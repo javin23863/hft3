@@ -34,6 +34,11 @@ KEYS = (
     "RITHMIC_EXCHANGE",
     "RTRADER_INSTALLER_PATH",
     "RTRADER_WINE_PREFIX",
+    "RTRADER_WATCH_DIRS",
+    "RITHMIC_GATEWAY",
+    "RITHMIC_TRIAL_ENABLED",
+    "RITHMIC_TRIAL_CONNECTOR",
+    "RITHMIC_TRIAL_CONFIG",
 )
 
 
@@ -64,6 +69,10 @@ def _render_env(values: dict[str, str]) -> str:
         "RITHMIC_APP_VERSION": "1.0",
         "RITHMIC_SYMBOL": "MES",
         "RITHMIC_EXCHANGE": "CME",
+        "RITHMIC_GATEWAY": "Chicago",
+        "RITHMIC_TRIAL_ENABLED": "1",
+        "RITHMIC_TRIAL_CONNECTOR": "rtrader",
+        "RITHMIC_TRIAL_CONFIG": "data_system/config/rithmic_trial.yaml",
     }
     merged = {**defaults, **{k: values[k] for k in KEYS if k in values and values[k]}}
     lines = ["# HFT3 CHI404 — generated; chmod 600", ""]

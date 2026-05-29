@@ -2,7 +2,7 @@
 # One-time Rithmic paper trial setup on CHI404 (colo only — do not run on a workstation).
 set -euo pipefail
 
-REPO="${HFT3_REPO_DIR:-/root/hft3}"
+REPO="${HFT3_REPO_DIR:-/root/hft3/repo}"
 cd "$REPO"
 
 ENV_FILE="${HFT3_ENV_FILE:-/root/hft3/.env}"
