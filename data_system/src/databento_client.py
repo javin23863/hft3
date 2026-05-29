@@ -2,7 +2,7 @@ import os
 import databento as db
 from .budget_manager import BudgetManager
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timezone
 
 class DatabentoResearchClient:
     """
@@ -18,7 +18,16 @@ class DatabentoResearchClient:
         self.manifest_path = "data/manifest.parquet"
         self.budget = BudgetManager(self.manifest_path)
         
-    def download_event_window(self, event_id: str, symbols: list, start_utc: datetime, end_utc: datetime, dataset="GLBX.MDP3", schema="mbo"):
+    def download_event_window(
+        self,
+        event_id: str,
+        symbols: list,
+        start_utc: datetime,
+        end_utc: datetime,
+        dataset="GLBX.MDP3",
+        schema="mbo",
+        stype_in: str = "continuous",
+    ):
         """
         Calculates exact cost per Section 11 math, checks budget, and downloads if approved.
         """
@@ -27,8 +36,9 @@ class DatabentoResearchClient:
             dataset=dataset,
             schema=schema,
             symbols=symbols,
+            stype_in=stype_in,
             start=start_utc,
-            end=end_utc
+            end=end_utc,
         )
         
         # 2. Check budget constraints
@@ -42,9 +52,10 @@ class DatabentoResearchClient:
             dataset=dataset,
             schema=schema,
             symbols=symbols,
+            stype_in=stype_in,
             start=start_utc,
             end=end_utc,
-            path=output_path
+            path=output_path,
         )
         
         # 4. Calculate required cost metrics per blueprint
@@ -62,7 +73,7 @@ class DatabentoResearchClient:
             "output_path": output_path,
             "dataset": dataset,
             "schema": schema,
-            "download_time": datetime.utcnow()
+            "download_time": datetime.now(timezone.utc),
         }
         
         self._record_manifest(record)

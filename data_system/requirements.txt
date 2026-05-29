@@ -2,3 +2,6 @@ pandas==2.2.0
 pyarrow==15.0.0
 pytz==2024.1
 databento==0.35.0
+python-dotenv>=1.0.0
+polars>=0.20.0
+pyyaml>=6.0.0
