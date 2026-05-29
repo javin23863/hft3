@@ -73,6 +73,7 @@ def main() -> None:
         if npz.exists():
             args.npz = str(npz)
             print(f"Trial replay NPZ: {npz}")
+            args.skip_download = True
 
     if not args.skip_download:
         print("=== Phase 3: Databento micro-probe ===")
@@ -112,10 +113,14 @@ def main() -> None:
                 if candidates:
                     npz_path = str(candidates[0])
 
-    print("=== Phase 6-7: Research matrix smoke ===")
-    from backtest_pipeline.src.research_runner import run_hypothesis_matrix
+    if not npz_path:
+        print("ERROR: No NPZ available for research matrix. Provide --npz or run download/trial first.")
+        sys.exit(1)
 
-    run_hypothesis_matrix(npz_path)
+    print("=== Phase 6-7: Research matrix smoke ===")
+    from backtest_pipeline.src.research_runner import run_all_research_cards
+
+    run_all_research_cards(npz_path)
 
     card_path = _REPO / "research_cards" / "matrix_smoke.json"
     if card_path.exists():

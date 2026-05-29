@@ -105,7 +105,21 @@ def run_all_research_cards(
     with open(index_path, "w", encoding="utf-8") as f:
         json.dump(index, f, indent=2, default=str)
 
+    smoke = {
+        "npz_path": npz_path,
+        "hypothesis_count": len(cards),
+        "pass_count": sum(1 for c in cards.values() if c.get("approval_status") == "PASS"),
+        "fail_count": sum(1 for c in cards.values() if c.get("approval_status") == "FAIL"),
+        "total_trades": sum(c.get("num_trades", 0) for c in cards.values()),
+        "hftbacktest_combined": hbt_summary,
+        "fills_csv": str(fills_path) if fills_path.exists() else None,
+    }
+    smoke_path = out / "matrix_smoke.json"
+    with open(smoke_path, "w", encoding="utf-8") as f:
+        json.dump(smoke, f, indent=2, default=str)
+
     print(f"Wrote {index_path}", flush=True)
+    print(f"Wrote {smoke_path}", flush=True)
     return index_path
 
 

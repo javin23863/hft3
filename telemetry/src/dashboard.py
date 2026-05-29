@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from metrics import TelemetryMetrics
+from telemetry.src.metrics import TelemetryMetrics
 
 st.set_page_config(page_title="HFT3 Microstructure Dashboard", layout="wide")
 
