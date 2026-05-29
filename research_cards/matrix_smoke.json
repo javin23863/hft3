@@ -1,0 +1,189 @@
+{
+  "hypothesis_count": 44,
+  "latency_bands_required": [
+    0.5,
+    1.0,
+    2.0,
+    5.0,
+    10.0
+  ],
+  "queue_models_required": [
+    "LogProbQueueModel2",
+    "SquareProbQueueModel"
+  ],
+  "regime_posterior_sample": {
+    "normal": 0.01775530831677072,
+    "event_shock": 0.08534352064675124,
+    "liquidity_vacuum": 0.0651494936385997,
+    "stop_cascade": 0.4143390215315522,
+    "prop_flatten": 0.05607468883495359,
+    "book_rebuild": 0.05607468883495359,
+    "chop": 0.022486936290789964,
+    "trend_continuation": 0.21149144136990955,
+    "spread_stress": 0.07128490053571948
+  },
+  "event_context": "NORMAL",
+  "signal_sample": {
+    "2": 0.0,
+    "4": 0.0,
+    "5": 0.0,
+    "3": 0.0,
+    "11": 0.0,
+    "25": -0.0,
+    "41": 0.0,
+    "44": 0.0,
+    "1": 0.9950547536867305,
+    "6": 0.0,
+    "7": -0.0,
+    "26": -0.0,
+    "28": 0.0,
+    "8": 0.0,
+    "12": -0.9592602262338502,
+    "13": 0.0,
+    "14": 0.0,
+    "15": 0.0,
+    "21": -0.0,
+    "22": 0.0,
+    "42": 0.9950547536867305,
+    "43": 0.0,
+    "16": -0.9640275800758169,
+    "17": -0.9640275800758169,
+    "18": -0.0,
+    "19": -0.9640275800758169,
+    "20": 0.0,
+    "35": 0.0,
+    "9": 0.0,
+    "10": 0.0,
+    "23": 0.0,
+    "24": -0.0,
+    "27": 0.0,
+    "29": 0.0,
+    "30": 0.0,
+    "31": 0.0,
+    "32": 0.0,
+    "33": 0.0,
+    "34": 0.0,
+    "36": 0.0,
+    "37": 0.0,
+    "38": 0.0,
+    "39": 0.0,
+    "40": 0.0
+  },
+  "hftbacktest_replay": {
+    "LogProbQueueModel2": {
+      "model_id": "HYP_MATRIX",
+      "timestamp": "2026-05-29T09:21:36.325349+00:00",
+      "latency_bands_tested": [
+        0.5,
+        1.0,
+        2.0,
+        5.0,
+        10.0
+      ],
+      "queue_model": "LogProbQueueModel2",
+      "results_by_band": {
+        "0.5ms": {
+          "steps": 3299116,
+          "balance": 0.0,
+          "fee": 0.0,
+          "num_trades": 0,
+          "trading_volume": 0.0,
+          "position": 0.0
+        },
+        "1.0ms": {
+          "steps": 3299116,
+          "balance": 0.0,
+          "fee": 0.0,
+          "num_trades": 0,
+          "trading_volume": 0.0,
+          "position": 0.0
+        },
+        "2.0ms": {
+          "steps": 3299116,
+          "balance": 0.0,
+          "fee": 0.0,
+          "num_trades": 0,
+          "trading_volume": 0.0,
+          "position": 0.0
+        },
+        "5.0ms": {
+          "steps": 3299116,
+          "balance": 0.0,
+          "fee": 0.0,
+          "num_trades": 0,
+          "trading_volume": 0.0,
+          "position": 0.0
+        },
+        "10.0ms": {
+          "steps": 3299116,
+          "balance": 0.0,
+          "fee": 0.0,
+          "num_trades": 0,
+          "trading_volume": 0.0,
+          "position": 0.0
+        }
+      },
+      "aggregated_net_pnl": 0.0,
+      "tail_risk_es_95": 0.0,
+      "approval_status": "FAIL"
+    },
+    "SquareProbQueueModel": {
+      "model_id": "HYP_MATRIX",
+      "timestamp": "2026-05-29T09:21:56.873129+00:00",
+      "latency_bands_tested": [
+        0.5,
+        1.0,
+        2.0,
+        5.0,
+        10.0
+      ],
+      "queue_model": "SquareProbQueueModel",
+      "results_by_band": {
+        "0.5ms": {
+          "steps": 3299116,
+          "balance": 0.0,
+          "fee": 0.0,
+          "num_trades": 0,
+          "trading_volume": 0.0,
+          "position": 0.0
+        },
+        "1.0ms": {
+          "steps": 3299116,
+          "balance": 0.0,
+          "fee": 0.0,
+          "num_trades": 0,
+          "trading_volume": 0.0,
+          "position": 0.0
+        },
+        "2.0ms": {
+          "steps": 3299116,
+          "balance": 0.0,
+          "fee": 0.0,
+          "num_trades": 0,
+          "trading_volume": 0.0,
+          "position": 0.0
+        },
+        "5.0ms": {
+          "steps": 3299116,
+          "balance": 0.0,
+          "fee": 0.0,
+          "num_trades": 0,
+          "trading_volume": 0.0,
+          "position": 0.0
+        },
+        "10.0ms": {
+          "steps": 3299116,
+          "balance": 0.0,
+          "fee": 0.0,
+          "num_trades": 0,
+          "trading_volume": 0.0,
+          "position": 0.0
+        }
+      },
+      "aggregated_net_pnl": 0.0,
+      "tail_risk_es_95": 0.0,
+      "approval_status": "FAIL"
+    }
+  },
+  "status": "REPLAY_PASS"
+}

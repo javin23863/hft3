@@ -1,6 +1,9 @@
 import numpy as np
-from typing import Dict, Any
-from dataclasses import dataclass
+from typing import Dict, Any, Optional
+from dataclasses import dataclass, field
+
+from features_engine.src.features.feature_index import FEATURE_NAME_TO_INDEX
+
 
 @dataclass
 class MarketState:
@@ -9,13 +12,24 @@ class MarketState:
     as specified in Section 2 of the A+ Developer Prompt.
     """
     primary_features: Dict[str, float]
-    cross_asset_features: Dict[str, Dict[str, float]] 
-    regime_state: str            # Z_t
-    event_context: str           # E_t
-    volatility_state: str        # V_t
-    liquidity_state: str         # V_t
-    latency_ms: float            # L_t
-    current_inventory: int       # I_t
+    cross_asset_features: Dict[str, Dict[str, float]]
+    regime_state: str  # argmax Z_t
+    event_context: str  # E_t
+    volatility_state: str  # V_t
+    liquidity_state: str  # V_t
+    latency_ms: float  # L_t
+    current_inventory: int  # I_t
+    feature_vector: Optional[np.ndarray] = None
+    regime_posterior: Dict[str, float] = field(default_factory=dict)
+
+    def f(self, name: str, default: float = 0.0) -> float:
+        """Indexed feature access (no string hashing on hot path)."""
+        if self.feature_vector is not None:
+            idx = FEATURE_NAME_TO_INDEX.get(name)
+            if idx is not None and idx < len(self.feature_vector):
+                return float(self.feature_vector[idx])
+        return float(self.primary_features.get(name, default))
+
 
 class BaseHypothesis:
     """
@@ -39,10 +53,9 @@ class StopRunExhaustionFade(BaseHypothesis):
         super().__init__(2, "Stop-run exhaustion fade")
         
     def evaluate(self, state: MarketState) -> float:
-        f = state.primary_features
-        agg_imb = f.get('aggressor_volume_imbalance', 0.0)
-        cancel_pressure = f.get('near_touch_cancel_pressure', 0.0)
-        book_slope = f.get('book_slope', 0.0)
+        agg_imb = state.f('aggressor_volume_imbalance', 0.0)
+        cancel_pressure = state.f('near_touch_cancel_pressure', 0.0)
+        book_slope = state.f('book_slope', 0.0)
         
         # Activation based on cancel pressure and extreme imbalance
         activation = np.clip(cancel_pressure, 0.0, 1.0) * np.abs(np.tanh(agg_imb * 2.0))
@@ -61,9 +74,8 @@ class DepthRefillImbalance(BaseHypothesis):
         super().__init__(4, "Depth-refill imbalance")
         
     def evaluate(self, state: MarketState) -> float:
-        f = state.primary_features
-        slope_change = f.get('book_slope_change', 0.0)
-        cancel_add_ratio = f.get('cancel_to_add_ratio', 1.0)
+        slope_change = state.f('book_slope_change', 0.0)
+        cancel_add_ratio = state.f('cancel_to_add_ratio', 1.0)
         
         # Continuous response: high when adds dominate (low ratio)
         refill_strength = np.exp(-cancel_add_ratio)
@@ -78,9 +90,8 @@ class SpreadBlowoutRecompression(BaseHypothesis):
         super().__init__(5, "Spread blowout/recompression")
         
     def evaluate(self, state: MarketState) -> float:
-        f = state.primary_features
-        spread_stress = f.get('spread_stress', 1.0)
-        book_slope = f.get('book_slope', 0.0)
+        spread_stress = state.f('spread_stress', 1.0)
+        book_slope = state.f('book_slope', 0.0)
         
         # Exponential activation when spread stress exceeds baseline (1.0)
         activation = 1.0 - np.exp(-np.maximum(0.0, spread_stress - 1.0))
@@ -95,8 +106,7 @@ class SecondWaveContinuation(BaseHypothesis):
         super().__init__(1, "Second-wave continuation")
         
     def evaluate(self, state: MarketState) -> float:
-        f = state.primary_features
-        agg_imb = f.get('aggressor_volume_imbalance', 0.0)
+        agg_imb = state.f('aggressor_volume_imbalance', 0.0)
         # Sigmoid-like response to strong persistent imbalances
         signal = np.tanh(agg_imb * 3.0)
         return float(signal)
@@ -109,9 +119,8 @@ class AggressorDecelerationFade(BaseHypothesis):
         super().__init__(6, "Aggressor deceleration fade")
         
     def evaluate(self, state: MarketState) -> float:
-        f = state.primary_features
-        agg_imb = f.get('aggressor_volume_imbalance', 0.0)
-        slope = f.get('book_slope', 0.0)
+        agg_imb = state.f('aggressor_volume_imbalance', 0.0)
+        slope = state.f('book_slope', 0.0)
         
         # Fade strength increases when imbalance and slope diverge
         divergence = -agg_imb * slope
@@ -127,10 +136,9 @@ class ForcedLiquidationCascade(BaseHypothesis):
         super().__init__(7, "Forced liquidation cascade")
         
     def evaluate(self, state: MarketState) -> float:
-        f = state.primary_features
-        agg_imb = f.get('aggressor_volume_imbalance', 0.0)
-        spread_stress = f.get('spread_stress', 1.0)
-        cancel_ratio = f.get('cancel_to_add_ratio', 1.0)
+        agg_imb = state.f('aggressor_volume_imbalance', 0.0)
+        spread_stress = state.f('spread_stress', 1.0)
+        cancel_ratio = state.f('cancel_to_add_ratio', 1.0)
         
         stress_activation = 1.0 - np.exp(-np.maximum(0.0, spread_stress - 1.0))
         panic_activation = 1.0 - np.exp(-np.maximum(0.0, cancel_ratio - 1.0))
@@ -145,8 +153,7 @@ class LateCandleEntryFade(BaseHypothesis):
         super().__init__(26, "Late candle entry fade")
         
     def evaluate(self, state: MarketState) -> float:
-        f = state.primary_features
-        agg_imb = f.get('aggressor_volume_imbalance', 0.0)
+        agg_imb = state.f('aggressor_volume_imbalance', 0.0)
         
         # Only active in trend continuation regime
         regime_multiplier = 1.0 if state.regime_state == 'trend_continuation' else 0.0
@@ -162,8 +169,7 @@ class PanicMarketOrderSpreadTax(BaseHypothesis):
         super().__init__(28, "Panic market-order spread tax")
         
     def evaluate(self, state: MarketState) -> float:
-        f = state.primary_features
-        spread_stress = f.get('spread_stress', 1.0)
+        spread_stress = state.f('spread_stress', 1.0)
         
         vol_multiplier = 1.0 if state.volatility_state == 'HIGH' else 0.0
         activation = 1.0 - np.exp(-np.maximum(0.0, spread_stress - 1.5))
@@ -178,9 +184,8 @@ class LiquidityVacuumContinuation(BaseHypothesis):
         super().__init__(3, "Liquidity vacuum continuation")
         
     def evaluate(self, state: MarketState) -> float:
-        f = state.primary_features
-        vacuum_score = f.get('liquidity_vacuum_score', 0.0)
-        agg_imb = f.get('aggressor_volume_imbalance', 0.0)
+        vacuum_score = state.f('liquidity_vacuum_score', 0.0)
+        agg_imb = state.f('aggressor_volume_imbalance', 0.0)
         
         signal = np.tanh(vacuum_score * 2.0) * np.tanh(agg_imb * 2.0)
         return float(signal)
@@ -193,9 +198,8 @@ class BookSlopeCollapse(BaseHypothesis):
         super().__init__(11, "Book slope collapse")
         
     def evaluate(self, state: MarketState) -> float:
-        f = state.primary_features
-        slope = f.get('book_slope', 0.0)
-        slope_change = f.get('book_slope_change', 0.0)
+        slope = state.f('book_slope', 0.0)
+        slope_change = state.f('book_slope_change', 0.0)
         
         # Product of slope and slope_change identifies accelerating collapse
         collapse_intensity = np.sign(slope) * np.maximum(0.0, slope * slope_change)
@@ -210,9 +214,8 @@ class DOMIllusionTrap(BaseHypothesis):
         super().__init__(25, "DOM illusion trap")
         
     def evaluate(self, state: MarketState) -> float:
-        f = state.primary_features
-        near_cancel = f.get('near_touch_cancel_pressure', 0.0)
-        agg_imb = f.get('aggressor_volume_imbalance', 0.0)
+        near_cancel = state.f('near_touch_cancel_pressure', 0.0)
+        agg_imb = state.f('aggressor_volume_imbalance', 0.0)
         
         # Cancel pressure combined with opposing flow -> snapback
         activation = np.tanh(near_cancel * 3.0)
@@ -228,10 +231,9 @@ class ThinBookContinuation(BaseHypothesis):
         super().__init__(41, "Thin-book continuation")
         
     def evaluate(self, state: MarketState) -> float:
-        f = state.primary_features
-        spread_stress = f.get('spread_stress', 1.0)
-        refill_ratio = f.get('cancel_to_add_ratio', 1.0) 
-        agg_imb = f.get('aggressor_volume_imbalance', 0.0)
+        spread_stress = state.f('spread_stress', 1.0)
+        refill_ratio = state.f('cancel_to_add_ratio', 1.0) 
+        agg_imb = state.f('aggressor_volume_imbalance', 0.0)
         
         stress_act = 1.0 - np.exp(-np.maximum(0.0, spread_stress - 1.0))
         refill_act = 1.0 - np.exp(-np.maximum(0.0, refill_ratio - 1.0))
@@ -246,8 +248,7 @@ class SpreadRegimeChange(BaseHypothesis):
         super().__init__(44, "Spread regime change")
         
     def evaluate(self, state: MarketState) -> float:
-        f = state.primary_features
-        spread_stress = f.get('spread_stress', 1.0)
+        spread_stress = state.f('spread_stress', 1.0)
         
         vol_act = 1.0 if state.volatility_state == 'HIGH' else 0.0
         activation = 1.0 - np.exp(-np.maximum(0.0, spread_stress - 2.0))
@@ -261,10 +262,9 @@ class FalseBreakoutTrap(BaseHypothesis):
         super().__init__(8, "False breakout trap")
         
     def evaluate(self, state: MarketState) -> float:
-        f = state.primary_features
-        is_breakout = f.get('is_breaking_level', 0.0) 
-        agg_imb = f.get('aggressor_volume_imbalance', 0.0)
-        book_slope = f.get('book_slope', 0.0)
+        is_breakout = state.f('is_breaking_level', 0.0) 
+        agg_imb = state.f('aggressor_volume_imbalance', 0.0)
+        book_slope = state.f('book_slope', 0.0)
         
         # Breakout direction minus flow confirmation
         breakout_dir = np.sign(is_breakout)
@@ -284,9 +284,8 @@ class AbsorptionFade(BaseHypothesis):
         super().__init__(12, "Absorption fade")
         
     def evaluate(self, state: MarketState) -> float:
-        f = state.primary_features
-        absorption = f.get('absorption_score', 0.0)
-        agg_imb = f.get('aggressor_volume_imbalance', 0.0)
+        absorption = state.f('absorption_score', 0.0)
+        agg_imb = state.f('aggressor_volume_imbalance', 0.0)
         
         # High absorption opposing the imbalance
         signal = -np.tanh(agg_imb * 2.0) * np.tanh(absorption * 3.0)
@@ -300,8 +299,7 @@ class IcebergReloadDetection(BaseHypothesis):
         super().__init__(13, "Iceberg/reload detection")
         
     def evaluate(self, state: MarketState) -> float:
-        f = state.primary_features
-        reload_score = f.get('iceberg_reload_score', 0.0)
+        reload_score = state.f('iceberg_reload_score', 0.0)
         # Join the side that is reloading
         return float(np.tanh(reload_score * 2.0))
 
@@ -313,9 +311,8 @@ class LiquidityDefenseBreak(BaseHypothesis):
         super().__init__(14, "Liquidity defense break")
         
     def evaluate(self, state: MarketState) -> float:
-        f = state.primary_features
-        reload_drop = f.get('reload_drop_score', 0.0) 
-        agg_imb = f.get('aggressor_volume_imbalance', 0.0)
+        reload_drop = state.f('reload_drop_score', 0.0) 
+        agg_imb = state.f('aggressor_volume_imbalance', 0.0)
         
         # Acceleration in direction of flow when defense breaks
         signal = np.tanh(reload_drop * 3.0) * np.tanh(agg_imb * 2.0)
@@ -329,9 +326,8 @@ class OneSidedAddCancelImbalance(BaseHypothesis):
         super().__init__(15, "One-sided add/cancel imbalance")
         
     def evaluate(self, state: MarketState) -> float:
-        f = state.primary_features
-        bid_pressure = f.get('bid_add_cancel_ratio', 1.0)
-        ask_pressure = f.get('ask_add_cancel_ratio', 1.0)
+        bid_pressure = state.f('bid_add_cancel_ratio', 1.0)
+        ask_pressure = state.f('ask_add_cancel_ratio', 1.0)
         
         # Ratio transformation for continuous score
         bid_score = np.log1p(bid_pressure)
@@ -347,9 +343,8 @@ class RoundNumberStopSweep(BaseHypothesis):
         super().__init__(21, "Round-number stop sweep")
         
     def evaluate(self, state: MarketState) -> float:
-        f = state.primary_features
-        dist_to_round = f.get('distance_to_round_number', 1.0)
-        agg_imb = f.get('aggressor_volume_imbalance', 0.0)
+        dist_to_round = state.f('distance_to_round_number', 1.0)
+        agg_imb = state.f('aggressor_volume_imbalance', 0.0)
         
         # Proximity activation using Gaussian kernel
         proximity = np.exp(- (dist_to_round ** 2) / 0.001)
@@ -365,9 +360,8 @@ class PriorHighLowBreakoutTrap(BaseHypothesis):
         super().__init__(22, "Prior high/low breakout trap")
         
     def evaluate(self, state: MarketState) -> float:
-        f = state.primary_features
-        is_breakout = f.get('is_breaking_session_level', 0.0)
-        agg_imb = f.get('aggressor_volume_imbalance', 0.0)
+        is_breakout = state.f('is_breaking_session_level', 0.0)
+        agg_imb = state.f('aggressor_volume_imbalance', 0.0)
         
         trap_intensity = np.sign(is_breakout) * (np.abs(is_breakout) - np.abs(np.tanh(agg_imb * 2.0)))
         return float(-np.tanh(trap_intensity * 2.0))
@@ -380,8 +374,7 @@ class PassiveTrapFill(BaseHypothesis):
         super().__init__(42, "Passive trap fill")
         
     def evaluate(self, state: MarketState) -> float:
-        f = state.primary_features
-        agg_imb = f.get('aggressor_volume_imbalance', 0.0)
+        agg_imb = state.f('aggressor_volume_imbalance', 0.0)
         
         # Simulated continuous loss function representation
         return float(np.tanh(agg_imb * 3.0))
@@ -482,8 +475,7 @@ class MaxContractCrowding(BaseHypothesis):
         super().__init__(35, "Max-contract crowding in micros")
         
     def evaluate(self, state: MarketState) -> float:
-        f = state.primary_features
-        block_trade = f.get('max_contract_trade_imbalance', 0.0)
+        block_trade = state.f('max_contract_trade_imbalance', 0.0)
         return float(np.tanh(block_trade * 2.0))
 
 class CancelStormBeforeMove(BaseHypothesis):
@@ -494,10 +486,9 @@ class CancelStormBeforeMove(BaseHypothesis):
         super().__init__(9, "Cancel storm before move")
         
     def evaluate(self, state: MarketState) -> float:
-        f = state.primary_features
-        cancel_ratio = f.get('cancel_to_add_ratio', 1.0)
-        cancel_pressure = f.get('near_touch_cancel_pressure', 0.0)
-        book_slope = f.get('book_slope', 0.0)
+        cancel_ratio = state.f('cancel_to_add_ratio', 1.0)
+        cancel_pressure = state.f('near_touch_cancel_pressure', 0.0)
+        book_slope = state.f('book_slope', 0.0)
         
         storm_activation = 1.0 - np.exp(-np.maximum(0.0, cancel_ratio - 1.5))
         pressure_activation = np.tanh(cancel_pressure * 2.0)
@@ -512,9 +503,8 @@ class QueueDepletionTrigger(BaseHypothesis):
         super().__init__(10, "Queue depletion trigger")
         
     def evaluate(self, state: MarketState) -> float:
-        f = state.primary_features
-        depletion_rate_bid = f.get('queue_depletion_rate_bid', 0.0)
-        depletion_rate_ask = f.get('queue_depletion_rate_ask', 0.0)
+        depletion_rate_bid = state.f('queue_depletion_rate_bid', 0.0)
+        depletion_rate_ask = state.f('queue_depletion_rate_ask', 0.0)
         
         depletion_diff = depletion_rate_ask - depletion_rate_bid # positive if ask depletes faster
         return float(np.tanh(depletion_diff * 3.0))
@@ -529,10 +519,8 @@ class OpeningCandleChase(BaseHypothesis):
     def evaluate(self, state: MarketState) -> float:
         if state.event_context != 'CASH_EQUITY_OPEN':
             return 0.0
-            
-        f = state.primary_features
-        agg_imb = f.get('aggressor_volume_imbalance', 0.0)
-        spread_stress = f.get('spread_stress', 1.0)
+        agg_imb = state.f('aggressor_volume_imbalance', 0.0)
+        spread_stress = state.f('spread_stress', 1.0)
         
         stress_act = 1.0 - np.exp(-np.maximum(0.0, spread_stress - 1.0))
         # Fade the opening chase if spread is stressed
@@ -546,10 +534,9 @@ class VWAPDefenseBreak(BaseHypothesis):
         super().__init__(24, "VWAP defense/break")
         
     def evaluate(self, state: MarketState) -> float:
-        f = state.primary_features
-        dist_to_vwap = f.get('distance_to_vwap', 1.0)
-        reload_score = f.get('iceberg_reload_score', 0.0)
-        agg_imb = f.get('aggressor_volume_imbalance', 0.0)
+        dist_to_vwap = state.f('distance_to_vwap', 1.0)
+        reload_score = state.f('iceberg_reload_score', 0.0)
+        agg_imb = state.f('aggressor_volume_imbalance', 0.0)
         
         vwap_proximity = np.exp(-(dist_to_vwap ** 2) / 0.01)
         # Defense holds if reload opposes imbalance
@@ -566,10 +553,8 @@ class StopLossCascadeContinuation(BaseHypothesis):
     def evaluate(self, state: MarketState) -> float:
         if state.regime_state != 'stop_cascade':
             return 0.0
-            
-        f = state.primary_features
-        slope = f.get('book_slope', 0.0)
-        agg_imb = f.get('aggressor_volume_imbalance', 0.0)
+        slope = state.f('book_slope', 0.0)
+        agg_imb = state.f('aggressor_volume_imbalance', 0.0)
         
         return float(np.tanh(agg_imb * 2.0) * np.tanh(slope * 2.0))
 
@@ -583,9 +568,7 @@ class EndOfDayForcedFlatten(BaseHypothesis):
     def evaluate(self, state: MarketState) -> float:
         if state.event_context not in ('PROP_FLATTEN_TOPSTEP', 'FRIDAY_CLOSE', 'TPT_FLATTEN'):
             return 0.0
-            
-        f = state.primary_features
-        agg_imb = f.get('aggressor_volume_imbalance', 0.0)
+        agg_imb = state.f('aggressor_volume_imbalance', 0.0)
         return float(np.tanh(agg_imb * 2.0))
 
 class CutoffPanicExits(BaseHypothesis):
@@ -598,9 +581,7 @@ class CutoffPanicExits(BaseHypothesis):
     def evaluate(self, state: MarketState) -> float:
         if state.event_context not in ('TPT_FLATTEN', 'APEX_FLATTEN'):
             return 0.0
-            
-        f = state.primary_features
-        cutoff_pressure = f.get('cutoff_pressure_score', 0.0)
+        cutoff_pressure = state.f('cutoff_pressure_score', 0.0)
         return float(np.tanh(cutoff_pressure * 3.0))
 
 class NoOvernightInventorySqueeze(BaseHypothesis):
@@ -613,9 +594,7 @@ class NoOvernightInventorySqueeze(BaseHypothesis):
     def evaluate(self, state: MarketState) -> float:
         if state.event_context != 'FRIDAY_CLOSE':
             return 0.0
-            
-        f = state.primary_features
-        agg_imb = f.get('aggressor_volume_imbalance', 0.0)
+        agg_imb = state.f('aggressor_volume_imbalance', 0.0)
         return float(np.tanh(agg_imb * 2.0))
 
 class DailyLossLimitDefense(BaseHypothesis):
@@ -638,8 +617,7 @@ class TrailingDrawdownPressure(BaseHypothesis):
         super().__init__(33, "Trailing drawdown pressure")
         
     def evaluate(self, state: MarketState) -> float:
-        f = state.primary_features
-        agg_imb = f.get('aggressor_volume_imbalance', 0.0)
+        agg_imb = state.f('aggressor_volume_imbalance', 0.0)
         
         regime_mult = 1.0 if state.regime_state == 'trend_continuation' else 0.0
         return float(regime_mult * np.tanh(agg_imb * 3.0))
@@ -653,8 +631,7 @@ class ProfitLockBehavior(BaseHypothesis):
         
     def evaluate(self, state: MarketState) -> float:
         if state.event_context in ('PROP_FLATTEN_TOPSTEP', 'TPT_FLATTEN') and state.regime_state == 'trend_continuation':
-            f = state.primary_features
-            agg_imb = f.get('aggressor_volume_imbalance', 0.0)
+            agg_imb = state.f('aggressor_volume_imbalance', 0.0)
             return float(np.tanh(agg_imb * 2.0))
         return 0.0
 
@@ -667,8 +644,7 @@ class PropResetReopenWindow(BaseHypothesis):
         
     def evaluate(self, state: MarketState) -> float:
         if state.event_context == 'PROP_REOPEN':
-            f = state.primary_features
-            reentry_score = f.get('prop_reentry_score', 0.0)
+            reentry_score = state.f('prop_reentry_score', 0.0)
             return float(np.tanh(reentry_score * 2.0))
         return 0.0
 
@@ -681,8 +657,7 @@ class FridayWeekendDerisking(BaseHypothesis):
         
     def evaluate(self, state: MarketState) -> float:
         if state.event_context == 'FRIDAY_CLOSE':
-            f = state.primary_features
-            agg_imb = f.get('aggressor_volume_imbalance', 0.0)
+            agg_imb = state.f('aggressor_volume_imbalance', 0.0)
             return float(np.tanh(agg_imb * 2.0))
         return 0.0
 
@@ -695,8 +670,7 @@ class EconomicEventRestrictionFlattening(BaseHypothesis):
         
     def evaluate(self, state: MarketState) -> float:
         if state.event_context == 'NEWS_RESTRICTION':
-            f = state.primary_features
-            flatten_score = f.get('news_restriction_flatten_score', 0.0)
+            flatten_score = state.f('news_restriction_flatten_score', 0.0)
             return float(np.tanh(flatten_score * 2.0))
         return 0.0
 
@@ -709,8 +683,7 @@ class QuotePullBeforeVolatility(BaseHypothesis):
         
     def evaluate(self, state: MarketState) -> float:
         if state.event_context == 'CPI_TIGHT':
-            f = state.primary_features
-            slope_change = f.get('book_slope_change', 0.0)
+            slope_change = state.f('book_slope_change', 0.0)
             return 0.0
         return 0.0
 
@@ -723,7 +696,6 @@ class RequoteRaceAfterShock(BaseHypothesis):
         
     def evaluate(self, state: MarketState) -> float:
         if state.regime_state == 'event_shock':
-            f = state.primary_features
-            slope_change = f.get('book_slope_change', 0.0)
+            slope_change = state.f('book_slope_change', 0.0)
             return float(np.tanh(slope_change * 3.0))
         return 0.0

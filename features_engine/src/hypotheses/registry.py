@@ -131,5 +131,12 @@ class HypothesisRegistry:
             "win_rate": results.get("win_rate", 0.0),
             "adverse_selection": results.get("adverse_selection", 0.0),
             "tail_loss": results.get("tail_loss", 0.0),
-            "approval_status": "PASS" if results.get("net_pnl", 0) > 0 and results.get("tail_loss", 0) > -500 else "FAIL"
+            "num_trades": results.get("num_trades", 0),
+            "approval_status": (
+                "PASS"
+                if results.get("num_trades", 0) > 0
+                and results.get("net_pnl", 0) > 0
+                and results.get("tail_loss", 0) > -500
+                else "FAIL"
+            ),
         }
