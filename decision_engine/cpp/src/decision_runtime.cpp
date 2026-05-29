@@ -1,13 +1,46 @@
 #include "decision_runtime.hpp"
+#include <fstream>
+#include <iostream>
 
 namespace hft {
 
 DecisionEngine::DecisionEngine() = default;
 
-bool DecisionEngine::load_model(const char* model_path) {
-    // In a real implementation, this loads weights from disk to the `weights_` array.
-    // Must be done before joining the hot path.
+bool DecisionEngine::load_model(const std::string& model_path) {
+    std::ifstream file(model_path, std::ios::binary);
+    if (!file) {
+        std::cerr << "[DecisionEngine] Error: Could not open model file " << model_path << std::endl;
+        return false;
+    }
+
+    ModelHeader header;
+    if (!file.read(reinterpret_cast<char*>(&header), sizeof(ModelHeader))) {
+        std::cerr << "[DecisionEngine] Error: Failed to read model header" << std::endl;
+        return false;
+    }
+
+    if (header.magic != 0x48465433) {
+        std::cerr << "[DecisionEngine] Error: Invalid magic number in model file" << std::endl;
+        return false;
+    }
+
+    if (header.feature_count > 64) {
+        std::cerr << "[DecisionEngine] Error: Model requires " << header.feature_count 
+                  << " features, but MarketState only supports up to 64." << std::endl;
+        return false;
+    }
+
+    if (!file.read(reinterpret_cast<char*>(weights_.data()), weights_.size() * sizeof(double))) {
+        std::cerr << "[DecisionEngine] Error: Failed to read model weights" << std::endl;
+        return false;
+    }
+
+    active_model_id_ = header.model_id;
+    active_feature_count_ = header.feature_count;
     initialized_ = true;
+    
+    std::cout << "[DecisionEngine] Successfully loaded Model ID " << active_model_id_ 
+              << " with " << active_feature_count_ << " features." << std::endl;
     return true;
 }
 
