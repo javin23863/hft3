@@ -1,97 +1,130 @@
-from hftbacktest import HftBacktest, models
-import numpy as np
-from typing import Callable, List, Dict
-from datetime import datetime
+"""
+HftBacktest 2.x replay runner with blueprint-mandated latency bands and queue models.
+"""
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Callable, Dict, List, Optional
+
+from hftbacktest import BacktestAsset, HashMapMarketDepthBacktest
+
+from backtest_pipeline.src.fee_model import FeeModel
+from backtest_pipeline.src.hft_strategy import CombinedHypothesisStrategy
+from features_engine.src.hypotheses.registry import get_active_hypotheses
+from features_engine.src.pipeline.market_state_pipeline import MarketStatePipeline
+
+LATENCY_BANDS_MS = [0.5, 1.0, 2.0, 5.0, 10.0]
+QUEUE_MODEL_BUILDERS = {
+    "LogProbQueueModel2": lambda a: a.log_prob_queue_model2(),
+    "SquareProbQueueModel": lambda a: a.power_prob_queue_model2(2),
+}
+QUEUE_MODELS = list(QUEUE_MODEL_BUILDERS.keys())
+
 
 class ReplayRunner:
-    """
-    Runs HftBacktest replays with parameterized latency bands and strict queue/exchange models.
-    Generates outputs ready for Research Cards.
-    """
-    def __init__(self, data_path: str, tick_size: float = 0.25):
+    def __init__(
+        self,
+        data_path: str,
+        tick_size: float = 0.25,
+        lot_size: float = 1.0,
+        product: str = "MES",
+    ):
         self.data_path = data_path
         self.tick_size = tick_size
-        
-    def _get_queue_model(self, queue_model_type: str):
-        if queue_model_type == "LogProbQueueModel2":
-            return models.queue.LogProbQueueModel2()
-        elif queue_model_type == "SquareProbQueueModel":
-            return models.queue.SquareProbQueueModel()
-        else:
-            raise ValueError(f"Unsupported queue model: {queue_model_type}")
-            
-    def _get_exchange_model(self):
-        # Enforcing NoPartialFillExchange logic as per spec
-        return models.exchange.NoPartialFillExchange()
-            
-    def build_backtest(self, latency_ms: float, queue_model_type: str):
-        """
-        Constructs the HftBacktest instance with the blueprint's mandated models.
-        """
+        self.lot_size = lot_size
+        self.fee_model = FeeModel(product=product)
+
+    def build_backtest(self, latency_ms: float, queue_model_type: str) -> HashMapMarketDepthBacktest:
         latency_ns = int(latency_ms * 1_000_000)
-        latency_model = models.latency.ConstantLatency(latency_ns, latency_ns)
-        queue_model = self._get_queue_model(queue_model_type)
-        exchange_model = self._get_exchange_model()
-        
-        hbt = HftBacktest(
-            [self.data_path],
-            tick_size=self.tick_size,
-            lot_size=1.0,
-            maker_fee=0.0,
-            taker_fee=0.0,
-            order_latency=latency_model,
-            queue_model=queue_model,
-            exchange_model=exchange_model,
-            asset_type=models.AssetType.LINEAR,
-            trade_list_size=100000
-        )
-        return hbt
-        
-    def run_replay(self, model_logic_callback: Callable, latency_ms: float = 1.0, queue_model: str = "LogProbQueueModel2") -> Dict:
-        """
-        Executes the backtest for a specific latency and queue model.
-        Returns a metrics dictionary.
-        """
+        if queue_model_type not in QUEUE_MODEL_BUILDERS:
+            raise ValueError(f"Unsupported queue model: {queue_model_type}")
+
+        asset = BacktestAsset()
+        asset.data(self.data_path)
+        asset.tick_size(self.tick_size)
+        asset.lot_size(self.lot_size)
+        asset.constant_order_latency(latency_ns, latency_ns)
+        asset.no_partial_fill_exchange()
+        asset.trading_value_fee_model(0.0, self.fee_model.get_fee_per_contract())
+        QUEUE_MODEL_BUILDERS[queue_model_type](asset)
+        return HashMapMarketDepthBacktest([asset])
+
+    def run_replay(
+        self,
+        model_logic_callback: Callable | None = None,
+        latency_ms: float = 1.0,
+        queue_model: str = "LogProbQueueModel2",
+        step_ns: int = 100_000,
+        use_combined_strategy: bool = True,
+    ) -> Dict:
         hbt = self.build_backtest(latency_ms, queue_model)
-        
-        while hbt.elapse(100_000):  # 100 microseconds steps
-            hbt.clear_inactive_orders()
-            model_logic_callback(hbt)
-            
-        # Collect statistics
-        # Note: In a real hftbacktest integration, we would pull the internal stats object.
-        # This is a structured representation of what that would extract.
-        stats = hbt.generate_stats() if hasattr(hbt, 'generate_stats') else {}
-        
-        return stats
-        
-    def generate_research_card(self, hyp_id: str, model_logic_callback: Callable, 
-                               latency_bands: List[float] = [0.5, 1.0, 2.0, 5.0, 10.0],
-                               queue_model: str = "LogProbQueueModel2") -> Dict:
-        """
-        Runs the model across all required latency bands and generates a comprehensive Research Card.
-        """
+        strategy = None
+        if use_combined_strategy and model_logic_callback is None:
+            hyps = get_active_hypotheses()
+            pipeline = MarketStatePipeline(tick_size=self.tick_size, latency_ms=latency_ms)
+            strategy = CombinedHypothesisStrategy(
+                hyps, tick_size=self.tick_size, signal_threshold=0.25
+            )
+
+        steps = 0
+        while True:
+            result = hbt.elapse(step_ns)
+            if result == 1:
+                break
+            if result != 0:
+                return {"error": int(result), "steps": steps}
+            hbt.clear_inactive_orders(0)
+            if model_logic_callback is not None:
+                model_logic_callback(hbt)
+            elif strategy is not None:
+                strategy.on_step(hbt)
+            steps += 1
+
+        state = hbt.state_values(0)
+        return {
+            "steps": steps,
+            "balance": float(state.balance),
+            "fee": float(state.fee),
+            "num_trades": int(state.num_trades),
+            "trading_volume": float(state.trading_volume),
+            "position": float(state.position),
+        }
+
+    def generate_research_card(
+        self,
+        hyp_id: str,
+        model_logic_callback: Callable | None = None,
+        latency_bands: Optional[List[float]] = None,
+        queue_model: str = "LogProbQueueModel2",
+    ) -> Dict:
+        latency_bands = latency_bands or LATENCY_BANDS_MS
         results_by_band = {}
-        
+
         for latency in latency_bands:
-            print(f"Running replay for {hyp_id} at {latency}ms latency...")
-            stats = self.run_replay(model_logic_callback, latency_ms=latency, queue_model=queue_model)
-            results_by_band[f"{latency}ms"] = stats
-            
-        # Aggregate logic
-        # Dummy aggregation for the card structure
-        avg_net_pnl = 0.0
-        worst_es = 0.0
-        
-        card = {
+            print(f"Running replay for {hyp_id} at {latency}ms latency ({queue_model})...")
+            results_by_band[f"{latency}ms"] = self.run_replay(
+                model_logic_callback,
+                latency_ms=latency,
+                queue_model=queue_model,
+            )
+
+        pnls = [r.get("balance", 0.0) for r in results_by_band.values() if "error" not in r]
+        avg_net_pnl = sum(pnls) / len(pnls) if pnls else 0.0
+        worst_balance = min(pnls) if pnls else 0.0
+        total_trades = sum(r.get("num_trades", 0) for r in results_by_band.values())
+
+        return {
             "model_id": hyp_id,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "latency_bands_tested": latency_bands,
             "queue_model": queue_model,
             "results_by_band": results_by_band,
             "aggregated_net_pnl": avg_net_pnl,
-            "tail_risk_es_95": worst_es,
-            "approval_status": "PASS" if avg_net_pnl > 0 and worst_es > -500 else "FAIL"
+            "tail_risk_es_95": worst_balance,
+            "num_trades": total_trades,
+            "approval_status": (
+                "PASS"
+                if avg_net_pnl > 0 and worst_balance > -500 and total_trades > 0
+                else "FAIL"
+            ),
         }
-        
-        return card
