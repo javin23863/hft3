@@ -1,0 +1,3 @@
+event_id,event_type,release_date,release_time,timezone,window_name,start_offset_seconds,end_offset_seconds,symbols,priority,source,source_url,effective_date,notes
+CPI_2024_09_11_TIGHT,CPI,2024-09-11,08:30:00,America/New_York,TIGHT,-30,300,"MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0",1,BLS,<url>,2024-01-01,"CPI tight window"
+TOPSTEP_2024_09_18_MAIN,PROP_FLATTEN_TOPSTEP,2024-09-18,15:10:00,America/Chicago,MAIN,-1500,600,"MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0",1,TOPSTEP,<url>,2024-01-01,"forced-flat window"

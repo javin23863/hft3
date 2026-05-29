@@ -1,0 +1,4 @@
+hftbacktest==1.9.0
+numpy
+numba
+pandas
