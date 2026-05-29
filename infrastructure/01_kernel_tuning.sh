@@ -1,61 +1,88 @@
 #!/bin/bash
+# Bare-metal kernel tuning — idempotent GRUB, AMD-focused.
+set -euo pipefail
 
-# Chicago CME Microstructure - Bare-Metal Kernel Tuning Script (Strict)
-# Must be run as root
-# Requires: tuned, linux-tools, numactl
+ENV_FILE="${HFT3_ENV_FILE:-/root/hft3/.env}"
+[[ -f "$ENV_FILE" ]] && set -a && source "$ENV_FILE" && set +a
 
-echo "Configuring STRICT CPU isolation and C-states..."
+RUN_ID="${RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
+LOG_DIR="${HFT3_TUNING_LOG_DIR:-/root/hft3/logs/tuning/${RUN_ID}}"
+mkdir -p "$LOG_DIR"
 
-# Define core isolation (Assume a 16-core CPU. Isolate cores 2-15 on NUMA node 0)
-# Core 0: OS
-# Core 1: Rithmic Gateway (non-isolated to handle networking interrupts if needed, or isolate it depending on NIC)
-# Cores 2-15: Strategy, Risk, Features
-ISOL_CORES="2-15"
+NPROC=$(nproc)
+LAST=$((NPROC - 1))
+HOT_CPUS="${HOT_CPUS:-${HFT3_ISOL_CPUS:-2-${LAST}}}"
 
-# 1. Update GRUB configuration
+echo "HOT_CPUS=$HOT_CPUS nproc=$NPROC" | tee "$LOG_DIR/kernel_tuning.txt"
+
 GRUB_FILE="/etc/default/grub"
-BACKUP_FILE="/etc/default/grub.bak.$(date +%F)"
+cp "$GRUB_FILE" "$LOG_DIR/grub_before.txt"
 
-if [ -f "$GRUB_FILE" ]; then
-    cp $GRUB_FILE $BACKUP_FILE
-    
-    # Check if we already added our parameters
-    if ! grep -q "isolcpus=$ISOL_CORES" $GRUB_FILE; then
-        # Strict isolation: 
-        # - isolcpus: completely remove from scheduler
-        # - nohz_full: disable tick timer on these cores
-        # - rcu_nocbs: offload RCU callbacks
-        # - processor.max_cstate=0 intel_idle.max_cstate=0 amd_idle.max_cstate=0 cpuidle.off=1: Disable deep sleep
-        # - mce=ignore_ce: ignore corrected machine check errors (prevents SMI-like stalls)
-        # - audit=0 nmi_watchdog=0: disable kernel watchdogs that cause latency spikes
-        STRICT_ARGS="isolcpus=$ISOL_CORES nohz_full=$ISOL_CORES rcu_nocbs=$ISOL_CORES processor.max_cstate=0 intel_idle.max_cstate=0 amd_idle.max_cstate=0 cpuidle.off=1 mce=ignore_ce audit=0 nmi_watchdog=0 nosoftlockup"
-        
-        sed -i "s/GRUB_CMDLINE_LINUX_DEFAULT=\"[^\"]*/& $STRICT_ARGS/" $GRUB_FILE
-        
-        echo "Updating GRUB... (Will require reboot)"
-        update-grub
-    else
-        echo "GRUB already configured with isolation parameters."
-    fi
-else
-    echo "ERROR: $GRUB_FILE not found."
-    exit 1
+export HOT_CPUS
+python3 << 'PY'
+import os
+import re
+from pathlib import Path
+
+grub = Path("/etc/default/grub")
+hot = os.environ.get("HOT_CPUS", "2-23")
+text = grub.read_text()
+m = re.search(r'^GRUB_CMDLINE_LINUX_DEFAULT="([^"]*)"', text, re.M)
+if not m:
+    raise SystemExit("GRUB_CMDLINE_LINUX_DEFAULT not found")
+args = m.group(1).split()
+strip_prefixes = (
+    "isolcpus=", "nohz_full=", "rcu_nocbs=", "isolcpus_managed_irq",
+    "processor.max_cstate=", "amd_idle.max_cstate=", "cpuidle.off=",
+    "mce=", "audit=", "nmi_watchdog=", "nosoftlockup", "intel_idle.max_cstate=",
+)
+new_args = [a for a in args if not any(a.startswith(p) for p in strip_prefixes)]
+add = [
+    f"isolcpus={hot}",
+    f"nohz_full={hot}",
+    f"rcu_nocbs={hot}",
+    "isolcpus_managed_irq,domain",
+    "processor.max_cstate=0",
+    "amd_idle.max_cstate=0",
+    "cpuidle.off=1",
+    "mce=ignore_ce",
+    "audit=0",
+    "nmi_watchdog=0",
+    "nosoftlockup",
+    "nosmt",
+]
+new_args.extend(add)
+merged = " ".join(new_args)
+text2 = re.sub(
+    r'^GRUB_CMDLINE_LINUX_DEFAULT="[^"]*"',
+    f'GRUB_CMDLINE_LINUX_DEFAULT="{merged}"',
+    text,
+    count=1,
+    flags=re.M,
+)
+grub.write_text(text2)
+print("GRUB updated:", merged[:120], "...")
+PY
+
+cp "$GRUB_FILE" "$LOG_DIR/grub_after.txt"
+update-grub 2>&1 | tee -a "$LOG_DIR/kernel_tuning.txt"
+
+systemctl stop irqbalance 2>/dev/null || true
+systemctl disable irqbalance 2>/dev/null || true
+
+if command -v cpupower >/dev/null; then
+  cpupower frequency-set -g performance 2>&1 | tee -a "$LOG_DIR/kernel_tuning.txt"
 fi
 
-# 2. Network and IRQ tuning
-echo "Disabling irqbalance..."
-systemctl stop irqbalance
-systemctl disable irqbalance
+# sysctl hot-path friendly
+cat > /etc/sysctl.d/99-hft3.conf << 'EOF'
+vm.swappiness=1
+kernel.numa_balancing=0
+EOF
+sysctl -p /etc/sysctl.d/99-hft3.conf | tee -a "$LOG_DIR/kernel_tuning.txt"
 
-# Set CPU scaling governor to performance on all cores
-if command -v cpupower &> /dev/null; then
-    cpupower frequency-set -g performance
-else
-    echo "cpupower not installed. Governor may not be set to performance."
-fi
+grep -q '^HOT_CPUS=' "$ENV_FILE" 2>/dev/null && sed -i "s/^HOT_CPUS=.*/HOT_CPUS=${HOT_CPUS}/" "$ENV_FILE" || echo "HOT_CPUS=${HOT_CPUS}" >> "$ENV_FILE"
+grep -q '^HFT3_ISOL_CPUS=' "$ENV_FILE" 2>/dev/null && sed -i "s/^HFT3_ISOL_CPUS=.*/HFT3_ISOL_CPUS=${HOT_CPUS}/" "$ENV_FILE" || echo "HFT3_ISOL_CPUS=${HOT_CPUS}" >> "$ENV_FILE"
 
-# 3. Disable HyperThreading (Requires sysfs access, preferable in BIOS)
-echo "Attempting to disable SMT/HyperThreading..."
-echo off > /sys/devices/system/cpu/smt/control 2>/dev/null || echo "Could not disable SMT via sysfs (check BIOS)"
-
-echo "Kernel tuning configured. A reboot is REQUIRED to apply GRUB changes."
+echo "KERNEL_REBOOT_REQUIRED=1" > "$LOG_DIR/kernel_reboot_required"
+echo "Kernel tuning done. Reboot required for GRUB."

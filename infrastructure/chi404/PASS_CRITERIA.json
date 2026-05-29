@@ -1,0 +1,13 @@
+{
+  "epsilon_halt_us": 500,
+  "epsilon_warn_us": 100,
+  "epsilon_last_offset_halt_us": 500,
+  "epsilon_rms_halt_us": 5000,
+  "cyclictest_p99_max_us": 20,
+  "nic_ring_min": 511,
+  "cpu_steal_max_pct": 0.1,
+  "load_max_1m": 0.5,
+  "require_virt": "none",
+  "require_cmdline_tokens": ["isolcpus=", "nohz_full=", "rcu_nocbs="],
+  "require_governor": "performance"
+}
