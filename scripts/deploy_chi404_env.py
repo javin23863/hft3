@@ -79,7 +79,7 @@ def _render_env(values: dict[str, str]) -> str:
     for k in KEYS:
         if k in merged and merged[k]:
             v = merged[k]
-            if " " in v or "#" in v or "$" in v:
+            if any(ch in v for ch in " #$(;"):
                 v = v.replace("\\", "\\\\").replace('"', '\\"')
                 lines.append(f'{k}="{v}"')
             else:
