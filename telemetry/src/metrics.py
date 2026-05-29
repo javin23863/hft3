@@ -18,7 +18,7 @@ class TelemetryMetrics:
         return np.mean(tail_losses)
         
     @staticmethod
-    def adverse_selection(fills_df: pd.DataFrame, horizons_ms=[100, 500, 1000, 5000]) -> dict:
+    def adverse_selection(fills_df: pd.DataFrame, tick_size: float = 0.25, horizons_ms=[100, 500, 1000, 5000]) -> dict:
         """
         Calculates post-fill markout (adverse selection) at multiple horizons.
         Requires 'side', 'exec_price', and 'mid_price_t+h' columns.
@@ -27,14 +27,15 @@ class TelemetryMetrics:
         for h in horizons_ms:
             col = f'mid_price_plus_{h}ms'
             if col in fills_df.columns:
-                # Long: (markout - exec)
-                # Short: (exec - markout)
+                # Long: (markout - exec) / tick_size
+                # Short: (exec - markout) / tick_size
                 longs = fills_df[fills_df['side'] == 'BUY']
                 shorts = fills_df[fills_df['side'] == 'SELL']
                 
-                as_long = (longs[col] - longs['exec_price']).mean() if not longs.empty else 0
-                as_short = (shorts['exec_price'] - shorts[col]).mean() if not shorts.empty else 0
+                as_long = ((longs[col] - longs['exec_price']) / tick_size).mean() if not longs.empty else 0
+                as_short = ((shorts['exec_price'] - shorts[col]) / tick_size).mean() if not shorts.empty else 0
                 
+                # We return the combined metric here or you could split it
                 results[f'{h}ms'] = (as_long + as_short) / 2.0
                 
         return results
