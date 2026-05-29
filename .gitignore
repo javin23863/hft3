@@ -1,0 +1,57 @@
+# Environment variables
+.env
+.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+
+# C++ / Build
+build/
+CMakeCache.txt
+CMakeFiles/
+Makefile
+cmake_install.cmake
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+
+# Data and Models
+data/*.dbn
+data/*.zst
+data/*.npz
+data/*.parquet
+data/*.csv
+!data_system/config/events.csv
+models/
+*.onnx
+
+# IDEs
+.vscode/
+.idea/
+*.swp
