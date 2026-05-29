@@ -12,7 +12,9 @@ add_compile_options(-O3 -Wall -Wextra)
 
 # Feature extractor library
 add_library(hft_features
+    features_engine/cpp/src/event_context.cpp
     features_engine/cpp/src/feature_extractor.cpp
+    features_engine/cpp/src/regime_filter.cpp
 )
 target_include_directories(hft_features PUBLIC
     features_engine/cpp/include
@@ -40,3 +42,8 @@ add_executable(hft_research_sim
     tools/research_sim_main.cpp
 )
 target_link_libraries(hft_research_sim PRIVATE hft_features hft_risk hft_decision)
+
+add_executable(hft_feature_golden
+    tools/feature_golden_main.cpp
+)
+target_link_libraries(hft_feature_golden PRIVATE hft_features)

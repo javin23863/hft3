@@ -53,10 +53,10 @@ Graph-assisted layer audit (May 2026). Tracks findings and remediation status ac
 
 | Item | Notes |
 |------|-------|
-| C++ regime probs 41–49 | Set in Python `MarketStatePipeline` only; C++ hot path zeros them until regime port |
+| C++ regime probs 41–49 | Ported in `RegimeFilterCpp`; written by `FeatureExtractorCpp` and Python pipeline |
 | Cross-asset hyps 16–20 | Disabled by default; enable with `HFT3_CROSS_ASSET=1` when ES/NQ/ZN feeds exist |
 | Rithmic trial NPZ | Trade-only from fixture bridge; full MBO requires R\|API |
-| `REALIZED_VOL_STATE` (26) | Still uncomputed in Python extractor |
+| `REALIZED_VOL_STATE` (26) | Rolling std of tick-normalized mid returns in 1s window (Python + C++) |
 | CHI404 live validate | Re-run on server after path/gate fixes |
 
 ## Verification

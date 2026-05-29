@@ -95,7 +95,9 @@ Orchestrator entry: `infrastructure/chi404/run_chi404_tuning.sh` (validate step 
 | **Fake PASS gates** | Marking CHI404 or pipeline "PASS" without `validate_pass_criteria.py` / `PASS_FAIL.txt` on real log dirs. |
 | **Fixture-only as done** | Rithmic trial passing on `fixture_connector` while live capture / Wine bridge untested. |
 | **Tests skipped** | "Should pass" without `pytest` in the loop. |
-| **Orchestrator implements everything** | Large inline edits burn context; use investigator → builder → reviewer. |
+| **Orchestrator implements everything** | Large inline edits burn context; use investigator → builder → reviewer → shell → graph post. |
+| **Skipped subagent chain** | Main thread inline locate/edit/review with no subagent receipts; unacceptable on a live execution stack — see [AGENTS.md § Trust](../AGENTS.md#trust-non-skippable-workflow). |
+| **Dishonest merge-ready** | Claiming done while reviewer said no, tests skipped without documented blockers, or C++ parity gate not run. |
 | **Builder for 3+ files** | Builder refuses; wastes a turn—plan multi-file work in main/feature agent. |
 | **Reviewer as architecture chat** | Use reviewer for diff findings; architecture stays with human + spec. |
 | **Trial data in production lake** | Writing trial capture into trusted `data/npz/` (see `docs/rithmic_trial/README.md`). |

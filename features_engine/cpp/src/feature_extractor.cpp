@@ -1,4 +1,5 @@
 #include "feature_extractor.hpp"
+#include "regime_filter.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -29,7 +30,14 @@ void FeatureExtractorCpp::reset() {
     prev_bid1_ = prev_ask1_ = 0;
     prev_reload_score_ = 0.0;
     last_ts_ns_ = 0;
+    prev_mid_ = 0.0;
+    mid_returns_.clear();
     spread_history_.clear();
+    regime_filter_.reset();
+}
+
+void FeatureExtractorCpp::set_event_context(const std::string& context) {
+    event_context_ = context.empty() ? "NORMAL" : context;
 }
 
 void FeatureExtractorCpp::maybe_reset_window(int64_t ts_ns) {
@@ -39,8 +47,33 @@ void FeatureExtractorCpp::maybe_reset_window(int64_t ts_ns) {
         near_touch_cancel_ = 0;
         reload_at_level_.clear();
         trade_at_level_.clear();
+        mid_returns_.clear();
+        prev_mid_ = 0.0;
     }
     last_ts_ns_ = ts_ns;
+}
+
+void FeatureExtractorCpp::update_realized_vol(double mid) {
+    if (prev_mid_ > 0.0 && mid > 0.0) {
+        mid_returns_.push_back((mid - prev_mid_) / tick_size_);
+        if (mid_returns_.size() > 100) mid_returns_.pop_front();
+    }
+    if (mid > 0.0) prev_mid_ = mid;
+
+    if (mid_returns_.size() >= 2) {
+        double mean = 0.0;
+        for (double r : mid_returns_) mean += r;
+        mean /= static_cast<double>(mid_returns_.size());
+        double var = 0.0;
+        for (double r : mid_returns_) {
+            const double d = r - mean;
+            var += d * d;
+        }
+        var /= static_cast<double>(mid_returns_.size());
+        vec_[static_cast<size_t>(FeatureIndex::REALIZED_VOL_STATE)] = std::sqrt(var);
+    } else if (mid_returns_.size() == 1) {
+        vec_[static_cast<size_t>(FeatureIndex::REALIZED_VOL_STATE)] = std::abs(mid_returns_.back());
+    }
 }
 
 void FeatureExtractorCpp::apply_book_event(const MBOEventCpp& event) {
@@ -85,16 +118,6 @@ void FeatureExtractorCpp::apply_book_event(const MBOEventCpp& event) {
                     int32_t rem = std::min(oit->second, event.size);
                     oit->second -= rem;
                     lvl.total_qty -= rem;
-                    if (event.action == 'C') {
-                        cancel_vol_ += rem;
-                        if (side == 'B') bid_cancel_ += rem;
-                        else ask_cancel_ += rem;
-                        double near = tick_size_ * 3;
-                        if (side == 'B' && best_bid_ > 0 && (best_bid_ - price) <= near)
-                            near_touch_cancel_ += rem;
-                        if (side == 'A' && best_ask_ < 1e11 && (price - best_ask_) <= near)
-                            near_touch_cancel_ += rem;
-                    }
                     if (oit->second <= 0) {
                         lvl.orders.erase(oit);
                         order_map_.erase(event.order_id);
@@ -129,6 +152,7 @@ static int sum_top_k(const std::map<double, BookLevelCpp>& book, int k, bool bid
 }
 
 void FeatureExtractorCpp::process_event(const MBOEventCpp& event) {
+    set_event_context(event_engine_.resolve_ns(event.timestamp_ns));
     maybe_reset_window(event.timestamp_ns);
     const double near_ticks = tick_size_ * 3;
 
@@ -209,6 +233,7 @@ void FeatureExtractorCpp::extract() {
         }
         vec_[16] = median > 1e-9 ? spread / median : 1.0;
         vec_[40] = (best_bid_ + best_ask_) / 2.0;
+        update_realized_vol(vec_[40]);
     }
 
     const int bid_depl = std::max(0, prev_bid1_ - b1);
@@ -235,6 +260,8 @@ void FeatureExtractorCpp::extract() {
     int hit_vol = 0;
     for (const auto& [_, v] : trade_at_level_) hit_vol += v;
     vec_[21] = total_agg > 0 ? (static_cast<double>(hit_vol) / (total_agg + 1e-9)) * (1.0 - std::abs(slope)) : 0.0;
+
+    regime_filter_.update(vec_, event_context_);
 }
 
 }  // namespace hft

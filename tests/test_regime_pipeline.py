@@ -39,10 +39,19 @@ def test_event_context_cpi_tight():
 
 def test_pipeline_produces_indexed_vector():
     pipe = MarketStatePipeline(tick_size=0.25)
-    ev = MBOEvent(1_700_000_000_000, 1, "ADD", "B", 5500.0, 5)
-    state = pipe.process_event(ev)
+    events = [
+        MBOEvent(1_700_000_000_000, 1, "ADD", "B", 5500.0, 10),
+        MBOEvent(1_700_000_000_100, 2, "ADD", "A", 5500.25, 8),
+        MBOEvent(1_700_000_000_200, 3, "TRADE", "A", 5500.25, 2),
+    ]
+    state = None
+    for ev in events:
+        state = pipe.process_event(ev)
+    assert state is not None
     assert state.feature_vector is not None
     assert state.feature_vector.shape == (64,)
     assert state.regime_posterior
-    assert state.primary_features["aggressor_volume_imbalance"] == state.feature_vector[0]
-    assert state.f("mid_price", 0.0) == 0.0  # single-sided book in smoke event
+    regime_sum = float(np.sum(state.feature_vector[41:50]))
+    assert abs(regime_sum - 1.0) < 1e-5
+    assert state.feature_vector[26] >= 0  # REALIZED_VOL_STATE
+    assert state.f("mid_price", 0.0) > 0

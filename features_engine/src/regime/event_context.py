@@ -55,12 +55,12 @@ class EventContextEngine:
                 return "NFP_TIGHT"
             if "FOMC" in str(event_type):
                 return "FOMC_STATEMENT_TIGHT"
+        if event_type == "PROP_REOPEN":
+            return "PROP_REOPEN"
         if event_type == "CASH_EQUITY_OPEN" or "OPEN" in str(event_type):
             return "CASH_EQUITY_OPEN"
         if event_type == "PROP_FLATTEN_TOPSTEP":
             return "PROP_FLATTEN_TOPSTEP"
-        if event_type == "PROP_REOPEN":
-            return "PROP_REOPEN"
         if "FRIDAY" in str(event_type):
             return "FRIDAY_CLOSE"
         if "APEX" in str(event_type):

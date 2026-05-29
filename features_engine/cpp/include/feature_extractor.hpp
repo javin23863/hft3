@@ -1,8 +1,13 @@
 #pragma once
 
+#include "event_context.hpp"
+#include "regime_filter.hpp"
+
 #include <array>
 #include <cstdint>
+#include <deque>
 #include <map>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -28,16 +33,21 @@ public:
 
     void reset();
     void process_event(const MBOEventCpp& event);
+    void set_event_context(const std::string& context);
     const std::array<double, 64>& features() const { return vec_; }
 
 private:
     void apply_book_event(const MBOEventCpp& event);
     void maybe_reset_window(int64_t ts_ns);
     void extract();
+    void update_realized_vol(double mid);
 
     double tick_size_;
     int64_t rolling_window_ns_;
     int64_t last_ts_ns_{0};
+    std::string event_context_{"NORMAL"};
+    EventContextEngineCpp event_engine_;
+    RegimeFilterCpp regime_filter_;
     std::array<double, 64> vec_{};
     std::map<double, BookLevelCpp> bids_;
     std::map<double, BookLevelCpp> asks_;
@@ -61,6 +71,8 @@ private:
     std::vector<double> spread_history_;
     std::map<std::pair<char, double>, int> reload_at_level_;
     std::map<std::pair<char, double>, int> trade_at_level_;
+    double prev_mid_{0.0};
+    std::deque<double> mid_returns_;
 };
 
 }  // namespace hft

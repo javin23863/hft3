@@ -133,6 +133,8 @@ class MBOFeatureExtractor:
         self._prev_reload_score = 0.0
         self._trade_at_level: Dict[Tuple[str, float], int] = {}
         self.last_ts_ns = 0
+        self._prev_mid = 0.0
+        self._mid_returns: Deque[float] = deque(maxlen=100)
 
     def _maybe_reset_window(self, ts_ns: int) -> None:
         if self.last_ts_ns and (ts_ns - self.last_ts_ns) > self.rolling_window_ns:
@@ -145,6 +147,8 @@ class MBOFeatureExtractor:
             self.bid_cancel_vol = 0
             self.ask_cancel_vol = 0
             self.near_touch_cancel_vol = 0
+            self._mid_returns.clear()
+            self._prev_mid = 0.0
         self.last_ts_ns = ts_ns
 
     def process_event(self, event: MBOEvent) -> np.ndarray:
@@ -244,7 +248,15 @@ class MBOFeatureExtractor:
         )
 
         if bb > 0 and ba < float("inf"):
-            v[FeatureIndex.MID_PRICE] = (bb + ba) / 2.0
+            mid = (bb + ba) / 2.0
+            v[FeatureIndex.MID_PRICE] = mid
+            if self._prev_mid > 0:
+                self._mid_returns.append((mid - self._prev_mid) / self.tick_size)
+            self._prev_mid = mid
+            if len(self._mid_returns) >= 2:
+                v[FeatureIndex.REALIZED_VOL_STATE] = float(np.std(self._mid_returns))
+            elif len(self._mid_returns) == 1:
+                v[FeatureIndex.REALIZED_VOL_STATE] = abs(self._mid_returns[0])
 
         bid_depl = max(0, self.prev_bid1_qty - b1) / (self.prev_bid1_qty + 1e-9)
         ask_depl = max(0, self.prev_ask1_qty - a1) / (self.prev_ask1_qty + 1e-9)

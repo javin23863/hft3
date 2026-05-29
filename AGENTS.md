@@ -24,9 +24,46 @@ Main thread must **not**:
 
 - Run large inline grep/read sweeps when investigator or explore would suffice
 - Edit three or more files in one turn without explicit user approval
+- Skip subagent delegation and absorb locate → edit → review inline to save time
 - Skip verification after code changes
+- Claim merge-ready or "done" without a reviewer verdict and green verify commands
+- Hide skipped tests or missing tooling behind a passing pytest summary
 
-Typical chain: investigator locates site → builder edits → reviewer audits diff → main thread verifies.
+Typical chain: investigator locates site → builder edits → reviewer audits diff → shell verifies → graph post.
+
+## Trust: non-skippable workflow
+
+This stack drives real research and execution. **Skipping delegation or verification is never acceptable**, even for "small" or urgent fixes. The user must be able to trust that every change ran the full chain.
+
+### Required subagent chain (every code change)
+
+Run this loop in order. The main thread **orchestrates and integrates**; it does **not** substitute for subagents.
+
+1. **Locate** — `cavecrew-investigator` or `explore` when definitions, callers, or test sites are not already known.
+2. **Edit** — `cavecrew-builder` for surgical changes (≤2 files). Multi-file work stays in main/feature agent with explicit user approval per batch.
+3. **Review** — `cavecrew-reviewer` dual-pass (Karpathy + math invariants) **before** claiming the change is sound. Report reviewer receipt: 🔴 count, 🟡 count, **merge-ready yes/no**.
+4. **Verify** — `shell` runs `pytest` (and CHI404 validate when infra applies). Paste or summarize command output; do not narrate "tests pass" without evidence.
+5. **GraphPost** — `graphify update .` or `scripts/graphify_rebuild.ps1` after edits. Commit updated `graphify-out/` with the change when the team tracks graph in git.
+
+**Parallel investigators** are OK. **Skipping any step** is not.
+
+### If the chain was skipped
+
+Stop. Acknowledge the miss to the user. Re-run the full **Spec → GraphPre → Plan → Delegate → Verify → GraphPost** loop on the current diff before more edits or a merge/commit narrative.
+
+### Merge-ready criteria (honest status)
+
+Do not tell the user work is merge-ready unless **all** of the following are true:
+
+| Gate | Requirement |
+|------|-------------|
+| Reviewer | `cavecrew-reviewer` verdict **merge-ready: yes**, **0 🔴** |
+| Tests | `pytest` green with command output in the thread |
+| Skipped tests | Every skip has a **documented blocker** (e.g. CMake missing → `test_cpp_feature_golden` skipped). Say **merge-ready: no** until the gate runs or the user explicitly accepts the skip. |
+| C++ parity | When Python/C++ feature slots change: build `hft_feature_golden` and pass `tests/test_cpp_feature_golden.py` |
+| Graph | `graphify-out/` rebuilt after code edits when graph is tracked in git |
+
+When blocked, state **what ran**, **what was skipped**, and **what unblocks** — do not imply completion.
 
 ## Karpathy principles
 
