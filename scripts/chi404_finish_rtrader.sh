@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Finish CHI404 Rithmic trial: Windows VM + SMB + capture (colo-only).
+set -euo pipefail
+
+REPO="${HFT3_REPO_DIR:-/root/hft3/repo}"
+cd "$REPO"
+
+echo "=== Quiesce Wine ==="
+systemctl stop hft3-rithmic-trial 2>/dev/null || true
+killall -9 wine wineserver winetricks 2>/dev/null || true
+sleep 2
+
+echo "=== SMB share ==="
+bash "$REPO/infrastructure/chi404/10_rtrader_smb_share.sh"
+
+echo "=== Windows VM (requires ${WINDOWS_ISO:-/root/hft3/installers/windows.iso}) ==="
+if [[ -f "${WINDOWS_ISO:-/root/hft3/installers/windows.iso}" ]]; then
+  bash "$REPO/infrastructure/chi404/11_rtrader_windows_vm.sh"
+else
+  echo "SKIP VM create — upload windows.iso then re-run 11_rtrader_windows_vm.sh"
+fi
+
+echo "=== Linux capture bridge ==="
+bash "$REPO/scripts/chi404_setup_vm_bridge.sh"
+
+echo "=== Status ==="
+systemctl is-active hft3-rithmic-trial
+virsh domstate hft3-rtrader-win 2>/dev/null || echo "vm-not-created"
+ls -la /root/hft3/rtrader_watch/ | head -10

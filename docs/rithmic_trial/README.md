@@ -1,6 +1,6 @@
 # Rithmic Trial Ingestion Lane
 
-Temporary bridge from R|Trader Pro (Wine on CHI404) into the quarantined HftBacktest replay workflow. Does **not** write to the trusted production data lake (`data/npz/` from Databento).
+Temporary bridge from R|Trader Pro (Windows VM on CHI404) into the quarantined HftBacktest replay workflow. Does **not** write to the trusted production data lake (`data/npz/` from Databento).
 
 Spec: [rithmic_trial_hftbacktest_pipeline_prompt.pdf](../../rithmic_trial_hftbacktest_pipeline_prompt.pdf)
 
@@ -46,26 +46,42 @@ python -m data_system.rithmic_trial.pipeline replay-sample \
 
 Live Rithmic trial capture **must run on CHI404** — not on a Windows workstation. Millisecond latency cannot tolerate a remote desktop or file-bridge loop through your PC.
 
+**Supported path:** native R|Trader in a KVM Windows VM; logs export via SMB to `/root/hft3/rtrader_watch` → `RTraderBridgeConnector` → `hft3-rithmic-trial.service`.
+
 ```bash
 # On CHI404 (/root/hft3)
 export RITHMIC_TRIAL_ENABLED=1
 
-# Set in /root/hft3/.env
-RTRADER_INSTALLER_PATH=/path/to/RTraderSetup.exe
-RTRADER_WINE_PREFIX=/root/.wine-rtrader
+# One-time host setup (SMB + VM + capture bridge)
+bash /root/hft3/repo/scripts/chi404_finish_rtrader.sh
 
-bash infrastructure/chi404/08_rtrader_wine_setup.sh
-bash scripts/setup_rithmic_chi404.sh
-bash /root/hft3/logs/rtrader/launch_rtrader.sh
+# Requires /root/hft3/installers/windows.iso (upload once from workstation if missing)
+# Windows install console: ssh -L 5900:127.0.0.1:5900 chi404 → VNC localhost:5900
 
-python -m data_system.rithmic_trial.pipeline run-unattended \
-  --config data_system/config/rithmic_trial.yaml
+# Env in /root/hft3/.env
+RTRADER_WATCH_DIRS="/root/hft3/rtrader_watch"
+RTRADER_START_WINE=0
+RITHMIC_TRIAL_CONNECTOR=rtrader
+RTRADER_SMB_USER=rtrader
+RTRADER_SMB_HOST=192.168.122.1
 ```
 
-First login may require provider console or VNC. Discovery output: `/root/hft3/logs/rtrader/rtrader_discovery.json` — copy `watch_dirs` into `data_system/config/rithmic_trial.yaml`.
+Guest VM first boot runs `scripts/chi404_vm_guest_setup.ps1` (maps `R:` to SMB, installs portable R|Trader, junction `Documents\Rithmic` → `R:\`, scheduled task at logon). **First Rithmic Paper / Chicago login** may still need console or RDP over SSH tunnel.
 
-Status file: `reports/rithmic_trial/YYYY-MM-DD/unattended_status.json`  
-Log: `logs/rithmic_trial/unattended.log`
+**VM install handoff / known bugs:** [CHI404_VM_BUGS.md](CHI404_VM_BUGS.md)
+
+Verification gates (run once each):
+
+```bash
+virsh domstate hft3-rtrader-win          # running
+find /root/hft3/rtrader_watch -name '*.log'
+systemctl is-active hft3-rithmic-trial     # active
+cat reports/rithmic_trial/$(date -u +%Y-%m-%d)/unattended_status.json
+```
+
+### Deprecated: Wine on Linux
+
+Wine + dotnet472 on CHI404 **does not work** for R|Trader (.NET/mscoree). Scripts moved to `scripts/deprecated/`. Do not use workstation log-push (`push_rtrader_logs_chi404.ps1`) — forbidden by AGENTS.md topology.
 
 ## Schema mapping
 
@@ -114,4 +130,5 @@ Do **not** put Wine or R|Trader paths in `rithmic_gateway/` C++ hot path.
 - `RITHMIC_TRIAL_ENABLED=1`
 - `RITHMIC_TRIAL_CONNECTOR=fixture|rtrader|rithmic_api`
 - `RITHMIC_SYMBOL`, `RITHMIC_EXCHANGE`
-- `RTRADER_WINE_PREFIX`, `RTRADER_INSTALLER_PATH`
+- `RTRADER_WINE_PREFIX`, `RTRADER_INSTALLER_PATH` (Wine path — deprecated)
+- `RTRADER_WATCH_DIRS`, `RTRADER_START_WINE=0`, `RTRADER_SMB_*` (VM + SMB path)

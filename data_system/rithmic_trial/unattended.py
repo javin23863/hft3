@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import signal
 import subprocess
 import sys
@@ -121,7 +122,10 @@ def run_unattended(
     signal.signal(signal.SIGTERM, _handle_sig)
 
     if start_rtrader and cfg.connector.lower().startswith("rtrader"):
-        ensure_rtrader_started(cfg)
+        if os.environ.get("RTRADER_START_WINE", "1").lower() not in ("0", "false", "no"):
+            ensure_rtrader_started(cfg)
+        else:
+            logging.info("RTRADER_START_WINE=0 — expecting log_push bridge into watch_dirs")
 
     connector = build_connector(cfg)
     connector.connect()

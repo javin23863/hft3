@@ -1,16 +1,16 @@
-# Graph Report - hft3  (2026-05-29)
+# Graph Report - hft3  (2026-05-30)
 
 ## Corpus Check
-- 147 files · ~57,399 words
+- 167 files · ~108,961 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2232 nodes · 3786 edges · 176 communities (153 shown, 23 thin omitted)
-- Extraction: 86% EXTRACTED · 14% INFERRED · 0% AMBIGUOUS · INFERRED: 519 edges (avg confidence: 0.5)
+- 2309 nodes · 3851 edges · 201 communities (162 shown, 39 thin omitted)
+- Extraction: 87% EXTRACTED · 13% INFERRED · 0% AMBIGUOUS · INFERRED: 519 edges (avg confidence: 0.5)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `d3325246`
+- Built from commit: `3dafbb4b`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -168,9 +168,31 @@
 - [[_COMMUNITY_Community 169|Community 169]]
 - [[_COMMUNITY_Community 170|Community 170]]
 - [[_COMMUNITY_Community 171|Community 171]]
+- [[_COMMUNITY_Community 173|Community 173]]
 - [[_COMMUNITY_Community 174|Community 174]]
 - [[_COMMUNITY_Community 175|Community 175]]
 - [[_COMMUNITY_Community 176|Community 176]]
+- [[_COMMUNITY_Community 177|Community 177]]
+- [[_COMMUNITY_Community 178|Community 178]]
+- [[_COMMUNITY_Community 179|Community 179]]
+- [[_COMMUNITY_Community 180|Community 180]]
+- [[_COMMUNITY_Community 181|Community 181]]
+- [[_COMMUNITY_Community 182|Community 182]]
+- [[_COMMUNITY_Community 183|Community 183]]
+- [[_COMMUNITY_Community 184|Community 184]]
+- [[_COMMUNITY_Community 185|Community 185]]
+- [[_COMMUNITY_Community 186|Community 186]]
+- [[_COMMUNITY_Community 187|Community 187]]
+- [[_COMMUNITY_Community 188|Community 188]]
+- [[_COMMUNITY_Community 189|Community 189]]
+- [[_COMMUNITY_Community 190|Community 190]]
+- [[_COMMUNITY_Community 191|Community 191]]
+- [[_COMMUNITY_Community 192|Community 192]]
+- [[_COMMUNITY_Community 193|Community 193]]
+- [[_COMMUNITY_Community 194|Community 194]]
+- [[_COMMUNITY_Community 195|Community 195]]
+- [[_COMMUNITY_Community 196|Community 196]]
+- [[_COMMUNITY_Community 197|Community 197]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `BaseHypothesis` - 72 edges
@@ -185,22 +207,22 @@
 10. `BaseHypothesis` - 46 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `str` --uses--> `MarketStatePipeline`  [INFERRED]
-  decision_engine/python/src/feature_store.py → features_engine/src/pipeline/market_state_pipeline.py
-- `float` --uses--> `MarketStatePipeline`  [INFERRED]
-  decision_engine/python/src/feature_store.py → features_engine/src/pipeline/market_state_pipeline.py
 - `Path` --uses--> `LegQuote`  [INFERRED]
   tests/test_parity_ingest.py → options_lane/src/models.py
 - `CombinedHypothesisStrategy` --uses--> `FeatureIndex`  [INFERRED]
   backtest_pipeline/src/hft_strategy.py → features_engine/src/features/feature_index.py
 - `CombinedHypothesisStrategy` --uses--> `BaseHypothesis`  [INFERRED]
   backtest_pipeline/src/hft_strategy.py → features_engine/src/hypotheses/modules.py
+- `CombinedHypothesisStrategy` --uses--> `MarketState`  [INFERRED]
+  backtest_pipeline/src/hft_strategy.py → features_engine/src/hypotheses/modules.py
+- `CombinedHypothesisStrategy` --uses--> `RegimeFilter`  [INFERRED]
+  backtest_pipeline/src/hft_strategy.py → features_engine/src/regime/regime_filter.py
 
-## Communities (176 total, 23 thin omitted)
+## Communities (201 total, 39 thin omitted)
 
 ### Community 0 - "Community 0"
-Cohesion: 0.18
-Nodes (22): str, BaseHypothesis, DataFrame, float, int, ndarray, str, DataFrame (+14 more)
+Cohesion: 0.08
+Nodes (23): 10. No live R|Trader logs until guest setup completes, 1. `virsh undefine --remove-all-storage` deleted ISOs, 2. Floppy `autounattend.xml` → license EULA error, 3. Upgrade vs Custom, 4. `on_reboot` was `destroy` (fixed on running domain), 5. VNC click coordinates vs keyboard, 6. `vncdo type` and OOBE password, 7. Wine path deprecated (+15 more)
 
 ### Community 1 - "Community 1"
 Cohesion: 0.11
@@ -215,16 +237,16 @@ Cohesion: 0.06
 Nodes (34): Capacity, MarketDataEvent, action, order_id, price, side, size, timestamp_ns (+26 more)
 
 ### Community 4 - "Community 4"
-Cohesion: 0.10
-Nodes (17): ConnectorInterface, build_connector(), Placeholder for future direct R|API connector., RithmicApiConnector, ConnectorInterface, Any, str, Any (+9 more)
+Cohesion: 0.13
+Nodes (10): ConnectorInterface, Placeholder for future direct R|API connector., RithmicApiConnector, ConnectorInterface, Any, str, Any, str (+2 more)
 
 ### Community 5 - "Community 5"
-Cohesion: 0.16
-Nodes (24): LiveCapture, FixtureConnector, Synthetic trial events for CI and offline pipeline tests., int, Namespace, Any, str, Any (+16 more)
+Cohesion: 0.21
+Nodes (14): int, Namespace, Any, str, Any, str, Namespace, cmd_capture() (+6 more)
 
 ### Community 6 - "Community 6"
-Cohesion: 0.08
-Nodes (34): bool, datetime, float, int, datetime, str, DataFrame, str (+26 more)
+Cohesion: 0.10
+Nodes (18): bool, datetime, float, int, datetime, str, main(), _parse_env() (+10 more)
 
 ### Community 7 - "Community 7"
 Cohesion: 0.07
@@ -235,8 +257,8 @@ Cohesion: 0.07
 Nodes (28): detected_event_types, input_files, connector, missing_event_types, note, limitations, connector, missing_event_types (+20 more)
 
 ### Community 9 - "Community 9"
-Cohesion: 0.06
-Nodes (40): float, str, float, bool, DataFrame, float, int, ndarray (+32 more)
+Cohesion: 0.10
+Nodes (21): float, DataFrame, float, int, float, int, str, MultiLossObjective (+13 more)
 
 ### Community 10 - "Community 10"
 Cohesion: 0.05
@@ -259,28 +281,28 @@ Cohesion: 0.09
 Nodes (21): checks, bad_prices, bad_sizes, crossed_books, duplicates, local_timestamp_monotonicity_violations, locked_books, malformed_order_fill_events (+13 more)
 
 ### Community 15 - "Community 15"
-Cohesion: 0.20
-Nodes (16): bool, Any, bool, int, Path, str, TrialConfig, is_windows() (+8 more)
+Cohesion: 0.15
+Nodes (22): Path, str, bool, Any, bool, int, Path, str (+14 more)
 
 ### Community 16 - "Community 16"
 Cohesion: 0.33
 Nodes (6): array, RegimeFilterCpp, prev_posterior_, reset, temperature_, update
 
 ### Community 17 - "Community 17"
-Cohesion: 0.16
-Nodes (16): _parse_csv_row(), _parse_log_line(), Watch R|Trader Pro export/log files (Windows native or Wine interim bridge)., Watch R|Trader Pro export/log files (Wine on CHI404 only)., RTraderBridgeConnector, Any, Path, str (+8 more)
+Cohesion: 0.15
+Nodes (18): build_connector(), _parse_csv_row(), _parse_log_line(), Watch R|Trader Pro export/log files (Wine on CHI404 only)., RTraderBridgeConnector, ConnectorInterface, TrialConfig, Any (+10 more)
 
 ### Community 18 - "Community 18"
 Cohesion: 0.06
-Nodes (74): BaseHypothesis, int, str, AbsorptionFade, AggressorDecelerationFade, BaseHypothesis, CancelStormBeforeMove, CutoffPanicExits (+66 more)
+Nodes (66): BaseHypothesis, int, str, AbsorptionFade, AggressorDecelerationFade, BaseHypothesis, CancelStormBeforeMove, CutoffPanicExits (+58 more)
 
 ### Community 19 - "Community 19"
 Cohesion: 0.36
 Nodes (7): convert_to_npz(), _has_mbo(), Any, bool, float, Path, str
 
 ### Community 20 - "Community 20"
-Cohesion: 0.11
-Nodes (13): EndOfDayForcedFlatten, EsNqDivergenceSnapback, LateCandleEntryFade, PanicMarketOrderSpreadTax, Hypothesis 26: Late candle entry fade, Hypothesis 28: Panic market-order spread tax, Hypothesis 18: ES/NQ divergence snapback, Hypothesis 29: End-of-day forced flatten flow (+5 more)
+Cohesion: 0.12
+Nodes (11): DailyLossLimitDefense, ForcedLiquidationCascade, LateCandleEntryFade, Hypothesis 7: Forced liquidation cascade, Hypothesis 26: Late candle entry fade, Hypothesis 32: Daily loss-limit defense, HypothesisRegistry, Creates the standardized research card for a model/hypothesis. (+3 more)
 
 ### Community 21 - "Community 21"
 Cohesion: 0.08
@@ -291,8 +313,8 @@ Cohesion: 0.12
 Nodes (16): feed_latency_us, avg_us, count, max_us, min_us, p99_us, input_files, limitations (+8 more)
 
 ### Community 23 - "Community 23"
-Cohesion: 0.12
-Nodes (16): CHI404 only (Chicago colo), code:block1 (data/raw/rithmic_trial_live_capture/YYYY-MM-DD/SYMBOL/), code:bash (# Enable in config or env), code:bash (# On CHI404 (/root/hft3)), code:powershell ($env:RITHMIC_TRIAL_ENABLED='1'), code:bash (# Set in /root/hft3/.env), Config, Detected vs missing event types (+8 more)
+Cohesion: 0.13
+Nodes (14): CHI404 only (Chicago colo), code:block1 (data/raw/rithmic_trial_live_capture/YYYY-MM-DD/SYMBOL/), code:bash (# Enable in config or env), code:bash (# On CHI404 (/root/hft3)), code:bash (virsh domstate hft3-rtrader-win          # running), Config, Deprecated: Wine on Linux, Detected vs missing event types (+6 more)
 
 ### Community 24 - "Community 24"
 Cohesion: 0.13
@@ -307,12 +329,12 @@ Cohesion: 0.10
 Nodes (19): 1. Think Before Coding, 2. Simplicity First, 3. Surgical Changes, 4. Goal-Driven Execution, CHI404 bare metal, hft3 Agent Charter, hft3-specific constraints, If the chain was skipped (+11 more)
 
 ### Community 27 - "Community 27"
-Cohesion: 0.19
-Nodes (33): bool, float, int, LegQuote, ParityGroup, QuoteSnapshot, str, LegQuote (+25 more)
+Cohesion: 0.16
+Nodes (24): float, LegQuote, ParityGroup, str, float, int, LegQuote, ParityGroup (+16 more)
 
 ### Community 28 - "Community 28"
-Cohesion: 0.18
-Nodes (11): BaseHypothesis, float, float, str, Latent regime posterior P(Z_t = z | F_t) per math model Section 5.  v0: log-li, Estimates P(Z_t | F_t) from observable features at time t only., RegimeFilter, _softmax() (+3 more)
+Cohesion: 0.16
+Nodes (11): BaseHypothesis, bool, float, MarketState, float, str, MarketState, Latent regime posterior P(Z_t = z | F_t) per math model Section 5.  v0: log-li (+3 more)
 
 ### Community 29 - "Community 29"
 Cohesion: 0.14
@@ -459,8 +481,8 @@ Cohesion: 0.14
 Nodes (13): code:powershell (pip install graphifyy), code:powershell (graphify --version), code:powershell (.\scripts\graphify_pre_edit.ps1), code:powershell (.\scripts\graphify_rebuild.ps1), code:powershell (graphify update .), code:powershell (graphify .), Graphify workflow (hft3), Install (+5 more)
 
 ### Community 65 - "Community 65"
-Cohesion: 0.13
-Nodes (19): float, int, ndarray, str, FeatureIndex, new_feature_vector(), Fixed feature index aligned with C++ std::array<double, 64>., BookLevel (+11 more)
+Cohesion: 0.22
+Nodes (6): float, int, ndarray, str, OrderBook, L3 book with O(1) amortized BBO; top-K via heapq (O(N log K), K=10).
 
 ### Community 66 - "Community 66"
 Cohesion: 0.17
@@ -473,6 +495,10 @@ Nodes (8): Calculates Expected Shortfall (CVaR) at the given alpha percentile., 
 ### Community 68 - "Community 68"
 Cohesion: 0.18
 Nodes (10): 1. Executive specification, 2. Mathematical foundation, 3. Pure mathematical model, 4. Live Architecture, 5. Historical data plan, 6. HftBacktest pipeline, 7. Feature set and Hypothesis Families, 8. Validation standard (+2 more)
+
+### Community 69 - "Community 69"
+Cohesion: 0.19
+Nodes (13): LiveCapture, FixtureConnector, Synthetic trial events for CI and offline pipeline tests., Any, Path, str, TrialConfig, MonkeyPatch (+5 more)
 
 ### Community 70 - "Community 70"
 Cohesion: 0.05
@@ -487,11 +513,11 @@ Cohesion: 0.20
 Nodes (6): FailureState, RiskLimits, RiskStatus, check_order(), handle_failure_state(), RiskManager()
 
 ### Community 73 - "Community 73"
-Cohesion: 0.29
+Cohesion: 0.24
 Nodes (7): _sha256(), _utc_date(), Any, int, Path, str, TrialConfig
 
 ### Community 74 - "Community 74"
-Cohesion: 0.36
+Cohesion: 0.42
 Nodes (8): Any, int, Path, str, TrialConfig, normalize_event(), normalize_file(), _parse_exchange_ts()
 
 ### Community 75 - "Community 75"
@@ -508,7 +534,7 @@ Nodes (8): best_ask, best_bid, depth_events, limitations, quote_events, spread, 
 
 ### Community 78 - "Community 78"
 Cohesion: 0.23
-Nodes (32): _build_classifications(), _build_complete_picture(), _classification_block(), _classify_tier(), _configured_hosts(), _cyclictest_p99_max(), _format_leg_status(), _gateway_rtt_from_summary() (+24 more)
+Nodes (33): float, _build_classifications(), _build_complete_picture(), _classification_block(), _classify_tier(), _configured_hosts(), _cyclictest_p99_max(), _format_leg_status() (+25 more)
 
 ### Community 79 - "Community 79"
 Cohesion: 0.07
@@ -547,8 +573,8 @@ Cohesion: 0.25
 Nodes (8): LogProbQueueModel2, aggregated_net_pnl, approval_status, latency_bands_tested, model_id, queue_model, tail_risk_es_95, timestamp
 
 ### Community 88 - "Community 88"
-Cohesion: 0.26
-Nodes (10): bool, Path, str, bool, Path, main(), Master offline orchestrator (pre-bare-metal): probe download -> convert -> resea, Generate 44 per-hypothesis research cards + HftBacktest combined replay + fills (+2 more)
+Cohesion: 0.12
+Nodes (17): DataFrame, str, datetime, MarketState, MBOEvent, datetime, int, str (+9 more)
 
 ### Community 89 - "Community 89"
 Cohesion: 0.25
@@ -603,8 +629,8 @@ Cohesion: 0.29
 Nodes (6): exe_path, note, platform, rithmic_environment, rithmic_gateway, watch_dirs
 
 ### Community 102 - "Community 102"
-Cohesion: 0.43
-Nodes (6): main(), _parse_env(), Path, str, Upload /root/hft3/.env on CHI404 from local .env (Rithmic + host keys)., _render_env()
+Cohesion: 0.40
+Nodes (4): install_rithmic_chi404_unattended.sh script, HFT3_REPO_DIR, RITHMIC_TRIAL_CONNECTOR, RITHMIC_TRIAL_ENABLED
 
 ### Community 103 - "Community 103"
 Cohesion: 0.40
@@ -639,28 +665,24 @@ Cohesion: 0.22
 Nodes (9): research_operating_tier, bottleneck, dominant_rtt_ms, recommendation, recommended_latency_bands_ms, source, status, tier_ms (+1 more)
 
 ### Community 114 - "Community 114"
-Cohesion: 0.17
-Nodes (9): MarketState, MBOEvent, datetime, int, str, EventContextEngine, Maps timestamp t to event context E_t using events.csv windows (F_t only)., Resolves E_t label for a UTC timestamp against parsed event windows. (+1 more)
-
-### Community 115 - "Community 115"
-Cohesion: 0.27
-Nodes (4): int, str, OneSidedAddCancelImbalance, Hypothesis 15: One-sided add/cancel imbalance
+Cohesion: 0.19
+Nodes (10): float, ndarray, str, FeatureIndex, new_feature_vector(), Fixed feature index aligned with C++ std::array<double, 64>., vector_to_feature_dict(), BookLevel (+2 more)
 
 ### Community 116 - "Community 116"
 Cohesion: 0.25
 Nodes (8): rithmic_trial_profile, connector, data_capture_report, limitations, order_rtt_ms, path, status, trusted
 
 ### Community 117 - "Community 117"
-Cohesion: 0.16
-Nodes (17): Ingest helpers for options parity lane., load_quote_ndjson(), Load quote fixtures for parity lane., cmd_backtest(), cmd_discover(), cmd_fixture_backtest(), cmd_scan(), main() (+9 more)
+Cohesion: 0.33
+Nodes (10): cmd_backtest(), cmd_discover(), cmd_fixture_backtest(), cmd_scan(), main(), int, Namespace, str (+2 more)
 
 ### Community 118 - "Community 118"
 Cohesion: 0.29
 Nodes (6): setup_rithmic_chi404.sh script, RITHMIC_ENVIRONMENT, RITHMIC_GATEWAY, RITHMIC_TRIAL_CONFIG, RITHMIC_TRIAL_CONNECTOR, RITHMIC_TRIAL_ENABLED
 
 ### Community 119 - "Community 119"
-Cohesion: 0.14
-Nodes (23): align_quotes(), Event-time quote alignment for parity groups (filtration-safe)., Build snapshots at each distinct timestamp where at least one leg updates.     E, snapshot_has_required_legs(), ParityGroup, Path, str, bool (+15 more)
+Cohesion: 0.23
+Nodes (14): ArbFill, _PendingArb, Multi-leg parity arb backtest with latency deferral., align_quotes(), Event-time quote alignment for parity groups (filtration-safe)., Build snapshots at each distinct timestamp where at least one leg updates.     E, snapshot_has_required_legs(), bool (+6 more)
 
 ### Community 121 - "Community 121"
 Cohesion: 0.62
@@ -671,16 +693,12 @@ Cohesion: 0.33
 Nodes (15): days, string, vector, month, col_index(), EventContextEngineCpp(), map_label(), nth_weekday_of_month() (+7 more)
 
 ### Community 125 - "Community 125"
-Cohesion: 0.17
-Nodes (13): Config-driven options fee model for parity arb., float, int, ParityGroup, str, float, LegQuote, ParityGroup (+5 more)
+Cohesion: 0.38
+Nodes (4): float, int, ParityGroup, str
 
 ### Community 126 - "Community 126"
-Cohesion: 0.16
-Nodes (13): float, ndarray, str, vector_to_feature_dict(), Builds full MarketState X_t from MBO events: features, regime posterior, event c, HftBacktest 2.x strategy: combined hypothesis signal -> orders with fees., _golden_exe(), ndarray (+5 more)
-
-### Community 129 - "Community 129"
-Cohesion: 0.36
-Nodes (12): bool, int, MBOEvent, ndarray, str, MBOEvent, _event_side(), _event_type() (+4 more)
+Cohesion: 0.24
+Nodes (17): MBOEvent, MBOFeatureExtractor, Indexed feature vector (64,) — no per-tick dict allocation on hot path., Path, _golden_exe(), ndarray, Path, C++ golden parity for REALIZED_VOL (26) and regime slots (41-49). (+9 more)
 
 ### Community 140 - "Community 140"
 Cohesion: 0.29
@@ -691,8 +709,8 @@ Cohesion: 0.33
 Nodes (5): detected_event_types, events_captured, status, uptime_sec, watch_dirs
 
 ### Community 158 - "Community 158"
-Cohesion: 0.40
-Nodes (4): bool, float, int, Calculates total cost including fees and slippage (adverse selection is separate
+Cohesion: 0.22
+Nodes (17): collect_download_specs(), discover_groups(), download_leg_window(), Budget-gated Databento download for options parity legs., Return unique download jobs from parity universe (no hardcoded symbols)., Download one leg via DatabentoResearchClient budget gate.     Requires DATABENTO, LegSpec, Any (+9 more)
 
 ### Community 162 - "Community 162"
 Cohesion: 0.33
@@ -704,7 +722,7 @@ Nodes (3): MBOEventCpp, main(), make_event()
 
 ### Community 164 - "Community 164"
 Cohesion: 0.16
-Nodes (21): ArbFill, MultiLegParityBacktester, ParityBacktestResult, _PendingArb, Multi-leg parity arb backtest with latency deferral., write_research_card(), OptionsFeeModel, Per-leg fees keyed by group tick_size / leg count — no hardcoded products. (+13 more)
+Nodes (19): MultiLegParityBacktester, ParityBacktestResult, write_research_card(), OptionsFeeModel, Config-driven options fee model for parity arb., Per-leg fees keyed by group tick_size / leg count — no hardcoded products., float, int (+11 more)
 
 ### Community 165 - "Community 165"
 Cohesion: 0.33
@@ -714,13 +732,13 @@ Nodes (6): production_operating_tier, gateway_rtt_ms, recommended_latency_bands_
 Cohesion: 0.40
 Nodes (5): classification, recommendation, recommended_latency_bands_ms, tier_ms, tier_name
 
-### Community 167 - "Community 167"
-Cohesion: 0.28
-Nodes (5): Path, str, _assert_quarantine(), Trial lane paths must not overlap trusted production Databento NPZ., TrialConfig
+### Community 168 - "Community 168"
+Cohesion: 0.21
+Nodes (14): ParityGroup, Path, str, _assert_quarantine(), load_group_by_id(), load_universe(), Load parity universe config and enforce lane quarantine., test_config_swap_different_group_no_code_change() (+6 more)
 
 ### Community 169 - "Community 169"
-Cohesion: 0.21
-Nodes (13): bool, MarketState, bool, float, int, str, HashMapMarketDepthBacktest, MarketState (+5 more)
+Cohesion: 0.05
+Nodes (75): bool, float, int, str, bool, Path, str, bool (+67 more)
 
 ### Community 170 - "Community 170"
 Cohesion: 0.38
@@ -730,19 +748,47 @@ Nodes (3): Any, int, str
 Cohesion: 0.33
 Nodes (5): fills, group_id, max_violation_ticks, net_pnl, num_arbs
 
+### Community 182 - "Community 182"
+Cohesion: 0.27
+Nodes (15): bool, RateSpec, is_actionable(), _fair_quotes(), _futures_group(), float, LegQuote, ParityGroup (+7 more)
+
+### Community 183 - "Community 183"
+Cohesion: 0.27
+Nodes (8): Ingest helpers for options parity lane., load_quote_ndjson(), Load quote fixtures for parity lane., LegQuote, Path, str, float, LegQuote
+
+### Community 184 - "Community 184"
+Cohesion: 0.40
+Nodes (4): chi404_install_dotnet472_clean.sh script, DISPLAY, WINEARCH, WINEPREFIX
+
+### Community 185 - "Community 185"
+Cohesion: 0.40
+Nodes (4): chi404_install_dotnet472.sh script, DISPLAY, WINEARCH, WINEPREFIX
+
+### Community 186 - "Community 186"
+Cohesion: 0.40
+Nodes (4): chi404_rtrader_auto_login.sh script, DISPLAY, WINEARCH, WINEPREFIX
+
+### Community 187 - "Community 187"
+Cohesion: 0.40
+Nodes (4): chi404_rtrader_vnc_login.sh script, DISPLAY, WINEARCH, WINEPREFIX
+
+### Community 188 - "Community 188"
+Cohesion: 0.83
+Nodes (3): chi404_vm_vnc_install.sh script, click(), key()
+
 ## Knowledge Gaps
-- **1113 isolated node(s):** `str`, `int`, `bool`, `bool`, `TrialConfig` (+1108 more)
+- **1162 isolated node(s):** `str`, `int`, `bool`, `bool`, `TrialConfig` (+1157 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **23 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **39 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `datetime` connect `Community 6` to `Community 5`, `Community 167`, `Community 169`, `Community 78`, `Community 15`, `Community 114`, `Community 28`, `Community 125`?**
+- **Why does `datetime` connect `Community 88` to `Community 69`, `Community 6`, `Community 73`, `Community 169`, `Community 78`, `Community 15`, `Community 27`, `Community 158`?**
   _High betweenness centrality (0.045) - this node is a cross-community bridge._
 - **Why does `cards` connect `Community 71` to `Community 29`, `Community 30`, `Community 31`, `Community 32`, `Community 33`, `Community 34`, `Community 35`, `Community 36`, `Community 37`, `Community 38`, `Community 39`, `Community 40`, `Community 41`, `Community 42`, `Community 43`, `Community 44`, `Community 45`, `Community 46`, `Community 47`, `Community 48`, `Community 49`, `Community 50`, `Community 51`, `Community 52`, `Community 53`, `Community 54`, `Community 55`, `Community 56`, `Community 57`, `Community 58`, `Community 59`, `Community 60`, `Community 61`, `Community 62`, `Community 63`?**
-  _High betweenness centrality (0.039) - this node is a cross-community bridge._
-- **Why does `ReplayRunner` connect `Community 169` to `Community 88`, `Community 0`, `Community 5`?**
+  _High betweenness centrality (0.038) - this node is a cross-community bridge._
+- **Why does `ParityGroup` connect `Community 27` to `Community 164`, `Community 168`, `Community 170`, `Community 182`, `Community 119`, `Community 88`, `Community 125`, `Community 158`?**
   _High betweenness centrality (0.026) - this node is a cross-community bridge._
 - **Are the 21 inferred relationships involving `BaseHypothesis` (e.g. with `BaseHypothesis` and `bool`) actually correct?**
   _`BaseHypothesis` has 21 INFERRED edges - model-reasoned connections that need verification._

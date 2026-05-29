@@ -1,16 +1,13 @@
 #!/bin/bash
 set -euo pipefail
-mkdir -p "/root/.wine-rtrader/drive_c/users/root/Documents"
-WATCH="/root/.wine-rtrader/drive_c/Program Files (x86)/Rithmic Trader Pro;/root/.wine-rtrader/drive_c/users/root/Documents"
-python3 <<'PY'
+WATCH="/root/hft3/rtrader_watch"
+mkdir -p "$WATCH"
+python3 <<PY
 import json
 from pathlib import Path
-watch = [
-    "/root/.wine-rtrader/drive_c/Program Files (x86)/Rithmic Trader Pro",
-    "/root/.wine-rtrader/drive_c/users/root/Documents",
-]
+watch = ["$WATCH"]
 Path("/root/hft3/logs/rtrader/rtrader_discovery.json").write_text(
-    json.dumps({"watch_dirs": watch}, indent=2) + "\n", encoding="utf-8"
+    json.dumps({"watch_dirs": watch, "bridge": "vm_smb"}, indent=2) + "\n", encoding="utf-8"
 )
 print("watch_dirs:", watch)
 PY
