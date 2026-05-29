@@ -1,0 +1,16 @@
+from __future__ import annotations
+
+from typing import Any, Protocol, runtime_checkable
+
+
+@runtime_checkable
+class ConnectorInterface(Protocol):
+    def connect(self) -> None: ...
+
+    def poll_events(self) -> list[dict[str, Any]]: ...
+
+    def detected_event_types(self) -> set[str]: ...
+
+    def limitations(self) -> dict[str, Any]: ...
+
+    def close(self) -> None: ...

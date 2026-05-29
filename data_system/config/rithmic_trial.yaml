@@ -1,0 +1,27 @@
+enabled: false
+connector: fixture
+symbol: MES
+exchange: CME
+contract: ""
+capture_environment: paper_or_trial
+source: rithmic_trial
+
+paths:
+  repo_root: .
+  raw_root: data/raw/rithmic_trial_live_capture
+  normalized_root: data/normalized/rithmic_trial_live_capture
+  replay_root: data/replay/hftbacktest/rithmic_trial
+  reports_root: reports/rithmic_trial
+
+rtrader:
+  wine_prefix: /root/.wine-rtrader
+  installer_path: ""
+  watch_dirs: []
+  log_globs:
+    - "**/*.log"
+    - "**/*.txt"
+  export_globs:
+    - "**/*.csv"
+    - "**/*.ndjson"
+
+schema_version: normalized_v1
