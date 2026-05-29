@@ -25,15 +25,23 @@ def _load_period(df: pd.DataFrame, start_year: int, end_year: int) -> dict:
     mask = (ts.dt.year >= start_year) & (ts.dt.year <= end_year)
     sub = df.loc[mask]
     if sub.empty:
-        sub = df.iloc[: max(100, len(df) // 10)]
+        raise ValueError(
+            f"No rows for walk-forward period {start_year}-{end_year}; "
+            "need multi-year parquet or narrower WF windows"
+        )
     feat_cols = [c for c in sub.columns if c.startswith("f_")]
+    y_ret = sub.get("y_return_500ms", pd.Series(np.nan, index=sub.index))
+    valid = y_ret.notna()
+    sub = sub.loc[valid]
+    y_ret = y_ret.loc[valid]
+    if sub.empty:
+        raise ValueError("All labels NaN after dropping forward-return tail rows")
     X = sub[feat_cols].values.astype(np.float64)
-    y_ret = sub.get("y_return_500ms", pd.Series(np.zeros(len(sub)))).fillna(0).values
     return {
         "X": X,
-        "y_return": y_ret,
+        "y_return": y_ret.values,
         "filled": np.ones(len(sub)),
-        "pnl": y_ret * 0.25,
+        "pnl": y_ret.values * 0.25,
         "adverse_selection": np.zeros(len(sub)),
     }
 
@@ -102,10 +110,9 @@ def main() -> None:
 
     result = validator.run_validation(train_fn, _eval_model, loader)
     if result.get("status") != "PASS":
-        print("Walk-forward did not pass strict gates; exporting best-effort weights anyway.")
-        model = train_fn(loader(2018, 2030))
-    else:
-        model = result["model"]
+        print("Walk-forward did not pass strict gates; refusing to export model.bin.")
+        sys.exit(1)
+    model = result["model"]
 
     out_path = Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)

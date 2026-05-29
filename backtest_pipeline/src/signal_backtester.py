@@ -49,66 +49,68 @@ class _HypSimState:
     losses: int = 0
     fills: List[FillRecord] = field(default_factory=list)
     markouts: List[float] = field(default_factory=list)
+    trade_pnls: List[float] = field(default_factory=list)
 
 
-def _future_mid(raw: np.ndarray, ts_ns: int, latency_ms: float) -> float:
-    target = ts_ns + int(latency_ms * 1_000_000)
-    i = int(np.searchsorted(raw["local_ts"], target, side="left"))
-    i = min(i, len(raw) - 1)
-    return float(raw[i]["px"])
+@dataclass
+class _PendingAction:
+    exec_time_ns: int
+    hyp_id: int
+    sig: float
+    direction: str  # 'long' or 'short'
+    mid_at_signal: float
 
 
-def _apply_signal(
+def _apply_pending(
     sim: _HypSimState,
-    hyp: BaseHypothesis,
+    hyp_id: int,
     sig: float,
-    mid: float,
-    mbo,
-    raw: np.ndarray,
-    latency_ms: float,
-    threshold: float,
+    direction: str,
+    exec_price: float,
+    exec_mid: float,
+    exec_ts: int,
     tick_size: float,
     tick_value: float,
     fee_model: FeeModel,
-    max_position: int = 1,
+    max_position: int,
 ) -> None:
-    if sig > threshold and sim.position <= 0:
+    if direction == "long" and sim.position <= 0:
         if sim.position < 0:
-            exit_px = _future_mid(raw, mbo.timestamp_ns, latency_ms)
-            trade_pnl = (sim.entry_price - exit_px) / tick_size * tick_value
+            trade_pnl = (sim.entry_price - exec_price) / tick_size * tick_value
             trade_pnl -= fee_model.calculate_trade_cost(1, is_market_order=True)
             sim.pnl += trade_pnl
+            sim.trade_pnls.append(trade_pnl)
             sim.fills.append(
-                FillRecord(mbo.timestamp_ns, "BUY", exit_px, 1, hyp.hyp_id, sig, mid)
+                FillRecord(exec_ts, "BUY", exec_price, 1, hyp_id, sig, exec_mid)
             )
             if trade_pnl > 0:
                 sim.wins += 1
             else:
                 sim.losses += 1
-        sim.entry_price = _future_mid(raw, mbo.timestamp_ns, latency_ms)
+        sim.entry_price = exec_price
         sim.position = max_position
         sim.fills.append(
-            FillRecord(mbo.timestamp_ns, "BUY", sim.entry_price, 1, hyp.hyp_id, sig, mid)
+            FillRecord(exec_ts, "BUY", exec_price, 1, hyp_id, sig, exec_mid)
         )
         sim.pnl -= fee_model.calculate_trade_cost(1, is_market_order=True)
 
-    elif sig < -threshold and sim.position >= 0:
+    elif direction == "short" and sim.position >= 0:
         if sim.position > 0:
-            exit_px = _future_mid(raw, mbo.timestamp_ns, latency_ms)
-            trade_pnl = (exit_px - sim.entry_price) / tick_size * tick_value
+            trade_pnl = (exec_price - sim.entry_price) / tick_size * tick_value
             trade_pnl -= fee_model.calculate_trade_cost(1, is_market_order=True)
             sim.pnl += trade_pnl
+            sim.trade_pnls.append(trade_pnl)
             sim.fills.append(
-                FillRecord(mbo.timestamp_ns, "SELL", exit_px, 1, hyp.hyp_id, sig, mid)
+                FillRecord(exec_ts, "SELL", exec_price, 1, hyp_id, sig, exec_mid)
             )
             if trade_pnl > 0:
                 sim.wins += 1
             else:
                 sim.losses += 1
-        sim.entry_price = _future_mid(raw, mbo.timestamp_ns, latency_ms)
+        sim.entry_price = exec_price
         sim.position = -max_position
         sim.fills.append(
-            FillRecord(mbo.timestamp_ns, "SELL", sim.entry_price, 1, hyp.hyp_id, sig, mid)
+            FillRecord(exec_ts, "SELL", exec_price, 1, hyp_id, sig, exec_mid)
         )
         sim.pnl -= fee_model.calculate_trade_cost(1, is_market_order=True)
 
@@ -129,10 +131,12 @@ class SignalBacktester:
         if sim.position != 0 and len(raw) > 0:
             exit_px = float(raw[-1]["px"])
             if sim.position > 0:
-                sim.pnl += (exit_px - sim.entry_price) / self.tick_size * self.tick_value
+                trade_pnl = (exit_px - sim.entry_price) / self.tick_size * self.tick_value
             else:
-                sim.pnl += (sim.entry_price - exit_px) / self.tick_size * self.tick_value
-            sim.pnl -= self.fee_model.calculate_trade_cost(1, is_market_order=True)
+                trade_pnl = (sim.entry_price - exit_px) / self.tick_size * self.tick_value
+            trade_pnl -= self.fee_model.calculate_trade_cost(1, is_market_order=True)
+            sim.pnl += trade_pnl
+            sim.trade_pnls.append(trade_pnl)
 
         n_trades = sim.wins + sim.losses
         return BacktestResult(
@@ -142,7 +146,7 @@ class SignalBacktester:
             win_rate=sim.wins / n_trades if n_trades else 0.0,
             expectancy=sim.pnl / n_trades if n_trades else 0.0,
             adverse_selection_ticks=float(np.mean(sim.markouts)) if sim.markouts else 0.0,
-            tail_loss=float(np.percentile([sim.pnl], 5)) if n_trades else 0.0,
+            tail_loss=float(np.percentile(sim.trade_pnls, 5)) if sim.trade_pnls else 0.0,
             fills=sim.fills,
         )
 
@@ -164,40 +168,76 @@ class SignalBacktester:
         latency_ms: float = 1.0,
         max_position: int = 1,
     ) -> Dict[int, BacktestResult]:
-        """Single MBO pass: shared pipeline, all hypotheses evaluated per event."""
+        """Single MBO pass: shared pipeline, deferred fills at signal_time + latency."""
         pipeline = MarketStatePipeline(tick_size=self.tick_size, latency_ms=latency_ms)
         sims = {h.hyp_id: _HypSimState() for h in hypotheses}
+        pending: List[_PendingAction] = []
+        latency_ns = int(latency_ms * 1_000_000)
 
         for mbo in iter_mbo_events(raw_events):
             state = pipeline.process_event(mbo)
             mid = state.f("mid_price", 0.0)
+            exec_price = float(mbo.price) if mbo.action == "TRADE" else mid
             if mid <= 0:
                 continue
 
+            still_pending: List[_PendingAction] = []
+            for action in pending:
+                if action.exec_time_ns <= mbo.timestamp_ns:
+                    sim = sims[action.hyp_id]
+                    _apply_pending(
+                        sim,
+                        action.hyp_id,
+                        action.sig,
+                        action.direction,
+                        exec_price,
+                        mid,
+                        mbo.timestamp_ns,
+                        self.tick_size,
+                        self.tick_value,
+                        self.fee_model,
+                        max_position,
+                    )
+                else:
+                    still_pending.append(action)
+            pending = still_pending
+
+            for hyp in hypotheses:
+                sig = hyp.evaluate(state)
+                if sig > self.signal_threshold:
+                    pending.append(
+                        _PendingAction(
+                            mbo.timestamp_ns + latency_ns,
+                            hyp.hyp_id,
+                            sig,
+                            "long",
+                            mid,
+                        )
+                    )
+                elif sig < -self.signal_threshold:
+                    pending.append(
+                        _PendingAction(
+                            mbo.timestamp_ns + latency_ns,
+                            hyp.hyp_id,
+                            sig,
+                            "short",
+                            mid,
+                        )
+                    )
+
             for hyp in hypotheses:
                 sim = sims[hyp.hyp_id]
-                sig = hyp.evaluate(state)
-                _apply_signal(
-                    sim,
-                    hyp,
-                    sig,
-                    mid,
-                    mbo,
-                    raw_events,
-                    latency_ms,
-                    self.signal_threshold,
-                    self.tick_size,
-                    self.tick_value,
-                    self.fee_model,
-                    max_position,
-                )
                 if sim.fills and mbo.action == "TRADE":
                     last = sim.fills[-1]
-                    m100 = _future_mid(raw_events, last.timestamp_ns, 0.1)
-                    if last.side == "BUY":
-                        sim.markouts.append((m100 - last.exec_price) / self.tick_size)
-                    else:
-                        sim.markouts.append((last.exec_price - m100) / self.tick_size)
+                    if last.timestamp_ns == mbo.timestamp_ns:
+                        markout_ns = last.timestamp_ns + int(0.1 * 1_000_000)
+                        j = int(np.searchsorted(raw_events["local_ts"], markout_ns, side="left"))
+                        j = min(j, len(raw_events) - 1)
+                        m100 = float(raw_events[j]["px"])
+                        if last.side == "BUY":
+                            sim.markouts.append((m100 - last.exec_price) / self.tick_size)
+                        else:
+                            sim.markouts.append((last.exec_price - m100) / self.tick_size)
 
         return {
             h.hyp_id: self._finalize(sims[h.hyp_id], h.hyp_id, raw_events) for h in hypotheses

@@ -90,7 +90,7 @@ def cmd_process(args: argparse.Namespace) -> int:
     print(f"Reports -> {reports_dir}")
     for name, path in report_paths.items():
         print(f"  {name}: {path}")
-    return 0 if quality["status"] != "fail" else 1
+    return 0 if quality["status"] == "pass" and book["status"] == "pass" and conversion["status"] == "pass" else 1
 
 
 def cmd_replay_sample(args: argparse.Namespace) -> int:
@@ -101,9 +101,11 @@ def cmd_replay_sample(args: argparse.Namespace) -> int:
         print(f"NPZ not found: {npz}")
         return 1
     runner = ReplayRunner(str(npz), tick_size=args.tick_size)
-    result = runner.run_replay(latency_ms=args.latency_ms, use_combined_strategy=False)
+    result = runner.run_replay(latency_ms=args.latency_ms, use_combined_strategy=True)
     print(json.dumps(result, indent=2, default=str))
-    return 0 if "error" not in result else 1
+    if "error" in result:
+        return 1
+    return 0
 
 
 def cmd_run_unattended(args: argparse.Namespace) -> int:
