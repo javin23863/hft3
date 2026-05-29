@@ -57,6 +57,12 @@ data/replay/hftbacktest/rithmic_trial/**
 reports/rithmic_trial/**
 !reports/rithmic_trial/.gitkeep
 logs/rithmic_trial/**
+data/options/**
+!data/options/.gitkeep
+data/replay/parity/**
+!data/replay/parity/.gitkeep
+research_cards/parity/**
+!research_cards/parity/.gitkeep
 models/
 *.onnx
 

@@ -23,6 +23,11 @@ def main() -> None:
         action="store_true",
         help="Run quarantined Rithmic trial fixture capture->process (no production lake)",
     )
+    parser.add_argument(
+        "--parity",
+        action="store_true",
+        help="Run quarantined options parity fixture backtest",
+    )
     args = parser.parse_args()
 
     if args.rithmic_trial:
@@ -113,18 +118,37 @@ def main() -> None:
                 if candidates:
                     npz_path = str(candidates[0])
 
-    if not npz_path:
+    if not npz_path and not args.parity:
         print("ERROR: No NPZ available for research matrix. Provide --npz or run download/trial first.")
         sys.exit(1)
 
-    print("=== Phase 6-7: Research matrix smoke ===")
-    from backtest_pipeline.src.research_runner import run_all_research_cards
+    if npz_path:
+        print("=== Phase 6-7: Research matrix smoke ===")
+        from backtest_pipeline.src.research_runner import run_all_research_cards
 
-    run_all_research_cards(npz_path)
+        run_all_research_cards(npz_path)
 
-    card_path = _REPO / "research_cards" / "matrix_smoke.json"
-    if card_path.exists():
-        print(json.dumps(json.loads(card_path.read_text()), indent=2)[:2000])
+        card_path = _REPO / "research_cards" / "matrix_smoke.json"
+        if card_path.exists():
+            print(json.dumps(json.loads(card_path.read_text()), indent=2)[:2000])
+
+    if args.parity:
+        print("=== Parity lane (fixture) ===")
+        r = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "options_lane.pipeline",
+                "fixture-backtest",
+            ],
+            cwd=str(_REPO),
+        )
+        if r.returncode != 0:
+            print("Parity fixture backtest failed")
+            sys.exit(1)
+        parity_dir = _REPO / "research_cards" / "parity"
+        for card in sorted(parity_dir.glob("*.json")) if parity_dir.exists() else []:
+            print(f"Parity research card: {card}")
 
 
 if __name__ == "__main__":

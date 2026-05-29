@@ -120,6 +120,16 @@ Trial capture is isolated from trusted production data (`data/npz/` from Databen
 
 Do not write trial output into production NPZ paths or bypass quarantine without explicit approval.
 
+### Options parity lane (quarantined)
+
+Options parity research is isolated from trusted production data (`data/npz/` from Databento).
+
+- Code: `options_lane/`
+- Data: `data/options/`, `data/replay/parity/`, `research_cards/parity/`
+- Config: `options_lane/config/parity_universe.yaml`
+
+Do not write options raw into production NPZ paths or bypass quarantine without explicit approval.
+
 ### Secrets
 
 Never commit credentials. Use `.env` locally (see `.env.example`). Do not add API keys, passwords, or private keys to git.

@@ -1,0 +1,3 @@
+{"role": "future", "symbol": "ES.c.0", "bid": 5500.0, "ask": 5500.0, "timestamp_ns": 1000000000, "strike": null, "right": null}
+{"role": "call", "symbol": "ES.c.0", "bid": 86.0, "ask": 86.0, "timestamp_ns": 1000000000, "strike": 5500, "right": "C"}
+{"role": "put", "symbol": "ES.c.0", "bid": 15.76, "ask": 15.76, "timestamp_ns": 1000000000, "strike": 5500, "right": "P"}
