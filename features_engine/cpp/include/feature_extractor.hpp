@@ -24,7 +24,7 @@ struct BookLevelCpp {
 
 class FeatureExtractorCpp {
 public:
-    explicit FeatureExtractorCpp(double tick_size = 0.25);
+    explicit FeatureExtractorCpp(double tick_size = 0.25, int64_t rolling_window_ns = 1'000'000'000LL);
 
     void reset();
     void process_event(const MBOEventCpp& event);
@@ -32,9 +32,12 @@ public:
 
 private:
     void apply_book_event(const MBOEventCpp& event);
+    void maybe_reset_window(int64_t ts_ns);
     void extract();
 
     double tick_size_;
+    int64_t rolling_window_ns_;
+    int64_t last_ts_ns_{0};
     std::array<double, 64> vec_{};
     std::map<double, BookLevelCpp> bids_;
     std::map<double, BookLevelCpp> asks_;
@@ -54,7 +57,10 @@ private:
     double prev_book_slope_{0.0};
     int prev_bid1_{0};
     int prev_ask1_{0};
+    double prev_reload_score_{0.0};
     std::vector<double> spread_history_;
+    std::map<std::pair<char, double>, int> reload_at_level_;
+    std::map<std::pair<char, double>, int> trade_at_level_;
 };
 
 }  // namespace hft

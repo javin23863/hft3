@@ -21,11 +21,13 @@ class CombinedHypothesisStrategy:
         tick_size: float = 0.25,
         signal_threshold: float = 0.25,
         order_qty: float = 1.0,
+        latency_ms: float = 1.0,
     ):
         self.hypotheses = hypotheses
         self.tick_size = tick_size
         self.signal_threshold = signal_threshold
         self.order_qty = order_qty
+        self.latency_ms = latency_ms
         self._order_id = 1000
         self.regime_filter = RegimeFilter()
 
@@ -48,7 +50,7 @@ class CombinedHypothesisStrategy:
             event_context="NORMAL",
             volatility_state=self.regime_filter.volatility_state(feat),
             liquidity_state=self.regime_filter.liquidity_state(feat),
-            latency_ms=1.0,
+            latency_ms=self.latency_ms,
             current_inventory=int(hbt.position(0)),
             feature_vector=vec,
             regime_posterior=posterior,

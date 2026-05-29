@@ -43,6 +43,21 @@ class TrialConfig:
         return self.reports_root / date
 
 
+def _assert_quarantine(path: Path, repo_root: Path, label: str) -> None:
+    """Trial lane paths must not overlap trusted production Databento NPZ."""
+    prod_npz = (repo_root / "data" / "npz").resolve()
+    resolved = path.resolve()
+    try:
+        resolved.relative_to(prod_npz)
+        raise ValueError(
+            f"Quarantine violation: {label}={path} must not be under production {prod_npz}"
+        )
+    except ValueError as exc:
+        if "Quarantine violation" in str(exc):
+            raise
+        return
+
+
 def load_config(path: str | Path) -> TrialConfig:
     cfg_path = Path(path)
     data = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
@@ -82,6 +97,18 @@ def load_config(path: str | Path) -> TrialConfig:
     if os.environ.get("RITHMIC_GATEWAY"):
         rithmic["gateway"] = os.environ["RITHMIC_GATEWAY"]
 
+    raw_root = _p("raw_root")
+    normalized_root = _p("normalized_root")
+    replay_root = _p("replay_root")
+    reports_root = _p("reports_root")
+    for label, p in (
+        ("raw_root", raw_root),
+        ("normalized_root", normalized_root),
+        ("replay_root", replay_root),
+        ("reports_root", reports_root),
+    ):
+        _assert_quarantine(p, repo_root, label)
+
     return TrialConfig(
         enabled=enabled,
         connector=connector,
@@ -92,10 +119,10 @@ def load_config(path: str | Path) -> TrialConfig:
         source=data.get("source", "rithmic_trial"),
         schema_version=data.get("schema_version", "normalized_v1"),
         repo_root=repo_root,
-        raw_root=_p("raw_root"),
-        normalized_root=_p("normalized_root"),
-        replay_root=_p("replay_root"),
-        reports_root=_p("reports_root"),
+        raw_root=raw_root,
+        normalized_root=normalized_root,
+        replay_root=replay_root,
+        reports_root=reports_root,
         rtrader=rtrader,
         unattended=unattended,
         rithmic=rithmic,

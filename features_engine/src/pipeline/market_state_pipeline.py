@@ -10,6 +10,7 @@ import numpy as np
 
 from features_engine.src.features.feature_index import (
     FEATURE_DIM,
+    FeatureIndex,
     REGIME_INDEX_MAP,
     vector_to_feature_dict,
 )
@@ -50,6 +51,15 @@ class MarketStatePipeline:
         regime_argmax = RegimeFilter.argmax(posterior)
         vol_state = self.regime_filter.volatility_state(feat_dict)
         liq_state = self.regime_filter.liquidity_state(feat_dict)
+
+        mid = feat_dict.get("mid_price", 0.0)
+        if mid > 0:
+            round_dist = abs((mid / self.tick_size) % 4.0 - 2.0) / 4.0
+            vec[FeatureIndex.DISTANCE_TO_ROUND_NUMBER] = round_dist
+            vec[FeatureIndex.DISTANCE_TO_VWAP] = abs(feat_dict.get("spread", 0.0)) / self.tick_size
+            spread_stress = feat_dict.get("spread_stress", 1.0)
+            vec[FeatureIndex.IS_BREAKING_LEVEL] = 1.0 if spread_stress > 2.0 else 0.0
+            vec[FeatureIndex.IS_BREAKING_SESSION_LEVEL] = vec[FeatureIndex.IS_BREAKING_LEVEL]
 
         return MarketState(
             feature_vector=vec,

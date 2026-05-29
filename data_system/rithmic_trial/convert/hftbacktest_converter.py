@@ -15,7 +15,7 @@ from hftbacktest.types import (
 
 
 def _has_mbo(events: list[dict[str, Any]]) -> bool:
-    return any(ev.get("event_type") in ("depth",) and ev.get("order_id") for ev in events)
+    return any(ev.get("event_type") == "depth" for ev in events)
 
 
 def convert_to_npz(

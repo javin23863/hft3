@@ -39,7 +39,19 @@ def _event_side(ev: int) -> str:
 
 
 def load_npz_events(path: str) -> np.ndarray:
-    return np.load(path)["data"]
+    with np.load(path) as archive:
+        if "data" not in archive:
+            raise ValueError(f"NPZ {path} missing 'data' array; expected HftBacktest event_dtype")
+        raw = archive["data"]
+    if raw.dtype.names is None:
+        raise ValueError(f"NPZ {path} data is not structured event array")
+    required = {"ev", "local_ts", "px", "qty", "order_id"}
+    missing = required - set(raw.dtype.names)
+    if missing:
+        raise ValueError(f"NPZ {path} missing fields: {sorted(missing)}")
+    if len(raw) == 0:
+        raise ValueError(f"NPZ {path} has zero events")
+    return raw
 
 
 def iter_mbo_events(

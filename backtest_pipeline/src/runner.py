@@ -63,7 +63,7 @@ class ReplayRunner:
             hyps = get_active_hypotheses()
             pipeline = MarketStatePipeline(tick_size=self.tick_size, latency_ms=latency_ms)
             strategy = CombinedHypothesisStrategy(
-                hyps, tick_size=self.tick_size, signal_threshold=0.25
+                hyps, tick_size=self.tick_size, signal_threshold=0.25, latency_ms=latency_ms
             )
 
         steps = 0

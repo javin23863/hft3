@@ -39,6 +39,14 @@ class FeatureIndex(enum.IntEnum):
     BID_ADD_CANCEL_RATIO = 24
     ASK_ADD_CANCEL_RATIO = 25
     REALIZED_VOL_STATE = 26
+    IS_BREAKING_LEVEL = 27
+    IS_BREAKING_SESSION_LEVEL = 28
+    DISTANCE_TO_ROUND_NUMBER = 29
+    DISTANCE_TO_VWAP = 30
+    CUTOFF_PRESSURE_SCORE = 31
+    PROP_REENTRY_SCORE = 32
+    NEWS_RESTRICTION_FLATTEN_SCORE = 33
+    MAX_CONTRACT_TRADE_IMBALANCE = 34
     MID_PRICE = 40
     REGIME_NORMAL = 41
     REGIME_EVENT_SHOCK = 42
@@ -78,6 +86,14 @@ FEATURE_NAME_TO_INDEX: Dict[str, int] = {
     "reload_drop_score": FeatureIndex.RELOAD_DROP_SCORE,
     "bid_add_cancel_ratio": FeatureIndex.BID_ADD_CANCEL_RATIO,
     "ask_add_cancel_ratio": FeatureIndex.ASK_ADD_CANCEL_RATIO,
+    "is_breaking_level": FeatureIndex.IS_BREAKING_LEVEL,
+    "is_breaking_session_level": FeatureIndex.IS_BREAKING_SESSION_LEVEL,
+    "distance_to_round_number": FeatureIndex.DISTANCE_TO_ROUND_NUMBER,
+    "distance_to_vwap": FeatureIndex.DISTANCE_TO_VWAP,
+    "cutoff_pressure_score": FeatureIndex.CUTOFF_PRESSURE_SCORE,
+    "prop_reentry_score": FeatureIndex.PROP_REENTRY_SCORE,
+    "news_restriction_flatten_score": FeatureIndex.NEWS_RESTRICTION_FLATTEN_SCORE,
+    "max_contract_trade_imbalance": FeatureIndex.MAX_CONTRACT_TRADE_IMBALANCE,
     "mid_price": FeatureIndex.MID_PRICE,
 }
 

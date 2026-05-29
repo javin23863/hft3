@@ -7,7 +7,8 @@
 
 namespace hft {
 
-FeatureExtractorCpp::FeatureExtractorCpp(double tick_size) : tick_size_(tick_size) {
+FeatureExtractorCpp::FeatureExtractorCpp(double tick_size, int64_t rolling_window_ns)
+    : tick_size_(tick_size), rolling_window_ns_(rolling_window_ns) {
     reset();
 }
 
@@ -16,6 +17,8 @@ void FeatureExtractorCpp::reset() {
     bids_.clear();
     asks_.clear();
     order_map_.clear();
+    reload_at_level_.clear();
+    trade_at_level_.clear();
     best_bid_ = 0.0;
     best_ask_ = 1e12;
     buy_agg_ = sell_agg_ = add_vol_ = cancel_vol_ = 0;
@@ -24,7 +27,20 @@ void FeatureExtractorCpp::reset() {
     prev_top10_depth_ = 0.0;
     prev_book_slope_ = 0.0;
     prev_bid1_ = prev_ask1_ = 0;
+    prev_reload_score_ = 0.0;
+    last_ts_ns_ = 0;
     spread_history_.clear();
+}
+
+void FeatureExtractorCpp::maybe_reset_window(int64_t ts_ns) {
+    if (last_ts_ns_ && (ts_ns - last_ts_ns_) > rolling_window_ns_) {
+        buy_agg_ = sell_agg_ = add_vol_ = cancel_vol_ = 0;
+        bid_add_ = ask_add_ = bid_cancel_ = ask_cancel_ = 0;
+        near_touch_cancel_ = 0;
+        reload_at_level_.clear();
+        trade_at_level_.clear();
+    }
+    last_ts_ns_ = ts_ns;
 }
 
 void FeatureExtractorCpp::apply_book_event(const MBOEventCpp& event) {
@@ -41,9 +57,21 @@ void FeatureExtractorCpp::apply_book_event(const MBOEventCpp& event) {
         book[event.price].orders[event.order_id] = event.size;
         book[event.price].total_qty += event.size;
         order_map_[event.order_id] = {event.price, event.side};
-        add_vol_ += event.size;
-        if (event.side == 'B') bid_add_ += event.size;
-        else ask_add_ += event.size;
+    } else if (event.action == 'M') {
+        auto it = order_map_.find(event.order_id);
+        if (it != order_map_.end()) {
+            auto [price, side] = it->second;
+            auto& tb = (side == 'B') ? bids_ : asks_;
+            auto lit = tb.find(price);
+            if (lit != tb.end()) {
+                auto oit = lit->second.orders.find(event.order_id);
+                if (oit != lit->second.orders.end()) {
+                    int32_t diff = event.size - oit->second;
+                    oit->second = event.size;
+                    lit->second.total_qty += diff;
+                }
+            }
+        }
     } else if (event.action == 'C' || event.action == 'T') {
         auto it = order_map_.find(event.order_id);
         if (it != order_map_.end()) {
@@ -83,10 +111,6 @@ void FeatureExtractorCpp::apply_book_event(const MBOEventCpp& event) {
                 }
             }
         }
-        if (event.action == 'T') {
-            if (event.side == 'A') buy_agg_ += event.size;
-            else sell_agg_ += event.size;
-        }
     }
 }
 
@@ -105,6 +129,30 @@ static int sum_top_k(const std::map<double, BookLevelCpp>& book, int k, bool bid
 }
 
 void FeatureExtractorCpp::process_event(const MBOEventCpp& event) {
+    maybe_reset_window(event.timestamp_ns);
+    const double near_ticks = tick_size_ * 3;
+
+    if (event.action == 'T') {
+        if (event.side == 'A') buy_agg_ += event.size;
+        else sell_agg_ += event.size;
+        auto key = std::make_pair(event.side, event.price);
+        trade_at_level_[key] += event.size;
+    } else if (event.action == 'A') {
+        add_vol_ += event.size;
+        if (event.side == 'B') bid_add_ += event.size;
+        else ask_add_ += event.size;
+        auto key = std::make_pair(event.side, event.price);
+        reload_at_level_[key] += 1;
+    } else if (event.action == 'C') {
+        cancel_vol_ += event.size;
+        if (event.side == 'B') bid_cancel_ += event.size;
+        else ask_cancel_ += event.size;
+        if (event.side == 'B' && best_bid_ > 0 && (best_bid_ - event.price) <= near_ticks)
+            near_touch_cancel_ += event.size;
+        else if (event.side == 'A' && best_ask_ < 1e11 && (event.price - best_ask_) <= near_ticks)
+            near_touch_cancel_ += event.size;
+    }
+
     apply_book_event(event);
     extract();
 }
@@ -117,15 +165,24 @@ void FeatureExtractorCpp::extract() {
     vec_[2] = static_cast<double>(sell_agg_);
     vec_[3] = add_vol_ > 0 ? static_cast<double>(cancel_vol_) / add_vol_ : 1.0;
     vec_[4] = add_vol_ > 0 ? static_cast<double>(near_touch_cancel_) / add_vol_ : 0.0;
-    vec_[24] = bid_cancel_ > 0 ? static_cast<double>(bid_add_) / bid_cancel_ : bid_add_;
-    vec_[25] = ask_cancel_ > 0 ? static_cast<double>(ask_add_) / ask_cancel_ : ask_add_;
+    vec_[24] = static_cast<double>(bid_add_) / (bid_cancel_ + 1e-9);
+    vec_[25] = static_cast<double>(ask_add_) / (ask_cancel_ + 1e-9);
 
-    const int b10 = sum_top_k(bids_, 10, true);
-    const int a10 = sum_top_k(asks_, 10, false);
     const int b1 = sum_top_k(bids_, 1, true);
     const int a1 = sum_top_k(asks_, 1, false);
+    const int b3 = sum_top_k(bids_, 3, true);
+    const int a3 = sum_top_k(asks_, 3, false);
+    const int b5 = sum_top_k(bids_, 5, true);
+    const int a5 = sum_top_k(asks_, 5, false);
+    const int b10 = sum_top_k(bids_, 10, true);
+    const int a10 = sum_top_k(asks_, 10, false);
+
     vec_[5] = static_cast<double>(b1);
     vec_[6] = static_cast<double>(a1);
+    vec_[7] = static_cast<double>(b3);
+    vec_[8] = static_cast<double>(a3);
+    vec_[9] = static_cast<double>(b5);
+    vec_[10] = static_cast<double>(a5);
     vec_[11] = static_cast<double>(b10);
     vec_[12] = static_cast<double>(a10);
 
@@ -161,6 +218,23 @@ void FeatureExtractorCpp::extract() {
     prev_bid1_ = b1;
     prev_ask1_ = a1;
     vec_[20] = cancel_vol_ > 0 ? static_cast<double>(add_vol_) / cancel_vol_ : 1.0;
+
+    double reload_score = 0.0;
+    for (const auto& [key, reloads] : reload_at_level_) {
+        auto tit = trade_at_level_.find(key);
+        int trades = tit != trade_at_level_.end() ? tit->second : 0;
+        if (trades > 0 && reloads >= 2) {
+            double side = key.first == 'B' ? 1.0 : -1.0;
+            reload_score += side * std::min(1.0, static_cast<double>(reloads) / (trades + 1e-9));
+        }
+    }
+    vec_[22] = std::tanh(reload_score);
+    vec_[23] = std::max(0.0, prev_reload_score_ - std::abs(reload_score));
+    prev_reload_score_ = std::abs(reload_score);
+
+    int hit_vol = 0;
+    for (const auto& [_, v] : trade_at_level_) hit_vol += v;
+    vec_[21] = total_agg > 0 ? (static_cast<double>(hit_vol) / (total_agg + 1e-9)) * (1.0 - std::abs(slope)) : 0.0;
 }
 
 }  // namespace hft

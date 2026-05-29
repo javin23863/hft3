@@ -51,12 +51,21 @@ void DecisionEngine::evaluate_actions(const MarketState& state, ActionArray& out
     // NO_TRADE
     out_actions[0] = {Action::NO_TRADE, 0.0, 1.0, 0.0, 0.0};
     
-    // ENTER_LONG - Vectorized math / BLAS dot product would go here using `state.model_features` and `weights_`
-    double ev_long = (state.ask_qty_1 > 0) ? (state.model_features[0] * weights_[0]) : -0.5;
+    // ENTER_LONG — full dot product on exported weight vector
+    double ev_long = -0.5;
+    double ev_short = -0.5;
+    if (state.ask_qty_1 > 0 || state.bid_qty_1 > 0) {
+        ev_long = 0.0;
+        ev_short = 0.0;
+        const size_t n = std::min(active_feature_count_, static_cast<size_t>(64));
+        for (size_t i = 0; i < n; ++i) {
+            ev_long += state.model_features[i] * weights_[i];
+            ev_short -= state.model_features[i] * weights_[i];
+        }
+    }
     out_actions[1] = {Action::ENTER_LONG, ev_long, 0.8, -10.0, 0.5};
     
     // ENTER_SHORT
-    double ev_short = (state.bid_qty_1 > 0) ? (state.model_features[1] * weights_[1]) : -0.5;
     out_actions[2] = {Action::ENTER_SHORT, ev_short, 0.8, -10.0, 0.5};
     
     // In reality, populate all supported actions based on the state.

@@ -1,4 +1,5 @@
 from typing import List
+import os
 from .modules import (
     BaseHypothesis, StopRunExhaustionFade, DepthRefillImbalance, SpreadBlowoutRecompression,
     LiquidityVacuumContinuation, BookSlopeCollapse, DOMIllusionTrap, ThinBookContinuation, SpreadRegimeChange,
@@ -11,8 +12,11 @@ from .modules import (
     QuotePullBeforeVolatility, RequoteRaceAfterShock
 )
 
+CROSS_ASSET_HYP_IDS = frozenset({16, 17, 18, 19, 20})
+
+
 def get_active_hypotheses() -> List[BaseHypothesis]:
-    return [
+    hyps = [
         StopRunExhaustionFade(),
         DepthRefillImbalance(),
         SpreadBlowoutRecompression(),
@@ -58,6 +62,9 @@ def get_active_hypotheses() -> List[BaseHypothesis]:
         QuotePullBeforeVolatility(),
         RequoteRaceAfterShock()
     ]
+    if os.environ.get("HFT3_CROSS_ASSET", "").lower() not in ("1", "true", "yes"):
+        hyps = [h for h in hyps if h.hyp_id not in CROSS_ASSET_HYP_IDS]
+    return hyps
 
 class HypothesisRegistry:
     """
