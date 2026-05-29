@@ -1,0 +1,23 @@
+---
+description: Mandatory graphify consult before edits and rebuild after edits
+alwaysApply: true
+---
+
+# Graphify mandatory (orchestrator)
+
+Full workflow: [docs/GRAPHIFY_WORKFLOW.md](../../docs/GRAPHIFY_WORKFLOW.md).
+
+## Before any code edit session
+
+1. Run `scripts/graphify_pre_edit.ps1` or confirm `graphify-out/graph.json` exists.
+2. **Consult the graph** before locating or editing code:
+   - Prefer `graphify query "<question>"` over blind repo-wide grep.
+   - Or read `graphify-out/GRAPH_REPORT.md` if it is fresh (recent build).
+3. Do not start builder/investigator edit work until graph context is loaded.
+
+## After any code edits
+
+1. Rebuild: `graphify update .` or `scripts/graphify_rebuild.ps1` from repo root.
+2. Commit updated `graphify-out/` artifacts with the code change when the team tracks graph in git.
+
+Orchestrator owns pre-edit consult and post-edit rebuild; subagents receive graph context from the main thread.

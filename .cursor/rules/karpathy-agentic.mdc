@@ -1,0 +1,26 @@
+---
+description: Karpathy agentic engineering — think, simplify, surgical edits, verify loops
+alwaysApply: true
+---
+
+# Karpathy agentic engineering
+
+Apply on every task. Full charter: [AGENTS.md](../../AGENTS.md).
+
+## Think Before Coding
+
+State assumptions. Surface tradeoffs. Ask when uncertain; do not silently guess or pick one interpretation.
+
+## Simplicity First
+
+Minimum code for the request. No speculative abstractions, extra config, or unrequested features.
+
+## Surgical Changes
+
+Edit only what the task requires. Match repo conventions. Every changed line traces to the request.
+
+## Goal-Driven Execution
+
+Define verifiable success criteria before coding. Transform "fix X" into "reproduce X, then make checks pass." Loop Spec → Plan → Code → Verify until criteria met or blocked.
+
+Weak criteria require clarification. Strong criteria enable independent verification.

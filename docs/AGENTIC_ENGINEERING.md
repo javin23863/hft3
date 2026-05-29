@@ -1,0 +1,109 @@
+# Agentic engineering (hft3)
+
+Summary of [Andrej Karpathy's agentic engineering](https://www.youtube.com/watch?v=LCEmiRjPEtQ) view, adapted for this repo: **spec-driven work**, **humans own architecture**, **agents implement and iterate**, **verification is mandatory** (tests and real gates—not narrative "done").
+
+## Agentic engineering principles
+
+| Principle | Meaning for hft3 |
+|-----------|------------------|
+| Spec-driven | Start from BLUEPRINT, production PDFs, and task specs—not ad-hoc prompts. |
+| Human owns architecture | Boundaries (e.g. trial lane vs `data/npz/`, CHI404 gates) are human decisions; agents implement inside them. |
+| Agents write code | Implementation, refactors, and docs drafts are delegated; orchestrator integrates. |
+| Verify with tests | Every change loop ends in **pytest** and, for infra, **CHI404 PASS criteria**—not self-reported success. |
+
+## Karpathy four principles
+
+Full detail: [AGENTS.md § Karpathy principles](../AGENTS.md#karpathy-principles). Apply alongside delegation on every task.
+
+- **Think Before Coding** — State assumptions; ask when ambiguous.
+- **Simplicity First** — Minimum code; no speculative abstractions.
+- **Surgical Changes** — Touch only task scope; match existing style.
+- **Goal-Driven Execution** — Verifiable success criteria; test-driven when possible.
+
+## Mandatory subagent delegation
+
+| Work type | Delegate to | Main thread keeps |
+|-----------|-------------|-------------------|
+| Find symbol / call graph / directory map | `cavecrew-investigator` (parallel OK) | Spec, which hits matter |
+| Edit ≤2 files, obvious scope | `cavecrew-builder` | Paths, acceptance criteria |
+| Post-edit dual-pass review (Karpathy + math) | `cavecrew-reviewer` per [REVIEWER_CHARTER.md](REVIEWER_CHARTER.md) | Merge decision |
+| Wide unknown area | `explore` | Stop conditions |
+| pytest, git, remote CHI404 | `shell` | Interpret failures, retry plan |
+| 3+ files or new subsystem | Main or feature agent | Architecture, sequencing |
+
+## Workflow
+
+```mermaid
+flowchart LR
+  S[Spec] --> GP[GraphPre]
+  GP --> P[Plan]
+  P --> I[Investigator / Explore]
+  I --> B[Builder ≤2 files]
+  B --> R["Reviewer (Karpathy + math)"]
+  R --> V[Verify]
+  V -->|fail| P
+  V -->|pass| GPO[GraphPost]
+  GPO --> D[Done]
+```
+
+### Spec → GraphPre → Plan → Code → Verify → GraphPost
+
+1. **Spec** — Read relevant spec (BLUEPRINT, PDF prompts, issue). State invariants (data lanes, PASS gates).
+2. **GraphPre** — `graphify query` or fresh `graphify-out/GRAPH_REPORT.md` before edits ([GRAPHIFY_WORKFLOW.md](GRAPHIFY_WORKFLOW.md)).
+3. **Plan** — Orchestrator decomposes; spawn investigators in parallel if needed.
+4. **Code** — Builder for surgical edits; main/feature agent for larger scope; shell for commands.
+5. **Verify** — Dual-pass reviewer on diff (both passes green), then **shell** for `pytest` (and CHI404 validate when infra). No merge narrative without green commands.
+6. **GraphPost** — `graphify . --update` or `scripts/graphify_rebuild.ps1` after code changes.
+
+## Dual-pass review
+
+Every code change requires **cavecrew-reviewer** under [REVIEWER_CHARTER.md](REVIEWER_CHARTER.md):
+
+- **Pass A — Karpathy** — assumptions, simplicity, surgical edits, verifiable goals.
+- **Pass B — Math invariants** — B1 filtration F_t, B2 event-time, B3 no lookahead, B4 walk-forward, B5 execution realism, B6 regime P(Z_t|F_t), B7 trial vs production lanes, B8 production failure states ([REVIEWER_CHARTER.md](REVIEWER_CHARTER.md) Pass B). Apply area-table columns only; full B1-B8 when in doubt.
+
+Orchestrator spawns reviewer with the charter **Spawn prompt** block. Pass B findings must cite BLUEPRINT or full repo-root PDF section/page. Both passes must pass before pytest / CHI404 gates.
+
+## hft3 verification commands
+
+From repo root (local):
+
+```bash
+pytest
+```
+
+CHI404 tuning validation (on server after tuning logs exist):
+
+```bash
+python3 infrastructure/chi404/validate_pass_criteria.py \
+  infrastructure/chi404/PASS_CRITERIA.json \
+  /root/hft3/logs/tuning/<RUN_ID>
+```
+
+Full remote resume-from-step-4 orchestration (includes validate step):
+
+```bash
+bash scripts/run_chi404_validate_remote.sh
+```
+
+Orchestrator entry: `infrastructure/chi404/run_chi404_tuning.sh` (validate step calls `validate_pass_criteria.py`).
+
+## Anti-patterns (grader / review)
+
+| Anti-pattern | Why it fails |
+|--------------|--------------|
+| **Fake PASS gates** | Marking CHI404 or pipeline "PASS" without `validate_pass_criteria.py` / `PASS_FAIL.txt` on real log dirs. |
+| **Fixture-only as done** | Rithmic trial passing on `fixture_connector` while live capture / Wine bridge untested. |
+| **Tests skipped** | "Should pass" without `pytest` in the loop. |
+| **Orchestrator implements everything** | Large inline edits burn context; use investigator → builder → reviewer. |
+| **Builder for 3+ files** | Builder refuses; wastes a turn—plan multi-file work in main/feature agent. |
+| **Reviewer as architecture chat** | Use reviewer for diff findings; architecture stays with human + spec. |
+| **Trial data in production lake** | Writing trial capture into trusted `data/npz/` (see `docs/rithmic_trial/README.md`). |
+
+## Related docs
+
+- [AGENTS.md](../AGENTS.md) — agent roles and repo conventions
+- [GRAPHIFY_WORKFLOW.md](GRAPHIFY_WORKFLOW.md) — mandatory graph consult and rebuild
+- [.cursor/rules/delegate-subagents.mdc](../.cursor/rules/delegate-subagents.mdc) — always-on delegation rule
+- [.cursor/rules/graphify-mandatory.mdc](../.cursor/rules/graphify-mandatory.mdc) — graph before edit, rebuild after
+- [.cursor/rules/karpathy-agentic.mdc](../.cursor/rules/karpathy-agentic.mdc) — Karpathy four principles (always-on)

@@ -1,0 +1,43 @@
+---
+description: "Orchestrate non-trivial work via specialized subagents; main thread plans and integrates."
+alwaysApply: true
+---
+
+# Delegate subagents (orchestrator pattern)
+
+The **main agent is an orchestrator** for any non-trivial task. It owns intent, spec alignment, architecture boundaries, and final integration. It does **not** inline large searches, multi-file edits, or deep reviews when a subagent fits.
+
+## When to spawn
+
+| Subagent | Use when |
+|----------|----------|
+| **cavecrew-investigator** | Where is X defined? What calls Y? List uses of Z? Map a directory. Output: `path:line` tables (compressed). |
+| **cavecrew-builder** | Surgical change in **1–2 files**, scope obvious and bounded. Returns diff receipt. |
+| **cavecrew-reviewer** | After **any** code change: dual-pass review per [docs/REVIEWER_CHARTER.md](../../docs/REVIEWER_CHARTER.md) — Pass A (Karpathy) + Pass B (math invariants from BLUEPRINT/PDFs). Spawn with charter **Spawn prompt** block. Findings only. |
+| **explore** | Broad codebase scout when you need moderate prose or multiple naming conventions. |
+| **shell** | Git, deploy, remote SSH, pytest runs, CHI404 scripts, anything terminal-native. |
+
+Use **cavecrew-reviewer** for compressed diff audit; **generalPurpose** for long-form review. Vanilla **Explore** when you need moderate prose scout beyond investigator compression.
+
+## Chaining and parallelism
+
+- **Parallel investigators OK** — e.g. defs vs callers vs tests in one message; aggregate in main thread.
+- **Default chain:** `investigator → builder → reviewer` for locate → fix → verify.
+- **Skip investigator** when path:line is already known; hand exact sites to builder.
+- **Never** use builder for **3+ file** refactors or cross-cutting features — generalPurpose Task agent or main thread owns that.
+
+## Builder hard limits
+
+If scope is unclear or spans three or more files, builder returns `too-big.` — do not retry builder; split work or escalate to generalPurpose Task agent or main thread.
+
+## Cavecrew skill patterns (reference)
+
+Follow the **Cursor cavecrew plugin skill contracts**:
+
+- **Investigator:** file-path-first, line-attached symbols; `No match.` if empty.
+- **Builder:** receipt lines `path:line-range — change`; `verified: re-read OK`; terminal tokens `too-big.` / `ambiguous.` / `regressed.`
+- **Reviewer:** `path:line: <emoji> <severity>: [Pass A|Pass B] problem. fix.` sorted by file and line. Pass B → cite BLUEPRINT or full repo-root PDF + section/page (`chicago_cme_microstructure_mathematical_model.pdf`, `chicago_cme_microstructure_a_plus_developer_handoff.pdf`, `chicago_cme_a_plus_production_implementation_prompt.pdf`, `rithmic_trial_hftbacktest_pipeline_prompt.pdf`, `Ultimate_Quantitative_Finance_Researcher.pdf`).
+
+**Locate → fix → verify** is the default loop. Do not chain investigator → builder for work you already know is multi-file.
+
+Main thread may paraphrase cavecrew output for humans; do not expect prose from subagents.

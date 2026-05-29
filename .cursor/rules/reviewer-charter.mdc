@@ -1,0 +1,37 @@
+---
+description: "Mandatory dual-pass review (Karpathy + math invariants) after every code change."
+alwaysApply: true
+---
+
+# Dual-pass reviewer charter
+
+Full contract: [docs/REVIEWER_CHARTER.md](../../docs/REVIEWER_CHARTER.md)
+
+## After any code change
+
+The orchestrator **must** spawn **cavecrew-reviewer** using the **Spawn prompt** block from [docs/REVIEWER_CHARTER.md](../../docs/REVIEWER_CHARTER.md). Do not skip review for "small" edits.
+
+## Required passes
+
+The reviewer runs **both** passes on every diff:
+
+1. **Pass A — Karpathy / agentic** — assumptions, simplicity, surgical scope, goal-driven verification.
+2. **Pass B — Mathematical logic** — invariants from BLUEPRINT and repo-root PDFs (filtration, event-time, no lookahead, walk-forward, etc.).
+
+Both passes must complete before the orchestrator proceeds to **Verify** (pytest / CHI404 gates).
+
+## Math violation citations
+
+When Pass B flags a math or invariant violation, the reviewer **must cite** the source section:
+
+- `BLUEPRINT.md` section, or
+- Full repo-root PDF name + section/page: `chicago_cme_microstructure_mathematical_model.pdf`, `chicago_cme_microstructure_a_plus_developer_handoff.pdf`, `chicago_cme_a_plus_production_implementation_prompt.pdf`, `rithmic_trial_hftbacktest_pipeline_prompt.pdf`, `Ultimate_Quantitative_Finance_Researcher.pdf`.
+
+Findings without a citation are incomplete for Pass B.
+
+## Output
+
+One line per finding:
+`path:line: <emoji> <severity>: [Pass A|Pass B] <problem>. <fix>.`
+
+Block merge on any 🔴 from either pass until resolved or explicitly accepted by the user.
