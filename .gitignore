@@ -42,14 +42,33 @@ cmake_install.cmake
 *.exe
 
 # Data and Models
-data/*.dbn
-data/*.zst
-data/*.npz
-data/*.parquet
-data/*.csv
+data/**/*.dbn
+data/**/*.zst
+data/**/*.npz
+data/**/*.parquet
+data/**/*.csv
 !data_system/config/events.csv
+data/raw/rithmic_trial_live_capture/**
+!data/raw/rithmic_trial_live_capture/.gitkeep
+data/normalized/rithmic_trial_live_capture/**
+!data/normalized/rithmic_trial_live_capture/.gitkeep
+data/replay/hftbacktest/rithmic_trial/**
+!data/replay/hftbacktest/rithmic_trial/.gitkeep
+reports/rithmic_trial/**
+!reports/rithmic_trial/.gitkeep
+logs/rithmic_trial/**
 models/
 *.onnx
+
+# Graphify (team commits graph.json/html/report; ignore local cache and cost metadata)
+graphify-out/manifest.json
+graphify-out/cost.json
+graphify-out/cache/
+
+# Ops artifacts and local logs
+logs/
+chi404_infra.tgz
+*.tgz
 
 # IDEs
 .vscode/
