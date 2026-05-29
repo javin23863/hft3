@@ -54,6 +54,7 @@ for rel in (
     "drive_c/users/root/Documents",
     "drive_c/Program Files/Rithmic",
     "drive_c/Program Files (x86)/Rithmic",
+    "drive_c/Program Files (x86)/Rithmic Trader Pro",
 ):
     p = prefix / rel
     if p.exists():

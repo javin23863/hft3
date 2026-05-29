@@ -134,6 +134,7 @@ class RTraderBridgeConnector(ConnectorInterface):
             self.wine_prefix / "drive_c" / "users" / "root" / "Documents",
             self.wine_prefix / "drive_c" / "Program Files" / "Rithmic",
             self.wine_prefix / "drive_c" / "Program Files (x86)" / "Rithmic",
+            self.wine_prefix / "drive_c" / "Program Files (x86)" / "Rithmic Trader Pro",
         ]
         self.watch_dirs = [p for p in candidates if p.exists()]
         if not self.watch_dirs:
