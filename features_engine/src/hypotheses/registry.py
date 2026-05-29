@@ -1,3 +1,64 @@
+from typing import List
+from .modules import (
+    BaseHypothesis, StopRunExhaustionFade, DepthRefillImbalance, SpreadBlowoutRecompression,
+    LiquidityVacuumContinuation, BookSlopeCollapse, DOMIllusionTrap, ThinBookContinuation, SpreadRegimeChange,
+    SecondWaveContinuation, AggressorDecelerationFade, ForcedLiquidationCascade, LateCandleEntryFade, PanicMarketOrderSpreadTax,
+    FalseBreakoutTrap, AbsorptionFade, IcebergReloadDetection, LiquidityDefenseBreak, OneSidedAddCancelImbalance, RoundNumberStopSweep, PriorHighLowBreakoutTrap, PassiveTrapFill, RebateTrapAvoidance,
+    EsToMesLeadLag, NqToMnqLeadLag, EsNqDivergenceSnapback, ZnZbToEsNqMacroImpulse, MicroContractRetailLag, MaxContractCrowding,
+    CancelStormBeforeMove, QueueDepletionTrigger, OpeningCandleChase, VWAPDefenseBreak, StopLossCascadeContinuation,
+    EndOfDayForcedFlatten, CutoffPanicExits, NoOvernightInventorySqueeze, DailyLossLimitDefense, TrailingDrawdownPressure,
+    ProfitLockBehavior, PropResetReopenWindow, FridayWeekendDerisking, EconomicEventRestrictionFlattening,
+    QuotePullBeforeVolatility, RequoteRaceAfterShock
+)
+
+def get_active_hypotheses() -> List[BaseHypothesis]:
+    return [
+        StopRunExhaustionFade(),
+        DepthRefillImbalance(),
+        SpreadBlowoutRecompression(),
+        LiquidityVacuumContinuation(),
+        BookSlopeCollapse(),
+        DOMIllusionTrap(),
+        ThinBookContinuation(),
+        SpreadRegimeChange(),
+        SecondWaveContinuation(),
+        AggressorDecelerationFade(),
+        ForcedLiquidationCascade(),
+        LateCandleEntryFade(),
+        PanicMarketOrderSpreadTax(),
+        FalseBreakoutTrap(),
+        AbsorptionFade(),
+        IcebergReloadDetection(),
+        LiquidityDefenseBreak(),
+        OneSidedAddCancelImbalance(),
+        RoundNumberStopSweep(),
+        PriorHighLowBreakoutTrap(),
+        PassiveTrapFill(),
+        RebateTrapAvoidance(),
+        EsToMesLeadLag(),
+        NqToMnqLeadLag(),
+        EsNqDivergenceSnapback(),
+        ZnZbToEsNqMacroImpulse(),
+        MicroContractRetailLag(),
+        MaxContractCrowding(),
+        CancelStormBeforeMove(),
+        QueueDepletionTrigger(),
+        OpeningCandleChase(),
+        VWAPDefenseBreak(),
+        StopLossCascadeContinuation(),
+        EndOfDayForcedFlatten(),
+        CutoffPanicExits(),
+        NoOvernightInventorySqueeze(),
+        DailyLossLimitDefense(),
+        TrailingDrawdownPressure(),
+        ProfitLockBehavior(),
+        PropResetReopenWindow(),
+        FridayWeekendDerisking(),
+        EconomicEventRestrictionFlattening(),
+        QuotePullBeforeVolatility(),
+        RequoteRaceAfterShock()
+    ]
+
 class HypothesisRegistry:
     """
     Registry for all 44 hypothesis families specified in the A+ Developer Handoff.
