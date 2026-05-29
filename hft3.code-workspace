@@ -1,0 +1,28 @@
+{
+  "folders": [
+    {
+      "name": "hft3",
+      "path": "."
+    }
+  ],
+  "settings": {
+    "python.analysis.extraPaths": [
+      "data_system",
+      "features_engine/src",
+      "backtest_pipeline/src",
+      "decision_engine/python/src",
+      "telemetry/src"
+    ],
+    "python.testing.pytestEnabled": true,
+    "python.testing.pytestArgs": ["tests"],
+    "files.exclude": {
+      "**/__pycache__": true,
+      "**/.pytest_cache": true,
+      "graphify-out/cache": true
+    },
+    "search.exclude": {
+      "**/graphify-out/cache": true,
+      "**/graphify-out/graph.json": true
+    }
+  }
+}

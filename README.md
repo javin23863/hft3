@@ -39,6 +39,7 @@ python -m pytest tests/ -q
 | Document | Purpose |
 |----------|---------|
 | [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) | **Start here** — full operational guide |
+| [docs/AUDIT_FRICTION_REPORT.md](docs/AUDIT_FRICTION_REPORT.md) | Layer audit findings and remediation status |
 | [BLUEPRINT.md](BLUEPRINT.md) | Developer handoff summary |
 | [chicago_cme_a_plus_production_implementation_prompt.pdf](chicago_cme_a_plus_production_implementation_prompt.pdf) | Production build spec |
 | [rithmic_trial_hftbacktest_pipeline_prompt.pdf](rithmic_trial_hftbacktest_pipeline_prompt.pdf) | Rithmic trial → HftBacktest wiring (R\|Trader bridge until R\|API) |
