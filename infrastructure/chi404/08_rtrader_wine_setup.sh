@@ -13,8 +13,9 @@ mkdir -p "$LOG_DIR"
 echo "=== R|Trader Wine setup ===" | tee "$LOG_DIR/setup.log"
 
 export DEBIAN_FRONTEND=noninteractive
+dpkg --add-architecture i386 2>/dev/null || true
 apt-get update -qq
-apt-get install -y -qq wine64 winbind xvfb x11vnc unzip 2>&1 | tee -a "$LOG_DIR/setup.log"
+apt-get install -y -qq wine64 wine32 winbind xvfb x11vnc unzip 2>&1 | tee -a "$LOG_DIR/setup.log"
 
 export WINEPREFIX="$WINE_PREFIX"
 export WINEARCH=win64
