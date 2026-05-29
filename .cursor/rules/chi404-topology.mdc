@@ -1,0 +1,24 @@
+---
+description: "Live HFT path is CHI404 colo only — never wire a dev workstation into capture or order loops."
+alwaysApply: true
+---
+
+# Chicago colo topology (BLUEPRINT §4)
+
+Production live architecture: **CHI404 bare metal** + **Rithmic Chicago/Aurora** on a dedicated colo route. See [BLUEPRINT.md §4](../../BLUEPRINT.md#4-live-architecture).
+
+## Non-negotiable
+
+- **Live/paper market data, order submit, and Rithmic trial capture run on CHI404 only.**
+- **Dev workstation (Windows/Mac) is never in the hot loop** — no capture daemons, no R|Trader bridge from the PC, no file-bridge that adds workstation RTT to the path.
+- Workstation is allowed for: offline Databento replay, pytest, git, SSH/sync scripts, diagnostic probes that are **not** operational dependencies.
+
+## Before Rithmic / trial / infra tasks
+
+1. Read [BLUEPRINT.md §4](../../BLUEPRINT.md#4-live-architecture)
+2. Read [docs/rithmic_trial/README.md](../../docs/rithmic_trial/README.md)
+3. Do **not** add Windows setup scripts, `*_windows.yaml` capture configs, or workstation unattended capture unless the user **explicitly** asks for a dev-only exception.
+
+## Agent workflow (same turn)
+
+Non-trivial changes still require: **investigator → builder → reviewer → shell → graph post** per [AGENTS.md](../../AGENTS.md). Do not skip subagents to "move faster" on infra or Rithmic work.

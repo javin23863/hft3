@@ -52,7 +52,7 @@ python -m pytest tests/ -q
 | Feature engine | `features_engine/src/pipeline/market_state_pipeline.py` | [BLUEPRINT.md](BLUEPRINT.md) |
 | Backtest | `backtest_pipeline/src/runner.py` | [GETTING_STARTED §4](docs/GETTING_STARTED.md#4-research-pipeline-offline) |
 | CHI404 tuning | `infrastructure/chi404/run_chi404_tuning.sh` | [GETTING_STARTED §5](docs/GETTING_STARTED.md#5-chi404-production-infra) |
-| Rithmic trial | `python -m data_system.rithmic_trial.pipeline` | [docs/rithmic_trial/README.md](docs/rithmic_trial/README.md) |
+| Rithmic trial | `python -m data_system.rithmic_trial.pipeline` (live capture: **CHI404 only**) | [docs/rithmic_trial/README.md](docs/rithmic_trial/README.md) |
 | Code graph | `graphify query "..."` | [docs/GRAPHIFY_WORKFLOW.md](docs/GRAPHIFY_WORKFLOW.md) |
 | Agent workflow | [AGENTS.md](AGENTS.md) | [docs/AGENTIC_ENGINEERING.md](docs/AGENTIC_ENGINEERING.md) |
 
@@ -65,7 +65,10 @@ python -m pytest tests/ -q
 # CHI404 — sync repo to bare-metal server
 bash scripts/sync_chi404_repo.sh
 
-# Rithmic trial — fixture capture (no live broker)
+# Rithmic trial — CHI404 live setup (on server only)
+bash scripts/setup_rithmic_chi404.sh
+
+# Rithmic trial — fixture capture (workstation / CI, no live broker)
 python -m data_system.rithmic_trial.pipeline capture --config data_system/config/rithmic_trial.yaml
 python -m data_system.rithmic_trial.pipeline process --date YYYY-MM-DD --symbol MES
 

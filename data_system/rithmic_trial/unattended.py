@@ -14,7 +14,7 @@ from .capture.live_capture import LiveCapture
 from .config import TrialConfig, load_config
 from .connector import build_connector
 from .pipeline import cmd_process
-from .windows_paths import discover_rtrader_exe, is_windows
+from .platform import is_windows
 
 
 def _utc_date() -> str:
@@ -39,46 +39,46 @@ def _write_status(reports_dir: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
-def _rtrader_running(exe_name: str) -> bool:
-    if not is_windows():
-        return False
+def _wine_rtrader_running() -> bool:
     try:
         out = subprocess.check_output(
-            ["tasklist", "/FI", f"IMAGENAME eq {exe_name}", "/NH"],
+            ["pgrep", "-af", "wine"],
             text=True,
             stderr=subprocess.DEVNULL,
         )
-        return exe_name.lower() in out.lower()
+        lowered = out.lower()
+        return "rtrader" in lowered or "rithmic" in lowered
     except (subprocess.CalledProcessError, FileNotFoundError):
         return False
 
 
 def ensure_rtrader_started(cfg: TrialConfig) -> Path | None:
+    """Start R|Trader under Wine on CHI404 via launch_rtrader.sh (colo only)."""
     rt = cfg.rtrader
-    exe = Path(rt.get("exe_path", "")) if rt.get("exe_path") else discover_rtrader_exe()
-    if exe is None or not exe.exists():
-        logging.warning("R|Trader exe not found; set RTRADER_EXE_PATH or rtrader.exe_path in config")
+    launch = Path(rt.get("launch_script", "/root/hft3/logs/rtrader/launch_rtrader.sh"))
+    if not launch.is_absolute():
+        launch = cfg.repo_root / launch
+
+    if rt.get("skip_start_if_running", True) and _wine_rtrader_running():
+        logging.info("R|Trader (Wine) already running")
+        return launch if launch.exists() else None
+
+    if not launch.exists():
+        logging.warning(
+            "R|Trader launch script not found: %s — run infrastructure/chi404/08_rtrader_wine_setup.sh",
+            launch,
+        )
         return None
 
-    if rt.get("skip_start_if_running", True) and _rtrader_running(exe.name):
-        logging.info("R|Trader already running: %s", exe.name)
-        return exe
-
-    args = [str(exe), *rt.get("extra_args", [])]
-    logging.info("Starting R|Trader minimized: %s", exe)
-    if is_windows():
-        flags = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
-        subprocess.Popen(
-            args,
-            cwd=str(exe.parent),
-            creationflags=flags,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-    else:
-        subprocess.Popen(args, cwd=str(exe.parent), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    logging.info("Starting R|Trader via %s", launch)
+    subprocess.Popen(
+        ["bash", str(launch)],
+        cwd=str(launch.parent),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
     time.sleep(float(rt.get("startup_wait_sec", 15)))
-    return exe
+    return launch
 
 
 def run_unattended(
@@ -87,6 +87,14 @@ def run_unattended(
     start_rtrader: bool = True,
     symbol: str | None = None,
 ) -> int:
+    if is_windows():
+        print(
+            "ERROR: Rithmic trial capture runs on CHI404 only. "
+            "Do not run capture/unattended on a Windows workstation.",
+            file=sys.stderr,
+        )
+        return 1
+
     cfg = load_config(config_path)
     if not cfg.enabled:
         logging.error("Rithmic trial lane disabled")

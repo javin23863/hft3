@@ -19,12 +19,20 @@ from data_system.rithmic_trial.reports.emit_reports import emit_all_reports
 from data_system.rithmic_trial.schema.normalized_v1 import SCHEMA_VERSION
 from data_system.rithmic_trial.validate.book_reconstruction import reconstruct_book
 from data_system.rithmic_trial.validate.quality_checks import validate_events
+from data_system.rithmic_trial.platform import is_windows
 
 
 def cmd_capture(args: argparse.Namespace) -> int:
     cfg = load_config(args.config)
     if not cfg.enabled and not args.force:
         print("Rithmic trial lane disabled. Set enabled: true or RITHMIC_TRIAL_ENABLED=1")
+        return 1
+    if is_windows() and cfg.connector.lower() != "fixture":
+        print(
+            "ERROR: Live Rithmic capture runs on CHI404 only (not this Windows workstation). "
+            "Use connector: fixture for local tests, or SSH to CHI404 for live capture.",
+            file=sys.stderr,
+        )
         return 1
     connector = build_connector(cfg)
     connector.connect()
@@ -147,7 +155,7 @@ def main() -> int:
     p_rep.add_argument("--tick-size", type=float, default=0.25)
     p_rep.set_defaults(func=cmd_replay_sample)
 
-    p_un = sub.add_parser("run-unattended", help="Headless capture daemon (Windows R|Trader)")
+    p_un = sub.add_parser("run-unattended", help="Headless capture daemon (CHI404 R|Trader Wine only)")
     _add_config(p_un)
     p_un.add_argument("--symbol", default=None)
     p_un.add_argument("--no-start-rtrader", action="store_true")

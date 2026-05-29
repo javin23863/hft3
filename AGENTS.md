@@ -6,6 +6,8 @@ Full workflow reference: [docs/AGENTIC_ENGINEERING.md](docs/AGENTIC_ENGINEERING.
 
 ## Mandatory delegation
 
+**If you are about to edit code without spawning investigator → builder → reviewer → shell, STOP.**
+
 The main agent orchestrates. It does not absorb large exploration or multi-file edits inline.
 
 | Task | Delegate to |
@@ -25,6 +27,7 @@ Main thread must **not**:
 - Run large inline grep/read sweeps when investigator or explore would suffice
 - Edit three or more files in one turn without explicit user approval
 - Skip subagent delegation and absorb locate → edit → review inline to save time
+- Wire a dev workstation into live/paper Rithmic or execution paths (BLUEPRINT §4 violation)
 - Skip verification after code changes
 - Claim merge-ready or "done" without a reviewer verdict and green verify commands
 - Hide skipped tests or missing tooling behind a passing pytest summary
@@ -109,6 +112,24 @@ Production tuning and validation run on CHI404 via SSH (`Host chi404` in `~/.ssh
 - Launch session: `scripts/launch_chi404.ps1`
 
 Do not assume local Windows paths apply on CHI404.
+
+### Topology: Chicago colo only (BLUEPRINT §4)
+
+Per [BLUEPRINT.md §4 Live Architecture](BLUEPRINT.md#4-live-architecture): production live path is **CHI404 bare metal** with a **dedicated route to Rithmic Chicago/Aurora**. Milliseconds matter — nothing else belongs in the hot loop.
+
+| Host | Role |
+|------|------|
+| **CHI404** | Live/paper market data, order submit, capture, tuning, PASS gates, Rithmic trial lane |
+| **Dev workstation** | Offline research (Databento replay), pytest, git, SSH/sync to CHI404, docs — **never** live capture or orders |
+
+**Forbidden** (unless the user explicitly requests an exception in the task):
+
+- Windows or Mac R\|Trader capture, unattended daemons, or scheduled tasks on a dev PC
+- File-bridge or API loop that routes live/paper data or orders through a non-colo host
+- Setup scripts that auto-start capture on the workstation
+- Treating workstation RTT as an operational dependency for execution or capture
+
+**Before any Rithmic trial, infra, or latency work:** read BLUEPRINT §4 and [docs/rithmic_trial/README.md](docs/rithmic_trial/README.md). Live capture code must refuse to run on Windows (see `data_system/rithmic_trial/pipeline.py`).
 
 ### Rithmic trial quarantined lane
 

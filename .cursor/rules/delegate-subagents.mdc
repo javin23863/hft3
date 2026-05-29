@@ -7,6 +7,10 @@ alwaysApply: true
 
 The **main agent is an orchestrator** for any non-trivial task. It owns intent, spec alignment, architecture boundaries, and final integration. It does **not** inline large searches, multi-file edits, or deep reviews when a subagent fits.
 
+**This chain is never optional** for code changes — including "small" or urgent fixes. If subagent spawn fails (quota/error), stop and tell the user; do not silently inline the full chain.
+
+**Topology:** live Rithmic/capture/orders on **CHI404 only** — see [.cursor/rules/chi404-topology.mdc](chi404-topology.mdc) and [AGENTS.md § Topology](../../AGENTS.md#topology-chicago-colo-only-blueprint-§4).
+
 ## When to spawn
 
 | Subagent | Use when |

@@ -23,7 +23,7 @@ Authoritative math and production specs live in the PDFs at repo root — not du
 - **Optional:** CMake + C++17 compiler for `features_engine/cpp/`
 - **Optional:** `graphify` CLI (`pip install "graphifyy[pdf]"`) for code navigation
 - **For CHI404:** SSH access to bare-metal server (`Host chi404` in `~/.ssh/config`)
-- **For Rithmic trial:** R\|Trader Pro on Windows, Paper Trading + Chicago gateway
+- **For Rithmic trial:** CHI404 only (R\|Trader Wine on colo) — not a Windows workstation; see [docs/rithmic_trial/README.md](rithmic_trial/README.md)
 
 ## 3. First-time setup
 
@@ -88,14 +88,13 @@ Until R\|API SDK arrives, live capture uses R\|Trader Pro as a bridge. **This la
 R|Trader Pro → raw capture → normalize → validate → HftBacktest NPZ → replay sample
 ```
 
-Windows (Paper Trading, Chicago):
+CHI404 (Paper Trading, Chicago — **only path for live capture**):
 
-```powershell
-# Discover install paths
-.\scripts\rtrader_discover_windows.ps1
-
-# Set RTRADER_EXE_PATH in .env, then:
-python -m data_system.rithmic_trial.pipeline run-unattended --config data_system/config/rithmic_trial_windows.yaml
+```bash
+# On CHI404 only — see docs/rithmic_trial/README.md
+export RITHMIC_TRIAL_ENABLED=1
+python -m data_system.rithmic_trial.pipeline run-unattended \
+  --config data_system/config/rithmic_trial.yaml
 ```
 
 Fixture mode (no live broker):
@@ -153,7 +152,7 @@ hft3/
 ├── decision_engine/             # Feature store, targets, training
 ├── infrastructure/              # Kernel tuning; chi404/ for bare metal
 ├── telemetry/                   # Dashboards and latency reporting
-├── scripts/                     # CHI404 sync, R|Trader, graphify, offline pipeline
+├── scripts/                     # CHI404 sync, setup_rithmic_chi404.sh, graphify, offline pipeline
 ├── tests/                       # pytest suite
 ├── docs/                        # Operational guides (this file)
 └── graphify-out/                # Committed knowledge graph artifacts
@@ -165,6 +164,7 @@ hft3/
 |-------|---------|
 | Unit tests | `python -m pytest tests/ -q` |
 | Rithmic fixture pipeline | `python -m pytest tests/test_rithmic_trial_pipeline.py -q` |
+| Rithmic topology guards | `python -m pytest tests/test_rithmic_topology_guards.py -q` |
 | Graph fresh after edits | `.\scripts\graphify_rebuild.ps1` |
 | CHI404 validate (remote) | `bash scripts/run_chi404_validate_remote.sh` |
 

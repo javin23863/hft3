@@ -81,8 +81,6 @@ def load_config(path: str | Path) -> TrialConfig:
         rtrader["wine_prefix"] = os.environ["RTRADER_WINE_PREFIX"]
     if os.environ.get("RTRADER_INSTALLER_PATH"):
         rtrader["installer_path"] = os.environ["RTRADER_INSTALLER_PATH"]
-    if os.environ.get("RTRADER_EXE_PATH"):
-        rtrader["exe_path"] = os.environ["RTRADER_EXE_PATH"]
     if os.environ.get("RTRADER_WATCH_DIRS"):
         rtrader["watch_dirs"] = [
             p.strip() for p in os.environ["RTRADER_WATCH_DIRS"].split(";") if p.strip()

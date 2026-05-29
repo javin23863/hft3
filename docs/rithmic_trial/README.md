@@ -42,47 +42,30 @@ python -m data_system.rithmic_trial.pipeline replay-sample \
   --npz data/replay/hftbacktest/rithmic_trial/YYYY-MM-DD/MES/MES_YYYY-MM-DD_trial.npz
 ```
 
-## Windows R|Trader Pro (this machine — Paper Trading / Chicago Gateway)
+## CHI404 only (Chicago colo)
 
-**One-time:** Log in to R|Trader Pro manually with:
-- System: **Rithmic Paper Trading**
-- Gateway: **Chicago**
-
-After that, unattended capture can run headless in the background.
-
-```powershell
-# Discover install + log directories
-powershell -ExecutionPolicy Bypass -File scripts/rtrader_discover_windows.ps1
-
-# Start headless capture daemon (background python + minimized R|Trader if found)
-powershell -ExecutionPolicy Bypass -File scripts/rtrader_run_unattended.ps1
-
-# Optional: run at every Windows logon
-powershell -ExecutionPolicy Bypass -File scripts/install_rtrader_scheduled_task.ps1
-```
-
-Direct Python daemon (foreground):
-
-```powershell
-$env:RITHMIC_TRIAL_ENABLED='1'
-python -m data_system.rithmic_trial.pipeline run-unattended --config data_system/config/rithmic_trial_windows.yaml
-```
-
-Status file: `reports/rithmic_trial/YYYY-MM-DD/unattended_status.json`  
-Log: `logs/rithmic_trial/unattended.log`
-
-## R|Trader Wine on CHI404 (interim)
+Live Rithmic trial capture **must run on CHI404** — not on a Windows workstation. Millisecond latency cannot tolerate a remote desktop or file-bridge loop through your PC.
 
 ```bash
+# On CHI404 (/root/hft3)
+export RITHMIC_TRIAL_ENABLED=1
+
 # Set in /root/hft3/.env
 RTRADER_INSTALLER_PATH=/path/to/RTraderSetup.exe
 RTRADER_WINE_PREFIX=/root/.wine-rtrader
 
 bash infrastructure/chi404/08_rtrader_wine_setup.sh
+bash scripts/setup_rithmic_chi404.sh
 bash /root/hft3/logs/rtrader/launch_rtrader.sh
+
+python -m data_system.rithmic_trial.pipeline run-unattended \
+  --config data_system/config/rithmic_trial.yaml
 ```
 
 First login may require provider console or VNC. Discovery output: `/root/hft3/logs/rtrader/rtrader_discovery.json` — copy `watch_dirs` into `data_system/config/rithmic_trial.yaml`.
+
+Status file: `reports/rithmic_trial/YYYY-MM-DD/unattended_status.json`  
+Log: `logs/rithmic_trial/unattended.log`
 
 ## Schema mapping
 

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import TrialConfig
-from ..windows_paths import default_windows_watch_dirs, is_windows
+from ..platform import is_windows
 from .base import ConnectorInterface
 
 ALL_EVENT_TYPES = {
@@ -94,21 +94,25 @@ def _parse_log_line(line: str, cfg: TrialConfig) -> dict[str, Any] | None:
         "CANCEL": "cancel",
         "REJECT": "reject",
     }
+    try:
+        price = float(m.group("px"))
+    except ValueError:
+        return None
     return {
         "event_type": type_map.get(m.group("type").upper(), "trade"),
         "symbol": m.group("sym") or cfg.symbol,
         "exchange": cfg.exchange,
-        "price": float(m.group("px")),
+        "price": price,
         "raw_line": line,
     }
 
 
 class RTraderBridgeConnector(ConnectorInterface):
-    """Watch R|Trader Pro export/log files (Windows native or Wine interim bridge)."""
+    """Watch R|Trader Pro export/log files (Wine on CHI404 only)."""
 
     def __init__(self, cfg: TrialConfig) -> None:
         self.cfg = cfg
-        self.platform = cfg.rtrader.get("platform") or ("windows" if is_windows() else "linux")
+        self.platform = cfg.rtrader.get("platform") or "linux"
         self.wine_prefix = Path(cfg.rtrader.get("wine_prefix", "/root/.wine-rtrader"))
         self.watch_dirs = [Path(p) for p in cfg.rtrader.get("watch_dirs", [])]
         self.export_globs = cfg.rtrader.get("export_globs", ["**/*.csv", "**/*.ndjson"])
@@ -121,19 +125,22 @@ class RTraderBridgeConnector(ConnectorInterface):
     def connect(self) -> None:
         if self.watch_dirs:
             return
-        if self.platform == "windows" or is_windows():
-            self.watch_dirs = default_windows_watch_dirs()
-        else:
-            candidates = [
-                self.wine_prefix / "drive_c" / "users" / "root" / "Documents",
-                self.wine_prefix / "drive_c" / "Program Files" / "Rithmic",
-                self.wine_prefix / "drive_c" / "Program Files (x86)" / "Rithmic",
-            ]
-            self.watch_dirs = [p for p in candidates if p.exists()]
+        if is_windows():
+            raise RuntimeError(
+                "RTraderBridgeConnector is for CHI404 (Wine) only. "
+                "Do not run live Rithmic capture on a Windows workstation — see AGENTS.md § Topology."
+            )
+        candidates = [
+            self.wine_prefix / "drive_c" / "users" / "root" / "Documents",
+            self.wine_prefix / "drive_c" / "Program Files" / "Rithmic",
+            self.wine_prefix / "drive_c" / "Program Files (x86)" / "Rithmic",
+        ]
+        self.watch_dirs = [p for p in candidates if p.exists()]
         if not self.watch_dirs:
             raise FileNotFoundError(
                 "No R|Trader watch directories found. "
-                "Run scripts/rtrader_discover_windows.ps1 or set RTRADER_WATCH_DIRS"
+                "On CHI404: run infrastructure/chi404/08_rtrader_wine_setup.sh and set rtrader.watch_dirs "
+                "in data_system/config/rithmic_trial.yaml from logs/rtrader/rtrader_discovery.json"
             )
 
     def _iter_files(self) -> list[Path]:
@@ -208,6 +215,8 @@ class RTraderBridgeConnector(ConnectorInterface):
                 continue
 
     def _ingest_file(self, path: Path) -> None:
+        if path.name.lower().endswith(".cur.txt"):
+            return
         suffix = path.suffix.lower()
         if suffix == ".csv":
             self._ingest_csv(path, self.cfg)
@@ -251,7 +260,7 @@ class RTraderBridgeConnector(ConnectorInterface):
         return {
             "connector": "rtrader_bridge",
             "platform": self.platform,
-            "wine_prefix": str(self.wine_prefix) if self.platform != "windows" else None,
+            "wine_prefix": str(self.wine_prefix),
             "watch_dirs": [str(p) for p in self.watch_dirs],
             "detected_event_types": sorted(detected),
             "missing_event_types": missing,

@@ -97,6 +97,7 @@ Orchestrator entry: `infrastructure/chi404/run_chi404_tuning.sh` (validate step 
 | **Tests skipped** | "Should pass" without `pytest` in the loop. |
 | **Orchestrator implements everything** | Large inline edits burn context; use investigator → builder → reviewer → shell → graph post. |
 | **Skipped subagent chain** | Main thread inline locate/edit/review with no subagent receipts; unacceptable on a live execution stack — see [AGENTS.md § Trust](../AGENTS.md#trust-non-skippable-workflow). |
+| **Windows in HFT loop** | Wiring a dev workstation into live/paper Rithmic capture or order path — violates BLUEPRINT §4; colo must be self-sufficient. |
 | **Dishonest merge-ready** | Claiming done while reviewer said no, tests skipped without documented blockers, or C++ parity gate not run. |
 | **Builder for 3+ files** | Builder refuses; wastes a turn—plan multi-file work in main/feature agent. |
 | **Reviewer as architecture chat** | Use reviewer for diff findings; architecture stays with human + spec. |
