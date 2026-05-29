@@ -55,16 +55,18 @@ def test_fixture_capture_normalize_reports(trial_cfg, tmp_path: Path) -> None:
     norm_path = trial_cfg.normalized_dir(date) / "events.ndjson"
     normalized, _ = normalize_file(capture.raw_path, trial_cfg, norm_path)
     quality = validate_events(normalized)
-    assert quality["status"] in ("pass", "warn")
+    assert quality["status"] == "pass"
     book = reconstruct_book(normalized)
     assert book["status"] == "pass"
 
-    npz_path = trial_cfg.replay_dir(date) / "MES_trial.npz"
+    npz_path = trial_cfg.replay_dir(date) / f"{trial_cfg.symbol}_{date}_trial.npz"
     conversion = convert_to_npz(normalized, npz_path)
     assert conversion["status"] == "pass"
+    assert npz_path.exists()
 
     latency = build_latency_profile(normalized)
-    assert latency["feed_latency_us"]["count"] >= 0
+    assert latency["feed_latency_us"]["count"] > 0
+    assert latency["feed_latency_us"]["avg_us"] is not None
 
     reports_dir = trial_cfg.reports_dir(date)
     paths = emit_all_reports(
@@ -92,6 +94,12 @@ def test_process_cli(trial_cfg, tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     cfg_path = tmp_path / "rithmic_trial.yaml"
     args = type("Args", (), {"config": str(cfg_path), "date": date, "symbol": trial_cfg.symbol})()
     assert cmd_process(args) == 0
+    expected_npz = trial_cfg.replay_dir(date) / f"{trial_cfg.symbol}_{date}_trial.npz"
+    assert expected_npz.exists()
+    conversion_report = trial_cfg.reports_dir(date) / "hftbacktest_conversion_report.json"
+    assert conversion_report.exists()
+    report = json.loads(conversion_report.read_text(encoding="utf-8"))
+    assert report.get("status") == "pass"
 
 
 def test_replay_sample_smoke(trial_cfg, tmp_path: Path) -> None:
@@ -102,7 +110,7 @@ def test_replay_sample_smoke(trial_cfg, tmp_path: Path) -> None:
     capture.append_raw(connector.poll_events())
     norm_path = trial_cfg.normalized_dir(date) / "events.ndjson"
     normalized, _ = normalize_file(capture.raw_path, trial_cfg, norm_path)
-    npz_path = trial_cfg.replay_dir(date) / "MES_trial.npz"
+    npz_path = trial_cfg.replay_dir(date) / f"{trial_cfg.symbol}_{date}_trial.npz"
     result = convert_to_npz(normalized, npz_path)
     assert result["status"] == "pass"
 
@@ -119,4 +127,6 @@ def test_replay_sample_smoke(trial_cfg, tmp_path: Path) -> None:
         capture_output=True,
         text=True,
     )
-    assert r.returncode == 0, r.stderr
+    assert r.returncode == 0, r.stderr + r.stdout
+    payload = json.loads(r.stdout.strip())
+    assert "error" not in payload

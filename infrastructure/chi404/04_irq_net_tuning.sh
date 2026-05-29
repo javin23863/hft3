@@ -76,7 +76,7 @@ except subprocess.CalledProcessError as exc:
         "limitation": "Could not read ring buffer sizes",
     }
     open(out_path, "w", encoding="utf-8").write(json.dumps(payload, indent=2) + "\n")
-    raise SystemExit(0)
+    raise SystemExit(1)
 
 def _field(label: str) -> int | None:
     m = re.search(rf"^{label}:\s*(\d+)", text, re.MULTILINE)

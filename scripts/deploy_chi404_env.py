@@ -17,6 +17,7 @@ KEYS = (
     "HFT3_PUBLIC_IP",
     "HFT3_ENV",
     "HFT3_REPO_DIR",
+    "HOT_CPUS",
     "HFT3_ISOL_CPUS",
     "HFT3_RITHMIC_CPU",
     "HFT3_OS_CPU",

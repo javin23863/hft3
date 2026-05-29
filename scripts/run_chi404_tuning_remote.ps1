@@ -1,6 +1,6 @@
 # Deploy infrastructure and run CHI404 tuning with reboot handling.
 $ErrorActionPreference = "Stop"
-$Repo = "C:\Users\MSI\Documents\GitHub\hft3"
+$Repo = Split-Path -Parent $PSScriptRoot
 $RunId = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
 
 Write-Host "Syncing infrastructure to chi404..."

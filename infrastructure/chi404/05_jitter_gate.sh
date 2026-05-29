@@ -6,7 +6,7 @@ ENV_FILE="${HFT3_ENV_FILE:-/root/hft3/.env}"
 
 RUN_ID="${RUN_ID:-}"
 LOG_DIR="${HFT3_TUNING_LOG_DIR:-/root/hft3/logs/tuning/${RUN_ID}}"
-CRITERIA="${HFT3_REPO_DIR:-/root/hft3}/infrastructure/chi404/PASS_CRITERIA.json"
+CRITERIA="${HFT3_REPO_DIR:-/root/hft3/repo}/infrastructure/chi404/PASS_CRITERIA.json"
 [[ -f /root/hft3/repo/infrastructure/chi404/PASS_CRITERIA.json ]] && CRITERIA=/root/hft3/repo/infrastructure/chi404/PASS_CRITERIA.json
 [[ -f /root/hft3/infrastructure/chi404/PASS_CRITERIA.json ]] && CRITERIA=/root/hft3/infrastructure/chi404/PASS_CRITERIA.json
 
