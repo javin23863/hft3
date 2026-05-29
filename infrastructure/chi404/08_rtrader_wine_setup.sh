@@ -15,7 +15,17 @@ echo "=== R|Trader Wine setup ===" | tee "$LOG_DIR/setup.log"
 export DEBIAN_FRONTEND=noninteractive
 dpkg --add-architecture i386 2>/dev/null || true
 apt-get update -qq
-apt-get install -y -qq wine64 wine32 winbind xvfb x11vnc unzip 2>&1 | tee -a "$LOG_DIR/setup.log"
+apt-get install -y -qq wine64 wine32 winbind xvfb x11vnc unzip libegl1 2>&1 | tee -a "$LOG_DIR/setup.log"
+
+# Prefer Wine HQ staging (needed for .NET 4.7.2 / R|Trader)
+if ! wine --version 2>/dev/null | grep -qE 'wine-[89]|wine-1[0-9]'; then
+  dpkg --add-architecture i386 2>/dev/null || true
+  mkdir -pm755 /etc/apt/keyrings
+  wget -q -O /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key || true
+  wget -q -NP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/ubuntu/dists/jammy/winehq-jammy.sources || true
+  apt-get update -qq
+  apt-get install -y -qq --install-recommends winehq-staging 2>&1 | tee -a "$LOG_DIR/setup.log" || true
+fi
 
 export WINEPREFIX="$WINE_PREFIX"
 export WINEARCH=win64

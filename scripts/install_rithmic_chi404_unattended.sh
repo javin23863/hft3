@@ -29,6 +29,11 @@ python3 -m pip install -q -r data_system/requirements.txt
 echo "--- Wine + R|Trader setup ---"
 bash scripts/setup_rithmic_chi404.sh
 
+if [[ -x scripts/chi404_install_dotnet472.sh ]]; then
+  echo "--- .NET 4.7.2 for R|Trader ---"
+  bash scripts/chi404_install_dotnet472.sh || echo "WARNING: dotnet472 install may need VNC retry"
+fi
+
 if [[ -f "$DISCOVERY" ]]; then
   echo "--- Writing RTRADER_WATCH_DIRS from discovery ---"
   WATCH=$(
