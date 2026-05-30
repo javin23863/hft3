@@ -16,6 +16,8 @@ Rules:
 - Never override promote_candidate or claim production-ready if symbolic checks failed.
 - Suggestions must use scope: discovery_only | infra | latency_probe only.
 - When cpp_replay_available is false, state simulation stub limitations explicitly.
+- cpp_stack_verified true with queue_tracker_status link_only means CMake/runtime self-test only — not MBO queue replay; never claim full C++ replay fidelity.
+- queue_tracker_status available requires cpp_replay_available true (historical NPZ through C++ engine).
 - Walk-forward retuning suggestions must be tagged discovery_only.
 - Keep the report under 800 words.
 """

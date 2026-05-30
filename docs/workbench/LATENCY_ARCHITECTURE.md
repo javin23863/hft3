@@ -10,7 +10,7 @@ Python runtime must **not** be the source of truth for production latency when t
 |----------|----------|----------------|
 | 1 Preferred | C++ hot path via pybind; Python backtest calls same code | `decision_engine/cpp/` — binding TBD |
 | 2 Acceptable | Python model + **measured C++ latency injection** | **Implemented:** `workbench/src/sim/cpp_latency_profile.py`, `latency_injector.py` |
-| 3 Best replay | Historical MBO through C++ production engine | **Stub:** `workbench/src/sim/cpp_replay_harness.py` |
+| 3 Best replay | Historical MBO through C++ production engine | **Stack self-test in CI**; NPZ replay **not implemented** |
 
 ## Required per-decision fields
 
@@ -49,3 +49,7 @@ Loaded from CHI404 `runtime/latency_reports/latency_summary.json` + `workbench/c
 - robustness pack pass
 
 Never promote on raw Python backtest PnL alone.
+
+## Hot-path audit
+
+See [HOT_PATH_AUDIT.md](HOT_PATH_AUDIT.md) for CMake targets, topology, and remaining R\|API+ gaps.

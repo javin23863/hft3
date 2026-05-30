@@ -26,7 +26,7 @@ from workbench.src.report.generator import (
 from workbench.src.robustness.pack import run_robustness_pack
 from workbench.src.run.run_context import RunContext
 from workbench.src.sim.cpp_latency_profile import CppLatencyProfile
-from workbench.src.sim.cpp_replay_harness import CppReplayHarness
+from workbench.src.sim.cpp_stack_verify import get_cached_stack_verify
 from workbench.src.sim.latency_simulator import LatencyPolicy
 
 
@@ -112,8 +112,7 @@ class WorkbenchEngine:
         if val_errs and not skip_history_gate:
             raise ValueError("; ".join(val_errs))
 
-        replay = CppReplayHarness()
-        cpp_replay = replay.replay(npz_path, primary_id)
+        cpp_verify = get_cached_stack_verify(self.repo_root)
 
         comp_trace = None
         if effective.defensive_stubs:
@@ -211,7 +210,10 @@ class WorkbenchEngine:
             "pnl_by_injection_us": {str(k): v for k, v in pnl_by_injection.items()},
             "pnl_by_latency": viability.pnl_by_latency,
             "cpp_latency_profile": viability.cpp_latency_profile,
-            "cpp_replay_available": cpp_replay.available,
+            "cpp_replay_available": False,
+            "cpp_stack_verified": cpp_verify.stack_verified,
+            "cpp_stack_checks": cpp_verify.checks,
+            "cpp_stack_verify_reason": cpp_verify.reason,
         }
         if comp_trace is not None:
             report["composition"] = effective.to_dict()

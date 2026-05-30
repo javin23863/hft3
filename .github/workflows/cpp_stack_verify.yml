@@ -1,0 +1,40 @@
+name: C++ stack verify
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  cpp-stack-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y cmake g++
+
+      - name: Configure and build
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j"$(nproc)"
+
+      - name: Run hft_research_sim stack verify
+        run: ./build/hft_research_sim --verify-stack
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pytest
+        run: pip install pytest numpy
+
+      - name: Hot-path and AAR contract tests
+        env:
+          HFT3_CPP_STACK_VERIFY: always
+        run: |
+          pytest tests/test_hot_path_topology.py tests/test_cpp_feature_golden.py tests/test_data_layer/test_after_action.py -q -m "not slow"
+
+      - name: Topology guards
+        run: pytest tests/test_rithmic_topology_guards.py -q

@@ -1,16 +1,16 @@
 # Graph Report - hft3  (2026-05-30)
 
 ## Corpus Check
-- 608 files · ~349,664 words
+- 987 files · ~635,615 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 8360 nodes · 13981 edges · 623 communities (502 shown, 121 thin omitted)
-- Extraction: 87% EXTRACTED · 13% INFERRED · 0% AMBIGUOUS · INFERRED: 1792 edges (avg confidence: 0.51)
+- 12561 nodes · 21117 edges · 826 communities (697 shown, 129 thin omitted)
+- Extraction: 91% EXTRACTED · 9% INFERRED · 0% AMBIGUOUS · INFERRED: 1881 edges (avg confidence: 0.52)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `5df515ef`
+- Built from commit: `cdd6b555`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -155,6 +155,7 @@
 - [[_COMMUNITY_Community 140|Community 140]]
 - [[_COMMUNITY_Community 141|Community 141]]
 - [[_COMMUNITY_Community 142|Community 142]]
+- [[_COMMUNITY_Community 143|Community 143]]
 - [[_COMMUNITY_Community 158|Community 158]]
 - [[_COMMUNITY_Community 162|Community 162]]
 - [[_COMMUNITY_Community 163|Community 163]]
@@ -595,7 +596,193 @@
 - [[_COMMUNITY_Community 612|Community 612]]
 - [[_COMMUNITY_Community 613|Community 613]]
 - [[_COMMUNITY_Community 614|Community 614]]
+- [[_COMMUNITY_Community 622|Community 622]]
 - [[_COMMUNITY_Community 623|Community 623]]
+- [[_COMMUNITY_Community 624|Community 624]]
+- [[_COMMUNITY_Community 625|Community 625]]
+- [[_COMMUNITY_Community 626|Community 626]]
+- [[_COMMUNITY_Community 627|Community 627]]
+- [[_COMMUNITY_Community 628|Community 628]]
+- [[_COMMUNITY_Community 629|Community 629]]
+- [[_COMMUNITY_Community 630|Community 630]]
+- [[_COMMUNITY_Community 631|Community 631]]
+- [[_COMMUNITY_Community 632|Community 632]]
+- [[_COMMUNITY_Community 633|Community 633]]
+- [[_COMMUNITY_Community 634|Community 634]]
+- [[_COMMUNITY_Community 635|Community 635]]
+- [[_COMMUNITY_Community 636|Community 636]]
+- [[_COMMUNITY_Community 637|Community 637]]
+- [[_COMMUNITY_Community 638|Community 638]]
+- [[_COMMUNITY_Community 639|Community 639]]
+- [[_COMMUNITY_Community 640|Community 640]]
+- [[_COMMUNITY_Community 641|Community 641]]
+- [[_COMMUNITY_Community 642|Community 642]]
+- [[_COMMUNITY_Community 643|Community 643]]
+- [[_COMMUNITY_Community 644|Community 644]]
+- [[_COMMUNITY_Community 645|Community 645]]
+- [[_COMMUNITY_Community 646|Community 646]]
+- [[_COMMUNITY_Community 647|Community 647]]
+- [[_COMMUNITY_Community 648|Community 648]]
+- [[_COMMUNITY_Community 649|Community 649]]
+- [[_COMMUNITY_Community 650|Community 650]]
+- [[_COMMUNITY_Community 651|Community 651]]
+- [[_COMMUNITY_Community 652|Community 652]]
+- [[_COMMUNITY_Community 653|Community 653]]
+- [[_COMMUNITY_Community 654|Community 654]]
+- [[_COMMUNITY_Community 655|Community 655]]
+- [[_COMMUNITY_Community 656|Community 656]]
+- [[_COMMUNITY_Community 657|Community 657]]
+- [[_COMMUNITY_Community 658|Community 658]]
+- [[_COMMUNITY_Community 659|Community 659]]
+- [[_COMMUNITY_Community 660|Community 660]]
+- [[_COMMUNITY_Community 661|Community 661]]
+- [[_COMMUNITY_Community 662|Community 662]]
+- [[_COMMUNITY_Community 663|Community 663]]
+- [[_COMMUNITY_Community 664|Community 664]]
+- [[_COMMUNITY_Community 665|Community 665]]
+- [[_COMMUNITY_Community 666|Community 666]]
+- [[_COMMUNITY_Community 667|Community 667]]
+- [[_COMMUNITY_Community 668|Community 668]]
+- [[_COMMUNITY_Community 669|Community 669]]
+- [[_COMMUNITY_Community 670|Community 670]]
+- [[_COMMUNITY_Community 671|Community 671]]
+- [[_COMMUNITY_Community 672|Community 672]]
+- [[_COMMUNITY_Community 673|Community 673]]
+- [[_COMMUNITY_Community 674|Community 674]]
+- [[_COMMUNITY_Community 675|Community 675]]
+- [[_COMMUNITY_Community 676|Community 676]]
+- [[_COMMUNITY_Community 677|Community 677]]
+- [[_COMMUNITY_Community 678|Community 678]]
+- [[_COMMUNITY_Community 679|Community 679]]
+- [[_COMMUNITY_Community 680|Community 680]]
+- [[_COMMUNITY_Community 681|Community 681]]
+- [[_COMMUNITY_Community 682|Community 682]]
+- [[_COMMUNITY_Community 683|Community 683]]
+- [[_COMMUNITY_Community 684|Community 684]]
+- [[_COMMUNITY_Community 685|Community 685]]
+- [[_COMMUNITY_Community 686|Community 686]]
+- [[_COMMUNITY_Community 687|Community 687]]
+- [[_COMMUNITY_Community 688|Community 688]]
+- [[_COMMUNITY_Community 689|Community 689]]
+- [[_COMMUNITY_Community 690|Community 690]]
+- [[_COMMUNITY_Community 691|Community 691]]
+- [[_COMMUNITY_Community 692|Community 692]]
+- [[_COMMUNITY_Community 693|Community 693]]
+- [[_COMMUNITY_Community 694|Community 694]]
+- [[_COMMUNITY_Community 695|Community 695]]
+- [[_COMMUNITY_Community 696|Community 696]]
+- [[_COMMUNITY_Community 697|Community 697]]
+- [[_COMMUNITY_Community 698|Community 698]]
+- [[_COMMUNITY_Community 699|Community 699]]
+- [[_COMMUNITY_Community 700|Community 700]]
+- [[_COMMUNITY_Community 701|Community 701]]
+- [[_COMMUNITY_Community 702|Community 702]]
+- [[_COMMUNITY_Community 703|Community 703]]
+- [[_COMMUNITY_Community 704|Community 704]]
+- [[_COMMUNITY_Community 705|Community 705]]
+- [[_COMMUNITY_Community 706|Community 706]]
+- [[_COMMUNITY_Community 707|Community 707]]
+- [[_COMMUNITY_Community 708|Community 708]]
+- [[_COMMUNITY_Community 709|Community 709]]
+- [[_COMMUNITY_Community 710|Community 710]]
+- [[_COMMUNITY_Community 711|Community 711]]
+- [[_COMMUNITY_Community 712|Community 712]]
+- [[_COMMUNITY_Community 713|Community 713]]
+- [[_COMMUNITY_Community 714|Community 714]]
+- [[_COMMUNITY_Community 715|Community 715]]
+- [[_COMMUNITY_Community 716|Community 716]]
+- [[_COMMUNITY_Community 717|Community 717]]
+- [[_COMMUNITY_Community 718|Community 718]]
+- [[_COMMUNITY_Community 719|Community 719]]
+- [[_COMMUNITY_Community 720|Community 720]]
+- [[_COMMUNITY_Community 721|Community 721]]
+- [[_COMMUNITY_Community 722|Community 722]]
+- [[_COMMUNITY_Community 723|Community 723]]
+- [[_COMMUNITY_Community 724|Community 724]]
+- [[_COMMUNITY_Community 725|Community 725]]
+- [[_COMMUNITY_Community 726|Community 726]]
+- [[_COMMUNITY_Community 727|Community 727]]
+- [[_COMMUNITY_Community 728|Community 728]]
+- [[_COMMUNITY_Community 729|Community 729]]
+- [[_COMMUNITY_Community 730|Community 730]]
+- [[_COMMUNITY_Community 731|Community 731]]
+- [[_COMMUNITY_Community 732|Community 732]]
+- [[_COMMUNITY_Community 733|Community 733]]
+- [[_COMMUNITY_Community 734|Community 734]]
+- [[_COMMUNITY_Community 735|Community 735]]
+- [[_COMMUNITY_Community 736|Community 736]]
+- [[_COMMUNITY_Community 737|Community 737]]
+- [[_COMMUNITY_Community 738|Community 738]]
+- [[_COMMUNITY_Community 739|Community 739]]
+- [[_COMMUNITY_Community 740|Community 740]]
+- [[_COMMUNITY_Community 741|Community 741]]
+- [[_COMMUNITY_Community 742|Community 742]]
+- [[_COMMUNITY_Community 743|Community 743]]
+- [[_COMMUNITY_Community 744|Community 744]]
+- [[_COMMUNITY_Community 745|Community 745]]
+- [[_COMMUNITY_Community 746|Community 746]]
+- [[_COMMUNITY_Community 747|Community 747]]
+- [[_COMMUNITY_Community 748|Community 748]]
+- [[_COMMUNITY_Community 749|Community 749]]
+- [[_COMMUNITY_Community 750|Community 750]]
+- [[_COMMUNITY_Community 751|Community 751]]
+- [[_COMMUNITY_Community 752|Community 752]]
+- [[_COMMUNITY_Community 753|Community 753]]
+- [[_COMMUNITY_Community 754|Community 754]]
+- [[_COMMUNITY_Community 755|Community 755]]
+- [[_COMMUNITY_Community 756|Community 756]]
+- [[_COMMUNITY_Community 757|Community 757]]
+- [[_COMMUNITY_Community 758|Community 758]]
+- [[_COMMUNITY_Community 759|Community 759]]
+- [[_COMMUNITY_Community 760|Community 760]]
+- [[_COMMUNITY_Community 761|Community 761]]
+- [[_COMMUNITY_Community 762|Community 762]]
+- [[_COMMUNITY_Community 763|Community 763]]
+- [[_COMMUNITY_Community 764|Community 764]]
+- [[_COMMUNITY_Community 765|Community 765]]
+- [[_COMMUNITY_Community 766|Community 766]]
+- [[_COMMUNITY_Community 767|Community 767]]
+- [[_COMMUNITY_Community 768|Community 768]]
+- [[_COMMUNITY_Community 769|Community 769]]
+- [[_COMMUNITY_Community 770|Community 770]]
+- [[_COMMUNITY_Community 771|Community 771]]
+- [[_COMMUNITY_Community 772|Community 772]]
+- [[_COMMUNITY_Community 773|Community 773]]
+- [[_COMMUNITY_Community 774|Community 774]]
+- [[_COMMUNITY_Community 775|Community 775]]
+- [[_COMMUNITY_Community 776|Community 776]]
+- [[_COMMUNITY_Community 777|Community 777]]
+- [[_COMMUNITY_Community 778|Community 778]]
+- [[_COMMUNITY_Community 779|Community 779]]
+- [[_COMMUNITY_Community 780|Community 780]]
+- [[_COMMUNITY_Community 781|Community 781]]
+- [[_COMMUNITY_Community 782|Community 782]]
+- [[_COMMUNITY_Community 783|Community 783]]
+- [[_COMMUNITY_Community 784|Community 784]]
+- [[_COMMUNITY_Community 785|Community 785]]
+- [[_COMMUNITY_Community 786|Community 786]]
+- [[_COMMUNITY_Community 787|Community 787]]
+- [[_COMMUNITY_Community 788|Community 788]]
+- [[_COMMUNITY_Community 789|Community 789]]
+- [[_COMMUNITY_Community 790|Community 790]]
+- [[_COMMUNITY_Community 791|Community 791]]
+- [[_COMMUNITY_Community 792|Community 792]]
+- [[_COMMUNITY_Community 793|Community 793]]
+- [[_COMMUNITY_Community 794|Community 794]]
+- [[_COMMUNITY_Community 795|Community 795]]
+- [[_COMMUNITY_Community 796|Community 796]]
+- [[_COMMUNITY_Community 797|Community 797]]
+- [[_COMMUNITY_Community 798|Community 798]]
+- [[_COMMUNITY_Community 799|Community 799]]
+- [[_COMMUNITY_Community 800|Community 800]]
+- [[_COMMUNITY_Community 801|Community 801]]
+- [[_COMMUNITY_Community 802|Community 802]]
+- [[_COMMUNITY_Community 803|Community 803]]
+- [[_COMMUNITY_Community 804|Community 804]]
+- [[_COMMUNITY_Community 805|Community 805]]
+- [[_COMMUNITY_Community 806|Community 806]]
+- [[_COMMUNITY_Community 807|Community 807]]
+- [[_COMMUNITY_Community 808|Community 808]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `Graph` - 149 edges
@@ -610,18 +797,18 @@
 10. `RunContext` - 68 edges
 
 ## Surprising Connections (you probably didn't know these)
+- `str` --uses--> `MarketStatePipeline`  [INFERRED]
+  decision_engine/python/src/feature_store.py → features_engine/src/pipeline/market_state_pipeline.py
+- `float` --uses--> `MarketStatePipeline`  [INFERRED]
+  decision_engine/python/src/feature_store.py → features_engine/src/pipeline/market_state_pipeline.py
 - `Path` --uses--> `LegQuote`  [INFERRED]
   tests/test_parity_ingest.py → options_lane/src/models.py
 - `CombinedHypothesisStrategy` --uses--> `FeatureIndex`  [INFERRED]
   backtest_pipeline/src/hft_strategy.py → features_engine/src/features/feature_index.py
 - `CombinedHypothesisStrategy` --uses--> `BaseHypothesis`  [INFERRED]
   backtest_pipeline/src/hft_strategy.py → features_engine/src/hypotheses/modules.py
-- `CombinedHypothesisStrategy` --uses--> `MarketState`  [INFERRED]
-  backtest_pipeline/src/hft_strategy.py → features_engine/src/hypotheses/modules.py
-- `BaseHypothesis` --uses--> `FeatureIndex`  [INFERRED]
-  backtest_pipeline/src/hft_strategy.py → features_engine/src/features/feature_index.py
 
-## Communities (623 total, 121 thin omitted)
+## Communities (826 total, 129 thin omitted)
 
 ### Community 0 - "Community 0"
 Cohesion: 0.08
@@ -640,16 +827,16 @@ Cohesion: 0.06
 Nodes (35): Capacity, MarketDataEvent, action, order_id, price, side, size, timestamp_ns (+27 more)
 
 ### Community 4 - "Community 4"
-Cohesion: 0.13
-Nodes (13): ConnectorInterface, build_connector(), Placeholder for future direct R|API connector., RithmicApiConnector, ConnectorInterface, Any, str, ConnectorInterface (+5 more)
+Cohesion: 0.17
+Nodes (9): ConnectorInterface, Path, str, Any, str, Protocol, _assert_quarantine(), Trial lane paths must not overlap trusted production Databento NPZ. (+1 more)
 
 ### Community 5 - "Community 5"
 Cohesion: 0.07
 Nodes (26): authoritative_source, dominant_bottleneck, e2e_harness, reason, spec, status, gates, cyclictest_pass (+18 more)
 
 ### Community 6 - "Community 6"
-Cohesion: 0.10
-Nodes (37): _campaign_id(), CampaignResult, make_campaign_id(), _param_hash(), _period_evaluate_only(), PeriodResult, PDF_MODEL_5 fixture MVP — options_lane quarantine (B7)., Return False if stop requested. (+29 more)
+Cohesion: 0.09
+Nodes (46): build_models_config(), dependency_map(), get_model_by_id(), list_models(), _pdf_diagnostics_only(), _pdf_signal_field(), Load unified 55-model registry from YAML + hypothesis registry., Build all 55 model configs (44 HYP + 11 PDF). (+38 more)
 
 ### Community 7 - "Community 7"
 Cohesion: 0.07
@@ -660,8 +847,8 @@ Cohesion: 0.07
 Nodes (28): detected_event_types, input_files, connector, missing_event_types, note, limitations, connector, missing_event_types (+20 more)
 
 ### Community 9 - "Community 9"
-Cohesion: 0.07
-Nodes (33): float, DataFrame, float, int, float, int, str, monte_carlo_ci() (+25 more)
+Cohesion: 0.11
+Nodes (17): float, DataFrame, float, int, float, int, str, MultiLossObjective (+9 more)
 
 ### Community 10 - "Community 10"
 Cohesion: 0.05
@@ -684,32 +871,32 @@ Cohesion: 0.09
 Nodes (21): checks, bad_prices, bad_sizes, crossed_books, duplicates, local_timestamp_monotonicity_violations, locked_books, malformed_order_fill_events (+13 more)
 
 ### Community 15 - "Community 15"
-Cohesion: 0.16
-Nodes (21): Path, str, bool, Any, bool, int, Path, str (+13 more)
+Cohesion: 0.15
+Nodes (26): int, Namespace, bool, Any, bool, int, Path, str (+18 more)
 
 ### Community 16 - "Community 16"
 Cohesion: 0.33
 Nodes (6): array, RegimeFilterCpp, prev_posterior_, reset, temperature_, update
 
 ### Community 17 - "Community 17"
-Cohesion: 0.14
+Cohesion: 0.15
 Nodes (20): _parse_comma_log_line(), _parse_csv_row(), _parse_export_timestamp(), _parse_log_line(), R|Trader export: timestamp,Trade,MES,5000.00,1, Watch R|Trader Pro export/log files (Wine on CHI404 only)., Parse R|Trader export prefix: 2026-05-30 01:00:00.000000, RTraderBridgeConnector (+12 more)
 
 ### Community 18 - "Community 18"
 Cohesion: 0.06
-Nodes (54): BaseHypothesis, str, AbsorptionFade, BaseHypothesis, BookSlopeCollapse, CancelStormBeforeMove, CutoffPanicExits, DepthRefillImbalance (+46 more)
+Nodes (64): BaseHypothesis, int, str, AbsorptionFade, AggressorDecelerationFade, BaseHypothesis, BookSlopeCollapse, CancelStormBeforeMove (+56 more)
 
 ### Community 19 - "Community 19"
 Cohesion: 0.08
 Nodes (25): breakeven_ms, breakeven_us, cpp_hot_path_runtime_us, cpp_replay_available, data_period, event_id, lane_measured, lane_pass (+17 more)
 
 ### Community 20 - "Community 20"
-Cohesion: 0.20
-Nodes (19): float, LegQuote, RateSpec, Data models for config-driven put/call parity groups., is_actionable(), _fair_quotes(), _futures_group(), float (+11 more)
+Cohesion: 0.16
+Nodes (32): bool, float, int, LegQuote, ParityGroup, QuoteSnapshot, str, QuoteSnapshot (+24 more)
 
 ### Community 21 - "Community 21"
-Cohesion: 0.10
-Nodes (24): 10. Verification checklist, 11. What is not in git, 1. What this repo is, 2. Prerequisites, 3. First-time setup, 4. Research pipeline (offline), 5. CHI404 production infra, 6. Rithmic trial lane (interim) (+16 more)
+Cohesion: 0.06
+Nodes (32): 10. Code navigation (graphify), 11. Agent and review workflow, 12. Repository layout, 13. Verification checklist, 14. What is not in git, 15. Where to go next, 1. What this repo is, 2. Authority documents (+24 more)
 
 ### Community 22 - "Community 22"
 Cohesion: 0.12
@@ -724,16 +911,16 @@ Cohesion: 0.13
 Nodes (14): Agentic engineering (hft3), Agentic engineering principles, Anti-patterns (grader / review), code:mermaid (flowchart LR), code:bash (pytest), code:bash (python3 infrastructure/chi404/validate_pass_criteria.py \), code:bash (bash scripts/run_chi404_validate_remote.sh), Dual-pass review (+6 more)
 
 ### Community 25 - "Community 25"
-Cohesion: 0.18
-Nodes (11): MarketDataEvent, Config, SPSCQueue, string, cancel_order(), disconnect(), on_execution_report(), on_market_data_update() (+3 more)
+Cohesion: 0.17
+Nodes (12): MarketDataEvent, Config, MarketDataEvent, SPSCQueue, string, cancel_order(), disconnect(), on_execution_report() (+4 more)
 
 ### Community 26 - "Community 26"
 Cohesion: 0.09
 Nodes (22): 1. Think Before Coding, 2. Simplicity First, 3. Surgical Changes, 4. Goal-Driven Execution, CHI404 bare metal, hft3 Agent Charter, hft3-specific constraints, If the chain was skipped (+14 more)
 
 ### Community 27 - "Community 27"
-Cohesion: 0.17
-Nodes (24): float, LegQuote, ParityGroup, str, bool, float, int, LegQuote (+16 more)
+Cohesion: 0.05
+Nodes (86): AuditActor, AuditDetail, AuditFilter, AuditOperation, AuditPage, AuditQueryOptions, AuditRecord, AuditStore (+78 more)
 
 ### Community 28 - "Community 28"
 Cohesion: 0.13
@@ -916,8 +1103,8 @@ Cohesion: 0.20
 Nodes (6): FailureState, RiskLimits, RiskStatus, check_order(), handle_failure_state(), RiskManager()
 
 ### Community 73 - "Community 73"
-Cohesion: 0.22
-Nodes (8): _sha256(), _utc_date(), Any, int, Path, str, TrialConfig, datetime
+Cohesion: 0.24
+Nodes (7): _sha256(), _utc_date(), Any, int, Path, str, TrialConfig
 
 ### Community 74 - "Community 74"
 Cohesion: 0.42
@@ -936,12 +1123,12 @@ Cohesion: 0.22
 Nodes (8): best_ask, best_bid, depth_events, limitations, quote_events, spread, status, trade_events
 
 ### Community 78 - "Community 78"
-Cohesion: 0.13
-Nodes (24): Any, T, Any, float, int, ModelOutput, QuantumSpreadOutput, ModelOutput (+16 more)
+Cohesion: 0.11
+Nodes (26): ABC, Any, T, Any, float, int, ModelOutput, QuantumSpreadOutput (+18 more)
 
 ### Community 79 - "Community 79"
 Cohesion: 0.13
-Nodes (15): classifications, colo_on_box, order_path, bottleneck, dominant_rtt_ms, recommendation, recommended_latency_bands_ms, tier_ms (+7 more)
+Nodes (15): classifications, local_workstation, order_path, bottleneck, dominant_rtt_ms, recommendation, recommended_latency_bands_ms, tier_ms (+7 more)
 
 ### Community 80 - "Community 80"
 Cohesion: 0.10
@@ -957,11 +1144,11 @@ Nodes (13): bottleneck, dominant_rtt_ms, env_hosts, chi404, rithmic, latency_ban
 
 ### Community 83 - "Community 83"
 Cohesion: 0.18
-Nodes (10): code:bash (git clone https://github.com/javin23863/hft3.git), code:block2 (┌─────────────────────────────────────────┐), code:bash (# Tests), Common commands, Contributing, hft3, Major subsystems, Quick start (+2 more)
+Nodes (10): code:bash (git clone --recurse-submodules https://github.com/javin23863), code:block2 (┌─────────────────────────────────────────┐), code:bash (# Tests), Common commands, Contributing, hft3, Major subsystems, Quick start (+2 more)
 
 ### Community 84 - "Community 84"
-Cohesion: 0.08
-Nodes (43): Resolve replay NPZ paths for Rithmic trial vs Databento event windows., Return Databento MBO NPZ path for a macro event_id from events.csv., Return quarantined Rithmic trial replay NPZ for a capture session date., resolve_event_npz(), resolve_trial_npz(), Any, Path, str (+35 more)
+Cohesion: 0.14
+Nodes (26): summarize_latency_us(), analyze_latency_viability(), classify_lane(), find_break_even_us(), LatencyViability, Break-even latency using C++-injected latency sweep — not Python runtime., sweep_injection_pnl(), LatencyViability (+18 more)
 
 ### Community 85 - "Community 85"
 Cohesion: 0.20
@@ -976,8 +1163,8 @@ Cohesion: 0.25
 Nodes (8): LogProbQueueModel2, aggregated_net_pnl, approval_status, latency_bands_tested, model_id, queue_model, tail_risk_es_95, timestamp
 
 ### Community 88 - "Community 88"
-Cohesion: 0.16
-Nodes (18): Any, float, ModelOutput, str, HawkesToxicOutput, hawkes_intensity(), HawkesToxicFlowModel, multivariate_hawkes_intensity() (+10 more)
+Cohesion: 0.18
+Nodes (16): Any, float, ModelOutput, str, HawkesToxicOutput, hawkes_intensity(), multivariate_hawkes_intensity(), Univariate Hawkes intensity lambda(t) = mu + sum alpha exp(-beta (t - t_i)). (+8 more)
 
 ### Community 89 - "Community 89"
 Cohesion: 0.25
@@ -1052,8 +1239,8 @@ Cohesion: 0.15
 Nodes (17): cyclictest_p99_us, cyclictest_p99_us, jitter_pass, pass, pass_fail, run_id, tuning_dir, 11 (+9 more)
 
 ### Community 108 - "Community 108"
-Cohesion: 0.14
-Nodes (11): bool, datetime, float, int, datetime, str, BudgetManager, Calculates exact per-symbol-minute and per-symbol-second costs as required by Bl (+3 more)
+Cohesion: 0.16
+Nodes (10): bool, datetime, float, int, datetime, str, BudgetManager, Calculates exact per-symbol-minute and per-symbol-second costs as required by Bl (+2 more)
 
 ### Community 109 - "Community 109"
 Cohesion: 0.18
@@ -1064,32 +1251,32 @@ Cohesion: 0.20
 Nodes (9): accounts, app_name, environment, error, next_steps, order_probe, status, ticks (+1 more)
 
 ### Community 112 - "Community 112"
-Cohesion: 0.06
-Nodes (88): build_report_card(), _fmt_ms_from_us(), _fmt_us(), _gate_status(), _md_table(), Fixed report card schema and renderers for CHI404 latency probes., Render latency summary as a fixed-section markdown report., Fixed-width console report (same sections every run). (+80 more)
+Cohesion: 0.05
+Nodes (100): _check_cyclictest_p99(), _check_irq_net(), _check_jitter_gate(), _check_manifest(), _check_nic_rings(), main(), _run(), _tool_available() (+92 more)
 
 ### Community 113 - "Community 113"
 Cohesion: 0.22
 Nodes (9): research_operating_tier, bottleneck, dominant_rtt_ms, recommendation, recommended_latency_bands_ms, source, status, tier_ms (+1 more)
 
 ### Community 114 - "Community 114"
-Cohesion: 0.17
-Nodes (15): bool, DataFrame, float, int, ndarray, str, build_forward_returns(), build_labels_frame() (+7 more)
+Cohesion: 0.08
+Nodes (31): Resolve replay NPZ paths for Rithmic trial vs Databento event windows., Return Databento MBO NPZ path for a macro event_id from events.csv., Return quarantined Rithmic trial replay NPZ for a capture session date., resolve_event_npz(), resolve_trial_npz(), Path, str, BookResetEvent (+23 more)
 
 ### Community 116 - "Community 116"
 Cohesion: 0.25
 Nodes (8): rithmic_trial_profile, connector, data_capture_report, limitations, order_rtt_ms, path, status, trusted
 
 ### Community 117 - "Community 117"
-Cohesion: 0.12
-Nodes (24): Ingest helpers for options parity lane., load_quote_ndjson(), Load quote fixtures for parity lane., ParityGroup, Path, str, LegQuote, Path (+16 more)
+Cohesion: 0.13
+Nodes (25): ArbFill, MultiLegParityBacktester, ParityBacktestResult, _PendingArb, Multi-leg parity arb backtest with latency deferral., write_research_card(), Ingest helpers for options parity lane., load_quote_ndjson() (+17 more)
 
 ### Community 118 - "Community 118"
 Cohesion: 0.29
 Nodes (6): setup_rithmic_chi404.sh script, RITHMIC_ENVIRONMENT, RITHMIC_GATEWAY, RITHMIC_TRIAL_CONFIG, RITHMIC_TRIAL_CONNECTOR, RITHMIC_TRIAL_ENABLED
 
 ### Community 119 - "Community 119"
-Cohesion: 0.11
-Nodes (42): HypothesisAdapter, Adapter: BaseHypothesis -> WorkbenchModel., OptionsLaneAdapter, Adapter: options_lane fixture backtest for PDF_MODEL_5 (B7 quarantine)., Runs options_lane.pipeline fixture-backtest; artifacts under research_cards/pari, Adapter: BaseStructuralModel -> WorkbenchModel., StructuralModelAdapter, BacktestResult (+34 more)
+Cohesion: 0.08
+Nodes (53): HypothesisAdapter, Adapter: BaseHypothesis -> WorkbenchModel., OptionsLaneAdapter, Adapter: options_lane fixture backtest for PDF_MODEL_5 (B7 quarantine)., Runs options_lane.pipeline fixture-backtest; artifacts under research_cards/pari, Adapter: BaseStructuralModel -> WorkbenchModel., StructuralModelAdapter, BacktestResult (+45 more)
 
 ### Community 121 - "Community 121"
 Cohesion: 0.11
@@ -1119,6 +1306,10 @@ Nodes (7): loopback_tcp, avg_ms, count, max_ms, min_ms, stdev_ms, target
 Cohesion: 0.33
 Nodes (5): detected_event_types, events_captured, status, uptime_sec, watch_dirs
 
+### Community 143 - "Community 143"
+Cohesion: 0.16
+Nodes (15): DecisionEngine, FeatureExtractorCpp, RiskManager, RithmicAdapter, MarketDataEvent, SPSCQueue, main(), print_json() (+7 more)
+
 ### Community 162 - "Community 162"
 Cohesion: 0.33
 Nodes (6): vector, EventContextEngineCpp, events_, map_label, resolve_ns, ParsedEvent
@@ -1129,7 +1320,7 @@ Nodes (3): MBOEventCpp, main(), make_event()
 
 ### Community 164 - "Community 164"
 Cohesion: 0.15
-Nodes (18): ArbFill, MultiLegParityBacktester, ParityBacktestResult, _PendingArb, Multi-leg parity arb backtest with latency deferral., OptionsFeeModel, Config-driven options fee model for parity arb., Per-leg fees keyed by group tick_size / leg count — no hardcoded products. (+10 more)
+Nodes (17): OptionsFeeModel, Config-driven options fee model for parity arb., Per-leg fees keyed by group tick_size / leg count — no hardcoded products., float, float, int, ParityGroup, str (+9 more)
 
 ### Community 165 - "Community 165"
 Cohesion: 0.33
@@ -1221,11 +1412,11 @@ Nodes (36): type, type, type, type, type, type, type, type (+28 more)
 
 ### Community 205 - "Community 205"
 Cohesion: 0.15
-Nodes (27): BookPressureOutput, Any, bool, float, int, ModelOutput, ndarray, OrderBook (+19 more)
+Nodes (26): BookPressureOutput, Any, bool, float, int, ModelOutput, ndarray, OrderBook (+18 more)
 
 ### Community 206 - "Community 206"
-Cohesion: 0.18
-Nodes (19): Any, float, ModelOutput, HybridExecutionOutput, as_optimal_spread(), as_reservation_price(), hybrid_reservation(), HybridExecutionModel (+11 more)
+Cohesion: 0.15
+Nodes (21): Any, float, ModelOutput, HybridExecutionOutput, PDF_MODEL_3 — VPIN, BVC with Student-t, volume-time buckets., as_optimal_spread(), as_reservation_price(), hybrid_reservation() (+13 more)
 
 ### Community 210 - "Community 210"
 Cohesion: 0.20
@@ -1248,16 +1439,16 @@ Cohesion: 0.50
 Nodes (3): run_all.sh script, LATENCY_REPORT_ROOT, RUN_ID
 
 ### Community 219 - "Community 219"
-Cohesion: 0.14
-Nodes (25): bool, float, int, str, BaseHypothesis, DataFrame, float, int (+17 more)
+Cohesion: 0.11
+Nodes (34): Any, bool, float, int, str, BaseHypothesis, DataFrame, float (+26 more)
 
 ### Community 220 - "Community 220"
 Cohesion: 0.29
 Nodes (7): engines, hftbacktest_loop, aggregation, description, engine, feature_path, signal_threshold
 
 ### Community 221 - "Community 221"
-Cohesion: 0.18
-Nodes (10): LoaderReport, Dataset manifest and history sufficiency gate., LoaderReport, bool, int, Any, float, int (+2 more)
+Cohesion: 0.09
+Nodes (34): Resolve built C++ binaries under repo build/., Find hft_* executable under build/ (Release/Debug or flat)., resolve_cpp_binary(), CppReplayResult, Backward-compatible aliases — use cpp_stack_verify for new code., Orders, fills, decisions, latency logs returned from C++ harness., Orders, fills, decisions, latency logs returned from C++ harness., CppStackVerifyHarness (+26 more)
 
 ### Community 222 - "Community 222"
 Cohesion: 0.22
@@ -1276,8 +1467,8 @@ Cohesion: 0.14
 Nodes (14): cyclictest_idle_cpu2, cyclictest, by_run, gate_mode, max_us, p50_us, p95_us, p999_us (+6 more)
 
 ### Community 228 - "Community 228"
-Cohesion: 0.15
-Nodes (22): ABC, CrossAssetLeadLagOutput, Any, float, int, ModelOutput, ndarray, BaseStructuralModel (+14 more)
+Cohesion: 0.09
+Nodes (29): CrossAssetLeadLagOutput, Any, float, int, ModelOutput, ndarray, str, PDF structural models package. (+21 more)
 
 ### Community 229 - "Community 229"
 Cohesion: 0.22
@@ -1289,15 +1480,15 @@ Nodes (22): DealerHedgingOutput, Any, bool, float, ModelOutput, bs_charm(), bs_d
 
 ### Community 231 - "Community 231"
 Cohesion: 0.06
-Nodes (25): Graph, Maybe add a new cyclic predicate from given congruent segments., Add a new cyclic predicate that 4 points are concyclic., Check if the angle is equal to a certain constant., Check if an angle has a constant value., Check if two angles are equal., Check whether a ratio is equal to some given constant., Check whether a ratio is equal to some constant. (+17 more)
+Nodes (21): Graph, Dependency list of why 8 points are collinear., Check if the angle is equal to a certain constant., Check if an angle has a constant value., Check if two angles are equal., Check whether a ratio is equal to some given constant., Check whether a ratio is equal to some constant., Check if 8 points make an eqratio predicate. (+13 more)
 
 ### Community 232 - "Community 232"
-Cohesion: 0.06
-Nodes (42): Clause, compare_fn(), Construction, Definition, _gcd(), hashed(), hashed_txt(), isint() (+34 more)
+Cohesion: 0.05
+Nodes (49): Clause, compare_fn(), Construction, Definition, Dependency, _gcd(), hashed(), hashed_txt() (+41 more)
 
 ### Community 233 - "Community 233"
 Cohesion: 0.09
-Nodes (28): Make that two nodes x and y are equal, i.e. merge their value node., Add a new predicate that 4 points (2 lines) are parallel., Get or create an angle between two Direction d1 and d2., Add a new parallel or collinear predicate., Maybe add a new parallel predicate from perp predicate., Add a new perpendicular predicate from 4 points (2 lines)., Get or create a Segment object between two Points p1 and p2., Add that two segments (4 points) are congruent. (+20 more)
+Nodes (27): Make that two nodes x and y are equal, i.e. merge their value node., Add a new predicate that 4 points (2 lines) are parallel., Add a new parallel or collinear predicate., Maybe add a new parallel predicate from perp predicate., Add a new perpendicular predicate from 4 points (2 lines)., Add that two segments (4 points) are congruent., Add ab/cd = mn/pq in case either two of (ab,cd,mn,pq) are equal., Add ab/cd = mn/pq in case maybe either two of (ab,cd,mn,pq) are equal. (+19 more)
 
 ### Community 234 - "Community 234"
 Cohesion: 0.10
@@ -1312,8 +1503,8 @@ Cohesion: 0.13
 Nodes (15): pnl_by_injection_us, 0, 100, 1000, 10000, 100000, 1000000, 2000 (+7 more)
 
 ### Community 237 - "Community 237"
-Cohesion: 0.12
-Nodes (43): CatalogEntry, CatalogEntry, DefensiveStub, ModelComposition, ModelRole, _default_role(), get_catalog_entry(), _hyp_description() (+35 more)
+Cohesion: 0.08
+Nodes (72): CatalogEntry, CatalogEntry, DefensiveStub, ModelComposition, ModelRole, Popen, Phased defensive + primary signal composition orchestrator., _default_role() (+64 more)
 
 ### Community 238 - "Community 238"
 Cohesion: 0.20
@@ -1333,23 +1524,23 @@ Nodes (5): CHI404 measured speed, Engine 1: hftbacktest_loop (queue-realistic), 
 
 ### Community 242 - "Community 242"
 Cohesion: 0.11
-Nodes (25): Any, float, int, ModelOutput, _betainc_cf(), bvc_buy_volume(), compute_vpin(), PDF_MODEL_3 — VPIN, BVC with Student-t, volume-time buckets. (+17 more)
+Nodes (24): Any, float, int, ModelOutput, _betainc_cf(), bvc_buy_volume(), compute_vpin(), Add trade/bar volume; flush bucket when target reached. (+16 more)
 
 ### Community 243 - "Community 243"
-Cohesion: 0.14
-Nodes (22): Any, float, ModelOutput, str, ctd_switch_threshold(), delivery_cost(), implied_repo_rate(), PDF_MODEL_7 — Treasury CTD, delivery cost, implied repo. (+14 more)
+Cohesion: 0.16
+Nodes (22): Any, float, ModelOutput, str, ModelOutput, ctd_switch_threshold(), delivery_cost(), implied_repo_rate() (+14 more)
 
 ### Community 244 - "Community 244"
-Cohesion: 0.19
-Nodes (13): LiveCapture, FixtureConnector, Synthetic trial events for CI and offline pipeline tests., Any, Path, str, TrialConfig, MonkeyPatch (+5 more)
+Cohesion: 0.10
+Nodes (26): LiveCapture, FixtureConnector, Synthetic trial events for CI and offline pipeline tests., convert_to_npz(), _has_mbo(), Any, Path, str (+18 more)
 
 ### Community 245 - "Community 245"
 Cohesion: 0.13
 Nodes (15): pnl_by_latency, 0.0, 0.05, 0.1, 0.25, 0.5, 1000.0, 100.0 (+7 more)
 
 ### Community 246 - "Community 246"
-Cohesion: 0.13
-Nodes (22): DowYMIndexOutput, Any, float, ModelOutput, str, str, PDF structural models package., component_weights() (+14 more)
+Cohesion: 0.18
+Nodes (15): DowYMIndexOutput, Any, float, ModelOutput, str, component_weights(), DowYMIndexModel, price_weighted_index() (+7 more)
 
 ### Community 247 - "Community 247"
 Cohesion: 0.09
@@ -1357,7 +1548,7 @@ Nodes (22): breakeven_ms, data_period, event_id, lane_measured, lane_pass, lane_
 
 ### Community 248 - "Community 248"
 Cohesion: 0.04
-Nodes (77): L3Loader, Wrap NPZ feed with sequence/timestamp quality checks., DatasetManifest, LatencyViability, LatencyPolicy, LatencyViability, generate_hyp_research_card(), generate_pdf_research_card() (+69 more)
+Nodes (69): audit_records_to_dataframe(), L3Loader, Wrap NPZ feed with sequence/timestamp quality checks., DatasetManifest, LatencyPolicy, _after_action_allowed(), Workbench run orchestrator — C++ latency is source of truth., Post-run LLM runs on dev workstation only (BLUEPRINT live path is CHI404). (+61 more)
 
 ### Community 250 - "Community 250"
 Cohesion: 0.20
@@ -1381,11 +1572,11 @@ Nodes (5): code:block1 (PDF_MODEL_1 (BookPressure)), Directed dependencies (runt
 
 ### Community 255 - "Community 255"
 Cohesion: 0.10
-Nodes (41): ang_of(), HalfLine, head_from(), Point, random_rfss(), Random rotate-flip-scale-shift a point cloud., Sketch the construction aline., Sketch the angle mirror. (+33 more)
+Nodes (39): ang_of(), HalfLine, head_from(), Point, random_rfss(), Random rotate-flip-scale-shift a point cloud., Sketch the construction aline., Sketch the angle mirror. (+31 more)
 
 ### Community 256 - "Community 256"
-Cohesion: 0.32
-Nodes (10): build_models_config(), dependency_map(), list_models(), _pdf_diagnostics_only(), _pdf_signal_field(), Load unified 55-model registry from YAML + hypothesis registry., Build all 55 model configs (44 HYP + 11 PDF)., Unified registry: 55 models. (+2 more)
+Cohesion: 0.05
+Nodes (73): BatchEvalResult, main(), server, ClientConnInterface, Duration, Env, EnvOption, Evaluator (+65 more)
 
 ### Community 257 - "Community 257"
 Cohesion: 0.40
@@ -1404,8 +1595,8 @@ Cohesion: 0.07
 Nodes (26): campaign_id, composition, defensive_stubs, primary_model_id, model_id, overfit_risk, param_hash, periods (+18 more)
 
 ### Community 262 - "Community 262"
-Cohesion: 0.19
-Nodes (16): int, Namespace, Any, str, Any, str, Namespace, cmd_capture() (+8 more)
+Cohesion: 0.17
+Nodes (17): monte_carlo_ci(), Robustness pack: walk-forward hooks, purged CV, Monte Carlo, parameter sweep., Build walk-forward result from campaign period summaries (B4)., run_robustness_pack(), walk_forward_from_campaign_periods(), purged_splits(), Purged k-fold with embargo on event timestamps., Simple purged CV: train on past, test on future chunk with embargo gap. (+9 more)
 
 ### Community 263 - "Community 263"
 Cohesion: 0.14
@@ -1428,8 +1619,8 @@ Cohesion: 0.15
 Nodes (12): chi404_run_id, data_sufficient, duplicate_order_ids, event_count, event_id, extra, gap_count, history_years_available (+4 more)
 
 ### Community 268 - "Community 268"
-Cohesion: 0.24
-Nodes (13): write_research_card(), cmd_backtest(), cmd_discover(), cmd_fixture_backtest(), cmd_scan(), main(), int, Namespace (+5 more)
+Cohesion: 0.19
+Nodes (19): cmd_backtest(), cmd_discover(), cmd_fixture_backtest(), cmd_scan(), main(), int, Namespace, str (+11 more)
 
 ### Community 269 - "Community 269"
 Cohesion: 0.20
@@ -1452,12 +1643,12 @@ Cohesion: 0.22
 Nodes (8): event_id, git_sha, measured_p99_ms, model_id, npz_hash, npz_path, run_id, seed
 
 ### Community 274 - "Community 274"
-Cohesion: 0.13
-Nodes (28): CompositionTrace, CompositionTrace, CompositionTraceStep, OrderBook, L3 book with O(1) amortized BBO; top-K via heapq (O(N log K), K=10)., Phase, CompositionOrchestrator, Phased defensive + primary signal composition orchestrator. (+20 more)
+Cohesion: 0.14
+Nodes (26): CompositionTrace, CompositionTrace, CompositionTraceStep, OrderBook, L3 book with O(1) amortized BBO; top-K via heapq (O(N log K), K=10)., Phase, CompositionOrchestrator, Empty defensive stack (primary only). (+18 more)
 
 ### Community 275 - "Community 275"
-Cohesion: 0.16
-Nodes (20): Any, float, int, ModelOutput, str, conditional_entropy(), PDF_MODEL_8 — Transfer Entropy lead-lag (hft_framework_developer_prompt.pdf Modu, Discrete Shannon entropy H(X) = -sum p log p. (+12 more)
+Cohesion: 0.17
+Nodes (19): Any, float, int, ModelOutput, str, conditional_entropy(), PDF_MODEL_8 — Transfer Entropy lead-lag (hft_framework_developer_prompt.pdf Modu, Discrete Shannon entropy H(X) = -sum p log p. (+11 more)
 
 ### Community 276 - "Community 276"
 Cohesion: 0.07
@@ -1484,12 +1675,12 @@ Cohesion: 0.04
 Nodes (46): breakeven_ms, breakeven_us, cpp_hot_path_runtime_us, cpp_replay_available, data_period, event_id, lane_measured, lane_pass (+38 more)
 
 ### Community 282 - "Community 282"
-Cohesion: 0.19
-Nodes (30): Angle, Circle, Direction, Length, Line, Measure, Point, Ratio (+22 more)
+Cohesion: 0.12
+Nodes (43): Angle, Circle, Direction, Length, Line, Measure, Point, Ratio (+35 more)
 
 ### Community 283 - "Community 283"
-Cohesion: 0.06
-Nodes (51): merge_feeds(), Align multi-symbol feeds on unified timeline (no lookahead)., K-way merge on local_ts; equal timestamps processed in symbol sort order., BookResetEvent, L3 NPZ loader with gap detection and book reset events., float, ndarray, str (+43 more)
+Cohesion: 0.05
+Nodes (60): AggregateMode, BaseHypothesis, bool, float, ndarray, merge_feeds(), Align multi-symbol feeds on unified timeline (no lookahead)., K-way merge on local_ts; equal timestamps processed in symbol sort order. (+52 more)
 
 ### Community 284 - "Community 284"
 Cohesion: 0.50
@@ -1520,8 +1711,8 @@ Cohesion: 0.08
 Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
 
 ### Community 291 - "Community 291"
-Cohesion: 0.12
-Nodes (27): str, download_events(), estimate_download_cost_usd(), missing_for_campaign(), Point-in-time Databento event-window download (never multi-year range)., Sum Databento get_cost for missing event windows (0 if no API key or estimate fa, Download missing event windows via Databento; convert to data/npz/., EventSpec (+19 more)
+Cohesion: 0.17
+Nodes (19): str, download_events(), estimate_download_cost_usd(), missing_for_campaign(), Point-in-time Databento event-window download (never multi-year range)., Sum Databento get_cost for missing event windows (0 if no API key or estimate fa, Download missing event windows via Databento; convert to data/npz/., EventSpec (+11 more)
 
 ### Community 296 - "Community 296"
 Cohesion: 0.13
@@ -1548,8 +1739,8 @@ Cohesion: 0.15
 Nodes (13): cpp_latency_profile, cpp_decision_compute_p50_us, cpp_decision_compute_p95_us, cpp_decision_compute_p99_us, gateway_ack_p50_us, gateway_ack_p95_us, gateway_ack_p99_us, measured_production_p99_us (+5 more)
 
 ### Community 302 - "Community 302"
-Cohesion: 0.29
-Nodes (6): Injection sweep (µs), Measured C++ distributions, Required per-decision fields, Three approved approaches, Viability rule, Workbench latency architecture
+Cohesion: 0.25
+Nodes (7): Hot-path audit, Injection sweep (µs), Measured C++ distributions, Required per-decision fields, Three approved approaches, Viability rule, Workbench latency architecture
 
 ### Community 303 - "Community 303"
 Cohesion: 0.33
@@ -1560,8 +1751,8 @@ Cohesion: 0.15
 Nodes (12): chi404_run_id, data_sufficient, duplicate_order_ids, event_count, event_id, extra, gap_count, history_years_available (+4 more)
 
 ### Community 305 - "Community 305"
-Cohesion: 0.09
-Nodes (24): check_perp(), InvalidLineIntersectError, Line, line_line_intersection(), line_segment_intersection(), _perpendicular_bisector(), Sketch a circle touching two lines and another circle., Sketch the def eqangle2. (+16 more)
+Cohesion: 0.05
+Nodes (22): clone(), evaluateFieldPredicate(), evaluateFilter(), evaluateLogicalPredicate(), genId(), isFieldPredicate(), isLogicalPredicate(), MemoryStorageProvider (+14 more)
 
 ### Community 306 - "Community 306"
 Cohesion: 0.50
@@ -1576,8 +1767,8 @@ Cohesion: 0.22
 Nodes (8): event_id, git_sha, measured_p99_ms, model_id, npz_hash, npz_path, run_id, seed
 
 ### Community 309 - "Community 309"
-Cohesion: 0.15
-Nodes (31): Popen, get_job_status(), job_dir_for(), list_active_campaigns(), Background campaign jobs with cooperative pause/stop., set_control(), start_campaign_subprocess(), _artifact_base() (+23 more)
+Cohesion: 0.05
+Nodes (37): AuditQuery, tracer, after, before, clinician, from, makeDetail(), makeOperation() (+29 more)
 
 ### Community 310 - "Community 310"
 Cohesion: 0.33
@@ -1588,8 +1779,8 @@ Cohesion: 0.08
 Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
 
 ### Community 312 - "Community 312"
-Cohesion: 0.36
-Nodes (7): convert_to_npz(), _has_mbo(), Any, bool, float, Path, str
+Cohesion: 0.17
+Nodes (15): bool, DataFrame, float, int, ndarray, str, build_forward_returns(), build_labels_frame() (+7 more)
 
 ### Community 313 - "Community 313"
 Cohesion: 0.08
@@ -1608,8 +1799,8 @@ Cohesion: 0.07
 Nodes (26): campaign_id, composition, defensive_stubs, primary_model_id, model_id, overfit_risk, param_hash, periods (+18 more)
 
 ### Community 320 - "Community 320"
-Cohesion: 0.14
-Nodes (36): campaign_preview(), catalog_years_available(), list_campaign_events(), load_model_binding(), load_periods(), load_sim_shadow_config(), load_walk_forward_config(), _npz_path() (+28 more)
+Cohesion: 0.19
+Nodes (22): campaign_preview(), catalog_years_available(), load_model_binding(), load_periods(), load_sim_shadow_config(), load_walk_forward_config(), _npz_path(), Campaign event catalog: model binding + B4 period filter + NPZ presence. (+14 more)
 
 ### Community 321 - "Community 321"
 Cohesion: 0.08
@@ -1645,7 +1836,7 @@ Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_y
 
 ### Community 329 - "Community 329"
 Cohesion: 0.05
-Nodes (38): Architecture diagram, code:text (hft3/), code:bash (git submodule add https://github.com/DioCrafts/OpenFoundry v), code:text (data_layer/), code:python (if not fast_sweep:), code:mermaid (flowchart TB), Confirmed scope, Connector [`integrations/openfoundry/hft3-cme-mbo.yaml`](integrations/openfoundry/hft3-cme-mbo.yaml) (+30 more)
+Nodes (38): Architecture diagram, code:text (hft3/), code:bash (git submodule add https://github.com/syzygyhack/open-foundry), code:text (data_layer/), code:python (if not fast_sweep:), code:mermaid (flowchart TB), Confirmed scope, Connector [`integrations/openfoundry/hft3-cme-mbo.yaml`](integrations/openfoundry/hft3-cme-mbo.yaml) (+30 more)
 
 ### Community 330 - "Community 330"
 Cohesion: 0.13
@@ -1788,8 +1979,8 @@ Cohesion: 0.28
 Nodes (15): list_personal_events(), artifact_root(), is_locked(), is_personal_sandbox_date(), load_personal_config(), personal_date_range(), Personal sandbox lock — local Windows only; excluded from promotion (B4/B7)., set_unlocked() (+7 more)
 
 ### Community 373 - "Community 373"
-Cohesion: 0.06
-Nodes (40): AggregateMode, BaseHypothesis, bool, float, MarketState, ndarray, bool, float (+32 more)
+Cohesion: 0.05
+Nodes (48): checkResponseSize(), createResponseTooLargeError(), createTimeoutError(), DEFAULT_CONFIG, ExecutionGuardConfig, withTimeout(), ComplexityAnalysis, ComplexityConfig (+40 more)
 
 ### Community 374 - "Community 374"
 Cohesion: 0.13
@@ -1824,12 +2015,12 @@ Cohesion: 0.13
 Nodes (15): pnl_by_latency, 0.0, 0.05, 0.1, 0.25, 0.5, 1000.0, 100.0 (+7 more)
 
 ### Community 382 - "Community 382"
-Cohesion: 0.08
-Nodes (21): EconomicEventRestrictionFlattening, EndOfDayForcedFlatten, MaxContractCrowding, NoOvernightInventorySqueeze, QueueDepletionTrigger, Hypothesis 19: ZN/ZB -> ES/NQ macro impulse, Hypothesis 35: Max-contract crowding in micros, Hypothesis 2: Stop-run exhaustion fade     Behavior: Sweep through level, stop- (+13 more)
+Cohesion: 0.06
+Nodes (30): bool, Path, str, bool, EsToMesLeadLag, LateCandleEntryFade, MaxContractCrowding, OpeningCandleChase (+22 more)
 
 ### Community 383 - "Community 383"
-Cohesion: 0.26
-Nodes (13): collect_download_specs(), discover_groups(), download_leg_window(), Budget-gated Databento download for options parity legs., Return unique download jobs from parity universe (no hardcoded symbols)., Download one leg via DatabentoResearchClient budget gate.     Requires DATABENTO, LegSpec, Any (+5 more)
+Cohesion: 0.14
+Nodes (23): DataFrame, str, datetime, collect_download_specs(), discover_groups(), download_leg_window(), Budget-gated Databento download for options parity legs., Return unique download jobs from parity universe (no hardcoded symbols). (+15 more)
 
 ### Community 384 - "Community 384"
 Cohesion: 0.14
@@ -2012,12 +2203,12 @@ Cohesion: 0.25
 Nodes (7): CHI404 runbook, code:powershell (python -m workbench campaign --model HYP_5 --symbol MES.v.0 ), Policy (workbench config), Purpose, Record PASS/FAIL after CHI404 run, Sim shadow stage (B4 fifth gate), Status hook (v1)
 
 ### Community 429 - "Community 429"
-Cohesion: 0.16
-Nodes (7): Draw some extra line/circles for illustration purpose., Add a new clause of construction, e.g. a new excenter., Build a problem into a gr.Graph object., Add new points with given names in list pnames., Return Point objects given names., Return Point objects given names., str
+Cohesion: 0.18
+Nodes (9): build_connector(), Placeholder for future direct R|API connector., RithmicApiConnector, ConnectorInterface, ConnectorInterface, TrialConfig, Any, str (+1 more)
 
 ### Community 430 - "Community 430"
-Cohesion: 0.38
-Nodes (12): _check_cyclictest_p99(), _check_irq_net(), _check_jitter_gate(), _check_manifest(), _check_nic_rings(), main(), _run(), _tool_available() (+4 more)
+Cohesion: 0.04
+Nodes (45): RedpandaEventBus, RedpandaEventBusConfig, generateSubscriptionResolvers(), logger, ChangeEvent, ConnectionAuthenticator, ConnectionAuthResult, createFilteredSubscription() (+37 more)
 
 ### Community 431 - "Community 431"
 Cohesion: 0.29
@@ -2152,8 +2343,8 @@ Cohesion: 0.08
 Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
 
 ### Community 487 - "Community 487"
-Cohesion: 0.06
-Nodes (34): required, type, type, type, required, type, required, type (+26 more)
+Cohesion: 0.04
+Nodes (45): type, type, required, type, type, type, required, type (+37 more)
 
 ### Community 488 - "Community 488"
 Cohesion: 0.13
@@ -2228,12 +2419,12 @@ Cohesion: 0.17
 Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
 
 ### Community 517 - "Community 517"
-Cohesion: 0.38
-Nodes (11): Post-run after-action layer — OpenFoundry bridge, packet, symbolic, LLM., Any, bool, Path, str, diagnostics_model_id(), _load_config(), Post-run after-action orchestrator. (+3 more)
+Cohesion: 0.23
+Nodes (19): Post-run after-action layer — OpenFoundry bridge, packet, symbolic, LLM., Any, int, str, Any, bool, Path, str (+11 more)
 
 ### Community 518 - "Community 518"
-Cohesion: 0.33
-Nodes (10): align_quotes(), Event-time quote alignment for parity groups (filtration-safe)., Build snapshots at each distinct timestamp where at least one leg updates.     E, snapshot_has_required_legs(), bool, LegQuote, ParityGroup, QuoteSnapshot (+2 more)
+Cohesion: 0.06
+Nodes (48): CdmRouterConfig, FhirRouterConfig, extractErrorCode(), mapCodeToCategory(), OpenFoundryErrorOptions, wrapError(), buildConnection(), decodeCursor() (+40 more)
 
 ### Community 519 - "Community 519"
 Cohesion: 0.33
@@ -2248,8 +2439,8 @@ Cohesion: 0.33
 Nodes (5): artifact_root, campaign_mode, fixture, model_id, symbol
 
 ### Community 524 - "Community 524"
-Cohesion: 0.14
-Nodes (25): get_proof_steps(), Extract proof steps from the built DAG., Run DD until saturation or goal found., Alternate between DD and AR until goal is found., saturate_or_goal(), solve(), Dependency, EmptyDependency (+17 more)
+Cohesion: 0.21
+Nodes (16): get_proof_steps(), Extract proof steps from the built DAG., Run DD until saturation or goal found., Alternate between DD and AR until goal is found., saturate_or_goal(), solve(), bool, Clause (+8 more)
 
 ### Community 525 - "Community 525"
 Cohesion: 0.11
@@ -2284,12 +2475,12 @@ Cohesion: 0.08
 Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
 
 ### Community 542 - "Community 542"
-Cohesion: 0.36
-Nodes (7): Path, TrialConfig, test_capture_refuses_windows_rtrader(), test_parse_log_line_rejects_bad_price(), test_rtrader_bridge_refuses_windows(), test_unattended_refuses_windows(), trial_cfg()
+Cohesion: 0.21
+Nodes (16): list_campaign_events(), Mirror features_engine/src/regime/event_context.py TIGHT/flatten labels., row_to_event_context(), ValidationPeriod, Ensure catalog downloads target event windows only., test_event_window_span_under_one_hour(), Tests for campaign event catalog., test_hyp_29_does_not_list_cpi() (+8 more)
 
 ### Community 543 - "Community 543"
-Cohesion: 0.29
-Nodes (7): balance, fee, num_trades, position, steps, trading_volume, 10.0ms
+Cohesion: 0.14
+Nodes (25): MarketState, bool, float, int, str, HashMapMarketDepthBacktest, MarketState, load_chi404_speed() (+17 more)
 
 ### Community 544 - "Community 544"
 Cohesion: 0.13
@@ -2297,43 +2488,43 @@ Nodes (15): injection_sweep, 0, 100, 1000, 10000, 100000, 1000000, 2000 (+7 more
 
 ### Community 545 - "Community 545"
 Cohesion: 0.21
-Nodes (22): Any, bool, float, int, Path, str, _audit_complete(), build_microstructure_aar_packet() (+14 more)
+Nodes (23): Any, bool, float, int, Path, str, _audit_complete(), build_microstructure_aar_packet() (+15 more)
 
 ### Community 546 - "Community 546"
 Cohesion: 0.13
 Nodes (15): latency_authority, authority, breakeven_us, cpp_hot_path_runtime_us, lane_measured, lane_pass, lane_required, latency_profitability_buffer_us (+7 more)
 
 ### Community 547 - "Community 547"
-Cohesion: 0.44
-Nodes (8): Any, int, str, _audit_summary(), build_packet_summary(), build_user_prompt(), parse_annotations(), After-action LLM prompts — Hawkish-8B constraints.
+Cohesion: 0.18
+Nodes (10): LoaderReport, Dataset manifest and history sufficiency gate., LoaderReport, bool, int, Any, float, int (+2 more)
 
 ### Community 548 - "Community 548"
 Cohesion: 0.21
 Nodes (12): Computes attention over a sequence of inputs.      Args:       xs: input sequ, Update a stored keys/values slice for different-lengthed seqs in batch., Initialize decoder state for autoregressive generation.      Args:       sequ, Full transformer layer, with attention., Compute the next decoder state, and return keys,values to attend to.      The, slice_in_dim_1(), TransformerLayerGenerate, update_slice_in_dim_1() (+4 more)
 
 ### Community 549 - "Community 549"
-Cohesion: 0.12
-Nodes (16): Any, float, str, _chain_tolerance_us(), check_latency_invariants(), Deterministic latency invariant checks (AlphaGeometry neuro-symbolic pattern)., After-action data_layer tests., test_after_action_skipped_on_fast_sweep() (+8 more)
+Cohesion: 0.09
+Nodes (23): Any, float, str, Lightweight required-field check (schema_v1.json mirror)., Lightweight required-field check (schema_v1.json mirror)., Lightweight required-field check (schema_v1.json mirror)., validate_packet_schema(), _chain_tolerance_us() (+15 more)
 
 ### Community 550 - "Community 550"
 Cohesion: 0.31
 Nodes (7): LanguageModelInference, Call the meliad model., Meliad wrapper for LM inference., MetricsOutput, int, ndarray, str
 
 ### Community 551 - "Community 551"
-Cohesion: 0.12
-Nodes (26): audit_records_to_dataframe(), build_audit_timestamps_ns(), Per-trade audit timestamps — C++-authoritative latency fields., Construct absolute timestamps from exchange time + C++ latency budget., summarize_latency_us(), TradeAuditRecord, DataFrame, analyze_latency_viability() (+18 more)
+Cohesion: 0.05
+Nodes (15): Message, MessageState, BatchEvalRequest, BatchEvalResponse, BatchEvalResult, file_cel_service_proto_init(), file_cel_service_proto_rawDescGZIP(), init() (+7 more)
 
 ### Community 552 - "Community 552"
-Cohesion: 0.19
-Nodes (4): Get or create a new Ratio from two Lenghts l1 and l2., Merge nodes1 into a single node0., Remove nodes out of self because they are merged., Node
+Cohesion: 0.10
+Nodes (10): Get or create an angle between two Direction d1 and d2., Get or create a Segment object between two Points p1 and p2., Maybe add a new cyclic predicate from given congruent segments., Add a new cyclic predicate that 4 points are concyclic., Get or create a new Ratio from two Lenghts l1 and l2., Add new points with given names in list pnames., Return Point objects given names., Merge nodes1 into a single node0. (+2 more)
 
 ### Community 554 - "Community 554"
 Cohesion: 0.27
 Nodes (13): _gcd(), map_symbol(), map_symbol_inv(), pretty(), pretty2a(), pretty2r(), pretty_angle(), pretty_nl() (+5 more)
 
 ### Community 555 - "Community 555"
-Cohesion: 0.21
-Nodes (4): Dependency list of why 8 points are collinear., Get a first angle between line l1 and line l2., No eqangles betcause para-para, or para-corresponding, or same., Line
+Cohesion: 0.07
+Nodes (50): fn, ActionResponse, fhirGet(), fhirGetRaw(), graphql(), GraphQLResponse, restGet(), RestItemResponse (+42 more)
 
 ### Community 556 - "Community 556"
 Cohesion: 0.18
@@ -2347,10 +2538,6 @@ Nodes (13): After-action reports (post-run LLM layer), CLI example, code:python 
 Cohesion: 0.15
 Nodes (12): error, evaluate_only, event_results, events_missing, events_run, expectancy, gate_pass, name (+4 more)
 
-### Community 559 - "Community 559"
-Cohesion: 0.29
-Nodes (7): local_workstation, bottleneck, dominant_rtt_ms, recommendation, recommended_latency_bands_ms, tier_ms, tier_name
-
 ### Community 560 - "Community 560"
 Cohesion: 0.17
 Nodes (5): ARTest, Test that AR can figure out triangles with 3 equal angles => each is pi/3., Test that AR can figure out incenter/excenter touchpoints are equidistant to mid, Test for update_groups., Test that AR can figure out bisector & ex-bisector are perpendicular.
@@ -2360,8 +2547,8 @@ Cohesion: 0.25
 Nodes (8): result, balance, fee, num_trades, position, skipped, steps, trading_volume
 
 ### Community 562 - "Community 562"
-Cohesion: 0.24
-Nodes (13): build_kg_slice(), ingest_run(), _load_net_pnl(), Any, float, int, Path, str (+5 more)
+Cohesion: 0.33
+Nodes (10): build_kg_slice(), ingest_run(), _load_net_pnl(), Any, float, int, Path, str (+2 more)
 
 ### Community 563 - "Community 563"
 Cohesion: 0.17
@@ -2392,28 +2579,32 @@ Cohesion: 0.29
 Nodes (6): DecoderOnlyLanguageModelGenerate, Generate an output sequence.      Args:       inputs: the same as argument to, Decoder only language modeling in inference mode., Any, ndarray, str
 
 ### Community 570 - "Community 570"
-Cohesion: 0.25
-Nodes (10): Any, float, int, Path, str, find_similar_runs(), _load_nodes(), Rule-based KG queries for similar workbench runs. (+2 more)
+Cohesion: 0.29
+Nodes (9): Any, float, int, Path, str, find_similar_runs(), _load_nodes(), Rule-based KG queries for similar workbench runs. (+1 more)
 
 ### Community 571 - "Community 571"
 Cohesion: 0.45
 Nodes (12): Any, int, Path, str, append_edges(), _append_jsonl(), append_nodes(), _edge_key() (+4 more)
 
 ### Community 572 - "Community 572"
-Cohesion: 0.44
-Nodes (9): default_connector_path(), default_vendor_lock_path(), load_connector(), Any, Path, str, Load OpenFoundry connector YAML and vendor pins., read_vendor_lock() (+1 more)
+Cohesion: 0.42
+Nodes (11): default_connector_path(), default_vendor_lock_path(), load_connector(), Any, Path, str, Load OpenFoundry connector YAML and vendor pins., read_vendor_lock() (+3 more)
 
 ### Community 574 - "Community 574"
-Cohesion: 0.28
-Nodes (6): check_too_close(), check_too_far(), Try to sketch an intersection between two objects., sketch(), try_to_sketch_intersect(), int
+Cohesion: 0.08
+Nodes (26): check_perp(), InvalidLineIntersectError, Line, line_line_intersection(), line_segment_intersection(), _perpendicular_bisector(), Sketch a circle touching two lines and another circle., Sketch the def eqangle2. (+18 more)
 
 ### Community 575 - "Community 575"
-Cohesion: 0.27
-Nodes (4): LiquidityDefenseBreak, Hypothesis 14: Liquidity defense break, Hypothesis 43: Rebate trap avoidance, RebateTrapAvoidance
+Cohesion: 0.29
+Nodes (7): balance, fee, num_trades, position, steps, trading_volume, 2.0ms
 
 ### Community 576 - "Community 576"
 Cohesion: 0.25
 Nodes (6): DecoderStackGenerate, Stack of transformer decoder layers., Return initial state for autoregressive generation., DStackDecoderState, Array, int
+
+### Community 577 - "Community 577"
+Cohesion: 0.07
+Nodes (41): CelClient, CelEvaluatorClient, CircuitBreaker, CircuitState, defaultProtoPath(), ProtoBatchEvalRequest, ProtoBatchEvalResponse, ProtoBatchEvalResult (+33 more)
 
 ### Community 578 - "Community 578"
 Cohesion: 0.31
@@ -2435,21 +2626,29 @@ Nodes (6): pdf_citations, pdf_citations_complete, per_trade_audit, run_id, schem
 Cohesion: 0.29
 Nodes (7): predictions_vs_outcomes, adverse_selection_ticks, signal_adjusted, signal_fill_direction_aligned_count, signal_fill_direction_aligned_ratio, signal_raw, trades_vetoed_by_defense
 
+### Community 585 - "Community 585"
+Cohesion: 0.05
+Nodes (44): hasExecutePerm, manifests, mustParseManifest(), names, tools, actionIds, actor, admitCtx (+36 more)
+
 ### Community 587 - "Community 587"
 Cohesion: 0.40
 Nodes (4): Code reviews, Community Guidelines, Contributor License Agreement, How to Contribute
 
 ### Community 590 - "Community 590"
-Cohesion: 0.40
-Nodes (4): _check_between(), check_sameside(), circle_segment_intersect(), Whether a is between b & c.
+Cohesion: 0.08
+Nodes (47): mapEncounterStatus(), mapEncounterToFhir(), mapPatientToFhir(), buildPatientFilter(), extractSearchFilterFields(), fhirHeaders(), FhirRequest, FhirResponse (+39 more)
 
 ### Community 592 - "Community 592"
-Cohesion: 0.40
-Nodes (4): Connector, hft3 adapter, OpenFoundry integration (hft3), Vendor pins
+Cohesion: 0.22
+Nodes (7): code:bash (git submodule update --init vendor/openfoundry vendor/alphag), code:bash (git submodule update --init vendor/openfoundry vendor/alphag), Connector, hft3 adapter, OpenFoundry integration (hft3), OpenFoundry vendor stub, Vendor pins
 
-### Community 599 - "Community 599"
+### Community 594 - "Community 594"
+Cohesion: 0.25
+Nodes (7): CLI entrypoints, Code map, code:bash (python -m workbench list), code:bash (pytest tests/test_workbench/ tests/test_data_layer/ -q), Reading order (this lane), Tests, Workbench lane
+
+### Community 595 - "Community 595"
 Cohesion: 0.50
-Nodes (3): Authority copies, PDF citation manifest (after-action packet fields), Required intake (reviewer charter)
+Nodes (3): Documentation index (read in this order), Subsystem deep dives (after the path above), Vendor submodules
 
 ### Community 602 - "Community 602"
 Cohesion: 0.50
@@ -2459,24 +2658,728 @@ Nodes (4): simulation_fidelity, cpp_replay_available, matching_config, queue_tra
 Cohesion: 0.50
 Nodes (3): obligations, passed, violations
 
-### Community 606 - "Community 606"
+### Community 604 - "Community 604"
+Cohesion: 0.11
+Nodes (47): NamedTypeWithFields, TypeKind, EnumValueAddition, EnumValueRemoval, FieldAddition, FieldModification, FieldRemoval, LinkModification (+39 more)
+
+### Community 607 - "Community 607"
+Cohesion: 0.09
+Nodes (21): ConnectorConfig, ExtractOptions, ConnectorFactory, ConnectorMetadata, ConnectorPlugin, connector, plugin, removed (+13 more)
+
+### Community 608 - "Community 608"
+Cohesion: 0.36
+Nodes (7): Path, TrialConfig, test_capture_refuses_windows_rtrader(), test_parse_log_line_rejects_bad_price(), test_rtrader_bridge_refuses_windows(), test_unattended_refuses_windows(), trial_cfg()
+
+### Community 622 - "Community 622"
+Cohesion: 0.07
+Nodes (35): ActionError, ActionEventPublisher, ActionExecutorConfig, AuditWriter, CelEvalResult, CelEvaluator, ChangeType, LinkTupleMap (+27 more)
+
+### Community 623 - "Community 623"
+Cohesion: 0.06
+Nodes (44): actionToPermissionName(), buildActionsByTarget(), findLinkType(), generateOpenFGAModel(), generateOpenFGASchema(), generateTypeRelations(), getActionTargetType(), getOutboundLinks() (+36 more)
+
+### Community 624 - "Community 624"
+Cohesion: 0.04
+Nodes (45): Action Manifests, Boot Sequence, code:block1 (my-pack/), code:yaml (api-gateway:), code:bash (docker compose up -d api-gateway), code:yaml (domainPacksExtra:), code:yaml (domainPacksExtra:), code:bash (curl http://localhost:4000/admin/packs | jq .) (+37 more)
+
+### Community 625 - "Community 625"
+Cohesion: 0.04
+Nodes (45): Appendix A — Items the Open Foundry team must fill in before submission, code:text (Baseline source:           github.com/syzygyhack/open-foundr), code:text (Verification commands:), code:text (Option A — Trust-controlled cloud tenant), code:text (Mode A — Real source data, read-only), code:text (Conformance test inputs:), code:text (Open Foundry's Stage 1 IG layer does NOT claim:), code:text (Incident response:) (+37 more)
+
+### Community 626 - "Community 626"
+Cohesion: 0.07
+Nodes (34): extractContext(), getSpanContext(), getSpanId(), getTraceId(), HeaderCarrier, injectContext(), PropagationHeaders, withContext() (+26 more)
+
+### Community 627 - "Community 627"
+Cohesion: 0.08
+Nodes (36): createCdmRouter(), createFhirRouter(), buildResolverContext(), createGraphQLServer(), ActionAuthzMapping, createFgaClient(), createSecurityLayer(), extractUser() (+28 more)
+
+### Community 628 - "Community 628"
+Cohesion: 0.09
+Nodes (38): logger, SYSTEM_FIELD_PREFIXES, CEL_KEYWORDS, crossReferenceSchema(), extractExpressionRoots(), parseActionManifest(), parseCreateLink(), parseCreateObject() (+30 more)
+
+### Community 629 - "Community 629"
+Cohesion: 0.08
+Nodes (22): AuthorizationService, OpenFgaClientInterface, failAuthz, failClient, PATIENT_FIELD_CONFIG, patients, result, results (+14 more)
+
+### Community 630 - "Community 630"
+Cohesion: 0.12
+Nodes (31): findMappingByCdmResource(), findMappingBySourceType(), projectToCdm(), NHS_ACUTE_CDM_PROFILE, CdmRequest, CdmResponse, ctxFor(), error() (+23 more)
+
+### Community 631 - "Community 631"
+Cohesion: 0.05
+Nodes (38): admittedTo, badDir, consultant, coreInfo, dir1, dir2, __dirname, DOMAIN_PACKS_DIR (+30 more)
+
+### Community 632 - "Community 632"
+Cohesion: 0.15
+Nodes (11): CdcConsumer, CdcConsumerConfig, CdcStats, ChangeApplier, CheckpointStore, logger, config, failConsumer (+3 more)
+
+### Community 633 - "Community 633"
+Cohesion: 0.09
+Nodes (28): classification, fga, generate, graphql, newSchema, newSource, oldSchema, oldSource (+20 more)
+
+### Community 634 - "Community 634"
+Cohesion: 0.10
+Nodes (5): ConsentService, EventCause, LinkManager, ObjectManager, withSpan()
+
+### Community 635 - "Community 635"
+Cohesion: 0.14
+Nodes (27): enforceReferentialIntegrity(), aggregateObjects(), tableName(), composeFragments(), fieldPredicateToSql(), filterToSql(), isFieldPredicate(), isLogicalPredicate() (+19 more)
+
+### Community 636 - "Community 636"
+Cohesion: 0.10
+Nodes (32): BOOLEAN_FILTER_OPS, BUILTIN_SCALARS, collectFilterEnumNames(), CUSTOM_SCALARS, fieldToGqlType(), generateChangeEvent(), generateConnection(), generateCustomScalars() (+24 more)
+
+### Community 637 - "Community 637"
+Cohesion: 0.14
+Nodes (32): config, record, records, result, results, yaml, clearCustomTransforms(), coalesce() (+24 more)
+
+### Community 638 - "Community 638"
+Cohesion: 0.12
+Nodes (27): ActionActor, ActionContext, ActionResult, ActionManifest, ADMIT_MANIFEST, agentContext, DISCHARGE_MANIFEST, mockGuard (+19 more)
+
+### Community 639 - "Community 639"
 Cohesion: 0.13
-Nodes (10): int, AggressorDecelerationFade, DailyLossLimitDefense, ForcedLiquidationCascade, Hypothesis 1: Second-wave continuation, Hypothesis 6: Aggressor deceleration fade, Hypothesis 7: Forced liquidation cascade, Hypothesis 32: Daily loss-limit defense (+2 more)
+Nodes (20): RollbackPolicy, SideEffect, SideEffectExecutor, CloudEvent, CloudEventConfig, EventBus, HttpClient, HttpRequestOptions (+12 more)
+
+### Community 640 - "Community 640"
+Cohesion: 0.06
+Nodes (31): actionResult, afterCursor, aggregateMock, batchRedactMock, checkMock, conn, createMockUser(), createResolverContext() (+23 more)
+
+### Community 641 - "Community 641"
+Cohesion: 0.11
+Nodes (14): EventBus, InMemoryEventBus, ChangeSet, EngineEventEmitter, generateEventId(), LinkEventData, ObjectEventData, ctx (+6 more)
+
+### Community 642 - "Community 642"
+Cohesion: 0.15
+Nodes (25): ageQuery(), createLink(), deleteLink(), enforceCardinality(), genId(), getLink(), getLinks(), linkTableName() (+17 more)
+
+### Community 643 - "Community 643"
+Cohesion: 0.06
+Nodes (30): actionFiles, combinedSource, computed, config, connPath, constraint, content, deps (+22 more)
+
+### Community 644 - "Community 644"
+Cohesion: 0.08
+Nodes (16): AuditQueryFilter, PostgresAuditStore, ConsentStoreInterface, PostgresConsentStore, DDLGenerationOptions, GeneratedDDL, PostgresStorageConfig, isTransientPgError() (+8 more)
+
+### Community 645 - "Community 645"
+Cohesion: 0.18
+Nodes (19): registerAggregationTests(), registerCrudTests(), registerLineageTests(), registerLinkTests(), registerMultiTenancyTests(), registerQueryTests(), registerSchemaTests(), registerSearchTests() (+11 more)
+
+### Community 647 - "Community 647"
+Cohesion: 0.14
+Nodes (22): createRestErrorResponse(), extractErrorCode(), mapCodeToCategory(), mapErrorToHttpStatus(), RestErrorOptions, wrapErrorToRest(), generateActionRoute(), generateAggregateRoute() (+14 more)
+
+### Community 648 - "Community 648"
+Cohesion: 0.06
+Nodes (29): actionFiles, combinedSource, computed, config, connPath, constraint, content, createObj (+21 more)
+
+### Community 649 - "Community 649"
+Cohesion: 0.06
+Nodes (30): actionResult, admitAction, aggregateMock, AnyBody, body, checkMock, createMockRequest(), createMockUser() (+22 more)
+
+### Community 650 - "Community 650"
+Cohesion: 0.06
+Nodes (28): actionFiles, combinedSource, computed, config, connPath, constraint, content, createObj (+20 more)
+
+### Community 651 - "Community 651"
+Cohesion: 0.11
+Nodes (29): ManifestRegistry, main(), compareSemver(), ConnectorManifest, convertObjectType(), discoverPacks(), discoverPacksFromPath(), loadDomainPacks() (+21 more)
+
+### Community 652 - "Community 652"
+Cohesion: 0.11
+Nodes (26): cardinalityValues, errs, paramErr, result, schema, warns, BUILTIN_COMPUTE_FNS, BUILTIN_SCALARS (+18 more)
+
+### Community 653 - "Community 653"
+Cohesion: 0.11
+Nodes (16): fiftyPatients, ids, manyPatients, noExemption, PatientRecord, PATIENTS, record, Tuple (+8 more)
+
+### Community 654 - "Community 654"
+Cohesion: 0.07
+Nodes (28): dependencies, @grpc/grpc-js, @grpc/proto-loader, @openfoundry/observability, @openfoundry/odl, @openfoundry/spi, yaml, description (+20 more)
+
+### Community 655 - "Community 655"
+Cohesion: 0.12
+Nodes (24): fieldToTsType(), generateActionInputInterface(), generateActionResultType(), generateActionsNamespace(), generateClientClass(), generateConnectionType(), generateEnums(), generateFilterInterface() (+16 more)
+
+### Community 656 - "Community 656"
+Cohesion: 0.07
+Nodes (28): Action Pipeline Footguns (end-to-end), Authorization Tuples for Actions, Boot ordering: create the OpenFGA store *before* api-gateway, code:bash (# 1. Copy environment config and set passwords), code:bash (GIT_REVISION=$(git rev-parse HEAD) docker compose up -d --bu), code:bash (docker compose down        # Stop services (keep data)), code:bash (# 1. Start dependencies only (not api-gateway)), code:block3 (Schema migration: version 1 already applied but DDL checksum) (+20 more)
+
+### Community 657 - "Community 657"
+Cohesion: 0.13
+Nodes (17): IdentityConflictEvent, IdentityResolutionResult, IdentityResolver, IdentityResolverConfig, IdentityStore, QualityViolation, QuarantineInput, QuarantineQueryFilter (+9 more)
+
+### Community 658 - "Community 658"
+Cohesion: 0.10
+Nodes (13): hashValue(), InMemoryLineageStore, LineageQueryOptions, LineageRecorder, LineageRecorderConfig, LineageStore, ctx, evaluator (+5 more)
+
+### Community 659 - "Community 659"
+Cohesion: 0.10
+Nodes (22): data, jsonDir, jsonFiles, { outputDir, config }, sqlDir, sqlPath, DEFAULT_CONFIG, GeneratorConfig (+14 more)
+
+### Community 660 - "Community 660"
+Cohesion: 0.14
+Nodes (14): ConflictEventData, ConflictEventHandler, ConflictResolutionResult, ConflictResolver, ConflictResolverConfig, ConflictStrategy, ExistingValue, FieldResolution (+6 more)
+
+### Community 661 - "Community 661"
+Cohesion: 0.07
+Nodes (27): 5.1.1 Action Versioning, 5.1 Action Manifest, 5.2.1 CEL Environment, 5.2.2 Null Propagation, 5.2.3 Type System, 5.2.4 CEL Runtime Strategy, 5.2 Expression Language, 5.3 Execution Pipeline (+19 more)
+
+### Community 662 - "Community 662"
+Cohesion: 0.10
+Nodes (27): buildConfig(), buildConnection(), buildLink(), buildMapping(), buildPrimaryKey(), buildProperties(), buildSync(), ConflictResolution (+19 more)
+
+### Community 663 - "Community 663"
+Cohesion: 0.13
+Nodes (9): LinkManagerConfig, tracer, formatUUID(), generateUUIDv7(), InMemoryObjectSetStore, baseDef, noActor, other (+1 more)
+
+### Community 664 - "Community 664"
+Cohesion: 0.08
+Nodes (26): dependencies, @opentelemetry/api, @opentelemetry/exporter-trace-otlp-http, @opentelemetry/sdk-metrics, @opentelemetry/sdk-node, @opentelemetry/sdk-trace-base, pino, description (+18 more)
+
+### Community 666 - "Community 666"
+Cohesion: 0.08
+Nodes (26): dependencies, @openfoundry/observability, @openfoundry/spi, pg, yaml, description, devDependencies, @types/node (+18 more)
+
+### Community 667 - "Community 667"
+Cohesion: 0.07
+Nodes (26): active, activeIds, activePatients, bed, bedAssignments, bedIds, consultantIds, data (+18 more)
+
+### Community 668 - "Community 668"
+Cohesion: 0.08
+Nodes (25): dependencies, @openfoundry/observability, @openfoundry/odl, @openfoundry/spi, description, devDependencies, @openfoundry/storage-memory, @types/node (+17 more)
+
+### Community 669 - "Community 669"
+Cohesion: 0.21
+Nodes (23): ageQuery(), createAgeVertex(), createObject(), deleteAgeVertex(), genId(), getObject(), hardDeleteObject(), historyTableName() (+15 more)
+
+### Community 670 - "Community 670"
+Cohesion: 0.13
+Nodes (20): generateAuditDDL(), generateConsentDDL(), generateAllGraphDDL(), generateEdgeLabelDDL(), generateGraphSetupDDL(), generateNodeLabelDDL(), generateLineageDDL(), generateDDL() (+12 more)
+
+### Community 671 - "Community 671"
+Cohesion: 0.08
+Nodes (25): dependencies, @apollo/server, cors, express, graphql, graphql-subscriptions, @graphql-tools/schema, graphql-ws (+17 more)
+
+### Community 672 - "Community 672"
+Cohesion: 0.21
+Nodes (7): ActionExecutor, addIdAlias(), failResult(), generateActionId(), now(), stripSystemFields(), AffectedObject
+
+### Community 673 - "Community 673"
+Cohesion: 0.12
+Nodes (12): after, before, ctx, id, ids, linkEvents, parsedSchema, spiSchema (+4 more)
+
+### Community 674 - "Community 674"
+Cohesion: 0.08
+Nodes (24): bin, odl, dependencies, commander, graphql, description, devDependencies, @openfoundry/spi (+16 more)
+
+### Community 675 - "Community 675"
+Cohesion: 0.08
+Nodes (24): dependencies, jose, @openfga/sdk, @openfoundry/observability, @openfoundry/spi, description, devDependencies, @types/node (+16 more)
+
+### Community 676 - "Community 676"
+Cohesion: 0.15
+Nodes (22): getBedTypesForSpecialty(), resetIds(), DISCHARGE_NOTES, FIRST_NAMES, LAST_NAMES, WARD_NAME_PREFIXES, WARD_SPECIALTIES, AdmittedToLink (+14 more)
+
+### Community 677 - "Community 677"
+Cohesion: 0.09
+Nodes (8): PgSpiTransaction, createMockClient(), createMockPool(), error, mockClient, mockPool, q, PgTransaction
+
+### Community 678 - "Community 678"
+Cohesion: 0.08
+Nodes (24): dependencies, @openfoundry/observability, @openfoundry/odl, @openfoundry/spi, pg, description, devDependencies, @types/node (+16 more)
+
+### Community 679 - "Community 679"
+Cohesion: 0.22
+Nodes (21): extractActionType(), extractEnum(), extractFieldDirectives(), extractFields(), extractInterface(), extractLinkType(), extractNamespace(), extractObjectType() (+13 more)
+
+### Community 680 - "Community 680"
+Cohesion: 0.09
+Nodes (22): dependencies, @openfoundry/actions, @openfoundry/api, @openfoundry/odl, @openfoundry/security, @openfoundry/spi, @openfoundry/storage-memory, @openfoundry/sync (+14 more)
+
+### Community 681 - "Community 681"
+Cohesion: 0.10
+Nodes (18): diff(), diffEnums(), diffFields(), diffLinkTypes(), diffNamedTypes(), diffScalars(), directiveArraysEqual(), fieldTypeRefsEqual() (+10 more)
+
+### Community 682 - "Community 682"
+Cohesion: 0.19
+Nodes (18): ObjectManagerConfig, tracer, applyNumericOp(), applySizeOp(), checkImmutableFields(), checkUniqueness(), evaluateCelExpr(), evaluateConstraints() (+10 more)
+
+### Community 683 - "Community 683"
+Cohesion: 0.09
+Nodes (21): compilerOptions, composite, declaration, declarationMap, esModuleInterop, exactOptionalPropertyTypes, forceConsistentCasingInFileNames, incremental (+13 more)
+
+### Community 684 - "Community 684"
+Cohesion: 0.29
+Nodes (7): colo_on_box, bottleneck, dominant_rtt_ms, recommendation, recommended_latency_bands_ms, tier_ms, tier_name
+
+### Community 685 - "Community 685"
+Cohesion: 0.10
+Nodes (21): dependencies, @openfoundry/spi, description, devDependencies, @openfoundry/storage-memory, vitest, exports, files (+13 more)
+
+### Community 686 - "Community 686"
+Cohesion: 0.10
+Nodes (20): API Specification Artifacts, Artifacts, AsyncAPI (any language), CI Release Workflow, code:bash (# Build first (CLIs run from dist/)), code:bash (DOMAIN_PACKS=core,nhs-acute pnpm --filter @openfoundry/api s), code:bash (openapi-generator-cli generate \), code:bash (# Using openapi-generator) (+12 more)
+
+### Community 687 - "Community 687"
+Cohesion: 0.16
+Nodes (12): PostgresSchemaRegistry, breakingSchema(), emptySchema(), field(), objectType(), pool, reader, reg (+4 more)
+
+### Community 688 - "Community 688"
+Cohesion: 0.10
+Nodes (19): 11.1 SPI Conformance Suite, 11.2 Integration Test Harness, 11.3 Action Conformance, 11.4 API and App Conformance, 11. Testing and Conformance, 13.1 Performance Targets, 13.2 Scalability Targets, 13.3 Security Requirements (+11 more)
+
+### Community 689 - "Community 689"
+Cohesion: 0.10
+Nodes (19): description, devDependencies, turbo, typescript, engines, node, license, name (+11 more)
+
+### Community 690 - "Community 690"
+Cohesion: 0.11
+Nodes (19): dependencies, @openfoundry/spi, description, devDependencies, vitest, exports, files, import (+11 more)
+
+### Community 691 - "Community 691"
+Cohesion: 0.10
+Nodes (16): ast, block, eventBlock, filterBlock, inputBlock, jobBlock, mutationBlock, orderBlock (+8 more)
+
+### Community 692 - "Community 692"
+Cohesion: 0.10
+Nodes (19): admitPath, body, components, content, __dirname, DOMAIN_PACKS_DIR, filterParams, get (+11 more)
+
+### Community 693 - "Community 693"
+Cohesion: 0.11
+Nodes (18): 7.1 Patient Lifecycle, 7.2 Permissions, 7.3 Consent, 7.4 Audit, 7.5 FHIR, 7.6 Sync, 7.7 Sync Conflict Resolution, 7.8 Identity Resolution (+10 more)
+
+### Community 694 - "Community 694"
+Cohesion: 0.11
+Nodes (19): 4.1 Responsibilities, 4.2.1 Event Ordering Guarantees, 4.2 Event Format, 4.3 Validation Pipeline, 4.4.1 Evaluation Strategies, 4.4.2 Dependency Tracking for EAGER Fields, 4.4.3 Cache Interface, 4.4 Computed Field Cache Invalidation (+11 more)
+
+### Community 695 - "Community 695"
+Cohesion: 0.11
+Nodes (18): dependsOn, outputs, cache, globalDependencies, dependsOn, outputs, $schema, tasks (+10 more)
+
+### Community 696 - "Community 696"
+Cohesion: 0.25
+Nodes (18): generate(), generateAdmittedToLinks(), generateBeds(), generateConsultants(), generateDischargeRecords(), generateOccupiesBedLinks(), generatePatients(), generateUnderCareOfLinks() (+10 more)
+
+### Community 697 - "Community 697"
+Cohesion: 0.11
+Nodes (16): classification, content, dir, fga, filePath, graphql, newPath, newSchema (+8 more)
+
+### Community 698 - "Community 698"
+Cohesion: 0.11
+Nodes (17): admLink, computed, constraint, def, dep, dir, enumNames, fieldNames (+9 more)
+
+### Community 699 - "Community 699"
+Cohesion: 0.11
+Nodes (17): asyncapiChannels, channel, channels, doc, DOMAIN_PACKS_DIR, methodObj, msg, name (+9 more)
+
+### Community 700 - "Community 700"
+Cohesion: 0.11
+Nodes (17): description, devDependencies, @types/node, vitest, license, name, private, scripts (+9 more)
+
+### Community 701 - "Community 701"
+Cohesion: 0.11
+Nodes (17): description, devDependencies, tsx, @types/node, typescript, vitest, license, name (+9 more)
+
+### Community 702 - "Community 702"
+Cohesion: 0.12
+Nodes (17): description, devDependencies, vitest, exports, files, import, license, main (+9 more)
+
+### Community 703 - "Community 703"
+Cohesion: 0.11
+Nodes (17): changeType, channel, channels, components, __dirname, DOMAIN_PACKS_DIR, idParam, message (+9 more)
+
+### Community 704 - "Community 704"
+Cohesion: 0.12
+Nodes (16): AdmittedTo (link) → CDM `Encounter`, API, Bed → CDM `Location` (kind=bed), code:json ({), Compatibility matrix, Consultant → CDM `Practitioner`, DischargeRecord → CDM `Discharge`, FDP/CDM Compatibility Profile (S1.0) (+8 more)
+
+### Community 705 - "Community 705"
+Cohesion: 0.12
+Nodes (17): 6.1 Connector Interface, 6.2.1 Pull-Based Consumption, 6.2.2 Rate Limiting, 6.2.3 Circuit Breaker, 6.2.4 Initial Full Extract, 6.2 Backpressure and Flow Control, 6.3 Datasource Mapping, 6.4.1 Overlay Semantics (+9 more)
+
+### Community 706 - "Community 706"
+Cohesion: 0.12
+Nodes (17): 8.2.1 Aggregate Health Endpoint, 8.2 REST API, 8.3 FHIR R4 API, 8.4 Client SDKs, 8.5 Application Framework, 8.6 Webhook Integrations, 8.7 API Governance and Quotas, 8.8 Unified Error Model (+9 more)
+
+### Community 707 - "Community 707"
+Cohesion: 0.09
+Nodes (15): Connector, DatasourceMappingConfig, createRecordMapper(), MappedLink, RecordMapper, CacheEntry, OverlayEngine, OverlayEngineConfig (+7 more)
+
+### Community 708 - "Community 708"
+Cohesion: 0.12
+Nodes (12): badHandler, defaultBus, event, goodHandler, handler, handler1, handler2, kafkaConstructorCalls (+4 more)
+
+### Community 709 - "Community 709"
+Cohesion: 0.25
+Nodes (14): actionInputSchema(), actionPath(), generateOpenApiSpec(), isComputed(), isLink(), isParam(), isPrimary(), lowerFirst() (+6 more)
+
+### Community 710 - "Community 710"
+Cohesion: 0.13
+Nodes (15): description, exports, files, import, license, main, name, scripts (+7 more)
+
+### Community 711 - "Community 711"
+Cohesion: 0.13
+Nodes (14): description, devDependencies, @openfoundry/actions, @openfoundry/odl, @types/node, vitest, yaml, name (+6 more)
+
+### Community 712 - "Community 712"
+Cohesion: 0.14
+Nodes (12): connector, extractPromise, initConnector(), iter, makeConfig(), mockConnect, mockEnd, MockPool (+4 more)
+
+### Community 713 - "Community 713"
+Cohesion: 0.13
+Nodes (15): 3.1 SPI Operations, 3.2 Key Types, 3.3 Soft-Delete Semantics, 3.4 Transaction Semantics, 3.5 Optimistic Concurrency, 3.6 Replication Requirements, 3.7 Provider Implementations, 3.8 Bulk Mutation Contract (+7 more)
+
+### Community 714 - "Community 714"
+Cohesion: 0.13
+Nodes (15): 7.2.1 Audit Query API, 7.2 Audit Trail, 7.3.1 Consent in the Query Pipeline, 7.3.2 Consent in the Action Pipeline, 7.3.3 Direct Care Exemption, 7.3.4 Consent Revocation, 7.3 Consent Management, 7.4 Authentication (+7 more)
+
+### Community 715 - "Community 715"
+Cohesion: 0.13
+Nodes (14): description, devDependencies, @openfoundry/actions, @openfoundry/odl, @types/node, vitest, yaml, name (+6 more)
+
+### Community 716 - "Community 716"
+Cohesion: 0.13
+Nodes (14): description, devDependencies, @openfoundry/actions, @openfoundry/odl, @types/node, vitest, yaml, name (+6 more)
+
+### Community 717 - "Community 717"
+Cohesion: 0.21
+Nodes (9): getObjectAtTime(), getObjectAtVersion(), historyRowToObject(), historyTableName(), ctx, pool, queryFn, row (+1 more)
+
+### Community 718 - "Community 718"
+Cohesion: 0.14
+Nodes (14): 2.2.1 CodeableConcept, 2.2 Scalar Types, 2.4 Namespaces, 2.5.1 Schema Rollback, 2.5.2 Data Migration Plans, 2.5 Schema Lifecycle, 2.6 Schema Workspaces, 2. Ontology Definition Language (ODL) (+6 more)
+
+### Community 719 - "Community 719"
+Cohesion: 0.14
+Nodes (12): coreOdlPath, coreOdlSource, __dirname, fieldNames, names, PACK_ROOT, packYamlContent, packYamlPath (+4 more)
+
+### Community 721 - "Community 721"
+Cohesion: 0.15
+Nodes (12): description, devDependencies, @openfoundry/odl, @types/node, vitest, name, private, scripts (+4 more)
+
+### Community 722 - "Community 722"
+Cohesion: 0.26
+Nodes (5): BUILT_IN_FUNCTIONS, ComputeContext, ComputedFieldEvaluator, ComputedFieldEvaluatorConfig, ComputeFunction
+
+### Community 723 - "Community 723"
+Cohesion: 0.17
+Nodes (11): 2.1.1 Object Types, 2.1.2 Interfaces, 2.1.3 Link Types, 2.1.4 Action Types, 2.1.5 Functions, 2.1 Core Types, code:graphql (type Patient @objectType {), code:graphql (interface Identifiable {) (+3 more)
+
+### Community 724 - "Community 724"
+Cohesion: 0.17
+Nodes (12): 9.1 Instance Identity, 9.2 Data Sharing Agreements, 9.3.1 Pagination, 9.3 Cross-Instance Query, 9.4 Federated Aggregation, 9.5.1 Handoff Conflict Resolution, 9.5 Object Handoff, 9. Federation Protocol (+4 more)
+
+### Community 725 - "Community 725"
+Cohesion: 0.17
+Nodes (11): compilerOptions, composite, declaration, declarationMap, noUnusedLocals, noUnusedParameters, outDir, rootDir (+3 more)
+
+### Community 726 - "Community 726"
+Cohesion: 0.17
+Nodes (12): Architecture, code:graphql (type Asset @objectType {), Design Principles, Documentation, License, ODL Schema Example, Open Foundry, PostgreSQL Capabilities (+4 more)
+
+### Community 727 - "Community 727"
+Cohesion: 0.27
+Nodes (10): calculateCheckDigit(), generateNhsNumber(), generateUniqueNhsNumbers(), isValidNhsNumber(), WEIGHTS, check, lastDigit, num (+2 more)
+
+### Community 728 - "Community 728"
+Cohesion: 0.17
+Nodes (10): bedNumbers, betweenTime, caps, config, ctx, filter, path, patientFilter (+2 more)
+
+### Community 729 - "Community 729"
+Cohesion: 0.30
+Nodes (11): a, b, emptySchema(), field(), objectType(), orderAB, orderBA, reg (+3 more)
+
+### Community 730 - "Community 730"
+Cohesion: 0.17
+Nodes (7): options, path, pool, queriedParams, QueryResponder, QueryResult, steps
+
+### Community 731 - "Community 731"
+Cohesion: 0.20
+Nodes (10): description, exports, files, import, license, main, name, type (+2 more)
+
+### Community 732 - "Community 732"
+Cohesion: 0.49
+Nodes (10): init-services.sh script, dc_psql(), err(), init_age(), load_domain_schema(), load_openfga_model(), log(), main() (+2 more)
+
+### Community 733 - "Community 733"
+Cohesion: 0.18
+Nodes (10): 10. Risk Register, 11. Go / No-Go Gates, 12. Success Criteria, 1. Purpose, 3.1 Monorepo Structure (MVP Scope), 3. Technology Stack, 8. Performance Targets (MVP), 9. What This Enables Next (+2 more)
+
+### Community 734 - "Community 734"
+Cohesion: 0.18
+Nodes (11): 4.1 ObjectTypes (5), 4.2 LinkTypes (6), 4.5 OpenFGA Model, 4.6 FHIR Mapping, 4.7 Pack Manifest, 4. NHS Acute Domain Pack — Pilot Slice, code:block11 (model), code:yaml (fhir:) (+3 more)
+
+### Community 735 - "Community 735"
+Cohesion: 0.17
+Nodes (15): align_quotes(), Event-time quote alignment for parity groups (filtration-safe)., Build snapshots at each distinct timestamp where at least one leg updates.     E, snapshot_has_required_legs(), bool, LegQuote, ParityGroup, QuoteSnapshot (+7 more)
+
+### Community 736 - "Community 736"
+Cohesion: 0.18
+Nodes (11): code:bash (pnpm install), code:bash (# Unit tests (all packages except integration)), code:bash (cd deploy), code:bash (helm install openfoundry deploy/helm/openfoundry \), Getting Started, Install and Build, Kubernetes Deployment, Local Development Stack (+3 more)
+
+### Community 737 - "Community 737"
+Cohesion: 0.18
+Nodes (10): co, condLink, condUpdate, del, delBed, { manifest }, NHS_SCHEMA, update (+2 more)
+
+### Community 738 - "Community 738"
+Cohesion: 0.20
+Nodes (10): 4.3 ActionTypes (3 core), AdmitPatient, code:graphql (type AdmitPatient @actionType {), code:yaml (# actions/admit-patient.yaml), code:graphql (type DischargePatient @actionType {), code:yaml (# actions/discharge-patient.yaml), code:graphql (type TransferWard @actionType {), code:yaml (# actions/transfer-ward.yaml) (+2 more)
+
+### Community 739 - "Community 739"
+Cohesion: 0.27
+Nodes (4): QueueDepletionTrigger, Hypothesis 1: Second-wave continuation, Hypothesis 10: Queue depletion trigger, SecondWaveContinuation
+
+### Community 740 - "Community 740"
+Cohesion: 0.28
+Nodes (6): check_too_close(), check_too_far(), Try to sketch an intersection between two objects., sketch(), try_to_sketch_intersect(), int
+
+### Community 741 - "Community 741"
+Cohesion: 0.22
+Nodes (9): scripts, build, clean, spec:all, spec:asyncapi, spec:graphql, spec:openapi, test (+1 more)
+
+### Community 742 - "Community 742"
+Cohesion: 0.22
+Nodes (9): 2.3.1 `@searchable` Directive Semantics, 2.3.2 `@constraint` Directive Semantics, 2.3.3 `@immutable` Directive Semantics, 2.3 Directives Reference, code:graphql (type Patient @objectType {), code:graphql (type Ward @objectType {), code:graphql (type TheatreSlot @objectType @constraint(expr: "this.endTime), code:graphql (type WaitingListEntry @objectType) (+1 more)
+
+### Community 743 - "Community 743"
+Cohesion: 0.22
+Nodes (9): 7.1.1 Authorisation Model, 7.1.2 Permission Levels, 7.1.3 Field-Level Security Behaviour, 7.1.4 Permission Evaluation, 7.1.5 Permission Check Batching, 7.1.6 Security Layer Circuit Breaker, 7.1 Access Control Model, code:block43 (model) (+1 more)
+
+### Community 744 - "Community 744"
+Cohesion: 0.18
+Nodes (10): C++ hot-path audit (workbench vs live), CMake targets, code:bash (cmake -B build -DCMAKE_BUILD_TYPE=Release), code:bash (pytest tests/test_hot_path_topology.py -q -m "not integratio), Remaining gaps, Remaining gaps (honest), Stack verify (not replay), Tests (+2 more)
+
+### Community 745 - "Community 745"
+Cohesion: 0.25
+Nodes (8): 10.1 Structure, 10.2 Pack Manifest, 10.3 Core Domain Pack, 10.4 Healthcare Domain Pack — Key Object Types, 10. Domain Packs, code:block63 (nhs-acute/), code:yaml (# pack.yaml), code:graphql (# openfoundry.core — always available)
+
+### Community 746 - "Community 746"
+Cohesion: 0.25
+Nodes (8): 8.1.1 Generated Query Types, 8.1.2 Generated Mutation Types, 8.1.3 FHIR Mapping for Mutations, 8.1.4 Generated Subscription Types, 8.1.5 Search and Discovery, 8.1 Auto-Generated GraphQL API, code:graphql (type Query {), code:graphql (type Subscription {)
+
+### Community 747 - "Community 747"
+Cohesion: 0.25
+Nodes (8): Action Framework, Deployment, Features, Governance & Resilience, Observability, Ontology Engine, Query & API, Security
+
+### Community 748 - "Community 748"
+Cohesion: 0.25
+Nodes (7): compilerOptions, noUnusedLocals, noUnusedParameters, outDir, rootDir, extends, include
+
+### Community 749 - "Community 749"
+Cohesion: 0.46
+Nodes (5): changeEventSchema(), generateAsyncApiSpec(), lowerFirst(), main(), readPlatformVersion()
+
+### Community 750 - "Community 750"
+Cohesion: 0.57
+Nodes (7): breakingSchema(), emptySchema(), field(), objectType(), schema, v1Schema(), v2Schema()
+
+### Community 751 - "Community 751"
+Cohesion: 0.29
+Nodes (7): devDependencies, @types/cors, @types/express, @types/node, @types/ws, typescript, vitest
+
+### Community 752 - "Community 752"
+Cohesion: 0.29
+Nodes (7): 12.1 Container Architecture, 12.2 Kubernetes Deployment, 12.3 Minimal Development Deployment, 12.4 Degraded Mode and Outage Behaviour, 12. Deployment, code:bash (helm install my-instance openfoundry/openfoundry \), code:bash (docker compose up)
+
+### Community 754 - "Community 754"
+Cohesion: 0.29
+Nodes (6): compilerOptions, outDir, rootDir, extends, include, references
+
+### Community 755 - "Community 755"
+Cohesion: 0.29
+Nodes (5): patient, patientA, patientB, records, updated
+
+### Community 756 - "Community 756"
+Cohesion: 0.33
+Nodes (5): compilerOptions, declarationMap, sourceMap, exclude, extends
+
+### Community 757 - "Community 757"
+Cohesion: 0.33
+Nodes (5): compilerOptions, outDir, rootDir, extends, include
+
+### Community 758 - "Community 758"
+Cohesion: 0.33
+Nodes (5): compilerOptions, outDir, rootDir, extends, include
+
+### Community 759 - "Community 759"
+Cohesion: 0.33
+Nodes (5): compilerOptions, outDir, rootDir, extends, include
+
+### Community 760 - "Community 760"
+Cohesion: 0.33
+Nodes (5): compilerOptions, outDir, rootDir, extends, include
+
+### Community 761 - "Community 761"
+Cohesion: 0.33
+Nodes (5): compilerOptions, outDir, rootDir, extends, include
+
+### Community 762 - "Community 762"
+Cohesion: 0.33
+Nodes (6): 5.1 Container Services (MVP), 5.2 Docker Compose (Development), 5.3 Production (Kubernetes / Helm), 5. Deployment Architecture, code:bash (docker compose up), code:bash (helm install nhs-pilot openfoundry/openfoundry \)
+
+### Community 763 - "Community 763"
+Cohesion: 0.33
+Nodes (6): 1.1 What This Document Is, 1.2 Design Principles, 1.3 Architecture Summary, 1.4 Normative Language, 1. Overview, code:block1 (┌─────────────────────────────────────────────────────────┐)
+
+### Community 764 - "Community 764"
+Cohesion: 0.33
+Nodes (5): compilerOptions, declarationMap, sourceMap, exclude, extends
+
+### Community 765 - "Community 765"
+Cohesion: 0.33
+Nodes (5): compilerOptions, outDir, rootDir, extends, include
+
+### Community 766 - "Community 766"
+Cohesion: 0.33
+Nodes (5): compilerOptions, declaration, declarationMap, sourceMap, extends
+
+### Community 767 - "Community 767"
+Cohesion: 0.33
+Nodes (5): compilerOptions, outDir, rootDir, extends, include
+
+### Community 768 - "Community 768"
+Cohesion: 0.33
+Nodes (5): compilerOptions, declarationMap, sourceMap, exclude, extends
+
+### Community 769 - "Community 769"
+Cohesion: 0.33
+Nodes (5): compilerOptions, outDir, rootDir, extends, include
+
+### Community 770 - "Community 770"
+Cohesion: 0.33
+Nodes (5): compilerOptions, outDir, rootDir, extends, include
+
+### Community 771 - "Community 771"
+Cohesion: 0.33
+Nodes (5): compilerOptions, outDir, rootDir, extends, include
+
+### Community 772 - "Community 772"
+Cohesion: 0.33
+Nodes (5): compilerOptions, declarationMap, sourceMap, exclude, extends
+
+### Community 773 - "Community 773"
+Cohesion: 0.33
+Nodes (5): compilerOptions, outDir, rootDir, extends, include
+
+### Community 774 - "Community 774"
+Cohesion: 0.33
+Nodes (5): compilerOptions, outDir, rootDir, extends, include
+
+### Community 775 - "Community 775"
+Cohesion: 0.33
+Nodes (5): compilerOptions, declarationMap, sourceMap, exclude, extends
+
+### Community 776 - "Community 776"
+Cohesion: 0.33
+Nodes (5): compilerOptions, outDir, rootDir, extends, include
+
+### Community 777 - "Community 777"
+Cohesion: 0.33
+Nodes (5): compilerOptions, outDir, rootDir, extends, include
+
+### Community 778 - "Community 778"
+Cohesion: 0.33
+Nodes (5): compilerOptions, outDir, rootDir, extends, include
+
+### Community 779 - "Community 779"
+Cohesion: 0.33
+Nodes (5): compilerOptions, outDir, rootDir, extends, include
+
+### Community 780 - "Community 780"
+Cohesion: 0.33
+Nodes (5): compilerOptions, outDir, rootDir, extends, include
+
+### Community 781 - "Community 781"
+Cohesion: 0.33
+Nodes (4): edgeIds, patient, PatientRecord, patients
+
+### Community 782 - "Community 782"
+Cohesion: 0.33
+Nodes (5): compilerOptions, outDir, rootDir, extends, include
+
+### Community 783 - "Community 783"
+Cohesion: 0.33
+Nodes (5): compilerOptions, outDir, rootDir, extends, include
+
+### Community 784 - "Community 784"
+Cohesion: 0.33
+Nodes (5): compilerOptions, outDir, rootDir, extends, include
+
+### Community 785 - "Community 785"
+Cohesion: 0.33
+Nodes (5): compilerOptions, outDir, rootDir, extends, include
+
+### Community 786 - "Community 786"
+Cohesion: 0.33
+Nodes (5): compilerOptions, outDir, rootDir, extends, include
+
+### Community 787 - "Community 787"
+Cohesion: 0.33
+Nodes (5): compilerOptions, declarationMap, sourceMap, exclude, extends
+
+### Community 788 - "Community 788"
+Cohesion: 0.33
+Nodes (5): compilerOptions, outDir, rootDir, extends, include
+
+### Community 789 - "Community 789"
+Cohesion: 0.40
+Nodes (4): _check_between(), check_sameside(), circle_segment_intersect(), Whether a is between b & c.
+
+### Community 790 - "Community 790"
+Cohesion: 0.40
+Nodes (5): 6. Pilot Onboarding Workflow, Phase 1: Connect (Week 1-2), Phase 2: Activate (Week 3-4), Phase 3: Integrate (Week 5-6), Phase 4: Validate (Week 7-8)
+
+### Community 791 - "Community 791"
+Cohesion: 0.40
+Nodes (5): Core Platform (`packages/`), Domain Packs (`domain-packs/`), Packages, Tests (`tests/`), Tools (`tools/`)
+
+### Community 792 - "Community 792"
+Cohesion: 0.50
+Nodes (4): 2.1 Must Ship, 2.2 Deferred to Post-MVP, 2.3 Stubbed (Interface Present, Implementation Minimal), 2. Scope Boundary
+
+### Community 793 - "Community 793"
+Cohesion: 0.50
+Nodes (4): 4.4.1 Source-of-Truth Policy, 4.4.2 Identity Resolution, 4.4 Connector Configuration, code:yaml (# connectors/pas-jdbc.yaml)
+
+### Community 794 - "Community 794"
+Cohesion: 0.50
+Nodes (4): By the Numbers, How This Was Built, Phase 1: Cardinal, Phase 2: Human-Agent Collaboration
+
+### Community 795 - "Community 795"
+Cohesion: 0.50
+Nodes (4): code:bash (# Load packs from one or more external directories (colon-se), Domain Packs, External Domain Packs, NHS Acute Pilot
+
+### Community 796 - "Community 796"
+Cohesion: 0.50
+Nodes (3): logger, PORT, server
+
+### Community 797 - "Community 797"
+Cohesion: 0.50
+Nodes (3): logger, PORT, server
+
+### Community 798 - "Community 798"
+Cohesion: 0.50
+Nodes (3): logger, PORT, server
+
+### Community 799 - "Community 799"
+Cohesion: 0.50
+Nodes (3): logger, PORT, server
 
 ## Knowledge Gaps
-- **4327 isolated node(s):** `str`, `int`, `bool`, `int`, `float` (+4322 more)
+- **6157 isolated node(s):** `str`, `int`, `bool`, `int`, `float` (+6152 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **121 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **129 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `datetime` connect `Community 73` to `Community 320`, `Community 291`, `Community 4`, `Community 517`, `Community 108`, `Community 15`, `Community 112`, `Community 84`, `Community 373`, `Community 244`, `Community 372`, `Community 248`, `Community 27`, `Community 383`?**
-  _High betweenness centrality (0.014) - this node is a cross-community bridge._
-- **Why does `ParityGroup` connect `Community 27` to `Community 164`, `Community 518`, `Community 73`, `Community 170`, `Community 268`, `Community 20`, `Community 117`, `Community 383`?**
-  _High betweenness centrality (0.006) - this node is a cross-community bridge._
-- **Why does `OrderBook` connect `Community 274` to `Community 205`, `Community 119`, `Community 248`, `Community 283`, `Community 221`?**
-  _High betweenness centrality (0.006) - this node is a cross-community bridge._
+- **Why does `datetime` connect `Community 383` to `Community 320`, `Community 4`, `Community 517`, `Community 164`, `Community 6`, `Community 73`, `Community 108`, `Community 219`, `Community 15`, `Community 112`, `Community 244`, `Community 372`, `Community 248`, `Community 283`, `Community 542`, `Community 543`?**
+  _High betweenness centrality (0.012) - this node is a cross-community bridge._
+- **Why does `main()` connect `Community 627` to `Community 709`, `Community 647`, `Community 651`, `Community 623`, `Community 626`, `Community 607`?**
+  _High betweenness centrality (0.010) - this node is a cross-community bridge._
+- **Why does `withSpan()` connect `Community 634` to `Community 720`, `Community 626`, `Community 629`, `Community 309`, `Community 607`?**
+  _High betweenness centrality (0.008) - this node is a cross-community bridge._
 - **Are the 12 inferred relationships involving `Graph` (e.g. with `Angle` and `Circle`) actually correct?**
   _`Graph` has 12 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 12 inferred relationships involving `Point` (e.g. with `Angle` and `Circle`) actually correct?**

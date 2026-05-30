@@ -39,7 +39,24 @@
     },
     "injection_sweep": { "type": "object" },
     "per_trade_audit": { "type": "array" },
-    "simulation_fidelity": { "type": "object" },
+    "simulation_fidelity": {
+      "type": "object",
+      "required": [
+        "cpp_replay_available",
+        "cpp_stack_verified",
+        "matching_config",
+        "queue_tracker_status"
+      ],
+      "properties": {
+        "cpp_replay_available": { "type": "boolean" },
+        "cpp_stack_verified": { "type": "boolean" },
+        "matching_config": { "type": "string" },
+        "queue_tracker_status": {
+          "type": "string",
+          "enum": ["available", "link_only", "stub_or_unverified"]
+        }
+      }
+    },
     "predictions_vs_outcomes": { "type": "object" },
     "skip_reasons": { "type": "array", "items": { "type": "string" } }
   }

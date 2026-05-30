@@ -10,7 +10,17 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 import yaml
 
+from data_layer.stack_check_contract import REQUIRED_STACK_CHECKS
 from data_layer.openfoundry_bridge import read_vendor_lock, validate_connector
+
+_REQUIRED_STACK_CHECKS = REQUIRED_STACK_CHECKS
+
+
+def _cpp_stack_verified_from_diagnostics(diagnostics: Dict[str, Any]) -> bool:
+    checks = diagnostics.get("cpp_stack_checks") or {}
+    if not isinstance(checks, dict) or not checks:
+        return False
+    return all(checks.get(k) for k in _REQUIRED_STACK_CHECKS)
 
 _AUDIT_NS_FIELDS = (
     "market_data_exchange_ts",
@@ -239,9 +249,16 @@ def build_microstructure_aar_packet(
         "per_trade_audit": per_trade_audit,
         "simulation_fidelity": {
             "cpp_replay_available": diagnostics.get("cpp_replay_available", False),
+            "cpp_stack_verified": _cpp_stack_verified_from_diagnostics(diagnostics),
             "matching_config": str(repo_root / "workbench" / "src" / "sim" / "matching_config.yaml"),
             "queue_tracker_status": (
-                "available" if diagnostics.get("cpp_replay_available") else "stub_or_unverified"
+                "available"
+                if diagnostics.get("cpp_replay_available")
+                else (
+                    "link_only"
+                    if _cpp_stack_verified_from_diagnostics(diagnostics)
+                    else "stub_or_unverified"
+                )
             ),
         },
         "predictions_vs_outcomes": _predictions_vs_outcomes(diagnostics, per_trade_audit),
@@ -276,4 +293,21 @@ def validate_packet_schema(packet: Dict[str, Any]) -> List[str]:
     lat = packet.get("latency_authority") or {}
     if lat.get("python_research_runtime_authoritative") is not False:
         errors.append("python_research_runtime_authoritative must be false")
+    sim = packet.get("simulation_fidelity") or {}
+    for key in (
+        "cpp_replay_available",
+        "cpp_stack_verified",
+        "matching_config",
+        "queue_tracker_status",
+    ):
+        if key not in sim:
+            errors.append(f"simulation_fidelity missing {key}")
+    qts = sim.get("queue_tracker_status")
+    if sim.get("cpp_replay_available"):
+        if qts != "available":
+            errors.append("queue_tracker_status must be available when cpp_replay_available")
+    elif sim.get("cpp_stack_verified") and qts != "link_only":
+        errors.append("queue_tracker_status must be link_only when cpp_stack_verified without replay")
+    elif not sim.get("cpp_stack_verified") and not sim.get("cpp_replay_available") and qts != "stub_or_unverified":
+        errors.append("queue_tracker_status must be stub_or_unverified when no C++ verify/replay")
     return errors

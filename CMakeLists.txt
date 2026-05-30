@@ -8,7 +8,11 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
-add_compile_options(-O3 -Wall -Wextra)
+if(MSVC)
+    add_compile_options(/O2 /W4)
+else()
+    add_compile_options(-O3 -Wall -Wextra)
+endif()
 
 # Feature extractor library
 add_library(hft_features
@@ -37,11 +41,23 @@ target_include_directories(hft_decision PUBLIC
 )
 target_link_libraries(hft_decision PRIVATE hft_features)
 
-# Offline research sim stub (no R-API)
+# Rithmic gateway (C++ hot path — R|API+ wiring pending)
+add_library(hft_rithmic_gateway
+    rithmic_gateway/src/rithmic_adapter.cpp
+)
+target_include_directories(hft_rithmic_gateway PUBLIC
+    rithmic_gateway/include
+)
+
+# Offline research sim (no R-API; validates C++ decision + risk + features stack)
 add_executable(hft_research_sim
     tools/research_sim_main.cpp
 )
-target_link_libraries(hft_research_sim PRIVATE hft_features hft_risk hft_decision)
+target_link_libraries(hft_research_sim PRIVATE hft_features hft_risk hft_decision hft_rithmic_gateway)
+
+add_executable(hft_rithmic_latency_probe
+    scripts/latency_probe/rithmic_latency_probe.cpp
+)
 
 add_executable(hft_feature_golden
     tools/feature_golden_main.cpp

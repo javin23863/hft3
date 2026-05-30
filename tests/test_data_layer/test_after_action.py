@@ -37,11 +37,77 @@ def test_openfoundry_connector_validates():
 
 
 def test_packet_pdf_citations_complete():
-    from data_layer.packet.microstructure_aar_packet import build_microstructure_aar_packet
+    from data_layer.packet.microstructure_aar_packet import (
+        build_microstructure_aar_packet,
+        validate_packet_schema,
+    )
 
     packet, _ = build_microstructure_aar_packet(FIXTURE, REPO)
     assert packet["pdf_citations_complete"] is True
     assert all(c["present_on_disk"] for c in packet["pdf_citations"])
+    sim = packet["simulation_fidelity"]
+    assert sim["cpp_replay_available"] is False
+    assert sim["cpp_stack_verified"] is False
+    assert sim["queue_tracker_status"] == "stub_or_unverified"
+    assert validate_packet_schema(packet) == []
+
+
+def test_packet_simulation_fidelity_link_only(tmp_path: Path):
+    from data_layer.packet.microstructure_aar_packet import (
+        build_microstructure_aar_packet,
+        validate_packet_schema,
+    )
+
+    art = tmp_path / "run_link"
+    art.mkdir()
+    (art / "diagnostics.json").write_text(
+        json.dumps(
+            {
+                "event_id": "X",
+                "num_trades": 0,
+                "pnl_by_injection_us": {"0": 0.0},
+                "cpp_replay_available": False,
+                "cpp_stack_verified": True,
+                "cpp_stack_checks": {
+                    "gateway_init": True,
+                    "spsc_queue_roundtrip": True,
+                    "feature_extract": True,
+                    "decision_evaluate": True,
+                    "risk_precheck": True,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (art / "manifest.json").write_text(json.dumps({"data_sufficient": True}), encoding="utf-8")
+    (art / "config.yaml").write_text("model_id: HYP_5\nevent_id: X\n", encoding="utf-8")
+    packet, _ = build_microstructure_aar_packet(art, REPO)
+    assert packet["simulation_fidelity"]["queue_tracker_status"] == "link_only"
+    assert validate_packet_schema(packet) == []
+
+
+def test_packet_stack_verified_requires_all_checks(tmp_path: Path):
+    from data_layer.packet.microstructure_aar_packet import build_microstructure_aar_packet
+
+    art = tmp_path / "run_bad_stack"
+    art.mkdir()
+    (art / "diagnostics.json").write_text(
+        json.dumps(
+            {
+                "event_id": "X",
+                "num_trades": 0,
+                "pnl_by_injection_us": {"0": 0.0},
+                "cpp_stack_verified": True,
+                "cpp_stack_checks": {"gateway_init": True, "spsc_queue_roundtrip": False},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (art / "manifest.json").write_text(json.dumps({"data_sufficient": True}), encoding="utf-8")
+    (art / "config.yaml").write_text("model_id: HYP_5\nevent_id: X\n", encoding="utf-8")
+    packet, _ = build_microstructure_aar_packet(art, REPO)
+    assert packet["simulation_fidelity"]["cpp_stack_verified"] is False
+    assert packet["simulation_fidelity"]["queue_tracker_status"] == "stub_or_unverified"
 
 
 def test_packet_requires_per_trade_audit_when_trades(tmp_path):

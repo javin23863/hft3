@@ -22,13 +22,9 @@ _PARITY_SLOTS = [FeatureIndex.REALIZED_VOL_STATE, *range(41, 50)]
 
 
 def _golden_exe() -> Path | None:
-    for sub in ("", "Release", "Debug"):
-        root = _REPO / "build" / sub if sub else _REPO / "build"
-        for name in ("hft_feature_golden", "hft_feature_golden.exe"):
-            path = root / name
-            if path.is_file():
-                return path
-    return None
+    from workbench.src.sim.cpp_binary import resolve_cpp_binary
+
+    return resolve_cpp_binary(_REPO, "hft_feature_golden")
 
 
 def _run_sequence_python() -> np.ndarray:
