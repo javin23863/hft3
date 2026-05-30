@@ -29,7 +29,7 @@ class DefensiveConfig:
             "hybrid_full": "Avellaneda-Stoikov + OFI drift + VPIN-scaled lambda/toxic flags",
             "ofi_only": "AS + OFI drift (VPIN inputs zeroed; no toxic cancel from VPIN)",
             "vpin_only": (
-                "AS + VPIN-scaled lambda (unit OFI probe) + toxic flags; no book OFI"
+                "AS + VPIN lambda path (ofi_smooth=1.0 unit probe, not book OFI) + toxic flags"
             ),
             "as_baseline": "Pure Avellaneda-Stoikov (no OFI/VPIN defensive inputs)",
         }

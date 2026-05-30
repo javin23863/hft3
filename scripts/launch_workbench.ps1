@@ -75,6 +75,12 @@ if (-not $SkipPreflight) {
             'Try: git pull; pip install -r workbench/requirements.txt'
         )
     }
+
+    Write-Host 'Preflight: grader import tests...' -ForegroundColor DarkCyan
+    & python -m pytest tests/test_workbench/test_ui_imports.py tests/test_workbench/test_event_catalog.py -q --tb=line
+    if ($LASTEXITCODE -ne 0) {
+        Exit-Launcher -Message 'ERROR: workbench grader import tests failed. Run: powershell -File scripts/verify_workbench.ps1'
+    }
 }
 
 $latencySummary = Join-Path $RepoRoot 'runtime/latency_reports/latency_summary.json'

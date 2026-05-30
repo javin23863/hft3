@@ -21,7 +21,11 @@ def summarize_replay_result(
     *,
     diagnostics: Optional[Dict[str, float]] = None,
 ) -> Dict[str, Any]:
-    """Extract comparison metrics from ReplayRunner output."""
+    """Extract comparison metrics from ReplayRunner output.
+
+    net_pnl and ending_balance are raw hftbacktest balance (before fee).
+    Use net_pnl_after_fee for cross-mode PnL comparison.
+    """
     if "error" in result:
         out: Dict[str, Any] = {
             "error": result["error"],
@@ -130,8 +134,9 @@ def run_defensive_ablation_matrix(
         "eval_scope": (
             "discovery_diagnostic_single_event; "
             "OFI/AS mid from hbt.depth BBO; VPIN from MBO TRADE sync (internal book mid, "
-            "hbt.depth fallback when book empty)"
+            "hbt.depth fallback when book empty); vpin_only uses unit OFI probe not book OFI"
         ),
+        "metrics_note": "Prefer net_pnl_after_fee; net_pnl is ending balance before fee.",
         "event_id": event_meta.get("event_id"),
         "events": len(raw),
         "latency_ms": resolved_ms,

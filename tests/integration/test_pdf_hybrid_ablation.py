@@ -12,12 +12,11 @@ sys.path.insert(0, str(_REPO))
 
 from backtest.adapters.rithmic_replay_loader import resolve_event_npz
 from backtest_pipeline.src.event_meta import load_event_row
-from backtest_pipeline.src.pdf_defensive_config import DefensiveConfig
+from backtest_pipeline.src.pdf_defensive_config import all_defensive_configs
 from backtest_pipeline.src.pdf_hybrid_ablation import run_defensive_ablation_matrix
 
 
-@pytest.mark.integration
-def test_pdf_defensive_ablation_smoke_two_modes() -> None:
+def _cpi_npz_or_skip():
     event_id = "CPI_2024_09_11_TIGHT"
     try:
         npz_path = resolve_event_npz(event_id, _REPO)
@@ -29,8 +28,15 @@ def test_pdf_defensive_ablation_smoke_two_modes() -> None:
         )
     if not npz_path.is_file():
         pytest.skip(f"NPZ not on disk: {npz_path}")
-
     event_meta = load_event_row(event_id, _REPO / "data_system" / "config" / "events.csv")
+    return npz_path, event_meta
+
+
+@pytest.mark.integration
+def test_pdf_defensive_ablation_smoke_two_modes() -> None:
+    npz_path, event_meta = _cpi_npz_or_skip()
+    from backtest_pipeline.src.pdf_defensive_config import DefensiveConfig
+
     matrix = run_defensive_ablation_matrix(
         npz_path=npz_path,
         event_meta=event_meta,
@@ -42,6 +48,27 @@ def test_pdf_defensive_ablation_smoke_two_modes() -> None:
         max_steps=500,
     )
     assert len(matrix["modes"]) == 2
+    _assert_matrix_health(matrix)
+
+
+@pytest.mark.integration
+@pytest.mark.slow
+def test_pdf_defensive_ablation_four_modes_chi404_latency() -> None:
+    npz_path, event_meta = _cpi_npz_or_skip()
+    matrix = run_defensive_ablation_matrix(
+        npz_path=npz_path,
+        event_meta=event_meta,
+        latency_ms=None,
+        max_steps=500,
+    )
+    assert len(matrix["modes"]) == len(all_defensive_configs())
+    assert matrix.get("latency_source")
+    assert matrix.get("backtest_latency_note")
+    assert matrix.get("metrics_note")
+    _assert_matrix_health(matrix)
+
+
+def _assert_matrix_health(matrix: dict) -> None:
     for mode in matrix["modes"]:
         assert "error" not in mode.get("metrics", {})
         m = mode["metrics"]

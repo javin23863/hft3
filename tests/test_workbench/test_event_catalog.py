@@ -29,7 +29,11 @@ def test_hyp_5_discovery_lists_cpi_events():
     events = list_campaign_events("HYP_5", period, "MES.v.0", REPO)
     ids = [e.event_id for e in events]
     assert "CPI_2018_01_11_TIGHT" in ids
-    assert all(e.event_context == "CPI_TIGHT" for e in events)
+    for e in events:
+        if e.event_id.startswith("CPI_"):
+            assert e.event_context == "CPI_TIGHT"
+        elif e.event_id.startswith("NFP_"):
+            assert e.event_context == "NFP_TIGHT"
 
 
 def test_hyp_29_does_not_list_cpi():
@@ -37,7 +41,8 @@ def test_hyp_29_does_not_list_cpi():
     events = list_campaign_events("HYP_29", period, "MES.v.0", REPO)
     assert all("CPI" not in e.event_id for e in events)
     if events:
-        assert events[0].event_id.startswith("TOPSTEP")
+        assert events[0].event_id.startswith("PROP_FLATTEN_TOPSTEP")
+        assert events[0].event_context == "PROP_FLATTEN_TOPSTEP"
 
 
 def test_period_year_filter_excludes_wrong_years():

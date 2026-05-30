@@ -1,4 +1,4 @@
-"""WorkbenchModel protocol and shared types."""
+"""WorkbenchModel protocol and plugin types (not composition/catalog stubs)."""
 
 from __future__ import annotations
 
@@ -6,26 +6,9 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from workbench.src.core.composition import (
-    CatalogEntry,
-    CompositionTrace,
-    CompositionTraceStep,
-    DefensiveStub,
-    ModelComposition,
-    ModelRole,
-    Phase,
-)
-
 __all__ = [
-    "CatalogEntry",
-    "CompositionTrace",
-    "CompositionTraceStep",
-    "DefensiveStub",
     "Diagnostics",
-    "ModelComposition",
     "ModelConfig",
-    "ModelRole",
-    "Phase",
     "WorkbenchModel",
 ]
 

@@ -253,13 +253,18 @@ def main() -> int:
         raise SystemExit(f"NPZ empty: {npz_path}")
 
     chi404 = load_chi404_speed(args.chi404_summary.resolve())
-    latency_ms = float(args.latency_ms) if args.latency_ms is not None else chi404["backtest_latency_ms"]
+    latency_ms, latency_source, chi404_meta = resolve_replay_latency_ms(
+        latency_ms=args.latency_ms,
+        chi404_summary=args.chi404_summary,
+    )
+    if chi404_meta is not None:
+        chi404 = chi404_meta
 
     out_dir = args.out or (_REPO / "research_cards" / f"{args.event_id}_replay")
 
     print(f"event_id={args.event_id} release_date={event['release_date']}", flush=True)
     print(f"NPZ={npz_path} events={len(raw)}", flush=True)
-    print(f"latency={latency_ms:.4f} ms probe={chi404.get('probe_run_id')}", flush=True)
+    print(f"latency={latency_ms:.4f} ms ({latency_source}) probe={chi404.get('probe_run_id')}", flush=True)
 
     if args.skip_hftbacktest:
         hft_result = {"skipped": True}

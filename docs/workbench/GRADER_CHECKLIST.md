@@ -2,6 +2,10 @@
 
 Manual audit playbook for reviewing workbench runs — not invoked by the desktop shortcut.
 
+## Import rule (composition types)
+
+Catalog/composition types (`CatalogEntry`, `DefensiveStub`, `ModelComposition`, `Phase`, `ModelRole`, trace types) **must** be imported from `workbench.src.core.composition` only. `workbench.src.core.protocol` is for `ModelConfig`, `Diagnostics`, and `WorkbenchModel` only.
+
 ## A. Run a backtest (CLI — full fidelity flags)
 
 Single event:

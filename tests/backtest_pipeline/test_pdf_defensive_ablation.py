@@ -217,3 +217,17 @@ def test_resolve_replay_latency_ms_from_chi404_summary() -> None:
     assert "CHI404" in source
     assert chi404 is not None
     assert chi404.get("backtest_latency_ms") == ms
+
+
+def test_resolve_replay_latency_ms_rejects_chi404_out_of_band(tmp_path: Path) -> None:
+    import json
+
+    from backtest_pipeline.src.chi404_latency import resolve_replay_latency_ms
+
+    bad = tmp_path / "bad_latency.json"
+    bad.write_text(
+        json.dumps({"network": {"rithmic_tcp_65000": {"p99_ms": 0.01}}}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="outside BLUEPRINT band"):
+        resolve_replay_latency_ms(latency_ms=None, chi404_summary=bad)

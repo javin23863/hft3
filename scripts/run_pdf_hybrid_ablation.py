@@ -14,11 +14,7 @@ if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
 from backtest.adapters.rithmic_replay_loader import resolve_event_npz
-from backtest_pipeline.src.chi404_latency import (
-    BACKTEST_LATENCY_NOTE,
-    DEFAULT_CHI404_SUMMARY,
-    resolve_replay_latency_ms,
-)
+from backtest_pipeline.src.chi404_latency import DEFAULT_CHI404_SUMMARY
 from backtest_pipeline.src.event_meta import load_event_row
 from backtest_pipeline.src.pdf_hybrid_ablation import run_defensive_ablation_matrix
 from backtest_pipeline.src.runner import QUEUE_MODELS
@@ -62,7 +58,8 @@ def write_ablation_report(out_dir: Path, matrix: dict, event_meta: dict) -> None
             "- `vpin_only`: VPIN lambda/toxic (unit OFI probe; no book OFI)",
             "- `hybrid_full`: both defensive layers",
             "",
-            "`net_pnl` is ending balance; `net_pnl_after_fee` = balance - fee.",
+            "`net_pnl` is ending balance; prefer `net_pnl_after_fee` for comparison.",
+            matrix.get("metrics_note", ""),
         ]
     )
     (out_dir / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -112,24 +109,19 @@ def main() -> int:
         print(f"NPZ missing: {npz_path}", file=sys.stderr)
         return 1
 
-    latency_ms, latency_source, chi404_meta = resolve_replay_latency_ms(
-        latency_ms=args.latency_ms,
-        chi404_summary=args.chi404_summary,
-    )
-
-    print(f"Running 4-mode ablation on {npz_path} (latency={latency_ms:.4f} ms, {latency_source}) ...", flush=True)
+    print(f"Running 4-mode ablation on {npz_path} ...", flush=True)
     matrix = run_defensive_ablation_matrix(
         npz_path=npz_path,
         event_meta=event_meta,
         tick_size=args.tick_size,
-        latency_ms=latency_ms,
+        latency_ms=args.latency_ms,
+        chi404_summary=args.chi404_summary,
         queue_model=args.queue_model,
         step_ns=args.step_ns,
     )
-    matrix["latency_source"] = latency_source
-    matrix["backtest_latency_note"] = BACKTEST_LATENCY_NOTE
-    if chi404_meta is not None:
-        matrix["chi404_measured_speed"] = chi404_meta
+    latency_ms = float(matrix["latency_ms"])
+    latency_source = str(matrix.get("latency_source", ""))
+    print(f"latency={latency_ms:.4f} ms ({latency_source})", flush=True)
 
     errors: list[str] = []
     for mode in matrix.get("modes", []):
