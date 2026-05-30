@@ -1,6 +1,7 @@
 # Launch HFT3 Streamlit workbench from repo root (desktop shortcut target).
 param(
     [switch]$SkipBrowser,
+    [switch]$SkipPreflight,
     [int]$Port = 8501
 )
 
@@ -9,14 +10,27 @@ $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Set-Location $RepoRoot
 $env:PYTHONPATH = $RepoRoot
 
+function Exit-Launcher {
+    param(
+        [int]$Code = 1,
+        [string]$Message = ''
+    )
+    if ($Message) {
+        Write-Host $Message -ForegroundColor Red
+    }
+    if ([Environment]::UserInteractive -and $Host.Name -eq 'ConsoleHost') {
+        Read-Host 'Press Enter to close'
+    }
+    exit $Code
+}
+
 function Test-CommandOnPath {
     param([string]$Name)
     $null -ne (Get-Command $Name -ErrorAction SilentlyContinue)
 }
 
 if (-not (Test-CommandOnPath 'python')) {
-    Write-Host 'ERROR: python not on PATH. Install Python 3.12+ and retry.' -ForegroundColor Red
-    exit 1
+    Exit-Launcher -Message 'ERROR: python not on PATH. Install Python 3.12+ and retry.'
 }
 
 $streamlitOk = $false
@@ -26,8 +40,28 @@ try {
 } catch {}
 
 if (-not $streamlitOk) {
-    Write-Host 'ERROR: streamlit not installed. Run: pip install -r workbench/requirements.txt' -ForegroundColor Red
-    exit 1
+    Exit-Launcher -Message 'ERROR: streamlit not installed. Run: pip install -r workbench/requirements.txt'
+}
+
+if (-not $SkipPreflight) {
+    Write-Host 'Preflight: workbench imports...' -ForegroundColor DarkCyan
+    $preflight = @"
+import sys
+from pathlib import Path
+root = Path(r'$RepoRoot')
+if str(root) not in sys.path:
+    sys.path.insert(0, str(root))
+from workbench.src.core.composition import DefensiveStub, ModelComposition
+from workbench.ui.campaign_panel import get_session_composition
+print('workbench import OK')
+"@
+    & python -c $preflight
+    if ($LASTEXITCODE -ne 0) {
+        Exit-Launcher -Message @(
+            'ERROR: workbench import failed (DefensiveStub / campaign_panel).',
+            'Try: git pull; remove workbench/**/__pycache__; pip install -r workbench/requirements.txt'
+        )
+    }
 }
 
 $latencySummary = Join-Path $RepoRoot 'runtime/latency_reports/latency_summary.json'
@@ -48,3 +82,7 @@ if (-not $SkipBrowser) {
 }
 
 & python -m streamlit run workbench/ui/app.py --server.headless true --server.port $Port
+$exitCode = $LASTEXITCODE
+if ($exitCode -ne 0) {
+    Exit-Launcher -Code $exitCode -Message "Streamlit exited with code $exitCode"
+}
