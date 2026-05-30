@@ -12,6 +12,13 @@ _REPO = Path(__file__).resolve().parents[2]
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(_REPO / ".env")
+except ImportError:
+    pass
+
 from workbench.src.data.catalog_backfill import (
     download_events,
     estimate_download_cost_usd,

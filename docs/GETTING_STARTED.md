@@ -101,8 +101,14 @@ Expect some skips when optional C++ golden binaries or CHI404 fixtures are absen
 events.csv → Databento NPZ → run_event_replay.py → research_cards/
 ```
 
-1. Set `DATABENTO_API_KEY` in `.env`.
-2. Place or download NPZ under `data/npz/`.
+1. Copy `.env.example` to `.env` and set `DATABENTO_API_KEY` (see [vault/WORKSTATION_ONE_LANE.md](vault/WORKSTATION_ONE_LANE.md)).
+2. Download missing NPZ via Databento event windows (not multi-year pulls):
+
+```bash
+python workbench/scripts/backfill_catalog.py --model HYP_5 --symbol MES.v.0 --dry-run
+python workbench/scripts/backfill_catalog.py --model HYP_5 --symbol MES.v.0 --download-missing --max-cost-usd 25
+```
+
 3. Sync CHI404 latency summary when available: `bash scripts/chi404_sync_trial_data.sh`.
 4. Primary macro replay:
 

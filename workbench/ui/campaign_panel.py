@@ -391,6 +391,17 @@ def model_selector_panel(repo: Path) -> Tuple[str, str, str]:
     camp = st.session_state.wb_active_campaign or ""
     workflow_status_strip(repo, model, symbol, camp)
 
+    preview = campaign_preview(model, symbol, repo)
+    runnable = sum(
+        1
+        for pdata in preview.get("periods", {}).values()
+        for ev in pdata.get("events", [])
+        if ev.get("npz_present")
+    )
+    total_catalog = sum(len(pdata.get("events", [])) for pdata in preview.get("periods", {}).values())
+    if total_catalog:
+        st.info(f"Runnable now: **{runnable} / {total_catalog}** walk-forward events (NPZ on disk)")
+
     cfg = configs[model]
     _render_dataset_panel(repo, model, symbol, cfg)
 
@@ -434,7 +445,10 @@ def model_selector_panel(repo: Path) -> Tuple[str, str, str]:
             "25",
         ]
         subprocess.Popen(cmd, cwd=str(repo))
-        st.info("Backfill started (max $25)")
+        st.info(
+            "Backfill started (max $25). Uses DATABENTO_API_KEY from `.env`; "
+            "ES fallback for pre-2019 MES windows per handoff PDF §8."
+        )
 
     with st.expander("Advanced — audit grade & full model grid"):
         audit = st.checkbox(

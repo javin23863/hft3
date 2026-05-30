@@ -51,6 +51,8 @@ class WorkbenchEngine:
         model_id: str,
         event_id: str,
         *,
+        symbol: Optional[str] = None,
+        npz_path: Optional[Path] = None,
         chi404_summary: Optional[Path] = None,
         seed: int = 42,
         history_years_available: float = 0.0,
@@ -63,10 +65,15 @@ class WorkbenchEngine:
         effective = composition or CompositionOrchestrator.default_composition(model_id)
         primary_id = effective.primary_model_id
         cfg = build_models_config()[primary_id]
-        npz_path = resolve_event_npz(event_id, self.repo_root)
+        if npz_path is not None:
+            resolved_npz = Path(npz_path)
+            if not resolved_npz.is_file():
+                raise FileNotFoundError(f"NPZ missing: {resolved_npz}")
+        else:
+            resolved_npz = resolve_event_npz(event_id, self.repo_root, symbol=symbol)
         loader = L3Loader(require_snapshot_on_gap=True)
         loader.mark_snapshot_available()
-        raw = loader.load(str(npz_path))
+        raw = loader.load(str(resolved_npz))
 
         chi404 = chi404_summary or (self.repo_root / "runtime/latency_reports/latency_summary.json")
         if chi404.is_file():
@@ -79,7 +86,7 @@ class WorkbenchEngine:
             measured_ms = cpp_profile.measured_production_p99_ms
 
         manifest = DatasetManifest.from_loader(
-            npz_path,
+            resolved_npz,
             event_id,
             loader.report,
             min_history_years=cfg.min_history_years,
@@ -93,7 +100,7 @@ class WorkbenchEngine:
             self.repo_root,
             primary_id,
             event_id,
-            npz_path,
+            resolved_npz,
             raw,
             seed=seed,
             chi404_summary=chi404 if chi404.is_file() else None,
@@ -145,7 +152,7 @@ class WorkbenchEngine:
             inj_us = max(0.0, lat_ms * 1000.0 - cpp_profile.measured_production_p99_us)
             sub_policy = LatencyPolicy.from_cpp_profile(cpp_profile, injection_us=inj_us)
             sub = RunContext.build(
-                self.repo_root, model_id, event_id, npz_path, raw,
+                self.repo_root, model_id, event_id, resolved_npz, raw,
                 seed=seed, measured_p99_ms=lat_ms,
                 latency_policy=sub_policy,
                 chi404_summary=chi404 if chi404.is_file() else None,

@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Set
 
 import yaml
 
+from data_system.src.npz_resolver import resolve_npz_for_event
 from data_system.src.events_parser import load_and_parse_events
 from decision_engine.python.src.walk_forward import ValidationPeriod, WalkForwardValidator
 
@@ -27,6 +28,8 @@ class EventSpec:
     end_utc: Any
     source: str = ""
     source_url: str = ""
+    parsed_symbols: tuple[str, ...] = ()
+    npz_symbol_used: str = ""
 
 
 def _repo_paths(repo_root: Path) -> dict[str, Path]:
@@ -102,10 +105,6 @@ def _release_year(release_date: str) -> int:
     return datetime.strptime(release_date, "%Y-%m-%d").year
 
 
-def _npz_path(repo_root: Path, event_id: str, symbol: str) -> Path:
-    return repo_root / "data" / "npz" / f"{symbol}_{event_id}_mbo.npz"
-
-
 from workbench.src.data.personal_lock import is_locked, is_personal_sandbox_date, personal_date_range
 
 
@@ -148,7 +147,8 @@ def list_campaign_events(
         if ctx not in allowed:
             continue
         eid = str(row["event_id"])
-        npz = _npz_path(repo_root, eid, symbol)
+        parsed = tuple(str(s) for s in syms)
+        npz, present, sym_used = resolve_npz_for_event(repo_root, eid, symbol, parsed)
         specs.append(
             EventSpec(
                 event_id=eid,
@@ -157,11 +157,13 @@ def list_campaign_events(
                 event_context=ctx,
                 symbol=symbol,
                 npz_path=npz,
-                npz_present=npz.is_file(),
+                npz_present=present,
                 start_utc=row["start_utc"],
                 end_utc=row["end_utc"],
                 source=str(row.get("source", "")),
                 source_url=str(row.get("source_url", "")),
+                parsed_symbols=parsed,
+                npz_symbol_used=sym_used if present else "",
             )
         )
     specs.sort(key=lambda s: s.release_date)
@@ -198,6 +200,7 @@ def campaign_preview(
                     "release_date": e.release_date,
                     "event_context": e.event_context,
                     "npz_present": e.npz_present,
+                    "npz_symbol_used": e.npz_symbol_used,
                 }
                 for e in events
             ],

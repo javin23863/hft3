@@ -10,13 +10,24 @@ from pathlib import Path
 _REPO = Path(__file__).resolve().parents[1]
 
 
+def _load_repo_env() -> None:
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv(_REPO / ".env")
+    except ImportError:
+        pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    _load_repo_env()
     parser = argparse.ArgumentParser(prog="workbench", description="Microstructure workbench")
     sub = parser.add_subparsers(dest="command")
 
     run_p = sub.add_parser("run", help="Run model backtest on event window")
     run_p.add_argument("--model", required=True, help="HYP_N or PDF_MODEL_N")
     run_p.add_argument("--event-id", required=True)
+    run_p.add_argument("--symbol", default=None, help="Research symbol e.g. MES.v.0")
     run_p.add_argument("--chi404-summary", default="runtime/latency_reports/latency_summary.json")
     run_p.add_argument("--seed", type=int, default=42)
     run_p.add_argument("--history-years", type=float, default=0.0)
@@ -125,6 +136,7 @@ def main(argv: list[str] | None = None) -> int:
     out = engine.run(
         args.model,
         args.event_id,
+        symbol=args.symbol,
         chi404_summary=chi404 if chi404.is_file() else None,
         seed=args.seed,
         history_years_available=args.history_years,

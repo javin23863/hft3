@@ -552,6 +552,8 @@ def run_campaign(
                 out = engine.run(
                     primary_id,
                     ev.event_id,
+                    symbol=symbol,
+                    npz_path=ev.npz_path,
                     chi404_summary=chi404_summary,
                     seed=seed,
                     history_years_available=float(years_avail),

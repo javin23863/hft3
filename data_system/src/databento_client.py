@@ -27,6 +27,7 @@ class DatabentoResearchClient:
         dataset="GLBX.MDP3",
         schema="mbo",
         stype_in: str = "continuous",
+        requested_symbol: str | None = None,
     ):
         """
         Calculates exact cost per Section 11 math, checks budget, and downloads if approved.
@@ -62,9 +63,12 @@ class DatabentoResearchClient:
         metrics = self.budget.calculate_cost_metrics(cost_estimate, len(symbols), start_utc, end_utc)
         
         # 5. Record to manifest.parquet
+        resolved_symbol = symbols[0] if symbols else ""
         record = {
             "event_id": event_id,
             "symbols": str(symbols),
+            "requested_symbol": requested_symbol or resolved_symbol,
+            "resolved_symbol": resolved_symbol,
             "start_utc": start_utc,
             "end_utc": end_utc,
             "cost": cost_estimate,

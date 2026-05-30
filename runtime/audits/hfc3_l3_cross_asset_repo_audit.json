@@ -1,0 +1,212 @@
+{
+  "generated_at_utc": "2026-05-30T15:51:25.885978+00:00",
+  "repo_root": "C:\\Users\\MSI\\Documents\\GitHub\\hft3",
+  "phase": "hfc3_l3_cross_asset_repo_audit",
+  "answers": {
+    "1_symbols_with_event_windows": [
+      "ES.v.0",
+      "MES.v.0",
+      "MNQ.v.0",
+      "NQ.v.0",
+      "ZB.v.0",
+      "ZN.v.0"
+    ],
+    "2_symbols_with_mbo_downloads": {
+      "ES.v.0": 8,
+      "MES.v.0": 44
+    },
+    "3_symbols_with_npz_conversion": {
+      "ES.v.0": 8,
+      "MES.v.0": 44
+    },
+    "4_symbols_hftbacktest_replay_ready": {
+      "ES.v.0": 8,
+      "MES.v.0": 44
+    },
+    "5_event_types_supported": [
+      "CPI",
+      "NFP",
+      "PROP_FLATTEN_TOPSTEP"
+    ],
+    "6_event_types_missing": [
+      "PPI",
+      "CORE_PPI",
+      "PCE",
+      "CORE_PCE",
+      "UNEMPLOYMENT_CLAIMS",
+      "FOMC_STATEMENT",
+      "FOMC_PRESS",
+      "FOMC_MINUTES",
+      "FED_SPEAKER",
+      "TREASURY_AUCTION",
+      "TREASURY_REFUNDING",
+      "EIA_CRUDE",
+      "EIA_NATGAS",
+      "USDA_WASDE",
+      "USDA_CROP",
+      "CASH_EQUITY_OPEN",
+      "FUTURES_ROLL",
+      "FUTURES_EXPIRY",
+      "OPTIONS_EXPIRY",
+      "PROP_REOPEN",
+      "FRIDAY_CLOSE"
+    ],
+    "7_true_mbo_derived_features": [
+      "MBOFeatureExtractor 64-dim vector slots 0-26 (aggressor, depth, spread, queue, iceberg, vol)",
+      "OrderBook L3 apply_event ADD/CANCEL/MODIFY/TRADE",
+      "Regime slots 41-49 from RegimeFilter posterior"
+    ],
+    "8_cross_asset_placeholders_only": [
+      "MarketState.cross_asset_features dict \u2014 empty in pipeline",
+      "FeatureIndex.MAX_CONTRACT_TRADE_IMBALANCE slot 34 \u2014 unpopulated",
+      "HYP 16-20 cross-asset hypotheses gated by HFT3_CROSS_ASSET env"
+    ],
+    "9_single_instrument_code_paths": [
+      "features_engine/src/features/mbo_features.py:114 \u2014 one OrderBook per MBOFeatureExtractor",
+      "features_engine/src/pipeline/market_state_pipeline.py:26 \u2014 one MBOFeatureExtractor",
+      "MBOEvent has no symbol field \u2014 single-stream assumption"
+    ],
+    "10_es_mes_only_assumptions": [
+      "backtest_pipeline/src/runner.py:30,50 \u2014 default product=MES, single BacktestAsset",
+      "backtest_pipeline/src/signal_backtester.py \u2014 TICK_VALUE_MES default",
+      "features_engine/src/structural_models/model_02_cross_asset_lead_lag.py \u2014 leader ES target MES",
+      "workbench default symbol MES.v.0; ES.v.0 fallback for pre-2019 Discovery only"
+    ],
+    "11_cpi_nfp_only_assumptions": [
+      "data_system/config/events.csv \u2014 CPI\u00d719, NFP\u00d733, PROP\u00d74 only",
+      "features_engine/src/regime/event_context.py:52-55 \u2014 explicit CPI_TIGHT/NFP_TIGHT",
+      "No FOMC or cash-open rows in events.csv (labels exist in event_context only)"
+    ],
+    "12_multi_symbol_mbo_tensor_changes_needed": [
+      "backtest/adapters/rithmic_replay_loader.py \u2014 resolve_event_npz single path per event",
+      "backtest_pipeline/src/converter.py \u2014 one symbol per NPZ file",
+      "No runtime/event_snapshots/ multi-symbol tensor builder existed before hfc3/",
+      "ReplayRunner accepts one data_path only"
+    ]
+  },
+  "events_csv": {
+    "row_count": 56,
+    "event_type_counts": {
+      "NFP": 33,
+      "CPI": 19,
+      "PROP_FLATTEN_TOPSTEP": 4
+    },
+    "symbols_in_csv": [
+      "ES.v.0",
+      "MES.v.0",
+      "MNQ.v.0",
+      "NQ.v.0",
+      "ZB.v.0",
+      "ZN.v.0"
+    ],
+    "window_names": [
+      "MAIN",
+      "TIGHT"
+    ],
+    "required_types_missing": [
+      "PPI",
+      "CORE_PPI",
+      "PCE",
+      "CORE_PCE",
+      "UNEMPLOYMENT_CLAIMS",
+      "FOMC_STATEMENT",
+      "FOMC_PRESS",
+      "FOMC_MINUTES",
+      "FED_SPEAKER",
+      "TREASURY_AUCTION",
+      "TREASURY_REFUNDING",
+      "EIA_CRUDE",
+      "EIA_NATGAS",
+      "USDA_WASDE",
+      "USDA_CROP",
+      "CASH_EQUITY_OPEN",
+      "FUTURES_ROLL",
+      "FUTURES_EXPIRY",
+      "OPTIONS_EXPIRY",
+      "PROP_REOPEN",
+      "FRIDAY_CLOSE"
+    ],
+    "required_types_present": [
+      "CPI",
+      "NFP",
+      "PROP_FLATTEN_TOPSTEP"
+    ]
+  },
+  "npz_inventory": {
+    "count": 52,
+    "by_symbol": {
+      "ES.v.0": 8,
+      "MES.v.0": 44
+    },
+    "by_event_type_prefix": {
+      "CPI": 19,
+      "NFP": 33
+    },
+    "paths_sample": [
+      "data\\npz\\ES.v.0_CPI_2018_01_11_TIGHT_mbo.npz",
+      "data\\npz\\ES.v.0_CPI_2019_02_13_TIGHT_mbo.npz",
+      "data\\npz\\ES.v.0_NFP_2018_01_05_TIGHT_mbo.npz",
+      "data\\npz\\ES.v.0_NFP_2018_02_02_TIGHT_mbo.npz",
+      "data\\npz\\ES.v.0_NFP_2018_03_09_TIGHT_mbo.npz"
+    ]
+  },
+  "hot_memory_universe": {
+    "instrument_count": 39,
+    "tiers": {
+      "HOT_EXECUTABLE": 22,
+      "HOT_SENSOR": 4,
+      "WARM": 13
+    },
+    "mbo_tradable_canonical": [],
+    "contextual_sensors": [
+      "VIX",
+      "VVIX"
+    ]
+  },
+  "manifest": {
+    "rows": 52,
+    "total_cost_usd": 1.1509207740419998
+  },
+  "code_path_assumptions": {
+    "single_order_book": [
+      "features_engine/src/features/mbo_features.py:114 \u2014 one OrderBook per MBOFeatureExtractor",
+      "features_engine/src/pipeline/market_state_pipeline.py:26 \u2014 one MBOFeatureExtractor",
+      "MBOEvent has no symbol field \u2014 single-stream assumption"
+    ],
+    "cross_asset_placeholder": [
+      "features_engine/src/pipeline/market_state_pipeline.py:31,67 \u2014 cross_asset_features never populated",
+      "backtest_pipeline/src/hft_strategy.py \u2014 cross_asset_features={} in depth fallback",
+      "features_engine/src/hypotheses/modules.py:401+ \u2014 HYP 16-20 expect ES/NQ/ZN keys"
+    ],
+    "es_mes_defaults": [
+      "backtest_pipeline/src/runner.py:30,50 \u2014 default product=MES, single BacktestAsset",
+      "backtest_pipeline/src/signal_backtester.py \u2014 TICK_VALUE_MES default",
+      "features_engine/src/structural_models/model_02_cross_asset_lead_lag.py \u2014 leader ES target MES",
+      "workbench default symbol MES.v.0; ES.v.0 fallback for pre-2019 Discovery only"
+    ],
+    "cpi_nfp_focus": [
+      "data_system/config/events.csv \u2014 CPI\u00d719, NFP\u00d733, PROP\u00d74 only",
+      "features_engine/src/regime/event_context.py:52-55 \u2014 explicit CPI_TIGHT/NFP_TIGHT",
+      "No FOMC or cash-open rows in events.csv (labels exist in event_context only)"
+    ],
+    "mbo_canonical": [
+      "data_system/src/databento_client.py:28 \u2014 schema=mbo GLBX.MDP3",
+      "features_engine/src/features/npz_feed.py \u2014 HftBacktest structured MBO array",
+      "No L1/L2 download path in databento_client (correct for this stack)"
+    ],
+    "multi_symbol_tensor_gaps": [
+      "backtest/adapters/rithmic_replay_loader.py \u2014 resolve_event_npz single path per event",
+      "backtest_pipeline/src/converter.py \u2014 one symbol per NPZ file",
+      "No runtime/event_snapshots/ multi-symbol tensor builder existed before hfc3/",
+      "ReplayRunner accepts one data_path only"
+    ]
+  },
+  "latency_bands_ms": [
+    0.5,
+    1.0,
+    2.0,
+    5.0,
+    10.0
+  ],
+  "latency_bands_source": "backtest_pipeline/src/runner.py:16"
+}
