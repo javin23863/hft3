@@ -22,8 +22,14 @@ fi
 smbpasswd -e "$SMB_USER"
 
 mkdir -p /etc/samba/smb.conf.d
-grep -q 'include = /etc/samba/smb.conf.d' /etc/samba/smb.conf || \
-  echo 'include = /etc/samba/smb.conf.d/*.conf' >> /etc/samba/smb.conf
+if ! grep -q 'smb.conf.d' /etc/samba/smb.conf; then
+  sed -i '/^\[global\]/a \   include = /etc/samba/smb.conf.d/*.conf' /etc/samba/smb.conf
+fi
+# Remove misplaced includes appended outside [global] (common misconfig).
+sed -i '/^include = \/etc\/samba\/smb.conf.d/d' /etc/samba/smb.conf
+if ! grep -q 'smb.conf.d' /etc/samba/smb.conf; then
+  sed -i '/^\[global\]/a \   include = /etc/samba/smb.conf.d/*.conf' /etc/samba/smb.conf
+fi
 
 cat > /etc/samba/smb.conf.d/rtrader_watch.conf <<EOF
 [rtrader_watch]

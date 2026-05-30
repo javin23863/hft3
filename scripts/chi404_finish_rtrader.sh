@@ -15,7 +15,16 @@ bash "$REPO/infrastructure/chi404/10_rtrader_smb_share.sh"
 
 echo "=== Windows VM (requires ${WINDOWS_ISO:-/root/hft3/installers/windows.iso}) ==="
 if [[ -f "${WINDOWS_ISO:-/root/hft3/installers/windows.iso}" ]]; then
+  if [[ "${RTRADER_VM_RECREATE:-0}" == "1" ]]; then
+    echo "RTRADER_VM_RECREATE=1 — VM will be rebuilt with VirtIO defaults"
+  fi
   bash "$REPO/infrastructure/chi404/11_rtrader_windows_vm.sh"
+  if grep -q 'using libvirt default NAT' "$REPO/../logs/rtrader/vm_setup.log" 2>/dev/null || \
+     grep -q 'using libvirt default NAT' /root/hft3/logs/rtrader/vm_setup.log 2>/dev/null; then
+    echo "VM network: NAT fallback (bridge not present)"
+  elif virsh dumpxml hft3-rtrader-win 2>/dev/null | grep -q "bridge="; then
+    echo "VM network: bridged"
+  fi
 else
   echo "SKIP VM create — upload windows.iso then re-run 11_rtrader_windows_vm.sh"
 fi

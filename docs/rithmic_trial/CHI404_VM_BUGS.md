@@ -1,6 +1,6 @@
 # CHI404 Windows VM — bug notes for next dev
 
-Handoff from May 2026 KVM + R|Trader trial lane work. Read with [README.md](README.md) and `AGENTS.md` § topology (CHI404 only; no workstation capture).
+Handoff from May 2026 KVM + R|Trader trial lane work. Canonical ops spec: **hft3_vm_modifications.pdf**. Read with [README.md](README.md) and `AGENTS.md` § topology (CHI404 only; no workstation capture).
 
 ## What works on CHI404 bare metal
 
@@ -97,7 +97,7 @@ Mouse clicks at wrong coords silently no-op. **`Alt+N`** works reliably for Next
 
 ### 6. `vncdo type` and OOBE password
 
-Special characters and shift state break password confirmation. Use lowercase test password via explicit field clicks, or finish password on console manually. Planned admin password in autounattend: `Hft3Vm2026!` (plain text in XML — rotate in prod).
+Special characters and shift state break password confirmation. Use explicit field clicks or finish password on console manually. Set **`VM_ADMIN_PASSWORD`** in `/root/hft3/.env` to match the VM Administrator password (autounattend default: `Hft3Vm2026` — rotate in prod).
 
 ### 7. Wine path deprecated
 
@@ -138,15 +138,33 @@ python3 -m data_system.rithmic_trial.pipeline process \
 # .\scripts\run_roundtrip_speedtest.ps1 --remote chi404 --samples 20
 ```
 
-## Recreate VM with VirtIO (when ready)
+## Recreate VM with VirtIO defaults
+
+[`11_rtrader_windows_vm.sh`](../../infrastructure/chi404/11_rtrader_windows_vm.sh) uses VirtIO disk/NIC, 16 GB RAM, 120 GB disk by default. Override via `RTRADER_VM_*` in `/root/hft3/.env`. Bridge `br0` is used when present; otherwise NAT fallback.
 
 ```bash
-export RTRADER_VM_RECREATE=1   # future flag in 11_rtrader_windows_vm.sh
-# Or manual: virsh destroy hft3-rtrader-win; virsh undefine hft3-rtrader-win  # NO --remove-all-storage
+export RTRADER_VM_RECREATE=1
 bash /root/hft3/repo/infrastructure/chi404/11_rtrader_windows_vm.sh
 ```
 
+Never use `virsh undefine --remove-all-storage` (deletes ISOs under `/root/hft3/installers/`).
+
 During install with VirtIO disk: **Load driver** → virtio ISO → `viostor\w10\amd64` (or matching folder). Install VirtIO NetKVM after first boot.
+
+**Install-time SATA fallback:** set `RTRADER_VM_DISK_BUS=sata` if VNC cannot click Load driver.
+
+**NAT NIC:** script uses **e1000** on NAT until guest NetKVM is installed (`RTRADER_VM_NIC_MODEL=virtio` on bridged `br0` only).
+
+**Post-install (required):**
+
+```bash
+bash /root/hft3/repo/scripts/chi404_vm_boot_disk.sh   # eject windows.iso, boot hd
+bash /root/hft3/repo/scripts/chi404_vm_oobe_offline.sh # optional: blank pwd + skip OOBE
+# Or finish OOBE in VNC: set password to match `VM_ADMIN_PASSWORD` in `/root/hft3/.env`
+bash /root/hft3/repo/scripts/chi404_vm_complete_install.sh  # language→custom→disk automation
+```
+
+Helper scripts: `chi404_vm_fix_nic.sh`, `chi404_vm_boot_disk.sh`, `chi404_vm_oobe_offline.sh`, `chi404_vm_complete_install.sh`.
 
 ## Provider ticket (only if `/dev/kvm` missing)
 
