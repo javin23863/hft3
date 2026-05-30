@@ -56,6 +56,7 @@ class ReplayRunner:
         queue_model: str = "LogProbQueueModel2",
         step_ns: int = 100_000,
         use_combined_strategy: bool = True,
+        max_steps: Optional[int] = None,
     ) -> Dict:
         hbt = self.build_backtest(latency_ms, queue_model)
         strategy = None
@@ -84,6 +85,8 @@ class ReplayRunner:
             elif strategy is not None:
                 strategy.on_step(hbt)
             steps += 1
+            if max_steps is not None and steps >= max_steps:
+                break
 
         state = hbt.state_values(0)
         return {

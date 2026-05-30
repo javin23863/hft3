@@ -1,0 +1,50 @@
+"""Integration: PDF defensive ablation on real NPZ (skip if missing)."""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+import pytest
+
+_REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(_REPO))
+
+from backtest.adapters.rithmic_replay_loader import resolve_event_npz
+from backtest_pipeline.src.event_meta import load_event_row
+from backtest_pipeline.src.pdf_defensive_config import DefensiveConfig
+from backtest_pipeline.src.pdf_hybrid_ablation import run_defensive_ablation_matrix
+
+
+@pytest.mark.integration
+def test_pdf_defensive_ablation_smoke_two_modes() -> None:
+    event_id = "CPI_2024_09_11_TIGHT"
+    try:
+        npz_path = resolve_event_npz(event_id, _REPO)
+    except FileNotFoundError:
+        pytest.skip(
+            f"Real NPZ missing for {event_id}. "
+            "Run: python scripts/run_offline_pipeline.py --skip-download "
+            f"--event-id {event_id}"
+        )
+    if not npz_path.is_file():
+        pytest.skip(f"NPZ not on disk: {npz_path}")
+
+    event_meta = load_event_row(event_id, _REPO / "data_system" / "config" / "events.csv")
+    matrix = run_defensive_ablation_matrix(
+        npz_path=npz_path,
+        event_meta=event_meta,
+        latency_ms=1.0,
+        configs=[
+            DefensiveConfig(use_ofi=False, use_vpin=False),
+            DefensiveConfig(use_ofi=True, use_vpin=True),
+        ],
+        max_steps=500,
+    )
+    assert len(matrix["modes"]) == 2
+    for mode in matrix["modes"]:
+        assert "error" not in mode.get("metrics", {})
+        m = mode["metrics"]
+        assert m["steps"] > 0
+        assert "net_pnl_after_fee" in m
+        assert "quote_refresh_count" in m

@@ -27,6 +27,30 @@ python -m data_system.rithmic_trial.pipeline replay-event \
   --event-id CPI_2024_09_11_TIGHT
 ```
 
+### PDF_MODEL_4 hybrid (structural stack + queue fills)
+
+**When:** Trial Avellaneda–Stoikov hybrid execution with PDF_MODEL_1 OFI + PDF_MODEL_3 VPIN on the same Databento NPZ.
+
+```bash
+python scripts/run_pdf_hybrid_replay.py --event-id CPI_2024_09_11_TIGHT
+```
+
+Or via event replay:
+
+```bash
+python scripts/run_event_replay.py --event-id CPI_2024_09_11_TIGHT --engine pdf_hybrid
+```
+
+See [docs/structural_models/PDF_HYBRID_REPLAY.md](../structural_models/PDF_HYBRID_REPLAY.md). Output: `research_cards/PDF_MODEL_4_hybrid_replay/`.
+
+Ablation matrix (all four defensive modes):
+
+```bash
+python scripts/run_pdf_hybrid_ablation.py --event-id CPI_2024_09_11_TIGHT
+```
+
+Output: `research_cards/PDF_MODEL_4_defensive_ablation/`.
+
 ## 2. Single-hypothesis drill-down
 
 **When:** One hypothesis family on the same event NPZ.
@@ -103,7 +127,7 @@ Seven models from [algorithmic_trading_strategy_development.pdf](../references/a
 - Specs: [docs/structural_models/PDF_MODELS.md](../structural_models/PDF_MODELS.md)
 - Registry: `get_structural_models()` (not `get_active_hypotheses()`)
 
-Macro event replay (`run_event_replay.py`) runs HYP backtests only; PDF models are evaluated offline via pytest and future research hooks.
+Macro event replay (`run_event_replay.py`) runs HYP backtests by default; PDF hybrid replay is available via `--engine pdf_hybrid` or [PDF_HYBRID_REPLAY.md](../structural_models/PDF_HYBRID_REPLAY.md).
 
 ## 6. Microstructure workbench (unified 51-model research)
 

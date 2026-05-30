@@ -19,13 +19,13 @@ if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
 from backtest.adapters.rithmic_replay_loader import resolve_event_npz
+from backtest_pipeline.src.chi404_latency import DEFAULT_CHI404_SUMMARY, load_chi404_speed, resolve_replay_latency_ms
+from backtest_pipeline.src.event_meta import load_event_row
 from backtest_pipeline.src.runner import ReplayRunner
 from backtest_pipeline.src.signal_backtester import BacktestResult, SignalBacktester
-from data_system.src.events_parser import load_and_parse_events
 from features_engine.src.features.npz_feed import load_npz_events
 from features_engine.src.hypotheses.registry import get_active_hypotheses
 
-DEFAULT_CHI404_SUMMARY = _REPO / "runtime" / "latency_reports" / "latency_summary.json"
 DEFAULT_EVENTS_CSV = _REPO / "data_system" / "config" / "events.csv"
 
 
@@ -34,60 +34,6 @@ def _relative_repo_path(path: Path) -> str:
         return str(path.resolve().relative_to(_REPO.resolve())).replace("\\", "/")
     except ValueError:
         return str(path.resolve()).replace("\\", "/")
-
-
-def load_chi404_speed(summary_path: Path) -> dict[str, Any]:
-    if not summary_path.is_file():
-        raise FileNotFoundError(
-            f"CHI404 latency summary missing: {summary_path}. "
-            "Run scripts/latency_probe/run_all.sh on CHI404 or chi404_sync_trial_data.sh."
-        )
-    s = json.loads(summary_path.read_text(encoding="utf-8"))
-    network = s.get("network") or {}
-    rithmic_tcp = network.get("rithmic_tcp_65000") or {}
-    gateway = network.get("gateway_ping") or {}
-    cyclictest = s.get("cyclictest") or {}
-    trial = s.get("trial_order_ack_appendix") or {}
-
-    rithmic_tcp_p99_ms = rithmic_tcp.get("p99_ms")
-    if not isinstance(rithmic_tcp_p99_ms, (int, float)):
-        raise ValueError("CHI404 summary has no rithmic_tcp_65000 p99_ms")
-
-    return {
-        "probe_run_id": s.get("run_id"),
-        "probe_timestamp_utc": s.get("timestamp_utc"),
-        "source": s.get("authoritative_source"),
-        "cpu_loaded_p99_us": cyclictest.get("max_p99_us"),
-        "gateway_ping_p99_ms": gateway.get("p99_ms"),
-        "rithmic_tcp_65000_p99_ms": float(rithmic_tcp_p99_ms),
-        "network_worst_p99_us": s.get("network_p99_us"),
-        "network_worst_source": s.get("network_p99_worst_source"),
-        "order_ack_p99_ms": s.get("order_ack_p99_ms"),
-        "trial_order_ack_p99_ms": trial.get("order_ack_p99_ms"),
-        "trial_order_ack_status": trial.get("status"),
-        "backtest_latency_ms": float(rithmic_tcp_p99_ms),
-        "backtest_latency_source": "CHI404 rithmic_tcp_65000 p99 (measured on colo bare metal)",
-        "order_ack_measured": False,
-    }
-
-
-def load_event_row(event_id: str, events_csv: Path) -> dict[str, Any]:
-    events = load_and_parse_events(str(events_csv))
-    row = events[events["event_id"] == event_id]
-    if row.empty:
-        raise SystemExit(f"event_id not found in events.csv: {event_id}")
-    r = row.iloc[0]
-    return {
-        "event_id": event_id,
-        "release_date": str(r["release_date"]),
-        "release_time": str(r["release_time"]),
-        "timezone": str(r["timezone"]),
-        "window_name": str(r["window_name"]),
-        "start_utc": r["start_utc"].isoformat(),
-        "end_utc": r["end_utc"].isoformat(),
-        "symbols": r["parsed_symbols"],
-        "primary_symbol": r["parsed_symbols"][0],
-    }
 
 
 def _serialize_backtest_result(res: BacktestResult) -> dict[str, Any]:
@@ -240,7 +186,61 @@ def main() -> int:
         action="store_true",
         help="Skip slow HftBacktest loop; run event_accurate_mbo only",
     )
+    p.add_argument(
+        "--engine",
+        choices=("default", "pdf_hybrid"),
+        default="default",
+        help="default: HYP combined + event_accurate_mbo; pdf_hybrid: PDF_MODEL_4 stack only",
+    )
+    p.add_argument("--use-ofi", dest="use_ofi", action="store_true", default=True)
+    p.add_argument("--no-ofi", dest="use_ofi", action="store_false")
+    p.add_argument("--use-vpin", dest="use_vpin", action="store_true", default=True)
+    p.add_argument("--no-vpin", dest="use_vpin", action="store_false")
     args = p.parse_args()
+
+    if args.engine == "pdf_hybrid":
+        import importlib.util
+
+        _pdf_script = _REPO / "scripts" / "run_pdf_hybrid_replay.py"
+        _spec = importlib.util.spec_from_file_location("run_pdf_hybrid_replay", _pdf_script)
+        _pdf_mod = importlib.util.module_from_spec(_spec)
+        assert _spec.loader is not None
+        _spec.loader.exec_module(_pdf_mod)
+
+        try:
+            event_meta = load_event_row(args.event_id, args.events_csv.resolve())
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
+        try:
+            npz_path = args.npz.resolve() if args.npz else resolve_event_npz(args.event_id, _REPO)
+        except FileNotFoundError as exc:
+            raise SystemExit(str(exc)) from exc
+        if not npz_path.is_file():
+            raise SystemExit(f"NPZ missing: {npz_path}")
+        latency_ms, latency_source = resolve_replay_latency_ms(
+            latency_ms=args.latency_ms,
+            chi404_summary=args.chi404_summary,
+        )
+        payload = _pdf_mod.run_pdf_hybrid_replay(
+            event_id=args.event_id,
+            npz_path=npz_path,
+            event_meta=event_meta,
+            tick_size=args.tick_size,
+            latency_ms=latency_ms,
+            latency_source=latency_source,
+            queue_model="LogProbQueueModel2",
+            step_ns=100_000,
+            use_ofi=args.use_ofi,
+            use_vpin=args.use_vpin,
+        )
+        if "error" in payload["result"]:
+            print(json.dumps(payload["result"], indent=2), flush=True)
+            return 1
+        out_dir = args.out or (_REPO / "research_cards" / "PDF_MODEL_4_hybrid_replay")
+        _pdf_mod.write_research_card(out_dir, payload, event_meta)
+        print(json.dumps(payload["result"], indent=2), flush=True)
+        print(f"Wrote {out_dir / 'result.json'}", flush=True)
+        return 0
 
     event = load_event_row(args.event_id, args.events_csv.resolve())
     npz_path = args.npz.resolve() if args.npz else resolve_event_npz(args.event_id, _REPO)
