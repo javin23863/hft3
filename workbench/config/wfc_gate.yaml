@@ -1,0 +1,52 @@
+# Walk Forward Correlation gate — BLUEPRINT B4 anti-overfit
+enabled: true
+require_bounds: true
+primary_metric: sharpe
+secondary_metrics:
+  - profit_factor
+  - max_drawdown_adj_return
+  - net_return_adjusted
+
+notional_capital: 100000.0
+max_oos_drawdown_limit: -500.0
+
+pearson_min: 0.20
+spearman_min: 0.20
+correlation_p_value_max: 0.10
+min_parameter_combinations: 100
+min_walk_forward_folds: 3
+min_positive_fold_ratio: 0.60
+require_oos_net_profit_positive: true
+require_oos_risk_adjusted_positive: true
+require_cost_adjusted_correlation: true
+bootstrap_samples: 2000
+outlier_winsor_pct: 0.01
+permutation_samples: 500
+
+min_oos_trade_count:
+  default: 30
+
+folds:
+  - id: D1
+    name: Discovery_2018_to_2019
+    regime_label: pre_covid
+    is_start_year: 2018
+    is_end_year: 2018
+    oos_start_year: 2019
+    oos_end_year: 2019
+  - id: D2
+    name: Discovery_2018_2019_to_2020
+    regime_label: covid_volatility
+    is_start_year: 2018
+    is_end_year: 2019
+    oos_start_year: 2020
+    oos_end_year: 2020
+  - id: D3
+    name: Discovery_to_Confirmation
+    regime_label: rate_hike
+    # OOS spans Confirmation years; exclude from IS-only plateau aggregation
+    plateau_exclude: true
+    is_start_year: 2018
+    is_end_year: 2020
+    oos_start_year: 2021
+    oos_end_year: 2022

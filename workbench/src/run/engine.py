@@ -57,6 +57,8 @@ class WorkbenchEngine:
         skip_history_gate: bool = True,
         fast_sweep: bool = True,
         composition: Optional[ModelComposition] = None,
+        strategy_params: Optional[Dict[str, Any]] = None,
+        wfc_status: Optional[str] = None,
     ) -> Dict[str, Any]:
         effective = composition or CompositionOrchestrator.default_composition(model_id)
         primary_id = effective.primary_model_id
@@ -99,6 +101,8 @@ class WorkbenchEngine:
             measured_p99_ms=measured_ms,
         )
         ctx.metadata["data_sufficient"] = manifest.data_sufficient
+        if strategy_params:
+            ctx.metadata["strategy_params"] = dict(strategy_params)
         if effective.defensive_stubs:
             ctx.metadata["composition"] = effective.to_dict()
         ctx.write_reproducibility_files()
@@ -180,6 +184,7 @@ class WorkbenchEngine:
             viability.survives_cpp_execution_delay
             and viability.simulated_latency_adjusted_pnl > 0
             and robustness.passed
+            and (wfc_status is None or wfc_status in ("PASS", "SKIPPED"))
         )
 
         report = {
@@ -207,6 +212,7 @@ class WorkbenchEngine:
             "net_pnl": net_pnl,
             "num_trades": num_trades,
             "promote_candidate": promote,
+            "wfc_status": wfc_status,
             "pnl_by_injection_us": {str(k): v for k, v in pnl_by_injection.items()},
             "pnl_by_latency": viability.pnl_by_latency,
             "cpp_latency_profile": viability.cpp_latency_profile,

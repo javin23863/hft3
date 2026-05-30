@@ -29,6 +29,14 @@ C++ memory architecture authority: zero-allocation hot path, cache alignment, lo
 (PDF also specifies Disruptor ring buffer — design authority; SPSC only in repo today). Index:
 [MEMORY_ARCHITECTURE.md](../workbench/MEMORY_ARCHITECTURE.md).
 
+## Chicago Futures Hot-Memory Universe (market-state layer)
+
+**File:** [chicago_futures_hot_memory_a_plus_developer_prompt.pdf](chicago_futures_hot_memory_a_plus_developer_prompt.pdf)
+
+Market-state authority: HOT/WARM/COLD tiers, instrument registry, VIX/VVIX volatility sensors, promotion
+audit, and degradation rules. Runtime config and gap table:
+[HOT_MEMORY_UNIVERSE.md](../workbench/HOT_MEMORY_UNIVERSE.md).
+
 ## Full PDF bundle (after-action citation index)
 
 | File | Status | Use |
@@ -41,5 +49,6 @@ C++ memory architecture authority: zero-allocation hot path, cache alignment, lo
 | [rithmic_trial_hftbacktest_pipeline_prompt.pdf](rithmic_trial_hftbacktest_pipeline_prompt.pdf) | present | Trial lane quarantine |
 | [Ultimate_Quantitative_Finance_Researcher.pdf](Ultimate_Quantitative_Finance_Researcher.pdf) | present | Walk-forward validation |
 | [ultra_low_latency_hft_vector_search_architecture.pdf](ultra_low_latency_hft_vector_search_architecture.pdf) | present | C++ memory, lock-free IPC, SIMD/MPHF design |
+| [chicago_futures_hot_memory_a_plus_developer_prompt.pdf](chicago_futures_hot_memory_a_plus_developer_prompt.pdf) | present | Market-state HOT/WARM/COLD, instrument registry, sensors |
 
 Field-level mapping: [MANIFEST.md](MANIFEST.md). After-action packets require all charter PDFs in this directory for `pdf_citations_complete: true`.

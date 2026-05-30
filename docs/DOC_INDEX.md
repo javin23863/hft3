@@ -20,6 +20,7 @@ Use this list when onboarding or explaining the repo to another developer. Each 
 |-------|-----|
 | Workbench latency authority | [workbench/LATENCY_ARCHITECTURE.md](workbench/LATENCY_ARCHITECTURE.md) |
 | Workbench memory authority | [workbench/MEMORY_ARCHITECTURE.md](workbench/MEMORY_ARCHITECTURE.md) |
+| Hot-memory universe (market-state) | [workbench/HOT_MEMORY_UNIVERSE.md](workbench/HOT_MEMORY_UNIVERSE.md) |
 | CHI404 memory upgrade (PDF §2–3 gap-fill) | [chi404/MEMORY_UPGRADE.md](chi404/MEMORY_UPGRADE.md) |
 | Model catalog + composition | [workbench/MODEL_CATALOG.md](workbench/MODEL_CATALOG.md) |
 | Walk-forward campaigns | [workbench/WALK_FORWARD_CAMPAIGNS.md](workbench/WALK_FORWARD_CAMPAIGNS.md) |

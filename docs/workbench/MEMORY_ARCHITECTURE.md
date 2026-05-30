@@ -1,5 +1,13 @@
 # Workbench memory architecture
 
+## Dual authority index
+
+| Concern | Authority PDF | hft3 doc |
+|---------|---------------|----------|
+| Market-state HOT/WARM/COLD, instrument registry, VIX/VVIX sensors, degradation | [chicago_futures_hot_memory_a_plus_developer_prompt.pdf](../references/chicago_futures_hot_memory_a_plus_developer_prompt.pdf) | [HOT_MEMORY_UNIVERSE.md](HOT_MEMORY_UNIVERSE.md) |
+| C++ zero-allocation, SPSC, SIMD design | [ultra_low_latency_hft_vector_search_architecture.pdf](../references/ultra_low_latency_hft_vector_search_architecture.pdf) | This document (§C++ mapping below) |
+| Colo kernel idle / GRUB gap-fill | ultra PDF §2–3 (advisory) | [MEMORY_UPGRADE.md](../chi404/MEMORY_UPGRADE.md) |
+
 Python is allowed for **research, orchestration, visualization, parameter sweeps, and dashboarding**.
 
 Python runtime must **not** be the source of truth for C++ hot-path memory layout, allocation, or lock-free concurrency when the live path is C++.
@@ -50,4 +58,4 @@ See [HOT_PATH_AUDIT.md](HOT_PATH_AUDIT.md) for CMake targets and topology.
 
 Pass B memory/concurrency/SIMD disputes cite `ultra_low_latency_hft_vector_search_architecture.pdf` + section (see [REVIEWER_CHARTER.md](../REVIEWER_CHARTER.md)).
 
-After-action packets include these concepts via [MANIFEST.md](../references/MANIFEST.md): `cpp_memory_optimization`, `lock_free_ipc`, `simd_vector_search`.
+After-action packets include these concepts via [MANIFEST.md](../references/MANIFEST.md): `cpp_memory_optimization`, `lock_free_ipc`, `simd_vector_search`, `hot_memory_universe`, `instrument_registry`, `volatility_sensor_layer`, `hot_memory_degradation`.

@@ -16,6 +16,10 @@ Each packet field cites a source PDF section. Missing PDFs on disk → `pdf_cita
 | `cpp_memory_optimization` | `ultra_low_latency_hft_vector_search_architecture.pdf` | §4 Memory architecture | **present** |
 | `lock_free_ipc` | `ultra_low_latency_hft_vector_search_architecture.pdf` | §4.4 Disruptor / SPSC | **present** |
 | `simd_vector_search` | `ultra_low_latency_hft_vector_search_architecture.pdf` | §6 AVX-512 (design authority) | **present** |
+| `hot_memory_universe` | `chicago_futures_hot_memory_a_plus_developer_prompt.pdf` | Phase 2 — Required HOT Universe | **present** |
+| `instrument_registry` | `chicago_futures_hot_memory_a_plus_developer_prompt.pdf` | Phase 1 — Instrument Registry | **present** |
+| `volatility_sensor_layer` | `chicago_futures_hot_memory_a_plus_developer_prompt.pdf` | HOT_SENSOR / VIX-VVIX-VX separation | **present** |
+| `hot_memory_degradation` | `chicago_futures_hot_memory_a_plus_developer_prompt.pdf` | Phase 7 — Memory and Degradation Rules | **present** |
 | `live_topology` | `BLUEPRINT.md` | Live architecture §4 | repo doc |
 
 ## Authority copies

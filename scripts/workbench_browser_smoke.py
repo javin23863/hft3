@@ -18,6 +18,7 @@ MAIN_TABS = [
     "Robustness",
     "Optimisation",
     "Report",
+    "Analyst",
 ]
 
 CATALOG_TABS = [

@@ -47,9 +47,11 @@ def test_dry_run_persists_composition_in_manifest():
     assert data["composition"]["primary_model_id"] == "HYP_5"
 
 
+@patch("workbench.src.run.campaign_runner.load_wfc_config")
 @patch("workbench.src.run.engine.WorkbenchEngine")
 @patch("workbench.src.run.campaign_runner.list_campaign_events")
-def test_sequential_gate_stops_after_discovery_fail(mock_list, MockEngine):
+def test_sequential_gate_stops_after_discovery_fail(mock_list, MockEngine, mock_wfc):
+    mock_wfc.return_value = {"enabled": False}
     from workbench.src.data.event_catalog import EventSpec
 
     ev = EventSpec(

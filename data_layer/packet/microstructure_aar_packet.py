@@ -240,6 +240,7 @@ def build_microstructure_aar_packet(
             "lane_pass": diagnostics.get("lane_pass"),
             "survives_cpp_execution_delay": diagnostics.get("survives_cpp_execution_delay"),
             "promote_candidate": diagnostics.get("promote_candidate"),
+            "wfc_status": diagnostics.get("wfc_status"),
             "robustness_passed": diagnostics.get("robustness_passed"),
             "cpp_hot_path_runtime_us": diagnostics.get("cpp_hot_path_runtime_us"),
             "python_research_runtime_us": diagnostics.get("python_research_runtime_us"),

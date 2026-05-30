@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import time
 from dataclasses import asdict, dataclass, field
@@ -14,6 +13,7 @@ import yaml
 
 from decision_engine.python.src.walk_forward import ValidationPeriod
 from workbench.src.core.composition import ModelComposition
+from workbench.src.core.params import DEFAULT_STRATEGY_PARAMS, param_hash_from_dict
 from workbench.src.data.event_catalog import (
     catalog_years_available,
     list_campaign_events,
@@ -25,6 +25,12 @@ from workbench.src.data.event_catalog import (
 )
 from workbench.src.registry.model_catalog import phase_budget_summary
 from workbench.src.registry.unified_registry import build_models_config
+from workbench.src.optimization.matrix_runner import MatrixFoldDataError, run_full_matrix_oos, save_matrix_rows
+from workbench.src.optimization.param_matrix import load_parameter_bounds
+from workbench.src.optimization.plateau_selector import select_robust_plateau
+from workbench.src.robustness.wfc import evaluate_wfc_gate, write_wfc_artifacts
+from workbench.src.robustness.wfc.config import load_wfc_config
+from workbench.src.robustness.wfc.gate import WfcResult
 
 
 @dataclass
@@ -53,15 +59,23 @@ class CampaignResult:
     artifact_dir: str = ""
 
 
+def _hot_memory_telemetry(repo_root: Path) -> Dict[str, Any]:
+    """Read-only market-state residency snapshot (diagnostics only)."""
+    from workbench.src.data.hot_memory_manager import hot_memory_telemetry_snapshot
+
+    return hot_memory_telemetry_snapshot(repo_root)
+
+
 def _campaign_id(model_id: str, symbol: str) -> str:
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     sym = symbol.replace(".", "_")
     return f"{model_id}_{sym}_{ts}"
 
 
-def _param_hash(model_id: str, seed: int) -> str:
-    h = hashlib.sha256(f"{model_id}:{seed}".encode()).hexdigest()
-    return h[:16]
+def _param_hash(model_id: str, params: Optional[Dict[str, Any]] = None, *, seed: int = 42) -> str:
+    if params:
+        return param_hash_from_dict(model_id, params)
+    return param_hash_from_dict(model_id, {"seed": seed})
 
 
 def _read_control(job_dir: Path) -> str:
@@ -100,6 +114,48 @@ def _period_evaluate_only(wf_cfg: dict[str, Any], period_name: str) -> bool:
     return period_name in (wf_cfg.get("holdout_evaluate_only") or [])
 
 
+def _period_tune_allowed(wf_cfg: dict[str, Any], period_name: str) -> bool:
+    allowed = wf_cfg.get("discovery_tune_allowed") or ["Discovery"]
+    return period_name in allowed
+
+
+def _plateau_matrix_rows(
+    rows: List[Dict[str, Any]], wfc_cfg: Dict[str, Any]
+) -> List[Dict[str, Any]]:
+    exclude = {
+        str(f.get("id"))
+        for f in (wfc_cfg.get("folds") or [])
+        if f.get("plateau_exclude") and f.get("id")
+    }
+    if not exclude:
+        return rows
+    return [r for r in rows if str(r.get("fold_id", "")) not in exclude]
+
+
+def _holdout_used_for_tuning(
+    artifact_dir: Path,
+    period_results: List[PeriodResult],
+    wf_cfg: dict[str, Any],
+) -> bool:
+    holdout_names = set(wf_cfg.get("holdout_evaluate_only") or [])
+    default = dict(DEFAULT_STRATEGY_PARAMS)
+    for p in period_results:
+        if p.name not in holdout_names:
+            continue
+        summary_path = artifact_dir / "periods" / p.name.replace(" ", "_") / "period_summary.json"
+        if not summary_path.is_file():
+            continue
+        try:
+            used = json.loads(summary_path.read_text(encoding="utf-8")).get("params_used", default)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(used, dict):
+            continue
+        if dict(used) != default:
+            return True
+    return False
+
+
 def make_campaign_id(model_id: str, symbol: str) -> str:
     return _campaign_id(model_id, symbol)
 
@@ -130,7 +186,8 @@ def record_sim_shadow(repo_root: Path, campaign_id: str, status: str) -> Path:
     if summary_path.is_file():
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
         summary["sim_shadow_status"] = status
-        summary["promote_candidate"] = summary.get("status") == "PASS" and status == "PASS"
+        wfc_ok = summary.get("wfc_status") == "PASS"
+        summary["promote_candidate"] = summary.get("status") == "PASS" and status == "PASS" and wfc_ok
         summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     return artifact_dir / "sim_shadow.json"
 
@@ -269,7 +326,7 @@ def run_campaign(
     campaign_id = campaign_id or _campaign_id(primary_id, symbol)
     artifact_dir = repo_root / "research_cards" / "workbench_runs" / campaign_id
     job_dir = job_dir or artifact_dir
-    param_hash = _param_hash(primary_id, seed)
+    param_hash = _param_hash(primary_id, DEFAULT_STRATEGY_PARAMS)
 
     if binding.get("campaign_mode") == "options_lane":
         artifact_dir.mkdir(parents=True, exist_ok=True)
@@ -318,6 +375,8 @@ def run_campaign(
         from workbench.src.data.event_catalog import campaign_preview
 
         preview = campaign_preview(model_id, symbol, repo_root)
+        preview.setdefault("diagnostics", {})
+        preview["diagnostics"]["hot_memory_telemetry"] = _hot_memory_telemetry(repo_root)
         write_campaign_manifest(artifact_dir / "dry_run_preview.json", preview)
         return CampaignResult(
             campaign_id=campaign_id,
@@ -332,160 +391,261 @@ def run_campaign(
     period_results: List[PeriodResult] = []
     status = "PASS"
 
-    for period in periods:
-        if not _wait_if_paused(job_dir):
-            status = "CANCELLED"
-            break
+    wfc_cfg = load_wfc_config(repo_root)
+    wfc_result: Optional[WfcResult] = None
+    wfc_dir = artifact_dir / "wfc"
+    skip_periods = False
+    matrix_rows: List[Dict[str, Any]] = []
+    strategy_params: Dict[str, Any] = dict(DEFAULT_STRATEGY_PARAMS)
+    bounds = load_parameter_bounds(primary_id)
+    wfc_status_for_events = "SKIPPED"
 
-        evaluate_only = _period_evaluate_only(wf_cfg, period.name)
-        events = list_campaign_events(primary_id, period, symbol, repo_root)
-        missing = [e for e in events if not e.npz_present]
-        if download_missing and missing:
-            from workbench.src.data.catalog_backfill import download_events
-
-            download_events(repo_root, missing)
-            events = list_campaign_events(primary_id, period, symbol, repo_root)
-            missing = [e for e in events if not e.npz_present]
-        runnable = [e for e in events if e.npz_present]
-
-        period_dir = artifact_dir / "periods" / period.name.replace(" ", "_")
-        period_dir.mkdir(parents=True, exist_ok=True)
-
-        if not runnable and not allow_partial:
-            pr = PeriodResult(
-                name=period.name,
-                gate_pass=False,
-                evaluate_only=evaluate_only,
-                net_pnl=0.0,
-                num_trades=0,
-                expectancy=0.0,
-                events_run=0,
-                events_missing=len(events),
-                survives_cpp=False,
-                error="DATA_MISSING: no NPZ for period events",
+    if wfc_cfg.get("enabled") and bounds:
+        try:
+            matrix_rows = run_full_matrix_oos(
+                repo_root,
+                model_id=primary_id,
+                symbol=symbol,
+                campaign_id=campaign_id,
+                composition=effective,
+                chi404_summary=chi404_summary,
+                seed=seed,
+                audit_grade=audit_grade,
+                years_avail=float(years_avail),
+                wfc_cfg=wfc_cfg,
             )
-            period_results.append(pr)
-            (period_dir / "period_summary.json").write_text(json.dumps(asdict(pr), indent=2), encoding="utf-8")
-            status = "BLOCKED"
-            if wf_cfg.get("sequential_gate", True):
-                break
-            continue
+        except MatrixFoldDataError as exc:
+            wfc_result = WfcResult(
+                run_id=campaign_id,
+                model_id=primary_id,
+                wfc_status="ERROR",
+                rejection_reasons=[str(exc)],
+            )
+            wfc_dir.mkdir(parents=True, exist_ok=True)
+            (wfc_dir / "wfc_summary.json").write_text(
+                json.dumps(wfc_result.to_dict(), indent=2), encoding="utf-8"
+            )
+            status = "FAIL"
+            skip_periods = True
+            wfc_status_for_events = "ERROR"
+        else:
+            save_matrix_rows(matrix_rows, wfc_dir)
+            wfc_result = evaluate_wfc_gate(
+                matrix_rows,
+                wfc_cfg,
+                run_id=campaign_id,
+                model_id=primary_id,
+            )
+            write_wfc_artifacts(
+                wfc_dir,
+                wfc_result,
+                matrix_rows,
+                primary_metric=str(wfc_cfg.get("primary_metric", "sharpe")),
+            )
+            wfc_status_for_events = wfc_result.wfc_status
+            if wfc_result.wfc_status in ("FAIL", "ERROR"):
+                status = "FAIL"
+                skip_periods = True
+            elif wfc_result.wfc_status == "PASS":
+                plateau = select_robust_plateau(
+                    _plateau_matrix_rows(matrix_rows, wfc_cfg),
+                    primary_metric=str(wfc_cfg.get("primary_metric", "sharpe")),
+                )
+                if plateau:
+                    strategy_params = dict(plateau)
+                    param_hash = _param_hash(primary_id, strategy_params)
+                    campaign_meta["param_hash"] = param_hash
+                    campaign_meta["strategy_params"] = strategy_params
+                    write_campaign_manifest(artifact_dir / "campaign.json", campaign_meta)
+                else:
+                    wfc_result.rejection_reasons.append("No robust plateau after WFC PASS")
+                    status = "FAIL"
+                    skip_periods = True
+    elif wfc_cfg.get("enabled"):
+        wfc_result = WfcResult(
+            run_id=campaign_id,
+            model_id=primary_id,
+            wfc_status="SKIPPED",
+            rejection_reasons=["No parameter_bounds configured for model"],
+        )
+        wfc_dir.mkdir(parents=True, exist_ok=True)
+        (wfc_dir / "wfc_summary.json").write_text(
+            json.dumps(wfc_result.to_dict(), indent=2), encoding="utf-8"
+        )
+        wfc_status_for_events = "SKIPPED"
 
-        event_outcomes: List[Dict[str, Any]] = []
-        total_pnl = 0.0
-        total_trades = 0
-        weighted_exp = 0.0
-        all_survive = True
-
-        for ev in runnable:
+    if not skip_periods:
+        for period in periods:
             if not _wait_if_paused(job_dir):
                 status = "CANCELLED"
                 break
 
-            _write_status(
-                job_dir,
-                {
-                    "state": "running",
-                    "period": period.name,
-                    "event_id": ev.event_id,
-                    "evaluate_only": evaluate_only,
-                },
+            evaluate_only = _period_evaluate_only(wf_cfg, period.name)
+            tune_allowed = _period_tune_allowed(wf_cfg, period.name)
+            period_params = (
+                strategy_params
+                if tune_allowed and not evaluate_only
+                else dict(DEFAULT_STRATEGY_PARAMS)
             )
+            events = list_campaign_events(primary_id, period, symbol, repo_root)
+            missing = [e for e in events if not e.npz_present]
+            if download_missing and missing:
+                from workbench.src.data.catalog_backfill import download_events
 
-            out = engine.run(
-                primary_id,
-                ev.event_id,
-                chi404_summary=chi404_summary,
-                seed=seed,
-                history_years_available=float(years_avail),
-                skip_history_gate=not audit_grade,
-                fast_sweep=not audit_grade,
-                composition=effective,
+                download_events(repo_root, missing)
+                events = list_campaign_events(primary_id, period, symbol, repo_root)
+                missing = [e for e in events if not e.npz_present]
+            runnable = [e for e in events if e.npz_present]
+
+            period_dir = artifact_dir / "periods" / period.name.replace(" ", "_")
+            period_dir.mkdir(parents=True, exist_ok=True)
+
+            if not runnable and not allow_partial:
+                pr = PeriodResult(
+                    name=period.name,
+                    gate_pass=False,
+                    evaluate_only=evaluate_only,
+                    net_pnl=0.0,
+                    num_trades=0,
+                    expectancy=0.0,
+                    events_run=0,
+                    events_missing=len(events),
+                    survives_cpp=False,
+                    error="DATA_MISSING: no NPZ for period events",
+                )
+                period_results.append(pr)
+                (period_dir / "period_summary.json").write_text(json.dumps(asdict(pr), indent=2), encoding="utf-8")
+                status = "BLOCKED"
+                if wf_cfg.get("sequential_gate", True):
+                    break
+                continue
+
+            event_outcomes: List[Dict[str, Any]] = []
+            total_pnl = 0.0
+            total_trades = 0
+            weighted_exp = 0.0
+            all_survive = True
+
+            for ev in runnable:
+                if not _wait_if_paused(job_dir):
+                    status = "CANCELLED"
+                    break
+
+                _write_status(
+                    job_dir,
+                    {
+                        "state": "running",
+                        "period": period.name,
+                        "event_id": ev.event_id,
+                        "evaluate_only": evaluate_only,
+                    },
+                )
+
+                out = engine.run(
+                    primary_id,
+                    ev.event_id,
+                    chi404_summary=chi404_summary,
+                    seed=seed,
+                    history_years_available=float(years_avail),
+                    skip_history_gate=not audit_grade,
+                    fast_sweep=not audit_grade,
+                    composition=effective,
+                    strategy_params=period_params,
+                    wfc_status=wfc_status_for_events,
+                )
+                if evaluate_only:
+                    out.setdefault("metadata", {})["evaluate_only"] = True
+                rep = out.get("report", {})
+                pnl = float(rep.get("net_pnl", 0.0))
+                ntr = int(rep.get("num_trades", 0))
+                exp = pnl / ntr if ntr else 0.0
+                surv = bool(rep.get("survives_cpp_execution_delay", False))
+                total_pnl += pnl
+                total_trades += ntr
+                weighted_exp += exp * max(ntr, 1)
+                all_survive = all_survive and surv
+
+                src_run = Path(out["artifact_dir"])
+                dest = period_dir / "events" / ev.event_id
+                dest.mkdir(parents=True, exist_ok=True)
+                for name in (
+                    "diagnostics.json",
+                    "manifest.json",
+                    "report.md",
+                    "config.yaml",
+                    "research_card.json",
+                    "composition_trace.json",
+                    "after_action_packet.json",
+                    "after_action_symbolic.json",
+                    "after_action_report.md",
+                    "after_action_annotations.json",
+                    "after_action_meta.json",
+                    "kg_slice.json",
+                ):
+                    src = src_run / name
+                    if src.is_file():
+                        dest.joinpath(name).write_bytes(src.read_bytes())
+                diag_dest = dest / "diagnostics.json"
+                if diag_dest.is_file():
+                    diag_payload = json.loads(diag_dest.read_text(encoding="utf-8"))
+                    diag_payload["wfc_status"] = wfc_status_for_events
+                    diag_payload["hot_memory_telemetry"] = _hot_memory_telemetry(repo_root)
+                    diag_dest.write_text(json.dumps(diag_payload, indent=2), encoding="utf-8")
+                trades = src_run / "trades.parquet"
+                if trades.is_file():
+                    dest.joinpath("trades.parquet").write_bytes(trades.read_bytes())
+
+                event_outcomes.append(
+                    {
+                        "event_id": ev.event_id,
+                        "release_date": ev.release_date,
+                        "net_pnl": pnl,
+                        "num_trades": ntr,
+                        "expectancy": exp,
+                        "survives_cpp_execution_delay": surv,
+                        "trades_vetoed_by_defense": rep.get("trades_vetoed_by_defense", 0),
+                        "run_id": out.get("run_id"),
+                    }
+                )
+
+            if status == "CANCELLED":
+                break
+
+            agg_exp = weighted_exp / max(total_trades, 1)
+            gate_pass = agg_exp > 0 and all_survive and total_trades > 0
+            pr = PeriodResult(
+                name=period.name,
+                gate_pass=gate_pass,
+                evaluate_only=evaluate_only,
+                net_pnl=total_pnl,
+                num_trades=total_trades,
+                expectancy=agg_exp,
+                events_run=len(runnable),
+                events_missing=len(events) - len(runnable),
+                survives_cpp=all_survive,
+                event_results=event_outcomes,
             )
-            if evaluate_only:
-                out.setdefault("metadata", {})["evaluate_only"] = True
-            rep = out.get("report", {})
-            pnl = float(rep.get("net_pnl", 0.0))
-            ntr = int(rep.get("num_trades", 0))
-            exp = pnl / ntr if ntr else 0.0
-            surv = bool(rep.get("survives_cpp_execution_delay", False))
-            total_pnl += pnl
-            total_trades += ntr
-            weighted_exp += exp * max(ntr, 1)
-            all_survive = all_survive and surv
+            period_results.append(pr)
+            summary = asdict(pr)
+            summary["param_hash"] = _param_hash(primary_id, period_params)
+            summary["tune_allowed"] = tune_allowed
+            summary["params_used"] = period_params
+            (period_dir / "period_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
 
-            src_run = Path(out["artifact_dir"])
-            dest = period_dir / "events" / ev.event_id
-            dest.mkdir(parents=True, exist_ok=True)
-            for name in (
-                "diagnostics.json",
-                "manifest.json",
-                "report.md",
-                "config.yaml",
-                "research_card.json",
-                "composition_trace.json",
-                "after_action_packet.json",
-                "after_action_symbolic.json",
-                "after_action_report.md",
-                "after_action_annotations.json",
-                "after_action_meta.json",
-                "kg_slice.json",
-            ):
-                src = src_run / name
-                if src.is_file():
-                    dest.joinpath(name).write_bytes(src.read_bytes())
-            trades = src_run / "trades.parquet"
-            if trades.is_file():
-                dest.joinpath("trades.parquet").write_bytes(trades.read_bytes())
-
-            event_outcomes.append(
-                {
-                    "event_id": ev.event_id,
-                    "release_date": ev.release_date,
-                    "net_pnl": pnl,
-                    "num_trades": ntr,
-                    "expectancy": exp,
-                    "survives_cpp_execution_delay": surv,
-                    "trades_vetoed_by_defense": rep.get("trades_vetoed_by_defense", 0),
-                    "run_id": out.get("run_id"),
-                }
-            )
-
-        if status == "CANCELLED":
-            break
-
-        agg_exp = weighted_exp / max(total_trades, 1)
-        gate_pass = agg_exp > 0 and all_survive and total_trades > 0
-        pr = PeriodResult(
-            name=period.name,
-            gate_pass=gate_pass,
-            evaluate_only=evaluate_only,
-            net_pnl=total_pnl,
-            num_trades=total_trades,
-            expectancy=agg_exp,
-            events_run=len(runnable),
-            events_missing=len(events) - len(runnable),
-            survives_cpp=all_survive,
-            event_results=event_outcomes,
-        )
-        period_results.append(pr)
-        summary = asdict(pr)
-        summary["param_hash"] = param_hash if evaluate_only else param_hash
-        (period_dir / "period_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
-
-        if not gate_pass and wf_cfg.get("sequential_gate", True):
-            status = "FAIL"
-            break
+            if not gate_pass and wf_cfg.get("sequential_gate", True):
+                status = "FAIL"
+                break
 
     from workbench.src.robustness.pack import run_robustness_pack
 
     trade_pnls = [float(e.get("net_pnl", 0.0)) for p in period_results for e in p.event_results]
-    holdout_touched = any(p.evaluate_only for p in period_results)
+    holdout_used_for_tuning = _holdout_used_for_tuning(artifact_dir, period_results, wf_cfg)
+    sweep_count = len({r["parameter_hash"] for r in matrix_rows}) if matrix_rows else 1
     robustness = run_robustness_pack(
         lambda: {"expectancy": sum(trade_pnls) / max(len(trade_pnls), 1)},
         trade_pnls,
-        sweep_count=1,
-        holdout_touched=holdout_touched,
+        sweep_count=sweep_count,
+        holdout_used_for_tuning=holdout_used_for_tuning,
         campaign_periods=[asdict(p) for p in period_results],
     )
 
@@ -493,6 +653,16 @@ def run_campaign(
     sim_status = _sim_shadow_status(artifact_dir)
     trades_vetoed = sum(
         int(e.get("trades_vetoed_by_defense", 0)) for p in period_results for e in p.event_results
+    )
+    wfc_status = wfc_result.wfc_status if wfc_result else "SKIPPED"
+    if wfc_status == "CONDITIONAL" and status == "PASS":
+        status = "CONDITIONAL"
+    wfc_required = bool(wfc_cfg.get("enabled")) and bool(bounds) and wfc_status != "SKIPPED"
+    promote_ok = (
+        status == "PASS"
+        and sim_status == "PASS"
+        and robustness.passed
+        and (not wfc_required or wfc_status == "PASS")
     )
     summary = {
         "campaign_id": campaign_id,
@@ -507,12 +677,14 @@ def run_campaign(
         "robustness_passed": robustness.passed,
         "overfit_risk": robustness.overfit_risk,
         "walk_forward": robustness.walk_forward,
+        "wfc_status": wfc_status,
+        "wfc": wfc_result.to_dict() if wfc_result else {},
         "sim_shadow_anchor": str(sim_cfg.get("anchor_date")),
         "sim_shadow_cme_days": sim_cfg.get("cme_days"),
         "sim_shadow_status": sim_status,
         "sim_shadow_required": status == "PASS",
-        "promote_candidate": status == "PASS" and sim_status == "PASS",
-        "promote_note": "Sim shadow (60 CME days on CHI404 from 2026-03-01) required before promotion — BLUEPRINT §8",
+        "promote_candidate": promote_ok,
+        "promote_note": "WFC PASS + sim shadow (60 CME days on CHI404) required before promotion — BLUEPRINT §8",
     }
     (artifact_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     _write_status(job_dir, {"state": status.lower(), "campaign_id": campaign_id})

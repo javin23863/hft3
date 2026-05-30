@@ -28,7 +28,11 @@ from workbench.src.run.job_manager import (
     get_job_status,
     list_active_campaigns,
     set_control,
-    start_campaign_subprocess,
+)
+from workbench.ui.flow_state import (
+    init_flow_session,
+    start_campaign_for_selection,
+    workflow_status_strip,
 )
 
 _LANES = ["all", "sub_10ms", "10_250ms", "multi_second", "options_chain", "microsecond"]
@@ -55,6 +59,26 @@ def init_session(repo: Path) -> None:
         st.session_state.wb_defensive_stubs = []
     if "wb_proc" not in st.session_state:
         st.session_state.wb_proc = None
+    init_flow_session()
+
+
+def _render_data_preview(repo: Path, model_id: str, symbol: str) -> None:
+    preview = campaign_preview(model_id, symbol, repo)
+    rows = []
+    for period_name, pdata in preview.get("periods", {}).items():
+        for ev in pdata.get("events", []):
+            rows.append(
+                {
+                    "period": period_name,
+                    "event_id": ev.get("event_id"),
+                    "npz": "yes" if ev.get("npz_present") else "missing",
+                }
+            )
+    with st.expander("Data availability preview", expanded=bool(rows) and any(r["npz"] == "missing" for r in rows)):
+        if rows:
+            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        else:
+            st.caption("No catalog events for this model/symbol binding.")
 
 
 def get_session_composition(primary: str) -> ModelComposition:
@@ -77,7 +101,15 @@ def _catalog_widget_key(key_prefix: str, *parts: str) -> str:
     return "_".join((prefix, *parts))
 
 
-def _render_catalog_rows(repo: Path, entries: list, configs: dict, *, key_prefix: str) -> None:
+def _render_catalog_rows(
+    repo: Path,
+    entries: list,
+    configs: dict,
+    *,
+    key_prefix: str,
+    symbol: str,
+    audit_grade: bool,
+) -> None:
     prefix = key_prefix.strip()
     if not prefix:
         raise ValueError("_render_catalog_rows requires a non-empty unique key_prefix")
@@ -108,16 +140,27 @@ def _render_catalog_rows(repo: Path, entries: list, configs: dict, *, key_prefix
             st.caption(f"Lane: {lane}")
             st.caption(f"Role: {entry.role}")
         with cols[2]:
+            primary = st.session_state.wb_selected_model
             if entry.role != "defensive":
                 if st.button(
-                    "Set primary",
+                    "Select & run campaign",
                     key=_catalog_widget_key(prefix, "select", str(row_idx), entry.model_id),
                 ):
                     st.session_state.wb_selected_model = entry.model_id
+                    composition = get_session_composition(entry.model_id)
+                    cid = start_campaign_for_selection(
+                        repo,
+                        model_id=entry.model_id,
+                        symbol=symbol,
+                        composition=composition,
+                        audit_grade=audit_grade,
+                    )
+                    st.toast(f"Campaign started: {cid}")
                     st.rerun()
             else:
+                stub_label = "Add to stack & re-run" if primary else "Add to stack"
                 if st.button(
-                    "Add stub",
+                    stub_label,
                     key=_catalog_widget_key(prefix, "enable", str(row_idx), entry.model_id),
                 ):
                     st.session_state.wb_defensive_stubs.append(
@@ -128,6 +171,16 @@ def _render_catalog_rows(repo: Path, entries: list, configs: dict, *, key_prefix
                             "enabled": True,
                         }
                     )
+                    if primary:
+                        composition = get_session_composition(primary)
+                        cid = start_campaign_for_selection(
+                            repo,
+                            model_id=primary,
+                            symbol=symbol,
+                            composition=composition,
+                            audit_grade=audit_grade,
+                        )
+                        st.toast(f"Campaign re-started: {cid}")
                     st.rerun()
         st.divider()
 
@@ -253,6 +306,22 @@ def model_selector_panel(repo: Path) -> Tuple[str, str, str]:
     st.metric("Registered models", len(models))
     st.caption(f"Showing {len(entries)} after filters")
 
+    symbol = st.selectbox("Primary symbol", ["MES.v.0", "ES.v.0", "MNQ.v.0", "NQ.v.0"], key="wb__sym_pick")
+    st.session_state.wb_symbol = symbol
+
+    model = st.session_state.wb_selected_model
+    camp = st.session_state.wb_active_campaign or ""
+    workflow_status_strip(repo, model, symbol, camp)
+
+    with st.expander("Advanced options"):
+        audit = st.checkbox(
+            "Audit grade (full-sweep + history gate)",
+            value=st.session_state.wb_audit_grade,
+            key="wb__audit",
+        )
+        st.session_state.wb_audit_grade = audit
+    audit = st.session_state.wb_audit_grade
+
     tab_alpha, tab_hybrid, tab_defensive, tab_stack = st.tabs(
         ["Alpha catalog", "Hybrid catalog", "Defensive catalog", "Stack builder"]
     )
@@ -263,6 +332,8 @@ def model_selector_panel(repo: Path) -> Tuple[str, str, str]:
             alpha_entries,
             configs,
             key_prefix="alpha_catalog",
+            symbol=symbol,
+            audit_grade=audit,
         )
     with tab_hybrid:
         hybrid_entries = [e for e in entries if e.role == "hybrid"]
@@ -271,6 +342,8 @@ def model_selector_panel(repo: Path) -> Tuple[str, str, str]:
             hybrid_entries,
             configs,
             key_prefix="hybrid_catalog",
+            symbol=symbol,
+            audit_grade=audit,
         )
     with tab_defensive:
         def_entries = list_by_role("defensive", repo)
@@ -281,18 +354,10 @@ def model_selector_panel(repo: Path) -> Tuple[str, str, str]:
             def_entries,
             configs,
             key_prefix="defensive_catalog",
+            symbol=symbol,
+            audit_grade=audit,
         )
 
-    symbol = st.selectbox("Primary symbol", ["MES.v.0", "ES.v.0", "MNQ.v.0", "NQ.v.0"], key="wb__sym_pick")
-    st.session_state.wb_symbol = symbol
-    audit = st.checkbox(
-        "Audit grade (full-sweep + history gate)",
-        value=st.session_state.wb_audit_grade,
-        key="wb__audit",
-    )
-    st.session_state.wb_audit_grade = audit
-
-    model = st.session_state.wb_selected_model
     with tab_stack:
         composition = stack_builder_panel(repo, model)
 
@@ -312,21 +377,21 @@ def model_selector_panel(repo: Path) -> Tuple[str, str, str]:
             f"Catalog years: {preview['catalog_years']}/{cfg.min_history_years} | CPI+NFP: {cpi_nfp}"
         )
         st.caption(f"Contexts: {', '.join(sorted(binding['allowed_contexts']))}")
+        _render_data_preview(repo, model, symbol)
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        if st.button("Start Campaign", disabled=not model, key="wb__start_campaign"):
-            proc, cid = start_campaign_subprocess(
+        if st.button("Re-run campaign", disabled=not model, key="wb__start_campaign"):
+            composition = get_session_composition(model) if model else None
+            cid = start_campaign_for_selection(
                 repo,
                 model_id=model,
                 symbol=symbol,
+                composition=composition,
                 audit_grade=audit,
-                composition=composition if model else None,
             )
-            st.session_state.wb_proc = proc
-            st.session_state.wb_active_campaign = cid
-            set_control(repo, cid, "run")
-            st.info(f"Campaign started: {cid}")
+            st.toast(f"Campaign re-started: {cid}")
+            st.rerun()
     with col2:
         if st.button("Pause", key="wb__pause") and st.session_state.wb_active_campaign:
             set_control(repo, st.session_state.wb_active_campaign, "pause")
@@ -349,12 +414,14 @@ def model_selector_panel(repo: Path) -> Tuple[str, str, str]:
             subprocess.Popen(cmd, cwd=str(repo))
             st.info("Backfill started (max $25)")
 
-    campaigns = list_active_campaigns(repo)
-    camp = st.selectbox("Load campaign", [""] + campaigns, key="wb__camp_pick")
-    if camp:
-        st.session_state.wb_active_campaign = camp
-        status = get_job_status(repo, camp)
-        st.json(status)
+    with st.expander("Advanced — load prior campaign"):
+        campaigns = list_active_campaigns(repo)
+        picked = st.selectbox("Load campaign", [""] + campaigns, key="wb__camp_pick")
+        if picked:
+            st.session_state.wb_active_campaign = picked
+            camp = picked
+            status = get_job_status(repo, picked)
+            st.json(status)
 
     return model, symbol, camp
 

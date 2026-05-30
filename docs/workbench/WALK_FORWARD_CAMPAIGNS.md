@@ -61,6 +61,15 @@ See [MODEL_CATALOG.md](MODEL_CATALOG.md) for phases (`before` / `during` / `afte
 
 Artifacts: `research_cards/workbench_runs/<campaign_id>/periods/<Stage>/events/<event_id>/` plus `composition_trace.json` per event when stubs are enabled.
 
+## Walk Forward Correlation (WFC) gate
+
+Before B4 period evaluation, campaigns with `parameter_bounds` in [`models.yaml`](../../workbench/config/models.yaml) run a **full parameter-matrix IS/OOS test** (config: [`wfc_gate.yaml`](../../workbench/config/wfc_gate.yaml)).
+
+- WFC gates the **model family**, not final parameter selection (plateau selection runs only after WFC PASS).
+- `wfc_status` must be `PASS` for `promote_candidate` in `summary.json`.
+- Artifacts under `research_cards/workbench_runs/<campaign_id>/wfc/`: `param_matrix.parquet`, `wfc_summary.json`, scatter plots, `wfc_audit.log`.
+- Tune strategy hyperparameters on Discovery only; Holdout evaluation never influences the matrix.
+
 ## UI
 
 Streamlit Model Selector → lane filter, model metadata, Start/Pause/Stop, personal lock (sidebar), Download missing. Drill down campaign → period → event; **Personal Runs** tab when unlocked.

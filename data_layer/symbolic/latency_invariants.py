@@ -29,6 +29,9 @@ def check_latency_invariants(packet: Dict[str, Any]) -> Dict[str, Any]:
             violations.append("promote_candidate true but survives_cpp_execution_delay false")
         if lat.get("robustness_passed") is not True:
             violations.append("promote_candidate true but robustness_passed not true")
+        wfc_status = lat.get("wfc_status")
+        if wfc_status is not None and wfc_status != "PASS":
+            violations.append(f"promote_candidate true but wfc_status is {wfc_status!r}, not PASS")
 
     for i, trade in enumerate(packet.get("per_trade_audit") or []):
         obligations.append(f"trade[{i}]: market_data_exchange_ts_ns <= market_data_receive_ts_ns")

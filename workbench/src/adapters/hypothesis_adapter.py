@@ -11,6 +11,7 @@ from features_engine.src.features.npz_feed import iter_mbo_events
 from features_engine.src.hypotheses.modules import BaseHypothesis
 from features_engine.src.pipeline.market_state_pipeline import MarketStatePipeline
 
+from workbench.src.core.params import DEFAULT_STRATEGY_PARAMS
 from workbench.src.core.protocol import Diagnostics, ModelConfig, WorkbenchModel
 from workbench.src.core.trade_audit import TradeAuditRecord, build_audit_timestamps_ns
 from workbench.src.run.run_context import RunContext
@@ -63,7 +64,9 @@ class HypothesisAdapter(WorkbenchModel):
         return float(self._hyp.evaluate(features[-1]))
 
     def run_backtest(self, ctx: RunContext) -> BacktestResult:
-        bt = SignalBacktester(signal_threshold=0.15)
+        params = ctx.metadata.get("strategy_params") or {}
+        threshold = float(params.get("signal_threshold", DEFAULT_STRATEGY_PARAMS["signal_threshold"]))
+        bt = SignalBacktester(signal_threshold=threshold)
         rng = random.Random(ctx.seed)
         latency_ms = ctx.latency_policy.total_ms_for_backtest(rng)
         t0 = time.perf_counter()

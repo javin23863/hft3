@@ -16,8 +16,9 @@ When Pass B findings conflict with local convention, defer to these sources in o
 | Trial pipeline | `rithmic_trial_hftbacktest_pipeline_prompt.pdf` | Quarantined trial lane, schema, replay wiring |
 | Math disputes | `Ultimate_Quantitative_Finance_Researcher.pdf` | Probability, econometrics, microstructure arguments |
 | Memory / concurrency / SIMD | `ultra_low_latency_hft_vector_search_architecture.pdf` | Zero-alloc hot path, cache alignment, lock-free IPC, MPHF/AVX design |
+| Market-state hot memory | `chicago_futures_hot_memory_a_plus_developer_prompt.pdf` | HOT/WARM/COLD tiers, instrument registry, VIX/VVIX sensors, degradation |
 
-Summary index: [BLUEPRINT.md](../BLUEPRINT.md). Memory index: [MEMORY_ARCHITECTURE.md](workbench/MEMORY_ARCHITECTURE.md).
+Summary index: [BLUEPRINT.md](../BLUEPRINT.md). Memory index: [MEMORY_ARCHITECTURE.md](workbench/MEMORY_ARCHITECTURE.md) (dual authority — market-state: [HOT_MEMORY_UNIVERSE.md](workbench/HOT_MEMORY_UNIVERSE.md)).
 
 ---
 

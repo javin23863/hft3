@@ -15,6 +15,7 @@ import streamlit as st
 
 st.set_page_config(page_title="HFT3 Workbench", layout="wide")
 
+from workbench.ui.analyst_panel import analyst_panel  # noqa: E402
 from workbench.ui.campaign_panel import (  # noqa: E402
     campaign_events,
     campaign_periods,
@@ -24,6 +25,7 @@ from workbench.ui.campaign_panel import (  # noqa: E402
     personal_lock_sidebar,
     personal_runs_panel,
 )
+from workbench.ui.flow_state import campaign_progress_panel, resolve_period_event  # noqa: E402
 
 init_session(REPO)
 
@@ -35,6 +37,10 @@ with st.sidebar:
 
 st.title("Microstructure Backtesting Workbench")
 
+_active = st.session_state.get("wb_active_campaign", "")
+if _active:
+    campaign_progress_panel(REPO, _active)
+
 tab_names = [
     "Model Selector",
     "Personal Runs",
@@ -44,6 +50,7 @@ tab_names = [
     "Robustness",
     "Optimisation",
     "Report",
+    "Analyst",
 ]
 tabs = st.tabs(tab_names)
 
@@ -58,18 +65,34 @@ selected_campaign = ""
 with tabs[0]:
     st.header("Model Selector")
     selected_model, selected_symbol, selected_campaign = model_selector_panel(REPO)
-    legacy_run = st.selectbox("Legacy single run", [""] + run_labels, key="wb__legacy_run")
-    if legacy_run and not selected_campaign:
-        selected_campaign = legacy_run
+    with st.expander("Advanced — legacy single run"):
+        legacy_run = st.selectbox("Legacy single run", [""] + run_labels, key="wb__legacy_run")
+        if legacy_run and not selected_campaign:
+            selected_campaign = legacy_run
+            st.session_state.wb_active_campaign = legacy_run
+            st.session_state.wb__period_sel = ""
+            st.session_state.wb__event_sel = ""
+            st.session_state.wb_auto_period = ""
+            st.session_state.wb_auto_event = ""
+    if selected_campaign:
+        periods = campaign_periods(REPO, selected_campaign)
+        with st.expander("Drill-down period / event"):
+            if periods:
+                st.selectbox(
+                    "Campaign period",
+                    [""] + periods,
+                    key="wb__period_sel",
+                )
+                pc = st.session_state.get("wb__period_sel") or st.session_state.get("wb_auto_period", "")
+                if pc:
+                    events = campaign_events(REPO, selected_campaign, pc)
+                    st.selectbox("Event in period", [""] + events, key="wb__event_sel")
 
-period_choice = ""
-event_choice = ""
-if selected_campaign:
-    periods = campaign_periods(REPO, selected_campaign)
-    period_choice = st.selectbox("Campaign period", [""] + periods, key="wb__period_sel")
-    if period_choice:
-        events = campaign_events(REPO, selected_campaign, period_choice)
-        event_choice = st.selectbox("Event in period", [""] + events, key="wb__event_sel")
+if not selected_campaign:
+    selected_campaign = st.session_state.get("wb_active_campaign", "")
+
+period_choice, event_choice = resolve_period_event(REPO, selected_campaign)
+campaign_summary_path = runs_dir / selected_campaign / "summary.json" if selected_campaign else None
 
 diag_data = load_campaign_diagnostics(REPO, selected_campaign, period_choice, event_choice)
 if diag_data is None and selected_campaign:
@@ -93,8 +116,10 @@ with tabs[2]:
             pnl_lat = rep.get("pnl_by_latency", {})
             if pnl_lat:
                 st.line_chart(pd.Series(pnl_lat))
+    elif selected_campaign:
+        st.info("Campaign running or waiting for first event diagnostics.")
     else:
-        st.info("Select a campaign in Model Selector")
+        st.info("Click **Select & run campaign** on a model in Model Selector.")
 
 with tabs[3]:
     st.header("Latency Viability")
@@ -106,8 +131,10 @@ with tabs[3]:
         st.caption(f"Survives C++ delay: {diag_data.get('survives_cpp_execution_delay')}")
     elif diag_data:
         st.write(f"Period gate pass: **{diag_data.get('gate_pass')}** | survives_cpp: **{diag_data.get('survives_cpp')}**")
+    elif selected_campaign:
+        st.info("Results appear when the first event completes.")
     else:
-        st.info("Select a campaign")
+        st.info("Start a campaign from Model Selector.")
 
 with tabs[4]:
     st.header("Signal Diagnostics")
@@ -131,18 +158,61 @@ with tabs[4]:
 
 with tabs[5]:
     st.header("Robustness")
+    wfc_summary_path = (
+        runs_dir / selected_campaign / "wfc" / "wfc_summary.json"
+        if selected_campaign
+        else None
+    )
+    campaign_summary_path = runs_dir / selected_campaign / "summary.json" if selected_campaign else None
+    wfc_data = {}
+    if wfc_summary_path and wfc_summary_path.is_file():
+        wfc_data = json.loads(wfc_summary_path.read_text(encoding="utf-8"))
+    elif campaign_summary_path and campaign_summary_path.is_file():
+        wfc_data = json.loads(campaign_summary_path.read_text(encoding="utf-8")).get("wfc", {})
+
+    if wfc_data:
+        st.subheader("Walk Forward Correlation (WFC)")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("WFC status", wfc_data.get("wfc_status", "—"))
+        c2.metric("Pearson", f"{wfc_data.get('pearson', 0):.3f}")
+        c3.metric("Spearman", f"{wfc_data.get('spearman', 0):.3f}")
+        c4.metric("Fold consistency", f"{wfc_data.get('positive_fold_ratio', 0):.0%}")
+        if wfc_data.get("n_folds"):
+            st.caption(f"Folds: {wfc_data.get('n_folds')} | Params: {wfc_data.get('n_parameter_combinations', '—')}")
+        if wfc_data.get("top_decile_oos_median") is not None:
+            st.caption(
+                f"Top decile OOS median: {wfc_data.get('top_decile_oos_median', 0):.3f} | "
+                f"Bottom: {wfc_data.get('bottom_decile_oos_median', 0):.3f}"
+            )
+        if wfc_data.get("fold_correlations"):
+            with st.expander("Per-fold correlations"):
+                st.json(wfc_data["fold_correlations"])
+        if wfc_data.get("rejection_reasons"):
+            st.warning("WFC rejection: " + "; ".join(wfc_data["rejection_reasons"]))
+        scatter = runs_dir / selected_campaign / "wfc" / "is_vs_oos_scatter.png"
+        if scatter.is_file():
+            st.image(str(scatter), caption="IS vs OOS parameter matrix")
+        with st.expander("WFC detail"):
+            st.json(wfc_data)
+
     if diag_data:
         st.write(f"Robustness passed: **{diag_data.get('robustness_passed', 'n/a')}**")
         st.write(f"Over-fit risk: **{diag_data.get('overfit_risk', 'n/a')}**")
         if "periods" in diag_data:
             st.json(diag_data.get("periods"))
-    else:
-        st.info("Select a campaign")
+    elif selected_campaign and not wfc_data:
+        st.info("Results appear when the first event completes.")
+    elif not selected_campaign:
+        st.info("Start a campaign from Model Selector.")
 
 with tabs[6]:
     st.header("Optimisation")
     st.caption("Run a campaign first — latency/cost sweeps attach to campaign events.")
-    promote = bool(diag_data.get("promote_candidate")) if diag_data else False
+    promote = False
+    if campaign_summary_path and campaign_summary_path.is_file():
+        promote = bool(json.loads(campaign_summary_path.read_text(encoding="utf-8")).get("promote_candidate"))
+    elif diag_data:
+        promote = bool(diag_data.get("promote_candidate"))
     st.button("Promote Candidate", disabled=not promote, key="wb__promote_candidate")
 
 with tabs[7]:
@@ -178,7 +248,7 @@ with tabs[7]:
         diag_path = art / "diagnostics.json"
 
         if meta_path.is_file() or sym_path.is_file() or aar_path.is_file():
-            st.subheader("After-action")
+            st.subheader("After-action summary")
             diag_local = json.loads(diag_path.read_text(encoding="utf-8")) if diag_path.is_file() else {}
             sym_data = json.loads(sym_path.read_text(encoding="utf-8")) if sym_path.is_file() else {}
             meta_data = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.is_file() else {}
@@ -196,7 +266,7 @@ with tabs[7]:
             if aar_path.is_file():
                 st.markdown(aar_path.read_text(encoding="utf-8"))
             elif meta_data.get("llm_status"):
-                st.info(f"No LLM report ({meta_data.get('llm_status')}).")
+                st.info(f"No LLM report ({meta_data.get('llm_status')}). See **Analyst** tab.")
 
             with st.expander("After-action artifacts"):
                 for name in (
@@ -213,5 +283,11 @@ with tabs[7]:
         summary_path = runs_dir / selected_campaign / "summary.json"
         if summary_path.is_file():
             st.json(json.loads(summary_path.read_text(encoding="utf-8")))
+        else:
+            st.info("Campaign in progress — reports appear per event.")
     else:
-        st.info("Select a campaign")
+        st.info("Click **Select & run campaign** on a model in Model Selector.")
+
+with tabs[8]:
+    st.header("Analyst")
+    analyst_panel(REPO, selected_campaign, period_choice, event_choice)

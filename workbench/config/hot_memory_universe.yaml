@@ -1,0 +1,251 @@
+# Chicago futures hot-memory universe (hft3 market-state layer)
+# Authority: docs/references/chicago_futures_hot_memory_a_plus_developer_prompt.pdf
+
+core_protected_symbols: [ES, NQ, ZT, ZN, SR3]
+
+defaults:
+  instrument_type: futures
+  asset_class: futures
+  tradable: true
+  order_book_available: true
+  trade_print_available: true
+  index_sensor_available: false
+  point_in_time_safe: true
+  data_delay_status: MISSING
+  live_feed_status: MISSING
+  historical_feed_status: MISSING
+  currency: USD
+  tick_size: 0.25
+  tick_value: 12.50
+  contract_multiplier: 50
+  min_price_increment: 0.25
+  roll_rule: volume
+  failure_mode: degrade
+
+instruments:
+  # --- HOT_EXECUTABLE equity index ---
+  - canonical_internal_symbol: ES
+    research_symbol: ES.v.0
+    data_vendor_symbol: ES.c.0
+    broker_symbol: ES
+    exchange: CME
+    venue: GLBX
+    hot_memory_tier: HOT_EXECUTABLE
+  - canonical_internal_symbol: MES
+    research_symbol: MES.v.0
+    data_vendor_symbol: MES.c.0
+    broker_symbol: MES
+    exchange: CME
+    venue: GLBX
+    hot_memory_tier: HOT_EXECUTABLE
+    contract_multiplier: 5
+    tick_value: 1.25
+  - canonical_internal_symbol: NQ
+    research_symbol: NQ.v.0
+    data_vendor_symbol: NQ.c.0
+    broker_symbol: NQ
+    exchange: CME
+    venue: GLBX
+    hot_memory_tier: HOT_EXECUTABLE
+  - canonical_internal_symbol: MNQ
+    research_symbol: MNQ.v.0
+    data_vendor_symbol: MNQ.c.0
+    broker_symbol: MNQ
+    exchange: CME
+    venue: GLBX
+    hot_memory_tier: HOT_EXECUTABLE
+    contract_multiplier: 2
+    tick_value: 0.50
+  - canonical_internal_symbol: RTY
+    research_symbol: RTY.v.0
+    data_vendor_symbol: RTY.c.0
+    broker_symbol: RTY
+    exchange: CME
+    venue: GLBX
+    hot_memory_tier: HOT_EXECUTABLE
+  - canonical_internal_symbol: M2K
+    research_symbol: M2K.v.0
+    data_vendor_symbol: M2K.c.0
+    broker_symbol: M2K
+    exchange: CME
+    venue: GLBX
+    hot_memory_tier: HOT_EXECUTABLE
+    contract_multiplier: 5
+  - canonical_internal_symbol: YM
+    research_symbol: YM.v.0
+    data_vendor_symbol: YM.c.0
+    broker_symbol: YM
+    exchange: CBOT
+    venue: GLBX
+    hot_memory_tier: HOT_EXECUTABLE
+  - canonical_internal_symbol: MYM
+    research_symbol: MYM.v.0
+    data_vendor_symbol: MYM.c.0
+    broker_symbol: MYM
+    exchange: CBOT
+    venue: GLBX
+    hot_memory_tier: HOT_EXECUTABLE
+    contract_multiplier: 0.5
+
+  # --- HOT_EXECUTABLE rates ---
+  - canonical_internal_symbol: ZT
+    research_symbol: ZT.v.0
+    data_vendor_symbol: ZT.c.0
+    exchange: CBOT
+    venue: GLBX
+    asset_class: rates
+    hot_memory_tier: HOT_EXECUTABLE
+  - canonical_internal_symbol: ZF
+    research_symbol: ZF.v.0
+    data_vendor_symbol: ZF.c.0
+    exchange: CBOT
+    venue: GLBX
+    asset_class: rates
+    hot_memory_tier: HOT_EXECUTABLE
+  - canonical_internal_symbol: ZN
+    research_symbol: ZN.v.0
+    data_vendor_symbol: ZN.c.0
+    exchange: CBOT
+    venue: GLBX
+    asset_class: rates
+    hot_memory_tier: HOT_EXECUTABLE
+  - canonical_internal_symbol: ZB
+    research_symbol: ZB.v.0
+    data_vendor_symbol: ZB.c.0
+    exchange: CBOT
+    venue: GLBX
+    asset_class: rates
+    hot_memory_tier: HOT_EXECUTABLE
+  - canonical_internal_symbol: UB
+    research_symbol: UB.v.0
+    data_vendor_symbol: UB.c.0
+    exchange: CBOT
+    venue: GLBX
+    asset_class: rates
+    hot_memory_tier: HOT_EXECUTABLE
+  - canonical_internal_symbol: SR3
+    research_symbol: SR3.v.0
+    data_vendor_symbol: SR3.c.0
+    exchange: CME
+    venue: GLBX
+    asset_class: rates
+    hot_memory_tier: HOT_EXECUTABLE
+  - canonical_internal_symbol: ZQ
+    research_symbol: ZQ.v.0
+    data_vendor_symbol: ZQ.c.0
+    exchange: CME
+    venue: GLBX
+    asset_class: rates
+    hot_memory_tier: HOT_EXECUTABLE
+
+  # --- HOT_EXECUTABLE energy / metals / FX ---
+  - canonical_internal_symbol: CL
+    research_symbol: CL.v.0
+    data_vendor_symbol: CL.c.0
+    exchange: NYMEX
+    venue: GLBX
+    asset_class: energy
+    hot_memory_tier: HOT_EXECUTABLE
+  - canonical_internal_symbol: MCL
+    research_symbol: MCL.v.0
+    data_vendor_symbol: MCL.c.0
+    exchange: NYMEX
+    venue: GLBX
+    asset_class: energy
+    hot_memory_tier: HOT_EXECUTABLE
+    contract_multiplier: 100
+  - canonical_internal_symbol: NG
+    research_symbol: NG.v.0
+    data_vendor_symbol: NG.c.0
+    exchange: NYMEX
+    venue: GLBX
+    asset_class: energy
+    hot_memory_tier: HOT_EXECUTABLE
+  - canonical_internal_symbol: GC
+    research_symbol: GC.v.0
+    data_vendor_symbol: GC.c.0
+    exchange: COMEX
+    venue: GLBX
+    asset_class: metals
+    hot_memory_tier: HOT_EXECUTABLE
+  - canonical_internal_symbol: MGC
+    research_symbol: MGC.v.0
+    data_vendor_symbol: MGC.c.0
+    exchange: COMEX
+    venue: GLBX
+    asset_class: metals
+    hot_memory_tier: HOT_EXECUTABLE
+    contract_multiplier: 10
+  - canonical_internal_symbol: HG
+    research_symbol: HG.v.0
+    data_vendor_symbol: HG.c.0
+    exchange: COMEX
+    venue: GLBX
+    asset_class: metals
+    hot_memory_tier: HOT_EXECUTABLE
+  - canonical_internal_symbol: "6E"
+    research_symbol: 6E.v.0
+    data_vendor_symbol: 6E.c.0
+    exchange: CME
+    venue: GLBX
+    asset_class: fx
+    hot_memory_tier: HOT_EXECUTABLE
+
+  # --- HOT_SENSOR volatility ---
+  - canonical_internal_symbol: VIX
+    research_symbol: VIX
+    data_vendor_symbol: VIX
+    exchange: CBOE
+    venue: CBOE
+    asset_class: volatility
+    instrument_type: index_sensor
+    tradable: false
+    order_book_available: false
+    trade_print_available: false
+    index_sensor_available: true
+    hot_memory_tier: HOT_SENSOR
+  - canonical_internal_symbol: VVIX
+    research_symbol: VVIX
+    data_vendor_symbol: VVIX
+    exchange: CBOE
+    venue: CBOE
+    asset_class: volatility
+    instrument_type: index_sensor
+    tradable: false
+    order_book_available: false
+    trade_print_available: false
+    index_sensor_available: true
+    hot_memory_tier: HOT_SENSOR
+  - canonical_internal_symbol: VX1
+    research_symbol: VX.v.0
+    data_vendor_symbol: VX.c.0
+    exchange: CFE
+    venue: CFE
+    asset_class: volatility
+    instrument_type: futures
+    hot_memory_tier: HOT_SENSOR
+    data_delay_status: MISSING
+  - canonical_internal_symbol: VX2
+    research_symbol: VX.v.1
+    data_vendor_symbol: VX.c.1
+    exchange: CFE
+    venue: CFE
+    asset_class: volatility
+    instrument_type: futures
+    hot_memory_tier: HOT_SENSOR
+    data_delay_status: MISSING
+
+  # --- WARM ---
+  - {canonical_internal_symbol: RB, research_symbol: RB.v.0, data_vendor_symbol: RB.c.0, exchange: NYMEX, venue: GLBX, asset_class: energy, hot_memory_tier: WARM}
+  - {canonical_internal_symbol: HO, research_symbol: HO.v.0, data_vendor_symbol: HO.c.0, exchange: NYMEX, venue: GLBX, asset_class: energy, hot_memory_tier: WARM}
+  - {canonical_internal_symbol: SI, research_symbol: SI.v.0, data_vendor_symbol: SI.c.0, exchange: COMEX, venue: GLBX, asset_class: metals, hot_memory_tier: WARM}
+  - {canonical_internal_symbol: "6J", research_symbol: 6J.v.0, data_vendor_symbol: 6J.c.0, exchange: CME, venue: GLBX, asset_class: fx, hot_memory_tier: WARM}
+  - {canonical_internal_symbol: "6B", research_symbol: 6B.v.0, data_vendor_symbol: 6B.c.0, exchange: CME, venue: GLBX, asset_class: fx, hot_memory_tier: WARM}
+  - {canonical_internal_symbol: "6A", research_symbol: 6A.v.0, data_vendor_symbol: 6A.c.0, exchange: CME, venue: GLBX, asset_class: fx, hot_memory_tier: WARM}
+  - {canonical_internal_symbol: "6C", research_symbol: 6C.v.0, data_vendor_symbol: 6C.c.0, exchange: CME, venue: GLBX, asset_class: fx, hot_memory_tier: WARM}
+  - {canonical_internal_symbol: ZC, research_symbol: ZC.v.0, data_vendor_symbol: ZC.c.0, exchange: CBOT, venue: GLBX, asset_class: grains, hot_memory_tier: WARM}
+  - {canonical_internal_symbol: ZS, research_symbol: ZS.v.0, data_vendor_symbol: ZS.c.0, exchange: CBOT, venue: GLBX, asset_class: grains, hot_memory_tier: WARM}
+  - {canonical_internal_symbol: ZW, research_symbol: ZW.v.0, data_vendor_symbol: ZW.c.0, exchange: CBOT, venue: GLBX, asset_class: grains, hot_memory_tier: WARM}
+  - {canonical_internal_symbol: KE, research_symbol: KE.v.0, data_vendor_symbol: KE.c.0, exchange: CBOT, venue: GLBX, asset_class: grains, hot_memory_tier: WARM}
+  - {canonical_internal_symbol: ZL, research_symbol: ZL.v.0, data_vendor_symbol: ZL.c.0, exchange: CBOT, venue: GLBX, asset_class: grains, hot_memory_tier: WARM}
+  - {canonical_internal_symbol: ZM, research_symbol: ZM.v.0, data_vendor_symbol: ZM.c.0, exchange: CBOT, venue: GLBX, asset_class: grains, hot_memory_tier: WARM}

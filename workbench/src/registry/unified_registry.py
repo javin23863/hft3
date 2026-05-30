@@ -60,8 +60,11 @@ def build_models_config() -> Dict[str, ModelConfig]:
     if _CONFIG_PATH.is_file():
         raw = yaml.safe_load(_CONFIG_PATH.read_text(encoding="utf-8")) or {}
         yaml_overrides = raw.get("overrides", {})
+        yaml_defaults = raw.get("defaults", {})
+    else:
+        yaml_defaults = {}
 
-    active = {h.hyp_id: h for h in get_active_hypotheses()}
+    default_bounds = yaml_defaults.get("parameter_bounds", _DEFAULTS.get("parameter_bounds", {}))
     for hyp_id in range(1, 45):
         mid = f"HYP_{hyp_id}"
         ov = yaml_overrides.get(mid, {})
@@ -75,7 +78,7 @@ def build_models_config() -> Dict[str, ModelConfig]:
             robustness_window=ov.get("robustness_window", _DEFAULTS["robustness_window"]),
             latency_lane=ov.get("latency_lane", _DEFAULTS["latency_lane"]),
             execution_assumptions=ov.get("execution_assumptions", _DEFAULTS["execution_assumptions"]),
-            parameter_bounds=ov.get("parameter_bounds", {}),
+            parameter_bounds=ov.get("parameter_bounds", default_bounds),
         )
 
     for pid in PDF_MODEL_IDS:

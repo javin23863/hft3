@@ -58,9 +58,9 @@ def test_render_catalog_rows_rejects_empty_key_prefix() -> None:
     from workbench.ui.campaign_panel import _catalog_widget_key, _render_catalog_rows
 
     with pytest.raises(ValueError, match="requires a non-empty unique key_prefix"):
-        _render_catalog_rows(None, [], {}, key_prefix="")
+        _render_catalog_rows(None, [], {}, key_prefix="", symbol="MES.v.0", audit_grade=True)
     with pytest.raises(ValueError, match="requires a non-empty unique key_prefix"):
-        _render_catalog_rows(None, [], {}, key_prefix="   ")
+        _render_catalog_rows(None, [], {}, key_prefix="   ", symbol="MES.v.0", audit_grade=True)
     with pytest.raises(ValueError, match="requires a non-empty unique key_prefix"):
         _catalog_widget_key("  ", "catalog_search")
 
@@ -108,3 +108,7 @@ def test_model_selector_panel_uses_unique_catalog_prefixes() -> None:
     assert 'key_prefix="hybrid_catalog"' in src
     assert 'key_prefix="defensive_catalog"' in src
     assert 'key_prefix="catalog"' not in src
+
+    catalog_src = inspect.getsource(campaign_panel._render_catalog_rows)
+    assert "Select & run campaign" in catalog_src
+    assert "Add to stack & re-run" in catalog_src

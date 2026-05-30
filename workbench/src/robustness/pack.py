@@ -87,7 +87,7 @@ def run_robustness_pack(
     *,
     n_purged_splits: int = 3,
     sweep_count: int = 1,
-    holdout_touched: bool = False,
+    holdout_used_for_tuning: bool = False,
     campaign_periods: Optional[List[Dict[str, Any]]] = None,
 ) -> RobustnessResult:
     wf = WalkForwardValidator()
@@ -102,8 +102,8 @@ def run_robustness_pack(
     penalty = max(1.0, sweep_count)
     sharpe_stable = mc["sharpe_p05"] > -0.5 / penalty
     dd_ok = mc["drawdown_p95"] > -500
-    passed = sharpe_stable and dd_ok and not holdout_touched
-    risk = "low" if passed else ("high" if holdout_touched else "medium")
+    passed = sharpe_stable and dd_ok and not holdout_used_for_tuning
+    risk = "low" if passed else ("high" if holdout_used_for_tuning else "medium")
     return RobustnessResult(
         walk_forward=wf_result,
         purged_cv=purged,

@@ -7,6 +7,8 @@ defaults:
   robustness_window: discovery
   latency_lane: sub_10ms
   execution_assumptions: limit_queue
+  parameter_bounds:
+    signal_threshold: [0.05, 0.30]
 
 overrides:
   PDF_MODEL_1:
@@ -61,3 +63,5 @@ overrides:
   HYP_5:
     name: Spread blowout/recompression
     latency_lane: sub_10ms
+    parameter_bounds:
+      signal_threshold: [0.05, 0.30]

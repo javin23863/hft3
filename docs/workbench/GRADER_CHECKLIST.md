@@ -81,6 +81,8 @@ powershell -File scripts/verify_workbench.ps1
 - `--full-sweep` used (not fast heuristic)
 - `--enforce-history-gate` passed
 - Robustness not stub-passed on fake trade PnLs
+- **WFC gate:** `wfc/wfc_summary.json` shows `wfc_status: PASS` before `promote_candidate` (full parameter-matrix IS/OOS correlation)
+- WFC artifacts: `param_matrix.parquet`, `is_vs_oos_scatter.png`, `wfc_audit.log`
 
 ## F. Known engine gaps
 
