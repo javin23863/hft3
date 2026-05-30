@@ -8,7 +8,7 @@ from typing import Any, List, Optional, Tuple
 
 from backtest_pipeline.src.signal_backtester import BacktestResult
 
-from workbench.src.core.protocol import (
+from workbench.src.core.composition import (
     CompositionTrace,
     CompositionTraceStep,
     DefensiveStub,

@@ -8,7 +8,7 @@ from typing import Dict, List, Optional
 import yaml
 
 from features_engine.src.hypotheses.registry import HypothesisRegistry
-from workbench.src.core.protocol import CatalogEntry, DefensiveStub, ModelComposition, ModelRole, Phase
+from workbench.src.core.composition import CatalogEntry, DefensiveStub, ModelComposition, ModelRole, Phase
 from workbench.src.registry.unified_registry import build_models_config
 
 _CATALOG_PATH = Path(__file__).resolve().parents[2] / "config" / "model_catalog.yaml"

@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from workbench.src.core.protocol import ModelComposition
+from workbench.src.core.composition import ModelComposition
 
 
 def job_dir_for(repo_root: Path, campaign_id: str) -> Path:

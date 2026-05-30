@@ -28,7 +28,7 @@ def test_dry_run_returns_preview(tmp_path, monkeypatch):
 
 
 def test_dry_run_persists_composition_in_manifest():
-    from workbench.src.core.protocol import DefensiveStub, ModelComposition
+    from workbench.src.core.composition import DefensiveStub, ModelComposition
 
     comp = ModelComposition(
         primary_model_id="HYP_5",

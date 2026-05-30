@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import List, Optional
 
-from workbench.src.core.protocol import DefensiveStub, ModelComposition
+from workbench.src.core.composition import DefensiveStub, ModelComposition
 from workbench.src.registry.model_catalog import get_catalog_entry, load_catalog
 
 

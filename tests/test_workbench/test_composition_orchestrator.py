@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from workbench.src.core.protocol import DefensiveStub, ModelComposition, CompositionTrace
+from workbench.src.core.composition import CompositionTrace, DefensiveStub, ModelComposition
 from workbench.src.registry.composition_orchestrator import CompositionOrchestrator
 from workbench.src.registry.model_catalog import resolve_stub_dependencies
 from workbench.src.run.run_context import RunContext

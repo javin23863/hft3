@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from workbench.src.core.protocol import DefensiveStub, ModelComposition
+from workbench.src.core.composition import DefensiveStub, ModelComposition
 from workbench.src.run.campaign_runner import run_campaign
 from workbench.src.run.composition_cli import load_composition, parse_defensive_flag
 

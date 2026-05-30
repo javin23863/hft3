@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 import yaml
 
 from decision_engine.python.src.walk_forward import ValidationPeriod
-from workbench.src.core.protocol import ModelComposition
+from workbench.src.core.composition import ModelComposition
 from workbench.src.data.event_catalog import (
     catalog_years_available,
     list_campaign_events,

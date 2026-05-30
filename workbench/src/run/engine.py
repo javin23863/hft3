@@ -14,7 +14,7 @@ from workbench.src.core.trade_audit import audit_records_to_dataframe
 from workbench.src.data.l3_loader import L3Loader
 from workbench.src.data.manifest import DatasetManifest
 from workbench.src.latency.viability import analyze_latency_viability, sweep_injection_pnl
-from workbench.src.core.protocol import ModelComposition
+from workbench.src.core.composition import ModelComposition
 from workbench.src.registry.composition_orchestrator import CompositionOrchestrator
 from workbench.src.registry.unified_registry import build_models_config, get_model_by_id
 from workbench.src.report.generator import (

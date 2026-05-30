@@ -43,23 +43,36 @@ if (-not $streamlitOk) {
     Exit-Launcher -Message 'ERROR: streamlit not installed. Run: pip install -r workbench/requirements.txt'
 }
 
-if (-not $SkipPreflight) {
-    Write-Host 'Preflight: workbench imports...' -ForegroundColor DarkCyan
-    $preflight = @"
+function Invoke-WorkbenchPreflight {
+    $script = @"
 import sys
 from pathlib import Path
 root = Path(r'$RepoRoot')
 if str(root) not in sys.path:
     sys.path.insert(0, str(root))
-from workbench.src.core.composition import DefensiveStub, ModelComposition
+from workbench.src.core.composition import CatalogEntry, DefensiveStub, ModelComposition
+from workbench.src.registry.model_catalog import load_catalog
 from workbench.ui.campaign_panel import get_session_composition
+assert load_catalog()
 print('workbench import OK')
 "@
-    & python -c $preflight
-    if ($LASTEXITCODE -ne 0) {
+    & python -c $script
+    return $LASTEXITCODE
+}
+
+if (-not $SkipPreflight) {
+    Write-Host 'Preflight: workbench imports...' -ForegroundColor DarkCyan
+    $preflightOk = Invoke-WorkbenchPreflight
+    if ($preflightOk -ne 0) {
+        Write-Host 'Preflight failed; clearing workbench __pycache__ and retrying once...' -ForegroundColor Yellow
+        Get-ChildItem -Path (Join-Path $RepoRoot 'workbench') -Recurse -Directory -Filter '__pycache__' -ErrorAction SilentlyContinue |
+            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+        $preflightOk = Invoke-WorkbenchPreflight
+    }
+    if ($preflightOk -ne 0) {
         Exit-Launcher -Message @(
-            'ERROR: workbench import failed (DefensiveStub / campaign_panel).',
-            'Try: git pull; remove workbench/**/__pycache__; pip install -r workbench/requirements.txt'
+            'ERROR: workbench import failed (CatalogEntry / model_catalog / campaign_panel).',
+            'Try: git pull; pip install -r workbench/requirements.txt'
         )
     }
 }
