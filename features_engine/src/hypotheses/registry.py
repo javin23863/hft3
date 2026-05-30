@@ -70,6 +70,9 @@ class HypothesisRegistry:
     """
     Registry for all 44 hypothesis families specified in the A+ Developer Handoff.
     Each hypothesis module returns a 'research card'.
+
+    PDF structural models (PDF_MODEL_1..7) are registered separately via
+    features_engine.src.structural_models.get_structural_models() — 51 total inventory.
     """
     def __init__(self):
         self.families = {

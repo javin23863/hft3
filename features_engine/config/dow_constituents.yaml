@@ -1,0 +1,23 @@
+# PDF_MODEL_6 — price-weighted Dow divisor and constituent symbols
+divisor: 0.152
+constituents:
+  - symbol: UNH
+    price: 520.0
+  - symbol: GS
+    price: 480.0
+  - symbol: MSFT
+    price: 420.0
+  - symbol: HD
+    price: 380.0
+  - symbol: CAT
+    price: 350.0
+  - symbol: MCD
+    price: 290.0
+  - symbol: V
+    price: 280.0
+  - symbol: AMGN
+    price: 310.0
+  - symbol: TRV
+    price: 220.0
+  - symbol: JPM
+    price: 200.0

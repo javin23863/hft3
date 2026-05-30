@@ -137,6 +137,16 @@ Per [BLUEPRINT.md §4 Live Architecture](BLUEPRINT.md#4-live-architecture): prod
 
 **Before any Rithmic trial, infra, or latency work:** read BLUEPRINT §4 and [docs/rithmic_trial/README.md](docs/rithmic_trial/README.md). Live capture code must refuse to run on Windows (see `data_system/rithmic_trial/pipeline.py`).
 
+### PDF structural models (signal layer)
+
+Seven models from [Algorithmic Trading Strategy Development](docs/references/algorithmic_trading_strategy_development.pdf) are **not** HYP families:
+
+- Code: `features_engine/src/structural_models/`
+- Registry: `get_structural_models()` — separate from `get_active_hypotheses()` (44 HYP + 7 PDF = 51 inventory)
+- Docs: [docs/structural_models/PDF_MODELS.md](docs/structural_models/PDF_MODELS.md)
+
+Do not merge PDF outputs into 64-dim `FeatureIndex` or `CombinedHypothesisStrategy` without C++ parity review.
+
 ### Rithmic trial quarantined lane
 
 Trial capture is isolated from trusted production data (`data/npz/` from Databento).

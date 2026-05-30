@@ -1,0 +1,19 @@
+# PDF_MODEL_7 — deliverable basket for CTD / implied repo
+futures_price: 108.50
+conversion_factor_scale: 1.0
+bonds:
+  - cusip: 91282CJK8
+    price: 98.25
+    conversion_factor: 0.8123
+    coupon: 0.025
+    maturity_years: 8.5
+  - cusip: 91282CJL6
+    price: 99.10
+    conversion_factor: 0.8456
+    coupon: 0.03
+    maturity_years: 9.2
+  - cusip: 91282CJM4
+    price: 97.80
+    conversion_factor: 0.7890
+    coupon: 0.0225
+    maturity_years: 7.8

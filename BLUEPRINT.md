@@ -47,6 +47,8 @@ Features computed using only data up to timestamp $t$. Include:
 
 **44 Hypothesis families** included for testing (e.g., Stop-run exhaustion fade, Depth-refill imbalance, Spread blowout, VWAP defense/break, etc.).
 
+**7 PDF structural models** (`PDF_MODEL_1` … `PDF_MODEL_7`) from [Algorithmic Trading Strategy Development](docs/references/algorithmic_trading_strategy_development.pdf) live in a separate signal layer (`features_engine/src/structural_models/`). Total research inventory: **51** (44 HYP + 7 PDF). See [docs/structural_models/PDF_MODELS.md](docs/structural_models/PDF_MODELS.md).
+
 ## 8. Validation standard
 Strict walk-forward periods:
 * Discovery: 2018-2020

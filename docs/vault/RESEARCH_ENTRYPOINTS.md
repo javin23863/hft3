@@ -94,3 +94,13 @@ python -m pytest tests/test_rithmic_trial_pipeline.py -q
 | Rithmic live tape | CHI404 capture | `data/raw/rithmic_trial_live_capture/` (forward-only) |
 
 No historical Rithmic download for past CPI dates.
+
+## PDF structural models (signal layer, not HYP backtest wiring)
+
+Seven models from [algorithmic_trading_strategy_development.pdf](../references/algorithmic_trading_strategy_development.pdf) are separate from the 44 `HYP_*` families:
+
+- Code: `features_engine/src/structural_models/`
+- Specs: [docs/structural_models/PDF_MODELS.md](../structural_models/PDF_MODELS.md)
+- Registry: `get_structural_models()` (not `get_active_hypotheses()`)
+
+Macro event replay (`run_event_replay.py`) runs HYP backtests only; PDF models are evaluated offline via pytest and future research hooks.
