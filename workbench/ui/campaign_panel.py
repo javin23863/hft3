@@ -200,7 +200,7 @@ def personal_lock_sidebar(repo: Path) -> None:
     locked = is_locked(repo)
     st.subheader("Personal sandbox lock")
     if locked:
-        st.error("Locked — 2026-03-01…2026-05-30 hidden from promotion")
+        st.info("Locked — personal sandbox dates (2026-03-01…2026-05-30) are hidden from promotion.")
     else:
         st.success("Unlocked — personal replay enabled (never promotes)")
     unlock = st.checkbox("Unlock personal sandbox (local only)", value=not locked, key="wb__personal_unlock")
@@ -362,7 +362,7 @@ def model_selector_panel(repo: Path) -> Tuple[str, str, str]:
 def personal_runs_panel(repo: Path, model: str, symbol: str) -> None:
     st.subheader("Personal runs (sandbox)")
     if is_locked(repo):
-        st.warning("Personal sandbox locked — unlock in sidebar to preview 2026 events.")
+        st.info("Personal sandbox locked — unlock in sidebar to preview 2026 events.")
         return
     if not model:
         st.info("Select a model above.")
