@@ -9,6 +9,24 @@ from typing import Any
 _REPO = Path(__file__).resolve().parents[2]
 DEFAULT_CHI404_SUMMARY = _REPO / "runtime" / "latency_reports" / "latency_summary.json"
 
+# BLUEPRINT.md § backtest realism; mirrors run_event_replay research cards.
+BACKTEST_LATENCY_NOTE = (
+    "TCP connect p99; order submit→ack not measured until Stage 3 paper harness"
+)
+LATENCY_BAND_MIN_MS = 0.5
+LATENCY_BAND_MAX_MS = 10.0
+
+
+def validate_replay_latency_ms(latency_ms: float, *, source: str) -> float:
+    """Fail loud if latency is outside blueprint-mandated replay band."""
+    ms = float(latency_ms)
+    if not (LATENCY_BAND_MIN_MS <= ms <= LATENCY_BAND_MAX_MS):
+        raise ValueError(
+            f"Replay latency {ms} ms from {source} outside BLUEPRINT band "
+            f"[{LATENCY_BAND_MIN_MS}, {LATENCY_BAND_MAX_MS}] ms"
+        )
+    return ms
+
 
 def load_chi404_speed(summary_path: Path) -> dict[str, Any]:
     if not summary_path.is_file():
@@ -49,11 +67,14 @@ def resolve_replay_latency_ms(
     *,
     latency_ms: float | None,
     chi404_summary: Path = DEFAULT_CHI404_SUMMARY,
-) -> tuple[float, str]:
-    """Return (latency_ms, source_label) for replay scripts."""
+) -> tuple[float, str, dict[str, Any] | None]:
+    """Return (latency_ms, source_label, chi404_payload_or_none) for replay scripts."""
     if latency_ms is not None:
-        return float(latency_ms), "CLI --latency-ms"
+        ms = validate_replay_latency_ms(float(latency_ms), source="CLI --latency-ms")
+        return ms, "CLI --latency-ms", None
     chi404 = load_chi404_speed(chi404_summary.resolve())
-    return float(chi404["backtest_latency_ms"]), str(
-        chi404.get("backtest_latency_source", "CHI404 summary")
+    ms = validate_replay_latency_ms(
+        float(chi404["backtest_latency_ms"]),
+        source="CHI404 rithmic_tcp_65000 p99",
     )
+    return ms, str(chi404.get("backtest_latency_source", "CHI404 summary")), chi404

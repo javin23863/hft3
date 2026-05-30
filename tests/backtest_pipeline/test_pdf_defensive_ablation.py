@@ -194,9 +194,17 @@ def test_summarize_includes_diagnostics() -> None:
 def test_resolve_replay_latency_ms_cli_override() -> None:
     from backtest_pipeline.src.chi404_latency import resolve_replay_latency_ms
 
-    ms, source = resolve_replay_latency_ms(latency_ms=2.5)
+    ms, source, chi404 = resolve_replay_latency_ms(latency_ms=2.5)
     assert ms == 2.5
     assert source == "CLI --latency-ms"
+    assert chi404 is None
+
+
+def test_resolve_replay_latency_ms_rejects_out_of_band() -> None:
+    from backtest_pipeline.src.chi404_latency import resolve_replay_latency_ms
+
+    with pytest.raises(ValueError, match="outside BLUEPRINT band"):
+        resolve_replay_latency_ms(latency_ms=0.01)
 
 
 def test_resolve_replay_latency_ms_from_chi404_summary() -> None:
@@ -204,6 +212,8 @@ def test_resolve_replay_latency_ms_from_chi404_summary() -> None:
 
     if not DEFAULT_CHI404_SUMMARY.is_file():
         pytest.skip(f"CHI404 summary missing: {DEFAULT_CHI404_SUMMARY}")
-    ms, source = resolve_replay_latency_ms(latency_ms=None)
-    assert ms > 0
-    assert "CHI404" in source or "colo" in source.lower() or "CLI" not in source
+    ms, source, chi404 = resolve_replay_latency_ms(latency_ms=None)
+    assert 0.5 <= ms <= 10.0
+    assert "CHI404" in source
+    assert chi404 is not None
+    assert chi404.get("backtest_latency_ms") == ms

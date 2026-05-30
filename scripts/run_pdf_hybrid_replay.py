@@ -14,7 +14,11 @@ if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
 from backtest.adapters.rithmic_replay_loader import resolve_event_npz
-from backtest_pipeline.src.chi404_latency import DEFAULT_CHI404_SUMMARY, resolve_replay_latency_ms
+from backtest_pipeline.src.chi404_latency import (
+    BACKTEST_LATENCY_NOTE,
+    DEFAULT_CHI404_SUMMARY,
+    resolve_replay_latency_ms,
+)
 from backtest_pipeline.src.event_meta import load_event_row
 from backtest_pipeline.src.pdf_hybrid_strategy import HybridExecutionStrategy
 from backtest_pipeline.src.runner import QUEUE_MODELS, ReplayRunner
@@ -43,6 +47,7 @@ def run_pdf_hybrid_replay(
     step_ns: int,
     use_ofi: bool = True,
     use_vpin: bool = True,
+    chi404_measured_speed: dict | None = None,
 ) -> dict:
     raw = load_npz_events(str(npz_path))
     strategy = HybridExecutionStrategy(
@@ -74,6 +79,8 @@ def run_pdf_hybrid_replay(
         "events": len(raw),
         "latency_ms": latency_ms,
         "latency_source": latency_source,
+        "backtest_latency_note": BACKTEST_LATENCY_NOTE,
+        "chi404_measured_speed": chi404_measured_speed,
         "queue_model": queue_model,
         "step_ns": step_ns,
         "result": result,
@@ -101,6 +108,7 @@ def write_research_card(out_dir: Path, payload: dict, event_meta: dict) -> None:
         "",
         f"- NPZ: `{payload.get('npz_path')}` ({payload.get('events')} events)",
         f"- Latency: {payload.get('latency_ms')} ms ({payload.get('latency_source', 'unknown')})",
+        f"- Latency note: {payload.get('backtest_latency_note', BACKTEST_LATENCY_NOTE)}",
         f"- Queue model: {payload.get('queue_model')}",
         f"- Defensive mode: `{payload.get('defensive_mode')}` (use_ofi={payload.get('use_ofi')}, use_vpin={payload.get('use_vpin')})",
         "",
@@ -172,7 +180,7 @@ def main() -> int:
         )
         return 1
 
-    latency_ms, latency_source = resolve_replay_latency_ms(
+    latency_ms, latency_source, chi404_meta = resolve_replay_latency_ms(
         latency_ms=args.latency_ms,
         chi404_summary=args.chi404_summary,
     )
@@ -189,6 +197,7 @@ def main() -> int:
         tick_size=args.tick_size,
         latency_ms=latency_ms,
         latency_source=latency_source,
+        chi404_measured_speed=chi404_meta,
         queue_model=args.queue_model,
         step_ns=args.step_ns,
         use_ofi=args.use_ofi,

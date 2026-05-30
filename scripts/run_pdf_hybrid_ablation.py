@@ -14,7 +14,11 @@ if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
 from backtest.adapters.rithmic_replay_loader import resolve_event_npz
-from backtest_pipeline.src.chi404_latency import DEFAULT_CHI404_SUMMARY, resolve_replay_latency_ms
+from backtest_pipeline.src.chi404_latency import (
+    BACKTEST_LATENCY_NOTE,
+    DEFAULT_CHI404_SUMMARY,
+    resolve_replay_latency_ms,
+)
 from backtest_pipeline.src.event_meta import load_event_row
 from backtest_pipeline.src.pdf_hybrid_ablation import run_defensive_ablation_matrix
 from backtest_pipeline.src.runner import QUEUE_MODELS
@@ -108,7 +112,7 @@ def main() -> int:
         print(f"NPZ missing: {npz_path}", file=sys.stderr)
         return 1
 
-    latency_ms, latency_source = resolve_replay_latency_ms(
+    latency_ms, latency_source, chi404_meta = resolve_replay_latency_ms(
         latency_ms=args.latency_ms,
         chi404_summary=args.chi404_summary,
     )
@@ -123,6 +127,9 @@ def main() -> int:
         step_ns=args.step_ns,
     )
     matrix["latency_source"] = latency_source
+    matrix["backtest_latency_note"] = BACKTEST_LATENCY_NOTE
+    if chi404_meta is not None:
+        matrix["chi404_measured_speed"] = chi404_meta
 
     errors: list[str] = []
     for mode in matrix.get("modes", []):

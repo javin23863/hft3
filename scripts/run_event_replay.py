@@ -217,7 +217,7 @@ def main() -> int:
             raise SystemExit(str(exc)) from exc
         if not npz_path.is_file():
             raise SystemExit(f"NPZ missing: {npz_path}")
-        latency_ms, latency_source = resolve_replay_latency_ms(
+        latency_ms, latency_source, chi404_meta = resolve_replay_latency_ms(
             latency_ms=args.latency_ms,
             chi404_summary=args.chi404_summary,
         )
@@ -228,6 +228,7 @@ def main() -> int:
             tick_size=args.tick_size,
             latency_ms=latency_ms,
             latency_source=latency_source,
+            chi404_measured_speed=chi404_meta,
             queue_model="LogProbQueueModel2",
             step_ns=100_000,
             use_ofi=args.use_ofi,

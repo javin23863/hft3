@@ -5,6 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from backtest_pipeline.src.chi404_latency import (
+    BACKTEST_LATENCY_NOTE,
+    DEFAULT_CHI404_SUMMARY,
+    resolve_replay_latency_ms,
+)
 from backtest_pipeline.src.pdf_defensive_config import DefensiveConfig, iter_ablation_configs
 from backtest_pipeline.src.pdf_hybrid_strategy import HybridExecutionStrategy
 from backtest_pipeline.src.runner import ReplayRunner
@@ -91,13 +96,18 @@ def run_defensive_ablation_matrix(
     npz_path: Path | str,
     event_meta: dict,
     tick_size: float = 0.25,
-    latency_ms: float = 1.0,
+    latency_ms: float | None = None,
+    chi404_summary: Path = DEFAULT_CHI404_SUMMARY,
     queue_model: str = "LogProbQueueModel2",
     step_ns: int = 100_000,
     configs: Optional[List[DefensiveConfig]] = None,
     max_steps: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Run all flag combinations; fresh strategy/models per mode."""
+    resolved_ms, latency_source, chi404_meta = resolve_replay_latency_ms(
+        latency_ms=latency_ms,
+        chi404_summary=chi404_summary,
+    )
     npz_path = Path(npz_path)
     raw = load_npz_events(str(npz_path))
     matrix: List[Dict[str, Any]] = []
@@ -108,7 +118,7 @@ def run_defensive_ablation_matrix(
                 event_meta=event_meta,
                 defensive=cfg,
                 tick_size=tick_size,
-                latency_ms=latency_ms,
+                latency_ms=resolved_ms,
                 queue_model=queue_model,
                 step_ns=step_ns,
                 max_steps=max_steps,
@@ -124,7 +134,10 @@ def run_defensive_ablation_matrix(
         ),
         "event_id": event_meta.get("event_id"),
         "events": len(raw),
-        "latency_ms": latency_ms,
+        "latency_ms": resolved_ms,
+        "latency_source": latency_source,
+        "backtest_latency_note": BACKTEST_LATENCY_NOTE,
+        "chi404_measured_speed": chi404_meta,
         "queue_model": queue_model,
         "step_ns": step_ns,
         "max_steps": max_steps,

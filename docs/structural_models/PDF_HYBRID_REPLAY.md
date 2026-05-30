@@ -82,6 +82,8 @@ Output default: `research_cards/PDF_MODEL_4_hybrid_replay/result.json` and `repo
 |-------|---------|
 | `net_pnl` | Ending balance from replay |
 | `net_pnl_after_fee` | `balance - fee` |
+| `backtest_latency_note` | TCP p99 proxy; order ack not measured until Stage 3 |
+| `chi404_measured_speed` | CHI404 probe payload when latency defaults from summary |
 | `cancel_count` | Resting order cancels |
 | `quote_refresh_count` | Quote refresh cycles |
 | `mean_vpin` / `mean_ofi_smooth` | Step means from strategy diagnostics |
