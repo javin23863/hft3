@@ -39,8 +39,10 @@ class CombinedHypothesisStrategy:
         vec[FeatureIndex.MID_PRICE] = mid
         vec[FeatureIndex.SPREAD] = spread
         vec[FeatureIndex.SPREAD_STRESS] = spread / self.tick_size if spread > 0 else 1.0
-        vec[FeatureIndex.TOP_1_DEPTH_BID] = depth.best_bid_qty
-        vec[FeatureIndex.TOP_1_DEPTH_ASK] = depth.best_ask_qty
+        bid_qty = getattr(depth, "best_bid_qty", getattr(depth, "best_bid_tick", 0))
+        ask_qty = getattr(depth, "best_ask_qty", getattr(depth, "best_ask_tick", 0))
+        vec[FeatureIndex.TOP_1_DEPTH_BID] = bid_qty
+        vec[FeatureIndex.TOP_1_DEPTH_ASK] = ask_qty
         feat = vector_to_feature_dict(vec)
         posterior = self.regime_filter.update(feat, "NORMAL")
         return MarketState(

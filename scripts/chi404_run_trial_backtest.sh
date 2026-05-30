@@ -30,5 +30,5 @@ python3 -m data_system.rithmic_trial.pipeline process \
 
 NPZ="$REPO/data/replay/hftbacktest/rithmic_trial/${DATE}/MES/MES_${DATE}_trial.npz"
 echo "=== replay-sample ==="
-python3 -m data_system.rithmic_trial.pipeline replay-sample --npz "$NPZ"
+python3 -m data_system.rithmic_trial.pipeline replay-sample --npz "$NPZ" --simple
 ls -la "$NPZ"

@@ -109,7 +109,11 @@ def cmd_replay_sample(args: argparse.Namespace) -> int:
         print(f"NPZ not found: {npz}")
         return 1
     runner = ReplayRunner(str(npz), tick_size=args.tick_size)
-    result = runner.run_replay(latency_ms=args.latency_ms, use_combined_strategy=True)
+    use_strategy = not getattr(args, "simple", False)
+    result = runner.run_replay(
+        latency_ms=args.latency_ms,
+        use_combined_strategy=use_strategy,
+    )
     print(json.dumps(result, indent=2, default=str))
     if "error" in result:
         return 1
@@ -153,6 +157,11 @@ def main() -> int:
     p_rep.add_argument("--npz", required=True)
     p_rep.add_argument("--latency-ms", type=float, default=1.0)
     p_rep.add_argument("--tick-size", type=float, default=0.25)
+    p_rep.add_argument(
+        "--simple",
+        action="store_true",
+        help="Trade-only replay without combined strategy (trial NPZ default)",
+    )
     p_rep.set_defaults(func=cmd_replay_sample)
 
     p_un = sub.add_parser("run-unattended", help="Headless capture daemon (CHI404 R|Trader Wine only)")
