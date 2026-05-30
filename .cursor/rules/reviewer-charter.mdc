@@ -16,7 +16,7 @@ The orchestrator **must** spawn **cavecrew-reviewer** using the **Spawn prompt**
 The reviewer runs **both** passes on every diff:
 
 1. **Pass A — Karpathy / agentic** — assumptions, simplicity, surgical scope, goal-driven verification.
-2. **Pass B — Mathematical logic** — invariants from BLUEPRINT and repo-root PDFs (filtration, event-time, no lookahead, walk-forward, etc.).
+2. **Pass B — Mathematical logic** — invariants from BLUEPRINT and authority PDFs in `docs/references/` (filtration, event-time, no lookahead, walk-forward, etc.).
 
 Both passes must complete before the orchestrator proceeds to **Verify** (pytest / CHI404 gates).
 
@@ -25,7 +25,7 @@ Both passes must complete before the orchestrator proceeds to **Verify** (pytest
 When Pass B flags a math or invariant violation, the reviewer **must cite** the source section:
 
 - `BLUEPRINT.md` section, or
-- Full repo-root PDF name + section/page: `chicago_cme_microstructure_mathematical_model.pdf`, `chicago_cme_microstructure_a_plus_developer_handoff.pdf`, `chicago_cme_a_plus_production_implementation_prompt.pdf`, `rithmic_trial_hftbacktest_pipeline_prompt.pdf`, `Ultimate_Quantitative_Finance_Researcher.pdf`.
+- Full PDF name + section/page under `docs/references/`: `chicago_cme_microstructure_mathematical_model.pdf`, `chicago_cme_microstructure_a_plus_developer_handoff.pdf`, `chicago_cme_a_plus_production_implementation_prompt.pdf`, `rithmic_trial_hftbacktest_pipeline_prompt.pdf`, `Ultimate_Quantitative_Finance_Researcher.pdf`, `ultra_low_latency_hft_vector_search_architecture.pdf`.
 
 Findings without a citation are incomplete for Pass B.
 

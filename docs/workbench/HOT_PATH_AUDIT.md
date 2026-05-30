@@ -21,6 +21,8 @@ Python trial capture (`data_system/rithmic_trial/`) is quarantined interim wirin
 | `hft_rithmic_latency_probe` | Tick→ack RTT on colo | Blocked until R\|API+ SDK |
 | `hft_feature_golden` | Python/C++ feature parity | pytest on CI |
 
+Memory/concurrency authority: [MEMORY_ARCHITECTURE.md](MEMORY_ARCHITECTURE.md) (`SPSCQueue` padding, zero-alloc decision path).
+
 Build locally:
 
 ```bash

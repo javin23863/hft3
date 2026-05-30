@@ -19,6 +19,7 @@ Use this list when onboarding or explaining the repo to another developer. Each 
 | Topic | Doc |
 |-------|-----|
 | Workbench latency authority | [workbench/LATENCY_ARCHITECTURE.md](workbench/LATENCY_ARCHITECTURE.md) |
+| Workbench memory authority | [workbench/MEMORY_ARCHITECTURE.md](workbench/MEMORY_ARCHITECTURE.md) |
 | Model catalog + composition | [workbench/MODEL_CATALOG.md](workbench/MODEL_CATALOG.md) |
 | Walk-forward campaigns | [workbench/WALK_FORWARD_CAMPAIGNS.md](workbench/WALK_FORWARD_CAMPAIGNS.md) |
 | After-action LLM (post-run) | [workbench/AFTER_ACTION_REPORTS.md](workbench/AFTER_ACTION_REPORTS.md) |

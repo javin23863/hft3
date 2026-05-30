@@ -15,8 +15,9 @@ When Pass B findings conflict with local convention, defer to these sources in o
 | Production build | `chicago_cme_a_plus_production_implementation_prompt.pdf` | Live execution, failure states, gateway behavior |
 | Trial pipeline | `rithmic_trial_hftbacktest_pipeline_prompt.pdf` | Quarantined trial lane, schema, replay wiring |
 | Math disputes | `Ultimate_Quantitative_Finance_Researcher.pdf` | Probability, econometrics, microstructure arguments |
+| Memory / concurrency / SIMD | `ultra_low_latency_hft_vector_search_architecture.pdf` | Zero-alloc hot path, cache alignment, lock-free IPC, MPHF/AVX design |
 
-Summary index: [BLUEPRINT.md](../BLUEPRINT.md).
+Summary index: [BLUEPRINT.md](../BLUEPRINT.md). Memory index: [MEMORY_ARCHITECTURE.md](workbench/MEMORY_ARCHITECTURE.md).
 
 ---
 
@@ -191,7 +192,7 @@ Run fused Pass A + Pass B:
 - B7 Data lanes — no trial data in data/npz production paths
 - B8 Production failure states — stale halt, disconnect, clock drift, position mismatch, daily loss (where applicable)
 
-Authority (repo root): chicago_cme_microstructure_mathematical_model.pdf, chicago_cme_microstructure_a_plus_developer_handoff.pdf, chicago_cme_a_plus_production_implementation_prompt.pdf, rithmic_trial_hftbacktest_pipeline_prompt.pdf, Ultimate_Quantitative_Finance_Researcher.pdf. Summary index: BLUEPRINT.md.
+Authority (docs/references/): chicago_cme_microstructure_mathematical_model.pdf, chicago_cme_microstructure_a_plus_developer_handoff.pdf, chicago_cme_a_plus_production_implementation_prompt.pdf, rithmic_trial_hftbacktest_pipeline_prompt.pdf, Ultimate_Quantitative_Finance_Researcher.pdf, ultra_low_latency_hft_vector_search_architecture.pdf. Summary index: BLUEPRINT.md. Memory index: workbench/MEMORY_ARCHITECTURE.md.
 
 Output one line per finding:
 path:line: <emoji> <severity>: [Pass A|Pass B] <problem>. <fix>.

@@ -21,6 +21,14 @@ Implementation specs and dependency map:
 - [PDF_MODELS.md](../structural_models/PDF_MODELS.md)
 - [MODEL_DEPENDENCY_MAP.md](../structural_models/MODEL_DEPENDENCY_MAP.md)
 
+## Ultra-Low Latency Vector Search and HFT Engine Architecture
+
+**File:** [ultra_low_latency_hft_vector_search_architecture.pdf](ultra_low_latency_hft_vector_search_architecture.pdf)
+
+C++ memory architecture authority: zero-allocation hot path, cache alignment, lock-free SPSC queue
+(PDF also specifies Disruptor ring buffer — design authority; SPSC only in repo today). Index:
+[MEMORY_ARCHITECTURE.md](../workbench/MEMORY_ARCHITECTURE.md).
+
 ## Full PDF bundle (after-action citation index)
 
 | File | Status | Use |
@@ -32,5 +40,6 @@ Implementation specs and dependency map:
 | [chicago_cme_a_plus_production_implementation_prompt.pdf](chicago_cme_a_plus_production_implementation_prompt.pdf) | present | C++ latency, gateway, injection sweep |
 | [rithmic_trial_hftbacktest_pipeline_prompt.pdf](rithmic_trial_hftbacktest_pipeline_prompt.pdf) | present | Trial lane quarantine |
 | [Ultimate_Quantitative_Finance_Researcher.pdf](Ultimate_Quantitative_Finance_Researcher.pdf) | present | Walk-forward validation |
+| [ultra_low_latency_hft_vector_search_architecture.pdf](ultra_low_latency_hft_vector_search_architecture.pdf) | present | C++ memory, lock-free IPC, SIMD/MPHF design |
 
 Field-level mapping: [MANIFEST.md](MANIFEST.md). After-action packets require all charter PDFs in this directory for `pdf_citations_complete: true`.
