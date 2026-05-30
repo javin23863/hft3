@@ -128,19 +128,19 @@ cat reports/rithmic_trial/$(date -u +%Y-%m-%d)/unattended_status.json
 
 TCP connect probes (`network.rithmic_tcp_65000`) are **network health only** — they do not set replay or workbench `gateway_ack`.
 
-Measured paper submit→ack requires ≥1,000 paired orders from the R|Trader VM log path:
+**Canonical agent doc:** [docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md](../vault/CHI404_CANONICAL_ENTRYPOINTS.md)
+
+Measured paper submit→ack requires ≥1,000 **real** paired orders from the R|Trader VM log path (R|Trader UI → SMB watch → bridge → daemon). **Synthetic log inject (`Add-Content`, host `f.write`) is forbidden** and blocked by pytest.
 
 ```bash
-# CHI404 orchestrator (live gate → daemon → VM sweep → reports)
+# CHI404 — deploy / recover VM sidecar first if needed:
+bash scripts/chi404_vm_deploy.sh
+
+# Full sweep (live gate → daemon → VM UI orders → promote → latency_summary):
 bash scripts/chi404_run_paper_latency_sweep.sh
-
-# Or run components separately:
-systemctl enable --now hft3-paper-latency   # after infrastructure/chi404/10_paper_latency_systemd.sh
-python3 -m data_system.rithmic_trial.pipeline paper-latency-daemon --config data_system/config/rithmic_trial.yaml
-
-# Inside R|Trader Windows VM (paper session):
-powershell -File C:\hft3\scripts\chi404_vm_paper_order_sweep.ps1 -TargetOrders 1000
 ```
+
+Do **not** use deprecated host-side sweep scripts under `scripts/deprecated/`.
 
 Artifacts:
 

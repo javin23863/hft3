@@ -1,0 +1,39 @@
+{
+  "scenario": "CPI_2024_09_11_TIGHT PDF hybrid replay",
+  "timestamp_utc": "2026-05-30T23:21:12.155924+00:00",
+  "event_id": "CPI_2024_09_11_TIGHT",
+  "release_date": "2024-09-11",
+  "release_time_et": "08:30:00",
+  "window_utc": "2024-09-11T12:29:30+00:00 to 2024-09-11T12:35:00+00:00",
+  "symbol": "MES.v.0",
+  "primary_research_engine": "pdf_hybrid",
+  "engines": {
+    "pdf_hybrid": {
+      "model_id": "PDF_MODEL_4",
+      "engine": "pdf_hybrid",
+      "description": "ReplayRunner + HybridExecutionStrategy (PDF_MODEL_1/3/4, TRADE VPIN)",
+      "event_id": "CPI_2024_09_11_TIGHT",
+      "defensive_mode": "hybrid_full",
+      "use_ofi": true,
+      "use_vpin": true,
+      "npz_path": "data/npz/MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz",
+      "npz_source": "Databento MBO (trusted research lake)",
+      "events": 146184,
+      "latency_ms": 1.0,
+      "latency_source": "workstation_gate_fallback_1ms",
+      "backtest_latency_note": "Paper order submit\u2192ack not measured; pass --latency-ms or run scripts/chi404_run_paper_latency_sweep.sh on CHI404. TCP connect is network health only \u2014 not used for execution latency.",
+      "chi404_measured_speed": null,
+      "queue_model": "LogProbQueueModel2",
+      "step_ns": 100000,
+      "result": {
+        "steps": 3299116,
+        "balance": -15017525.5,
+        "fee": 0.0,
+        "num_trades": 20966,
+        "trading_volume": 20966.0,
+        "position": 2736.0
+      },
+      "gate_latency_note": "Paper order submit\u2192ack not measured; pass --latency-ms or run scripts/chi404_run_paper_latency_sweep.sh on CHI404. TCP connect is network health only \u2014 not used for execution latency. Gate used --latency-ms 1.0 workstation fallback for repeatable local PASS."
+    }
+  }
+}

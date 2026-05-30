@@ -132,11 +132,34 @@ def _parse_comma_log_line(line: str, cfg: TrialConfig) -> dict[str, Any] | None:
     if not event_type:
         return None
     sym = parts[2] or cfg.symbol
+    if event_type == "order_submit":
+        ev: dict[str, Any] = {
+            "event_type": event_type,
+            "symbol": sym,
+            "exchange": cfg.exchange,
+            "order_type": parts[3] if len(parts) > 3 else "unknown",
+            "raw_line": line,
+        }
+        if len(parts) >= 5 and parts[4]:
+            try:
+                ev["size"] = float(parts[4])
+            except ValueError:
+                pass
+        if len(parts) >= 6 and parts[5]:
+            ev["order_id"] = parts[5]
+        exch_ts = _parse_export_timestamp(parts[0])
+        if exch_ts:
+            ev["exchange_timestamp"] = exch_ts
+        return ev
+
     try:
         price = float(parts[3])
     except ValueError:
-        return None
-    ev: dict[str, Any] = {
+        if event_type in ("order_ack", "cancel", "order_replace", "order_status", "reject"):
+            price = 0.0
+        else:
+            return None
+    ev = {
         "event_type": event_type,
         "symbol": sym,
         "exchange": cfg.exchange,

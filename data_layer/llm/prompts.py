@@ -58,6 +58,8 @@ def build_packet_summary(packet: Dict[str, Any]) -> Dict[str, Any]:
         "predictions_vs_outcomes": pred,
         "per_trade_audit_summary": _audit_summary(trades),
         "composition_trace": packet.get("composition_trace"),
+        "ablation_modes": packet.get("ablation_modes"),
+        "audit_waiver_reason": packet.get("audit_waiver_reason"),
         "skip_reasons": packet.get("skip_reasons"),
         "pdf_citations_complete": packet.get("pdf_citations_complete"),
     }

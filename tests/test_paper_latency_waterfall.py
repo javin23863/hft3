@@ -59,6 +59,75 @@ def test_waterfall_report_percentiles() -> None:
     assert sa["p99_us"] is not None
 
 
+def test_promote_rejects_sweep_synthetic_order_ids(tmp_path: Path) -> None:
+    from data_system.rithmic_trial.latency.promote_reports import promote_from_records
+
+    records = tmp_path / "records.ndjson"
+    records.write_text(
+        json.dumps(
+            {
+                "schema_version": "paper_latency_record_v1",
+                "run_id": "r1",
+                "order_id": "SWEEP-batch-0",
+                "symbol": "ES",
+                "rithmic_submit_mono_ns": 1000,
+                "rithmic_ack_mono_ns": 2000,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="no promotable records"):
+        promote_from_records(records, tmp_path / "reports")
+
+
+def test_promote_rejects_mkt_synthetic_order_ids(tmp_path: Path) -> None:
+    from data_system.rithmic_trial.latency.promote_reports import promote_from_records
+
+    records = tmp_path / "records.ndjson"
+    records.write_text(
+        json.dumps(
+            {
+                "schema_version": "paper_latency_record_v1",
+                "run_id": "r1",
+                "order_id": "MKT-batch-0",
+                "symbol": "MES",
+                "rithmic_submit_mono_ns": 1000,
+                "rithmic_ack_mono_ns": 2000,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="no promotable records"):
+        promote_from_records(records, tmp_path / "reports")
+
+
+def test_promote_min_paired_gate(tmp_path: Path) -> None:
+    from data_system.rithmic_trial.latency.promote_reports import promote_from_records
+
+    records = tmp_path / "records.ndjson"
+    lines = []
+    for i in range(3):
+        submit = 1_000_000 + i * 10_000
+        ack = submit + 2_000
+        lines.append(
+            json.dumps(
+                {
+                    "schema_version": "paper_latency_record_v1",
+                    "run_id": "r1",
+                    "order_id": str(i),
+                    "symbol": "MES",
+                    "rithmic_submit_mono_ns": submit,
+                    "rithmic_ack_mono_ns": ack,
+                }
+            )
+        )
+    records.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="min_paired"):
+        promote_from_records(records, tmp_path / "reports", min_paired=1000)
+
+
 def test_promote_reports_from_synthetic_records(tmp_path: Path) -> None:
     from data_system.rithmic_trial.latency.promote_reports import promote_from_records
 

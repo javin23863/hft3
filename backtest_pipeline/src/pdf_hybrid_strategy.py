@@ -165,9 +165,47 @@ class HybridExecutionStrategy:
 
     def _depth_mid(self, hbt) -> Optional[float]:
         depth = hbt.depth(0)
-        if depth.best_bid <= 0 or depth.best_ask <= 0:
+        bid_p = float(depth.best_bid)
+        ask_p = float(depth.best_ask)
+        if not (math.isfinite(bid_p) and math.isfinite(ask_p)):
             return None
-        return (float(depth.best_bid) + float(depth.best_ask)) / 2.0
+        if bid_p <= 0 or ask_p <= 0:
+            return None
+        return (bid_p + ask_p) / 2.0
+
+    def _book_level_qty(self, price: float, side: str) -> int:
+        book = self._book.bids if side == "B" else self._book.asks
+        level = book.get(price)
+        return int(level.total_qty) if level is not None else 0
+
+    def _hbt_depth_bbo(self, depth) -> Optional[tuple[float, float, int, int]]:
+        bid_p = float(depth.best_bid)
+        ask_p = float(depth.best_ask)
+        if not (math.isfinite(bid_p) and math.isfinite(ask_p)):
+            return None
+        if bid_p <= 0 or ask_p <= 0 or bid_p >= ask_p:
+            return None
+        return bid_p, ask_p, self._depth_qty(depth, "bid"), self._depth_qty(depth, "ask")
+
+    def _book_bbo(self) -> Optional[tuple[float, float, int, int]]:
+        bid_p = self._book.get_best_bid()
+        ask_p = self._book.get_best_ask()
+        if bid_p <= 0 or ask_p >= float("inf") or bid_p >= ask_p:
+            return None
+        return (
+            bid_p,
+            ask_p,
+            self._book_level_qty(bid_p, "B"),
+            self._book_level_qty(ask_p, "A"),
+        )
+
+    def _resolve_bbo(self, hbt) -> Optional[tuple[float, float, int, int]]:
+        """Prefer hftbacktest depth; fall back to MBO-synced internal book when depth is NaN."""
+        self._sync_mbo(hbt)
+        bbo = self._hbt_depth_bbo(hbt.depth(0))
+        if bbo is not None:
+            return bbo
+        return self._book_bbo()
 
     def _sync_mbo(self, hbt) -> None:
         ts = int(hbt.current_timestamp)
@@ -241,16 +279,11 @@ class HybridExecutionStrategy:
         self._diag_sum_vpin += vpin_value
 
     def on_step(self, hbt) -> None:
-        depth = hbt.depth(0)
-        if depth.best_bid <= 0 or depth.best_ask <= 0:
+        bbo = self._resolve_bbo(hbt)
+        if bbo is None:
             return
 
-        self._sync_mbo(hbt)
-
-        bid_p = float(depth.best_bid)
-        ask_p = float(depth.best_ask)
-        bid_q = self._depth_qty(depth, "bid")
-        ask_q = self._depth_qty(depth, "ask")
+        bid_p, ask_p, bid_q, ask_q = bbo
         ts = int(hbt.current_timestamp)
 
         book_payload = None
@@ -284,8 +317,6 @@ class HybridExecutionStrategy:
         ofi_smooth = float(eval_kw.get("ofi_smooth", book_payload.OFI_smooth if book_payload else 0.0))
         self._record_eval_diagnostics(ofi_smooth, vpin_value)
 
-        bid_p = float(depth.best_bid)
-        ask_p = float(depth.best_ask)
         inventory = float(hbt.position(0))
 
         bid_px = _round_to_tick(payload.optimal_bid, self.tick_size)

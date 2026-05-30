@@ -44,6 +44,9 @@ def records_to_events(records: list[PaperLatencyRecordV1]) -> list[dict[str, Any
     return events
 
 
+SYNTHETIC_ORDER_PREFIXES = ("SWEEP-", "MKT-")
+
+
 def load_records(path: Path) -> list[PaperLatencyRecordV1]:
     out: list[PaperLatencyRecordV1] = []
     if not path.is_file():
@@ -53,17 +56,37 @@ def load_records(path: Path) -> list[PaperLatencyRecordV1]:
         if not line:
             continue
         try:
-            out.append(PaperLatencyRecordV1.from_dict(json.loads(line)))
+            rec = PaperLatencyRecordV1.from_dict(json.loads(line))
         except json.JSONDecodeError:
             continue
+        oid = (rec.order_id or "").upper()
+        if any(oid.startswith(p) for p in SYNTHETIC_ORDER_PREFIXES):
+            continue
+        out.append(rec)
     return out
 
 
-def promote_from_records(records_path: Path, reports_dir: Path) -> dict[str, str]:
+def promote_from_records(
+    records_path: Path,
+    reports_dir: Path,
+    *,
+    min_paired: int = 0,
+) -> dict[str, str]:
     records = load_records(records_path)
+    if not records:
+        raise ValueError(
+            f"no promotable records in {records_path} "
+            "(synthetic SWEEP-*/MKT-* filtered; need real R|Trader exports)"
+        )
     events = records_to_events(records)
     latency = build_latency_profile(events)
     paper_summary = build_paper_order_summary(events)
+    paired = int(paper_summary.get("paired_count", 0) or 0)
+    if min_paired > 0 and paired < min_paired:
+        raise ValueError(
+            f"paired_count={paired} < min_paired={min_paired} in {records_path} "
+            "(refusing to promote partial/stale sweep)"
+        )
     reports_dir.mkdir(parents=True, exist_ok=True)
 
     paths = {
@@ -103,8 +126,18 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Promote paper latency NDJSON to trial reports")
     parser.add_argument("--records", type=Path, required=True)
     parser.add_argument("--reports-dir", type=Path, required=True)
+    parser.add_argument(
+        "--min-paired",
+        type=int,
+        default=0,
+        help="Minimum paired submit→ack count required to promote (0 = any)",
+    )
     args = parser.parse_args(argv)
-    paths = promote_from_records(args.records.resolve(), args.reports_dir.resolve())
+    paths = promote_from_records(
+        args.records.resolve(),
+        args.reports_dir.resolve(),
+        min_paired=args.min_paired,
+    )
     for name, path in paths.items():
         print(f"Wrote {name}: {path}")
     paired = json.loads(Path(paths["paper_order_summary.json"]).read_text())["paired_count"]

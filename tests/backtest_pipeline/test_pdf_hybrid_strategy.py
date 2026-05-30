@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -73,6 +74,40 @@ def test_time_remaining_before_window_uses_window_length() -> None:
     remaining = strategy._time_remaining_sec(hbt)
     expected = (event_window_end_ns(meta) - event_window_start_ns(meta)) / 1e9
     assert abs(remaining - expected) < 1.0
+
+
+def test_on_step_uses_book_bbo_when_depth_nan() -> None:
+    events = _mbo_sequence()
+    strategy = HybridExecutionStrategy(
+        "unused.npz",
+        tick_size=0.25,
+        event_meta=_event_meta(),
+        mbo_events=events,
+        quote_refresh_ticks=1,
+    )
+    depth = SimpleNamespace(
+        best_bid=float("nan"),
+        best_ask=float("nan"),
+        best_bid_qty=0,
+        best_ask_qty=0,
+    )
+    hbt = MagicMock()
+    hbt.depth.return_value = depth
+    hbt.current_timestamp = events[-1].timestamp_ns
+    hbt.position.return_value = 0.0
+    hbt.submit_buy_order = MagicMock()
+    hbt.submit_sell_order = MagicMock()
+    hbt.cancel = MagicMock()
+
+    strategy.on_step(hbt)
+
+    assert strategy.last_hybrid_out is not None
+    payload = strategy.last_hybrid_out.payload
+    assert payload is not None
+    assert math.isfinite(payload.optimal_bid)
+    assert math.isfinite(payload.optimal_ask)
+    assert payload.optimal_bid < payload.optimal_ask
+    assert hbt.submit_buy_order.called or hbt.submit_sell_order.called
 
 
 def test_on_step_runs_hybrid_after_trades() -> None:

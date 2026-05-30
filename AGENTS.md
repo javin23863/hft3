@@ -95,13 +95,14 @@ Convert imperative instructions into verifiable success criteria. Prefer "write 
 Every task runs this loop:
 
 1. **Spec** — Restate goal, constraints, and success criteria. Ask if ambiguous.
-2. **GraphPre** — Before any code edit session: `scripts/graphify_pre_edit.ps1`, then `graphify query "..."` or read fresh `graphify-out/GRAPH_REPORT.md`. Prefer graph query over blind grep. See [docs/GRAPHIFY_WORKFLOW.md](docs/GRAPHIFY_WORKFLOW.md).
-3. **Plan** — Brief plan with verification steps before editing. Delegate locate work when needed (with graph context).
-4. **Code** — Minimal change via builder or approved multi-file path. No drive-by edits.
-5. **Verify** — **cavecrew-reviewer** must complete Pass A (Karpathy) and Pass B (math invariants) on the diff before **shell** runs `pytest` and CHI404 validate gates when infra applies. Loop until met or blocked.
-6. **GraphPost** — After code edits: `graphify update .` or `scripts/graphify_rebuild.ps1`. Commit updated `graphify-out/` with the change when the team tracks graph in git.
+2. **GraphGate** — **Blocking:** `scripts/graphify_gate.ps1 -Query "..."` (or `bash scripts/graphify_gate.sh '...'`). Writes `graphify-out/.last-graph-query.json`. **No code edits before this.**
+3. **GraphPre** — `scripts/graphify_pre_edit.ps1` (exits 2 if gate stamp missing/stale). Use graph query output — not blind repo grep. CHI404: [docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md](docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md).
+4. **Plan** — Brief plan with verification steps before editing. Delegate locate work when needed (with graph context).
+5. **Code** — Minimal change via builder or approved multi-file path. No drive-by edits. No parallel CHI404 orchestrators.
+6. **Verify** — **cavecrew-reviewer** must complete Pass A (Karpathy) and Pass B (math invariants) on the diff before **shell** runs `pytest` and CHI404 validate gates when infra applies. Loop until met or blocked.
+7. **GraphPost** — After code edits: `graphify update .` or `scripts/graphify_rebuild.ps1`. Commit updated `graphify-out/` with the change when the team tracks graph in git.
 
-Do not skip GraphPre, Plan, Verify, or GraphPost for "small" changes.
+Do not skip GraphGate, GraphPre, Plan, Verify, or GraphPost for "small" changes.
 
 ## hft3-specific constraints
 
@@ -168,6 +169,7 @@ Trial capture is isolated from trusted production data (`data/npz/` from Databen
 - Code: `data_system/rithmic_trial/`
 - Config: `data_system/config/rithmic_trial.yaml`
 - Docs: [docs/rithmic_trial/README.md](docs/rithmic_trial/README.md)
+- **CHI404 canonical paths (agents):** [docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md](docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md) — deploy via `chi404_vm_deploy.sh`; paper latency via live gate + real R|Trader exports only. **Never** host-side synthetic order log inject.
 
 Do not write trial output into production NPZ paths or bypass quarantine without explicit approval.
 

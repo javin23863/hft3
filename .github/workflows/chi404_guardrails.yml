@@ -1,0 +1,38 @@
+name: chi404_guardrails
+
+on:
+  push:
+    paths:
+      - "scripts/chi404_*"
+      - "scripts/graphify_*"
+      - "data_system/rithmic_trial/**"
+      - "tests/test_chi404_*"
+      - "tests/test_paper_latency_*"
+      - "docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md"
+  pull_request:
+    paths:
+      - "scripts/chi404_*"
+      - "scripts/graphify_*"
+      - "data_system/rithmic_trial/**"
+      - "tests/test_chi404_*"
+      - "tests/test_paper_latency_*"
+      - "docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md"
+
+jobs:
+  guardrails:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test deps
+        run: pip install pytest pyyaml
+
+      - name: CHI404 canonical guardrails
+        run: pytest tests/test_chi404_canonical_guardrails.py -q
+
+      - name: Paper latency waterfall tests
+        run: pytest tests/test_paper_latency_waterfall.py -q

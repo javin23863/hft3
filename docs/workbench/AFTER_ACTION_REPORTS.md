@@ -59,6 +59,7 @@ Global KG append: `research_cards/kg/nodes.jsonl`, `edges.jsonl`.
 |-----------|---------------|
 | `data_sufficient == false` | `HISTORY_GATE` |
 | trades > 0 but incomplete audit | `AUDIT_INCOMPLETE` |
+| trades > 0, no `trades.parquet`, `execution_assumptions == quote_engine` | LLM allowed; packet `audit_waiver_reason: quote_engine_aggregate_only` (discovery hybrid gate only; not production promotion) |
 | Ollama unreachable | `LLM_UNAVAILABLE` |
 | Required PDFs missing | LLM skipped (`pdf_citations_complete: false`) |
 

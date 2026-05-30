@@ -20,15 +20,20 @@ graphify --version
 From repo root (`C:\...\hft3`):
 
 ```powershell
+.\scripts\graphify_gate.ps1 -Query "where is X defined and what calls it"
 .\scripts\graphify_pre_edit.ps1
-graphify query "where is X defined and what calls it"
 ```
 
-If `graphify-out/graph.json` is missing, the pre-edit script runs `graphify update .` (AST-only, no API key).
+On CHI404:
 
-Alternative when `graphify-out/GRAPH_REPORT.md` is fresh: read that report instead of repeating broad grep.
+```bash
+bash scripts/graphify_gate.sh "CHI404 R|Trader deploy paper latency"
+bash scripts/graphify_pre_edit.ps1   # if using PowerShell on workstation only
+```
 
-**Prefer** `graphify query` over blind full-repo grep for symbol location and call relationships.
+**GraphGate is blocking:** `graphify_pre_edit.ps1` exits 2 if `graphify-out/.last-graph-query.json` is missing or older than 4 hours.
+
+CHI404 / R|Trader tasks: read [docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md](vault/CHI404_CANONICAL_ENTRYPOINTS.md) after graph query.
 
 ## Post-edit (after Verify)
 

@@ -126,6 +126,34 @@ def test_packet_requires_per_trade_audit_when_trades(tmp_path):
     assert len(packet["per_trade_audit"]) == 0
 
 
+def test_packet_waives_audit_for_quote_engine(tmp_path):
+    from data_layer.packet.microstructure_aar_packet import build_microstructure_aar_packet
+
+    art = tmp_path / "run_quote"
+    art.mkdir()
+    (art / "diagnostics.json").write_text(
+        json.dumps(
+            {
+                "event_id": "CPI_2024_09_11_TIGHT",
+                "num_trades": 5,
+                "execution_assumptions": "quote_engine",
+                "ablation_modes": [{"mode_id": "hybrid_full", "num_trades": 5}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (art / "manifest.json").write_text(json.dumps({"data_sufficient": True}), encoding="utf-8")
+    (art / "config.yaml").write_text(
+        "model_id: PDF_MODEL_4\nevent_id: CPI_2024_09_11_TIGHT\nexecution_assumptions: quote_engine\n",
+        encoding="utf-8",
+    )
+    packet, skips = build_microstructure_aar_packet(art, REPO)
+    assert "AUDIT_INCOMPLETE" not in skips
+    assert packet.get("audit_waiver_reason") == "quote_engine_aggregate_only"
+    assert packet.get("simulation_fidelity", {}).get("quote_engine_replay") is True
+    assert len(packet.get("ablation_modes", [])) == 1
+
+
 def test_symbolic_exchange_receive_ordering():
     from data_layer.symbolic.latency_invariants import check_latency_invariants
 

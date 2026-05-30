@@ -205,8 +205,15 @@ def build_microstructure_aar_packet(
 
     num_trades = int(diagnostics.get("num_trades", 0))
     per_trade_audit, audit_complete = _load_per_trade_audit(artifact_dir, num_trades)
+    execution_assumptions = str(
+        config.get("execution_assumptions") or diagnostics.get("execution_assumptions") or ""
+    )
+    audit_waiver_reason: Optional[str] = None
     if num_trades > 0 and not audit_complete:
-        skip_reasons.append("AUDIT_INCOMPLETE")
+        if execution_assumptions == "quote_engine":
+            audit_waiver_reason = "quote_engine_aggregate_only"
+        else:
+            skip_reasons.append("AUDIT_INCOMPLETE")
 
     pdf_citations, pdf_complete = load_pdf_citations(repo_root)
     injection_sweep = _normalize_injection_sweep(diagnostics)
@@ -252,6 +259,7 @@ def build_microstructure_aar_packet(
             "cpp_replay_available": diagnostics.get("cpp_replay_available", False),
             "cpp_stack_verified": _cpp_stack_verified_from_diagnostics(diagnostics),
             "matching_config": str(repo_root / "workbench" / "src" / "sim" / "matching_config.yaml"),
+            "quote_engine_replay": execution_assumptions == "quote_engine",
             "queue_tracker_status": (
                 "available"
                 if diagnostics.get("cpp_replay_available")
@@ -265,11 +273,15 @@ def build_microstructure_aar_packet(
         "predictions_vs_outcomes": _predictions_vs_outcomes(diagnostics, per_trade_audit),
         "skip_reasons": skip_reasons,
     }
+    if audit_waiver_reason:
+        packet["audit_waiver_reason"] = audit_waiver_reason
     if diagnostics.get("phase_budgets_us"):
         packet["composition_trace"] = {
             "phase_budgets_us": diagnostics.get("phase_budgets_us"),
             "trades_vetoed_by_defense": diagnostics.get("trades_vetoed_by_defense"),
         }
+    if diagnostics.get("ablation_modes"):
+        packet["ablation_modes"] = diagnostics.get("ablation_modes")
     return packet, skip_reasons
 
 

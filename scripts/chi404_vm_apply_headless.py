@@ -21,6 +21,7 @@ REQUIRED = {
     "C:/chi404_vm_headless.ps1": repo_root() / "scripts" / "chi404_vm_headless.ps1",
     "C:/chi404_vm_rtrader_login.ps1": repo_root() / "scripts" / "chi404_vm_rtrader_login.ps1",
     "C:/chi404_vm_rtrader_subscribe.ps1": repo_root() / "scripts" / "chi404_vm_rtrader_subscribe.ps1",
+    "C:/chi404_vm_rtrader_ui.ps1": repo_root() / "scripts" / "chi404_vm_rtrader_ui.ps1",
 }
 
 

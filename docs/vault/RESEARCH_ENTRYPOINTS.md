@@ -51,6 +51,14 @@ python scripts/run_pdf_hybrid_ablation.py --event-id CPI_2024_09_11_TIGHT
 
 Output: `research_cards/PDF_MODEL_4_defensive_ablation/`.
 
+**Gate (ablation + hybrid replay + after-action report):**
+
+```bash
+python scripts/run_hybrid_pipeline_gate.py --event-id CPI_2024_09_11_TIGHT
+```
+
+See [docs/structural_models/HYBRID_PIPELINE_GATE.md](../structural_models/HYBRID_PIPELINE_GATE.md). Outputs: `research_cards/PDF_MODEL_4_hybrid_replay/`, `research_cards/PDF_MODEL_4_defensive_ablation/`, `research_cards/PDF_MODEL_4_hybrid_pipeline/` (AAR), `runtime/reports/hybrid_pipeline_gate.json`.
+
 ## 2. Single-hypothesis drill-down
 
 **When:** One hypothesis family on the same event NPZ.
@@ -92,6 +100,8 @@ EVENT_ID=CPI_2024_09_11_TIGHT bash scripts/chi404_run_trial_live.sh
 
 - `--date` / folder `YYYY-MM-DD` = **capture session date** (ingest only).
 - `EVENT_ID` / `replay-event` = **research event** (from `events.csv`).
+
+**Paper order latency (≥1,000 real pairs):** [CHI404_CANONICAL_ENTRYPOINTS.md](CHI404_CANONICAL_ENTRYPOINTS.md) — `chi404_vm_deploy.sh` then `chi404_run_paper_latency_sweep.sh`. No synthetic log inject.
 
 ## 5. Legacy / smoke only (do not use for macro research)
 
