@@ -1,3 +1,4 @@
 numpy
 pandas
 pyyaml>=6.0.0
+scipy>=1.11.0

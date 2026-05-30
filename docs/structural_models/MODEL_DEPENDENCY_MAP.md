@@ -1,6 +1,6 @@
 # PDF model dependency map
 
-Total inventory: **44 HYP_*** + **7 PDF_MODEL_*** = **51**.
+Total inventory: **44 HYP_*** + **11 PDF_MODEL_*** = **55**.
 
 Only two internal convergences (combined math inside one registry entry):
 
@@ -22,6 +22,10 @@ PDF_MODEL_3 (VPIN)
 
 PDF_MODEL_5 (DealerGEX)          — standalone
 PDF_MODEL_7 (TreasuryCTD)        — standalone
+PDF_MODEL_8 (TransferEntropy)    — standalone
+PDF_MODEL_9 (QuantumSpread)      — standalone
+PDF_MODEL_10 (StochasticThermo)  — standalone
+PDF_MODEL_11 (HawkesToxic)       — reads PDF_MODEL_4 reservation skew
 ```
 
 ## Explicit non-combinations
@@ -38,6 +42,6 @@ Do **not** merge in one codebase:
 | API | Returns |
 |-----|---------|
 | `get_active_hypotheses()` | 44 HYP families (39 active without cross-asset env) |
-| `get_structural_models()` | 7 PDF_MODEL instances |
+| `get_structural_models()` | 11 PDF_MODEL instances |
 
 PDF outputs live in `ModelOutput` dataclasses, not 64-dim `FeatureIndex` slots.

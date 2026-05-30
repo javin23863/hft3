@@ -1,4 +1,4 @@
-"""Registry inventory: 7 PDF models + 44 HYP unchanged."""
+"""Registry inventory: 11 PDF models + 44 HYP unchanged."""
 
 from features_engine.src.hypotheses.registry import HypothesisRegistry, get_active_hypotheses
 from features_engine.src.structural_models.registry import (
@@ -8,15 +8,22 @@ from features_engine.src.structural_models.registry import (
 )
 
 
-def test_seven_pdf_models_registered():
+def test_eleven_pdf_models_registered():
     models = get_structural_models()
-    assert len(models) == 7
+    assert len(models) == 11
     ids = {m.model_id for m in models}
     assert ids == set(PDF_MODEL_IDS)
 
 
+def test_hft_framework_models_present():
+    ids = set(PDF_MODEL_IDS)
+    assert "PDF_MODEL_8" in ids
+    assert "PDF_MODEL_11" in ids
+
+
 def test_dependency_map():
     assert MODEL_DEPENDENCY_MAP["PDF_MODEL_4"] == ["PDF_MODEL_1", "PDF_MODEL_3"]
+    assert MODEL_DEPENDENCY_MAP["PDF_MODEL_11"] == ["PDF_MODEL_4"]
     assert MODEL_DEPENDENCY_MAP["PDF_MODEL_1"] == []
 
 

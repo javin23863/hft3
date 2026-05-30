@@ -1,0 +1,37 @@
+# B4 walk-forward — BLUEPRINT.md §8, chicago_cme_microstructure_a_plus_developer_handoff.pdf
+sequential_gate: true
+discovery_tune_allowed:
+  - Discovery
+holdout_evaluate_only:
+  - Holdout
+  - Recent holdout
+
+periods:
+  - name: Discovery
+    start_year: 2018
+    end_year: 2020
+  - name: Confirmation
+    start_year: 2021
+    end_year: 2022
+  - name: Holdout
+    start_year: 2023
+    end_year: 2024
+  - name: Recent holdout
+    start_year: 2025
+    end_year: 2025
+
+default_macro_contexts:
+  - CPI_TIGHT
+  - NFP_TIGHT
+
+sim_shadow:
+  anchor_date: 2026-03-01
+  cme_days: 60
+  host: CHI404
+  lane: rithmic_trial
+
+personal_sandbox:
+  start_date: 2026-03-01
+  end_date: 2026-05-30
+  default_locked: true
+  artifact_root: research_cards/workbench_personal/

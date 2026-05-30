@@ -1,9 +1,9 @@
 # PDF structural models — implementation specs
 
-Source: [algorithmic_trading_strategy_development.pdf](../references/algorithmic_trading_strategy_development.pdf)
+Source: [algorithmic_trading_strategy_development.pdf](../references/algorithmic_trading_strategy_development.pdf) (PDF_MODEL_1..7); [hft_framework_developer_prompt.pdf](../../hft_framework_developer_prompt.pdf) (PDF_MODEL_8..11).
 
-Seven models live in `features_engine/src/structural_models/`. Registry: `get_structural_models()`.
-**Not** merged into `get_active_hypotheses()` (44 HYP unchanged → **51 total inventory**).
+Eleven models live in `features_engine/src/structural_models/`. Registry: `get_structural_models()`.
+**Not** merged into `get_active_hypotheses()` (44 HYP unchanged → **55 total inventory**).
 
 ---
 
@@ -116,3 +116,20 @@ Seven models live in `features_engine/src/structural_models/`. Registry: `get_st
 | **execution_interpretation** | CTD switch → basis jump; repo spread vs funding |
 | **dependency_on_other_models** | None (fully standalone) |
 | **reason_model_is_separate_or_combined** | Fixed-income delivery math; no equity book overlap |
+
+---
+
+## HFT framework models (PDF_MODEL_8..11)
+
+Source: [hft_framework_developer_prompt.pdf](../../hft_framework_developer_prompt.pdf) (also `docs/references/`)
+
+| Model | Class | Module | Signal / output |
+|-------|-------|--------|-----------------|
+| **PDF_MODEL_8** | `TransferEntropyModel` | Transfer Entropy lead-lag | `transfer_entropy`, `aggressive_liquidity_signal` |
+| **PDF_MODEL_9** | `QuantumSpreadDefenseModel` | Spread eigenstate P(Δ), Bessel I₀ | `collapse_risk`, `cancel_all_quotes` |
+| **PDF_MODEL_10** | `StochasticThermoModel` | Gibbs ensemble, F(β) | `free_energy`, `mean_reversion_signal` |
+| **PDF_MODEL_11** | `HawkesToxicFlowModel` | Multivariate Hawkes → AS γ skew | `toxic_cascade_score`, `risk_aversion_gamma` |
+
+**Inventory:** 44 HYP + **11 PDF** = **55 total** workbench models.
+
+PDF_MODEL_11 depends on PDF_MODEL_4 (Avellaneda-Stoikov reservation skew per Module 4).

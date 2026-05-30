@@ -1,0 +1,45 @@
+# Measured C++ hot-path latency distributions (microseconds).
+# Production source of truth — NOT Python execution time.
+# Values below are populated from CHI404 probes when workbench loads latency_summary.json.
+# Override here only for offline dev when summary is missing.
+
+cpp_decision_compute:
+  p50_us: 11
+  p95_us: 11
+  p99_us: 11
+  source: cyclictest_loaded_cpu11
+
+order_send:
+  p50_us: 3611
+  p95_us: 4071
+  p99_us: 4094
+  source: rithmic_tcp_65000_proxy
+
+gateway_ack:
+  p50_us: 3611
+  p95_us: 4071
+  p99_us: 4094
+  source: rithmic_tcp_65000_proxy_until_rapi
+
+feed_delay:
+  p50_us: 500
+  p95_us: 2000
+  p99_us: 4094
+  source: network_p99_worst
+
+# Latency injection sweep (microseconds) for viability analysis
+injection_sweep_us:
+  - 0
+  - 50
+  - 100
+  - 250
+  - 500
+  - 1000
+  - 2000
+  - 5000
+  - 10000
+  - 25000
+  - 50000
+  - 100000
+  - 250000
+  - 1000000

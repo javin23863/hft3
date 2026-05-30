@@ -77,3 +77,40 @@ class TreasuryCTDOutput:
     CTD_switch_threshold: float = 0.0
     quality_option_pressure: float = 0.0
     futures_basis_signal: float = 0.0
+
+
+@dataclass
+class TransferEntropyOutput:
+    leader_asset: str = ""
+    target_asset: str = ""
+    lag: int = 1
+    transfer_entropy: float = 0.0
+    te_upper_control_limit: float = 0.0
+    aggressive_liquidity_signal: bool = False
+
+
+@dataclass
+class QuantumSpreadOutput:
+    spread_probability: float = 0.0
+    collapse_risk: float = 0.0
+    cancel_all_quotes: bool = False
+    xi1: float = 1.0
+    kappa1: float = 1.0
+
+
+@dataclass
+class StochasticThermoOutput:
+    partition_function: float = 1.0
+    expected_work: float = 0.0
+    entropy: float = 0.0
+    free_energy: float = 0.0
+    mean_reversion_signal: bool = False
+
+
+@dataclass
+class HawkesToxicOutput:
+    intensity_by_class: Dict[str, float] = field(default_factory=dict)
+    toxic_cascade_score: float = 0.0
+    risk_aversion_gamma: float = 0.1
+    reservation_price_skew: float = 0.0
+    toxic_flow_detected: bool = False

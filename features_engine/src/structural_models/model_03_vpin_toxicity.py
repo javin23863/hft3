@@ -12,15 +12,31 @@ from .base import BaseStructuralModel, ModelOutput
 from .types import VPINToxicityOutput
 
 
-def _betainc(a: float, b: float, x: float) -> float:
-    """Regularized incomplete beta I_x(a,b) via continued fraction (Numerical Recipes)."""
+import math
+from collections import deque
+from typing import Any, Deque, List, Optional
+
+import numpy as np
+
+try:
+    from scipy.stats import t as student_t_dist
+except ImportError:  # pragma: no cover
+    student_t_dist = None
+
+from .base import BaseStructuralModel, ModelOutput
+from .types import VPINToxicityOutput
+
+
+def _betainc_cf(a: float, b: float, x: float) -> float:
+    """Regularized incomplete beta I_x(a,b) — Lentz continued fraction (both branches)."""
     if x <= 0.0:
         return 0.0
     if x >= 1.0:
         return 1.0
     ln_beta = math.lgamma(a) + math.lgamma(b) - math.lgamma(a + b)
     front = math.exp(a * math.log(x) + b * math.log(1.0 - x) - ln_beta) / a
-    if x < (a + 1.0) / (a + b + 2.0):
+
+    def _cf() -> float:
         f = 1.0
         c = 1.0
         d = 1.0 - (a + b) * x / (a + 1.0)
@@ -51,20 +67,21 @@ def _betainc(a: float, b: float, x: float) -> float:
             f *= delta
             if abs(delta - 1.0) < 1e-10:
                 break
-        return front * f
-    f = 1.0
-    c = 1.0
-    d = 1.0
-    f *= d
-    return 1.0 - front * f
+        return f
+
+    if x < (a + 1.0) / (a + b + 2.0):
+        return front * _cf()
+    return 1.0 - front * _cf()
 
 
 def student_t_cdf(x: float, df: float) -> float:
     """CDF of Student-t with df degrees of freedom."""
     if df <= 0:
         return 0.5
+    if student_t_dist is not None:
+        return float(student_t_dist.cdf(x, df=df))
     t = df / (df + x * x)
-    ib = _betainc(df / 2.0, 0.5, t)
+    ib = _betainc_cf(df / 2.0, 0.5, t)
     return 1.0 - 0.5 * ib if x >= 0 else 0.5 * ib
 
 

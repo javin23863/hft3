@@ -14,6 +14,10 @@ from .model_04_hybrid_execution import HybridExecutionModel
 from .model_05_dealer_hedging import DealerHedgingModel
 from .model_06_dow_ym_index import DowYMIndexModel
 from .model_07_treasury_ctd import TreasuryCTDModel
+from .model_08_transfer_entropy import TransferEntropyModel
+from .model_09_quantum_spread import QuantumSpreadDefenseModel
+from .model_10_stochastic_thermo import StochasticThermoModel
+from .model_11_hawkes_toxic import HawkesToxicFlowModel
 
 PDF_MODEL_IDS = (
     "PDF_MODEL_1",
@@ -23,6 +27,10 @@ PDF_MODEL_IDS = (
     "PDF_MODEL_5",
     "PDF_MODEL_6",
     "PDF_MODEL_7",
+    "PDF_MODEL_8",
+    "PDF_MODEL_9",
+    "PDF_MODEL_10",
+    "PDF_MODEL_11",
 )
 
 # Directed dependency map: consumer -> list of producers
@@ -34,6 +42,10 @@ MODEL_DEPENDENCY_MAP: Dict[str, List[str]] = {
     "PDF_MODEL_5": [],
     "PDF_MODEL_6": ["PDF_MODEL_1"],
     "PDF_MODEL_7": [],
+    "PDF_MODEL_8": [],
+    "PDF_MODEL_9": [],
+    "PDF_MODEL_10": [],
+    "PDF_MODEL_11": ["PDF_MODEL_4"],
 }
 
 _CONFIG_DIR = Path(__file__).resolve().parents[2] / "config"
@@ -46,7 +58,7 @@ def load_pdf_model_params() -> dict:
 
 
 def get_structural_models():
-    """Return all seven PDF structural model instances."""
+    """Return all PDF structural model instances."""
     params = load_pdf_model_params()
     return [
         BookPressureModel(params=params),
@@ -56,6 +68,10 @@ def get_structural_models():
         DealerHedgingModel(params=params),
         DowYMIndexModel(params=params),
         TreasuryCTDModel(params=params),
+        TransferEntropyModel(params=params),
+        QuantumSpreadDefenseModel(params=params),
+        StochasticThermoModel(params=params),
+        HawkesToxicFlowModel(params=params),
     ]
 
 

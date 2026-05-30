@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WorkbenchRunReport",
+  "type": "object",
+  "required": [
+    "model_id",
+    "event_id",
+    "data_period",
+    "measured_p99_ms",
+    "breakeven_ms",
+    "latency_buffer_ms",
+    "recommendation"
+  ],
+  "properties": {
+    "model_id": { "type": "string" },
+    "event_id": { "type": "string" },
+    "data_period": { "type": "string" },
+    "robustness_window": { "type": "string" },
+    "measured_p99_ms": { "type": "number" },
+    "breakeven_ms": { "type": "number" },
+    "latency_buffer_ms": { "type": "number" },
+    "lane_required": { "type": "string" },
+    "lane_measured": { "type": "string" },
+    "lane_pass": { "type": "boolean" },
+    "overfit_risk": { "type": "string" },
+    "recommendation": { "type": "string", "enum": ["VIABLE", "MARGINAL", "REJECT"] },
+    "robustness_passed": { "type": "boolean" },
+    "net_pnl": { "type": "number" },
+    "num_trades": { "type": "integer" }
+  }
+}

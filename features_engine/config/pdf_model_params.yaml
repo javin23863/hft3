@@ -1,4 +1,4 @@
-# Shared parameters for PDF_MODEL_1..7 (see docs/structural_models/PDF_MODELS.md)
+# Shared parameters for PDF_MODEL_1..11 (see docs/structural_models/PDF_MODELS.md)
 
 ofi:
   pca_levels: 5
@@ -25,3 +25,27 @@ lead_lag:
 
 dealer_gex:
   risk_free_rate: 0.05
+
+transfer_entropy:
+  lag: 1
+  bins: 16
+  ucl_multiplier: 2.0
+
+quantum_spread:
+  xi1: 1.0
+  kappa1: 1.0
+  small_delta: 0.25
+  wide_delta: 2.0
+  collapse_threshold: 0.65
+
+stochastic_thermo:
+  beta: 1.0
+  exhaustion_threshold: 0.0
+
+hawkes:
+  mu: 0.1
+  alpha: 0.5
+  beta: 1.0
+  gamma_base: 0.1
+  gamma_scale: 2.0
+  toxic_threshold: 1.0

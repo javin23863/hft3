@@ -1,0 +1,63 @@
+# Unified workbench model registry (55 models: 44 HYP + 11 PDF)
+# HYP entries are auto-generated from HypothesisRegistry; overrides below.
+
+defaults:
+  required_datasets: [mbo_npz]
+  min_history_years: 10
+  robustness_window: discovery
+  latency_lane: sub_10ms
+  execution_assumptions: limit_queue
+
+overrides:
+  PDF_MODEL_1:
+    name: Book Pressure OFI/MLOFI/PCA
+    latency_lane: sub_10ms
+    signal_field: OFI_zscore
+  PDF_MODEL_2:
+    name: Cross-Asset Lead-Lag
+    latency_lane: 10_250ms
+    signal_field: cross_impact_score
+  PDF_MODEL_3:
+    name: VPIN Flow Toxicity
+    latency_lane: sub_10ms
+    signal_field: VPIN_percentile
+  PDF_MODEL_4:
+    name: Hybrid Avellaneda-Stoikov Execution
+    latency_lane: sub_10ms
+    diagnostics_only: true
+    execution_assumptions: quote_engine
+  PDF_MODEL_5:
+    name: Dealer GEX/Vanna/Charm
+    latency_lane: 10_250ms
+    diagnostics_only: true
+    required_datasets: [options_chain]
+  PDF_MODEL_6:
+    name: Dow/YM Index Pressure
+    latency_lane: 10_250ms
+    signal_field: synthetic_Dow_pressure
+  PDF_MODEL_7:
+    name: Treasury CTD / Implied Repo
+    latency_lane: multi_second
+    diagnostics_only: true
+    required_datasets: [treasury_basket_yaml]
+  PDF_MODEL_8:
+    name: Transfer Entropy Lead-Lag
+    latency_lane: microsecond
+    signal_field: transfer_entropy
+  PDF_MODEL_9:
+    name: Quantum Spread Defense
+    latency_lane: microsecond
+    diagnostics_only: true
+    signal_field: collapse_risk
+  PDF_MODEL_10:
+    name: Stochastic Thermodynamics / Free Energy
+    latency_lane: sub_10ms
+    signal_field: free_energy
+  PDF_MODEL_11:
+    name: Hawkes Toxic Flow Detection
+    latency_lane: sub_10ms
+    diagnostics_only: true
+    signal_field: toxic_cascade_score
+  HYP_5:
+    name: Spread blowout/recompression
+    latency_lane: sub_10ms

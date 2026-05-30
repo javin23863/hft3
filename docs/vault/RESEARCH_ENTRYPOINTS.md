@@ -104,3 +104,31 @@ Seven models from [algorithmic_trading_strategy_development.pdf](../references/a
 - Registry: `get_structural_models()` (not `get_active_hypotheses()`)
 
 Macro event replay (`run_event_replay.py`) runs HYP backtests only; PDF models are evaluated offline via pytest and future research hooks.
+
+## 6. Microstructure workbench (unified 51-model research)
+
+**When:** Latency viability, break-even analysis, robustness pack, and audit artifacts for any `HYP_*` or `PDF_MODEL_*`.
+
+```bash
+python -m workbench run \
+  --model HYP_5 \
+  --event-id CPI_2024_09_11_TIGHT \
+  --chi404-summary runtime/latency_reports/latency_summary.json
+```
+
+```bash
+streamlit run workbench/ui/app.py
+```
+
+**Desktop shortcut (Windows):** run once `powershell -File scripts/create_workbench_desktop_shortcut.ps1`, then double-click **HFT3 Workbench** on the desktop. Grader audit playbook: [docs/workbench/GRADER_CHECKLIST.md](../workbench/GRADER_CHECKLIST.md). Walk-forward campaigns: [docs/workbench/WALK_FORWARD_CAMPAIGNS.md](../workbench/WALK_FORWARD_CAMPAIGNS.md).
+
+```bash
+python -m workbench campaign --model HYP_5 --symbol MES.v.0 --dry-run
+```
+
+- Unified registry: `workbench/config/models.yaml` + `workbench/src/registry/unified_registry.py` (44 HYP + 7 PDF)
+- Artifacts: `research_cards/workbench_runs/<run_id>/`
+
+**Latency authority:** C++ measured distributions from CHI404 probes — not Python wall time. See [docs/workbench/LATENCY_ARCHITECTURE.md](../workbench/LATENCY_ARCHITECTURE.md). (config, manifest, trades.parquet, report.md)
+- Wraps `SignalBacktester` (primary) and documents HftBacktest queue path via matching config
+- Does **not** replace `run_event_replay.py`; use workbench for per-model latency viability and promotion gates

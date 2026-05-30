@@ -147,6 +147,18 @@ Seven models from [Algorithmic Trading Strategy Development](docs/references/alg
 
 Do not merge PDF outputs into 64-dim `FeatureIndex` or `CombinedHypothesisStrategy` without C++ parity review.
 
+### Microstructure workbench
+
+Unified 51-model research workbench (`workbench/`):
+
+- CLI: `python -m workbench run --model HYP_5 --event-id CPI_2024_09_11_TIGHT`
+- UI: `streamlit run workbench/ui/app.py`
+- Artifacts: `research_cards/workbench_runs/<run_id>/`
+
+See [docs/vault/RESEARCH_ENTRYPOINTS.md](docs/vault/RESEARCH_ENTRYPOINTS.md) section 6.
+
+**Latency:** C++ hot-path distributions are the production source of truth; Python runtime is informational only. See [docs/workbench/LATENCY_ARCHITECTURE.md](docs/workbench/LATENCY_ARCHITECTURE.md).
+
 ### Rithmic trial quarantined lane
 
 Trial capture is isolated from trusted production data (`data/npz/` from Databento).

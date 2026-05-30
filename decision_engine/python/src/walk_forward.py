@@ -21,7 +21,7 @@ class WalkForwardValidator:
             ValidationPeriod("Discovery", 2018, 2020),
             ValidationPeriod("Confirmation", 2021, 2022),
             ValidationPeriod("Holdout", 2023, 2024),
-            ValidationPeriod("Recent holdout", 2025, 2030)
+            ValidationPeriod("Recent holdout", 2025, 2025)
         ]
         
     def run_validation(self, train_func: Callable, eval_func: Callable, data_loader: Callable) -> dict:

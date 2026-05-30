@@ -1,0 +1,9 @@
+# Personal sandbox — local Windows only; never affects CHI404 or promotion (B4/B7)
+default_locked: true
+start_date: 2026-03-01
+end_date: 2026-05-30
+artifact_root: research_cards/workbench_personal/
+promotion_eligible: false
+authority:
+  - BLUEPRINT.md §8
+  - docs/REVIEWER_CHARTER.md B3 B4 B7

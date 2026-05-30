@@ -1,0 +1,20 @@
+# CME matching presets (MVP delegates to HftBacktest queue models)
+
+default_venue: CME_GLOBEX
+presets:
+  CME_GLOBEX:
+    matching: price_time
+    queue_model: LogProbQueueModel2
+    partial_fills: false
+    min_resting_ms: 0
+  CME_PRO_RATA_STUB:
+    matching: pro_rata
+    queue_model: SquareProbQueueModel
+    partial_fills: true
+    min_resting_ms: 0
+    note: stub — not full pro-rata engine
+  ICEBERG_STUB:
+    matching: price_time
+    queue_model: LogProbQueueModel2
+    hidden_liquidity: true
+    note: stub — iceberg rules documented only
