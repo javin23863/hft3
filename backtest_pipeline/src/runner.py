@@ -43,7 +43,7 @@ class ReplayRunner:
         asset.data(self.data_path)
         asset.tick_size(self.tick_size)
         asset.lot_size(self.lot_size)
-        asset.constant_order_latency(latency_ns, latency_ns)
+        asset.constant_latency(latency_ns, latency_ns)
         asset.no_partial_fill_exchange()
         asset.trading_value_fee_model(0.0, self.fee_model.get_fee_per_contract())
         QUEUE_MODEL_BUILDERS[queue_model_type](asset)
