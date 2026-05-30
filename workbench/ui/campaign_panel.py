@@ -10,19 +10,17 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 import streamlit as st
-import yaml
 
 from workbench.src.core.composition import DefensiveStub, ModelComposition
 from workbench.src.data.event_catalog import campaign_preview, list_personal_events, load_model_binding
 from workbench.src.data.personal_lock import is_locked, set_unlocked
 from workbench.src.registry.model_catalog import (
     get_catalog_entry,
-    list_by_role,
     load_catalog,
     phase_budget_summary,
     validate_composition,
 )
-from workbench.src.registry.unified_registry import build_models_config, list_models
+from workbench.src.registry.unified_registry import build_models_config
 from workbench.src.sim.cpp_latency_profile import CppLatencyProfile
 from workbench.src.run.job_manager import (
     get_job_status,
@@ -31,12 +29,12 @@ from workbench.src.run.job_manager import (
 )
 from workbench.ui.flow_state import (
     init_flow_session,
+    navigate_to_tab,
     start_campaign_for_selection,
     workflow_status_strip,
 )
+from workbench.ui.workflow_tabs import WORKFLOW_TABS
 
-_LANES = ["all", "sub_10ms", "10_250ms", "multi_second", "options_chain", "microsecond"]
-_ROLES = ["all", "alpha", "defensive", "hybrid"]
 _PHASES = ["before", "during", "after", "continuous"]
 
 
@@ -50,11 +48,7 @@ def init_session(repo: Path) -> None:
     if "wb_symbol" not in st.session_state:
         st.session_state.wb_symbol = "MES.v.0"
     if "wb_audit_grade" not in st.session_state:
-        st.session_state.wb_audit_grade = True
-    if "wb_lane_filter" not in st.session_state:
-        st.session_state.wb_lane_filter = "all"
-    if "wb_role_filter" not in st.session_state:
-        st.session_state.wb_role_filter = "all"
+        st.session_state.wb_audit_grade = False
     if "wb_defensive_stubs" not in st.session_state:
         st.session_state.wb_defensive_stubs = []
     if "wb_proc" not in st.session_state:
@@ -62,23 +56,92 @@ def init_session(repo: Path) -> None:
     init_flow_session()
 
 
-def _render_data_preview(repo: Path, model_id: str, symbol: str) -> None:
+_RECOMMENDED_STARTERS = [
+    ("HYP_5", "Spread blowout / recompression — recommended first run"),
+    ("HYP_1", "Second-wave continuation after CPI/NFP impulse"),
+    ("PDF_MODEL_1", "Book pressure OFI / MLOFI"),
+]
+
+
+def _runnable_primary_ids(catalog: dict) -> List[str]:
+    return sorted(
+        [mid for mid, entry in catalog.items() if entry.role in ("alpha", "hybrid")],
+        key=lambda mid: catalog[mid].display_name.lower(),
+    )
+
+
+def _render_dataset_panel(repo: Path, model_id: str, symbol: str, cfg) -> None:
+    """Always-visible dataset and walk-forward binding for the selected model."""
+    binding = load_model_binding(repo, model_id)
     preview = campaign_preview(model_id, symbol, repo)
-    rows = []
+    datasets = binding.get("required_datasets") or cfg.required_datasets or ["mbo_npz"]
+    npz_root = repo / "data" / "npz"
+    dataset_note = "mbo_npz" if "mbo_npz" in datasets else ", ".join(datasets)
+
+    st.subheader("Dataset & walk-forward binding")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Symbol", symbol)
+    c2.metric("Latency lane", cfg.latency_lane)
+    c3.metric("Dataset lane", dataset_note)
+    c4.metric("History years", f"{preview.get('catalog_years', 0)}/{cfg.min_history_years}")
+
+    if "mbo_npz" in datasets:
+        st.caption(f"NPZ path pattern: `{npz_root}/{symbol}_{{event_id}}_mbo.npz` · ")
+    else:
+        st.caption(f"Required datasets: {', '.join(datasets)} (see model_event_binding.yaml)")
+    st.caption(
+        f"Contexts: {', '.join(sorted(binding['allowed_contexts']))}"
+    )
+
+    summary_rows = []
+    total_events = 0
+    ready_events = 0
+    for period_name, pdata in preview.get("periods", {}).items():
+        events = pdata.get("events", [])
+        ready = sum(1 for e in events if e.get("npz_present"))
+        total = len(events)
+        total_events += total
+        ready_events += ready
+        summary_rows.append(
+            {
+                "period": period_name,
+                "years": f"{pdata.get('start_year')}–{pdata.get('end_year')}",
+                "events": total,
+                "npz_ready": ready,
+                "npz_missing": total - ready,
+            }
+        )
+    if summary_rows:
+        st.dataframe(pd.DataFrame(summary_rows), use_container_width=True, hide_index=True)
+        if ready_events == 0:
+            st.error("No NPZ files on disk for this model/symbol — use **Download missing** or backfill catalog.")
+        elif ready_events < total_events:
+            st.warning(f"{total_events - ready_events} of {total_events} events missing NPZ (campaign may block).")
+        else:
+            st.success(f"All {total_events} walk-forward events have NPZ data ready.")
+    else:
+        st.error("No events in catalog for this model/symbol binding.")
+
+    detail_rows = []
     for period_name, pdata in preview.get("periods", {}).items():
         for ev in pdata.get("events", []):
-            rows.append(
+            detail_rows.append(
                 {
                     "period": period_name,
                     "event_id": ev.get("event_id"),
-                    "npz": "yes" if ev.get("npz_present") else "missing",
+                    "release": ev.get("release_date"),
+                    "context": ev.get("event_context"),
+                    "npz": "ready" if ev.get("npz_present") else "missing",
                 }
             )
-    with st.expander("Data availability preview", expanded=bool(rows) and any(r["npz"] == "missing" for r in rows)):
-        if rows:
-            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
-        else:
-            st.caption("No catalog events for this model/symbol binding.")
+    if detail_rows:
+        with st.expander("Event-level catalog", expanded=ready_events < total_events):
+            st.dataframe(pd.DataFrame(detail_rows), use_container_width=True, hide_index=True)
+
+
+def _render_data_preview(repo: Path, model_id: str, symbol: str) -> None:
+    cfg = build_models_config()[model_id]
+    _render_dataset_panel(repo, model_id, symbol, cfg)
 
 
 def get_session_composition(primary: str) -> ModelComposition:
@@ -143,8 +206,16 @@ def _render_catalog_rows(
             primary = st.session_state.wb_selected_model
             if entry.role != "defensive":
                 if st.button(
-                    "Select & run campaign",
-                    key=_catalog_widget_key(prefix, "select", str(row_idx), entry.model_id),
+                    "Set primary",
+                    key=_catalog_widget_key(prefix, "set", str(row_idx), entry.model_id),
+                ):
+                    st.session_state.wb_selected_model = entry.model_id
+                    navigate_to_tab("Backtest Results")
+                    st.rerun()
+                if st.button(
+                    "Run campaign",
+                    key=_catalog_widget_key(prefix, "run", str(row_idx), entry.model_id),
+                    type="primary",
                 ):
                     st.session_state.wb_selected_model = entry.model_id
                     composition = get_session_composition(entry.model_id)
@@ -262,165 +333,137 @@ def personal_lock_sidebar(repo: Path) -> None:
         st.rerun()
 
 
-def _binding_meta(repo: Path, model_id: str) -> dict:
-    binding_path = repo / "workbench" / "config" / "model_event_binding.yaml"
-    raw = yaml.safe_load(binding_path.read_text(encoding="utf-8")) or {}
-    if model_id.startswith("PDF_MODEL_"):
-        return raw.get("pdf", {}).get(model_id, {})
-    return raw.get("hypothesis", {}).get(model_id, {})
-
-
-def _filter_models(models: List[str], lane: str, configs: dict) -> List[str]:
-    if lane == "all":
-        return models
-    out = []
-    for mid in models:
-        cfg = configs[mid]
-        binding = _binding_meta(Path(st.session_state.wb_repo), mid)
-        datasets = binding.get("required_datasets") or cfg.required_datasets
-        if lane == "options_chain" and "options_chain" in datasets:
-            out.append(mid)
-        elif cfg.latency_lane == lane:
-            out.append(mid)
-    return out
-
-
 def model_selector_panel(repo: Path) -> Tuple[str, str, str]:
     configs = build_models_config()
     catalog = load_catalog(repo)
-    models = sorted(list_models())
+    runnable = _runnable_primary_ids(catalog)
 
-    colf1, colf2 = st.columns(2)
-    with colf1:
-        lane = st.selectbox("Latency lane filter", _LANES, key="wb__lane_filter")
-    with colf2:
-        role_filter = st.selectbox("Role filter", _ROLES, key="wb__role_filter")
-    st.session_state.wb_lane_filter = lane
-    st.session_state.wb_role_filter = role_filter
+    st.caption(
+        "Trial mode: runs available NPZ events only (skips WFC matrix). "
+        "Latency lane and datasets come from each model's registry binding."
+    )
 
-    filtered_ids = _filter_models(models, lane, configs)
-    entries = [catalog[mid] for mid in filtered_ids if mid in catalog]
-    if role_filter != "all":
-        entries = [e for e in entries if e.role == role_filter]
-
-    st.metric("Registered models", len(models))
-    st.caption(f"Showing {len(entries)} after filters")
-
-    symbol = st.selectbox("Primary symbol", ["MES.v.0", "ES.v.0", "MNQ.v.0", "NQ.v.0"], key="wb__sym_pick")
+    symbol = st.selectbox("Symbol", ["MES.v.0", "ES.v.0", "MNQ.v.0", "NQ.v.0"], key="wb__sym_pick")
     st.session_state.wb_symbol = symbol
 
-    model = st.session_state.wb_selected_model
+    st.subheader("Quick start")
+    starter_cols = st.columns(len(_RECOMMENDED_STARTERS))
+    for col, (mid, blurb) in zip(starter_cols, _RECOMMENDED_STARTERS):
+        if mid not in catalog:
+            continue
+        entry = catalog[mid]
+        with col:
+            st.markdown(f"**{entry.display_name}**")
+            st.caption(blurb)
+            st.caption(f"`{mid}` · lane {configs[mid].latency_lane}")
+            if st.button("Start with this model", key=f"wb__starter__{mid}", type="primary"):
+                st.session_state.wb_selected_model = mid
+                composition = get_session_composition(mid)
+                cid = start_campaign_for_selection(
+                    repo,
+                    model_id=mid,
+                    symbol=st.session_state.wb_symbol,
+                    composition=composition,
+                    audit_grade=st.session_state.wb_audit_grade,
+                )
+                st.toast(f"Campaign started: {cid}")
+                st.rerun()
+
+    if not runnable:
+        st.error("No runnable alpha/hybrid models in catalog.")
+        return "", symbol, st.session_state.wb_active_campaign or ""
+
+    default_model = st.session_state.wb_selected_model
+    if default_model not in runnable:
+        default_model = "HYP_5" if "HYP_5" in runnable else runnable[0]
+        st.session_state.wb_selected_model = default_model
+
+    picked = st.selectbox(
+        "Primary model",
+        runnable,
+        index=runnable.index(st.session_state.wb_selected_model),
+        format_func=lambda mid: f"{catalog[mid].display_name} ({mid})",
+        key="wb__primary_model",
+    )
+    st.session_state.wb_selected_model = picked
+    model = picked
+
     camp = st.session_state.wb_active_campaign or ""
     workflow_status_strip(repo, model, symbol, camp)
 
-    with st.expander("Advanced options"):
+    cfg = configs[model]
+    _render_dataset_panel(repo, model, symbol, cfg)
+
+    composition = get_session_composition(model)
+    st.caption(f"Defensive stubs in stack: {len(composition.defensive_stubs)} (optional — expand below)")
+
+    c_primary, c_run, c_pause, c_stop = st.columns(4)
+    with c_primary:
+        if st.button("Set primary", key="wb__set_primary", use_container_width=True):
+            st.session_state.wb_selected_model = model
+            navigate_to_tab("Backtest Results")
+            st.rerun()
+    with c_run:
+        if st.button("Run campaign", key="wb__start_campaign", type="primary", use_container_width=True):
+            cid = start_campaign_for_selection(
+                repo,
+                model_id=model,
+                symbol=symbol,
+                composition=composition,
+                audit_grade=st.session_state.wb_audit_grade,
+            )
+            st.toast(f"Campaign started: {cid}")
+            st.rerun()
+    with c_pause:
+        if st.button("Pause", key="wb__pause", use_container_width=True) and st.session_state.wb_active_campaign:
+            set_control(repo, st.session_state.wb_active_campaign, "pause")
+    with c_stop:
+        if st.button("Stop", key="wb__stop", use_container_width=True) and st.session_state.wb_active_campaign:
+            set_control(repo, st.session_state.wb_active_campaign, "stop")
+
+    if st.button("Download missing NPZ", key="wb__download_missing"):
+        cmd = [
+            sys.executable,
+            str(repo / "workbench" / "scripts" / "backfill_catalog.py"),
+            "--model",
+            model,
+            "--symbol",
+            symbol,
+            "--download-missing",
+            "--max-cost-usd",
+            "25",
+        ]
+        subprocess.Popen(cmd, cwd=str(repo))
+        st.info("Backfill started (max $25)")
+
+    with st.expander("Advanced — audit grade & full model grid"):
         audit = st.checkbox(
             "Audit grade (full-sweep + history gate)",
             value=st.session_state.wb_audit_grade,
             key="wb__audit",
         )
         st.session_state.wb_audit_grade = audit
-    audit = st.session_state.wb_audit_grade
-
-    tab_alpha, tab_hybrid, tab_defensive, tab_stack = st.tabs(
-        ["Alpha catalog", "Hybrid catalog", "Defensive catalog", "Stack builder"]
-    )
-    with tab_alpha:
-        alpha_entries = [e for e in entries if e.role == "alpha"]
+        st.markdown("**All models**")
+        all_entries = [catalog[mid] for mid in sorted(catalog.keys())]
         _render_catalog_rows(
             repo,
-            alpha_entries,
+            all_entries,
             configs,
-            key_prefix="alpha_catalog",
-            symbol=symbol,
-            audit_grade=audit,
-        )
-    with tab_hybrid:
-        hybrid_entries = [e for e in entries if e.role == "hybrid"]
-        _render_catalog_rows(
-            repo,
-            hybrid_entries,
-            configs,
-            key_prefix="hybrid_catalog",
-            symbol=symbol,
-            audit_grade=audit,
-        )
-    with tab_defensive:
-        def_entries = list_by_role("defensive", repo)
-        if role_filter == "all" or role_filter == "defensive":
-            def_entries = [e for e in def_entries if e.model_id in filtered_ids or lane == "all"]
-        _render_catalog_rows(
-            repo,
-            def_entries,
-            configs,
-            key_prefix="defensive_catalog",
+            key_prefix="all_catalog",
             symbol=symbol,
             audit_grade=audit,
         )
 
-    with tab_stack:
-        composition = stack_builder_panel(repo, model)
-
-    if model:
-        st.success(f"Primary: **{catalog[model].display_name}** (`{model}`)")
-        cfg = configs[model]
-        binding = load_model_binding(repo, model)
-        preview = campaign_preview(model, symbol, repo)
-        cpi_nfp = sum(
-            1
-            for pdata in preview["periods"].values()
-            for ev in pdata["events"]
-            if "CPI" in ev["event_id"] or "NFP" in ev["event_id"]
-        )
-        st.caption(
-            f"Lane: {cfg.latency_lane} | Stubs: {len(composition.defensive_stubs)} | "
-            f"Catalog years: {preview['catalog_years']}/{cfg.min_history_years} | CPI+NFP: {cpi_nfp}"
-        )
-        st.caption(f"Contexts: {', '.join(sorted(binding['allowed_contexts']))}")
-        _render_data_preview(repo, model, symbol)
-
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        if st.button("Re-run campaign", disabled=not model, key="wb__start_campaign"):
-            composition = get_session_composition(model) if model else None
-            cid = start_campaign_for_selection(
-                repo,
-                model_id=model,
-                symbol=symbol,
-                composition=composition,
-                audit_grade=audit,
-            )
-            st.toast(f"Campaign re-started: {cid}")
-            st.rerun()
-    with col2:
-        if st.button("Pause", key="wb__pause") and st.session_state.wb_active_campaign:
-            set_control(repo, st.session_state.wb_active_campaign, "pause")
-    with col3:
-        if st.button("Stop", key="wb__stop") and st.session_state.wb_active_campaign:
-            set_control(repo, st.session_state.wb_active_campaign, "stop")
-    with col4:
-        if st.button("Download missing", disabled=not model, key="wb__download_missing"):
-            cmd = [
-                sys.executable,
-                str(repo / "workbench" / "scripts" / "backfill_catalog.py"),
-                "--model",
-                model,
-                "--symbol",
-                symbol,
-                "--download-missing",
-                "--max-cost-usd",
-                "25",
-            ]
-            subprocess.Popen(cmd, cwd=str(repo))
-            st.info("Backfill started (max $25)")
+    with st.expander("Defensive stack builder"):
+        stack_builder_panel(repo, model)
 
     with st.expander("Advanced — load prior campaign"):
         campaigns = list_active_campaigns(repo)
-        picked = st.selectbox("Load campaign", [""] + campaigns, key="wb__camp_pick")
-        if picked:
-            st.session_state.wb_active_campaign = picked
-            camp = picked
-            status = get_job_status(repo, picked)
+        picked_camp = st.selectbox("Load campaign", [""] + campaigns, key="wb__camp_pick")
+        if picked_camp:
+            st.session_state.wb_active_campaign = picked_camp
+            camp = picked_camp
+            status = get_job_status(repo, picked_camp)
             st.json(status)
 
     return model, symbol, camp

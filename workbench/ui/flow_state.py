@@ -9,16 +9,29 @@ from typing import Any, Dict, Optional, Tuple
 
 import streamlit as st
 
-from workbench.src.core.composition import ModelComposition
-from workbench.src.run.job_manager import get_job_status, set_control, start_campaign_subprocess
-
 _TERMINAL_STATES = frozenset(
     {"pass", "fail", "blocked", "cancelled", "dry_run", "unknown", "complete", "completed"}
 )
 _AAR_MARKERS = ("after_action_report.md", "after_action_symbolic.json", "diagnostics.json")
 
+from workbench.ui.workflow_tabs import WORKFLOW_TABS
+
+
+def navigate_to_tab(tab_name: str) -> None:
+    if tab_name in WORKFLOW_TABS:
+        st.session_state.wb_ui_tab = tab_name
+        st.session_state.wb_nav_hint = f"Next: open the **{tab_name}** tab to continue."
+
+
+from workbench.src.core.composition import ModelComposition
+from workbench.src.run.job_manager import get_job_status, set_control, start_campaign_subprocess
+
 
 def init_flow_session() -> None:
+    if "wb_ui_tab" not in st.session_state:
+        st.session_state.wb_ui_tab = WORKFLOW_TABS[0]
+    if "wb_nav_hint" not in st.session_state:
+        st.session_state.wb_nav_hint = ""
     if "wb_campaign_state" not in st.session_state:
         st.session_state.wb_campaign_state = ""
     if "wb_auto_period" not in st.session_state:
@@ -135,6 +148,7 @@ def start_campaign_for_selection(
         symbol=symbol,
         audit_grade=audit_grade,
         composition=composition,
+        trial_mode=True,
     )
     st.session_state.wb_proc = proc
     st.session_state.wb_active_campaign = cid
@@ -150,6 +164,7 @@ def start_campaign_for_selection(
     st.session_state.wb_chat_messages = []
     st.session_state.wb_chat_context_key = ""
     set_control(repo, cid, "run")
+    navigate_to_tab("Backtest Results")
     return cid
 
 

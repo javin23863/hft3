@@ -310,12 +310,17 @@ def run_campaign(
     dry_run: bool = False,
     download_missing: bool = False,
     allow_partial: bool = False,
+    trial_mode: bool = False,
     job_dir: Optional[Path] = None,
     campaign_id: Optional[str] = None,
     composition: Optional[ModelComposition] = None,
 ) -> CampaignResult:
     from workbench.src.registry.composition_orchestrator import CompositionOrchestrator
     from workbench.src.run.engine import WorkbenchEngine
+
+    if trial_mode:
+        audit_grade = False
+        allow_partial = True
 
     effective = composition or CompositionOrchestrator.default_composition(model_id)
     primary_id = effective.primary_model_id
@@ -357,6 +362,7 @@ def run_campaign(
         ],
         "catalog_years_available": years_avail,
         "min_history_years_required": cfg.min_history_years,
+        "trial_mode": trial_mode,
     }
     artifact_dir.mkdir(parents=True, exist_ok=True)
     write_campaign_manifest(artifact_dir / "campaign.json", campaign_meta)
@@ -400,7 +406,7 @@ def run_campaign(
     bounds = load_parameter_bounds(primary_id)
     wfc_status_for_events = "SKIPPED"
 
-    if wfc_cfg.get("enabled") and bounds:
+    if not trial_mode and wfc_cfg.get("enabled") and bounds:
         try:
             matrix_rows = run_full_matrix_oos(
                 repo_root,
@@ -500,7 +506,9 @@ def run_campaign(
             period_dir = artifact_dir / "periods" / period.name.replace(" ", "_")
             period_dir.mkdir(parents=True, exist_ok=True)
 
-            if not runnable and not allow_partial:
+            if not runnable:
+                if allow_partial or trial_mode:
+                    continue
                 pr = PeriodResult(
                     name=period.name,
                     gate_pass=False,
@@ -632,7 +640,7 @@ def run_campaign(
             summary["params_used"] = period_params
             (period_dir / "period_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
 
-            if not gate_pass and wf_cfg.get("sequential_gate", True):
+            if not gate_pass and wf_cfg.get("sequential_gate", True) and not trial_mode:
                 status = "FAIL"
                 break
 
@@ -655,6 +663,12 @@ def run_campaign(
         int(e.get("trades_vetoed_by_defense", 0)) for p in period_results for e in p.event_results
     )
     wfc_status = wfc_result.wfc_status if wfc_result else "SKIPPED"
+    events_ran = sum(p.events_run for p in period_results)
+    if trial_mode:
+        if events_ran > 0 and status not in ("CANCELLED",):
+            status = "PASS"
+        elif events_ran == 0:
+            status = "BLOCKED"
     if wfc_status == "CONDITIONAL" and status == "PASS":
         status = "CONDITIONAL"
     wfc_required = bool(wfc_cfg.get("enabled")) and bool(bounds) and wfc_status != "SKIPPED"
@@ -685,6 +699,8 @@ def run_campaign(
         "sim_shadow_required": status == "PASS",
         "promote_candidate": promote_ok,
         "promote_note": "WFC PASS + sim shadow (60 CME days on CHI404) required before promotion — BLUEPRINT §8",
+        "trial_mode": trial_mode,
+        "events_ran": events_ran,
     }
     (artifact_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     _write_status(job_dir, {"state": status.lower(), "campaign_id": campaign_id})

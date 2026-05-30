@@ -69,21 +69,12 @@ def test_catalog_tab_key_patterns_do_not_collide() -> None:
     from workbench.ui.campaign_panel import _catalog_widget_key
 
     model_id = "HYP_5"
-    alpha_keys = {
-        _catalog_widget_key("alpha_catalog", "catalog_search"),
-        _catalog_widget_key("alpha_catalog", "select", "0", model_id),
+    all_keys = {
+        _catalog_widget_key("all_catalog", "catalog_search"),
+        _catalog_widget_key("all_catalog", "set", "0", model_id),
+        _catalog_widget_key("all_catalog", "run", "0", model_id),
     }
-    hybrid_keys = {
-        _catalog_widget_key("hybrid_catalog", "catalog_search"),
-        _catalog_widget_key("hybrid_catalog", "select", "0", model_id),
-    }
-    defensive_keys = {
-        _catalog_widget_key("defensive_catalog", "catalog_search"),
-        _catalog_widget_key("defensive_catalog", "enable", "0", model_id),
-    }
-    assert alpha_keys.isdisjoint(hybrid_keys)
-    assert alpha_keys.isdisjoint(defensive_keys)
-    assert hybrid_keys.isdisjoint(defensive_keys)
+    assert len(all_keys) == 3
 
 
 def test_workbench_ui_has_no_literal_catalog_search_keys() -> None:
@@ -104,11 +95,9 @@ def test_model_selector_panel_uses_unique_catalog_prefixes() -> None:
     from workbench.ui import campaign_panel
 
     src = inspect.getsource(campaign_panel.model_selector_panel)
-    assert 'key_prefix="alpha_catalog"' in src
-    assert 'key_prefix="hybrid_catalog"' in src
-    assert 'key_prefix="defensive_catalog"' in src
+    assert 'key_prefix="all_catalog"' in src
     assert 'key_prefix="catalog"' not in src
 
     catalog_src = inspect.getsource(campaign_panel._render_catalog_rows)
-    assert "Select & run campaign" in catalog_src
-    assert "Add to stack & re-run" in catalog_src
+    assert "Set primary" in catalog_src
+    assert "Run campaign" in catalog_src

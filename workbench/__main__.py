@@ -41,6 +41,7 @@ def main(argv: list[str] | None = None) -> int:
     camp_p.add_argument("--dry-run", action="store_true")
     camp_p.add_argument("--download-missing", action="store_true")
     camp_p.add_argument("--allow-partial", action="store_true")
+    camp_p.add_argument("--trial", action="store_true", help="Fast UI smoke: skip WFC, partial NPZ OK")
     camp_p.add_argument("--record-sim-shadow", choices=["PASS", "FAIL"], default=None)
     camp_p.add_argument("--composition", default=None, help="JSON file with ModelComposition")
     camp_p.add_argument(
@@ -88,6 +89,7 @@ def main(argv: list[str] | None = None) -> int:
             dry_run=args.dry_run,
             download_missing=args.download_missing,
             allow_partial=args.allow_partial,
+            trial_mode=args.trial,
             campaign_id=args.campaign_id,
             composition=composition,
         )

@@ -25,14 +25,15 @@ from workbench.ui.campaign_panel import (  # noqa: E402
     personal_lock_sidebar,
     personal_runs_panel,
 )
-from workbench.ui.flow_state import campaign_progress_panel, resolve_period_event  # noqa: E402
+from workbench.ui.workflow_tabs import WORKFLOW_TABS  # noqa: E402
+from workbench.ui.flow_state import campaign_progress_panel, navigate_to_tab, resolve_period_event  # noqa: E402
 
 init_session(REPO)
 
 with st.sidebar:
     personal_lock_sidebar(REPO)
     st.caption("Grader checklist: `docs/workbench/GRADER_CHECKLIST.md`")
-    st.caption("Campaign CLI: `python -m workbench campaign --model HYP_5 --symbol MES.v.0 --dry-run`")
+    st.caption("Trial CLI: `python scripts/workbench_pipeline_trial.py`")
     st.caption("Verify: `powershell -File scripts/verify_workbench.ps1`")
 
 st.title("Microstructure Backtesting Workbench")
@@ -41,26 +42,18 @@ _active = st.session_state.get("wb_active_campaign", "")
 if _active:
     campaign_progress_panel(REPO, _active)
 
-tab_names = [
-    "Model Selector",
-    "Personal Runs",
-    "Backtest Results",
-    "Latency Viability",
-    "Signal Diagnostics",
-    "Robustness",
-    "Optimisation",
-    "Report",
-    "Analyst",
-]
-tabs = st.tabs(tab_names)
+if st.session_state.get("wb_nav_hint"):
+    st.info(st.session_state.wb_nav_hint)
+
+tabs = st.tabs(WORKFLOW_TABS)
 
 runs_dir = REPO / "research_cards" / "workbench_runs"
 run_dirs = sorted(runs_dir.glob("*"), reverse=True) if runs_dir.is_dir() else []
 run_labels = [d.name for d in run_dirs]
 
-selected_model = ""
-selected_symbol = "MES.v.0"
-selected_campaign = ""
+selected_model = st.session_state.get("wb_selected_model", "")
+selected_symbol = st.session_state.get("wb_symbol", "MES.v.0")
+selected_campaign = st.session_state.get("wb_active_campaign", "")
 
 with tabs[0]:
     st.header("Model Selector")
@@ -78,11 +71,7 @@ with tabs[0]:
         periods = campaign_periods(REPO, selected_campaign)
         with st.expander("Drill-down period / event"):
             if periods:
-                st.selectbox(
-                    "Campaign period",
-                    [""] + periods,
-                    key="wb__period_sel",
-                )
+                st.selectbox("Campaign period", [""] + periods, key="wb__period_sel")
                 pc = st.session_state.get("wb__period_sel") or st.session_state.get("wb_auto_period", "")
                 if pc:
                     events = campaign_events(REPO, selected_campaign, pc)
@@ -101,12 +90,10 @@ if diag_data is None and selected_campaign:
     diag_data = load_campaign_diagnostics(REPO, selected_campaign)
 
 with tabs[1]:
-    st.header("Personal Runs")
-    personal_runs_panel(REPO, selected_model, selected_symbol)
-
-with tabs[2]:
     st.header("Backtest Results")
-    if diag_data:
+    if not selected_model:
+        st.info("Choose a model on **Model Selector**, then **Set primary** or **Run campaign**.")
+    elif diag_data:
         rep = diag_data if "net_pnl" in diag_data else {}
         if "event_results" in diag_data:
             st.dataframe(pd.DataFrame(diag_data["event_results"]), use_container_width=True)
@@ -117,11 +104,11 @@ with tabs[2]:
             if pnl_lat:
                 st.line_chart(pd.Series(pnl_lat))
     elif selected_campaign:
-        st.info("Campaign running or waiting for first event diagnostics.")
+        st.info("Campaign running — open this tab as events complete (~5 min per event on Windows).")
     else:
-        st.info("Click **Select & run campaign** on a model in Model Selector.")
+        st.info("Click **Run campaign** on Model Selector (trial mode: available NPZ only).")
 
-with tabs[3]:
+with tabs[2]:
     st.header("Latency Viability")
     if diag_data and "breakeven_us" in diag_data:
         c1, c2, c3 = st.columns(3)
@@ -132,11 +119,11 @@ with tabs[3]:
     elif diag_data:
         st.write(f"Period gate pass: **{diag_data.get('gate_pass')}** | survives_cpp: **{diag_data.get('survives_cpp')}**")
     elif selected_campaign:
-        st.info("Results appear when the first event completes.")
+        st.info("Latency metrics appear when the first event completes.")
     else:
-        st.info("Start a campaign from Model Selector.")
+        st.info("Run a campaign from Model Selector.")
 
-with tabs[4]:
+with tabs[3]:
     st.header("Signal Diagnostics")
     if diag_data and diag_data.get("composition"):
         st.subheader("Campaign composition")
@@ -156,14 +143,9 @@ with tabs[4]:
             st.json(json.loads(trace_path.read_text(encoding="utf-8")))
     st.caption("PDF OFI/VPIN and HYP signal histograms from run artifacts")
 
-with tabs[5]:
+with tabs[4]:
     st.header("Robustness")
-    wfc_summary_path = (
-        runs_dir / selected_campaign / "wfc" / "wfc_summary.json"
-        if selected_campaign
-        else None
-    )
-    campaign_summary_path = runs_dir / selected_campaign / "summary.json" if selected_campaign else None
+    wfc_summary_path = runs_dir / selected_campaign / "wfc" / "wfc_summary.json" if selected_campaign else None
     wfc_data = {}
     if wfc_summary_path and wfc_summary_path.is_file():
         wfc_data = json.loads(wfc_summary_path.read_text(encoding="utf-8"))
@@ -177,13 +159,6 @@ with tabs[5]:
         c2.metric("Pearson", f"{wfc_data.get('pearson', 0):.3f}")
         c3.metric("Spearman", f"{wfc_data.get('spearman', 0):.3f}")
         c4.metric("Fold consistency", f"{wfc_data.get('positive_fold_ratio', 0):.0%}")
-        if wfc_data.get("n_folds"):
-            st.caption(f"Folds: {wfc_data.get('n_folds')} | Params: {wfc_data.get('n_parameter_combinations', '—')}")
-        if wfc_data.get("top_decile_oos_median") is not None:
-            st.caption(
-                f"Top decile OOS median: {wfc_data.get('top_decile_oos_median', 0):.3f} | "
-                f"Bottom: {wfc_data.get('bottom_decile_oos_median', 0):.3f}"
-            )
         if wfc_data.get("fold_correlations"):
             with st.expander("Per-fold correlations"):
                 st.json(wfc_data["fold_correlations"])
@@ -192,22 +167,13 @@ with tabs[5]:
         scatter = runs_dir / selected_campaign / "wfc" / "is_vs_oos_scatter.png"
         if scatter.is_file():
             st.image(str(scatter), caption="IS vs OOS parameter matrix")
-        with st.expander("WFC detail"):
-            st.json(wfc_data)
-
     if diag_data:
         st.write(f"Robustness passed: **{diag_data.get('robustness_passed', 'n/a')}**")
-        st.write(f"Over-fit risk: **{diag_data.get('overfit_risk', 'n/a')}**")
-        if "periods" in diag_data:
-            st.json(diag_data.get("periods"))
-    elif selected_campaign and not wfc_data:
-        st.info("Results appear when the first event completes.")
     elif not selected_campaign:
-        st.info("Start a campaign from Model Selector.")
+        st.info("Run a campaign from Model Selector.")
 
-with tabs[6]:
+with tabs[5]:
     st.header("Optimisation")
-    st.caption("Run a campaign first — latency/cost sweeps attach to campaign events.")
     promote = False
     if campaign_summary_path and campaign_summary_path.is_file():
         promote = bool(json.loads(campaign_summary_path.read_text(encoding="utf-8")).get("promote_candidate"))
@@ -215,7 +181,7 @@ with tabs[6]:
         promote = bool(diag_data.get("promote_candidate"))
     st.button("Promote Candidate", disabled=not promote, key="wb__promote_candidate")
 
-with tabs[7]:
+with tabs[6]:
     st.header("Report")
 
     def _artifact_base() -> Path | None:
@@ -239,55 +205,16 @@ with tabs[7]:
     if art:
         md_path = art / "report.md"
         if md_path.is_file():
-            st.subheader("C++ viability report")
             st.markdown(md_path.read_text(encoding="utf-8"))
-
-        aar_path = art / "after_action_report.md"
-        sym_path = art / "after_action_symbolic.json"
-        meta_path = art / "after_action_meta.json"
-        diag_path = art / "diagnostics.json"
-
-        if meta_path.is_file() or sym_path.is_file() or aar_path.is_file():
-            st.subheader("After-action summary")
-            diag_local = json.loads(diag_path.read_text(encoding="utf-8")) if diag_path.is_file() else {}
-            sym_data = json.loads(sym_path.read_text(encoding="utf-8")) if sym_path.is_file() else {}
-            meta_data = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.is_file() else {}
-
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Lane pass", str(diag_local.get("lane_pass", "n/a")))
-            c2.metric("Break-even (µs)", f"{diag_local.get('breakeven_us', 0):.0f}")
-            c3.metric("Symbolic", "PASS" if sym_data.get("passed") else "FAIL")
-            if sym_data.get("violations"):
-                c4.caption(f"Violations: {len(sym_data['violations'])}")
-
-            if meta_data.get("skip_reasons"):
-                st.warning(f"After-action skipped/partial: {', '.join(meta_data['skip_reasons'])}")
-
-            if aar_path.is_file():
-                st.markdown(aar_path.read_text(encoding="utf-8"))
-            elif meta_data.get("llm_status"):
-                st.info(f"No LLM report ({meta_data.get('llm_status')}). See **Analyst** tab.")
-
-            with st.expander("After-action artifacts"):
-                for name in (
-                    "after_action_packet.json",
-                    "after_action_symbolic.json",
-                    "after_action_meta.json",
-                    "kg_slice.json",
-                ):
-                    p = art / name
-                    if p.is_file():
-                        st.caption(name)
-                        st.json(json.loads(p.read_text(encoding="utf-8")))
     elif selected_campaign:
-        summary_path = runs_dir / selected_campaign / "summary.json"
-        if summary_path.is_file():
-            st.json(json.loads(summary_path.read_text(encoding="utf-8")))
-        else:
-            st.info("Campaign in progress — reports appear per event.")
+        st.info("Campaign in progress — reports appear per event.")
     else:
-        st.info("Click **Select & run campaign** on a model in Model Selector.")
+        st.info("Run a campaign from Model Selector.")
 
-with tabs[8]:
+with tabs[7]:
     st.header("Analyst")
     analyst_panel(REPO, selected_campaign, period_choice, event_choice)
+
+with tabs[8]:
+    st.header("Personal Runs")
+    personal_runs_panel(REPO, selected_model, selected_symbol)

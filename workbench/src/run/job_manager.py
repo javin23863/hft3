@@ -27,6 +27,7 @@ def start_campaign_subprocess(
     audit_grade: bool = True,
     download_missing: bool = False,
     allow_partial: bool = False,
+    trial_mode: bool = False,
     chi404_summary: str = "runtime/latency_reports/latency_summary.json",
     composition: Optional[ModelComposition] = None,
 ) -> tuple[subprocess.Popen, str]:
@@ -58,11 +59,21 @@ def start_campaign_subprocess(
         cmd.append("--download-missing")
     if allow_partial:
         cmd.append("--allow-partial")
+    if trial_mode:
+        cmd.append("--trial")
     if composition_path is not None:
         cmd.extend(["--composition", str(composition_path)])
 
+    if trial_mode:
+        audit_grade = False
+        allow_partial = True
+        if "--allow-partial" not in cmd:
+            cmd.append("--allow-partial")
+        cmd = [c for c in cmd if c not in ("--enforce-history-gate", "--full-sweep")]
+
     env = os.environ.copy()
     env["PYTHONPATH"] = str(repo_root)
+    env.setdefault("HFT3_CPP_STACK_VERIFY", "off")
     proc = subprocess.Popen(
         cmd,
         cwd=str(repo_root),
