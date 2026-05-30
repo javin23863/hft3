@@ -67,6 +67,7 @@ def test_missing_vix_no_crash(manager: HotMemoryManager):
     manager.update_feed_status("VIX", "MISSING", None)
     manager.update_feed_status("VVIX", "MISSING", None)
     snap = manager.snapshot_telemetry()
+    assert snap["registry_status"] == "ok"
     assert "VIX" in snap["missing_sensor_warnings"]
     assert "ES" in snap["resident"]
 
@@ -74,3 +75,93 @@ def test_missing_vix_no_crash(manager: HotMemoryManager):
 def test_cannot_demote_core_without_force(manager: HotMemoryManager):
     with pytest.raises(ValueError, match="core protected"):
         manager.demote("ES", reason_code="TEST", event_ts="2024-01-01T00:00:00Z")
+
+
+def test_promote_blocked_during_cooldown(manager: HotMemoryManager):
+    manager.promote(
+        "RB",
+        reason_code="TEST",
+        event_ts="2024-01-01T00:00:00Z",
+        triggering_feature="x",
+        expected_hot_duration_sec=7200,
+    )
+    with pytest.raises(ValueError, match="cooldown"):
+        manager.promote(
+            "RB",
+            reason_code="RETRY",
+            event_ts="2024-01-01T01:00:00Z",
+            triggering_feature="x",
+            expected_hot_duration_sec=60,
+        )
+
+
+def test_load_pressure_clears_cooldown_allows_repromote(manager: HotMemoryManager):
+    manager.promote(
+        "RB",
+        reason_code="TEST",
+        event_ts="2024-01-01T00:00:00Z",
+        triggering_feature="x",
+        expected_hot_duration_sec=7200,
+    )
+    manager.apply_load_pressure(event_ts="2024-01-01T01:00:00Z")
+    manager.promote(
+        "RB",
+        reason_code="RETRY",
+        event_ts="2024-01-01T01:30:00Z",
+        triggering_feature="x",
+        expected_hot_duration_sec=60,
+    )
+    assert "RB" in manager.promoted_resident
+
+
+def test_demote_clears_cooldown_allows_repromote(manager: HotMemoryManager):
+    manager.promote(
+        "RB",
+        reason_code="TEST",
+        event_ts="2024-01-01T00:00:00Z",
+        triggering_feature="x",
+        expected_hot_duration_sec=7200,
+    )
+    manager.demote("RB", reason_code="COOLDOWN", event_ts="2024-01-01T01:00:00Z")
+    manager.promote(
+        "RB",
+        reason_code="RETRY",
+        event_ts="2024-01-01T01:30:00Z",
+        triggering_feature="x",
+        expected_hot_duration_sec=60,
+    )
+    assert "RB" in manager.promoted_resident
+
+
+def test_naive_event_ts_rejected_on_demote(manager: HotMemoryManager):
+    manager.promote(
+        "RB",
+        reason_code="TEST",
+        event_ts="2024-01-01T00:00:00Z",
+        triggering_feature="x",
+        expected_hot_duration_sec=60,
+    )
+    with pytest.raises(ValueError, match="timezone"):
+        manager.demote("RB", reason_code="BAD", event_ts="2024-01-01T01:00:00")
+    assert "RB" in manager.promoted_resident
+
+
+def test_naive_event_ts_rejected(manager: HotMemoryManager):
+    with pytest.raises(ValueError, match="timezone"):
+        manager.promote(
+            "RB",
+            reason_code="TEST",
+            event_ts="2024-01-01T00:00:00",
+            triggering_feature="x",
+            expected_hot_duration_sec=60,
+        )
+
+
+def test_degraded_telemetry_shape(tmp_path: Path):
+    from workbench.src.data.hot_memory_manager import hot_memory_telemetry_snapshot
+
+    snap = hot_memory_telemetry_snapshot(tmp_path)
+    assert snap["registry_status"] == "degraded"
+    assert "degradation_flags" in snap
+    assert "promotion_audit_tail" in snap
+    assert "feed_status" in snap

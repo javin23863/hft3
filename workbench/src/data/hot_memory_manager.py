@@ -18,7 +18,10 @@ NATIVE_HOT_TIERS = frozenset({"HOT_EXECUTABLE", "HOT_SENSOR"})
 
 def _parse_event_ts(event_ts: str) -> datetime:
     normalized = event_ts.replace("Z", "+00:00")
-    return datetime.fromisoformat(normalized).astimezone(timezone.utc)
+    dt = datetime.fromisoformat(normalized)
+    if dt.tzinfo is None:
+        raise ValueError(f"event_ts must include timezone (Z or offset): {event_ts!r}")
+    return dt.astimezone(timezone.utc)
 
 
 @dataclass(frozen=True)
@@ -96,6 +99,7 @@ class HotMemoryManager:
         return record
 
     def demote(self, symbol: str, *, reason_code: str, event_ts: str, force: bool = False) -> None:
+        event_dt = _parse_event_ts(event_ts)
         if symbol in self.core_protected_symbols and symbol in self.base_resident:
             if not force:
                 raise ValueError(f"cannot demote core protected symbol {symbol}")
@@ -103,6 +107,7 @@ class HotMemoryManager:
             if not force:
                 raise ValueError(f"cannot demote native HOT symbol {symbol}")
         self.promoted_resident.discard(symbol)
+        self.cooldown_until.pop(symbol, None)
         self.promotion_audit.append(
             PromotionRecord(
                 symbol=symbol,
@@ -110,12 +115,13 @@ class HotMemoryManager:
                 event_ts=event_ts,
                 triggering_feature="demote",
                 expected_hot_duration_sec=0,
-                cooldown_until=datetime.now(timezone.utc).isoformat(),
+                cooldown_until=event_dt.isoformat(),
             )
         )
 
     def apply_load_pressure(self, *, event_ts: Optional[str] = None) -> list[str]:
         ts = event_ts or datetime.now(timezone.utc).isoformat()
+        event_dt = _parse_event_ts(ts)
         demoted: list[str] = []
         for sym in sorted(self.promoted_resident):
             if sym in self.core_protected_symbols:
@@ -123,6 +129,7 @@ class HotMemoryManager:
             rec = self.registry[sym]
             if rec.hot_memory_tier in {"WARM", "COLD"}:
                 self.promoted_resident.discard(sym)
+                self.cooldown_until.pop(sym, None)
                 demoted.append(sym)
                 self.promotion_audit.append(
                     PromotionRecord(
@@ -131,7 +138,7 @@ class HotMemoryManager:
                         event_ts=ts,
                         triggering_feature="apply_load_pressure",
                         expected_hot_duration_sec=0,
-                        cooldown_until=datetime.now(timezone.utc).isoformat(),
+                        cooldown_until=event_dt.isoformat(),
                     )
                 )
         return demoted
@@ -159,6 +166,7 @@ class HotMemoryManager:
         warm = [s for s, r in self.registry.items() if r.hot_memory_tier == "WARM"]
         cold = [s for s, r in self.registry.items() if r.hot_memory_tier == "COLD"]
         return {
+            "registry_status": "ok",
             "hot_executable": sorted(
                 s for s, r in self.registry.items() if r.hot_memory_tier == "HOT_EXECUTABLE"
             ),
@@ -183,14 +191,26 @@ class HotMemoryManager:
 def hot_memory_telemetry_snapshot(repo_root: Path) -> dict[str, Any]:
     try:
         return HotMemoryManager.from_repo(repo_root).snapshot_telemetry()
-    except Exception as exc:
-        return {
-            "registry_status": "degraded",
-            "error": str(exc),
-            "hot_executable": [],
-            "hot_sensor": [],
-            "warm": [],
-            "cold": [],
-            "resident": [],
-            "core_protected_symbols": [],
-        }
+    except (FileNotFoundError, ValueError, KeyError, OSError) as exc:
+        return _degraded_telemetry(str(exc))
+
+
+def _degraded_telemetry(error: str) -> dict[str, Any]:
+    return {
+        "registry_status": "degraded",
+        "error": error,
+        "hot_executable": [],
+        "hot_sensor": [],
+        "warm": [],
+        "cold": [],
+        "resident": [],
+        "promoted_resident": [],
+        "core_protected_symbols": [],
+        "missing_sensor_warnings": [],
+        "promotion_audit_tail": [],
+        "degradation_flags": {
+            "load_pressure_demotions_available": False,
+            "missing_vix_family": False,
+        },
+        "feed_status": {},
+    }
