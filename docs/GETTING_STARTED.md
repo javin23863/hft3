@@ -1,63 +1,110 @@
 # Getting Started — hft3 end-to-end
 
-Chicago CME microstructure research and execution stack. Read this once, top to bottom, before touching code.
+Chicago CME microstructure research and execution stack. **Read this document once, top to bottom**, before editing code. For a printable checklist of every doc in order, see [DOC_INDEX.md](DOC_INDEX.md).
+
+---
 
 ## 1. What this repo is
 
-hft3 implements the [BLUEPRINT.md](../BLUEPRINT.md) specification for:
+hft3 implements [BLUEPRINT.md](../BLUEPRINT.md): a filtration-safe, event-time MBO research stack with a separate **live colo path** (CHI404) and **offline / workstation** research paths.
 
 | Lane | Purpose | Primary paths |
 |------|---------|---------------|
-| **Research** | Databento MBO → NPZ → features → backtest | `data_system/`, `features_engine/`, `backtest_pipeline/` |
-| **Decision** | Feature store, targets, model training | `decision_engine/python/` |
-| **Production infra** | CHI404 bare-metal tuning and validation | `infrastructure/chi404/`, `scripts/sync_chi404_repo.sh` |
-| **Rithmic trial** | Interim live capture until R\|API (quarantined) | `data_system/rithmic_trial/`, `docs/rithmic_trial/` |
-| **Telemetry** | Latency and health dashboards | `telemetry/` |
+| **Research ingest** | Databento MBO → NPZ | `data_system/` |
+| **Features** | MBO features, hypotheses, regime | `features_engine/` |
+| **Backtest** | HftBacktest replay, research runner | `backtest_pipeline/` |
+| **Workbench** | Event-window backtests, campaigns, latency PASS | `workbench/`, `research_cards/` |
+| **After-action** | Post-run packet, symbolic checks, local LLM narrative | `data_layer/` |
+| **Decision** | Feature store, training | `decision_engine/python/` |
+| **Production infra** | CHI404 tuning and validation | `infrastructure/chi404/` |
+| **Rithmic trial** | Quarantined interim live capture | `data_system/rithmic_trial/` |
+| **Telemetry** | Latency dashboards | `telemetry/` |
 
-Authoritative math and production specs live in the PDFs at repo root — not duplicated here.
+**Topology (non-negotiable):** live/paper capture and orders run on **CHI404 bare metal** only. The dev workstation runs offline replay, pytest, workbench, and **post-run** after-action LLM — never the live Rithmic hot loop. See BLUEPRINT §4.
 
-## 2. Prerequisites
+---
 
-- **Python 3.11+** with `pip`
-- **Git** with LF normalization (`.gitattributes` enforces this)
-- **Optional:** CMake + C++17 compiler for `features_engine/cpp/`
-- **Optional:** `graphify` CLI (`pip install "graphifyy[pdf]"`) for code navigation
-- **For CHI404:** SSH access to bare-metal server (`Host chi404` in `~/.ssh/config`)
-- **For Rithmic trial:** CHI404 only (R\|Trader Wine on colo) — not a Windows workstation; see [docs/rithmic_trial/README.md](rithmic_trial/README.md)
+## 2. Authority documents
 
-## 3. First-time setup
+Mathematical and production rules live in PDFs — not duplicated in prose here.
+
+| Location | Use |
+|----------|-----|
+| [docs/references/](references/README.md) | **Canonical PDF bundle** for citations and reviewers |
+| [docs/references/MANIFEST.md](references/MANIFEST.md) | Field → PDF section map (after-action packets) |
+| Repo root `*.pdf` | Legacy links; prefer `docs/references/` copies |
+| [BLUEPRINT.md](../BLUEPRINT.md) | Developer handoff summary |
+| [REVIEWER_CHARTER.md](REVIEWER_CHARTER.md) | Pass A (engineering) + Pass B (math invariants) |
+
+---
+
+## 3. Prerequisites
+
+- **Python 3.11+**, **Git**, **pip**
+- **Optional:** CMake + C++17 for `features_engine/cpp/`
+- **Optional:** `graphify` CLI — `pip install graphifyy` (AST rebuild; no cloud API required)
+- **Optional:** Ollama + Hawkish-8B for workbench after-action reports and optional semantic graphify
+- **CHI404:** SSH `Host chi404` in `~/.ssh/config`
+- **Rithmic trial live:** CHI404 only — see [rithmic_trial/README.md](rithmic_trial/README.md)
+
+---
+
+## 4. First-time setup
+
+### 4.1 Clone with vendor submodules
 
 ```bash
-git clone https://github.com/javin23863/hft3.git
+git clone --recurse-submodules https://github.com/javin23863/hft3.git
 cd hft3
-cp .env.example .env          # fill in keys locally; never commit .env
-pip install -r data_system/requirements.txt
-pip install -r backtest_pipeline/requirements.txt
-pip install "graphifyy[pdf]"  # optional but recommended
 ```
 
-Run the test suite to confirm the environment:
+If you already cloned without submodules:
+
+```bash
+git submodule update --init vendor/openfoundry vendor/alphageometry
+```
+
+| Submodule | Upstream |
+|-----------|----------|
+| `vendor/openfoundry/` | [syzygyhack/open-foundry](https://github.com/syzygyhack/open-foundry) |
+| `vendor/alphageometry/` | [google-deepmind/alphageometry](https://github.com/google-deepmind/alphageometry) |
+
+Pins: [integrations/openfoundry/VENDOR.lock](../integrations/openfoundry/VENDOR.lock)
+
+### 4.2 Environment and dependencies
+
+```bash
+cp .env.example .env          # fill locally; never commit
+pip install -r data_system/requirements.txt
+pip install -r backtest_pipeline/requirements.txt
+pip install -r workbench/requirements.txt
+pip install graphifyy         # code navigation (recommended)
+pip install openai            # only if using graphify semantic via local Ollama
+```
+
+### 4.3 Baseline verification
 
 ```bash
 python -m pytest tests/ -q
 ```
 
-## 4. Research pipeline (offline)
+Expect some skips when optional C++ golden binaries or CHI404 fixtures are absent — see test output, not a silent PASS.
 
-**Canonical entrypoints:** [docs/vault/RESEARCH_ENTRYPOINTS.md](vault/RESEARCH_ENTRYPOINTS.md)  
-**CPI baseline:** [docs/vault/CPI_2024_09_11_TIGHT_BASELINE.md](vault/CPI_2024_09_11_TIGHT_BASELINE.md)
+---
 
-Typical flow from historical MBO to backtest:
+## 5. Research pipeline (offline)
+
+**Entrypoints:** [vault/RESEARCH_ENTRYPOINTS.md](vault/RESEARCH_ENTRYPOINTS.md)  
+**CPI baseline:** [vault/CPI_2024_09_11_TIGHT_BASELINE.md](vault/CPI_2024_09_11_TIGHT_BASELINE.md)
 
 ```
-events.csv → Databento NPZ → run_event_replay.py (SignalBacktester) → research_cards/
-                     ↳ optional: research_runner.py latency matrix (--skip-hft)
+events.csv → Databento NPZ → run_event_replay.py → research_cards/
 ```
 
-1. Configure `DATABENTO_API_KEY` in `.env`.
-2. Download CPI probe: `python data_system/scripts/download_micro_probe.py` (or place NPZ under `data/npz/`).
-3. Sync CHI404 latency: `bash scripts/chi404_sync_trial_data.sh` (or run probe on CHI404).
-4. **Primary macro replay:**
+1. Set `DATABENTO_API_KEY` in `.env`.
+2. Place or download NPZ under `data/npz/`.
+3. Sync CHI404 latency summary when available: `bash scripts/chi404_sync_trial_data.sh`.
+4. Primary macro replay:
 
 ```bash
 python scripts/run_event_replay.py \
@@ -66,82 +113,115 @@ python scripts/run_event_replay.py \
   --skip-hftbacktest
 ```
 
-5. Hypothesis families: `features_engine/src/hypotheses/`, output under `research_cards/`.
-6. Regime / market state: `features_engine/src/regime/`, `features_engine/src/pipeline/`.
+**Invariant:** no lookahead — features use filtration \(F_t\) only. [REVIEWER_CHARTER.md](REVIEWER_CHARTER.md) Pass B.
 
-Do **not** use `pipeline replay-sample` on trial NPZ for macro event research — see vault entrypoints §5.
+Do **not** use trial NPZ for trusted macro research without quarantine checks — see vault entrypoints.
 
-Key invariant: **no lookahead** — all features must be computable from filtration \(F_t\) at event time. See [REVIEWER_CHARTER.md](REVIEWER_CHARTER.md) Pass B.
+---
 
-## 5. CHI404 production infra
+## 6. Workbench lane
 
-CHI404 is the Chicago colo bare-metal host used for kernel tuning, jitter gates, and latency validation.
+Event-window backtests with C++ latency authority, walk-forward campaigns, and Streamlit UI.
+
+**Full guide:** [workbench/README.md](workbench/README.md)
 
 ```bash
-# From your workstation — sync repo to server
+python -m workbench list
+python -m workbench run --model HYP_5 --event-id CPI_2024_09_11_TIGHT --full-sweep
+python -m workbench campaign --model HYP_5 --symbol MES.v.0 --full-sweep
+```
+
+| Flag | Meaning |
+|------|---------|
+| `--full-sweep` | Full latency injection matrix + diagnostics (required for after-action) |
+| default (fast sweep) | Skips heavy sweep and **skips after-action** |
+
+Run outputs: `research_cards/workbench_runs/` (**gitignored** — local only).
+
+---
+
+## 7. After-action reports (post-run only)
+
+Runs **after** a full-sweep workbench event completes on the **workstation** (Windows/macOS by default). Not in the MBO hot path; not on CHI404 unless `HFT3_AFTER_ACTION=1`.
+
+**Spec:** [workbench/AFTER_ACTION_REPORTS.md](workbench/AFTER_ACTION_REPORTS.md)
+
+Pipeline:
+
+```
+diagnostics.json + trades.parquet → MicrostructureAARPacket → symbolic invariants → KG JSONL → Hawkish-8B (Ollama)
+```
+
+Per-run artifacts (when enabled):
+
+| File | Content |
+|------|---------|
+| `after_action_packet.json` | Structured packet (ns/µs, PDF citations) |
+| `after_action_symbolic.json` | Deterministic latency invariant pass/fail |
+| `after_action_report.md` | Plain-English narrative (Ollama) |
+| `after_action_meta.json` | `llm_status`, skip reasons, timing |
+
+Setup:
+
+1. Submodules initialized (§4.1).
+2. Ollama running with `hf.co/QuantFactory/Llama-3.1-Hawkish-8B-GGUF:Q6_K`.
+3. Charter PDFs present in `docs/references/` (see MANIFEST).
+
+```bash
+pytest tests/test_data_layer/ -q -m "not slow"
+```
+
+Global KG append: `research_cards/kg/nodes.jsonl` (structure committed; run rows are local).
+
+---
+
+## 8. CHI404 production infra
+
+Chicago colo bare metal — kernel tuning, jitter gates, latency validation.
+
+```bash
 bash scripts/sync_chi404_repo.sh
-
-# Remote tuning + validation (PowerShell on Windows)
-.\scripts\run_chi404_tuning_remote.ps1
-.\scripts\run_chi404_validate_remote.sh
+.\scripts\run_chi404_tuning_remote.ps1    # Windows → remote
+bash scripts/run_chi404_validate_remote.sh
 ```
 
-Scripts live in `infrastructure/chi404/`. Pass criteria: `infrastructure/chi404/PASS_CRITERIA.json`. Validator: `validate_pass_criteria.py`.
+Pass criteria: `infrastructure/chi404/PASS_CRITERIA.json`.
 
-Expected outcomes (validated RUN_ID `20260529T112136Z`):
+---
 
-- Cyclictest p99 on isolated CPUs: **≤ 20 µs** (measured ~11 µs)
-- NIC ring size documented in `ring_buffer_limitation.json` when hardware caps at 511
+## 9. Rithmic trial lane (quarantined)
 
-Set `HFT3_RITHMIC_HOST` on the server for gateway RTT probes once Rithmic connectivity is configured.
+Interim live capture via R\|Trader until R\|API. **Never writes to trusted `data/npz/`.**
 
-## 6. Rithmic trial lane (interim)
-
-Until R\|API SDK arrives, live capture uses R\|Trader Pro as a bridge. **This lane is quarantined** — it never writes to trusted Databento `data/npz/`.
-
-```
-R|Trader Pro → raw capture → normalize → validate → HftBacktest NPZ → replay sample
-```
-
-CHI404 (Paper Trading, Chicago — **only path for live capture**):
+Live capture: **CHI404 only.**
 
 ```bash
-# On CHI404 only — see docs/rithmic_trial/README.md
-export RITHMIC_TRIAL_ENABLED=1
+# CHI404 — see docs/rithmic_trial/README.md
 python -m data_system.rithmic_trial.pipeline run-unattended \
   --config data_system/config/rithmic_trial.yaml
-```
 
-Fixture mode (no live broker):
-
-```bash
+# Fixture mode (workstation / CI)
 python -m data_system.rithmic_trial.pipeline capture --config data_system/config/rithmic_trial.yaml
 python -m data_system.rithmic_trial.pipeline process --date YYYY-MM-DD --symbol MES
 ```
 
-Full spec: [rithmic_trial_hftbacktest_pipeline_prompt.pdf](../rithmic_trial_hftbacktest_pipeline_prompt.pdf).  
-Operational detail: [docs/rithmic_trial/README.md](rithmic_trial/README.md).
+Spec: [docs/references/rithmic_trial_hftbacktest_pipeline_prompt.pdf](references/rithmic_trial_hftbacktest_pipeline_prompt.pdf)
 
-## 7. Code navigation (graphify)
+---
 
-Before editing code, consult the knowledge graph:
+## 10. Code navigation (graphify)
 
-```powershell
-.\scripts\graphify_pre_edit.ps1
-graphify query "where is the rithmic trial pipeline entry point?"
-```
+| Task | Command | API key? |
+|------|---------|----------|
+| Before edits | `.\scripts\graphify_pre_edit.ps1` then `graphify query "..."` | No |
+| After code edits | `.\scripts\graphify_rebuild.ps1` or `graphify update .` | No |
+| Optional semantic (PDFs/docs) | `.\scripts\graphify_semantic_local.ps1` | No — uses **local Ollama** |
 
-After any code edit, rebuild (mandatory, AST-only, no API key):
+Do **not** use Google/Gemini for routine rebuilds. Full workflow: [GRAPHIFY_WORKFLOW.md](GRAPHIFY_WORKFLOW.md).
 
-```powershell
-.\scripts\graphify_rebuild.ps1
-```
+---
 
-Full workflow: [GRAPHIFY_WORKFLOW.md](GRAPHIFY_WORKFLOW.md).
-
-## 8. Agent and review workflow
-
-Multi-step or multi-file work uses orchestrator + subagents:
+## 11. Agent and review workflow
 
 ```
 Spec → GraphPre → Plan → Code → Review (Karpathy + math) → Verify → GraphPost
@@ -149,47 +229,72 @@ Spec → GraphPre → Plan → Code → Review (Karpathy + math) → Verify → 
 
 | Doc | Purpose |
 |-----|---------|
-| [AGENTS.md](../AGENTS.md) | Roles, Karpathy principles, hft3 constraints |
-| [AGENTIC_ENGINEERING.md](AGENTIC_ENGINEERING.md) | Delegation table, verify commands |
-| [REVIEWER_CHARTER.md](REVIEWER_CHARTER.md) | Dual-pass review: engineering + PDF math invariants |
+| [AGENTS.md](../AGENTS.md) | Roles, topology, constraints |
+| [AGENTIC_ENGINEERING.md](AGENTIC_ENGINEERING.md) | Delegation and verify commands |
+| [REVIEWER_CHARTER.md](REVIEWER_CHARTER.md) | Dual-pass review contract |
 
-Cursor rules in `.cursor/rules/` enforce this for AI-assisted development.
+---
 
-## 9. Repository layout
+## 12. Repository layout
 
 ```
 hft3/
-├── BLUEPRINT.md                 # Developer handoff summary
+├── BLUEPRINT.md                 # Spec summary
 ├── AGENTS.md                    # Agent charter
-├── data_system/                 # Ingestion, Databento, Rithmic trial
-├── features_engine/             # MBO features, hypotheses, regime, C++ extractor
-├── backtest_pipeline/           # NPZ conversion, replay, research runner
-├── decision_engine/             # Feature store, targets, training
-├── infrastructure/              # Kernel tuning; chi404/ for bare metal
-├── telemetry/                   # Dashboards and latency reporting
-├── scripts/                     # CHI404 sync, setup_rithmic_chi404.sh, graphify, offline pipeline
-├── tests/                       # pytest suite
+├── data_layer/                  # After-action: packet, symbolic, KG, Ollama
+├── integrations/openfoundry/    # hft3 CME MBO connector + VENDOR.lock
+├── vendor/openfoundry/          # syzygyhack/open-foundry submodule
+├── vendor/alphageometry/        # AlphaGeometry submodule (symbolic pattern ref)
+├── data_system/                 # Databento, Rithmic trial
+├── features_engine/             # MBO features, hypotheses, C++
+├── backtest_pipeline/           # NPZ, replay, research runner
+├── workbench/                   # Event backtests, campaigns, UI
+├── decision_engine/             # Training lane
+├── infrastructure/chi404/       # Bare-metal tuning
+├── research_cards/
+│   ├── kg/                      # File-backed KG (JSONL)
+│   └── workbench_runs/          # Local run artifacts (gitignored)
+├── tests/                       # pytest
 ├── docs/                        # Operational guides (this file)
-└── graphify-out/                # Committed knowledge graph artifacts
+└── graphify-out/                # Committed code graph
 ```
 
-## 10. Verification checklist
+---
+
+## 13. Verification checklist
 
 | Check | Command |
 |-------|---------|
-| Unit tests | `python -m pytest tests/ -q` |
+| Full unit suite | `python -m pytest tests/ -q` |
+| Workbench + after-action | `pytest tests/test_workbench/ tests/test_data_layer/ -q -m "not slow"` |
 | CPI event replay | `python scripts/run_event_replay.py --event-id CPI_2024_09_11_TIGHT --skip-hftbacktest` |
-| Event replay tests | `python -m pytest tests/test_run_event_replay.py -q` |
-| Rithmic fixture pipeline | `python -m pytest tests/test_rithmic_trial_pipeline.py -q` |
-| Rithmic topology guards | `python -m pytest tests/test_rithmic_topology_guards.py -q` |
-| Graph fresh after edits | `.\scripts\graphify_rebuild.ps1` |
+| Rithmic fixture pipeline | `pytest tests/test_rithmic_trial_pipeline.py -q` |
+| Rithmic topology guards | `pytest tests/test_rithmic_topology_guards.py -q` |
+| Graph after edits | `.\scripts\graphify_rebuild.ps1` |
 | CHI404 validate (remote) | `bash scripts/run_chi404_validate_remote.sh` |
+| Submodules present | `git submodule status` |
 
-## 11. What is not in git
+---
 
-- `.env` — credentials and API keys
-- `data/**/*.npz`, `data/raw/rithmic_trial_live_capture/**` — market data
-- `logs/`, `graphify-out/cache/` — local runtime artifacts
-- `chi404_infra.tgz` — ops transfer bundles
+## 14. What is not in git
 
-When in doubt, check `.gitignore` before adding files.
+| Path | Reason |
+|------|--------|
+| `.env` | Secrets |
+| `data/**/*.npz`, live Rithmic raw | Market data |
+| `research_cards/workbench_runs/` | Ephemeral run outputs |
+| `logs/`, `graphify-out/cache/` | Local runtime |
+| `graphify-out/manifest.json`, `cost.json` | Local graphify metadata |
+
+See `.gitignore` before adding files.
+
+---
+
+## 15. Where to go next
+
+| Goal | Document |
+|------|----------|
+| Full doc reading order | [DOC_INDEX.md](DOC_INDEX.md) |
+| Workbench deep dive | [workbench/README.md](workbench/README.md) |
+| After-action setup | [workbench/AFTER_ACTION_REPORTS.md](workbench/AFTER_ACTION_REPORTS.md) |
+| Open Foundry integration | [integrations/openfoundry/README.md](../integrations/openfoundry/README.md) |

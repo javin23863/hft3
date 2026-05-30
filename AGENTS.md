@@ -2,6 +2,8 @@
 
 Chicago CME microstructure research and execution stack. Agents working in this repo follow mandatory delegation, Karpathy engineering principles, and hft3-specific constraints below.
 
+**Human onboarding:** [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) (read once, top to bottom) · [docs/DOC_INDEX.md](docs/DOC_INDEX.md) (chronological doc map)
+
 Full workflow reference: [docs/AGENTIC_ENGINEERING.md](docs/AGENTIC_ENGINEERING.md)
 
 ## Mandatory delegation

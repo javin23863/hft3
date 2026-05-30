@@ -63,6 +63,10 @@ data/replay/parity/**
 !data/replay/parity/.gitkeep
 research_cards/parity/**
 !research_cards/parity/.gitkeep
+research_cards/workbench_runs/**
+!research_cards/workbench_runs/.gitkeep
+research_cards/workbench_catalog_manifest.json
+vendor/openfoundry_upstream_test/
 models/
 *.onnx
 

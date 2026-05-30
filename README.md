@@ -2,15 +2,19 @@
 
 Chicago CME microstructure research and execution stack.
 
-**New here?** Start with **[docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)** — it walks through setup, the research pipeline, CHI404 infra, Rithmic trial capture, graphify, and verification from start to finish.
+**New developer?** Read **[docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)** top to bottom once, then use **[docs/DOC_INDEX.md](docs/DOC_INDEX.md)** as the chronological doc map.
 
 ## Quick start
 
 ```bash
-git clone https://github.com/javin23863/hft3.git
+git clone --recurse-submodules https://github.com/javin23863/hft3.git
 cd hft3
 cp .env.example .env    # configure locally; never commit
-pip install -r data_system/requirements.txt -r backtest_pipeline/requirements.txt
+pip install -r data_system/requirements.txt \
+            -r backtest_pipeline/requirements.txt \
+            -r workbench/requirements.txt
+pip install graphifyy   # recommended for code navigation
+git submodule update --init vendor/openfoundry vendor/alphageometry
 python -m pytest tests/ -q
 ```
 
@@ -18,41 +22,45 @@ python -m pytest tests/ -q
 
 ```
                     ┌─────────────────────────────────────────┐
-                    │           Reference specs (PDFs)         │
-                    │  BLUEPRINT · CME production · Rithmic    │
+                    │     Authority specs (docs/references/)   │
+                    │  BLUEPRINT · CME PDFs · Rithmic trial   │
                     └────────────────────┬────────────────────┘
                                          │
      ┌───────────────┬───────────────────┼───────────────────┬───────────────┐
      ▼               ▼                   ▼                   ▼               ▼
- Research        Features           Backtest            Decision         CHI404
- (Databento)     (MBO + regime)     (HftBacktest)       (train)          (bare metal)
- data_system/    features_engine/  backtest_pipeline/  decision_engine/ infrastructure/
-     │               │                   │                   │               │
-     └───────────────┴───────────────────┴───────────────────┴───────────────┘
+ Research        Features           Backtest            Workbench         CHI404
+ (Databento)     (MBO + regime)     (HftBacktest)       (campaigns)       (bare metal)
+ data_system/    features_engine/  backtest_pipeline/  workbench/        infrastructure/
+     │               │                   │              data_layer/            │
+     └───────────────┴───────────────────┴───────────────┴───────────────────┘
                                          │
                               Rithmic trial (quarantined interim lane)
                               data_system/rithmic_trial/
 ```
 
+Post-run after-action (workstation only): `data_layer/` → Ollama Hawkish-8B + file KG. See [docs/workbench/AFTER_ACTION_REPORTS.md](docs/workbench/AFTER_ACTION_REPORTS.md).
+
 ## Reference documents
 
 | Document | Purpose |
 |----------|---------|
-| [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) | **Start here** — full operational guide |
-| [docs/AUDIT_FRICTION_REPORT.md](docs/AUDIT_FRICTION_REPORT.md) | Layer audit findings and remediation status |
+| [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) | **Start here** — full operational guide (chronological) |
+| [docs/DOC_INDEX.md](docs/DOC_INDEX.md) | Every doc in recommended reading order |
+| [docs/references/](docs/references/README.md) | Canonical PDF bundle + MANIFEST |
 | [BLUEPRINT.md](BLUEPRINT.md) | Developer handoff summary |
-| [chicago_cme_a_plus_production_implementation_prompt.pdf](chicago_cme_a_plus_production_implementation_prompt.pdf) | Production build spec |
-| [rithmic_trial_hftbacktest_pipeline_prompt.pdf](rithmic_trial_hftbacktest_pipeline_prompt.pdf) | Rithmic trial → HftBacktest wiring (R\|Trader bridge until R\|API) |
+| [AGENTS.md](AGENTS.md) | Agent charter and topology rules |
 
 ## Major subsystems
 
 | Subsystem | Entry point | Docs |
 |-----------|-------------|------|
-| Research ingest | `data_system/src/databento_client.py` | [GETTING_STARTED §4](docs/GETTING_STARTED.md#4-research-pipeline-offline) |
+| Research ingest | `data_system/src/databento_client.py` | [GETTING_STARTED §5](docs/GETTING_STARTED.md#5-research-pipeline-offline) |
 | Feature engine | `features_engine/src/pipeline/market_state_pipeline.py` | [BLUEPRINT.md](BLUEPRINT.md) |
-| Backtest | `backtest_pipeline/src/runner.py` | [GETTING_STARTED §4](docs/GETTING_STARTED.md#4-research-pipeline-offline) |
-| CHI404 tuning | `infrastructure/chi404/run_chi404_tuning.sh` | [GETTING_STARTED §5](docs/GETTING_STARTED.md#5-chi404-production-infra) |
-| Rithmic trial | `python -m data_system.rithmic_trial.pipeline` (live capture: **CHI404 only**) | [docs/rithmic_trial/README.md](docs/rithmic_trial/README.md) |
+| Backtest | `backtest_pipeline/src/runner.py` | [GETTING_STARTED §5](docs/GETTING_STARTED.md#5-research-pipeline-offline) |
+| Workbench | `python -m workbench run` | [docs/workbench/README.md](docs/workbench/README.md) |
+| After-action LLM | `data_layer/pipeline/after_action.py` | [AFTER_ACTION_REPORTS.md](docs/workbench/AFTER_ACTION_REPORTS.md) |
+| CHI404 tuning | `infrastructure/chi404/run_chi404_tuning.sh` | [GETTING_STARTED §8](docs/GETTING_STARTED.md#8-chi404-production-infra) |
+| Rithmic trial | `python -m data_system.rithmic_trial.pipeline` (live: **CHI404 only**) | [docs/rithmic_trial/README.md](docs/rithmic_trial/README.md) |
 | Code graph | `graphify query "..."` | [docs/GRAPHIFY_WORKFLOW.md](docs/GRAPHIFY_WORKFLOW.md) |
 | Agent workflow | [AGENTS.md](AGENTS.md) | [docs/AGENTIC_ENGINEERING.md](docs/AGENTIC_ENGINEERING.md) |
 
@@ -61,20 +69,17 @@ python -m pytest tests/ -q
 ```bash
 # Tests
 python -m pytest tests/ -q
+pytest tests/test_workbench/ tests/test_data_layer/ -q -m "not slow"
+
+# Workbench full sweep (enables after-action on workstation)
+python -m workbench run --model HYP_5 --event-id CPI_2024_09_11_TIGHT --full-sweep
 
 # CHI404 — sync repo to bare-metal server
 bash scripts/sync_chi404_repo.sh
 
-# Rithmic trial — CHI404 live setup (on server only)
-bash scripts/setup_rithmic_chi404.sh
-
-# Rithmic trial — fixture capture (workstation / CI, no live broker)
-python -m data_system.rithmic_trial.pipeline capture --config data_system/config/rithmic_trial.yaml
-python -m data_system.rithmic_trial.pipeline process --date YYYY-MM-DD --symbol MES
-
 # Graphify — before edits
 graphify query "where is X defined?"
-# after edits
+# after code edits (no cloud API)
 .\scripts\graphify_rebuild.ps1        # Windows
 graphify update .                    # any platform
 ```
