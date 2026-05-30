@@ -42,13 +42,25 @@ Equivalent manual command (mandatory after code edits, no API key):
 graphify update .
 ```
 
-AST-only rebuild via `graphify update .` — no LLM key required.
+AST-only rebuild via `graphify update .` — **no LLM, no Google API** (mandatory after code edits).
 
-Optional full semantic rebuild (includes PDFs; requires `GEMINI_API_KEY` or `ANTHROPIC_API_KEY`):
+Optional **full semantic rebuild** (PDFs/docs + inferred edges) via **local Ollama** — not Gemini:
 
 ```powershell
-graphify .
+pip install openai   # graphify ollama backend uses OpenAI-compatible client
+.\scripts\graphify_semantic_local.ps1
 ```
+
+Manual equivalent:
+
+```powershell
+$env:OLLAMA_API_KEY = 'local'
+graphify extract . --backend ollama --model "hf.co/QuantFactory/Llama-3.1-Hawkish-8B-GGUF:Q6_K" --max-concurrency 1 --api-timeout 600 --out .
+```
+
+Override model: `$env:GRAPHIFY_OLLAMA_MODEL = 'your-ollama-tag'`
+
+Do **not** use `graphify .` / Gemini unless you explicitly want cloud API (`GEMINI_API_KEY`).
 
 On failure the rebuild script falls back to `graphify cluster-only .`. Logs: `logs/graphify/rebuild.log`.
 

@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MicrostructureAARPacket",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run_id",
+    "openfoundry_meta",
+    "pdf_citations",
+    "pdf_citations_complete",
+    "event_context",
+    "latency_authority",
+    "injection_sweep",
+    "per_trade_audit",
+    "simulation_fidelity",
+    "predictions_vs_outcomes"
+  ],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "run_id": { "type": "string" },
+    "openfoundry_meta": {
+      "type": "object",
+      "required": ["connector_id", "asset_class", "vendor_shas", "schema_version"]
+    },
+    "pdf_citations": { "type": "array" },
+    "pdf_citations_complete": { "type": "boolean" },
+    "event_context": {
+      "type": "object",
+      "required": ["event_id", "event_state", "data_sufficient"]
+    },
+    "latency_authority": {
+      "type": "object",
+      "required": [
+        "authority",
+        "breakeven_us",
+        "lane_pass",
+        "python_research_runtime_authoritative"
+      ]
+    },
+    "injection_sweep": { "type": "object" },
+    "per_trade_audit": { "type": "array" },
+    "simulation_fidelity": { "type": "object" },
+    "predictions_vs_outcomes": { "type": "object" },
+    "skip_reasons": { "type": "array", "items": { "type": "string" } }
+  }
+}

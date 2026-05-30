@@ -1,0 +1,12 @@
+{
+  "npz_path": "data/npz/MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz",
+  "event_id": "CPI_2024_09_11_TIGHT",
+  "event_count": 1000,
+  "gap_count": 0,
+  "duplicate_order_ids": 0,
+  "monotonic_violations": 0,
+  "min_history_years_required": 10,
+  "history_years_available": 12.0,
+  "data_sufficient": true,
+  "extra": {}
+}

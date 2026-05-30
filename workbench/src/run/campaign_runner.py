@@ -424,6 +424,12 @@ def run_campaign(
                 "config.yaml",
                 "research_card.json",
                 "composition_trace.json",
+                "after_action_packet.json",
+                "after_action_symbolic.json",
+                "after_action_report.md",
+                "after_action_annotations.json",
+                "after_action_meta.json",
+                "kg_slice.json",
             ):
                 src = src_run / name
                 if src.is_file():

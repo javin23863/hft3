@@ -20,3 +20,17 @@ Implementation specs and dependency map:
 
 - [PDF_MODELS.md](../structural_models/PDF_MODELS.md)
 - [MODEL_DEPENDENCY_MAP.md](../structural_models/MODEL_DEPENDENCY_MAP.md)
+
+## Full PDF bundle (after-action citation index)
+
+| File | Status | Use |
+|------|--------|-----|
+| [algorithmic_trading_strategy_development.pdf](algorithmic_trading_strategy_development.pdf) | present | PDF_MODEL_1..7 structural specs |
+| [hft_framework_developer_prompt.pdf](hft_framework_developer_prompt.pdf) | present | PDF_MODEL_8..11 framework extensions |
+| [chicago_cme_microstructure_mathematical_model.pdf](chicago_cme_microstructure_mathematical_model.pdf) | present | Filtration, event-time, ns timestamps |
+| [chicago_cme_microstructure_a_plus_developer_handoff.pdf](chicago_cme_microstructure_a_plus_developer_handoff.pdf) | present | Simulation fidelity, matching |
+| [chicago_cme_a_plus_production_implementation_prompt.pdf](chicago_cme_a_plus_production_implementation_prompt.pdf) | present | C++ latency, gateway, injection sweep |
+| [rithmic_trial_hftbacktest_pipeline_prompt.pdf](rithmic_trial_hftbacktest_pipeline_prompt.pdf) | present | Trial lane quarantine |
+| [Ultimate_Quantitative_Finance_Researcher.pdf](Ultimate_Quantitative_Finance_Researcher.pdf) | present | Walk-forward validation |
+
+Field-level mapping: [MANIFEST.md](MANIFEST.md). After-action packets require all charter PDFs in this directory for `pdf_citations_complete: true`.

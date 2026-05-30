@@ -53,7 +53,7 @@ flowchart LR
 3. **Plan** — Orchestrator decomposes; spawn investigators in parallel if needed.
 4. **Code** — Builder for surgical edits; main/feature agent for larger scope; shell for commands.
 5. **Verify** — Dual-pass reviewer on diff (both passes green), then **shell** for `pytest` (and CHI404 validate when infra). No merge narrative without green commands.
-6. **GraphPost** — `graphify . --update` or `scripts/graphify_rebuild.ps1` after code changes.
+6. **GraphPost** — `graphify update .` or `scripts/graphify_rebuild.ps1` after code changes (AST-only, no Google API). Optional semantic PDF pass: `scripts/graphify_semantic_local.ps1` (local Ollama).
 
 ## Dual-pass review
 

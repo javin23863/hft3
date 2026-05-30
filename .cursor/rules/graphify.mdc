@@ -9,4 +9,4 @@ This project has a graphify knowledge graph at graphify-out/.
 - If graphify-out/wiki/index.md exists, navigate it instead of reading raw files
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context
 - After modifying code files in this session, run `graphify update .` or `scripts/graphify_rebuild.ps1` (mandatory; AST-only, no API key)
-- Full semantic rebuild `graphify .` is optional and requires an LLM API key (PDFs/docs)
+- Full semantic rebuild (PDFs/docs) is optional: `scripts/graphify_semantic_local.ps1` uses **local Ollama**, not Google/Gemini API

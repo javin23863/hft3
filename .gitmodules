@@ -1,0 +1,6 @@
+[submodule "vendor/alphageometry"]
+	path = vendor/alphageometry
+	url = https://github.com/google-deepmind/alphageometry
+[submodule "vendor/openfoundry"]
+	path = vendor/openfoundry
+	url = https://github.com/syzygyhack/open-foundry

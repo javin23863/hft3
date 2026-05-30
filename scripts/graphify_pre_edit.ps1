@@ -13,7 +13,7 @@ if (-not (Get-Command graphify -ErrorAction SilentlyContinue)) {
 
 if (-not (Test-Path $GraphJson)) {
     Write-Host 'graphify-out/graph.json missing — running AST build (graphify update .)...'
-    Write-Host 'Optional: full semantic graphify . requires GEMINI/ANTHROPIC API key (includes PDFs).'
+    Write-Host 'Optional: full semantic rebuild uses local Ollama — .\scripts\graphify_semantic_local.ps1 (not Google API).'
     & graphify update . 2>&1
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE

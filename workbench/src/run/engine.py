@@ -30,6 +30,18 @@ from workbench.src.sim.cpp_replay_harness import CppReplayHarness
 from workbench.src.sim.latency_simulator import LatencyPolicy
 
 
+def _after_action_allowed() -> bool:
+    """Post-run LLM runs on dev workstation only (BLUEPRINT live path is CHI404)."""
+    import os
+    import sys
+
+    if os.environ.get("HFT3_AFTER_ACTION") == "0":
+        return False
+    if os.environ.get("HFT3_AFTER_ACTION") == "1":
+        return True
+    return sys.platform in ("win32", "darwin")
+
+
 class WorkbenchEngine:
     def __init__(self, repo_root: Path):
         self.repo_root = repo_root
@@ -248,10 +260,31 @@ class WorkbenchEngine:
             )
         (ctx.artifact_dir / "research_card.json").write_text(json.dumps(card, indent=2), encoding="utf-8")
 
+        if not fast_sweep and _after_action_allowed():
+            after_action_meta: Dict[str, Any] = {}
+            try:
+                from data_layer.pipeline.after_action import run_after_action_report
+
+                after_action_meta = run_after_action_report(ctx.artifact_dir, repo_root=self.repo_root)
+            except Exception as exc:
+                import logging
+
+                logging.getLogger(__name__).warning("after-action report failed: %s", exc)
+                meta_path = ctx.artifact_dir / "after_action_meta.json"
+                if meta_path.is_file():
+                    after_action_meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                else:
+                    after_action_meta = {"llm_status": "failed", "after_action_failed": str(exc)}
+
         return {
             "run_id": ctx.run_id,
             "artifact_dir": str(ctx.artifact_dir),
             "report": report,
             "diagnostics": diagnostics.metrics if diagnostics else {},
             "promote_candidate": promote,
+            **(
+                {"after_action": after_action_meta}
+                if not fast_sweep and _after_action_allowed()
+                else {}
+            ),
         }

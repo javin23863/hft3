@@ -1,0 +1,41 @@
+# hft3 CME MBO microstructure connector — extends OpenFoundry backtest-run stream
+connector_id: hft3-cme-mbo
+schema_version: "1"
+asset_class: cme_mbo_microstructure
+upstream: https://github.com/syzygyhack/open-foundry
+upstream_core_pack: domain-packs/core/pack.yaml
+upstream_stream: backtest-run
+
+artifact_root: research_cards/workbench_runs
+artifact_files:
+  - diagnostics.json
+  - trades.parquet
+  - manifest.json
+  - config.yaml
+  - report.md
+  - research_card.json
+
+stream_mappings:
+  run_id: artifact_dir.name
+  model_id: diagnostics.model_id
+  event_id: diagnostics.event_id
+  net_pnl: diagnostics.net_pnl
+  num_trades: diagnostics.num_trades
+  promote_candidate: diagnostics.promote_candidate
+  lane_pass: diagnostics.lane_pass
+
+ontology_extensions:
+  - MarkedMicroEvent
+  - BookSnapshotAtDecision
+  - QueuePositionEstimate
+  - LatencyChainUs
+  - CppLatencyBudget
+  - InjectionSweepResult
+  - StrategySignal
+  - FillOutcome
+  - EventContext
+
+time_units:
+  exchange_timestamps: ns
+  latency_chain: us
+  injection_sweep_keys: us

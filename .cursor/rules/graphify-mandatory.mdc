@@ -17,7 +17,8 @@ Full workflow: [docs/GRAPHIFY_WORKFLOW.md](../../docs/GRAPHIFY_WORKFLOW.md).
 
 ## After any code edits
 
-1. Rebuild: `graphify update .` or `scripts/graphify_rebuild.ps1` from repo root.
-2. Commit updated `graphify-out/` artifacts with the code change when the team tracks graph in git.
+1. Rebuild: `graphify update .` or `scripts/graphify_rebuild.ps1` from repo root (AST-only; **no Google API**).
+2. Optional semantic PDF/docs pass: `scripts/graphify_semantic_local.ps1` (local Ollama, not Gemini).
+3. Commit updated `graphify-out/` artifacts with the code change when the team tracks graph in git.
 
 Orchestrator owns pre-edit consult and post-edit rebuild; subagents receive graph context from the main thread.

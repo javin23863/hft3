@@ -44,6 +44,9 @@ Campaign: `research_cards/workbench_runs/<campaign_id>/periods/<Stage>/events/<e
 | `diagnostics.json` | `survives_cpp_execution_delay`, `cpp_hot_path_runtime_us`, `python_research_runtime_us`, `promote_candidate` |
 | `trades.parquet` | timestamp chain + µs fields per [LATENCY_ARCHITECTURE.md](LATENCY_ARCHITECTURE.md) |
 | `report.md` | narrative cites C++ latency authority |
+| `after_action_report.md` | Hawkish-8B after-action (requires `--full-sweep`) |
+| `after_action_symbolic.json` | latency invariant pass/fail |
+| `after_action_packet.json` | structured AAR packet with PDF citations |
 | `composition_trace.json` | per-phase stub budgets, veto counts, raw vs adjusted signal (composed campaigns) |
 | `campaign.json` | frozen `composition` + `phase_budgets_us` at B4 start |
 
@@ -57,7 +60,7 @@ Campaign: `research_cards/workbench_runs/<campaign_id>/periods/<Stage>/events/<e
 ## D. Verify commands (run when grading)
 
 ```bash
-pytest tests/test_workbench/ tests/structural_models/ -q
+pytest tests/test_workbench/ tests/structural_models/ tests/test_data_layer/ -q
 pytest tests/test_workbench/test_cpi_e2e.py -q   # requires CPI NPZ locally
 ```
 

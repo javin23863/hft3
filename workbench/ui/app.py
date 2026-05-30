@@ -144,18 +144,68 @@ with tabs[6]:
 
 with tabs[7]:
     st.header("Report")
-    if selected_campaign and period_choice and event_choice:
-        md_path = (
-            runs_dir
-            / selected_campaign
-            / "periods"
-            / period_choice.replace(" ", "_")
-            / "events"
-            / event_choice
-            / "report.md"
-        )
+
+    def _artifact_base() -> Path | None:
+        if not selected_campaign:
+            return None
+        if period_choice and event_choice:
+            return (
+                runs_dir
+                / selected_campaign
+                / "periods"
+                / period_choice.replace(" ", "_")
+                / "events"
+                / event_choice
+            )
+        legacy = runs_dir / selected_campaign
+        if legacy.is_dir() and (legacy / "diagnostics.json").is_file():
+            return legacy
+        return None
+
+    art = _artifact_base()
+    if art:
+        md_path = art / "report.md"
         if md_path.is_file():
+            st.subheader("C++ viability report")
             st.markdown(md_path.read_text(encoding="utf-8"))
+
+        aar_path = art / "after_action_report.md"
+        sym_path = art / "after_action_symbolic.json"
+        meta_path = art / "after_action_meta.json"
+        diag_path = art / "diagnostics.json"
+
+        if meta_path.is_file() or sym_path.is_file() or aar_path.is_file():
+            st.subheader("After-action")
+            diag_local = json.loads(diag_path.read_text(encoding="utf-8")) if diag_path.is_file() else {}
+            sym_data = json.loads(sym_path.read_text(encoding="utf-8")) if sym_path.is_file() else {}
+            meta_data = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.is_file() else {}
+
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Lane pass", str(diag_local.get("lane_pass", "n/a")))
+            c2.metric("Break-even (µs)", f"{diag_local.get('breakeven_us', 0):.0f}")
+            c3.metric("Symbolic", "PASS" if sym_data.get("passed") else "FAIL")
+            if sym_data.get("violations"):
+                c4.caption(f"Violations: {len(sym_data['violations'])}")
+
+            if meta_data.get("skip_reasons"):
+                st.warning(f"After-action skipped/partial: {', '.join(meta_data['skip_reasons'])}")
+
+            if aar_path.is_file():
+                st.markdown(aar_path.read_text(encoding="utf-8"))
+            elif meta_data.get("llm_status"):
+                st.info(f"No LLM report ({meta_data.get('llm_status')}).")
+
+            with st.expander("After-action artifacts"):
+                for name in (
+                    "after_action_packet.json",
+                    "after_action_symbolic.json",
+                    "after_action_meta.json",
+                    "kg_slice.json",
+                ):
+                    p = art / name
+                    if p.is_file():
+                        st.caption(name)
+                        st.json(json.loads(p.read_text(encoding="utf-8")))
     elif selected_campaign:
         summary_path = runs_dir / selected_campaign / "summary.json"
         if summary_path.is_file():
