@@ -28,19 +28,41 @@ reports/rithmic_trial/YYYY-MM-DD/
 
 ## Pipeline commands
 
+Macro event replay (Databento NPZ + CHI404 latency — **use for CPI/NFP research**):
+
 ```bash
-# Enable in config or env
+python -m data_system.rithmic_trial.pipeline replay-event \
+  --event-id CPI_2024_09_11_TIGHT \
+  --config data_system/config/rithmic_trial.yaml
+```
+
+Trial ingest (capture session date = folder `YYYY-MM-DD`, not macro event):
+
+```bash
 export RITHMIC_TRIAL_ENABLED=1
 
 python -m data_system.rithmic_trial.pipeline capture \
-  --config data_system/config/rithmic_trial.yaml --force
+  --config data_system/config/rithmic_trial.yaml --force --event-id CPI_2024_09_11_TIGHT
 
 python -m data_system.rithmic_trial.pipeline process \
   --date YYYY-MM-DD --symbol MES
-
-python -m data_system.rithmic_trial.pipeline replay-sample \
-  --npz data/replay/hftbacktest/rithmic_trial/YYYY-MM-DD/MES/MES_YYYY-MM-DD_trial.npz
 ```
+
+CHI404 live (recommended):
+
+```bash
+EVENT_ID=CPI_2024_09_11_TIGHT bash scripts/chi404_run_trial_live.sh
+```
+
+**Smoke only** (trial NPZ wiring check — not macro research):
+
+```bash
+python -m data_system.rithmic_trial.pipeline replay-sample \
+  --npz data/replay/hftbacktest/rithmic_trial/YYYY-MM-DD/MES/MES_YYYY-MM-DD_trial.npz \
+  --simple
+```
+
+See [docs/vault/RESEARCH_ENTRYPOINTS.md](../vault/RESEARCH_ENTRYPOINTS.md) for full canonical order.
 
 ## CHI404 only (Chicago colo)
 

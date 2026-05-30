@@ -28,6 +28,21 @@ def main() -> None:
         action="store_true",
         help="Run quarantined options parity fixture backtest",
     )
+    parser.add_argument(
+        "--event-id",
+        default="CPI_2024_09_11_TIGHT",
+        help="Macro event for canonical replay (events.csv)",
+    )
+    parser.add_argument(
+        "--full-hft",
+        action="store_true",
+        help="Include slow HftBacktest combined replay in research matrix",
+    )
+    parser.add_argument(
+        "--skip-event-replay",
+        action="store_true",
+        help="Skip run_event_replay.py (matrix only)",
+    )
     args = parser.parse_args()
 
     if args.rithmic_trial:
@@ -123,10 +138,26 @@ def main() -> None:
         sys.exit(1)
 
     if npz_path:
-        print("=== Phase 6-7: Research matrix smoke ===")
+        if not args.skip_event_replay:
+            print("=== Canonical event replay (SignalBacktester primary) ===")
+            replay_cmd = [
+                sys.executable,
+                str(_REPO / "scripts" / "run_event_replay.py"),
+                "--event-id",
+                args.event_id,
+                "--npz",
+                npz_path,
+                "--skip-hftbacktest",
+            ]
+            r = subprocess.run(replay_cmd, cwd=str(_REPO))
+            if r.returncode != 0:
+                print("Event replay failed")
+                sys.exit(r.returncode)
+
+        print("=== Research matrix (SignalBacktester; HftBacktest combined opt-in) ===")
         from backtest_pipeline.src.research_runner import run_all_research_cards
 
-        run_all_research_cards(npz_path)
+        run_all_research_cards(npz_path, skip_hft=not args.full_hft)
 
         card_path = _REPO / "research_cards" / "matrix_smoke.json"
         if card_path.exists():

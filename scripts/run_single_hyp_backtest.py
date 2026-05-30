@@ -14,12 +14,20 @@ if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
 from backtest_pipeline.src.signal_backtester import SignalBacktester
+from backtest.adapters.rithmic_replay_loader import resolve_event_npz
 from features_engine.src.features.npz_feed import load_npz_events
 from features_engine.src.hypotheses.modules import SpreadBlowoutRecompression
 
-DEFAULT_NPZ = _REPO / "data" / "npz" / "MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz"
+DEFAULT_EVENT_ID = "CPI_2024_09_11_TIGHT"
 DEFAULT_OUT = _REPO / "research_cards" / "single_run_CPI_HYP5"
 DEFAULT_CHI404_SUMMARY = _REPO / "runtime" / "latency_reports" / "latency_summary.json"
+
+
+def _relative_npz(path: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(_REPO.resolve())).replace("\\", "/")
+    except ValueError:
+        return str(path.resolve()).replace("\\", "/")
 
 
 def load_chi404_speed(summary_path: Path) -> dict[str, Any]:
@@ -58,8 +66,9 @@ def load_chi404_speed(summary_path: Path) -> dict[str, Any]:
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="Single HYP CPI backtest with CHI404-measured latency")
-    p.add_argument("--npz", type=Path, default=DEFAULT_NPZ)
+    p = argparse.ArgumentParser(description="Single HYP backtest with CHI404-measured latency (SignalBacktester)")
+    p.add_argument("--event-id", default=DEFAULT_EVENT_ID, help="Macro event from events.csv")
+    p.add_argument("--npz", type=Path, default=None, help="Override NPZ; default from --event-id")
     p.add_argument("--out", type=Path, default=DEFAULT_OUT)
     p.add_argument(
         "--chi404-summary",
@@ -69,14 +78,15 @@ def main() -> int:
     )
     args = p.parse_args()
 
+    npz_path = args.npz.resolve() if args.npz else resolve_event_npz(args.event_id, _REPO)
     chi404 = load_chi404_speed(args.chi404_summary.resolve())
     latency_ms = chi404["backtest_latency_ms"]
 
     args.out.mkdir(parents=True, exist_ok=True)
-    raw = load_npz_events(str(args.npz))
+    raw = load_npz_events(str(npz_path))
     hyp = SpreadBlowoutRecompression()
 
-    print(f"Data: {args.npz} events={len(raw)}", flush=True)
+    print(f"Data: {npz_path} events={len(raw)}", flush=True)
     print(f"CHI404 probe run: {chi404['probe_run_id']}", flush=True)
     print(f"Backtest latency: {latency_ms:.4f} ms ({chi404['backtest_latency_source']})", flush=True)
     print(f"Running HYP_{hyp.hyp_id} {hyp.name}", flush=True)
@@ -92,12 +102,12 @@ def main() -> int:
     payload = {
         "scenario": "CPI_2024_09_11_TIGHT single hypothesis backtest",
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
-        "event_id": "CPI_2024_09_11_TIGHT",
+        "event_id": args.event_id,
         "release_date": "2024-09-11",
         "release_time_et": "08:30:00",
         "window_utc": "2024-09-11T12:29:30Z to 2024-09-11T12:35:00Z",
         "symbol": "MES.v.0",
-        "npz_path": str(args.npz.relative_to(_REPO)).replace("\\", "/"),
+        "npz_path": _relative_npz(npz_path),
         "events": int(len(raw)),
         "hypothesis_id": hyp.hyp_id,
         "hypothesis_name": hyp.name,

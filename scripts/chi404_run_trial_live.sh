@@ -34,6 +34,8 @@ if [ -n "$EVENT_ID" ]; then
     --event-id "$EVENT_ID"
 else
   NPZ="$REPO/data/replay/hftbacktest/rithmic_trial/${DATE}/MES/MES_${DATE}_trial.npz"
+  echo "WARNING: EVENT_ID unset — replay-sample on trial NPZ is smoke only, not macro research." >&2
+  echo "         Set EVENT_ID=CPI_2024_09_11_TIGHT for canonical replay (docs/vault/RESEARCH_ENTRYPOINTS.md)." >&2
   echo "=== replay-sample (trial NPZ, no event_id) ==="
   python3 -m data_system.rithmic_trial.pipeline replay-sample --npz "$NPZ" --simple
   ls -la "$NPZ"

@@ -103,6 +103,12 @@ Do not skip GraphPre, Plan, Verify, or GraphPost for "small" changes.
 
 ## hft3-specific constraints
 
+### Research entrypoints (canonical order)
+
+Macro backtest and replay: [docs/vault/RESEARCH_ENTRYPOINTS.md](docs/vault/RESEARCH_ENTRYPOINTS.md).  
+Primary path: `scripts/run_event_replay.py` + `events.csv` + CHI404 `latency_summary.json`.  
+Do not use `pipeline replay-sample` or trial NPZ paths for CPI/macro research.
+
 ### CHI404 bare metal
 
 Production tuning and validation run on CHI404 via SSH (`Host chi404` in `~/.ssh/config`).

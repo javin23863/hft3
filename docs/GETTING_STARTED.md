@@ -44,17 +44,32 @@ python -m pytest tests/ -q
 
 ## 4. Research pipeline (offline)
 
+**Canonical entrypoints:** [docs/vault/RESEARCH_ENTRYPOINTS.md](vault/RESEARCH_ENTRYPOINTS.md)  
+**CPI baseline:** [docs/vault/CPI_2024_09_11_TIGHT_BASELINE.md](vault/CPI_2024_09_11_TIGHT_BASELINE.md)
+
 Typical flow from historical MBO to backtest:
 
 ```
-Databento API → raw capture → NPZ conversion → feature extraction → backtest / research runner
+events.csv → Databento NPZ → run_event_replay.py (SignalBacktester) → research_cards/
+                     ↳ optional: research_runner.py latency matrix (--skip-hft)
 ```
 
 1. Configure `DATABENTO_API_KEY` in `.env`.
-2. Download or place MBO data under `data/` (large files are gitignored).
-3. Convert and run features via `scripts/run_offline_pipeline.py` or module CLIs in `backtest_pipeline/src/`.
-4. Hypothesis families and research cards: `features_engine/src/hypotheses/`, `research_cards/`.
-5. Regime filtering and market-state pipeline: `features_engine/src/regime/`, `features_engine/src/pipeline/`.
+2. Download CPI probe: `python data_system/scripts/download_micro_probe.py` (or place NPZ under `data/npz/`).
+3. Sync CHI404 latency: `bash scripts/chi404_sync_trial_data.sh` (or run probe on CHI404).
+4. **Primary macro replay:**
+
+```bash
+python scripts/run_event_replay.py \
+  --event-id CPI_2024_09_11_TIGHT \
+  --chi404-summary runtime/latency_reports/latency_summary.json \
+  --skip-hftbacktest
+```
+
+5. Hypothesis families: `features_engine/src/hypotheses/`, output under `research_cards/`.
+6. Regime / market state: `features_engine/src/regime/`, `features_engine/src/pipeline/`.
+
+Do **not** use `pipeline replay-sample` on trial NPZ for macro event research — see vault entrypoints §5.
 
 Key invariant: **no lookahead** — all features must be computable from filtration \(F_t\) at event time. See [REVIEWER_CHARTER.md](REVIEWER_CHARTER.md) Pass B.
 
@@ -163,6 +178,8 @@ hft3/
 | Check | Command |
 |-------|---------|
 | Unit tests | `python -m pytest tests/ -q` |
+| CPI event replay | `python scripts/run_event_replay.py --event-id CPI_2024_09_11_TIGHT --skip-hftbacktest` |
+| Event replay tests | `python -m pytest tests/test_run_event_replay.py -q` |
 | Rithmic fixture pipeline | `python -m pytest tests/test_rithmic_trial_pipeline.py -q` |
 | Rithmic topology guards | `python -m pytest tests/test_rithmic_topology_guards.py -q` |
 | Graph fresh after edits | `.\scripts\graphify_rebuild.ps1` |

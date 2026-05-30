@@ -110,6 +110,12 @@ def cmd_process(args: argparse.Namespace) -> int:
 
 
 def cmd_replay_sample(args: argparse.Namespace) -> int:
+    print(
+        "NOTE: replay-sample is trial-NPZ smoke only. "
+        "Macro event research: pipeline replay-event --event-id ... "
+        "or scripts/run_event_replay.py (see docs/vault/RESEARCH_ENTRYPOINTS.md).",
+        file=sys.stderr,
+    )
     from backtest_pipeline.src.runner import ReplayRunner
 
     npz = Path(args.npz)
@@ -149,6 +155,8 @@ def cmd_replay_event(args: argparse.Namespace) -> int:
         cmd.extend(["--out", str(Path(args.out))])
     if args.latency_ms is not None:
         cmd.extend(["--latency-ms", str(args.latency_ms)])
+    if not getattr(args, "full_hftbacktest", False):
+        cmd.append("--skip-hftbacktest")
     return subprocess.call(cmd)
 
 
@@ -219,6 +227,11 @@ def main() -> int:
     )
     p_ev.add_argument("--out", default=None)
     p_ev.add_argument("--latency-ms", type=float, default=None)
+    p_ev.add_argument(
+        "--full-hftbacktest",
+        action="store_true",
+        help="Include slow hftbacktest_loop engine (default: event_accurate_mbo only)",
+    )
     p_ev.set_defaults(func=cmd_replay_event)
 
     p_un = sub.add_parser("run-unattended", help="Headless capture daemon (CHI404 R|Trader Wine only)")

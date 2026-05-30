@@ -1,6 +1,6 @@
 # CPI_2024_09_11_TIGHT baseline (2026-05-30)
 
-Research baseline for macro event replay + CHI404 colo latency. Start here for the next iteration.
+Research baseline for macro event replay + CHI404 colo latency. **Canonical script order:** [RESEARCH_ENTRYPOINTS.md](RESEARCH_ENTRYPOINTS.md)
 
 ## Event
 
