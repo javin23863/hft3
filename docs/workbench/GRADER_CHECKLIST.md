@@ -18,11 +18,19 @@ Walk-forward campaign (B4 stages, per-model events):
 python -m workbench campaign --model HYP_5 --symbol MES.v.0 \
   --chi404-summary runtime/latency_reports/latency_summary.json \
   --full-sweep --enforce-history-gate --allow-partial
+python -m workbench campaign --model HYP_5 --symbol MES.v.0 --dry-run \
+  --defensive PDF_MODEL_9:before:50,PDF_MODEL_11:during
 python -m workbench campaign --model PDF_MODEL_5 --dry-run
 python -m workbench campaign --campaign-id <id> --record-sim-shadow PASS
 ```
 
-See [WALK_FORWARD_CAMPAIGNS.md](WALK_FORWARD_CAMPAIGNS.md), [SIM_SHADOW.md](SIM_SHADOW.md), [PERSONAL_SANDBOX.md](PERSONAL_SANDBOX.md).
+Composed stack (JSON file):
+
+```bash
+python -m workbench campaign --model HYP_5 --composition stack.json --allow-partial
+```
+
+See [MODEL_CATALOG.md](MODEL_CATALOG.md), [WALK_FORWARD_CAMPAIGNS.md](WALK_FORWARD_CAMPAIGNS.md), [SIM_SHADOW.md](SIM_SHADOW.md), [PERSONAL_SANDBOX.md](PERSONAL_SANDBOX.md).
 
 ## B. Inspect artifacts
 
@@ -36,6 +44,8 @@ Campaign: `research_cards/workbench_runs/<campaign_id>/periods/<Stage>/events/<e
 | `diagnostics.json` | `survives_cpp_execution_delay`, `cpp_hot_path_runtime_us`, `python_research_runtime_us`, `promote_candidate` |
 | `trades.parquet` | timestamp chain + µs fields per [LATENCY_ARCHITECTURE.md](LATENCY_ARCHITECTURE.md) |
 | `report.md` | narrative cites C++ latency authority |
+| `composition_trace.json` | per-phase stub budgets, veto counts, raw vs adjusted signal (composed campaigns) |
+| `campaign.json` | frozen `composition` + `phase_budgets_us` at B4 start |
 
 ## C. PDF / math cross-reference
 

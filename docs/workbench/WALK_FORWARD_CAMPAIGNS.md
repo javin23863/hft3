@@ -48,10 +48,18 @@ python -m workbench campaign --model HYP_5 --symbol MES.v.0 --dry-run
 python -m workbench campaign --model HYP_29 --symbol MES.v.0 --dry-run
 python -m workbench campaign --model PDF_MODEL_5 --symbol MES.v.0 --dry-run
 python -m workbench campaign --model HYP_5 --symbol MES.v.0 --enforce-history-gate --full-sweep --allow-partial
+python -m workbench campaign --model HYP_5 --symbol MES.v.0 --dry-run \
+  --defensive PDF_MODEL_3:continuous,PDF_MODEL_9:before,PDF_MODEL_11:during
 python -m workbench campaign --campaign-id <id> --record-sim-shadow PASS
 ```
 
-Artifacts: `research_cards/workbench_runs/<campaign_id>/periods/<Stage>/events/<event_id>/`.
+## Defensive composition (frozen at campaign start)
+
+Primary alpha + optional defensive stubs run through `CompositionOrchestrator` on each event. Composition is written to `campaign.json` and **not re-tuned on holdout** — only the primary signal params use evaluate-only mode in Confirmation/Holdout; defensive veto thresholds stay frozen from Discovery.
+
+See [MODEL_CATALOG.md](MODEL_CATALOG.md) for phases (`before` / `during` / `after` / `continuous`), budgets, and CLI `--composition` JSON.
+
+Artifacts: `research_cards/workbench_runs/<campaign_id>/periods/<Stage>/events/<event_id>/` plus `composition_trace.json` per event when stubs are enabled.
 
 ## UI
 

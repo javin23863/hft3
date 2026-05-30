@@ -23,6 +23,13 @@ def main(argv: list[str] | None = None) -> int:
     run_p.add_argument("--enforce-history-gate", action="store_true")
     run_p.add_argument("--full-sweep", action="store_true", help="Run full latency band matrix")
 
+    run_p.add_argument("--composition", default=None, help="JSON file with ModelComposition")
+    run_p.add_argument(
+        "--defensive",
+        default=None,
+        help="Defensive stubs: MODEL:phase[:budget_us],... e.g. PDF_MODEL_9:before,PDF_MODEL_11:during",
+    )
+
     camp_p = sub.add_parser("campaign", help="B4 walk-forward campaign")
     camp_p.add_argument("--model", required=True)
     camp_p.add_argument("--symbol", default="MES.v.0")
@@ -35,6 +42,12 @@ def main(argv: list[str] | None = None) -> int:
     camp_p.add_argument("--download-missing", action="store_true")
     camp_p.add_argument("--allow-partial", action="store_true")
     camp_p.add_argument("--record-sim-shadow", choices=["PASS", "FAIL"], default=None)
+    camp_p.add_argument("--composition", default=None, help="JSON file with ModelComposition")
+    camp_p.add_argument(
+        "--defensive",
+        default=None,
+        help="Defensive stubs: MODEL:phase[:budget_us],...",
+    )
 
     sub.add_parser("list", help="List registered models")
 
@@ -58,6 +71,13 @@ def main(argv: list[str] | None = None) -> int:
 
         chi404 = repo / args.chi404_summary
         audit = args.enforce_history_gate or args.full_sweep or True
+        from workbench.src.run.composition_cli import load_composition
+
+        composition = load_composition(
+            args.model,
+            composition_path=Path(args.composition) if args.composition else None,
+            defensive_spec=args.defensive,
+        )
         result = run_campaign(
             repo,
             args.model,
@@ -69,6 +89,7 @@ def main(argv: list[str] | None = None) -> int:
             download_missing=args.download_missing,
             allow_partial=args.allow_partial,
             campaign_id=args.campaign_id,
+            composition=composition,
         )
         print(json.dumps(
             {
@@ -88,11 +109,17 @@ def main(argv: list[str] | None = None) -> int:
         parser.print_help()
         return 1
 
+    from workbench.src.run.composition_cli import load_composition
     from workbench.src.run.engine import WorkbenchEngine
 
     repo = _REPO
     engine = WorkbenchEngine(repo)
     chi404 = repo / args.chi404_summary
+    composition = load_composition(
+        args.model,
+        composition_path=Path(args.composition) if args.composition else None,
+        defensive_spec=args.defensive,
+    )
     out = engine.run(
         args.model,
         args.event_id,
@@ -101,6 +128,7 @@ def main(argv: list[str] | None = None) -> int:
         history_years_available=args.history_years,
         skip_history_gate=not args.enforce_history_gate,
         fast_sweep=not args.full_sweep,
+        composition=composition,
     )
     print(json.dumps(out, indent=2))
     return 0

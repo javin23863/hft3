@@ -66,8 +66,13 @@ class StochasticThermoModel(BaseStructuralModel[StochasticThermoOutput]):
         expected_work = float(np.dot(probs, w_arr)) if probs.size else 0.0
         entropy = shannon_entropy_probs(probs)
         f_beta = free_energy(expected_work, entropy, beta)
-        dissipative = float(kwargs.get("observed_dissipative_work", expected_work))
-        mean_revert = dissipative >= f_beta + self.exhaustion_threshold
+        observed_raw = kwargs.get("observed_dissipative_work")
+        if observed_raw is None:
+            mean_revert = False
+            dissipative = expected_work
+        else:
+            dissipative = float(observed_raw)
+            mean_revert = dissipative >= f_beta + self.exhaustion_threshold
 
         payload = StochasticThermoOutput(
             partition_function=z,

@@ -97,7 +97,11 @@ class HawkesToxicFlowModel(BaseStructuralModel[HawkesToxicOutput]):
         score = toxic_cascade_score(intensities, baseline)
         toxic = score >= self.toxic_threshold
         gamma = self.gamma_base * (self.gamma_scale if toxic else 1.0)
-        reservation_skew = -score if toxic else 0.0
+        hybrid_price = float(kwargs.get("hybrid_reservation_price", 0.0))
+        if toxic and hybrid_price > 0:
+            reservation_skew = -score * hybrid_price * 1e-4
+        else:
+            reservation_skew = -score if toxic else 0.0
 
         payload = HawkesToxicOutput(
             intensity_by_class=intensities,

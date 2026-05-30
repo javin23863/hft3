@@ -14,6 +14,8 @@ from workbench.src.core.trade_audit import audit_records_to_dataframe
 from workbench.src.data.l3_loader import L3Loader
 from workbench.src.data.manifest import DatasetManifest
 from workbench.src.latency.viability import analyze_latency_viability, sweep_injection_pnl
+from workbench.src.core.protocol import ModelComposition
+from workbench.src.registry.composition_orchestrator import CompositionOrchestrator
 from workbench.src.registry.unified_registry import build_models_config, get_model_by_id
 from workbench.src.report.generator import (
     generate_hyp_research_card,
@@ -42,8 +44,11 @@ class WorkbenchEngine:
         history_years_available: float = 0.0,
         skip_history_gate: bool = True,
         fast_sweep: bool = True,
+        composition: Optional[ModelComposition] = None,
     ) -> Dict[str, Any]:
-        cfg = build_models_config()[model_id]
+        effective = composition or CompositionOrchestrator.default_composition(model_id)
+        primary_id = effective.primary_model_id
+        cfg = build_models_config()[primary_id]
         npz_path = resolve_event_npz(event_id, self.repo_root)
         loader = L3Loader(require_snapshot_on_gap=True)
         loader.mark_snapshot_available()
@@ -72,7 +77,7 @@ class WorkbenchEngine:
 
         ctx = RunContext.build(
             self.repo_root,
-            model_id,
+            primary_id,
             event_id,
             npz_path,
             raw,
@@ -82,21 +87,30 @@ class WorkbenchEngine:
             measured_p99_ms=measured_ms,
         )
         ctx.metadata["data_sufficient"] = manifest.data_sufficient
+        if effective.defensive_stubs:
+            ctx.metadata["composition"] = effective.to_dict()
         ctx.write_reproducibility_files()
         manifest.write_json(ctx.artifact_dir / "manifest.json")
 
         if manifest.gate_error() and not skip_history_gate:
             raise RuntimeError(manifest.gate_error())
 
-        model = get_model_by_id(model_id)
+        model = get_model_by_id(primary_id)
         val_errs = model.validate_inputs(ctx)
         if val_errs and not skip_history_gate:
             raise ValueError("; ".join(val_errs))
 
         replay = CppReplayHarness()
-        cpp_replay = replay.replay(npz_path, model_id)
+        cpp_replay = replay.replay(npz_path, primary_id)
 
-        result = model.run_backtest(ctx)
+        comp_trace = None
+        if effective.defensive_stubs:
+            comp_orch = CompositionOrchestrator()
+            result, comp_trace = comp_orch.run(ctx, effective)
+            trace_path = ctx.artifact_dir / "composition_trace.json"
+            trace_path.write_text(json.dumps(comp_trace.to_dict(), indent=2), encoding="utf-8")
+        else:
+            result = model.run_backtest(ctx)
         diagnostics = model.produce_diagnostics(ctx, result) if not fast_sweep else None
         from workbench.src.adapters.hypothesis_adapter import HypothesisAdapter
 
@@ -158,7 +172,7 @@ class WorkbenchEngine:
         )
 
         report = {
-            "model_id": model_id,
+            "model_id": primary_id,
             "event_id": event_id,
             "data_period": event_id,
             "robustness_window": cfg.robustness_window,
@@ -187,8 +201,14 @@ class WorkbenchEngine:
             "cpp_latency_profile": viability.cpp_latency_profile,
             "cpp_replay_available": cpp_replay.available,
         }
+        if comp_trace is not None:
+            report["composition"] = effective.to_dict()
+            report["trades_vetoed_by_defense"] = comp_trace.trades_vetoed
+            report["signal_raw"] = comp_trace.signal_raw
+            report["signal_adjusted"] = comp_trace.signal_adjusted
+            report["phase_budgets_us"] = comp_trace.phase_budgets_us
 
-        md = render_markdown_report(model_id, event_id, event_id, viability, robustness)
+        md = render_markdown_report(primary_id, event_id, event_id, viability, robustness)
         write_run_report(ctx.artifact_dir, report, md)
 
         if audit_records:
@@ -199,11 +219,12 @@ class WorkbenchEngine:
         (ctx.artifact_dir / "config.yaml").write_text(
             yaml.safe_dump(
                 {
-                    "model_id": model_id,
+                    "model_id": primary_id,
                     "event_id": event_id,
                     "seed": seed,
                     "latency_authority": "cpp_measured",
                     "cpp_latency_profile": cpp_profile.to_report_dict(),
+                    "composition": effective.to_dict() if effective.defensive_stubs else None,
                 }
             ),
             encoding="utf-8",
@@ -222,7 +243,7 @@ class WorkbenchEngine:
             )
         else:
             card = generate_pdf_research_card(
-                model_id,
+                primary_id,
                 {**report, "name": cfg.name, "approval_status": "PASS" if promote else "FAIL"},
             )
         (ctx.artifact_dir / "research_card.json").write_text(json.dumps(card, indent=2), encoding="utf-8")

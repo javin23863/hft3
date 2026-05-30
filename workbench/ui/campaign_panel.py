@@ -12,9 +12,18 @@ import pandas as pd
 import streamlit as st
 import yaml
 
+from workbench.src.core.protocol import DefensiveStub, ModelComposition
 from workbench.src.data.event_catalog import campaign_preview, list_personal_events, load_model_binding
 from workbench.src.data.personal_lock import is_locked, set_unlocked
+from workbench.src.registry.model_catalog import (
+    get_catalog_entry,
+    list_by_role,
+    load_catalog,
+    phase_budget_summary,
+    validate_composition,
+)
 from workbench.src.registry.unified_registry import build_models_config, list_models
+from workbench.src.sim.cpp_latency_profile import CppLatencyProfile
 from workbench.src.run.job_manager import (
     get_job_status,
     list_active_campaigns,
@@ -23,6 +32,8 @@ from workbench.src.run.job_manager import (
 )
 
 _LANES = ["all", "sub_10ms", "10_250ms", "multi_second", "options_chain", "microsecond"]
+_ROLES = ["all", "alpha", "defensive", "hybrid"]
+_PHASES = ["before", "during", "after", "continuous"]
 
 
 def init_session(repo: Path) -> None:
@@ -38,8 +49,122 @@ def init_session(repo: Path) -> None:
         st.session_state.wb_audit_grade = True
     if "wb_lane_filter" not in st.session_state:
         st.session_state.wb_lane_filter = "all"
+    if "wb_role_filter" not in st.session_state:
+        st.session_state.wb_role_filter = "all"
+    if "wb_defensive_stubs" not in st.session_state:
+        st.session_state.wb_defensive_stubs = []
     if "wb_proc" not in st.session_state:
         st.session_state.wb_proc = None
+
+
+def get_session_composition(primary: str) -> ModelComposition:
+    stubs = [
+        DefensiveStub(
+            model_id=s["model_id"],
+            phase=s["phase"],
+            budget_us=float(s["budget_us"]),
+            enabled=bool(s.get("enabled", True)),
+        )
+        for s in st.session_state.wb_defensive_stubs
+    ]
+    return ModelComposition(primary_model_id=primary, defensive_stubs=stubs)
+
+
+def _render_catalog_rows(repo: Path, entries: list, configs: dict) -> None:
+    search = st.text_input("Search models", key="catalog_search").strip().lower()
+    for entry in entries:
+        cfg = configs.get(entry.model_id)
+        lane = cfg.latency_lane if cfg else "?"
+        if search and search not in entry.display_name.lower() and search not in entry.model_id.lower():
+            continue
+        cols = st.columns([3, 1, 1])
+        with cols[0]:
+            st.markdown(f"**{entry.display_name}** `{entry.model_id}`")
+            st.caption(entry.description)
+        with cols[1]:
+            st.caption(f"Lane: {lane}")
+            st.caption(f"Role: {entry.role}")
+        with cols[2]:
+            if entry.role != "defensive":
+                if st.button("Set primary", key=f"pri_{entry.model_id}"):
+                    st.session_state.wb_selected_model = entry.model_id
+                    st.rerun()
+            else:
+                if st.button("Add stub", key=f"stub_{entry.model_id}"):
+                    st.session_state.wb_defensive_stubs.append(
+                        {
+                            "model_id": entry.model_id,
+                            "phase": entry.default_phase,
+                            "budget_us": entry.budget_us,
+                            "enabled": True,
+                        }
+                    )
+                    st.rerun()
+        st.divider()
+
+
+def stack_builder_panel(repo: Path, primary: str) -> ModelComposition:
+    st.subheader("Defensive stack builder")
+    composition = get_session_composition(primary) if primary else ModelComposition("", [])
+    if not primary:
+        st.info("Select a primary alpha model from the catalog.")
+        return composition
+
+    stubs = st.session_state.wb_defensive_stubs
+    if stubs:
+        for i, stub in enumerate(list(stubs)):
+            cols = st.columns([2, 1, 1, 1])
+            entry = get_catalog_entry(stub["model_id"], repo)
+            cols[0].write(f"`{stub['model_id']}` — {entry.display_name}")
+            stub["phase"] = cols[1].selectbox(
+                "Phase",
+                _PHASES,
+                index=_PHASES.index(stub.get("phase", entry.default_phase)),
+                key=f"phase_{i}_{stub['model_id']}",
+            )
+            stub["budget_us"] = cols[2].number_input(
+                "Budget µs",
+                min_value=1.0,
+                value=float(stub.get("budget_us", entry.budget_us)),
+                key=f"budget_{i}_{stub['model_id']}",
+            )
+            if cols[3].button("Remove", key=f"rm_{i}_{stub['model_id']}"):
+                stubs.pop(i)
+                st.rerun()
+    else:
+        st.caption("No defensive stubs — campaign runs primary only.")
+
+    composition = get_session_composition(primary)
+    errs = validate_composition(composition, repo)
+    if errs:
+        for e in errs:
+            st.warning(e)
+
+    phase_totals = phase_budget_summary(composition, repo)
+    cpp_p99 = CppLatencyProfile.from_yaml_defaults().measured_production_p99_us
+    decision_path = phase_totals.get("before", 0) + phase_totals.get("during", 0) + cpp_p99
+    st.markdown("**Phase timing summary**")
+    st.dataframe(
+        pd.DataFrame(
+            [
+                {"phase": p, "budget_us": phase_totals.get(p, 0.0), "budget_ms": phase_totals.get(p, 0.0) / 1000.0}
+                for p in _PHASES
+            ]
+        ),
+        use_container_width=True,
+        hide_index=True,
+    )
+    st.caption(
+        f"Decision path ≈ {decision_path/1000:.2f} ms (before + during stubs + C++ p99 {cpp_p99:.0f}µs)"
+    )
+    if st.button("Load preset: VPIN + Quantum + Hawkes"):
+        st.session_state.wb_defensive_stubs = [
+            {"model_id": "PDF_MODEL_3", "phase": "continuous", "budget_us": 2500, "enabled": True},
+            {"model_id": "PDF_MODEL_9", "phase": "before", "budget_us": 50, "enabled": True},
+            {"model_id": "PDF_MODEL_11", "phase": "during", "budget_us": 2500, "enabled": True},
+        ]
+        st.rerun()
+    return composition
 
 
 def personal_lock_sidebar(repo: Path) -> None:
@@ -80,16 +205,34 @@ def _filter_models(models: List[str], lane: str, configs: dict) -> List[str]:
 
 def model_selector_panel(repo: Path) -> Tuple[str, str, str]:
     configs = build_models_config()
+    catalog = load_catalog(repo)
     models = sorted(list_models())
-    lane = st.selectbox("Latency lane filter", _LANES, key="lane_filter")
-    st.session_state.wb_lane_filter = lane
-    filtered = _filter_models(models, lane, configs)
-    st.metric("Registered models", len(models))
-    st.caption(f"Showing {len(filtered)} after lane filter")
 
-    selected = st.selectbox("Select model", [""] + filtered, key="model_pick")
-    if selected:
-        st.session_state.wb_selected_model = selected
+    colf1, colf2 = st.columns(2)
+    with colf1:
+        lane = st.selectbox("Latency lane filter", _LANES, key="lane_filter")
+    with colf2:
+        role_filter = st.selectbox("Role filter", _ROLES, key="role_filter")
+    st.session_state.wb_lane_filter = lane
+    st.session_state.wb_role_filter = role_filter
+
+    filtered_ids = _filter_models(models, lane, configs)
+    entries = [catalog[mid] for mid in filtered_ids if mid in catalog]
+    if role_filter != "all":
+        entries = [e for e in entries if e.role == role_filter]
+
+    st.metric("Registered models", len(models))
+    st.caption(f"Showing {len(entries)} after filters")
+
+    tab_alpha, tab_def, tab_stack = st.tabs(["Alpha / signal catalog", "Defensive catalog", "Stack builder"])
+    with tab_alpha:
+        alpha_entries = [e for e in entries if e.role in ("alpha", "hybrid")]
+        _render_catalog_rows(repo, alpha_entries, configs)
+    with tab_def:
+        def_entries = list_by_role("defensive", repo)
+        if role_filter == "all" or role_filter == "defensive":
+            def_entries = [e for e in def_entries if e.model_id in filtered_ids or lane == "all"]
+        _render_catalog_rows(repo, def_entries, configs)
 
     symbol = st.selectbox("Primary symbol", ["MES.v.0", "ES.v.0", "MNQ.v.0", "NQ.v.0"], key="sym_pick")
     st.session_state.wb_symbol = symbol
@@ -97,16 +240,13 @@ def model_selector_panel(repo: Path) -> Tuple[str, str, str]:
     st.session_state.wb_audit_grade = audit
 
     model = st.session_state.wb_selected_model
+    with tab_stack:
+        composition = stack_builder_panel(repo, model)
+
     if model:
+        st.success(f"Primary: **{catalog[model].display_name}** (`{model}`)")
         cfg = configs[model]
         binding = load_model_binding(repo, model)
-        meta = _binding_meta(repo, model)
-        st.caption(
-            f"Lane: {cfg.latency_lane} | datasets: {meta.get('required_datasets', cfg.required_datasets)} | "
-            f"mode: {binding.get('campaign_mode', 'mbo')}"
-        )
-        contexts = sorted(binding["allowed_contexts"])
-        st.caption(f"Bound contexts: {', '.join(contexts) or 'none'}")
         preview = campaign_preview(model, symbol, repo)
         cpi_nfp = sum(
             1
@@ -115,23 +255,10 @@ def model_selector_panel(repo: Path) -> Tuple[str, str, str]:
             if "CPI" in ev["event_id"] or "NFP" in ev["event_id"]
         )
         st.caption(
-            f"Stages: {len(preview['periods'])} | Catalog years: {preview['catalog_years']}/{cfg.min_history_years} | "
-            f"CPI+NFP events in catalog: {cpi_nfp}"
+            f"Lane: {cfg.latency_lane} | Stubs: {len(composition.defensive_stubs)} | "
+            f"Catalog years: {preview['catalog_years']}/{cfg.min_history_years} | CPI+NFP: {cpi_nfp}"
         )
-        rows = []
-        for pname, pdata in preview["periods"].items():
-            for ev in pdata["events"]:
-                rows.append(
-                    {
-                        "stage": pname,
-                        "event_id": ev["event_id"],
-                        "release_date": ev["release_date"],
-                        "context": ev["event_context"],
-                        "npz": "yes" if ev["npz_present"] else "missing",
-                    }
-                )
-        if rows:
-            st.dataframe(pd.DataFrame(rows), use_container_width=True, height=200)
+        st.caption(f"Contexts: {', '.join(sorted(binding['allowed_contexts']))}")
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:
@@ -141,6 +268,7 @@ def model_selector_panel(repo: Path) -> Tuple[str, str, str]:
                 model_id=model,
                 symbol=symbol,
                 audit_grade=audit,
+                composition=composition if model else None,
             )
             st.session_state.wb_proc = proc
             st.session_state.wb_active_campaign = cid

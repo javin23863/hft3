@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -24,6 +25,26 @@ def test_dry_run_returns_preview(tmp_path, monkeypatch):
     assert result.status == "DRY_RUN"
     preview = REPO / "research_cards" / "workbench_runs" / result.campaign_id / "dry_run_preview.json"
     assert preview.is_file()
+
+
+def test_dry_run_persists_composition_in_manifest():
+    from workbench.src.core.protocol import DefensiveStub, ModelComposition
+
+    comp = ModelComposition(
+        primary_model_id="HYP_5",
+        defensive_stubs=[DefensiveStub("PDF_MODEL_9", "before", 50.0)],
+    )
+    result = run_campaign(
+        REPO,
+        "HYP_5",
+        "MES.v.0",
+        dry_run=True,
+        allow_partial=True,
+        composition=comp,
+    )
+    manifest = REPO / "research_cards" / "workbench_runs" / result.campaign_id / "campaign.json"
+    data = json.loads(manifest.read_text(encoding="utf-8"))
+    assert data["composition"]["primary_model_id"] == "HYP_5"
 
 
 @patch("workbench.src.run.engine.WorkbenchEngine")

@@ -58,6 +58,13 @@ class StructuralModelAdapter(WorkbenchModel):
         return outputs
 
     def generate_signals(self, features: Any) -> float:
+        if self.model_id in {"PDF_MODEL_8", "PDF_MODEL_10", "PDF_MODEL_2", "PDF_MODEL_6"}:
+            out = self._orchestrator.get_output(self.model_id)
+            if out is not None and out.payload is not None:
+                field_name = self.config.signal_field if self.config else "signal"
+                val = getattr(out.payload, field_name, None)
+                if val is not None:
+                    return float(val)
         if not features:
             return 0.0
         payload = features[-1].payload
@@ -86,11 +93,18 @@ class StructuralModelAdapter(WorkbenchModel):
                 ],
             )
             kwargs["spot"] = mid
-        outputs = self._orchestrator.run_all(**kwargs)
+        outputs = self._orchestrator.run_subset([self.model_id], **kwargs)
         out = outputs.get(self.model_id)
         if self.config and self.config.diagnostics_only:
-            return {"diagnostics_output": out, "signal": self.generate_signals(ctx.metadata.get("pdf_book_outputs", []))}
+            sig = self.generate_signals(ctx.metadata.get("pdf_book_outputs", []))
+            comp_sig = ctx.metadata.get("composition_signal")
+            if comp_sig is not None:
+                sig = float(comp_sig)
+            return {"diagnostics_output": out, "signal": sig}
         signal = self.generate_signals(ctx.metadata.get("pdf_book_outputs", []))
+        comp_sig = ctx.metadata.get("composition_signal")
+        if comp_sig is not None:
+            signal = float(comp_sig)
         return BacktestResult(
             hypothesis_id=0,
             net_pnl=signal * 10.0,

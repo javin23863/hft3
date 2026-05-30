@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 import yaml
 
 from decision_engine.python.src.walk_forward import ValidationPeriod
+from workbench.src.core.protocol import ModelComposition
 from workbench.src.data.event_catalog import (
     catalog_years_available,
     list_campaign_events,
@@ -22,6 +23,7 @@ from workbench.src.data.event_catalog import (
     load_walk_forward_config,
     write_campaign_manifest,
 )
+from workbench.src.registry.model_catalog import phase_budget_summary
 from workbench.src.registry.unified_registry import build_models_config
 
 
@@ -253,17 +255,21 @@ def run_campaign(
     allow_partial: bool = False,
     job_dir: Optional[Path] = None,
     campaign_id: Optional[str] = None,
+    composition: Optional[ModelComposition] = None,
 ) -> CampaignResult:
+    from workbench.src.registry.composition_orchestrator import CompositionOrchestrator
     from workbench.src.run.engine import WorkbenchEngine
 
-    cfg = build_models_config()[model_id]
-    binding = load_model_binding(repo_root, model_id)
+    effective = composition or CompositionOrchestrator.default_composition(model_id)
+    primary_id = effective.primary_model_id
+    cfg = build_models_config()[primary_id]
+    binding = load_model_binding(repo_root, primary_id)
     wf_cfg = load_walk_forward_config(repo_root)
     periods = load_periods(repo_root)
-    campaign_id = campaign_id or _campaign_id(model_id, symbol)
+    campaign_id = campaign_id or _campaign_id(primary_id, symbol)
     artifact_dir = repo_root / "research_cards" / "workbench_runs" / campaign_id
     job_dir = job_dir or artifact_dir
-    param_hash = _param_hash(model_id, seed)
+    param_hash = _param_hash(primary_id, seed)
 
     if binding.get("campaign_mode") == "options_lane":
         artifact_dir.mkdir(parents=True, exist_ok=True)
@@ -277,15 +283,16 @@ def run_campaign(
         )
 
     _write_control(job_dir, "run")
-    years_avail = catalog_years_available(model_id, symbol, repo_root)
+    years_avail = catalog_years_available(primary_id, symbol, repo_root)
     history_gate = audit_grade and years_avail < cfg.min_history_years
 
     campaign_meta = {
         "campaign_id": campaign_id,
-        "model_id": model_id,
+        "model_id": primary_id,
         "symbol": symbol,
         "param_hash": param_hash,
         "audit_grade": audit_grade,
+        "composition": effective.to_dict(),
         "authority_refs": [
             "BLUEPRINT.md §8",
             "decision_engine/python/src/walk_forward.py",
@@ -331,13 +338,13 @@ def run_campaign(
             break
 
         evaluate_only = _period_evaluate_only(wf_cfg, period.name)
-        events = list_campaign_events(model_id, period, symbol, repo_root)
+        events = list_campaign_events(primary_id, period, symbol, repo_root)
         missing = [e for e in events if not e.npz_present]
         if download_missing and missing:
             from workbench.src.data.catalog_backfill import download_events
 
             download_events(repo_root, missing)
-            events = list_campaign_events(model_id, period, symbol, repo_root)
+            events = list_campaign_events(primary_id, period, symbol, repo_root)
             missing = [e for e in events if not e.npz_present]
         runnable = [e for e in events if e.npz_present]
 
@@ -386,13 +393,14 @@ def run_campaign(
             )
 
             out = engine.run(
-                model_id,
+                primary_id,
                 ev.event_id,
                 chi404_summary=chi404_summary,
                 seed=seed,
                 history_years_available=float(years_avail),
                 skip_history_gate=not audit_grade,
                 fast_sweep=not audit_grade,
+                composition=effective,
             )
             if evaluate_only:
                 out.setdefault("metadata", {})["evaluate_only"] = True
@@ -409,7 +417,14 @@ def run_campaign(
             src_run = Path(out["artifact_dir"])
             dest = period_dir / "events" / ev.event_id
             dest.mkdir(parents=True, exist_ok=True)
-            for name in ("diagnostics.json", "manifest.json", "report.md", "config.yaml", "research_card.json"):
+            for name in (
+                "diagnostics.json",
+                "manifest.json",
+                "report.md",
+                "config.yaml",
+                "research_card.json",
+                "composition_trace.json",
+            ):
                 src = src_run / name
                 if src.is_file():
                     dest.joinpath(name).write_bytes(src.read_bytes())
@@ -425,6 +440,7 @@ def run_campaign(
                     "num_trades": ntr,
                     "expectancy": exp,
                     "survives_cpp_execution_delay": surv,
+                    "trades_vetoed_by_defense": rep.get("trades_vetoed_by_defense", 0),
                     "run_id": out.get("run_id"),
                 }
             )
@@ -469,12 +485,18 @@ def run_campaign(
 
     sim_cfg = load_sim_shadow_config(repo_root)
     sim_status = _sim_shadow_status(artifact_dir)
+    trades_vetoed = sum(
+        int(e.get("trades_vetoed_by_defense", 0)) for p in period_results for e in p.event_results
+    )
     summary = {
         "campaign_id": campaign_id,
         "status": status,
-        "model_id": model_id,
+        "model_id": primary_id,
         "symbol": symbol,
         "param_hash": param_hash,
+        "composition": effective.to_dict(),
+        "phase_budgets_us": phase_budget_summary(effective, repo_root),
+        "trades_vetoed_by_defense": trades_vetoed,
         "periods": [asdict(p) for p in period_results],
         "robustness_passed": robustness.passed,
         "overfit_risk": robustness.overfit_risk,
@@ -491,7 +513,7 @@ def run_campaign(
 
     return CampaignResult(
         campaign_id=campaign_id,
-        model_id=model_id,
+        model_id=primary_id,
         symbol=symbol,
         status=status,
         param_hash=param_hash,

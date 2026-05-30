@@ -21,6 +21,17 @@ def test_free_energy_finite():
 
 def test_model_outputs_valid_probs():
     model = StochasticThermoModel()
-    out = model.evaluate(strategy_work=[0.0, 0.5, 1.0, 2.0], beta=1.0, observed_dissipative_work=1.5)
+    out = model.evaluate(strategy_work=[0.0, 0.5, 1.0, 2.0], beta=1.0)
     assert out.payload.partition_function >= 1.0
     assert out.payload.entropy >= 0.0
+    assert out.payload.mean_reversion_signal is False
+
+
+def test_mean_reversion_when_observed_work_explicit():
+    model = StochasticThermoModel()
+    out = model.evaluate(
+        strategy_work=[0.0, 0.5, 1.0, 2.0],
+        beta=1.0,
+        observed_dissipative_work=10.0,
+    )
+    assert out.payload.mean_reversion_signal is True

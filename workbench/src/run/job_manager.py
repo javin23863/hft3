@@ -9,6 +9,8 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from workbench.src.core.protocol import ModelComposition
+
 
 def job_dir_for(repo_root: Path, campaign_id: str) -> Path:
     return repo_root / "research_cards" / "workbench_runs" / campaign_id
@@ -26,8 +28,15 @@ def start_campaign_subprocess(
     download_missing: bool = False,
     allow_partial: bool = False,
     chi404_summary: str = "runtime/latency_reports/latency_summary.json",
+    composition: Optional[ModelComposition] = None,
 ) -> tuple[subprocess.Popen, str]:
     campaign_id = make_campaign_id(model_id, symbol)
+    composition_path: Optional[Path] = None
+    if composition and composition.defensive_stubs:
+        composition_path = job_dir_for(repo_root, campaign_id) / "composition.json"
+        composition_path.parent.mkdir(parents=True, exist_ok=True)
+        composition_path.write_text(json.dumps(composition.to_dict(), indent=2), encoding="utf-8")
+
     cmd = [
         sys.executable,
         "-m",
@@ -49,6 +58,8 @@ def start_campaign_subprocess(
         cmd.append("--download-missing")
     if allow_partial:
         cmd.append("--allow-partial")
+    if composition_path is not None:
+        cmd.extend(["--composition", str(composition_path)])
 
     env = os.environ.copy()
     env["PYTHONPATH"] = str(repo_root)

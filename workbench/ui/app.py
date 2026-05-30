@@ -108,6 +108,22 @@ with tabs[3]:
 
 with tabs[4]:
     st.header("Signal Diagnostics")
+    if diag_data and diag_data.get("composition"):
+        st.subheader("Campaign composition")
+        st.json(diag_data.get("composition"))
+    if selected_campaign and period_choice and event_choice:
+        trace_path = (
+            runs_dir
+            / selected_campaign
+            / "periods"
+            / period_choice.replace(" ", "_")
+            / "events"
+            / event_choice
+            / "composition_trace.json"
+        )
+        if trace_path.is_file():
+            st.subheader("Composition trace (event)")
+            st.json(json.loads(trace_path.read_text(encoding="utf-8")))
     st.caption("PDF OFI/VPIN and HYP signal histograms from run artifacts")
 
 with tabs[5]:

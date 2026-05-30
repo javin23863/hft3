@@ -23,6 +23,25 @@ class HypothesisAdapter(WorkbenchModel):
         self.model_id = config.model_id
         self.config = config
 
+    def _effective_hypothesis(self, ctx: RunContext) -> BaseHypothesis:
+        comp_sig = ctx.metadata.get("composition_signal")
+        comp_raw = ctx.metadata.get("composition_signal_raw")
+        if comp_sig is None or comp_raw is None or abs(float(comp_raw)) < 1e-12:
+            return self._hyp
+        scale = float(comp_sig) / float(comp_raw)
+        if abs(scale - 1.0) < 1e-12:
+            return self._hyp
+
+        inner = self._hyp
+
+        class _ScaledHypothesis:
+            hyp_id = inner.hyp_id
+
+            def evaluate(self, state: Any) -> float:
+                return float(inner.evaluate(state)) * scale
+
+        return _ScaledHypothesis()  # type: ignore[return-value]
+
     def validate_inputs(self, ctx: RunContext) -> List[str]:
         errs: List[str] = []
         if ctx.events is None or len(ctx.events) == 0:
@@ -48,7 +67,7 @@ class HypothesisAdapter(WorkbenchModel):
         rng = random.Random(ctx.seed)
         latency_ms = ctx.latency_policy.total_ms_for_backtest(rng)
         t0 = time.perf_counter()
-        result = bt.run_hypothesis(self._hyp, ctx.events, latency_ms=latency_ms)
+        result = bt.run_hypothesis(self._effective_hypothesis(ctx), ctx.events, latency_ms=latency_ms)
         python_us = (time.perf_counter() - t0) * 1e6
         ctx.metadata["python_research_runtime_us"] = python_us
         ctx.metadata["cpp_backtest_latency_ms"] = latency_ms

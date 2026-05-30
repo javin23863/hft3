@@ -11,20 +11,10 @@ import numpy as np
 from .base import BaseStructuralModel, ModelOutput
 from .types import VPINToxicityOutput
 
-
-import math
-from collections import deque
-from typing import Any, Deque, List, Optional
-
-import numpy as np
-
 try:
     from scipy.stats import t as student_t_dist
 except ImportError:  # pragma: no cover
     student_t_dist = None
-
-from .base import BaseStructuralModel, ModelOutput
-from .types import VPINToxicityOutput
 
 
 def _betainc_cf(a: float, b: float, x: float) -> float:
