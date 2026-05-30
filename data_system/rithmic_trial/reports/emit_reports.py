@@ -1,60 +1,90 @@
 from __future__ import annotations
 
 import json
-import statistics
 from pathlib import Path
 from typing import Any
 
+from ..latency.percentile_stats import stats_by_key, stats_us
 
-def _write(path: Path, payload: dict[str, Any]) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    return path
+
+def _local_mono_ns(ev: dict[str, Any]) -> int | None:
+    v = ev.get("local_monotonic_receive_ns")
+    if v is not None:
+        return int(v)
+    v = ev.get("local_receive_timestamp_ns")
+    return int(v) if v is not None else None
 
 
 def build_latency_profile(events: list[dict[str, Any]]) -> dict[str, Any]:
     feed_latencies_us: list[float] = []
     order_rtts_us: list[float] = []
     submit_ts: dict[str, int] = {}
+    paired_records: list[dict[str, Any]] = []
 
     for ev in events:
         et = ev.get("event_type")
-        local_ts = ev.get("local_receive_timestamp_ns")
+        local_ts = _local_mono_ns(ev)
         exch_ts = ev.get("exchange_timestamp_ns")
         if local_ts is not None and exch_ts is not None:
             feed_latencies_us.append((int(local_ts) - int(exch_ts)) / 1000.0)
         oid = ev.get("order_id")
         if not oid:
             continue
+        oid_s = str(oid)
         if et == "order_submit" and local_ts is not None:
-            submit_ts[str(oid)] = int(local_ts)
-        if et == "order_ack" and local_ts is not None and str(oid) in submit_ts:
-            order_rtts_us.append(int(local_ts) - submit_ts[str(oid)])
+            submit_ts[oid_s] = int(local_ts)
+        if et in ("order_ack", "ack") and local_ts is not None and oid_s in submit_ts:
+            delta_us = (int(local_ts) - submit_ts[oid_s]) / 1000.0
+            order_rtts_us.append(delta_us)
+            paired_records.append(
+                {
+                    "order_id": oid_s,
+                    "symbol": ev.get("symbol"),
+                    "order_type": ev.get("order_type") or ev.get("type") or "unknown",
+                    "market_state": ev.get("market_state") or "unknown",
+                    "session_tag": ev.get("session_tag") or "regular",
+                    "submit_to_ack_us": delta_us,
+                }
+            )
 
-    def _stats(vals: list[float]) -> dict[str, float | None]:
-        if not vals:
-            return {"count": 0, "min_us": None, "avg_us": None, "p99_us": None, "max_us": None}
-        s = sorted(vals)
-        p99_idx = max(0, int(len(s) * 0.99) - 1)
-        return {
-            "count": len(vals),
-            "min_us": min(s),
-            "avg_us": statistics.mean(s),
-            "p99_us": s[p99_idx],
-            "max_us": max(s),
-        }
+    feed = stats_us(feed_latencies_us)
+    orders = stats_us(order_rtts_us)
+    order_rtt_ms = (orders["avg_us"] / 1000.0) if orders.get("avg_us") is not None else None
 
-    feed = _stats(feed_latencies_us)
-    orders = _stats([v / 1000.0 for v in order_rtts_us])  # ns -> us
-    order_rtt_ms = (orders["avg_us"] / 1000.0) if orders["avg_us"] is not None else None
+    dimensions = {
+        "by_symbol": stats_by_key(paired_records, "symbol", lambda r: r.get("submit_to_ack_us")),
+        "by_order_type": stats_by_key(paired_records, "order_type", lambda r: r.get("submit_to_ack_us")),
+        "by_market_state": stats_by_key(paired_records, "market_state", lambda r: r.get("submit_to_ack_us")),
+        "by_session": stats_by_key(paired_records, "session_tag", lambda r: r.get("submit_to_ack_us")),
+    }
 
     return {
         "status": "pass" if feed_latencies_us or order_rtts_us else "warn",
         "feed_latency_us": feed,
         "order_submit_to_ack_us": orders,
         "order_rtt_ms": order_rtt_ms,
+        "paired_count": len(order_rtts_us),
+        "dimensions": dimensions,
         "limitations": [] if order_rtts_us else ["No order ack events captured yet"],
     }
+
+
+def build_paper_order_summary(events: list[dict[str, Any]]) -> dict[str, Any]:
+    profile = build_latency_profile(events)
+    orders = profile.get("order_submit_to_ack_us") or {}
+    count = int(orders.get("count") or 0)
+    return {
+        "paired_count": count,
+        "meets_acceptance_threshold": count >= 1000,
+        "order_submit_to_ack_us": orders,
+        "dimensions": profile.get("dimensions"),
+    }
+
+
+def _write(path: Path, payload: dict[str, Any]) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return path
 
 
 def emit_all_reports(
@@ -67,9 +97,11 @@ def emit_all_reports(
     book: dict[str, Any],
     conversion: dict[str, Any],
     schema_mapping: dict[str, Any],
+    waterfall_records_path: Path | None = None,
 ) -> dict[str, str]:
     reports_dir.mkdir(parents=True, exist_ok=True)
     latency = build_latency_profile(events)
+    paper_summary = build_paper_order_summary(events)
 
     paths = {
         "data_capture_report.json": _write(
@@ -109,9 +141,21 @@ def emit_all_reports(
                 **latency,
             },
         ),
+        "paper_order_summary.json": _write(
+            reports_dir / "paper_order_summary.json",
+            paper_summary,
+        ),
         "hftbacktest_conversion_report.json": _write(
             reports_dir / "hftbacktest_conversion_report.json",
             conversion,
         ),
     }
+
+    if waterfall_records_path is not None and waterfall_records_path.is_file():
+        from .waterfall import write_waterfall_report
+
+        wf_path = reports_dir / "latency_waterfall.json"
+        write_waterfall_report(waterfall_records_path, wf_path)
+        paths["latency_waterfall.json"] = wf_path
+
     return {k: str(v) for k, v in paths.items()}

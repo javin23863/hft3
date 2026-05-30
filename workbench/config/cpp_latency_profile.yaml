@@ -1,7 +1,6 @@
 # Measured C++ hot-path latency distributions (microseconds).
-# Production source of truth — NOT Python execution time.
-# Values below are populated from CHI404 probes when workbench loads latency_summary.json.
-# Override here only for offline dev when summary is missing.
+# order_send / gateway_ack stay blocked until paper submit→ack is measured on CHI404.
+# TCP connect (rithmic_tcp_65000) is network health telemetry only — see latency_summary.json.
 
 cpp_decision_compute:
   p50_us: 11
@@ -10,24 +9,23 @@ cpp_decision_compute:
   source: cyclictest_loaded_cpu11
 
 order_send:
-  p50_us: 3611
-  p95_us: 4071
-  p99_us: 4094
-  source: rithmic_tcp_65000_proxy
+  p50_us: 0
+  p95_us: 0
+  p99_us: 0
+  source: blocked_until_paper_order_ack
 
 gateway_ack:
-  p50_us: 3611
-  p95_us: 4071
-  p99_us: 4094
-  source: rithmic_tcp_65000_proxy_until_rapi
+  p50_us: 0
+  p95_us: 0
+  p99_us: 0
+  source: blocked_until_paper_order_ack
 
 feed_delay:
   p50_us: 500
   p95_us: 2000
   p99_us: 4094
-  source: network_p99_worst
+  source: network_health_feed_estimate
 
-# Latency injection sweep (microseconds) for viability analysis
 injection_sweep_us:
   - 0
   - 50

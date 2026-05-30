@@ -38,12 +38,8 @@ class CppLatencyProfile:
 
     @property
     def measured_production_p99_us(self) -> float:
-        return (
-            self.feed_delay.p99_us
-            + self.cpp_decision_compute.p99_us
-            + self.order_send.p99_us
-            + self.gateway_ack.p99_us
-        )
+        submit_ack = self.order_send.p99_us + self.gateway_ack.p99_us
+        return self.feed_delay.p99_us + self.cpp_decision_compute.p99_us + submit_ack
 
     @property
     def measured_production_p99_ms(self) -> float:
@@ -65,38 +61,69 @@ class CppLatencyProfile:
         }
 
     @classmethod
+    def _ack_from_summary(cls, data: dict[str, Any]) -> tuple[LatencyPercentilesUs, LatencyPercentilesUs, bool, List[str]]:
+        notes: List[str] = []
+        paper = data.get("paper_order_latency") or {}
+        measured = bool(data.get("order_ack_measured") or paper.get("measured"))
+        order_ack_ms = data.get("order_ack_p99_ms")
+
+        appendix = data.get("trial_order_ack_appendix") or {}
+        stats = appendix.get("order_submit_to_ack_us") or {}
+
+        def _us(key: str, fallback_ms: float) -> float:
+            v = stats.get(key)
+            if isinstance(v, (int, float)):
+                return float(v)
+            if key == "p95_us":
+                v90 = stats.get("p90_us")
+                if isinstance(v90, (int, float)):
+                    return float(v90)
+            if isinstance(order_ack_ms, (int, float)) and key == "p99_us":
+                return float(order_ack_ms) * 1000.0
+            return fallback_ms * 1000.0
+
+        if measured and (stats.get("count") or order_ack_ms is not None):
+            ack = LatencyPercentilesUs(
+                _us("p50_us", float(order_ack_ms or 0)),
+                _us("p90_us", float(order_ack_ms or 0)),
+                _us("p99_us", float(order_ack_ms or 0)),
+                "paper_order_submit_to_ack",
+            )
+            send = LatencyPercentilesUs(0.0, 0.0, 0.0, "included_in_gateway_ack")
+            notes.append("gateway_ack from measured R|Trader paper submit→ack")
+            return send, ack, False, notes
+
+        yaml_cfg = cls.from_yaml_defaults()
+        notes.append(
+            "order_ack_blocked: paper submit→ack not measured; "
+            "TCP connect is network health only — not used for gateway_ack"
+        )
+        return yaml_cfg.order_send, yaml_cfg.gateway_ack, True, notes
+
+    @classmethod
     def from_chi404_summary(cls, summary_path: Path) -> "CppLatencyProfile":
         data = json.loads(summary_path.read_text(encoding="utf-8"))
-        notes: List[str] = []
         cyclic = data.get("cyclictest") or {}
         max_p99_us = float(cyclic.get("max_p99_us") or 11)
         compute = LatencyPercentilesUs(max_p99_us * 0.5, max_p99_us * 0.9, max_p99_us, "cyclictest_loaded")
 
         net = data.get("network") or {}
         rithmic = net.get("rithmic_tcp_65000") or {}
+
         def _ms_to_us(v: Any, default: float) -> float:
             if v is None:
                 return default
             return float(v) * 1000.0
 
-        send = LatencyPercentilesUs(
-            _ms_to_us(rithmic.get("p50_ms"), 3611),
-            _ms_to_us(rithmic.get("p95_ms"), 4071),
-            _ms_to_us(rithmic.get("p99_ms"), 4094),
-            "rithmic_tcp_65000",
+        net_p99_us = float(data.get("network_p99_us") or _ms_to_us(rithmic.get("p99_ms"), 4094))
+        feed = LatencyPercentilesUs(
+            net_p99_us * 0.3,
+            net_p99_us * 0.7,
+            net_p99_us,
+            data.get("network_p99_worst_source", "network_health"),
         )
-        ack_blocked = data.get("order_ack_p99_ms") is None
-        ack = LatencyPercentilesUs(
-            _ms_to_us(rithmic.get("p50_ms"), 3611),
-            _ms_to_us(rithmic.get("p95_ms"), 4071),
-            _ms_to_us(rithmic.get("p99_ms"), 4094),
-            "rithmic_tcp_proxy" if ack_blocked else "order_ack_e2e",
-        )
-        if ack_blocked:
-            notes.append("gateway_ack uses TCP proxy; R|API+ order ack not wired")
 
-        net_p99_us = float(data.get("network_p99_us") or send.p99_us)
-        feed = LatencyPercentilesUs(net_p99_us * 0.3, net_p99_us * 0.7, net_p99_us, data.get("network_p99_worst_source", "network"))
+        send, ack, ack_blocked, notes = cls._ack_from_summary(data)
 
         sweep = list(LATENCY_INJECTION_SWEEP_US)
         yaml_cfg = cls.from_yaml_defaults()
@@ -134,6 +161,8 @@ class CppLatencyProfile:
             gateway_ack=_block("gateway_ack"),
             feed_delay=_block("feed_delay"),
             injection_sweep_us=[int(x) for x in raw.get("injection_sweep_us", LATENCY_INJECTION_SWEEP_US)],
+            order_ack_blocked=True,
+            notes=["yaml defaults; paper order ack not measured"],
         )
 
     @classmethod

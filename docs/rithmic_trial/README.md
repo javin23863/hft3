@@ -124,6 +124,41 @@ systemctl is-active hft3-rithmic-trial     # active
 cat reports/rithmic_trial/$(date -u +%Y-%m-%d)/unattended_status.json
 ```
 
+### Paper order submit→ack latency (authoritative)
+
+TCP connect probes (`network.rithmic_tcp_65000`) are **network health only** — they do not set replay or workbench `gateway_ack`.
+
+Measured paper submit→ack requires ≥1,000 paired orders from the R|Trader VM log path:
+
+```bash
+# CHI404 orchestrator (live gate → daemon → VM sweep → reports)
+bash scripts/chi404_run_paper_latency_sweep.sh
+
+# Or run components separately:
+systemctl enable --now hft3-paper-latency   # after infrastructure/chi404/10_paper_latency_systemd.sh
+python3 -m data_system.rithmic_trial.pipeline paper-latency-daemon --config data_system/config/rithmic_trial.yaml
+
+# Inside R|Trader Windows VM (paper session):
+powershell -File C:\hft3\scripts\chi404_vm_paper_order_sweep.ps1 -TargetOrders 1000
+```
+
+Artifacts:
+
+```
+runtime/paper_latency/raw/<run_id>/records.ndjson   # monotonic audit
+reports/rithmic_trial/<date>/latency_waterfall.json
+reports/rithmic_trial/<date>/paper_order_summary.json
+runtime/latency_reports/latency_summary.json        # order_ack_p99_ms when promoted
+```
+
+Refresh probe summary after sweep:
+
+```bash
+python3 scripts/latency_probe/summarize_latency.py --run-id <probe_run_id> --include-trial-appendix
+```
+
+Until `order_ack_measured=true`, macro replay requires explicit `--latency-ms`.
+
 ### Deprecated: Wine on Linux
 
 Wine + dotnet472 on CHI404 **does not work** for R|Trader (.NET/mscoree). Scripts moved to `scripts/deprecated/`. Do not use workstation log-push (`push_rtrader_logs_chi404.ps1`) — forbidden by AGENTS.md topology.

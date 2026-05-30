@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -89,6 +90,12 @@ def cmd_process(args: argparse.Namespace) -> int:
         "field_map": "raw event_type -> normalized_v1 event_type (1:1 with extensions)",
     }
     reports_dir = cfg.reports_dir(date)
+    waterfall_path: Path | None = None
+    run_id = os.environ.get("PAPER_LATENCY_RUN_ID")
+    if run_id:
+        candidate = cfg.repo_root / "runtime" / "paper_latency" / "raw" / run_id / "records.ndjson"
+        if candidate.is_file():
+            waterfall_path = candidate
     report_paths = emit_all_reports(
         reports_dir,
         manifest=manifest,
@@ -98,6 +105,7 @@ def cmd_process(args: argparse.Namespace) -> int:
         book=book,
         conversion=conversion,
         schema_mapping=schema_mapping,
+        waterfall_records_path=waterfall_path,
     )
     print(f"Normalized -> {norm_path} ({len(events)} events)")
     print(f"Reports -> {reports_dir}")
@@ -170,6 +178,15 @@ def cmd_run_unattended(args: argparse.Namespace) -> int:
     )
 
 
+def cmd_paper_latency_daemon(args: argparse.Namespace) -> int:
+    from data_system.rithmic_trial.latency.paper_latency_daemon import main as daemon_main
+
+    argv = ["--config", args.config, "--poll-interval-sec", str(args.poll_interval_sec)]
+    if args.run_id:
+        argv.extend(["--run-id", args.run_id])
+    return daemon_main(argv)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Rithmic trial ingestion lane")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -239,6 +256,15 @@ def main() -> int:
     p_un.add_argument("--symbol", default=None)
     p_un.add_argument("--no-start-rtrader", action="store_true")
     p_un.set_defaults(func=cmd_run_unattended)
+
+    p_pl = sub.add_parser(
+        "paper-latency-daemon",
+        help="Monotonic paper order latency waterfall daemon (CHI404 only)",
+    )
+    _add_config(p_pl)
+    p_pl.add_argument("--run-id", default=None)
+    p_pl.add_argument("--poll-interval-sec", type=float, default=0.25)
+    p_pl.set_defaults(func=cmd_paper_latency_daemon)
 
     args = parser.parse_args()
     return args.func(args)

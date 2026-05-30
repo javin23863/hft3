@@ -1,42 +1,33 @@
 # E2E latency harness (tick → order ack)
 
-**Status: BLOCKED** until R|API+ is wired on CHI404 bare metal.
+**Primary path (2026):** R|Trader VM paper orders → SMB log bridge → `paper_latency_daemon` → `records.ndjson` / `latency_waterfall.json`. See [docs/rithmic_trial/README.md](../../../docs/rithmic_trial/README.md#paper-order-submitack-latency-authoritative).
+
+**Status: BLOCKED** for production claims until ≥1,000 paired paper submit→ack samples (`order_ack_measured=true`).
 
 ## Purpose
 
 Measure end-to-end latency on the production colo path:
 
-1. **Tick receive** — local monotonic timestamp when the market data tick arrives on CHI404.
-2. **Order submit** — timestamp immediately before `submit` returns on the Rithmic session.
-3. **Order ack** — timestamp when the exchange/broker ack event is received.
+1. **Tick receive** — `local_monotonic_receive_ns` at R|Trader bridge ingest (CHI404).
+2. **Order submit** — R|Trader log parse (`rithmic_submit_mono_ns`).
+3. **Order ack** — R|Trader log parse (`rithmic_ack_mono_ns`).
 
-Report **submit→ack p99** in milliseconds for lane classification (lanes 1–4 in `summarize_latency.py`).
+Report **submit→ack p50/p90/p99/p99.9** in microseconds; promote to `latency_summary.json` when paired_count ≥ 1,000.
 
 ## Requirements
 
 - Run **only** on CHI404 (BLUEPRINT §4). No workstation or file-bridge in the hot path.
-- Use R|API+ (not R|Trader UI automation) for submit and ack events.
-- Clock: `CLOCK_MONOTONIC` for deltas; chrony discipline validated separately.
+- Use R|Trader VM log export (not TCP connect as ack proxy).
+- Clock: `time.perf_counter_ns()` / monotonic for deltas; chrony discipline validated separately.
 - Quarantine: trial lane raw under `data/raw/rithmic_trial_live_capture/` — never production `data/npz/`.
 
-## Trial order ack (appendix only, available today)
+## Trial order ack (authoritative when promoted)
 
-You can send **paper orders** via R|Trader Pro in the CHI404 Windows VM without R|API+. That path is measured separately and does **not** change the colo `recommended_lane`.
-
-**Populate the appendix:**
-
-1. VM running, R|Trader logged in (paper).
-2. Send a few paper limit orders in R|Trader (manual).
-3. Run live capture on CHI404:
+Paper orders via R|Trader VM + automated sweep:
 
 ```bash
-bash scripts/chi404_run_trial_live.sh
-```
-
-4. Run the colo probe (appendix reads latest `reports/rithmic_trial/.../latency_profile.json`):
-
-```bash
-LATENCY_PROBE_CYCLICTEST_SEC=60 bash scripts/latency_probe/run_all.sh
+bash scripts/chi404_run_paper_latency_sweep.sh
+python3 scripts/latency_probe/summarize_latency.py --run-id <probe_run_id> --include-trial-appendix
 ```
 
 Optional: set `LATENCY_PROBE_TRIAL_CAPTURE=1` on `run_all.sh` to run step 3 automatically before summarize (adds ~30s+ VM dependency).

@@ -32,8 +32,13 @@ Derived (microseconds): `feed_delay_us`, `decision_compute_us`, `decision_to_sen
 Loaded from CHI404 `runtime/latency_reports/latency_summary.json` + `workbench/config/cpp_latency_profile.yaml`:
 
 - `cpp_decision_compute_p50/p95/p99_us` — cyclictest loaded (until dedicated C++ probe)
-- `order_send_p50/p95/p99_us` — Rithmic TCP proxy
-- `gateway_ack_p50/p95/p99_us` — TCP proxy until R|API+ wired
+- `gateway_ack_p50/p95/p99_us` — **measured R|Trader paper submit→ack** when `order_ack_measured=true` (≥1,000 paired orders)
+- `order_send_*` — zero when ack is folded into `gateway_ack`; blocked until paper measurement
+- `network.rithmic_tcp_65000` — **network health only**; never used for `gateway_ack` or replay default latency
+
+Paper waterfall: `runtime/paper_latency/raw/<run_id>/records.ndjson` → `latency_waterfall.json` via `scripts/latency_probe/build_waterfall_report.py`. Daemon: `python -m data_system.rithmic_trial.pipeline paper-latency-daemon` (CHI404 only).
+
+Until `order_ack_measured=true`, replay scripts require explicit `--latency-ms`; TCP connect is not a silent fallback.
 
 ## Injection sweep (µs)
 

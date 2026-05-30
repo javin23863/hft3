@@ -52,14 +52,27 @@ def _parse_export_timestamp(ts_str: str) -> str | None:
     return None
 
 
+def _stamp_event(ev: dict[str, Any]) -> dict[str, Any]:
+    ev = dict(ev)
+    mono = time.perf_counter_ns()
+    ev["local_monotonic_receive_ns"] = mono
+    ev.setdefault("local_receive_timestamp_ns", mono)
+    return ev
+
+
 def _parse_csv_row(row: dict[str, str], cfg: TrialConfig) -> dict[str, Any] | None:
     lowered = {k.strip().lower(): v.strip() for k, v in row.items() if k}
     event_type = lowered.get("event_type") or lowered.get("type") or lowered.get("action")
     if not event_type:
-        if "fill" in lowered or lowered.get("status", "").lower() == "filled":
+        status = lowered.get("status", "").lower()
+        if "fill" in lowered or status == "filled":
             event_type = "fill"
-        elif lowered.get("status", "").lower() in ("ack", "acknowledged", "working"):
+        elif status in ("ack", "acknowledged", "working"):
             event_type = "order_ack"
+        elif status in ("cancelled", "canceled"):
+            event_type = "cancel"
+        elif status in ("replaced", "replace"):
+            event_type = "order_replace"
         elif lowered.get("side") and lowered.get("qty"):
             event_type = "order_submit"
         elif lowered.get("last") or lowered.get("price"):
@@ -106,7 +119,12 @@ def _parse_comma_log_line(line: str, cfg: TrialConfig) -> dict[str, Any] | None:
         "quote": "quote",
         "fill": "fill",
         "ack": "order_ack",
+        "order_submit": "order_submit",
+        "submit": "order_submit",
         "cancel": "cancel",
+        "replace": "order_replace",
+        "cancel_replace": "order_replace",
+        "status": "order_status",
         "reject": "reject",
     }
     raw_type = parts[1].lower()
@@ -133,6 +151,10 @@ def _parse_comma_log_line(line: str, cfg: TrialConfig) -> dict[str, Any] | None:
             ev["size"] = float(parts[4])
         except ValueError:
             pass
+    if len(parts) >= 6 and parts[5]:
+        ev["order_id"] = parts[5]
+    if event_type == "order_submit" and len(parts) >= 4:
+        ev["order_type"] = parts[3]
     return ev
 
 
@@ -152,7 +174,7 @@ def _parse_log_line(line: str, cfg: TrialConfig) -> dict[str, Any] | None:
         if ev:
             return ev
     m = re.search(
-        r"(?P<type>TRADE|QUOTE|FILL|ACK|CANCEL|REJECT).*?(?P<sym>[A-Z0-9.]+).*?(?P<px>[\d.]+)",
+        r"(?P<type>TRADE|QUOTE|FILL|ACK|CANCEL|REPLACE|REJECT|STATUS).*?(?P<sym>[A-Z0-9.]+).*?(?P<px>[\d.]+)",
         line,
         re.I,
     )
@@ -164,7 +186,9 @@ def _parse_log_line(line: str, cfg: TrialConfig) -> dict[str, Any] | None:
         "FILL": "fill",
         "ACK": "order_ack",
         "CANCEL": "cancel",
+        "REPLACE": "order_replace",
         "REJECT": "reject",
+        "STATUS": "order_status",
     }
     try:
         price = float(m.group("px"))
@@ -243,7 +267,7 @@ class RTraderBridgeConnector(ConnectorInterface):
         for line in chunk.splitlines():
             ev = _parse_log_line(line, cfg)
             if ev:
-                self._pending.append(ev)
+                self._pending.append(_stamp_event(ev))
                 self._detected.add(str(ev.get("event_type", "unknown")))
 
     def _ingest_csv(self, path: Path, cfg: TrialConfig) -> None:
@@ -258,7 +282,7 @@ class RTraderBridgeConnector(ConnectorInterface):
         for row in rows[start:]:
             ev = _parse_csv_row(row, cfg)
             if ev:
-                self._pending.append(ev)
+                self._pending.append(_stamp_event(ev))
                 self._detected.add(str(ev.get("event_type", "unknown")))
         self._csv_rows_seen[key] = len(rows)
 
@@ -282,7 +306,7 @@ class RTraderBridgeConnector(ConnectorInterface):
                 continue
             try:
                 ev = json.loads(line)
-                self._pending.append(ev)
+                self._pending.append(_stamp_event(ev))
                 self._detected.add(str(ev.get("event_type", "unknown")))
             except json.JSONDecodeError:
                 continue
@@ -311,7 +335,6 @@ class RTraderBridgeConnector(ConnectorInterface):
             return []
         batch = self._pending
         self._pending = []
-        now = time.time_ns()
         gateway = self.cfg.rithmic.get("gateway") or self.cfg.rtrader.get("gateway")
         meta = {
             "gateway": gateway,
@@ -320,11 +343,11 @@ class RTraderBridgeConnector(ConnectorInterface):
         out = []
         for ev in batch:
             ev = dict(ev)
-            ev.setdefault("local_receive_timestamp_ns", now)
+            ev.setdefault("local_monotonic_receive_ns", time.perf_counter_ns())
+            ev.setdefault("local_receive_timestamp_ns", ev["local_monotonic_receive_ns"])
             if gateway and "gateway_metadata" not in ev:
                 ev["gateway_metadata"] = meta
             out.append(ev)
-            now += 1000
         return out
 
     def detected_event_types(self) -> set[str]:

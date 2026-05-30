@@ -26,10 +26,13 @@ LANE_THRESHOLDS_MS = {
     3: (10.0, 50.0),
     4: (50.0, float("inf")),
 }
-ORDER_ACK_BLOCKED_NOTE = "R|API+ not wired; order ack p99 unavailable"
+PAPER_ORDER_MIN_PAIRED = 1000
+ORDER_ACK_BLOCKED_NOTE = (
+    "Paper order submit→ack not measured; run scripts/chi404_run_paper_latency_sweep.sh on CHI404"
+)
 TRIAL_APPENDIX_LIMITATIONS = [
-    "Windows VM + log bridge; not R|API+ hot path",
-    "Does not affect colo recommended_lane",
+    "R|Trader VM log bridge; monotonic timestamps at ingest",
+    "Promoted to authoritative when paired_count>=1000",
 ]
 TRIAL_CONNECTORS = frozenset({"rtrader", "rtrader_bridge"})
 
@@ -237,7 +240,7 @@ def _dominant_bottleneck(
     if clock_warnings:
         return f"clock_discipline ({clock_warnings[0]})"
     if order_ack_blocked:
-        return "order_submit_to_ack_not_measured (R|API+ blocked)"
+        return "order_submit_to_ack_not_measured (R|Trader paper path)"
     return "none_identified"
 
 
@@ -258,7 +261,7 @@ def _strategy_guidance(
                 "Backtest at 0.5-2 ms latency bands; colo CPU/network support HFT-tier infra."
             )
             unrealistic.append(
-                "Assuming sub-2 ms order ack or production HFT execution without R|API+ probe."
+                "Assuming sub-2 ms order ack or production HFT execution without measured paper orders."
             )
         elif not cyclictest_pass:
             realistic.append("Fix kernel isolation / jitter before any sub-ms strategy research.")
@@ -352,12 +355,21 @@ def _build_trial_order_ack_appendix(
         }
 
     order_ack_p99_ms = float(p99_us) / 1000.0
+    count = int(order_stats.get("count") or 0)
+    authoritative = count >= PAPER_ORDER_MIN_PAIRED
 
     return {
         **base,
         "status": "ok",
         "order_submit_to_ack_us": order_stats,
         "order_ack_p99_ms": order_ack_p99_ms,
+        "paired_count": count,
+        "authoritative": authoritative,
+        "note": (
+            "Authoritative for backtest latency when paired_count>=1000"
+            if authoritative
+            else base["note"]
+        ),
     }
 
 
@@ -391,18 +403,6 @@ def build_summary(
     clock = _collect_clock_discipline(crit)
     clock_warnings = (clock.get("parsed") or {}).get("warnings") or []
 
-    order_ack_blocked = True
-    order_ack_p99_ms: float | None = None
-
-    lane_info = _classify_lane(
-        cyclictest_pass=cyclictest_pass,
-        network_pass=network_pass,
-        order_ack_p99_ms=order_ack_p99_ms,
-        order_ack_blocked=order_ack_blocked,
-        network_limit_us=network_limit_us,
-        cyclictest_limit_us=cyclictest_limit_us,
-    )
-
     trial_appendix = _build_trial_order_ack_appendix(
         repo_root,
         include=include_trial_appendix,
@@ -411,6 +411,51 @@ def build_summary(
             if include_trial_appendix
             else "trial appendix disabled (--no-trial-appendix or LATENCY_PROBE_INCLUDE_TRIAL_APPENDIX=0)"
         ),
+    )
+
+    order_ack_blocked = True
+    order_ack_p99_ms: float | None = None
+    paper_order_latency: dict[str, Any] = {
+        "measured": False,
+        "authoritative": False,
+        "paired_count": 0,
+        "source": "rithmic_trial_rtrader",
+        "measurement_tier": "log_bridge",
+    }
+
+    if trial_appendix.get("status") == "ok" and trial_appendix.get("authoritative"):
+        stats = trial_appendix.get("order_submit_to_ack_us") or {}
+        p99_us = stats.get("p99_us")
+        count = int(trial_appendix.get("paired_count") or stats.get("count") or 0)
+        if isinstance(p99_us, (int, float)):
+            order_ack_p99_ms = float(p99_us) / 1000.0
+            order_ack_blocked = False
+            paper_order_latency = {
+                "measured": True,
+                "authoritative": True,
+                "paired_count": count,
+                "source": "rithmic_trial_rtrader",
+                "measurement_tier": "log_bridge",
+                "profile_path": trial_appendix.get("profile_path"),
+            }
+
+    if network and isinstance(network.get("rithmic_tcp_65000"), dict):
+        network["rithmic_tcp_65000"]["network_health_only"] = True
+
+    rithmic_tcp = (network or {}).get("rithmic_tcp_65000") or {}
+    network_health = {
+        "rithmic_tcp_65000_p99_ms": rithmic_tcp.get("p99_ms"),
+        "network_health_only": True,
+        "note": "TCP connect probes are network health telemetry; excluded from order_ack and backtest_latency_ms",
+    }
+
+    lane_info = _classify_lane(
+        cyclictest_pass=cyclictest_pass,
+        network_pass=network_pass,
+        order_ack_p99_ms=order_ack_p99_ms,
+        order_ack_blocked=order_ack_blocked,
+        network_limit_us=network_limit_us,
+        cyclictest_limit_us=cyclictest_limit_us,
     )
 
     summary: dict[str, Any] = {
@@ -431,22 +476,25 @@ def build_summary(
         "network_limit_us": network_limit_us,
         "network_pass": network_pass,
         "clock_discipline": clock,
+        "network_health": network_health,
         "rithmic_app_latency": {
-            "status": "BLOCKED",
-            "reason": ORDER_ACK_BLOCKED_NOTE,
-            "probe": "scripts/latency_probe/rithmic_latency_probe.cpp",
+            "status": "BLOCKED" if order_ack_blocked else "ok",
+            "reason": ORDER_ACK_BLOCKED_NOTE if order_ack_blocked else "paper order submit→ack measured",
+            "probe": "data_system/rithmic_trial/latency/paper_latency_daemon.py",
         },
         "e2e_harness": {
-            "status": "BLOCKED",
-            "reason": ORDER_ACK_BLOCKED_NOTE,
-            "spec": "scripts/latency_probe/e2e_harness/README.md",
+            "status": "BLOCKED" if order_ack_blocked else "ok",
+            "reason": ORDER_ACK_BLOCKED_NOTE if order_ack_blocked else "paper waterfall available",
+            "spec": "scripts/latency_probe/build_waterfall_report.py",
         },
         "trial_order_ack_appendix": trial_appendix,
+        "paper_order_latency": paper_order_latency,
         "order_ack_p99_ms": order_ack_p99_ms,
+        "order_ack_measured": not order_ack_blocked,
         "gates": {
             "cyclictest_pass": cyclictest_pass,
             "network_pass": network_pass,
-            "order_ack_pass": None,
+            "order_ack_pass": (not order_ack_blocked) if include_trial_appendix else None,
         },
         "recommended_lane": lane_info,
         "dominant_bottleneck": _dominant_bottleneck(

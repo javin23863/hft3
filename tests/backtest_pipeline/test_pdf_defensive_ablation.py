@@ -207,16 +207,40 @@ def test_resolve_replay_latency_ms_rejects_out_of_band() -> None:
         resolve_replay_latency_ms(latency_ms=0.01)
 
 
-def test_resolve_replay_latency_ms_from_chi404_summary() -> None:
-    from backtest_pipeline.src.chi404_latency import DEFAULT_CHI404_SUMMARY, resolve_replay_latency_ms
+def test_resolve_replay_latency_ms_from_chi404_summary(tmp_path: Path) -> None:
+    import json
 
-    if not DEFAULT_CHI404_SUMMARY.is_file():
-        pytest.skip(f"CHI404 summary missing: {DEFAULT_CHI404_SUMMARY}")
-    ms, source, chi404 = resolve_replay_latency_ms(latency_ms=None)
-    assert 0.5 <= ms <= 10.0
-    assert "CHI404" in source
+    from backtest_pipeline.src.chi404_latency import resolve_replay_latency_ms
+
+    summary = tmp_path / "latency_summary.json"
+    summary.write_text(
+        json.dumps(
+            {
+                "order_ack_measured": True,
+                "order_ack_p99_ms": 2.5,
+                "paper_order_latency": {"measured": True, "authoritative": True, "paired_count": 1100},
+            }
+        ),
+        encoding="utf-8",
+    )
+    ms, source, chi404 = resolve_replay_latency_ms(latency_ms=None, chi404_summary=summary)
+    assert ms == 2.5
     assert chi404 is not None
-    assert chi404.get("backtest_latency_ms") == ms
+    assert chi404.get("order_ack_measured") is True
+
+
+def test_resolve_replay_latency_ms_fails_without_measured_ack(tmp_path: Path) -> None:
+    import json
+
+    from backtest_pipeline.src.chi404_latency import resolve_replay_latency_ms
+
+    summary = tmp_path / "latency_summary.json"
+    summary.write_text(
+        json.dumps({"network": {"rithmic_tcp_65000": {"p99_ms": 4.094}}, "order_ack_measured": False}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="not measured"):
+        resolve_replay_latency_ms(latency_ms=None, chi404_summary=summary)
 
 
 def test_resolve_replay_latency_ms_rejects_chi404_out_of_band(tmp_path: Path) -> None:
@@ -226,7 +250,13 @@ def test_resolve_replay_latency_ms_rejects_chi404_out_of_band(tmp_path: Path) ->
 
     bad = tmp_path / "bad_latency.json"
     bad.write_text(
-        json.dumps({"network": {"rithmic_tcp_65000": {"p99_ms": 0.01}}}),
+        json.dumps(
+            {
+                "order_ack_measured": True,
+                "order_ack_p99_ms": 0.01,
+                "paper_order_latency": {"measured": True},
+            }
+        ),
         encoding="utf-8",
     )
     with pytest.raises(ValueError, match="outside BLUEPRINT band"):

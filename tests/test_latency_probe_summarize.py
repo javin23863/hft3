@@ -112,6 +112,99 @@ def test_trial_appendix_accepts_rtrader_bridge_connector(tmp_path: Path) -> None
     assert appendix["order_ack_p99_ms"] == 8.0
 
 
+def test_trial_appendix_promotes_at_1000_pairs(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    date_dir = repo / "reports" / "rithmic_trial" / "2026-05-30"
+    date_dir.mkdir(parents=True)
+    (date_dir / "latency_profile.json").write_text(
+        json.dumps(
+            {
+                "order_submit_to_ack_us": {
+                    "count": 1100,
+                    "p50_us": 3000.0,
+                    "p90_us": 4500.0,
+                    "p99_us": 5000.0,
+                    "p999_us": 6000.0,
+                },
+                "status": "pass",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (date_dir / "data_capture_report.json").write_text(
+        json.dumps({"manifest": {"known_limitations": {"connector": "rtrader_bridge"}}}),
+        encoding="utf-8",
+    )
+    appendix = _build_trial_order_ack_appendix(repo, include=True)
+    assert appendix["status"] == "ok"
+    assert appendix["authoritative"] is True
+    assert appendix["order_ack_p99_ms"] == 5.0
+
+
+def test_build_summary_promotes_measured_ack(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    raw = repo / "runtime" / "latency_reports" / "raw" / "testrun"
+    raw.mkdir(parents=True)
+    crit = repo / "infrastructure" / "chi404"
+    crit.mkdir(parents=True)
+    (crit / "PASS_CRITERIA.json").write_text(
+        json.dumps({"cyclictest_p99_max_us": 20, "network_p99_max_us": 500000}),
+        encoding="utf-8",
+    )
+    (raw / "cyclictest_loaded_cpu2" / "percentiles.json").parent.mkdir(parents=True)
+    (raw / "cyclictest_loaded_cpu2" / "percentiles.json").write_text(
+        json.dumps({"p99_us": 11}), encoding="utf-8"
+    )
+    (raw / "network.json").write_text(
+        json.dumps({"gateway_ping": {"status": "ok", "p99_ms": 0.2}}),
+        encoding="utf-8",
+    )
+    date_dir = repo / "reports" / "rithmic_trial" / "2026-05-30"
+    date_dir.mkdir(parents=True)
+    (date_dir / "latency_profile.json").write_text(
+        json.dumps(
+            {
+                "order_submit_to_ack_us": {"count": 1100, "p99_us": 4200.0},
+                "status": "pass",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (date_dir / "data_capture_report.json").write_text(
+        json.dumps({"manifest": {"known_limitations": {"connector": "rtrader_bridge"}}}),
+        encoding="utf-8",
+    )
+    summary = build_summary(repo, "testrun", include_trial_appendix=True)
+    assert summary["order_ack_p99_ms"] == pytest.approx(4.2)
+    assert summary["order_ack_measured"] is True
+    assert summary["paper_order_latency"]["authoritative"] is True
+
+
+def test_build_summary_tcp_not_used_as_order_ack(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    raw = repo / "runtime" / "latency_reports" / "raw" / "testrun"
+    raw.mkdir(parents=True)
+    crit = repo / "infrastructure" / "chi404"
+    crit.mkdir(parents=True)
+    (crit / "PASS_CRITERIA.json").write_text(
+        json.dumps({"cyclictest_p99_max_us": 20, "network_p99_max_us": 500000}),
+        encoding="utf-8",
+    )
+    (raw / "cyclictest_loaded_cpu2" / "percentiles.json").parent.mkdir(parents=True)
+    (raw / "cyclictest_loaded_cpu2" / "percentiles.json").write_text(
+        json.dumps({"p99_us": 11}), encoding="utf-8"
+    )
+    (raw / "network.json").write_text(
+        json.dumps({"rithmic_tcp_65000": {"status": "ok", "p99_ms": 4.094}}),
+        encoding="utf-8",
+    )
+    summary = build_summary(repo, "testrun", include_trial_appendix=False)
+    assert summary["order_ack_p99_ms"] is None
+    assert summary["order_ack_measured"] is False
+    assert summary["network_health"]["network_health_only"] is True
+    assert summary["network"]["rithmic_tcp_65000"]["network_health_only"] is True
+
+
 def test_latest_latency_profile_reads_order_stats(tmp_path: Path) -> None:
     date_dir = tmp_path / "reports" / "rithmic_trial" / "2026-05-30"
     date_dir.mkdir(parents=True)
