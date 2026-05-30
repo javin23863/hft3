@@ -12,7 +12,7 @@ import pandas as pd
 import streamlit as st
 import yaml
 
-from workbench.src.core.protocol import DefensiveStub, ModelComposition
+from workbench.src.core.composition import DefensiveStub, ModelComposition
 from workbench.src.data.event_catalog import campaign_preview, list_personal_events, load_model_binding
 from workbench.src.data.personal_lock import is_locked, set_unlocked
 from workbench.src.registry.model_catalog import (
