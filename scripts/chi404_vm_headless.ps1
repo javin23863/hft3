@@ -38,9 +38,11 @@ function Register-LogonTask {
     } else {
         $action = New-ScheduledTaskAction -Execute $Execute
     }
-    $trigger = New-ScheduledTaskTrigger -AtLogOn -User "Administrator"
-    $trigger.Delay = $Delay
-    Register-ScheduledTask -TaskName $Name -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
+    $logon = New-ScheduledTaskTrigger -AtLogOn -User "Administrator"
+    $logon.Delay = $Delay
+    $boot = New-ScheduledTaskTrigger -AtStartup
+    $boot.Delay = $Delay
+    Register-ScheduledTask -TaskName $Name -Action $action -Trigger @($logon, $boot) -Principal $principal -Settings $settings -Force | Out-Null
 }
 
 Register-LogonTask "HFT3-MapSMB" "powershell.exe" "-ExecutionPolicy Bypass -WindowStyle Hidden -File C:\chi404_vm_map_smb.ps1" "PT60S"
