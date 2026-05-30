@@ -70,6 +70,43 @@ def _parse_csv_row(row: dict[str, str], cfg: TrialConfig) -> dict[str, Any] | No
     return ev
 
 
+def _parse_comma_log_line(line: str, cfg: TrialConfig) -> dict[str, Any] | None:
+    """R|Trader export: timestamp,Trade,MES,5000.00,1"""
+    parts = [p.strip() for p in line.split(",")]
+    if len(parts) < 4:
+        return None
+    type_map = {
+        "trade": "trade",
+        "quote": "quote",
+        "fill": "fill",
+        "ack": "order_ack",
+        "cancel": "cancel",
+        "reject": "reject",
+    }
+    raw_type = parts[1].lower()
+    event_type = type_map.get(raw_type)
+    if not event_type:
+        return None
+    sym = parts[2] or cfg.symbol
+    try:
+        price = float(parts[3])
+    except ValueError:
+        return None
+    ev: dict[str, Any] = {
+        "event_type": event_type,
+        "symbol": sym,
+        "exchange": cfg.exchange,
+        "price": price,
+        "raw_line": line,
+    }
+    if len(parts) >= 5 and parts[4]:
+        try:
+            ev["size"] = float(parts[4])
+        except ValueError:
+            pass
+    return ev
+
+
 def _parse_log_line(line: str, cfg: TrialConfig) -> dict[str, Any] | None:
     line = line.strip()
     if not line:
@@ -79,6 +116,10 @@ def _parse_log_line(line: str, cfg: TrialConfig) -> dict[str, Any] | None:
             return json.loads(line)
         except json.JSONDecodeError:
             return None
+    if "," in line and re.match(r"^\d{4}-\d{2}-\d{2}", line):
+        ev = _parse_comma_log_line(line, cfg)
+        if ev:
+            return ev
     m = re.search(
         r"(?P<type>TRADE|QUOTE|FILL|ACK|CANCEL|REJECT).*?(?P<sym>[A-Z0-9.]+).*?(?P<px>[\d.]+)",
         line,
@@ -217,7 +258,7 @@ class RTraderBridgeConnector(ConnectorInterface):
 
     def _ingest_file(self, path: Path) -> None:
         name = path.name.lower()
-        if name.endswith("_probe.txt") or name == "rithmic_test.log":
+        if name.endswith("_probe.txt"):
             return
         suffix = path.suffix.lower()
         if suffix == ".csv":
