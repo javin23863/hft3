@@ -10,5 +10,8 @@
   "load_max_1m": 0.5,
   "require_virt": "none",
   "require_cmdline_tokens": ["isolcpus=", "nohz_full=", "rcu_nocbs="],
+  "require_cmdline_tokens_optional": ["rcu_nocb_poll", "idle=poll", "acpi_irq_nobalance"],
+  "require_cmdline_tokens_memory_upgrade": ["rcu_nocb_poll", "idle=poll", "acpi_irq_nobalance"],
+  "require_idle_disabled": true,
   "require_governor": "performance"
 }

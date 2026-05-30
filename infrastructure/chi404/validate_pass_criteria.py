@@ -18,6 +18,106 @@ def _tool_available(name: str) -> bool:
     return subprocess.run(["which", name], capture_output=True).returncode == 0
 
 
+def _is_intel_cpu() -> bool:
+    try:
+        text = Path("/proc/cpuinfo").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return "vendor_id" in text and "intel" in text.lower()
+
+
+def _read_cmdline() -> str:
+    proc = Path("/proc/cmdline")
+    if proc.exists():
+        return proc.read_text(encoding="utf-8")
+    return os.environ.get("HFT3_TEST_CMDLINE", "")
+
+
+def _detect_virt() -> str | None:
+    try:
+        proc = subprocess.run(
+            ["systemd-detect-virt"], capture_output=True, text=True, check=False
+        )
+    except FileNotFoundError:
+        return None
+    if proc.returncode != 0:
+        return proc.stdout.strip() or None
+    return proc.stdout.strip()
+
+
+def _check_cmdline_tokens(
+    cmdline: str, crit: dict, profile: str
+) -> tuple[list[str], list[str]]:
+    failures: list[str] = []
+    warns: list[str] = []
+
+    for tok in crit.get("require_cmdline_tokens") or []:
+        if tok not in cmdline:
+            failures.append(f"G3 missing cmdline token {tok}")
+
+    optional = list(crit.get("require_cmdline_tokens_optional") or [])
+    memory_tokens = list(crit.get("require_cmdline_tokens_memory_upgrade") or optional)
+    skip_idle_poll = os.environ.get("HFT3_SKIP_IDLE_POLL", "0") == "1"
+
+    if profile == "memory_upgrade":
+        for tok in memory_tokens:
+            if skip_idle_poll and tok == "idle=poll":
+                continue
+            if tok not in cmdline:
+                failures.append(f"G3 memory upgrade missing cmdline token {tok}")
+        if _is_intel_cpu() and "intel_idle.max_cstate=0" not in cmdline:
+            failures.append("G3 memory upgrade missing cmdline token intel_idle.max_cstate=0")
+    else:
+        for tok in optional:
+            if tok not in cmdline:
+                warns.append(f"G3 optional cmdline token missing {tok}")
+
+    return failures, warns
+
+
+def _cmdline_idle_effectively_disabled(cmdline: str) -> bool:
+    markers = ("cpuidle.off=1", "processor.max_cstate=0", "idle=poll")
+    return any(m in cmdline for m in markers)
+
+
+def _cpupower_idle_disabled(cmdline: str = "") -> tuple[bool, str]:
+    if _cmdline_idle_effectively_disabled(cmdline):
+        return True, "cmdline disables cpuidle/c-states"
+    if not _tool_available("cpupower"):
+        return False, "cpupower not installed"
+    text = _run(["cpupower", "idle-info"])
+    in_states = False
+    saw_non_poll = False
+    for line in text.splitlines():
+        if "Available idle states" in line:
+            in_states = True
+            continue
+        if not in_states:
+            continue
+        stripped = line.strip()
+        if not stripped or stripped.startswith("CPU"):
+            continue
+        name = stripped.split(":")[0].strip()
+        if name.upper() == "POLL":
+            continue
+        saw_non_poll = True
+        if "disabled" not in line.lower():
+            return False, f"idle state {name!r} not disabled"
+    if not saw_non_poll:
+        return False, "no parseable non-POLL idle states in cpupower idle-info"
+    return True, "ok"
+
+
+def _check_cpupower_idle(crit: dict, cmdline: str = "") -> list[str]:
+    failures: list[str] = []
+    if not crit.get("require_idle_disabled"):
+        return failures
+    ok, detail = _cpupower_idle_disabled(cmdline)
+    if not ok:
+        failures.append(f"G4 cpupower idle states not fully disabled ({detail})")
+    return failures
+
+
 def _check_cyclictest_p99(log_dir: Path, crit: dict) -> list[str]:
     failures: list[str] = []
     limit = crit["cyclictest_p99_max_us"]
@@ -122,11 +222,13 @@ def main() -> int:
 
     crit = json.loads(criteria_path.read_text(encoding="utf-8"))
     failures: list[str] = []
+    profile = os.environ.get("HFT3_VALIDATE_PROFILE", "")
 
-    virt = subprocess.run(
-        ["systemd-detect-virt"], capture_output=True, text=True, check=False
-    ).stdout.strip()
-    if virt != crit["require_virt"]:
+    virt = _detect_virt()
+    if virt is None:
+        if Path("/proc/cmdline").exists():
+            failures.append("G1 systemd-detect-virt missing on Linux host")
+    elif virt != crit["require_virt"]:
         failures.append(f"G1 virt={virt} expected {crit['require_virt']}")
 
     if not _tool_available("mpstat"):
@@ -144,19 +246,31 @@ def main() -> int:
             if steal > crit["cpu_steal_max_pct"]:
                 failures.append(f"G2 steal={steal}% > {crit['cpu_steal_max_pct']}")
 
-    cmdline = Path("/proc/cmdline").read_text()
-    for tok in crit["require_cmdline_tokens"]:
-        if tok not in cmdline:
-            failures.append(f"G3 missing cmdline token {tok}")
+    cmdline = _read_cmdline()
+    cmd_failures, optional_warn = _check_cmdline_tokens(cmdline, crit, profile)
+    failures.extend(cmd_failures)
+    if optional_warn:
+        warn_path = log_dir / "PASS_WARN.txt"
+        warn_path.write_text("\n".join(optional_warn) + "\n", encoding="utf-8")
+        print("WARN optional cmdline tokens:")
+        for w in optional_warn:
+            print(f"  - {w}")
 
     if not _tool_available("cpupower"):
         failures.append("G4 cpupower not installed — cannot evaluate governor")
     else:
         freq = _run(["cpupower", "frequency-info"])
-        gov_match = re.search(r"current policy.*governor\s*:\s*(\S+)", freq, re.IGNORECASE)
+        gov_match = re.search(
+            r'The governor "(\w+)"', freq, re.IGNORECASE
+        ) or re.search(
+            r"current policy.*governor\s*:\s*(\S+)", freq, re.IGNORECASE
+        )
         active = gov_match.group(1).lower() if gov_match else ""
         if active != crit["require_governor"].lower():
             failures.append(f"G4 active governor {active!r} != {crit['require_governor']!r}")
+
+    if profile == "memory_upgrade":
+        failures.extend(_check_cpupower_idle(crit, cmdline))
 
     chrony_gate = log_dir / "chrony_gate_result"
     if chrony_gate.exists() and "PASS" in chrony_gate.read_text(encoding="utf-8"):
@@ -192,9 +306,10 @@ def main() -> int:
 
     failures.extend(_check_jitter_gate(log_dir))
     failures.extend(_check_cyclictest_p99(log_dir, crit))
-    failures.extend(_check_irq_net(log_dir))
-    failures.extend(_check_nic_rings(log_dir, crit))
-    failures.extend(_check_manifest(log_dir))
+    if profile != "memory_upgrade":
+        failures.extend(_check_irq_net(log_dir))
+        failures.extend(_check_nic_rings(log_dir, crit))
+        failures.extend(_check_manifest(log_dir))
 
     out = log_dir / "PASS_FAIL.txt"
     if failures:

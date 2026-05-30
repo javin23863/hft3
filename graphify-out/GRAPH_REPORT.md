@@ -1,16 +1,16 @@
 # Graph Report - hft3  (2026-05-30)
 
 ## Corpus Check
-- 1082 files · ~686,751 words
+- 1319 files · ~716,436 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 13809 nodes · 22684 edges · 934 communities (771 shown, 163 thin omitted)
-- Extraction: 91% EXTRACTED · 9% INFERRED · 0% AMBIGUOUS · INFERRED: 2028 edges (avg confidence: 0.52)
+- 17424 nodes · 26446 edges · 1210 communities (990 shown, 220 thin omitted)
+- Extraction: 92% EXTRACTED · 8% INFERRED · 0% AMBIGUOUS · INFERRED: 2091 edges (avg confidence: 0.52)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `bff20257`
+- Built from commit: `f28b4a1b`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -891,16 +891,291 @@
 - [[_COMMUNITY_Community 931|Community 931]]
 - [[_COMMUNITY_Community 932|Community 932]]
 - [[_COMMUNITY_Community 933|Community 933]]
+- [[_COMMUNITY_Community 934|Community 934]]
+- [[_COMMUNITY_Community 935|Community 935]]
+- [[_COMMUNITY_Community 936|Community 936]]
+- [[_COMMUNITY_Community 937|Community 937]]
+- [[_COMMUNITY_Community 938|Community 938]]
+- [[_COMMUNITY_Community 939|Community 939]]
+- [[_COMMUNITY_Community 940|Community 940]]
+- [[_COMMUNITY_Community 941|Community 941]]
+- [[_COMMUNITY_Community 942|Community 942]]
+- [[_COMMUNITY_Community 943|Community 943]]
+- [[_COMMUNITY_Community 944|Community 944]]
+- [[_COMMUNITY_Community 945|Community 945]]
+- [[_COMMUNITY_Community 946|Community 946]]
+- [[_COMMUNITY_Community 947|Community 947]]
+- [[_COMMUNITY_Community 948|Community 948]]
+- [[_COMMUNITY_Community 949|Community 949]]
+- [[_COMMUNITY_Community 950|Community 950]]
+- [[_COMMUNITY_Community 951|Community 951]]
+- [[_COMMUNITY_Community 952|Community 952]]
+- [[_COMMUNITY_Community 953|Community 953]]
+- [[_COMMUNITY_Community 954|Community 954]]
+- [[_COMMUNITY_Community 955|Community 955]]
+- [[_COMMUNITY_Community 956|Community 956]]
+- [[_COMMUNITY_Community 957|Community 957]]
+- [[_COMMUNITY_Community 958|Community 958]]
+- [[_COMMUNITY_Community 959|Community 959]]
+- [[_COMMUNITY_Community 960|Community 960]]
+- [[_COMMUNITY_Community 961|Community 961]]
+- [[_COMMUNITY_Community 963|Community 963]]
+- [[_COMMUNITY_Community 964|Community 964]]
+- [[_COMMUNITY_Community 965|Community 965]]
+- [[_COMMUNITY_Community 966|Community 966]]
+- [[_COMMUNITY_Community 967|Community 967]]
+- [[_COMMUNITY_Community 968|Community 968]]
+- [[_COMMUNITY_Community 969|Community 969]]
+- [[_COMMUNITY_Community 970|Community 970]]
+- [[_COMMUNITY_Community 971|Community 971]]
+- [[_COMMUNITY_Community 972|Community 972]]
+- [[_COMMUNITY_Community 973|Community 973]]
+- [[_COMMUNITY_Community 974|Community 974]]
+- [[_COMMUNITY_Community 975|Community 975]]
+- [[_COMMUNITY_Community 976|Community 976]]
+- [[_COMMUNITY_Community 977|Community 977]]
+- [[_COMMUNITY_Community 978|Community 978]]
+- [[_COMMUNITY_Community 979|Community 979]]
+- [[_COMMUNITY_Community 980|Community 980]]
+- [[_COMMUNITY_Community 981|Community 981]]
+- [[_COMMUNITY_Community 982|Community 982]]
+- [[_COMMUNITY_Community 983|Community 983]]
+- [[_COMMUNITY_Community 984|Community 984]]
+- [[_COMMUNITY_Community 985|Community 985]]
+- [[_COMMUNITY_Community 986|Community 986]]
+- [[_COMMUNITY_Community 987|Community 987]]
+- [[_COMMUNITY_Community 988|Community 988]]
+- [[_COMMUNITY_Community 989|Community 989]]
+- [[_COMMUNITY_Community 990|Community 990]]
+- [[_COMMUNITY_Community 991|Community 991]]
+- [[_COMMUNITY_Community 992|Community 992]]
+- [[_COMMUNITY_Community 993|Community 993]]
+- [[_COMMUNITY_Community 994|Community 994]]
+- [[_COMMUNITY_Community 995|Community 995]]
+- [[_COMMUNITY_Community 996|Community 996]]
+- [[_COMMUNITY_Community 997|Community 997]]
+- [[_COMMUNITY_Community 998|Community 998]]
+- [[_COMMUNITY_Community 999|Community 999]]
+- [[_COMMUNITY_Community 1000|Community 1000]]
+- [[_COMMUNITY_Community 1001|Community 1001]]
+- [[_COMMUNITY_Community 1002|Community 1002]]
+- [[_COMMUNITY_Community 1003|Community 1003]]
+- [[_COMMUNITY_Community 1004|Community 1004]]
+- [[_COMMUNITY_Community 1005|Community 1005]]
+- [[_COMMUNITY_Community 1006|Community 1006]]
+- [[_COMMUNITY_Community 1007|Community 1007]]
+- [[_COMMUNITY_Community 1008|Community 1008]]
+- [[_COMMUNITY_Community 1009|Community 1009]]
+- [[_COMMUNITY_Community 1010|Community 1010]]
+- [[_COMMUNITY_Community 1011|Community 1011]]
+- [[_COMMUNITY_Community 1012|Community 1012]]
+- [[_COMMUNITY_Community 1013|Community 1013]]
+- [[_COMMUNITY_Community 1014|Community 1014]]
+- [[_COMMUNITY_Community 1015|Community 1015]]
+- [[_COMMUNITY_Community 1016|Community 1016]]
+- [[_COMMUNITY_Community 1017|Community 1017]]
+- [[_COMMUNITY_Community 1018|Community 1018]]
+- [[_COMMUNITY_Community 1019|Community 1019]]
+- [[_COMMUNITY_Community 1020|Community 1020]]
+- [[_COMMUNITY_Community 1021|Community 1021]]
+- [[_COMMUNITY_Community 1022|Community 1022]]
+- [[_COMMUNITY_Community 1023|Community 1023]]
+- [[_COMMUNITY_Community 1024|Community 1024]]
+- [[_COMMUNITY_Community 1025|Community 1025]]
+- [[_COMMUNITY_Community 1026|Community 1026]]
+- [[_COMMUNITY_Community 1027|Community 1027]]
+- [[_COMMUNITY_Community 1028|Community 1028]]
+- [[_COMMUNITY_Community 1029|Community 1029]]
+- [[_COMMUNITY_Community 1030|Community 1030]]
+- [[_COMMUNITY_Community 1031|Community 1031]]
+- [[_COMMUNITY_Community 1032|Community 1032]]
+- [[_COMMUNITY_Community 1033|Community 1033]]
+- [[_COMMUNITY_Community 1034|Community 1034]]
+- [[_COMMUNITY_Community 1035|Community 1035]]
+- [[_COMMUNITY_Community 1036|Community 1036]]
+- [[_COMMUNITY_Community 1037|Community 1037]]
+- [[_COMMUNITY_Community 1038|Community 1038]]
+- [[_COMMUNITY_Community 1039|Community 1039]]
+- [[_COMMUNITY_Community 1040|Community 1040]]
+- [[_COMMUNITY_Community 1041|Community 1041]]
+- [[_COMMUNITY_Community 1042|Community 1042]]
+- [[_COMMUNITY_Community 1043|Community 1043]]
+- [[_COMMUNITY_Community 1044|Community 1044]]
+- [[_COMMUNITY_Community 1045|Community 1045]]
+- [[_COMMUNITY_Community 1046|Community 1046]]
+- [[_COMMUNITY_Community 1047|Community 1047]]
+- [[_COMMUNITY_Community 1048|Community 1048]]
+- [[_COMMUNITY_Community 1049|Community 1049]]
+- [[_COMMUNITY_Community 1050|Community 1050]]
+- [[_COMMUNITY_Community 1051|Community 1051]]
+- [[_COMMUNITY_Community 1052|Community 1052]]
+- [[_COMMUNITY_Community 1053|Community 1053]]
+- [[_COMMUNITY_Community 1054|Community 1054]]
+- [[_COMMUNITY_Community 1055|Community 1055]]
+- [[_COMMUNITY_Community 1056|Community 1056]]
+- [[_COMMUNITY_Community 1057|Community 1057]]
+- [[_COMMUNITY_Community 1058|Community 1058]]
+- [[_COMMUNITY_Community 1059|Community 1059]]
+- [[_COMMUNITY_Community 1060|Community 1060]]
+- [[_COMMUNITY_Community 1061|Community 1061]]
+- [[_COMMUNITY_Community 1062|Community 1062]]
+- [[_COMMUNITY_Community 1063|Community 1063]]
+- [[_COMMUNITY_Community 1064|Community 1064]]
+- [[_COMMUNITY_Community 1065|Community 1065]]
+- [[_COMMUNITY_Community 1066|Community 1066]]
+- [[_COMMUNITY_Community 1067|Community 1067]]
+- [[_COMMUNITY_Community 1068|Community 1068]]
+- [[_COMMUNITY_Community 1069|Community 1069]]
+- [[_COMMUNITY_Community 1070|Community 1070]]
+- [[_COMMUNITY_Community 1071|Community 1071]]
+- [[_COMMUNITY_Community 1072|Community 1072]]
+- [[_COMMUNITY_Community 1073|Community 1073]]
+- [[_COMMUNITY_Community 1074|Community 1074]]
+- [[_COMMUNITY_Community 1075|Community 1075]]
+- [[_COMMUNITY_Community 1076|Community 1076]]
+- [[_COMMUNITY_Community 1077|Community 1077]]
+- [[_COMMUNITY_Community 1078|Community 1078]]
+- [[_COMMUNITY_Community 1079|Community 1079]]
+- [[_COMMUNITY_Community 1080|Community 1080]]
+- [[_COMMUNITY_Community 1081|Community 1081]]
+- [[_COMMUNITY_Community 1082|Community 1082]]
+- [[_COMMUNITY_Community 1083|Community 1083]]
+- [[_COMMUNITY_Community 1084|Community 1084]]
+- [[_COMMUNITY_Community 1085|Community 1085]]
+- [[_COMMUNITY_Community 1086|Community 1086]]
+- [[_COMMUNITY_Community 1087|Community 1087]]
+- [[_COMMUNITY_Community 1088|Community 1088]]
+- [[_COMMUNITY_Community 1089|Community 1089]]
+- [[_COMMUNITY_Community 1090|Community 1090]]
+- [[_COMMUNITY_Community 1091|Community 1091]]
+- [[_COMMUNITY_Community 1092|Community 1092]]
+- [[_COMMUNITY_Community 1093|Community 1093]]
+- [[_COMMUNITY_Community 1094|Community 1094]]
+- [[_COMMUNITY_Community 1095|Community 1095]]
+- [[_COMMUNITY_Community 1096|Community 1096]]
+- [[_COMMUNITY_Community 1097|Community 1097]]
+- [[_COMMUNITY_Community 1098|Community 1098]]
+- [[_COMMUNITY_Community 1099|Community 1099]]
+- [[_COMMUNITY_Community 1100|Community 1100]]
+- [[_COMMUNITY_Community 1101|Community 1101]]
+- [[_COMMUNITY_Community 1102|Community 1102]]
+- [[_COMMUNITY_Community 1103|Community 1103]]
+- [[_COMMUNITY_Community 1104|Community 1104]]
+- [[_COMMUNITY_Community 1105|Community 1105]]
+- [[_COMMUNITY_Community 1106|Community 1106]]
+- [[_COMMUNITY_Community 1107|Community 1107]]
+- [[_COMMUNITY_Community 1108|Community 1108]]
+- [[_COMMUNITY_Community 1109|Community 1109]]
+- [[_COMMUNITY_Community 1110|Community 1110]]
+- [[_COMMUNITY_Community 1111|Community 1111]]
+- [[_COMMUNITY_Community 1112|Community 1112]]
+- [[_COMMUNITY_Community 1113|Community 1113]]
+- [[_COMMUNITY_Community 1114|Community 1114]]
+- [[_COMMUNITY_Community 1115|Community 1115]]
+- [[_COMMUNITY_Community 1116|Community 1116]]
+- [[_COMMUNITY_Community 1117|Community 1117]]
+- [[_COMMUNITY_Community 1118|Community 1118]]
+- [[_COMMUNITY_Community 1119|Community 1119]]
+- [[_COMMUNITY_Community 1120|Community 1120]]
+- [[_COMMUNITY_Community 1121|Community 1121]]
+- [[_COMMUNITY_Community 1122|Community 1122]]
+- [[_COMMUNITY_Community 1123|Community 1123]]
+- [[_COMMUNITY_Community 1124|Community 1124]]
+- [[_COMMUNITY_Community 1125|Community 1125]]
+- [[_COMMUNITY_Community 1126|Community 1126]]
+- [[_COMMUNITY_Community 1127|Community 1127]]
+- [[_COMMUNITY_Community 1128|Community 1128]]
+- [[_COMMUNITY_Community 1129|Community 1129]]
+- [[_COMMUNITY_Community 1130|Community 1130]]
+- [[_COMMUNITY_Community 1131|Community 1131]]
+- [[_COMMUNITY_Community 1132|Community 1132]]
+- [[_COMMUNITY_Community 1133|Community 1133]]
+- [[_COMMUNITY_Community 1134|Community 1134]]
+- [[_COMMUNITY_Community 1135|Community 1135]]
+- [[_COMMUNITY_Community 1136|Community 1136]]
+- [[_COMMUNITY_Community 1137|Community 1137]]
+- [[_COMMUNITY_Community 1138|Community 1138]]
+- [[_COMMUNITY_Community 1139|Community 1139]]
+- [[_COMMUNITY_Community 1140|Community 1140]]
+- [[_COMMUNITY_Community 1141|Community 1141]]
+- [[_COMMUNITY_Community 1142|Community 1142]]
+- [[_COMMUNITY_Community 1143|Community 1143]]
+- [[_COMMUNITY_Community 1144|Community 1144]]
+- [[_COMMUNITY_Community 1145|Community 1145]]
+- [[_COMMUNITY_Community 1146|Community 1146]]
+- [[_COMMUNITY_Community 1147|Community 1147]]
+- [[_COMMUNITY_Community 1148|Community 1148]]
+- [[_COMMUNITY_Community 1149|Community 1149]]
+- [[_COMMUNITY_Community 1150|Community 1150]]
+- [[_COMMUNITY_Community 1151|Community 1151]]
+- [[_COMMUNITY_Community 1152|Community 1152]]
+- [[_COMMUNITY_Community 1153|Community 1153]]
+- [[_COMMUNITY_Community 1154|Community 1154]]
+- [[_COMMUNITY_Community 1155|Community 1155]]
+- [[_COMMUNITY_Community 1156|Community 1156]]
+- [[_COMMUNITY_Community 1157|Community 1157]]
+- [[_COMMUNITY_Community 1158|Community 1158]]
+- [[_COMMUNITY_Community 1159|Community 1159]]
+- [[_COMMUNITY_Community 1160|Community 1160]]
+- [[_COMMUNITY_Community 1161|Community 1161]]
+- [[_COMMUNITY_Community 1162|Community 1162]]
+- [[_COMMUNITY_Community 1163|Community 1163]]
+- [[_COMMUNITY_Community 1164|Community 1164]]
+- [[_COMMUNITY_Community 1165|Community 1165]]
+- [[_COMMUNITY_Community 1166|Community 1166]]
+- [[_COMMUNITY_Community 1167|Community 1167]]
+- [[_COMMUNITY_Community 1168|Community 1168]]
+- [[_COMMUNITY_Community 1169|Community 1169]]
+- [[_COMMUNITY_Community 1170|Community 1170]]
+- [[_COMMUNITY_Community 1171|Community 1171]]
+- [[_COMMUNITY_Community 1172|Community 1172]]
+- [[_COMMUNITY_Community 1173|Community 1173]]
+- [[_COMMUNITY_Community 1174|Community 1174]]
+- [[_COMMUNITY_Community 1175|Community 1175]]
+- [[_COMMUNITY_Community 1176|Community 1176]]
+- [[_COMMUNITY_Community 1177|Community 1177]]
+- [[_COMMUNITY_Community 1178|Community 1178]]
+- [[_COMMUNITY_Community 1179|Community 1179]]
+- [[_COMMUNITY_Community 1180|Community 1180]]
+- [[_COMMUNITY_Community 1181|Community 1181]]
+- [[_COMMUNITY_Community 1182|Community 1182]]
+- [[_COMMUNITY_Community 1183|Community 1183]]
+- [[_COMMUNITY_Community 1184|Community 1184]]
+- [[_COMMUNITY_Community 1185|Community 1185]]
+- [[_COMMUNITY_Community 1186|Community 1186]]
+- [[_COMMUNITY_Community 1187|Community 1187]]
+- [[_COMMUNITY_Community 1188|Community 1188]]
+- [[_COMMUNITY_Community 1189|Community 1189]]
+- [[_COMMUNITY_Community 1190|Community 1190]]
+- [[_COMMUNITY_Community 1191|Community 1191]]
+- [[_COMMUNITY_Community 1192|Community 1192]]
+- [[_COMMUNITY_Community 1193|Community 1193]]
+- [[_COMMUNITY_Community 1194|Community 1194]]
+- [[_COMMUNITY_Community 1195|Community 1195]]
+- [[_COMMUNITY_Community 1196|Community 1196]]
+- [[_COMMUNITY_Community 1197|Community 1197]]
+- [[_COMMUNITY_Community 1198|Community 1198]]
+- [[_COMMUNITY_Community 1199|Community 1199]]
+- [[_COMMUNITY_Community 1200|Community 1200]]
+- [[_COMMUNITY_Community 1201|Community 1201]]
+- [[_COMMUNITY_Community 1202|Community 1202]]
+- [[_COMMUNITY_Community 1203|Community 1203]]
+- [[_COMMUNITY_Community 1204|Community 1204]]
+- [[_COMMUNITY_Community 1205|Community 1205]]
+- [[_COMMUNITY_Community 1206|Community 1206]]
+- [[_COMMUNITY_Community 1207|Community 1207]]
+- [[_COMMUNITY_Community 1208|Community 1208]]
+- [[_COMMUNITY_Community 1209|Community 1209]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `Graph` - 149 edges
 2. `Point` - 145 edges
 3. `Point` - 114 edges
-4. `BaseHypothesis` - 86 edges
-5. `BaseStructuralModel` - 85 edges
-6. `ModelOutput` - 83 edges
-7. `HypothesisRegistry` - 82 edges
-8. `ModelComposition` - 81 edges
+4. `ModelComposition` - 97 edges
+5. `BaseHypothesis` - 86 edges
+6. `BaseStructuralModel` - 85 edges
+7. `ModelOutput` - 83 edges
+8. `HypothesisRegistry` - 82 edges
 9. `Dependency` - 68 edges
 10. `RunContext` - 68 edges
 
@@ -913,18 +1188,18 @@
   tests/test_parity_ingest.py → options_lane/src/models.py
 - `test_resolve_replay_latency_ms_cli_override()` --calls--> `resolve_replay_latency_ms()`  [EXTRACTED]
   tests/backtest_pipeline/test_pdf_defensive_ablation.py → backtest_pipeline/src/chi404_latency.py
-- `test_resolve_replay_latency_ms_from_chi404_summary()` --calls--> `resolve_replay_latency_ms()`  [EXTRACTED]
+- `test_resolve_replay_latency_ms_rejects_out_of_band()` --calls--> `resolve_replay_latency_ms()`  [EXTRACTED]
   tests/backtest_pipeline/test_pdf_defensive_ablation.py → backtest_pipeline/src/chi404_latency.py
 
-## Communities (934 total, 163 thin omitted)
+## Communities (1210 total, 220 thin omitted)
 
 ### Community 0 - "Community 0"
 Cohesion: 0.08
 Nodes (24): 10. No live R|Trader logs until guest setup completes, 1. `virsh undefine --remove-all-storage` deleted ISOs, 2. Floppy `autounattend.xml` → license EULA error, 3. Upgrade vs Custom, 4. `on_reboot` was `destroy` (fixed on running domain), 5. VNC click coordinates vs keyboard, 6. `vncdo type` and OOBE password, 7. Wine path deprecated (+16 more)
 
 ### Community 1 - "Community 1"
-Cohesion: 0.13
-Nodes (18): DEFAULT_ROLE_MAPPING, OidcAuthenticator, addr, auth, authErr, identity, jwks, tracer (+10 more)
+Cohesion: 0.14
+Nodes (33): Tests for workbench UI flow_state helpers., test_pick_latest_event_with_aar(), test_poll_campaign_status_missing(), test_resolve_period_event_ignores_manual_while_running(), test_start_campaign_clears_drill_down_keys(), Path, analyst_panel(), _chat_reply() (+25 more)
 
 ### Community 2 - "Community 2"
 Cohesion: 0.04
@@ -955,8 +1230,8 @@ Cohesion: 0.07
 Nodes (28): detected_event_types, input_files, connector, missing_event_types, note, limitations, connector, missing_event_types (+20 more)
 
 ### Community 9 - "Community 9"
-Cohesion: 0.16
-Nodes (17): Any, float, ModelOutput, HybridExecutionOutput, as_optimal_spread(), as_reservation_price(), hybrid_reservation(), PDF_MODEL_4 — Avellaneda-Stoikov hybrid execution (reads Model 1 + 3). (+9 more)
+Cohesion: 0.08
+Nodes (37): Any, bool, datetime, DefensiveConfig, float, int, MBOEvent, str (+29 more)
 
 ### Community 10 - "Community 10"
 Cohesion: 0.05
@@ -979,8 +1254,8 @@ Cohesion: 0.09
 Nodes (21): checks, bad_prices, bad_sizes, crossed_books, duplicates, local_timestamp_monotonicity_violations, locked_books, malformed_order_fill_events (+13 more)
 
 ### Community 15 - "Community 15"
-Cohesion: 0.17
-Nodes (24): float, LegQuote, ParityGroup, str, bool, float, int, LegQuote (+16 more)
+Cohesion: 0.16
+Nodes (32): bool, float, int, LegQuote, ParityGroup, QuoteSnapshot, str, QuoteSnapshot (+24 more)
 
 ### Community 16 - "Community 16"
 Cohesion: 0.33
@@ -991,16 +1266,16 @@ Cohesion: 0.15
 Nodes (20): _parse_comma_log_line(), _parse_csv_row(), _parse_export_timestamp(), _parse_log_line(), R|Trader export: timestamp,Trade,MES,5000.00,1, Watch R|Trader Pro export/log files (Wine on CHI404 only)., Parse R|Trader export prefix: 2026-05-30 01:00:00.000000, RTraderBridgeConnector (+12 more)
 
 ### Community 18 - "Community 18"
-Cohesion: 0.12
-Nodes (12): BookSlopeCollapse, DailyLossLimitDefense, MicroContractRetailLag, NqToMnqLeadLag, Hypothesis 11: Book slope collapse, Hypothesis 21: Round-number stop sweep, Hypothesis 43: Rebate trap avoidance, Hypothesis 17: NQ -> MNQ lead-lag (+4 more)
+Cohesion: 0.04
+Nodes (97): BaseHypothesis, int, str, AbsorptionFade, AggressorDecelerationFade, BookSlopeCollapse, CancelStormBeforeMove, CutoffPanicExits (+89 more)
 
 ### Community 19 - "Community 19"
 Cohesion: 0.08
 Nodes (25): breakeven_ms, breakeven_us, cpp_hot_path_runtime_us, cpp_replay_available, data_period, event_id, lane_measured, lane_pass (+17 more)
 
 ### Community 20 - "Community 20"
-Cohesion: 0.15
-Nodes (23): Any, float, Path, str, main(), Any, int, Path (+15 more)
+Cohesion: 0.07
+Nodes (28): breakeven_ms, breakeven_us, cpp_hot_path_runtime_us, cpp_replay_available, cpp_stack_checks, cpp_stack_verified, cpp_stack_verify_reason, data_period (+20 more)
 
 ### Community 21 - "Community 21"
 Cohesion: 0.06
@@ -1183,8 +1458,8 @@ Cohesion: 0.06
 Nodes (35): adverse_selection_ticks, backtest_latency_ms, chi404_measured_speed, backtest_latency_ms, backtest_latency_source, cpu_loaded_p99_us, gateway_ping_p99_ms, network_worst_p99_us (+27 more)
 
 ### Community 66 - "Community 66"
-Cohesion: 0.15
-Nodes (12): cpu_steal_max_pct, cyclictest_p99_max_us, epsilon_halt_us, epsilon_last_offset_halt_us, epsilon_rms_halt_us, epsilon_warn_us, load_max_1m, network_p99_max_us (+4 more)
+Cohesion: 0.12
+Nodes (15): cpu_steal_max_pct, cyclictest_p99_max_us, epsilon_halt_us, epsilon_last_offset_halt_us, epsilon_rms_halt_us, epsilon_warn_us, load_max_1m, network_p99_max_us (+7 more)
 
 ### Community 67 - "Community 67"
 Cohesion: 0.18
@@ -1231,8 +1506,8 @@ Cohesion: 0.22
 Nodes (8): best_ask, best_bid, depth_events, limitations, quote_events, spread, status, trade_events
 
 ### Community 78 - "Community 78"
-Cohesion: 0.09
-Nodes (30): Any, float, ModelOutput, str, str, HawkesToxicOutput, PDF structural models package., DealerHedgingModel (+22 more)
+Cohesion: 0.16
+Nodes (18): Any, float, ModelOutput, str, HawkesToxicOutput, hawkes_intensity(), HawkesToxicFlowModel, multivariate_hawkes_intensity() (+10 more)
 
 ### Community 79 - "Community 79"
 Cohesion: 0.13
@@ -1255,24 +1530,24 @@ Cohesion: 0.18
 Nodes (10): code:bash (git clone --recurse-submodules https://github.com/javin23863), code:block2 (┌─────────────────────────────────────────┐), code:bash (# Tests), Common commands, Contributing, hft3, Major subsystems, Quick start (+2 more)
 
 ### Community 84 - "Community 84"
-Cohesion: 0.19
-Nodes (17): int, Namespace, Any, str, Any, str, Namespace, load_config() (+9 more)
+Cohesion: 0.36
+Nodes (7): Path, TrialConfig, test_capture_refuses_windows_rtrader(), test_parse_log_line_rejects_bad_price(), test_rtrader_bridge_refuses_windows(), test_unattended_refuses_windows(), trial_cfg()
 
 ### Community 85 - "Community 85"
 Cohesion: 0.20
 Nodes (9): Audit Friction Report, code:bash (python -m pytest tests/ -q), Phase A — Orchestration (fixed), Phase B — Honest gates (fixed), Phase C — Math integrity (fixed), Phase D — Production parity (mostly fixed), Remaining known limitations, Summary (+1 more)
 
 ### Community 86 - "Community 86"
-Cohesion: 0.11
-Nodes (15): BookResetEvent, LoaderReport, L3 NPZ loader with gap detection and book reset events., Dataset manifest and history sufficiency gate., LoaderReport, bool, int, MBOEvent (+7 more)
+Cohesion: 0.18
+Nodes (10): LoaderReport, Dataset manifest and history sufficiency gate., LoaderReport, bool, int, Any, float, int (+2 more)
 
 ### Community 87 - "Community 87"
 Cohesion: 0.25
 Nodes (8): LogProbQueueModel2, aggregated_net_pnl, approval_status, latency_bands_tested, model_id, queue_model, tail_risk_es_95, timestamp
 
 ### Community 88 - "Community 88"
-Cohesion: 0.07
-Nodes (73): CatalogEntry, CompositionTrace, CatalogEntry, CompositionTrace, CompositionTraceStep, DefensiveStub, ModelComposition, Defensive composition types (catalog + campaign stubs). (+65 more)
+Cohesion: 0.06
+Nodes (77): CatalogEntry, CompositionTrace, CatalogEntry, CompositionTrace, CompositionTraceStep, DefensiveStub, ModelComposition, Defensive composition types (catalog + campaign stubs). (+69 more)
 
 ### Community 89 - "Community 89"
 Cohesion: 0.25
@@ -1319,8 +1594,8 @@ Cohesion: 0.13
 Nodes (14): backtest_latency_ms, backtest_latency_note, event_id, events, live_orders_sent, npz_path, npz_source, primary_research_engine (+6 more)
 
 ### Community 100 - "Community 100"
-Cohesion: 0.08
-Nodes (45): ModelComposition, Path, Popen, get_job_status(), job_dir_for(), list_active_campaigns(), Background campaign jobs with cooperative pause/stop., set_control() (+37 more)
+Cohesion: 0.10
+Nodes (40): ModelComposition, Path, Popen, get_job_status(), job_dir_for(), list_active_campaigns(), Background campaign jobs with cooperative pause/stop., set_control() (+32 more)
 
 ### Community 101 - "Community 101"
 Cohesion: 0.29
@@ -1347,8 +1622,8 @@ Cohesion: 0.15
 Nodes (17): cyclictest_p99_us, cyclictest_p99_us, jitter_pass, pass, pass_fail, run_id, tuning_dir, 11 (+9 more)
 
 ### Community 108 - "Community 108"
-Cohesion: 0.14
-Nodes (19): float, _event_meta(), _mbo_sequence(), Unit tests for HybridExecutionStrategy (in-memory MBO steps, no NPZ file)., When internal MBO book has BBO, VPIN mid must not follow divergent hbt.depth., TRADE before book BBO: VPIN uses hbt.depth mid fallback., test_cancel_quote_flag_cancels_resting_orders(), test_event_window_end_ns_parses_iso() (+11 more)
+Cohesion: 0.27
+Nodes (14): _event_meta(), _mbo_sequence(), Unit tests for HybridExecutionStrategy (in-memory MBO steps, no NPZ file)., When internal MBO book has BBO, VPIN mid must not follow divergent hbt.depth., TRADE before book BBO: VPIN uses hbt.depth mid fallback., test_cancel_quote_flag_cancels_resting_orders(), test_event_window_end_ns_parses_iso(), test_event_window_start_ns_parses_iso() (+6 more)
 
 ### Community 109 - "Community 109"
 Cohesion: 0.18
@@ -1359,32 +1634,32 @@ Cohesion: 0.20
 Nodes (9): accounts, app_name, environment, error, next_steps, order_probe, status, ticks (+1 more)
 
 ### Community 112 - "Community 112"
-Cohesion: 0.05
-Nodes (100): _check_cyclictest_p99(), _check_irq_net(), _check_jitter_gate(), _check_manifest(), _check_nic_rings(), main(), _run(), _tool_available() (+92 more)
+Cohesion: 0.23
+Nodes (32): _build_classifications(), _build_complete_picture(), _classification_block(), _classify_tier(), _configured_hosts(), _cyclictest_p99_max(), _format_leg_status(), _gateway_rtt_from_summary() (+24 more)
 
 ### Community 113 - "Community 113"
 Cohesion: 0.22
 Nodes (9): research_operating_tier, bottleneck, dominant_rtt_ms, recommendation, recommended_latency_bands_ms, source, status, tier_ms (+1 more)
 
 ### Community 114 - "Community 114"
-Cohesion: 0.26
-Nodes (13): collect_download_specs(), discover_groups(), download_leg_window(), Budget-gated Databento download for options parity legs., Return unique download jobs from parity universe (no hardcoded symbols)., Download one leg via DatabentoResearchClient budget gate.     Requires DATABENTO, LegSpec, Any (+5 more)
+Cohesion: 0.07
+Nodes (26): campaign_id, composition, defensive_stubs, primary_model_id, model_id, overfit_risk, param_hash, periods (+18 more)
 
 ### Community 116 - "Community 116"
 Cohesion: 0.25
 Nodes (8): rithmic_trial_profile, connector, data_capture_report, limitations, order_rtt_ms, path, status, trusted
 
 ### Community 117 - "Community 117"
-Cohesion: 0.15
-Nodes (18): ArbFill, MultiLegParityBacktester, ParityBacktestResult, _PendingArb, Multi-leg parity arb backtest with latency deferral., OptionsFeeModel, Config-driven options fee model for parity arb., Per-leg fees keyed by group tick_size / leg count — no hardcoded products. (+10 more)
+Cohesion: 0.11
+Nodes (30): ArbFill, ParityBacktestResult, _PendingArb, Multi-leg parity arb backtest with latency deferral., write_research_card(), OptionsFeeModel, Config-driven options fee model for parity arb., Per-leg fees keyed by group tick_size / leg count — no hardcoded products. (+22 more)
 
 ### Community 118 - "Community 118"
 Cohesion: 0.29
 Nodes (6): setup_rithmic_chi404.sh script, RITHMIC_ENVIRONMENT, RITHMIC_GATEWAY, RITHMIC_TRIAL_CONFIG, RITHMIC_TRIAL_CONNECTOR, RITHMIC_TRIAL_ENABLED
 
 ### Community 119 - "Community 119"
-Cohesion: 0.11
-Nodes (46): HypothesisAdapter, Adapter: BaseHypothesis -> WorkbenchModel., OptionsLaneAdapter, Adapter: options_lane fixture backtest for PDF_MODEL_5 (B7 quarantine)., Runs options_lane.pipeline fixture-backtest; artifacts under research_cards/pari, Adapter: BaseStructuralModel -> WorkbenchModel., StructuralModelAdapter, BacktestResult (+38 more)
+Cohesion: 0.08
+Nodes (60): HypothesisAdapter, Adapter: BaseHypothesis -> WorkbenchModel., OptionsLaneAdapter, Adapter: options_lane fixture backtest for PDF_MODEL_5 (B7 quarantine)., Runs options_lane.pipeline fixture-backtest; artifacts under research_cards/pari, Adapter: BaseStructuralModel -> WorkbenchModel., StructuralModelAdapter, BacktestResult (+52 more)
 
 ### Community 121 - "Community 121"
 Cohesion: 0.11
@@ -1427,8 +1702,8 @@ Cohesion: 0.67
 Nodes (3): MBOEventCpp, main(), make_event()
 
 ### Community 164 - "Community 164"
-Cohesion: 0.10
-Nodes (41): bool, str, Any, DefensiveConfig, float, int, Path, str (+33 more)
+Cohesion: 0.09
+Nodes (51): bool, str, Any, DefensiveConfig, float, int, Path, str (+43 more)
 
 ### Community 165 - "Community 165"
 Cohesion: 0.33
@@ -1519,8 +1794,8 @@ Cohesion: 0.05
 Nodes (36): type, type, type, type, type, type, type, type (+28 more)
 
 ### Community 205 - "Community 205"
-Cohesion: 0.16
-Nodes (22): BookPressureOutput, float, int, ModelOutput, OrderBook, compute_level1_ofi_event(), compute_mlofi_vector(), _level_ofi_delta() (+14 more)
+Cohesion: 0.07
+Nodes (26): campaign_id, composition, defensive_stubs, primary_model_id, model_id, overfit_risk, param_hash, periods (+18 more)
 
 ### Community 206 - "Community 206"
 Cohesion: 0.07
@@ -1583,20 +1858,20 @@ Cohesion: 0.22
 Nodes (9): hyp_5_spread_blowout, adverse_selection_ticks, expectancy_usd, hypothesis_id, hypothesis_name, net_pnl_usd, num_trades, tail_loss_usd (+1 more)
 
 ### Community 230 - "Community 230"
-Cohesion: 0.19
-Nodes (21): DealerHedgingOutput, Any, bool, float, ModelOutput, bs_charm(), bs_d1_d2(), bs_gamma() (+13 more)
+Cohesion: 0.18
+Nodes (22): DealerHedgingOutput, Any, bool, float, ModelOutput, bs_charm(), bs_d1_d2(), bs_gamma() (+14 more)
 
 ### Community 231 - "Community 231"
 Cohesion: 0.06
-Nodes (24): Graph, Maybe add a new cyclic predicate from given congruent segments., Add a new cyclic predicate that 4 points are concyclic., Check if the angle is equal to a certain constant., Check if an angle has a constant value., Check if two angles are equal., Check whether a ratio is equal to some given constant., Check whether a ratio is equal to some constant. (+16 more)
+Nodes (21): Graph, Dependency list of why 8 points are collinear., Check if the angle is equal to a certain constant., Check if an angle has a constant value., Check if two angles are equal., Check whether a ratio is equal to some given constant., Check whether a ratio is equal to some constant., Check if 8 points make an eqratio predicate. (+13 more)
 
 ### Community 232 - "Community 232"
-Cohesion: 0.06
-Nodes (42): Clause, compare_fn(), Construction, Definition, _gcd(), hashed(), hashed_txt(), isint() (+34 more)
+Cohesion: 0.05
+Nodes (49): Clause, compare_fn(), Construction, Definition, Dependency, _gcd(), hashed(), hashed_txt() (+41 more)
 
 ### Community 233 - "Community 233"
-Cohesion: 0.08
-Nodes (30): Make that two nodes x and y are equal, i.e. merge their value node., Add a new predicate that 4 points (2 lines) are parallel., Get or create an angle between two Direction d1 and d2., Add a new parallel or collinear predicate., Maybe add a new parallel predicate from perp predicate., Add a new perpendicular predicate from 4 points (2 lines)., Get or create a Segment object between two Points p1 and p2., Add that two segments (4 points) are congruent. (+22 more)
+Cohesion: 0.09
+Nodes (27): Make that two nodes x and y are equal, i.e. merge their value node., Add a new predicate that 4 points (2 lines) are parallel., Add a new parallel or collinear predicate., Maybe add a new parallel predicate from perp predicate., Add a new perpendicular predicate from 4 points (2 lines)., Add that two segments (4 points) are congruent., Add ab/cd = mn/pq in case either two of (ab,cd,mn,pq) are equal., Add ab/cd = mn/pq in case maybe either two of (ab,cd,mn,pq) are equal. (+19 more)
 
 ### Community 234 - "Community 234"
 Cohesion: 0.10
@@ -1611,8 +1886,8 @@ Cohesion: 0.13
 Nodes (15): pnl_by_injection_us, 0, 100, 1000, 10000, 100000, 1000000, 2000 (+7 more)
 
 ### Community 237 - "Community 237"
-Cohesion: 0.12
-Nodes (26): audit_records_to_dataframe(), build_audit_timestamps_ns(), Per-trade audit timestamps — C++-authoritative latency fields., Construct absolute timestamps from exchange time + C++ latency budget., summarize_latency_us(), TradeAuditRecord, DataFrame, analyze_latency_viability() (+18 more)
+Cohesion: 0.07
+Nodes (26): campaign_id, composition, defensive_stubs, primary_model_id, model_id, overfit_risk, param_hash, periods (+18 more)
 
 ### Community 238 - "Community 238"
 Cohesion: 0.20
@@ -1631,12 +1906,12 @@ Cohesion: 0.33
 Nodes (5): CHI404 measured speed, Engine 1: hftbacktest_loop (queue-realistic), Engine 2: event_accurate_mbo (research path), Event replay: CPI_2024_09_11_TIGHT, Limits
 
 ### Community 242 - "Community 242"
-Cohesion: 0.09
-Nodes (42): Any, bool, datetime, DefensiveConfig, int, MBOEvent, str, Any (+34 more)
+Cohesion: 0.11
+Nodes (23): Any, float, int, ModelOutput, _betainc_cf(), bvc_buy_volume(), compute_vpin(), Add trade/bar volume; flush bucket when target reached. (+15 more)
 
 ### Community 243 - "Community 243"
-Cohesion: 0.17
-Nodes (19): Any, float, ModelOutput, str, ctd_switch_threshold(), delivery_cost(), implied_repo_rate(), Cost of delivery: bond price - futures * CF. (+11 more)
+Cohesion: 0.14
+Nodes (21): Any, float, int, ModelOutput, QuantumSpreadOutput, bessel_i0(), collapse_risk(), QuantumSpreadDefenseModel (+13 more)
 
 ### Community 244 - "Community 244"
 Cohesion: 0.07
@@ -1656,7 +1931,7 @@ Nodes (22): breakeven_ms, data_period, event_id, lane_measured, lane_pass, lane_
 
 ### Community 248 - "Community 248"
 Cohesion: 0.04
-Nodes (72): L3Loader, Wrap NPZ feed with sequence/timestamp quality checks., DatasetManifest, LatencyViability, LatencyPolicy, LatencyViability, generate_hyp_research_card(), generate_pdf_research_card() (+64 more)
+Nodes (91): audit_records_to_dataframe(), Per-trade audit timestamps — C++-authoritative latency fields., summarize_latency_us(), L3Loader, Wrap NPZ feed with sequence/timestamp quality checks., DatasetManifest, analyze_latency_viability(), classify_lane() (+83 more)
 
 ### Community 250 - "Community 250"
 Cohesion: 0.20
@@ -1703,8 +1978,8 @@ Cohesion: 0.07
 Nodes (26): campaign_id, composition, defensive_stubs, primary_model_id, model_id, overfit_risk, param_hash, periods (+18 more)
 
 ### Community 262 - "Community 262"
-Cohesion: 0.10
-Nodes (27): buildConfig(), buildConnection(), buildLink(), buildMapping(), buildPrimaryKey(), buildProperties(), buildSync(), ConflictResolution (+19 more)
+Cohesion: 0.07
+Nodes (28): campaign_id, composition, defensive_stubs, primary_model_id, model_id, overfit_risk, param_hash, periods (+20 more)
 
 ### Community 263 - "Community 263"
 Cohesion: 0.14
@@ -1783,12 +2058,12 @@ Cohesion: 0.04
 Nodes (46): breakeven_ms, breakeven_us, cpp_hot_path_runtime_us, cpp_replay_available, data_period, event_id, lane_measured, lane_pass (+38 more)
 
 ### Community 282 - "Community 282"
-Cohesion: 0.16
-Nodes (38): Angle, Circle, Direction, Length, Line, Measure, Point, Ratio (+30 more)
+Cohesion: 0.12
+Nodes (43): Angle, Circle, Direction, Length, Line, Measure, Point, Ratio (+35 more)
 
 ### Community 283 - "Community 283"
-Cohesion: 0.14
-Nodes (24): bool, float, int, str, BaseHypothesis, DataFrame, float, int (+16 more)
+Cohesion: 0.08
+Nodes (47): AggregateMode, bool, float, int, str, BaseHypothesis, bool, float (+39 more)
 
 ### Community 284 - "Community 284"
 Cohesion: 0.50
@@ -1819,8 +2094,8 @@ Cohesion: 0.08
 Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
 
 ### Community 291 - "Community 291"
-Cohesion: 0.06
-Nodes (87): campaign_preview(), catalog_years_available(), list_campaign_events(), list_personal_events(), load_model_binding(), load_periods(), load_sim_shadow_config(), load_walk_forward_config() (+79 more)
+Cohesion: 0.09
+Nodes (52): campaign_preview(), catalog_years_available(), list_campaign_events(), list_personal_events(), load_model_binding(), load_periods(), load_sim_shadow_config(), load_walk_forward_config() (+44 more)
 
 ### Community 296 - "Community 296"
 Cohesion: 0.13
@@ -1907,8 +2182,8 @@ Cohesion: 0.07
 Nodes (26): campaign_id, composition, defensive_stubs, primary_model_id, model_id, overfit_risk, param_hash, periods (+18 more)
 
 ### Community 320 - "Community 320"
-Cohesion: 0.08
-Nodes (32): str, download_events(), estimate_download_cost_usd(), missing_for_campaign(), Point-in-time Databento event-window download (never multi-year range)., Sum Databento get_cost for missing event windows (0 if no API key or estimate fa, Download missing event windows via Databento; convert to data/npz/., EventSpec (+24 more)
+Cohesion: 0.07
+Nodes (28): campaign_id, composition, defensive_stubs, primary_model_id, model_id, overfit_risk, param_hash, periods (+20 more)
 
 ### Community 321 - "Community 321"
 Cohesion: 0.08
@@ -1975,8 +2250,8 @@ Cohesion: 0.08
 Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
 
 ### Community 337 - "Community 337"
-Cohesion: 0.18
-Nodes (10): CLI, code:bash (python workbench/scripts/generate_model_event_binding.py), code:bash (python -m workbench campaign --model HYP_5 --symbol MES.v.0 ), Defensive composition (frozen at campaign start), Per-model events, Personal sandbox, Point-in-time data (not 10-year continuous MBO), Stages (+2 more)
+Cohesion: 0.17
+Nodes (11): CLI, code:bash (python workbench/scripts/generate_model_event_binding.py), code:bash (python -m workbench campaign --model HYP_5 --symbol MES.v.0 ), Defensive composition (frozen at campaign start), Per-model events, Personal sandbox, Point-in-time data (not 10-year continuous MBO), Stages (+3 more)
 
 ### Community 338 - "Community 338"
 Cohesion: 0.22
@@ -2051,8 +2326,8 @@ Cohesion: 0.08
 Nodes (25): breakeven_ms, breakeven_us, cpp_hot_path_runtime_us, cpp_replay_available, data_period, event_id, lane_measured, lane_pass (+17 more)
 
 ### Community 364 - "Community 364"
-Cohesion: 0.17
-Nodes (19): Any, float, ModelOutput, ndarray, StochasticThermoOutput, free_energy(), gibbs_probabilities(), partition_function() (+11 more)
+Cohesion: 0.06
+Nodes (81): _events_for_years(), _git_sha(), load_matrix_rows(), MatrixFoldDataError, _npz_hash(), Full parameter-matrix IS/OOS backtest runner for WFC., Raised when required fold NPZ data is missing., _run_events() (+73 more)
 
 ### Community 365 - "Community 365"
 Cohesion: 0.09
@@ -2063,8 +2338,8 @@ Cohesion: 0.09
 Nodes (21): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+13 more)
 
 ### Community 367 - "Community 367"
-Cohesion: 0.24
-Nodes (10): MarketState, bool, float, int, str, HashMapMarketDepthBacktest, MarketState, CombinedHypothesisStrategy (+2 more)
+Cohesion: 0.13
+Nodes (18): DEFAULT_ROLE_MAPPING, OidcAuthenticator, addr, auth, authErr, identity, jwks, tracer (+10 more)
 
 ### Community 368 - "Community 368"
 Cohesion: 0.11
@@ -2123,8 +2398,8 @@ Cohesion: 0.13
 Nodes (15): pnl_by_latency, 0.0, 0.05, 0.1, 0.25, 0.5, 1000.0, 100.0 (+7 more)
 
 ### Community 382 - "Community 382"
-Cohesion: 0.17
-Nodes (19): Any, float, int, ModelOutput, str, conditional_entropy(), PDF_MODEL_8 — Transfer Entropy lead-lag (hft_framework_developer_prompt.pdf Modu, Discrete Shannon entropy H(X) = -sum p log p. (+11 more)
+Cohesion: 0.11
+Nodes (27): Any, float, int, ModelOutput, str, str, PDF structural models package., conditional_entropy() (+19 more)
 
 ### Community 383 - "Community 383"
 Cohesion: 0.07
@@ -2527,8 +2802,8 @@ Cohesion: 0.17
 Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
 
 ### Community 517 - "Community 517"
-Cohesion: 0.23
-Nodes (19): Post-run after-action layer — OpenFoundry bridge, packet, symbolic, LLM., Any, int, str, Any, bool, Path, str (+11 more)
+Cohesion: 0.21
+Nodes (20): build_kg_slice(), ingest_run(), _load_net_pnl(), Any, float, int, Path, str (+12 more)
 
 ### Community 518 - "Community 518"
 Cohesion: 0.06
@@ -2547,8 +2822,8 @@ Cohesion: 0.33
 Nodes (5): artifact_root, campaign_mode, fixture, model_id, symbol
 
 ### Community 524 - "Community 524"
-Cohesion: 0.14
-Nodes (23): get_proof_steps(), Extract proof steps from the built DAG., Run DD until saturation or goal found., Alternate between DD and AR until goal is found., saturate_or_goal(), solve(), Dependency, Dependency is a predicate that other predicates depend on. (+15 more)
+Cohesion: 0.21
+Nodes (16): get_proof_steps(), Extract proof steps from the built DAG., Run DD until saturation or goal found., Alternate between DD and AR until goal is found., saturate_or_goal(), solve(), bool, Clause (+8 more)
 
 ### Community 525 - "Community 525"
 Cohesion: 0.11
@@ -2587,8 +2862,8 @@ Cohesion: 0.13
 Nodes (15): pnl_by_latency, 0.0, 0.05, 0.1, 0.25, 0.5, 1000.0, 100.0 (+7 more)
 
 ### Community 543 - "Community 543"
-Cohesion: 0.07
-Nodes (37): Resolve replay NPZ paths for Rithmic trial vs Databento event windows., Return Databento MBO NPZ path for a macro event_id from events.csv., Return quarantined Rithmic trial replay NPZ for a capture session date., resolve_event_npz(), resolve_trial_npz(), Path, str, Any (+29 more)
+Cohesion: 0.06
+Nodes (54): Resolve replay NPZ paths for Rithmic trial vs Databento event windows., Return Databento MBO NPZ path for a macro event_id from events.csv., Return quarantined Rithmic trial replay NPZ for a capture session date., resolve_event_npz(), resolve_trial_npz(), Path, str, Any (+46 more)
 
 ### Community 544 - "Community 544"
 Cohesion: 0.13
@@ -2612,7 +2887,7 @@ Nodes (12): Computes attention over a sequence of inputs.      Args:       xs: i
 
 ### Community 549 - "Community 549"
 Cohesion: 0.10
-Nodes (21): Any, float, str, Lightweight required-field check (schema_v1.json mirror)., validate_packet_schema(), _chain_tolerance_us(), check_latency_invariants(), Deterministic latency invariant checks (AlphaGeometry neuro-symbolic pattern). (+13 more)
+Nodes (21): Any, float, str, Lightweight required-field check (schema_v1.json mirror)., Lightweight required-field check (schema_v1.json mirror)., validate_packet_schema(), _chain_tolerance_us(), check_latency_invariants() (+13 more)
 
 ### Community 550 - "Community 550"
 Cohesion: 0.31
@@ -2632,7 +2907,7 @@ Nodes (13): _gcd(), map_symbol(), map_symbol_inv(), pretty(), pretty2a(), pretty
 
 ### Community 555 - "Community 555"
 Cohesion: 0.07
-Nodes (49): ActionResponse, fhirGet(), fhirGetRaw(), graphql(), GraphQLResponse, restGet(), RestItemResponse, RestListResponse (+41 more)
+Nodes (50): fn, ActionResponse, fhirGet(), fhirGetRaw(), graphql(), GraphQLResponse, restGet(), RestItemResponse (+42 more)
 
 ### Community 556 - "Community 556"
 Cohesion: 0.18
@@ -2647,8 +2922,8 @@ Cohesion: 0.15
 Nodes (12): error, evaluate_only, event_results, events_missing, events_run, expectancy, gate_pass, name (+4 more)
 
 ### Community 559 - "Community 559"
-Cohesion: 0.19
-Nodes (13): LiveCapture, FixtureConnector, Synthetic trial events for CI and offline pipeline tests., Any, Path, str, TrialConfig, MonkeyPatch (+5 more)
+Cohesion: 0.08
+Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
 
 ### Community 560 - "Community 560"
 Cohesion: 0.17
@@ -2659,8 +2934,8 @@ Cohesion: 0.25
 Nodes (8): result, balance, fee, num_trades, position, skipped, steps, trading_volume
 
 ### Community 562 - "Community 562"
-Cohesion: 0.33
-Nodes (10): build_kg_slice(), ingest_run(), _load_net_pnl(), Any, float, int, Path, str (+2 more)
+Cohesion: 0.07
+Nodes (27): wfc, artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, cost_adjusted_pearson, cost_adjusted_spearman, drawdown_pass, fold_correlations (+19 more)
 
 ### Community 563 - "Community 563"
 Cohesion: 0.17
@@ -2695,20 +2970,20 @@ Cohesion: 0.29
 Nodes (9): Any, float, int, Path, str, find_similar_runs(), _load_nodes(), Rule-based KG queries for similar workbench runs. (+1 more)
 
 ### Community 571 - "Community 571"
-Cohesion: 0.45
-Nodes (12): Any, int, Path, str, append_edges(), _append_jsonl(), append_nodes(), _edge_key() (+4 more)
+Cohesion: 0.36
+Nodes (13): Ingest a workbench run into the file-backed KG., Any, int, Path, str, append_edges(), _append_jsonl(), append_nodes() (+5 more)
 
 ### Community 572 - "Community 572"
 Cohesion: 0.42
 Nodes (11): default_connector_path(), default_vendor_lock_path(), load_connector(), Any, Path, str, Load OpenFoundry connector YAML and vendor pins., read_vendor_lock() (+3 more)
 
 ### Community 574 - "Community 574"
-Cohesion: 0.15
-Nodes (20): Any, float, int, ModelOutput, QuantumSpreadOutput, bessel_i0(), collapse_risk(), PDF_MODEL_9 — Quantum spread defense (hft_framework_developer_prompt.pdf Module (+12 more)
+Cohesion: 0.07
+Nodes (28): campaign_id, composition, defensive_stubs, primary_model_id, model_id, overfit_risk, param_hash, periods (+20 more)
 
 ### Community 575 - "Community 575"
-Cohesion: 0.11
-Nodes (18): bool, Path, str, bool, EsToMesLeadLag, Hypothesis 16: ES -> MES lead-lag, get_active_hypotheses(), HypothesisRegistry (+10 more)
+Cohesion: 0.20
+Nodes (9): bool, Path, str, bool, main(), Master offline orchestrator (pre-bare-metal): probe download -> convert -> resea, Generate 44 per-hypothesis research cards + HftBacktest combined replay + fills, Per-hypothesis SignalBacktester matrix. HftBacktest combined is opt-in (skip_hft (+1 more)
 
 ### Community 576 - "Community 576"
 Cohesion: 0.25
@@ -2719,8 +2994,8 @@ Cohesion: 0.07
 Nodes (41): CelClient, CelEvaluatorClient, CircuitBreaker, CircuitState, defaultProtoPath(), ProtoBatchEvalRequest, ProtoBatchEvalResponse, ProtoBatchEvalResult (+33 more)
 
 ### Community 578 - "Community 578"
-Cohesion: 0.31
-Nodes (10): bool, float, int, str, _fetch_tags(), generate(), GenerateResult, ollama_available() (+2 more)
+Cohesion: 0.20
+Nodes (14): bool, float, int, str, _fetch_tags(), generate(), GenerateResult, ollama_available() (+6 more)
 
 ### Community 579 - "Community 579"
 Cohesion: 0.29
@@ -2762,6 +3037,10 @@ Nodes (7): CLI entrypoints, Code map, code:bash (python -m workbench list), code
 Cohesion: 0.50
 Nodes (3): Documentation index (read in this order), Subsystem deep dives (after the path above), Vendor submodules
 
+### Community 600 - "Community 600"
+Cohesion: 0.07
+Nodes (27): wfc, artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, cost_adjusted_pearson, cost_adjusted_spearman, drawdown_pass, fold_correlations (+19 more)
+
 ### Community 602 - "Community 602"
 Cohesion: 0.50
 Nodes (4): simulation_fidelity, cpp_replay_available, matching_config, queue_tracker_status
@@ -2787,8 +3066,8 @@ Cohesion: 0.08
 Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
 
 ### Community 622 - "Community 622"
-Cohesion: 0.09
-Nodes (22): ACTION_CTX, ACTOR, createAllowAllSecurity(), createMockCelEvaluator(), data, denyExecutor, evalCelExpression(), { exec, calls } (+14 more)
+Cohesion: 0.07
+Nodes (35): ActionError, ActionEventPublisher, ActionExecutorConfig, AuditWriter, CelEvalResult, CelEvaluator, ChangeType, LinkTupleMap (+27 more)
 
 ### Community 623 - "Community 623"
 Cohesion: 0.06
@@ -2887,8 +3166,8 @@ Cohesion: 0.15
 Nodes (13): cpp_latency_profile, cpp_decision_compute_p50_us, cpp_decision_compute_p95_us, cpp_decision_compute_p99_us, gateway_ack_p50_us, gateway_ack_p95_us, gateway_ack_p99_us, measured_production_p99_us (+5 more)
 
 ### Community 647 - "Community 647"
-Cohesion: 0.20
-Nodes (19): float, LegQuote, RateSpec, Data models for config-driven put/call parity groups., is_actionable(), _fair_quotes(), _futures_group(), float (+11 more)
+Cohesion: 0.07
+Nodes (27): wfc, artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, cost_adjusted_pearson, cost_adjusted_spearman, drawdown_pass, fold_correlations (+19 more)
 
 ### Community 648 - "Community 648"
 Cohesion: 0.06
@@ -2949,10 +3228,6 @@ Nodes (27): 5.1.1 Action Versioning, 5.1 Action Manifest, 5.2.1 CEL Environment,
 ### Community 662 - "Community 662"
 Cohesion: 0.08
 Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
-
-### Community 663 - "Community 663"
-Cohesion: 0.13
-Nodes (9): LinkManagerConfig, tracer, formatUUID(), generateUUIDv7(), InMemoryObjectSetStore, baseDef, noActor, other (+1 more)
 
 ### Community 664 - "Community 664"
 Cohesion: 0.08
@@ -3023,7 +3298,7 @@ Cohesion: 0.10
 Nodes (18): diff(), diffEnums(), diffFields(), diffLinkTypes(), diffNamedTypes(), diffScalars(), directiveArraysEqual(), fieldTypeRefsEqual() (+10 more)
 
 ### Community 682 - "Community 682"
-Cohesion: 0.19
+Cohesion: 0.20
 Nodes (18): ObjectManagerConfig, tracer, applyNumericOp(), applySizeOp(), checkImmutableFields(), checkUniqueness(), evaluateCelExpr(), evaluateConstraints() (+10 more)
 
 ### Community 683 - "Community 683"
@@ -3231,8 +3506,8 @@ Cohesion: 0.18
 Nodes (11): 4.1 ObjectTypes (5), 4.2 LinkTypes (6), 4.5 OpenFGA Model, 4.6 FHIR Mapping, 4.7 Pack Manifest, 4. NHS Acute Domain Pack — Pilot Slice, code:block11 (model), code:yaml (fhir:) (+3 more)
 
 ### Community 735 - "Community 735"
-Cohesion: 0.12
-Nodes (24): Ingest helpers for options parity lane., load_quote_ndjson(), Load quote fixtures for parity lane., ParityGroup, Path, str, LegQuote, Path (+16 more)
+Cohesion: 0.13
+Nodes (24): align_quotes(), Event-time quote alignment for parity groups (filtration-safe)., Build snapshots at each distinct timestamp where at least one leg updates.     E, snapshot_has_required_legs(), ParityGroup, Path, str, bool (+16 more)
 
 ### Community 736 - "Community 736"
 Cohesion: 0.18
@@ -3251,8 +3526,8 @@ Cohesion: 0.08
 Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
 
 ### Community 740 - "Community 740"
-Cohesion: 0.09
-Nodes (29): float, str, bool, DataFrame, float, int, ndarray, str (+21 more)
+Cohesion: 0.08
+Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
 
 ### Community 741 - "Community 741"
 Cohesion: 0.22
@@ -3491,8 +3766,8 @@ Cohesion: 0.50
 Nodes (3): logger, PORT, server
 
 ### Community 801 - "Community 801"
-Cohesion: 0.07
-Nodes (34): float, DataFrame, float, int, float, int, str, monte_carlo_ci() (+26 more)
+Cohesion: 0.06
+Nodes (36): float, str, float, bool, DataFrame, float, int, ndarray (+28 more)
 
 ### Community 802 - "Community 802"
 Cohesion: 0.15
@@ -3500,15 +3775,15 @@ Nodes (12): chi404_run_id, data_sufficient, duplicate_order_ids, event_count, ev
 
 ### Community 803 - "Community 803"
 Cohesion: 0.06
-Nodes (53): AggregateMode, BaseHypothesis, bool, float, ndarray, merge_feeds(), Align multi-symbol feeds on unified timeline (no lookahead)., K-way merge on local_ts; equal timestamps processed in symbol sort order. (+45 more)
+Nodes (53): merge_feeds(), Align multi-symbol feeds on unified timeline (no lookahead)., K-way merge on local_ts; equal timestamps processed in symbol sort order., BookResetEvent, L3 NPZ loader with gap detection and book reset events., float, ndarray, str (+45 more)
 
 ### Community 808 - "Community 808"
 Cohesion: 0.15
 Nodes (12): error, evaluate_only, event_results, events_missing, events_run, expectancy, gate_pass, name (+4 more)
 
 ### Community 826 - "Community 826"
-Cohesion: 0.13
-Nodes (8): Draw some extra line/circles for illustration purpose., Add a new clause of construction, e.g. a new excenter., Build a problem into a gr.Graph object., Return all nodes of type Point., Add new points with given names in list pnames., Return Point objects given names., Return Point objects given names., str
+Cohesion: 0.10
+Nodes (10): Get or create an angle between two Direction d1 and d2., Get or create a Segment object between two Points p1 and p2., Maybe add a new cyclic predicate from given congruent segments., Add a new cyclic predicate that 4 points are concyclic., Get or create a new Ratio from two Lenghts l1 and l2., Add new points with given names in list pnames., Return Point objects given names., Merge nodes1 into a single node0. (+2 more)
 
 ### Community 827 - "Community 827"
 Cohesion: 0.15
@@ -3547,12 +3822,12 @@ Cohesion: 0.17
 Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
 
 ### Community 837 - "Community 837"
-Cohesion: 0.09
-Nodes (16): float, CutoffPanicExits, DepthRefillImbalance, EconomicEventRestrictionFlattening, EndOfDayForcedFlatten, ForcedLiquidationCascade, MarketState, MaxContractCrowding (+8 more)
+Cohesion: 0.07
+Nodes (28): campaign_id, composition, defensive_stubs, primary_model_id, model_id, overfit_risk, param_hash, periods (+20 more)
 
 ### Community 838 - "Community 838"
-Cohesion: 0.21
-Nodes (14): build_models_config(), dependency_map(), get_model_by_id(), list_models(), _pdf_diagnostics_only(), _pdf_signal_field(), Load unified 55-model registry from YAML + hypothesis registry., Build all 55 model configs (44 HYP + 11 PDF). (+6 more)
+Cohesion: 0.08
+Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
 
 ### Community 839 - "Community 839"
 Cohesion: 0.13
@@ -3575,20 +3850,20 @@ Cohesion: 0.15
 Nodes (13): cpp_latency_profile, cpp_decision_compute_p50_us, cpp_decision_compute_p95_us, cpp_decision_compute_p99_us, gateway_ack_p50_us, gateway_ack_p95_us, gateway_ack_p99_us, measured_production_p99_us (+5 more)
 
 ### Community 844 - "Community 844"
-Cohesion: 0.20
-Nodes (6): datetime, datetime, int, str, HftBacktest 2.x replay runner with blueprint-mandated latency bands and queue mo, test_event_context_cpi_tight()
+Cohesion: 0.08
+Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
 
 ### Community 845 - "Community 845"
 Cohesion: 0.17
 Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
 
 ### Community 846 - "Community 846"
-Cohesion: 0.12
-Nodes (12): after, before, ctx, id, ids, linkEvents, parsedSchema, spiSchema (+4 more)
+Cohesion: 0.07
+Nodes (21): LinkManagerConfig, tracer, formatUUID(), generateUUIDv7(), InMemoryObjectSetStore, after, before, ctx (+13 more)
 
 ### Community 847 - "Community 847"
-Cohesion: 0.09
-Nodes (44): ABC, CrossAssetLeadLagOutput, DowYMIndexOutput, Any, T, Any, bool, ndarray (+36 more)
+Cohesion: 0.16
+Nodes (22): BookPressureOutput, float, int, ModelOutput, OrderBook, compute_level1_ofi_event(), compute_mlofi_vector(), _level_ofi_delta() (+14 more)
 
 ### Community 848 - "Community 848"
 Cohesion: 0.13
@@ -3603,12 +3878,12 @@ Cohesion: 0.14
 Nodes (13): adverse_selection, alpha_family_or_discovered_behavior, approval_status, events_tested, expectancy, latency_bands, model_id, net_pnl (+5 more)
 
 ### Community 851 - "Community 851"
-Cohesion: 0.27
-Nodes (10): Any, Hypothesis 5: Spread blowout/recompression, SpreadBlowoutRecompression, load_chi404_speed(), main(), Any, int, Path (+2 more)
+Cohesion: 0.08
+Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
 
 ### Community 852 - "Community 852"
-Cohesion: 0.23
-Nodes (13): ActionError, ActionEventPublisher, ActionExecutorConfig, AuditWriter, CelEvalResult, CelEvaluator, ChangeType, LinkTupleMap (+5 more)
+Cohesion: 0.08
+Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
 
 ### Community 853 - "Community 853"
 Cohesion: 0.15
@@ -3619,8 +3894,8 @@ Cohesion: 0.33
 Nodes (5): C++ latency profile (µs), Latency viability, Robustness, Runtime (do not conflate), Workbench Run Report: HYP_5
 
 ### Community 855 - "Community 855"
-Cohesion: 0.12
-Nodes (6): Hypothesis 2: Stop-run exhaustion fade     Behavior: Sweep through level, stop-, Hypothesis 27: Stop-loss cascade continuation, Hypothesis 33: Trailing drawdown pressure, StopLossCascadeContinuation, StopRunExhaustionFade, TrailingDrawdownPressure
+Cohesion: 0.07
+Nodes (27): wfc, artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, cost_adjusted_pearson, cost_adjusted_spearman, drawdown_pass, fold_correlations (+19 more)
 
 ### Community 856 - "Community 856"
 Cohesion: 0.33
@@ -3659,8 +3934,8 @@ Cohesion: 0.17
 Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
 
 ### Community 873 - "Community 873"
-Cohesion: 0.15
-Nodes (8): int, str, AbsorptionFade, BaseHypothesis, LiquidityVacuumContinuation, Hypothesis 3: Liquidity vacuum continuation, Hypothesis 12: Absorption fade, Base class for all hypothesis testing modules.     Evaluates the full MarketSta
+Cohesion: 0.08
+Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
 
 ### Community 874 - "Community 874"
 Cohesion: 0.22
@@ -3675,12 +3950,12 @@ Cohesion: 0.17
 Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
 
 ### Community 877 - "Community 877"
-Cohesion: 0.40
-Nodes (5): int, _exception_text(), main(), int, str
+Cohesion: 0.18
+Nodes (13): int, RuntimeError, _exception_text(), main(), int, str, _assert_catalog_keys_namespaced(), _bootstrap_sys_path() (+5 more)
 
 ### Community 878 - "Community 878"
-Cohesion: 0.33
-Nodes (10): align_quotes(), Event-time quote alignment for parity groups (filtration-safe)., Build snapshots at each distinct timestamp where at least one leg updates.     E, snapshot_has_required_legs(), bool, LegQuote, ParityGroup, QuoteSnapshot (+2 more)
+Cohesion: 0.08
+Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
 
 ### Community 879 - "Community 879"
 Cohesion: 0.33
@@ -3691,28 +3966,28 @@ Cohesion: 0.33
 Nodes (5): artifact_root, campaign_mode, fixture, model_id, symbol
 
 ### Community 881 - "Community 881"
-Cohesion: 0.43
-Nodes (3): float, str, _softmax()
+Cohesion: 0.08
+Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
 
 ### Community 882 - "Community 882"
-Cohesion: 0.14
-Nodes (23): bool, Any, bool, int, Path, str, TrialConfig, TrialConfig (+15 more)
+Cohesion: 0.16
+Nodes (25): int, Namespace, bool, Any, bool, int, Path, str (+17 more)
 
 ### Community 883 - "Community 883"
 Cohesion: 0.08
 Nodes (26): check_perp(), InvalidLineIntersectError, Line, line_line_intersection(), line_segment_intersection(), _perpendicular_bisector(), Sketch a circle touching two lines and another circle., Sketch the def eqangle2. (+18 more)
 
 ### Community 884 - "Community 884"
-Cohesion: 0.24
-Nodes (13): write_research_card(), cmd_backtest(), cmd_discover(), cmd_fixture_backtest(), cmd_scan(), main(), int, Namespace (+5 more)
+Cohesion: 0.35
+Nodes (11): MultiLegParityBacktester, cmd_backtest(), cmd_discover(), cmd_fixture_backtest(), cmd_scan(), main(), int, Namespace (+3 more)
 
 ### Community 885 - "Community 885"
 Cohesion: 0.22
 Nodes (8): event_id, git_sha, measured_p99_ms, model_id, npz_hash, npz_path, run_id, seed
 
 ### Community 886 - "Community 886"
-Cohesion: 0.23
-Nodes (6): BUILT_IN_FUNCTIONS, ComputeContext, ComputedFieldEvaluator, ComputedFieldEvaluatorConfig, ComputeFunction, fn
+Cohesion: 0.26
+Nodes (5): BUILT_IN_FUNCTIONS, ComputeContext, ComputedFieldEvaluator, ComputedFieldEvaluatorConfig, ComputeFunction
 
 ### Community 887 - "Community 887"
 Cohesion: 0.28
@@ -3731,64 +4006,936 @@ Cohesion: 0.29
 Nodes (7): balance, fee, num_trades, position, steps, trading_volume, 2.0ms
 
 ### Community 891 - "Community 891"
-Cohesion: 0.36
-Nodes (7): convert_to_npz(), _has_mbo(), Any, bool, float, Path, str
+Cohesion: 0.08
+Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
 
 ### Community 892 - "Community 892"
-Cohesion: 0.39
-Nodes (4): Path, str, _assert_quarantine(), Trial lane paths must not overlap trusted production Databento NPZ.
+Cohesion: 0.36
+Nodes (6): Path, str, _assert_quarantine(), load_config(), Trial lane paths must not overlap trusted production Databento NPZ., TrialConfig
 
 ### Community 893 - "Community 893"
-Cohesion: 0.62
-Nodes (6): Any, Path, str, build_latency_profile(), emit_all_reports(), _write()
+Cohesion: 0.08
+Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
 
 ### Community 894 - "Community 894"
-Cohesion: 0.29
-Nodes (7): local_workstation, bottleneck, dominant_rtt_ms, recommendation, recommended_latency_bands_ms, tier_ms, tier_name
+Cohesion: 0.13
+Nodes (14): 1. From workstation (recommended), 2. On CHI404 directly, CHI404 memory upgrade (PDF §2–3 gap-fill), code:powershell (.\scripts\run_chi404_memory_upgrade_remote.ps1), code:powershell ($env:HFT3_MEMORY_RESUME_STEP=4), code:bash (cd /root/hft3/repo/infrastructure/chi404), code:bash (RESTORE_ID=<id> bash /root/hft3/repo/infrastructure/chi404/0), Idempotency (+6 more)
 
 ### Community 895 - "Community 895"
 Cohesion: 0.40
 Nodes (4): _check_between(), check_sameside(), circle_segment_intersect(), Whether a is between b & c.
 
+### Community 896 - "Community 896"
+Cohesion: 0.10
+Nodes (51): _cfg(), _metric_dict(), _multi_fold_rows(), Tests for Walk Forward Correlation gate., Pooled (param×fold) correlation differs from per-parameter fold correlation., _rows(), _rows_negative_fold(), test_wfc_cost_adjusted_correlation_required() (+43 more)
+
 ### Community 897 - "Community 897"
-Cohesion: 0.40
-Nodes (4): PDF section → hft3 mapping, Reviewer citations, Runtime verification gate, Workbench memory architecture
+Cohesion: 0.33
+Nodes (5): CHI404 PDF §2–3 gap status, PDF section → hft3 mapping, Reviewer citations, Runtime verification gate, Workbench memory architecture
+
+### Community 898 - "Community 898"
+Cohesion: 0.13
+Nodes (15): pnl_by_injection_us, 0, 100, 1000, 10000, 100000, 1000000, 2000 (+7 more)
+
+### Community 900 - "Community 900"
+Cohesion: 0.13
+Nodes (15): pnl_by_latency, 0.0, 0.05, 0.1, 0.25, 0.5, 1000.0, 100.0 (+7 more)
 
 ### Community 906 - "Community 906"
 Cohesion: 0.29
 Nodes (7): balance, fee, num_trades, position, steps, trading_volume, 5.0ms
 
+### Community 907 - "Community 907"
+Cohesion: 0.14
+Nodes (13): adverse_selection, alpha_family_or_discovered_behavior, approval_status, events_tested, expectancy, latency_bands, model_id, net_pnl (+5 more)
+
+### Community 908 - "Community 908"
+Cohesion: 0.15
+Nodes (13): cpp_latency_profile, cpp_decision_compute_p50_us, cpp_decision_compute_p95_us, cpp_decision_compute_p99_us, gateway_ack_p50_us, gateway_ack_p95_us, gateway_ack_p99_us, measured_production_p99_us (+5 more)
+
 ### Community 911 - "Community 911"
 Cohesion: 0.29
 Nodes (7): balance, fee, num_trades, position, steps, trading_volume, 1.0ms
 
+### Community 912 - "Community 912"
+Cohesion: 0.15
+Nodes (12): chi404_run_id, data_sufficient, duplicate_order_ids, event_count, event_id, extra, gap_count, history_years_available (+4 more)
+
 ### Community 913 - "Community 913"
-Cohesion: 0.13
-Nodes (11): int, str, EsNqDivergenceSnapback, NoOvernightInventorySqueeze, OpeningCandleChase, Hypothesis 18: ES/NQ divergence snapback, Hypothesis 23: Opening candle chase, Hypothesis 31: No-overnight inventory squeeze (+3 more)
+Cohesion: 0.15
+Nodes (12): error, evaluate_only, event_results, events_missing, events_run, expectancy, gate_pass, name (+4 more)
+
+### Community 914 - "Community 914"
+Cohesion: 0.15
+Nodes (12): error, evaluate_only, event_results, events_missing, events_run, expectancy, gate_pass, name (+4 more)
+
+### Community 915 - "Community 915"
+Cohesion: 0.15
+Nodes (12): error, evaluate_only, event_results, events_missing, events_run, expectancy, gate_pass, name (+4 more)
+
+### Community 916 - "Community 916"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 917 - "Community 917"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
 
 ### Community 918 - "Community 918"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 919 - "Community 919"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 925 - "Community 925"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 926 - "Community 926"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 927 - "Community 927"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 928 - "Community 928"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 929 - "Community 929"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 930 - "Community 930"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 931 - "Community 931"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 932 - "Community 932"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 933 - "Community 933"
+Cohesion: 0.25
+Nodes (9): run_chi404_memory_upgrade.sh script, HFT3_ENV_FILE, HFT3_MEMORY_LOG_DIR, HFT3_TUNING_LOG_DIR, HFT3_VALIDATE_PROFILE, load_restore_id(), manifest(), RUN_ID (+1 more)
+
+### Community 934 - "Community 934"
+Cohesion: 0.07
+Nodes (27): wfc, artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, cost_adjusted_pearson, cost_adjusted_spearman, drawdown_pass, fold_correlations (+19 more)
+
+### Community 935 - "Community 935"
+Cohesion: 0.07
+Nodes (27): wfc, artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, cost_adjusted_pearson, cost_adjusted_spearman, drawdown_pass, fold_correlations (+19 more)
+
+### Community 936 - "Community 936"
+Cohesion: 0.22
+Nodes (8): event_id, git_sha, measured_p99_ms, model_id, npz_hash, npz_path, run_id, seed
+
+### Community 937 - "Community 937"
+Cohesion: 0.14
+Nodes (12): _load_validate(), MonkeyPatch, Path, str, Tests for CHI404 memory upgrade infra (restore + gap-fill validate profile)., test_capture_idle_manifest_parser(), test_check_cmdline_tokens_full_profile_warn_only(), test_check_cmdline_tokens_memory_profile_required() (+4 more)
+
+### Community 938 - "Community 938"
+Cohesion: 0.08
+Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
+
+### Community 939 - "Community 939"
+Cohesion: 0.09
+Nodes (36): str, download_events(), estimate_download_cost_usd(), missing_for_campaign(), Point-in-time Databento event-window download (never multi-year range)., Sum Databento get_cost for missing event windows (0 if no API key or estimate fa, Download missing event windows via Databento; convert to data/npz/., EventSpec (+28 more)
+
+### Community 940 - "Community 940"
+Cohesion: 0.33
+Nodes (5): C++ latency profile (µs), Latency viability, Robustness, Runtime (do not conflate), Workbench Run Report: HYP_5
+
+### Community 941 - "Community 941"
+Cohesion: 0.33
+Nodes (5): artifact_root, campaign_mode, fixture, model_id, symbol
+
+### Community 942 - "Community 942"
+Cohesion: 0.33
+Nodes (5): artifact_root, campaign_mode, fixture, model_id, symbol
+
+### Community 943 - "Community 943"
+Cohesion: 0.33
+Nodes (5): artifact_root, campaign_mode, fixture, model_id, symbol
+
+### Community 944 - "Community 944"
+Cohesion: 1.00
+Nodes (3): 12_memory_gap_fill.sh script, append_grub_token(), log()
+
+### Community 963 - "Community 963"
+Cohesion: 0.10
+Nodes (27): bool, datetime, float, int, datetime, str, datetime, collect_download_specs() (+19 more)
+
+### Community 964 - "Community 964"
+Cohesion: 0.08
+Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
+
+### Community 965 - "Community 965"
+Cohesion: 0.08
+Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
+
+### Community 966 - "Community 966"
+Cohesion: 0.08
+Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
+
+### Community 967 - "Community 967"
+Cohesion: 0.08
+Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
+
+### Community 968 - "Community 968"
+Cohesion: 0.09
+Nodes (23): wfc, artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, fold_correlations, kendall, model_id, n_folds (+15 more)
+
+### Community 969 - "Community 969"
+Cohesion: 0.09
+Nodes (23): wfc, artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, fold_correlations, kendall, model_id, n_folds (+15 more)
+
+### Community 970 - "Community 970"
+Cohesion: 0.09
+Nodes (22): artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, fold_correlations, kendall, model_id, n_folds, n_parameter_combinations (+14 more)
+
+### Community 971 - "Community 971"
+Cohesion: 0.09
+Nodes (22): artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, fold_correlations, kendall, model_id, n_folds, n_parameter_combinations (+14 more)
+
+### Community 972 - "Community 972"
+Cohesion: 0.09
+Nodes (23): wfc, artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, fold_correlations, kendall, model_id, n_folds (+15 more)
+
+### Community 973 - "Community 973"
+Cohesion: 0.09
+Nodes (22): artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, fold_correlations, kendall, model_id, n_folds, n_parameter_combinations (+14 more)
+
+### Community 974 - "Community 974"
 Cohesion: 0.18
-Nodes (7): BaseHypothesis, AggressorDecelerationFade, IcebergReloadDetection, Hypothesis 6: Aggressor deceleration fade, Hypothesis 13: Iceberg/reload detection, Hypothesis 19: ZN/ZB -> ES/NQ macro impulse, ZnZbToEsNqMacroImpulse
+Nodes (15): canonical_params_json(), param_hash_from_dict(), Strategy parameter hashing and canonical serialization., generate_param_grid(), _linspace_values(), load_parameter_bounds(), Parameter matrix generation from model bounds., Tests for parameter matrix generation. (+7 more)
+
+### Community 975 - "Community 975"
+Cohesion: 0.12
+Nodes (16): campaign_id, model_id, overfit_risk, param_hash, periods, promote_candidate, promote_note, robustness_passed (+8 more)
+
+### Community 976 - "Community 976"
+Cohesion: 0.12
+Nodes (16): campaign_id, model_id, overfit_risk, param_hash, periods, promote_candidate, promote_note, robustness_passed (+8 more)
+
+### Community 977 - "Community 977"
+Cohesion: 0.07
+Nodes (27): wfc, artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, cost_adjusted_pearson, cost_adjusted_spearman, drawdown_pass, fold_correlations (+19 more)
+
+### Community 978 - "Community 978"
+Cohesion: 0.07
+Nodes (27): wfc, artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, cost_adjusted_pearson, cost_adjusted_spearman, drawdown_pass, fold_correlations (+19 more)
+
+### Community 979 - "Community 979"
+Cohesion: 0.07
+Nodes (27): wfc, artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, cost_adjusted_pearson, cost_adjusted_spearman, drawdown_pass, fold_correlations (+19 more)
+
+### Community 980 - "Community 980"
+Cohesion: 0.30
+Nodes (10): Any, Hypothesis 5: Spread blowout/recompression, SpreadBlowoutRecompression, load_chi404_speed(), main(), Any, int, Path (+2 more)
+
+### Community 981 - "Community 981"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 982 - "Community 982"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 983 - "Community 983"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 984 - "Community 984"
+Cohesion: 0.12
+Nodes (20): LiveCapture, FixtureConnector, Synthetic trial events for CI and offline pipeline tests., Any, Path, str, TrialConfig, Any (+12 more)
+
+### Community 985 - "Community 985"
+Cohesion: 0.12
+Nodes (16): campaign_id, model_id, overfit_risk, param_hash, periods, promote_candidate, promote_note, robustness_passed (+8 more)
+
+### Community 986 - "Community 986"
+Cohesion: 0.20
+Nodes (11): Ingest helpers for options parity lane., load_quote_ndjson(), Load quote fixtures for parity lane., LegQuote, Path, str, float, LegQuote (+3 more)
+
+### Community 987 - "Community 987"
+Cohesion: 0.29
+Nodes (7): local_workstation, bottleneck, dominant_rtt_ms, recommendation, recommended_latency_bands_ms, tier_ms, tier_name
+
+### Community 988 - "Community 988"
+Cohesion: 0.07
+Nodes (26): artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, cost_adjusted_pearson, cost_adjusted_spearman, drawdown_pass, fold_correlations, kendall (+18 more)
+
+### Community 989 - "Community 989"
+Cohesion: 0.40
+Nodes (5): phase_budgets_us, after, before, continuous, during
+
+### Community 990 - "Community 990"
+Cohesion: 0.40
+Nodes (5): phase_budgets_us, after, before, continuous, during
+
+### Community 991 - "Community 991"
+Cohesion: 0.07
+Nodes (26): artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, cost_adjusted_pearson, cost_adjusted_spearman, drawdown_pass, fold_correlations, kendall (+18 more)
+
+### Community 992 - "Community 992"
+Cohesion: 0.07
+Nodes (26): artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, cost_adjusted_pearson, cost_adjusted_spearman, drawdown_pass, fold_correlations, kendall (+18 more)
+
+### Community 994 - "Community 994"
+Cohesion: 0.10
+Nodes (6): float, int, str, MarketState, Represents the full mathematical state vector X_t = (B_t, A_t, Q_t, I_t, Z_t, L_, Indexed feature access (no string hashing on hot path).
+
+### Community 996 - "Community 996"
+Cohesion: 0.67
+Nodes (3): composition, defensive_stubs, primary_model_id
+
+### Community 997 - "Community 997"
+Cohesion: 0.67
+Nodes (3): walk_forward, periods, status
+
+### Community 999 - "Community 999"
+Cohesion: 0.67
+Nodes (3): composition, defensive_stubs, primary_model_id
+
+### Community 1000 - "Community 1000"
+Cohesion: 0.67
+Nodes (3): walk_forward, periods, status
+
+### Community 1001 - "Community 1001"
+Cohesion: 0.15
+Nodes (12): error, evaluate_only, event_results, events_missing, events_run, expectancy, gate_pass, name (+4 more)
+
+### Community 1002 - "Community 1002"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 1003 - "Community 1003"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 1004 - "Community 1004"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 1005 - "Community 1005"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 1006 - "Community 1006"
+Cohesion: 0.10
+Nodes (27): buildConfig(), buildConnection(), buildLink(), buildMapping(), buildPrimaryKey(), buildProperties(), buildSync(), ConflictResolution (+19 more)
+
+### Community 1010 - "Community 1010"
+Cohesion: 0.36
+Nodes (7): convert_to_npz(), _has_mbo(), Any, bool, float, Path, str
+
+### Community 1011 - "Community 1011"
+Cohesion: 0.07
+Nodes (26): artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, cost_adjusted_pearson, cost_adjusted_spearman, drawdown_pass, fold_correlations, kendall (+18 more)
+
+### Community 1012 - "Community 1012"
+Cohesion: 0.07
+Nodes (26): artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, cost_adjusted_pearson, cost_adjusted_spearman, drawdown_pass, fold_correlations, kendall (+18 more)
+
+### Community 1013 - "Community 1013"
+Cohesion: 0.62
+Nodes (6): Any, Path, str, build_latency_profile(), emit_all_reports(), _write()
+
+### Community 1014 - "Community 1014"
+Cohesion: 0.40
+Nodes (5): phase_budgets_us, after, before, continuous, during
+
+### Community 1016 - "Community 1016"
+Cohesion: 0.67
+Nodes (3): composition, defensive_stubs, primary_model_id
+
+### Community 1017 - "Community 1017"
+Cohesion: 0.67
+Nodes (3): walk_forward, periods, status
+
+### Community 1019 - "Community 1019"
+Cohesion: 0.07
+Nodes (26): artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, cost_adjusted_pearson, cost_adjusted_spearman, drawdown_pass, fold_correlations, kendall (+18 more)
+
+### Community 1020 - "Community 1020"
+Cohesion: 0.07
+Nodes (27): wfc, artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, cost_adjusted_pearson, cost_adjusted_spearman, drawdown_pass, fold_correlations (+19 more)
+
+### Community 1021 - "Community 1021"
+Cohesion: 0.07
+Nodes (27): wfc, artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, cost_adjusted_pearson, cost_adjusted_spearman, drawdown_pass, fold_correlations (+19 more)
+
+### Community 1022 - "Community 1022"
+Cohesion: 0.07
+Nodes (27): wfc, artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, cost_adjusted_pearson, cost_adjusted_spearman, drawdown_pass, fold_correlations (+19 more)
+
+### Community 1027 - "Community 1027"
+Cohesion: 0.07
+Nodes (26): artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, cost_adjusted_pearson, cost_adjusted_spearman, drawdown_pass, fold_correlations, kendall (+18 more)
+
+### Community 1028 - "Community 1028"
+Cohesion: 0.07
+Nodes (26): artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, cost_adjusted_pearson, cost_adjusted_spearman, drawdown_pass, fold_correlations, kendall (+18 more)
+
+### Community 1029 - "Community 1029"
+Cohesion: 0.07
+Nodes (26): artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, cost_adjusted_pearson, cost_adjusted_spearman, drawdown_pass, fold_correlations, kendall (+18 more)
+
+### Community 1030 - "Community 1030"
+Cohesion: 0.07
+Nodes (27): wfc, artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, cost_adjusted_pearson, cost_adjusted_spearman, drawdown_pass, fold_correlations (+19 more)
+
+### Community 1031 - "Community 1031"
+Cohesion: 0.14
+Nodes (22): Any, float, ModelOutput, str, ctd_switch_threshold(), delivery_cost(), implied_repo_rate(), PDF_MODEL_7 — Treasury CTD, delivery cost, implied repo. (+14 more)
+
+### Community 1032 - "Community 1032"
+Cohesion: 0.08
+Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
+
+### Community 1033 - "Community 1033"
+Cohesion: 0.08
+Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
+
+### Community 1034 - "Community 1034"
+Cohesion: 0.08
+Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
+
+### Community 1035 - "Community 1035"
+Cohesion: 0.08
+Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
+
+### Community 1036 - "Community 1036"
+Cohesion: 0.08
+Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
+
+### Community 1037 - "Community 1037"
+Cohesion: 0.08
+Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
+
+### Community 1038 - "Community 1038"
+Cohesion: 0.08
+Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
+
+### Community 1039 - "Community 1039"
+Cohesion: 0.07
+Nodes (26): artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, cost_adjusted_pearson, cost_adjusted_spearman, drawdown_pass, fold_correlations, kendall (+18 more)
+
+### Community 1040 - "Community 1040"
+Cohesion: 0.17
+Nodes (19): Any, float, ModelOutput, ndarray, StochasticThermoOutput, free_energy(), gibbs_probabilities(), partition_function() (+11 more)
+
+### Community 1041 - "Community 1041"
+Cohesion: 0.09
+Nodes (23): wfc, artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, fold_correlations, kendall, model_id, n_folds (+15 more)
+
+### Community 1042 - "Community 1042"
+Cohesion: 0.09
+Nodes (23): wfc, artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, fold_correlations, kendall, model_id, n_folds (+15 more)
+
+### Community 1043 - "Community 1043"
+Cohesion: 0.09
+Nodes (23): wfc, artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, fold_correlations, kendall, model_id, n_folds (+15 more)
+
+### Community 1044 - "Community 1044"
+Cohesion: 0.09
+Nodes (22): artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, fold_correlations, kendall, model_id, n_folds, n_parameter_combinations (+14 more)
+
+### Community 1045 - "Community 1045"
+Cohesion: 0.09
+Nodes (22): artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, fold_correlations, kendall, model_id, n_folds, n_parameter_combinations (+14 more)
+
+### Community 1046 - "Community 1046"
+Cohesion: 0.09
+Nodes (22): artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, fold_correlations, kendall, model_id, n_folds, n_parameter_combinations (+14 more)
+
+### Community 1047 - "Community 1047"
+Cohesion: 0.31
+Nodes (19): _check_cmdline_tokens(), _check_cpupower_idle(), _check_cyclictest_p99(), _check_irq_net(), _check_jitter_gate(), _check_manifest(), _check_nic_rings(), _cmdline_idle_effectively_disabled() (+11 more)
+
+### Community 1048 - "Community 1048"
+Cohesion: 0.09
+Nodes (44): ABC, CrossAssetLeadLagOutput, DowYMIndexOutput, Any, T, Any, bool, ndarray (+36 more)
+
+### Community 1049 - "Community 1049"
+Cohesion: 0.11
+Nodes (14): datetime, int, str, float, str, EventContextEngine, Maps timestamp t to event context E_t using events.csv windows (F_t only)., Resolves E_t label for a UTC timestamp against parsed event windows. (+6 more)
+
+### Community 1050 - "Community 1050"
+Cohesion: 0.07
+Nodes (26): artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, cost_adjusted_pearson, cost_adjusted_spearman, drawdown_pass, fold_correlations, kendall (+18 more)
+
+### Community 1051 - "Community 1051"
+Cohesion: 0.12
+Nodes (16): campaign_id, model_id, overfit_risk, param_hash, periods, promote_candidate, promote_note, robustness_passed (+8 more)
+
+### Community 1052 - "Community 1052"
+Cohesion: 0.12
+Nodes (16): campaign_id, model_id, overfit_risk, param_hash, periods, promote_candidate, promote_note, robustness_passed (+8 more)
+
+### Community 1053 - "Community 1053"
+Cohesion: 0.12
+Nodes (16): campaign_id, model_id, overfit_risk, param_hash, periods, promote_candidate, promote_note, robustness_passed (+8 more)
+
+### Community 1054 - "Community 1054"
+Cohesion: 0.12
+Nodes (16): campaign_id, model_id, overfit_risk, param_hash, periods, promote_candidate, promote_note, robustness_passed (+8 more)
+
+### Community 1055 - "Community 1055"
+Cohesion: 0.12
+Nodes (16): campaign_id, model_id, overfit_risk, param_hash, periods, promote_candidate, promote_note, robustness_passed (+8 more)
+
+### Community 1056 - "Community 1056"
+Cohesion: 0.12
+Nodes (16): campaign_id, model_id, overfit_risk, param_hash, periods, promote_candidate, promote_note, robustness_passed (+8 more)
+
+### Community 1057 - "Community 1057"
+Cohesion: 0.12
+Nodes (16): campaign_id, model_id, overfit_risk, param_hash, periods, promote_candidate, promote_note, robustness_passed (+8 more)
+
+### Community 1058 - "Community 1058"
+Cohesion: 0.12
+Nodes (16): campaign_id, model_id, overfit_risk, param_hash, periods, promote_candidate, promote_note, robustness_passed (+8 more)
+
+### Community 1059 - "Community 1059"
+Cohesion: 0.12
+Nodes (16): campaign_id, model_id, overfit_risk, param_hash, periods, promote_candidate, promote_note, robustness_passed (+8 more)
+
+### Community 1060 - "Community 1060"
+Cohesion: 0.12
+Nodes (16): campaign_id, model_id, overfit_risk, param_hash, periods, promote_candidate, promote_note, robustness_passed (+8 more)
+
+### Community 1061 - "Community 1061"
+Cohesion: 0.12
+Nodes (16): campaign_id, model_id, overfit_risk, param_hash, periods, promote_candidate, promote_note, robustness_passed (+8 more)
+
+### Community 1062 - "Community 1062"
+Cohesion: 0.12
+Nodes (16): campaign_id, model_id, overfit_risk, param_hash, periods, promote_candidate, promote_note, robustness_passed (+8 more)
+
+### Community 1063 - "Community 1063"
+Cohesion: 0.07
+Nodes (26): artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, cost_adjusted_pearson, cost_adjusted_spearman, drawdown_pass, fold_correlations, kendall (+18 more)
+
+### Community 1064 - "Community 1064"
+Cohesion: 0.07
+Nodes (26): artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, cost_adjusted_pearson, cost_adjusted_spearman, drawdown_pass, fold_correlations, kendall (+18 more)
+
+### Community 1065 - "Community 1065"
+Cohesion: 0.14
+Nodes (13): error, evaluate_only, event_results, events_missing, events_run, expectancy, gate_pass, name (+5 more)
+
+### Community 1066 - "Community 1066"
+Cohesion: 0.14
+Nodes (13): error, evaluate_only, event_results, events_missing, events_run, expectancy, gate_pass, name (+5 more)
+
+### Community 1067 - "Community 1067"
+Cohesion: 0.14
+Nodes (13): error, evaluate_only, event_results, events_missing, events_run, expectancy, gate_pass, name (+5 more)
+
+### Community 1068 - "Community 1068"
+Cohesion: 0.14
+Nodes (13): error, evaluate_only, event_results, events_missing, events_run, expectancy, gate_pass, name (+5 more)
+
+### Community 1069 - "Community 1069"
+Cohesion: 0.14
+Nodes (13): error, evaluate_only, event_results, events_missing, events_run, expectancy, gate_pass, name (+5 more)
+
+### Community 1070 - "Community 1070"
+Cohesion: 0.15
+Nodes (12): error, evaluate_only, event_results, events_missing, events_run, expectancy, gate_pass, name (+4 more)
+
+### Community 1071 - "Community 1071"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 1072 - "Community 1072"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 1073 - "Community 1073"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 1074 - "Community 1074"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 1075 - "Community 1075"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 1076 - "Community 1076"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 1077 - "Community 1077"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 1078 - "Community 1078"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 1079 - "Community 1079"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 1080 - "Community 1080"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 1081 - "Community 1081"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 1082 - "Community 1082"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 1083 - "Community 1083"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 1084 - "Community 1084"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 1085 - "Community 1085"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 1086 - "Community 1086"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 1087 - "Community 1087"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 1088 - "Community 1088"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 1089 - "Community 1089"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 1090 - "Community 1090"
+Cohesion: 0.08
+Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
+
+### Community 1091 - "Community 1091"
+Cohesion: 0.08
+Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
+
+### Community 1092 - "Community 1092"
+Cohesion: 0.44
+Nodes (8): Any, int, str, _audit_summary(), build_packet_summary(), build_user_prompt(), parse_annotations(), After-action LLM prompts — Hawkish-8B constraints.
+
+### Community 1093 - "Community 1093"
+Cohesion: 0.08
+Nodes (23): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+15 more)
+
+### Community 1094 - "Community 1094"
+Cohesion: 0.17
+Nodes (21): build_report_card(), _fmt_ms_from_us(), _fmt_us(), _gate_status(), _md_table(), Fixed report card schema and renderers for CHI404 latency probes., Render latency summary as a fixed-section markdown report., Fixed-width console report (same sections every run). (+13 more)
+
+### Community 1095 - "Community 1095"
+Cohesion: 0.33
+Nodes (5): artifact_root, campaign_mode, fixture, model_id, symbol
+
+### Community 1096 - "Community 1096"
+Cohesion: 0.40
+Nodes (5): phase_budgets_us, after, before, continuous, during
+
+### Community 1097 - "Community 1097"
+Cohesion: 0.40
+Nodes (5): phase_budgets_us, after, before, continuous, during
+
+### Community 1098 - "Community 1098"
+Cohesion: 0.40
+Nodes (5): phase_budgets_us, after, before, continuous, during
+
+### Community 1099 - "Community 1099"
+Cohesion: 0.40
+Nodes (5): phase_budgets_us, after, before, continuous, during
+
+### Community 1100 - "Community 1100"
+Cohesion: 0.40
+Nodes (5): phase_budgets_us, after, before, continuous, during
+
+### Community 1101 - "Community 1101"
+Cohesion: 0.40
+Nodes (5): phase_budgets_us, after, before, continuous, during
+
+### Community 1102 - "Community 1102"
+Cohesion: 0.40
+Nodes (5): phase_budgets_us, after, before, continuous, during
+
+### Community 1103 - "Community 1103"
+Cohesion: 0.40
+Nodes (5): phase_budgets_us, after, before, continuous, during
+
+### Community 1104 - "Community 1104"
+Cohesion: 0.40
+Nodes (5): phase_budgets_us, after, before, continuous, during
+
+### Community 1105 - "Community 1105"
+Cohesion: 0.40
+Nodes (5): phase_budgets_us, after, before, continuous, during
+
+### Community 1106 - "Community 1106"
+Cohesion: 0.40
+Nodes (5): phase_budgets_us, after, before, continuous, during
+
+### Community 1107 - "Community 1107"
+Cohesion: 0.40
+Nodes (5): phase_budgets_us, after, before, continuous, during
+
+### Community 1108 - "Community 1108"
+Cohesion: 0.33
+Nodes (19): build_summary(), _build_trial_order_ack_appendix(), _classify_lane(), _collect_clock_discipline(), _collect_cyclictest(), _dominant_bottleneck(), _lane_from_order_ack_ms(), _load_json() (+11 more)
+
+### Community 1109 - "Community 1109"
+Cohesion: 0.18
+Nodes (16): latest_latency_profile(), load_json(), profile_untrusted(), Read latest Rithmic trial latency_profile.json with trusted/untrusted classifica, Any, bool, Path, str (+8 more)
+
+### Community 1110 - "Community 1110"
+Cohesion: 0.12
+Nodes (16): campaign_id, model_id, overfit_risk, param_hash, periods, promote_candidate, promote_note, robustness_passed (+8 more)
+
+### Community 1111 - "Community 1111"
+Cohesion: 0.12
+Nodes (16): campaign_id, model_id, overfit_risk, param_hash, periods, promote_candidate, promote_note, robustness_passed (+8 more)
+
+### Community 1112 - "Community 1112"
+Cohesion: 0.12
+Nodes (16): campaign_id, model_id, overfit_risk, param_hash, periods, promote_candidate, promote_note, robustness_passed (+8 more)
+
+### Community 1113 - "Community 1113"
+Cohesion: 0.12
+Nodes (16): campaign_id, model_id, overfit_risk, param_hash, periods, promote_candidate, promote_note, robustness_passed (+8 more)
+
+### Community 1114 - "Community 1114"
+Cohesion: 0.14
+Nodes (13): error, evaluate_only, event_results, events_missing, events_run, expectancy, gate_pass, name (+5 more)
+
+### Community 1115 - "Community 1115"
+Cohesion: 0.14
+Nodes (13): error, evaluate_only, event_results, events_missing, events_run, expectancy, gate_pass, name (+5 more)
+
+### Community 1116 - "Community 1116"
+Cohesion: 0.14
+Nodes (13): error, evaluate_only, event_results, events_missing, events_run, expectancy, gate_pass, name (+5 more)
+
+### Community 1117 - "Community 1117"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 1118 - "Community 1118"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 1119 - "Community 1119"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 1120 - "Community 1120"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 1121 - "Community 1121"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 1122 - "Community 1122"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 1123 - "Community 1123"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 1124 - "Community 1124"
+Cohesion: 0.17
+Nodes (11): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+3 more)
+
+### Community 1126 - "Community 1126"
+Cohesion: 0.33
+Nodes (5): artifact_root, campaign_mode, fixture, model_id, symbol
+
+### Community 1127 - "Community 1127"
+Cohesion: 0.40
+Nodes (5): phase_budgets_us, after, before, continuous, during
+
+### Community 1130 - "Community 1130"
+Cohesion: 0.67
+Nodes (3): composition, defensive_stubs, primary_model_id
+
+### Community 1131 - "Community 1131"
+Cohesion: 0.67
+Nodes (3): walk_forward, periods, status
+
+### Community 1133 - "Community 1133"
+Cohesion: 0.67
+Nodes (3): composition, defensive_stubs, primary_model_id
+
+### Community 1134 - "Community 1134"
+Cohesion: 0.67
+Nodes (3): walk_forward, periods, status
+
+### Community 1137 - "Community 1137"
+Cohesion: 0.67
+Nodes (3): composition, defensive_stubs, primary_model_id
+
+### Community 1138 - "Community 1138"
+Cohesion: 0.67
+Nodes (3): walk_forward, periods, status
+
+### Community 1140 - "Community 1140"
+Cohesion: 0.67
+Nodes (3): composition, defensive_stubs, primary_model_id
+
+### Community 1141 - "Community 1141"
+Cohesion: 0.67
+Nodes (3): walk_forward, periods, status
+
+### Community 1143 - "Community 1143"
+Cohesion: 0.67
+Nodes (3): composition, defensive_stubs, primary_model_id
+
+### Community 1144 - "Community 1144"
+Cohesion: 0.67
+Nodes (3): walk_forward, periods, status
+
+### Community 1146 - "Community 1146"
+Cohesion: 0.67
+Nodes (3): composition, defensive_stubs, primary_model_id
+
+### Community 1147 - "Community 1147"
+Cohesion: 0.67
+Nodes (3): walk_forward, periods, status
+
+### Community 1149 - "Community 1149"
+Cohesion: 0.67
+Nodes (3): composition, defensive_stubs, primary_model_id
+
+### Community 1150 - "Community 1150"
+Cohesion: 0.67
+Nodes (3): walk_forward, periods, status
+
+### Community 1152 - "Community 1152"
+Cohesion: 0.67
+Nodes (3): composition, defensive_stubs, primary_model_id
+
+### Community 1153 - "Community 1153"
+Cohesion: 0.67
+Nodes (3): walk_forward, periods, status
+
+### Community 1155 - "Community 1155"
+Cohesion: 0.67
+Nodes (3): composition, defensive_stubs, primary_model_id
+
+### Community 1156 - "Community 1156"
+Cohesion: 0.67
+Nodes (3): walk_forward, periods, status
+
+### Community 1158 - "Community 1158"
+Cohesion: 0.67
+Nodes (3): composition, defensive_stubs, primary_model_id
+
+### Community 1159 - "Community 1159"
+Cohesion: 0.67
+Nodes (3): walk_forward, periods, status
+
+### Community 1161 - "Community 1161"
+Cohesion: 0.67
+Nodes (3): composition, defensive_stubs, primary_model_id
+
+### Community 1162 - "Community 1162"
+Cohesion: 0.67
+Nodes (3): walk_forward, periods, status
+
+### Community 1164 - "Community 1164"
+Cohesion: 0.67
+Nodes (3): composition, defensive_stubs, primary_model_id
+
+### Community 1165 - "Community 1165"
+Cohesion: 0.67
+Nodes (3): walk_forward, periods, status
+
+### Community 1185 - "Community 1185"
+Cohesion: 0.40
+Nodes (5): phase_budgets_us, after, before, continuous, during
+
+### Community 1186 - "Community 1186"
+Cohesion: 0.40
+Nodes (5): phase_budgets_us, after, before, continuous, during
+
+### Community 1187 - "Community 1187"
+Cohesion: 0.40
+Nodes (5): phase_budgets_us, after, before, continuous, during
+
+### Community 1191 - "Community 1191"
+Cohesion: 0.67
+Nodes (3): composition, defensive_stubs, primary_model_id
+
+### Community 1192 - "Community 1192"
+Cohesion: 0.67
+Nodes (3): walk_forward, periods, status
+
+### Community 1194 - "Community 1194"
+Cohesion: 0.67
+Nodes (3): composition, defensive_stubs, primary_model_id
+
+### Community 1195 - "Community 1195"
+Cohesion: 0.67
+Nodes (3): walk_forward, periods, status
+
+### Community 1197 - "Community 1197"
+Cohesion: 0.67
+Nodes (3): composition, defensive_stubs, primary_model_id
+
+### Community 1198 - "Community 1198"
+Cohesion: 0.67
+Nodes (3): walk_forward, periods, status
+
+### Community 1200 - "Community 1200"
+Cohesion: 0.67
+Nodes (3): composition, defensive_stubs, primary_model_id
+
+### Community 1201 - "Community 1201"
+Cohesion: 0.67
+Nodes (3): walk_forward, periods, status
 
 ## Knowledge Gaps
-- **7048 isolated node(s):** `str`, `Path`, `Any`, `str`, `int` (+7043 more)
+- **9961 isolated node(s):** `str`, `Path`, `Any`, `str`, `int` (+9956 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **163 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **220 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `datetime` connect `Community 844` to `Community 320`, `Community 803`, `Community 4`, `Community 517`, `Community 164`, `Community 291`, `Community 15`, `Community 112`, `Community 559`, `Community 242`, `Community 882`, `Community 114`, `Community 20`, `Community 851`, `Community 248`, `Community 543`?**
-  _High betweenness centrality (0.012) - this node is a cross-community bridge._
 - **Why does `main()` connect `Community 627` to `Community 709`, `Community 651`, `Community 623`, `Community 626`, `Community 253`, `Community 607`?**
-  _High betweenness centrality (0.010) - this node is a cross-community bridge._
-- **Why does `withSpan()` connect `Community 634` to `Community 1`, `Community 684`, `Community 626`, `Community 629`, `Community 309`, `Community 607`?**
   _High betweenness centrality (0.006) - this node is a cross-community bridge._
+- **Why does `datetime` connect `Community 963` to `Community 248`, `Community 1`, `Community 291`, `Community 164`, `Community 517`, `Community 9`, `Community 364`, `Community 112`, `Community 17`, `Community 882`, `Community 1108`, `Community 117`, `Community 980`, `Community 984`, `Community 1049`, `Community 283`, `Community 892`, `Community 543`?**
+  _High betweenness centrality (0.005) - this node is a cross-community bridge._
+- **Why does `parseActionManifest()` connect `Community 628` to `Community 585`, `Community 651`, `Community 737`, `Community 622`?**
+  _High betweenness centrality (0.004) - this node is a cross-community bridge._
 - **Are the 12 inferred relationships involving `Graph` (e.g. with `Angle` and `Circle`) actually correct?**
   _`Graph` has 12 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 12 inferred relationships involving `Point` (e.g. with `Angle` and `Circle`) actually correct?**
   _`Point` has 12 INFERRED edges - model-reasoned connections that need verification._
+- **Are the 72 inferred relationships involving `ModelComposition` (e.g. with `CatalogEntry` and `CompositionTrace`) actually correct?**
+  _`ModelComposition` has 72 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 33 inferred relationships involving `BaseHypothesis` (e.g. with `HypothesisAdapter` and `AggregateMode`) actually correct?**
   _`BaseHypothesis` has 33 INFERRED edges - model-reasoned connections that need verification._
-- **Are the 70 inferred relationships involving `BaseStructuralModel` (e.g. with `BookPressureOutput` and `CrossAssetLeadLagOutput`) actually correct?**
-  _`BaseStructuralModel` has 70 INFERRED edges - model-reasoned connections that need verification._
