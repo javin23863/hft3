@@ -23,9 +23,11 @@ CHECKS = [
     ),
     (
         "logs",
-        "Get-ChildItem C:\\Users\\Administrator\\Documents\\Rithmic -Filter *.log "
-        "-ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | "
-        "Select-Object -First 5 Name,Length,LastWriteTime | Format-Table -AutoSize",
+        "$d='C:\\Users\\Administrator\\Documents\\Rithmic'; "
+        "Get-ChildItem -Path $d -Filter *.log -ErrorAction SilentlyContinue; "
+        "Get-ChildItem -Path $d -Filter *.cur.txt -ErrorAction SilentlyContinue | "
+        "Sort-Object LastWriteTime -Descending | Select-Object -First 5 Name,Length,LastWriteTime | "
+        "Format-Table -AutoSize",
     ),
     (
         "tasks",

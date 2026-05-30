@@ -3,6 +3,8 @@
 set -euo pipefail
 
 REPO="${HFT3_REPO_DIR:-/root/hft3/repo}"
+ENV_FILE="${HFT3_ENV_FILE:-/root/hft3/.env}"
+[[ -f "$ENV_FILE" ]] && set -a && source "$ENV_FILE" && set +a
 cd "$REPO"
 
 echo "=== Quiesce Wine ==="
@@ -31,6 +33,15 @@ fi
 
 echo "=== Linux capture bridge ==="
 bash "$REPO/scripts/chi404_setup_vm_bridge.sh"
+
+if virsh domstate hft3-rtrader-win 2>/dev/null | grep -q running; then
+  if [[ -n "${VM_ADMIN_PASSWORD:-}" ]]; then
+    echo "=== Headless sidecar deploy ==="
+    bash "$REPO/scripts/chi404_vm_deploy.sh"
+  else
+    echo "SKIP headless deploy — set VM_ADMIN_PASSWORD in /root/hft3/.env"
+  fi
+fi
 
 echo "=== Status ==="
 systemctl is-active hft3-rithmic-trial

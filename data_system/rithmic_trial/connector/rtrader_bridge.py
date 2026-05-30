@@ -116,7 +116,7 @@ class RTraderBridgeConnector(ConnectorInterface):
         self.wine_prefix = Path(cfg.rtrader.get("wine_prefix", "/root/.wine-rtrader"))
         self.watch_dirs = [Path(p) for p in cfg.rtrader.get("watch_dirs", [])]
         self.export_globs = cfg.rtrader.get("export_globs", ["**/*.csv", "**/*.ndjson"])
-        self.log_globs = cfg.rtrader.get("log_globs", ["**/*.log", "**/*.txt"])
+        self.log_globs = cfg.rtrader.get("log_globs", ["**/*.log", "**/*.cur.txt"])
         self._file_offsets: dict[str, int] = {}
         self._csv_rows_seen: dict[str, int] = {}
         self._pending: list[dict[str, Any]] = []
@@ -216,7 +216,8 @@ class RTraderBridgeConnector(ConnectorInterface):
                 continue
 
     def _ingest_file(self, path: Path) -> None:
-        if path.name.lower().endswith(".cur.txt"):
+        name = path.name.lower()
+        if name.endswith("_probe.txt") or name == "rithmic_test.log":
             return
         suffix = path.suffix.lower()
         if suffix == ".csv":

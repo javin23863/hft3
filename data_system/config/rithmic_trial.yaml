@@ -35,7 +35,7 @@ rtrader:
   watch_dirs: []
   log_globs:
     - "**/*.log"
-    - "**/*.txt"
+    - "**/*.cur.txt"
   export_globs:
     - "**/*.csv"
     - "**/*.ndjson"

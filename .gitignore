@@ -75,6 +75,8 @@ graphify-out/cache/
 logs/
 chi404_infra.tgz
 *.tgz
+_rithmic_staging/
+rithmic_portable.zip
 
 # IDEs
 .vscode/

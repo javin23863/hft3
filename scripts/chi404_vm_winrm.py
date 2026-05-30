@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import base64
 import os
+import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -26,8 +28,33 @@ def require_vm_password() -> str:
     return pw
 
 
+def resolve_vm_host() -> str:
+    explicit = os.environ.get("VM_WINRM_HOST", "").strip()
+    if explicit:
+        return explicit
+    try:
+        r = subprocess.run(
+            ["virsh", "domifaddr", "hft3-rtrader-win"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        for line in r.stdout.splitlines():
+            m = re.search(r"(\d+\.\d+\.\d+\.\d+)/\d+", line)
+            if m:
+                return m.group(1)
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        pass
+    print(
+        "Could not resolve VM IP from virsh; set VM_WINRM_HOST in .env",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+
 def vm_host() -> str:
-    return os.environ.get("VM_WINRM_HOST", DEFAULT_VM)
+    return resolve_vm_host()
 
 
 def vm_user() -> str:
