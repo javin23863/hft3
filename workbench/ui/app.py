@@ -58,7 +58,7 @@ selected_campaign = ""
 with tabs[0]:
     st.header("Model Selector")
     selected_model, selected_symbol, selected_campaign = model_selector_panel(REPO)
-    legacy_run = st.selectbox("Legacy single run", [""] + run_labels)
+    legacy_run = st.selectbox("Legacy single run", [""] + run_labels, key="wb__legacy_run")
     if legacy_run and not selected_campaign:
         selected_campaign = legacy_run
 
@@ -66,10 +66,10 @@ period_choice = ""
 event_choice = ""
 if selected_campaign:
     periods = campaign_periods(REPO, selected_campaign)
-    period_choice = st.selectbox("Campaign period", [""] + periods, key="period_sel")
+    period_choice = st.selectbox("Campaign period", [""] + periods, key="wb__period_sel")
     if period_choice:
         events = campaign_events(REPO, selected_campaign, period_choice)
-        event_choice = st.selectbox("Event in period", [""] + events, key="event_sel")
+        event_choice = st.selectbox("Event in period", [""] + events, key="wb__event_sel")
 
 diag_data = load_campaign_diagnostics(REPO, selected_campaign, period_choice, event_choice)
 if diag_data is None and selected_campaign:
@@ -143,7 +143,7 @@ with tabs[6]:
     st.header("Optimisation")
     st.caption("Run a campaign first — latency/cost sweeps attach to campaign events.")
     promote = bool(diag_data.get("promote_candidate")) if diag_data else False
-    st.button("Promote Candidate", disabled=not promote)
+    st.button("Promote Candidate", disabled=not promote, key="wb__promote_candidate")
 
 with tabs[7]:
     st.header("Report")

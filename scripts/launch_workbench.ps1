@@ -2,6 +2,7 @@
 param(
     [switch]$SkipBrowser,
     [switch]$SkipPreflight,
+    [switch]$PreflightOnly,
     [int]$Port = 8501
 )
 
@@ -44,35 +45,42 @@ if (-not $streamlitOk) {
 }
 
 function Invoke-WorkbenchPreflight {
-    $script = @"
-import sys
-from pathlib import Path
-root = Path(r'$RepoRoot')
-if str(root) not in sys.path:
-    sys.path.insert(0, str(root))
-from workbench.src.core.composition import CatalogEntry, DefensiveStub, ModelComposition
-from workbench.src.registry.model_catalog import load_catalog
-from workbench.ui.campaign_panel import get_session_composition
-assert load_catalog()
-print('workbench import OK')
-"@
-    & python -c $script
-    return $LASTEXITCODE
+    param([string[]]$ErrorLines = @())
+
+    $preflightScript = Join-Path $RepoRoot 'scripts/workbench_preflight.py'
+    if (-not (Test-Path $preflightScript)) {
+        Write-Host "ERROR: missing preflight script: $preflightScript" -ForegroundColor Red
+        return @{ Code = 1; ErrorLines = @("missing $preflightScript") }
+    }
+
+    $attemptOutput = & python $preflightScript 2>&1
+    $code = $LASTEXITCODE
+    $lines = @($attemptOutput | ForEach-Object { "$_" })
+    if ($code -ne 0) {
+        $ErrorLines += $lines
+    }
+    return @{ Code = $code; ErrorLines = $ErrorLines }
 }
 
 if (-not $SkipPreflight) {
     Write-Host 'Preflight: workbench imports...' -ForegroundColor DarkCyan
-    $preflightOk = Invoke-WorkbenchPreflight
-    if ($preflightOk -ne 0) {
+    $preflightResult = Invoke-WorkbenchPreflight
+    if ($preflightResult.Code -ne 0 -and $preflightResult.ErrorLines -notcontains "missing $(Join-Path $RepoRoot 'scripts/workbench_preflight.py')") {
         Write-Host 'Preflight failed; clearing workbench __pycache__ and retrying once...' -ForegroundColor Yellow
         Get-ChildItem -Path (Join-Path $RepoRoot 'workbench') -Recurse -Directory -Filter '__pycache__' -ErrorAction SilentlyContinue |
             Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-        $preflightOk = Invoke-WorkbenchPreflight
+        $preflightResult = Invoke-WorkbenchPreflight -ErrorLines $preflightResult.ErrorLines
     }
-    if ($preflightOk -ne 0) {
+    if ($preflightResult.Code -ne 0) {
+        if ($preflightResult.ErrorLines.Count -gt 0) {
+            Write-Host '--- Python preflight error ---' -ForegroundColor Red
+            $preflightResult.ErrorLines | ForEach-Object { Write-Host $_ -ForegroundColor Red }
+            Write-Host '------------------------------' -ForegroundColor Red
+        }
         Exit-Launcher -Message @(
             'ERROR: workbench import failed (CatalogEntry / model_catalog / campaign_panel).',
-            'Try: git pull; pip install -r workbench/requirements.txt'
+            'Try: git pull; pip install -r workbench/requirements.txt',
+            'Diagnostics: python scripts/workbench_preflight.py'
         )
     }
 
@@ -81,6 +89,14 @@ if (-not $SkipPreflight) {
     if ($LASTEXITCODE -ne 0) {
         Exit-Launcher -Message 'ERROR: workbench grader import tests failed. Run: powershell -File scripts/verify_workbench.ps1'
     }
+}
+
+if ($PreflightOnly) {
+    if ($SkipPreflight) {
+        Exit-Launcher -Message 'ERROR: -PreflightOnly cannot be used with -SkipPreflight.'
+    }
+    Write-Host 'Preflight complete.' -ForegroundColor Green
+    exit 0
 }
 
 $latencySummary = Join-Path $RepoRoot 'runtime/latency_reports/latency_summary.json'

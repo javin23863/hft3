@@ -70,9 +70,32 @@ def get_session_composition(primary: str) -> ModelComposition:
     return ModelComposition(primary_model_id=primary, defensive_stubs=stubs)
 
 
-def _render_catalog_rows(repo: Path, entries: list, configs: dict) -> None:
-    search = st.text_input("Search models", key="catalog_search").strip().lower()
+def _catalog_widget_key(key_prefix: str, *parts: str) -> str:
+    prefix = key_prefix.strip()
+    if not prefix:
+        raise ValueError("_render_catalog_rows requires a non-empty unique key_prefix")
+    return "_".join((prefix, *parts))
+
+
+def _render_catalog_rows(repo: Path, entries: list, configs: dict, *, key_prefix: str) -> None:
+    prefix = key_prefix.strip()
+    if not prefix:
+        raise ValueError("_render_catalog_rows requires a non-empty unique key_prefix")
+
+    search = st.text_input(
+        "Search models",
+        key=_catalog_widget_key(prefix, "catalog_search"),
+    ).strip().lower()
+
+    deduped = []
+    seen: set[str] = set()
     for entry in entries:
+        if entry.model_id in seen:
+            continue
+        seen.add(entry.model_id)
+        deduped.append(entry)
+
+    for row_idx, entry in enumerate(deduped):
         cfg = configs.get(entry.model_id)
         lane = cfg.latency_lane if cfg else "?"
         if search and search not in entry.display_name.lower() and search not in entry.model_id.lower():
@@ -86,11 +109,17 @@ def _render_catalog_rows(repo: Path, entries: list, configs: dict) -> None:
             st.caption(f"Role: {entry.role}")
         with cols[2]:
             if entry.role != "defensive":
-                if st.button("Set primary", key=f"pri_{entry.model_id}"):
+                if st.button(
+                    "Set primary",
+                    key=_catalog_widget_key(prefix, "select", str(row_idx), entry.model_id),
+                ):
                     st.session_state.wb_selected_model = entry.model_id
                     st.rerun()
             else:
-                if st.button("Add stub", key=f"stub_{entry.model_id}"):
+                if st.button(
+                    "Add stub",
+                    key=_catalog_widget_key(prefix, "enable", str(row_idx), entry.model_id),
+                ):
                     st.session_state.wb_defensive_stubs.append(
                         {
                             "model_id": entry.model_id,
@@ -120,15 +149,15 @@ def stack_builder_panel(repo: Path, primary: str) -> ModelComposition:
                 "Phase",
                 _PHASES,
                 index=_PHASES.index(stub.get("phase", entry.default_phase)),
-                key=f"phase_{i}_{stub['model_id']}",
+                key=f"wb__stack__phase__{i}__{stub['model_id']}",
             )
             stub["budget_us"] = cols[2].number_input(
                 "Budget µs",
                 min_value=1.0,
                 value=float(stub.get("budget_us", entry.budget_us)),
-                key=f"budget_{i}_{stub['model_id']}",
+                key=f"wb__stack__budget__{i}__{stub['model_id']}",
             )
-            if cols[3].button("Remove", key=f"rm_{i}_{stub['model_id']}"):
+            if cols[3].button("Remove", key=f"wb__stack__remove__{i}__{stub['model_id']}"):
                 stubs.pop(i)
                 st.rerun()
     else:
@@ -157,7 +186,7 @@ def stack_builder_panel(repo: Path, primary: str) -> ModelComposition:
     st.caption(
         f"Decision path ≈ {decision_path/1000:.2f} ms (before + during stubs + C++ p99 {cpp_p99:.0f}µs)"
     )
-    if st.button("Load preset: VPIN + Quantum + Hawkes"):
+    if st.button("Load preset: VPIN + Quantum + Hawkes", key="wb__load_preset"):
         st.session_state.wb_defensive_stubs = [
             {"model_id": "PDF_MODEL_3", "phase": "continuous", "budget_us": 2500, "enabled": True},
             {"model_id": "PDF_MODEL_9", "phase": "before", "budget_us": 50, "enabled": True},
@@ -174,7 +203,7 @@ def personal_lock_sidebar(repo: Path) -> None:
         st.error("Locked — 2026-03-01…2026-05-30 hidden from promotion")
     else:
         st.success("Unlocked — personal replay enabled (never promotes)")
-    unlock = st.checkbox("Unlock personal sandbox (local only)", value=not locked, key="personal_unlock")
+    unlock = st.checkbox("Unlock personal sandbox (local only)", value=not locked, key="wb__personal_unlock")
     if unlock != (not locked):
         set_unlocked(repo, unlock)
         st.rerun()
@@ -210,9 +239,9 @@ def model_selector_panel(repo: Path) -> Tuple[str, str, str]:
 
     colf1, colf2 = st.columns(2)
     with colf1:
-        lane = st.selectbox("Latency lane filter", _LANES, key="lane_filter")
+        lane = st.selectbox("Latency lane filter", _LANES, key="wb__lane_filter")
     with colf2:
-        role_filter = st.selectbox("Role filter", _ROLES, key="role_filter")
+        role_filter = st.selectbox("Role filter", _ROLES, key="wb__role_filter")
     st.session_state.wb_lane_filter = lane
     st.session_state.wb_role_filter = role_filter
 
@@ -224,19 +253,43 @@ def model_selector_panel(repo: Path) -> Tuple[str, str, str]:
     st.metric("Registered models", len(models))
     st.caption(f"Showing {len(entries)} after filters")
 
-    tab_alpha, tab_def, tab_stack = st.tabs(["Alpha / signal catalog", "Defensive catalog", "Stack builder"])
+    tab_alpha, tab_hybrid, tab_defensive, tab_stack = st.tabs(
+        ["Alpha catalog", "Hybrid catalog", "Defensive catalog", "Stack builder"]
+    )
     with tab_alpha:
-        alpha_entries = [e for e in entries if e.role in ("alpha", "hybrid")]
-        _render_catalog_rows(repo, alpha_entries, configs)
-    with tab_def:
+        alpha_entries = [e for e in entries if e.role == "alpha"]
+        _render_catalog_rows(
+            repo,
+            alpha_entries,
+            configs,
+            key_prefix="alpha_catalog",
+        )
+    with tab_hybrid:
+        hybrid_entries = [e for e in entries if e.role == "hybrid"]
+        _render_catalog_rows(
+            repo,
+            hybrid_entries,
+            configs,
+            key_prefix="hybrid_catalog",
+        )
+    with tab_defensive:
         def_entries = list_by_role("defensive", repo)
         if role_filter == "all" or role_filter == "defensive":
             def_entries = [e for e in def_entries if e.model_id in filtered_ids or lane == "all"]
-        _render_catalog_rows(repo, def_entries, configs)
+        _render_catalog_rows(
+            repo,
+            def_entries,
+            configs,
+            key_prefix="defensive_catalog",
+        )
 
-    symbol = st.selectbox("Primary symbol", ["MES.v.0", "ES.v.0", "MNQ.v.0", "NQ.v.0"], key="sym_pick")
+    symbol = st.selectbox("Primary symbol", ["MES.v.0", "ES.v.0", "MNQ.v.0", "NQ.v.0"], key="wb__sym_pick")
     st.session_state.wb_symbol = symbol
-    audit = st.checkbox("Audit grade (full-sweep + history gate)", value=st.session_state.wb_audit_grade)
+    audit = st.checkbox(
+        "Audit grade (full-sweep + history gate)",
+        value=st.session_state.wb_audit_grade,
+        key="wb__audit",
+    )
     st.session_state.wb_audit_grade = audit
 
     model = st.session_state.wb_selected_model
@@ -262,7 +315,7 @@ def model_selector_panel(repo: Path) -> Tuple[str, str, str]:
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        if st.button("Start Campaign", disabled=not model):
+        if st.button("Start Campaign", disabled=not model, key="wb__start_campaign"):
             proc, cid = start_campaign_subprocess(
                 repo,
                 model_id=model,
@@ -275,13 +328,13 @@ def model_selector_panel(repo: Path) -> Tuple[str, str, str]:
             set_control(repo, cid, "run")
             st.info(f"Campaign started: {cid}")
     with col2:
-        if st.button("Pause") and st.session_state.wb_active_campaign:
+        if st.button("Pause", key="wb__pause") and st.session_state.wb_active_campaign:
             set_control(repo, st.session_state.wb_active_campaign, "pause")
     with col3:
-        if st.button("Stop") and st.session_state.wb_active_campaign:
+        if st.button("Stop", key="wb__stop") and st.session_state.wb_active_campaign:
             set_control(repo, st.session_state.wb_active_campaign, "stop")
     with col4:
-        if st.button("Download missing", disabled=not model):
+        if st.button("Download missing", disabled=not model, key="wb__download_missing"):
             cmd = [
                 sys.executable,
                 str(repo / "workbench" / "scripts" / "backfill_catalog.py"),
@@ -297,7 +350,7 @@ def model_selector_panel(repo: Path) -> Tuple[str, str, str]:
             st.info("Backfill started (max $25)")
 
     campaigns = list_active_campaigns(repo)
-    camp = st.selectbox("Load campaign", [""] + campaigns, key="camp_pick")
+    camp = st.selectbox("Load campaign", [""] + campaigns, key="wb__camp_pick")
     if camp:
         st.session_state.wb_active_campaign = camp
         status = get_job_status(repo, camp)
