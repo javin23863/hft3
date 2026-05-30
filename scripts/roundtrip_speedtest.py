@@ -186,67 +186,10 @@ def _load_json(path: Path) -> dict[str, Any] | None:
         return None
 
 
-def _profile_untrusted(latency_data: dict[str, Any], capture: dict[str, Any] | None) -> bool:
-    texts: list[str] = []
-    lims = latency_data.get("limitations")
-    if isinstance(lims, list):
-        texts.extend(str(x) for x in lims)
-    elif isinstance(lims, str):
-        texts.append(lims)
-
-    connector: str | None = None
-    if capture:
-        manifest = capture.get("manifest") or {}
-        known = capture.get("limitations") or manifest.get("known_limitations") or {}
-        if isinstance(known, dict):
-            connector = known.get("connector")
-            note = known.get("note")
-            if note:
-                texts.append(str(note))
-
-    if connector == "fixture":
-        return True
-    return any("Synthetic fixture" in t for t in texts)
-
-
 def _latest_latency_profile(repo_root: Path) -> dict[str, Any] | None:
-    base = repo_root / "reports" / "rithmic_trial"
-    if not base.is_dir():
-        return None
-    candidates = sorted(
-        (p for p in base.iterdir() if p.is_dir() and (p / "latency_profile.json").is_file()),
-        key=lambda p: p.name,
-        reverse=True,
-    )
-    if not candidates:
-        return None
-    profile_dir = candidates[0]
-    path = profile_dir / "latency_profile.json"
-    data = _load_json(path)
-    if data is None:
-        return None
+    from scripts.latency_probe.trial_profile import latest_latency_profile
 
-    capture_path = profile_dir / "data_capture_report.json"
-    capture = _load_json(capture_path) if capture_path.is_file() else None
-    trusted = not _profile_untrusted(data, capture)
-    connector: str | None = None
-    if capture:
-        manifest = capture.get("manifest") or {}
-        known = capture.get("limitations") or manifest.get("known_limitations") or {}
-        if isinstance(known, dict):
-            connector = known.get("connector")
-
-    out: dict[str, Any] = {
-        "path": str(path.relative_to(repo_root)).replace("\\", "/"),
-        "order_rtt_ms": data.get("order_rtt_ms"),
-        "status": data.get("status"),
-        "limitations": data.get("limitations"),
-        "trusted": trusted,
-        "connector": connector,
-    }
-    if capture is not None:
-        out["data_capture_report"] = str(capture_path.relative_to(repo_root)).replace("\\", "/")
-    return out
+    return latest_latency_profile(repo_root)
 
 
 def _parse_chi404_tuning_block(text: str) -> dict[str, Any] | None:
@@ -498,6 +441,7 @@ def _build_classifications(payload: dict[str, Any]) -> dict[str, Any]:
     ping_hosts = (payload.get("ping") or {}).get("hosts") or []
     remote = payload.get("remote")
     trial = payload.get("rithmic_trial_profile") or {}
+    colo_only = bool(payload.get("colo_only"))
 
     local_ms = _min_ping_avg(ping_hosts, ("chi404", "rithmic"))
     local_workstation = _classification_block(local_ms, "min_ping_chi404_rithmic")
@@ -510,7 +454,15 @@ def _build_classifications(payload: dict[str, Any]) -> dict[str, Any]:
         order_ms = float(trial["order_rtt_ms"])
     order_path = _classification_block(order_ms, "order_rtt_ms")
 
-    if local_ms is not None and local_ms > 5.0:
+    if colo_only and remote:
+        if colo_ms is not None:
+            operating_tier = {**colo_on_box, "source": "colo_on_box"}
+        else:
+            operating_tier = {
+                "status": "pending",
+                "reason": "colo-only remote probe: no gateway/rithmic ping on CHI404",
+            }
+    elif local_ms is not None and local_ms > 5.0:
         operating_tier = {**local_workstation, "source": "local_workstation"}
     elif colo_ms is not None:
         operating_tier = {**colo_on_box, "source": "colo_on_box"}
@@ -657,7 +609,12 @@ def _build_complete_picture(payload: dict[str, Any]) -> dict[str, Any]:
         }
 
     local_ws = classifications.get("local_workstation") or {}
-    if local_ws.get("dominant_rtt_ms") is not None:
+    if payload.get("colo_only"):
+        research_operating_tier = {
+            "status": "skipped",
+            "reason": "--colo-only with --remote",
+        }
+    elif local_ws.get("dominant_rtt_ms") is not None:
         research_operating_tier: dict[str, Any] = {
             **local_ws,
             "status": "PASS",
@@ -702,7 +659,13 @@ def _format_leg_status(leg: dict[str, Any]) -> str:
         return f"FAIL ({leg.get('reason', leg.get('max_p99_us', 'check leg'))})"
     if status == "not_measured":
         return f"not_measured ({leg.get('reason', 'unknown')})"
+    if status == "skipped":
+        return f"skipped ({leg.get('reason', 'unknown')})"
     return f"pending ({leg.get('reason', 'unknown')})"
+
+
+def _skipped_local_leg(reason: str) -> dict[str, Any]:
+    return {"status": "skipped", "reason": reason}
 
 
 def run_probe(
@@ -710,26 +673,34 @@ def run_probe(
     samples: int,
     output_dir: Path,
     remote: str | None,
+    *,
+    colo_only: bool = False,
 ) -> dict[str, Any]:
     _load_dotenv(repo_root)
-    hosts = _configured_hosts()
+    skip_local = colo_only and remote is not None
+    hosts = [] if skip_local else _configured_hosts()
 
-    loopback = measure_loopback_tcp(samples)
-    ping_results: list[dict[str, Any]] = []
-    for label, host in hosts:
-        row = measure_ping(host, samples)
-        row["label"] = label
-        ping_results.append(row)
+    if skip_local:
+        loopback = _skipped_local_leg("--colo-only with --remote")
+        ping_results = []
+        tcp_targets = []
+    else:
+        loopback = measure_loopback_tcp(samples)
+        ping_results = []
+        for label, host in hosts:
+            row = measure_ping(host, samples)
+            row["label"] = label
+            ping_results.append(row)
 
-    tcp_targets: list[dict[str, Any]] = []
-    for label, host in hosts:
-        if label == "rithmic":
-            port = RITHMIC_TCP_PORT
-        else:
-            port = HTTPS_TCP_PORT
-        row = measure_tcp_connect(host, port, samples)
-        row["label"] = label
-        tcp_targets.append(row)
+        tcp_targets = []
+        for label, host in hosts:
+            if label == "rithmic":
+                port = RITHMIC_TCP_PORT
+            else:
+                port = HTTPS_TCP_PORT
+            row = measure_tcp_connect(host, port, samples)
+            row["label"] = label
+            tcp_targets.append(row)
 
     trial = _latest_latency_profile(repo_root)
     remote_block: dict[str, Any] | None = None
@@ -741,6 +712,7 @@ def run_probe(
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "platform": platform.platform(),
         "samples": samples,
+        "colo_only": colo_only,
         "latency_bands_ms": list(LATENCY_BANDS_MS),
         "env_hosts": {label: host for label, host in hosts},
         "loopback_tcp": loopback,
@@ -843,6 +815,11 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="SSH remote probe (default alias chi404 when flag alone)",
     )
+    parser.add_argument(
+        "--colo-only",
+        action="store_true",
+        help="With --remote: skip local loopback/ping/TCP (CHI404 remote metrics only)",
+    )
     parser.add_argument("--samples", type=int, default=DEFAULT_SAMPLES)
     parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR)
     args = parser.parse_args(argv)
@@ -852,7 +829,16 @@ def main(argv: list[str] | None = None) -> int:
     if not out_dir.is_absolute():
         out_dir = repo_root / out_dir
 
-    payload = run_probe(repo_root, args.samples, out_dir, args.remote)
+    if args.colo_only and not args.remote:
+        parser.error("--colo-only requires --remote")
+
+    payload = run_probe(
+        repo_root,
+        args.samples,
+        out_dir,
+        args.remote,
+        colo_only=args.colo_only,
+    )
     _print_summary(payload)
     return 0
 

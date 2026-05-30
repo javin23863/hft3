@@ -49,3 +49,13 @@ if (-not (Test-Path "R:\")) {
     net use R: /delete /y 2>$null | Out-Null
     cmd /c "net use R: `"$shareRoot`" /user:$SmbUser $SmbPass /persistent:yes" 2>$null | Out-Null
 }
+
+# Merge orphaned Rithmic.bak_* logs into symlink target (pre-symlink sessions).
+if (Test-Path $docs) {
+    Get-ChildItem "$env:USERPROFILE\Documents" -Directory -Filter 'Rithmic.bak_*' -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending | ForEach-Object {
+            Get-ChildItem $_.FullName -File -ErrorAction SilentlyContinue | ForEach-Object {
+                Copy-Item $_.FullName (Join-Path $docs $_.Name) -Force -ErrorAction SilentlyContinue
+            }
+        }
+}

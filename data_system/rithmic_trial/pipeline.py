@@ -36,7 +36,12 @@ def cmd_capture(args: argparse.Namespace) -> int:
         return 1
     connector = build_connector(cfg)
     connector.connect()
-    capture = LiveCapture(cfg, date=args.date, symbol=args.symbol)
+    capture = LiveCapture(
+        cfg,
+        date=args.date,
+        symbol=args.symbol,
+        event_id=getattr(args, "event_id", None),
+    )
     deadline = time.time() + args.duration_sec
     total = 0
     try:
@@ -98,7 +103,10 @@ def cmd_process(args: argparse.Namespace) -> int:
     print(f"Reports -> {reports_dir}")
     for name, path in report_paths.items():
         print(f"  {name}: {path}")
-    return 0 if quality["status"] == "pass" and book["status"] == "pass" and conversion["status"] == "pass" else 1
+    quality_ok = quality["status"] == "pass" or (
+        getattr(args, "allow_quality_warn", False) and quality["status"] == "warn"
+    )
+    return 0 if quality_ok and book["status"] == "pass" and conversion["status"] == "pass" else 1
 
 
 def cmd_replay_sample(args: argparse.Namespace) -> int:
@@ -118,6 +126,30 @@ def cmd_replay_sample(args: argparse.Namespace) -> int:
     if "error" in result:
         return 1
     return 0
+
+
+def cmd_replay_event(args: argparse.Namespace) -> int:
+    """Event-driven replay via Databento NPZ + CHI404 latency (not trial capture date)."""
+    import subprocess
+
+    summary = Path(args.chi404_summary)
+    if not summary.is_absolute():
+        summary = _REPO / summary
+    cmd = [
+        sys.executable,
+        str(_REPO / "scripts" / "run_event_replay.py"),
+        "--event-id",
+        args.event_id,
+        "--chi404-summary",
+        str(summary),
+    ]
+    if args.npz:
+        cmd.extend(["--npz", str(Path(args.npz))])
+    if args.out:
+        cmd.extend(["--out", str(Path(args.out))])
+    if args.latency_ms is not None:
+        cmd.extend(["--latency-ms", str(args.latency_ms)])
+    return subprocess.call(cmd)
 
 
 def cmd_run_unattended(args: argparse.Namespace) -> int:
@@ -144,12 +176,22 @@ def main() -> int:
     p_cap.add_argument("--duration-sec", type=int, default=30)
     p_cap.add_argument("--poll-interval-sec", type=float, default=1.0)
     p_cap.add_argument("--force", action="store_true")
+    p_cap.add_argument(
+        "--event-id",
+        default=None,
+        help="Macro event tag for manifest (research key; capture folder still uses --date)",
+    )
     p_cap.set_defaults(func=cmd_capture)
 
     p_proc = sub.add_parser("process")
     _add_config(p_proc)
     p_proc.add_argument("--date", required=True)
     p_proc.add_argument("--symbol", default=None)
+    p_proc.add_argument(
+        "--allow-quality-warn",
+        action="store_true",
+        help="Exit 0 when quality status is warn (trial smoke only)",
+    )
     p_proc.set_defaults(func=cmd_process)
 
     p_rep = sub.add_parser("replay-sample")
@@ -163,6 +205,21 @@ def main() -> int:
         help="Trade-only replay without combined strategy (trial NPZ default)",
     )
     p_rep.set_defaults(func=cmd_replay_sample)
+
+    p_ev = sub.add_parser(
+        "replay-event",
+        help="Replay macro event from Databento NPZ at CHI404-measured latency",
+    )
+    _add_config(p_ev)
+    p_ev.add_argument("--event-id", required=True)
+    p_ev.add_argument("--npz", default=None)
+    p_ev.add_argument(
+        "--chi404-summary",
+        default="runtime/latency_reports/latency_summary.json",
+    )
+    p_ev.add_argument("--out", default=None)
+    p_ev.add_argument("--latency-ms", type=float, default=None)
+    p_ev.set_defaults(func=cmd_replay_event)
 
     p_un = sub.add_parser("run-unattended", help="Headless capture daemon (CHI404 R|Trader Wine only)")
     _add_config(p_un)

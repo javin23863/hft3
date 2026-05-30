@@ -1,0 +1,507 @@
+{
+  "scenario": "CPI_2024_09_11_TIGHT event replay",
+  "timestamp_utc": "2026-05-30T04:29:28.684938+00:00",
+  "event_id": "CPI_2024_09_11_TIGHT",
+  "release_date": "2024-09-11",
+  "release_time_et": "08:30:00",
+  "window_utc": "2024-09-11T12:29:30+00:00 to 2024-09-11T12:35:00+00:00",
+  "symbol": "MES.v.0",
+  "npz_path": "data/npz/MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz",
+  "npz_source": "Databento MBO (trusted research lake)",
+  "events": 146184,
+  "live_orders_sent": false,
+  "chi404_measured_speed": {
+    "probe_run_id": "20260530T031754Z",
+    "probe_timestamp_utc": "2026-05-30T03:23:46.374366+00:00",
+    "source": "chi404_bare_metal_only",
+    "cpu_loaded_p99_us": 11,
+    "gateway_ping_p99_ms": 0.166,
+    "rithmic_tcp_65000_p99_ms": 4.094202995474916,
+    "network_worst_p99_us": 4094.202995474916,
+    "network_worst_source": "rithmic_tcp_65000",
+    "order_ack_p99_ms": null,
+    "trial_order_ack_p99_ms": null,
+    "trial_order_ack_status": "missing",
+    "backtest_latency_ms": 4.094202995474916,
+    "backtest_latency_source": "CHI404 rithmic_tcp_65000 p99 (measured on colo bare metal)",
+    "order_ack_measured": false
+  },
+  "backtest_latency_ms": 4.094202995474916,
+  "backtest_latency_note": "TCP connect p99; order submit\u2192ack not measured until Stage 3 paper harness",
+  "primary_research_engine": "event_accurate_mbo",
+  "engines": {
+    "hftbacktest_loop": {
+      "engine": "hftbacktest_loop",
+      "description": "ReplayRunner + MBO-synced CombinedHypothesisStrategy (queue-realistic LIMIT fills)",
+      "feature_path": "mbo_pipeline_synced_to_hbt.current_timestamp",
+      "aggregation": "max_abs",
+      "signal_threshold": 0.15,
+      "result": {
+        "skipped": true
+      }
+    },
+    "event_accurate_mbo": {
+      "engine": "event_accurate_mbo",
+      "description": "SignalBacktester: full MBO MarketStatePipeline, per-hypothesis signals",
+      "feature_path": "mbo_pipeline",
+      "signal_threshold": 0.15,
+      "hypothesis_count": 39,
+      "hypotheses_with_trades": 9,
+      "total_trades_all_hypotheses": 3506,
+      "top_by_abs_pnl": [
+        {
+          "hypothesis_id": 40,
+          "net_pnl_usd": -639.575,
+          "num_trades": 1850,
+          "win_rate": 0.2454,
+          "expectancy_usd": -0.3457,
+          "adverse_selection_ticks": -5.5636,
+          "tail_loss_usd": -7.9125,
+          "hypothesis_name": "Re-quote race after shock"
+        },
+        {
+          "hypothesis_id": 4,
+          "net_pnl_usd": -381.425,
+          "num_trades": 528,
+          "win_rate": 0.3106,
+          "expectancy_usd": -0.7224,
+          "adverse_selection_ticks": -1.8047,
+          "tail_loss_usd": -12.1,
+          "hypothesis_name": "Depth-refill imbalance"
+        },
+        {
+          "hypothesis_id": 13,
+          "net_pnl_usd": -377.6,
+          "num_trades": 37,
+          "win_rate": 0.2162,
+          "expectancy_usd": -10.2054,
+          "adverse_selection_ticks": -119.0909,
+          "tail_loss_usd": -54.2875,
+          "hypothesis_name": "Iceberg/reload detection"
+        },
+        {
+          "hypothesis_id": 10,
+          "net_pnl_usd": -202.875,
+          "num_trades": 1054,
+          "win_rate": 0.2097,
+          "expectancy_usd": -0.1925,
+          "adverse_selection_ticks": -1.1254,
+          "tail_loss_usd": -2.6,
+          "hypothesis_name": "Queue depletion trigger"
+        },
+        {
+          "hypothesis_id": 5,
+          "net_pnl_usd": -194.275,
+          "num_trades": 11,
+          "win_rate": 0.4545,
+          "expectancy_usd": -17.6614,
+          "adverse_selection_ticks": -8.0,
+          "tail_loss_usd": -94.6312,
+          "hypothesis_name": "Spread blowout/recompression"
+        }
+      ],
+      "hyp_5_spread_blowout": {
+        "hypothesis_id": 5,
+        "net_pnl_usd": -194.275,
+        "num_trades": 11,
+        "win_rate": 0.4545,
+        "expectancy_usd": -17.6614,
+        "adverse_selection_ticks": -8.0,
+        "tail_loss_usd": -94.6312,
+        "hypothesis_name": "Spread blowout/recompression"
+      },
+      "all_hypotheses": [
+        {
+          "hypothesis_id": 1,
+          "net_pnl_usd": -94.575,
+          "num_trades": 0,
+          "win_rate": 0.0,
+          "expectancy_usd": 0.0,
+          "adverse_selection_ticks": 0.0,
+          "tail_loss_usd": -94.475,
+          "hypothesis_name": "Second-wave continuation"
+        },
+        {
+          "hypothesis_id": 2,
+          "net_pnl_usd": 0.0,
+          "num_trades": 0,
+          "win_rate": 0.0,
+          "expectancy_usd": 0.0,
+          "adverse_selection_ticks": 0.0,
+          "tail_loss_usd": 0.0,
+          "hypothesis_name": "Stop-run exhaustion fade"
+        },
+        {
+          "hypothesis_id": 3,
+          "net_pnl_usd": 0.0,
+          "num_trades": 0,
+          "win_rate": 0.0,
+          "expectancy_usd": 0.0,
+          "adverse_selection_ticks": 0.0,
+          "tail_loss_usd": 0.0,
+          "hypothesis_name": "Liquidity vacuum continuation"
+        },
+        {
+          "hypothesis_id": 4,
+          "net_pnl_usd": -381.425,
+          "num_trades": 528,
+          "win_rate": 0.3106,
+          "expectancy_usd": -0.7224,
+          "adverse_selection_ticks": -1.8047,
+          "tail_loss_usd": -12.1,
+          "hypothesis_name": "Depth-refill imbalance"
+        },
+        {
+          "hypothesis_id": 5,
+          "net_pnl_usd": -194.275,
+          "num_trades": 11,
+          "win_rate": 0.4545,
+          "expectancy_usd": -17.6614,
+          "adverse_selection_ticks": -8.0,
+          "tail_loss_usd": -94.6312,
+          "hypothesis_name": "Spread blowout/recompression"
+        },
+        {
+          "hypothesis_id": 6,
+          "net_pnl_usd": 94.175,
+          "num_trades": 0,
+          "win_rate": 0.0,
+          "expectancy_usd": 0.0,
+          "adverse_selection_ticks": 0.0,
+          "tail_loss_usd": 94.275,
+          "hypothesis_name": "Aggressor deceleration fade"
+        },
+        {
+          "hypothesis_id": 7,
+          "net_pnl_usd": 0.0,
+          "num_trades": 0,
+          "win_rate": 0.0,
+          "expectancy_usd": 0.0,
+          "adverse_selection_ticks": 0.0,
+          "tail_loss_usd": 0.0,
+          "hypothesis_name": "Forced liquidation cascade"
+        },
+        {
+          "hypothesis_id": 8,
+          "net_pnl_usd": 94.175,
+          "num_trades": 0,
+          "win_rate": 0.0,
+          "expectancy_usd": 0.0,
+          "adverse_selection_ticks": 0.0,
+          "tail_loss_usd": 94.275,
+          "hypothesis_name": "False breakout trap"
+        },
+        {
+          "hypothesis_id": 9,
+          "net_pnl_usd": -93.525,
+          "num_trades": 1,
+          "win_rate": 0.0,
+          "expectancy_usd": -93.525,
+          "adverse_selection_ticks": 8.0,
+          "tail_loss_usd": -87.4437,
+          "hypothesis_name": "Cancel storm before move"
+        },
+        {
+          "hypothesis_id": 10,
+          "net_pnl_usd": -202.875,
+          "num_trades": 1054,
+          "win_rate": 0.2097,
+          "expectancy_usd": -0.1925,
+          "adverse_selection_ticks": -1.1254,
+          "tail_loss_usd": -2.6,
+          "hypothesis_name": "Queue depletion trigger"
+        },
+        {
+          "hypothesis_id": 11,
+          "net_pnl_usd": -147.175,
+          "num_trades": 13,
+          "win_rate": 0.3077,
+          "expectancy_usd": -11.3212,
+          "adverse_selection_ticks": 13.3571,
+          "tail_loss_usd": -55.1,
+          "hypothesis_name": "Book slope collapse"
+        },
+        {
+          "hypothesis_id": 12,
+          "net_pnl_usd": 94.175,
+          "num_trades": 0,
+          "win_rate": 0.0,
+          "expectancy_usd": 0.0,
+          "adverse_selection_ticks": 0.0,
+          "tail_loss_usd": 94.275,
+          "hypothesis_name": "Absorption fade"
+        },
+        {
+          "hypothesis_id": 13,
+          "net_pnl_usd": -377.6,
+          "num_trades": 37,
+          "win_rate": 0.2162,
+          "expectancy_usd": -10.2054,
+          "adverse_selection_ticks": -119.0909,
+          "tail_loss_usd": -54.2875,
+          "hypothesis_name": "Iceberg/reload detection"
+        },
+        {
+          "hypothesis_id": 14,
+          "net_pnl_usd": 0.0,
+          "num_trades": 0,
+          "win_rate": 0.0,
+          "expectancy_usd": 0.0,
+          "adverse_selection_ticks": 0.0,
+          "tail_loss_usd": 0.0,
+          "hypothesis_name": "Liquidity defense break"
+        },
+        {
+          "hypothesis_id": 15,
+          "net_pnl_usd": 94.625,
+          "num_trades": 4,
+          "win_rate": 0.5,
+          "expectancy_usd": 23.6562,
+          "adverse_selection_ticks": 0.0,
+          "tail_loss_usd": -1.1,
+          "hypothesis_name": "One-sided add/cancel imbalance"
+        },
+        {
+          "hypothesis_id": 21,
+          "net_pnl_usd": 0.0,
+          "num_trades": 0,
+          "win_rate": 0.0,
+          "expectancy_usd": 0.0,
+          "adverse_selection_ticks": 0.0,
+          "tail_loss_usd": 0.0,
+          "hypothesis_name": "Round-number stop sweep"
+        },
+        {
+          "hypothesis_id": 22,
+          "net_pnl_usd": 94.175,
+          "num_trades": 0,
+          "win_rate": 0.0,
+          "expectancy_usd": 0.0,
+          "adverse_selection_ticks": 0.0,
+          "tail_loss_usd": 94.275,
+          "hypothesis_name": "Prior high/low breakout trap"
+        },
+        {
+          "hypothesis_id": 23,
+          "net_pnl_usd": 0.0,
+          "num_trades": 0,
+          "win_rate": 0.0,
+          "expectancy_usd": 0.0,
+          "adverse_selection_ticks": 0.0,
+          "tail_loss_usd": 0.0,
+          "hypothesis_name": "Opening candle chase"
+        },
+        {
+          "hypothesis_id": 24,
+          "net_pnl_usd": 113.2,
+          "num_trades": 8,
+          "win_rate": 0.5,
+          "expectancy_usd": 14.15,
+          "adverse_selection_ticks": -144.0,
+          "tail_loss_usd": -3.225,
+          "hypothesis_name": "VWAP defense/break"
+        },
+        {
+          "hypothesis_id": 25,
+          "net_pnl_usd": 94.175,
+          "num_trades": 0,
+          "win_rate": 0.0,
+          "expectancy_usd": 0.0,
+          "adverse_selection_ticks": 0.0,
+          "tail_loss_usd": 94.275,
+          "hypothesis_name": "DOM illusion trap"
+        },
+        {
+          "hypothesis_id": 26,
+          "net_pnl_usd": 0.0,
+          "num_trades": 0,
+          "win_rate": 0.0,
+          "expectancy_usd": 0.0,
+          "adverse_selection_ticks": 0.0,
+          "tail_loss_usd": 0.0,
+          "hypothesis_name": "Late candle entry fade"
+        },
+        {
+          "hypothesis_id": 27,
+          "net_pnl_usd": 0.0,
+          "num_trades": 0,
+          "win_rate": 0.0,
+          "expectancy_usd": 0.0,
+          "adverse_selection_ticks": 0.0,
+          "tail_loss_usd": 0.0,
+          "hypothesis_name": "Stop-loss cascade continuation"
+        },
+        {
+          "hypothesis_id": 28,
+          "net_pnl_usd": 0.0,
+          "num_trades": 0,
+          "win_rate": 0.0,
+          "expectancy_usd": 0.0,
+          "adverse_selection_ticks": 0.0,
+          "tail_loss_usd": 0.0,
+          "hypothesis_name": "Panic market-order spread tax"
+        },
+        {
+          "hypothesis_id": 29,
+          "net_pnl_usd": 0.0,
+          "num_trades": 0,
+          "win_rate": 0.0,
+          "expectancy_usd": 0.0,
+          "adverse_selection_ticks": 0.0,
+          "tail_loss_usd": 0.0,
+          "hypothesis_name": "End-of-day forced flatten flow"
+        },
+        {
+          "hypothesis_id": 30,
+          "net_pnl_usd": 0.0,
+          "num_trades": 0,
+          "win_rate": 0.0,
+          "expectancy_usd": 0.0,
+          "adverse_selection_ticks": 0.0,
+          "tail_loss_usd": 0.0,
+          "hypothesis_name": "Cutoff panic exits"
+        },
+        {
+          "hypothesis_id": 31,
+          "net_pnl_usd": 0.0,
+          "num_trades": 0,
+          "win_rate": 0.0,
+          "expectancy_usd": 0.0,
+          "adverse_selection_ticks": 0.0,
+          "tail_loss_usd": 0.0,
+          "hypothesis_name": "No-overnight inventory squeeze"
+        },
+        {
+          "hypothesis_id": 32,
+          "net_pnl_usd": 0.0,
+          "num_trades": 0,
+          "win_rate": 0.0,
+          "expectancy_usd": 0.0,
+          "adverse_selection_ticks": 0.0,
+          "tail_loss_usd": 0.0,
+          "hypothesis_name": "Daily loss-limit defense"
+        },
+        {
+          "hypothesis_id": 33,
+          "net_pnl_usd": 0.0,
+          "num_trades": 0,
+          "win_rate": 0.0,
+          "expectancy_usd": 0.0,
+          "adverse_selection_ticks": 0.0,
+          "tail_loss_usd": 0.0,
+          "hypothesis_name": "Trailing drawdown pressure"
+        },
+        {
+          "hypothesis_id": 34,
+          "net_pnl_usd": 0.0,
+          "num_trades": 0,
+          "win_rate": 0.0,
+          "expectancy_usd": 0.0,
+          "adverse_selection_ticks": 0.0,
+          "tail_loss_usd": 0.0,
+          "hypothesis_name": "Profit-lock behavior"
+        },
+        {
+          "hypothesis_id": 35,
+          "net_pnl_usd": 0.0,
+          "num_trades": 0,
+          "win_rate": 0.0,
+          "expectancy_usd": 0.0,
+          "adverse_selection_ticks": 0.0,
+          "tail_loss_usd": 0.0,
+          "hypothesis_name": "Max-contract crowding in micros"
+        },
+        {
+          "hypothesis_id": 36,
+          "net_pnl_usd": 0.0,
+          "num_trades": 0,
+          "win_rate": 0.0,
+          "expectancy_usd": 0.0,
+          "adverse_selection_ticks": 0.0,
+          "tail_loss_usd": 0.0,
+          "hypothesis_name": "Prop reset/reopen window"
+        },
+        {
+          "hypothesis_id": 37,
+          "net_pnl_usd": 0.0,
+          "num_trades": 0,
+          "win_rate": 0.0,
+          "expectancy_usd": 0.0,
+          "adverse_selection_ticks": 0.0,
+          "tail_loss_usd": 0.0,
+          "hypothesis_name": "Friday/weekend de-risking"
+        },
+        {
+          "hypothesis_id": 38,
+          "net_pnl_usd": 0.0,
+          "num_trades": 0,
+          "win_rate": 0.0,
+          "expectancy_usd": 0.0,
+          "adverse_selection_ticks": 0.0,
+          "tail_loss_usd": 0.0,
+          "hypothesis_name": "Economic-event restriction flattening"
+        },
+        {
+          "hypothesis_id": 39,
+          "net_pnl_usd": 0.0,
+          "num_trades": 0,
+          "win_rate": 0.0,
+          "expectancy_usd": 0.0,
+          "adverse_selection_ticks": 0.0,
+          "tail_loss_usd": 0.0,
+          "hypothesis_name": "Quote pull before volatility"
+        },
+        {
+          "hypothesis_id": 40,
+          "net_pnl_usd": -639.575,
+          "num_trades": 1850,
+          "win_rate": 0.2454,
+          "expectancy_usd": -0.3457,
+          "adverse_selection_ticks": -5.5636,
+          "tail_loss_usd": -7.9125,
+          "hypothesis_name": "Re-quote race after shock"
+        },
+        {
+          "hypothesis_id": 41,
+          "net_pnl_usd": 0.0,
+          "num_trades": 0,
+          "win_rate": 0.0,
+          "expectancy_usd": 0.0,
+          "adverse_selection_ticks": 0.0,
+          "tail_loss_usd": 0.0,
+          "hypothesis_name": "Thin-book continuation"
+        },
+        {
+          "hypothesis_id": 42,
+          "net_pnl_usd": -94.575,
+          "num_trades": 0,
+          "win_rate": 0.0,
+          "expectancy_usd": 0.0,
+          "adverse_selection_ticks": 0.0,
+          "tail_loss_usd": -94.475,
+          "hypothesis_name": "Passive trap fill"
+        },
+        {
+          "hypothesis_id": 43,
+          "net_pnl_usd": 0.0,
+          "num_trades": 0,
+          "win_rate": 0.0,
+          "expectancy_usd": 0.0,
+          "adverse_selection_ticks": 0.0,
+          "tail_loss_usd": 0.0,
+          "hypothesis_name": "Rebate trap avoidance"
+        },
+        {
+          "hypothesis_id": 44,
+          "net_pnl_usd": 0.0,
+          "num_trades": 0,
+          "win_rate": 0.0,
+          "expectancy_usd": 0.0,
+          "adverse_selection_ticks": 0.0,
+          "tail_loss_usd": 0.0,
+          "hypothesis_name": "Spread regime change"
+        }
+      ]
+    }
+  }
+}

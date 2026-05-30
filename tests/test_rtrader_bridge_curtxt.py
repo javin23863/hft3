@@ -76,6 +76,24 @@ def test_rtrader_bridge_ingests_comma_log(tmp_path: Path) -> None:
     assert len(events) == 1
     assert events[0]["event_type"] == "trade"
     assert events[0]["price"] == 5000.0
+    assert events[0].get("exchange_timestamp")
+
+
+def test_rtrader_bridge_skips_trace_noise(trial_cfg: TrialConfig, tmp_path: Path) -> None:
+    watch = tmp_path / "watch"
+    watch.mkdir()
+    log = watch / "Rithmic Trader Pro.cur.txt"
+    log.write_text(
+        "ritpz04063.04.rithmic.com connecting\nTRADE MES 5123.25\n",
+        encoding="utf-8",
+    )
+
+    trial_cfg.rtrader["watch_dirs"] = [str(watch)]
+    conn = RTraderBridgeConnector(trial_cfg)
+    conn.connect()
+    events = conn.poll_events()
+    assert len(events) == 1
+    assert events[0]["event_type"] == "trade"
 
 
 def test_rtrader_bridge_skips_probe_txt(trial_cfg: TrialConfig, tmp_path: Path) -> None:

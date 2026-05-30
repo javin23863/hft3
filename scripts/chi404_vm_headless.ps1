@@ -48,5 +48,6 @@ function Register-LogonTask {
 Register-LogonTask "HFT3-MapSMB" "powershell.exe" "-ExecutionPolicy Bypass -WindowStyle Hidden -File C:\chi404_vm_map_smb.ps1" "PT60S"
 Register-LogonTask "HFT3-RithmicTrader" $exe $null "PT120S"
 Register-LogonTask "HFT3-RithmicLogin" "powershell.exe" "-ExecutionPolicy Bypass -WindowStyle Hidden -File C:\chi404_vm_rtrader_login.ps1" "PT180S"
+Register-LogonTask "HFT3-RithmicSubscribe" "powershell.exe" "-ExecutionPolicy Bypass -WindowStyle Hidden -File C:\chi404_vm_rtrader_subscribe.ps1" "PT240S"
 
-Write-Output "Headless tasks registered: MapSMB (60s), R|Trader (120s), Login (180s) after auto-logon"
+Write-Output "Headless tasks registered: MapSMB (60s), R|Trader (120s), Login (180s), Subscribe (240s)"

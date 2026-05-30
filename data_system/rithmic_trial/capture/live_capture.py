@@ -24,10 +24,17 @@ def _sha256(path: Path) -> str:
 
 
 class LiveCapture:
-    def __init__(self, cfg: TrialConfig, date: str | None = None, symbol: str | None = None) -> None:
+    def __init__(
+        self,
+        cfg: TrialConfig,
+        date: str | None = None,
+        symbol: str | None = None,
+        event_id: str | None = None,
+    ) -> None:
         self.cfg = cfg
         self.date = date or _utc_date()
         self.symbol = symbol or cfg.symbol
+        self.event_id = event_id
         self.out_dir = cfg.raw_dir(self.date, self.symbol)
         self.out_dir.mkdir(parents=True, exist_ok=True)
         self.raw_path = self.out_dir / "events.ndjson"
@@ -69,6 +76,8 @@ class LiveCapture:
             "schema_version": SCHEMA_VERSION,
             "source": self.cfg.source,
             "capture_environment": self.cfg.capture_environment,
+            "capture_date_utc": self.date,
+            "event_id": self.event_id,
             "symbol": self.symbol,
             "exchange": self.cfg.exchange,
             "row_count": self._count,

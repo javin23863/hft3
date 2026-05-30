@@ -5,6 +5,7 @@ import json
 import os
 import re
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,31 @@ ALL_EVENT_TYPES = {
     "position",
     "account",
 }
+
+_TRACE_SKIP_RE = re.compile(
+    r"(?i)(ritpz|ritch|theomne|rithmic\.com|Finis!|waiting for price|"
+    r"mscoree|\.dll|version|connecting|disconnect|heartbeat|"
+    r"auto log|software license|omnebb|trace|diagnostic)"
+)
+
+_STAGING_EXPORT_NAMES = frozenset(
+    {
+        "rithmic_trial_export.log",
+        "rithmic_trial_smoke_export.log",
+    }
+)
+
+
+def _parse_export_timestamp(ts_str: str) -> str | None:
+    """Parse R|Trader export prefix: 2026-05-30 01:00:00.000000"""
+    s = ts_str.strip()
+    for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S"):
+        try:
+            dt = datetime.strptime(s, fmt).replace(tzinfo=timezone.utc)
+            return dt.isoformat()
+        except ValueError:
+            continue
+    return None
 
 
 def _parse_csv_row(row: dict[str, str], cfg: TrialConfig) -> dict[str, Any] | None:
@@ -99,6 +125,9 @@ def _parse_comma_log_line(line: str, cfg: TrialConfig) -> dict[str, Any] | None:
         "price": price,
         "raw_line": line,
     }
+    exch_ts = _parse_export_timestamp(parts[0])
+    if exch_ts:
+        ev["exchange_timestamp"] = exch_ts
     if len(parts) >= 5 and parts[4]:
         try:
             ev["size"] = float(parts[4])
@@ -110,6 +139,8 @@ def _parse_comma_log_line(line: str, cfg: TrialConfig) -> dict[str, Any] | None:
 def _parse_log_line(line: str, cfg: TrialConfig) -> dict[str, Any] | None:
     line = line.strip()
     if not line:
+        return None
+    if _TRACE_SKIP_RE.search(line):
         return None
     if line.startswith("{"):
         try:
@@ -259,6 +290,8 @@ class RTraderBridgeConnector(ConnectorInterface):
     def _ingest_file(self, path: Path) -> None:
         name = path.name.lower()
         if name.endswith("_probe.txt"):
+            return
+        if path.name in _STAGING_EXPORT_NAMES:
             return
         suffix = path.suffix.lower()
         if suffix == ".csv":

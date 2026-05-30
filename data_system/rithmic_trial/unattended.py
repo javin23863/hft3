@@ -131,6 +131,8 @@ def run_unattended(
     connector.connect()
     capture = LiveCapture(cfg, date=_utc_date(), symbol=sym)
     total = 0
+    market_total = 0
+    market_types = {"trade", "quote"}
     last_process = 0.0
     last_manifest = 0.0
     started = time.time()
@@ -147,7 +149,12 @@ def run_unattended(
         while not stop:
             batch = connector.poll_events()
             if batch:
-                total += capture.append_raw(batch)
+                market_batch = [
+                    ev for ev in batch if str(ev.get("event_type", "")).lower() in market_types
+                ]
+                if market_batch:
+                    market_total += capture.append_raw(market_batch)
+                total += len(batch)
             now = time.time()
 
             if now - last_manifest >= manifest_every:
@@ -162,14 +169,15 @@ def run_unattended(
                     cfg.reports_dir(_utc_date()),
                     {
                         "status": "running",
-                        "events_captured": total,
+                        "events_captured": market_total,
+                        "events_polled": total,
                         "uptime_sec": int(now - started),
                         "detected_event_types": sorted(connector.detected_event_types()),
                         "watch_dirs": lim.get("watch_dirs", []),
                     },
                 )
 
-            if now - last_process >= process_every and total > 0:
+            if now - last_process >= process_every and market_total > 0:
                 logging.info("Running periodic process pass")
                 args = type(
                     "Args",
@@ -196,10 +204,15 @@ def run_unattended(
             cfg.reports_dir(_utc_date()),
             {
                 "status": "stopped",
-                "events_captured": total,
+                "events_captured": market_total,
+                "events_polled": total,
                 "uptime_sec": int(time.time() - started),
             },
         )
-        logging.info("Unattended capture stopped; total events=%s", total)
+        logging.info(
+            "Unattended capture stopped; market events=%s polled=%s",
+            market_total,
+            total,
+        )
 
     return 0

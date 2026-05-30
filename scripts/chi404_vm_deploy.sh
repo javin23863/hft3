@@ -23,6 +23,7 @@ fi
 echo "=== Deploy headless to $VM_WINRM_HOST ==="
 python3 "$REPO/scripts/chi404_vm_apply_headless.py"
 python3 "$REPO/scripts/chi404_vm_remap_smb.py"
+python3 "$REPO/scripts/chi404_vm_fix_log_path.py"
 python3 "$REPO/scripts/chi404_vm_restart_rtrader.py"
 
 virsh autostart hft3-rtrader-win 2>/dev/null || true

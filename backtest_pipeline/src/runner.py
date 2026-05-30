@@ -10,8 +10,8 @@ from hftbacktest import BacktestAsset, HashMapMarketDepthBacktest
 
 from backtest_pipeline.src.fee_model import FeeModel
 from backtest_pipeline.src.hft_strategy import CombinedHypothesisStrategy
+from features_engine.src.features.npz_feed import load_npz_events
 from features_engine.src.hypotheses.registry import get_active_hypotheses
-from features_engine.src.pipeline.market_state_pipeline import MarketStatePipeline
 
 LATENCY_BANDS_MS = [0.5, 1.0, 2.0, 5.0, 10.0]
 QUEUE_MODEL_BUILDERS = {
@@ -61,9 +61,14 @@ class ReplayRunner:
         strategy = None
         if use_combined_strategy and model_logic_callback is None:
             hyps = get_active_hypotheses()
-            pipeline = MarketStatePipeline(tick_size=self.tick_size, latency_ms=latency_ms)
+            raw_events = load_npz_events(self.data_path)
             strategy = CombinedHypothesisStrategy(
-                hyps, tick_size=self.tick_size, signal_threshold=0.25, latency_ms=latency_ms
+                hyps,
+                tick_size=self.tick_size,
+                signal_threshold=0.15,
+                latency_ms=latency_ms,
+                raw_events=raw_events,
+                aggregate_mode="max_abs",
             )
 
         steps = 0

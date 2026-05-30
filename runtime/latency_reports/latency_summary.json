@@ -1,0 +1,206 @@
+{
+  "run_id": "20260530T031754Z",
+  "timestamp_utc": "2026-05-30T03:23:46.374366+00:00",
+  "authoritative_source": "chi404_bare_metal_only",
+  "pass_criteria_path": "infrastructure/chi404/PASS_CRITERIA.json",
+  "raw_dir": "runtime/latency_reports/raw/20260530T031754Z",
+  "cyclictest": {
+    "by_run": {
+      "cyclictest_idle_cpu11": {
+        "p50_us": 1,
+        "p95_us": 11,
+        "p99_us": 11,
+        "p999_us": 11,
+        "max_us": 999999,
+        "samples": 60000
+      },
+      "cyclictest_idle_cpu2": {
+        "p50_us": 1,
+        "p95_us": 10,
+        "p99_us": 11,
+        "p999_us": 11,
+        "max_us": 999999,
+        "samples": 60000
+      },
+      "cyclictest_loaded_cpu11": {
+        "p50_us": 1,
+        "p95_us": 10,
+        "p99_us": 11,
+        "p999_us": 11,
+        "max_us": 999999,
+        "samples": 60000
+      },
+      "cyclictest_loaded_cpu2": {
+        "p50_us": 1,
+        "p95_us": 10,
+        "p99_us": 11,
+        "p999_us": 11,
+        "max_us": 999999,
+        "samples": 60000
+      }
+    },
+    "max_p99_us": 11,
+    "gate_mode": "loaded_only",
+    "loaded_runs": 2,
+    "limit_us": 20,
+    "pass": true
+  },
+  "loopback_tcp": {
+    "samples": 100,
+    "p50_us": 9.959003364201635,
+    "p95_us": 11.201002052985132,
+    "p99_us": 16.12099731573835,
+    "p999_us": 16.12099731573835,
+    "max_us": 447.77900620829314,
+    "avg_us": 14.474100389634259,
+    "errors": []
+  },
+  "network": {
+    "gateway_ping": {
+      "host": "64.44.98.129",
+      "transmitted": 100,
+      "received": 100,
+      "loss_pct": 0.0,
+      "samples": 100,
+      "p50_ms": 0.09,
+      "p95_ms": 0.114,
+      "p99_ms": 0.166,
+      "p999_ms": 0.166,
+      "max_ms": 0.167,
+      "avg_ms": 0.09382,
+      "jitter_ms": 0.013925070915438816,
+      "ping_summary": {
+        "min_ms": 0.071,
+        "avg_ms": 0.093,
+        "max_ms": 0.167,
+        "mdev_ms": 0.013
+      },
+      "status": "ok"
+    },
+    "rithmic_ping": {
+      "host": "ritpz04063.04.rithmic.com",
+      "transmitted": 100,
+      "received": 0,
+      "loss_pct": 100.0,
+      "samples": 0,
+      "p50_ms": null,
+      "p95_ms": null,
+      "p99_ms": null,
+      "p999_ms": null,
+      "max_ms": null,
+      "avg_ms": null,
+      "jitter_ms": null,
+      "status": "icmp_blocked_or_unreachable"
+    },
+    "gateway_tcp_443": {
+      "host": "64.44.98.129",
+      "port": 443,
+      "samples": 0,
+      "p50_ms": null,
+      "p95_ms": null,
+      "p99_ms": null,
+      "p999_ms": null,
+      "max_ms": null,
+      "avg_ms": null,
+      "errors": [
+        "[Errno 111] Connection refused",
+        "[Errno 111] Connection refused",
+        "[Errno 111] Connection refused"
+      ],
+      "status": "failed"
+    },
+    "rithmic_tcp_65000": {
+      "host": "ritpz04063.04.rithmic.com",
+      "port": 65000,
+      "samples": 30,
+      "p50_ms": 3.61147899820935,
+      "p95_ms": 4.071451003255788,
+      "p99_ms": 4.094202995474916,
+      "p999_ms": 4.094202995474916,
+      "max_ms": 4.327611000917386,
+      "avg_ms": 3.6213491674667844,
+      "errors": null,
+      "status": "ok"
+    }
+  },
+  "network_p99_us": 4094.202995474916,
+  "network_p99_worst_source": "rithmic_tcp_65000",
+  "network_limit_us": 500,
+  "network_pass": false,
+  "clock_discipline": {
+    "status": "ok",
+    "tracking_text": "Reference ID    : 81FA23FB (y.ns.gin.ntt.net)\nStratum         : 3\nRef time (UTC)  : Sat May 30 03:23:28 2026\nSystem time     : 0.000408564 seconds slow of NTP time\nLast offset     : +0.000017082 seconds\nRMS offset      : 0.000047485 seconds\nFrequency       : 5.488 ppm fast\nResidual freq   : -0.000 ppm\nSkew            : 0.028 ppm\nRoot delay      : 0.054642525 seconds\nRoot dispersion : 0.009627052 seconds\nUpdate interval : 64.3 seconds\nLeap status     : Normal",
+    "sources_text": ".-- Source mode  '^' = server, '=' = peer, '#' = local clock.\n / .- Source state '*' = current best, '+' = combined, '-' = not combined,\n| /             'x' = may be in error, '~' = too variable, '?' = unusable.\n||                                                 .- xxxx [ yyyy ] +/- zzzz\n||      Reachability register (octal) -.           |  xxxx = adjusted offset,\n||      Log2(Polling interval) --.      |          |  yyyy = measured offset,\n||                                \\     |          |  zzzz = estimated error.\n||                                 |    |           \\\nMS Name/IP address         Stratum Poll Reach LastRx Last sample               \n===============================================================================\n^+ 23.186.168.133                2   6   377    91   +913us[ +899us] +/-   43ms\n^+ 172-232-15-202.ip.linode>     2   6   377    13  +1065us[+1065us] +/-   59ms\n^+ ntp.maxhost.io                2   6   377    94   +460us[ +446us] +/-   44ms\n^* y.ns.gin.ntt.net              2   6   377    18  -1971us[-1954us] +/-   43ms",
+    "parsed": {
+      "synchronised": true,
+      "last_offset_us": 17.082,
+      "rms_offset_us": 47.485,
+      "limits_us": {
+        "last_offset_halt": 500,
+        "rms_halt": 5000
+      },
+      "warnings": []
+    }
+  },
+  "rithmic_app_latency": {
+    "status": "BLOCKED",
+    "reason": "R|API+ not wired; order ack p99 unavailable",
+    "probe": "scripts/latency_probe/rithmic_latency_probe.cpp"
+  },
+  "e2e_harness": {
+    "status": "BLOCKED",
+    "reason": "R|API+ not wired; order ack p99 unavailable",
+    "spec": "scripts/latency_probe/e2e_harness/README.md"
+  },
+  "trial_order_ack_appendix": {
+    "authoritative": false,
+    "source": "rithmic_trial_rtrader",
+    "note": "Does not affect colo recommended_lane",
+    "limitations": [
+      "Windows VM + log bridge; not R|API+ hot path",
+      "Does not affect colo recommended_lane"
+    ],
+    "profile_path": "reports/rithmic_trial/2026-05-30/latency_profile.json",
+    "profile_date": "2026-05-30",
+    "connector": "rtrader_bridge",
+    "trusted": true,
+    "status": "missing",
+    "reason": "No order ack events captured yet",
+    "populate_hint": "Send paper orders in R|Trader VM, then bash scripts/chi404_run_trial_live.sh"
+  },
+  "order_ack_p99_ms": null,
+  "gates": {
+    "cyclictest_pass": true,
+    "network_pass": false,
+    "order_ack_pass": null
+  },
+  "recommended_lane": {
+    "lane": null,
+    "lane_name": "undetermined",
+    "partial": true,
+    "infrastructure_meets_lane_1": false,
+    "order_ack_lane": null,
+    "order_ack_blocked": true,
+    "note": "R|API+ not wired; order ack p99 unavailable",
+    "criteria": {
+      "lane_1": {
+        "cyclictest_p99_max_us": 20,
+        "network_p99_max_us": 500,
+        "order_ack_p99_max_ms": 2.0
+      },
+      "lane_2_order_ack_ms": "2-10",
+      "lane_3_order_ack_ms": "10-50",
+      "lane_4_order_ack_ms": "50+"
+    }
+  },
+  "dominant_bottleneck": "network_path (worst p99 4094 us)",
+  "strategy_guidance": {
+    "realistic": [
+      "Diagnose gateway/Rithmic path before colo execution assumptions.",
+      "See trial_order_ack_appendix for R|Trader VM order round-trip (non-production)."
+    ],
+    "unrealistic": [
+      "Tier-0.5 ms production tier with worst network p99 above PASS limit."
+    ]
+  }
+}
