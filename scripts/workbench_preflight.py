@@ -30,11 +30,38 @@ def _bootstrap_sys_path(repo: Path) -> None:
     os.environ.setdefault("PYTHONPATH", repo_str)
 
 
+def _assert_catalog_keys_namespaced(repo: Path) -> None:
+    """Fail fast when campaign_panel still uses global catalog_search keys."""
+    panel_path = repo / "workbench" / "ui" / "campaign_panel.py"
+    text = panel_path.read_text(encoding="utf-8")
+    forbidden = (
+        'key="catalog_search"',
+        "key='catalog_search'",
+        'key_prefix = "catalog"',
+        "key_prefix = 'catalog'",
+    )
+    for pattern in forbidden:
+        if pattern in text:
+            raise RuntimeError(
+                f"{panel_path} still contains {pattern!r}; "
+                "git pull and ensure key_prefix uses alpha_catalog/hybrid_catalog/defensive_catalog"
+            )
+
+    from workbench.ui import campaign_panel
+
+    if not hasattr(campaign_panel, "_catalog_widget_key"):
+        raise RuntimeError(
+            "campaign_panel missing _catalog_widget_key(); "
+            "update workbench/ui/campaign_panel.py from main"
+        )
+
+
 def main() -> int:
     repo = _repo_root()
     _bootstrap_sys_path(repo)
 
     try:
+        _assert_catalog_keys_namespaced(repo)
         from workbench.src.core.composition import CatalogEntry, DefensiveStub, ModelComposition
         from workbench.src.registry.model_catalog import load_catalog
         from workbench.ui.campaign_panel import get_session_composition
