@@ -1,0 +1,14 @@
+---
+description: "No merge-ready without scope-green pytest/gates, verify tail, and honest status block."
+alwaysApply: true
+---
+
+# Validation honesty
+
+Charter: [docs/VALIDATION_HONESTY.md](../../docs/VALIDATION_HONESTY.md) · [AGENTS.md](../../AGENTS.md) · [scripts/check_handoff_status.py](../../scripts/check_handoff_status.py)
+
+- Every handoff includes the status block (`merge-ready`, `scope-green`, `scope`, `verify-run` with **exit code + output tail**, `data-mode`, `known-gaps`).
+- **Scope-green** = full scope table command passes — not targeted file subsets.
+- User **"don't test"** → `verify-run: WAIVED (user)`, `known-gaps: unverified (verify waived)`, **`merge-ready: no`**; todos stay **pending**.
+- `known-gaps: none` only when scope-green **and** no open lane addendum items.
+- Reviewer: flag 🔴 on fake PASS, missing verify tail, or merge-ready without scope-green.

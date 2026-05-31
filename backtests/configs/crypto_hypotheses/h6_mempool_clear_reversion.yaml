@@ -1,7 +1,9 @@
 config_id: h6_mempool_clear_reversion
 hypothesis_id: CRYPTO_H6
 candidate_id: crypto_h6_mempool_clear_reversion
-validation_mode: production
+validation_mode: fixture
+fixture_embargo_steps: 2
+fixture_label_horizon_ms: 1000
 holdout_days: 30
 universe:
 - BTC

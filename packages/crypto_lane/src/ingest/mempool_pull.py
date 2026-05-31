@@ -4,11 +4,12 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 
 import polars as pl
 
+from crypto_lane.src.align.latency_profile import measure_node_profile_from_btc, save_node_profile
 from crypto_lane.src.ingest.btc_rpc import BtcRpc
 from crypto_lane.src.ingest.paths import bronze_dir, ensure_data_dirs
 
@@ -51,7 +52,7 @@ def _fee_sat_per_vbyte(fee_btc_kvb: float) -> float:
     return fee_btc_kvb * 1e8 / 1000.0
 
 
-def snapshot_from_rpc(client: BtcRpc | None = None) -> MempoolSnapshot:
+def snapshot_from_rpc(client: BtcRpc | None = None, *, tunnel_rtt_ms: float | None = None) -> MempoolSnapshot:
     c = client or BtcRpc()
     t0 = time.perf_counter()
     info = c.getmempoolinfo()
@@ -60,6 +61,15 @@ def snapshot_from_rpc(client: BtcRpc | None = None) -> MempoolSnapshot:
     now_ms = int(time.time() * 1000)
     usage = info.usage / max(DEFAULT_MEMPOOL_MAX_BYTES, 1)
     min_fee_sat = _fee_sat_per_vbyte(max(info.mempool_min_fee, fee_btc_kvb))
+
+    node_profile = measure_node_profile_from_btc(tunnel_rtt_ms=tunnel_rtt_ms)
+    save_node_profile(node_profile)
+
+    processing_ms = max(node_profile.processing_latency_ms, elapsed_ms)
+    network_ms = node_profile.network_latency_ms
+    theta_node = node_profile.theta_node_ms
+    estimated = network_ms + processing_ms + abs(theta_node)
+
     return MempoolSnapshot(
         node_observation_time=now_ms,
         timestamp_iso=datetime.fromtimestamp(now_ms / 1000, tz=UTC).isoformat(),
@@ -68,11 +78,11 @@ def snapshot_from_rpc(client: BtcRpc | None = None) -> MempoolSnapshot:
         mempool_tx_count=int(info.size),
         min_fee_sat=min_fee_sat,
         btc_blockspace_stress_score=min(1.0, usage * 1.2),
-        node_clock_drift_ms=1.0,
-        network_latency_ms=5.0,
-        processing_latency_ms=max(1.0, elapsed_ms),
-        exchange_clock_drift_ms=0.5,
-        estimated_latency_ms=max(7.0, elapsed_ms + 5.0),
+        node_clock_drift_ms=theta_node,
+        network_latency_ms=network_ms,
+        processing_latency_ms=processing_ms,
+        exchange_clock_drift_ms=0.0,
+        estimated_latency_ms=estimated,
     )
 
 
@@ -87,11 +97,11 @@ def write_mempool_snapshot(snapshot: MempoolSnapshot, out_dir: Path | None = Non
     return path
 
 
-def pull_live_mempool(*, samples: int = 1, interval_minutes: int = 15) -> list[MempoolSnapshot]:
+def pull_live_mempool(*, samples: int = 1, interval_minutes: int = 15, tunnel_rtt_ms: float | None = None) -> list[MempoolSnapshot]:
     client = BtcRpc()
     out: list[MempoolSnapshot] = []
     for i in range(samples):
-        snap = snapshot_from_rpc(client)
+        snap = snapshot_from_rpc(client, tunnel_rtt_ms=tunnel_rtt_ms)
         write_mempool_snapshot(snap)
         out.append(snap)
         if i + 1 < samples:
@@ -119,7 +129,7 @@ def load_mempool_bronze(start: datetime, end: datetime) -> pl.DataFrame:
     return pl.DataFrame(rows)
 
 
-def pull_mempool_backfill(*, hours: int = 24, interval_minutes: int = 15) -> int:
+def pull_mempool_backfill(*, hours: int = 24, interval_minutes: int = 15, tunnel_rtt_ms: float | None = None) -> int:
     """Sample live mempool at interval; returns snapshot count written."""
     samples = max(1, (hours * 60) // max(1, interval_minutes))
-    return len(pull_live_mempool(samples=samples, interval_minutes=interval_minutes))
+    return len(pull_live_mempool(samples=samples, interval_minutes=interval_minutes, tunnel_rtt_ms=tunnel_rtt_ms))

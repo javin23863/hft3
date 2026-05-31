@@ -11,3 +11,8 @@ exec bash tools/shell/run_with_timeout.sh 180 agent-verify -- \
     tests/test_workbench/ \
     --ignore=tests/test_workbench/test_cpi_e2e.py \
     -q --tb=no
+
+if [[ -n "${HANDOFF_STATUS_FILE:-}" && -f "${HANDOFF_STATUS_FILE}" ]]; then
+  bash tools/shell/run_with_timeout.sh 30 handoff-status -- \
+    python scripts/check_handoff_status.py "${HANDOFF_STATUS_FILE}" --require
+fi

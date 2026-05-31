@@ -23,4 +23,12 @@ $PyArgs = @(
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 & $Wrapper -TimeoutSec $BudgetSec -Label 'agent-verify' -- python @PyArgs
-exit $LASTEXITCODE
+$verifyExit = $LASTEXITCODE
+if ($verifyExit -ne 0) { exit $verifyExit }
+
+$HandoffFile = $env:HANDOFF_STATUS_FILE
+if ($HandoffFile -and (Test-Path -LiteralPath $HandoffFile)) {
+  & $Wrapper -TimeoutSec 30 -Label 'handoff-status' -- python scripts/check_handoff_status.py $HandoffFile --require
+  exit $LASTEXITCODE
+}
+exit 0

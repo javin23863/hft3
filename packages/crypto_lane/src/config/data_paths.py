@@ -14,7 +14,7 @@ _REQUIRED_PRODUCTION = (
 
 
 def resolve_lane_data_dir(backtest: dict | None = None) -> Path:
-    mode = (backtest or {}).get("validation_mode", "production")
+    mode = (backtest or {}).get("validation_mode", "fixture")
     uni = load_universe()
     paths = uni.get("paths", {})
     root = repo_root_from_lane()
@@ -31,5 +31,5 @@ def resolve_lane_data_dir(backtest: dict | None = None) -> Path:
 
 
 def data_provenance_source(backtest: dict | None = None) -> str:
-    mode = (backtest or {}).get("validation_mode", "production")
+    mode = (backtest or {}).get("validation_mode", "fixture")
     return "crypto_lane_fixture" if mode == "fixture" else "crypto_lane_production"

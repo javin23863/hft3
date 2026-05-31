@@ -42,6 +42,8 @@ Only after graph + charter: [docs/human/DOC_INDEX.md](../human/DOC_INDEX.md).
 
 ## Step 4 — Verification
 
+**Honest status:** Every handoff uses the block in [docs/VALIDATION_HONESTY.md](../VALIDATION_HONESTY.md). Subset pytest is not scope-green.
+
 **Time budgets are mandatory:** [SHELL_EXECUTION.md](SHELL_EXECUTION.md)
 
 | Gate | Command | Hard stop |

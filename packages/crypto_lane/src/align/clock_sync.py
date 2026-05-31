@@ -31,6 +31,11 @@ def local_true_time_ns(nominal_local_ns: int, theta_ms: float) -> int:
     return int(nominal_local_ns - theta_ms * 1_000_000.0)
 
 
+def one_way_latency_ms(rtt_ms: float) -> float:
+    """One-way propagation δ_net from round-trip measurement."""
+    return max(0.0, rtt_ms / 2.0)
+
+
 def exchange_offset_from_ws_rtt(
     ping_send_ns: int,
     pong_recv_ns: int,

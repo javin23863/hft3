@@ -1,7 +1,9 @@
 config_id: h7_congestion_event_study
 hypothesis_id: CRYPTO_H7
 candidate_id: crypto_h7_congestion_event_study
-validation_mode: production
+validation_mode: fixture
+fixture_embargo_steps: 2
+fixture_label_horizon_ms: 1000
 holdout_days: 30
 universe:
 - BTC

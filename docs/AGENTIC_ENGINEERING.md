@@ -99,12 +99,18 @@ Orchestrator entry: `infrastructure/chi404/run_chi404_tuning.sh` (validate step 
 | **Skipped subagent chain** | Main thread inline locate/edit/review with no subagent receipts; unacceptable on a live execution stack — see [AGENTS.md § Trust](../AGENTS.md#trust-non-skippable-workflow). |
 | **Windows in HFT loop** | Wiring a dev workstation into live/paper Rithmic capture or order path — violates BLUEPRINT §4; colo must be self-sufficient. |
 | **Dishonest merge-ready** | Claiming done while reviewer said no, tests skipped without documented blockers, or C++ parity gate not run. |
+| **Subset pytest as scope-green** | Targeted file pass while the scope test directory or gate script for the touched path fails. |
+| **Verify todo theater** | Marking verify todos `completed` when pytest or gate scripts were waived, not run, or failed. |
+| **Production mode without data** | Production YAML or paths with empty trusted lake — config-only, not "real-data wired". |
+| **Synthetic-as-live probes** | Fixture, YAML, or CLI-default calibration labeled as live measurement or CHI404 PASS. |
+| **Aspirational spec docs** | Math/spec doc implies end-to-end compliance without Implementation status / known gaps. |
 | **Builder for 3+ files** | Builder refuses; wastes a turn—plan multi-file work in main/feature agent. |
 | **Reviewer as architecture chat** | Use reviewer for diff findings; architecture stays with human + spec. |
 | **Trial data in production lake** | Writing trial capture into trusted `data/npz/` (see `docs/rithmic_trial/README.md`). |
 
 ## Related docs
 
+- [docs/VALIDATION_HONESTY.md](VALIDATION_HONESTY.md) — repo-wide status block, scope-green gates, forbidden verification theater
 - [AGENTS.md](../AGENTS.md) — agent roles and repo conventions
 - [GRAPHIFY_WORKFLOW.md](GRAPHIFY_WORKFLOW.md) — mandatory graph consult and rebuild
 - [.cursor/rules/delegate-subagents.mdc](../.cursor/rules/delegate-subagents.mdc) — always-on delegation rule

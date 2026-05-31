@@ -6,6 +6,7 @@ from crypto_lane.src.align.clock_sync import (
     compute_rtt_ms,
     compute_theta_ms,
     exchange_offset_from_ws_rtt,
+    one_way_latency_ms,
 )
 
 
@@ -24,3 +25,8 @@ def test_ws_rtt_offset():
     off = exchange_offset_from_ws_rtt(0, 100_000_000, venue="binance_perp")
     assert off.rtt_ms > 0
     assert off.source.startswith("ws_rtt:")
+
+
+def test_one_way_latency_half_rtt():
+    assert one_way_latency_ms(10.0) == 5.0
+    assert one_way_latency_ms(0.0) == 0.0

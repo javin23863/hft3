@@ -16,9 +16,16 @@ from crypto_lane.src.ingest.bronze_reader import (
     read_parquet_key,
     _local_cache_path,
 )
+from crypto_lane.src.align.latency_profile import default_venue_from_backtest, resolve_node_latency, resolve_theta_exch
 from crypto_lane.src.ingest.mempool_pull import load_mempool_bronze
 from crypto_lane.src.ingest.paths import ensure_data_dirs, normalized_dir
 from crypto_lane.src.types import repo_root_from_lane
+
+DEFAULT_BACKTEST_LATENCY = {
+    "latency_assumptions": {"ws_rtt_ms": 5.0, "ws_rtt_tracking": True},
+    "venues": ["binance_perp"],
+}
+
 
 def _parse_date(s: str) -> date:
     return datetime.strptime(s, "%Y-%m-%d").date()
@@ -244,7 +251,6 @@ def build_mempool_snapshots(start: str, end: str, spot_ticks: pl.DataFrame) -> p
     if not frames:
         return pl.DataFrame(schema={
             "node_observation_time": pl.Int64,
-            "exchange_timestamp": pl.Int64,
             "mempool_bytes": pl.Int64,
             "mempool_max_bytes": pl.Int64,
             "mempool_tx_count": pl.Int64,
@@ -258,8 +264,9 @@ def build_mempool_snapshots(start: str, end: str, spot_ticks: pl.DataFrame) -> p
         })
 
     raw = pl.concat(frames, how="diagonal_relaxed")
+    node_lat = resolve_node_latency()
+    venue_profile = resolve_theta_exch(default_venue_from_backtest(DEFAULT_BACKTEST_LATENCY), DEFAULT_BACKTEST_LATENCY)
     rows: list[dict[str, object]] = []
-    exch_ts = spot_ticks["exchange_timestamp"].to_list() if spot_ticks.height else []
 
     for row in raw.iter_rows(named=True):
         node_ms = int(row.get("node_observation_time") or 0)
@@ -269,12 +276,6 @@ def build_mempool_snapshots(start: str, end: str, spot_ticks: pl.DataFrame) -> p
                 node_ms = int(datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp() * 1000)
         if not node_ms and "timestamp_iso" in row:
             node_ms = int(datetime.fromisoformat(str(row["timestamp_iso"]).replace("Z", "+00:00")).timestamp() * 1000)
-        exch = node_ms
-        for ts in exch_ts:
-            if ts <= node_ms:
-                exch = ts
-            elif ts > node_ms:
-                break
         usage = float(row.get("usage_bytes") or row.get("mempool_bytes") or row.get("bytes") or 0)
         max_bytes = int(row.get("mempool_max_bytes") or 300_000_000)
         min_fee = float(row.get("min_fee_sat") or 0.0)
@@ -283,17 +284,19 @@ def build_mempool_snapshots(start: str, end: str, spot_ticks: pl.DataFrame) -> p
         stress = float(row.get("btc_blockspace_stress_score") or row.get("blockspace_stress_score") or usage / max(max_bytes, 1))
         rows.append({
             "node_observation_time": node_ms,
-            "exchange_timestamp": int(exch),
             "mempool_bytes": int(usage),
             "mempool_max_bytes": max_bytes,
             "mempool_tx_count": int(row.get("mempool_tx_count") or row.get("size_txs") or 0),
             "min_fee_sat": min_fee,
             "btc_blockspace_stress_score": min(1.0, stress),
-            "node_clock_drift_ms": float(row.get("node_clock_drift_ms") or 1.0),
-            "network_latency_ms": float(row.get("network_latency_ms") or 5.0),
-            "processing_latency_ms": float(row.get("processing_latency_ms") or 2.0),
-            "exchange_clock_drift_ms": float(row.get("exchange_clock_drift_ms") or 0.5),
-            "estimated_latency_ms": float(row.get("estimated_latency_ms") or 7.0),
+            "node_clock_drift_ms": float(row.get("node_clock_drift_ms") or node_lat.theta_node_ms),
+            "network_latency_ms": float(row.get("network_latency_ms") or node_lat.network_latency_ms),
+            "processing_latency_ms": float(row.get("processing_latency_ms") or node_lat.processing_latency_ms),
+            "exchange_clock_drift_ms": float(row.get("exchange_clock_drift_ms") or venue_profile.theta_exch_ms),
+            "estimated_latency_ms": float(
+                row.get("estimated_latency_ms")
+                or (node_lat.network_latency_ms + node_lat.processing_latency_ms)
+            ),
         })
 
     return pl.DataFrame(rows).unique(subset=["node_observation_time"]).sort("node_observation_time")
@@ -345,7 +348,6 @@ def _empty_deribit() -> pl.DataFrame:
 def _empty_mempool() -> pl.DataFrame:
     return pl.DataFrame(schema={
         "node_observation_time": pl.Int64,
-        "exchange_timestamp": pl.Int64,
         "mempool_bytes": pl.Int64,
         "mempool_max_bytes": pl.Int64,
         "mempool_tx_count": pl.Int64,

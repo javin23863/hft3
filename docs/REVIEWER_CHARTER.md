@@ -49,6 +49,9 @@ Apply on **every** diff regardless of area. Findings use severity rubric below.
 - Success criteria verifiable (test, gate script, report artifact)?
 - Tests added or updated when behavior changes?
 - Fake PASS anti-patterns absent (fixture-only live claims, skipped `pytest`, CHI404 validate without real logs)?
+- Subset pytest claimed as scope-green while scope directory or gate fails?
+- Verify todos marked complete when waived or not run?
+- Synthetic latency calibration labeled as live probe?
 
 ---
 
@@ -157,6 +160,11 @@ path:line: <emoji> <severity>: <problem>. <fix>.
 | `data_system/` (Databento, non-trial) | x | x | x | | | | x | |
 | `data/`, `data/npz/` | | x | x | | | | x | |
 | `data_system/rithmic_trial/` | x | x | | | x | | x | |
+| `packages/crypto_lane/` | x | x | x | x | | | x | |
+| `packages/equities_lane/` | x | x | x | x | | | x | |
+| `workbench/` | x | x | x | x | x | | | |
+| `options_lane/` | x | x | x | x | | | x | |
+| `infrastructure/chi404/` | | | | | x | | | x |
 | `rithmic_gateway/` | x | x | | | x | | | x |
 | `infrastructure/` | | | | | x | | | x |
 | `tests/` | scope | scope | scope | scope | scope | scope | scope | scope |
@@ -181,7 +189,9 @@ Run fused Pass A + Pass B:
 - A1 Think: assumptions stated? ambiguity guessed?
 - A2 Simplicity: over-engineering?
 - A3 Surgical: orthogonal edits only?
-- A4 Goal-driven: tests / verify criteria met? fake PASS?
+- A4 Goal-driven: tests / verify criteria met? fake PASS? verify-run includes exit code + output tail?
+
+If diff touches any research lane, workbench, CHI404 infra, or quarantined data path, apply [VALIDATION_HONESTY.md](VALIDATION_HONESTY.md); flag 🔴 if handoff claims merge-ready without scope-green, missing verify tail, or hides known addendum gaps.
 
 **Pass B (mathematical invariants)** — apply area-table columns only for touched paths; when in doubt, full B1-B8:
 - B1 Filtration F_t — only info up to decision time t

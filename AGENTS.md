@@ -63,12 +63,19 @@ Do not tell the user work is merge-ready unless **all** of the following are tru
 | Gate | Requirement |
 |------|-------------|
 | Reviewer | `cavecrew-reviewer` verdict **merge-ready: yes**, **0 🔴** |
-| Tests | `pytest` green with command output in the thread |
+| Tests | Scope-green per [docs/VALIDATION_HONESTY.md](docs/VALIDATION_HONESTY.md): full scope pytest or gate script with **exit code and output tail** pasted in thread — not targeted file subsets alone. Full-repo `pytest` when scope is ambiguous. |
 | Skipped tests | Every skip has a **documented blocker** (e.g. CMake missing → `test_cpp_feature_golden` skipped). Say **merge-ready: no** until the gate runs or the user explicitly accepts the skip. |
 | C++ parity | When Python/C++ feature slots change: build `hft_feature_golden` and pass `tests/test_cpp_feature_golden.py` |
 | Graph | `graphify-out/` rebuilt after code edits when graph is tracked in git |
 
 When blocked, state **what ran**, **what was skipped**, and **what unblocks** — do not imply completion.
+
+### Honest completion (no verification theater)
+
+- **Subset pytest is not scope-green.** A targeted pass (e.g. 10/10 on one file) while the scope test directory fails does not satisfy the Tests gate.
+- **User-waived verify is not done.** If the user says "don't test" or "code only", report `verify-run: WAIVED (user)` and **`merge-ready: no`**. Verify-gated plan todos stay **`pending`** or **`waived-not-verified`** — never **`completed`**.
+- **Plan todo theater is forbidden.** Frontmatter `status: completed` on verify todos requires pasted green output from the verify command, or an explicit user acceptance of waiver in the thread.
+- **All handoffs** must include the status block in [docs/VALIDATION_HONESTY.md](docs/VALIDATION_HONESTY.md) (`merge-ready`, `scope-green`, `scope`, `verify-run`, `data-mode`, `known-gaps`). Lane addenda (e.g. crypto PIT gaps) supplement but do not replace the repo-wide charter.
 
 ## Shell execution (time-bounded — mandatory)
 

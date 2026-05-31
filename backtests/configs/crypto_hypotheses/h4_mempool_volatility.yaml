@@ -1,7 +1,9 @@
 config_id: h4_mempool_volatility
 hypothesis_id: CRYPTO_H4
 candidate_id: crypto_h4_mempool_volatility
-validation_mode: production
+validation_mode: fixture
+fixture_embargo_steps: 2
+fixture_label_horizon_ms: 1000
 holdout_days: 30
 universe:
 - BTC

@@ -20,6 +20,8 @@ The reviewer runs **both** passes on every diff:
 
 Both passes must complete before the orchestrator proceeds to **Verify** (pytest / CHI404 gates).
 
+Handoff must include [docs/VALIDATION_HONESTY.md](../../docs/VALIDATION_HONESTY.md) status block. Flag 🔴 if merge-ready claimed without scope-green, verify output tail, or open lane addendum gaps.
+
 ## Math violation citations
 
 When Pass B flags a math or invariant violation, the reviewer **must cite** the source section:

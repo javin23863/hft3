@@ -11,6 +11,10 @@ defaults:
   funding_horizon_hours: 8
   fee_spike_z_threshold: 3.0
   pit_strict: false
+  # PIT availability boundary defaults (see docs/PIT_AVAILABILITY_BOUNDARY.md)
+  network_latency_ms: 5.0
+  processing_latency_ms: 2.0
+  node_clock_drift_ms: 0.0
 
 venues:
   - id: binance_spot

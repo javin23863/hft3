@@ -18,6 +18,8 @@ feature_builders:
 align_modules:
 - packages/crypto_lane/src/align/clock_sync.py
 - packages/crypto_lane/src/align/pit_join.py
+- packages/crypto_lane/src/align/latency_profile.py
+- packages/crypto_lane/docs/PIT_AVAILABILITY_BOUNDARY.md
 model_candidates:
 - crypto_h1_basis_compression
 - crypto_h2_funding_capture

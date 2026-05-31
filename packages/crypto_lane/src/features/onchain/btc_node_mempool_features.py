@@ -15,6 +15,7 @@ def build_mempool_features(
     max_staleness_ms: int = 15000,
     strict: bool = False,
 ) -> pl.DataFrame:
+    """Legacy path: snapshots with nominal exchange_timestamp pairing (prefer join-first)."""
     df = snapshots.with_columns([
         (pl.col("mempool_bytes") / pl.col("mempool_max_bytes").clip(lower_bound=1)).alias(
             "btc_mempool_usage_bytes"
@@ -50,3 +51,38 @@ def build_mempool_features(
         })
     out = pl.DataFrame(rows)
     return apply_pit_alignment(out, max_staleness_ms=max_staleness_ms, strict=strict)
+
+
+def build_mempool_features_from_join(
+    joined: pl.DataFrame,
+    *,
+    fee_window: int = 48,
+) -> pl.DataFrame:
+    """Build feature columns on rows already PIT-joined via backward_join_node_to_exchange."""
+    if joined.is_empty():
+        return joined
+    df = joined.sort("exchange_timestamp")
+    fee_hist: list[float] = []
+    extras: list[dict[str, object]] = []
+    for i, row in enumerate(df.iter_rows(named=True)):
+        fee = float(row.get("min_fee_sat") or 0.0)
+        fee_hist.append(fee)
+        z = rolling_fee_zscore(fee_hist, fee_window)
+        max_b = float(row.get("mempool_max_bytes") or 300_000_000)
+        mb = float(row.get("mempool_bytes") or 0.0)
+        usage = mb / max(max_b, 1.0)
+        stress = float(row.get("btc_blockspace_stress_score") or usage)
+        row_extra: dict[str, object] = {
+            "btc_mempool_size_txs": int(row.get("mempool_tx_count") or 0),
+            "btc_mempool_bytes": mb,
+            "btc_mempool_usage_bytes": usage,
+            "btc_mempool_min_fee": fee,
+            "btc_fee_spike_zscore": z,
+            "btc_mempool_growth_rate": float(fee - fee_hist[i - 1]) if i > 0 else 0.0,
+            "jump_intensity_lambda": jump_intensity_lambda(usage, z),
+            "btc_node_snapshot_latency_ms": float(row.get("estimated_latency_ms") or 0.0),
+        }
+        if "btc_blockspace_stress_score" not in df.columns:
+            row_extra["btc_blockspace_stress_score"] = stress
+        extras.append(row_extra)
+    return pl.concat([df, pl.DataFrame(extras)], how="horizontal")

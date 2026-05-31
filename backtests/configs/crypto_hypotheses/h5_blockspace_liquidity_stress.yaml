@@ -1,7 +1,9 @@
 config_id: h5_blockspace_liquidity_stress
 hypothesis_id: CRYPTO_H5
 candidate_id: crypto_h5_blockspace_liquidity_stress
-validation_mode: production
+validation_mode: fixture
+fixture_embargo_steps: 2
+fixture_label_horizon_ms: 1000
 holdout_days: 30
 universe:
 - BTC

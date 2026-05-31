@@ -8,6 +8,7 @@ Chronological onboarding for human developers. AI agents: [../ai/ONBOARDING.md](
 | 2 | [../../BLUEPRINT.md](../../BLUEPRINT.md) | System spec: math invariants, topology, walk-forward |
 | 3 | [../references/README.md](../references/README.md) + [../references/MANIFEST.md](../references/MANIFEST.md) | Authority PDF bundle |
 | 4 | [../REVIEWER_CHARTER.md](../REVIEWER_CHARTER.md) | Non-negotiable review gates |
+| 4a | [../VALIDATION_HONESTY.md](../VALIDATION_HONESTY.md) | Scope-green verify; no fake PASS or completed todos |
 | 5 | [../vault/RESEARCH_ENTRYPOINTS.md](../vault/RESEARCH_ENTRYPOINTS.md) | Offline research commands |
 | 5a | [../vault/ECONOMIC_EVENT_UNIVERSE.md](../vault/ECONOMIC_EVENT_UNIVERSE.md) | Macro calendar catalog, timezones, snapshots |
 | 5b | [../vault/BACKTESTER_CERTIFICATION.md](../vault/BACKTESTER_CERTIFICATION.md) | T0–T4 certification tiers |

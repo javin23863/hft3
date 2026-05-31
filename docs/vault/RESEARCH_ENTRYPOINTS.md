@@ -2,6 +2,8 @@
 
 Use this order. Do **not** skip to legacy paths below.
 
+**Verification honesty:** Every agent handoff must use the status block in [VALIDATION_HONESTY.md](../VALIDATION_HONESTY.md). Scope-green commands for each lane are in that doc; smoke-only targeted pytest never substitutes.
+
 Baseline metrics: [CPI_2024_09_11_TIGHT_BASELINE.md](CPI_2024_09_11_TIGHT_BASELINE.md)
 
 ## 1. Macro event replay (primary research)
@@ -71,6 +73,13 @@ python scripts/run_full_pipeline_gate.py --tier catalog --event-id CPI_2024_09_1
 
 Or via hybrid wrapper: `python scripts/run_hybrid_pipeline_gate.py --tier smoke`. See [docs/structural_models/FULL_PIPELINE_GATE.md](../structural_models/FULL_PIPELINE_GATE.md).
 
+**Verify (scope-green):**
+
+```bash
+python -m pytest tests/test_run_event_replay.py tests/test_replay_must_emit_order_intents.py tests/test_replay_clock_order_timestamps.py -q
+python scripts/run_hybrid_pipeline_gate.py --event-id CPI_2024_09_11_TIGHT  # when touching hybrid gate
+```
+
 ## 1b. Autoresearch pipeline (NL thesis)
 
 **When:** Ingest a natural-language trading thesis (and optional research PDF), generate candidate models, backtest, and write pipeline artifacts. Workstation-only; no live deploy until CHI404 is stable.
@@ -101,6 +110,8 @@ python scripts/run_pipeline.py \
 
 Output: `research_cards/pipeline_runs/<run_id>/`. Authority: [AUTORESEARCH_PIPELINE.md](../research/AUTORESEARCH_PIPELINE.md), source PDF [dev_instructions.pdf](../references/dev_instructions.pdf).
 
+**Verify (scope-green):** `python -m pytest tests/test_research_pipeline.py -q`
+
 ## 1c. Low-float runner (equities lane)
 
 **When:** Screen and backtest low-float momentum sessions on quarantined equities data. Workstation-only; separate from CME MBO production path.
@@ -123,6 +134,38 @@ python -m equities_lane.pipeline normalize --raw data/equities/raw/<file>.dbn.zs
 ```
 
 Output: `research_cards/equities/<run_id>/`. Authority: [LOW_FLOAT_RUNNER.md](../research/LOW_FLOAT_RUNNER.md), source PDF [low_float_momentum_anomaly_research_pack.pdf](../references/low_float_momentum_anomaly_research_pack.pdf).
+
+**Verify (scope-green):** `python -m pytest tests/test_equities_lane/ -q`
+
+## 1d. Crypto alpha (crypto lane)
+
+**When:** Walk-forward ML research on BTC spot/perp basis, funding, Deribit IV/RV, and local Bitcoin node mempool features. Workstation-only; quarantined from CME production path.
+
+```bash
+pip install -r packages/crypto_lane/requirements.txt
+
+# One-time (or after hypothesis schema changes):
+python packages/crypto_lane/scripts/generate_yaml_artifacts.py
+
+python -m crypto_lane.pipeline discover
+python -m crypto_lane.pipeline smoke --candidate crypto_h1_basis_compression
+python -m crypto_lane.pipeline smoke
+```
+
+**Validation modes** (crypto addendum: [packages/crypto_lane/docs/VALIDATION_HONESTY.md](../../packages/crypto_lane/docs/VALIDATION_HONESTY.md); repo-wide: [VALIDATION_HONESTY.md](../VALIDATION_HONESTY.md)):
+
+- **Dev/CI default:** `validation_mode: fixture` — bundled fixture CSVs; no live ingest required.
+- **Production real-data:** run ingest first (`python -m crypto_lane.pipeline ingest` or pull/normalize steps), populate `data/crypto/normalized/`, then smoke with `validation_mode: production` in backtest YAML.
+
+**Verify (scope-green gate):**
+
+```bash
+python -m pytest tests/test_crypto_lane/ -q
+```
+
+Targeted pytest on single files is smoke-only; it does not substitute for the command above.
+
+Hypotheses: `research/hypotheses/crypto_alpha_engine_extracted_hypotheses.yaml`. Manifest: `research/hypotheses/crypto_alpha_engine_manifest.yaml`. Report: [crypto_alpha_engine_extraction_report.md](../../research/reports/crypto_alpha_engine_extraction_report.md).
 
 ## 2. Single-hypothesis drill-down
 
@@ -167,6 +210,8 @@ EVENT_ID=CPI_2024_09_11_TIGHT bash scripts/chi404_run_trial_live.sh
 - `EVENT_ID` / `replay-event` = **research event** (from `events.csv`).
 
 **Paper order latency (≥1,000 real pairs):** [CHI404_CANONICAL_ENTRYPOINTS.md](CHI404_CANONICAL_ENTRYPOINTS.md) — `chi404_vm_deploy.sh` then `chi404_run_paper_latency_sweep.sh`. No synthetic log inject.
+
+**Verify (scope-green workstation):** `python -m pytest tests/test_rithmic_trial_pipeline.py tests/test_rithmic_topology_guards.py -q`. CHI404 PASS requires `validate_pass_criteria.py` on real logs — see [docs/chi404/VALIDATION_ADDENDUM.md](../chi404/VALIDATION_ADDENDUM.md).
 
 ## 5. Legacy / smoke only (do not use for macro research)
 
@@ -228,6 +273,8 @@ python -m workbench campaign --model HYP_5 --symbol MES.v.0 --dry-run
 - Unified registry: `workbench/config/models.yaml` + `workbench/src/registry/unified_registry.py` (44 HYP + 7 PDF)
 - Artifacts: `research_cards/workbench_runs/<run_id>/`
 
+**Verify (scope-green):** `python -m pytest tests/test_workbench/ -q`
+
 **Latency authority:** C++ measured distributions from CHI404 probes — not Python wall time. See [docs/workbench/LATENCY_ARCHITECTURE.md](../workbench/LATENCY_ARCHITECTURE.md). (config, manifest, trades.parquet, report.md)
 - Wraps `SignalBacktester` (primary) and documents HftBacktest queue path via matching config
 - Does **not** replace `run_event_replay.py`; use workbench for per-model latency viability and promotion gates
@@ -249,3 +296,5 @@ from economic_event_universe import list_upcoming
 for ev in list_upcoming("Asia/Phnom_Penh")[:3]:
     print(ev.event_id, ev.anchor_user_tz, ev.source_url)
 ```
+
+**Verify (scope-green):** `python -m pytest tests/test_economic_event_universe/ -q`

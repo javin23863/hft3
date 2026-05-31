@@ -17,8 +17,9 @@ class ClockOffset:
 class PitConfig:
     max_staleness_ms: int = 15000
     strict: bool = False
-    network_latency_ms: float = 0.0
-    processing_latency_ms: float = 0.0
+    network_latency_ms: float = 5.0
+    processing_latency_ms: float = 2.0
+    exchange_clock_drift_ms: float = 0.0
 
 
 @dataclass
