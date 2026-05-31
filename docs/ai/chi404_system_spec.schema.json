@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hft3.local/schemas/chi404_system_spec.schema.json",
+  "title": "CHI404SystemSpec",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "host_id",
+    "captured_at",
+    "hardware",
+    "kernel_runtime",
+    "cpu_layout",
+    "network",
+    "validation",
+    "software_layers"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "host_id": { "type": "string" },
+    "captured_at": { "type": "string", "format": "date-time" },
+    "capture_method": { "type": "string" },
+    "hardware": {
+      "type": "object",
+      "required": ["cpu", "memory"],
+      "properties": {
+        "cpu": { "type": "object" },
+        "memory": { "type": "object" },
+        "virtualization_host": { "type": "object" }
+      }
+    },
+    "firmware_bios": { "type": "object" },
+    "kernel_runtime": { "type": "object" },
+    "cpu_layout": { "type": "object" },
+    "network": { "type": "object" },
+    "vm_sidecar": { "type": "object" },
+    "software_layers": { "type": "object" },
+    "validation": { "type": "object" },
+    "known_gaps": { "type": "array", "items": { "type": "string" } },
+    "drift_warnings": { "type": "array", "items": { "type": "string" } }
+  }
+}

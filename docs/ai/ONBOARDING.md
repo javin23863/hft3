@@ -38,6 +38,8 @@ python tools/graphify/build_wiki_index.py
 
 Only after graph + charter: [docs/human/DOC_INDEX.md](../human/DOC_INDEX.md).
 
+**CHI404 hardware/runtime (before infra edits):** [docs/ai/chi404_system_spec.json](chi404_system_spec.json) · human: [docs/chi404/HARDWARE_BASELINE.md](../chi404/HARDWARE_BASELINE.md)
+
 ## Step 4 — Verification
 
 **Time budgets are mandatory:** [SHELL_EXECUTION.md](SHELL_EXECUTION.md)

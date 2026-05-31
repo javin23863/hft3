@@ -6,7 +6,8 @@ RUN_ID="${RUN_ID:-}"
 LOG_DIR="${HFT3_TUNING_LOG_DIR:-/root/hft3/logs/tuning/${RUN_ID}}"
 mkdir -p "$LOG_DIR"
 
-NPROC_BEFORE=$(nproc)
+NPROC_BEFORE=$(lscpu -b -p=CPU,ONLINE 2>/dev/null | awk -F, '$2==1' | wc -l)
+[[ "$NPROC_BEFORE" -lt 1 ]] && NPROC_BEFORE=$(nproc)
 echo "nproc before SMT policy: $NPROC_BEFORE" | tee "$LOG_DIR/smt.txt"
 
 if [[ -f /sys/devices/system/cpu/smt/control ]]; then
@@ -14,7 +15,8 @@ if [[ -f /sys/devices/system/cpu/smt/control ]]; then
   sleep 2
 fi
 
-NPROC_AFTER=$(nproc)
+NPROC_AFTER=$(lscpu -b -p=CPU,ONLINE 2>/dev/null | awk -F, '$2==1' | wc -l)
+[[ "$NPROC_AFTER" -lt 1 ]] && NPROC_AFTER=$(nproc)
 echo "nproc after SMT policy: $NPROC_AFTER" | tee -a "$LOG_DIR/smt.txt"
 
 # Compute HOT_CPUS

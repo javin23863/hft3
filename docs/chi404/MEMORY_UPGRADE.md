@@ -81,5 +81,6 @@ Re-running gap-fill on an already-upgraded host logs `SKIP already present` for 
 ## Related
 
 - Full colo tuning: [infrastructure/chi404/run_chi404_tuning.sh](../../infrastructure/chi404/run_chi404_tuning.sh)
+- **Hardware baseline (CPU/RAM/NIC/BIOS):** [HARDWARE_BASELINE.md](HARDWARE_BASELINE.md)
 - Remote tuning: [scripts/run_chi404_tuning_remote.ps1](../../scripts/run_chi404_tuning_remote.ps1)
 - Topology: [BLUEPRINT.md](../../BLUEPRINT.md) §4

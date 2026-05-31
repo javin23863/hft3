@@ -1,0 +1,235 @@
+{
+  "schema_version": "1.0",
+  "host_id": "CHI404",
+  "captured_at": "2026-05-31T03:46:49Z",
+  "capture_method": "01_fix_baseline_gaps.sh + 00_hardware_baseline_capture.sh",
+  "hardware": {
+    "cpu": {
+      "vendor": "AuthenticAMD",
+      "model": "AMD Ryzen 9 9900X 12-Core Processor",
+      "family": 26,
+      "cores_per_socket": 12,
+      "sockets": 1,
+      "threads_per_core_live": 1,
+      "online_cpus": "0-11",
+      "offline_cpus": "12-23",
+      "smt_active_sysfs": 0,
+      "frequency_boost_enabled": true,
+      "max_mhz": 4400.0,
+      "min_mhz": 3000.0,
+      "current_mhz_observed": 4400.0,
+      "cpufreq_driver": "acpi-cpufreq",
+      "cpufreq_governor": "performance",
+      "l1d_kib": 576,
+      "l1i_kib": 384,
+      "l2_mib": 12,
+      "l3_mib": 64,
+      "isa_highlights": [
+        "avx512",
+        "avx2",
+        "fma",
+        "aes"
+      ],
+      "virtualization": "AMD-V"
+    },
+    "memory": {
+      "total_installed_gib": 128,
+      "total_available_gib": 123,
+      "swap_gib": 4,
+      "dimms": [
+        {
+          "size_gib": 32,
+          "type": "DDR5",
+          "rated_speed_mts": 4800,
+          "configured_speed_mts": 3600,
+          "manufacturer": "Micron Technology",
+          "part_number": "MB32G48U64M2R8.RsM"
+        },
+        {
+          "size_gib": 32,
+          "type": "DDR5",
+          "rated_speed_mts": 4800,
+          "configured_speed_mts": 3600,
+          "manufacturer": "Micron Technology",
+          "part_number": "MB32G48U64M2R8.RsM"
+        },
+        {
+          "size_gib": 32,
+          "type": "DDR5",
+          "rated_speed_mts": 4800,
+          "configured_speed_mts": 3600,
+          "manufacturer": "Micron Technology",
+          "part_number": "MB32G48U64M2R8.RsM"
+        },
+        {
+          "size_gib": 32,
+          "type": "DDR5",
+          "rated_speed_mts": 4800,
+          "configured_speed_mts": 3600,
+          "manufacturer": "Micron Technology",
+          "part_number": "MB32G48U64M2R8.RsM"
+        }
+      ],
+      "dimm_count": 4,
+      "ecc": false,
+      "error_correction_type": "None"
+    },
+    "virtualization_host": {
+      "kvm_available": true,
+      "libvirt_active": true,
+      "systemd_detect_virt": "none"
+    }
+  },
+  "firmware_bios": {
+    "audit_status": "operator_manual_required",
+    "checklist_ref": "docs/chi404/HARDWARE_BASELINE.md#bios--uefi-operator-checklist",
+    "overclock_pbo": "unknown_verify_in_uefi",
+    "memory_profile": "likely_ddr5_3600mt_s_not_4800_rated",
+    "c_states_firmware": "unknown_verify_disabled_for_trading",
+    "smi_correctable_ecc_reporting": "unknown_verify_disabled",
+    "secure_boot": "unknown",
+    "notes": "BIOS fields are not readable from Linux; record UEFI screenshots in operator log after each change."
+  },
+  "kernel_runtime": {
+    "os": "Ubuntu 22.04.5 LTS",
+    "kernel": "5.15.0-179-generic",
+    "cmdline": "BOOT_IMAGE=/vmlinuz-5.15.0-179-generic root=/dev/mapper/vg0-root ro isolcpus=2-11 nohz_full=2-11 rcu_nocbs=2-11 isolcpus_managed_irq,domain processor.max_cstate=0 amd_idle.max_cstate=0 cpuidle.off=1 mce=ignore_ce audit=0 nmi_watchdog=0 nosoftlockup nosmt rcu_nocb_poll idle=poll acpi_irq_nobalance",
+    "cmdline_tokens": {
+      "isolcpus": "2-11",
+      "nohz_full": "2-11",
+      "rcu_nocbs": "2-11",
+      "processor.max_cstate": "0",
+      "amd_idle.max_cstate": "0",
+      "cpuidle.off": "1",
+      "nosmt": true,
+      "rcu_nocb_poll": true,
+      "idle": "poll",
+      "acpi_irq_nobalance": true
+    },
+    "cpuidle_states_non_poll": "none_observed",
+    "sysctl_hft3": {
+      "vm.swappiness": 1,
+      "kernel.numa_balancing": 0
+    },
+    "irqbalance": "disabled_by_tuning_script",
+    "public_ip": "64.44.98.219"
+  },
+  "cpu_layout": {
+    "policy": "SMT off; OS on CPU0; Rithmic/IRQ on CPU1; HOT isolated 2-11",
+    "os_cpu": 0,
+    "rithmic_cpu": 1,
+    "hot_cpus": "2-11",
+    "hot_cpu_count": 10,
+    "cgroup_cpuset_hft3_hot": "2-11",
+    "systemd_hft3_gateway_cpuaffinity": 1,
+    "systemd_hft3_engine_cpuaffinity": "2-11",
+    "env_synced_at": "2026-05-31T03:29:13Z"
+  },
+  "network": {
+    "primary_nic": "enp10s0f0np0",
+    "driver": "bnxt_en",
+    "firmware": "225.0.148.0/pkg 225.4.1.0",
+    "colo_default_route_nic": "enp10s0f0np0",
+    "ring_buffers": {
+      "rx_current": 4096,
+      "rx_max": 8191,
+      "tx_current": 2047,
+      "tx_max": 2047
+    },
+    "offloads_observed": {
+      "generic_receive_offload": "off",
+      "generic_segmentation_offload": "off",
+      "large_receive_offload": "off",
+      "tcp_segmentation_offload": "off"
+    },
+    "net_tune_on_boot": "hft3-net-tune.service enabled",
+    "rithmic_host": "ritpz04063.04.rithmic.com",
+    "irq_affinity_target_cpu": 1
+  },
+  "vm_sidecar": {
+    "name": "hft3-rtrader-win",
+    "state": "running",
+    "memory_kib": 16777216,
+    "memory_gib": 16,
+    "vcpus": 4,
+    "cpu_mode": "host-passthrough",
+    "network": "libvirt default NAT (virbr0)",
+    "guest_ip_typical": "192.168.122.128/24",
+    "disk_bus_current": "SATA",
+    "disk_bus_target": "virtio",
+    "nic_model_current": "e1000",
+    "nic_model_target": "virtio",
+    "ram_target_gib": 16,
+    "docs_ref": "docs/rithmic_trial/CHI404_VM_BUGS.md"
+  },
+  "software_layers": {
+    "hot_path_topology_ref": "BLUEPRINT.md section 4",
+    "market_state_hot_memory": {
+      "config": "apps/workbench/config/hot_memory_universe.yaml",
+      "doc": "docs/workbench/HOT_MEMORY_UNIVERSE.md",
+      "tiers": [
+        "HOT_EXECUTABLE",
+        "HOT_SENSOR",
+        "WARM"
+      ],
+      "core_protected_symbols": [
+        "ES",
+        "NQ",
+        "ZT",
+        "ZN",
+        "SR3"
+      ]
+    },
+    "cpp_memory_concurrency": {
+      "doc": "docs/workbench/MEMORY_ARCHITECTURE.md",
+      "spsc_queue": "rithmic_gateway/include/spsc_queue.hpp",
+      "market_state_align": "alignas(64)"
+    },
+    "economic_event_universe": {
+      "config": "packages/economic_event_universe/config/event_universe.yaml",
+      "research_ready_in_events_csv": [
+        "CPI",
+        "NFP",
+        "PROP_FLATTEN_TOPSTEP"
+      ]
+    },
+    "repo_path_on_host": "/root/hft3/repo",
+    "env_file": "/root/hft3/.env"
+  },
+  "validation": {
+    "pass_criteria_json": "infrastructure/chi404/PASS_CRITERIA.json",
+    "validate_script": "infrastructure/chi404/validate_pass_criteria.py",
+    "profiles": {
+      "full_tuning": "default",
+      "memory_upgrade": "HFT3_VALIDATE_PROFILE=memory_upgrade"
+    },
+    "gates_summary": {
+      "virt": "none",
+      "cyclictest_p99_max_us": 20,
+      "cpu_governor": "performance",
+      "require_idle_disabled": true,
+      "nic_ring_min": 511,
+      "cpu_steal_max_pct": 0.1
+    },
+    "capture_scripts": {
+      "hardware_baseline": "infrastructure/chi404/00_hardware_baseline_capture.sh",
+      "baseline_gap_fix": "infrastructure/chi404/01_fix_baseline_gaps.sh",
+      "tuning_baseline": "infrastructure/chi404/00_baseline_capture.sh",
+      "restore_point": "infrastructure/chi404/00_restore_point_capture.sh"
+    },
+    "remote_fix": "powershell -File scripts/run_chi404_baseline_fix_remote.ps1",
+    "remote_validate": "bash scripts/run_chi404_validate_remote.sh"
+  },
+  "known_gaps": [
+    "BIOS/PBO/overclock: operator UEFI audit required (see HARDWARE_BASELINE.md checklist)",
+    "DDR5 configured 3600 MT/s vs 4800 MT/s rated \u00e2\u20ac\u201d confirm EXPO/XMP in UEFI if higher speed desired",
+    "VM sidecar: SATA+e1000+NAT \u00e2\u20ac\u201d production target VirtIO+bridge (CHI404_VM_BUGS.md)",
+    "Rithmic host may block ICMP; gateway RTT is the colo health check"
+  ],
+  "drift_warnings": [
+    "Any GRUB/cmdline change requires restore point + validate_pass_criteria.py",
+    "cpupower idle-set -D 0 is lost on reboot \u00e2\u20ac\u201d 12_memory_idle_apply.sh or 01_fix_baseline_gaps.sh",
+    "NIC rings/offloads reset on reboot \u00e2\u20ac\u201d hft3-net-tune.service should re-apply 04_irq_net_tuning.sh",
+    "Do not change memory speed or PBO in BIOS without new baseline capture"
+  ]
+}

@@ -18,11 +18,25 @@ HOT_CPUS="${HOT_CPUS:-2-11}"
   ethtool -i "$NIC" 2>/dev/null || echo "ethtool -i failed"
   echo "--- offloads ---"
   for off in gro lro gso tso; do
-    ethtool -K "$NIC" "$off" off 2>/dev/null && echo "$off off OK" || echo "$off off SKIPPED"
+    if ethtool -K "$NIC" "$off" off 2>/dev/null; then
+      echo "$off off OK"
+    else
+      echo "$off off FAILED"
+    fi
   done
+  echo "--- offloads verify ---"
+  ethtool -k "$NIC" 2>/dev/null | grep -E 'generic-receive-offload|generic-segmentation-offload|tcp-segmentation-offload|large-receive-offload' || true
   echo "--- rings (before) ---"
   ethtool -g "$NIC" 2>/dev/null || echo "ethtool -g failed"
-  ethtool -G "$NIC" rx 4096 tx 4096 2>/dev/null && echo "rings set 4096 OK" || echo "rings set 4096 SKIPPED"
+  RX_MAX=$(ethtool -g "$NIC" 2>/dev/null | awk '/Pre-set maximums:/{f=1;next} f&&/^RX:/{print $2; exit}')
+  TX_MAX=$(ethtool -g "$NIC" 2>/dev/null | awk '/Pre-set maximums:/{f=1;next} f&&/^TX:/{print $2; exit}')
+  TARGET_RX=${RX_MAX:-4096}
+  TARGET_TX=${TX_MAX:-4096}
+  if [[ "$TARGET_RX" -gt 4096 ]]; then TARGET_RX=4096; fi
+  if [[ "$TARGET_TX" -gt 4096 ]]; then TARGET_TX=4096; fi
+  ethtool -G "$NIC" rx "$TARGET_RX" tx "$TARGET_TX" 2>/dev/null \
+    && echo "rings set rx=${TARGET_RX} tx=${TARGET_TX} OK" \
+    || echo "rings set rx=${TARGET_RX} tx=${TARGET_TX} SKIPPED"
   echo "--- rings (after) ---"
   ethtool -g "$NIC" 2>/dev/null || true
   echo "--- IRQ affinity ---"
@@ -53,13 +67,22 @@ HOT_CPUS="${HOT_CPUS:-2-11}"
   fi
 } | tee "$OUT"
 
-python3 - "$NIC" "$LOG_DIR/ring_buffer_limitation.json" <<'PY'
+RX_MAX=$(ethtool -g "$NIC" 2>/dev/null | awk '/Pre-set maximums:/{f=1;next} f&&/^RX:/{print $2; exit}')
+TX_MAX=$(ethtool -g "$NIC" 2>/dev/null | awk '/Pre-set maximums:/{f=1;next} f&&/^TX:/{print $2; exit}')
+TARGET_RX=${RX_MAX:-4096}
+TARGET_TX=${TX_MAX:-4096}
+if [[ "$TARGET_RX" -gt 4096 ]]; then TARGET_RX=4096; fi
+if [[ "$TARGET_TX" -gt 4096 ]]; then TARGET_TX=4096; fi
+
+python3 - "$NIC" "$LOG_DIR/ring_buffer_limitation.json" "$TARGET_RX" "$TARGET_TX" <<'PY'
 import json
 import re
 import subprocess
 import sys
 
 nic, out_path = sys.argv[1], sys.argv[2]
+req_rx = int(sys.argv[3]) if len(sys.argv) > 3 else 4096
+req_tx = int(sys.argv[4]) if len(sys.argv) > 4 else 4096
 try:
     text = subprocess.check_output(["ethtool", "-g", nic], text=True, stderr=subprocess.STDOUT)
 except subprocess.CalledProcessError as exc:
@@ -71,12 +94,13 @@ except subprocess.CalledProcessError as exc:
         "tx_current": None,
         "rx_max": None,
         "tx_max": None,
-        "requested_rx": 4096,
-        "requested_tx": 4096,
+        "requested_rx": req_rx,
+        "requested_tx": req_tx,
         "limitation": "Could not read ring buffer sizes",
     }
     open(out_path, "w", encoding="utf-8").write(json.dumps(payload, indent=2) + "\n")
-    raise SystemExit(1)
+    print(f"Wrote {out_path} (ethtool -g failed)", file=sys.stderr)
+    sys.exit(0)
 
 def _field(label: str) -> int | None:
     m = re.search(rf"^{label}:\s*(\d+)", text, re.MULTILINE)
@@ -100,10 +124,10 @@ if cur_block:
     tx_cur = int(re.search(r"TX:\s*(\d+)", cb).group(1)) if re.search(r"TX:\s*(\d+)", cb) else tx_cur
 
 limitation = None
-if rx_max is not None and rx_max < 4096:
-    limitation = f"Hardware RX ring max is {rx_max}; requested 4096"
-elif tx_max is not None and tx_max < 4096:
-    limitation = f"Hardware TX ring max is {tx_max}; requested 4096"
+if rx_max is not None and rx_max < req_rx:
+    limitation = f"Hardware RX ring max is {rx_max}; requested {req_rx}"
+elif tx_max is not None and tx_max < req_tx:
+    limitation = f"Hardware TX ring max is {tx_max}; requested {req_tx}"
 
 payload = {
     "nic": nic,
@@ -112,8 +136,8 @@ payload = {
     "tx_current": tx_cur,
     "rx_max": rx_max,
     "tx_max": tx_max,
-    "requested_rx": 4096,
-    "requested_tx": 4096,
+    "requested_rx": req_rx,
+    "requested_tx": req_tx,
     "limitation": limitation,
 }
 open(out_path, "w", encoding="utf-8").write(json.dumps(payload, indent=2) + "\n")

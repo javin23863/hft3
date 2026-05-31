@@ -1,0 +1,98 @@
+{
+  "capture_method": "01_fix_baseline_gaps.sh + 00_hardware_baseline_capture.sh",
+  "captured_at": "2026-05-31T03:48:47Z",
+  "cpu_layout": {
+    "hot_cpus": "2-11",
+    "os_cpu": "0",
+    "rithmic_cpu": "1"
+  },
+  "drift_warnings": [],
+  "firmware_bios": {
+    "audit_status": "operator_manual_required"
+  },
+  "hardware": {
+    "cpu": {
+      "cpufreq_governor": "performance",
+      "max_mhz": "4400.0000",
+      "model": "AMD Ryzen 9 9900X 12-Core Processor",
+      "offline_cpus": "12-23",
+      "online_cpus": "0-11",
+      "threads_per_core": "1",
+      "vendor": "AuthenticAMD"
+    },
+    "memory": {
+      "dimm_count": 4,
+      "dimms": [
+        {
+          "configured_speed_mts": 3600,
+          "manufacturer": "Micron Technology",
+          "part_number": "MB32G48U64M2R8.RsM",
+          "rated_speed_mts": 4800,
+          "size_gib": 32,
+          "type": "DDR5"
+        },
+        {
+          "configured_speed_mts": 3600,
+          "manufacturer": "Micron Technology",
+          "part_number": "MB32G48U64M2R8.RsM",
+          "rated_speed_mts": 4800,
+          "size_gib": 32,
+          "type": "DDR5"
+        },
+        {
+          "configured_speed_mts": 3600,
+          "manufacturer": "Micron Technology",
+          "part_number": "MB32G48U64M2R8.RsM",
+          "rated_speed_mts": 4800,
+          "size_gib": 32,
+          "type": "DDR5"
+        },
+        {
+          "configured_speed_mts": 3600,
+          "manufacturer": "Micron Technology",
+          "part_number": "MB32G48U64M2R8.RsM",
+          "rated_speed_mts": 4800,
+          "size_gib": 32,
+          "type": "DDR5"
+        }
+      ],
+      "total_available_gib": 123,
+      "total_installed_gib": 128
+    }
+  },
+  "host_id": "CHI404",
+  "kernel_runtime": {
+    "cmdline": "BOOT_IMAGE=/vmlinuz-5.15.0-179-generic root=/dev/mapper/vg0-root ro isolcpus=2-11 nohz_full=2-11 rcu_nocbs=2-11 isolcpus_managed_irq,domain processor.max_cstate=0 amd_idle.max_cstate=0 cpuidle.off=1 mce=ignore_ce audit=0 nmi_watchdog=0 nosoftlockup nosmt rcu_nocb_poll idle=poll acpi_irq_nobalance",
+    "kernel": "5.15.0-179-generic"
+  },
+  "known_gaps": [],
+  "network": {
+    "driver": "bnxt_en",
+    "offloads_observed": {
+      "generic_receive_offload": "off",
+      "generic_segmentation_offload": "off",
+      "large_receive_offload": "off",
+      "tcp_segmentation_offload": "off"
+    },
+    "primary_nic": "enp10s0f0np0",
+    "ring_buffers": {
+      "rx_current": 4096,
+      "rx_max": 8191,
+      "tx_current": 2047,
+      "tx_max": 2047
+    }
+  },
+  "schema_version": "1.0",
+  "software_layers": {
+    "market_state_hot_memory": {
+      "config": "apps/workbench/config/hot_memory_universe.yaml"
+    }
+  },
+  "validation": {
+    "pass_criteria_json": "infrastructure/chi404/PASS_CRITERIA.json",
+    "validate_script": "infrastructure/chi404/validate_pass_criteria.py"
+  },
+  "vm_sidecar": {
+    "virsh_list": "Id   Name               State\n----------------------------------\n 1    hft3-rtrader-win   running"
+  }
+}

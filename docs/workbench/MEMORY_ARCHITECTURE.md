@@ -7,6 +7,7 @@
 | Market-state HOT/WARM/COLD, instrument registry, VIX/VVIX sensors, degradation | [chicago_futures_hot_memory_a_plus_developer_prompt.pdf](../references/chicago_futures_hot_memory_a_plus_developer_prompt.pdf) | [HOT_MEMORY_UNIVERSE.md](HOT_MEMORY_UNIVERSE.md) |
 | C++ zero-allocation, SPSC, SIMD design | [ultra_low_latency_hft_vector_search_architecture.pdf](../references/ultra_low_latency_hft_vector_search_architecture.pdf) | This document (§C++ mapping below) |
 | Colo kernel idle / GRUB gap-fill | ultra PDF §2–3 (advisory) | [MEMORY_UPGRADE.md](../chi404/MEMORY_UPGRADE.md) |
+| **CHI404 hardware baseline (CPU/RAM/NIC/BIOS)** | — | [HARDWARE_BASELINE.md](../chi404/HARDWARE_BASELINE.md) · AI: [chi404_system_spec.json](../ai/chi404_system_spec.json) |
 
 Python is allowed for **research, orchestration, visualization, parameter sweeps, and dashboarding**.
 
