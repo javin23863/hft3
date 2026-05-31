@@ -1,0 +1,43 @@
+source_repo_url: https://github.com/javin23863/crypto-alpha-engine
+ideas_only: false
+source_commit_sha: cebc1acae275be7b0b29101cb84455e59f62e440
+extracted_hypotheses:
+- CRYPTO_H1
+- CRYPTO_H2
+- CRYPTO_H3
+- CRYPTO_H4
+- CRYPTO_H5
+- CRYPTO_H6
+- CRYPTO_H7
+feature_builders:
+- packages/crypto_lane/src/features/crypto/basis_features.py
+- packages/crypto_lane/src/features/crypto/funding_features.py
+- packages/crypto_lane/src/features/crypto/deribit_vol_features.py
+- packages/crypto_lane/src/features/onchain/btc_node_mempool_features.py
+- packages/crypto_lane/src/features/onchain/btc_blockspace_event_features.py
+align_modules:
+- packages/crypto_lane/src/align/clock_sync.py
+- packages/crypto_lane/src/align/pit_join.py
+model_candidates:
+- crypto_h1_basis_compression
+- crypto_h2_funding_capture
+- crypto_h3_deribit_vol_leadlag
+- crypto_h4_mempool_volatility
+- crypto_h5_blockspace_liquidity_stress
+- crypto_h6_mempool_clear_reversion
+- crypto_h7_congestion_event_study
+backtest_configs:
+- h1_basis_compression
+- h2_funding_capture
+- h3_deribit_vol_leadlag
+- h4_mempool_volatility
+- h5_blockspace_liquidity_stress
+- h6_mempool_clear_reversion
+- h7_congestion_event_study
+tests:
+- tests/test_crypto_lane/
+no_runtime_dependency: true
+integration_points:
+- packages/crypto_lane/pipeline.py
+blocked_items:
+- CHI404 hot path

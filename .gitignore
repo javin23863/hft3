@@ -1,6 +1,11 @@
 # Environment variables
 .env
 .env.local
+.btc-node.env
+keys.env
+*.pem
+id_ed25519
+id_ed25519_osaka
 
 # Python
 __pycache__/
@@ -71,6 +76,10 @@ research_cards/parity/**
 !research_cards/parity/.gitkeep
 research_cards/equities/**
 !research_cards/equities/.gitkeep
+data/crypto/**
+!data/crypto/.gitkeep
+research_cards/crypto/**
+!research_cards/crypto/.gitkeep
 research_cards/workbench_runs/**
 !research_cards/workbench_runs/.gitkeep
 research_cards/workbench_catalog_manifest.json

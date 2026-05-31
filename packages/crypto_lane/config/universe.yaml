@@ -1,0 +1,33 @@
+repo_root: .
+paths:
+  data_root: data/crypto
+  fixtures_root: packages/crypto_lane/fixtures
+  manifest_root: research/hypotheses
+  reports_root: research_cards/crypto
+
+defaults:
+  max_staleness_ms_hft: 15000
+  max_staleness_ms_slow: 300000
+  funding_horizon_hours: 8
+  fee_spike_z_threshold: 3.0
+  pit_strict: false
+
+venues:
+  - id: binance_spot
+    ws_rtt_tracking: true
+  - id: binance_perp
+    ws_rtt_tracking: true
+  - id: deribit
+    ws_rtt_tracking: true
+
+symbols:
+  - BTC
+
+hypothesis_ids:
+  - CRYPTO_H1
+  - CRYPTO_H2
+  - CRYPTO_H3
+  - CRYPTO_H4
+  - CRYPTO_H5
+  - CRYPTO_H6
+  - CRYPTO_H7
