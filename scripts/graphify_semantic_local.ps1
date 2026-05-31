@@ -25,7 +25,7 @@ if (-not (Get-Command ollama -ErrorAction SilentlyContinue)) {
 }
 
 $Model = if ($env:GRAPHIFY_OLLAMA_MODEL) { $env:GRAPHIFY_OLLAMA_MODEL } else {
-    'hf.co/QuantFactory/Llama-3.1-Hawkish-8B-GGUF:Q6_K'
+    if ($env:HFT3_OLLAMA_MODEL) { $env:HFT3_OLLAMA_MODEL } else { 'gemma4:31b-cloud' }
 }
 $HostUrl = if ($env:OLLAMA_HOST) { $env:OLLAMA_HOST } else { 'http://127.0.0.1:11434' }
 $Timeout = if ($env:GRAPHIFY_OLLAMA_TIMEOUT_S) { $env:GRAPHIFY_OLLAMA_TIMEOUT_S } else { '600' }

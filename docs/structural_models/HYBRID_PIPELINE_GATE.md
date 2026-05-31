@@ -40,7 +40,7 @@ python scripts/run_hybrid_pipeline_gate.py --min-trades 0           # replay-onl
 | `unit_tests` | `test_pdf_hybrid_strategy`, `test_pdf_defensive_ablation` |
 | `defensive_ablation` | 4 modes: `as_baseline`, `ofi_only`, `vpin_only`, `hybrid_full` |
 | `hybrid_backtest` | Primary `hybrid_full` card → `PDF_MODEL_4_hybrid_replay/` |
-| `after_action_report` | AAR artifacts + optional Hawkish-8B narrative |
+| `after_action_report` | AAR artifacts + optional Gemma narrative (`after_action_response.json`) |
 | `validate_card` | `result.json` + `report.md`; `num_trades >= --min-trades` |
 
 ## Latency

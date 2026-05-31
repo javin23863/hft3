@@ -61,6 +61,8 @@ def write_hybrid_aar_artifacts(
         "latency_ms": latency_ms,
         "latency_source": latency_source,
         "latency_authority": "workstation_replay",
+        "breakeven_us": None,
+        "lane_pass": False,
         "data_sufficient": True,
         "eval_scope": "discovery_single_event_gate",
         "cpp_replay_available": False,

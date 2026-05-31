@@ -12,7 +12,12 @@ import streamlit as st
 _TERMINAL_STATES = frozenset(
     {"pass", "fail", "blocked", "cancelled", "dry_run", "unknown", "complete", "completed"}
 )
-_AAR_MARKERS = ("after_action_report.md", "after_action_symbolic.json", "diagnostics.json")
+_AAR_MARKERS = (
+    "after_action_response.json",
+    "after_action_report.md",
+    "after_action_symbolic.json",
+    "diagnostics.json",
+)
 
 from workbench.ui.workflow_tabs import WORKFLOW_TABS
 

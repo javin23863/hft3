@@ -29,7 +29,9 @@ artifacts/workbench_runs/{campaign_id}/
     signal_diagnostics.json
     after_action_packet.json
     after_action_symbolic.json
-    after_action_report.md
+    after_action_response.json   # canonical LLM output (schema_aar_response_v1)
+    after_action_report.md       # derived from narrative_md
+    after_action_annotations.json
     after_action_meta.json
 ```
 
@@ -38,7 +40,7 @@ artifacts/workbench_runs/{campaign_id}/
 | Mode | Flags | After-action LLM |
 |------|-------|------------------|
 | Quick trial | default UI quick run | Skipped |
-| Full audit | `--full-sweep`, `trial_mode=False` | Runs via `data_layer.pipeline.after_action` + Ollama |
+| Full audit | `--full-sweep`, `trial_mode=False` | Runs via `packet_runner` + Gemma (`HFT3_OLLAMA_MODEL`) |
 
 ## Event replay
 
@@ -62,7 +64,7 @@ UI **System** tab reads these paths.
 
 ## JSON schemas
 
-See `runtime/schemas/` for machine-readable shapes (`campaign_summary.json`, `event_diagnostics.json`).
+See `runtime/schemas/` for machine-readable shapes (`schema_v1.json`, `schema_aar_response_v1.json`, pipeline request/response, `campaign_summary.json`, `event_diagnostics.json`).
 
 ## Shared path helper
 

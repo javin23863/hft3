@@ -27,3 +27,5 @@ git submodule update --init vendor/openfoundry vendor/alphageometry
 `data_layer/openfoundry_bridge.py` validates the connector YAML and checks `vendor/openfoundry/domain-packs/core/pack.yaml` is present.
 
 Quant X (`quant_data_refinery/`) is **not** used.
+
+Vendor boundaries (OpenFoundry vs AlphaGeometry vs Ollama LLMs): [docs/research/VENDOR_BOUNDARIES.md](../../docs/research/VENDOR_BOUNDARIES.md).

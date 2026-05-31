@@ -64,3 +64,16 @@ def runtime_validation_dir() -> Path:
 
 def event_replays_dir() -> Path:
     return artifact_root() / "event_replays"
+
+
+AAR_RESPONSE_FILENAME = "after_action_response.json"
+AAR_REPORT_FILENAME = "after_action_report.md"
+
+
+def aar_response_path(event_dir: Path) -> Path:
+    return event_dir / AAR_RESPONSE_FILENAME
+
+
+def pipeline_runs_dir(repo: Path | None = None) -> Path:
+    root = repo or repo_root()
+    return root / "research_cards" / "pipeline_runs"

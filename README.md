@@ -47,6 +47,9 @@ python -m workbench run --model SPREAD_BLOWOUT_RECOMPRESSION --event-id CPI_2024
 # Macro replay
 python scripts/run_event_replay.py --event-id CPI_2024_09_11_TIGHT
 
+# Autoresearch pipeline (NL thesis → backtest → artifacts)
+python scripts/run_pipeline.py --thesis "Fade spread blowout after CPI" --event-id CPI_2024_09_11_TIGHT --dry-run
+
 # T0 certification gate
 python -m pytest tests/backtester_validation/fast -q
 
@@ -64,3 +67,5 @@ graphify query "where is ReplaySession defined?"
 | [docs/vault/BACKTESTER_CERTIFICATION.md](docs/vault/BACKTESTER_CERTIFICATION.md) | Certification tiers |
 
 Post-run after-action (workstation + Ollama): [docs/workbench/AFTER_ACTION_REPORTS.md](docs/workbench/AFTER_ACTION_REPORTS.md).
+
+Autoresearch pipeline (NL hypothesis → backtest): [docs/research/AUTORESEARCH_PIPELINE.md](docs/research/AUTORESEARCH_PIPELINE.md).

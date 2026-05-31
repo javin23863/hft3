@@ -1,6 +1,6 @@
 ---
 name: HFT After-Action LLM Layer
-overview: Vendor OpenFoundry + AlphaGeometry into hft3; extend OpenFoundry for CME MBO HFT; bind ontology to mathematical PDFs; post-run only after-action (symbolic invariants + Hawkish-8B + file KG). Workbench event runs on MSI workstation — not Quant X, not hot path.
+overview: "SUPERSEDED by packet-strict_llm_fix_16432bbd.plan.md — Hawkish-8B replaced by gemma4:31b-cloud + packet_runner. Do not execute this plan."
 todos:
   - id: vendor-repos-pdfs
     content: "Git submodules vendor/openfoundry + vendor/alphageometry; VENDOR.lock SHAs; docs/references/MANIFEST.md + missing PDF intake"

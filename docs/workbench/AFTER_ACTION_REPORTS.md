@@ -29,7 +29,7 @@ Do not set `HFT3_AFTER_ACTION=1` on CHI404 production hosts.
 ## Setup
 
 1. Vendor submodules: `vendor/openfoundry/` ([syzygyhack/open-foundry](https://github.com/syzygyhack/open-foundry)), `vendor/alphageometry/` — pins in `integrations/openfoundry/VENDOR.lock`
-2. Ollama with Hawkish-8B: `hf.co/QuantFactory/Llama-3.1-Hawkish-8B-GGUF:Q6_K`
+2. Ollama with Gemma: `ollama run gemma4:31b-cloud` (override `HFT3_OLLAMA_MODEL`)
 3. PDF bundle in `docs/references/` — see [MANIFEST.md](../references/MANIFEST.md)
 
 ## Time discipline
@@ -46,8 +46,9 @@ Do not set `HFT3_AFTER_ACTION=1` on CHI404 production hosts.
 |------|---------|
 | `after_action_packet.json` | `MicrostructureAARPacket` |
 | `after_action_symbolic.json` | Invariant pass/fail |
-| `after_action_report.md` | Hawkish-8B narrative (when LLM available) |
-| `after_action_annotations.json` | KG edge proposals |
+| `after_action_response.json` | Canonical LLM output (`schema_aar_response_v1`) |
+| `after_action_report.md` | Derived human view (`narrative_md`) |
+| `after_action_annotations.json` | KG edge proposals (legacy compat) |
 | `after_action_meta.json` | skip_reason, llm_status, vendor SHAs |
 | `kg_slice.json` | Portable subgraph for this run |
 

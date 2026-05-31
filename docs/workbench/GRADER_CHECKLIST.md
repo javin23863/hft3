@@ -48,7 +48,7 @@ Campaign: `research_cards/workbench_runs/<campaign_id>/periods/<Stage>/events/<e
 | `diagnostics.json` | `survives_cpp_execution_delay`, `cpp_hot_path_runtime_us`, `python_research_runtime_us`, `promote_candidate` |
 | `trades.parquet` | timestamp chain + µs fields per [LATENCY_ARCHITECTURE.md](LATENCY_ARCHITECTURE.md) |
 | `report.md` | narrative cites C++ latency authority |
-| `after_action_report.md` | Hawkish-8B after-action (requires `--full-sweep`) |
+| `after_action_response.json` | Gemma after-action (requires `--full-sweep`) |
 | `after_action_symbolic.json` | latency invariant pass/fail |
 | `after_action_packet.json` | structured AAR packet with PDF citations |
 | `composition_trace.json` | per-phase stub budgets, veto counts, raw vs adjusted signal (composed campaigns) |

@@ -286,41 +286,7 @@ def build_microstructure_aar_packet(
 
 
 def validate_packet_schema(packet: Dict[str, Any]) -> List[str]:
-    """Lightweight required-field check (schema_v1.json mirror)."""
-    errors: List[str] = []
-    for key in (
-        "schema_version",
-        "run_id",
-        "openfoundry_meta",
-        "pdf_citations",
-        "pdf_citations_complete",
-        "event_context",
-        "latency_authority",
-        "injection_sweep",
-        "per_trade_audit",
-        "simulation_fidelity",
-        "predictions_vs_outcomes",
-    ):
-        if key not in packet:
-            errors.append(f"missing {key}")
-    lat = packet.get("latency_authority") or {}
-    if lat.get("python_research_runtime_authoritative") is not False:
-        errors.append("python_research_runtime_authoritative must be false")
-    sim = packet.get("simulation_fidelity") or {}
-    for key in (
-        "cpp_replay_available",
-        "cpp_stack_verified",
-        "matching_config",
-        "queue_tracker_status",
-    ):
-        if key not in sim:
-            errors.append(f"simulation_fidelity missing {key}")
-    qts = sim.get("queue_tracker_status")
-    if sim.get("cpp_replay_available"):
-        if qts != "available":
-            errors.append("queue_tracker_status must be available when cpp_replay_available")
-    elif sim.get("cpp_stack_verified") and qts != "link_only":
-        errors.append("queue_tracker_status must be link_only when cpp_stack_verified without replay")
-    elif not sim.get("cpp_stack_verified") and not sim.get("cpp_replay_available") and qts != "stub_or_unverified":
-        errors.append("queue_tracker_status must be stub_or_unverified when no C++ verify/replay")
-    return errors
+    """Validate against schema_v1.json via jsonschema."""
+    from data_layer.packet.validate import validate_aar_packet_in
+
+    return validate_aar_packet_in(packet)

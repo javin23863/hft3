@@ -1,4 +1,4 @@
-"""Ollama HTTP client for Hawkish-8B after-action reports."""
+"""Ollama HTTP client for packet-strict LLM calls (Gemma AAR / GLM pipeline)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,8 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 from urllib import error, request
 
-DEFAULT_MODEL = "hf.co/QuantFactory/Llama-3.1-Hawkish-8B-GGUF:Q6_K"
+DEFAULT_AAR_MODEL = os.environ.get("HFT3_OLLAMA_MODEL", "gemma4:31b-cloud")
+DEFAULT_MODEL = DEFAULT_AAR_MODEL
 DEFAULT_HOST = "http://127.0.0.1:11434"
 DEFAULT_TIMEOUT_S = float(os.environ.get("HFT3_OLLAMA_TIMEOUT_S", "600"))
 
@@ -28,7 +29,7 @@ def _fetch_tags(host: str) -> List[str]:
     return [str(m.get("name", "")) for m in body.get("models", []) if m.get("name")]
 
 
-def resolve_model(host: str = DEFAULT_HOST, preferred: str = DEFAULT_MODEL) -> Optional[str]:
+def resolve_model(host: str = DEFAULT_HOST, preferred: str = DEFAULT_AAR_MODEL) -> Optional[str]:
     try:
         names = _fetch_tags(host)
     except (error.URLError, error.HTTPError, TimeoutError, OSError, json.JSONDecodeError):
@@ -42,18 +43,19 @@ def resolve_model(host: str = DEFAULT_HOST, preferred: str = DEFAULT_MODEL) -> O
     return None
 
 
-def ollama_available(host: str = DEFAULT_HOST) -> bool:
-    return resolve_model(host) is not None
+def ollama_available(host: str = DEFAULT_HOST, model: str = DEFAULT_AAR_MODEL) -> bool:
+    return resolve_model(host, model) is not None
 
 
 def generate(
     system: str,
     user: str,
     *,
-    model: str = DEFAULT_MODEL,
+    model: str = DEFAULT_AAR_MODEL,
     host: str = DEFAULT_HOST,
     timeout_s: float = DEFAULT_TIMEOUT_S,
     num_predict: int = 2048,
+    format_json: bool = False,
 ) -> GenerateResult:
     import time
 
@@ -69,6 +71,8 @@ def generate(
         ],
         "options": {"num_predict": num_predict, "temperature": 0.3},
     }
+    if format_json:
+        payload["format"] = "json"
     data = json.dumps(payload).encode("utf-8")
     req = request.Request(
         f"{host.rstrip('/')}/api/chat",

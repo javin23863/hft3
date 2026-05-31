@@ -43,7 +43,7 @@ Mathematical and production rules live in PDFs ΓÇö not duplicated in prose he
 - **Python 3.11+**, **Git**, **pip**
 - **Optional:** CMake + C++17 for `features_engine/cpp/`
 - **Optional:** `graphify` CLI ΓÇö `pip install graphifyy` (AST rebuild; no cloud API required)
-- **Optional:** Ollama + Hawkish-8B for workbench after-action reports and optional semantic graphify
+- **Optional:** Ollama + Gemma (`gemma4:31b-cloud`) for workbench after-action reports and optional semantic graphify
 - **CHI404:** SSH `Host chi404` in `~/.ssh/config`
 - **Rithmic trial live:** CHI404 only ΓÇö see [rithmic_trial/README.md](rithmic_trial/README.md)
 
@@ -78,6 +78,7 @@ cp .env.example .env          # fill locally; never commit
 pip install -r data_system/requirements.txt
 pip install -r backtest_pipeline/requirements.txt
 pip install -r workbench/requirements.txt
+pip install -e .                    # pulls jsonschema for packet-strict LLM validation
 pip install graphifyy         # code navigation (recommended)
 pip install openai            # only if using graphify semantic via local Ollama
 ```
@@ -155,7 +156,7 @@ Runs **after** a full-sweep workbench event completes on the **workstation** (Wi
 Pipeline:
 
 ```
-diagnostics.json + trades.parquet ΓåÆ MicrostructureAARPacket ΓåÆ symbolic invariants ΓåÆ KG JSONL ΓåÆ Hawkish-8B (Ollama)
+diagnostics.json + trades.parquet → MicrostructureAARPacket → symbolic invariants → KG JSONL → Gemma (Ollama, packet-strict)
 ```
 
 Per-run artifacts (when enabled):
@@ -164,13 +165,14 @@ Per-run artifacts (when enabled):
 |------|---------|
 | `after_action_packet.json` | Structured packet (ns/┬╡s, PDF citations) |
 | `after_action_symbolic.json` | Deterministic latency invariant pass/fail |
-| `after_action_report.md` | Plain-English narrative (Ollama) |
+| `after_action_response.json` | Canonical LLM output (schema-validated) |
+| `after_action_report.md` | Plain-English narrative (derived) |
 | `after_action_meta.json` | `llm_status`, skip reasons, timing |
 
 Setup:
 
 1. Submodules initialized (┬º4.1).
-2. Ollama running with `hf.co/QuantFactory/Llama-3.1-Hawkish-8B-GGUF:Q6_K`.
+2. Ollama running with `gemma4:31b-cloud` (or `HFT3_OLLAMA_MODEL`).
 3. Charter PDFs present in `docs/references/` (see MANIFEST).
 
 ```bash

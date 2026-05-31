@@ -1,0 +1,64 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PipelineResponsePacket",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "request_id",
+    "run_id",
+    "event_id",
+    "llm_model",
+    "llm_status",
+    "parsed",
+    "candidates_tested",
+    "results",
+    "generated_at"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "const": "1" },
+    "request_id": { "type": "string" },
+    "run_id": { "type": "string" },
+    "event_id": { "type": "string" },
+    "llm_model": { "type": ["string", "null"] },
+    "llm_status": {
+      "type": "string",
+      "enum": ["ok", "skipped_connector", "skipped_no_llm", "unavailable", "schema_reject"]
+    },
+    "openfoundry_meta": {
+      "type": "object",
+      "required": ["connector_id", "asset_class", "vendor_shas", "schema_version"]
+    },
+    "parsed": {
+      "type": "object",
+      "required": ["primary_model_id", "instrument_universe", "indicators", "source"],
+      "properties": {
+        "primary_model_id": { "type": "string" },
+        "instrument_universe": { "type": "array", "items": { "type": "string" } },
+        "indicators": { "type": "array", "items": { "type": "string" } },
+        "source": { "type": "string" }
+      }
+    },
+    "candidates_tested": { "type": "integer" },
+    "selected_model_id": { "type": ["string", "null"] },
+    "artifact_dir": { "type": ["string", "null"] },
+    "document_summary": { "type": ["string", "null"] },
+    "generated_at": { "type": "string" },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["candidate_id", "model_id", "net_pnl", "num_trades", "passes"],
+        "properties": {
+          "candidate_id": { "type": "string" },
+          "model_id": { "type": "string" },
+          "net_pnl": { "type": "number" },
+          "num_trades": { "type": "integer" },
+          "passes": { "type": "boolean" },
+          "error": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "llm_error": { "type": "string" }
+  },
+  "additionalProperties": false
+}

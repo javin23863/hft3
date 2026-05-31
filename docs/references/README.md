@@ -52,3 +52,9 @@ audit, and degradation rules. Runtime config and gap table:
 | [chicago_futures_hot_memory_a_plus_developer_prompt.pdf](chicago_futures_hot_memory_a_plus_developer_prompt.pdf) | present | Market-state HOT/WARM/COLD, instrument registry, sensors |
 
 Field-level mapping: [MANIFEST.md](MANIFEST.md). After-action packets require all charter PDFs in this directory for `pdf_citations_complete: true`.
+
+## Automated research pipeline
+
+**File:** [dev_instructions.pdf](dev_instructions.pdf)
+
+NL hypothesis → structured rules → candidate generation → backtest → deployment spec. Implementation: [AUTORESEARCH_PIPELINE.md](../research/AUTORESEARCH_PIPELINE.md), package `packages/research_pipeline/`.

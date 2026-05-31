@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PipelineHypothesisResponse",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "request_id",
+    "llm_model",
+    "llm_status",
+    "primary_model_id",
+    "instrument_universe",
+    "entry_rules",
+    "exit_rules",
+    "indicators",
+    "feature_list",
+    "param_ranges"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "const": "1" },
+    "request_id": { "type": "string" },
+    "llm_model": { "type": ["string", "null"] },
+    "llm_status": {
+      "type": "string",
+      "enum": ["ok", "skipped_connector", "unavailable", "schema_reject"]
+    },
+    "primary_model_id": { "type": "string" },
+    "instrument_universe": { "type": "array", "items": { "type": "string" } },
+    "entry_rules": { "type": "array", "items": { "type": "string" } },
+    "exit_rules": { "type": "array", "items": { "type": "string" } },
+    "indicators": { "type": "array", "items": { "type": "string" } },
+    "feature_list": { "type": "array", "items": { "type": "string" } },
+    "param_ranges": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "number" },
+        "minItems": 2,
+        "maxItems": 2
+      }
+    },
+    "llm_error": { "type": "string" }
+  },
+  "additionalProperties": false
+}

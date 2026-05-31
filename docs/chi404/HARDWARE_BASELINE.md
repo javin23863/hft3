@@ -16,6 +16,7 @@ Authority: [BLUEPRINT.md §4](../../BLUEPRINT.md#4-live-architecture) · [MEMORY
 |-------|--------------------------|
 | Hostname | `CHI404` |
 | Role | Chicago colo bare metal — live/paper Rithmic, capture, latency probes |
+| Colo provider | **QuantVPS** |
 | Public IP | `64.44.98.219/25` |
 | OS | Ubuntu 22.04.5 LTS |
 | Kernel | `5.15.0-179-generic` |
@@ -89,8 +90,8 @@ Not readable from Linux. Log date + Y/N after each UEFI visit.
 |---------|--------|
 | SMT | Disabled (matches `nosmt`) |
 | C-states | Disabled or minimum |
-| PBO / overclock | **Document exact profile** |
-| Memory EXPO/XMP | **Document** — currently **3600 MT/s** |
+| PBO / overclock | **Document exact profile** — see [CPU_MEMORY_OVERCLOCK.md](CPU_MEMORY_OVERCLOCK.md) |
+| Memory EXPO/XMP | **Enable 4800 MT/s** — currently **3600 MT/s** |
 | Memory pre-failure / SMI | Disabled for trading (PDF §3.2) |
 | SVM | Enabled |
 
@@ -108,6 +109,8 @@ Not readable from Linux. Log date + Y/N after each UEFI visit.
 
 **One-shot fix (workstation):** `powershell -File scripts/run_chi404_baseline_fix_remote.ps1`  
 **On box:** `bash infrastructure/chi404/01_fix_baseline_gaps.sh`
+
+**CPU/RAM overclock (UEFI + market-load validate):** [CPU_MEMORY_OVERCLOCK.md](CPU_MEMORY_OVERCLOCK.md)
 
 ---
 

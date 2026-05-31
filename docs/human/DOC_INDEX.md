@@ -14,6 +14,7 @@ Chronological onboarding for human developers. AI agents: [../ai/ONBOARDING.md](
 | 6 | [../workbench/README.md](../workbench/README.md) | Workbench campaigns, latency, after-action |
 | 7 | [../rithmic_trial/README.md](../rithmic_trial/README.md) | Quarantined live capture (CHI404 only) |
 | 7a | [../chi404/HARDWARE_BASELINE.md](../chi404/HARDWARE_BASELINE.md) | CHI404 CPU/memory/NIC baseline + verify gates |
+| 7b | [../chi404/CPU_MEMORY_OVERCLOCK.md](../chi404/CPU_MEMORY_OVERCLOCK.md) | UEFI EXPO/PBO + market-load stability |
 | 8 | [../GRAPHIFY_WORKFLOW.md](../GRAPHIFY_WORKFLOW.md) | Code graph rebuild |
 | 9 | [../../AGENTS.md](../../AGENTS.md) + [../AGENTIC_ENGINEERING.md](../AGENTIC_ENGINEERING.md) | Agent delegation |
 | 10 | [../REPO_MAP.md](../REPO_MAP.md) | Complete top-level directory map |

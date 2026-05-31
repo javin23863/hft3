@@ -260,9 +260,23 @@ def test_ollama_mocked_pipeline(tmp_path, monkeypatch):
     monkeypatch.setattr("data_layer.llm.ollama_client.ollama_available", lambda **kw: True)
     from data_layer.llm.ollama_client import GenerateResult
 
+    mock_response = json.dumps(
+        {
+            "schema_version": "1",
+            "run_id": "run_ok",
+            "input_schema_version": "1",
+            "llm_model": "mock",
+            "llm_elapsed_s": 0.1,
+            "llm_status": "ok",
+            "symbolic_passed": True,
+            "decision": {"promote_candidate_recommendation": False},
+            "kg_annotations": [],
+            "narrative_md": "# After-action\n\nOK.",
+        }
+    )
     monkeypatch.setattr(
         "data_layer.llm.ollama_client.generate",
-        lambda *a, **k: GenerateResult("# After-action\n\nOK.\n\n```json\n[]\n```", model="mock"),
+        lambda *a, **k: GenerateResult(mock_response, model="mock", elapsed_s=0.1),
     )
     monkeypatch.setattr(
         "data_layer.packet.microstructure_aar_packet.load_pdf_citations",
@@ -275,10 +289,13 @@ def test_ollama_mocked_pipeline(tmp_path, monkeypatch):
     tmp_repo = tmp_path / "repo"
     tmp_repo.mkdir()
     (tmp_repo / "artifacts" / "research_cards" / "kg").mkdir(parents=True)
+    (tmp_repo / "vendor" / "openfoundry" / "domain-packs" / "core").mkdir(parents=True)
+    (tmp_repo / "vendor" / "openfoundry" / "domain-packs" / "core" / "pack.yaml").write_text(
+        "pack: stub\n", encoding="utf-8"
+    )
     (tmp_repo / "integrations" / "openfoundry").mkdir(parents=True)
-    (tmp_repo / "integrations" / "openfoundry" / "VENDOR.lock").write_text(
-        "openfoundry=pending\nalphageometry=6777cb586cbb46beed28db12dc72c69770b68337\n",
-        encoding="utf-8",
+    (tmp_repo / "integrations" / "openfoundry" / "VENDOR.lock").write_bytes(
+        (REPO / "integrations" / "openfoundry" / "VENDOR.lock").read_bytes()
     )
     (tmp_repo / "integrations" / "openfoundry" / "hft3-cme-mbo.yaml").write_bytes(
         (REPO / "integrations" / "openfoundry" / "hft3-cme-mbo.yaml").read_bytes()
@@ -294,16 +311,62 @@ def test_ollama_mocked_pipeline(tmp_path, monkeypatch):
     assert (art / "after_action_meta.json").is_file()
     assert (art / "kg_slice.json").is_file()
     assert meta["llm_status"] == "ok"
+    assert (art / "after_action_response.json").is_file()
     assert (art / "after_action_report.md").is_file()
+    from data_layer.packet.validate import validate_aar_packet_out
+
+    response = json.loads((art / "after_action_response.json").read_text(encoding="utf-8"))
+    assert validate_aar_packet_out(response) == []
+
+
+def test_after_action_skips_llm_on_pending_vendor_lock(tmp_path, monkeypatch):
+    from data_layer.pipeline.after_action import run_after_action_report
+
+    art = tmp_path / "run_pending"
+    art.mkdir()
+    for name in ("diagnostics.json", "manifest.json", "config.yaml", "trades.parquet"):
+        (art / name).write_bytes((FIXTURE / name).read_bytes())
+
+    tmp_repo = tmp_path / "repo"
+    tmp_repo.mkdir()
+    (tmp_repo / "artifacts" / "research_cards" / "kg").mkdir(parents=True)
+    (tmp_repo / "integrations" / "openfoundry").mkdir(parents=True)
+    (tmp_repo / "vendor" / "openfoundry" / "domain-packs" / "core").mkdir(parents=True)
+    (tmp_repo / "vendor" / "openfoundry" / "domain-packs" / "core" / "pack.yaml").write_text(
+        "pack: stub\n", encoding="utf-8"
+    )
+    (tmp_repo / "integrations" / "openfoundry" / "VENDOR.lock").write_text(
+        "openfoundry=pending\nalphageometry=6777cb586cbb46beed28db12dc72c69770b68337\n",
+        encoding="utf-8",
+    )
+    (tmp_repo / "integrations" / "openfoundry" / "hft3-cme-mbo.yaml").write_bytes(
+        (REPO / "integrations" / "openfoundry" / "hft3-cme-mbo.yaml").read_bytes()
+    )
+    (tmp_repo / "docs" / "references").mkdir(parents=True)
+    (tmp_repo / "docs" / "references" / "MANIFEST.md").write_bytes(
+        (REPO / "docs" / "references" / "MANIFEST.md").read_bytes()
+    )
+    monkeypatch.setattr(
+        "data_layer.packet.microstructure_aar_packet.load_pdf_citations",
+        lambda repo: (
+            [{"field": "x", "pdf": "algorithmic_trading_strategy_development.pdf", "present_on_disk": True}],
+            True,
+        ),
+    )
+
+    meta = run_after_action_report(art, tmp_repo, skip_llm=False)
+    assert meta["llm_status"] == "skipped_connector"
+    response = json.loads((art / "after_action_response.json").read_text(encoding="utf-8"))
+    assert response["kg_annotations"] == []
 
 
 @pytest.mark.slow
-def test_ollama_live_hawkish_fixture(tmp_path):
+def test_ollama_live_gemma_fixture(tmp_path):
     from data_layer.llm import ollama_client
     from data_layer.pipeline.after_action import run_after_action_report
 
     if not ollama_client.ollama_available():
-        pytest.skip("Hawkish-8B not in ollama list")
+        pytest.skip("Gemma cloud model not in ollama list")
 
     art = tmp_path / "run_live"
     art.mkdir()

@@ -60,7 +60,7 @@ Manual equivalent:
 
 ```powershell
 $env:OLLAMA_API_KEY = 'local'
-graphify extract . --backend ollama --model "hf.co/QuantFactory/Llama-3.1-Hawkish-8B-GGUF:Q6_K" --max-concurrency 1 --api-timeout 600 --out .
+graphify extract . --backend ollama --model "gemma4:31b-cloud" --max-concurrency 1 --api-timeout 600 --out .
 ```
 
 Override model: `$env:GRAPHIFY_OLLAMA_MODEL = 'your-ollama-tag'`

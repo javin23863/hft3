@@ -84,3 +84,17 @@ def validate_connector(repo_root: Path, connector_path: Path | None = None) -> D
         "vendor_shas": vendor_shas,
         "upstream": upstream,
     }
+
+
+def assert_connector_valid(result: Dict[str, Any]) -> None:
+    """Fail closed before LLM or KG persist when vendor/connector is incomplete."""
+    upstream = result.get("upstream") or {}
+    if not upstream.get("vendor_present"):
+        raise ValueError("vendor/openfoundry directory missing")
+    if not upstream.get("core_pack_present"):
+        raise ValueError("OpenFoundry core pack missing under vendor/openfoundry")
+    shas = result.get("vendor_shas") or {}
+    for key, sha in shas.items():
+        token = str(sha).strip().lower()
+        if token in ("pending", "head", ""):
+            raise ValueError(f"vendor lock {key} not pinned (got {sha!r})")

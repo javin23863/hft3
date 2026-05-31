@@ -592,6 +592,7 @@ def run_campaign(
                     "composition_trace.json",
                     "after_action_packet.json",
                     "after_action_symbolic.json",
+                    "after_action_response.json",
                     "after_action_report.md",
                     "after_action_annotations.json",
                     "after_action_meta.json",

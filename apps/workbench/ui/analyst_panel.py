@@ -10,6 +10,7 @@ import streamlit as st
 
 from data_layer.llm import ollama_client
 from data_layer.llm.prompts import SYSTEM_PROMPT
+from workbench.src.artifacts.paths import AAR_RESPONSE_FILENAME, AAR_REPORT_FILENAME
 from workbench.ui.flow_state import event_artifact_dir, load_json_artifact
 
 CHAT_SYSTEM = (
@@ -17,6 +18,18 @@ CHAT_SYSTEM = (
     + "\n\nYou are now in follow-up Q&A mode. Answer only about the attached run artifacts. "
     "Do not suggest live trading actions."
 )
+
+
+def _load_aar_narrative(art: Path) -> tuple[str, Dict[str, Any]]:
+    """Prefer canonical response packet, then legacy report.md."""
+    response_path = art / AAR_RESPONSE_FILENAME
+    if response_path.is_file():
+        data = load_json_artifact(response_path)
+        return str(data.get("narrative_md") or ""), data
+    report_path = art / AAR_REPORT_FILENAME
+    if report_path.is_file():
+        return report_path.read_text(encoding="utf-8"), {}
+    return "", {}
 
 
 def _compact_context(art: Path) -> str:
@@ -29,13 +42,19 @@ def _compact_context(art: Path) -> str:
             "obligations": sym.get("obligations"),
         }
         parts.append("symbolic: " + json.dumps(slim_sym, indent=0))
+    response = load_json_artifact(art / AAR_RESPONSE_FILENAME)
+    if response:
+        slim = {
+            "llm_status": response.get("llm_status"),
+            "decision": response.get("decision"),
+            "symbolic_passed": response.get("symbolic_passed"),
+        }
+        parts.append("response_packet: " + json.dumps(slim, indent=0)[:4000])
     packet = load_json_artifact(art / "after_action_packet.json")
     if packet:
         slim = {
-            "model_id": packet.get("model_id"),
             "event_context": packet.get("event_context"),
             "latency_authority": packet.get("latency_authority"),
-            "promote_candidate": packet.get("promote_candidate"),
         }
         parts.append("packet: " + json.dumps(slim, indent=0)[:4000])
     meta = load_json_artifact(art / "after_action_meta.json")
@@ -78,7 +97,7 @@ def analyst_panel(
     kg_path = art / "kg_slice.json"
     packet_path = art / "after_action_packet.json"
     meta_path = art / "after_action_meta.json"
-    report_path = art / "after_action_report.md"
+    response_path = art / AAR_RESPONSE_FILENAME
 
     st.markdown("### Symbolic latency invariants")
     if sym_path.is_file():
@@ -99,10 +118,11 @@ def analyst_panel(
         packet = load_json_artifact(packet_path)
         nodes = kg.get("nodes") or []
         edges = kg.get("edges") or []
+        evt = (packet.get("event_context") or {}).get("event_id", "—")
         c1, c2, c3 = st.columns(3)
         c1.metric("KG nodes", len(nodes))
         c2.metric("KG edges", len(edges))
-        c3.metric("Model", str(packet.get("model_id", "—")))
+        c3.metric("Event", str(evt))
         st.caption(
             "OpenFoundry ingest slice for this run (portable subgraph appended to research_cards/kg/)."
         )
@@ -114,12 +134,17 @@ def analyst_panel(
 
     st.markdown("### LLM after-action narrative")
     meta = load_json_artifact(meta_path)
-    if report_path.is_file():
-        st.markdown(report_path.read_text(encoding="utf-8"))
+    narrative, response_data = _load_aar_narrative(art)
+    if narrative:
+        if response_data.get("llm_model"):
+            st.caption(f"Model: `{response_data.get('llm_model')}` · status: `{response_data.get('llm_status')}`")
+        st.markdown(narrative)
     elif meta.get("llm_status"):
         st.info(f"No LLM report ({meta.get('llm_status')}).")
+    elif response_path.is_file():
+        st.info("Response packet present but narrative_md empty.")
     else:
-        st.caption("Run full-sweep campaign with audit grade for Hawkish-8B narrative.")
+        st.caption("Run full-sweep campaign with audit grade for Gemma after-action narrative.")
 
     st.markdown("### Chat with local LM")
     ctx_key = f"{campaign_id}:{period}:{event_id}"
@@ -132,17 +157,20 @@ def analyst_panel(
             st.markdown(msg["content"])
 
     if not ollama_client.ollama_available():
-        st.warning("Ollama / Hawkish model not available. Start Ollama and pull Hawkish-8B.")
+        st.warning(
+            "Ollama / Gemma model not available. Start Ollama and pull "
+            "`gemma4:31b-cloud` (or set HFT3_OLLAMA_MODEL)."
+        )
         return
 
-    if not sym_path.is_file() and not report_path.is_file():
+    if not sym_path.is_file() and not narrative:
         st.caption("Chat unlocks after symbolic or LLM artifacts exist for this event.")
         return
 
     question = st.chat_input("Ask about this run…", key="wb__analyst_chat")
     if question:
         st.session_state.wb_chat_messages.append({"role": "user", "content": question})
-        with st.spinner("Hawkish-8B thinking…"):
+        with st.spinner("Gemma thinking…"):
             answer = _chat_reply(art, question)
         st.session_state.wb_chat_messages.append({"role": "assistant", "content": answer})
         st.rerun()

@@ -71,6 +71,36 @@ python scripts/run_full_pipeline_gate.py --tier catalog --event-id CPI_2024_09_1
 
 Or via hybrid wrapper: `python scripts/run_hybrid_pipeline_gate.py --tier smoke`. See [docs/structural_models/FULL_PIPELINE_GATE.md](../structural_models/FULL_PIPELINE_GATE.md).
 
+## 1b. Autoresearch pipeline (NL thesis)
+
+**When:** Ingest a natural-language trading thesis (and optional research PDF), generate candidate models, backtest, and write pipeline artifacts. Workstation-only; no live deploy until CHI404 is stable.
+
+```bash
+pip install -r packages/research_pipeline/requirements.txt
+
+python scripts/run_pipeline.py \
+  --thesis "Fade spread blowout after CPI surprise on MES" \
+  --event-id CPI_2024_09_11_TIGHT \
+  --max-candidates 5
+
+# Parse + candidates only (no backtest)
+python scripts/run_pipeline.py \
+  --thesis "Fade spread blowout after CPI" \
+  --event-id CPI_2024_09_11_TIGHT \
+  --dry-run --no-llm
+```
+
+Optional document ingestion:
+
+```bash
+python scripts/run_pipeline.py \
+  --thesis "..." \
+  --doc docs/references/dev_instructions.pdf \
+  --event-id CPI_2024_09_11_TIGHT
+```
+
+Output: `research_cards/pipeline_runs/<run_id>/`. Authority: [AUTORESEARCH_PIPELINE.md](../research/AUTORESEARCH_PIPELINE.md), source PDF [dev_instructions.pdf](../references/dev_instructions.pdf).
+
 ## 2. Single-hypothesis drill-down
 
 **When:** One hypothesis family on the same event NPZ.

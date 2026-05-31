@@ -21,6 +21,7 @@ Each packet field cites a source PDF section. Missing PDFs on disk → `pdf_cita
 | `volatility_sensor_layer` | `chicago_futures_hot_memory_a_plus_developer_prompt.pdf` | HOT_SENSOR / VIX-VVIX-VX separation | **present** |
 | `hot_memory_degradation` | `chicago_futures_hot_memory_a_plus_developer_prompt.pdf` | Phase 7 — Memory and Degradation Rules | **present** |
 | `live_topology` | `BLUEPRINT.md` | Live architecture §4 | repo doc |
+| `autoresearch_pipeline` | `dev_instructions.pdf` | Pipeline overview §1–6 | **present** |
 
 ## Authority copies
 

@@ -8,6 +8,9 @@ version = "0.1.0"
 description = "Chicago CME microstructure research and execution stack"
 readme = "README.md"
 requires-python = ">=3.11"
+dependencies = [
+    "jsonschema>=4.20.0",
+]
 
 [project.scripts]
 workbench = "workbench.__main__:main"
