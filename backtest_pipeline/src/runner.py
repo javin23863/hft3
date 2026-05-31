@@ -1,24 +1,22 @@
 """
 HftBacktest 2.x replay runner with blueprint-mandated latency bands and queue models.
+Delegates to ReplaySession + HftBacktestSimulatedExchangeAdapter for execution parity.
 """
 from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Callable, Dict, List, Optional
 
-from hftbacktest import BacktestAsset, HashMapMarketDepthBacktest
+from backtest_pipeline.src.hft_backtest_builder import LATENCY_BANDS_MS, QUEUE_MODELS, build_hftbacktest
 
-from backtest_pipeline.src.fee_model import FeeModel
-from backtest_pipeline.src.hft_strategy import CombinedHypothesisStrategy
-from features_engine.src.features.npz_feed import load_npz_events
-from features_engine.src.hypotheses.registry import get_active_hypotheses
 
-LATENCY_BANDS_MS = [0.5, 1.0, 2.0, 5.0, 10.0]
-QUEUE_MODEL_BUILDERS = {
-    "LogProbQueueModel2": lambda a: a.log_prob_queue_model2(),
-    "SquareProbQueueModel": lambda a: a.power_prob_queue_model2(2),
-}
-QUEUE_MODELS = list(QUEUE_MODEL_BUILDERS.keys())
+class _CallbackStrategy:
+    def __init__(self, callback: Callable) -> None:
+        self._callback = callback
+
+    def on_step(self, ctx):
+        # Legacy callbacks receive hbt; build transient hbt from session not available here.
+        return []
 
 
 class ReplayRunner:
@@ -32,22 +30,17 @@ class ReplayRunner:
         self.data_path = data_path
         self.tick_size = tick_size
         self.lot_size = lot_size
-        self.fee_model = FeeModel(product=product)
+        self.product = product
 
-    def build_backtest(self, latency_ms: float, queue_model_type: str) -> HashMapMarketDepthBacktest:
-        latency_ns = int(latency_ms * 1_000_000)
-        if queue_model_type not in QUEUE_MODEL_BUILDERS:
-            raise ValueError(f"Unsupported queue model: {queue_model_type}")
-
-        asset = BacktestAsset()
-        asset.data(self.data_path)
-        asset.tick_size(self.tick_size)
-        asset.lot_size(self.lot_size)
-        asset.constant_order_latency(latency_ns, latency_ns)
-        asset.no_partial_fill_exchange()
-        asset.trading_value_fee_model(0.0, self.fee_model.get_fee_per_contract())
-        QUEUE_MODEL_BUILDERS[queue_model_type](asset)
-        return HashMapMarketDepthBacktest([asset])
+    def build_backtest(self, latency_ms: float, queue_model_type: str):
+        return build_hftbacktest(
+            self.data_path,
+            latency_ms=latency_ms,
+            queue_model_type=queue_model_type,
+            tick_size=self.tick_size,
+            lot_size=self.lot_size,
+            product=self.product,
+        )
 
     def run_replay(
         self,
@@ -57,21 +50,59 @@ class ReplayRunner:
         step_ns: int = 100_000,
         use_combined_strategy: bool = True,
         max_steps: Optional[int] = None,
+        run_id: str | None = None,
+        execution_adapter=None,
     ) -> Dict:
-        hbt = self.build_backtest(latency_ms, queue_model)
-        strategy = None
-        if use_combined_strategy and model_logic_callback is None:
+        del execution_adapter  # adapter created inside ReplaySession
+
+        if model_logic_callback is not None:
+            # Legacy hbt callback path: run direct hbt loop for pdf_hybrid compatibility
+            return self._run_legacy_callback(
+                model_logic_callback,
+                latency_ms=latency_ms,
+                queue_model=queue_model,
+                step_ns=step_ns,
+                max_steps=max_steps,
+            )
+
+        raw_events = load_npz_events(self.data_path)
+        if use_combined_strategy:
             hyps = get_active_hypotheses()
-            raw_events = load_npz_events(self.data_path)
-            strategy = CombinedHypothesisStrategy(
+            strategy = CombinedHypothesisReplayStrategy(
                 hyps,
+                raw_events,
                 tick_size=self.tick_size,
                 signal_threshold=0.15,
                 latency_ms=latency_ms,
-                raw_events=raw_events,
-                aggregate_mode="max_abs",
             )
+        else:
+            from backtest_pipeline.src.hypothesis_replay_strategy import ToyAlwaysLongStrategy
 
+            strategy = ToyAlwaysLongStrategy()
+
+        cfg = ReplaySessionConfig(
+            npz_path=self.data_path,
+            run_id=run_id or "",
+            latency_ms=latency_ms,
+            queue_model=queue_model,
+            tick_size=self.tick_size,
+            lot_size=self.lot_size,
+            product=self.product,
+            step_ns=step_ns,
+            max_steps=max_steps,
+        )
+        return ReplaySession(cfg, strategy).run()
+
+    def _run_legacy_callback(
+        self,
+        model_logic_callback: Callable,
+        *,
+        latency_ms: float,
+        queue_model: str,
+        step_ns: int,
+        max_steps: Optional[int],
+    ) -> Dict:
+        hbt = self.build_backtest(latency_ms, queue_model)
         steps = 0
         while True:
             result = hbt.elapse(step_ns)
@@ -80,14 +111,10 @@ class ReplayRunner:
             if result != 0:
                 return {"error": int(result), "steps": steps}
             hbt.clear_inactive_orders(0)
-            if model_logic_callback is not None:
-                model_logic_callback(hbt)
-            elif strategy is not None:
-                strategy.on_step(hbt)
+            model_logic_callback(hbt)
             steps += 1
             if max_steps is not None and steps >= max_steps:
                 break
-
         state = hbt.state_values(0)
         return {
             "steps": steps,
@@ -96,6 +123,7 @@ class ReplayRunner:
             "num_trades": int(state.num_trades),
             "trading_volume": float(state.trading_volume),
             "position": float(state.position),
+            "order_intent_count": 0,
         }
 
     def generate_research_card(
@@ -120,6 +148,7 @@ class ReplayRunner:
         avg_net_pnl = sum(pnls) / len(pnls) if pnls else 0.0
         worst_balance = min(pnls) if pnls else 0.0
         total_trades = sum(r.get("num_trades", 0) for r in results_by_band.values())
+        total_intents = sum(r.get("order_intent_count", 0) for r in results_by_band.values())
 
         return {
             "model_id": hyp_id,
@@ -130,6 +159,7 @@ class ReplayRunner:
             "aggregated_net_pnl": avg_net_pnl,
             "tail_risk_es_95": worst_balance,
             "num_trades": total_trades,
+            "order_intent_count": total_intents,
             "approval_status": (
                 "PASS"
                 if avg_net_pnl > 0 and worst_balance > -500 and total_trades > 0

@@ -69,4 +69,4 @@ Hybrid replay uses `execution_assumptions: quote_engine`. Per-trade `trades.parq
 
 - [PDF_HYBRID_REPLAY.md](PDF_HYBRID_REPLAY.md) — engine details
 - [RESEARCH_ENTRYPOINTS.md](../vault/RESEARCH_ENTRYPOINTS.md) — canonical entry order
-- Full 55-model catalog gate (PR2): `FULL_PIPELINE_GATE.md` (planned)
+- Full 55-model catalog gate (PR2): [FULL_PIPELINE_GATE.md](FULL_PIPELINE_GATE.md)

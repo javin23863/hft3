@@ -10,8 +10,8 @@ from pathlib import Path
 _REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO))
 
+from backtest_pipeline.src.replay_matrix import run_all_hypotheses_replay, run_latency_matrix_replay
 from backtest_pipeline.src.runner import LATENCY_BANDS_MS, QUEUE_MODELS, ReplayRunner
-from backtest_pipeline.src.signal_backtester import SignalBacktester
 from features_engine.src.features.npz_feed import load_npz_events
 from features_engine.src.hypotheses.registry import HypothesisRegistry, get_active_hypotheses
 
@@ -21,20 +21,19 @@ LATENCY_BANDS = LATENCY_BANDS_MS
 def run_all_research_cards(
     npz_path: str,
     output_dir: str | None = None,
-    skip_hft: bool = True,
+    skip_hft: bool = False,
 ) -> Path:
-    """Per-hypothesis SignalBacktester matrix. HftBacktest combined is opt-in (skip_hft=False)."""
+    """Per-hypothesis ReplaySession matrix (adapter-backed). Combined HftBacktest optional."""
     out = Path(output_dir or _REPO / "research_cards")
     out.mkdir(parents=True, exist_ok=True)
 
     raw = load_npz_events(npz_path)
     hyps = get_active_hypotheses()
     registry = HypothesisRegistry()
-    backtester = SignalBacktester()
     all_fills = []
 
-    print(f"Running {len(hyps)} hypotheses x {len(LATENCY_BANDS)} latency bands (batched)...", flush=True)
-    matrix = backtester.run_latency_matrix(hyps, raw, LATENCY_BANDS)
+    print(f"Running {len(hyps)} hypotheses x {len(LATENCY_BANDS)} latency bands (ReplaySession)...", flush=True)
+    matrix = run_latency_matrix_replay(hyps, npz_path, LATENCY_BANDS)
 
     cards = {}
     for hyp in hyps:
@@ -60,7 +59,7 @@ def run_all_research_cards(
                 "years_tested": "2024",
                 "events_tested": 1,
                 "latency_bands": LATENCY_BANDS,
-                "queue_model": "MBO_event_replay",
+                "queue_model": "HftBacktestSimulatedExchangeAdapter",
                 "net_pnl": sum(pnls) / len(pnls) if pnls else 0.0,
                 "expectancy": sum(band_results[f"{b}ms"]["expectancy"] for b in LATENCY_BANDS)
                 / len(LATENCY_BANDS),
@@ -80,18 +79,15 @@ def run_all_research_cards(
             flush=True,
         )
 
-    fills_df = backtester.fills_to_dataframe(all_fills, raw)
     fills_path = out / "fills.csv"
-    if not fills_df.empty:
-        fills_df.to_csv(fills_path, index=False)
+    if all_fills:
+        import pandas as pd
+
+        pd.DataFrame([f.__dict__ for f in all_fills]).to_csv(fills_path, index=False)
 
     hbt_summary = {}
     if not skip_hft:
-        print(
-            "WARNING: HftBacktest combined replay is secondary to run_event_replay.py "
-            "(event_accurate_mbo). See docs/vault/RESEARCH_ENTRYPOINTS.md.",
-            flush=True,
-        )
+        print("Running combined HftBacktest ReplaySession...", flush=True)
         runner = ReplayRunner(npz_path)
         for qm in QUEUE_MODELS:
             print(f"HftBacktest combined ({qm})...", flush=True)
@@ -135,11 +131,11 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--data", required=True)
     p.add_argument("--out", default=None)
-    p.add_argument("--skip-hft", action="store_true", help="Skip slow HftBacktest combined replay (default)")
+    p.add_argument("--skip-hft", action="store_true", help="Skip combined HftBacktest replay")
     p.add_argument(
         "--full-hft",
         action="store_true",
-        help="Run HftBacktest combined replay (secondary engine)",
+        help="Run combined HftBacktest replay (default: run combined)",
     )
     args = p.parse_args()
-    run_all_research_cards(args.data, args.out, skip_hft=not args.full_hft)
+    run_all_research_cards(args.data, args.out, skip_hft=args.skip_hft and not args.full_hft)

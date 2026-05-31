@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Event-driven replay: events.csv event_id + Databento NPZ + CHI404 latency.
 
-Runs two labeled engines:
-  1. hftbacktest_loop — ReplayRunner + MBO-synced CombinedHypothesisStrategy (queue fills)
-  2. event_accurate_mbo — SignalBacktester per-hypothesis MBO pipeline (research path)
+Runs adapter-backed replay engines:
+  1. replay_execution_adapter — ReplaySession + CombinedHypothesisReplayStrategy (HftBacktest adapter)
+  2. per_hypothesis_replay — ReplaySession matrix per hypothesis (replaces SignalBacktester fills)
 """
 from __future__ import annotations
 
@@ -21,8 +21,9 @@ if str(_REPO) not in sys.path:
 from backtest.adapters.rithmic_replay_loader import resolve_event_npz
 from backtest_pipeline.src.chi404_latency import DEFAULT_CHI404_SUMMARY, load_chi404_speed, resolve_replay_latency_ms
 from backtest_pipeline.src.event_meta import load_event_row
+from backtest_pipeline.src.replay_matrix import run_all_hypotheses_replay
 from backtest_pipeline.src.runner import ReplayRunner
-from backtest_pipeline.src.signal_backtester import BacktestResult, SignalBacktester
+from backtest_pipeline.src.signal_backtester import BacktestResult
 from features_engine.src.features.npz_feed import load_npz_events
 from features_engine.src.hypotheses.registry import get_active_hypotheses
 
@@ -48,10 +49,9 @@ def _serialize_backtest_result(res: BacktestResult) -> dict[str, Any]:
     }
 
 
-def run_event_accurate_mbo(raw, latency_ms: float) -> dict[str, Any]:
+def run_per_hypothesis_replay(npz_path: str, latency_ms: float) -> dict[str, Any]:
     hyps = get_active_hypotheses()
-    bt = SignalBacktester(signal_threshold=0.15)
-    results = bt.run_all_hypotheses(hyps, raw, latency_ms=latency_ms)
+    results = run_all_hypotheses_replay(hyps, npz_path, latency_ms=latency_ms)
     by_id = {h.hyp_id: h.name for h in hyps}
     serialized = []
     for hyp_id, res in sorted(results.items()):
@@ -64,8 +64,8 @@ def run_event_accurate_mbo(raw, latency_ms: float) -> dict[str, Any]:
     hyp5 = next((r for r in serialized if r["hypothesis_id"] == 5), None)
 
     return {
-        "engine": "event_accurate_mbo",
-        "description": "SignalBacktester: full MBO MarketStatePipeline, per-hypothesis signals",
+        "engine": "per_hypothesis_replay",
+        "description": "ReplaySession + HypothesisReplayStrategy per hypothesis (adapter-backed)",
         "feature_path": "mbo_pipeline",
         "signal_threshold": 0.15,
         "hypothesis_count": len(hyps),
@@ -84,8 +84,9 @@ def write_report(
     event_count: int,
     chi404: dict[str, Any],
     hft_result: dict[str, Any],
-    mbo_result: dict[str, Any],
+    hyp_result: dict[str, Any],
     latency_ms: float,
+    lifecycle_summary: dict[str, Any] | None = None,
 ) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     payload = {
@@ -100,27 +101,30 @@ def write_report(
         "npz_source": "Databento MBO (trusted research lake)",
         "events": event_count,
         "live_orders_sent": False,
+        "live_broker_call_count": (lifecycle_summary or {}).get("live_broker_call_count", 0),
+        "rithmic_order_call_count": (lifecycle_summary or {}).get("rithmic_order_call_count", 0),
         "chi404_measured_speed": chi404,
         "backtest_latency_ms": latency_ms,
-        "backtest_latency_note": "TCP connect p99; order submit→ack not measured until Stage 3 paper harness",
-        "primary_research_engine": "event_accurate_mbo",
+        "backtest_latency_note": "Replay uses HftBacktestSimulatedExchangeAdapter; paper ack separate",
+        "primary_research_engine": "replay_execution_adapter",
         "engines": {
-            "hftbacktest_loop": {
-                "engine": "hftbacktest_loop",
-                "description": "ReplayRunner + MBO-synced CombinedHypothesisStrategy (queue-realistic LIMIT fills)",
-                "feature_path": "mbo_pipeline_synced_to_hbt.current_timestamp",
+            "replay_execution_adapter": {
+                "engine": "replay_execution_adapter",
+                "description": "ReplaySession + CombinedHypothesisReplayStrategy (HftBacktest adapter)",
+                "feature_path": "mbo_pipeline_synced_to_replay_clock",
                 "aggregation": "max_abs",
                 "signal_threshold": 0.15,
                 "result": hft_result,
+                "order_lifecycle_summary": lifecycle_summary,
             },
-            "event_accurate_mbo": mbo_result,
+            "per_hypothesis_replay": hyp_result,
         },
     }
     result_path = out_dir / "result.json"
     result_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
     hft = hft_result
-    hyp5 = mbo_result.get("hyp_5_spread_blowout") or {}
+    hyp5 = hyp_result.get("hyp_5_spread_blowout") or {}
     md_lines = [
         f"# Event replay: {event['event_id']}",
         "",
@@ -129,7 +133,7 @@ def write_report(
         f"- **NPZ:** `{payload['npz_path']}` ({event_count} events)",
         f"- **latency:** {latency_ms:.4f} ms ({chi404['backtest_latency_source']})",
         f"- **CHI404 probe:** {chi404.get('probe_run_id')}",
-        f"- **primary research engine:** event_accurate_mbo",
+        f"- **primary research engine:** replay_execution_adapter",
         "",
         "## CHI404 measured speed",
         "",
@@ -140,28 +144,29 @@ def write_report(
         f"| Rithmic TCP p99 | {chi404.get('rithmic_tcp_65000_p99_ms'):.4f} ms |",
         "| Order ack p99 | not measured |",
         "",
-        "## Engine 1: hftbacktest_loop (queue-realistic)",
+        "## Engine 1: replay_execution_adapter (combined, queue-realistic)",
         "",
-        "MBO features synced to `hbt.current_timestamp`; max-abs aggregation; threshold 0.15.",
+        "MBO features synced to replay clock; max-abs aggregation; OrderIntent → HftBacktest adapter.",
         "",
         f"- steps: {hft.get('steps')}",
         f"- balance: {hft.get('balance')}",
         f"- num_trades: {hft.get('num_trades')}",
+        f"- order_intent_count: {hft.get('order_intent_count')}",
         f"- position: {hft.get('position')}",
         "",
-        "## Engine 2: event_accurate_mbo (research path)",
+        "## Engine 2: per_hypothesis_replay (adapter-backed matrix)",
         "",
-        "SignalBacktester with full MarketStatePipeline; per-hypothesis evaluation.",
+        "ReplaySession per hypothesis; replaces deprecated SignalBacktester fill sim.",
         "",
-        f"- hypotheses with trades: {mbo_result.get('hypotheses_with_trades')} / {mbo_result.get('hypothesis_count')}",
-        f"- total trades (all hyps): {mbo_result.get('total_trades_all_hypotheses')}",
+        f"- hypotheses with trades: {hyp_result.get('hypotheses_with_trades')} / {hyp_result.get('hypothesis_count')}",
+        f"- total trades (all hyps): {hyp_result.get('total_trades_all_hypotheses')}",
         f"- HYP_5 trades: {hyp5.get('num_trades', 0)}",
         f"- HYP_5 net PnL: ${hyp5.get('net_pnl_usd', 0)}",
         "",
         "## Limits",
         "",
         "- Zero trades on the old depth-only mean@0.25 path was a wiring issue, not missing edge.",
-        "- hftbacktest_loop and event_accurate_mbo measure different fill models; compare explicitly.",
+        "- Combined and per-hyp paths both route OrderIntent through HftBacktestSimulatedExchangeAdapter.",
         "- Replay body is Databento MBO for the macro event window, not Rithmic historical tape.",
     ]
     (out_dir / "report.md").write_text("\n".join(md_lines) + "\n", encoding="utf-8")
@@ -182,15 +187,20 @@ def main() -> int:
     p.add_argument("--latency-ms", type=float, default=None, help="Override CHI404 TCP p99")
     p.add_argument("--tick-size", type=float, default=0.25)
     p.add_argument(
+        "--skip-combined-replay",
+        action="store_true",
+        help="Skip combined ReplaySession loop; run per-hypothesis matrix only",
+    )
+    p.add_argument(
         "--skip-hftbacktest",
         action="store_true",
-        help="Skip slow HftBacktest loop; run event_accurate_mbo only",
+        help="Deprecated alias for --skip-combined-replay",
     )
     p.add_argument(
         "--engine",
         choices=("default", "pdf_hybrid"),
         default="default",
-        help="default: HYP combined + event_accurate_mbo; pdf_hybrid: PDF_MODEL_4 stack only",
+        help="default: adapter-backed combined + per-hyp replay; pdf_hybrid: PDF_MODEL_4 stack",
     )
     p.add_argument("--use-ofi", dest="use_ofi", action="store_true", default=True)
     p.add_argument("--no-ofi", dest="use_ofi", action="store_false")
@@ -266,28 +276,33 @@ def main() -> int:
     print(f"NPZ={npz_path} events={len(raw)}", flush=True)
     print(f"latency={latency_ms:.4f} ms ({latency_source}) probe={chi404.get('probe_run_id')}", flush=True)
 
-    if args.skip_hftbacktest:
+    skip_combined = args.skip_combined_replay or args.skip_hftbacktest
+    if skip_combined:
         hft_result = {"skipped": True}
-        print("Skipping hftbacktest_loop (--skip-hftbacktest)", flush=True)
+        lifecycle_summary = None
+        print("Skipping combined replay (--skip-combined-replay)", flush=True)
     else:
-        print("=== engine 1: hftbacktest_loop ===", flush=True)
+        print("=== engine 1: replay_execution_adapter ===", flush=True)
         runner = ReplayRunner(str(npz_path), tick_size=args.tick_size)
         hft_result = runner.run_replay(latency_ms=latency_ms, use_combined_strategy=True)
         if "error" in hft_result:
             print(json.dumps(hft_result, indent=2), flush=True)
             return 1
+        lifecycle_summary = hft_result.get("order_lifecycle_summary")
         print(json.dumps(hft_result, indent=2), flush=True)
 
-    print("=== engine 2: event_accurate_mbo ===", flush=True)
-    mbo_result = run_event_accurate_mbo(raw, latency_ms)
+    print("=== engine 2: per_hypothesis_replay ===", flush=True)
+    hyp_result = run_per_hypothesis_replay(str(npz_path), latency_ms)
     print(
-        f"hypotheses_with_trades={mbo_result['hypotheses_with_trades']} "
-        f"total_trades={mbo_result['total_trades_all_hypotheses']} "
-        f"HYP_5_trades={(mbo_result.get('hyp_5_spread_blowout') or {}).get('num_trades', 0)}",
+        f"hypotheses_with_trades={hyp_result['hypotheses_with_trades']} "
+        f"total_trades={hyp_result['total_trades_all_hypotheses']} "
+        f"HYP_5_trades={(hyp_result.get('hyp_5_spread_blowout') or {}).get('num_trades', 0)}",
         flush=True,
     )
 
-    write_report(out_dir, event, npz_path, len(raw), chi404, hft_result, mbo_result, latency_ms)
+    write_report(
+        out_dir, event, npz_path, len(raw), chi404, hft_result, hyp_result, latency_ms, lifecycle_summary
+    )
     print(f"Wrote {out_dir / 'result.json'}", flush=True)
     print(f"Wrote {out_dir / 'report.md'}", flush=True)
     return 0

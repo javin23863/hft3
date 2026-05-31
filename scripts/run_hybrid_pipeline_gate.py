@@ -288,7 +288,38 @@ def main() -> int:
         default=1,
         help="Require at least this many fills in hybrid_full backtest (default: 1)",
     )
+    parser.add_argument(
+        "--tier",
+        choices=("hybrid", "smoke", "catalog"),
+        default="hybrid",
+        help="hybrid: PDF_MODEL_4 only (default); smoke/catalog: delegate to run_full_pipeline_gate.py",
+    )
     args = parser.parse_args()
+
+    if args.tier in ("smoke", "catalog"):
+        import subprocess
+
+        cmd = [
+            sys.executable,
+            str(_REPO / "scripts" / "run_full_pipeline_gate.py"),
+            "--tier",
+            args.tier,
+            "--event-id",
+            args.event_id,
+            "--symbol",
+            args.symbol,
+            "--min-trades",
+            str(args.min_trades),
+        ]
+        if args.skip_unit_tests:
+            cmd.append("--skip-unit-tests")
+        if args.skip_ablation:
+            cmd.append("--skip-ablation")
+        if args.skip_after_action:
+            cmd.append("--skip-after-action")
+        if args.latency_ms is not None:
+            cmd.extend(["--latency-ms", str(args.latency_ms)])
+        return subprocess.call(cmd)
 
     steps: List[Dict[str, Any]] = []
     overall = True

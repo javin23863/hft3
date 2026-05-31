@@ -45,7 +45,7 @@ def _write_hyp_artifact(
     md = [
         f"# {model_id} — {event_id}",
         "",
-        f"**Backend:** {backend_label}",
+        backend_label,
         "",
         "| Metric | Value |",
         "|--------|-------|",

@@ -24,6 +24,7 @@ from backtest_pipeline.src.pipeline_model_router import (
     PDF_OPTIONS_FIXTURE,
     PDF_STRUCTURAL_EVAL,
     SMOKE_HYP_SAMPLE,
+    all_model_ids,
     route,
 )
 from features_engine.src.features.npz_feed import load_npz_events
@@ -45,7 +46,7 @@ def _relative(path: Path) -> str:
 
 
 def _resolve_npz(event_id: str, symbol: str) -> Path:
-    return resolve_event_npz(event_id, _REPO)
+    return resolve_event_npz(event_id, _REPO, symbol=symbol)
 
 
 def _load_hybrid_gate():
@@ -63,6 +64,9 @@ def _resolve_latency(latency_ms: float | None) -> Tuple[float, str]:
     hg = _load_hybrid_gate()
     ms, src, _ = hg.resolve_latency(latency_ms)
     return ms, src
+
+
+def _run_hybrid_block(
     event_id: str,
     npz: Path,
     symbol: str,
@@ -72,7 +76,7 @@ def _resolve_latency(latency_ms: float | None) -> Tuple[float, str]:
     skip_after_action: bool,
     min_trades: int,
 ) -> Tuple[bool, str, Dict[str, Any]]:
-    from scripts import run_hybrid_pipeline_gate as hg
+    hg = _load_hybrid_gate()
 
     ablation_bundle: Dict[str, Any] = {}
     if not skip_ablation:
@@ -87,7 +91,11 @@ def _resolve_latency(latency_ms: float | None) -> Tuple[float, str]:
     if trades < min_trades:
         return False, f"hybrid num_trades={trades} < min_trades={min_trades}", payload
     if not skip_after_action:
-        hg.run_after_action_step(event_id, symbol, payload, ablation_bundle, latency_ms)
+        aa_ok, aa_detail, _ = hg.run_after_action_step(
+            event_id, symbol, payload, ablation_bundle, latency_ms
+        )
+        if not aa_ok:
+            return False, aa_detail, {"payload": payload}
     rt = route("PDF_MODEL_4")
     row = {
         "model_id": "PDF_MODEL_4",
@@ -124,6 +132,9 @@ def _run_hyp_batch(
         latency_ms=ms,
     )
     detail = f"MBO pass trades_total={mbo_result.get('total_trades_all_hypotheses')} fan_out={len(rows)}"
+    failed = [r["model_id"] for r in rows if r.get("status") == "FAIL"]
+    if failed:
+        return False, f"{detail}; failed: {', '.join(failed)}", rows
     return True, detail, rows
 
 
@@ -366,17 +377,27 @@ def main() -> int:
         executed.extend(hyp_rows)
 
     if overall and args.tier == "catalog":
+        pdf_rows: List[Dict[str, Any]] = []
         for model_id in sorted(PDF_STRUCTURAL_EVAL):
-            row = _run_pdf_structural_eval(model_id, args.event_id, npz, args.latency_ms)
-            executed.append(row)
+            pdf_rows.append(_run_pdf_structural_eval(model_id, args.event_id, npz, args.latency_ms))
         for model_id in sorted(PDF_DIAGNOSTICS):
-            row = _run_pdf_diagnostics(model_id, args.event_id, npz, args.latency_ms)
-            executed.append(row)
-        executed.append(_run_pdf_options(args.event_id))
-        steps.append(_step("pdf_catalog_loop", True, f"structural={len(PDF_STRUCTURAL_EVAL)} diagnostics={len(PDF_DIAGNOSTICS)}"))
+            pdf_rows.append(_run_pdf_diagnostics(model_id, args.event_id, npz, args.latency_ms))
+        pdf_rows.append(_run_pdf_options(args.event_id))
+        executed.extend(pdf_rows)
+        pdf_failed = [r["model_id"] for r in pdf_rows if r.get("status") == "FAIL"]
+        pdf_ok = len(pdf_failed) == 0
+        pdf_detail = (
+            f"structural={len(PDF_STRUCTURAL_EVAL)} diagnostics={len(PDF_DIAGNOSTICS)}"
+            + (f"; failed: {', '.join(pdf_failed)}" if pdf_failed else "")
+        )
+        steps.append(_step("pdf_catalog_loop", pdf_ok, pdf_detail))
+        overall &= pdf_ok
 
     models = finalize_catalog_models(executed, args.tier)
-    assert len(models) == 55, f"expected 55 models, got {len(models)}"
+    expected = len(all_model_ids())
+    if len(models) != expected:
+        steps.append(_step("model_registry", False, f"expected {expected} models, got {len(models)}"))
+        overall = False
 
     gate_path = write_catalog_artifacts(
         _REPO,

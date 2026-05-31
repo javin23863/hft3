@@ -16,8 +16,12 @@ RUNTIME_BUDGET_NOTES = {
 
 
 def finalize_catalog_models(executed_rows: List[Dict[str, Any]], tier: str) -> List[Dict[str, Any]]:
-    """Merge executed rows with placeholders until len == 55."""
-    by_id = {r["model_id"]: r for r in executed_rows}
+    """Merge executed rows with placeholders until len == len(all_model_ids())."""
+    by_id: Dict[str, Dict[str, Any]] = {}
+    for row in executed_rows:
+        mid = row["model_id"]
+        if mid not in by_id:
+            by_id[mid] = row
     out: List[Dict[str, Any]] = []
     for model_id in all_model_ids():
         if model_id in by_id:
@@ -61,6 +65,15 @@ def write_catalog_artifacts(
     manifest: Dict[str, Any] = {
         "gate": "full_pipeline_catalog",
         "status": "PASS" if overall_pass else "FAIL",
+        "validation_scope": (
+            "smoke_sample" if tier == "smoke" else "full_catalog_execution"
+        ),
+        "validation_scope_note": (
+            "PASS means smoke plumbing only (PDF_MODEL_4 + HYP_1/HYP_5 executed); "
+            "55 rows include NOT_RUN_SMOKE placeholders — not a full-catalog backtest claim."
+            if tier == "smoke"
+            else "PASS means all model routes executed for this event/symbol tier."
+        ),
         "runtime_tier": tier,
         "runtime_budget_note": RUNTIME_BUDGET_NOTES.get(tier, tier),
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
@@ -87,7 +100,8 @@ def write_catalog_artifacts(
         f"- **tier:** {tier}",
         f"- **symbol:** {symbol}",
         f"- **status:** {manifest['status']}",
-        f"- **models:** {len(models)} (executed {len(executed)}, not run {not_run})",
+        f"- **models:** {len(models)} rows (executed {len(executed)}, not run {not_run})",
+        f"- **validation_scope:** {manifest.get('validation_scope')} — {manifest.get('validation_scope_note')}",
         f"- **runtime budget:** {RUNTIME_BUDGET_NOTES.get(tier, tier)}",
         "",
         "| model_id | engine_kind | status | trades | net_pnl | backend (honest) |",

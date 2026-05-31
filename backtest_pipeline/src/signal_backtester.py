@@ -168,7 +168,15 @@ class SignalBacktester:
         latency_ms: float = 1.0,
         max_position: int = 1,
     ) -> Dict[int, BacktestResult]:
-        """Single MBO pass: shared pipeline, deferred fills at signal_time + latency."""
+        """Deprecated: internal fill simulation. Use replay_matrix.run_all_hypotheses_replay."""
+        import warnings
+
+        warnings.warn(
+            "SignalBacktester.run_all_hypotheses is deprecated; "
+            "use backtest_pipeline.src.replay_matrix.run_all_hypotheses_replay with npz_path.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         pipeline = MarketStatePipeline(tick_size=self.tick_size, latency_ms=latency_ms)
         sims = {h.hyp_id: _HypSimState() for h in hypotheses}
         pending: List[_PendingAction] = []

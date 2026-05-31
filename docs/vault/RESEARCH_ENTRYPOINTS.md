@@ -59,6 +59,15 @@ python scripts/run_hybrid_pipeline_gate.py --event-id CPI_2024_09_11_TIGHT
 
 See [docs/structural_models/HYBRID_PIPELINE_GATE.md](../structural_models/HYBRID_PIPELINE_GATE.md). Outputs: `research_cards/PDF_MODEL_4_hybrid_replay/`, `research_cards/PDF_MODEL_4_defensive_ablation/`, `research_cards/PDF_MODEL_4_hybrid_pipeline/` (AAR), `runtime/reports/hybrid_pipeline_gate.json`.
 
+**Full 55-model catalog gate:**
+
+```bash
+python scripts/run_full_pipeline_gate.py --tier smoke --event-id CPI_2024_09_11_TIGHT --symbol MES.v.0
+python scripts/run_full_pipeline_gate.py --tier catalog --event-id CPI_2024_09_11_TIGHT --symbol MES.v.0
+```
+
+Or via hybrid wrapper: `python scripts/run_hybrid_pipeline_gate.py --tier smoke`. See [docs/structural_models/FULL_PIPELINE_GATE.md](../structural_models/FULL_PIPELINE_GATE.md).
+
 ## 2. Single-hypothesis drill-down
 
 **When:** One hypothesis family on the same event NPZ.
