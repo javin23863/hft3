@@ -101,6 +101,29 @@ python scripts/run_pipeline.py \
 
 Output: `research_cards/pipeline_runs/<run_id>/`. Authority: [AUTORESEARCH_PIPELINE.md](../research/AUTORESEARCH_PIPELINE.md), source PDF [dev_instructions.pdf](../references/dev_instructions.pdf).
 
+## 1c. Low-float runner (equities lane)
+
+**When:** Screen and backtest low-float momentum sessions on quarantined equities data. Workstation-only; separate from CME MBO production path.
+
+```bash
+pip install -r packages/equities_lane/requirements.txt
+
+python -m equities_lane.pipeline fixture-backtest
+
+python -m equities_lane.pipeline experiment \
+  --config packages/equities_lane/config/universe.yaml \
+  --ablation all
+```
+
+Optional Databento download (requires `DATABENTO_API_KEY`):
+
+```bash
+python -m equities_lane.pipeline download --symbol GME --date 2021-01-27
+python -m equities_lane.pipeline normalize --raw data/equities/raw/<file>.dbn.zst
+```
+
+Output: `research_cards/equities/<run_id>/`. Authority: [LOW_FLOAT_RUNNER.md](../research/LOW_FLOAT_RUNNER.md), source PDF [low_float_momentum_anomaly_research_pack.pdf](../references/low_float_momentum_anomaly_research_pack.pdf).
+
 ## 2. Single-hypothesis drill-down
 
 **When:** One hypothesis family on the same event NPZ.

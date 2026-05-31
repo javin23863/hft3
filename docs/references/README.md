@@ -58,3 +58,9 @@ Field-level mapping: [MANIFEST.md](MANIFEST.md). After-action packets require al
 **File:** [dev_instructions.pdf](dev_instructions.pdf)
 
 NL hypothesis → structured rules → candidate generation → backtest → deployment spec. Implementation: [AUTORESEARCH_PIPELINE.md](../research/AUTORESEARCH_PIPELINE.md), package `packages/research_pipeline/`.
+
+## Low-float momentum anomaly (equities lane)
+
+**File:** [low_float_momentum_anomaly_research_pack.pdf](low_float_momentum_anomaly_research_pack.pdf)
+
+Low-float runner screener, microstructure features (OFI, VPIN, Hawkes, HMM), and walk-forward backtest. Implementation: [LOW_FLOAT_RUNNER.md](../research/LOW_FLOAT_RUNNER.md), package `packages/equities_lane/`. Quarantined from production CME `data/npz/`.

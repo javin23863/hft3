@@ -199,6 +199,17 @@ Options parity research is isolated from trusted production data (`data/npz/` fr
 
 Do not write options raw into production NPZ paths or bypass quarantine without explicit approval.
 
+### Low-float equities lane (quarantined)
+
+Low-float momentum research is isolated from trusted production CME data (`data/npz/`).
+
+- Code: `packages/equities_lane/`
+- Data: `data/equities/`, `data/replay/equities/`, `research_cards/equities/`
+- Config: `packages/equities_lane/config/universe.yaml`
+- Docs: [docs/research/LOW_FLOAT_RUNNER.md](docs/research/LOW_FLOAT_RUNNER.md)
+
+Do not write equities raw into production NPZ paths or bypass quarantine without explicit approval.
+
 ### Secrets
 
 Never commit credentials. Use `.env` locally (see `.env.example`). Do not add API keys, passwords, or private keys to git.

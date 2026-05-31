@@ -18,6 +18,26 @@ class DatabentoResearchClient:
         self.manifest_path = "data/manifest.parquet"
         self.budget = BudgetManager(self.manifest_path)
         
+    def estimate_cost(
+        self,
+        symbols: list,
+        start_utc: datetime,
+        end_utc: datetime,
+        dataset="GLBX.MDP3",
+        schema="mbo",
+        stype_in: str = "continuous",
+    ) -> float:
+        return float(
+            self.client.metadata.get_cost(
+                dataset=dataset,
+                schema=schema,
+                symbols=symbols,
+                stype_in=stype_in,
+                start=start_utc,
+                end=end_utc,
+            )
+        )
+
     def download_event_window(
         self,
         event_id: str,
@@ -28,27 +48,29 @@ class DatabentoResearchClient:
         schema="mbo",
         stype_in: str = "continuous",
         requested_symbol: str | None = None,
+        output_path: str | None = None,
+        override_hard_limit: bool = False,
+        override_operating_cap: bool = False,
     ):
         """
         Calculates exact cost per Section 11 math, checks budget, and downloads if approved.
         """
-        # 1. Get cost estimate
-        cost_estimate = self.client.metadata.get_cost(
-            dataset=dataset,
-            schema=schema,
-            symbols=symbols,
-            stype_in=stype_in,
-            start=start_utc,
-            end=end_utc,
+        cost_estimate = self.estimate_cost(
+            symbols, start_utc, end_utc, dataset, schema, stype_in
         )
-        
-        # 2. Check budget constraints
-        self.budget.check_request(cost_estimate)
-        
-        # 3. Request data
-        output_path = f"data/{event_id}_{schema}.dbn.zst"
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        
+
+        if override_operating_cap:
+            if cost_estimate > self.budget.HARD_LIMIT and not override_hard_limit:
+                raise ValueError(
+                    f"Cost estimate ${cost_estimate:.2f} exceeds hard limit "
+                    f"${self.budget.HARD_LIMIT:.2f}"
+                )
+        else:
+            self.budget.check_request(cost_estimate, override_hard_limit=override_hard_limit)
+
+        dest = output_path or f"data/{event_id}_{schema}.dbn.zst"
+        os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
+
         self.client.timeseries.get_range(
             dataset=dataset,
             schema=schema,
@@ -56,13 +78,13 @@ class DatabentoResearchClient:
             stype_in=stype_in,
             start=start_utc,
             end=end_utc,
-            path=output_path,
+            path=dest,
         )
-        
-        # 4. Calculate required cost metrics per blueprint
-        metrics = self.budget.calculate_cost_metrics(cost_estimate, len(symbols), start_utc, end_utc)
-        
-        # 5. Record to manifest.parquet
+
+        metrics = self.budget.calculate_cost_metrics(
+            cost_estimate, len(symbols), start_utc, end_utc
+        )
+
         resolved_symbol = symbols[0] if symbols else ""
         record = {
             "event_id": event_id,
@@ -74,14 +96,14 @@ class DatabentoResearchClient:
             "cost": cost_estimate,
             "duration_seconds": metrics["duration_seconds"],
             "cost_per_symbol_minute": metrics["cost_per_symbol_minute"],
-            "output_path": output_path,
+            "output_path": dest,
             "dataset": dataset,
             "schema": schema,
             "download_time": datetime.now(timezone.utc),
         }
-        
+
         self._record_manifest(record)
-        return output_path
+        return dest
         
     def _record_manifest(self, record: dict):
         df_new = pd.DataFrame([record])

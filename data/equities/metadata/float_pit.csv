@@ -1,0 +1,17 @@
+symbol,as_of_date,float_shares,outstanding_shares,source_url
+DRYS,2016-11-01,850000,1200000,https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0000316253
+LFIN,2017-12-01,12000000,15000000,https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001705012
+LBCC,2017-12-01,5800000,6200000,https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001540625
+KODK,2020-07-01,45000000,78000000,https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0000031235
+SPI,2020-09-01,8500000,12000000,https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001297188
+GME,2021-01-01,50400000,69700000,https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001326380
+EXPR,2021-01-01,62000000,65000000,https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001281269
+INDO,2022-03-01,12000000,15000000,https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001834049
+HKD,2022-08-01,25000000,30000000,https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001876588
+TOP,2023-04-01,18000000,22000000,https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001848275
+HOLO,2024-02-01,4500000,5200000,https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001841203
+CYCC,2025-07-01,3500000,4200000,https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001130166
+AIRE,2025-07-01,8500000,10000000,https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0002030763
+BIRD,2026-04-01,12000000,15000000,https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001653906
+AMST,2026-05-01,4500000,5500000,https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001807167
+SNAL,2026-05-01,8500000,10000000,https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001886894
