@@ -1,0 +1,10 @@
+{
+  "run_id": "SECOND_WAVE_CONTINUATION1_NFP_2019_01_04_TIGHT_20260531T000519Z",
+  "model_id": "BOOK_SLOPE_COLLAPSE",
+  "event_id": "NFP_2019_01_04_TIGHT",
+  "npz_path": "C:\\Users\\MSI\\Documents\\GitHub\\hft3\\data\\npz\\ES.v.0_NFP_2019_01_04_TIGHT_mbo.npz",
+  "npz_hash": "f7e4d59a9704e3ba",
+  "seed": 42,
+  "git_sha": "184e5df51a5d02ba76bda55b43e7d596ace70f32",
+  "measured_p99_ms": 4.105202995474916
+}

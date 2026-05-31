@@ -1,0 +1,28 @@
+name: Backtester Fast Gate (T0)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  t0-fast-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r data_system/requirements.txt
+      - name: Run T0 fast gate
+        run: bash scripts/run_backtester_fast_gate.sh
+      - name: Upload fast gate report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fast_gate_report
+          path: runtime/validation/fast_gate_report.json

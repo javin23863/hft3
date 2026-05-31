@@ -1,0 +1,89 @@
+{
+  "generated_at_utc": "2026-05-30T15:55:26.649511+00:00",
+  "event_ids": [
+    "CPI_2024_09_11_TIGHT"
+  ],
+  "results": [
+    {
+      "event_id": "CPI_2024_09_11_TIGHT",
+      "group": "baseline_a_event_only",
+      "feature_count": 0,
+      "target_instruments": 0,
+      "mean_abs_forward_return": NaN,
+      "verdict": "noise"
+    },
+    {
+      "event_id": "CPI_2024_09_11_TIGHT",
+      "group": "baseline_b_event_plus_target_mbo",
+      "feature_count": 1,
+      "target_instruments": 1,
+      "mean_abs_forward_return": 0.002118242654358881,
+      "verdict": "noise"
+    },
+    {
+      "event_id": "CPI_2024_09_11_TIGHT",
+      "group": "cross_equity_mbo",
+      "feature_count": 1,
+      "target_instruments": 1,
+      "mean_abs_forward_return": 0.002118242654358881,
+      "verdict": "noise"
+    },
+    {
+      "event_id": "CPI_2024_09_11_TIGHT",
+      "group": "cross_rates_mbo",
+      "feature_count": 1,
+      "target_instruments": 1,
+      "mean_abs_forward_return": 0.002118242654358881,
+      "verdict": "noise"
+    },
+    {
+      "event_id": "CPI_2024_09_11_TIGHT",
+      "group": "cross_metals_mbo",
+      "feature_count": 1,
+      "target_instruments": 1,
+      "mean_abs_forward_return": 0.002118242654358881,
+      "verdict": "noise"
+    },
+    {
+      "event_id": "CPI_2024_09_11_TIGHT",
+      "group": "cross_energy_mbo",
+      "feature_count": 1,
+      "target_instruments": 1,
+      "mean_abs_forward_return": 0.002118242654358881,
+      "verdict": "noise"
+    },
+    {
+      "event_id": "CPI_2024_09_11_TIGHT",
+      "group": "cross_fx_mbo",
+      "feature_count": 1,
+      "target_instruments": 1,
+      "mean_abs_forward_return": 0.002118242654358881,
+      "verdict": "noise"
+    },
+    {
+      "event_id": "CPI_2024_09_11_TIGHT",
+      "group": "cross_vol_sensors",
+      "feature_count": 0,
+      "target_instruments": 0,
+      "mean_abs_forward_return": NaN,
+      "verdict": "insufficient_data"
+    },
+    {
+      "event_id": "CPI_2024_09_11_TIGHT",
+      "group": "cross_full_hot",
+      "feature_count": 1,
+      "target_instruments": 1,
+      "mean_abs_forward_return": 0.002118242654358881,
+      "verdict": "noise"
+    },
+    {
+      "event_id": "CPI_2024_09_11_TIGHT",
+      "group": "cross_warm_event_triggered",
+      "feature_count": 1,
+      "target_instruments": 1,
+      "mean_abs_forward_return": 0.002118242654358881,
+      "verdict": "noise"
+    }
+  ],
+  "note": "Exploratory ablation \u2014 not a directional strategy; tests whether cross-asset MBO groups add signal."
+}

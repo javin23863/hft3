@@ -23,6 +23,7 @@ from backtest_pipeline.src.event_meta import load_event_row
 from backtest_pipeline.src.pdf_hybrid_strategy import HybridExecutionStrategy
 from backtest_pipeline.src.runner import QUEUE_MODELS, ReplayRunner
 from features_engine.src.features.npz_feed import load_npz_events
+from hft3.validation.research_stamp import build_certification_stamp, format_stamp_footer
 
 
 DEFAULT_EVENTS_CSV = _REPO / "data_system" / "config" / "events.csv"
@@ -89,6 +90,15 @@ def run_pdf_hybrid_replay(
 
 def write_research_card(out_dir: Path, payload: dict, event_meta: dict) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
+    stamp = build_certification_stamp(
+        event_id=event_meta["event_id"],
+        instrument=event_meta.get("primary_symbol", ""),
+        model_id="PDF_MODEL_4",
+        latency_band=payload.get("latency_ms"),
+        queue_model=payload.get("queue_model"),
+        execution_mode="REPLAY",
+        execution_adapter_mode="legacy_hbt_callback",
+    )
     card = {
         "scenario": f"{event_meta['event_id']} PDF hybrid replay",
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
@@ -99,6 +109,8 @@ def write_research_card(out_dir: Path, payload: dict, event_meta: dict) -> None:
         "symbol": event_meta["primary_symbol"],
         "primary_research_engine": "pdf_hybrid",
         "engines": {"pdf_hybrid": payload},
+        "certification_stamp": stamp,
+        "certification_footer": format_stamp_footer(stamp),
     }
     (out_dir / "result.json").write_text(json.dumps(card, indent=2), encoding="utf-8")
 
@@ -121,6 +133,8 @@ def write_research_card(out_dir: Path, payload: dict, event_meta: dict) -> None:
         f"- position: {res.get('position')}",
         "",
         "Dependencies: PDF_MODEL_1 (OFI) → PDF_MODEL_3 (VPIN from TRADE vol) → PDF_MODEL_4.",
+        "",
+        f"_{format_stamp_footer(stamp)}_",
     ]
     if "error" in res:
         lines.extend(["", f"**Error:** {res['error']}"])

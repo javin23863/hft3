@@ -1,0 +1,30 @@
+{
+  "model_id": "BOOK_SLOPE_COLLAPSE",
+  "alpha_family_or_discovered_behavior": "Book slope collapse",
+  "years_tested": "N/A",
+  "events_tested": 0,
+  "latency_bands": [
+    0.0,
+    0.05,
+    0.1,
+    0.25,
+    0.5,
+    1.0,
+    2.0,
+    5.0,
+    10.0,
+    25.0,
+    50.0,
+    100.0,
+    250.0,
+    1000.0
+  ],
+  "queue_model": "Unknown",
+  "net_pnl": -59.275000000000105,
+  "expectancy": -1.6465277777777807,
+  "win_rate": 0.2777777777777778,
+  "adverse_selection": 0.0,
+  "tail_loss": 0.0,
+  "num_trades": 36,
+  "approval_status": "FAIL"
+}

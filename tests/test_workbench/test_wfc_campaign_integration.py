@@ -156,7 +156,7 @@ def test_confirmation_uses_default_params_when_tune_disallowed(
         start_utc=None,
         end_utc=None,
     )
-    artifact = REPO / "research_cards" / "workbench_runs" / "tune_test_run"
+    artifact = REPO / "artifacts" / "research_cards" / "workbench_runs" / "tune_test_run"
     artifact.mkdir(parents=True, exist_ok=True)
     run_report = {
         "run_id": "x",

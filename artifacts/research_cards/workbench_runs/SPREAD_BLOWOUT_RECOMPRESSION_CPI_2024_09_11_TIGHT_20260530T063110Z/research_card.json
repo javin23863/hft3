@@ -1,0 +1,19 @@
+{
+  "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+  "alpha_family_or_discovered_behavior": "Spread blowout/recompression",
+  "years_tested": "N/A",
+  "events_tested": 0,
+  "latency_bands": [
+    0.5,
+    1.0,
+    2.0
+  ],
+  "queue_model": "Unknown",
+  "net_pnl": -181.77499999999992,
+  "expectancy": -16.52499999999999,
+  "win_rate": 0.36363636363636365,
+  "adverse_selection": 0.0,
+  "tail_loss": 0.0,
+  "num_trades": 11,
+  "approval_status": "FAIL"
+}

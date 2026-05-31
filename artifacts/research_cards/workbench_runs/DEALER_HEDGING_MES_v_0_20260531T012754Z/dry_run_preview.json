@@ -1,0 +1,7 @@
+{
+  "model_id": "DEALER_HEDGING",
+  "symbol": "MES.v.0",
+  "campaign_mode": "options_lane",
+  "fixture": "options_lane/fixtures/fair_futures_quotes.ndjson",
+  "artifact_root": "C:\\Users\\MSI\\Documents\\GitHub\\hft3\\artifacts\\research_cards\\parity"
+}

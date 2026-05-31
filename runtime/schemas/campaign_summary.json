@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CampaignSummary",
+  "type": "object",
+  "required": ["campaign_id", "status", "model_id"],
+  "properties": {
+    "campaign_id": { "type": "string" },
+    "status": { "type": "string" },
+    "model_id": { "type": "string" },
+    "promote_candidate": { "type": "boolean" },
+    "certification_stamp": { "type": "object" }
+  }
+}

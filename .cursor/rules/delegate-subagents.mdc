@@ -19,7 +19,7 @@ The **main agent is an orchestrator** for any non-trivial task. It owns intent, 
 | **cavecrew-builder** | Surgical change in **1–2 files**, scope obvious and bounded. Returns diff receipt. |
 | **cavecrew-reviewer** | After **any** code change: dual-pass review per [docs/REVIEWER_CHARTER.md](../../docs/REVIEWER_CHARTER.md) — Pass A (Karpathy) + Pass B (math invariants from BLUEPRINT/PDFs). Spawn with charter **Spawn prompt** block. Findings only. |
 | **explore** | Broad codebase scout when you need moderate prose or multiple naming conventions. |
-| **shell** | Git, deploy, remote SSH, pytest runs, CHI404 scripts, anything terminal-native. |
+| **shell** | Git, deploy, remote commands, **bounded** pytest/SSH (see [docs/ai/SHELL_EXECUTION.md](../../docs/ai/SHELL_EXECUTION.md)) |
 
 Use **cavecrew-reviewer** for compressed diff audit; **generalPurpose** for long-form review. Vanilla **Explore** when you need moderate prose scout beyond investigator compression.
 

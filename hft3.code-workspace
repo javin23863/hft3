@@ -7,10 +7,17 @@
   ],
   "settings": {
     "python.analysis.extraPaths": [
-      "data_system",
-      "features_engine/src",
-      "backtest_pipeline/src",
-      "decision_engine/python/src",
+      "packages",
+      "apps",
+      "packages/economic_event_universe",
+      "packages/data_system",
+      "packages/features_engine/src",
+      "packages/backtest_pipeline/src",
+      "packages/decision_engine/python/src",
+      "packages/replay",
+      "packages/execution",
+      "packages/data_layer",
+      "apps/workbench",
       "telemetry/src"
     ],
     "python.testing.pytestEnabled": true,

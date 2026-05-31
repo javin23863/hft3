@@ -8,7 +8,7 @@ import pytest
 import yaml
 
 REPO = Path(__file__).resolve().parents[2]
-BINDING = REPO / "workbench" / "config" / "model_event_binding.yaml"
+BINDING = REPO / "apps" / "workbench" / "config" / "model_event_binding.yaml"
 
 
 def test_binding_file_exists():
@@ -17,19 +17,19 @@ def test_binding_file_exists():
 
 def test_hyp_29_requires_flatten_contexts():
     raw = yaml.safe_load(BINDING.read_text(encoding="utf-8"))
-    ctx = raw["hypothesis"]["HYP_29"]["required_event_contexts"]
+    ctx = raw["hypothesis"]["END_OF_DAY_FORCED_FLATTEN_FLOW"]["required_event_contexts"]
     assert "PROP_FLATTEN_TOPSTEP" in ctx
     assert "CPI_TIGHT" not in ctx
 
 
 def test_hyp_5_uses_macro_defaults():
     raw = yaml.safe_load(BINDING.read_text(encoding="utf-8"))
-    ctx = raw["hypothesis"]["HYP_5"]["default_macro_contexts"]
+    ctx = raw["hypothesis"]["SPREAD_BLOWOUT_RECOMPRESSION"]["default_macro_contexts"]
     assert "CPI_TIGHT" in ctx
 
 
 def test_pdf_model_5_options_lane():
     raw = yaml.safe_load(BINDING.read_text(encoding="utf-8"))
-    cfg = raw["pdf"]["PDF_MODEL_5"]
+    cfg = raw["pdf"]["DEALER_HEDGING"]
     assert cfg.get("campaign_mode") == "options_lane"
     assert "options_chain" in cfg.get("required_datasets", [])

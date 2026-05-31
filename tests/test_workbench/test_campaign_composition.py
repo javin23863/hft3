@@ -33,7 +33,7 @@ def test_dry_run_campaign_with_composition():
         composition=composition,
     )
     assert result.status == "DRY_RUN"
-    manifest = REPO / "research_cards" / "workbench_runs" / result.campaign_id / "campaign.json"
+    manifest = REPO / "artifacts" / "research_cards" / "workbench_runs" / result.campaign_id / "campaign.json"
     assert manifest.is_file()
     data = json.loads(manifest.read_text(encoding="utf-8"))
     assert data["composition"]["primary_model_id"] == "HYP_5"

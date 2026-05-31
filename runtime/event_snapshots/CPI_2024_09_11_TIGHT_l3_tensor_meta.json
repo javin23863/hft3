@@ -1,0 +1,33 @@
+{
+  "event_id": "CPI_2024_09_11_TIGHT",
+  "offsets_sec": [
+    -300,
+    -120,
+    -60,
+    -30,
+    -10,
+    -5,
+    -1,
+    0,
+    1,
+    5,
+    10,
+    30,
+    60,
+    120,
+    300
+  ],
+  "row_count": 45,
+  "symbols": [
+    "ES.v.0",
+    "MES.v.0",
+    "ZN.v.0"
+  ],
+  "mbo_missing_symbols": [
+    "ES.v.0",
+    "MES.v.0",
+    "ZN.v.0"
+  ],
+  "data_source": "MBO_DERIVED",
+  "filtration": "snapshot at T+offset uses MBO events with timestamp_ns <= snapshot_ts_ns"
+}

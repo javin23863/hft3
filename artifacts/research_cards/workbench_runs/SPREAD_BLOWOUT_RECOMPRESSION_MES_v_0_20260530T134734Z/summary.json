@@ -1,0 +1,67 @@
+{
+  "campaign_id": "SPREAD_BLOWOUT_RECOMPRESSION_MES_v_0_20260530T134734Z",
+  "status": "FAIL",
+  "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+  "symbol": "MES.v.0",
+  "param_hash": "f7f540a90ef25d67",
+  "composition": {
+    "primary_model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+    "defensive_stubs": []
+  },
+  "phase_budgets_us": {
+    "before": 0.0,
+    "during": 0.0,
+    "after": 0.0,
+    "continuous": 0.0
+  },
+  "trades_vetoed_by_defense": 0,
+  "periods": [],
+  "robustness_passed": true,
+  "overfit_risk": "low",
+  "walk_forward": {
+    "periods": [
+      "Discovery",
+      "Confirmation",
+      "Holdout",
+      "Recent holdout"
+    ],
+    "status": "single_window"
+  },
+  "wfc_status": "ERROR",
+  "wfc": {
+    "run_id": "SPREAD_BLOWOUT_RECOMPRESSION_MES_v_0_20260530T134734Z",
+    "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+    "strategy_id": "",
+    "wfc_status": "ERROR",
+    "pearson": 0.0,
+    "spearman": 0.0,
+    "kendall": 0.0,
+    "pearson_ci": [],
+    "spearman_ci": [],
+    "p_value": 1.0,
+    "cost_adjusted_pearson": 0.0,
+    "cost_adjusted_spearman": 0.0,
+    "n_parameter_combinations": 0,
+    "n_folds": 0,
+    "positive_fold_ratio": 0.0,
+    "fold_correlations": {},
+    "top_decile_oos_median": 0.0,
+    "bottom_decile_oos_median": 0.0,
+    "outlier_sensitivity_pass": false,
+    "cost_adjusted_pass": false,
+    "drawdown_pass": false,
+    "secondary_metrics_pass": true,
+    "regime_consistency_pass": true,
+    "universe_consistency_pass": true,
+    "rejection_reasons": [
+      "No active WFC folds configured"
+    ],
+    "artifact_paths": []
+  },
+  "sim_shadow_anchor": "2026-03-01",
+  "sim_shadow_cme_days": 60,
+  "sim_shadow_status": "pending_CHI404",
+  "sim_shadow_required": false,
+  "promote_candidate": false,
+  "promote_note": "WFC PASS + sim shadow (60 CME days on CHI404) required before promotion \u2014 BLUEPRINT \u00a78"
+}

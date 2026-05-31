@@ -1,0 +1,26 @@
+"""Canonical core backtester paths for T3 staleness detection."""
+from __future__ import annotations
+
+CORE_BACKTESTER_PATHS: list[str] = [
+    "features_engine/src/features/mbo_features.py",
+    "features_engine/src/features/npz_feed.py",
+    "features_engine/src/features/feature_index.py",
+    "features_engine/src/pipeline/market_state_pipeline.py",
+    "backtest_pipeline/src/hft_backtest_builder.py",
+    "backtest_pipeline/src/fee_model.py",
+    "backtest_pipeline/src/hft_strategy.py",
+    "backtest_pipeline/src/hypothesis_replay_strategy.py",
+    "backtest_pipeline/src/replay_matrix.py",
+    "backtest_pipeline/src/runner.py",
+    "backtest_pipeline/src/signal_backtester.py",
+    "backtest_pipeline/src/replay_npz_fixture.py",
+    "execution/",
+    "replay/",
+    "hft3/validation/",
+    "workbench/src/robustness/",
+    "workbench/src/run/engine.py",
+    "workbench/src/run/campaign_runner.py",
+    "scripts/run_event_replay.py",
+    "decision_engine/python/src/walk_forward.py",
+    "data_system/src/databento_client.py",
+]

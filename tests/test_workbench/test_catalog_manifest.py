@@ -14,7 +14,7 @@ def test_manifest_event_windows_single_year():
     subprocess.run(
         [
             sys.executable,
-            str(REPO / "workbench" / "scripts" / "backfill_catalog.py"),
+            str(REPO / "apps" / "workbench" / "scripts" / "backfill_catalog.py"),
             "--model",
             "HYP_5",
             "--symbol",
@@ -25,7 +25,7 @@ def test_manifest_event_windows_single_year():
         capture_output=True,
     )
     manifest = json.loads(
-        (REPO / "research_cards" / "workbench_catalog_manifest.json").read_text(encoding="utf-8")
+        (REPO / "artifacts" / "research_cards" / "workbench_catalog_manifest.json").read_text(encoding="utf-8")
     )
     for ev in manifest["events"]:
         assert "release_year" in ev

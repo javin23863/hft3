@@ -1,0 +1,70 @@
+defaults:
+  required_datasets:
+  - mbo_npz
+  min_history_years: 10
+  robustness_window: discovery
+  latency_lane: sub_10ms
+  execution_assumptions: limit_queue
+  parameter_bounds:
+    signal_threshold:
+    - 0.05
+    - 0.3
+overrides:
+  BOOK_PRESSURE:
+    name: Book Pressure OFI/MLOFI/PCA
+    latency_lane: sub_10ms
+    signal_field: OFI_zscore
+  CROSS_ASSET_LEAD_LAG:
+    name: Cross-Asset Lead-Lag
+    latency_lane: 10_250ms
+    signal_field: cross_impact_score
+  VPIN_TOXICITY:
+    name: VPIN Flow Toxicity
+    latency_lane: sub_10ms
+    signal_field: VPIN_percentile
+  HYBRID_EXECUTION:
+    name: Hybrid Avellaneda-Stoikov Execution
+    latency_lane: sub_10ms
+    diagnostics_only: true
+    execution_assumptions: quote_engine
+  DEALER_HEDGING:
+    name: Dealer GEX/Vanna/Charm
+    latency_lane: 10_250ms
+    diagnostics_only: true
+    required_datasets:
+    - options_chain
+  DOW_YM_INDEX:
+    name: Dow/YM Index Pressure
+    latency_lane: 10_250ms
+    signal_field: synthetic_Dow_pressure
+  TREASURY_CTD:
+    name: Treasury CTD / Implied Repo
+    latency_lane: multi_second
+    diagnostics_only: true
+    required_datasets:
+    - treasury_basket_yaml
+  TRANSFER_ENTROPY:
+    name: Transfer Entropy Lead-Lag
+    latency_lane: microsecond
+    signal_field: transfer_entropy
+  QUANTUM_SPREAD_DEFENSE:
+    name: Quantum Spread Defense
+    latency_lane: microsecond
+    diagnostics_only: true
+    signal_field: collapse_risk
+  STOCHASTIC_THERMO:
+    name: Stochastic Thermodynamics / Free Energy
+    latency_lane: sub_10ms
+    signal_field: free_energy
+  HAWKES_TOXIC_FLOW:
+    name: Hawkes Toxic Flow Detection
+    latency_lane: sub_10ms
+    diagnostics_only: true
+    signal_field: toxic_cascade_score
+  SPREAD_BLOWOUT_RECOMPRESSION:
+    name: Spread blowout/recompression
+    latency_lane: sub_10ms
+    parameter_bounds:
+      signal_threshold:
+      - 0.05
+      - 0.3

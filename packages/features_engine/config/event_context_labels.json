@@ -1,0 +1,227 @@
+{
+  "ADP_EMPLOYMENT": {
+    "context_priority": 50,
+    "label": "ADP_TIGHT",
+    "main_label": ""
+  },
+  "BAKER_HUGHES_RIG": {
+    "context_priority": 50,
+    "label": "RIG_COUNT_TIGHT",
+    "main_label": ""
+  },
+  "BUILDING_PERMITS": {
+    "context_priority": 50,
+    "label": "BUILDING_PERMITS_TIGHT",
+    "main_label": ""
+  },
+  "CASH_EQUITY_OPEN": {
+    "context_priority": 50,
+    "label": "CASH_EQUITY_OPEN",
+    "main_label": ""
+  },
+  "CONSTRUCTION_SPENDING": {
+    "context_priority": 50,
+    "label": "CONSTRUCTION_SPENDING_TIGHT",
+    "main_label": ""
+  },
+  "CORE_CPI": {
+    "context_priority": 50,
+    "label": "CORE_CPI_TIGHT",
+    "main_label": ""
+  },
+  "CORE_PCE": {
+    "context_priority": 50,
+    "label": "CORE_PCE_TIGHT",
+    "main_label": ""
+  },
+  "CORE_PPI": {
+    "context_priority": 50,
+    "label": "CORE_PPI_TIGHT",
+    "main_label": ""
+  },
+  "CPI": {
+    "context_priority": 50,
+    "label": "CPI_TIGHT",
+    "main_label": ""
+  },
+  "DURABLE_GOODS_ADVANCE": {
+    "context_priority": 50,
+    "label": "DURABLE_GOODS_TIGHT",
+    "main_label": ""
+  },
+  "DURABLE_GOODS_FULL": {
+    "context_priority": 50,
+    "label": "DURABLE_GOODS_FULL_TIGHT",
+    "main_label": ""
+  },
+  "ECI": {
+    "context_priority": 50,
+    "label": "ECI_TIGHT",
+    "main_label": ""
+  },
+  "EIA_CRUDE": {
+    "context_priority": 50,
+    "label": "EIA_CRUDE_TIGHT",
+    "main_label": ""
+  },
+  "EIA_NATGAS": {
+    "context_priority": 50,
+    "label": "EIA_NATGAS_TIGHT",
+    "main_label": ""
+  },
+  "EXISTING_HOME_SALES": {
+    "context_priority": 50,
+    "label": "EXISTING_HOME_SALES_TIGHT",
+    "main_label": ""
+  },
+  "EXPORT_PRICES": {
+    "context_priority": 50,
+    "label": "EXPORT_PRICES_TIGHT",
+    "main_label": ""
+  },
+  "FACTORY_ORDERS": {
+    "context_priority": 50,
+    "label": "FACTORY_ORDERS_TIGHT",
+    "main_label": ""
+  },
+  "FED_BEIGE_BOOK": {
+    "context_priority": 50,
+    "label": "FED_BEIGE_BOOK_TIGHT",
+    "main_label": ""
+  },
+  "FED_H41": {
+    "context_priority": 50,
+    "label": "FED_H41_TIGHT",
+    "main_label": ""
+  },
+  "FED_SPEAKER": {
+    "context_priority": 50,
+    "label": "FED_SPEAKER_TIGHT",
+    "main_label": ""
+  },
+  "FOMC_MINUTES": {
+    "context_priority": 30,
+    "label": "FOMC_MINUTES_TIGHT",
+    "main_label": ""
+  },
+  "FOMC_PRESS": {
+    "context_priority": 5,
+    "label": "FOMC_PRESS_TIGHT",
+    "main_label": ""
+  },
+  "FOMC_STATEMENT": {
+    "context_priority": 10,
+    "label": "FOMC_STATEMENT_TIGHT",
+    "main_label": ""
+  },
+  "FRIDAY_CLOSE": {
+    "context_priority": 50,
+    "label": "FRIDAY_CLOSE",
+    "main_label": ""
+  },
+  "GDP_ADVANCE": {
+    "context_priority": 50,
+    "label": "GDP_ADVANCE_TIGHT",
+    "main_label": ""
+  },
+  "GDP_FINAL": {
+    "context_priority": 50,
+    "label": "GDP_FINAL_TIGHT",
+    "main_label": ""
+  },
+  "GDP_SECOND": {
+    "context_priority": 50,
+    "label": "GDP_SECOND_TIGHT",
+    "main_label": ""
+  },
+  "HOUSING_STARTS": {
+    "context_priority": 50,
+    "label": "HOUSING_STARTS_TIGHT",
+    "main_label": ""
+  },
+  "IMPORT_PRICES": {
+    "context_priority": 50,
+    "label": "IMPORT_PRICES_TIGHT",
+    "main_label": ""
+  },
+  "INDUSTRIAL_PRODUCTION": {
+    "context_priority": 50,
+    "label": "INDPRO_TIGHT",
+    "main_label": ""
+  },
+  "ISM_MANUFACTURING": {
+    "context_priority": 50,
+    "label": "ISM_MFG_TIGHT",
+    "main_label": ""
+  },
+  "ISM_SERVICES": {
+    "context_priority": 50,
+    "label": "ISM_SVC_TIGHT",
+    "main_label": ""
+  },
+  "JOLTS": {
+    "context_priority": 50,
+    "label": "JOLTS_TIGHT",
+    "main_label": ""
+  },
+  "NEW_HOME_SALES": {
+    "context_priority": 50,
+    "label": "NEW_HOME_SALES_TIGHT",
+    "main_label": ""
+  },
+  "NFP": {
+    "context_priority": 50,
+    "label": "NFP_TIGHT",
+    "main_label": ""
+  },
+  "PCE": {
+    "context_priority": 50,
+    "label": "PCE_TIGHT",
+    "main_label": ""
+  },
+  "PPI": {
+    "context_priority": 50,
+    "label": "PPI_TIGHT",
+    "main_label": ""
+  },
+  "PRODUCTIVITY": {
+    "context_priority": 50,
+    "label": "PRODUCTIVITY_TIGHT",
+    "main_label": ""
+  },
+  "PROP_FLATTEN_TOPSTEP": {
+    "context_priority": 50,
+    "label": "PROP_FLATTEN_TOPSTEP",
+    "main_label": "PROP_FLATTEN_TOPSTEP"
+  },
+  "PROP_REOPEN": {
+    "context_priority": 50,
+    "label": "PROP_REOPEN",
+    "main_label": ""
+  },
+  "RETAIL_SALES": {
+    "context_priority": 50,
+    "label": "RETAIL_SALES_TIGHT",
+    "main_label": ""
+  },
+  "TRADE_BALANCE": {
+    "context_priority": 50,
+    "label": "TRADE_BALANCE_TIGHT",
+    "main_label": ""
+  },
+  "TREASURY_AUCTION": {
+    "context_priority": 50,
+    "label": "TREASURY_AUCTION_TIGHT",
+    "main_label": ""
+  },
+  "TREASURY_REFUNDING": {
+    "context_priority": 50,
+    "label": "TREASURY_REFUNDING_TIGHT",
+    "main_label": ""
+  },
+  "UNEMPLOYMENT_CLAIMS": {
+    "context_priority": 50,
+    "label": "CLAIMS_TIGHT",
+    "main_label": ""
+  }
+}

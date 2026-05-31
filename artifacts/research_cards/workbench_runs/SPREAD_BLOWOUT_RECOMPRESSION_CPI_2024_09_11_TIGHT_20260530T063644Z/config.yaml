@@ -1,0 +1,5 @@
+event_id: CPI_2024_09_11_TIGHT
+latency_policy: variable
+measured_p99_ms: 1.0
+model_id: SPREAD_BLOWOUT_RECOMPRESSION
+seed: 42

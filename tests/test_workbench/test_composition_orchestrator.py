@@ -17,11 +17,11 @@ REPO = Path(__file__).resolve().parents[2]
 
 
 def test_pdf_model_11_pulls_pdf_model_4_dependency():
-    stubs = [DefensiveStub("PDF_MODEL_11", "during", 2500.0)]
+    stubs = [DefensiveStub("HAWKES_TOXIC_FLOW", "during", 2500.0)]
     resolved = resolve_stub_dependencies(stubs, REPO)
     ids = {s.model_id for s in resolved}
-    assert "PDF_MODEL_4" in ids
-    assert "PDF_MODEL_11" in ids
+    assert "HYBRID_EXECUTION" in ids
+    assert "HAWKES_TOXIC_FLOW" in ids
 
 
 @patch("workbench.src.registry.composition_orchestrator.get_model_by_id")
@@ -34,7 +34,7 @@ def test_before_veto_blocks_backtest(mock_get_model):
     ctx = RunContext(
         repo_root=REPO,
         run_id="test",
-        model_id="HYP_5",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
         event_id="CPI_2018_01_11_TIGHT",
         npz_path=REPO / "x.npz",
         events=np.array([]),
@@ -42,8 +42,8 @@ def test_before_veto_blocks_backtest(mock_get_model):
     ctx.metadata["pdf_bars"] = []
 
     composition = ModelComposition(
-        primary_model_id="HYP_5",
-        defensive_stubs=[DefensiveStub("PDF_MODEL_9", "before", 50.0)],
+        primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        defensive_stubs=[DefensiveStub("QUANTUM_SPREAD_DEFENSE", "before", 50.0)],
     )
 
     orch = CompositionOrchestrator()
@@ -69,10 +69,10 @@ def test_phase_budget_summary_sums():
     from workbench.src.registry.model_catalog import phase_budget_summary
 
     comp = ModelComposition(
-        "HYP_5",
+        "SPREAD_BLOWOUT_RECOMPRESSION",
         [
-            DefensiveStub("PDF_MODEL_9", "before", 50.0),
-            DefensiveStub("PDF_MODEL_3", "continuous", 2500.0),
+            DefensiveStub("QUANTUM_SPREAD_DEFENSE", "before", 50.0),
+            DefensiveStub("VPIN_TOXICITY", "continuous", 2500.0),
         ],
     )
     totals = phase_budget_summary(comp, REPO)
@@ -85,20 +85,20 @@ def test_vpin_continuous_scales_once():
     ctx = RunContext(
         repo_root=REPO,
         run_id="test",
-        model_id="HYP_5",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
         event_id="CPI_2018_01_11_TIGHT",
         npz_path=REPO / "x.npz",
         events=np.array([]),
     )
     ctx.metadata["pdf_bars"] = []
-    stub = DefensiveStub("PDF_MODEL_3", "continuous", 2500.0)
-    trace = CompositionTrace(primary_model_id="HYP_5")
+    stub = DefensiveStub("VPIN_TOXICITY", "continuous", 2500.0)
+    trace = CompositionTrace(primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION")
     mock_payload = MagicMock(VPIN_percentile=0.995)
     mock_out = MagicMock(payload=mock_payload)
 
     with patch.object(orch, "_run_pdf_stub", return_value=({"VPIN_percentile": 0.995}, 1.0)):
         with patch("workbench.src.registry.composition_orchestrator.get_catalog_entry") as mock_cat:
             mock_cat.return_value = MagicMock(blocks_trade=False)
-            ctx.metadata["pdf_composition_outputs"] = {"PDF_MODEL_3": mock_out}
+            ctx.metadata["pdf_composition_outputs"] = {"VPIN_TOXICITY": mock_out}
             adjusted, _ = orch._apply_stub(stub, ctx, trace, 1.0, "continuous")
     assert adjusted == pytest.approx(0.5)

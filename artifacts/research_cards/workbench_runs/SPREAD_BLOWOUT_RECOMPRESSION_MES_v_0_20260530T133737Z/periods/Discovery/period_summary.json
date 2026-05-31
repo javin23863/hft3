@@ -1,0 +1,25 @@
+{
+  "name": "Discovery",
+  "gate_pass": false,
+  "evaluate_only": false,
+  "net_pnl": -1.0,
+  "num_trades": 1,
+  "expectancy": -1.0,
+  "events_run": 1,
+  "events_missing": 0,
+  "survives_cpp": false,
+  "event_results": [
+    {
+      "event_id": "CPI_2018_01_11_TIGHT",
+      "release_date": "2018-01-11",
+      "net_pnl": -1.0,
+      "num_trades": 1,
+      "expectancy": -1.0,
+      "survives_cpp_execution_delay": false,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "x"
+    }
+  ],
+  "error": null,
+  "param_hash": "f7f540a90ef25d67"
+}

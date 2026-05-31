@@ -1,0 +1,14 @@
+{
+  "tier": "T4",
+  "passed": true,
+  "timestamp_utc": "2026-05-31T00:39:44.533786+00:00",
+  "failures": [],
+  "event_id": "CPI_2024_09_11_TIGHT",
+  "symbol": "ES",
+  "latency_ms": 1.0,
+  "queue_model": "LogProbQueueModel2",
+  "certification_status": "GREEN",
+  "certification_commit": "3951a16a84785cab08796ce6d46bb4cdd0d4b12d",
+  "current_commit": "3951a16a84785cab08796ce6d46bb4cdd0d4b12d",
+  "stale": false
+}

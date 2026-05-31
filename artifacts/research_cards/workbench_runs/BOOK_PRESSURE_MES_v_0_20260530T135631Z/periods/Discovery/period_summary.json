@@ -1,0 +1,18 @@
+{
+  "name": "Discovery",
+  "gate_pass": false,
+  "evaluate_only": false,
+  "net_pnl": 0.0,
+  "num_trades": 0,
+  "expectancy": 0.0,
+  "events_run": 0,
+  "events_missing": 0,
+  "survives_cpp": true,
+  "event_results": [],
+  "error": null,
+  "param_hash": "abc8daedbc3884f2",
+  "tune_allowed": true,
+  "params_used": {
+    "signal_threshold": 0.15
+  }
+}

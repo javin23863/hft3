@@ -20,6 +20,6 @@ def test_every_model_has_catalog_entry():
 
 def test_defensive_models_tagged():
     catalog = load_catalog(REPO)
-    assert catalog["PDF_MODEL_9"].role == "defensive"
-    assert catalog["PDF_MODEL_9"].blocks_trade is True
-    assert catalog["PDF_MODEL_11"].requires == ("PDF_MODEL_4",)
+    assert catalog["QUANTUM_SPREAD_DEFENSE"].role == "defensive"
+    assert catalog["QUANTUM_SPREAD_DEFENSE"].blocks_trade is True
+    assert catalog["HAWKES_TOXIC_FLOW"].requires == ("HYBRID_EXECUTION",)

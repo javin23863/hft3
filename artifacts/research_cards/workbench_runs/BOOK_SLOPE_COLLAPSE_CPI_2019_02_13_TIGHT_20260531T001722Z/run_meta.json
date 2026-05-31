@@ -1,0 +1,10 @@
+{
+  "run_id": "SECOND_WAVE_CONTINUATION1_CPI_2019_02_13_TIGHT_20260531T001722Z",
+  "model_id": "BOOK_SLOPE_COLLAPSE",
+  "event_id": "CPI_2019_02_13_TIGHT",
+  "npz_path": "C:\\Users\\MSI\\Documents\\GitHub\\hft3\\data\\npz\\ES.v.0_CPI_2019_02_13_TIGHT_mbo.npz",
+  "npz_hash": "a3f0ef56b8f83b76",
+  "seed": 42,
+  "git_sha": "41be84876ef8ca0f3f448f723a4d030323a21573",
+  "measured_p99_ms": 4.105202995474916
+}

@@ -23,7 +23,7 @@ def test_dry_run_returns_preview(tmp_path, monkeypatch):
         allow_partial=True,
     )
     assert result.status == "DRY_RUN"
-    preview = REPO / "research_cards" / "workbench_runs" / result.campaign_id / "dry_run_preview.json"
+    preview = REPO / "artifacts" / "research_cards" / "workbench_runs" / result.campaign_id / "dry_run_preview.json"
     assert preview.is_file()
 
 
@@ -42,7 +42,7 @@ def test_dry_run_persists_composition_in_manifest():
         allow_partial=True,
         composition=comp,
     )
-    manifest = REPO / "research_cards" / "workbench_runs" / result.campaign_id / "campaign.json"
+    manifest = REPO / "artifacts" / "research_cards" / "workbench_runs" / result.campaign_id / "campaign.json"
     data = json.loads(manifest.read_text(encoding="utf-8"))
     assert data["composition"]["primary_model_id"] == "HYP_5"
 
@@ -76,14 +76,14 @@ def test_sequential_gate_stops_after_discovery_fail(mock_list, MockEngine, mock_
     MockEngine.return_value = mock_engine
     mock_engine.run.return_value = {
         "run_id": "x",
-        "artifact_dir": str(REPO / "research_cards" / "workbench_runs" / "dummy"),
+        "artifact_dir": str(REPO / "artifacts" / "research_cards" / "workbench_runs" / "dummy"),
         "report": {
             "net_pnl": -1.0,
             "num_trades": 1,
             "survives_cpp_execution_delay": False,
         },
     }
-    (REPO / "research_cards" / "workbench_runs" / "dummy").mkdir(parents=True, exist_ok=True)
+    (REPO / "artifacts" / "research_cards" / "workbench_runs" / "dummy").mkdir(parents=True, exist_ok=True)
 
     result = run_campaign(
         REPO,

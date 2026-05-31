@@ -1,0 +1,30 @@
+---
+description: "Time-bounded shell/SSH/pytest — no infinite background polls; kill hung jobs."
+alwaysApply: true
+---
+
+# Shell execution timeouts (mandatory)
+
+Full policy: [docs/ai/SHELL_EXECUTION.md](../../docs/ai/SHELL_EXECUTION.md)
+
+## Agent rules
+
+1. **Budget before run** — every shell command gets an expected duration and hard stop from the policy table.
+2. **No infinite background** — set `block_until_ms` to the hard stop; max **3** polls without new output, then **stop** and report BLOCKED.
+3. **Hung = no progress** — wall time **> 2× expected** and no stdout/stderr delta for **60s** → kill job tree, do not leave pytest/ssh/streamlit orphans.
+4. **Use bounded scripts** — prefer `scripts/run_agent_verify.ps1` and `tools/shell/run_with_timeout.ps1` over raw `pytest tests/` in background.
+5. **SSH** — always `-o ConnectTimeout=15`; no `while ! grep …; do sleep N; done` without a **900s** max wall clock and single status report.
+6. **Verify claims** — paste exit code + summary line; never “tests pass” without evidence.
+
+## Default budgets (hard stop)
+
+| Job | Hard stop |
+|-----|-----------|
+| T0 fast | 90s |
+| Agent verify (T0 + registry + workbench) | 180s |
+| Full pytest | 600s (explicit request only) |
+| Graphify rebuild | 300s |
+| SSH one-shot | 60s |
+| replay-sample smoke | 120s |
+
+When killed for timeout: report command, budget, elapsed, last log lines, and what unblocks.

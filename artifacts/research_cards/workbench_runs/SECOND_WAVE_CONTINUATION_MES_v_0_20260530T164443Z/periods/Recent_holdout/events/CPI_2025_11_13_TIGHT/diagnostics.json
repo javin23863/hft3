@@ -1,0 +1,333 @@
+{
+  "model_id": "SECOND_WAVE_CONTINUATION",
+  "event_id": "CPI_2025_11_13_TIGHT",
+  "data_period": "CPI_2025_11_13_TIGHT",
+  "robustness_window": "discovery",
+  "latency_authority": "cpp_measured",
+  "python_research_runtime_us": 61705517.800000966,
+  "cpp_hot_path_runtime_us": 4105.202995474916,
+  "measured_production_p99_us": 4105.202995474916,
+  "measured_p99_ms": 4.105202995474916,
+  "breakeven_us": 2000000.0,
+  "breakeven_ms": 2000.0,
+  "latency_profitability_buffer_us": 1995894.797004525,
+  "latency_buffer_ms": 1995.8947970045251,
+  "simulated_latency_adjusted_pnl": -25.393976417600427,
+  "survives_cpp_execution_delay": false,
+  "lane_required": "sub_10ms",
+  "lane_measured": "sub_10ms",
+  "lane_pass": true,
+  "overfit_risk": "low",
+  "recommendation": "MARGINAL",
+  "robustness_passed": true,
+  "net_pnl": -42.75,
+  "num_trades": 19,
+  "promote_candidate": false,
+  "wfc_status": "SKIPPED",
+  "pnl_by_injection_us": {
+    "0": -42.75,
+    "50": -42.576439764176,
+    "100": -42.40287952835201,
+    "250": -41.88219882088002,
+    "500": -41.01439764176004,
+    "1000": -39.27879528352008,
+    "2000": -35.80759056704017,
+    "5000": -25.393976417600427,
+    "10000": -8.037952835200857,
+    "25000": -0.0,
+    "50000": -0.0,
+    "100000": -0.0,
+    "250000": -0.0,
+    "1000000": -0.0
+  },
+  "pnl_by_latency": {
+    "0.0": -42.75,
+    "0.05": -42.576439764176,
+    "0.1": -42.40287952835201,
+    "0.25": -41.88219882088002,
+    "0.5": -41.01439764176004,
+    "1.0": -39.27879528352008,
+    "2.0": -35.80759056704017,
+    "5.0": -25.393976417600427,
+    "10.0": -8.037952835200857,
+    "25.0": -0.0,
+    "50.0": -0.0,
+    "100.0": -0.0,
+    "250.0": -0.0,
+    "1000.0": -0.0
+  },
+  "cpp_latency_profile": {
+    "cpp_decision_compute_p50_us": 5.5,
+    "cpp_decision_compute_p95_us": 9.9,
+    "cpp_decision_compute_p99_us": 11.0,
+    "order_send_p50_us": 0.0,
+    "order_send_p95_us": 0.0,
+    "order_send_p99_us": 0.0,
+    "gateway_ack_p50_us": 0.0,
+    "gateway_ack_p95_us": 0.0,
+    "gateway_ack_p99_us": 0.0,
+    "measured_production_p99_us": 4105.202995474916,
+    "order_ack_blocked": true,
+    "notes": [
+      "order_ack_blocked: paper submit\u2192ack not measured; TCP connect is network health only \u2014 not used for gateway_ack"
+    ]
+  },
+  "cpp_replay_available": false,
+  "cpp_stack_verified": false,
+  "cpp_stack_checks": {},
+  "cpp_stack_verify_reason": "disabled by HFT3_CPP_STACK_VERIFY",
+  "hot_memory_telemetry": {
+    "registry_status": "ok",
+    "hot_executable": [
+      "6E",
+      "CL",
+      "ES",
+      "GC",
+      "HG",
+      "M2K",
+      "MCL",
+      "MES",
+      "MGC",
+      "MNQ",
+      "MYM",
+      "NG",
+      "NQ",
+      "RTY",
+      "SR3",
+      "UB",
+      "YM",
+      "ZB",
+      "ZF",
+      "ZN",
+      "ZQ",
+      "ZT"
+    ],
+    "hot_sensor": [
+      "VIX",
+      "VVIX",
+      "VX1",
+      "VX2"
+    ],
+    "warm": [
+      "6A",
+      "6B",
+      "6C",
+      "6J",
+      "HO",
+      "KE",
+      "RB",
+      "SI",
+      "ZC",
+      "ZL",
+      "ZM",
+      "ZS",
+      "ZW"
+    ],
+    "cold": [],
+    "resident": [
+      "6E",
+      "CL",
+      "ES",
+      "GC",
+      "HG",
+      "M2K",
+      "MCL",
+      "MES",
+      "MGC",
+      "MNQ",
+      "MYM",
+      "NG",
+      "NQ",
+      "RTY",
+      "SR3",
+      "UB",
+      "VIX",
+      "VVIX",
+      "VX1",
+      "VX2",
+      "YM",
+      "ZB",
+      "ZF",
+      "ZN",
+      "ZQ",
+      "ZT"
+    ],
+    "promoted_resident": [],
+    "core_protected_symbols": [
+      "ES",
+      "NQ",
+      "SR3",
+      "ZN",
+      "ZT"
+    ],
+    "missing_sensor_warnings": [
+      "VIX",
+      "VVIX",
+      "VX1",
+      "VX2"
+    ],
+    "promotion_audit_tail": [],
+    "degradation_flags": {
+      "load_pressure_demotions_available": false,
+      "missing_vix_family": true
+    },
+    "feed_status": {
+      "ES": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "MES": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "NQ": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "MNQ": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "RTY": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "M2K": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "YM": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "MYM": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "ZT": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "ZF": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "ZN": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "ZB": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "UB": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "SR3": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "ZQ": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "CL": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "MCL": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "NG": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "GC": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "MGC": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "HG": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "6E": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "VIX": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "VVIX": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "VX1": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "VX2": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "RB": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "HO": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "SI": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "6J": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "6B": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "6A": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "6C": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "ZC": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "ZS": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "ZW": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "KE": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "ZL": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      },
+      "ZM": {
+        "data_delay_status": "MISSING",
+        "last_update_age_ms": null
+      }
+    }
+  }
+}

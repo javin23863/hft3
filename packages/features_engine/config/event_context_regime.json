@@ -1,0 +1,13 @@
+{
+  "event_shock": [
+    "CASH_EQUITY_OPEN",
+    "CPI_TIGHT",
+    "FOMC_PRESS_TIGHT",
+    "FOMC_STATEMENT_TIGHT",
+    "NFP_TIGHT"
+  ],
+  "prop_flatten": [
+    "FRIDAY_CLOSE",
+    "PROP_FLATTEN_TOPSTEP"
+  ]
+}

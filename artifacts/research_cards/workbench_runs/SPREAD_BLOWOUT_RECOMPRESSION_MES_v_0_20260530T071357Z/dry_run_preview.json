@@ -1,0 +1,83 @@
+{
+  "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+  "symbol": "MES.v.0",
+  "allowed_contexts": [
+    "CPI_TIGHT",
+    "NFP_TIGHT"
+  ],
+  "catalog_years": 1,
+  "periods": {
+    "Discovery": {
+      "start_year": 2018,
+      "end_year": 2020,
+      "events": [
+        {
+          "event_id": "CPI_2018_01_11_TIGHT",
+          "release_date": "2018-01-11",
+          "event_context": "CPI_TIGHT",
+          "npz_present": false
+        },
+        {
+          "event_id": "CPI_2019_02_13_TIGHT",
+          "release_date": "2019-02-13",
+          "event_context": "CPI_TIGHT",
+          "npz_present": false
+        },
+        {
+          "event_id": "CPI_2020_03_11_TIGHT",
+          "release_date": "2020-03-11",
+          "event_context": "CPI_TIGHT",
+          "npz_present": false
+        }
+      ]
+    },
+    "Confirmation": {
+      "start_year": 2021,
+      "end_year": 2022,
+      "events": [
+        {
+          "event_id": "CPI_2021_04_13_TIGHT",
+          "release_date": "2021-04-13",
+          "event_context": "CPI_TIGHT",
+          "npz_present": false
+        },
+        {
+          "event_id": "CPI_2022_05_11_TIGHT",
+          "release_date": "2022-05-11",
+          "event_context": "CPI_TIGHT",
+          "npz_present": false
+        }
+      ]
+    },
+    "Holdout": {
+      "start_year": 2023,
+      "end_year": 2024,
+      "events": [
+        {
+          "event_id": "CPI_2023_06_13_TIGHT",
+          "release_date": "2023-06-13",
+          "event_context": "CPI_TIGHT",
+          "npz_present": false
+        },
+        {
+          "event_id": "CPI_2024_09_11_TIGHT",
+          "release_date": "2024-09-11",
+          "event_context": "CPI_TIGHT",
+          "npz_present": true
+        }
+      ]
+    },
+    "Recent holdout": {
+      "start_year": 2025,
+      "end_year": 2030,
+      "events": [
+        {
+          "event_id": "CPI_2025_01_15_TIGHT",
+          "release_date": "2025-01-15",
+          "event_context": "CPI_TIGHT",
+          "npz_present": false
+        }
+      ]
+    }
+  }
+}

@@ -35,7 +35,7 @@ def test_load_event_row_from_run_event_replay():
 
     row = mod.load_event_row(
         "CPI_2024_09_11_TIGHT",
-        _REPO / "data_system" / "config" / "events.csv",
+        _REPO / "packages" / "data_system" / "config" / "events.csv",
     )
     assert row["release_date"] == "2024-09-11"
     assert row["primary_symbol"] == "MES.v.0"

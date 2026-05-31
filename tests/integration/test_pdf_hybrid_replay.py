@@ -31,7 +31,7 @@ def test_pdf_hybrid_replay_on_real_npz() -> None:
             "Run: python scripts/run_offline_pipeline.py --skip-download "
             f"--event-id {event_id}"
         )
-    event_meta = _pdf_mod.load_event_row(event_id, _REPO / "data_system" / "config" / "events.csv")
+    event_meta = _pdf_mod.load_event_row(event_id, _REPO / "packages" / "data_system" / "config" / "events.csv")
     payload = _pdf_mod.run_pdf_hybrid_replay(
         event_id=event_id,
         npz_path=npz_path,

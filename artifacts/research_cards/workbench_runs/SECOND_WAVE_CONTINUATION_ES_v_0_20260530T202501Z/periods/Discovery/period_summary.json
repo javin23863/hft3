@@ -1,0 +1,139 @@
+{
+  "name": "Discovery",
+  "gate_pass": false,
+  "evaluate_only": false,
+  "net_pnl": -62.29999999999998,
+  "num_trades": 87,
+  "expectancy": -1.094540229885057,
+  "events_run": 12,
+  "events_missing": 0,
+  "survives_cpp": false,
+  "event_results": [
+    {
+      "event_id": "NFP_2018_01_05_TIGHT",
+      "release_date": "2018-01-05",
+      "net_pnl": -0.8000000000000002,
+      "num_trades": 3,
+      "expectancy": -0.2666666666666667,
+      "survives_cpp_execution_delay": false,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION_NFP_2018_01_05_TIGHT_20260530T202501Z"
+    },
+    {
+      "event_id": "CPI_2018_01_11_TIGHT",
+      "release_date": "2018-01-11",
+      "net_pnl": -8.674999999999995,
+      "num_trades": 33,
+      "expectancy": -0.2628787878787877,
+      "survives_cpp_execution_delay": false,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION_CPI_2018_01_11_TIGHT_20260530T202620Z"
+    },
+    {
+      "event_id": "NFP_2018_02_02_TIGHT",
+      "release_date": "2018-02-02",
+      "net_pnl": 62.775,
+      "num_trades": 7,
+      "expectancy": 8.967857142857143,
+      "survives_cpp_execution_delay": true,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION_NFP_2018_02_02_TIGHT_20260530T202640Z"
+    },
+    {
+      "event_id": "NFP_2018_03_09_TIGHT",
+      "release_date": "2018-03-09",
+      "net_pnl": 101.275,
+      "num_trades": 2,
+      "expectancy": 50.6375,
+      "survives_cpp_execution_delay": true,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION_NFP_2018_03_09_TIGHT_20260530T202855Z"
+    },
+    {
+      "event_id": "NFP_2019_01_04_TIGHT",
+      "release_date": "2019-01-04",
+      "net_pnl": -32.25,
+      "num_trades": 4,
+      "expectancy": -8.0625,
+      "survives_cpp_execution_delay": false,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION_NFP_2019_01_04_TIGHT_20260530T203433Z"
+    },
+    {
+      "event_id": "NFP_2019_02_01_TIGHT",
+      "release_date": "2019-02-01",
+      "net_pnl": 32.925,
+      "num_trades": 0,
+      "expectancy": 0.0,
+      "survives_cpp_execution_delay": true,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION_NFP_2019_02_01_TIGHT_20260530T204049Z"
+    },
+    {
+      "event_id": "CPI_2019_02_13_TIGHT",
+      "release_date": "2019-02-13",
+      "net_pnl": -12.624999999999996,
+      "num_trades": 9,
+      "expectancy": -1.4027777777777775,
+      "survives_cpp_execution_delay": false,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION_CPI_2019_02_13_TIGHT_20260530T204335Z"
+    },
+    {
+      "event_id": "NFP_2019_03_08_TIGHT",
+      "release_date": "2019-03-08",
+      "net_pnl": -29.324999999999967,
+      "num_trades": 5,
+      "expectancy": -5.864999999999993,
+      "survives_cpp_execution_delay": false,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION_NFP_2019_03_08_TIGHT_20260530T204445Z"
+    },
+    {
+      "event_id": "NFP_2020_01_10_TIGHT",
+      "release_date": "2020-01-10",
+      "net_pnl": -164.75,
+      "num_trades": 4,
+      "expectancy": -41.1875,
+      "survives_cpp_execution_delay": false,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION_NFP_2020_01_10_TIGHT_20260530T204839Z"
+    },
+    {
+      "event_id": "NFP_2020_02_07_TIGHT",
+      "release_date": "2020-02-07",
+      "net_pnl": -19.775000000000002,
+      "num_trades": 1,
+      "expectancy": -19.775000000000002,
+      "survives_cpp_execution_delay": false,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION_NFP_2020_02_07_TIGHT_20260530T205050Z"
+    },
+    {
+      "event_id": "NFP_2020_03_06_TIGHT",
+      "release_date": "2020-03-06",
+      "net_pnl": 10.65,
+      "num_trades": 2,
+      "expectancy": 5.325,
+      "survives_cpp_execution_delay": true,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION_NFP_2020_03_06_TIGHT_20260530T205347Z"
+    },
+    {
+      "event_id": "CPI_2020_03_11_TIGHT",
+      "release_date": "2020-03-11",
+      "net_pnl": -1.7250000000000156,
+      "num_trades": 17,
+      "expectancy": -0.10147058823529503,
+      "survives_cpp_execution_delay": false,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION_CPI_2020_03_11_TIGHT_20260530T205720Z"
+    }
+  ],
+  "error": null,
+  "param_hash": "20c72a496bcc3370",
+  "tune_allowed": true,
+  "params_used": {
+    "signal_threshold": 0.15
+  }
+}

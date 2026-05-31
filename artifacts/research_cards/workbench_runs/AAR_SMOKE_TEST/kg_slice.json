@@ -1,0 +1,31 @@
+{
+  "nodes": [
+    {
+      "id": "run:AAR_SMOKE_TEST",
+      "type": "backtest-run",
+      "run_id": "AAR_SMOKE_TEST",
+      "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+      "event_id": "CPI_2024_09_11_TIGHT",
+      "event_context": "CPI_TIGHT",
+      "event_state_heuristic": true,
+      "latency_lane": "sub_10ms",
+      "breakeven_us": 250.0,
+      "lane_pass": false,
+      "promote_candidate": false,
+      "net_pnl": -181.77
+    },
+    {
+      "id": "event:CPI_2024_09_11_TIGHT",
+      "type": "macro-event",
+      "event_id": "CPI_2024_09_11_TIGHT",
+      "event_state_heuristic": true
+    }
+  ],
+  "edges": [
+    {
+      "from": "run:AAR_SMOKE_TEST",
+      "to": "event:CPI_2024_09_11_TIGHT",
+      "relation": "executed_on"
+    }
+  ]
+}

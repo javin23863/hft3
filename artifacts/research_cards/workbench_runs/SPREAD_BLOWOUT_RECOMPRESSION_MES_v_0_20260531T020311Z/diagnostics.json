@@ -1,0 +1,96 @@
+{
+  "campaign_id": "SPREAD_BLOWOUT_RECOMPRESSION_MES_v_0_20260531T020311Z",
+  "status": "FAIL",
+  "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+  "symbol": "MES.v.0",
+  "param_hash": "097a72ecae888d1f",
+  "composition": {
+    "primary_model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+    "defensive_stubs": []
+  },
+  "phase_budgets_us": {
+    "before": 0.0,
+    "during": 0.0,
+    "after": 0.0,
+    "continuous": 0.0
+  },
+  "trades_vetoed_by_defense": 0,
+  "periods": [],
+  "robustness_passed": true,
+  "overfit_risk": "low",
+  "walk_forward": {
+    "periods": [
+      "Discovery",
+      "Confirmation",
+      "Holdout",
+      "Recent holdout"
+    ],
+    "status": "single_window"
+  },
+  "wfc_status": "ERROR",
+  "wfc": {
+    "run_id": "SPREAD_BLOWOUT_RECOMPRESSION_MES_v_0_20260531T020311Z",
+    "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+    "strategy_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+    "wfc_status": "ERROR",
+    "pearson": 0.0,
+    "spearman": 0.0,
+    "kendall": 0.0,
+    "pearson_ci": [],
+    "spearman_ci": [],
+    "p_value": 1.0,
+    "cost_adjusted_pearson": 0.0,
+    "cost_adjusted_spearman": 0.0,
+    "n_parameter_combinations": 2,
+    "n_folds": 1,
+    "positive_fold_ratio": 0.0,
+    "fold_correlations": {},
+    "top_decile_oos_median": 0.0,
+    "bottom_decile_oos_median": 0.0,
+    "outlier_sensitivity_pass": false,
+    "cost_adjusted_pass": false,
+    "drawdown_pass": false,
+    "secondary_metrics_pass": true,
+    "regime_consistency_pass": true,
+    "universe_consistency_pass": true,
+    "rejection_reasons": [
+      "No per-parameter fold vectors for correlation"
+    ],
+    "artifact_paths": [
+      "C:\\Users\\MSI\\Documents\\GitHub\\hft3\\artifacts\\research_cards\\workbench_runs\\SPREAD_BLOWOUT_RECOMPRESSION_MES_v_0_20260531T020311Z\\wfc\\wfc_summary.json",
+      "C:\\Users\\MSI\\Documents\\GitHub\\hft3\\artifacts\\research_cards\\workbench_runs\\SPREAD_BLOWOUT_RECOMPRESSION_MES_v_0_20260531T020311Z\\wfc\\wfc_audit.log",
+      "C:\\Users\\MSI\\Documents\\GitHub\\hft3\\artifacts\\research_cards\\workbench_runs\\SPREAD_BLOWOUT_RECOMPRESSION_MES_v_0_20260531T020311Z\\wfc\\is_vs_oos_scatter.png",
+      "C:\\Users\\MSI\\Documents\\GitHub\\hft3\\artifacts\\research_cards\\workbench_runs\\SPREAD_BLOWOUT_RECOMPRESSION_MES_v_0_20260531T020311Z\\wfc\\is_vs_oos_by_fold.png",
+      "C:\\Users\\MSI\\Documents\\GitHub\\hft3\\artifacts\\research_cards\\workbench_runs\\SPREAD_BLOWOUT_RECOMPRESSION_MES_v_0_20260531T020311Z\\wfc\\top_decile_oos.png"
+    ]
+  },
+  "sim_shadow_anchor": "2026-03-01",
+  "sim_shadow_cme_days": 60,
+  "sim_shadow_status": "pending_CHI404",
+  "sim_shadow_required": false,
+  "certification_stamp": {
+    "status": "MISSING",
+    "certification_run_id": "",
+    "certification_commit": "",
+    "current_commit": "1fa7c5070b88e4ec5e4c1511af0caa6953905a00",
+    "git_sha": "1fa7c5070b88e4ec5e4c1511af0caa6953905a00",
+    "git_commit": "1fa7c5070b88e4ec5e4c1511af0caa6953905a00",
+    "stale": false,
+    "changed_core_files": [],
+    "promotion_eligible": false,
+    "promotion_label": "UNCERTIFIED",
+    "reason_if_not_promotion_eligible": "no_full_certification_on_record",
+    "backtester_version": "unknown",
+    "staleness_reason": "no_full_certification_on_record",
+    "instrument": "MES.v.0",
+    "execution_adapter_mode": "workbench_campaign",
+    "execution_mode": "REPLAY",
+    "event_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+    "model_id": "SPREAD_BLOWOUT_RECOMPRESSION"
+  },
+  "certification_footer": "Backtester certification used: MISSING, run_id=, commit=",
+  "promote_candidate": false,
+  "promote_note": "WFC PASS + sim shadow (60 CME days on CHI404) + backtester certification stamp required before promotion \u2014 BLUEPRINT \u00a78",
+  "trial_mode": false,
+  "events_ran": 0
+}

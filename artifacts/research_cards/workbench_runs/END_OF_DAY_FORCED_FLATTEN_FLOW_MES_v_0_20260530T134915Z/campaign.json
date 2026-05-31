@@ -1,0 +1,18 @@
+{
+  "campaign_id": "STOP_RUN_EXHAUSTION_FADE9_MES_v_0_20260530T134915Z",
+  "model_id": "END_OF_DAY_FORCED_FLATTEN_FLOW",
+  "symbol": "MES.v.0",
+  "param_hash": "234b27d4705a2ad2",
+  "audit_grade": true,
+  "composition": {
+    "primary_model_id": "STOP_RUN_EXHAUSTION_FADE9",
+    "defensive_stubs": []
+  },
+  "authority_refs": [
+    "BLUEPRINT.md \u00a78",
+    "decision_engine/python/src/walk_forward.py",
+    "docs/REVIEWER_CHARTER.md B4"
+  ],
+  "catalog_years_available": 0,
+  "min_history_years_required": 10
+}

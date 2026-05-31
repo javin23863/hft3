@@ -1,0 +1,63 @@
+{
+  "model_id": "END_OF_DAY_FORCED_FLATTEN_FLOW",
+  "symbol": "MES.v.0",
+  "allowed_contexts": [
+    "FRIDAY_CLOSE",
+    "PROP_FLATTEN_TOPSTEP",
+    "TPT_FLATTEN"
+  ],
+  "catalog_years": 0,
+  "personal_locked": true,
+  "personal_range": [
+    "2026-03-01",
+    "2026-05-30"
+  ],
+  "periods": {
+    "Discovery": {
+      "start_year": 2018,
+      "end_year": 2020,
+      "events": []
+    },
+    "Confirmation": {
+      "start_year": 2021,
+      "end_year": 2022,
+      "events": []
+    },
+    "Holdout": {
+      "start_year": 2023,
+      "end_year": 2024,
+      "events": [
+        {
+          "event_id": "PROP_FLATTEN_TOPSTEP_2023_09_15_MAIN",
+          "release_date": "2023-09-15",
+          "event_context": "PROP_FLATTEN_TOPSTEP",
+          "npz_present": false
+        },
+        {
+          "event_id": "PROP_FLATTEN_TOPSTEP_2024_09_18_MAIN",
+          "release_date": "2024-09-18",
+          "event_context": "PROP_FLATTEN_TOPSTEP",
+          "npz_present": false
+        },
+        {
+          "event_id": "TOPSTEP_2024_09_18_MAIN",
+          "release_date": "2024-09-18",
+          "event_context": "PROP_FLATTEN_TOPSTEP",
+          "npz_present": false
+        }
+      ]
+    },
+    "Recent holdout": {
+      "start_year": 2025,
+      "end_year": 2025,
+      "events": [
+        {
+          "event_id": "PROP_FLATTEN_TOPSTEP_2025_06_20_MAIN",
+          "release_date": "2025-06-20",
+          "event_context": "PROP_FLATTEN_TOPSTEP",
+          "npz_present": false
+        }
+      ]
+    }
+  }
+}

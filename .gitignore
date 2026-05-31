@@ -70,7 +70,8 @@ vendor/openfoundry_upstream_test/
 models/
 *.onnx
 
-# Graphify (team commits graph.json/html/report; ignore local cache and cost metadata)
+# Graphify (team commits report/labels; graph.json exceeds GitHub 100MB — rebuild locally)
+graphify-out/graph.json
 graphify-out/manifest.json
 graphify-out/cost.json
 graphify-out/cache/

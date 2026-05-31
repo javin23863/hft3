@@ -1,0 +1,124 @@
+defaults:
+  alpha:
+    default_phase: during
+    budget_us: 2500
+  defensive:
+    default_phase: during
+    budget_us: 2500
+  hybrid:
+    default_phase: during
+    budget_us: 5000
+BOOK_PRESSURE:
+  display_name: Book pressure OFI / MLOFI / PCA
+  description: Level-1 OFI and multi-level book pressure with PCA spoof defense. Positive
+    pressure favors bid-side continuation.
+  role: alpha
+  default_phase: continuous
+  budget_us: 2500
+CROSS_ASSET_LEAD_LAG:
+  display_name: Cross-asset lead-lag
+  description: Ridge cross-impact of leader OFI on target returns. Scores when leader
+    flow predicts lagged target move.
+  role: alpha
+  default_phase: during
+  budget_us: 10000
+VPIN_TOXICITY:
+  display_name: VPIN flow toxicity
+  description: Volume-time flow toxicity via BVC and Student-t tails. High VPIN percentile
+    widens spreads and reduces aggression.
+  role: defensive
+  default_phase: continuous
+  budget_us: 2500
+HYBRID_EXECUTION:
+  display_name: Hybrid Avellaneda-Stoikov execution
+  description: Reservation price with OFI drift and VPIN multiplier. Quote engine
+    layer for defensive spread management.
+  role: defensive
+  default_phase: during
+  budget_us: 2500
+  requires:
+  - BOOK_PRESSURE
+  - VPIN_TOXICITY
+DEALER_HEDGING:
+  display_name: Dealer GEX / vanna / charm
+  description: Options dealer gamma exposure and hedging pressure from chain fixtures.
+    Diagnostics for vol-regime context.
+  role: hybrid
+  default_phase: whole_event
+  budget_us: 100000
+DOW_YM_INDEX:
+  display_name: Dow / YM index pressure
+  description: Price-weighted Dow divisor pressure from top constituents. Synthetic
+    index drift signal for YM fair value.
+  role: alpha
+  default_phase: during
+  budget_us: 10000
+TREASURY_CTD:
+  display_name: Treasury CTD / implied repo
+  description: Cheapest-to-deliver and implied repo from deliverable basket. Basis
+    and quality-option diagnostics.
+  role: hybrid
+  default_phase: whole_event
+  budget_us: 100000
+TRANSFER_ENTROPY:
+  display_name: Transfer entropy lead-lag
+  description: Transfer entropy measures directional information flow between correlated
+    assets. Aggressive liquidity when TE crosses UCL.
+  role: alpha
+  default_phase: during
+  budget_us: 50
+QUANTUM_SPREAD_DEFENSE:
+  display_name: Quantum spread defense
+  description: Models bid-ask spread as eigenstate distribution; cancels resting quotes
+    when collapse risk spikes.
+  role: defensive
+  default_phase: before
+  budget_us: 50
+  blocks_trade: true
+STOCHASTIC_THERMO:
+  display_name: Stochastic thermodynamics / free energy
+  description: Gibbs ensemble over strategy work; mean-reversion when institutional
+    dissipative work exceeds free-energy boundary.
+  role: alpha
+  default_phase: during
+  budget_us: 2500
+HAWKES_TOXIC_FLOW:
+  display_name: Hawkes toxic flow detection
+  description: Self-exciting order flow intensity; skews AS reservation price and
+    raises gamma when toxic cascade detected.
+  role: defensive
+  default_phase: during
+  budget_us: 2500
+  requires:
+  - HYBRID_EXECUTION
+LIQUIDITY_DEFENSE_BREAK:
+  role: defensive
+  default_phase: during
+  description: Detects liquidity defense levels breaking; fades or follows once defense
+    fails and flow accelerates.
+END_OF_DAY_FORCED_FLATTEN_FLOW:
+  role: defensive
+  default_phase: after
+  description: Prop-firm end-of-day flatten flow; reduces aggression into forced liquidation
+    windows.
+DAILY_LOSS_LIMIT_DEFENSE:
+  role: defensive
+  default_phase: continuous
+  description: Daily loss-limit defense behavior; throttles risk when drawdown pressure
+    builds.
+QUOTE_PULL_BEFORE_VOLATILITY:
+  role: defensive
+  default_phase: before
+  blocks_trade: true
+  budget_us: 2500
+  description: Quote pull before volatility; veto new risk when market makers withdraw
+    liquidity ahead of shocks.
+REQUOTE_RACE_AFTER_SHOCK:
+  role: defensive
+  default_phase: during
+  description: Re-quote race after shock; adjusts reservation skew while liquidity
+    reprices post-vol spike.
+SPREAD_BLOWOUT_RECOMPRESSION:
+  display_name: Spread blowout / recompression
+  description: Detects spread expansion and mean-reversion after liquidity shock.
+    Fades overextended moves when book refills.

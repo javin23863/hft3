@@ -2,7 +2,7 @@
 
 Chicago CME microstructure research and execution stack. Agents working in this repo follow mandatory delegation, Karpathy engineering principles, and hft3-specific constraints below.
 
-**Human onboarding:** [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) (read once, top to bottom) · [docs/DOC_INDEX.md](docs/DOC_INDEX.md) (chronological doc map)
+**Human onboarding:** [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) (read once, top to bottom) · [docs/human/DOC_INDEX.md](docs/human/DOC_INDEX.md) · [docs/ai/ONBOARDING.md](docs/ai/ONBOARDING.md) (graph-first for agents) · [docs/ai/ENGINEERING.md](docs/ai/ENGINEERING.md) (Karpathy style)
 
 Full workflow reference: [docs/AGENTIC_ENGINEERING.md](docs/AGENTIC_ENGINEERING.md)
 
@@ -70,6 +70,22 @@ Do not tell the user work is merge-ready unless **all** of the following are tru
 
 When blocked, state **what ran**, **what was skipped**, and **what unblocks** — do not imply completion.
 
+## Shell execution (time-bounded — mandatory)
+
+Background pytest, SSH wait loops, and subprocess jobs **must not run unbounded**. Hung work wastes resources and hides failures.
+
+**Full policy:** [docs/ai/SHELL_EXECUTION.md](docs/ai/SHELL_EXECUTION.md) · Cursor rule: [.cursor/rules/shell-execution-timeouts.mdc](.cursor/rules/shell-execution-timeouts.mdc)
+
+| Rule | Requirement |
+|------|-------------|
+| Budget | Every command: expected duration + **hard stop** before run |
+| Hung | **> 2× expected** with no output for 60s → **kill** and report BLOCKED |
+| Orphans | Never leave pytest / `replay-sample` / SSH / Streamlit running after abort |
+| Verify | Prefer `scripts/run_agent_verify.ps1` (180s cap) over background full-suite pytest |
+| SSH | `-o ConnectTimeout=15`; no infinite `while ! grep …` loops from workstation |
+
+Main thread and **shell** subagent: paste **exit code + summary line**; do not poll background shells indefinitely.
+
 ## Karpathy principles
 
 Derived from standard Karpathy CLAUDE.md guidelines. Every task applies all four.
@@ -99,7 +115,7 @@ Every task runs this loop:
 3. **GraphPre** — `scripts/graphify_pre_edit.ps1` (exits 2 if gate stamp missing/stale). Use graph query output — not blind repo grep. CHI404: [docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md](docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md).
 4. **Plan** — Brief plan with verification steps before editing. Delegate locate work when needed (with graph context).
 5. **Code** — Minimal change via builder or approved multi-file path. No drive-by edits. No parallel CHI404 orchestrators.
-6. **Verify** — **cavecrew-reviewer** must complete Pass A (Karpathy) and Pass B (math invariants) on the diff before **shell** runs `pytest` and CHI404 validate gates when infra applies. Loop until met or blocked.
+6. **Verify** — **cavecrew-reviewer** must complete Pass A (Karpathy) and Pass B (math invariants) on the diff before **shell** runs bounded pytest (see [docs/ai/SHELL_EXECUTION.md](docs/ai/SHELL_EXECUTION.md)) and CHI404 validate gates when infra applies. Loop until met or blocked.
 7. **GraphPost** — After code edits: `graphify update .` or `scripts/graphify_rebuild.ps1`. Commit updated `graphify-out/` with the change when the team tracks graph in git.
 
 Do not skip GraphGate, GraphPre, Plan, Verify, or GraphPost for "small" changes.

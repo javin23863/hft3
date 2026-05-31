@@ -1,0 +1,20 @@
+composition: null
+cpp_latency_profile:
+  cpp_decision_compute_p50_us: 5.5
+  cpp_decision_compute_p95_us: 9.9
+  cpp_decision_compute_p99_us: 11.0
+  gateway_ack_p50_us: 0.0
+  gateway_ack_p95_us: 0.0
+  gateway_ack_p99_us: 0.0
+  measured_production_p99_us: 4105.202995474916
+  notes:
+  - "order_ack_blocked: paper submit\u2192ack not measured; TCP connect is network\
+    \ health only \u2014 not used for gateway_ack"
+  order_ack_blocked: true
+  order_send_p50_us: 0.0
+  order_send_p95_us: 0.0
+  order_send_p99_us: 0.0
+event_id: CPI_2025_10_15_TIGHT
+latency_authority: cpp_measured
+model_id: SECOND_WAVE_CONTINUATION
+seed: 42

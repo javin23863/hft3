@@ -78,7 +78,7 @@ def test_catalog_tab_key_patterns_do_not_collide() -> None:
 
 
 def test_workbench_ui_has_no_literal_catalog_search_keys() -> None:
-    ui_dir = Path(__file__).resolve().parents[2] / "workbench" / "ui"
+    ui_dir = Path(__file__).resolve().parents[2] / "apps" / "workbench" / "ui"
     forbidden = (
         'key="catalog_search"',
         "key='catalog_search'",

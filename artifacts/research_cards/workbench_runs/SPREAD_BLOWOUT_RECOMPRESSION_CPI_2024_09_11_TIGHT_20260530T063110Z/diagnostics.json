@@ -1,0 +1,23 @@
+{
+  "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+  "event_id": "CPI_2024_09_11_TIGHT",
+  "data_period": "CPI_2024_09_11_TIGHT",
+  "robustness_window": "discovery",
+  "measured_p99_ms": 1.0,
+  "breakeven_ms": 0.25,
+  "latency_buffer_ms": -0.75,
+  "lane_required": "sub_10ms",
+  "lane_measured": "sub_10ms",
+  "lane_pass": false,
+  "overfit_risk": "low",
+  "recommendation": "REJECT",
+  "robustness_passed": true,
+  "net_pnl": -181.77499999999992,
+  "num_trades": 11,
+  "promote_candidate": false,
+  "pnl_by_latency": {
+    "0.5": -161.77499999999992,
+    "1.0": -181.77499999999992,
+    "2.0": -240.52499999999992
+  }
+}

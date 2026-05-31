@@ -18,11 +18,16 @@ _REPO = Path(__file__).resolve().parents[1]
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
+from hft3_bootstrap import setup_repo_paths
+
+setup_repo_paths()
+
 from backtest.adapters.rithmic_replay_loader import resolve_event_npz
 from backtest_pipeline.src.chi404_latency import DEFAULT_CHI404_SUMMARY, load_chi404_speed, resolve_replay_latency_ms
 from backtest_pipeline.src.event_meta import load_event_row
 from backtest_pipeline.src.replay_matrix import run_all_hypotheses_replay
 from backtest_pipeline.src.runner import ReplayRunner
+from hft3.validation.research_stamp import build_certification_stamp, format_stamp_footer
 from backtest_pipeline.src.signal_backtester import BacktestResult
 from features_engine.src.features.npz_feed import load_npz_events
 from features_engine.src.hypotheses.registry import get_active_hypotheses
@@ -89,6 +94,17 @@ def write_report(
     lifecycle_summary: dict[str, Any] | None = None,
 ) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
+    stamp = build_certification_stamp(
+        event_id=event["event_id"],
+        instrument=event["primary_symbol"],
+        event_type=event.get("event_type", "macro"),
+        latency_band=latency_ms,
+        queue_model="LogProbQueueModel2",
+        fee_model="FeeModel",
+        execution_adapter_mode="hftbacktest_simulated_exchange",
+        execution_mode="REPLAY",
+        data_version="databento_mbo",
+    )
     payload = {
         "scenario": f"{event['event_id']} event replay",
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
@@ -107,6 +123,8 @@ def write_report(
         "backtest_latency_ms": latency_ms,
         "backtest_latency_note": "Replay uses HftBacktestSimulatedExchangeAdapter; paper ack separate",
         "primary_research_engine": "replay_execution_adapter",
+        "certification_stamp": stamp,
+        "certification_footer": format_stamp_footer(stamp),
         "engines": {
             "replay_execution_adapter": {
                 "engine": "replay_execution_adapter",
@@ -168,6 +186,8 @@ def write_report(
         "- Zero trades on the old depth-only mean@0.25 path was a wiring issue, not missing edge.",
         "- Combined and per-hyp paths both route OrderIntent through HftBacktestSimulatedExchangeAdapter.",
         "- Replay body is Databento MBO for the macro event window, not Rithmic historical tape.",
+        "",
+        f"_{format_stamp_footer(stamp)}_",
     ]
     (out_dir / "report.md").write_text("\n".join(md_lines) + "\n", encoding="utf-8")
 

@@ -1,0 +1,14 @@
+{
+  "npz_path": "C:\\Users\\MSI\\Documents\\GitHub\\hft3\\data\\npz\\ES.v.0_NFP_2023_02_03_TIGHT_mbo.npz",
+  "event_id": "NFP_2023_02_03_TIGHT",
+  "event_count": 292395,
+  "gap_count": 0,
+  "duplicate_order_ids": 0,
+  "monotonic_violations": 0,
+  "ptp_note": "CHI404 probe metadata; PTP assumed on colo path",
+  "min_history_years_required": 10,
+  "history_years_available": 8.0,
+  "data_sufficient": true,
+  "chi404_run_id": "20260530T031754Z",
+  "extra": {}
+}

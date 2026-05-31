@@ -1,0 +1,10 @@
+{
+  "run_id": "SECOND_WAVE_CONTINUATION_CPI_2020_03_11_TIGHT_20260530T205720Z",
+  "model_id": "SECOND_WAVE_CONTINUATION",
+  "event_id": "CPI_2020_03_11_TIGHT",
+  "npz_path": "C:\\Users\\MSI\\Documents\\GitHub\\hft3\\data\\npz\\ES.v.0_CPI_2020_03_11_TIGHT_mbo.npz",
+  "npz_hash": "7118566e118a9fb2",
+  "seed": 42,
+  "git_sha": "28c9dfd5126b14a8171a6f949e0aea745e7e7801",
+  "measured_p99_ms": 4.105202995474916
+}

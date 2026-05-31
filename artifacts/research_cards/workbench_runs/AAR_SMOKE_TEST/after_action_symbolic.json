@@ -1,0 +1,10 @@
+{
+  "passed": true,
+  "obligations": [
+    "trade[0]: market_data_exchange_ts_ns <= market_data_receive_ts_ns",
+    "trade[0]: decision_end_ts_ns >= market_data_receive_ts_ns",
+    "trade[0]: fill_ts_ns >= order_send_ts_ns when fill present",
+    "trade[0]: tick_to_ack_us \u2248 feed + decision + send + ack"
+  ],
+  "violations": []
+}

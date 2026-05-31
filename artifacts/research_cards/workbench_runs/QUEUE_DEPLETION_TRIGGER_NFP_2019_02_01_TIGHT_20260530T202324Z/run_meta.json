@@ -1,0 +1,10 @@
+{
+  "run_id": "SECOND_WAVE_CONTINUATION0_NFP_2019_02_01_TIGHT_20260530T202324Z",
+  "model_id": "QUEUE_DEPLETION_TRIGGER",
+  "event_id": "NFP_2019_02_01_TIGHT",
+  "npz_path": "C:\\Users\\MSI\\Documents\\GitHub\\hft3\\data\\npz\\ES.v.0_NFP_2019_02_01_TIGHT_mbo.npz",
+  "npz_hash": "b84bfd8fffe64a3e",
+  "seed": 42,
+  "git_sha": "28c9dfd5126b14a8171a6f949e0aea745e7e7801",
+  "measured_p99_ms": 4.105202995474916
+}

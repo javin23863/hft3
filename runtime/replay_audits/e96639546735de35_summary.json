@@ -1,0 +1,21 @@
+{
+  "run_id": "e96639546735de35",
+  "order_intent_count": 0,
+  "accepted_count": 0,
+  "rejected_count": 0,
+  "partial_fill_count": 0,
+  "filled_count": 0,
+  "cancel_count": 0,
+  "replace_count": 0,
+  "live_broker_call_count": 0,
+  "rithmic_order_call_count": 0,
+  "total_fees": 0.0,
+  "realized_pnl": 0.0,
+  "unrealized_pnl": 0.0,
+  "max_position": 0.0,
+  "latency_band_ms": 4.094,
+  "queue_model": "LogProbQueueModel2",
+  "replay_start_time_ns": 1726057770087029152,
+  "replay_end_time_ns": 1726058099998529152,
+  "steps": 3299116
+}

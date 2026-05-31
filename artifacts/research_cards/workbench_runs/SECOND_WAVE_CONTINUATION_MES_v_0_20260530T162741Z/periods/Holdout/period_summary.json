@@ -1,0 +1,99 @@
+{
+  "name": "Holdout",
+  "gate_pass": false,
+  "evaluate_only": true,
+  "net_pnl": 259.84999999999997,
+  "num_trades": 24,
+  "expectancy": 14.767708333333331,
+  "events_run": 8,
+  "events_missing": 0,
+  "survives_cpp": false,
+  "event_results": [
+    {
+      "event_id": "NFP_2023_01_06_TIGHT",
+      "release_date": "2023-01-06",
+      "net_pnl": 112.14999999999995,
+      "num_trades": 7,
+      "expectancy": 16.021428571428565,
+      "survives_cpp_execution_delay": true,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION_NFP_2023_01_06_TIGHT_20260530T172222Z"
+    },
+    {
+      "event_id": "NFP_2023_02_03_TIGHT",
+      "release_date": "2023-02-03",
+      "net_pnl": -115.57499999999999,
+      "num_trades": 5,
+      "expectancy": -23.115,
+      "survives_cpp_execution_delay": false,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION_NFP_2023_02_03_TIGHT_20260530T172917Z"
+    },
+    {
+      "event_id": "NFP_2023_03_10_TIGHT",
+      "release_date": "2023-03-10",
+      "net_pnl": 91.275,
+      "num_trades": 2,
+      "expectancy": 45.6375,
+      "survives_cpp_execution_delay": true,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION_NFP_2023_03_10_TIGHT_20260530T173751Z"
+    },
+    {
+      "event_id": "CPI_2023_06_13_TIGHT",
+      "release_date": "2023-06-13",
+      "net_pnl": 31.474999999999998,
+      "num_trades": 1,
+      "expectancy": 31.474999999999998,
+      "survives_cpp_execution_delay": true,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION_CPI_2023_06_13_TIGHT_20260530T174729Z"
+    },
+    {
+      "event_id": "NFP_2024_01_05_TIGHT",
+      "release_date": "2024-01-05",
+      "net_pnl": 106.475,
+      "num_trades": 1,
+      "expectancy": 106.475,
+      "survives_cpp_execution_delay": true,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION_NFP_2024_01_05_TIGHT_20260530T174955Z"
+    },
+    {
+      "event_id": "NFP_2024_02_02_TIGHT",
+      "release_date": "2024-02-02",
+      "net_pnl": -92.675,
+      "num_trades": 3,
+      "expectancy": -30.891666666666666,
+      "survives_cpp_execution_delay": false,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION_NFP_2024_02_02_TIGHT_20260530T175506Z"
+    },
+    {
+      "event_id": "NFP_2024_03_08_TIGHT",
+      "release_date": "2024-03-08",
+      "net_pnl": 221.3,
+      "num_trades": 5,
+      "expectancy": 44.260000000000005,
+      "survives_cpp_execution_delay": true,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION_NFP_2024_03_08_TIGHT_20260530T180003Z"
+    },
+    {
+      "event_id": "CPI_2024_09_11_TIGHT",
+      "release_date": "2024-09-11",
+      "net_pnl": -94.57499999999999,
+      "num_trades": 0,
+      "expectancy": 0.0,
+      "survives_cpp_execution_delay": false,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION_CPI_2024_09_11_TIGHT_20260530T180731Z"
+    }
+  ],
+  "error": null,
+  "param_hash": "20c72a496bcc3370",
+  "tune_allowed": false,
+  "params_used": {
+    "signal_threshold": 0.15
+  }
+}

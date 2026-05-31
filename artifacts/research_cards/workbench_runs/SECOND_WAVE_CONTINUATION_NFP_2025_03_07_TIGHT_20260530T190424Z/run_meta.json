@@ -1,0 +1,10 @@
+{
+  "run_id": "SECOND_WAVE_CONTINUATION_NFP_2025_03_07_TIGHT_20260530T190424Z",
+  "model_id": "SECOND_WAVE_CONTINUATION",
+  "event_id": "NFP_2025_03_07_TIGHT",
+  "npz_path": "C:\\Users\\MSI\\Documents\\GitHub\\hft3\\data\\npz\\MES.v.0_NFP_2025_03_07_TIGHT_mbo.npz",
+  "npz_hash": "2074113d6845fe89",
+  "seed": 42,
+  "git_sha": "28c9dfd5126b14a8171a6f949e0aea745e7e7801",
+  "measured_p99_ms": 4.105202995474916
+}

@@ -28,7 +28,7 @@ def _cpi_npz_or_skip():
         )
     if not npz_path.is_file():
         pytest.skip(f"NPZ not on disk: {npz_path}")
-    event_meta = load_event_row(event_id, _REPO / "data_system" / "config" / "events.csv")
+    event_meta = load_event_row(event_id, _REPO / "packages" / "data_system" / "config" / "events.csv")
     return npz_path, event_meta
 
 

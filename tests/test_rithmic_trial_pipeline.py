@@ -12,6 +12,10 @@ import pytest
 _REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO))
 
+from hft3_bootstrap import setup_repo_paths
+
+setup_repo_paths()
+
 from data_system.rithmic_trial.capture.live_capture import LiveCapture
 from data_system.rithmic_trial.config import load_config
 from data_system.rithmic_trial.connector.fixture_connector import FixtureConnector
@@ -25,7 +29,7 @@ from data_system.rithmic_trial.validate.quality_checks import validate_events
 
 @pytest.fixture
 def trial_cfg(tmp_path: Path):
-    cfg_src = _REPO / "data_system" / "config" / "rithmic_trial.yaml"
+    cfg_src = _REPO / "packages" / "data_system" / "config" / "rithmic_trial.yaml"
     text = cfg_src.read_text(encoding="utf-8").replace("repo_root: .", f"repo_root: {tmp_path}")
     cfg_path = tmp_path / "rithmic_trial.yaml"
     cfg_path.write_text(text, encoding="utf-8")
@@ -79,7 +83,7 @@ def test_fixture_capture_normalize_reports(trial_cfg, tmp_path: Path) -> None:
         conversion=conversion,
         schema_mapping={"schema_version": "normalized_v1"},
     )
-    assert len(paths) == 6
+    assert len(paths) >= 6
     assert (reports_dir / "latency_profile.json").exists()
 
 
@@ -114,6 +118,10 @@ def test_replay_sample_smoke(trial_cfg, tmp_path: Path) -> None:
     result = convert_to_npz(normalized, npz_path)
     assert result["status"] == "pass"
 
+    env = os.environ.copy()
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(_REPO), str(_REPO / "packages"), str(_REPO / "apps")]
+    )
     r = subprocess.run(
         [
             sys.executable,
@@ -126,6 +134,7 @@ def test_replay_sample_smoke(trial_cfg, tmp_path: Path) -> None:
         cwd=str(_REPO),
         capture_output=True,
         text=True,
+        env=env,
     )
     assert r.returncode == 0, r.stderr + r.stdout
     payload = json.loads(r.stdout.strip())

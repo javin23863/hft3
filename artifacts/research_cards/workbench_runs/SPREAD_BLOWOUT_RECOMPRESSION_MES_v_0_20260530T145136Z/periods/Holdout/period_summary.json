@@ -1,0 +1,29 @@
+{
+  "name": "Holdout",
+  "gate_pass": false,
+  "evaluate_only": true,
+  "net_pnl": -194.27499999999992,
+  "num_trades": 11,
+  "expectancy": -17.661363636363628,
+  "events_run": 1,
+  "events_missing": 7,
+  "survives_cpp": false,
+  "event_results": [
+    {
+      "event_id": "CPI_2024_09_11_TIGHT",
+      "release_date": "2024-09-11",
+      "net_pnl": -194.27499999999992,
+      "num_trades": 11,
+      "expectancy": -17.661363636363628,
+      "survives_cpp_execution_delay": false,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SPREAD_BLOWOUT_RECOMPRESSION_CPI_2024_09_11_TIGHT_20260530T145139Z"
+    }
+  ],
+  "error": null,
+  "param_hash": "f7f540a90ef25d67",
+  "tune_allowed": false,
+  "params_used": {
+    "signal_threshold": 0.15
+  }
+}

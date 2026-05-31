@@ -1,0 +1,19 @@
+{
+  "campaign_id": "SECOND_WAVE_CONTINUATION0_MES_v_0_20260530T200734Z",
+  "model_id": "QUEUE_DEPLETION_TRIGGER",
+  "symbol": "MES.v.0",
+  "param_hash": "bd7356327d01d7e7",
+  "audit_grade": false,
+  "composition": {
+    "primary_model_id": "SECOND_WAVE_CONTINUATION0",
+    "defensive_stubs": []
+  },
+  "authority_refs": [
+    "BLUEPRINT.md \u00a78",
+    "decision_engine/python/src/walk_forward.py",
+    "docs/REVIEWER_CHARTER.md B4"
+  ],
+  "catalog_years_available": 8,
+  "min_history_years_required": 10,
+  "trial_mode": true
+}

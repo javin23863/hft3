@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hft3"
+version = "0.1.0"
+description = "Chicago CME microstructure research and execution stack"
+readme = "README.md"
+requires-python = ">=3.11"
+
+[project.scripts]
+workbench = "workbench.__main__:main"
+economic-event-universe = "economic_event_universe.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["apps", "packages"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "packages", "apps"]

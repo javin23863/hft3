@@ -1,0 +1,64 @@
+{
+  "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+  "symbol": "ZB.v.0",
+  "authority_refs": [
+    "BLUEPRINT.md \u00a75",
+    "chicago_cme_microstructure_a_plus_developer_handoff.pdf",
+    "docs/REVIEWER_CHARTER.md B4",
+    "AGENTS.md options quarantine"
+  ],
+  "missing_count": 0,
+  "estimated_cost_usd": 0.0,
+  "max_cost_usd": 30.0,
+  "events": [],
+  "options_lane_discover": {
+    "groups": [
+      "example_same_ul",
+      "example_cross_ul"
+    ],
+    "download_jobs": [
+      {
+        "group_id": "example_same_ul",
+        "role": "future",
+        "symbol": "ES.c.0",
+        "dataset": "GLBX.MDP3",
+        "output_dir": "C:\\Users\\MSI\\Documents\\GitHub\\hft3\\data\\options\\raw"
+      },
+      {
+        "group_id": "example_same_ul",
+        "role": "call",
+        "symbol": "ES.c.0",
+        "dataset": "GLBX.MDP3",
+        "output_dir": "C:\\Users\\MSI\\Documents\\GitHub\\hft3\\data\\options\\raw"
+      },
+      {
+        "group_id": "example_same_ul",
+        "role": "put",
+        "symbol": "ES.c.0",
+        "dataset": "GLBX.MDP3",
+        "output_dir": "C:\\Users\\MSI\\Documents\\GitHub\\hft3\\data\\options\\raw"
+      },
+      {
+        "group_id": "example_cross_ul",
+        "role": "spot",
+        "symbol": "SPX",
+        "dataset": "OPRA.PILLAR",
+        "output_dir": "C:\\Users\\MSI\\Documents\\GitHub\\hft3\\data\\options\\raw"
+      },
+      {
+        "group_id": "example_cross_ul",
+        "role": "call",
+        "symbol": "SPX",
+        "dataset": "OPRA.PILLAR",
+        "output_dir": "C:\\Users\\MSI\\Documents\\GitHub\\hft3\\data\\options\\raw"
+      },
+      {
+        "group_id": "example_cross_ul",
+        "role": "put",
+        "symbol": "SPX",
+        "dataset": "OPRA.PILLAR",
+        "output_dir": "C:\\Users\\MSI\\Documents\\GitHub\\hft3\\data\\options\\raw"
+      }
+    ]
+  }
+}

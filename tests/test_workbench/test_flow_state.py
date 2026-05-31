@@ -9,7 +9,7 @@ from pathlib import Path
 def test_pick_latest_event_with_aar(tmp_path: Path) -> None:
     from workbench.ui.flow_state import pick_first_event_with_aar, pick_latest_event_with_aar
 
-    base = tmp_path / "research_cards" / "workbench_runs" / "HYP_5_MES_v_0_20260101T000000Z"
+    base = tmp_path / "artifacts" / "research_cards" / "workbench_runs" / "HYP_5_MES_v_0_20260101T000000Z"
     ev1 = base / "periods" / "P1" / "events" / "EVT_A"
     ev2 = base / "periods" / "P1" / "events" / "EVT_B"
     ev1.mkdir(parents=True)
@@ -38,7 +38,7 @@ def test_poll_campaign_status_missing(tmp_path: Path) -> None:
     assert status["state"] == "idle"
 
     cid = "test_campaign"
-    job = tmp_path / "research_cards" / "workbench_runs" / cid
+    job = tmp_path / "artifacts" / "research_cards" / "workbench_runs" / cid
     job.mkdir(parents=True)
     (job / "status.json").write_text(
         json.dumps({"state": "running", "period": "P1", "event_id": "EVT_X"}),
@@ -138,7 +138,7 @@ def test_resolve_period_event_ignores_manual_while_running(tmp_path: Path, monke
             self[name] = value
 
     cid = "camp_running"
-    job = tmp_path / "research_cards" / "workbench_runs" / cid
+    job = tmp_path / "artifacts" / "research_cards" / "workbench_runs" / cid
     ev = job / "periods" / "P1" / "events" / "EVT_DONE"
     ev.mkdir(parents=True)
     (ev / "diagnostics.json").write_text("{}", encoding="utf-8")

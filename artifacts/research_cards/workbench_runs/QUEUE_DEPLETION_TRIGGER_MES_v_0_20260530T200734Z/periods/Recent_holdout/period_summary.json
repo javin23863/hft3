@@ -1,0 +1,259 @@
+{
+  "name": "Recent holdout",
+  "gate_pass": false,
+  "evaluate_only": true,
+  "net_pnl": -8433.550000000583,
+  "num_trades": 17850,
+  "expectancy": -0.47246778711487863,
+  "events_run": 24,
+  "events_missing": 0,
+  "survives_cpp": false,
+  "event_results": [
+    {
+      "event_id": "NFP_2025_01_10_TIGHT",
+      "release_date": "2025-01-10",
+      "net_pnl": -498.9000000000035,
+      "num_trades": 781,
+      "expectancy": -0.6387964148527574,
+      "survives_cpp_execution_delay": false,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION0_NFP_2025_01_10_TIGHT_20260530T215247Z"
+    },
+    {
+      "event_id": "CPI_2025_01_15_TIGHT",
+      "release_date": "2025-01-15",
+      "net_pnl": -4855.700000000573,
+      "num_trades": 5040,
+      "expectancy": -0.9634325396826533,
+      "survives_cpp_execution_delay": false,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION0_CPI_2025_01_15_TIGHT_20260530T220106Z"
+    },
+    {
+      "event_id": "NFP_2025_02_07_TIGHT",
+      "release_date": "2025-02-07",
+      "net_pnl": -242.00000000000242,
+      "num_trades": 459,
+      "expectancy": -0.5272331154684149,
+      "survives_cpp_execution_delay": false,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION0_NFP_2025_02_07_TIGHT_20260530T220839Z"
+    },
+    {
+      "event_id": "CPI_2025_02_12_TIGHT",
+      "release_date": "2025-02-12",
+      "net_pnl": 70.5250000000012,
+      "num_trades": 112,
+      "expectancy": 0.6296875000000107,
+      "survives_cpp_execution_delay": true,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION0_CPI_2025_02_12_TIGHT_20260530T221515Z"
+    },
+    {
+      "event_id": "NFP_2025_03_07_TIGHT",
+      "release_date": "2025-03-07",
+      "net_pnl": 105.17500000000072,
+      "num_trades": 295,
+      "expectancy": 0.356525423728816,
+      "survives_cpp_execution_delay": true,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION0_NFP_2025_03_07_TIGHT_20260530T222651Z"
+    },
+    {
+      "event_id": "CPI_2025_03_12_TIGHT",
+      "release_date": "2025-03-12",
+      "net_pnl": 8.625000000001094,
+      "num_trades": 234,
+      "expectancy": 0.03685897435897904,
+      "survives_cpp_execution_delay": true,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION0_CPI_2025_03_12_TIGHT_20260530T223659Z"
+    },
+    {
+      "event_id": "NFP_2025_04_04_TIGHT",
+      "release_date": "2025-04-04",
+      "net_pnl": -767.7000000000188,
+      "num_trades": 675,
+      "expectancy": -1.1373333333333613,
+      "survives_cpp_execution_delay": false,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION0_NFP_2025_04_04_TIGHT_20260530T224631Z"
+    },
+    {
+      "event_id": "CPI_2025_04_10_TIGHT",
+      "release_date": "2025-04-10",
+      "net_pnl": 267.4999999999867,
+      "num_trades": 574,
+      "expectancy": 0.4660278745644368,
+      "survives_cpp_execution_delay": true,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION0_CPI_2025_04_10_TIGHT_20260530T225221Z"
+    },
+    {
+      "event_id": "NFP_2025_05_02_TIGHT",
+      "release_date": "2025-05-02",
+      "net_pnl": -297.60000000000286,
+      "num_trades": 637,
+      "expectancy": -0.4671899529042431,
+      "survives_cpp_execution_delay": false,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION0_NFP_2025_05_02_TIGHT_20260530T225807Z"
+    },
+    {
+      "event_id": "CPI_2025_05_13_TIGHT",
+      "release_date": "2025-05-13",
+      "net_pnl": 189.37500000000037,
+      "num_trades": 199,
+      "expectancy": 0.9516331658291476,
+      "survives_cpp_execution_delay": true,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION0_CPI_2025_05_13_TIGHT_20260530T230304Z"
+    },
+    {
+      "event_id": "NFP_2025_06_06_TIGHT",
+      "release_date": "2025-06-06",
+      "net_pnl": -186.69999999999678,
+      "num_trades": 395,
+      "expectancy": -0.4726582278480931,
+      "survives_cpp_execution_delay": false,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION0_NFP_2025_06_06_TIGHT_20260530T230734Z"
+    },
+    {
+      "event_id": "CPI_2025_06_11_TIGHT",
+      "release_date": "2025-06-11",
+      "net_pnl": -1215.5000000000084,
+      "num_trades": 1214,
+      "expectancy": -1.0012355848434995,
+      "survives_cpp_execution_delay": false,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION0_CPI_2025_06_11_TIGHT_20260530T231206Z"
+    },
+    {
+      "event_id": "NFP_2025_07_03_TIGHT",
+      "release_date": "2025-07-03",
+      "net_pnl": -102.52499999998817,
+      "num_trades": 2096,
+      "expectancy": -0.048914599236635575,
+      "survives_cpp_execution_delay": false,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION0_NFP_2025_07_03_TIGHT_20260530T231855Z"
+    },
+    {
+      "event_id": "CPI_2025_07_11_TIGHT",
+      "release_date": "2025-07-11",
+      "net_pnl": -61.02500000000058,
+      "num_trades": 351,
+      "expectancy": -0.17386039886040053,
+      "survives_cpp_execution_delay": false,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION0_CPI_2025_07_11_TIGHT_20260530T232253Z"
+    },
+    {
+      "event_id": "NFP_2025_08_01_TIGHT",
+      "release_date": "2025-08-01",
+      "net_pnl": 67.87500000000736,
+      "num_trades": 794,
+      "expectancy": 0.08548488664988332,
+      "survives_cpp_execution_delay": true,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION0_NFP_2025_08_01_TIGHT_20260530T232342Z"
+    },
+    {
+      "event_id": "CPI_2025_08_12_TIGHT",
+      "release_date": "2025-08-12",
+      "net_pnl": -192.5749999999929,
+      "num_trades": 715,
+      "expectancy": -0.2693356643356544,
+      "survives_cpp_execution_delay": false,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION0_CPI_2025_08_12_TIGHT_20260530T232713Z"
+    },
+    {
+      "event_id": "NFP_2025_09_05_TIGHT",
+      "release_date": "2025-09-05",
+      "net_pnl": -190.8999999999967,
+      "num_trades": 416,
+      "expectancy": -0.45889423076922287,
+      "survives_cpp_execution_delay": false,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION0_NFP_2025_09_05_TIGHT_20260530T233432Z"
+    },
+    {
+      "event_id": "CPI_2025_09_11_TIGHT",
+      "release_date": "2025-09-11",
+      "net_pnl": 240.9499999999994,
+      "num_trades": 513,
+      "expectancy": 0.4696881091617922,
+      "survives_cpp_execution_delay": true,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION0_CPI_2025_09_11_TIGHT_20260530T234012Z"
+    },
+    {
+      "event_id": "NFP_2025_10_03_TIGHT",
+      "release_date": "2025-10-03",
+      "net_pnl": -22.325000000000607,
+      "num_trades": 370,
+      "expectancy": -0.06033783783783948,
+      "survives_cpp_execution_delay": false,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION0_NFP_2025_10_03_TIGHT_20260530T234806Z"
+    },
+    {
+      "event_id": "CPI_2025_10_15_TIGHT",
+      "release_date": "2025-10-15",
+      "net_pnl": -118.97499999999643,
+      "num_trades": 747,
+      "expectancy": -0.15927041499330177,
+      "survives_cpp_execution_delay": false,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION0_CPI_2025_10_15_TIGHT_20260530T234834Z"
+    },
+    {
+      "event_id": "NFP_2025_11_07_TIGHT",
+      "release_date": "2025-11-07",
+      "net_pnl": 66.10000000000004,
+      "num_trades": 156,
+      "expectancy": 0.42371794871794893,
+      "survives_cpp_execution_delay": true,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION0_NFP_2025_11_07_TIGHT_20260530T234947Z"
+    },
+    {
+      "event_id": "CPI_2025_11_13_TIGHT",
+      "release_date": "2025-11-13",
+      "net_pnl": -115.05000000000078,
+      "num_trades": 318,
+      "expectancy": -0.3617924528301911,
+      "survives_cpp_execution_delay": false,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION0_CPI_2025_11_13_TIGHT_20260530T235101Z"
+    },
+    {
+      "event_id": "NFP_2025_12_05_TIGHT",
+      "release_date": "2025-12-05",
+      "net_pnl": -58.17500000000054,
+      "num_trades": 293,
+      "expectancy": -0.19854948805460934,
+      "survives_cpp_execution_delay": false,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION0_NFP_2025_12_05_TIGHT_20260530T235203Z"
+    },
+    {
+      "event_id": "CPI_2025_12_11_TIGHT",
+      "release_date": "2025-12-11",
+      "net_pnl": -524.0249999999982,
+      "num_trades": 466,
+      "expectancy": -1.1245171673819703,
+      "survives_cpp_execution_delay": false,
+      "trades_vetoed_by_defense": 0,
+      "run_id": "SECOND_WAVE_CONTINUATION0_CPI_2025_12_11_TIGHT_20260530T235254Z"
+    }
+  ],
+  "error": null,
+  "param_hash": "bd7356327d01d7e7",
+  "tune_allowed": false,
+  "params_used": {
+    "signal_threshold": 0.15
+  }
+}

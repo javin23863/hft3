@@ -1,0 +1,25 @@
+{
+  "campaign_id": "SPREAD_BLOWOUT_RECOMPRESSION_MES_v_0_20260530T113839Z",
+  "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+  "symbol": "MES.v.0",
+  "param_hash": "08404c4f92383932",
+  "audit_grade": true,
+  "composition": {
+    "primary_model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+    "defensive_stubs": [
+      {
+        "model_id": "QUANTUM_SPREAD_DEFENSE",
+        "phase": "before",
+        "budget_us": 50.0,
+        "enabled": true
+      }
+    ]
+  },
+  "authority_refs": [
+    "BLUEPRINT.md \u00a78",
+    "decision_engine/python/src/walk_forward.py",
+    "docs/REVIEWER_CHARTER.md B4"
+  ],
+  "catalog_years_available": 1,
+  "min_history_years_required": 10
+}

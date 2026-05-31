@@ -223,7 +223,7 @@ def test_no_quant_x_imports():
 
 
 def test_after_action_skipped_on_fast_sweep():
-    engine_src = (REPO / "workbench" / "src" / "run" / "engine.py").read_text(encoding="utf-8")
+    engine_src = (REPO / "apps" / "workbench" / "src" / "run" / "engine.py").read_text(encoding="utf-8")
     assert "if not fast_sweep and _after_action_allowed():" in engine_src
     assert "run_after_action_report" in engine_src
 
@@ -274,7 +274,7 @@ def test_ollama_mocked_pipeline(tmp_path, monkeypatch):
 
     tmp_repo = tmp_path / "repo"
     tmp_repo.mkdir()
-    (tmp_repo / "research_cards" / "kg").mkdir(parents=True)
+    (tmp_repo / "artifacts" / "research_cards" / "kg").mkdir(parents=True)
     (tmp_repo / "integrations" / "openfoundry").mkdir(parents=True)
     (tmp_repo / "integrations" / "openfoundry" / "VENDOR.lock").write_text(
         "openfoundry=pending\nalphageometry=6777cb586cbb46beed28db12dc72c69770b68337\n",
@@ -312,7 +312,7 @@ def test_ollama_live_hawkish_fixture(tmp_path):
 
     tmp_repo = tmp_path / "repo"
     tmp_repo.mkdir()
-    (tmp_repo / "research_cards" / "kg").mkdir(parents=True)
+    (tmp_repo / "artifacts" / "research_cards" / "kg").mkdir(parents=True)
     (tmp_repo / "integrations" / "openfoundry").mkdir(parents=True)
     (tmp_repo / "integrations" / "openfoundry" / "VENDOR.lock").write_bytes(
         (REPO / "integrations" / "openfoundry" / "VENDOR.lock").read_bytes()

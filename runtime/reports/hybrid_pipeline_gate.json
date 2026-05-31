@@ -1,0 +1,51 @@
+{
+  "gate": "PDF_MODEL_4_hybrid_pipeline",
+  "status": "PASS",
+  "timestamp_utc": "2026-05-30T23:21:12.172467+00:00",
+  "event_id": "CPI_2024_09_11_TIGHT",
+  "symbol": "MES.v.0",
+  "research_card": "research_cards/PDF_MODEL_4_hybrid_replay",
+  "steps": [
+    {
+      "step": "preflight",
+      "status": "PASS",
+      "detail": "C:\\Users\\MSI\\Documents\\GitHub\\hft3\\data\\npz\\MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz"
+    },
+    {
+      "step": "unit_tests",
+      "status": "PASS",
+      "detail": "23 passed in 1.81s"
+    },
+    {
+      "step": "hybrid_backtest",
+      "status": "PASS",
+      "detail": "steps=3299116 trades=20966 balance=-15017525.5 latency=1.0ms (workstation_gate_fallback_1ms)"
+    },
+    {
+      "step": "validate_card",
+      "status": "PASS",
+      "detail": "card OK event_id=CPI_2024_09_11_TIGHT trades=20966"
+    }
+  ],
+  "backtest_summary": {
+    "model_id": "PDF_MODEL_4",
+    "engine": "pdf_hybrid",
+    "dependency_chain": [
+      "PDF_MODEL_1",
+      "PDF_MODEL_3",
+      "PDF_MODEL_4"
+    ],
+    "result": {
+      "steps": 3299116,
+      "balance": -15017525.5,
+      "fee": 0.0,
+      "num_trades": 20966,
+      "trading_volume": 20966.0,
+      "position": 2736.0
+    },
+    "latency_ms": 1.0,
+    "latency_source": "workstation_gate_fallback_1ms",
+    "gate_latency_note": "Paper order submit\u2192ack not measured; pass --latency-ms or run scripts/chi404_run_paper_latency_sweep.sh on CHI404. TCP connect is network health only \u2014 not used for execution latency. Gate used --latency-ms 1.0 workstation fallback for repeatable local PASS."
+  },
+  "repeat_command": "python scripts/run_hybrid_pipeline_gate.py --event-id CPI_2024_09_11_TIGHT --symbol MES.v.0"
+}

@@ -6,6 +6,8 @@ Baseline metrics: [CPI_2024_09_11_TIGHT_BASELINE.md](CPI_2024_09_11_TIGHT_BASELI
 
 ## 1. Macro event replay (primary research)
 
+**Backtester certification:** Every replay output includes a `certification_stamp` (T1). See [BACKTESTER_CERTIFICATION.md](BACKTESTER_CERTIFICATION.md) for T0–T4 gates.
+
 **When:** Backtest a scheduled macro window (CPI, NFP, etc.) on Databento MBO with CHI404-measured latency.
 
 ```bash
@@ -176,3 +178,21 @@ python -m workbench campaign --model HYP_5 --symbol MES.v.0 --dry-run
 **Latency authority:** C++ measured distributions from CHI404 probes — not Python wall time. See [docs/workbench/LATENCY_ARCHITECTURE.md](../workbench/LATENCY_ARCHITECTURE.md). (config, manifest, trades.parquet, report.md)
 - Wraps `SignalBacktester` (primary) and documents HftBacktest queue path via matching config
 - Does **not** replace `run_event_replay.py`; use workbench for per-model latency viability and promotion gates
+
+## 7. Economic event universe (macro calendar API)
+
+**When:** Query upcoming releases, user-timezone display, rebuild `events.csv`, or offline cross-asset L3 tensors.
+
+Full guide: [ECONOMIC_EVENT_UNIVERSE.md](ECONOMIC_EVENT_UNIVERSE.md)
+
+```bash
+PYTHONPATH=packages python -m economic_event_universe.cli validate
+python packages/data_system/scripts/build_events_from_calendar.py --dry-run
+python scripts/build_event_cross_asset_snapshot.py --event-id CPI_2024_09_11_TIGHT
+```
+
+```python
+from economic_event_universe import list_upcoming
+for ev in list_upcoming("Asia/Phnom_Penh")[:3]:
+    print(ev.event_id, ev.anchor_user_tz, ev.source_url)
+```

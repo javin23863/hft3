@@ -16,12 +16,12 @@ endif()
 
 # Feature extractor library
 add_library(hft_features
-    features_engine/cpp/src/event_context.cpp
-    features_engine/cpp/src/feature_extractor.cpp
-    features_engine/cpp/src/regime_filter.cpp
+    packages/features_engine/cpp/src/event_context.cpp
+    packages/features_engine/cpp/src/feature_extractor.cpp
+    packages/features_engine/cpp/src/regime_filter.cpp
 )
 target_include_directories(hft_features PUBLIC
-    features_engine/cpp/include
+    packages/features_engine/cpp/include
 )
 
 # Risk engine
@@ -63,3 +63,8 @@ add_executable(hft_feature_golden
     tools/feature_golden_main.cpp
 )
 target_link_libraries(hft_feature_golden PRIVATE hft_features)
+
+add_executable(hft_event_context_golden
+    tools/event_context_golden_main.cpp
+)
+target_link_libraries(hft_event_context_golden PRIVATE hft_features)

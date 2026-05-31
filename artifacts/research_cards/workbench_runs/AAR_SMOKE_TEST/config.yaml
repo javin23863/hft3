@@ -1,0 +1,4 @@
+model_id: SPREAD_BLOWOUT_RECOMPRESSION
+event_id: CPI_2024_09_11_TIGHT
+seed: 42
+latency_authority: cpp_measured

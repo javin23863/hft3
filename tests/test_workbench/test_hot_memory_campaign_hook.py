@@ -14,7 +14,7 @@ def test_dry_run_includes_hot_memory_telemetry():
     result = run_campaign(REPO, "HYP_5", "MES.v.0", dry_run=True, allow_partial=True)
     assert result.status == "DRY_RUN"
     preview_path = (
-        REPO / "research_cards" / "workbench_runs" / result.campaign_id / "dry_run_preview.json"
+        REPO / "artifacts" / "research_cards" / "workbench_runs" / result.campaign_id / "dry_run_preview.json"
     )
     preview = json.loads(preview_path.read_text(encoding="utf-8"))
     telemetry = preview["diagnostics"]["hot_memory_telemetry"]

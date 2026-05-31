@@ -1,0 +1,51 @@
+{
+  "campaign_id": "SPREAD_BLOWOUT_RECOMPRESSION_MES_v_0_20260530T074215Z",
+  "status": "FAIL",
+  "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+  "symbol": "MES.v.0",
+  "param_hash": "08404c4f92383932",
+  "periods": [
+    {
+      "name": "Discovery",
+      "gate_pass": false,
+      "evaluate_only": false,
+      "net_pnl": -1.0,
+      "num_trades": 1,
+      "expectancy": -1.0,
+      "events_run": 1,
+      "events_missing": 0,
+      "survives_cpp": false,
+      "event_results": [
+        {
+          "event_id": "CPI_2018_01_11_TIGHT",
+          "release_date": "2018-01-11",
+          "net_pnl": -1.0,
+          "num_trades": 1,
+          "expectancy": -1.0,
+          "survives_cpp_execution_delay": false,
+          "run_id": "x"
+        }
+      ],
+      "error": null
+    }
+  ],
+  "robustness_passed": true,
+  "overfit_risk": "low",
+  "walk_forward": {
+    "periods": [
+      {
+        "name": "Discovery",
+        "gate_pass": false,
+        "expectancy": -1.0,
+        "evaluate_only": false
+      }
+    ],
+    "status": "FAIL"
+  },
+  "sim_shadow_anchor": "2026-03-01",
+  "sim_shadow_cme_days": 60,
+  "sim_shadow_status": "pending_CHI404",
+  "sim_shadow_required": false,
+  "promote_candidate": false,
+  "promote_note": "Sim shadow (60 CME days on CHI404 from 2026-03-01) required before promotion \u2014 BLUEPRINT \u00a78"
+}

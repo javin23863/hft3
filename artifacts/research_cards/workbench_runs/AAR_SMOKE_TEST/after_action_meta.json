@@ -1,0 +1,15 @@
+{
+  "generated_at": "2026-05-30T09:27:34.237812+00:00",
+  "skip_reasons": [],
+  "llm_status": "ok",
+  "llm_model": "hf.co/QuantFactory/Llama-3.1-Hawkish-8B-GGUF:Q6_K",
+  "llm_elapsed_s": 304.7821114063263,
+  "llm_error": null,
+  "similar_runs_count": 4,
+  "symbolic_passed": true,
+  "vendor_shas": {
+    "openfoundry": "pending_clone",
+    "alphageometry": "6777cb586cbb46beed28db12dc72c69770b68337"
+  },
+  "report_written": true
+}
