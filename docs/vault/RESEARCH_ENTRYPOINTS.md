@@ -11,14 +11,15 @@ Baseline metrics: [CPI_2024_09_11_TIGHT_BASELINE.md](CPI_2024_09_11_TIGHT_BASELI
 ```bash
 python scripts/run_event_replay.py \
   --event-id CPI_2024_09_11_TIGHT \
-  --chi404-summary runtime/latency_reports/latency_summary.json \
-  --skip-hftbacktest
+  --chi404-summary runtime/latency_reports/latency_summary.json
 ```
 
 - Resolves window from `data_system/config/events.csv` (never `date +%F` as research key).
-- **Primary engine:** `event_accurate_mbo` (`SignalBacktester` + full MBO pipeline).
-- **Secondary engine:** `hftbacktest_loop` (queue-realistic; slow — omit `--skip-hftbacktest` only when needed).
+- **Primary engine:** `replay_execution_adapter` (`ReplaySession` + `HftBacktestSimulatedExchangeAdapter` + combined hypotheses).
+- **Secondary engine:** `per_hypothesis_replay` (same adapter contract, one hypothesis per session).
+- Use `--skip-combined-replay` to run per-hypothesis matrix only (faster).
 - Output: `research_cards/<event_id>_replay/`
+- Lifecycle audits: `runtime/replay_audits/{run_id}_order_lifecycle.jsonl`
 
 Equivalent:
 

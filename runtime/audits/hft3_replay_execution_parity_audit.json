@@ -1,0 +1,106 @@
+{
+  "audit_id": "hft3_replay_execution_parity",
+  "timestamp_utc": "2026-05-31T00:00:00Z",
+  "repo_head_at_audit": "184e5df",
+  "questions": {
+    "1_combined_strategy_submits_during_replay": {
+      "answer": "partial",
+      "detail": "Yes on hftbacktest_loop when use_combined_strategy=True; no on primary SignalBacktester path",
+      "evidence": [
+        "backtest_pipeline/src/hft_strategy.py:118-129",
+        "backtest_pipeline/src/runner.py:85-86",
+        "scripts/run_event_replay.py:269-275"
+      ]
+    },
+    "2_where_decision_stops": {
+      "answer": "SignalBacktester stops at signal scoring + deferred _apply_pending fill sim; Hft path calls hbt.submit_* directly without OrderIntent/adapter",
+      "evidence": [
+        "backtest_pipeline/src/signal_backtester.py:205-226",
+        "backtest_pipeline/src/hft_strategy.py:123-129"
+      ]
+    },
+    "3_scores_vs_order_intent": {
+      "answer": "primary path emits scores only; no OrderIntent type exists",
+      "evidence": [
+        "backtest_pipeline/src/signal_backtester.py:206-226",
+        "docs/vault/RESEARCH_ENTRYPOINTS.md:19"
+      ]
+    },
+    "4_different_code_path_from_paper_live": {
+      "answer": true,
+      "detail": "Three lanes: SignalBacktester, direct hbt, rithmic trial capture (no unified OMS)",
+      "evidence": [
+        "data_system/rithmic_trial/connector/__init__.py:11",
+        "rithmic_gateway/src/rithmic_adapter.cpp:43"
+      ]
+    },
+    "5_backtest_do_not_submit_branch": {
+      "answer": "de_facto not literal",
+      "detail": "--skip-hftbacktest and docs recommend skipping HftBacktest; skip_hft=True default in research_runner",
+      "evidence": [
+        "scripts/run_event_replay.py:185-187,269",
+        "backtest_pipeline/src/research_runner.py:24,138"
+      ]
+    },
+    "6_hftbacktest_order_methods_called": {
+      "answer": true,
+      "methods": ["submit_buy_order", "submit_sell_order", "cancel (pdf_hybrid only)"],
+      "evidence": [
+        "backtest_pipeline/src/hft_strategy.py:127-129",
+        "backtest_pipeline/src/pdf_hybrid_strategy.py:253,367-370"
+      ]
+    },
+    "7_simulated_fills_cancels_rejects": {
+      "answer": "partial",
+      "detail": "HftBacktest engine fills via queue model; not surfaced as lifecycle events; SignalBacktester simulates fills in _apply_pending",
+      "evidence": [
+        "backtest_pipeline/src/runner.py:47-49",
+        "backtest_pipeline/src/signal_backtester.py:64-115"
+      ]
+    },
+    "8_inventory_updated_from_fills": {
+      "answer": "partial",
+      "detail": "hbt.position(0) in strategy; SignalBacktester _HypSimState.position",
+      "evidence": [
+        "backtest_pipeline/src/hft_strategy.py:68,116",
+        "backtest_pipeline/src/signal_backtester.py:44-50"
+      ]
+    },
+    "9_pnl_updated_from_fills": {
+      "answer": "partial",
+      "detail": "Terminal hbt.state_values(0) or SignalBacktester _finalize mark-to-market",
+      "evidence": [
+        "backtest_pipeline/src/runner.py:91-98",
+        "backtest_pipeline/src/signal_backtester.py:130-151"
+      ]
+    },
+    "10_lifecycle_events_logged": {
+      "answer": false,
+      "evidence": ["scripts/run_event_replay.py:102 live_orders_sent hardcoded"]
+    },
+    "11_latency_bands_on_lifecycle": {
+      "answer": "partial",
+      "detail": "constant_order_latency on BacktestAsset; SignalBacktester uses deferred exec_time_ns",
+      "evidence": [
+        "backtest_pipeline/src/runner.py:38-46",
+        "backtest_pipeline/src/signal_backtester.py:175,210"
+      ]
+    },
+    "12_queue_models_applied": {
+      "answer": true,
+      "evidence": ["backtest_pipeline/src/runner.py:17-20,49"]
+    },
+    "13_order_objects_compatible_across_modes": {
+      "answer": false,
+      "detail": "No shared OrderIntent; hbt oid ints vs trial NDJSON vs C++ stub"
+    },
+    "14_live_broker_risk_in_replay": {
+      "answer": false,
+      "detail": "No live adapter wired to replay today"
+    },
+    "15_smallest_patch": {
+      "answer": "Insufficient to add cancel-before-submit only; requires execution/ package, ReplaySession, adapter factory, deprecate SignalBacktester fills, lifecycle audit"
+    }
+  },
+  "smallest_safe_patch_hypothesis": "Wire ReplaySession + HftBacktestSimulatedExchangeAdapter; refactor strategies to emit OrderIntent; replace SignalBacktester primary path"
+}

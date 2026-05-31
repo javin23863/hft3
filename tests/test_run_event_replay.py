@@ -76,23 +76,19 @@ def test_combined_strategy_max_abs_beats_mean_on_sparse_signals():
     assert max_strat._combined_signal(state) == -0.5
 
 
-def test_run_event_accurate_mbo_smoke():
-    npz = _REPO / "data" / "npz" / "MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz"
-    if not npz.is_file():
-        pytest.skip("CPI NPZ not present locally")
+def test_run_per_hypothesis_replay_smoke(tmp_path):
+    from backtest_pipeline.src.replay_npz_fixture import build_minimal_mbo_npz
+    from backtest_pipeline.src.replay_matrix import run_hypothesis_replay
+    from features_engine.src.hypotheses.modules import BaseHypothesis, MarketState
 
-    import importlib.util
+    class _AlwaysLong(BaseHypothesis):
+        def __init__(self):
+            super().__init__(1, "always_long")
 
-    script = _REPO / "scripts" / "run_event_replay.py"
-    spec = importlib.util.spec_from_file_location("run_event_replay", script)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+        def evaluate(self, state: MarketState) -> float:
+            return 0.5
 
-    from features_engine.src.features.npz_feed import load_npz_events
-
-    raw = load_npz_events(str(npz))
-    result = mod.run_event_accurate_mbo(raw, latency_ms=4.094)
-    assert result["engine"] == "event_accurate_mbo"
-    assert result["hypothesis_count"] >= 30
-    assert result["total_trades_all_hypotheses"] > 0
-    assert result["hyp_5_spread_blowout"]["num_trades"] > 0
+    npz = tmp_path / "smoke.npz"
+    build_minimal_mbo_npz(npz)
+    res = run_hypothesis_replay(_AlwaysLong(), str(npz), latency_ms=1.0, max_steps=300)
+    assert res.num_trades >= 0

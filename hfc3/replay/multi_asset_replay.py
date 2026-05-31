@@ -46,8 +46,15 @@ def run_l3_cross_asset_event_replay(
 
     band_results: List[Dict[str, Any]] = []
     for band in latency_bands:
-        result = runner.run_replay(latency_ms=float(band), queue_model=queue_model, use_combined_strategy=False)
-        band_results.append({"latency_ms": band, "steps": result.get("steps"), "status": result.get("status")})
+        result = runner.run_replay(latency_ms=float(band), queue_model=queue_model, use_combined_strategy=True)
+        band_results.append(
+            {
+                "latency_ms": band,
+                "steps": result.get("steps"),
+                "order_intent_count": result.get("order_intent_count"),
+                "num_trades": result.get("num_trades"),
+            }
+        )
 
     out_dir = repo_root / "runtime" / "reports" / "l3_cross_asset_replay"
     out_dir.mkdir(parents=True, exist_ok=True)

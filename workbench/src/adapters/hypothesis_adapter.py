@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import random
 import time
+from pathlib import Path
 from typing import Any, List
 
-from backtest_pipeline.src.signal_backtester import BacktestResult, SignalBacktester
+from backtest_pipeline.src.replay_matrix import run_hypothesis_replay
+from backtest_pipeline.src.signal_backtester import BacktestResult
 from features_engine.src.features.npz_feed import iter_mbo_events
 from features_engine.src.hypotheses.modules import BaseHypothesis
 from features_engine.src.pipeline.market_state_pipeline import MarketStatePipeline
@@ -47,6 +49,8 @@ class HypothesisAdapter(WorkbenchModel):
         errs: List[str] = []
         if ctx.events is None or len(ctx.events) == 0:
             errs.append("empty event array")
+        elif not ctx.metadata.get("npz_path"):
+            errs.append("npz_path required for adapter-backed replay")
         if ctx.metadata.get("data_sufficient") is False:
             errs.append("DATA_INSUFFICIENT")
         return errs
@@ -66,11 +70,27 @@ class HypothesisAdapter(WorkbenchModel):
     def run_backtest(self, ctx: RunContext) -> BacktestResult:
         params = ctx.metadata.get("strategy_params") or {}
         threshold = float(params.get("signal_threshold", DEFAULT_STRATEGY_PARAMS["signal_threshold"]))
-        bt = SignalBacktester(signal_threshold=threshold)
+        npz_path = ctx.metadata.get("npz_path")
+        if not npz_path:
+            import tempfile
+
+            from features_engine.src.features.npz_feed import load_npz_events
+
+            tmp = Path(tempfile.gettempdir()) / f"wb_events_{ctx.run_id}.npz"
+            import numpy as np
+
+            np.savez_compressed(tmp, data=ctx.events)
+            npz_path = str(tmp)
+
         rng = random.Random(ctx.seed)
         latency_ms = ctx.latency_policy.total_ms_for_backtest(rng)
         t0 = time.perf_counter()
-        result = bt.run_hypothesis(self._effective_hypothesis(ctx), ctx.events, latency_ms=latency_ms)
+        result = run_hypothesis_replay(
+            self._effective_hypothesis(ctx),
+            str(npz_path),
+            latency_ms=latency_ms,
+            signal_threshold=threshold,
+        )
         python_us = (time.perf_counter() - t0) * 1e6
         ctx.metadata["python_research_runtime_us"] = python_us
         ctx.metadata["cpp_backtest_latency_ms"] = latency_ms
