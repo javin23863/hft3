@@ -1,0 +1,50 @@
+# Rithmic R|API Plus v13.7.0.0 - Test (Orangeburg) configuration
+# System: Rithmic Test
+# Gateway: Orangeburg
+# DO NOT commit credentials — use .env for RITHMIC_USERNAME / RITHMIC_PASSWORD
+
+api_version: "13.7.0.0"
+system: "Rithmic Test"
+gateway: "Orangeburg"
+
+engine_params:
+  app_name: "HFT3"
+  app_version: "1.0"
+  # sAdmCnnctPt removed in v12.1.0.0+ — not needed
+
+environment:
+  MML_DMN_SRVR_ADDR: "rituz00100.00.rithmic.com:65000~rituz00100.00.rithmic.net:65000~rituz00100.00.theomne.net:65000~rituz00100.00.theomne.com:65000"
+  MML_DOMAIN_NAME: "rithmic_uat_dmz_domain"
+  MML_LIC_SRVR_ADDR: "rituz00100.00.rithmic.com:56000~rituz00100.00.rithmic.net:56000~rituz00100.00.theomne.net:56000~rituz00100.00.theomne.com:56000"
+  MML_LOC_BROK_ADDR: "rituz00100.00.rithmic.com:64100"
+  MML_LOGGER_ADDR: "rituz00100.00.rithmic.com:45454~rituz00100.00.rithmic.net:45454~rituz00100.00.theomne.net:45454~rituz00100.00.theomne.com:45454"
+  MML_LOG_TYPE: "log_net"
+  # MML_SSL_CLNT_AUTH_FILE: set at runtime — path to etc/rithmic_ssl_cert_auth_params
+  # USER: set at runtime from RITHMIC_USERNAME env var
+
+repository_login:
+  sCnnctPt: "login_agent_repositoryc"
+
+login_params:
+  # Market data connect point (tick data, depth)
+  sMdCnnctPt: "login_agent_tpc"
+  # Alternative for aggregated market data:
+  # sMdCnnctPt: "login_agent_tp_aggc"
+  # Trading system (order entry)
+  sTsCnnctPt: "login_agent_opc"
+  # Historical data
+  sIhCnnctPt: "login_agent_historyc"
+  # PnL
+  sPnlCnnctPt: "login_agent_pnlc"
+
+ssl:
+  # Relative path from rithmic_gateway/RApiPlus/13.7.0.0/etc/
+  cert_file: "rithmic_ssl_cert_auth_params"
+
+sdk_paths:
+  # Linux x86_64 (CHI404)
+  linux_x86_64: "rithmic_gateway/RApiPlus/13.7.0.0/linux-gnu-4.18-x86_64/lib"
+  # Windows (development)
+  win10: "rithmic_gateway/RApiPlus/13.7.0.0/win10/lib"
+  # Headers
+  include: "rithmic_gateway/RApiPlus/13.7.0.0/include/RApiPlus.h"

@@ -102,6 +102,8 @@ chi404_infra.tgz
 *.tgz
 _rithmic_staging/
 rithmic_portable.zip
+# Rithmic R|API Plus SDK (proprietary — download separately, do not commit)
+rithmic_gateway/RApiPlus/
 
 # IDEs
 .vscode/

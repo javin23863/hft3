@@ -1,6 +1,7 @@
 # Rithmic trial lane — CHI404 colo only for live capture (BLUEPRINT §4).
 # Workstation: use connector fixture + pytest only.
 enabled: false
+# connector options: fixture (offline), rtrader (R|Trader VM bridge), rithmic_api (R|API Plus direct)
 connector: fixture
 symbol: MES
 exchange: CME
