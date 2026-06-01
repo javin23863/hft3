@@ -11,28 +11,31 @@ from pathlib import Path
 def _repo_root() -> Path:
     """Resolve repo root from this script's location (launcher sets PYTHONPATH)."""
     script_repo = Path(__file__).resolve().parents[1]
-    if (script_repo / "workbench").is_dir():
+    if (script_repo / "apps" / "workbench").is_dir():
         return script_repo
     for part in os.environ.get("PYTHONPATH", "").split(os.pathsep):
         part = part.strip()
         if not part:
             continue
         candidate = Path(part).resolve()
-        if (candidate / "workbench").is_dir():
+        if (candidate / "apps" / "workbench").is_dir():
             return candidate
     return script_repo
 
 
 def _bootstrap_sys_path(repo: Path) -> None:
     repo_str = str(repo)
-    if repo_str not in sys.path:
-        sys.path.insert(0, repo_str)
-    os.environ.setdefault("PYTHONPATH", repo_str)
+    apps_str = str(repo / "apps")
+    pkg_str = str(repo / "packages")
+    for p in (repo_str, pkg_str, apps_str):
+        if p not in sys.path:
+            sys.path.insert(0, p)
+    os.environ.setdefault("PYTHONPATH", f"{repo_str}{os.pathsep}{pkg_str}{os.pathsep}{apps_str}")
 
 
 def _assert_catalog_keys_namespaced(repo: Path) -> None:
     """Fail fast when campaign_panel still uses global catalog_search keys."""
-    panel_path = repo / "workbench" / "ui" / "campaign_panel.py"
+    panel_path = repo / "apps" / "workbench" / "ui" / "campaign_panel.py"
     text = panel_path.read_text(encoding="utf-8")
     forbidden = (
         'key="catalog_search"',
