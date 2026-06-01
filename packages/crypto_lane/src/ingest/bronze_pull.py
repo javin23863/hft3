@@ -1,6 +1,7 @@
 """Pull bronze parquet from B2 into data/crypto/bronze cache."""
 from __future__ import annotations
 
+import time
 from datetime import date, datetime, timedelta
 from typing import Iterable
 
@@ -87,10 +88,25 @@ def pull_bronze(
     if "mempool" in wanted:
         btc_sym = sym.get("bitcoind", "BTC")
         for day in _date_range(start_d, end_d):
-            try:
-                read_bronze_day("bitcoind", btc_sym, day, "mempool_snapshot_15m")
-                counts["downloaded"] += 1
-            except BronzeReadError:
+            key = bronze_key("bitcoind", btc_sym, day, "mempool_snapshot_15m")
+            cache_path = _local_cache_path(key)
+            if cache_path.is_file():
+                counts["skipped"] += 1
+                continue
+            succeeded = False
+            for attempt in range(3):
+                try:
+                    # Empty frame is treated as success (matches original semantics:
+                    # an empty read means the day exists in bronze but had no
+                    # mempool snapshots — not a transient error).
+                    read_bronze_day("bitcoind", btc_sym, day, "mempool_snapshot_15m")
+                    counts["downloaded"] += 1
+                    succeeded = True
+                    break
+                except Exception:
+                    if attempt < 2:
+                        time.sleep(2 ** attempt)
+            if not succeeded:
                 counts["errors"] += 1
 
     return counts

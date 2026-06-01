@@ -34,22 +34,32 @@ def test_measure_live_ws_rtt_saves_profile(tmp_path, monkeypatch):
     monkeypatch.setattr("crypto_lane.src.align.latency_profile.venue_profiles_path", lambda: tmp_path / "venue_profiles.json")
     monkeypatch.setattr("crypto_lane.src.align.latency_profile.latency_dir", lambda: tmp_path)
 
-    mock_ws = AsyncMock()
-    mock_ws.ping = AsyncMock(return_value=b"\x00")
+    # ws.ping() must return an awaitable that resolves on pong
+    async def run_test():
+        pong_future: asyncio.Future = asyncio.get_event_loop().create_future()
+        pong_future.set_result(None)
 
-    mock_cm = MagicMock()
-    mock_cm.__aenter__ = AsyncMock(return_value=mock_ws)
-    mock_cm.__aexit__ = AsyncMock(return_value=False)
+        async def fake_ping():
+            return pong_future
 
-    mock_websockets = MagicMock()
-    mock_websockets.connect = MagicMock(return_value=mock_cm)
-    mock_websockets.exceptions = MagicMock()
-    mock_websockets.exceptions.WebSocketException = Exception
+        mock_ws = AsyncMock()
+        mock_ws.ping = fake_ping
 
-    with patch.dict("sys.modules", {"websockets": mock_websockets}):
-        profile = asyncio.run(measure_live_ws_rtt("binance_perp"))
-        assert profile.source.startswith("live_measured:")
-        assert profile.venue == "binance_perp"
+        mock_cm = MagicMock()
+        mock_cm.__aenter__ = AsyncMock(return_value=mock_ws)
+        mock_cm.__aexit__ = AsyncMock(return_value=False)
+
+        mock_websockets = MagicMock()
+        mock_websockets.connect = MagicMock(return_value=mock_cm)
+        mock_websockets.exceptions = MagicMock()
+        mock_websockets.exceptions.WebSocketException = Exception
+
+        with patch.dict("sys.modules", {"websockets": mock_websockets}):
+            profile = await measure_live_ws_rtt("binance_perp")
+            assert profile.source.startswith("live_measured:")
+            assert profile.venue == "binance_perp"
+
+    asyncio.run(run_test())
 
 
 def test_measure_live_ws_rtt_fallback_on_oserror():

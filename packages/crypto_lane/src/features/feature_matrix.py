@@ -47,6 +47,13 @@ def build_labeled_frame(
             how="left",
         )
 
+    if "l2_data_quality_flag" in ticks.columns:
+        out = out.join(
+            ticks.select(["exchange_timestamp", "l2_data_quality_flag"]),
+            on="exchange_timestamp",
+            how="left",
+        )
+
     if "validation_period" in ticks.columns:
         out = out.join(
             ticks.select(["exchange_timestamp", "validation_period"]),
@@ -115,17 +122,25 @@ def build_labeled_frame(
             if col in out.columns:
                 out = out.with_columns(pl.when(perp_ok).then(pl.col(col)).otherwise(None).alias(col))
 
+    if "l2_data_quality_flag" in out.columns:
+        l2_flag = out["l2_data_quality_flag"]
+        l2_ok = l2_flag == 1
+        for col in ("exchange_spread", "exchange_depth", "exchange_order_imbalance"):
+            if col in out.columns:
+                out = out.with_columns(pl.when(l2_ok).then(pl.col(col)).otherwise(None).alias(col))
+
     if "is_pit_safe" in out.columns:
         pit_col = out["is_pit_safe"]
+        # Empty PIT column cannot be 'safe' — refuse to stamp provenance as PIT-safe.
         is_pit_safe_all = (
-            pit_col.null_count() == 0 and bool((pit_col == True).all())
+            len(pit_col) > 0 and pit_col.null_count() == 0 and bool((pit_col == True).all())
         )
     else:
         is_pit_safe_all = True
     if "staleness_delta_ms" in out.columns and out.height:
-        avg_staleness = float(out["staleness_delta_ms"].max())
+        worst_staleness_ms = float(out["staleness_delta_ms"].max())
     else:
-        avg_staleness = 0.0
+        worst_staleness_ms = 0.0
     node_flag = int(out["btc_node_data_available_flag"].min()) if "btc_node_data_available_flag" in out.columns else (1 if include_btc_node else 0)
     if "T_avail" in out.columns and "T_exch_true" in out.columns and out.height:
         worst = out.sort("staleness_delta_ms", descending=True).head(1)
@@ -139,7 +154,8 @@ def build_labeled_frame(
         source=data_provenance_source(bt),
         t_avail_ns=t_avail_ns,
         t_exch_true_ns=t_exch_ns,
-        staleness_delta_ms=avg_staleness,
+        # See FeatureProvenance docstring: this is worst-case (max) staleness.
+        staleness_delta_ms=worst_staleness_ms,
         is_pit_safe=is_pit_safe_all,
         btc_node_data_available_flag=node_flag,
     )

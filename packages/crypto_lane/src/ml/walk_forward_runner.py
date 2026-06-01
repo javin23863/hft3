@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,91 @@ from crypto_lane.src.ml.embargo import horizon_steps_from_ms, resolve_embargo_st
 from crypto_lane.src.ml.holdout_gate import run_holdout_gate
 from crypto_lane.src.ml.walk_forward import purged_expanding_folds
 from crypto_lane.src.types import repo_root_from_lane
+
+
+CHI404_ORDER_ACK_STATUS = "INSUFFICIENT (12/1000+ pairs; see HANDOFF_2026_06_02.md known-gaps)"
+
+
+def deflated_sharpe_cdf(observed_sharpe: float, n_trials: int, n_obs: int, skew: float = 0.0, kurt: float = 3.0) -> float:
+    """
+    Deflated Sharpe CDF (Bailey & Lopez de Prado, 2014, simplified).
+
+    Returns the probability P(Z <= z) where z is the standardized gap
+    between the observed Sharpe and the expected-max Sharpe under the null
+    (with multiple-testing correction for `n_trials`).
+
+    The returned value is the NORMAL CDF of the test statistic, in [0, 1].
+    Higher means the observed Sharpe is more extreme (less likely under the
+    null). It is NOT a "ratio" and is NOT a p-value. To convert to a
+    one-sided p-value use `1 - deflated_sharpe_cdf(...)`.
+
+    Args:
+        observed_sharpe: The observed (in-sample or OOS) Sharpe ratio.
+        n_trials: Number of independent trials (configurations attempted).
+        n_obs: Number of observations (bars/rows).
+        skew: Return skewness (default 0).
+        kurt: Return kurtosis (default 3 = Gaussian).
+
+    Returns:
+        CDF value in [0, 1]. Higher is more extreme.
+    """
+    if n_trials <= 0 or n_obs <= 2:
+        return 0.0
+    from math import lgamma, sqrt, erf
+    if n_trials > 1:
+        inner = 2.0 * lgamma(n_trials / 2.0 + 0.5) - lgamma(n_trials / 2.0) - n_trials * 0.5 * 0.5772
+        e_max = sqrt(inner) if inner > 0 else 0.0
+    else:
+        e_max = 0.0
+    se = 1.0 / sqrt(n_obs - 1.0)
+    denom = se * (1.0 + (skew * observed_sharpe) / 2.0 + ((kurt - 1.0) * observed_sharpe ** 2) / 6.0)
+    if denom == 0.0:
+        return 0.0
+    z = (observed_sharpe - e_max) / denom
+    return 0.5 * (1.0 + erf(z / sqrt(2.0)))
+
+
+# Backward-compat alias. New code should use deflated_sharpe_cdf directly.
+deflated_sharpe_ratio = deflated_sharpe_cdf
+
+
+def benjamini_hochberg(pvalues: list[float], alpha: float = 0.05) -> list[bool]:
+    """
+    Benjamini-Hochberg FDR correction (canonical step-up procedure).
+
+    Walk p-values in ascending order; find the largest k such that
+    p_(k) <= alpha * k / n; reject all p_(i) for i <= k. Returns a
+    list of booleans aligned with the input order.
+
+    Reference: Benjamini & Hochberg (1995), JRSS-B 57(1).
+    """
+    n = len(pvalues)
+    if n == 0:
+        return []
+    indexed = sorted(enumerate(pvalues), key=lambda t: t[1])
+    rejected = [False] * n
+    k_max = -1
+    for rank, (orig_idx, p) in enumerate(indexed, start=1):
+        if p <= alpha * rank / n:
+            k_max = rank
+    if k_max > 0:
+        for rank, (orig_idx, _) in enumerate(indexed, start=1):
+            if rank <= k_max:
+                rejected[orig_idx] = True
+    return rejected
+
+
+def _count_trials_per_candidate() -> int:
+    """Honest trial count for the current smoke run (one Ridge baseline per candidate)."""
+    return 1
+
+
+def _ic_to_pvalue(ic: float, n_obs: int) -> float:
+    """Two-sided normal-approximation p-value for an information coefficient."""
+    if n_obs <= 1:
+        return 1.0
+    z = abs(ic) * math.sqrt(n_obs)
+    return 2.0 * (1.0 - 0.5 * (1.0 + math.erf(z / math.sqrt(2.0))))
 
 
 def _all_label_names() -> frozenset[str]:
@@ -472,6 +558,14 @@ def run_smoke(candidate_id: str, output_dir: str | Path | None = None) -> dict[s
     if abs_ic > 0.995:
         reject_reasons.append("suspiciously perfect OOS IC on fixture")
 
+    n_trials = _count_trials_per_candidate()
+    n_obs_primary = int(primary.get("n_rows", 0)) or 200
+    headline_ic = float(primary.get("oos_ic_baseline_mean", 0.0))
+    sharpe_proxy = headline_ic * math.sqrt(max(n_obs_primary, 1))
+    dsr = deflated_sharpe_cdf(sharpe_proxy, n_trials, n_obs_primary)
+    pvalue = _ic_to_pvalue(headline_ic, n_obs_primary)
+    bh_rejected = benjamini_hochberg([pvalue])[0]
+
     report: dict[str, Any] = {
         "candidate_id": candidate_id,
         "hypothesis_id": hypothesis_id,
@@ -493,6 +587,13 @@ def run_smoke(candidate_id: str, output_dir: str | Path | None = None) -> dict[s
         "embargo_steps": primary.get("embargo_steps"),
         "pass_fail": "pass" if not reject_reasons else "fail",
         "rejection_reason": "; ".join(reject_reasons) if reject_reasons else None,
+        "n_trials": n_trials,
+        # Report key kept as "deflated_sharpe_ratio" for backward compat;
+        # the value is the CDF (higher = more extreme), not a ratio.
+        # Use 1 - value for a one-sided p-value.
+        "deflated_sharpe_ratio": dsr,
+        "bh_rejected": bh_rejected,
+        "chi404_order_ack_status": CHI404_ORDER_ACK_STATUS,
     }
 
     out = Path(output_dir or repo_root_from_lane() / "research_cards" / "crypto" / candidate_id)
@@ -506,4 +607,14 @@ def run_smoke(candidate_id: str, output_dir: str | Path | None = None) -> dict[s
 
 def run_all_smokes() -> list[dict[str, Any]]:
     from crypto_lane.src.ml.candidate_registry import discover_candidates
-    return [run_smoke(c["candidate_id"]) for c in discover_candidates()]
+    reports = [run_smoke(c["candidate_id"]) for c in discover_candidates()]
+    pvalues: list[float] = []
+    for r in reports:
+        primary = r["runs"].get("with_btc_node") or r["runs"].get("without_btc_node") or {}
+        n_obs = int(primary.get("n_rows", 0)) or 200
+        ic = float(primary.get("oos_ic_baseline_mean", 0.0))
+        pvalues.append(_ic_to_pvalue(ic, n_obs))
+    rejected = benjamini_hochberg(pvalues)
+    for r, rej in zip(reports, rejected):
+        r["bh_rejected"] = bool(rej)
+    return reports

@@ -73,6 +73,7 @@ def _mid_from_klines(df: pl.DataFrame, prefix: str) -> pl.DataFrame:
 
 
 def build_spot_perp_ticks(start: str, end: str) -> pl.DataFrame:
+    """Build spot/perp ticks; `l2_data_quality_flag` is 0 here (L2 wiring is future work)."""
     sym = _symbol_map()
     start_d = _parse_date(start)
     end_d = _parse_date(end)
@@ -129,11 +130,21 @@ def build_spot_perp_ticks(start: str, end: str) -> pl.DataFrame:
         pl.col("perp_mid").alias("perp_mid_okx"),
         pl.col("funding_rate").alias("funding_rate_binance"),
         pl.col("funding_rate").alias("funding_rate_okx"),
-        (pl.col("spot_mid").log().diff()).fill_null(0.0).alias("spot_return"),
-        (pl.col("perp_mid").log().diff()).fill_null(0.0).alias("perp_return"),
+        pl.when((pl.col("spot_mid") > 0) & (pl.col("spot_mid").shift(1) > 0))
+          .then(pl.col("spot_mid").log() - pl.col("spot_mid").shift(1).log())
+          .otherwise(0.0)
+          .alias("spot_return"),
+        pl.when((pl.col("perp_mid") > 0) & (pl.col("perp_mid").shift(1) > 0))
+          .then(pl.col("perp_mid").log() - pl.col("perp_mid").shift(1).log())
+          .otherwise(0.0)
+          .alias("perp_return"),
         pl.lit(0.0).alias("bid_ask_spread"),
         pl.lit(0.0).alias("depth_btc"),
         pl.lit(0.0).alias("order_imbalance"),
+        # l2_data_quality_flag default 0: no L2 source is wired into normalize_all
+        # yet. When binance_l2_recorder output is joined here, set this to 1
+        # downstream so the feature_matrix null-gate releases spread/depth.
+        pl.lit(0).alias("l2_data_quality_flag"),
         pl.lit(1 if perp_is_real else 0).alias("perp_data_quality_flag"),
     ])
     out = _assign_validation_periods(out.sort("exchange_timestamp"))
@@ -141,7 +152,7 @@ def build_spot_perp_ticks(start: str, end: str) -> pl.DataFrame:
         "exchange_timestamp", "validation_period", "spot_mid", "perp_mid",
         "perp_mid_binance", "perp_mid_okx", "funding_rate", "funding_rate_binance",
         "funding_rate_okx", "spot_return", "perp_return", "bid_ask_spread",
-        "depth_btc", "order_imbalance", "perp_data_quality_flag",
+        "depth_btc", "order_imbalance", "l2_data_quality_flag", "perp_data_quality_flag",
     ]
     return out.select(cols)
 

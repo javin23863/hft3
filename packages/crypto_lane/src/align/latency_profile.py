@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import threading as _threading
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -15,6 +16,18 @@ from crypto_lane.src.align.clock_sync import (
 )
 from crypto_lane.src.config_loader import load_universe
 from crypto_lane.src.ingest.paths import data_root
+
+try:
+    import fcntl as _fcntl
+except ImportError:
+    _fcntl = None
+try:
+    import msvcrt as _msvcrt
+except ImportError:
+    _msvcrt = None
+
+_INTRA_PROCESS_LOCKS: dict = {}
+_INTRA_PROCESS_LOCKS_GUARD = _threading.Lock()
 
 MAX_CLOCK_DRIFT_MS = 5000.0
 
@@ -190,9 +203,10 @@ async def measure_live_ws_rtt(venue: str, *, url: str | None = None, timeout_s: 
     import asyncio
 
     try:
-        ping_ns = time.time_ns()
-        async with websockets.connect(ws_url, close_timeout=float(timeout_s)) as ws:
-            await ws.ping()
+        async with websockets.connect(ws_url, open_timeout=float(timeout_s), close_timeout=float(timeout_s)) as ws:
+            ping_ns = time.time_ns()
+            pong_waiter = await ws.ping()
+            await asyncio.wait_for(pong_waiter, timeout=timeout_s)
             pong_ns = time.time_ns()
         off = exchange_offset_from_ws_rtt(ping_ns, pong_ns, venue=venue)
         profile = VenueLatencyProfile(
@@ -204,6 +218,10 @@ async def measure_live_ws_rtt(venue: str, *, url: str | None = None, timeout_s: 
         save_venue_profile(profile)
         return profile
     except (OSError, asyncio.TimeoutError, websockets.exceptions.WebSocketException):
+        return calibrate_ws_rtt(venue)
+    except Exception:
+        # Catch-all is intentional: live probe must never crash the caller; fall back to synthetic calibration.
+        # Note: asyncio.CancelledError is BaseException, not Exception — it propagates so callers can cancel cleanly.
         return calibrate_ws_rtt(venue)
 
 
@@ -228,19 +246,67 @@ def load_venue_profiles() -> dict[str, VenueLatencyProfile]:
     return out
 
 
+def _get_intra_process_lock(path) -> "_threading.Lock":
+    key = str(path)
+    with _INTRA_PROCESS_LOCKS_GUARD:
+        lock = _INTRA_PROCESS_LOCKS.get(key)
+        if lock is None:
+            lock = _threading.Lock()
+            _INTRA_PROCESS_LOCKS[key] = lock
+        return lock
+
+
+def _locked_json_write(path, doc):
+    intra_lock = _get_intra_process_lock(path)
+    with intra_lock:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "a+", encoding="utf-8") as fh:
+            try:
+                if _fcntl is not None:
+                    _fcntl.flock(fh.fileno(), _fcntl.LOCK_EX)
+                elif _msvcrt is not None:
+                    for _ in range(50):
+                        try:
+                            _msvcrt.locking(fh.fileno(), _msvcrt.LK_LOCK, 1)
+                            break
+                        except OSError:
+                            time.sleep(0.05)
+                    else:
+                        raise RuntimeError(f"Could not acquire lock on {path}")
+            except Exception:
+                pass
+            try:
+                fh.seek(0)
+                try:
+                    raw = fh.read() or "{}"
+                except OSError:
+                    raw = "{}"
+                data = json.loads(raw)
+                for key, value in doc.items():
+                    if isinstance(value, dict) and isinstance(data.get(key), dict):
+                        data[key].update(value)
+                    else:
+                        data[key] = value
+                try:
+                    fh.seek(0)
+                    fh.truncate()
+                    json.dump(data, fh, indent=2, sort_keys=True)
+                except OSError:
+                    pass
+            finally:
+                try:
+                    if _fcntl is not None:
+                        _fcntl.flock(fh.fileno(), _fcntl.LOCK_UN)
+                except Exception:
+                    pass
+
+
 def save_venue_profile(profile: VenueLatencyProfile) -> None:
     latency_dir().mkdir(parents=True, exist_ok=True)
     path = venue_profiles_path()
-    doc: dict[str, Any] = {"venues": {}}
-    if path.is_file():
-        doc = json.loads(path.read_text(encoding="utf-8"))
-    doc.setdefault("venues", {})[profile.venue] = asdict(profile)
-    path.write_text(json.dumps(doc, indent=2), encoding="utf-8")
+    _locked_json_write(path, {"venues": {profile.venue: asdict(profile)}})
 
 
 def save_node_profile(profile: NodeLatencyProfile) -> None:
     latency_dir().mkdir(parents=True, exist_ok=True)
-    node_profile_path().write_text(
-        json.dumps(asdict(profile), indent=2),
-        encoding="utf-8",
-    )
+    _locked_json_write(node_profile_path(), asdict(profile))

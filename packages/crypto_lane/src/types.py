@@ -24,6 +24,13 @@ class PitConfig:
 
 @dataclass
 class FeatureProvenance:
+    """Provenance stamp attached to each labeled frame.
+
+    Note on `staleness_delta_ms`: the value is the WORST-CASE (max) staleness
+    across the frame, not the mean. The name is historical and not renamed
+    to preserve backward compat with serialized artifacts. New consumers
+    should treat this as `max_staleness_ms`.
+    """
     source: str
     t_avail_ns: int
     t_exch_true_ns: int

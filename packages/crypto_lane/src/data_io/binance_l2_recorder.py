@@ -47,18 +47,35 @@ class BinanceL2Recorder:
         self.symbols = [s.lower() for s in (symbols or DEFAULT_SYMBOLS)]
         self.output_dir = output_dir or _resolve_output_dir()
         self._running = True
+        self._stop_requested = False
         self._files: Dict[str, Any] = {}
         self._msg_counts: Dict[str, int] = {}
         self._start_time: float = 0.0
 
     def _setup_signal_handlers(self) -> None:
-        if sys.platform != "win32":
-            loop = asyncio.get_event_loop()
-            for sig in (signal.SIGINT, signal.SIGTERM):
-                loop.add_signal_handler(sig, self._shutdown)
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        if sys.platform == "win32":
+            # asyncio on Windows does not support add_signal_handler; rely on try/finally in run()
+            return
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            try:
+                loop.add_signal_handler(sig, self._request_stop)
+            except NotImplementedError:
+                pass
 
-    def _shutdown(self) -> None:
-        self._running = False
+    def _request_stop(self) -> None:
+        self._stop_requested = True
+
+    def _close_files(self) -> None:
+        for fh in self._files.values():
+            try:
+                fh.close()
+            except Exception:
+                pass
+        self._files = {}
 
     def _write_line(self, symbol: str, data: Dict[str, Any]) -> None:
         line = json.dumps(data, ensure_ascii=False, default=str)
@@ -96,31 +113,36 @@ class BinanceL2Recorder:
         session_start = datetime.now(timezone.utc).isoformat()
         last_heartbeat = time.monotonic()
 
-        while self._running:
-            try:
-                async with websockets.connect(BINANCE_WS_URL) as ws:
-                    await self._subscribe(ws)
+        try:
+            while self._running and not self._stop_requested:
+                try:
+                    async with websockets.connect(BINANCE_WS_URL) as ws:
+                        await self._subscribe(ws)
 
-                    while self._running:
-                        if duration_s and (time.monotonic() - self._start_time) > duration_s:
-                            self._running = False
-                            break
+                        while self._running and not self._stop_requested:
+                            if duration_s and (time.monotonic() - self._start_time) > duration_s:
+                                self._running = False
+                                break
 
-                        if time.monotonic() - last_heartbeat > HEARTBEAT_INTERVAL_S:
-                            last_heartbeat = time.monotonic()
+                            if time.monotonic() - last_heartbeat > HEARTBEAT_INTERVAL_S:
+                                last_heartbeat = time.monotonic()
+                                try:
+                                    pong_waiter = await ws.ping()
+                                    await asyncio.wait_for(pong_waiter, timeout=2.0)
+                                except (asyncio.TimeoutError, Exception):
+                                    pass
 
-                        try:
-                            msg = await asyncio.wait_for(ws.recv(), timeout=5.0)
-                            await self._handle_message(ws, msg)
-                        except asyncio.TimeoutError:
-                            continue
+                            try:
+                                msg = await asyncio.wait_for(ws.recv(), timeout=5.0)
+                                await self._handle_message(ws, msg)
+                            except asyncio.TimeoutError:
+                                continue
 
-            except (websockets.ConnectionClosed, OSError):
-                if self._running:
-                    await asyncio.sleep(RECONNECT_DELAY_S)
-
-        for fh in self._files.values():
-            fh.close()
+                except (websockets.ConnectionClosed, OSError):
+                    if self._running and not self._stop_requested:
+                        await asyncio.sleep(RECONNECT_DELAY_S)
+        finally:
+            self._close_files()
 
         elapsed = time.monotonic() - self._start_time
         total_msgs = sum(self._msg_counts.values())

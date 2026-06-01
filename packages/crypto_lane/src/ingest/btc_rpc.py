@@ -23,7 +23,6 @@ class ChainInfo:
     headers: int
     best_block_hash: str
     difficulty: float
-    median_time: int
     verification_progress: float
     initial_block_download: bool
     size_on_disk: int
@@ -77,8 +76,10 @@ class BtcRpc:
         try:
             with urllib.request.urlopen(req, timeout=self._timeout) as resp:
                 body = json.loads(resp.read())
+        except urllib.error.HTTPError as exc:
+            raise BtcRpcError(f"BTC RPC HTTP {exc.code}: {exc.reason}") from exc
         except urllib.error.URLError as exc:
-            raise BtcRpcError(f"BTC RPC transport error: {exc}") from exc
+            raise BtcRpcError(f"BTC RPC URL error: {exc.reason}") from exc
         if body.get("error"):
             raise BtcRpcError(f"BTC RPC error: {body['error']}")
         return body["result"]
@@ -91,7 +92,6 @@ class BtcRpc:
             headers=int(r["headers"]),
             best_block_hash=r["bestblockhash"],
             difficulty=float(r["difficulty"]),
-            median_time=int(r["mediantime"]),
             verification_progress=float(r["verificationprogress"]),
             initial_block_download=bool(r.get("initialblockdownload", False)),
             size_on_disk=int(r["size_on_disk"]),

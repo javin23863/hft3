@@ -18,6 +18,17 @@ class BronzeReadError(RuntimeError):
     pass
 
 
+EXPECTED_SPOT_COLUMNS = {"open", "high", "low", "close", "volume"}
+# Per-funding-rate files: only carry last_funding_rate + interval metadata; no OHLCV.
+EXPECTED_FUNDING_COLUMNS = {"last_funding_rate", "funding_interval_hours"}
+
+
+def _validate_columns(df: pl.DataFrame, expected: set[str], name: str) -> None:
+    missing = expected - set(df.columns)
+    if missing:
+        raise BronzeReadError(f"{name} schema drift: missing columns {sorted(missing)}")
+
+
 def _lake_config() -> dict[str, Any]:
     path = repo_root_from_lane() / "packages" / "crypto_lane" / "config" / "lake_sources.yaml"
     return load_yaml(path)
@@ -76,17 +87,23 @@ def _local_cache_path(key: str) -> Path:
 def read_parquet_key(key: str, *, bucket_name: str | None = None, source: str = "binance") -> pl.DataFrame:
     local = _local_cache_path(key)
     if local.is_file():
-        return pl.read_parquet(local)
-
-    bucket = bucket_name or resolve_bucket(source)
-    client = B2Client()
-    try:
-        raw = client.download_bytes(bucket, key)
-    except B2ClientError as exc:
-        raise BronzeReadError(str(exc)) from exc
-    local.parent.mkdir(parents=True, exist_ok=True)
-    local.write_bytes(raw)
-    return pl.read_parquet(io.BytesIO(raw))
+        df = pl.read_parquet(local)
+    else:
+        bucket = bucket_name or resolve_bucket(source)
+        client = B2Client()
+        try:
+            raw = client.download_bytes(bucket, key)
+        except B2ClientError as exc:
+            raise BronzeReadError(str(exc)) from exc
+        local.parent.mkdir(parents=True, exist_ok=True)
+        local.write_bytes(raw)
+        df = pl.read_parquet(io.BytesIO(raw))
+    if "funding_rate" in key or "funding" in key:
+        expected = EXPECTED_FUNDING_COLUMNS
+    else:
+        expected = EXPECTED_SPOT_COLUMNS
+    _validate_columns(df, expected, key)
+    return df
 
 
 def read_bronze_day(

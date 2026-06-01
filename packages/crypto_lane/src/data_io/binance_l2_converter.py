@@ -185,14 +185,19 @@ def cmd_convert_binance_l2(args: Any) -> int:
         npz_path = ndjson_path.with_suffix(".npz")
 
     snapshot_path = Path(args.snapshot) if args.snapshot else None
-    if not snapshot_path and args.routing_symbol and not args.no_fetch:
+    should_fetch = (
+        not snapshot_path
+        and bool(args.routing_symbol)
+        and not args.no_fetch
+    )
+    if should_fetch:
         print(f"Fetching REST snapshot for {args.routing_symbol}...", file=sys.stderr)
 
     result = convert_ndjson_to_npz(
         ndjson_path,
         npz_path,
         snapshot_path=snapshot_path,
-        symbol=args.routing_symbol if not snapshot_path else None,
+        symbol=args.routing_symbol if should_fetch else None,
         start_time_ns=args.start_time_ns,
         step_ns=args.step_ns,
     )
