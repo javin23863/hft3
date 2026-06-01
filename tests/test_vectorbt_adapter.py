@@ -170,6 +170,10 @@ class TestMetricsFallback:
         wf = _simulate_walk_forward(ohlcv, entry, exit, n_windows=3)
         assert "wf_consistency" in wf
         assert "oos_expectancy" in wf
+        assert 0.0 <= wf["wf_consistency"] <= 1.0, f"wf_consistency out of range: {wf['wf_consistency']}"
+        assert abs(wf["oos_expectancy"]) < 0.5, (
+            f"oos_expectancy unreasonably large for random walk: {wf['oos_expectancy']}"
+        )
 
     def test_no_data_returns_empty(self):
         empty = np.zeros((10, 5), dtype=np.float64)
@@ -214,3 +218,10 @@ class TestFilterCandidates:
         )
         assert result.total_candidates >= 1
         assert not result.vectorbt_available or len(result.promoted) > 0
+        if result.promoted:
+            prom = result.promoted[0]
+            assert prom.candidate_id, "candidate_id must be populated"
+            assert prom.hypothesis_id, "hypothesis_id must be populated"
+            assert prom.asset_class in ("CME_FUTURES", ""), f"Unexpected asset_class: {prom.asset_class}"
+            assert prom.param_values, "param_values must be populated"
+            assert prom.vectorbt_results, "vectorbt_results must be populated"

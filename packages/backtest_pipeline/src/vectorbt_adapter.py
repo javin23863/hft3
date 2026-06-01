@@ -158,7 +158,7 @@ def _compute_metrics_for_params(
     position = 0.0
     entry_price = 0.0
     trades: List[float] = []
-    cum_pnl = 0.0
+    cum_return = 0.0
     peak = 0.0
     max_dd = 0.0
 
@@ -167,49 +167,54 @@ def _compute_metrics_for_params(
             ret = (close[i] - entry_price) / entry_price
             hit_stop = stop_loss_pct is not None and ret < -stop_loss_pct / 100.0
             hit_target = take_profit_pct is not None and ret > take_profit_pct / 100.0
-            if hit_stop or hit_target:
-                exit_pnl = entry_price * ret
-                trades.append(exit_pnl)
-                cum_pnl += exit_pnl
+            if hit_stop:
+                exit_return = -stop_loss_pct / 100.0
+            elif hit_target:
+                exit_return = take_profit_pct / 100.0
+            else:
+                exit_return = None
+            if exit_return is not None:
+                trades.append(exit_return)
+                cum_return += exit_return
                 entry_price = 0.0
                 position = 0.0
-                peak = max(peak, cum_pnl)
-                max_dd = max(max_dd, peak - cum_pnl)
+                peak = max(peak, cum_return)
+                max_dd = max(max_dd, peak - cum_return)
                 continue
 
             if position > 0:
                 unrealized = (close[i] - entry_price) / entry_price
             else:
                 unrealized = (entry_price - close[i]) / entry_price
-            cum_pnl_unrealized = cum_pnl + unrealized
-            peak = max(peak, cum_pnl_unrealized)
-            max_dd = max(max_dd, peak - cum_pnl_unrealized)
+            cum_return_unrealized = cum_return + unrealized
+            peak = max(peak, cum_return_unrealized)
+            max_dd = max(max_dd, peak - cum_return_unrealized)
 
         if position == 0 and entry_signal[i] > 0:
             entry_price = close[i]
             position = 1.0
         elif position > 0 and exit_signal[i] < 0:
-            trade_pnl = (close[i] - entry_price) / entry_price
-            trades.append(trade_pnl)
-            cum_pnl += trade_pnl
+            trade_return = (close[i] - entry_price) / entry_price
+            trades.append(trade_return)
+            cum_return += trade_return
             entry_price = 0.0
             position = 0.0
 
     if position != 0:
-        trade_pnl = (close[-1] - entry_price) / entry_price
-        trades.append(trade_pnl)
-        cum_pnl += trade_pnl
+        trade_return = (close[-1] - entry_price) / entry_price
+        trades.append(trade_return)
+        cum_return += trade_return
 
     n_trades = len([t for t in trades if abs(t) > 1e-12])
     expectancy = float(np.mean(trades)) if n_trades > 0 else 0.0
     win_rate = float(np.mean([t > 0 for t in trades])) if n_trades > 0 else 0.0
-    total_return = float(cum_pnl)
+    total_return = float(cum_return)
     return {
         "net_return_pct": round(total_return * 100, 4),
         "expectancy": round(expectancy, 6),
         "win_rate": round(win_rate, 4),
         "num_trades": n_trades,
-        "max_drawdown_pct": round(-max_dd * 100, 4),
+        "max_drawdown_pct": -round(max_dd * 100, 4),
     }
 
 
@@ -221,31 +226,16 @@ def _simulate_walk_forward(
     train_ratio: float = 0.6,
 ) -> Dict[str, Any]:
     n = len(ohlcv)
-    window_size = n // n_windows
-    if window_size < 10:
+    if n < 20:
         return {"wf_consistency": 0.0, "oos_expectancy": 0.0}
 
     oos_expectancies: List[float] = []
-    for w in range(n_windows):
-        train_end = int((w * window_size + train_ratio * window_size))
-        if train_end >= n:
-            break
-        oos_start = train_end
-        oos_end = min(oos_start + int(window_size * (1 - train_ratio)), n)
-        if oos_start >= oos_end:
+    for w in range(1, n_windows + 1):
+        split = int(n * (train_ratio + (1 - train_ratio) * (w - 1) / max(n_windows - 1, 1)))
+        if split < 10 or split >= n - 10:
             continue
-        metrics_is = _compute_metrics_for_params(
-            ohlcv[train_end - window_size:train_end],
-            entry_signal[train_end - window_size:train_end],
-            exit_signal[train_end - window_size:train_end],
-            None, None,
-        )
-        metrics_oos = _compute_metrics_for_params(
-            ohlcv[oos_start:oos_end],
-            entry_signal[oos_start:oos_end],
-            exit_signal[oos_start:oos_end],
-            None, None,
-        )
+        oos_data = ohlcv[split:], entry_signal[split:], exit_signal[split:]
+        metrics_oos = _compute_metrics_for_params(*oos_data, None, None)
         if metrics_oos["num_trades"] >= 5:
             oos_expectancies.append(metrics_oos["expectancy"])
 
@@ -260,6 +250,39 @@ def _simulate_walk_forward(
     }
 
 
+def _default_signal_computer(
+    cand: CandidateModel,
+    ohlcv: np.ndarray,
+    parsed: ParsedHypothesis,
+    repo_root: Path,
+) -> Tuple[np.ndarray, np.ndarray]:
+    from features_engine.src.model_registry import resolve_model_id
+    from features_engine.src.hypotheses.registry import get_active_hypotheses
+    from features_engine.src.market_state_pipeline import MarketStatePipeline
+
+    resolved = resolve_model_id(cand.model_id)
+    hypotheses = get_active_hypotheses()
+    hypothesis_cls = hypotheses.get(resolved)
+    if hypothesis_cls is None:
+        raise ValueError(f"model_id {cand.model_id} not in active hypotheses")
+
+    pipeline = MarketStatePipeline()
+    n_bars = len(ohlcv)
+    signal = np.zeros(n_bars)
+
+    for i in range(n_bars):
+        bar_end_ts = int(ohlcv[i, 0] * 1_000_000_000) if ohlcv[i, 0] < 1e12 else int(ohlcv[i, 0])
+        pipeline.process_event({"local_ts": bar_end_ts, "close": ohlcv[i, 3]})
+        state = pipeline.latest_state
+        if state is not None:
+            sig = hypothesis_cls.evaluate(state)
+            signal[i] = sig
+
+    entry_signal = np.where(signal > 0, 1.0, 0.0)
+    exit_signal = np.where(signal < 0, -1.0, 0.0)
+    return entry_signal, exit_signal
+
+
 def _grid_iter(grid: Dict[str, List[Any]]) -> Iterator[Dict[str, Any]]:
     keys = list(grid.keys())
     for values in itertools.product(*[grid[k] for k in keys]):
@@ -272,11 +295,17 @@ def _run_vectorbt_simulation(
     parsed: ParsedHypothesis,
     grid: Dict[str, List[Any]],
     repo_root: Path,
+    signal_computer: Optional[Callable] = None,
 ) -> FilterResult:
     """Run VectorBT simulation when the library is available.
     Falls back to numpy-based simulation if VectorBT is not installed.
+
+    ``parsed`` is used by the ``signal_computer`` to configure feature parameters.
+    The actual usage happens inside ``signal_computer``, not directly in this function.
     """
     from backtest_pipeline.src.asset_class_routing import resolve_validation_path
+
+    signal_computer = signal_computer or _default_signal_computer
 
     import vectorbt as vbt
     close = ohlcv[:, 3]
@@ -292,6 +321,17 @@ def _run_vectorbt_simulation(
     )
 
     for cand in candidates:
+        try:
+            entry_signal, exit_signal = signal_computer(cand, ohlcv, parsed, repo_root)
+        except Exception:
+            result.rejected.append(RejectedCandidate(
+                candidate_id=cand.candidate_id,
+                hypothesis_id=cand.model_id,
+                reject_reason="unresolvable_model_id",
+                metric_values={},
+            ))
+            continue
+
         for params in _grid_iter(grid):
             merged = dict(cand.strategy_params)
             merged.update(params)
@@ -301,20 +341,18 @@ def _run_vectorbt_simulation(
             take_profit = merged.get("take_profit_pct")
             stop_loss_f = float(stop_loss) if stop_loss is not None else None
             take_profit_f = float(take_profit) if take_profit is not None else None
-            entry_signal = np.zeros(len(close))
-            exit_signal = np.zeros(len(close))
-            entry_signal[1:] = np.where(close[1:] > close[:-1] * (1 + signal_thresh), 1.0, 0.0)
-            exit_signal[1:] = np.where(close[1:] < close[:-1] * (1 - signal_thresh), -1.0, 0.0)
 
+            vbt_stats = {}
             try:
-                size = np.where(entry_signal > 0, 1.0, 0.0)
+                entries = entry_signal > 0
+                exits = exit_signal < 0
                 pf = vbt.Portfolio.from_signals(
-                    close, entries=size > 0, exits=size < 0,
+                    close, entries=entries, exits=exits,
                     init_cash=10000.0, freq="1min",
                     sl_stop=stop_loss_f / 100.0 if stop_loss_f else None,
                     tp_stop=take_profit_f / 100.0 if take_profit_f else None,
                 )
-                stats = pf.stats()
+                vbt_stats = dict(pf.stats())
             except Exception:
                 pf = None
 
@@ -329,6 +367,7 @@ def _run_vectorbt_simulation(
                 "holding_period_bars": holding_period,
                 "stop_loss_pct": stop_loss_f,
                 "take_profit_pct": take_profit_f,
+                "vbt_stats": vbt_stats,
                 **metrics,
                 **wf,
                 "param_stability_score": 1.0,
@@ -378,64 +417,87 @@ def filter_candidates(
     gates: Optional[PromotionGate] = None,
     param_grid: Optional[Dict[str, List[Any]]] = None,
     data_loader: Optional[Callable[[str, Path], Optional[np.ndarray]]] = None,
+    signal_computer: Optional[Callable] = None,
 ) -> FilterResult:
     """Run VectorBT filter on candidates. Returns promoted+rejected lists.
 
-    If VectorBT is not installed, promotes all candidates (graceful fallback).
+    If VectorBT is not installed, rejects all candidates by default.
+    Set env var HFT3_ALLOW_UNFILTERED=1 to promote without filtering instead.
     """
     gates = gates or PromotionGate()
     repo_root = repo_root or _REPO
     data_loader = data_loader or _default_data_loader
     grid = param_grid or DEFAULT_PARAM_GRID
+    signal_computer = signal_computer or _default_signal_computer
 
     if not _vectorbt_available():
-        logger.warning("vectorbt not installed — skipping VectorBT filter, promoting all candidates")
+        logger.warning("vectorbt not installed — rejecting all candidates")
         result = FilterResult(
             vectorbt_available=False,
             run_id=f"no_vbt_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}",
             total_candidates=len(candidates),
         )
-        for cand in candidates:
-            prom = PromotedCandidate(
-                candidate_id=cand.candidate_id,
-                hypothesis_id=cand.model_id,
-                strategy_family=cand.metadata.get("strategy_family", cand.model_id),
-                asset_class="CME_FUTURES",
-                symbol=cand.metadata.get("symbol", "MES"),
-                timeframe="1m",
-                param_values=dict(cand.strategy_params),
-                vectorbt_run_id=result.run_id,
-                vectorbt_results={"note": "vectorbt not installed — promoted without filter"},
-                pass_reason="vectorbt_unavailable_fallback",
-            )
-            result.promoted.append(prom)
+        allow_unfiltered = os.environ.get("HFT3_ALLOW_UNFILTERED", "").lower() in ("1", "true")
+        if allow_unfiltered:
+            for cand in candidates:
+                prom = PromotedCandidate(
+                    candidate_id=cand.candidate_id,
+                    hypothesis_id=cand.model_id,
+                    strategy_family=cand.metadata.get("strategy_family", cand.model_id),
+                    asset_class="CME_FUTURES",
+                    symbol=cand.metadata.get("symbol", "MES"),
+                    timeframe="1m",
+                    param_values=dict(cand.strategy_params),
+                    vectorbt_run_id=result.run_id,
+                    vectorbt_results={"note": "vectorbt not installed — promoted without filter"},
+                    pass_reason="vectorbt_unavailable_fallback",
+                )
+                result.promoted.append(prom)
+        else:
+            for cand in candidates:
+                result.rejected.append(RejectedCandidate(
+                    candidate_id=cand.candidate_id,
+                    hypothesis_id=cand.model_id,
+                    reject_reason="vectorbt_not_installed",
+                    metric_values={},
+                ))
         return result
 
     ohlcv = data_loader(event_id, repo_root)
     if ohlcv is None:
-        logger.warning("No OHLCV data for %s — promoting all candidates without VectorBT filter", event_id)
+        logger.warning("No OHLCV data for %s — rejecting all candidates", event_id)
         result = FilterResult(
             vectorbt_available=True,
             run_id=f"no_data_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}",
             total_candidates=len(candidates),
         )
-        for cand in candidates:
-            prom = PromotedCandidate(
-                candidate_id=cand.candidate_id,
-                hypothesis_id=cand.model_id,
-                strategy_family=cand.metadata.get("strategy_family", cand.model_id),
-                asset_class="CME_FUTURES",
-                symbol=cand.metadata.get("symbol", "MES"),
-                timeframe="1m",
-                param_values=dict(cand.strategy_params),
-                vectorbt_run_id=result.run_id,
-                vectorbt_results={"note": f"No OHLCV data for {event_id} — promoted without filter"},
-                pass_reason="no_ohlcv_data_fallback",
-            )
-            result.promoted.append(prom)
+        allow_unfiltered = os.environ.get("HFT3_ALLOW_UNFILTERED", "").lower() in ("1", "true")
+        if allow_unfiltered:
+            for cand in candidates:
+                prom = PromotedCandidate(
+                    candidate_id=cand.candidate_id,
+                    hypothesis_id=cand.model_id,
+                    strategy_family=cand.metadata.get("strategy_family", cand.model_id),
+                    asset_class="CME_FUTURES",
+                    symbol=cand.metadata.get("symbol", "MES"),
+                    timeframe="1m",
+                    param_values=dict(cand.strategy_params),
+                    vectorbt_run_id=result.run_id,
+                    vectorbt_results={"note": f"No OHLCV data for {event_id} — promoted without filter"},
+                    pass_reason="no_ohlcv_data_fallback",
+                )
+                result.promoted.append(prom)
+        else:
+            for cand in candidates:
+                result.rejected.append(RejectedCandidate(
+                    candidate_id=cand.candidate_id,
+                    hypothesis_id=cand.model_id,
+                    reject_reason="no_ohlcv_data",
+                    metric_values={},
+                ))
         return result
 
-    result = _run_vectorbt_simulation(ohlcv, candidates, parsed, grid, repo_root)
+    result = _run_vectorbt_simulation(ohlcv, candidates, parsed, grid, repo_root, signal_computer)
     promoted_out: List[PromotedCandidate] = []
     rejected_out: List[RejectedCandidate] = []
 

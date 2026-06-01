@@ -81,6 +81,7 @@ class RejectedCandidate:
             "hypothesis_id": self.hypothesis_id,
             "reject_reason": self.reject_reason,
             "metric_values": self.metric_values,
+            "vectorbt_results": self.vectorbt_results,
         }
 
 
@@ -101,7 +102,7 @@ class PromotionGate:
             return False
         if candidate.vectorbt_results.get("wf_consistency", 0.0) < self.min_walk_forward_consistency:
             return False
-        if candidate.vectorbt_results.get("max_drawdown_pct", 0.0) < self.max_drawdown_pct:
+        if abs(candidate.vectorbt_results.get("max_drawdown_pct", 0.0)) > abs(self.max_drawdown_pct):
             return False
         if candidate.vectorbt_results.get("turnover_mean_pct", 0.0) > self.max_turnover_pct:
             return False

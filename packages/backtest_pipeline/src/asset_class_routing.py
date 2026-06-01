@@ -106,7 +106,8 @@ def resolve_validation_path(
         exec_cap = ExecutionCapability.NO_EXECUTION_VALIDATION
         notes.append(f"Unknown asset class {asset_class}; NO_EXECUTION_VALIDATION")
 
-    route_to_vbt = exec_cap == ExecutionCapability.FULL_EXECUTION or True
+    # VectorBT always runs — OHLCV data is universal. HftBacktest routing is conditional.
+    route_to_vbt = True
     route_to_hft = exec_cap == ExecutionCapability.FULL_EXECUTION
 
     return ValidationPath(
