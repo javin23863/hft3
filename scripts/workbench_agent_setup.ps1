@@ -12,13 +12,14 @@ $env:PYTHONPATH = "$RepoRoot;$RepoRoot\packages;$RepoRoot\apps"
 
 function Write-Step { param([string]$Msg) Write-Host "--- $Msg ---" -ForegroundColor Cyan }
 
-Write-Step "python -m workbench setup"
-& python -m workbench setup --rebuild-graph
-if ($LASTEXITCODE -ne 0 -and -not $SkipDownload) {
+if (-not $SkipDownload) {
     Write-Step "Installing workbench dependencies"
     & pip install -r apps/workbench/requirements.txt
     if ($LASTEXITCODE -ne 0) { Write-Host "pip install failed; continuing..." -ForegroundColor Yellow }
 }
+
+Write-Step "python -m workbench setup"
+& python -m workbench setup --rebuild-graph
 
 Write-Step "python -m workbench verify"
 & python -m workbench verify

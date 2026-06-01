@@ -106,8 +106,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Graphify: {'OK' if result['graphify']['graph_present'] else 'MISSING — run with --rebuild-graph'}")
             if result.get("graph_rebuild"):
                 print(f"Graph rebuild: {'OK' if result['graph_rebuild']['rebuilt'] else 'FAILED'}")
-            overall = "PASS" if result["all_ok"] else "INCOMPLETE"
-            print(f"\nOverall: {overall}")
+            core = "PASS" if result["all_ok"] else "FAIL"
+            data = "OK" if result["npz"]["npz_count"] > 0 else "MISSING"
+            graph = "OK" if result["graphify"]["graph_present"] else "MISSING"
+            print(f"\nCore (python+deps+env): {core}  |  NPZ data: {data}  |  Graph: {graph}")
         return 0 if result["all_ok"] else 1
 
     if args.command == "verify":
