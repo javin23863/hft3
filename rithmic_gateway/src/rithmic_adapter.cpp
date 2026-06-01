@@ -1,9 +1,10 @@
 #include "rithmic_adapter.hpp"
-#include "RApiPlus.h"
 
 #include <iostream>
 #include <cstring>
 #include <chrono>
+
+#include "RApiPlus.h"
 
 namespace hft {
 
@@ -16,8 +17,8 @@ public:
         (void)pContext;
         int ignored;
         pInfo->dump(&ignored);
-        *aiCode = RApi::API_OK;
-        return RApi::OK;
+        *aiCode = API_OK;
+        return OK;
     }
 };
 
@@ -49,8 +50,8 @@ public:
         }
 
         adapter_->login_cv_.notify_all();
-        *aiCode = RApi::API_OK;
-        return RApi::OK;
+        *aiCode = API_OK;
+        return OK;
     }
 
     int AgreementList(RApi::AgreementListInfo* pInfo, void* pContext, int* aiCode) override {
@@ -58,7 +59,7 @@ public:
         if (!pInfo->bAccepted) {
             for (int i = 0; i < pInfo->iArrayLen; i++) {
                 RApi::AgreementInfo ag = pInfo->asAgreementInfoArray[i];
-                RApi::tsNCharcb active = {const_cast<char*>("active"), 6};
+                tsNCharcb active = {const_cast<char*>("active"), 6};
                 bool is_active = (ag.sStatus.iDataLen == active.iDataLen &&
                     memcmp(ag.sStatus.pData, active.pData, ag.sStatus.iDataLen) == 0);
                 if (ag.bMandatory && is_active) {
@@ -67,8 +68,8 @@ public:
             }
             adapter_->agreements_received_ = true;
         }
-        *aiCode = RApi::API_OK;
-        return RApi::OK;
+        *aiCode = API_OK;
+        return OK;
     }
 
     int TradePrint(RApi::TradeInfo* pInfo, void* pContext, int* aiCode) override {
@@ -90,8 +91,8 @@ public:
             std::cerr << "[CRITICAL] MBO Queue overrun on TradePrint!" << std::endl;
         }
 
-        *aiCode = RApi::API_OK;
-        return RApi::OK;
+        *aiCode = API_OK;
+        return OK;
     }
 
     int BestBidAskQuote(RApi::BidInfo* pBid, RApi::AskInfo* pAsk,
@@ -122,153 +123,153 @@ public:
             adapter_->mbo_queue_->push(evt);
         }
 
-        *aiCode = RApi::API_OK;
-        return RApi::OK;
+        *aiCode = API_OK;
+        return OK;
     }
 
     int LineUpdate(RApi::LineInfo* pInfo, void* pContext, int* aiCode) override {
         (void)pContext;
         int ignored;
         pInfo->dump(&ignored);
-        *aiCode = RApi::API_OK;
-        return RApi::OK;
+        *aiCode = API_OK;
+        return OK;
     }
 
     int FillReport(RApi::OrderFillReport* pReport, void* pContext, int* aiCode) override {
         (void)pContext;
         int ignored;
         pReport->dump(&ignored);
-        *aiCode = RApi::API_OK;
-        return RApi::OK;
+        *aiCode = API_OK;
+        return OK;
     }
 
     int StatusReport(RApi::OrderStatusReport* pReport, void* pContext, int* aiCode) override {
         (void)pContext;
         int ignored;
         pReport->dump(&ignored);
-        *aiCode = RApi::API_OK;
-        return RApi::OK;
+        *aiCode = API_OK;
+        return OK;
     }
 
     int CancelReport(RApi::OrderCancelReport* pReport, void* pContext, int* aiCode) override {
         (void)pContext;
         int ignored;
         pReport->dump(&ignored);
-        *aiCode = RApi::API_OK;
-        return RApi::OK;
+        *aiCode = API_OK;
+        return OK;
     }
 
     int ModifyReport(RApi::OrderModifyReport* pReport, void* pContext, int* aiCode) override {
         (void)pContext;
         int ignored;
         pReport->dump(&ignored);
-        *aiCode = RApi::API_OK;
-        return RApi::OK;
+        *aiCode = API_OK;
+        return OK;
     }
 
     int RejectReport(RApi::OrderRejectReport* pReport, void* pContext, int* aiCode) override {
         (void)pContext;
         int ignored;
         pReport->dump(&ignored);
-        *aiCode = RApi::API_OK;
-        return RApi::OK;
+        *aiCode = API_OK;
+        return OK;
     }
 
     int FailureReport(RApi::OrderFailureReport* pReport, void* pContext, int* aiCode) override {
         (void)pContext;
         int ignored;
         pReport->dump(&ignored);
-        *aiCode = RApi::API_OK;
-        return RApi::OK;
+        *aiCode = API_OK;
+        return OK;
     }
 
-    int AccountList(RApi::AccountListInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int AccountUpdate(RApi::AccountUpdateInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int Aggregator(RApi::AggregatorInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int AskQuote(RApi::AskInfo* pInfo, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int AssignedUserList(RApi::AssignedUserListInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int AutoLiquidate(RApi::AutoLiquidateInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int AuxRefData(RApi::AuxRefDataInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int Bar(RApi::BarInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int BarReplay(RApi::BarReplayInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int BestAskQuote(RApi::AskInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int BestBidQuote(RApi::BidInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int BidQuote(RApi::BidInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int BinaryContractList(RApi::BinaryContractListInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int BracketReplay(RApi::BracketReplayInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int BracketTierModify(RApi::BracketTierModifyInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int BracketUpdate(RApi::BracketInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int BustReport(RApi::OrderBustReport*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int CloseMidPrice(RApi::CloseMidPriceInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int ClosePrice(RApi::ClosePriceInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int ClosingIndicator(RApi::ClosingIndicatorInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int Dbo(RApi::DboInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int DboBookRebuild(RApi::DboBookRebuildInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int EasyToBorrow(RApi::EasyToBorrowInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int EasyToBorrowList(RApi::EasyToBorrowListInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int EndQuote(RApi::EndQuoteInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int EquityOptionStrategyList(RApi::EquityOptionStrategyListInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int ExchangeList(RApi::ExchangeListInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int ExecutionReplay(RApi::ExecutionReplayInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int HighBidPrice(RApi::HighBidPriceInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int HighPrice(RApi::HighPriceInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int HighPriceLimit(RApi::HighPriceLimitInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int IbList(RApi::IbListInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int InstrumentByUnderlying(RApi::InstrumentByUnderlyingInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int InstrumentSearch(RApi::InstrumentSearchInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int LimitOrderBook(RApi::LimitOrderBookInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int LowAskPrice(RApi::LowAskPriceInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int LowPrice(RApi::LowPriceInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int LowPriceLimit(RApi::LowPriceLimitInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int MarketMode(RApi::MarketModeInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int MidPrice(RApi::MidPriceInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int NotCancelledReport(RApi::OrderNotCancelledReport*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int NotModifiedReport(RApi::OrderNotModifiedReport*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int OpenInterest(RApi::OpenInterestInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int OpenOrderReplay(RApi::OrderReplayInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int OpenPrice(RApi::OpenPriceInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int OpeningIndicator(RApi::OpeningIndicatorInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int OptionList(RApi::OptionListInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int OrderHistoryDates(RApi::OrderHistoryDatesInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int OrderReplay(RApi::OrderReplayInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int OtherReport(RApi::OrderReport*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int PasswordChange(RApi::PasswordChangeInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int Ping(RApi::PingInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int PnlReplay(RApi::PnlReplayInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int PnlUpdate(RApi::PnlInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int PositionExit(RApi::PositionExitInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int PriceIncrUpdate(RApi::PriceIncrInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int ProductRmsList(RApi::ProductRmsListInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int ProjectedSettlementPrice(RApi::ProjectedSettlementPriceInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int RefData(RApi::RefDataInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int SettlementPrice(RApi::SettlementPriceInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int SingleOrderReplay(RApi::SingleOrderReplayInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int SodUpdate(RApi::SodReport*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int Strategy(RApi::StrategyInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int StrategyList(RApi::StrategyListInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int TradeCondition(RApi::TradeInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int TradeCorrectReport(RApi::OrderTradeCorrectReport*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int TradeReplay(RApi::TradeReplayInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int TradeRoute(RApi::TradeRouteInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int TradeRouteList(RApi::TradeRouteListInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int TradeVolume(RApi::TradeVolumeInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int TriggerPulledReport(RApi::OrderTriggerPulledReport*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int TriggerReport(RApi::OrderTriggerReport*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int User(RApi::UserInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int UserDefinedSpreadCreate(RApi::UserDefinedSpreadCreateInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int UserList(RApi::UserListInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int UserProfile(RApi::UserProfileInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int VolumeAtPrice(RApi::VolumeAtPriceInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int Quote(RApi::QuoteReport*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int Quote(RApi::QuoteInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
-    int QuoteReplay(RApi::QuoteReplayInfo*, void*, int* aiCode) override { *aiCode = RApi::API_OK; return RApi::OK; }
+    int AccountList(RApi::AccountListInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int AccountUpdate(RApi::AccountUpdateInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int Aggregator(RApi::AggregatorInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int AskQuote(RApi::AskInfo* pInfo, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int AssignedUserList(RApi::AssignedUserListInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int AutoLiquidate(RApi::AutoLiquidateInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int AuxRefData(RApi::AuxRefDataInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int Bar(RApi::BarInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int BarReplay(RApi::BarReplayInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int BestAskQuote(RApi::AskInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int BestBidQuote(RApi::BidInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int BidQuote(RApi::BidInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int BinaryContractList(RApi::BinaryContractListInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int BracketReplay(RApi::BracketReplayInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int BracketTierModify(RApi::BracketTierModifyInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int BracketUpdate(RApi::BracketInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int BustReport(RApi::OrderBustReport*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int CloseMidPrice(RApi::CloseMidPriceInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int ClosePrice(RApi::ClosePriceInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int ClosingIndicator(RApi::ClosingIndicatorInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int Dbo(RApi::DboInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int DboBookRebuild(RApi::DboBookRebuildInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int EasyToBorrow(RApi::EasyToBorrowInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int EasyToBorrowList(RApi::EasyToBorrowListInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int EndQuote(RApi::EndQuoteInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int EquityOptionStrategyList(RApi::EquityOptionStrategyListInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int ExchangeList(RApi::ExchangeListInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int ExecutionReplay(RApi::ExecutionReplayInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int HighBidPrice(RApi::HighBidPriceInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int HighPrice(RApi::HighPriceInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int HighPriceLimit(RApi::HighPriceLimitInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int IbList(RApi::IbListInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int InstrumentByUnderlying(RApi::InstrumentByUnderlyingInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int InstrumentSearch(RApi::InstrumentSearchInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int LimitOrderBook(RApi::LimitOrderBookInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int LowAskPrice(RApi::LowAskPriceInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int LowPrice(RApi::LowPriceInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int LowPriceLimit(RApi::LowPriceLimitInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int MarketMode(RApi::MarketModeInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int MidPrice(RApi::MidPriceInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int NotCancelledReport(RApi::OrderNotCancelledReport*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int NotModifiedReport(RApi::OrderNotModifiedReport*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int OpenInterest(RApi::OpenInterestInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int OpenOrderReplay(RApi::OrderReplayInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int OpenPrice(RApi::OpenPriceInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int OpeningIndicator(RApi::OpeningIndicatorInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int OptionList(RApi::OptionListInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int OrderHistoryDates(RApi::OrderHistoryDatesInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int OrderReplay(RApi::OrderReplayInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int OtherReport(RApi::OrderReport*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int PasswordChange(RApi::PasswordChangeInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int Ping(RApi::PingInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int PnlReplay(RApi::PnlReplayInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int PnlUpdate(RApi::PnlInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int PositionExit(RApi::PositionExitInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int PriceIncrUpdate(RApi::PriceIncrInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int ProductRmsList(RApi::ProductRmsListInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int ProjectedSettlementPrice(RApi::ProjectedSettlementPriceInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int RefData(RApi::RefDataInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int SettlementPrice(RApi::SettlementPriceInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int SingleOrderReplay(RApi::SingleOrderReplayInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int SodUpdate(RApi::SodReport*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int Strategy(RApi::StrategyInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int StrategyList(RApi::StrategyListInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int TradeCondition(RApi::TradeInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int TradeCorrectReport(RApi::OrderTradeCorrectReport*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int TradeReplay(RApi::TradeReplayInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int TradeRoute(RApi::TradeRouteInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int TradeRouteList(RApi::TradeRouteListInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int TradeVolume(RApi::TradeVolumeInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int TriggerPulledReport(RApi::OrderTriggerPulledReport*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int TriggerReport(RApi::OrderTriggerReport*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int User(RApi::UserInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int UserDefinedSpreadCreate(RApi::UserDefinedSpreadCreateInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int UserList(RApi::UserListInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int UserProfile(RApi::UserProfileInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int VolumeAtPrice(RApi::VolumeAtPriceInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int Quote(RApi::QuoteReport*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int Quote(RApi::QuoteInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int QuoteReplay(RApi::QuoteReplayInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
 
 private:
     RithmicAdapter* adapter_;
 };
 
-static RApi::tsNCharcb make_ts(const char* s) {
-    RApi::tsNCharcb cb;
+static tsNCharcb make_ts(const char* s) {
+    tsNCharcb cb;
     cb.pData = const_cast<char*>(s);
     cb.iDataLen = static_cast<int>(std::strlen(s));
     return cb;
@@ -306,7 +307,7 @@ bool RithmicAdapter::initialize() {
         auto* adm = new MyAdmCallbacks();
         adm_callbacks_ = adm;
         return true;
-    } catch (RApi::OmneException& ex) {
+    } catch (OmneException& ex) {
         std::cerr << "[RithmicAdapter] AdmCallbacks creation error: " << ex.getErrorCode() << std::endl;
         return false;
     }
@@ -338,7 +339,7 @@ bool RithmicAdapter::connect() {
     RApi::REngine* pEngine = nullptr;
     try {
         pEngine = new RApi::REngine(&params);
-    } catch (RApi::OmneException& ex) {
+    } catch (OmneException& ex) {
         std::cerr << "[RithmicAdapter] REngine creation error: " << ex.getErrorCode() << std::endl;
         return false;
     }
@@ -352,10 +353,10 @@ bool RithmicAdapter::connect() {
     agreements_received_ = false;
     unaccepted_mandatory_agreements_ = 0;
 
-    RApi::tsNCharcb rep_env_key = make_ts("system");
-    RApi::tsNCharcb rep_user = make_ts(config_.username.c_str());
-    RApi::tsNCharcb rep_password = make_ts(config_.password.c_str());
-    RApi::tsNCharcb rep_cnnct_pt = make_ts(config_.rep_connect_point.c_str());
+    tsNCharcb rep_env_key = make_ts("system");
+    tsNCharcb rep_user = make_ts(config_.username.c_str());
+    tsNCharcb rep_password = make_ts(config_.password.c_str());
+    tsNCharcb rep_cnnct_pt = make_ts(config_.rep_connect_point.c_str());
 
     int iCode = 0;
     if (!pEngine->loginRepository(&rep_env_key, &rep_user, &rep_password,
@@ -488,8 +489,8 @@ bool RithmicAdapter::subscribe_mbo(const std::string& symbol, const std::string&
     if (!connected_ || !engine_) return false;
 
     auto* pEngine = static_cast<RApi::REngine*>(engine_);
-    RApi::tsNCharcb sExchange = make_ts(exchange.c_str());
-    RApi::tsNCharcb sTicker = make_ts(symbol.c_str());
+    tsNCharcb sExchange = make_ts(exchange.c_str());
+    tsNCharcb sTicker = make_ts(symbol.c_str());
     int iFlags = RApi::MD_PRINTS | RApi::MD_BEST;
     int iCode = 0;
 
@@ -533,11 +534,11 @@ bool RithmicAdapter::cancel_order(const std::string& order_id) {
     if (!connected_ || !engine_) return false;
 
     auto* pEngine = static_cast<RApi::REngine*>(engine_);
-    RApi::tsNCharcb sOrderNum = make_ts(order_id.c_str());
-    RApi::tsNCharcb sEntryType = make_ts("Limit");
-    RApi::tsNCharcb sTradingAlgorithm = make_ts("System");
-    RApi::tsNCharcb sUserMsg = make_ts("");
-    RApi::tsNCharcb sWindowName = make_ts("");
+    tsNCharcb sOrderNum = make_ts(order_id.c_str());
+    tsNCharcb sEntryType = make_ts("Limit");
+    tsNCharcb sTradingAlgorithm = make_ts("System");
+    tsNCharcb sUserMsg = make_ts("");
+    tsNCharcb sWindowName = make_ts("");
 
     int iCode = 0;
     if (!pEngine->cancelOrder(nullptr, &sOrderNum, &sEntryType,

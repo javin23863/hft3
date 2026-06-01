@@ -37,6 +37,9 @@ struct ConnectionConfig {
 };
 
 class RithmicAdapter {
+    friend class MyCallbacks;
+    friend class MyAdmCallbacks;
+
 public:
     explicit RithmicAdapter(const ConnectionConfig& config,
                            SPSCQueue<MarketDataEvent, 8192>* mbo_queue);
