@@ -49,7 +49,13 @@ def _resolve_npz(event_id: str, symbol: str) -> Path:
     return resolve_event_npz(event_id, _REPO, symbol=symbol)
 
 
+_HYBRID_GATE_MODULE = None
+
+
 def _load_hybrid_gate():
+    global _HYBRID_GATE_MODULE
+    if _HYBRID_GATE_MODULE is not None:
+        return _HYBRID_GATE_MODULE
     import importlib.util
 
     script = _REPO / "scripts" / "run_hybrid_pipeline_gate.py"
@@ -57,6 +63,7 @@ def _load_hybrid_gate():
     mod = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(mod)
+    _HYBRID_GATE_MODULE = mod
     return mod
 
 
@@ -340,7 +347,7 @@ def main() -> int:
 
     try:
         npz = _resolve_npz(args.event_id, args.symbol)
-    except FileNotFoundError as exc:
+    except Exception as exc:
         print(json.dumps({"status": "FAIL", "error": str(exc)}, indent=2))
         return 1
     if not npz.is_file():
@@ -396,7 +403,10 @@ def main() -> int:
     models = finalize_catalog_models(executed, args.tier)
     expected = len(all_model_ids())
     if len(models) != expected:
-        steps.append(_step("model_registry", False, f"expected {expected} models, got {len(models)}"))
+        executed_ids = {m["model_id"] for m in models}
+        all_ids = set(all_model_ids())
+        missing = all_ids - executed_ids
+        steps.append(_step("model_registry", False, f"expected {expected} models, got {len(models)}; missing: {', '.join(sorted(missing))}"))
         overall = False
 
     gate_path = write_catalog_artifacts(

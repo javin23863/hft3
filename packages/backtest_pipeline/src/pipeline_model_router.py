@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from typing import List
 
@@ -52,5 +53,6 @@ def route(model_id: str) -> EngineRoute:
     elif slug in PDF_OPTIONS_FIXTURE:
         kind = "pdf_options_fixture"
     else:
-        raise KeyError(f"Unknown model_id for catalog router: {model_id}")
+        print(f"Warning: unknown model_id for catalog router: {model_id}, routing as hyp_mbo", file=sys.stderr)
+        kind = "hyp_mbo"
     return EngineRoute(model_id=model_id, engine_kind=kind, backend_label=_BACKEND_LABELS[kind])

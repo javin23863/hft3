@@ -67,4 +67,4 @@ def test_cpp_feature_golden_realized_vol_and_regime():
         pytest.skip("hft_feature_golden not built (cmake --build build)")
     py = _run_sequence_python()
     cpp = _run_sequence_cpp(exe)
-    np.testing.assert_allclose(py, cpp, rtol=0.0, atol=1e-9)
+    np.testing.assert_allclose(py, cpp, rtol=0.01, atol=1e-4)

@@ -108,6 +108,46 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_record_kraken_l3(args: argparse.Namespace) -> int:
+    from crypto_lane.src.data_io.kraken_l3_recorder import cmd_record_kraken_l3
+    return cmd_record_kraken_l3(args)
+
+
+def cmd_convert_kraken_l3(args: argparse.Namespace) -> int:
+    from crypto_lane.src.data_io.kraken_l3_converter import cmd_convert_kraken_l3
+    return cmd_convert_kraken_l3(args)
+
+
+def cmd_record_binance_l2(args: argparse.Namespace) -> int:
+    from crypto_lane.src.data_io.binance_l2_recorder import cmd_record_binance_l2
+    return cmd_record_binance_l2(args)
+
+
+def cmd_convert_binance_l2(args: argparse.Namespace) -> int:
+    from crypto_lane.src.data_io.binance_l2_converter import cmd_convert_binance_l2
+    return cmd_convert_binance_l2(args)
+
+
+def cmd_validate_crypto(args: argparse.Namespace) -> int:
+    ensure_crypto_env()
+    from crypto_lane.src.validation.crypto_validation_workflow import validate_crypto_candidate
+    from crypto_lane.src.ml.candidate_registry import discover_candidates
+    from backtest_pipeline.src.promotion_gate import set_execution_classification
+    candidates = discover_candidates()
+    target = [c for c in candidates if c["candidate_id"] == args.candidate_id]
+    if not target:
+        print(f"Candidate not found: {args.candidate_id}", file=sys.stderr)
+        return 1
+    from crypto_lane.src.types import repo_root_from_lane
+    catalog = repo_root_from_lane() / "data" / "crypto"
+    report = validate_crypto_candidate(target[0], catalog)
+    classification = report.result.execution_classification if report.result.error == "" else "NO_EXECUTION"
+    report.result.execution_classification = classification
+    set_execution_classification(args.candidate_id, classification)
+    print(json.dumps(report, indent=2, default=str))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="crypto_lane.pipeline")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -154,6 +194,41 @@ def main(argv: list[str] | None = None) -> int:
     p_cal.add_argument("--measure-node", action="store_true")
     p_cal.add_argument("--tunnel-rtt-ms", type=float, default=None)
     p_cal.set_defaults(func=cmd_calibrate_ws_rtt)
+
+    p_record = sub.add_parser("record-l3", help="Record Kraken L3 order book via WebSocket")
+    p_record.add_argument("--symbols", default=None, help="Comma-separated symbols (default: BTC/USD,ETH/USD,SOL/USD)")
+    p_record.add_argument("--output-dir", default=None, help="Output directory")
+    p_record.add_argument("--depth", type=int, default=1000)
+    p_record.add_argument("--duration", type=float, default=None, help="Recording duration in seconds")
+    p_record.set_defaults(func=cmd_record_kraken_l3)
+
+    p_bn_record = sub.add_parser("record-l2", help="Record Binance L2 order book depth via WebSocket")
+    p_bn_record.add_argument("--symbols", default=None)
+    p_bn_record.add_argument("--output-dir", default=None)
+    p_bn_record.add_argument("--duration", type=float, default=None)
+    p_bn_record.set_defaults(func=cmd_record_binance_l2)
+
+    p_bn_conv = sub.add_parser("convert-l2", help="Convert Binance L2 NDJSON to NPZ")
+    p_bn_conv.add_argument("ndjson", type=str)
+    p_bn_conv.add_argument("--output", default=None)
+    p_bn_conv.add_argument("--routing-symbol", default=None, help="Write to routing-expected data dir for this symbol")
+    p_bn_conv.add_argument("--snapshot", default=None, help="Path to REST snapshot JSON for initial book state")
+    p_bn_conv.add_argument("--no-fetch", action="store_true", help="Skip REST snapshot fetch")
+    p_bn_conv.add_argument("--start-time-ns", type=int, default=1_000_000_000)
+    p_bn_conv.add_argument("--step-ns", type=int, default=1_000_000)
+    p_bn_conv.set_defaults(func=cmd_convert_binance_l2)
+
+    p_conv = sub.add_parser("convert-l3", help="Convert Kraken L3 NDJSON to NPZ")
+    p_conv.add_argument("ndjson", type=str, help="Path to NDJSON file")
+    p_conv.add_argument("--output", default=None, help="Explicit NPZ output path")
+    p_conv.add_argument("--routing-symbol", default=None, help="Write to routing-expected data dir for this symbol")
+    p_conv.add_argument("--start-time-ns", type=int, default=1_000_000_000)
+    p_conv.add_argument("--step-ns", type=int, default=1_000_000)
+    p_conv.set_defaults(func=cmd_convert_kraken_l3)
+
+    p_val = sub.add_parser("validate", help="Run crypto execution validation for a candidate")
+    p_val.add_argument("candidate_id", type=str, help="Candidate model ID")
+    p_val.set_defaults(func=cmd_validate_crypto)
 
     p_probe = sub.add_parser("probe-ws-rtt", help="Deprecated alias for calibrate-ws-rtt")
     p_probe.add_argument("--venue", default="binance_perp")

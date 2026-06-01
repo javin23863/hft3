@@ -7,15 +7,17 @@ from pathlib import Path
 import pytest
 
 _REPO = Path(__file__).resolve().parents[1]
+_OPTIONS = _REPO / "packages" / "options_lane"
 sys.path.insert(0, str(_REPO))
+sys.path.insert(0, str(_REPO / "packages"))
 
 from options_lane.src.config_loader import load_group_by_id, load_universe
 from options_lane.src.ingest.quote_aligner import align_quotes, snapshot_has_required_legs
 from options_lane.src.ingest.quotes_io import load_quote_ndjson
 from options_lane.src.models import LegQuote
 
-_CONFIG = _REPO / "options_lane" / "config" / "parity_universe.yaml"
-_FAIR_FIXTURE = _REPO / "options_lane" / "fixtures" / "fair_futures_quotes.ndjson"
+_CONFIG = _OPTIONS / "config" / "parity_universe.yaml"
+_FAIR_FIXTURE = _OPTIONS / "fixtures" / "fair_futures_quotes.ndjson"
 
 
 def test_load_fixture_ndjson() -> None:

@@ -129,8 +129,8 @@ def build_spot_perp_ticks(start: str, end: str) -> pl.DataFrame:
         pl.col("funding_rate").alias("funding_rate_okx"),
         (pl.col("spot_mid").log().diff()).fill_null(0.0).alias("spot_return"),
         (pl.col("perp_mid").log().diff()).fill_null(0.0).alias("perp_return"),
-        pl.lit(2.0).alias("bid_ask_spread"),
-        pl.lit(50.0).alias("depth_btc"),
+        pl.lit(0.0).alias("bid_ask_spread"),
+        pl.lit(0.0).alias("depth_btc"),
         pl.lit(0.0).alias("order_imbalance"),
     ])
     out = _assign_validation_periods(out.sort("exchange_timestamp"))

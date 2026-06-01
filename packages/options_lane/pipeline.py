@@ -6,8 +6,9 @@ import json
 import sys
 from pathlib import Path
 
-_REPO = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_REPO))
+_PKG_ROOT = Path(__file__).resolve().parents[1]
+if str(_PKG_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PKG_ROOT))
 
 from options_lane.src.backtest.multi_leg_backtester import (
     MultiLegParityBacktester,
@@ -65,10 +66,10 @@ def cmd_scan(args: argparse.Namespace) -> int:
 
 def cmd_fixture_backtest(args: argparse.Namespace) -> int:
     """Run backtest on committed fixture (no API key)."""
-    fixture = _REPO / "options_lane" / "fixtures" / args.fixture
+    fixture = _PKG_ROOT / "options_lane" / "fixtures" / args.fixture
     args.quotes = str(fixture)
     args.group = args.group or "example_same_ul"
-    args.config = str(_REPO / "options_lane" / "config" / "parity_universe.yaml")
+    args.config = str(_PKG_ROOT / "options_lane" / "config" / "parity_universe.yaml")
     return cmd_backtest(args)
 
 
@@ -76,7 +77,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="options_lane.pipeline")
     parser.add_argument(
         "--config",
-        default=str(_REPO / "options_lane" / "config" / "parity_universe.yaml"),
+        default=str(_PKG_ROOT / "options_lane" / "config" / "parity_universe.yaml"),
     )
     sub = parser.add_subparsers(dest="command", required=True)
 

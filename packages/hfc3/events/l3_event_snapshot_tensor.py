@@ -36,7 +36,7 @@ def _default_snapshot_offsets_from_yaml() -> Tuple[int, ...]:
 
 SNAPSHOT_OFFSETS_SEC: Tuple[int, ...] = _default_snapshot_offsets_from_yaml()
 
-REPO = Path(__file__).resolve().parents[2]
+REPO = Path(__file__).resolve().parents[3]
 _TICK_SIZE_CACHE: Dict[str, float] = {}
 
 

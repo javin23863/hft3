@@ -2,7 +2,7 @@
 
 Rules from integration spec:
 - CME futures with MBO NPZ → VectorBT filter → HftBacktest execution gate
-- Crypto with normalized OHLCV → VectorBT filter → no_execution (mark not pretend-pass)
+- Crypto with normalized OHLCV → VectorBT filter → L2 proxy or L3 execution gate
 - Equities with bar data → VectorBT filter → no_execution (mark)
 - Options lane → VectorBT filter → no_execution (mark)
 - Any lane missing tick/book data → no_execution (mark, not pretend-pass)
@@ -19,6 +19,8 @@ from research_pipeline.types import CandidateModel
 
 class ExecutionCapability(Enum):
     FULL_EXECUTION = auto()
+    L3_VALIDATED = auto()
+    L2_PROXY_VALIDATION = auto()
     NO_EXECUTION_VALIDATION = auto()
 
 
@@ -41,6 +43,27 @@ SUPPORTED_CME_SYMBOLS = {
 }
 
 CRYPTO_LANE_MODEL_PREFIXES = ("CRYPTO_", "BTC_", "ETH_")
+
+# Crypto symbols that may have Binance L2 depth data
+CRYPTO_BINANCE_L2_SYMBOLS = {"BTCUSDT", "ETHUSDT", "SOLUSDT"}
+
+# Crypto symbols that may have Kraken L3 MBO data (spot only, using wsname format)
+CRYPTO_KRAKEN_L3_SYMBOLS = {"BTC/USD", "ETH/USD", "SOL/USD"}
+
+# Mapping from perp symbol (as used by hypotheses) to Binance L2 symbol
+CRYPTO_PERP_TO_L2 = {
+    "BTCUSDT": "BTCUSDT",
+    "ETHUSDT": "ETHUSDT",
+    "SOLUSDT": "SOLUSDT",
+}
+
+# Mapping from perp symbol to Kraken spot symbol for L3 validation
+CRYPTO_PERP_TO_KRAKEN_SPOT = {
+    "BTCUSDT": "BTC/USD",
+    "ETHUSDT": "ETH/USD",
+    "SOLUSDT": "SOL/USD",
+}
+
 EQUITIES_LANE_MODEL_PREFIXES = ("EQUITY_", "LOW_FLOAT_")
 OPTIONS_LANE_MODEL_PREFIXES = ("OPTIONS_", "PARITY_")
 
@@ -63,6 +86,28 @@ def resolve_asset_class(candidate: CandidateModel) -> str:
 
 def resolve_symbol(candidate: CandidateModel) -> str:
     return candidate.metadata.get("symbol", "MES")
+
+
+def _crypto_l2_npz_path(data_catalog_root: Path, symbol: str) -> Path:
+    return data_catalog_root / "data" / "replay" / "hftbacktest" / "crypto" / "binance" / symbol
+
+
+def _crypto_l3_npz_path(data_catalog_root: Path, symbol: str) -> Path:
+    return data_catalog_root / "data" / "replay" / "hftbacktest" / "crypto" / "kraken" / symbol.replace("/", "_")
+
+
+def _crypto_l2_npz_exists(data_catalog_root: Optional[Path], symbol: str) -> bool:
+    if not data_catalog_root:
+        return False
+    npz_dir = _crypto_l2_npz_path(data_catalog_root, symbol)
+    return npz_dir.exists() and any(npz_dir.glob("*.npz"))
+
+
+def _crypto_l3_npz_exists(data_catalog_root: Optional[Path], symbol: str) -> bool:
+    if not data_catalog_root:
+        return False
+    npz_dir = _crypto_l3_npz_path(data_catalog_root, symbol)
+    return npz_dir.exists() and any(npz_dir.glob("*.npz"))
 
 
 def resolve_validation_path(
@@ -88,11 +133,28 @@ def resolve_validation_path(
             notes.append(f"No tick/order-book data for {symbol}")
 
     elif asset_class == "CRYPTO":
-        has_order_book = bool(data_catalog_root) and (
-            data_catalog_root / "data" / "crypto" / "normalized"
-        ).exists() if data_catalog_root else False
-        exec_cap = ExecutionCapability.NO_EXECUTION_VALIDATION
-        notes.append("Crypto: no order-book NPZ; marking NO_EXECUTION_VALIDATION")
+        has_order_book = False
+        has_tick = False
+        perp_symbol = symbol.upper()
+        l2_sym = CRYPTO_PERP_TO_L2.get(perp_symbol)
+        kraken_sym = CRYPTO_PERP_TO_KRAKEN_SPOT.get(perp_symbol)
+
+        if l2_sym and _crypto_l2_npz_exists(data_catalog_root, l2_sym):
+            has_order_book = True
+            has_tick = True
+            exec_cap = ExecutionCapability.L2_PROXY_VALIDATION
+            notes.append(f"Binance L2 depth NPZ found for {l2_sym}; L2_PROXY_VALIDATION")
+        elif kraken_sym and _crypto_l3_npz_exists(data_catalog_root, kraken_sym):
+            has_order_book = True
+            has_tick = True
+            exec_cap = ExecutionCapability.L3_VALIDATED
+            notes.append(f"Kraken L3 MBO NPZ found for {kraken_sym}; L3_VALIDATED")
+        else:
+            exec_cap = ExecutionCapability.NO_EXECUTION_VALIDATION
+            if data_catalog_root and (data_catalog_root / "data" / "crypto" / "normalized").exists():
+                notes.append("Crypto: normalized data exists but no L2/L3 NPZ; marking NO_EXECUTION_VALIDATION")
+            else:
+                notes.append("Crypto: no order-book NPZ; marking NO_EXECUTION_VALIDATION")
 
     elif asset_class == "EQUITIES":
         exec_cap = ExecutionCapability.NO_EXECUTION_VALIDATION
@@ -108,7 +170,11 @@ def resolve_validation_path(
 
     # VectorBT always runs — OHLCV data is universal. HftBacktest routing is conditional.
     route_to_vbt = True
-    route_to_hft = exec_cap == ExecutionCapability.FULL_EXECUTION
+    route_to_hft = exec_cap in (
+        ExecutionCapability.FULL_EXECUTION,
+        ExecutionCapability.L3_VALIDATED,
+        ExecutionCapability.L2_PROXY_VALIDATION,
+    )
 
     return ValidationPath(
         candidate=candidate,

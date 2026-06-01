@@ -8,7 +8,7 @@ import os
 import sys
 from pathlib import Path
 
-_REPO = Path(__file__).resolve().parents[2]
+_REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_REPO))
 
 from dotenv import load_dotenv
@@ -24,7 +24,7 @@ SYMBOLS = ["MES.v.0"]
 
 
 def main() -> None:
-    events = load_and_parse_events(str(_REPO / "data_system" / "config" / "events.csv"))
+    events = load_and_parse_events(str(_REPO / "packages" / "data_system" / "config" / "events.csv"))
     row = events[events["event_id"] == EVENT_ID]
     if row.empty:
         raise SystemExit(f"Event {EVENT_ID} not found in events.csv")

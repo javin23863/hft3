@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 from equities_lane.src.ingest.session_io import save_session
@@ -62,6 +63,7 @@ def _try_decode_dbn(raw_path: Path, schema: str) -> list[SessionTick]:
     try:
         import databento as db
     except ImportError:
+        print(f"Warning: databento module not installed, cannot decode {raw_path}", file=sys.stderr)
         return []
 
     store = db.DBNStore.from_file(str(raw_path))

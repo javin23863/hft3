@@ -80,11 +80,15 @@ def main() -> int:
     )
 
     if args.doc:
-        text = extract_text(args.doc)
-        doc_summary = summarise_text(text)
-        doc_id = f"doc:{args.doc.stem}"
-        kg = build_knowledge_graph(text, doc_id=doc_id)
-        persist_graph_slice(repo_root, kg)
+        try:
+            text = extract_text(args.doc)
+            doc_summary = summarise_text(text)
+            doc_id = f"doc:{args.doc.stem}"
+            kg = build_knowledge_graph(text, doc_id=doc_id)
+            persist_graph_slice(repo_root, kg)
+        except Exception as exc:
+            print(f"Warning: document ingestion failed, continuing without doc: {exc}", file=sys.stderr)
+            doc_summary = {"error": str(exc)}
 
     parsed = parse_hypothesis(
         args.thesis,
@@ -121,7 +125,7 @@ def main() -> int:
                     model_id=p.hypothesis_id,
                     strategy_params=p.param_values,
                     thesis=parsed.thesis,
-                    metadata={"strategy_family": p.strategy_family, "promoted": True, "vectorbt_run_id": p.vectorbt_run_id, "vectorbt_results": p.vectorbt_results},
+                    metadata={"strategy_family": p.strategy_family, "promoted": True, "vectorbt_run_id": p.vectorbt_run_id, "vectorbt_results": p.vectorbt_results, "asset_class": p.asset_class, "symbol": p.symbol},
                 )
                 for p in filter_result.promoted
             ]
@@ -129,6 +133,40 @@ def main() -> int:
             print("No candidates survived VectorBT filter.")
             if args.vectorbt_only:
                 return 1
+
+    # === Crypto execution validation for promoted candidates ===
+    if args.vectorbt and not args.vectorbt_only:
+        crypto_data = repo_root / "data" / "crypto"
+        for cand in candidates:
+            ac = cand.metadata.get("asset_class", "").upper()
+            if ac in ("CRYPTO",):
+                try:
+                    from crypto_lane.src.validation.crypto_validation_workflow import validate_crypto_candidate  # noqa: F811
+                    from backtest_pipeline.src.promotion_gate import set_execution_classification  # noqa: F811
+
+                    print(f"  Validating crypto execution for {cand.candidate_id}...")
+                    report = validate_crypto_candidate(cand, crypto_data)
+                    error = report.result.error
+                    classification = report.result.execution_classification if not error else "NO_EXECUTION"
+                    cand.metadata["execution_classification"] = classification
+                    cand.metadata["execution_quality"] = {
+                        "mean_jump_bps": report.result.mean_jump_bps,
+                        "mean_qqe": report.result.mean_qqe,
+                        "total_fills": report.result.total_fills,
+                        "error": error,
+                    }
+                    set_execution_classification(cand.candidate_id, classification)
+                    print(f"    {cand.candidate_id}: {classification}, "
+                          f"fills={report.result.total_fills}, "
+                          f"jump={report.result.mean_jump_bps:.2f}bps, "
+                          f"qqe={report.result.mean_qqe:.2f}")
+                except ImportError:
+                    print(f"  Skipping crypto validation for {cand.candidate_id}: crypto_lane not installed", file=sys.stderr)
+                    cand.metadata["execution_classification"] = "NO_EXECUTION"
+                except Exception as exc:
+                    print(f"  Crypto validation failed for {cand.candidate_id}: {exc}", file=sys.stderr)
+                    cand.metadata["execution_classification"] = "NO_EXECUTION"
+                    cand.metadata["execution_quality"] = {"error": str(exc)}
 
     if args.dry_run:
         report = PipelineReport(
@@ -173,6 +211,8 @@ def main() -> int:
     if chi404 is None:
         default_lat = repo_root / "runtime" / "latency_reports" / "latency_summary.json"
         chi404 = default_lat if default_lat.is_file() else None
+    if chi404 is None:
+        print("Warning: no latency data available; backtest will run without CHI404 latency", file=sys.stderr)
 
     gates = GateThresholds(min_trades=0)
     results = []
@@ -195,6 +235,8 @@ def main() -> int:
     )
 
     artifact = deploy_best(repo_root, report)
+    if artifact is None:
+        print("Note: deploy_best returned None (no passing candidates)", file=sys.stderr)
     llm_status = _pipeline_llm_status(parsed, no_llm=args.no_llm)
     response = build_pipeline_response(
         report,

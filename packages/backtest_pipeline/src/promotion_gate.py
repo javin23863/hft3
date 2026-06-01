@@ -33,6 +33,7 @@ class PromotedCandidate:
     robustness_metrics: Dict[str, float] = field(default_factory=dict)
     turnover_metrics: Dict[str, float] = field(default_factory=dict)
     drawdown_metrics: Dict[str, float] = field(default_factory=dict)
+    execution_classification: str = ""
     data_version: str = ""
     git_commit: str = ""
     config_path: str = ""
@@ -62,6 +63,7 @@ class PromotedCandidate:
             "data_version": self.data_version,
             "git_commit": self.git_commit,
             "config_path": self.config_path,
+            "execution_classification": self.execution_classification,
             "seed": self.seed,
             "timestamp_utc": self.timestamp_utc,
         }
@@ -95,7 +97,6 @@ class PromotionGate:
     min_trades: int = 10
     param_stability_rtol: float = 0.3
     max_slippage_sensitivity: float = 0.5
-    require_reproducible: bool = True
 
     def evaluate(self, candidate: PromotedCandidate) -> bool:
         if candidate.vectorbt_results.get("oos_expectancy", 0.0) < self.min_oos_expectancy:
@@ -106,7 +107,7 @@ class PromotionGate:
             return False
         if candidate.vectorbt_results.get("turnover_mean_pct", 0.0) > self.max_turnover_pct:
             return False
-        if candidate.vectorbt_results.get("total_trades", 0) < self.min_trades:
+        if candidate.vectorbt_results.get("num_trades", 0) < self.min_trades:
             return False
         if candidate.vectorbt_results.get("param_stability_score", 0.0) < (1.0 - self.param_stability_rtol):
             return False
@@ -124,6 +125,19 @@ def serialize_promoted(
     path = out_dir / f"{candidate.candidate_id}.json"
     path.write_text(json.dumps(candidate.to_dict(), indent=2), encoding="utf-8")
     return path
+
+
+def set_execution_classification(candidate_id: str, classification: str) -> bool:
+    """Update the execution_classification field of a serialized PromotedCandidate."""
+    path = (_REPO / "research_cards" / "promotion" / f"{candidate_id}.json")
+    if not path.exists():
+        return False
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["execution_classification"] = classification
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    tmp.replace(path)
+    return True
 
 
 def load_promoted(path: Path) -> PromotedCandidate:
@@ -145,6 +159,7 @@ def load_promoted(path: Path) -> PromotedCandidate:
         robustness_metrics=raw.get("robustness_metrics", {}),
         turnover_metrics=raw.get("turnover_metrics", {}),
         drawdown_metrics=raw.get("drawdown_metrics", {}),
+        execution_classification=raw.get("execution_classification", ""),
         data_version=raw.get("data_version", ""),
         git_commit=raw.get("git_commit", ""),
         config_path=raw.get("config_path", ""),

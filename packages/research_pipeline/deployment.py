@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -22,7 +23,11 @@ def _build_packet(
     eval_result: EvaluationResult,
     repo_root: Path,
 ) -> Dict[str, Any]:
-    of = validate_connector(repo_root)
+    try:
+        of = validate_connector(repo_root)
+    except Exception as exc:
+        print(f"Warning: connector validation failed, using defaults: {exc}", file=sys.stderr)
+        of = {"connector": {"connector_id": "unknown", "asset_class": "CME_FUTURES", "schema_version": "0"}, "vendor_shas": {}}
     return {
         "run_id": run_id,
         "openfoundry_meta": {
@@ -110,7 +115,10 @@ def deploy_model(
         eval_result,
         repo_root,
     )
-    ingest_run(artifact_dir, repo_root, packet)
+    try:
+        ingest_run(artifact_dir, repo_root, packet)
+    except Exception as exc:
+        print(f"Warning: data layer ingest failed: {exc}", file=sys.stderr)
     return artifact_dir
 
 

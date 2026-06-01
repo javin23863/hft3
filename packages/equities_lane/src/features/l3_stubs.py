@@ -1,4 +1,9 @@
-"""L3-only feature stubs (no-op in degraded mode)."""
+"""L3 feature stubs (v1 scaffold — no real order book computation).
+
+Current implementation returns hardcoded placeholders (queue_position=0.5 neutral,
+cancellation_delta=0.0, iceberg_detected=False). These must be replaced with
+real MBO/order-book computation before the lane produces production signals.
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass

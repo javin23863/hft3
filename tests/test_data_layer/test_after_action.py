@@ -362,6 +362,8 @@ def test_after_action_skips_llm_on_pending_vendor_lock(tmp_path, monkeypatch):
 
 @pytest.mark.slow
 def test_ollama_live_gemma_fixture(tmp_path):
+    import shutil
+
     from data_layer.llm import ollama_client
     from data_layer.pipeline.after_action import run_after_action_report
 
@@ -383,6 +385,12 @@ def test_ollama_live_gemma_fixture(tmp_path):
     (tmp_repo / "integrations" / "openfoundry" / "hft3-cme-mbo.yaml").write_bytes(
         (REPO / "integrations" / "openfoundry" / "hft3-cme-mbo.yaml").read_bytes()
     )
+    src_vendor = REPO / "vendor" / "openfoundry"
+    dst_vendor = tmp_repo / "vendor" / "openfoundry"
+    if src_vendor.is_dir():
+        shutil.copytree(str(src_vendor), str(dst_vendor), dirs_exist_ok=True)
+    else:
+        dst_vendor.mkdir(parents=True, exist_ok=True)
     (tmp_repo / "docs" / "references").mkdir(parents=True)
     for pdf in (REPO / "docs" / "references").glob("*.pdf"):
         (tmp_repo / "docs" / "references" / pdf.name).write_bytes(pdf.read_bytes())

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -55,8 +56,8 @@ def resolve_symbology(session: DecadalSession) -> str | None:
             if isinstance(mapped, str):
                 return mapped
     except Exception:
-        pass
-    return session.symbol
+        print(f"Warning: symbology resolution failed for {session.symbol}, using raw symbol", file=sys.stderr)
+        return session.symbol
 
 
 def estimate_session_cost(session: DecadalSession) -> float:

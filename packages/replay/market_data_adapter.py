@@ -26,7 +26,9 @@ class HistoricalReplayMarketDataAdapter:
         self._finished = False
 
     @classmethod
-    def from_npz(cls, path: str, **kwargs) -> HistoricalReplayMarketDataAdapter:
+    def from_npz(cls, path: str = "", events: Optional[np.ndarray] = None, **kwargs) -> HistoricalReplayMarketDataAdapter:
+        if events is not None:
+            return cls(events, **kwargs)
         return cls(load_npz_events(path), **kwargs)
 
     def next_event(self) -> Optional[MBOEvent]:

@@ -503,8 +503,14 @@ def run_llm_on_pipeline_request(
 
 
 def _parse_json_object(text: str) -> tuple[Optional[Dict[str, Any]], Optional[str]]:
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        first_newline = stripped.index("\n") if "\n" in stripped else len(stripped)
+        last_fence = stripped.rfind("```")
+        if last_fence > first_newline:
+            stripped = stripped[first_newline + 1 : last_fence].strip()
     try:
-        data = json.loads(text.strip())
+        data = json.loads(stripped)
     except json.JSONDecodeError as exc:
         return None, str(exc)
     if not isinstance(data, dict):

@@ -7,7 +7,7 @@ import json
 import sys
 from pathlib import Path
 
-_REPO = Path(__file__).resolve().parents[2]
+_REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_REPO))
 
 from backtest_pipeline.src.replay_matrix import run_all_hypotheses_replay, run_latency_matrix_replay
@@ -82,9 +82,12 @@ def run_all_research_cards(
 
     fills_path = out / "fills.csv"
     if all_fills:
-        import pandas as pd
+        try:
+            import pandas as pd
 
-        pd.DataFrame([f.__dict__ for f in all_fills]).to_csv(fills_path, index=False)
+            pd.DataFrame([f.__dict__ for f in all_fills]).to_csv(fills_path, index=False)
+        except ImportError:
+            print("Warning: pandas not installed, skipping fills.csv export", file=sys.stderr)
 
     hbt_summary = {}
     if not skip_hft:

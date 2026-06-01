@@ -50,7 +50,7 @@ def test_rtrader_bridge_refuses_windows(trial_cfg: TrialConfig) -> None:
 
 
 def test_capture_refuses_windows_rtrader() -> None:
-    cfg_path = _REPO / "data_system/config/rithmic_trial.yaml"
+    cfg_path = _REPO / "packages" / "data_system" / "config" / "rithmic_trial.yaml"
     args = type(
         "Args",
         (),

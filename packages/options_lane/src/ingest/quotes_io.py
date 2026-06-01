@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 from options_lane.src.models import LegQuote
@@ -13,16 +14,24 @@ def load_quote_ndjson(path: str | Path) -> list[LegQuote]:
         line = line.strip()
         if not line:
             continue
-        row = json.loads(line)
-        quotes.append(
-            LegQuote(
-                role=str(row["role"]),
-                symbol=str(row["symbol"]),
-                bid=float(row["bid"]),
-                ask=float(row["ask"]),
-                timestamp_ns=int(row["timestamp_ns"]),
-                strike=float(row["strike"]) if row.get("strike") is not None else None,
-                right=row.get("right"),
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError as exc:
+            print(f"Warning: skipping malformed NDJSON line in {path}: {exc}", file=sys.stderr)
+            continue
+        try:
+            quotes.append(
+                LegQuote(
+                    role=str(row.get("role", "")),
+                    symbol=str(row.get("symbol", "")),
+                    bid=float(row.get("bid", 0.0)),
+                    ask=float(row.get("ask", 0.0)),
+                    timestamp_ns=int(row.get("timestamp_ns", 0)),
+                    strike=float(row["strike"]) if row.get("strike") is not None else None,
+                    right=row.get("right"),
+                )
             )
-        )
+        except (ValueError, TypeError) as exc:
+            print(f"Warning: skipping invalid quote row in {path}: {exc}", file=sys.stderr)
+            continue
     return quotes

@@ -57,7 +57,7 @@ void DecisionEngine::evaluate_actions(const MarketState& state, ActionArray& out
     if (state.ask_qty_1 > 0 || state.bid_qty_1 > 0) {
         ev_long = 0.0;
         ev_short = 0.0;
-        const size_t n = std::min(active_feature_count_, static_cast<size_t>(64));
+        const size_t n = std::min(static_cast<size_t>(active_feature_count_), static_cast<size_t>(64));
         for (size_t i = 0; i < n; ++i) {
             ev_long += state.model_features[i] * weights_[i];
             ev_short -= state.model_features[i] * weights_[i];

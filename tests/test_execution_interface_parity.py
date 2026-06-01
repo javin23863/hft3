@@ -61,7 +61,7 @@ def test_toy_strategy_runs_all_adapter_modes(minimal_npz: str, tmp_path: Path) -
     assert isinstance(live, LiveBrokerAdapter)
     live.submit_order(intent)
 
-    source = Path(__file__).resolve().parents[1] / "backtest_pipeline" / "src" / "hypothesis_replay_strategy.py"
+    source = Path(__file__).resolve().parents[1] / "packages" / "backtest_pipeline" / "src" / "hypothesis_replay_strategy.py"
     text = source.read_text(encoding="utf-8").lower()
     assert 'if mode == "replay"' not in text
     assert 'if mode == "paper"' not in text

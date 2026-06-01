@@ -8,14 +8,16 @@ from pathlib import Path
 import pytest
 
 _REPO = Path(__file__).resolve().parents[1]
+_OPTIONS = _REPO / "packages" / "options_lane"
 sys.path.insert(0, str(_REPO))
+sys.path.insert(0, str(_REPO / "packages"))
 
 from options_lane.src.config_loader import load_group_by_id, load_universe
 from options_lane.src.ingest.quote_aligner import align_quotes
 from options_lane.src.models import LegQuote, ParityGroup, QuoteSnapshot, RateSpec
 from options_lane.src.parity_engine import compute_violation, discount_factor, is_actionable, theoretical_spread
 
-_CONFIG = _REPO / "options_lane" / "config" / "parity_universe.yaml"
+_CONFIG = _OPTIONS / "config" / "parity_universe.yaml"
 
 
 def _futures_group(**overrides) -> ParityGroup:

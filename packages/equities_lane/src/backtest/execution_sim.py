@@ -36,10 +36,7 @@ def simulate_fill(
         fees = config.fee_per_share * intent.qty
         return TradeFill(exec_ts, "buy", price, intent.qty, fees, price - base)
     if intent.side == "sell":
-        if not config.allow_short:
-            base = bid_px if bid_px > 0 else (intent.limit_price or 0.0)
-        else:
-            base = bid_px if bid_px > 0 else (intent.limit_price or 0.0)
+        base = bid_px if bid_px > 0 else (intent.limit_price or 0.0)
         if base <= 0:
             return None
         price = base * (1.0 - slip)

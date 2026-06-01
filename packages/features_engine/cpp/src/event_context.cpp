@@ -96,7 +96,7 @@ using days = std::chrono::sys_days;
 
 
 
-days nth_weekday_of_month(int year, std::chrono::month month, int weekday, int n) {
+days nth_weekday_of_month(int yr, std::chrono::month month, int weekday, int n) {
 
     using std::chrono::year;
 
@@ -104,7 +104,7 @@ days nth_weekday_of_month(int year, std::chrono::month month, int weekday, int n
 
 
 
-    const year_month_day first{year(year), month, std::chrono::day{1}};
+    const year_month_day first{std::chrono::year{yr}, month, std::chrono::day{1}};
 
     const int first_wd = static_cast<int>(std::chrono::weekday{first}.c_encoding());
 
@@ -112,7 +112,7 @@ days nth_weekday_of_month(int year, std::chrono::month month, int weekday, int n
 
     const int day = 1 + delta + 7 * (n - 1);
 
-    return days{year_month_day{year(year), month, std::chrono::day{static_cast<unsigned>(day)}}};
+    return days{year_month_day{std::chrono::year{yr}, month, std::chrono::day{static_cast<unsigned>(day)}}};
 
 }
 

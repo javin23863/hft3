@@ -12,7 +12,9 @@ import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
+
+import numpy as np
 
 _REPO = Path(__file__).resolve().parents[1]
 if str(_REPO) not in sys.path:
@@ -54,9 +56,9 @@ def _serialize_backtest_result(res: BacktestResult) -> dict[str, Any]:
     }
 
 
-def run_per_hypothesis_replay(npz_path: str, latency_ms: float) -> dict[str, Any]:
+def run_per_hypothesis_replay(npz_path: str, latency_ms: float, events: Optional[np.ndarray] = None) -> dict[str, Any]:
     hyps = get_active_hypotheses()
-    results = run_all_hypotheses_replay(hyps, npz_path, latency_ms=latency_ms)
+    results = run_all_hypotheses_replay(hyps, npz_path, latency_ms=latency_ms, events=events)
     by_id = {h.hyp_id: h.name for h in hyps}
     serialized = []
     for hyp_id, res in sorted(results.items()):
@@ -80,6 +82,10 @@ def run_per_hypothesis_replay(npz_path: str, latency_ms: float) -> dict[str, Any
         "hyp_5_spread_blowout": hyp5,
         "all_hypotheses": serialized,
     }
+
+
+def run_event_accurate_mbo(raw: np.ndarray, latency_ms: float) -> dict[str, Any]:
+    return run_per_hypothesis_replay("", latency_ms, events=raw)
 
 
 def write_report(
@@ -273,7 +279,10 @@ def main() -> int:
         print(f"Wrote {out_dir / 'result.json'}", flush=True)
         return 0
 
-    event = load_event_row(args.event_id, args.events_csv.resolve())
+    try:
+        event = load_event_row(args.event_id, args.events_csv.resolve())
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
     npz_path = args.npz.resolve() if args.npz else resolve_event_npz(args.event_id, _REPO)
     if not npz_path.is_file():
         raise SystemExit(f"NPZ missing: {npz_path}")
@@ -290,12 +299,14 @@ def main() -> int:
     if chi404_meta is not None:
         chi404 = chi404_meta
 
-    out_dir = args.out or (_REPO / "research_cards" / f"{args.event_id}_replay")
+    out_dir = args.out or (_REPO / "research_cards" / f"{args.event_id}_replay_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')}")
 
     print(f"event_id={args.event_id} release_date={event['release_date']}", flush=True)
     print(f"NPZ={npz_path} events={len(raw)}", flush=True)
     print(f"latency={latency_ms:.4f} ms ({latency_source}) probe={chi404.get('probe_run_id')}", flush=True)
 
+    if args.skip_hftbacktest:
+        print("Warning: --skip-hftbacktest is deprecated, use --skip-combined-replay", file=sys.stderr)
     skip_combined = args.skip_combined_replay or args.skip_hftbacktest
     if skip_combined:
         hft_result = {"skipped": True}

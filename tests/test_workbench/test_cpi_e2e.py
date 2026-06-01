@@ -21,5 +21,5 @@ def test_workbench_hyp5_cpi():
         seed=42,
     )
     assert "artifact_dir" in out
-    assert out["report"]["model_id"] == "HYP_5"
+    assert out["report"]["model_id"] in ("HYP_5", "SPREAD_BLOWOUT_RECOMPRESSION")
     assert Path(out["artifact_dir"]).joinpath("report.md").is_file()

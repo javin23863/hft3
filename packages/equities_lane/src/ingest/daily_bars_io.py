@@ -10,6 +10,8 @@ from equities_lane.src.models import DailyBar
 
 def load_daily_bars(path: str | Path, symbol: str | None = None) -> list[DailyBar]:
     p = Path(path)
+    if not p.exists():
+        return []
     if p.is_dir():
         if not symbol:
             raise ValueError("symbol required when daily_bars path is a directory")

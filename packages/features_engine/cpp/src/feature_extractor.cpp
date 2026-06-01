@@ -1,4 +1,5 @@
 #include "feature_extractor.hpp"
+#include "feature_index.hpp"
 #include "regime_filter.hpp"
 
 #include <algorithm>

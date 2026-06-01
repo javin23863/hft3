@@ -5,8 +5,8 @@ from pathlib import Path
 
 _REPO = Path(__file__).resolve().parents[1]
 STRATEGY_FILES = [
-    _REPO / "backtest_pipeline" / "src" / "hypothesis_replay_strategy.py",
-    _REPO / "backtest_pipeline" / "src" / "hft_strategy.py",
+    _REPO / "packages" / "backtest_pipeline" / "src" / "hypothesis_replay_strategy.py",
+    _REPO / "packages" / "backtest_pipeline" / "src" / "hft_strategy.py",
 ]
 
 FORBIDDEN = (

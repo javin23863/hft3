@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import numpy as np
 
@@ -19,10 +19,12 @@ def run_hypothesis_replay(
     latency_ms: float = 1.0,
     signal_threshold: float = 0.15,
     max_steps: int | None = None,
+    events: Optional[np.ndarray] = None,
 ) -> BacktestResult:
     strategy = HypothesisReplayStrategy(hypothesis, signal_threshold=signal_threshold)
     cfg = ReplaySessionConfig(
         npz_path=npz_path,
+        events=events,
         latency_ms=latency_ms,
         max_steps=max_steps,
     )
@@ -71,10 +73,11 @@ def run_all_hypotheses_replay(
     npz_path: str,
     latency_ms: float = 1.0,
     signal_threshold: float = 0.15,
+    events: Optional[np.ndarray] = None,
 ) -> Dict[int, BacktestResult]:
     return {
         h.hyp_id: run_hypothesis_replay(
-            h, npz_path, latency_ms=latency_ms, signal_threshold=signal_threshold
+            h, npz_path, latency_ms=latency_ms, signal_threshold=signal_threshold, events=events
         )
         for h in hypotheses
     }

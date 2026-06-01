@@ -2,10 +2,14 @@
 from __future__ import annotations
 
 import json
+import tempfile
+import os
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Protocol, runtime_checkable
+
+import numpy as np
 
 from execution import safety
 from execution.adapter_factory import create_adapter
@@ -45,7 +49,8 @@ class ReplayStrategy(Protocol):
 
 @dataclass
 class ReplaySessionConfig:
-    npz_path: str
+    npz_path: str = ""
+    events: Optional[np.ndarray] = None
     run_id: str = ""
     latency_ms: float = 1.0
     queue_model: str = "LogProbQueueModel2"
@@ -73,114 +78,133 @@ class ReplaySession:
         self.clock = ReplayClock(seed=config.seed)
         self._lifecycle: List[dict[str, Any]] = []
         self._intent_count = 0
+        self._temp_npz: Optional[str] = None
 
     def run(self) -> Dict[str, Any]:
         from backtest_pipeline.src.hft_backtest_builder import build_hftbacktest
 
         cfg = self.config
-        hbt = build_hftbacktest(
-            cfg.npz_path,
-            latency_ms=cfg.latency_ms,
-            queue_model_type=cfg.queue_model,
-            tick_size=cfg.tick_size,
-            lot_size=cfg.lot_size,
-            product=cfg.product,
-        )
-        adapter = create_adapter(
-            "REPLAY",
-            hbt=hbt,
-            run_id=self.run_id,
-            latency_ms=cfg.latency_ms,
-            queue_model=cfg.queue_model,
-        )
-        safety.assert_replay_safe(adapter)
+        if cfg.events is not None:
+            fd, tmp_path = tempfile.mkstemp(suffix='.npz')
+            os.close(fd)
+            self._temp_npz = tmp_path
+            np.savez_compressed(tmp_path, data=cfg.events)
+            data_path = tmp_path
+        else:
+            data_path = cfg.npz_path
 
-        mda = HistoricalReplayMarketDataAdapter.from_npz(
-            cfg.npz_path,
-            tick_size=cfg.tick_size,
-            latency_ms=cfg.latency_ms,
-        )
+        try:
+            hbt = build_hftbacktest(
+                data_path,
+                latency_ms=cfg.latency_ms,
+                queue_model_type=cfg.queue_model,
+                tick_size=cfg.tick_size,
+                lot_size=cfg.lot_size,
+                product=cfg.product,
+            )
+            adapter = create_adapter(
+                "REPLAY",
+                hbt=hbt,
+                run_id=self.run_id,
+                latency_ms=cfg.latency_ms,
+                queue_model=cfg.queue_model,
+            )
+            safety.assert_replay_safe(adapter)
 
-        steps = 0
-        while True:
-            result = hbt.elapse(cfg.step_ns)
-            if result == 1:
-                break
-            if result != 0:
-                return {"error": int(result), "steps": steps, "run_id": self.run_id}
+            mda = HistoricalReplayMarketDataAdapter.from_npz(
+                cfg.npz_path,
+                events=cfg.events,
+                tick_size=cfg.tick_size,
+                latency_ms=cfg.latency_ms,
+            )
 
-            ts = int(hbt.current_timestamp)
-            self.clock.advance_to(ts)
-            hbt.clear_inactive_orders(0)
-            adapter.after_elapse(ts)
+            steps = 0
+            while True:
+                result = hbt.elapse(cfg.step_ns)
+                if result == 1:
+                    break
+                if result != 0:
+                    return {"error": int(result), "steps": steps, "run_id": self.run_id}
 
-            depth = hbt.depth(0)
-            if depth.best_bid <= 0 or depth.best_ask <= 0:
+                ts = int(hbt.current_timestamp)
+                self.clock.advance_to(ts)
+                hbt.clear_inactive_orders(0)
+                adapter.after_elapse(ts)
+
+                depth = hbt.depth(0)
+                if depth.best_bid <= 0 or depth.best_ask <= 0:
+                    steps += 1
+                    if cfg.max_steps and steps >= cfg.max_steps:
+                        break
+                    continue
+
+                mda.sync_to_timestamp(ts)
+                state = mda.current_market_state(cfg.symbol)
+                drained = adapter.drain_order_events()
+
+                ctx = ReplayStepContext(
+                    run_id=self.run_id,
+                    clock=self.clock,
+                    market_state=state,
+                    best_bid=float(depth.best_bid),
+                    best_ask=float(depth.best_ask),
+                    position=float(hbt.position(0)),
+                    order_events=drained,
+                    execution=adapter,
+                    symbol=cfg.symbol,
+                )
+                actions = self.strategy.on_step(ctx)
+                for action in actions:
+                    if isinstance(action, OrderIntent):
+                        self._intent_count += 1
+                        ev = adapter.submit_order(action)
+                        self._record_lifecycle(ev, ts, action.strategy_id, action.model_id)
+                    elif isinstance(action, CancelIntent):
+                        ev = adapter.cancel_order(action.order_id)
+                        self._record_lifecycle(ev, ts, action.strategy_id, action.model_id)
+                    elif isinstance(action, ReplaceIntent):
+                        ev = adapter.replace_order(action.order_id, action.new_order_intent)
+                        self._record_lifecycle(ev, ts, action.new_order_intent.strategy_id, action.new_order_intent.model_id)
+
                 steps += 1
                 if cfg.max_steps and steps >= cfg.max_steps:
                     break
-                continue
 
-            mda.sync_to_timestamp(ts)
-            state = mda.current_market_state(cfg.symbol)
-            drained = adapter.drain_order_events()
-
-            ctx = ReplayStepContext(
-                run_id=self.run_id,
-                clock=self.clock,
-                market_state=state,
-                best_bid=float(depth.best_bid),
-                best_ask=float(depth.best_ask),
-                position=float(hbt.position(0)),
-                order_events=drained,
-                execution=adapter,
-                symbol=cfg.symbol,
+            account = adapter.get_account_state()
+            summary = self._build_summary(adapter, account, steps)
+            stamp = build_certification_stamp(
+                execution_mode="REPLAY",
+                execution_adapter_mode="hftbacktest_simulated_exchange",
+                latency_band=self.config.latency_ms,
+                queue_model=self.config.queue_model,
+                fee_model="FeeModel",
+                fill_model_version="hftbacktest",
             )
-            actions = self.strategy.on_step(ctx)
-            for action in actions:
-                if isinstance(action, OrderIntent):
-                    self._intent_count += 1
-                    ev = adapter.submit_order(action)
-                    self._record_lifecycle(ev, ts, action.strategy_id, action.model_id)
-                elif isinstance(action, CancelIntent):
-                    ev = adapter.cancel_order(action.order_id)
-                    self._record_lifecycle(ev, ts, action.strategy_id, action.model_id)
-                elif isinstance(action, ReplaceIntent):
-                    ev = adapter.replace_order(action.order_id, action.new_order_intent)
-                    self._record_lifecycle(ev, ts, action.new_order_intent.strategy_id, action.new_order_intent.model_id)
-
-            steps += 1
-            if cfg.max_steps and steps >= cfg.max_steps:
-                break
-
-        account = adapter.get_account_state()
-        summary = self._build_summary(adapter, account, steps)
-        stamp = build_certification_stamp(
-            execution_mode="REPLAY",
-            execution_adapter_mode="hftbacktest_simulated_exchange",
-            latency_band=self.config.latency_ms,
-            queue_model=self.config.queue_model,
-            fee_model="FeeModel",
-            fill_model_version="hftbacktest",
-        )
-        summary["certification_stamp"] = stamp
-        summary["certification_footer"] = format_stamp_footer(stamp)
-        self._write_audits(summary)
-        return {
-            "run_id": self.run_id,
-            "steps": steps,
-            "balance": account.balance,
-            "fee": account.fee,
-            "num_trades": account.num_trades,
-            "trading_volume": account.trading_volume,
-            "position": account.position,
-            "order_intent_count": self._intent_count,
-            "order_lifecycle_summary": summary,
-            "lifecycle_path": str(cfg.audit_dir / f"{self.run_id}_order_lifecycle.jsonl"),
-            "summary_path": str(cfg.audit_dir / f"{self.run_id}_summary.json"),
-            "certification_stamp": stamp,
-            "certification_footer": format_stamp_footer(stamp),
-        }
+            summary["certification_stamp"] = stamp
+            summary["certification_footer"] = format_stamp_footer(stamp)
+            self._write_audits(summary)
+            return {
+                "run_id": self.run_id,
+                "steps": steps,
+                "balance": account.balance,
+                "fee": account.fee,
+                "num_trades": account.num_trades,
+                "trading_volume": account.trading_volume,
+                "position": account.position,
+                "order_intent_count": self._intent_count,
+                "order_lifecycle_summary": summary,
+                "lifecycle_path": str(cfg.audit_dir / f"{self.run_id}_order_lifecycle.jsonl"),
+                "summary_path": str(cfg.audit_dir / f"{self.run_id}_summary.json"),
+                "certification_stamp": stamp,
+                "certification_footer": format_stamp_footer(stamp),
+            }
+        finally:
+            if self._temp_npz is not None:
+                try:
+                    os.unlink(self._temp_npz)
+                except OSError:
+                    pass
+                self._temp_npz = None
 
     def _record_lifecycle(
         self,

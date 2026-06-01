@@ -61,38 +61,38 @@
       {
         "model_id": "ABSORPTION_FADE",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "AGGRESSOR_DECELERATION_FADE",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "BOOK_PRESSURE",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "BOOK_SLOPE_COLLAPSE",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "CANCEL_STORM_BEFORE_MOVE",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "CROSS_ASSET_LEAD_LAG",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "CUTOFF_PANIC_EXITS",
@@ -103,26 +103,26 @@
       {
         "model_id": "DAILY_LOSS_LIMIT_DEFENSE",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "DEPTH_REFILL_IMBALANCE",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "DOM_ILLUSION_TRAP",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "DOW_YM_INDEX",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "ECONOMIC_EVENT_RESTRICTION_FLATTENING",
@@ -139,26 +139,26 @@
       {
         "model_id": "ES_MES_LEAD_LAG",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "ES_NQ_DIVERGENCE_SNAPBACK",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "FALSE_BREAKOUT_TRAP",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "FORCED_LIQUIDATION_CASCADE",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "FRIDAY_WEEKEND_DERISKING",
@@ -169,38 +169,38 @@
       {
         "model_id": "ICEBERG_RELOAD_DETECTION",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "LATE_CANDLE_ENTRY_FADE",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "LIQUIDITY_DEFENSE_BREAK",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "LIQUIDITY_VACUUM_CONTINUATION",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "MAX_CONTRACT_CROWDING_IN_MICROS",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "MICRO_CONTRACT_RETAIL_LAG",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "NO_OVERNIGHT_INVENTORY_SQUEEZE",
@@ -211,14 +211,14 @@
       {
         "model_id": "NQ_MNQ_LEAD_LAG",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "ONE_SIDED_ADD_CANCEL_IMBALANCE",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "OPENING_CANDLE_CHASE",
@@ -229,20 +229,20 @@
       {
         "model_id": "PANIC_MARKET_ORDER_SPREAD_TAX",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "PASSIVE_TRAP_FILL",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "PRIOR_HIGH_LOW_BREAKOUT_TRAP",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "PROFIT_LOCK_BEHAVIOR",
@@ -259,104 +259,104 @@
       {
         "model_id": "QUEUE_DEPLETION_TRIGGER",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "QUOTE_PULL_BEFORE_VOLATILITY",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "REBATE_TRAP_AVOIDANCE",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "REQUOTE_RACE_AFTER_SHOCK",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "ROUND_NUMBER_STOP_SWEEP",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "SECOND_WAVE_CONTINUATION",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "SPREAD_REGIME_CHANGE",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "STOCHASTIC_THERMO",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "STOP_LOSS_CASCADE_CONTINUATION",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "STOP_RUN_EXHAUSTION_FADE",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "THIN_BOOK_CONTINUATION",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "TRAILING_DRAWDOWN_PRESSURE",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "TRANSFER_ENTROPY",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "VPIN_TOXICITY",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "VWAP_DEFENSE_BREAK",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       },
       {
         "model_id": "ZN_ZB_ES_NQ_MACRO_IMPULSE",
         "symbol": "MES.v.0",
-        "runnable_events": 0,
-        "status": "SKIP_NO_NPZ"
+        "runnable_events": 1,
+        "status": "DRY_RUN"
       }
     ],
     "model_count": 50,

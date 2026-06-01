@@ -73,7 +73,7 @@ def _heuristic_parse(thesis: str) -> ParsedHypothesis:
     )
 
 
-def _from_llm_dict(thesis: str, data: Dict[str, Any]) -> ParsedHypothesis:
+def _parse_dict_common(thesis: str, data: Dict[str, Any], source: str) -> ParsedHypothesis:
     slugs = set(_hypothesis_slugs()) | set(all_slugs())
     model_id = str(data.get("primary_model_id", ""))
     if model_id not in slugs:
@@ -94,33 +94,16 @@ def _from_llm_dict(thesis: str, data: Dict[str, Any]) -> ParsedHypothesis:
         feature_list=list(data.get("feature_list") or [model_id]),
         param_ranges=normalized,
         primary_model_id=model_id,
-        source="ollama",
+        source=source,
     )
+
+
+def _from_llm_dict(thesis: str, data: Dict[str, Any]) -> ParsedHypothesis:
+    return _parse_dict_common(thesis, data, "ollama")
 
 
 def _from_hypothesis_packet(thesis: str, data: Dict[str, Any]) -> ParsedHypothesis:
-    slugs = set(_hypothesis_slugs()) | set(all_slugs())
-    model_id = str(data.get("primary_model_id", ""))
-    if model_id not in slugs:
-        model_id = _match_model(thesis)
-    param_ranges = data.get("param_ranges") or {"signal_threshold": [0.05, 0.35]}
-    normalized: Dict[str, List[float]] = {}
-    for k, v in param_ranges.items():
-        if isinstance(v, (list, tuple)) and len(v) >= 2:
-            normalized[str(k)] = [float(v[0]), float(v[1])]
-    if not normalized:
-        normalized = {"signal_threshold": [0.05, 0.35]}
-    return ParsedHypothesis(
-        thesis=thesis,
-        instrument_universe=list(data.get("instrument_universe") or ["MES"]),
-        entry_rules=list(data.get("entry_rules") or []),
-        exit_rules=list(data.get("exit_rules") or []),
-        indicators=list(data.get("indicators") or []),
-        feature_list=list(data.get("feature_list") or [model_id]),
-        param_ranges=normalized,
-        primary_model_id=model_id,
-        source="ollama",
-    )
+    return _parse_dict_common(thesis, data, "ollama")
 
 
 def parse_hypothesis(

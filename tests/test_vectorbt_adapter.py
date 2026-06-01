@@ -127,7 +127,7 @@ class TestPromotionArtifact:
             vectorbt_results={
                 "oos_expectancy": 2.0, "wf_consistency": 0.8,
                 "max_drawdown_pct": -15.0, "turnover_mean_pct": 50.0,
-                "total_trades": 200, "param_stability_score": 0.9,
+                "num_trades": 200, "param_stability_score": 0.9,
                 "slippage_sensitivity": 0.1,
             },
             pass_reason="testing",

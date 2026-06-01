@@ -34,10 +34,10 @@ target_include_directories(hft_risk PUBLIC
 
 # Decision engine
 add_library(hft_decision
-    decision_engine/cpp/src/decision_runtime.cpp
+    packages/decision_engine/cpp/src/decision_runtime.cpp
 )
 target_include_directories(hft_decision PUBLIC
-    decision_engine/cpp/include
+    packages/decision_engine/cpp/include
 )
 target_link_libraries(hft_decision PRIVATE hft_features)
 

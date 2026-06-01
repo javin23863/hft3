@@ -64,7 +64,7 @@ def generate_candidates(
             for threshold, holding in itertools.product(thresholds, _DEFAULT_HOLDING_PERIODS_BARS):
                 if count >= max_candidates:
                     break
-                params = dict(DEFAULT_STRATEGY_PARAMS)
+                params = copy.deepcopy(DEFAULT_STRATEGY_PARAMS)
                 params["signal_threshold"] = threshold
                 params["holding_period_bars"] = holding
                 cid = param_hash_from_dict(model_id, params)

@@ -1,6 +1,7 @@
 """Multi-leg parity arb backtest with latency deferral."""
 from __future__ import annotations
 
+import bisect
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -128,13 +129,11 @@ class MultiLegParityBacktester:
     def _find_exec_snapshot(
         self, snapshots: list[QuoteSnapshot], exec_ts: int
     ) -> QuoteSnapshot | None:
-        best: QuoteSnapshot | None = None
-        for snap in snapshots:
-            if snap.timestamp_ns <= exec_ts:
-                best = snap
-        if best is None:
+        times = [s.timestamp_ns for s in snapshots]
+        idx = bisect.bisect_right(times, exec_ts) - 1
+        if idx < 0:
             return None
-        return self._exec_snapshot(best, exec_ts)
+        return self._exec_snapshot(snapshots[idx], exec_ts)
 
     def _count_legs(self, group: ParityGroup, exec_quotes: dict[str, LegQuote]) -> int:
         if group.type == "index_future_basis":
@@ -163,7 +162,10 @@ class MultiLegParityBacktester:
         put = exec_quotes.get("put")
         if call is None or put is None:
             return 0.0, []
-        theo = theoretical_spread(group, exec_quotes)
+        try:
+            theo = theoretical_spread(group, exec_quotes)
+        except ValueError:
+            return 0.0, []
         num_legs = self._count_legs(group, exec_quotes)
         fees = self.fee_model.total_leg_cost(group, num_legs)
 

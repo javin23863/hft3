@@ -13,6 +13,9 @@ from features_engine.src.features.npz_feed import load_npz_events
 from features_engine.src.hypotheses.registry import get_active_hypotheses
 from replay.replay_session import ReplaySession, ReplaySessionConfig
 
+_MIN_PNL = 0.0
+_MIN_BALANCE = -500.0
+
 
 class _CallbackStrategy:
     def __init__(self, callback: Callable) -> None:
@@ -55,9 +58,7 @@ class ReplayRunner:
         use_combined_strategy: bool = True,
         max_steps: Optional[int] = None,
         run_id: str | None = None,
-        execution_adapter=None,
     ) -> Dict:
-        del execution_adapter  # adapter created inside ReplaySession
 
         if model_logic_callback is not None:
             # Legacy hbt callback path: run direct hbt loop for pdf_hybrid compatibility
@@ -166,7 +167,7 @@ class ReplayRunner:
             "order_intent_count": total_intents,
             "approval_status": (
                 "PASS"
-                if avg_net_pnl > 0 and worst_balance > -500 and total_trades > 0
+                if avg_net_pnl > _MIN_PNL and worst_balance > _MIN_BALANCE and total_trades > 0
                 else "FAIL"
             ),
         }

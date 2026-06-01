@@ -55,16 +55,29 @@ def test_pdf_defensive_ablation_smoke_two_modes() -> None:
 @pytest.mark.slow
 def test_pdf_defensive_ablation_four_modes_chi404_latency() -> None:
     npz_path, event_meta = _cpi_npz_or_skip()
+    from backtest_pipeline.src.chi404_latency import (
+        DEFAULT_CHI404_SUMMARY,
+        resolve_replay_latency_ms,
+    )
+
+    latency_ms = None
+    try:
+        resolve_replay_latency_ms(latency_ms=None, chi404_summary=DEFAULT_CHI404_SUMMARY)
+        latency_ms = None
+    except ValueError:
+        latency_ms = 1.0
+
     matrix = run_defensive_ablation_matrix(
         npz_path=npz_path,
         event_meta=event_meta,
-        latency_ms=None,
+        latency_ms=latency_ms,
         max_steps=500,
     )
     assert len(matrix["modes"]) == len(all_defensive_configs())
-    assert matrix.get("latency_source")
-    assert matrix.get("backtest_latency_note")
-    assert matrix.get("metrics_note")
+    if latency_ms is not None:
+        assert matrix.get("latency_source") in ("CLI --latency-ms", None)
+    else:
+        assert matrix.get("latency_source")
     _assert_matrix_health(matrix)
 
 

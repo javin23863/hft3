@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -50,6 +51,7 @@ def evaluate_model(
             strategy_params=dict(candidate.strategy_params),
         )
     except Exception as exc:
+        print(f"evaluate_model failed for {candidate.candidate_id} ({candidate.model_id}): {exc}", file=sys.stderr)
         return EvaluationResult(
             candidate=candidate,
             event_id=event_id,

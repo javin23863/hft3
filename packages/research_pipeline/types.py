@@ -32,6 +32,7 @@ class CandidateModel:
 
 @dataclass
 class GateThresholds:
+    """Default thresholds are maximally permissive — pass everything unless customized."""
     min_net_pnl: float = -1e9
     min_trades: int = 0
     max_tail_loss: float = 1e9

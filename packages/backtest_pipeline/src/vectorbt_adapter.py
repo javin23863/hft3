@@ -16,6 +16,7 @@ import json
 import logging
 import os
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -141,7 +142,8 @@ def _default_data_loader(
 
         l[l == np.inf] = o[l == np.inf]
         return np.column_stack([o, h, l, c, v])
-    except Exception:
+    except Exception as exc:
+        print(f"Warning: NPZ data load failed: {exc}", file=sys.stderr)
         return None
 
 
@@ -323,13 +325,14 @@ def _run_vectorbt_simulation(
     for cand in candidates:
         try:
             entry_signal, exit_signal = signal_computer(cand, ohlcv, parsed, repo_root)
-        except Exception:
+        except Exception as exc:
+            print(f"Warning: signal computer failed for {cand.candidate_id}: {exc}", file=sys.stderr)
             result.rejected.append(RejectedCandidate(
                 candidate_id=cand.candidate_id,
                 hypothesis_id=cand.model_id,
                 reject_reason="unresolvable_model_id",
                 metric_values={},
-            ))
+            )) 
             continue
 
         for params in _grid_iter(grid):
@@ -353,7 +356,8 @@ def _run_vectorbt_simulation(
                     tp_stop=take_profit_f / 100.0 if take_profit_f else None,
                 )
                 vbt_stats = dict(pf.stats())
-            except Exception:
+            except Exception as exc:
+                print(f"Warning: VectorBT portfolio sim failed for {cand.candidate_id}: {exc}", file=sys.stderr)
                 pf = None
 
             metrics = _compute_metrics_for_params(
@@ -405,7 +409,8 @@ def _resolve_git_commit() -> str:
             ["git", "rev-parse", "--short", "HEAD"],
             cwd=_REPO, stderr=subprocess.DEVNULL, timeout=5,
         ).decode().strip()
-    except Exception:
+    except Exception as exc:
+        print(f"Warning: git commit resolution failed: {exc}", file=sys.stderr)
         return ""
 
 
