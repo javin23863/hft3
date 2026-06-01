@@ -17,14 +17,14 @@ def test_eleven_pdf_models_registered():
 
 def test_hft_framework_models_present():
     ids = set(PDF_MODEL_IDS)
-    assert "PDF_MODEL_8" in ids
-    assert "PDF_MODEL_11" in ids
+    assert "TRANSFER_ENTROPY" in ids
+    assert "HAWKES_TOXIC_FLOW" in ids
 
 
 def test_dependency_map():
-    assert MODEL_DEPENDENCY_MAP["PDF_MODEL_4"] == ["PDF_MODEL_1", "PDF_MODEL_3"]
-    assert MODEL_DEPENDENCY_MAP["PDF_MODEL_11"] == ["PDF_MODEL_4"]
-    assert MODEL_DEPENDENCY_MAP["PDF_MODEL_1"] == []
+    assert MODEL_DEPENDENCY_MAP["HYBRID_EXECUTION"] == ["BOOK_PRESSURE", "VPIN_TOXICITY"]
+    assert MODEL_DEPENDENCY_MAP["HAWKES_TOXIC_FLOW"] == ["HYBRID_EXECUTION"]
+    assert MODEL_DEPENDENCY_MAP["BOOK_PRESSURE"] == []
 
 
 def test_hypothesis_count_unchanged():

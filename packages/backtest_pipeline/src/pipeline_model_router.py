@@ -5,16 +5,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List
 
+from features_engine.src.model_registry import load_model_registry, resolve_model_id
 from workbench.src.registry.unified_registry import list_models
 
 PDF_STRUCTURAL_EVAL = frozenset(
-    {"PDF_MODEL_1", "PDF_MODEL_2", "PDF_MODEL_3", "PDF_MODEL_6", "PDF_MODEL_8", "PDF_MODEL_10"}
+    {"BOOK_PRESSURE", "CROSS_ASSET_LEAD_LAG", "VPIN_TOXICITY", "DOW_YM_INDEX", "TRANSFER_ENTROPY", "STOCHASTIC_THERMO"}
 )
-PDF_DIAGNOSTICS = frozenset({"PDF_MODEL_7", "PDF_MODEL_9", "PDF_MODEL_11"})
-PDF_HYBRID_REPLAY = frozenset({"PDF_MODEL_4"})
-PDF_OPTIONS_FIXTURE = frozenset({"PDF_MODEL_5"})
+PDF_DIAGNOSTICS = frozenset({"TREASURY_CTD", "QUANTUM_SPREAD_DEFENSE", "HAWKES_TOXIC_FLOW"})
+PDF_HYBRID_REPLAY = frozenset({"HYBRID_EXECUTION"})
+PDF_OPTIONS_FIXTURE = frozenset({"DEALER_HEDGING"})
 
-SMOKE_HYP_SAMPLE = frozenset({"HYP_1", "HYP_5"})
+SMOKE_HYP_SAMPLE = frozenset({"SECOND_WAVE_CONTINUATION", "SPREAD_BLOWOUT_RECOMPRESSION"})
 
 _BACKEND_LABELS = {
     "hyp_mbo": "SignalBacktester MBO pipeline (research path)",
@@ -37,16 +38,19 @@ def all_model_ids() -> List[str]:
 
 
 def route(model_id: str) -> EngineRoute:
-    if model_id.startswith("HYP_"):
+    slug = resolve_model_id(model_id)
+    models = load_model_registry().get("models", {})
+    entry = models.get(slug, {})
+    if entry.get("kind") == "hypothesis":
         kind = "hyp_mbo"
-    elif model_id in PDF_HYBRID_REPLAY:
+    elif slug in PDF_HYBRID_REPLAY:
         kind = "pdf_hybrid_replay"
-    elif model_id in PDF_STRUCTURAL_EVAL:
+    elif slug in PDF_STRUCTURAL_EVAL:
         kind = "pdf_structural_eval"
-    elif model_id in PDF_DIAGNOSTICS:
+    elif slug in PDF_DIAGNOSTICS:
         kind = "pdf_diagnostics"
-    elif model_id in PDF_OPTIONS_FIXTURE:
+    elif slug in PDF_OPTIONS_FIXTURE:
         kind = "pdf_options_fixture"
     else:
         raise KeyError(f"Unknown model_id for catalog router: {model_id}")
-    return EngineRoute(model_id=model_id, engine_kind=kind, backend_label=_BACKEND_LABELS[kind])
+    return EngineRoute(model_id=slug, engine_kind=kind, backend_label=_BACKEND_LABELS[kind])

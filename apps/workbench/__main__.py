@@ -65,6 +65,23 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("list", help="List registered models")
 
+    setup_p = sub.add_parser("setup", help="Bootstrap environment for AI or human use")
+    setup_p.add_argument("--json", action="store_true", help="Machine-readable output")
+    setup_p.add_argument("--rebuild-graph", action="store_true", help="Rebuild graphify-out/ if missing")
+
+    verify_p = sub.add_parser("verify", help="Full readiness gate — run before any backtest")
+    verify_p.add_argument("--json", action="store_true", help="Machine-readable output")
+
+    download_p = sub.add_parser("download", help="Download missing NPZ for a model/symbol")
+    download_p.add_argument("--model", required=True)
+    download_p.add_argument("--symbol", default="MES.v.0")
+    download_p.add_argument("--max-cost-usd", type=float, default=30.0)
+    download_p.add_argument("--dry-run", action="store_true")
+    download_p.add_argument("--json", action="store_true")
+
+    status_p = sub.add_parser("status", help="Current state snapshot — campaigns, data, certification")
+    status_p.add_argument("--json", action="store_true")
+
     args = parser.parse_args(argv)
 
     if args.command == "list":
@@ -72,6 +89,89 @@ def main(argv: list[str] | None = None) -> int:
 
         for mid in list_models():
             print(mid)
+        return 0
+
+    if args.command == "setup":
+        from workbench.src.setup import setup as run_setup
+        from workbench.src.json_output import emit_json
+
+        result = run_setup(_REPO, rebuild_graph_flag=args.rebuild_graph)
+        if getattr(args, "json", False):
+            emit_json(result)
+        else:
+            print(f"Python: {result['python']['python']} {'OK' if result['python']['python_ok'] else 'FAIL'}")
+            print(f"Dependencies: {'OK' if result['dependencies']['all_present'] else 'MISSING ' + ', '.join(result['dependencies']['missing'])}")
+            print(f"Environment: {'OK' if result['env']['env_ok'] else 'INCOMPLETE'}")
+            print(f"NPZ data: {result['npz']['npz_count']} files ({result['npz']['npz_total_size_mb']} MB)")
+            print(f"Graphify: {'OK' if result['graphify']['graph_present'] else 'MISSING — run with --rebuild-graph'}")
+            if result.get("graph_rebuild"):
+                print(f"Graph rebuild: {'OK' if result['graph_rebuild']['rebuilt'] else 'FAILED'}")
+            overall = "PASS" if result["all_ok"] else "INCOMPLETE"
+            print(f"\nOverall: {overall}")
+        return 0 if result["all_ok"] else 1
+
+    if args.command == "verify":
+        from workbench.src.verify import verify as run_verify
+        from workbench.src.json_output import emit_json
+
+        result = run_verify(_REPO)
+        if getattr(args, "json", False):
+            emit_json(result)
+        else:
+            print(f"Grader tests: {'PASS' if result['tests']['passed'] else 'FAIL'}")
+            for f in result["files"]:
+                print(f"  {f['label']}: {'OK' if f['exists'] else 'MISSING'}")
+            print(f"\nOverall: {'PASS' if result['all_ok'] else 'FAIL'}")
+        return 0 if result["all_ok"] else 1
+
+    if args.command == "download":
+        from workbench.src.json_output import emit_json
+
+        from apps.workbench.scripts.backfill_catalog import main as backfill_main
+
+        repo = _REPO
+        model = args.model
+        symbol = args.symbol
+        dry_run = args.dry_run
+        max_cost = args.max_cost_usd
+
+        class FakeArgs:
+            pass
+
+        fa = FakeArgs()
+        fa.model = model
+        fa.symbol = symbol
+        fa.dry_run = dry_run
+        fa.download_missing = not dry_run
+        fa.max_cost_usd = max_cost
+
+        result = backfill_main(fa)
+        if getattr(args, "json", False):
+            emit_json({"model": model, "symbol": symbol, "dry_run": dry_run, "result": str(result)})
+        return 0
+
+    if args.command == "status":
+        from workbench.src.json_output import emit_json
+        from workbench.src.setup import scan_npz, check_graphify
+        from workbench.src.registry.unified_registry import list_models
+
+        npz = scan_npz(_REPO)
+        graph = check_graphify(_REPO)
+        models = list_models()
+        promo_dir = _REPO / "research_cards" / "promotion"
+        promoted = list(promo_dir.glob("*.json")) if promo_dir.is_dir() else []
+        result = {
+            "models_registered": len(models),
+            "npz_files": npz["npz_count"],
+            "npz_total_mb": npz["npz_total_size_mb"],
+            "graph_ready": graph["graph_present"],
+            "promoted_candidates": len(promoted),
+        }
+        if getattr(args, "json", False):
+            emit_json(result)
+        else:
+            for k, v in result.items():
+                print(f"{k}: {v}")
         return 0
 
     if args.command == "campaign":

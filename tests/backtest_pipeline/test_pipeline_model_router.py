@@ -35,14 +35,14 @@ def test_route_engine_kinds_unique_coverage() -> None:
 
 
 def test_smoke_hyp_sample() -> None:
-    assert SMOKE_HYP_SAMPLE == {"HYP_1", "HYP_5"}
+    assert SMOKE_HYP_SAMPLE == {"SECOND_WAVE_CONTINUATION", "SPREAD_BLOWOUT_RECOMPRESSION"}
 
 
 def test_pdf_model_routes() -> None:
-    assert route("PDF_MODEL_4").engine_kind == "pdf_hybrid_replay"
-    assert route("PDF_MODEL_1").engine_kind == "pdf_structural_eval"
-    assert route("PDF_MODEL_7").engine_kind == "pdf_diagnostics"
-    assert route("PDF_MODEL_5").engine_kind == "pdf_options_fixture"
-    assert "PDF_MODEL_4" in PDF_HYBRID_REPLAY
+    assert route("HYBRID_EXECUTION").engine_kind == "pdf_hybrid_replay"
+    assert route("BOOK_PRESSURE").engine_kind == "pdf_structural_eval"
+    assert route("TREASURY_CTD").engine_kind == "pdf_diagnostics"
+    assert route("DEALER_HEDGING").engine_kind == "pdf_options_fixture"
+    assert "HYBRID_EXECUTION" in PDF_HYBRID_REPLAY
     assert len(PDF_STRUCTURAL_EVAL) == 6
     assert len(PDF_DIAGNOSTICS) == 3

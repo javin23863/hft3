@@ -47,14 +47,14 @@ def test_fan_out_writes_dirs_without_npz(tmp_path: Path) -> None:
         "CPI_2024_09_11_TIGHT",
         out_root,
         repo_root=tmp_path,
-        only_model_ids={"HYP_1", "HYP_5"},
+        only_model_ids={"SECOND_WAVE_CONTINUATION", "SPREAD_BLOWOUT_RECOMPRESSION"},
         latency_ms=1.0,
     )
     assert len(rows) == 2
-    assert (out_root / "HYP_1_CPI_2024_09_11_TIGHT" / "result.json").is_file()
-    assert (out_root / "HYP_5_CPI_2024_09_11_TIGHT" / "report.md").is_file()
+    assert (out_root / "SECOND_WAVE_CONTINUATION_CPI_2024_09_11_TIGHT" / "result.json").is_file()
+    assert (out_root / "SPREAD_BLOWOUT_RECOMPRESSION_CPI_2024_09_11_TIGHT" / "report.md").is_file()
     payload = json.loads(
-        (out_root / "HYP_5_CPI_2024_09_11_TIGHT" / "result.json").read_text(encoding="utf-8")
+        (out_root / "SPREAD_BLOWOUT_RECOMPRESSION_CPI_2024_09_11_TIGHT" / "result.json").read_text(encoding="utf-8")
     )
     assert payload["engine_kind"] == "hyp_mbo"
     assert "SignalBacktester" in payload["backend_label"]
