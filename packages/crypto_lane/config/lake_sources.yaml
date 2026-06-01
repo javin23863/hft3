@@ -28,7 +28,7 @@ symbols:
     deribit_options_prefix: BTC
     bitcoind: BTC
 source_bucket_by_source:
-  binance: source
+  binance: write
   deribit: write
   deribit_index: write
   bitcoind: write

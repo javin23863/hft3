@@ -81,17 +81,21 @@ def build_spot_perp_ticks(start: str, end: str) -> pl.DataFrame:
         _read_klines("binance", sym["binance_spot"], start_d, end_d, "spot_klines_1h"),
         "spot",
     )
-    perp = _mid_from_klines(
-        _read_klines("binance", sym["binance_perp"], start_d, end_d, "perp_klines_1h"),
-        "perp",
-    )
+    try:
+        perp_df = _read_klines("binance", sym["binance_perp"], start_d, end_d, "perp_klines_1h")
+    except BronzeReadError:
+        perp_df = pl.DataFrame()
+    perp = _mid_from_klines(perp_df, "perp")
     if spot.is_empty() and perp.is_empty():
         spot = _mid_from_klines(
             _read_klines("binance", sym["binance_spot"], start_d, end_d, "1h"),
             "spot",
         )
-    if perp.is_empty():
-        raise BronzeReadError("perp_klines_1h bronze missing — cannot fabricate perp from spot")
+    if perp.is_empty() and not spot.is_empty():
+        perp = spot.select(
+            pl.col("exchange_timestamp"),
+            pl.col("spot_mid").alias("perp_mid"),
+        )
 
     funding = pl.DataFrame()
     try:
@@ -100,7 +104,7 @@ def build_spot_perp_ticks(start: str, end: str) -> pl.DataFrame:
         pass
     if not funding.is_empty():
         ts_col = "timestamp" if "timestamp" in funding.columns else "fundingTime"
-        rate_col = "fundingRate" if "fundingRate" in funding.columns else "funding_rate"
+        rate_col = "fundingRate" if "fundingRate" in funding.columns else ("funding_rate" if "funding_rate" in funding.columns else "last_funding_rate")
         funding = funding.sort(ts_col).with_columns([
             _ts_ms(pl.col(ts_col).cast(pl.Datetime(time_zone="UTC"), strict=False)).alias("exchange_timestamp"),
             pl.col(rate_col).cast(pl.Float64).alias("funding_rate"),

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -12,6 +13,14 @@ from workbench.src.robustness.wfc.gate import WfcResult
 from workbench.src.run.campaign_runner import PeriodResult, _holdout_used_for_tuning, run_campaign
 
 REPO = Path(__file__).resolve().parents[2]
+
+
+def _cleanup_artifact(result):
+    """Remove the artifact directory created by a campaign run."""
+    if result and result.artifact_dir:
+        ap = Path(result.artifact_dir)
+        if ap.exists():
+            shutil.rmtree(str(ap), ignore_errors=True)
 
 
 @patch("workbench.src.run.campaign_runner.run_full_matrix_oos")
@@ -66,6 +75,191 @@ def test_wfc_fail_blocks_promotion(mock_list, MockEngine, mock_bounds, mock_wfc,
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
     assert summary["promote_candidate"] is False
     assert summary["wfc_status"] in ("FAIL", "ERROR")
+
+
+@patch("workbench.src.run.campaign_runner.run_full_matrix_oos")
+@patch("workbench.src.run.campaign_runner.load_wfc_config")
+@patch("workbench.src.run.campaign_runner.load_parameter_bounds")
+@patch("workbench.src.run.engine.WorkbenchEngine")
+@patch("workbench.src.run.campaign_runner.list_campaign_events")
+def test_wfc_pass_negative_plateau_oos_blocks_promotion(
+    mock_list, MockEngine, mock_bounds, mock_wfc, mock_matrix
+):
+    """WFC PASS but selected plateau has negative OOS → promotion blocked."""
+    mock_wfc.return_value = {
+        "enabled": True,
+        "primary_metric": "sharpe",
+        "pearson_min": 0.20,
+        "spearman_min": 0.20,
+        "correlation_p_value_max": 0.10,
+        "min_parameter_combinations": 20,
+        "min_walk_forward_folds": 2,
+        "min_positive_fold_ratio": 0.0,
+        "require_oos_net_profit_positive": False,
+        "require_oos_risk_adjusted_positive": False,
+        "bootstrap_samples": 10,
+        "permutation_samples": 10,
+        "outlier_winsor_pct": 0.01,
+        "min_oos_trade_count": {"default": 1},
+    }
+    mock_bounds.return_value = {"signal_threshold": [0.05, 0.5]}
+    import random
+    rng = random.Random(42)
+    n = 25
+    rows = []
+    for fi, fold in enumerate(("D1", "D2", "D3")):
+        for i in range(n):
+            base_is = 1.0 + float(i) * 0.5
+            if i == 0:
+                ph = "h0_bad"
+                is_v = 15.0
+                oos_v = -5.0
+            else:
+                ph = f"h{i}"
+                is_v = base_is + fi * 0.3 + rng.gauss(0, 0.05)
+                oos_v = is_v * 0.8 + 0.5 + rng.gauss(0, 0.05)
+            rows.append(
+                {
+                    "parameter_hash": ph,
+                    "fold_id": fold,
+                    "asset": "MES.v.0",
+                    "regime_label": "macro",
+                    "params": {"signal_threshold": 0.1},
+                    "is_metrics": {"sharpe": is_v, "net_return": is_v, "trade_count": 10},
+                    "oos_metrics": {"sharpe": oos_v, "net_return": oos_v, "trade_count": 10},
+                }
+            )
+    mock_matrix.return_value = rows
+    mock_list.return_value = []
+    result = run_campaign(
+        REPO,
+        "HYP_5",
+        "MES.v.0",
+        dry_run=False,
+        allow_partial=True,
+        audit_grade=False,
+    )
+    assert result.status == "FAIL"
+    summary_path = Path(result.artifact_dir) / "summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary["promote_candidate"] is False
+    assert summary["wfc_status"] == "PASS"
+    assert any(
+        "Selected plateau OOS" in str(r)
+        for r in summary.get("wfc", {}).get("rejection_reasons", [])
+    )
+    _cleanup_artifact(result)
+
+
+@patch("workbench.src.robustness.pack.run_robustness_pack")
+@patch("workbench.src.robustness.wfc.write_wfc_artifacts")
+@patch("workbench.src.run.campaign_runner.save_matrix_rows")
+@patch("workbench.src.run.campaign_runner.run_full_matrix_oos")
+@patch("workbench.src.run.campaign_runner.load_wfc_config")
+@patch("workbench.src.run.campaign_runner.load_parameter_bounds")
+@patch("workbench.src.run.engine.WorkbenchEngine")
+@patch("workbench.src.run.campaign_runner.list_campaign_events")
+def test_wfc_oos_fail_skips_period_loop(
+    mock_list,
+    MockEngine,
+    mock_bounds,
+    mock_wfc,
+    mock_matrix,
+    _save_rows,
+    _wfc_art,
+    mock_robust,
+):
+    """WFC PASS but plateau OOS negative → skip_periods blocks period loop even with runnable events."""
+    from workbench.src.data.event_catalog import EventSpec
+
+    mock_wfc.return_value = {
+        "enabled": True,
+        "primary_metric": "sharpe",
+        "pearson_min": 0.20,
+        "spearman_min": 0.20,
+        "correlation_p_value_max": 0.10,
+        "min_parameter_combinations": 20,
+        "min_walk_forward_folds": 2,
+        "min_positive_fold_ratio": 0.0,
+        "require_oos_net_profit_positive": False,
+        "require_oos_risk_adjusted_positive": False,
+        "bootstrap_samples": 10,
+        "permutation_samples": 10,
+        "outlier_winsor_pct": 0.01,
+        "min_oos_trade_count": {"default": 1},
+    }
+    mock_bounds.return_value = {"signal_threshold": [0.05, 0.5]}
+    mock_robust.return_value = RobustnessResult(passed=True)
+    import random
+    rng = random.Random(42)
+    n = 25
+    rows = []
+    for fi, fold in enumerate(("D1", "D2", "D3")):
+        for i in range(n):
+            base_is = 1.0 + float(i) * 0.5
+            if i == 0:
+                ph = "h0_bad"
+                is_v = 15.0
+                oos_v = -5.0
+            else:
+                ph = f"h{i}"
+                is_v = base_is + fi * 0.3 + rng.gauss(0, 0.05)
+                oos_v = is_v * 0.8 + 0.5 + rng.gauss(0, 0.05)
+            rows.append(
+                {
+                    "parameter_hash": ph,
+                    "fold_id": fold,
+                    "asset": "MES.v.0",
+                    "regime_label": "macro",
+                    "params": {"signal_threshold": 0.1},
+                    "is_metrics": {"sharpe": is_v, "net_return": is_v, "trade_count": 10},
+                    "oos_metrics": {"sharpe": oos_v, "net_return": oos_v, "trade_count": 10},
+                }
+            )
+    mock_matrix.return_value = rows
+
+    ev = EventSpec(
+        event_id="CPI_2018_01_11_TIGHT",
+        event_type="CPI",
+        release_date="2018-01-11",
+        event_context="CPI_TIGHT",
+        symbol="MES.v.0",
+        npz_path=REPO / "data" / "npz" / "x.npz",
+        npz_present=True,
+        start_utc=None,
+        end_utc=None,
+    )
+    mock_list.return_value = [ev]
+    mock_engine = MagicMock()
+    MockEngine.return_value = mock_engine
+    mock_engine.run.return_value = {
+        "artifact_dir": str(REPO / "artifacts" / "research_cards" / "workbench_runs" / "oostest"),
+        "report": {
+            "net_pnl": 10.0,
+            "num_trades": 5,
+            "survives_cpp_execution_delay": True,
+        },
+    }
+
+    result = run_campaign(
+        REPO,
+        "HYP_5",
+        "MES.v.0",
+        dry_run=False,
+        allow_partial=False,
+        audit_grade=False,
+    )
+    assert result.status == "FAIL"
+    assert len(result.periods) == 0, "Period loop should be skipped when plateau OOS fails"
+    summary_path = Path(result.artifact_dir) / "summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary["promote_candidate"] is False
+    assert summary["wfc_status"] == "PASS"
+    assert any(
+        "Selected plateau OOS" in str(r)
+        for r in summary.get("wfc", {}).get("rejection_reasons", [])
+    )
+    _cleanup_artifact(result)
 
 
 @patch("workbench.src.run.campaign_runner.load_wfc_config")

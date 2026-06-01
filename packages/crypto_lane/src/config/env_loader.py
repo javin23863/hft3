@@ -15,7 +15,6 @@ _ENV_ALIASES: list[tuple[str, str]] = [
     # S3-compatible credential fallbacks (Backblaze B2 uses S3 API)
     ("HFT3_CRYPTO_B2_KEY_ID", "AWS_ACCESS_KEY_ID"),
     ("HFT3_CRYPTO_B2_APP_KEY", "AWS_SECRET_ACCESS_KEY"),
-    ("HFT3_CRYPTO_B2_BUCKET", "B2_BUCKET"),
     ("HFT3_CRYPTO_B2_ENDPOINT", "B2_ENDPOINT_URL"),
 ]
 

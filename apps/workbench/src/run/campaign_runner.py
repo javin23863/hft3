@@ -463,21 +463,52 @@ def run_campaign(
                     primary_metric=str(wfc_cfg.get("primary_metric", "sharpe")),
                 )
                 if plateau:
+                    plateau_hash = str(plateau.pop("__plateau_hash__", ""))
                     strategy_params = dict(plateau)
-                    param_hash = _param_hash(primary_id, strategy_params)
-                    campaign_meta["param_hash"] = param_hash
-                    campaign_meta["strategy_params"] = strategy_params
-                    write_campaign_manifest(artifact_dir / "campaign.json", campaign_meta)
+                    plateau_oos_metric = str(wfc_cfg.get("primary_metric", "sharpe"))
+                    plateau_oos_pass = True
+                    if plateau_hash:
+                        ph_rows = [
+                            r
+                            for r in matrix_rows
+                            if str(r.get("parameter_hash", "")) == plateau_hash
+                        ]
+                        if ph_rows:
+                            oos_primaries = [
+                                float(r.get("oos_metrics", {}).get(plateau_oos_metric, 0))
+                                for r in ph_rows
+                            ]
+                            oos_nets = [
+                                float(r.get("oos_metrics", {}).get("net_return", 0))
+                                for r in ph_rows
+                            ]
+                            if oos_primaries and oos_nets:
+                                mean_oos_primary = sum(oos_primaries) / len(oos_primaries)
+                                mean_oos_net = sum(oos_nets) / len(oos_nets)
+                                if mean_oos_primary <= 0 or mean_oos_net <= 0:
+                                    wfc_result.rejection_reasons.append(
+                                        f"Selected plateau OOS {plateau_oos_metric}={mean_oos_primary:.3f} net_return={mean_oos_net:.3f}"
+                                    )
+                                    plateau_oos_pass = False
+                    if plateau_oos_pass:
+                        param_hash = _param_hash(primary_id, strategy_params)
+                        campaign_meta["param_hash"] = param_hash
+                        campaign_meta["strategy_params"] = strategy_params
+                        write_campaign_manifest(artifact_dir / "campaign.json", campaign_meta)
+                    else:
+                        status = "FAIL"
+                        skip_periods = True
                 else:
                     wfc_result.rejection_reasons.append("No robust plateau after WFC PASS")
                     status = "FAIL"
                     skip_periods = True
     elif wfc_cfg.get("enabled"):
+        skip_reason = "Trial mode skips WFC" if trial_mode else "No parameter_bounds configured for model"
         wfc_result = WfcResult(
             run_id=campaign_id,
             model_id=primary_id,
             wfc_status="SKIPPED",
-            rejection_reasons=["No parameter_bounds configured for model"],
+            rejection_reasons=[skip_reason],
         )
         wfc_dir.mkdir(parents=True, exist_ok=True)
         (wfc_dir / "wfc_summary.json").write_text(

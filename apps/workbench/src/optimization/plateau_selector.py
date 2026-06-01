@@ -26,8 +26,8 @@ def select_robust_plateau(
         if row.get("params"):
             bucket["params"] = row.get("params")
 
-    scored: List[tuple[float, float, Dict[str, Any]]] = []
-    for bucket in by_hash.values():
+    scored: List[tuple[float, float, Dict[str, Any], str]] = []
+    for ph, bucket in by_hash.items():
         is_vals = bucket["is_vals"]
         if not is_vals:
             continue
@@ -38,7 +38,7 @@ def select_robust_plateau(
         params = bucket.get("params")
         if not params:
             continue
-        scored.append((mean_is, stability, params))
+        scored.append((mean_is, stability, params, ph))
 
     if not scored:
         return None
@@ -47,4 +47,4 @@ def select_robust_plateau(
     n_decile = max(1, len(scored) // 10)
     top = scored[:n_decile]
     best = max(top, key=lambda x: (x[1], x[0]))
-    return dict(best[2])
+    return dict(best[2], __plateau_hash__=best[3])

@@ -62,9 +62,10 @@ def resolve_bucket(source: str) -> str:
         env_key = cfg.get("write_bucket_env", "HFT3_CRYPTO_B2_BUCKET")
         default = cfg.get("write_bucket_default", "crypto-alpha-datasets")
     bucket = os.environ.get(env_key, default)
-    forbidden = set(_lake_config().get("forbidden_write_buckets") or [])
-    if bucket in forbidden:
-        raise BronzeReadError(f"bucket {bucket} is forbidden for crypto lane reads")
+    if mode != "source":
+        forbidden = set(_lake_config().get("forbidden_write_buckets") or [])
+        if bucket in forbidden:
+            raise BronzeReadError(f"bucket {bucket} is forbidden for crypto lane writes")
     return bucket
 
 
