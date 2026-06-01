@@ -30,11 +30,12 @@ def _clear_stack_cache() -> None:
 
 
 def test_cmake_lists_hot_path_targets() -> None:
-    text = (_REPO / "CMakeLists.txt").read_text(encoding="utf-8")
-    assert "hft_rithmic_gateway" in text
-    assert "hft_research_sim" in text
-    assert "hft_rithmic_latency_probe" in text
-    assert "rithmic_gateway/src/rithmic_adapter.cpp" in text
+    root_text = (_REPO / "CMakeLists.txt").read_text(encoding="utf-8")
+    assert "hft_rithmic_gateway" in root_text
+    assert "hft_research_sim" in root_text
+    assert "hft_rithmic_latency_probe" in root_text
+    gw_text = (_REPO / "rithmic_gateway" / "CMakeLists.txt").read_text(encoding="utf-8")
+    assert "rithmic_gateway/src/rithmic_adapter.cpp" in root_text or "src/rithmic_adapter.cpp" in gw_text
 
 
 def test_stack_verify_skips_without_binary(tmp_path: Path) -> None:

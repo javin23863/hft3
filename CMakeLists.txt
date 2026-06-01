@@ -41,13 +41,8 @@ target_include_directories(hft_decision PUBLIC
 )
 target_link_libraries(hft_decision PRIVATE hft_features)
 
-# Rithmic gateway (C++ hot path — R|API+ wiring pending)
-add_library(hft_rithmic_gateway
-    rithmic_gateway/src/rithmic_adapter.cpp
-)
-target_include_directories(hft_rithmic_gateway PUBLIC
-    rithmic_gateway/include
-)
+# Rithmic gateway (C++ hot path — RApiPlus SDK integration)
+add_subdirectory(rithmic_gateway)
 
 # Offline research sim (no R-API; validates C++ decision + risk + features stack)
 add_executable(hft_research_sim
