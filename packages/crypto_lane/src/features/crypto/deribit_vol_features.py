@@ -31,6 +31,26 @@ def build_deribit_vol_features(
 ) -> pl.DataFrame:
     if align_timestamps is not None:
         surf = surface.sort("exchange_timestamp")
+        n_align = len(align_timestamps)
+        if surf.height == 0 or n_align == 0:
+            return pl.DataFrame(
+                {
+                    "exchange_timestamp": pl.Series(
+                        "exchange_timestamp",
+                        align_timestamps.cast(pl.Int64) if n_align > 0 else pl.Series([], dtype=pl.Int64),
+                        dtype=pl.Int64,
+                    ),
+                    "atm_iv": pl.Series("atm_iv", [None] * n_align, dtype=pl.Float64),
+                    "spot_realized_volatility": pl.Series("spot_realized_volatility", [None] * n_align, dtype=pl.Float64),
+                    "realized_vol_forecast": pl.Series("realized_vol_forecast", [None] * n_align, dtype=pl.Float64),
+                    "iv_rv_spread": pl.Series("iv_rv_spread", [None] * n_align, dtype=pl.Float64),
+                    "iv_rv_zscore": pl.Series("iv_rv_zscore", [None] * n_align, dtype=pl.Float64),
+                    "skew_25d": pl.Series("skew_25d", [None] * n_align, dtype=pl.Float64),
+                    "term_structure_slope": pl.Series("term_structure_slope", [None] * n_align, dtype=pl.Float64),
+                    "put_call_parity_residual": pl.Series("put_call_parity_residual", [None] * n_align, dtype=pl.Float64),
+                    "vol_surface_quality_flag": pl.Series("vol_surface_quality_flag", [0] * n_align, dtype=pl.Int64),
+                }
+            )
         rows = []
         s_idx = 0
         surf_rows = list(surf.iter_rows(named=True))

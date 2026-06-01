@@ -103,11 +103,6 @@ def test_build_deribit_vol_features_align_timestamps_row_count_matches():
     assert out.height == 3
 
 
-@pytest.mark.xfail(
-    reason="Acceptance test: empty surface + align_timestamps should produce NaN rows, "
-           "but current implementation IndexErrors. Document desired behavior.",
-    strict=False,
-)
 def test_build_deribit_vol_features_empty_surface_with_align():
     """Empty surface + align timestamps → frame of len(align) with NaN vol cols."""
     cols = list(_surface_row(0).keys())

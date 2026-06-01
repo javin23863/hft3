@@ -1,8 +1,9 @@
-"""Bitcoin Core JSON-RPC client (stdlib only)."""
+"""Bitcoin Core JSON-RPC client (stdlib only). Retries transient HTTP failures (408, 429, 500, 502, 503, 504)."""
 from __future__ import annotations
 
 import base64
 import json
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -10,6 +11,9 @@ from typing import Any
 from urllib.parse import urlparse
 
 from crypto_lane.src.ingest.btc_node_env import NodeEnv
+
+
+_RETRYABLE_HTTP_CODES = frozenset({408, 429, 500, 502, 503, 504})
 
 
 class BtcRpcError(RuntimeError):
@@ -50,9 +54,22 @@ class NetworkInfo:
 
 
 class BtcRpc:
-    def __init__(self, env: NodeEnv | None = None, *, timeout: float = 10.0) -> None:
+    def __init__(
+        self,
+        env: NodeEnv | None = None,
+        *,
+        timeout: float = 10.0,
+        max_attempts: int = 3,
+        base_backoff_s: float = 0.1,
+        backoff_multiplier: float = 2.0,
+        max_backoff_s: float = 2.0,
+    ) -> None:
         self._env = env or NodeEnv.load()
         self._timeout = timeout
+        self._max_attempts = max_attempts
+        self._base_backoff_s = base_backoff_s
+        self._backoff_multiplier = backoff_multiplier
+        self._max_backoff_s = max_backoff_s
         parsed = urlparse(self._env.btc_rpc_url)
         host = parsed.hostname or "127.0.0.1"
         port = parsed.port or 8332
@@ -60,6 +77,14 @@ class BtcRpc:
         user = parsed.username or self._env.btc_rpc_user
         password = parsed.password or self._env.btc_rpc_pass
         self._auth = base64.b64encode(f"{user}:{password}".encode()).decode()
+
+    def _sleep_backoff(self, attempt: int) -> None:
+        time.sleep(
+            min(
+                self._base_backoff_s * (self._backoff_multiplier ** (attempt - 1)),
+                self._max_backoff_s,
+            )
+        )
 
     def call(self, method: str, *params: Any) -> Any:
         payload = json.dumps(
@@ -73,13 +98,28 @@ class BtcRpc:
                 "Authorization": f"Basic {self._auth}",
             },
         )
-        try:
-            with urllib.request.urlopen(req, timeout=self._timeout) as resp:
-                body = json.loads(resp.read())
-        except urllib.error.HTTPError as exc:
-            raise BtcRpcError(f"BTC RPC HTTP {exc.code}: {exc.reason}") from exc
-        except urllib.error.URLError as exc:
-            raise BtcRpcError(f"BTC RPC URL error: {exc.reason}") from exc
+        body: Any = None
+        for attempt in range(1, self._max_attempts + 1):
+            is_final = attempt == self._max_attempts
+            try:
+                with urllib.request.urlopen(req, timeout=self._timeout) as resp:
+                    body = json.loads(resp.read())
+                break
+            except urllib.error.HTTPError as exc:
+                if exc.code in _RETRYABLE_HTTP_CODES and not is_final:
+                    self._sleep_backoff(attempt)
+                    continue
+                raise BtcRpcError(f"BTC RPC HTTP {exc.code}: {exc.reason}") from exc
+            except urllib.error.URLError as exc:
+                if not is_final:
+                    self._sleep_backoff(attempt)
+                    continue
+                raise BtcRpcError(f"BTC RPC URL error: {exc.reason}") from exc
+            except TimeoutError as exc:
+                if not is_final:
+                    self._sleep_backoff(attempt)
+                    continue
+                raise BtcRpcError(f"BTC RPC timeout: {exc}") from exc
         if body.get("error"):
             raise BtcRpcError(f"BTC RPC error: {body['error']}")
         return body["result"]
