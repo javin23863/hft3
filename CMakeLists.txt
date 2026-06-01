@@ -68,3 +68,40 @@ add_executable(hft_event_context_golden
     tools/event_context_golden_main.cpp
 )
 target_link_libraries(hft_event_context_golden PRIVATE hft_features)
+
+# Copy MinGW runtime DLLs to build directory for Windows
+if(WIN32 AND NOT MSVC)
+    set(MINGW_DLL_DIR "" CACHE PATH "Path to MinGW bin directory containing runtime DLLs")
+    if(MINGW_DLL_DIR STREQUAL "")
+        if(CMAKE_CXX_COMPILER)
+            get_filename_component(_COMPILER_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
+        endif()
+        set(_DLL_SEARCH_PATHS
+            "${_COMPILER_DIR}"
+            "$ENV{MINGW64_HOME}/bin"
+            "C:/msys64/mingw64/bin"
+            "C:/msys64/ucrt64/bin"
+        )
+        foreach(_DIR ${_DLL_SEARCH_PATHS})
+            if(EXISTS "${_DIR}/libgcc_s_seh-1.dll")
+                set(MINGW_DLL_DIR "${_DIR}")
+                break()
+            endif()
+        endforeach()
+    endif()
+    if(EXISTS "${MINGW_DLL_DIR}/libgcc_s_seh-1.dll")
+        message(STATUS "Copying MinGW runtime DLLs from ${MINGW_DLL_DIR}")
+        set(_DLL_OUTPUT_DIR "${CMAKE_BINARY_DIR}")
+        foreach(DLL libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll)
+            add_custom_command(TARGET hft_feature_golden POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different "${MINGW_DLL_DIR}/${DLL}" "${_DLL_OUTPUT_DIR}")
+            add_custom_command(TARGET hft_research_sim POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different "${MINGW_DLL_DIR}/${DLL}" "${_DLL_OUTPUT_DIR}")
+            add_custom_command(TARGET hft_event_context_golden POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different "${MINGW_DLL_DIR}/${DLL}" "${_DLL_OUTPUT_DIR}")
+        endforeach()
+    else()
+        message(WARNING "MinGW runtime DLLs not found. "
+                         "Set -DMINGW_DLL_DIR=<path> or ensure the DLLs are on PATH.")
+    endif()
+endif()
