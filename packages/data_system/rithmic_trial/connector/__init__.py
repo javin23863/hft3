@@ -5,7 +5,12 @@ from typing import Any
 from ..config import TrialConfig
 from .base import ConnectorInterface
 from .fixture_connector import FixtureConnector
-from .rithmic_api_connector import RithmicApiConnector
+from .rithmic_api_connector import (
+    RithmicApiConnector,
+    RithmicApiError,
+    RithmicApiLibraryNotFoundError,
+)
+from ._rithmic_api_bridge import RithmicApiBridge, ConnectionConfig
 from .rtrader_bridge import RTraderBridgeConnector
 
 
