@@ -30,7 +30,7 @@ endif()
 if(WIN32)
     set(RAPIPLUS_LIB_DIR "${RAPIPLUS_ROOT}/win10/lib")
 
-    target_link_libraries(rithmic_gateway PRIVATE
+    target_link_libraries(rithmic_gateway PUBLIC
         ${RAPIPLUS_LIB_DIR}/RApiPlus_mt64.lib
         ${RAPIPLUS_LIB_DIR}/OmneStreamEngine_mt64.lib
         ${RAPIPLUS_LIB_DIR}/OmneChannel_mt64.lib
@@ -54,7 +54,9 @@ else()
         ${RAPIPLUS_LIB_DIR}/lib_api-optimize.a
         ${RAPIPLUS_LIB_DIR}/lib_apipoll-stubs-optimize.a
         ${RAPIPLUS_LIB_DIR}/lib_kit-optimize.a
-        ssl crypto z pthread rt dl
+        ${RAPIPLUS_LIB_DIR}/libssl.a
+        ${RAPIPLUS_LIB_DIR}/libcrypto.a
+        z pthread rt dl
     )
 endif()
 
