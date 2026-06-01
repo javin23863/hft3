@@ -16,6 +16,8 @@ _ENV_ALIASES: list[tuple[str, str]] = [
     ("HFT3_CRYPTO_B2_KEY_ID", "AWS_ACCESS_KEY_ID"),
     ("HFT3_CRYPTO_B2_APP_KEY", "AWS_SECRET_ACCESS_KEY"),
     ("HFT3_CRYPTO_B2_ENDPOINT", "B2_ENDPOINT_URL"),
+    ("HFT3_CRYPTO_KRAKEN_API_KEY", "KRAKEN_API_KEY"),
+    ("HFT3_CRYPTO_KRAKEN_PRIVATE_KEY", "KRAKEN_PRIVATE_KEY"),
 ]
 
 _LOADED_FILES: list[Path] = []
@@ -121,6 +123,8 @@ def redacted_env_report() -> dict[str, object]:
         "CRYPTOCOMPARE_API_KEY",
         "ETHERSCAN_API_KEY",
         "FRED_API_KEY",
+        "HFT3_CRYPTO_KRAKEN_API_KEY",
+        "HFT3_CRYPTO_KRAKEN_PRIVATE_KEY",
     ]
     return {
         "loaded_files": [str(p) for p in _LOADED_FILES],

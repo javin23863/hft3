@@ -26,11 +26,6 @@ def compute_theta_ms(ts: SyncTimestamps) -> float:
     return theta_ns / 1_000_000.0
 
 
-def local_true_time_ns(nominal_local_ns: int, theta_ms: float) -> int:
-    """T_local_true = T_local_nominal - θ."""
-    return int(nominal_local_ns - theta_ms * 1_000_000.0)
-
-
 def one_way_latency_ms(rtt_ms: float) -> float:
     """One-way propagation δ_net from round-trip measurement."""
     return max(0.0, rtt_ms / 2.0)

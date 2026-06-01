@@ -20,8 +20,8 @@ Four-timestamp handshake between local collector and remote clock:
 
 ```
 RTT = (T4 - T1) - (T3 - T2)
-θ   = ((T2 - T1) + (T3 - T4)) / 2
-T_local_true = T_local_nominal - θ
+θ   = ((T2 - T1) + (T3 - T4)) / 2       (NTP: θ = remote − local; θ > 0 → remote ahead)
+T_local_true = T_local_nominal + θ      (add θ to convert local → true)
 ```
 
 Code: `compute_rtt_ms`, `compute_theta_ms`, `node_offset_from_handshake` in [`clock_sync.py`](../src/align/clock_sync.py).
@@ -41,13 +41,13 @@ A node observation at nominal time `T_node_obs` is unavailable until it traverse
 **True availability timestamp:**
 
 ```
-T_avail = T_node_obs + θ_node + δ_net + δ_proc
+T_avail = T_node_obs - θ_node + δ_net + δ_proc
 ```
 
 **True exchange decision time:**
 
 ```
-T_exch_true = T_exch + θ_exch
+T_exch_true = T_exch - θ_exch
 ```
 
 **Availability condition (required for feature inclusion):**

@@ -21,7 +21,7 @@ Repo-wide: **[docs/VALIDATION_HONESTY.md](../../../docs/VALIDATION_HONESTY.md)**
 
 ## Known gaps (open)
 
-1. **θ convention audit** — doc `T_local_true = T_nominal − θ` vs ingest mediantime/wall usage; sign audit pending.
+1. ~~**θ convention audit**~~ — **Closed.** NTP sign convention corrected: `T_local_true = T_nominal + θ`, `T_exch_true = T_exch - θ_exch`, `T_avail = T_node_obs - θ_node + δ_net + δ_proc`. BTC mediantime no longer used as θ_node (it is consensus lag, not clock drift).
 2. **Live venue RTT** — default path is synthetic calibration until real WS trace stored in `venue_profiles.json`.
 
 Closed in code (do not re-report): PIT join runs before mempool/event features; normalize no longer nominal-pairs mempool to exchange bars.

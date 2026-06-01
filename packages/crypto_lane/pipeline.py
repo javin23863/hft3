@@ -13,6 +13,7 @@ sys.path.insert(0, str(_REPO / "packages"))
 
 from crypto_lane.src.align.latency_profile import (
     calibrate_ws_rtt,
+    measure_live_ws_rtt,
     measure_node_profile_from_btc,
     save_node_profile,
 )
@@ -90,6 +91,14 @@ def cmd_calibrate_ws_rtt(args: argparse.Namespace) -> int:
         print(json.dumps({"venue": profile.__dict__, "node": node.__dict__}, indent=2))
     else:
         print(json.dumps(profile.__dict__, indent=2))
+    return 0
+
+
+def cmd_measure_live_ws_rtt(args: argparse.Namespace) -> int:
+    import asyncio
+    ensure_crypto_env()
+    profile = asyncio.run(measure_live_ws_rtt(args.venue, url=args.url, timeout_s=args.timeout))
+    print(json.dumps(profile.__dict__, indent=2))
     return 0
 
 
@@ -194,6 +203,15 @@ def main(argv: list[str] | None = None) -> int:
     p_cal.add_argument("--measure-node", action="store_true")
     p_cal.add_argument("--tunnel-rtt-ms", type=float, default=None)
     p_cal.set_defaults(func=cmd_calibrate_ws_rtt)
+
+    p_live = sub.add_parser(
+        "measure-live-ws-rtt",
+        help="Live WebSocket ping/pong RTT measurement for a venue",
+    )
+    p_live.add_argument("--venue", default="binance_perp")
+    p_live.add_argument("--url", default=None, help="Override WebSocket URL")
+    p_live.add_argument("--timeout", type=float, default=10.0, help="Connection timeout in seconds")
+    p_live.set_defaults(func=cmd_measure_live_ws_rtt)
 
     p_record = sub.add_parser("record-l3", help="Record Kraken L3 order book via WebSocket")
     p_record.add_argument("--symbols", default=None, help="Comma-separated symbols (default: BTC/USD,ETH/USD,SOL/USD)")

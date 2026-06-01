@@ -86,6 +86,7 @@ def build_spot_perp_ticks(start: str, end: str) -> pl.DataFrame:
     except BronzeReadError:
         perp_df = pl.DataFrame()
     perp = _mid_from_klines(perp_df, "perp")
+    perp_is_real = not perp.is_empty()
     if spot.is_empty() and perp.is_empty():
         spot = _mid_from_klines(
             _read_klines("binance", sym["binance_spot"], start_d, end_d, "1h"),
@@ -96,6 +97,7 @@ def build_spot_perp_ticks(start: str, end: str) -> pl.DataFrame:
             pl.col("exchange_timestamp"),
             pl.col("spot_mid").alias("perp_mid"),
         )
+        perp_is_real = False
 
     funding = pl.DataFrame()
     try:
@@ -132,13 +134,14 @@ def build_spot_perp_ticks(start: str, end: str) -> pl.DataFrame:
         pl.lit(0.0).alias("bid_ask_spread"),
         pl.lit(0.0).alias("depth_btc"),
         pl.lit(0.0).alias("order_imbalance"),
+        pl.lit(1 if perp_is_real else 0).alias("perp_data_quality_flag"),
     ])
     out = _assign_validation_periods(out.sort("exchange_timestamp"))
     cols = [
         "exchange_timestamp", "validation_period", "spot_mid", "perp_mid",
         "perp_mid_binance", "perp_mid_okx", "funding_rate", "funding_rate_binance",
         "funding_rate_okx", "spot_return", "perp_return", "bid_ask_spread",
-        "depth_btc", "order_imbalance",
+        "depth_btc", "order_imbalance", "perp_data_quality_flag",
     ]
     return out.select(cols)
 

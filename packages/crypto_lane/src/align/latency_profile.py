@@ -16,6 +16,8 @@ from crypto_lane.src.align.clock_sync import (
 from crypto_lane.src.config_loader import load_universe
 from crypto_lane.src.ingest.paths import data_root
 
+MAX_CLOCK_DRIFT_MS = 5000.0
+
 
 @dataclass(frozen=True)
 class VenueLatencyProfile:
@@ -63,7 +65,7 @@ def resolve_theta_exch(venue: str, backtest: dict[str, Any] | None = None) -> Ve
     """
     saved = load_venue_profiles().get(venue)
     if saved is not None and not saved.source.startswith(
-        ("synthetic_calibrated:", "backtest_calibrated:", "ws_rtt:")
+        ("backtest_calibrated:", "ws_rtt:")
     ):
         return saved
 
@@ -109,20 +111,10 @@ def resolve_node_latency(*, defaults: dict[str, Any] | None = None) -> NodeLaten
 
 def measure_node_profile_from_btc(*, tunnel_rtt_ms: float | None = None) -> NodeLatencyProfile:
     """
-    Estimate θ_node from bitcoind mediantime vs wall clock; δ_net from tunnel RTT/2.
+    Estimate θ_node from tunnel handshake RTT; δ_net from RTT/2.
+
+    BTC mediantime is a ~2h consensus lag, NOT a clock drift — must not be used as θ_node.
     """
-    theta_node_ms = 0.0
-    source = "btc_median_time"
-    try:
-        from crypto_lane.src.ingest.btc_rpc import BtcRpc
-
-        chain = BtcRpc().getblockchaininfo()
-        wall_ms = int(time.time() * 1000)
-        theta_node_ms = float(wall_ms - chain.median_time)
-        source = "btc_median_time"
-    except OSError:
-        source = "btc_median_time_unavailable"
-
     if tunnel_rtt_ms is not None and tunnel_rtt_ms > 0:
         ts = SyncTimestamps(
             t1_local_send_ns=0,
@@ -131,8 +123,9 @@ def measure_node_profile_from_btc(*, tunnel_rtt_ms: float | None = None) -> Node
             t4_local_recv_ns=int(tunnel_rtt_ms * 1_000_000),
         )
         off = node_offset_from_handshake(ts, source="btc_tunnel_rtt")
+        theta = max(-MAX_CLOCK_DRIFT_MS, min(MAX_CLOCK_DRIFT_MS, off.theta_ms))
         return NodeLatencyProfile(
-            theta_node_ms=off.theta_ms if abs(off.theta_ms) > abs(theta_node_ms) else theta_node_ms,
+            theta_node_ms=theta,
             network_latency_ms=one_way_latency_ms(off.rtt_ms),
             processing_latency_ms=2.0,
             node_rtt_ms=off.rtt_ms,
@@ -141,11 +134,11 @@ def measure_node_profile_from_btc(*, tunnel_rtt_ms: float | None = None) -> Node
 
     node = resolve_node_latency()
     return NodeLatencyProfile(
-        theta_node_ms=theta_node_ms if theta_node_ms else node.theta_node_ms,
+        theta_node_ms=max(-MAX_CLOCK_DRIFT_MS, min(MAX_CLOCK_DRIFT_MS, node.theta_node_ms)),
         network_latency_ms=node.network_latency_ms,
         processing_latency_ms=node.processing_latency_ms,
         node_rtt_ms=node.node_rtt_ms,
-        source=source,
+        source=node.source,
     )
 
 
@@ -170,8 +163,52 @@ def calibrate_ws_rtt(venue: str, *, ws_rtt_ms: float | None = None) -> VenueLate
     return profile
 
 
+async def measure_live_ws_rtt(venue: str, *, url: str | None = None, timeout_s: float = 10.0) -> VenueLatencyProfile:
+    """
+    Live WebSocket ping/pong RTT measurement.
+
+    Connects to the venue WS, sends a protocol-level ping, measures pong RTT,
+    and saves the result to venue_profiles.json with source ``live_measured:<venue>``.
+
+    Falls back to calibrate_ws_rtt on any connection error.
+    """
+    try:
+        import websockets
+    except ImportError:
+        return calibrate_ws_rtt(venue)
+
+    venue_urls: dict[str, str] = {
+        "binance_perp": "wss://fstream.binance.com/ws",
+        "binance_spot": "wss://stream.binance.com:9443/ws",
+        "kraken_spot": "wss://ws.kraken.com",
+        "kraken_futures": "wss://futures.kraken.com/ws/v1",
+    }
+    ws_url = url or venue_urls.get(venue)
+    if not ws_url:
+        return calibrate_ws_rtt(venue)
+
+    import asyncio
+
+    try:
+        ping_ns = time.time_ns()
+        async with websockets.connect(ws_url, close_timeout=float(timeout_s)) as ws:
+            await ws.ping()
+            pong_ns = time.time_ns()
+        off = exchange_offset_from_ws_rtt(ping_ns, pong_ns, venue=venue)
+        profile = VenueLatencyProfile(
+            venue=venue,
+            theta_exch_ms=off.theta_ms,
+            ws_rtt_ms=off.rtt_ms,
+            source=f"live_measured:{venue}",
+        )
+        save_venue_profile(profile)
+        return profile
+    except (OSError, asyncio.TimeoutError, websockets.exceptions.WebSocketException):
+        return calibrate_ws_rtt(venue)
+
+
 def probe_ws_rtt(venue: str, *, ws_rtt_ms: float | None = None) -> VenueLatencyProfile:
-    """Deprecated alias for calibrate_ws_rtt."""
+    """Deprecated: use measure_live_ws_rtt for live probes or calibrate_ws_rtt for synthetic."""
     return calibrate_ws_rtt(venue, ws_rtt_ms=ws_rtt_ms)
 
 

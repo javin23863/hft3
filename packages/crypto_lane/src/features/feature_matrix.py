@@ -40,6 +40,13 @@ def build_labeled_frame(
         micro, on="exchange_timestamp", how="left"
     ).join(vol, on="exchange_timestamp", how="left")
 
+    if "perp_data_quality_flag" in ticks.columns:
+        out = out.join(
+            ticks.select(["exchange_timestamp", "perp_data_quality_flag"]),
+            on="exchange_timestamp",
+            how="left",
+        )
+
     if "validation_period" in ticks.columns:
         out = out.join(
             ticks.select(["exchange_timestamp", "validation_period"]),
@@ -99,6 +106,14 @@ def build_labeled_frame(
         for col in ("btc_mempool_usage_bytes", "btc_fee_spike_zscore", "jump_intensity_lambda"):
             if col in out.columns:
                 out = out.with_columns(pl.when(avail).then(pl.col(col)).otherwise(None).alias(col))
+
+    if "perp_data_quality_flag" in out.columns:
+        perp_ok = pl.col("perp_data_quality_flag") == 1
+        for col in ("spot_perp_basis", "basis_pct", "basis_zscore", "annualized_basis_yield",
+                     "funding_adjusted_basis", "cross_venue_basis_dispersion",
+                     "ou_basis_compression_signal", "basis_momentum", "basis_volatility"):
+            if col in out.columns:
+                out = out.with_columns(pl.when(perp_ok).then(pl.col(col)).otherwise(None).alias(col))
 
     if "is_pit_safe" in out.columns:
         pit_col = out["is_pit_safe"]

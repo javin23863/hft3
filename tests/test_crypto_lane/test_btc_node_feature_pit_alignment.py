@@ -22,6 +22,70 @@ def test_pit_safe_row_has_availability_flag():
     assert out["is_pit_safe"][0] is True
 
 
+def test_positive_theta_node_delays_availability():
+    df = pl.DataFrame({
+        "node_observation_time": [5000.0],
+        "node_clock_drift_ms": [10.0],
+        "network_latency_ms": [5.0],
+        "processing_latency_ms": [2.0],
+        "exchange_timestamp": [5000.0],
+        "exchange_clock_drift_ms": [3.0],
+    })
+    out = apply_pit_alignment(df, max_staleness_ms=15000)
+    t_avail = float(out["T_avail"][0])
+    t_exch_true = float(out["T_exch_true"][0])
+    assert t_avail == 5000.0 - 10.0 + 5.0 + 2.0, f"T_avail should be 4997.0, got {t_avail}"
+    assert t_exch_true == 5000.0 - 3.0, f"T_exch_true should be 4997.0, got {t_exch_true}"
+
+
+def test_negative_theta_advances_availability():
+    df = pl.DataFrame({
+        "node_observation_time": [5000.0],
+        "node_clock_drift_ms": [-10.0],
+        "network_latency_ms": [5.0],
+        "processing_latency_ms": [2.0],
+        "exchange_timestamp": [5000.0],
+        "exchange_clock_drift_ms": [-3.0],
+    })
+    out = apply_pit_alignment(df, max_staleness_ms=15000)
+    t_avail = float(out["T_avail"][0])
+    t_exch_true = float(out["T_exch_true"][0])
+    assert t_avail == 5000.0 - (-10.0) + 5.0 + 2.0, f"negative θ_node pushes T_avail later; got {t_avail}"
+    assert t_exch_true == 5000.0 - (-3.0), f"negative θ_exch pushes T_exch_true later; got {t_exch_true}"
+
+
+def test_negative_theta_exch_prevents_false_leakage():
+    df = pl.DataFrame({
+        "node_observation_time": [5000.0],
+        "node_clock_drift_ms": [0.0],
+        "network_latency_ms": [5.0],
+        "processing_latency_ms": [2.0],
+        "exchange_timestamp": [5000.0],
+        "exchange_clock_drift_ms": [-100.0],
+    })
+    out = apply_pit_alignment(df, max_staleness_ms=15000)
+    t_avail = float(out["T_avail"][0])
+    t_exch_true = float(out["T_exch_true"][0])
+    assert t_exch_true == 5100.0, "exchange behind local → T_exch_true > T_exch"
+    assert t_avail < t_exch_true, "should be PIT-safe"
+    assert out["is_pit_safe"][0] is True
+
+
+def test_positive_theta_exch_causes_leakage_when_node_late():
+    df = pl.DataFrame({
+        "node_observation_time": [5000.0],
+        "node_clock_drift_ms": [0.0],
+        "network_latency_ms": [5.0],
+        "processing_latency_ms": [2.0],
+        "exchange_timestamp": [5000.0],
+        "exchange_clock_drift_ms": [100.0],
+    })
+    out = apply_pit_alignment(df, max_staleness_ms=15000)
+    t_exch_true = float(out["T_exch_true"][0])
+    assert t_exch_true == 4900.0, "exchange ahead → T_exch_true < T_exch"
+    assert out["is_pit_safe"][0] is False, "T_avail=5007 > T_exch_true=4900 → unsafe"
+
+
 def test_stale_node_sets_flag_zero():
     df = pl.DataFrame({
         "node_observation_time": [1000.0],

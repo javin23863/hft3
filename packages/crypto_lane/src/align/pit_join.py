@@ -26,13 +26,13 @@ def _ensure_latency_columns(df: pl.DataFrame, cfg: PitConfig) -> pl.DataFrame:
 
 
 def compute_t_avail(df: pl.DataFrame, *, cfg: PitConfig | None = None) -> pl.DataFrame:
-    """T_avail = T_node_obs + θ_node + δ_net + δ_proc."""
+    """T_avail = T_node_obs - θ_node + δ_net + δ_proc (NTP: θ = node - local; subtract to convert node→local)."""
     cfg = cfg or PitConfig()
     out = _ensure_latency_columns(df, cfg)
     return out.with_columns(
         (
             pl.col("node_observation_time").cast(pl.Float64)
-            + pl.col("node_clock_drift_ms")
+            - pl.col("node_clock_drift_ms")
             + pl.col("network_latency_ms")
             + pl.col("processing_latency_ms")
         ).alias("T_avail")
@@ -40,11 +40,11 @@ def compute_t_avail(df: pl.DataFrame, *, cfg: PitConfig | None = None) -> pl.Dat
 
 
 def compute_t_exch_true(df: pl.DataFrame, *, exch_ts_col: str, cfg: PitConfig | None = None) -> pl.DataFrame:
-    """T_exch_true = T_exch + θ_exch."""
+    """T_exch_true = T_exch - θ_exch (NTP: θ = exchange - local; subtract to convert exchange→local)."""
     cfg = cfg or PitConfig()
     out = _ensure_latency_columns(df, cfg)
     return out.with_columns(
-        (pl.col(exch_ts_col).cast(pl.Float64) + pl.col("exchange_clock_drift_ms")).alias("T_exch_true")
+        (pl.col(exch_ts_col).cast(pl.Float64) - pl.col("exchange_clock_drift_ms")).alias("T_exch_true")
     )
 
 
