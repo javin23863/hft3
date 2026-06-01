@@ -54,6 +54,8 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true", help="Parse and generate only")
     parser.add_argument("--no-llm", action="store_true", help="Heuristic hypothesis parse only")
     parser.add_argument("--repo-root", type=Path, default=REPO)
+    parser.add_argument("--vectorbt", action="store_true", help="Enable VectorBT pre-filter before HftBacktest")
+    parser.add_argument("--vectorbt-only", action="store_true", help="Run VectorBT filter only, skip HftBacktest")
     args = parser.parse_args()
 
     repo_root = args.repo_root.resolve()
@@ -88,7 +90,10 @@ def main() -> int:
         pipeline_request=request,
         repo_root=repo_root,
     )
-    candidates = list(generate_candidates(parsed, max_candidates=args.max_candidates))
+    candidates = list(generate_candidates(
+        parsed, max_candidates=args.max_candidates,
+        expand_for_vectorbt=bool(args.vectorbt or args.vectorbt_only),
+    ))
 
     if args.dry_run:
         report = PipelineReport(
@@ -145,6 +150,8 @@ def main() -> int:
                 repo_root,
                 chi404_summary=chi404,
                 gates=gates,
+                vectorbt_pre_filter=args.vectorbt,
+                vectorbt_only=args.vectorbt_only,
             )
         )
 

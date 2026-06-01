@@ -258,6 +258,11 @@ def main() -> int:
         action="store_true",
         help="Run full WFC matrix (slow; default is trial/fast sweep)",
     )
+    parser.add_argument(
+        "--vectorbt-pre-filter",
+        action="store_true",
+        help="Apply VectorBT cheap filter before per-model campaign",
+    )
     args = parser.parse_args()
 
     if not args.backfill and not args.sweep:

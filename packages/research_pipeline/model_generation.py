@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import itertools
-from typing import Iterator, List
+from typing import Any, Dict, Iterator, List
 
 from workbench.src.core.params import DEFAULT_STRATEGY_PARAMS, param_hash_from_dict
 
 from research_pipeline.types import CandidateModel, ParsedHypothesis
 
 _DEFAULT_THRESHOLDS = [0.10, 0.15, 0.20, 0.25]
+_DEFAULT_HOLDING_PERIODS_BARS = [15, 30, 60]
 
 
 def _threshold_grid(parsed: ParsedHypothesis) -> List[float]:
@@ -27,8 +28,14 @@ def generate_candidates(
     parsed: ParsedHypothesis,
     *,
     max_candidates: int = 20,
+    expand_for_vectorbt: bool = False,
 ) -> Iterator[CandidateModel]:
-    """Yield param variants for primary model and keyword-adjacent slugs."""
+    """Yield param variants for primary model and keyword-adjacent slugs.
+
+    When expand_for_vectorbt is True, generates a richer grid across
+    signal_threshold, holding_period, and stop_loss/take_profit for
+    VectorBT's cheap parameter filtering.
+    """
     models = [parsed.primary_model_id]
     for feat in parsed.feature_list:
         if feat not in models and feat.isupper():
@@ -48,6 +55,28 @@ def generate_candidates(
             model_id=model_id,
             strategy_params=params,
             thesis=parsed.thesis,
-            metadata={"source_model": parsed.primary_model_id},
+            metadata={"source_model": parsed.primary_model_id, "strategy_family": model_id},
         )
         count += 1
+
+    if expand_for_vectorbt:
+        for model_id in models[:1]:
+            for threshold, holding in itertools.product(thresholds, _DEFAULT_HOLDING_PERIODS_BARS):
+                if count >= max_candidates:
+                    break
+                params = dict(DEFAULT_STRATEGY_PARAMS)
+                params["signal_threshold"] = threshold
+                params["holding_period_bars"] = holding
+                cid = param_hash_from_dict(model_id, params)
+                yield CandidateModel(
+                    candidate_id=cid,
+                    model_id=model_id,
+                    strategy_params=params,
+                    thesis=parsed.thesis,
+                    metadata={
+                        "source_model": parsed.primary_model_id,
+                        "strategy_family": model_id,
+                        "vectorbt_grid": True,
+                    },
+                )
+                count += 1
