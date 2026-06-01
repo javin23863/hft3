@@ -84,7 +84,7 @@ def fan_out_hyp_reports(
 ) -> List[Dict[str, Any]]:
     """Write artifact dirs and return executed model rows."""
     rows: List[Dict[str, Any]] = []
-    backend_label = route("HYP_1").backend_label
+    backend_label = route("SECOND_WAVE_CONTINUATION").backend_label
     for hyp_row in mbo_result.get("all_hypotheses") or []:
         hyp_id = int(hyp_row["hypothesis_id"])
         model_id = hyp_id_to_model_id(hyp_id)

@@ -96,9 +96,9 @@ def _run_hybrid_block(
         )
         if not aa_ok:
             return False, aa_detail, {"payload": payload}
-    rt = route("PDF_MODEL_4")
+    rt = route("HYBRID_EXECUTION")
     row = {
-        "model_id": "PDF_MODEL_4",
+        "model_id": "HYBRID_EXECUTION",
         "engine_kind": rt.engine_kind,
         "status": "PASS",
         "artifact_dir": _relative(hg.CARD_DIR),
@@ -258,7 +258,7 @@ def _run_pdf_options(event_id: str) -> Dict[str, Any]:
     from workbench.src.registry.unified_registry import get_model_by_id
     from workbench.src.run.run_context import RunContext
 
-    model_id = "PDF_MODEL_5"
+    model_id = "DEALER_HEDGING"
     rt = route(model_id)
     fixture = _REPO / "options_lane" / "fixtures" / "fair_futures_quotes.ndjson"
     artifact_dir = PIPELINE_RUNS / f"{model_id}_{event_id}"

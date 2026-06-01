@@ -46,3 +46,12 @@ def test_pdf_model_routes() -> None:
     assert "HYBRID_EXECUTION" in PDF_HYBRID_REPLAY
     assert len(PDF_STRUCTURAL_EVAL) == 6
     assert len(PDF_DIAGNOSTICS) == 3
+
+
+def test_legacy_ids_resolve_via_route() -> None:
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        assert route("PDF_MODEL_4").engine_kind == "pdf_hybrid_replay"
+        assert route("HYP_1").engine_kind == "hyp_mbo"
+        assert route("PDF_MODEL_8").engine_kind == "pdf_structural_eval"

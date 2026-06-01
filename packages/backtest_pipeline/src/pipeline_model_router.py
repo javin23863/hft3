@@ -53,4 +53,4 @@ def route(model_id: str) -> EngineRoute:
         kind = "pdf_options_fixture"
     else:
         raise KeyError(f"Unknown model_id for catalog router: {model_id}")
-    return EngineRoute(model_id=slug, engine_kind=kind, backend_label=_BACKEND_LABELS[kind])
+    return EngineRoute(model_id=model_id, engine_kind=kind, backend_label=_BACKEND_LABELS[kind])
