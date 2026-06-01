@@ -1,6 +1,6 @@
 source_repo_url: https://github.com/javin23863/crypto-alpha-engine
 ideas_only: false
-source_commit_sha: cebc1acae275be7b0b29101cb84455e59f62e440
+source_commit_sha: e8e4c988df536eedc7aa3910fda3c82264fcd428
 extracted_hypotheses:
 - CRYPTO_H1
 - CRYPTO_H2

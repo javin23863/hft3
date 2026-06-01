@@ -6,7 +6,7 @@ hypotheses:
   source_files:
   - ideas-only extraction
   ideas_only: false
-  source_commit_sha: cebc1acae275be7b0b29101cb84455e59f62e440
+  source_commit_sha: e8e4c988df536eedc7aa3910fda3c82264fcd428
   source_concept_summary: BTC spot/perp basis compression
   economic_mechanism: BTC spot/perp basis compression
   null_hypothesis: Feature set has zero incremental predictive power OOS.
@@ -85,7 +85,7 @@ hypotheses:
   source_files:
   - ideas-only extraction
   ideas_only: false
-  source_commit_sha: cebc1acae275be7b0b29101cb84455e59f62e440
+  source_commit_sha: e8e4c988df536eedc7aa3910fda3c82264fcd428
   source_concept_summary: Perp latent funding pressure
   economic_mechanism: Perp latent funding pressure
   null_hypothesis: Feature set has zero incremental predictive power OOS.
@@ -156,7 +156,7 @@ hypotheses:
   source_files:
   - ideas-only extraction
   ideas_only: false
-  source_commit_sha: cebc1acae275be7b0b29101cb84455e59f62e440
+  source_commit_sha: e8e4c988df536eedc7aa3910fda3c82264fcd428
   source_concept_summary: Deribit IV/RV lead-lag
   economic_mechanism: Deribit IV/RV lead-lag
   null_hypothesis: Feature set has zero incremental predictive power OOS.
@@ -228,7 +228,7 @@ hypotheses:
   source_files:
   - ideas-only extraction
   ideas_only: false
-  source_commit_sha: cebc1acae275be7b0b29101cb84455e59f62e440
+  source_commit_sha: e8e4c988df536eedc7aa3910fda3c82264fcd428
   source_concept_summary: BTC mempool fee regime and volatility
   economic_mechanism: BTC mempool fee regime and volatility
   null_hypothesis: Feature set has zero incremental predictive power OOS.
@@ -301,7 +301,7 @@ hypotheses:
   source_files:
   - ideas-only extraction
   ideas_only: false
-  source_commit_sha: cebc1acae275be7b0b29101cb84455e59f62e440
+  source_commit_sha: e8e4c988df536eedc7aa3910fda3c82264fcd428
   source_concept_summary: BTC blockspace stress and liquidity degradation
   economic_mechanism: BTC blockspace stress and liquidity degradation
   null_hypothesis: Feature set has zero incremental predictive power OOS.
@@ -374,7 +374,7 @@ hypotheses:
   source_files:
   - ideas-only extraction
   ideas_only: false
-  source_commit_sha: cebc1acae275be7b0b29101cb84455e59f62e440
+  source_commit_sha: e8e4c988df536eedc7aa3910fda3c82264fcd428
   source_concept_summary: BTC mempool clear reversion
   economic_mechanism: BTC mempool clear reversion
   null_hypothesis: Feature set has zero incremental predictive power OOS.
@@ -447,7 +447,7 @@ hypotheses:
   source_files:
   - ideas-only extraction
   ideas_only: false
-  source_commit_sha: cebc1acae275be7b0b29101cb84455e59f62e440
+  source_commit_sha: e8e4c988df536eedc7aa3910fda3c82264fcd428
   source_concept_summary: BTC congestion shock event study
   economic_mechanism: BTC congestion shock event study
   null_hypothesis: Feature set has zero incremental predictive power OOS.

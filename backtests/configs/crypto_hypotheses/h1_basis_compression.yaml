@@ -23,6 +23,7 @@ cost_assumptions:
   spread_bps: 1
 latency_assumptions:
   ws_rtt_ms: 5
+  ws_rtt_tracking: true
 slippage_assumptions:
   model: linear_bps
 max_feature_staleness_ms: 300000
