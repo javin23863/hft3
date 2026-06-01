@@ -32,7 +32,7 @@ bool run_stack_checks(
     }
 
     const hft::MarketDataEvent ev{1'000'000'000ULL, 42, 'A', 'B', 5500.0, 10};
-    gateway.on_market_data_update(ev);
+    queue.push(ev);
 
     hft::MarketDataEvent popped{};
     checks.spsc_queue_roundtrip = queue.pop(popped) && popped.order_id == 42 && popped.price == 5500.0;
@@ -109,8 +109,12 @@ int main(int argc, char** argv) {
     hft::risk::RiskLimits limits;
     hft::risk::RiskManager risk(limits);
     hft::SPSCQueue<hft::MarketDataEvent, 8192> mbo_queue;
-    hft::RithmicAdapter::Config gw_cfg{
-        "Rithmic Aurora", "paper", "paper", "hft3_research_sim", "1.0"};
+    hft::ConnectionConfig gw_cfg;
+    gw_cfg.environment = "Rithmic Aurora";
+    gw_cfg.username = "paper";
+    gw_cfg.password = "paper";
+    gw_cfg.app_name = "hft3_research_sim";
+    gw_cfg.app_version = "1.0";
     hft::RithmicAdapter gateway(gw_cfg, &mbo_queue);
 
     StackChecks checks{};
