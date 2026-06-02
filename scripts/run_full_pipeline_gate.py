@@ -29,7 +29,6 @@ from backtest_pipeline.src.pipeline_model_router import (
 )
 from features_engine.src.features.npz_feed import load_npz_events
 
-DEFAULT_EVENT = "CPI_2024_09_11_TIGHT"
 DEFAULT_SYMBOL = "MES.v.0"
 PIPELINE_RUNS = _REPO / "research_cards" / "pipeline_runs"
 
@@ -324,7 +323,11 @@ def _run_pdf_options(event_id: str) -> Dict[str, Any]:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Full 55-model catalog pipeline gate")
     parser.add_argument("--tier", choices=("smoke", "catalog"), default="smoke")
-    parser.add_argument("--event-id", default=DEFAULT_EVENT)
+    parser.add_argument(
+        "--event-id",
+        required=True,
+        help="Macro event id from packages/data_system/config/events.csv (any of 55 rows)",
+    )
     parser.add_argument("--symbol", default=DEFAULT_SYMBOL)
     parser.add_argument("--latency-ms", type=float, default=None)
     parser.add_argument("--skip-hybrid", action="store_true")

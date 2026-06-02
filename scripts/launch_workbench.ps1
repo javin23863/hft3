@@ -104,9 +104,11 @@ if (-not (Test-Path $latencySummary)) {
     Write-Host "WARN: missing $latencySummary — backtests need CHI404 latency summary for C++ authority." -ForegroundColor Yellow
 }
 
-$cpiNpz = Join-Path $RepoRoot 'data/npz/MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz'
-if (-not (Test-Path $cpiNpz)) {
-    Write-Host "WARN: missing $cpiNpz — local CPI backtests unavailable until NPZ is present." -ForegroundColor Yellow
+$npzDir = Join-Path $RepoRoot 'data/npz'
+$anyNpz = Get-ChildItem -Path $npzDir -Filter '*_mbo.npz' -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $anyNpz) {
+    Write-Host "WARN: no *_mbo.npz under data/npz — pull macro events from packages/data_system/config/events.csv" -ForegroundColor Yellow
+    Write-Host "      List ids: python packages/data_system/src/macro_event_cli.py" -ForegroundColor Yellow
 }
 
 $url = "http://localhost:$Port"

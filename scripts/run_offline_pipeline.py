@@ -30,8 +30,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--event-id",
-        default="CPI_2024_09_11_TIGHT",
-        help="Macro event for canonical replay (events.csv)",
+        required=True,
+        help="Macro event id from packages/data_system/config/events.csv",
     )
     parser.add_argument(
         "--full-hft",

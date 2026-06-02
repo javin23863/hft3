@@ -48,7 +48,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Autoresearch pipeline")
     parser.add_argument("--thesis", required=True, help="Natural-language trading thesis")
     parser.add_argument("--doc", type=Path, help="Optional research document (PDF/DOCX/URL)")
-    parser.add_argument("--event-id", default="CPI_2024_09_11_TIGHT")
+    parser.add_argument(
+        "--event-id",
+        required=True,
+        help="Macro event id from packages/data_system/config/events.csv",
+    )
     parser.add_argument("--max-candidates", type=int, default=5)
     parser.add_argument("--chi404-summary", type=Path, default=None)
     parser.add_argument("--dry-run", action="store_true", help="Parse and generate only")

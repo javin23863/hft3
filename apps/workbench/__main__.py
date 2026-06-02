@@ -75,7 +75,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Replay-backed imbalance ablation matrix (requires NPZ)",
     )
     abl_p.add_argument("--model", default="HYP_5", help="Model slug or legacy HYP_N")
-    abl_p.add_argument("--event-id", default="CPI_2024_09_11_TIGHT")
+    abl_p.add_argument(
+        "--event-id",
+        required=True,
+        help="Macro event id from packages/data_system/config/events.csv (CPI, NFP, PROP_FLATTEN, ...)",
+    )
     abl_p.add_argument("--symbol", default=None)
     abl_p.add_argument("--npz", default=None, help="Override NPZ path")
     abl_p.add_argument("--seed", type=int, default=42)

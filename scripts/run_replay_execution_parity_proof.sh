@@ -13,7 +13,11 @@ REPORT="$REPO/runtime/reports/replay_execution_parity_proof.md"
 mkdir -p "$REPO/runtime/reports" "$AUDIT_DIR"
 
 if [[ -z "$NPZ" ]]; then
-  NPZ="$REPO/data/npz/MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz"
+  NPZ="$(find "$REPO/data/npz" -maxdepth 1 -name '*_mbo.npz' 2>/dev/null | head -n 1 || true)"
+fi
+if [[ -z "$NPZ" || ! -f "$NPZ" ]]; then
+  echo "Set REPLAY_PROOF_NPZ or place any *_mbo.npz under data/npz/ (from events.csv pulls)." >&2
+  exit 1
 fi
 
 if [[ ! -f "$NPZ" ]]; then

@@ -143,7 +143,7 @@ def write_research_card(out_dir: Path, payload: dict, event_meta: dict) -> None:
 
 def main() -> int:
     p = argparse.ArgumentParser(description="PDF_MODEL_4 hybrid hftbacktest trial (real NPZ only)")
-    p.add_argument("--event-id", default="CPI_2024_09_11_TIGHT")
+    p.add_argument("--event-id", required=True, help="Macro event id from packages/data_system/config/events.csv")
     p.add_argument("--events-csv", type=Path, default=DEFAULT_EVENTS_CSV)
     p.add_argument("--npz", type=Path, default=None, help="Explicit NPZ path (must exist)")
     p.add_argument(

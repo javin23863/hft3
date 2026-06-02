@@ -6,7 +6,7 @@ set -euo pipefail
 REPO="${HFT3_REPO_DIR:-/root/hft3/repo}"
 cd "$REPO"
 DATE=$(date -u +%F)
-EVENT_ID="${EVENT_ID:-CPI_2024_09_11_TIGHT}"
+: "${EVENT_ID:?Set EVENT_ID to a macro id from packages/data_system/config/events.csv (python packages/data_system/src/macro_event_cli.py)}"
 WATCH="${RTRADER_WATCH_DIRS:-/root/hft3/rtrader_watch}"
 SYMBOL="${SYMBOL:-MES}"
 LATENCY_SUMMARY="${CHI404_LATENCY_SUMMARY:-runtime/latency_reports/latency_summary.json}"

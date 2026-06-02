@@ -89,10 +89,28 @@ def _eval_model(model: dict, data: dict) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--npz", default=str(_REPO / "data/npz/MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz"))
+    parser.add_argument(
+        "--event-id",
+        required=True,
+        help="Macro event id from packages/data_system/config/events.csv",
+    )
+    parser.add_argument("--symbol", default="MES.v.0", help="Research symbol (must match NPZ)")
+    parser.add_argument(
+        "--npz",
+        default=None,
+        help="Override NPZ path; default resolved from --event-id and --symbol",
+    )
     parser.add_argument("--features", default=str(_REPO / "data/features/mes_cpi_features.parquet"))
     parser.add_argument("--output", default=str(_REPO / "models/model.bin"))
     args = parser.parse_args()
+
+    if args.npz:
+        npz_path = Path(args.npz)
+    else:
+        from backtest.adapters.rithmic_replay_loader import resolve_event_npz
+
+        npz_path = resolve_event_npz(args.event_id, _REPO, symbol=args.symbol)
+    args.npz = str(npz_path)
 
     if not Path(args.features).exists():
         print(f"Building feature store from {args.npz}...")

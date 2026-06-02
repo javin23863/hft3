@@ -42,15 +42,19 @@ graphify-out/      Code graph (AI entry)
 
 ## Common commands
 
+Macro events (55 in `packages/data_system/config/events.csv` — 19 CPI, 33 NFP, 3 prop-flatten):
+
 ```bash
-# Workbench (canonical model slug)
-python -m workbench run --model SPREAD_BLOWOUT_RECOMPRESSION --event-id CPI_2024_09_11_TIGHT --full-sweep
+python packages/data_system/src/macro_event_cli.py   # list all event_id values
+```
 
-# Macro replay
-python scripts/run_event_replay.py --event-id CPI_2024_09_11_TIGHT
+```bash
+# Pick any event_id from the catalog (examples: CPI or NFP)
+export EVENT_ID=NFP_2024_01_05_TIGHT
 
-# Autoresearch pipeline (NL thesis → backtest → artifacts)
-python scripts/run_pipeline.py --thesis "Fade spread blowout after CPI" --event-id CPI_2024_09_11_TIGHT --dry-run
+python -m workbench run --model SPREAD_BLOWOUT_RECOMPRESSION --event-id "$EVENT_ID" --full-sweep
+python scripts/run_event_replay.py --event-id "$EVENT_ID"
+python scripts/run_pipeline.py --thesis "Fade spread blowout after release" --event-id "$EVENT_ID" --dry-run
 
 # T0 certification gate
 python -m pytest tests/backtester_validation/fast -q

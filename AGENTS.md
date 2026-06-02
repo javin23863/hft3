@@ -179,7 +179,7 @@ Do not merge PDF outputs into 64-dim `FeatureIndex` or `CombinedHypothesisStrate
 
 Unified 51-model research workbench (`workbench/`):
 
-- CLI: `python -m workbench run --model HYP_5 --event-id CPI_2024_09_11_TIGHT`
+- CLI: `python -m workbench run --model HYP_5 --event-id <from events.csv>` (required; list: `python packages/data_system/src/macro_event_cli.py`)
 - UI: `streamlit run workbench/ui/app.py`
 - Artifacts: `research_cards/workbench_runs/<run_id>/`
 

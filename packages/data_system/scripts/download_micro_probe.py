@@ -1,5 +1,5 @@
 """
-Budget-locked Databento micro-probe: one symbol, CPI TIGHT window only.
+Budget-locked Databento micro-probe: one symbol, one events.csv window.
 Pre-flight get_cost(); abort if estimate > $5.
 """
 from __future__ import annotations
@@ -19,15 +19,21 @@ from data_system.src.databento_client import DatabentoResearchClient
 from data_system.src.events_parser import load_and_parse_events
 
 SOFT_PROBE_LIMIT_USD = 5.0
-EVENT_ID = "CPI_2024_09_11_TIGHT"
 SYMBOLS = ["MES.v.0"]
 
 
 def main() -> None:
-    events = load_and_parse_events(str(_REPO / "data_system" / "config" / "events.csv"))
-    row = events[events["event_id"] == EVENT_ID]
+    import argparse
+
+    p = argparse.ArgumentParser(description="Databento cost probe for one events.csv row")
+    p.add_argument("--event-id", required=True, help="event_id from packages/data_system/config/events.csv")
+    args = p.parse_args()
+    event_id = args.event_id
+
+    events = load_and_parse_events(str(_REPO / "packages" / "data_system" / "config" / "events.csv"))
+    row = events[events["event_id"] == event_id]
     if row.empty:
-        raise SystemExit(f"Event {EVENT_ID} not found in events.csv")
+        raise SystemExit(f"Event {event_id} not found in events.csv")
 
     r = row.iloc[0]
     start_utc = r["start_utc"]
@@ -51,7 +57,7 @@ def main() -> None:
         )
 
     client.download_event_window(
-        event_id=EVENT_ID,
+        event_id=event_id,
         symbols=SYMBOLS,
         start_utc=start_utc.to_pydatetime() if hasattr(start_utc, "to_pydatetime") else start_utc,
         end_utc=end_utc.to_pydatetime() if hasattr(end_utc, "to_pydatetime") else end_utc,

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Single-hypothesis CPI backtest on Databento NPZ; latency from CHI404 probe."""
+"""Single-hypothesis macro-event backtest on Databento NPZ; latency from CHI404 probe."""
 from __future__ import annotations
 
 import argparse
@@ -18,8 +18,7 @@ from backtest.adapters.rithmic_replay_loader import resolve_event_npz
 from features_engine.src.features.npz_feed import load_npz_events
 from features_engine.src.hypotheses.modules import SpreadBlowoutRecompression
 
-DEFAULT_EVENT_ID = "CPI_2024_09_11_TIGHT"
-DEFAULT_OUT = _REPO / "research_cards" / "single_run_CPI_HYP5"
+DEFAULT_OUT = _REPO / "research_cards" / "single_run_hyp"
 DEFAULT_CHI404_SUMMARY = _REPO / "runtime" / "latency_reports" / "latency_summary.json"
 
 
@@ -67,7 +66,7 @@ def load_chi404_speed(summary_path: Path) -> dict[str, Any]:
 
 def main() -> int:
     p = argparse.ArgumentParser(description="Single HYP backtest with CHI404-measured latency (SignalBacktester)")
-    p.add_argument("--event-id", default=DEFAULT_EVENT_ID, help="Macro event from events.csv")
+    p.add_argument("--event-id", required=True, help="Macro event from packages/data_system/config/events.csv")
     p.add_argument("--npz", type=Path, default=None, help="Override NPZ; default from --event-id")
     p.add_argument("--out", type=Path, default=DEFAULT_OUT)
     p.add_argument(
@@ -100,7 +99,7 @@ def main() -> int:
         df.to_csv(fills_path, index=False)
 
     payload = {
-        "scenario": "CPI_2024_09_11_TIGHT single hypothesis backtest",
+        "scenario": f"{args.event_id} single hypothesis backtest",
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "event_id": args.event_id,
         "release_date": "2024-09-11",

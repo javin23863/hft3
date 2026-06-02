@@ -21,6 +21,13 @@ MBP-10 is **aggregated depth, not Level 3**.
 
 ## Commands
 
+Macro catalog: **55 events** in `packages/data_system/config/events.csv` (CPI, NFP, PROP_FLATTEN — not CPI-only).
+
+```bash
+python packages/data_system/src/macro_event_cli.py              # list event_id
+python packages/data_system/src/macro_event_cli.py --type NFP   # filter by type
+```
+
 ```bash
 # Download everything (macro imbalance enrich + estimate; pull only with --confirm-pull)
 .\scripts\download_all_research_data.ps1
@@ -29,14 +36,14 @@ MBP-10 is **aggregated depth, not Level 3**.
 # Full manifest-backed audit (macro + equities daily/normalized/options)
 python scripts/audit_all_research_data.py
 
-# Imbalance-only enrich (55 macro events + MBP-10 + auction NDJSON)
+# Imbalance-only enrich (all 55 macro events + MBP-10 + auction NDJSON)
 python scripts/download_imbalance_research_data.py --all --max-cost-usd 200
 
 # Imbalance filename gaps only
 python scripts/audit_imbalance_data_gaps.py
 
-# Single event
-python scripts/download_imbalance_research_data.py --event-id CPI_2024_09_11_TIGHT --symbol MES.v.0 --with-mbp10
+# Single macro event (any event_id from catalog)
+python scripts/download_imbalance_research_data.py --event-id NFP_2024_01_05_TIGHT --symbol MES.v.0 --with-mbp10
 
 # Full workbench campaign catalog (all periods for a model)
 python apps/workbench/scripts/backfill_catalog.py --model HYP_5 --symbol MES.v.0 --dry-run
@@ -45,17 +52,17 @@ python apps/workbench/scripts/backfill_catalog.py --model HYP_5 --symbol MES.v.0
 # Regenerate inventory
 python scripts/build_imbalance_inventory.py
 
-# Workbench run (writes imbalance/ artifacts under run dir)
-python -m workbench run --model HYP_5 --event-id CPI_2024_09_11_TIGHT
+# Workbench run — --event-id required (any catalog row)
+python -m workbench run --model HYP_5 --event-id NFP_2024_01_05_TIGHT
 
 # Full 8-mode imbalance ablation during run (slow; real per-mode replays)
-python -m workbench run --model HYP_5 --event-id CPI_2024_09_11_TIGHT --imbalance-ablation-full
+python -m workbench run --model HYP_5 --event-id NFP_2024_01_05_TIGHT --imbalance-ablation-full
 
-# Replay-backed ablation matrix (3-mode fast sweep by default)
-python -m workbench imbalance-ablation --model HYP_5 --event-id CPI_2024_09_11_TIGHT
+# Replay-backed ablation matrix (--event-id required)
+python -m workbench imbalance-ablation --model HYP_5 --event-id NFP_2024_01_05_TIGHT
 
 # Full 8-mode replay ablation
-python -m workbench imbalance-ablation --model HYP_5 --event-id CPI_2024_09_11_TIGHT --full
+python -m workbench imbalance-ablation --model HYP_5 --event-id NFP_2024_01_05_TIGHT --full
 
 # Tests
 python -m pytest tests/test_imbalance/ -q

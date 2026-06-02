@@ -30,7 +30,6 @@ _REPO = Path(__file__).resolve().parents[1]
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
-DEFAULT_EVENT = "CPI_2024_09_11_TIGHT"
 DEFAULT_SYMBOL = "MES.v.0"
 GATE_REPORT = _REPO / "runtime" / "reports" / "hybrid_pipeline_gate.json"
 CARD_DIR = _REPO / "research_cards" / "PDF_MODEL_4_hybrid_replay"
@@ -271,7 +270,11 @@ def validate_card(min_trades: int = 0) -> Tuple[bool, str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="PDF_MODEL_4 hybrid pipeline PASS gate")
-    parser.add_argument("--event-id", default=DEFAULT_EVENT)
+    parser.add_argument(
+        "--event-id",
+        required=True,
+        help="Macro event id from packages/data_system/config/events.csv",
+    )
     parser.add_argument("--symbol", default=DEFAULT_SYMBOL)
     parser.add_argument(
         "--latency-ms",

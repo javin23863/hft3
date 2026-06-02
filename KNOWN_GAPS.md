@@ -7,6 +7,26 @@ This file is the **single billboard** for what is missing, broken, misleading, o
 
 ---
 
+## 0. Macro event catalog (not CPI-only)
+
+**Authoritative list:** [`packages/data_system/config/events.csv`](packages/data_system/config/events.csv)
+
+| `event_type` | Count | Example `event_id` |
+|--------------|-------|------------------|
+| CPI | 19 | `CPI_2024_09_11_TIGHT` |
+| NFP | 33 | `NFP_2024_01_05_TIGHT` |
+| PROP_FLATTEN_TOPSTEP | 3 | `PROP_FLATTEN_TOPSTEP_2024_09_18_MAIN` |
+
+```bash
+python packages/data_system/src/macro_event_cli.py
+```
+
+**CLI policy (2026-06-02):** Replay, workbench `imbalance-ablation`, pipeline gates, and PDF hybrid scripts **require `--event-id`** — no repo default to a single CPI row. Optional automation only: env `HFT3_DEFAULT_EVENT_ID`.
+
+**Still CPI-biased (not fixed):** [`apps/workbench/config/model_event_binding.yaml`](apps/workbench/config/model_event_binding.yaml) binds most HYP/PDF models to `CPI_TIGHT` / `NFP_TIGHT` *context families* (not one event id, but macro-heavy). [`docs/vault/RESEARCH_ENTRYPOINTS.md`](docs/vault/RESEARCH_ENTRYPOINTS.md) examples still cite CPI in places — use `macro_event_cli.py` for truth.
+
+---
+
 ## 1. Topology — which machine owns what
 
 | Host | Role | Data / code |
@@ -99,8 +119,8 @@ Entry: [docs/vault/RESEARCH_ENTRYPOINTS.md](docs/vault/RESEARCH_ENTRYPOINTS.md) 
 | I-03 | **P0** | CPI real NPZ replay: **0 PnL**, **0 delta** across ablation modes | Replay + hypothesis path |
 | I-04 | P1 | MBP-10 on disk but **not wired** into main replay/workbench | [`mbp_replay.py`](packages/features_engine/src/imbalance/mbp_replay.py) only |
 | I-05 | P1 | C++ hot path **no** imbalance v1 slots | [docs/hft3_imbalance_runbook.md](docs/hft3_imbalance_runbook.md) |
-| C-01 | P1 | CLI default event = `CPI_2024_09_11_TIGHT` for `imbalance-ablation` | [`apps/workbench/__main__.py`](apps/workbench/__main__.py) |
-| C-02 | P1 | Most models bound to **CPI_TIGHT / NFP_TIGHT** only in YAML | [`apps/workbench/config/model_event_binding.yaml`](apps/workbench/config/model_event_binding.yaml) |
+| C-01 | ~~P1~~ | ~~CLI default CPI for `imbalance-ablation`~~ **Fixed:** `--event-id` required | [`apps/workbench/__main__.py`](apps/workbench/__main__.py) |
+| C-02 | P1 | Most models bound to **CPI_TIGHT / NFP_TIGHT** context families only (not equities/crypto) | [`apps/workbench/config/model_event_binding.yaml`](apps/workbench/config/model_event_binding.yaml) |
 | I-06 | P2 | Fast ablation = 4 modes unless `--imbalance-ablation-full` | workbench CLI |
 
 Macro futures: **no venue auction imbalance feed** in inventory (labels only) — [docs/hft3_imbalance_inventory.md](docs/hft3_imbalance_inventory.md).
@@ -158,6 +178,7 @@ Hypotheses: `CRYPTO_H1` … `CRYPTO_H7` — configs under `backtests/configs/cry
 
 | Task | Command |
 |------|---------|
+| **List macro event ids** | `python packages/data_system/src/macro_event_cli.py` |
 | Full data gap audit | `python scripts/audit_all_research_data.py` |
 | Imbalance-only gaps | `python scripts/audit_imbalance_data_gaps.py` |
 | Download macro + equities enrich | `.\scripts\download_all_research_data.ps1` then `-ConfirmPull` after estimate |

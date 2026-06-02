@@ -3,7 +3,7 @@
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
-EVENT_ID="${1:-CPI_2024_09_11_TIGHT}"
+EVENT_ID="${1:?Usage: $0 EVENT_ID  [SYMBOL]. List ids: python packages/data_system/src/macro_event_cli.py}"
 SYMBOL="${2:-MES.v.0}"
 python -c "
 from pathlib import Path
