@@ -477,9 +477,16 @@ RithmicAdapter::~RithmicAdapter() {
 
 void RithmicAdapter::build_envp() {
     cleanup_envp();
-    env_storage_.reserve(config_.env_vars.size());
+    env_storage_.reserve(config_.env_vars.size() + 1);
     for (auto& v : config_.env_vars) {
         env_storage_.push_back(v);
+    }
+    bool has_user = false;
+    for (auto& v : env_storage_) {
+        if (v.rfind("USER=", 0) == 0) { has_user = true; break; }
+    }
+    if (!has_user && !config_.username.empty()) {
+        env_storage_.push_back("USER=" + config_.username);
     }
     env_strings_.reserve(env_storage_.size() + 1);
     for (auto& s : env_storage_) {
