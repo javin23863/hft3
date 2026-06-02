@@ -10,7 +10,7 @@ import yaml
 
 from backtest.adapters.rithmic_replay_loader import resolve_event_npz
 from backtest_pipeline.src.signal_backtester import BacktestResult
-from workbench.src.core.trade_audit import audit_records_to_dataframe
+from workbench.src.core.trade_audit import audit_records_to_dataframe, summarize_phase5_timestamp_schema
 from workbench.src.data.l3_loader import L3Loader
 from workbench.src.data.manifest import DatasetManifest
 from workbench.src.latency.viability import analyze_latency_viability, sweep_injection_pnl
@@ -152,6 +152,10 @@ class WorkbenchEngine:
             base = {"net_pnl": result.net_pnl, "expectancy": result.expectancy, "num_trades": result.num_trades}
         else:
             base = {"net_pnl": 0.0, "expectancy": 0.0, "num_trades": 0}
+        phase5_timestamp_schema = summarize_phase5_timestamp_schema(
+            audit_records,
+            expected_trade_count=int(base["num_trades"]),
+        )
 
         def _run_at_latency(lat_ms: float) -> Dict[str, float]:
             m = get_model_by_id(model_id)
@@ -247,6 +251,7 @@ class WorkbenchEngine:
             "cpp_stack_verified": cpp_verify.stack_verified,
             "cpp_stack_checks": cpp_verify.checks,
             "cpp_stack_verify_reason": cpp_verify.reason,
+            "phase5_timestamp_schema": phase5_timestamp_schema,
         }
         if comp_trace is not None:
             report["composition"] = effective.to_dict()

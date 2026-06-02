@@ -15,7 +15,11 @@ from features_engine.src.pipeline.market_state_pipeline import MarketStatePipeli
 
 from workbench.src.core.params import DEFAULT_STRATEGY_PARAMS
 from workbench.src.core.protocol import Diagnostics, ModelConfig, WorkbenchModel
-from workbench.src.core.trade_audit import TradeAuditRecord, build_audit_timestamps_ns
+from workbench.src.core.trade_audit import (
+    TradeAuditRecord,
+    build_audit_timestamps_ns,
+    phase5_latency_chain_ns,
+)
 from workbench.src.run.run_context import RunContext
 from workbench.src.sim.latency_injector import CppLatencyInjector
 
@@ -133,18 +137,12 @@ class HypothesisAdapter(WorkbenchModel):
                 injection_us=ctx.latency_policy.injection_us,
                 percentile="p99",
             )
-            exchange_ts = fill.timestamp_ns
-            ts = build_audit_timestamps_ns(exchange_ts, injected)
+            exchange_ts = max(0, fill.timestamp_ns - phase5_latency_chain_ns(injected))
+            ts = build_audit_timestamps_ns(exchange_ts, injected, fill_ts_ns=fill.timestamp_ns)
             records.append(
                 TradeAuditRecord(
                     model_id=self.model_id,
-                    market_data_exchange_ts=ts["market_data_exchange_ts"],
-                    market_data_receive_ts=ts["market_data_receive_ts"],
-                    decision_start_ts=ts["decision_start_ts"],
-                    decision_end_ts=ts["decision_end_ts"],
-                    order_send_ts=ts["order_send_ts"],
-                    gateway_ack_ts=ts["gateway_ack_ts"],
-                    fill_ts=fill.timestamp_ns,
+                    **ts,
                     side=fill.side,
                     exec_price=fill.exec_price,
                     qty=fill.qty,

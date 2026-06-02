@@ -43,7 +43,7 @@ This document maps each major requirement from the 26-phase spec to:
 
 | Requirement | Implementation | Test | Artifact |
 |---|---|---|---|
-| 33-timestamp capture | **NOT YET IMPLEMENTED** | N/A | N/A |
+| 33-timestamp capture | `apps/workbench/src/core/trade_audit.py::PHASE5_TIMESTAMP_FIELDS`; `WorkbenchEngine.run()` reports `phase5_timestamp_schema` | `tests/test_workbench/test_phase5_trade_audit.py` (7 tests) | `trades.parquet` with 33 `_ts` columns; `diagnostics.json.phase5_timestamp_schema` |
 
 ## Phase 6: Level 3 / Event-Driven Data Handling
 
@@ -156,7 +156,7 @@ This document maps each major requirement from the 26-phase spec to:
 | 2 — Autonomous runner | ✅ DONE (scaffold) | 16 |
 | 3 — Intake 14-file | ✅ DONE | 11 |
 | 4 — LLM boundary | ✅ DONE | 3 |
-| 5 — Backtest 33-timestamp | ❌ NOT DONE | 0 |
+| 5 — Backtest 33-timestamp | ✅ DONE | 7 |
 | 6 — L3 data-resolution | ✅ DONE | 17 |
 | 7 — DefensiveModel ABC | ✅ DONE | 12 |
 | 8 — Gate schema | ✅ DONE | 12 |
@@ -167,9 +167,9 @@ This document maps each major requirement from the 26-phase spec to:
 | 13 — Reporting 22 sections | ✅ DONE | 1 |
 | 14-23 — Trade Manager | ❌ NOT DONE | 0 |
 | 24 — Resumability | ⚠️ PARTIAL | 1 |
-| 25 — 22 required tests | ⚠️ PARTIAL | 142 total |
+| 25 — 22 required tests | ⚠️ PARTIAL | 149 total |
 | 26 — Documentation | ✅ DONE | N/A |
 
-**Total: 142 tests passing across 12 test files.**
+**Total: 149 tests passing across 13 test files.**
 
-**11 of 26 phases complete. 3 partially done. 12 not started.**
+**12 of 26 phases complete. 3 partially done. 11 not started.**

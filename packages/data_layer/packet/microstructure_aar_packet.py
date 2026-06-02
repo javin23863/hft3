@@ -40,6 +40,41 @@ _AUDIT_US_FIELDS = (
     "python_research_compute_us",
     "latency_injection_us",
 )
+_PHASE5_AUDIT_NS_FIELDS = (
+    "market_data_exchange_ts",
+    "market_data_wire_ts",
+    "market_data_receive_start_ts",
+    "market_data_receive_ts",
+    "market_data_decode_start_ts",
+    "market_data_decode_end_ts",
+    "book_snapshot_start_ts",
+    "book_snapshot_end_ts",
+    "feature_build_start_ts",
+    "feature_build_end_ts",
+    "signal_start_ts",
+    "signal_end_ts",
+    "decision_start_ts",
+    "decision_end_ts",
+    "risk_check_start_ts",
+    "risk_check_end_ts",
+    "sizing_start_ts",
+    "sizing_end_ts",
+    "order_intent_create_ts",
+    "order_queue_enter_ts",
+    "order_queue_exit_ts",
+    "order_send_ts",
+    "gateway_send_ts",
+    "gateway_ack_ts",
+    "exchange_ack_ts",
+    "queue_position_ts",
+    "fill_model_start_ts",
+    "fill_model_end_ts",
+    "fill_ts",
+    "pnl_mark_start_ts",
+    "pnl_mark_end_ts",
+    "audit_record_start_ts",
+    "audit_record_end_ts",
+)
 
 _MANIFEST_TABLE_ROW = re.compile(
     r"^\|\s*`([^`]+)`.*\|\s*`([^`]+)`.*\|\s*([^|]+)\|\s*\*\*(present|absent)\*\*\s*\|",
@@ -114,6 +149,9 @@ def _row_to_audit(row: pd.Series) -> Dict[str, Any]:
             d[field] = int(row[src])
         elif field in row.index and pd.notna(row[field]):
             d[field] = int(row[field])
+    for field in row.index:
+        if isinstance(field, str) and field.endswith("_ts") and field not in d and pd.notna(row[field]):
+            d[field] = int(row[field])
     for field in _AUDIT_US_FIELDS:
         if field in row.index and pd.notna(row[field]):
             d[field] = float(row[field])
@@ -137,8 +175,9 @@ def _row_to_audit(row: pd.Series) -> Dict[str, Any]:
     return d
 
 
-def _audit_complete(rec: Dict[str, Any]) -> bool:
-    for f in _AUDIT_NS_FIELDS:
+def _audit_complete(rec: Dict[str, Any], *, require_phase5: bool = False) -> bool:
+    ns_fields = _PHASE5_AUDIT_NS_FIELDS if require_phase5 else _AUDIT_NS_FIELDS
+    for f in ns_fields:
         if f not in rec:
             return False
     for f in ("feed_delay_us", "decision_compute_us", "decision_to_send_us", "send_to_ack_us", "tick_to_ack_us"):
@@ -147,7 +186,12 @@ def _audit_complete(rec: Dict[str, Any]) -> bool:
     return True
 
 
-def _load_per_trade_audit(artifact_dir: Path, num_trades: int) -> Tuple[List[Dict[str, Any]], bool]:
+def _load_per_trade_audit(
+    artifact_dir: Path,
+    num_trades: int,
+    *,
+    require_phase5: bool = False,
+) -> Tuple[List[Dict[str, Any]], bool]:
     if num_trades <= 0:
         return [], True
     path = artifact_dir / "trades.parquet"
@@ -155,7 +199,9 @@ def _load_per_trade_audit(artifact_dir: Path, num_trades: int) -> Tuple[List[Dic
         return [], False
     df = pd.read_parquet(path)
     audits = [_row_to_audit(row) for _, row in df.iterrows()]
-    complete = len(audits) == num_trades and all(_audit_complete(a) for a in audits)
+    complete = len(audits) == num_trades and all(
+        _audit_complete(a, require_phase5=require_phase5) for a in audits
+    )
     return audits, complete
 
 
@@ -204,7 +250,13 @@ def build_microstructure_aar_packet(
         skip_reasons.append("HISTORY_GATE")
 
     num_trades = int(diagnostics.get("num_trades", 0))
-    per_trade_audit, audit_complete = _load_per_trade_audit(artifact_dir, num_trades)
+    phase5_schema = diagnostics.get("phase5_timestamp_schema") or {}
+    require_phase5_audit = phase5_schema.get("schema_version") == "phase5_33_timestamp_v1"
+    per_trade_audit, audit_complete = _load_per_trade_audit(
+        artifact_dir,
+        num_trades,
+        require_phase5=require_phase5_audit,
+    )
     execution_assumptions = str(
         config.get("execution_assumptions") or diagnostics.get("execution_assumptions") or ""
     )

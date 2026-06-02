@@ -95,19 +95,19 @@ python -m pytest tests/test_autonomous_runner.py tests/test_runner_honesty.py -v
 
 ## 17. Known limitations
 
-- **Scaffolded mode**: The runner does not yet invoke the real WorkbenchEngine for backtest, robustness, or walk-forward. All PENDING gates have `pass_fail=False, severity=BLOCKING` so the runner cannot PROMOTE until Phase 5 lands.
+- **Scaffolded mode**: The runner does not yet invoke the real WorkbenchEngine for backtest, robustness, or walk-forward. All PENDING gates have `pass_fail=False, severity=BLOCKING` so the runner cannot PROMOTE until WorkbenchEngine integration lands.
 - **Single-WF only**: The double-WF correlator (Phase 10) exists but is not yet wired into the campaign runner. The runner emits a PENDING stub.
-- **No real scoring**: The runner defaults to QUARANTINE. Real scoring requires Phase 5 backtest metrics.
+- **No real scoring**: The runner defaults to QUARANTINE. Real scoring requires WorkbenchEngine backtest metrics.
 
 ## 18. Remaining risks
 
-- **Phase 5 (backtest 33-timestamp)**: Not yet implemented. The runner's `stage_backtest` writes stub metrics.
+- **Phase 5 (backtest 33-timestamp)**: Implemented in Workbench audit artifacts. The autonomous runner's `stage_backtest` still writes stub metrics and is not wired to WorkbenchEngine.
 - **Phase 9 (25 robustness checks)**: Most exist in the workbench; ~8 missing.
 - **Phase 14-23 (Trade Manager + risk + execution + monitoring + kill switch + observer + sessions)**: All new packages, not yet implemented.
 - **Phase 24 (resumability)**: Partially done (checkpoint state.json exists); crash recovery not fully tested.
 - **Phase 25 (22 required tests)**: Most exist; ~5 missing.
 
-## Completed phases (11 of 26)
+## Completed phases (12 of 26)
 
 | Phase | Status | Commit |
 |---|---|---|
@@ -115,6 +115,7 @@ python -m pytest tests/test_autonomous_runner.py tests/test_runner_honesty.py -v
 | 2 — Autonomous runner | ✅ DONE (scaffold) | `9d2eeb5` |
 | 3 — Intake 14-file | ✅ DONE | `0656b1d` |
 | 4 — LLM boundary | ✅ DONE | `0656b1d` (upgraded in `7340d58`) |
+| 5 — Backtest 33-timestamp | ✅ DONE | `apps/workbench/src/core/trade_audit.py` |
 | 6 — L3 data-resolution | ✅ DONE | `4d17e94` |
 | 7 — DefensiveModel ABC | ✅ DONE | `e5cc1ef` |
 | 8 — Gate schema | ✅ DONE | `6380cc4` |
@@ -125,11 +126,12 @@ python -m pytest tests/test_autonomous_runner.py tests/test_runner_honesty.py -v
 
 ## Test scoreboard
 
-**142/142 passing** across 12 test files:
+**149/149 passing** across 13 test files:
 - `tests/test_autonomous_runner.py` (11 tests)
 - `tests/test_runner_honesty.py` (5 tests)
 - `tests/test_research_intake.py` (11 tests)
 - `tests/test_extractors.py` (14 tests)
+- `tests/test_workbench/test_phase5_trade_audit.py` (7 tests)
 - `tests/test_defensive_model.py` (12 tests)
 - `tests/test_gate_schema.py` (12 tests)
 - `tests/test_certification_registry_hardening.py` (19 tests)
