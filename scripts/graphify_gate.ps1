@@ -1,4 +1,4 @@
-# Blocking graph consult gate — run BEFORE any code locate/edit session.
+# Blocking graph consult gate - run BEFORE any code locate/edit session.
 # Writes graphify-out/.last-graph-query.json (proof of consult for this session).
 param(
     [Parameter(Mandatory = $true)]
@@ -18,7 +18,7 @@ if (-not (Get-Command graphify -ErrorAction SilentlyContinue)) {
 }
 
 if (-not (Test-Path $GraphJson)) {
-    Write-Host 'graphify-out/graph.json missing — running graphify update . (AST-only)...'
+    Write-Host 'graphify-out/graph.json missing - running graphify update . (AST-only)...'
     & graphify update .
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
@@ -32,7 +32,7 @@ if ($queryExit -ne 0) {
     Write-Error "graphify query failed (exit $queryExit)"
 }
 if ($out.Length -lt 40) {
-    Write-Error "graphify query output too short (${out.Length} chars) — likely empty or failed"
+    Write-Error "graphify query output too short (${out.Length} chars) - likely empty or failed"
 }
 
 $payload = @{
@@ -46,4 +46,4 @@ $payload = @{
 New-Item -ItemType Directory -Force -Path (Split-Path $Stamp) | Out-Null
 Set-Content -Path $Stamp -Value $payload -Encoding UTF8
 Write-Host "Wrote $Stamp"
-Write-Host 'OK: graph consult recorded. Proceed to Plan/Locate using graph context — not blind repo grep.'
+Write-Host 'OK: graph consult recorded. Proceed to Plan/Locate using graph context - not blind repo grep.'

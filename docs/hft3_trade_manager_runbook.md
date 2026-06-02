@@ -9,6 +9,8 @@ When a candidate is PROMOTED by the autonomous runner, the runner writes a YELLO
 2. Load the model's configuration from `artifacts/runs/{run_id}/manifest.json`
 3. Activate the model for live/paper trading
 
+Live/paper operation is future state and must run on CHI404 only. The development workstation remains offline research/replay only and must not route live/paper market data or orders.
+
 ## 2. Required registry fields for operation
 
 The Trade Manager will require these fields from `PromotionRecord` (Phase 11):
@@ -29,21 +31,24 @@ The Trade Manager will load risk limits from `configs/risk/limits.yaml` (Phase 1
 
 ## 4. Required execution adapter config
 
-The Trade Manager will load execution adapter config from `configs/execution/adapter.yaml` (Phase 19):
-- `broker`: "rithmic" | "databento" | "simulated"
-- `venue`: "CME" | "NYSE" | "NASDAQ"
+The Trade Manager will load mode-aware execution adapter config from `configs/execution/adapter.yaml` (Phase 19):
+- `mode`: "REPLAY" | "PAPER" | "LIVE"
+- `adapter`: "hftbacktest_simulated_exchange" | "paper_broker" | "live_broker"
+- `live_broker`: "rithmic" (LIVE only; stub today)
+- `venue`: derived from registry-allowed instruments and symbols
 - `order_routing`: "direct" | "aggregated"
 - `reconnect_handling`: "automatic" | "manual"
 - `heartbeat_interval_sec`: 30
 
 ## 5. Order-intent schema (Phase 16)
 
-The Trade Manager will convert model signals into `OrderIntent` objects with 18 fields:
+The Trade Manager will convert model signals into future Phase 16 `OrderIntent` objects with 18 fields. This is not the current adapter-level `packages/execution/interfaces.py::OrderIntent` shape.
 - `order_intent_id`, `registry_id`, `model_id`, `strategy_id`, `signal_id`
-- `timestamp`, `signal_timestamp`, `symbol`, `side`, `quantity`
-- `order_type`, `limit_price`, `time_in_force`, `expected_edge`, `holding_period_estimate`
-- `risk_budget_id`, `reason_code`, `execution_profile`, `latency_profile`
-- `source_features_reference`, `model_version`, `config_hash`
+- `timestamp`, `symbol`, `side`, `quantity`, `order_type`
+- `limit_price`, `time_in_force`, `expected_edge`, `risk_budget_id`, `reason_code`
+- `execution_profile`, `latency_profile`, `source_features_reference`
+
+Model version and config hash remain in the registry/manifest and are not duplicated in the order intent.
 
 ## 6. Order-state machine (Phase 18)
 
@@ -51,7 +56,7 @@ The Trade Manager will track every order through 17 states:
 - `CREATED`, `SENT_TO_RISK`, `RISK_REJECTED`, `RISK_APPROVED`
 - `SENT_TO_EXECUTION`, `ACKNOWLEDGED`, `PARTIALLY_FILLED`, `FILLED`
 - `CANCEL_REQUESTED`, `CANCELLED`, `REPLACE_REQUESTED`, `REPLACED`
-- `BROKER_REJECTED`, `EXPIRED`, `ERROR`, `KILLED`
+- `BROKER_REJECTED`, `EXPIRED`, `TIMED_OUT`, `ERROR`, `KILLED`
 
 Every state transition will be timestamped and logged. Invalid transitions will fail safely and write an error event.
 
@@ -62,7 +67,6 @@ The Trade Manager will respect 12 kill-switch triggers:
 - `runaway_order_rate`, `runaway_cancel_rate`, `stale_market_data`
 - `broker_disconnect`, `execution_adapter_failure`, `position_mismatch`
 - `fill_reconciliation_failure`, `abnormal_slippage`, `abnormal_latency`
-- `risk_layer_failure`
 
 Configured kill-switch actions (7):
 - `stop_new_orders`, `cancel_open_orders`, `flatten_positions_if_configured`

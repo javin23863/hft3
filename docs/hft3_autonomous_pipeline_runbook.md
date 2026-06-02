@@ -1,6 +1,6 @@
 # HFT3 Autonomous Pipeline Runbook (Phase 26)
 
-This runbook documents the autonomous research runner and the 10 completed phases of the 26-phase hardening spec.
+This runbook documents the autonomous research runner and the 11 completed phases of the 26-phase hardening spec.
 
 ## 1. Exact CLI command for autonomous research run
 
@@ -107,7 +107,7 @@ python -m pytest tests/test_autonomous_runner.py tests/test_runner_honesty.py -v
 - **Phase 24 (resumability)**: Partially done (checkpoint state.json exists); crash recovery not fully tested.
 - **Phase 25 (22 required tests)**: Most exist; ~5 missing.
 
-## Completed phases (10 of 26)
+## Completed phases (11 of 26)
 
 | Phase | Status | Commit |
 |---|---|---|
