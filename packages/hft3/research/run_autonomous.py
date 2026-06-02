@@ -277,6 +277,12 @@ class AutonomousRunner:
             except (OSError, json.JSONDecodeError, TypeError) as exc:
                 logger.warning("could not load state, starting fresh: %s", exc)
 
+        # Phase 6: data-resolution tag and derived gate, populated by
+        # stage_resolve_data. Initialized to None so tests can assert
+        # on them after a run without AttributeError.
+        self._data_resolution_tag: Any = None
+        self._data_eligibility_gate: Any = None
+
     # --- stage helpers ---
 
     def _stage_done(self, name: str) -> bool:
@@ -350,21 +356,67 @@ class AutonomousRunner:
 
     def stage_resolve_data(self) -> Path:
         """Stage 2: resolve data sources, dataset IDs, symbol universe,
-        event windows. Writes data_lineage.json."""
+        event windows. Writes data_lineage.json + data_resolution.json
+        (Phase 6) and emits a data-eligibility gate (Phase 8).
+
+        The campaign config may specify separate `requested` and
+        `resolved` data classes. When they differ, the runner tags
+        the run with the downgrade reason and demotes promotion
+        eligibility — silent downgrades are forbidden.
+        """
         if self._stage_done("resolve_data"):
             return Path(self.state.artifacts["resolve_data"])
         self._stage_start("resolve_data")
+
+        from hft3.data_class import DataClass, make_tag
+        from hft3.validation.gate_result import GateCategory, GateResult, Severity
+
+        data_cfg = self.config.data
+        # Accept either the legacy single `resolution` field or the new
+        # Phase 6 `requested` / `resolved` pair. If only `resolution`
+        # is given, both classes are set to it (no downgrade).
+        requested = data_cfg.get("requested") or data_cfg.get("resolution", "L3_MBO")
+        resolved = data_cfg.get("resolved") or data_cfg.get("resolution", "L3_MBO")
+
+        time_windows: list[tuple[int, int]] = []
+        for w in data_cfg.get("event_windows", []):
+            s = w.get("start_ns")
+            e = w.get("end_ns")
+            if s is not None and e is not None:
+                time_windows.append((int(s), int(e)))
+
+        tag = make_tag(
+            requested=requested,
+            resolved=resolved,
+            source=data_cfg.get("source", "databento"),
+            symbols=list(data_cfg.get("symbol_universe", [])),
+            time_windows=time_windows,
+            notes=str(data_cfg.get("notes", "")),
+        )
+
+        # Persist Phase 12 artifact: data_resolution.json
+        path = self._write_artifact("data_resolution.json", tag.to_dict())
+        # Backward-compat: keep data_lineage.json too (legacy)
         lineage = {
-            "dataset_id": self.config.data.get("dataset_id"),
-            "symbol_universe": self.config.data.get("symbol_universe", []),
-            "event_windows": self.config.data.get("event_windows", []),
-            "data_source": self.config.data.get("source", "databento"),
-            "data_resolution": self.config.data.get("resolution", "L3_MBO"),
-            "requested_data_class": self.config.data.get("resolution", "L3_MBO"),
-            "resolved_data_class": self.config.data.get("resolution", "L3_MBO"),
-            "downgrade_reason": None,
+            "dataset_id": data_cfg.get("dataset_id"),
+            "symbol_universe": data_cfg.get("symbol_universe", []),
+            "event_windows": data_cfg.get("event_windows", []),
+            "data_source": data_cfg.get("source", "databento"),
+            "data_resolution": resolved,
+            "requested_data_class": requested,
+            "resolved_data_class": resolved,
+            "downgrade_reason": tag.downgrade_reason,
+            "validity_impact": tag.validity_impact.value,
+            "promotion_eligibility_impact": tag.promotion_eligibility_impact.value,
         }
-        path = self._write_artifact("data_lineage.json", lineage)
+        self._write_artifact("data_lineage.json", lineage)
+
+        # Emit a data-eligibility gate. Stash on the runner so the
+        # robustness stage can merge it.
+        from hft3.data_class import to_gate_result
+        self._data_eligibility_gate = to_gate_result(tag)
+        self._data_resolution_tag = tag
+
         self._stage_end("resolve_data", path)
         return path
 

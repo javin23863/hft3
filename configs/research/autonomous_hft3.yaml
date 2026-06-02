@@ -25,7 +25,14 @@ campaign_id: "cpi-2024-uat-tight"
 data:
   dataset_id: "databento_es_mbo_v1"
   source: "databento"
-  resolution: "L3_MBO"        # requested and resolved data class
+  # Phase 6: data-resolution labeling. `requested` is what the experiment
+  # asks for; `resolved` is what the data source actually provides. When
+  # they differ, the runner tags the run with a downgrade reason and
+  # demotes promotion eligibility. Silent downgrades are forbidden.
+  # Valid values: L3_MBO, L3_ORDERBOOK_SNAPSHOT, TRADES_ONLY,
+  # AGGREGATED_BARS, SYNTHETIC_OR_DEGRADED.
+  requested: "L3_MBO"
+  resolved: "L3_MBO"
   symbol_universe: ["ES", "MES"]
   event_windows:
     - event_id: "CPI_2024_09_11_TIGHT"
