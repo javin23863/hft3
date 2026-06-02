@@ -7,6 +7,12 @@ keys.env
 id_ed25519
 id_ed25519_osaka
 
+# Phase 11 certification registry runtime artifacts (atomic write helpers)
+runtime/validation/certification_registry.jsonl
+runtime/validation/certification_registry.json.lock
+runtime/validation/certification_registry.json.bak
+runtime/validation/certification_registry.json.legacy-*
+
 # Python
 __pycache__/
 *.py[cod]
