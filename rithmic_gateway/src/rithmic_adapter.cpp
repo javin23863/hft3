@@ -82,7 +82,8 @@ static OrderEvent make_order_event(RApi::OrderReport* pReport, char event_type) 
 
 class MyAdmCallbacks : public RApi::AdmCallbacks {
 public:
-    MyAdmCallbacks() = default;
+    explicit MyAdmCallbacks(RithmicAdapter* adapter)
+        : adapter_(adapter) {}
     ~MyAdmCallbacks() override = default;
 
     int Alert(RApi::AlertInfo* pInfo, void* pContext, int* aiCode) override {
@@ -92,6 +93,48 @@ public:
         *aiCode = API_OK;
         return OK;
     }
+
+    int EnvironmentList(RApi::EnvironmentListInfo* pInfo, void* pContext, int* aiCode) override {
+        (void)pContext;
+        if (pInfo && pInfo->iArrayLen > 0 && pInfo->asKeyArray) {
+            for (int i = 0; i < pInfo->iArrayLen; ++i) {
+                tsNCharcb& key = pInfo->asKeyArray[i];
+                if (key.pData && key.iDataLen > 0) {
+                    std::string env_key(key.pData, static_cast<size_t>(key.iDataLen));
+                    std::cout << "[AdmCallbacks] Environment[" << i << "]: " << env_key << std::endl;
+                    if (adapter_->discovered_env_key_.empty()) {
+                        adapter_->discovered_env_key_ = env_key;
+                    }
+                }
+            }
+        }
+        adapter_->env_list_ready_.store(true);
+        adapter_->env_list_cv_.notify_all();
+        *aiCode = API_OK;
+        return OK;
+    }
+
+    int Environment(RApi::EnvironmentInfo* pInfo, void* pContext, int* aiCode) override {
+        (void)pContext;
+        if (pInfo) {
+            std::string key(pInfo->sKey.pData, static_cast<size_t>(pInfo->sKey.iDataLen));
+            std::cout << "[AdmCallbacks] Environment info for key='" << key << "' with "
+                      << pInfo->iArrayLen << " variables" << std::endl;
+            for (int i = 0; i < pInfo->iArrayLen; ++i) {
+                RApi::EnvironmentVariable& v = pInfo->asVariableArray[i];
+                std::string name(v.sName.pData, static_cast<size_t>(v.sName.iDataLen));
+                std::string value(v.sValue.pData, static_cast<size_t>(v.sValue.iDataLen));
+                std::cout << "  " << name << "=" << value << std::endl;
+            }
+        }
+        adapter_->env_ready_.store(true);
+        adapter_->env_cv_.notify_all();
+        *aiCode = API_OK;
+        return OK;
+    }
+
+private:
+    RithmicAdapter* adapter_;
 };
 
 class MyCallbacks : public RApi::RCallbacks {
@@ -447,7 +490,7 @@ void RithmicAdapter::cleanup_envp() {
 
 bool RithmicAdapter::initialize() {
     try {
-        auto* adm = new MyAdmCallbacks();
+        auto* adm = new MyAdmCallbacks(this);
         adm_callbacks_ = adm;
         return true;
     } catch (OmneException& ex) {
@@ -527,12 +570,54 @@ bool RithmicAdapter::connect() {
             return false;
         }
         std::cerr << "[RithmicAdapter] repo login OK" << std::endl;
+
+        // Step 2: Discover available environments and their variables
+        discovered_env_key_.clear();
+        env_list_ready_ = false;
+        env_ready_ = false;
+        int iCodeEnv = 0;
+        if (!pEngine->listEnvironments(nullptr, &iCodeEnv)) {
+            std::cerr << "[RithmicAdapter] listEnvironments error: " << iCodeEnv << std::endl;
+        }
+        {
+            std::unique_lock<std::mutex> lk(env_mutex_);
+            if (!env_list_cv_.wait_for(lk, std::chrono::seconds(10), [&] {
+                    return env_list_ready_.load();
+                })) {
+                std::cerr << "[RithmicAdapter] listEnvironments timed out (no callback)" << std::endl;
+            }
+        }
+        if (!discovered_env_key_.empty()) {
+            std::cerr << "[RithmicAdapter] discovered environment key: '" << discovered_env_key_ << "'" << std::endl;
+            tsNCharcb envKey = make_ts(discovered_env_key_.c_str());
+            int iCodeGet = 0;
+            if (!pEngine->getEnvironment(&envKey, nullptr, &iCodeGet)) {
+                std::cerr << "[RithmicAdapter] getEnvironment error: " << iCodeGet << std::endl;
+            }
+            {
+                std::unique_lock<std::mutex> lk(env_mutex_);
+                if (!env_cv_.wait_for(lk, std::chrono::seconds(10), [&] {
+                        return env_ready_.load();
+                    })) {
+                    std::cerr << "[RithmicAdapter] getEnvironment timed out" << std::endl;
+                }
+            }
+        } else {
+            std::cerr << "[RithmicAdapter] no environments discovered from repository" << std::endl;
+        }
     } else {
         std::cerr << "[RithmicAdapter] no repo connect point, skipping repository login" << std::endl;
     }
 
-    // Step 2: Login to individual service endpoints (MD, TS, IH, PnL)
+    // Step 3: Login to individual service endpoints (MD, TS, IH, PnL)
     RApi::LoginParams login_params;
+    if (!discovered_env_key_.empty()) {
+        login_params.sMdEnvKey = make_ts(discovered_env_key_.c_str());
+        login_params.sTsEnvKey = make_ts(discovered_env_key_.c_str());
+        login_params.sIhEnvKey = make_ts(discovered_env_key_.c_str());
+        std::cerr << "[RithmicAdapter] using discovered env key '" << discovered_env_key_
+                  << "' in LoginParams" << std::endl;
+    }
     login_params.pCallbacks = callbacks;
 
     login_params.sMdUser = make_ts(config_.username.c_str());

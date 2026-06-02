@@ -97,11 +97,17 @@ private:
     std::condition_variable account_cv_;
     std::mutex trade_route_mutex_;
     std::condition_variable trade_route_cv_;
+    std::mutex env_mutex_;
+    std::condition_variable env_cv_;
+    std::condition_variable env_list_cv_;
 
     std::string account_id_;
     std::string fcm_id_;
     std::string ib_id_;
     std::string trade_route_;
+    std::string discovered_env_key_;
+    std::atomic<bool> env_list_ready_{false};
+    std::atomic<bool> env_ready_{false};
     std::vector<std::string> env_storage_;
     std::vector<char*> env_strings_;
 
