@@ -123,6 +123,15 @@ public:
             }
         }
 
+        if (pInfo->iConnectionId == RApi::REPOSITORY_CONNECTION_ID) {
+            if (pInfo->iAlertType == RApi::ALERT_LOGIN_COMPLETE) {
+                adapter_->rep_login_status_ = RithmicAdapter::LOGIN_COMPLETE;
+            } else if (pInfo->iAlertType == RApi::ALERT_LOGIN_FAILED
+                       || pInfo->iAlertType == RApi::ALERT_CONNECTION_BROKEN) {
+                adapter_->rep_login_status_ = RithmicAdapter::LOGIN_FAILED;
+            }
+        }
+
         adapter_->login_cv_.notify_all();
         *aiCode = API_OK;
         return OK;
@@ -484,7 +493,44 @@ bool RithmicAdapter::connect() {
 
     md_login_status_ = LOGIN_NOT_LOGGED_IN;
     ts_login_status_ = LOGIN_NOT_LOGGED_IN;
+    rep_login_status_ = LOGIN_NOT_LOGGED_IN;
 
+    // Step 1: Repository login — establishes the authenticated session
+    if (!config_.rep_connect_point.empty()) {
+        std::cerr << "[RithmicAdapter] repo login cp=" << config_.rep_connect_point << std::endl;
+        tsNCharcb envKey = make_ts("");
+        tsNCharcb user = make_ts(config_.username.c_str());
+        tsNCharcb pw = make_ts(config_.password.c_str());
+        tsNCharcb cp = make_ts(config_.rep_connect_point.c_str());
+        int iCode = 0;
+        if (!pEngine->loginRepository(&envKey, &user, &pw, &cp, callbacks, &iCode)) {
+            std::cerr << "[RithmicAdapter] loginRepository error: " << iCode << std::endl;
+            delete pEngine;
+            delete callbacks;
+            engine_ = nullptr;
+            callbacks_ = nullptr;
+            return false;
+        }
+        {
+            std::unique_lock<std::mutex> lk(login_mutex_);
+            login_cv_.wait_for(lk, std::chrono::seconds(30), [&] {
+                return rep_login_status_ == LOGIN_COMPLETE || rep_login_status_ == LOGIN_FAILED;
+            });
+        }
+        if (rep_login_status_ != LOGIN_COMPLETE) {
+            std::cerr << "[RithmicAdapter] repo login did not complete (status=" << rep_login_status_.load() << ")" << std::endl;
+            delete pEngine;
+            delete callbacks;
+            engine_ = nullptr;
+            callbacks_ = nullptr;
+            return false;
+        }
+        std::cerr << "[RithmicAdapter] repo login OK" << std::endl;
+    } else {
+        std::cerr << "[RithmicAdapter] no repo connect point, skipping repository login" << std::endl;
+    }
+
+    // Step 2: Login to individual service endpoints (MD, TS, IH, PnL)
     RApi::LoginParams login_params;
     login_params.pCallbacks = callbacks;
 
@@ -525,7 +571,7 @@ bool RithmicAdapter::connect() {
     }
 
     if (ts_login_status_ != LOGIN_COMPLETE) {
-        std::cerr << "[RithmicAdapter] TS login did not complete (status=" << ts_login_status_ << ")" << std::endl;
+        std::cerr << "[RithmicAdapter] TS login did not complete (status=" << ts_login_status_.load() << ")" << std::endl;
         delete pEngine;
         delete callbacks;
         engine_ = nullptr;

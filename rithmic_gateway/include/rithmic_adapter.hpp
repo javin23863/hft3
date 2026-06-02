@@ -89,6 +89,7 @@ private:
     std::atomic<bool> trade_route_ready_{false};
     std::atomic<int> md_login_status_{0};
     std::atomic<int> ts_login_status_{0};
+    std::atomic<int> rep_login_status_{0};
 
     std::mutex login_mutex_;
     std::condition_variable login_cv_;
