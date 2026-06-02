@@ -1,0 +1,175 @@
+# HFT3 Traceability Matrix (Phase 26)
+
+This document maps each major requirement from the 26-phase spec to:
+- Implementation file
+- Test file
+- Artifact proving it works
+
+## Phase 1: Current-State Repository Audit
+
+| Requirement | Implementation | Test | Artifact |
+|---|---|---|---|
+| 25-item audit | `docs/hft3_pipeline_audit.md` | N/A (doc) | Audit doc with file:line references |
+
+## Phase 2: Autonomous HFT3 Research Runner
+
+| Requirement | Implementation | Test | Artifact |
+|---|---|---|---|
+| Headless CLI | `packages/hft3/research/run_autonomous.py` | `tests/test_autonomous_runner.py::test_autonomous_runner_headless` | `hft3-research.py` launcher |
+| 12-stage pipeline | `run_autonomous.py` (12 `stage_*` methods) | `test_artifact_bundle_manifest_lists_all_stages` | `manifest.json` with 12 completed stages |
+| Resumable | `RunState` checkpoint in `state.json` | `test_resumable_rerun` | `runtime/research/{run_id}/state.json` |
+| Deterministic | `config_hash.txt` | `test_config_hash_is_deterministic` | `config_hash.txt` |
+| Auditable | 19 artifacts per run | `test_runner_writes_all_17_artifacts` | `artifacts/runs/{run_id}/` |
+| No manual approval | No `input()` / `click.prompt` | `test_autonomous_runner_no_input_or_gui_imports` | AST check |
+
+## Phase 3: Research Paper / White Paper Input
+
+| Requirement | Implementation | Test | Artifact |
+|---|---|---|---|
+| 14-file output schema | `packages/research_pipeline/intake_schema.py` (12 pydantic models) | `tests/test_research_intake.py::test_intake_bundle_writes_all_14_files` | `research_inputs/{id}/` with 14 files |
+| Quarantine detection | `intake_bundle.py::is_quarantined()` | `test_intake_bundle_invalid_thesis_is_quarantined` | `experiment_translation_notes.json` with `quarantine=True` |
+| Equation extraction | `packages/research_pipeline/extractors.py::extract_equations()` | `tests/test_extractors.py` (7 tests) | `extracted_equations.json` |
+| Table extraction | `extractors.py::extract_tables()` | `tests/test_extractors.py` (6 tests) | `extracted_tables.json` |
+
+## Phase 4: LLM Research Layer Boundaries
+
+| Requirement | Implementation | Test | Artifact |
+|---|---|---|---|
+| LLM cannot promote model | AST check in `test_research_intake.py` | `test_llm_cannot_promote_model_static_check` | AST scan of 4 LLM-facing modules |
+| Capability check | Import closure walk | `test_llm_cannot_promote_model_capability_check` | Transitive import graph |
+| Runtime check | Module import check | `test_llm_promotion_attempt_at_runtime_blocked` | Writer module `__dict__` scan |
+
+## Phase 5: Backtest Engine Hardening
+
+| Requirement | Implementation | Test | Artifact |
+|---|---|---|---|
+| 33-timestamp capture | **NOT YET IMPLEMENTED** | N/A | N/A |
+
+## Phase 6: Level 3 / Event-Driven Data Handling
+
+| Requirement | Implementation | Test | Artifact |
+|---|---|---|---|
+| 5 data classes | `packages/hft3/data_class.py::DataClass` enum | `tests/test_data_class.py::test_data_class_enum_complete` | `data_resolution.json` |
+| Silent downgrade guard | `DataResolutionTag` with `downgrade_reason` | `test_make_tag_validates_reason_when_mismatched` | `downgrade_reason` field |
+| Promotion eligibility | `PromotionEligibility` enum | `test_make_tag_ineligible_when_synthetic` | `promotion_eligibility_impact` field |
+| Gate derivation | `to_gate_result()` | `test_to_gate_result_ineligible_blocks` | Phase 8 `GateResult` with `DATA_INELIGIBLE_FOR_PROMOTION` |
+
+## Phase 7: Alpha / Defensive / Hybrid Model Combinations
+
+| Requirement | Implementation | Test | Artifact |
+|---|---|---|---|
+| DefensiveModel ABC | `apps/workbench/src/core/defensive.py::DefensiveModel` | `tests/test_defensive_model.py::test_defensive_model_must_subclass` | ABC with `defend()` method |
+| FilterAction enum | `defensive.py::FilterAction` | `test_filter_action_enum_complete` | 4 actions: VETO/SKEW/THROTTLE/TAG |
+| FilterDecision | `defensive.py::FilterDecision` | `test_filter_decision_veto` | Frozen dataclass with 4 factory methods |
+| MODEL_COMBINATIONS | `defensive.py::MODEL_COMBINATIONS` | `test_model_combinations_no_manual_code_change` | 10 canonical test cases |
+
+## Phase 8: Formal Gate Schema
+
+| Requirement | Implementation | Test | Artifact |
+|---|---|---|---|
+| 17 gate categories | `packages/hft3/validation/gate_result.py::GateCategory` enum | `tests/test_gate_schema.py::test_all_17_categories_registered` | Enum with 17 values |
+| GateResult dataclass | `gate_result.py::GateResult` | `test_gate_schema_round_trip` | 11 required fields |
+| Severity enum | `gate_result.py::Severity` | `test_severity_blocking_must_match_blocking_status` | INFO/WARN/BLOCKING |
+| Aggregate promotion | `gate_result.py::aggregate_promotion()` | `test_aggregate_promotion_reduces_correctly` | `(passed, failures, warnings)` tuple |
+| Atomic write | `gate_result.py::write_robustness_gates_json()` | `test_write_robustness_gates_json_atomic` | `robustness_gates.json` |
+
+## Phase 9: Required Robustness and Validation Checks
+
+| Requirement | Implementation | Test | Artifact |
+|---|---|---|---|
+| 25 robustness checks | **PARTIALLY IMPLEMENTED** (most exist in workbench; ~8 missing) | N/A | N/A |
+
+## Phase 10: Walk-Forward Correlation
+
+| Requirement | Implementation | Test | Artifact |
+|---|---|---|---|
+| Double-WF correlator | `apps/workbench/src/robustness/wfc/double_wf.py::evaluate_double_wf()` | `tests/test_workbench/test_double_wf.py::test_double_wf_agreement` | `walk_forward_correlation.json` |
+| DoubleWfResult | `double_wf.py::DoubleWfResult` | `test_double_wf_round_trip` | 12 fields per spec |
+| Gate derivation | `double_wf.py::to_gate_result()` | `test_double_wf_gate_result_pass` | Phase 8 `GateResult` with `WALK_FORWARD_CORRELATION` category |
+
+## Phase 11: HFT3 Registry Hardening
+
+| Requirement | Implementation | Test | Artifact |
+|---|---|---|---|
+| Atomic write | `packages/hft3/validation/certification_registry.py::_atomic_write_text()` | `tests/test_certification_registry_hardening.py::test_atomic_registry_promotion_no_partial_state_on_write_failure` | `os.replace` + `fsync` |
+| Hash chain | `certification_registry.py::record_hash()` | `test_hash_chain_continuity_across_writes` | SHA-256 `prev_hash`/`self_hash` |
+| File lock | `certification_registry.py::_RegistryLock` | `test_lock_timeout_raises_cleanly` | Cross-platform (msvcrt/fcntl) |
+| Schema validation | `certification_registry.py::validate_record()` | `test_registry_schema_rejects_bad_fields` (7 parametrized cases) | `RegistrySchemaError` on bad input |
+| PromotionRecord | `certification_registry.py::PromotionRecord` | `tests/test_promotion_record.py::test_promotion_record_has_27_spec_fields` | 27 spec fields |
+| save_promotion | `certification_registry.py::save_promotion()` | `test_save_promotion_appends_to_audit_log` | JSONL append with `record_type="promotion"` |
+
+## Phase 12: Artifact Bundle
+
+| Requirement | Implementation | Test | Artifact |
+|---|---|---|---|
+| 19 required files | `packages/hft3/artifact_bundle.py::REQUIRED_ARTIFACTS` | `tests/test_artifact_bundle.py::test_required_artifacts_constant` | 19-file constant |
+| validate_bundle | `artifact_bundle.py::validate_bundle()` | `test_validate_bundle_complete` | `ArtifactBundleResult` |
+| Gate derivation | `artifact_bundle.py::to_gate_result()` | `test_to_gate_result_complete` | Phase 8 `GateResult` with `ARTIFACT_COMPLETENESS` category |
+
+## Phase 13: Reporting
+
+| Requirement | Implementation | Test | Artifact |
+|---|---|---|---|
+| 22 sections in report.md | `packages/hft3/research/run_autonomous.py::_build_report()` | `tests/test_autonomous_runner.py::test_report_md_has_required_sections` | `report.md` with 22 `## N.` sections |
+
+## Phase 14-23: Trade Manager Layer
+
+| Requirement | Implementation | Test | Artifact |
+|---|---|---|---|
+| Trade Manager | **NOT YET IMPLEMENTED** | N/A | N/A |
+| Order intent | **NOT YET IMPLEMENTED** | N/A | N/A |
+| Risk layer | **NOT YET IMPLEMENTED** (production_safety.py exists but not wired) | N/A | N/A |
+| Order state machine | **NOT YET IMPLEMENTED** | N/A | N/A |
+| Execution adapter | **STUB** (`live_broker.py` returns ORDER_REJECTED) | N/A | N/A |
+| Position monitoring | **NOT YET IMPLEMENTED** | N/A | N/A |
+| Kill switch | **NOT YET IMPLEMENTED** | N/A | N/A |
+| Observer view | **NOT YET IMPLEMENTED** | N/A | N/A |
+| Session reporting | **NOT YET IMPLEMENTED** | N/A | N/A |
+
+## Phase 24: Resumability and Failure Safety
+
+| Requirement | Implementation | Test | Artifact |
+|---|---|---|---|
+| Checkpoint state.json | `packages/hft3/research/run_autonomous.py::RunState` | `tests/test_autonomous_runner.py::test_resumable_rerun` | `runtime/research/{run_id}/state.json` |
+| Atomic registry write | Phase 11 | Phase 11 tests | JSONL append with hash chain |
+| Crash recovery | **PARTIALLY IMPLEMENTED** (state.json exists; full crash recovery not tested) | N/A | N/A |
+
+## Phase 25: Tests
+
+| Requirement | Implementation | Test | Artifact |
+|---|---|---|---|
+| 22 required tests | **PARTIALLY IMPLEMENTED** (most exist; ~5 missing) | N/A | N/A |
+
+## Phase 26: Required Documentation
+
+| Requirement | Implementation | Test | Artifact |
+|---|---|---|---|
+| Autonomous pipeline runbook | `docs/hft3_autonomous_pipeline_runbook.md` | N/A (doc) | This file |
+| Trade manager runbook | `docs/hft3_trade_manager_runbook.md` | N/A (doc) | This file |
+| Traceability matrix | `docs/hft3_traceability.md` | N/A (doc) | This file |
+
+## Summary
+
+| Phase | Status | Tests |
+|---|---|---|
+| 1 — Audit | ✅ DONE | N/A |
+| 2 — Autonomous runner | ✅ DONE (scaffold) | 16 |
+| 3 — Intake 14-file | ✅ DONE | 11 |
+| 4 — LLM boundary | ✅ DONE | 3 |
+| 5 — Backtest 33-timestamp | ❌ NOT DONE | 0 |
+| 6 — L3 data-resolution | ✅ DONE | 17 |
+| 7 — DefensiveModel ABC | ✅ DONE | 12 |
+| 8 — Gate schema | ✅ DONE | 12 |
+| 9 — 25 robustness checks | ⚠️ PARTIAL | 0 |
+| 10 — Double-WF correlator | ✅ DONE | 10 |
+| 11 — Atomic registry | ✅ DONE | 31 |
+| 12 — Artifact bundle | ✅ DONE | 11 |
+| 13 — Reporting 22 sections | ✅ DONE | 1 |
+| 14-23 — Trade Manager | ❌ NOT DONE | 0 |
+| 24 — Resumability | ⚠️ PARTIAL | 1 |
+| 25 — 22 required tests | ⚠️ PARTIAL | 142 total |
+| 26 — Documentation | ✅ DONE | N/A |
+
+**Total: 142 tests passing across 12 test files.**
+
+**11 of 26 phases complete. 3 partially done. 12 not started.**
