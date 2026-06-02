@@ -840,7 +840,7 @@ bool RithmicAdapter::list_agreements() {
     }
     int iCode = -1;
     int rc = engine->listAgreements(false, nullptr, &iCode);
-    if (rc != RApi::OK) {
+    if (rc != OK) {
         last_connect_error_ = "listAgreements submit error: rc=" + std::to_string(rc)
                             + " iCode=" + std::to_string(iCode);
         std::cerr << "[RithmicAdapter] " << last_connect_error_ << std::endl;
