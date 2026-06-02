@@ -98,8 +98,8 @@ def run_unattended(
 
     cfg = load_config(config_path)
     if not cfg.enabled:
-        logging.error("Rithmic trial lane disabled")
-        return 1
+        logging.info("Rithmic trial lane disabled (enabled: false in %s) — clean exit", config_path)
+        return 0
 
     unattended_cfg = cfg.unattended or {}
     poll = float(unattended_cfg.get("poll_interval_sec", 2.0))
