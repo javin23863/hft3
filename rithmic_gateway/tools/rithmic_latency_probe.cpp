@@ -46,7 +46,7 @@ int main(int argc, char** argv) {
         };
     } else {
         env_vars = {
-            "MML_DMN_SRVR_ADDR=ritpz04063.04.rithmic.com:443",
+            "MML_DMN_SRVR_ADDR=ritpz04063.04.rithmic.com:65000",
             "MML_DOMAIN_NAME=rithmic_paper_domain",
             "MML_LIC_SRVR_ADDR=ritpz04063.04.rithmic.com:56000",
             "MML_LOC_BROK_ADDR=ritpz04063.04.rithmic.com:64100",
