@@ -207,6 +207,8 @@ CConnectionConfig._fields_ = [
     ("md_connect_point", c_char_p),
     ("ts_connect_point", c_char_p),
     ("rep_connect_point", c_char_p),
+    ("pnl_connect_point", c_char_p),
+    ("ih_connect_point", c_char_p),
     ("env_vars", POINTER(c_char_p)),
     ("env_vars_count", c_int),
 ]
@@ -224,6 +226,8 @@ class ConnectionConfig:
     md_connect_point: str = ""
     ts_connect_point: str = ""
     rep_connect_point: str = ""
+    pnl_connect_point: str = ""
+    ih_connect_point: str = ""
     env_vars: list[str] = field(default_factory=list)
 
     def to_c(self) -> CConnectionConfig:
@@ -240,6 +244,8 @@ class ConnectionConfig:
             self.md_connect_point,
             self.ts_connect_point,
             self.rep_connect_point,
+            self.pnl_connect_point,
+            self.ih_connect_point,
         ):
             if s is None:
                 c_strings.append(c_char_p(None))
@@ -273,6 +279,8 @@ class ConnectionConfig:
             md_connect_point=c_strings[7],
             ts_connect_point=c_strings[8],
             rep_connect_point=c_strings[9],
+            pnl_connect_point=c_strings[10],
+            ih_connect_point=c_strings[11],
             env_vars=ctypes.cast(env_array, POINTER(c_char_p)),
             env_vars_count=n,
         )

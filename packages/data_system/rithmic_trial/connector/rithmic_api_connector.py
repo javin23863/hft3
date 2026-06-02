@@ -101,6 +101,8 @@ class RithmicApiConnector(ConnectorInterface):
 
         md = login.get("sMdCnnctPt") or ""
         ts = login.get("sTsCnnctPt") or ""
+        pnl = login.get("sPnlCnnctPt") or ""
+        ih = login.get("sIhCnnctPt") or ""
         rep = repository_login.get("sCnnctPt") or ""
 
         env_name = (
@@ -126,6 +128,8 @@ class RithmicApiConnector(ConnectorInterface):
             md_connect_point=str(md),
             ts_connect_point=str(ts),
             rep_connect_point=str(rep),
+            pnl_connect_point=str(pnl),
+            ih_connect_point=str(ih),
             env_vars=env_vars,
         )
 

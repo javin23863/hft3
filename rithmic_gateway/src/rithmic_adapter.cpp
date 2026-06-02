@@ -495,6 +495,17 @@ bool RithmicAdapter::connect() {
     login_params.sTsUser = make_ts(config_.username.c_str());
     login_params.sTsPassword = make_ts(config_.password.c_str());
     login_params.sTsCnnctPt = make_ts(config_.ts_connect_point.c_str());
+    login_params.sPnlCnnctPt = make_ts(config_.pnl_connect_point.c_str());
+    login_params.sIhUser = make_ts(config_.username.c_str());
+    login_params.sIhPassword = make_ts(config_.password.c_str());
+    login_params.sIhCnnctPt = make_ts(config_.ih_connect_point.c_str());
+
+    std::cerr << "[RithmicAdapterDBG] connecting user=" << config_.username
+              << " pw_len=" << config_.password.size()
+              << " md_cp=" << config_.md_connect_point
+              << " ts_cp=" << config_.ts_connect_point
+              << " pnl_cp=" << config_.pnl_connect_point
+              << " ih_cp=" << config_.ih_connect_point << std::endl;
 
     int iCode = 0;
     if (!pEngine->login(&login_params, &iCode)) {

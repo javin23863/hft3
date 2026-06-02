@@ -45,6 +45,8 @@ struct ConnectionConfig {
     std::string md_connect_point;
     std::string ts_connect_point;
     std::string rep_connect_point;
+    std::string pnl_connect_point;
+    std::string ih_connect_point;
 
     std::vector<std::string> env_vars;
 };

@@ -18,6 +18,8 @@ typedef struct ConnectionConfig {
     const char* md_connect_point;
     const char* ts_connect_point;
     const char* rep_connect_point;
+    const char* pnl_connect_point;
+    const char* ih_connect_point;
     const char** env_vars;
     int env_vars_count;
 } ConnectionConfig;

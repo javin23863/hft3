@@ -47,6 +47,8 @@ hft::ConnectionConfig build_cpp_config(const ConnectionConfig* cfg, const std::v
     if (cfg->md_connect_point) out.md_connect_point = cfg->md_connect_point;
     if (cfg->ts_connect_point) out.ts_connect_point = cfg->ts_connect_point;
     if (cfg->rep_connect_point) out.rep_connect_point = cfg->rep_connect_point;
+    if (cfg->pnl_connect_point) out.pnl_connect_point = cfg->pnl_connect_point;
+    if (cfg->ih_connect_point) out.ih_connect_point = cfg->ih_connect_point;
     out.env_vars = env_storage;
     return out;
 }

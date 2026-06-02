@@ -1,0 +1,16 @@
+{
+  "venues": {
+    "binance_perp": {
+      "source": "synthetic_calibrated:binance_perp",
+      "theta_exch_ms": 0.0,
+      "venue": "binance_perp",
+      "ws_rtt_ms": 5.0
+    },
+    "unknown_venue_xyz": {
+      "source": "synthetic_calibrated:unknown_venue_xyz",
+      "theta_exch_ms": 0.0,
+      "venue": "unknown_venue_xyz",
+      "ws_rtt_ms": 5.0
+    }
+  }
+}
