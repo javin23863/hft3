@@ -5,7 +5,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
 #include <thread>
@@ -22,6 +24,69 @@ static const char* repo_root() {
     return "/root/hft3/repo";
 }
 
+// Trim ASCII whitespace from both ends (in place).
+static void trim(std::string& s) {
+    size_t a = 0;
+    while (a < s.size() && (s[a] == ' ' || s[a] == '\t' || s[a] == '\r' || s[a] == '\n')) ++a;
+    size_t b = s.size();
+    while (b > a && (s[b-1] == ' ' || s[b-1] == '\t' || s[b-1] == '\r' || s[b-1] == '\n')) --b;
+    s = s.substr(a, b - a);
+}
+
+// Strip a matching pair of surrounding quotes (single or double) from a value.
+static void unquote(std::string& s) {
+    if (s.size() >= 2 && (s.front() == '"' || s.front() == '\'')
+        && s.back() == s.front()) {
+        s = s.substr(1, s.size() - 2);
+    }
+}
+
+// Read a YAML file and pull out any `KEY: VALUE` pairs where KEY starts with MML_.
+// Supports: indented or top-level keys, quoted or unquoted values, inline `#` comments.
+// Returns true if at least one MML_* entry was extracted.
+static bool load_mml_env_vars(const std::string& path, std::vector<std::string>& out) {
+    std::ifstream f(path);
+    if (!f.is_open()) return false;
+
+    std::string line;
+    int found = 0;
+    while (std::getline(f, line)) {
+        std::string raw = line;
+        // Find first non-whitespace char.
+        size_t start = 0;
+        while (start < raw.size() && (raw[start] == ' ' || raw[start] == '\t')) ++start;
+        if (start == raw.size()) continue;          // blank
+        if (raw[start] == '#') continue;             // comment-only
+
+        // Must start with MML_
+        if (raw.compare(start, 4, "MML_") != 0) continue;
+
+        // Find ':' separator (skip past the key).
+        size_t colon = raw.find(':', start);
+        if (colon == std::string::npos) continue;
+
+        std::string key = raw.substr(start, colon - start);
+
+        // Value starts after the colon, skipping whitespace.
+        size_t v = colon + 1;
+        while (v < raw.size() && (raw[v] == ' ' || raw[v] == '\t')) ++v;
+
+        // Value ends at inline comment or end of line.
+        size_t vend = raw.size();
+        size_t hash = raw.find('#', v);
+        if (hash != std::string::npos && hash >= v) vend = hash;
+        std::string value = raw.substr(v, vend - v);
+        trim(value);
+        unquote(value);
+
+        if (!key.empty() && !value.empty()) {
+            out.push_back(key + "=" + value);
+            ++found;
+        }
+    }
+    return found > 0;
+}
+
 int main(int argc, char** argv) {
     (void)argc; (void)argv;
 
@@ -32,14 +97,21 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    std::vector<std::string> env_vars = {
-        "MML_DMN_SRVR_ADDR=rituz00100.00.rithmic.com:65000~rituz00100.00.rithmic.net:65000~rituz00100.00.theomne.net:65000~rituz00100.00.theomne.com:65000",
-        "MML_DOMAIN_NAME=rithmic_uat_dmz_domain",
-        "MML_LIC_SRVR_ADDR=rituz00100.00.rithmic.com:56000~rituz00100.00.rithmic.net:56000~rituz00100.00.theomne.net:56000~rituz00100.00.theomne.com:56000",
-        "MML_LOC_BROK_ADDR=rituz00100.00.rithmic.com:64100",
-        "MML_LOGGER_ADDR=rituz00100.00.rithmic.com:45454~rituz00100.00.rithmic.net:45454~rituz00100.00.theomne.net:45454~rituz00100.00.theomne.com:45454",
-        "MML_LOG_TYPE=log_net",
-    };
+    std::vector<std::string> env_vars;
+    std::string yaml_path = std::string(repo_root())
+        + "/packages/data_system/config/rithmic_api_test.yaml";
+    if (!load_mml_env_vars(yaml_path, env_vars)) {
+        std::fprintf(stderr, "WARN: could not load MML_* env from %s; using hardcoded Test defaults\n",
+                     yaml_path.c_str());
+        env_vars = {
+            "MML_DMN_SRVR_ADDR=rituz00100.00.rithmic.com:65000~rituz00100.00.rithmic.net:65000~rituz00100.00.theomne.net:65000~rituz00100.00.theomne.com:65000",
+            "MML_DOMAIN_NAME=rithmic_uat_dmz_domain",
+            "MML_LIC_SRVR_ADDR=rituz00100.00.rithmic.com:56000~rituz00100.00.rithmic.net:56000~rituz00100.00.theomne.net:56000~rituz00100.00.theomne.com:56000",
+            "MML_LOC_BROK_ADDR=rituz00100.00.rithmic.com:64100",
+            "MML_LOGGER_ADDR=rituz00100.00.rithmic.com:45454~rituz00100.00.rithmic.net:45454~rituz00100.00.theomne.net:45454~rituz00100.00.theomne.com:45454",
+            "MML_LOG_TYPE=log_net",
+        };
+    }
 
     std::string repo = repo_root();
     std::string ssl_path = repo + "/rithmic_gateway/RApiPlus/13.7.0.0/etc/rithmic_ssl_cert_auth_params";
