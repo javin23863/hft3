@@ -389,6 +389,7 @@ def ingest_research_bundle(
     the LLM fails — `experiment_translation_notes.json` will have
     `quarantine=True` and populated `quarantine_reasons`.
     """
+    from research_pipeline.extractors import extract_equations, extract_tables
     from research_pipeline.intake_bundle import write_intake_bundle
 
     text = extract_text(source)
@@ -397,6 +398,11 @@ def ingest_research_bundle(
     else:
         raw = _heuristic_intake_payload(text)
     payload = _parse_intake_payload(raw)
+    # Run heuristic extractors on the raw text — these do not need
+    # the LLM and produce structured Equation/Table records that the
+    # LLM may later disambiguate.
+    equations = extract_equations(text)
+    tables = extract_tables(text)
     return write_intake_bundle(
         research_id=research_id,
         source_path=Path(source),
@@ -412,5 +418,7 @@ def ingest_research_bundle(
         failure_modes=payload["failure_modes"],
         testable_hypotheses=payload["hypotheses"],
         translation_notes=payload["notes"],
+        equations=equations,
+        tables=tables,
     )
 

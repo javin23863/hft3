@@ -1,8 +1,21 @@
-# HFT3 autonomous research campaign (Phase 2)
-# Usage:
-#   python -m hft3.research.run_autonomous --config configs/research/autonomous_hft3.yaml
+# HFT3 autonomous research campaign (Phase 2) — SCAFFOLDED
 #
-# See docs/hft3_autonomous_pipeline_runbook.md (Phase 26) for full field reference.
+# STATUS: This config runs the runner's 12 stages end-to-end, but the
+# runner is in SCAFFOLDED mode. Backtest, robustness, and walk-forward
+# stages produce PENDING gates (observed_value=None, pass_fail=False,
+# BLOCKING). The decision defaults to QUARANTINE / REJECT — not PROMOTE.
+#
+# DO NOT interpret a successful run (exit code 0) as a real promotion.
+# A successful run only means: the orchestrator reached the registry
+# stage and wrote artifacts. The decision it records is always
+# QUARANTINE until Phase 5 (real backtest) and Phase 10 (double WF
+# correlation) land.
+#
+# See docs/hft3_autonomous_pipeline_runbook.md (Phase 26) for the
+# full field reference and the honesty contract.
+#
+# Usage:
+#   python hft3-research.py --config configs/research/autonomous_hft3.yaml
 
 campaign_id: "cpi-2024-uat-tight"
 

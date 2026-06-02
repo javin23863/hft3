@@ -84,6 +84,136 @@ class CertificationRecord:
         return asdict(self)
 
 
+# ---- Phase 11 promotion records (per-model/per-candidate) -----------------
+#
+# `CertificationRecord` above is per-backtester (one row per `run_full_certification`).
+# `PromotionRecord` below is per-model/per-candidate (one row per
+# `evaluate_promotion_gate` decision for a specific model). They live in
+# the same JSONL audit log but with `record_type="promotion"` so the chain
+# is still auditable. The Phase 11 spec's 27 new fields are modelled here.
+
+PROMOTION_STATUSES = frozenset({"PROMOTED", "REJECTED", "QUARANTINED"})
+
+
+@dataclass
+class PromotionRecord:
+    """Per-candidate promotion record (Phase 11 spec, items 11–35)."""
+
+    # Identity
+    registry_id: str = ""               # one per repo; UUIDv4 of the JSONL log
+    model_id: str = ""                  # the model being certified
+    candidate_id: str = ""              # the candidate variant
+    experiment_id: str = ""            # the experiment that produced the candidate
+    run_id: str = ""                   # the runner run id (== CertificationRecord.latest_certification_run_id for the originating run)
+    dataset_id: str = ""               # dataset used
+    feature_set_id: str = ""           # feature-set manifest
+    config_hash: str = ""              # SHA-256 of the candidate config
+    git_commit: str = ""               # the git SHA at promotion time
+    timestamp: str = ""                # ISO-8601 UTC
+
+    # Decision
+    promotion_status: str = "QUARANTINED"
+    promotion_reason: str = ""
+    passed_gates: list[str] = field(default_factory=list)
+    failed_gates: list[str] = field(default_factory=list)
+    quarantined_warnings: list[str] = field(default_factory=list)
+
+    # Metrics
+    backtest_metrics: dict[str, Any] = field(default_factory=dict)
+    robustness_metrics: dict[str, Any] = field(default_factory=dict)
+    walk_forward_metrics: dict[str, Any] = field(default_factory=dict)
+    walk_forward_correlation_metrics: dict[str, Any] = field(default_factory=dict)
+
+    # Assumptions
+    latency_profile: dict[str, Any] = field(default_factory=dict)
+    execution_assumptions: dict[str, Any] = field(default_factory=dict)
+    data_resolution: str = ""
+
+    # Composition
+    model_combination: dict[str, Any] = field(default_factory=dict)
+    alpha_components: list[str] = field(default_factory=list)
+    defensive_components: list[str] = field(default_factory=list)
+    hybrid_components: list[str] = field(default_factory=list)
+
+    # Eligibility
+    allowed_symbols: list[str] = field(default_factory=list)
+    allowed_instruments: list[str] = field(default_factory=list)
+    allowed_order_types: list[str] = field(default_factory=list)
+    risk_limits_reference: str = ""
+    capital_allocation_reference: str = ""
+    kill_switch_reference: str = ""
+
+    # Artifacts
+    report_path: str = ""
+    artifact_path: str = ""
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> PromotionRecord:
+        return cls(
+            registry_id=str(raw.get("registry_id", "")),
+            model_id=str(raw.get("model_id", "")),
+            candidate_id=str(raw.get("candidate_id", "")),
+            experiment_id=str(raw.get("experiment_id", "")),
+            run_id=str(raw.get("run_id", "")),
+            dataset_id=str(raw.get("dataset_id", "")),
+            feature_set_id=str(raw.get("feature_set_id", "")),
+            config_hash=str(raw.get("config_hash", "")),
+            git_commit=str(raw.get("git_commit", "")),
+            timestamp=str(raw.get("timestamp", "")),
+            promotion_status=str(raw.get("promotion_status", "QUARANTINED")),
+            promotion_reason=str(raw.get("promotion_reason", "")),
+            passed_gates=list(raw.get("passed_gates", [])),
+            failed_gates=list(raw.get("failed_gates", [])),
+            quarantined_warnings=list(raw.get("quarantined_warnings", [])),
+            backtest_metrics=dict(raw.get("backtest_metrics", {})),
+            robustness_metrics=dict(raw.get("robustness_metrics", {})),
+            walk_forward_metrics=dict(raw.get("walk_forward_metrics", {})),
+            walk_forward_correlation_metrics=dict(raw.get("walk_forward_correlation_metrics", {})),
+            latency_profile=dict(raw.get("latency_profile", {})),
+            execution_assumptions=dict(raw.get("execution_assumptions", {})),
+            data_resolution=str(raw.get("data_resolution", "")),
+            model_combination=dict(raw.get("model_combination", {})),
+            alpha_components=list(raw.get("alpha_components", [])),
+            defensive_components=list(raw.get("defensive_components", [])),
+            hybrid_components=list(raw.get("hybrid_components", [])),
+            allowed_symbols=list(raw.get("allowed_symbols", [])),
+            allowed_instruments=list(raw.get("allowed_instruments", [])),
+            allowed_order_types=list(raw.get("allowed_order_types", [])),
+            risk_limits_reference=str(raw.get("risk_limits_reference", "")),
+            capital_allocation_reference=str(raw.get("capital_allocation_reference", "")),
+            kill_switch_reference=str(raw.get("kill_switch_reference", "")),
+            report_path=str(raw.get("report_path", "")),
+            artifact_path=str(raw.get("artifact_path", "")),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    def validate(self) -> None:
+        """Raise RegistrySchemaError on bad fields."""
+        if self.promotion_status not in PROMOTION_STATUSES:
+            raise RegistrySchemaError(
+                f"promotion_status must be one of {sorted(PROMOTION_STATUSES)}, "
+                f"got {self.promotion_status!r}"
+            )
+        if self.timestamp:
+            try:
+                datetime.fromisoformat(self.timestamp.replace("Z", "+00:00"))
+            except (TypeError, ValueError) as exc:
+                raise RegistrySchemaError(
+                    f"timestamp must be ISO-8601, got {self.timestamp!r}: {exc}"
+                ) from exc
+        if self.config_hash and not all(c in "0123456789abcdef" for c in self.config_hash):
+            raise RegistrySchemaError(
+                f"config_hash must be hex, got {self.config_hash!r}"
+            )
+
+
+def validate_promotion_record(record: dict[str, Any]) -> None:
+    """Validate a raw dict representing a promotion record."""
+    PromotionRecord.from_dict(record).validate()
+
+
 def repo_root() -> Path:
     return Path(__file__).resolve().parents[3]
 
@@ -466,3 +596,62 @@ def save_registry(record: CertificationRecord, root: Path | None = None) -> Path
 
 def get_latest_status(root: Path | None = None) -> str:
     return load_registry(root).latest_certification_status
+
+
+# ---- Phase 11 promotion records (per-model/per-candidate) API -------------
+
+
+def save_promotion(record: PromotionRecord, root: Path | None = None) -> dict[str, Any]:
+    """Atomically append a promotion record to the JSONL audit log.
+
+    Promotion records live in the same JSONL log as certification
+    records but with `record_type="promotion"` so the hash chain
+    stays unified. The legacy single-JSON file is *not* touched
+    (it remains a "current certification status" mirror only).
+
+    Schema validation runs before any I/O; an invalid record raises
+    `RegistrySchemaError` without touching the log.
+    """
+    record_dict = record.to_dict()
+    record_dict["record_type"] = "promotion"
+    validate_promotion_record(record_dict)
+
+    audit = audit_log_path(root)
+    with _RegistryLock(lock_path(root)):
+        persisted = _append_audit_line(audit, record_dict)
+    return persisted
+
+
+def load_latest_promotion(
+    model_id: str, root: Path | None = None
+) -> PromotionRecord | None:
+    """Return the most recent promotion record for `model_id`, or None
+    if the model has never been promoted / rejected / quarantined.
+
+    Walks the JSONL log in reverse and returns the first record whose
+    `record_type="promotion"` and `model_id` matches. Verifies the hash
+    chain on the way (per `load_audit_log`).
+    """
+    audit = audit_log_path(root)
+    if not audit.is_file():
+        return None
+    records = load_audit_log(root)
+    for rec in reversed(records):
+        if rec.get("record_type") == "promotion" and rec.get("model_id") == model_id:
+            return PromotionRecord.from_dict(rec)
+    return None
+
+
+def list_promotion_models(root: Path | None = None) -> list[str]:
+    """Return the sorted set of model_ids that have at least one
+    promotion record. Useful for the Trade Manager (Phase 14) and
+    observer (Phase 22) views."""
+    audit = audit_log_path(root)
+    if not audit.is_file():
+        return []
+    records = load_audit_log(root)
+    models: set[str] = set()
+    for rec in records:
+        if rec.get("record_type") == "promotion" and rec.get("model_id"):
+            models.add(str(rec["model_id"]))
+    return sorted(models)

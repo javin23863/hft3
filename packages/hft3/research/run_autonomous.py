@@ -1,6 +1,37 @@
 """HFT3 autonomous research runner (Phase 2).
 
-Headless end-to-end orchestrator that ties the existing HFT3 modules into
+========================================================================
+STATUS: SCAFFOLD. NOT YET PRODUCTION-READY.
+========================================================================
+
+This module is the headless orchestrator shell. It loads a campaign
+config, walks 12 stages, writes 14 artifacts per run, and persists a
+checkpoint. **The actual backtest, robustness pack, walk-forward, and
+scoring work is NOT yet wired** — those stages emit GateResults with
+`observed_value=None` and `pass_fail=False` (BLOCKING) so the run
+defaults to QUARANTINE / REJECT.
+
+What is real:
+  - YAML config loader + schema validator
+  - Resumable state checkpoint
+  - Atomic artifact writes
+  - 12-stage pipeline that runs end-to-end without crashing
+  - QUARANTINE / REJECT default in scaffolded mode
+  - Promotion-gate wiring (writes to the atomic certification registry)
+  - Report generator with the 22 spec sections
+
+What is pending (blocked on Phase 5 / Phase 9 / Phase 10):
+  - Real backtest metrics from WorkbenchEngine
+  - Real robustness pack results
+  - Walk-forward correlation (single WF only today; double-WF in Phase 10)
+  - Real scoring (not the QUARANTINE default)
+
+Do NOT ship a candidate as PROMOTE through this runner until
+`stage_robustness_and_wf` produces real observed values. The
+honesty tests in `tests/test_runner_honesty.py` enforce this.
+========================================================================
+
+End-to-end orchestrator that ties the existing HFT3 modules into
 a single deterministic, resumable, auditable pipeline:
 
   1. Load + validate campaign YAML config
@@ -31,7 +62,7 @@ under `artifacts/runs/{run_id}/` and the bundle is listed in the run
 manifest.
 
 Usage:
-    python -m hft3.research.run_autonomous --config configs/research/autonomous_hft3.yaml
+    python hft3-research.py --config configs/research/autonomous_hft3.yaml
 """
 from __future__ import annotations
 
@@ -450,17 +481,29 @@ class AutonomousRunner:
 
     def stage_robustness_and_wf(self) -> Path:
         """Stages 8-9: robustness + walk-forward. Emits GateResults
-        (Phase 8) and writes robustness_gates.json (Phase 12)."""
+        (Phase 8) and writes robustness_gates.json (Phase 12).
+
+        HONEST SCAFFOLD: when WorkbenchEngine integration is not yet
+        available, the gates below have `observed_value=None` and
+        `pass_fail=False` with `severity=BLOCKING`. This means a
+        scaffolded run will NEVER pass T3 — the runner defaults to
+        QUARANTINE via `stage_score_and_decide` until real metrics
+        arrive. This is the opposite of the previous behavior, which
+        wrote `pass_fail=True` with no observation (a silent lie that
+        let bad candidates ship as "passed"). DO NOT change this back
+        without a code review — see `tests/test_runner_no_dishonest_passes`
+        for the guard.
+        """
         if self._stage_done("robustness_and_wf"):
             return Path(self.state.artifacts["robustness_and_wf"])
         self._stage_start("robustness_and_wf")
         gates: list[GateResult] = []
-        # Synthetic gates from config thresholds (real pipeline replaces
-        # with the actual pack results when WorkbenchEngine is integrated).
+        # Real pipeline replaces these with observed values when
+        # WorkbenchEngine integration lands. Until then, every gate
+        # has observed_value=None and pass_fail=False (BLOCKING).
         scoring = self.config.scoring or {}
         min_sharpe = float(scoring.get("min_sharpe", 0.5))
         max_drawdown = float(scoring.get("max_drawdown", -0.10))
-        # Robustness gate: required even with no observed data (must be present)
         gates.append(GateResult(
             gate_name="monte_carlo_sharpe_p05",
             gate_category=GateCategory.ROBUSTNESS,
@@ -468,7 +511,7 @@ class AutonomousRunner:
             threshold=min_sharpe,
             observed_value=None,
             comparison_operator=">=",
-            pass_fail=True,
+            pass_fail=False,
             severity=Severity.BLOCKING,
             reason_code="ROBUSTNESS_PENDING",
             artifact_reference="robustness_gates.json",
@@ -480,11 +523,10 @@ class AutonomousRunner:
             threshold=max_drawdown,
             observed_value=None,
             comparison_operator=">=",
-            pass_fail=True,
+            pass_fail=False,
             severity=Severity.BLOCKING,
             reason_code="DRAWDOWN_PENDING",
         ))
-        # Walk-forward gate (single WF today; double-WF in Phase 10)
         gates.append(GateResult(
             gate_name="walk_forward_pass",
             gate_category=GateCategory.WALK_FORWARD,
@@ -492,11 +534,10 @@ class AutonomousRunner:
             threshold=1.0,
             observed_value=None,
             comparison_operator="==",
-            pass_fail=True,
+            pass_fail=False,
             severity=Severity.BLOCKING,
             reason_code="WF_PENDING",
         ))
-        # Artifact completeness
         gates.append(GateResult(
             gate_name="artifact_completeness",
             gate_category=GateCategory.ARTIFACT_COMPLETENESS,
@@ -504,7 +545,7 @@ class AutonomousRunner:
             threshold=1.0,
             observed_value=None,
             comparison_operator="==",
-            pass_fail=True,
+            pass_fail=False,
             severity=Severity.BLOCKING,
             reason_code="ARTIFACT_PENDING",
         ))

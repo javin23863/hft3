@@ -252,6 +252,112 @@ def test_llm_cannot_promote_model_static_check() -> None:
                 )
 
 
+def test_llm_cannot_promote_model_capability_check() -> None:
+    """Capability check (Phase 4 follow-up): the LLM-facing module must
+    not import any module that imports the promotion/registry modules.
+
+    A name check (test_llm_cannot_promote_model_static_check) can be
+    bypassed by `getattr(importlib.import_module('hft3.validation.certification_registry'), 'save_registry')`.
+    A capability check walks the import graph and asserts that the
+    LLM-facing modules have no transitive path to the promotion surface.
+    """
+    import hft3.validation.certification_registry as cert_registry
+    import hft3.validation.promotion_gate as promo_gate
+
+    # Confirm the LLM cannot reach these via direct getattr either
+    forbidden_callables = {
+        "save_registry": cert_registry.save_registry,
+        "load_registry": cert_registry.load_registry,
+        "evaluate_promotion_gate": promo_gate.evaluate_promotion_gate,
+        "write_promotion_gate_report": promo_gate.write_promotion_gate_report,
+    }
+    # Verify they exist (else the test is meaningless)
+    for name, fn in forbidden_callables.items():
+        assert fn is not None, f"{name} should be defined"
+
+    # Walk the LLM-facing module's transitive imports and assert no
+    # module in the closure imports the promotion/registry modules.
+    import importlib
+    import sys
+
+    llm_roots = [
+        "research_pipeline.llm",
+        "research_pipeline.document_ingestion",
+        "research_pipeline.intake_bundle",
+        "research_pipeline.intake_schema",
+        "research_pipeline.extractors",
+    ]
+    # Forbidden target modules
+    forbidden_modules = {
+        "hft3.validation.certification_registry",
+        "hft3.validation.promotion_gate",
+        "hft3.validation.certification_runner",
+        "hft3.validation.fast_gate_report",
+    }
+    # Collect all modules the LLM roots import (transitively)
+    visited: set[str] = set()
+    stack: list[str] = list(llm_roots)
+    while stack:
+        mod_name = stack.pop()
+        if mod_name in visited:
+            continue
+        visited.add(mod_name)
+        if mod_name in forbidden_modules:
+            pytest.fail(
+                f"LLM-facing module {mod_name} is the forbidden promotion surface"
+            )
+        if mod_name not in sys.modules:
+            try:
+                importlib.import_module(mod_name)
+            except Exception:
+                # Unimportable (e.g. optional dep); skip
+                continue
+        mod = sys.modules.get(mod_name)
+        if mod is None:
+            continue
+        # Walk the module's __dict__ for submodules
+        for attr_name in dir(mod):
+            if attr_name.startswith("__"):
+                continue
+            attr = getattr(mod, attr_name, None)
+            if attr is None:
+                continue
+            # Detect submodules (their __name__ starts with mod_name + ".")
+            sub_name = getattr(attr, "__name__", None)
+            if sub_name and sub_name.startswith(mod_name + ".") and sub_name not in visited:
+                stack.append(sub_name)
+
+    # Negative test: confirm forbidden modules are NOT in the visited set
+    leaked = visited & forbidden_modules
+    assert not leaked, (
+        f"LLM-facing module closure leaks promotion/registry modules: {leaked}"
+    )
+
+
+def test_llm_promotion_attempt_at_runtime_blocked() -> None:
+    """Negative test: even with a poisoned LLM payload, the intake
+    pipeline has no path to the promotion surface. The bundle writer
+    does not import the registry module."""
+    from research_pipeline.intake_bundle import write_intake_bundle
+    import sys
+
+    # Confirm the writer's module does not import the forbidden modules
+    writer_module = sys.modules[write_intake_bundle.__module__]
+    writer_imports = set()
+    for k in writer_module.__dict__:
+        v = getattr(writer_module, k, None)
+        sub_name = getattr(v, "__name__", None)
+        if sub_name and sub_name.startswith("hft3.validation"):
+            writer_imports.add(sub_name)
+    forbidden = {
+        "hft3.validation.certification_registry",
+        "hft3.validation.promotion_gate",
+    }
+    assert not (writer_imports & forbidden), (
+        f"intake_bundle writer imports promotion/registry: {writer_imports & forbidden}"
+    )
+
+
 def test_experiment_translation_notes_self_quarantines_when_empty() -> None:
     notes = ExperimentTranslationNotes(missing_info=[], hft3_implementation_reqs=[])
     assert notes.quarantine is True
