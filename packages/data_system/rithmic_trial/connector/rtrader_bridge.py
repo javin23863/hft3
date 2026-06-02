@@ -247,7 +247,7 @@ class RTraderBridgeConnector(ConnectorInterface):
         if is_windows():
             raise RuntimeError(
                 "RTraderBridgeConnector is for CHI404 (Wine) only. "
-                "Do not run live Rithmic capture on a Windows workstation — see AGENTS.md § Topology."
+                "CHI404 is the trade-path host; Windows is the dev workstation — see AGENTS.md § Topology."
             )
         candidates = [
             self.wine_prefix / "drive_c" / "users" / "root" / "Documents",

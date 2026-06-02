@@ -223,3 +223,83 @@ ssh chi404 "PYTHONPATH=/root/hft3/repo/packages HFT3_RITHMIC_GATEWAY_SO=/root/hf
 # UAT reachability (manual)
 ssh chi404 "for p in 65000 56000 64100 45454; do nc -zv rituz00100.00.rithmic.com \$p; done"
 ```
+
+---
+
+# Session 3 (2026-06-02): Windows-out-of-loop cleanup
+
+User statement: *"take wondow computer out of the loop chgi404 is the computer we use"*.
+
+CHI404 is the only trade-path host. The R|Trader Windows VM was already torn down in Session 2. This session removes VM-coupled code from the active repo and rewrites CHI404 entrypoint scripts to the rithmic_api path.
+
+## Removed code (39 files + 4 infra)
+
+| Category | Files |
+|----------|-------|
+| `scripts/chi404_vm_*.{sh,py,ps1}` | 35 |
+| `scripts/launch_chi404_vm_vnc.ps1` | 1 |
+| `scripts/chi404_finish_rtrader.sh` | 1 |
+| `scripts/chi404_setup_vm_bridge.sh` | 1 |
+| `scripts/chi404_trigger_vm_paper_sweep.py` | 1 |
+| `infrastructure/chi404/08_rtrader_wine_setup.sh` | 1 |
+| `infrastructure/chi404/10_rtrader_smb_share.sh` | 1 |
+| `infrastructure/chi404/11_rtrader_windows_vm.sh` | 1 |
+| `infrastructure/chi404/autounattend.xml` | 1 |
+
+## Retained (defensive legacy, still tested)
+
+- `packages/data_system/rithmic_trial/connector/rtrader_bridge.py` — file-based, no VM dependency, used by `chi404_run_trial_smoke.sh` for synthetic .cur.txt ingest
+- `tests/test_rtrader_bridge_curtxt.py` — still passes
+- `tests/test_rithmic_topology_guards.py` — still passes
+- `packages/data_system/rithmic_trial/platform.py` — `is_windows()` guard
+- `scripts/chi404_run_trial_smoke.sh` — synthetic file injection
+- `scripts/run_chi404_bmc_ikvm_tunnel.ps1` — BMC iKVM, accesses CHI404 host console for BIOS/EXPO, NOT VM-coupled
+- `scripts/chi404_fast_market_sweep.sh` + `chi404_host_paper_sweep_orchestrator.sh` — already deprecated stubs
+- `scripts/deprecated/*` — already separated, untouched
+
+## Retained (cross-platform guards, legitimate)
+
+- `packages/data_system/crypto_lane/{kraken_l3_recorder,binance_l2_recorder}.py` — `sys.platform == "win32"` (asyncio no signal_handler on Windows)
+- `packages/workbench/scripts/run_hybrid_pipeline_gate.py` + `engine.py` — `HFT3_AFTER_ACTION` workbench toggle
+- `packages/research_pipeline/roundtrip_speedtest.py` — ping flag diff
+
+## Rewritten scripts
+
+| Path | Before | After |
+|------|--------|-------|
+| `scripts/chi404_run_trial_live.sh` | calls `chi404_vm_live_gate.sh` (deleted) | verifies `hft3-rithmic-trial.service` is active, runs `pipeline capture` / `process` / `replay-event` |
+| `scripts/chi404_run_paper_latency_sweep.sh` | calls VM UI orders + RTraderBridgeConnector | rithmic_api: reachability gate → daemon → wait for `paired_submit_ack_count >= 1000` (or `PAPER_LATENCY_SKIP_ORDERS_BURST=1` for connectivity check) |
+| `scripts/deploy_chi404_env.py` | default `RITHMIC_TRIAL_CONNECTOR=rtrader` | default `RITHMIC_TRIAL_CONNECTOR=rithmic_api` |
+
+## Docs updated
+
+| Doc | Change |
+|-----|--------|
+| `docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md` | Rewritten for rithmic_api path; removed VM deploy chain table |
+| `docs/rithmic_trial/README.md` | Replaced R\|Trader VM section with R\|API+ daemon section; added `HFT3_RITHMIC_GATEWAY_SO` env var |
+| `docs/rithmic_trial/CHI404_VM_BUGS.md` | Marked historical; prepended "do not bring it back" warning |
+| `docs/rithmic_trial/VALIDATION_ADDENDUM.md` | Added R\|API+ order callback gap + UAT port 45454 issue; added `test_rithmic_api_bridge.py` to scope-green |
+| `docs/vault/WORKSTATION_ONE_LANE.md` | Clarified that workstation is dev/research only, not in trade path |
+| `tests/test_chi404_canonical_guardrails.py` | Dropped rtrader script existence assertions; added `test_no_rtrader_active_scripts`, `test_no_windows_only_doc_asserts_chi404`, `test_canonical_entrypoints_doc_uses_rithmic_api` |
+
+## Error messages tightened
+
+- `unattended.py` — "Do not run capture/unattended on a Windows workstation" → "Windows is the dev workstation, not the trade-path host."
+- `pipeline.py` — "not this Windows workstation" → "BLUEPRINT §4; use connector: fixture for local tests"
+- `paper_latency_daemon.py` — "Do not run on a dev workstation" → "Windows is the dev workstation, not the trade-path host"
+- `rtrader_bridge.py` — same clarification
+
+## Status
+
+- 23 deleted scripts confirmed via `_active_script_paths`; 0 survivors in active chain
+- 4 infra files removed
+- 6 docs updated; 1 marked historical
+- 4 error messages tightened
+- Windows pytest target: `tests/test_chi404_canonical_guardrails.py`, `test_rithmic_trial_pipeline.py`, `test_rithmic_api_bridge.py` (to be re-run + commit + push)
+- CHI404: 12/12 bridge tests, 15/15 trial tests, daemon active with new drop-in; **no code change on CHI404 needed for Session 3**
+
+## Open (unchanged from Session 2)
+
+- R|API+ UAT port 45454 blocked by Rithmic firewall (`loginRepository` "Repository Connection Broken") — user action pending
+- R|API+ order callbacks not wired to SPSC queue — `paper_latency_daemon` paired count stays at 0; `PAPER_LATENCY_SKIP_ORDERS_BURST=1` works around
+

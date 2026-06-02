@@ -2,13 +2,15 @@
 
 Single trusted path for macro MBO replay and walk-forward campaigns on the dev workstation.
 
+The dev workstation is **not** in the trade path. CHI404 is the only host that touches R|API+. This doc is about the dev workstation's role for trusted research replay from Databento, not the R|Trader / R|API+ trade path.
+
 ## Lane
 
 ```
 events.csv → Databento GLBX.MDP3 MBO → data/npz/ → workbench / run_event_replay.py
 ```
 
-**Not this lane:** Rithmic trial NPZ under `data/replay/hftbacktest/rithmic_trial/` (CHI404 quarantine only).
+**Not this lane:** Rithmic trial NPZ under `data/replay/hftbacktest/rithmic_trial/` (CHI404 quarantine only). The dev workstation does not run `hft3-rithmic-trial.service`, has no `/root/hft3/rtrader_watch` SMB share, and never sees a R|API+ login. Live/paper trade data lives only on CHI404 (see [CHI404_CANONICAL_ENTRYPOINTS.md](CHI404_CANONICAL_ENTRYPOINTS.md)).
 
 ## Keys
 

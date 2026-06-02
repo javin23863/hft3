@@ -34,7 +34,7 @@ def _assert_chi404_only() -> None:
     if is_windows():
         raise RuntimeError(
             "paper_latency_daemon runs on CHI404 only (BLUEPRINT §4). "
-            "Do not run on a dev workstation."
+            "Windows is the dev workstation, not the trade-path host."
         )
 
 

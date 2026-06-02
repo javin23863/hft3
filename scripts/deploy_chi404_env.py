@@ -71,8 +71,8 @@ def _render_env(values: dict[str, str]) -> str:
         "RITHMIC_EXCHANGE": "CME",
         "RITHMIC_GATEWAY": "Chicago",
         "RITHMIC_TRIAL_ENABLED": "1",
-        "RITHMIC_TRIAL_CONNECTOR": "rtrader",
-        "RITHMIC_TRIAL_CONFIG": "data_system/config/rithmic_trial.yaml",
+        "RITHMIC_TRIAL_CONNECTOR": "rithmic_api",
+        "RITHMIC_TRIAL_CONFIG": "packages/data_system/config/rithmic_trial.yaml",
     }
     merged = {**defaults, **{k: values[k] for k in KEYS if k in values and values[k]}}
     lines = ["# HFT3 CHI404 — generated; chmod 600", ""]

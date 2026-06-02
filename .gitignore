@@ -109,3 +109,10 @@ rithmic_gateway/RApiPlus/
 .vscode/
 .idea/
 *.swp
+
+# Session scratch (created during CHI404 ops; not source)
+.tmp/
+
+# Runtime audit outputs (replay_audits, latency_reports, etc.) - not source
+packages/runtime/
+

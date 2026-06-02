@@ -128,8 +128,8 @@ def run_unattended(
 ) -> int:
     if is_windows():
         print(
-            "ERROR: Rithmic trial capture runs on CHI404 only. "
-            "Do not run capture/unattended on a Windows workstation.",
+            "ERROR: Rithmic trial capture runs on CHI404 only (BLUEPRINT §4). "
+            "Windows is the dev workstation, not the trade-path host.",
             file=sys.stderr,
         )
         return 1

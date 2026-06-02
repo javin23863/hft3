@@ -30,7 +30,7 @@ def cmd_capture(args: argparse.Namespace) -> int:
         return 1
     if is_windows() and cfg.connector.lower() != "fixture":
         print(
-            "ERROR: Live Rithmic capture runs on CHI404 only (not this Windows workstation). "
+            "ERROR: Live Rithmic capture runs on CHI404 only (BLUEPRINT §4). "
             "Use connector: fixture for local tests, or SSH to CHI404 for live capture.",
             file=sys.stderr,
         )
