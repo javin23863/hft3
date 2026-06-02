@@ -350,8 +350,8 @@ def main() -> int:
     p.add_argument("--max-cost-usd", type=float, default=150.0, help="Per-event or total cap where enforced")
     p.add_argument(
         "--campaign-models",
-        default="HYP_5,HYP_29,PDF_MODEL_5",
-        help="Comma-separated models for campaign NPZ sweep",
+        default="SPREAD_BLOWOUT_RECOMPRESSION,END_OF_DAY_FORCED_FLATTEN_FLOW,DEALER_HEDGING",
+        help="Comma-separated workbench slugs for campaign NPZ sweep (python -m workbench list)",
     )
     args = p.parse_args()
 

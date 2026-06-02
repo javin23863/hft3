@@ -167,19 +167,19 @@ Per [BLUEPRINT.md §4 Live Architecture](BLUEPRINT.md#4-live-architecture): prod
 
 ### PDF structural models (signal layer)
 
-Seven models from [Algorithmic Trading Strategy Development](docs/references/algorithmic_trading_strategy_development.pdf) are **not** HYP families:
+Seven PDF structural slugs (e.g. `DEALER_HEDGING`, `HYBRID_EXECUTION`) from [Algorithmic Trading Strategy Development](docs/references/algorithmic_trading_strategy_development.pdf) are **not** hypothesis slugs:
 
 - Code: `features_engine/src/structural_models/`
-- Registry: `get_structural_models()` — separate from `get_active_hypotheses()` (44 HYP + 7 PDF = 51 inventory)
+- Registry: [`packages/features_engine/config/model_registry.yaml`](packages/features_engine/config/model_registry.yaml) — 44 hypothesis + 7 PDF structural = **51 workbench slugs** (`legacy_id` `HYP_*` / `PDF_MODEL_*` deprecated)
 - Docs: [docs/structural_models/PDF_MODELS.md](docs/structural_models/PDF_MODELS.md)
 
 Do not merge PDF outputs into 64-dim `FeatureIndex` or `CombinedHypothesisStrategy` without C++ parity review.
 
 ### Microstructure workbench
 
-Unified 51-model research workbench (`workbench/`):
+Unified 51-slug research workbench (`workbench/`):
 
-- CLI: `python -m workbench run --model HYP_5 --event-id <from events.csv>` (required; list: `python packages/data_system/src/macro_event_cli.py`)
+- CLI: `python -m workbench run --model SPREAD_BLOWOUT_RECOMPRESSION --event-id <from events.csv>` (both required; slugs: `python -m workbench list`; events: `python packages/data_system/src/macro_event_cli.py`)
 - UI: `streamlit run workbench/ui/app.py`
 - Artifacts: `research_cards/workbench_runs/<run_id>/`
 

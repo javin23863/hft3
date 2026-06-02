@@ -2,7 +2,7 @@
 
 Chicago CME microstructure research and execution stack.
 
-> **STOP — [KNOWN_GAPS.md](KNOWN_GAPS.md)** lists data missing on disk, CHI404 vs workstation topology, CPI/imbalance/crypto issues, and pipeline bugs. Read it before claiming research or data work is complete.
+> **STOP — [KNOWN_GAPS.md](KNOWN_GAPS.md)** lists data missing on disk, CHI404 vs workstation topology, which **workbench slugs** need equities OPRA (`DEALER_HEDGING` only), imbalance/crypto issues, and pipeline bugs. Model CLI ids: `python -m workbench list` (not `HYP_N`). Read before claiming research or data work is complete.
 
 ## Choose your path
 

@@ -45,24 +45,24 @@ python scripts/audit_imbalance_data_gaps.py
 # Single macro event (any event_id from catalog)
 python scripts/download_imbalance_research_data.py --event-id NFP_2024_01_05_TIGHT --symbol MES.v.0 --with-mbp10
 
-# Full workbench campaign catalog (all periods for a model)
-python apps/workbench/scripts/backfill_catalog.py --model HYP_5 --symbol MES.v.0 --dry-run
-python apps/workbench/scripts/backfill_catalog.py --model HYP_5 --symbol MES.v.0 --download-missing --max-cost-usd 50
+# Full workbench campaign catalog (all periods for a model; slug from: python -m workbench list)
+python apps/workbench/scripts/backfill_catalog.py --model SPREAD_BLOWOUT_RECOMPRESSION --symbol MES.v.0 --dry-run
+python apps/workbench/scripts/backfill_catalog.py --model SPREAD_BLOWOUT_RECOMPRESSION --symbol MES.v.0 --download-missing --max-cost-usd 50
 
 # Regenerate inventory
 python scripts/build_imbalance_inventory.py
 
-# Workbench run — --event-id required (any catalog row)
-python -m workbench run --model HYP_5 --event-id NFP_2024_01_05_TIGHT
+# Workbench run — --model slug + --event-id required (any catalog row)
+python -m workbench run --model SPREAD_BLOWOUT_RECOMPRESSION --event-id NFP_2024_01_05_TIGHT
 
 # Full 8-mode imbalance ablation during run (slow; real per-mode replays)
-python -m workbench run --model HYP_5 --event-id NFP_2024_01_05_TIGHT --imbalance-ablation-full
+python -m workbench run --model SPREAD_BLOWOUT_RECOMPRESSION --event-id NFP_2024_01_05_TIGHT --imbalance-ablation-full
 
-# Replay-backed ablation matrix (--event-id required)
-python -m workbench imbalance-ablation --model HYP_5 --event-id NFP_2024_01_05_TIGHT
+# Replay-backed ablation matrix (--model and --event-id required)
+python -m workbench imbalance-ablation --model SPREAD_BLOWOUT_RECOMPRESSION --event-id NFP_2024_01_05_TIGHT
 
 # Full 8-mode replay ablation
-python -m workbench imbalance-ablation --model HYP_5 --event-id NFP_2024_01_05_TIGHT --full
+python -m workbench imbalance-ablation --model SPREAD_BLOWOUT_RECOMPRESSION --event-id NFP_2024_01_05_TIGHT --full
 
 # Tests
 python -m pytest tests/test_imbalance/ -q

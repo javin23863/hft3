@@ -5,6 +5,15 @@
 
 This file is the **single billboard** for what is missing, broken, misleading, or on the wrong machine. Lane-specific addenda still apply ([crypto](packages/crypto_lane/docs/VALIDATION_HONESTY.md), [validation charter](docs/VALIDATION_HONESTY.md)); this doc ties them together.
 
+**Model names:** Use **canonical slugs** only (`SPREAD_BLOWOUT_RECOMPRESSION`, `DEALER_HEDGING`, …). Do **not** use deprecated `HYP_N` / `PDF_MODEL_N` in new docs, tickets, or CLI examples.
+
+| Discovery | Command / file |
+|-----------|----------------|
+| All 51 workbench models (slug = CLI `--model`) | `python -m workbench list` |
+| Registry + `legacy_id` (deprecated) | [`packages/features_engine/config/model_registry.yaml`](packages/features_engine/config/model_registry.yaml) |
+| Macro `event_id` catalog | `python packages/data_system/src/macro_event_cli.py` |
+| Crypto lane (separate from workbench 51) | `CRYPTO_H1` … `CRYPTO_H7` in [`packages/crypto_lane/config/universe.yaml`](packages/crypto_lane/config/universe.yaml) |
+
 ---
 
 ## 0. Macro event catalog (not CPI-only)
@@ -23,7 +32,7 @@ python packages/data_system/src/macro_event_cli.py
 
 **CLI policy (2026-06-02):** Replay, workbench `imbalance-ablation`, pipeline gates, and PDF hybrid scripts **require `--event-id`** — no repo default to a single CPI row. Optional automation only: env `HFT3_DEFAULT_EVENT_ID`.
 
-**Still CPI-biased (not fixed):** [`apps/workbench/config/model_event_binding.yaml`](apps/workbench/config/model_event_binding.yaml) binds most HYP/PDF models to `CPI_TIGHT` / `NFP_TIGHT` *context families* (not one event id, but macro-heavy). [`docs/vault/RESEARCH_ENTRYPOINTS.md`](docs/vault/RESEARCH_ENTRYPOINTS.md) examples still cite CPI in places — use `macro_event_cli.py` for truth.
+**Still CPI-biased (not fixed):** [`apps/workbench/config/model_event_binding.yaml`](apps/workbench/config/model_event_binding.yaml) binds most workbench slugs to `CPI_TIGHT` / `NFP_TIGHT` *context families* (not one event id, but macro-heavy). [`docs/vault/RESEARCH_ENTRYPOINTS.md`](docs/vault/RESEARCH_ENTRYPOINTS.md) examples still cite CPI in places — use `macro_event_cli.py` for truth.
 
 ---
 
@@ -51,6 +60,27 @@ Sync **data** to colo: **not automated** — rsync/scp `data/` if colo replay is
 | **Crypto alpha** | [`packages/crypto_lane/config/universe.yaml`](packages/crypto_lane/config/universe.yaml) (`CRYPTO_H1`–`H7`) | `data/crypto/` | **No** |
 
 **Imbalance integration** (`packages/features_engine/src/imbalance/`) targets macro + equities + options parity — **not crypto**.
+
+### 2.1 Workbench slugs × equities OPRA (decadal sessions)
+
+Low-float **sessions** live in [`decadal_runners.yaml`](packages/equities_lane/config/decadal_runners.yaml). The **workbench** has **51 slugs** (44 hypothesis + 7 PDF structural per `model_registry.yaml`). Only one slug needs per-session equity OPRA chains:
+
+| Workbench slug | `legacy_id` (do not use) | Needs `data/options/equity_chains/<session>.ndjson`? |
+|----------------|--------------------------|------------------------------------------------------|
+| **`DEALER_HEDGING`** | `PDF_MODEL_5` | **Yes** — `options_chain` binding |
+| All other 50 slugs | various `HYP_*` / `PDF_MODEL_*` | **No** — macro `mbo_npz` + CPI/NFP/prop context families |
+
+**OPRA gap impact:** Only **`DEALER_HEDGING`** is blocked for the **10 symbology-failed** sessions (SPI, INDO, HKD, TOP, HOLO, CYCC, AIRE, BIRD, AMST, SNAL) and the **3 `skip_pull`** sessions (DRYS, LFIN, LBCC). **`DEALER_HEDGING` OK** on `kodk_2020`, `gme_2021`, `expr_2021`.
+
+**Not the same lane:**
+
+| Lane | Entry | Models / ids |
+|------|--------|----------------|
+| Workbench macro backtest | `python -m workbench run --model <SLUG> --event-id <from events.csv>` | 51 slugs above |
+| Low-float equities research | `python -m equities_lane.pipeline` | Session ids in `decadal_runners.yaml` + [`universe.yaml`](packages/equities_lane/config/universe.yaml) features — **not** workbench slugs |
+| Options parity (ES/SPX) | `options_lane/` | `data/options/` parity universe — **not** `data/options/equity_chains/` |
+
+Default imbalance download campaign slugs (see `scripts/download_imbalance_research_data.py`): `SPREAD_BLOWOUT_RECOMPRESSION`, `END_OF_DAY_FORCED_FLATTEN_FLOW`, `DEALER_HEDGING`.
 
 ---
 
@@ -115,12 +145,12 @@ Entry: [docs/vault/RESEARCH_ENTRYPOINTS.md](docs/vault/RESEARCH_ENTRYPOINTS.md) 
 | ID | Severity | Issue | Where to fix |
 |----|----------|--------|--------------|
 | I-01 | **P0** | Macro auction uses **test fixture** when no real file | [`packages/features_engine/src/imbalance/auction_events.py`](packages/features_engine/src/imbalance/auction_events.py) → `tests/fixtures/imbalance_auction_sample.ndjson` |
-| I-02 | **P0** | Ablation = wrapper boost on HYP score, **not** toggling real feature slots 34–37 | [`packages/features_engine/src/imbalance/apply.py`](packages/features_engine/src/imbalance/apply.py) `wrap_hypothesis_for_ablation` |
-| I-03 | **P0** | CPI real NPZ replay: **0 PnL**, **0 delta** across ablation modes | Replay + hypothesis path |
+| I-02 | **P0** | Ablation = wrapper boost on hypothesis score, **not** toggling real feature slots 34–37 | [`packages/features_engine/src/imbalance/apply.py`](packages/features_engine/src/imbalance/apply.py) `wrap_hypothesis_for_ablation` |
+| I-03 | **P0** | Example macro replay (`SPREAD_BLOWOUT_RECOMPRESSION` on a CPI event): **0 PnL**, **0 delta** across ablation modes | Replay + hypothesis path |
 | I-04 | P1 | MBP-10 on disk but **not wired** into main replay/workbench | [`mbp_replay.py`](packages/features_engine/src/imbalance/mbp_replay.py) only |
 | I-05 | P1 | C++ hot path **no** imbalance v1 slots | [docs/hft3_imbalance_runbook.md](docs/hft3_imbalance_runbook.md) |
 | C-01 | ~~P1~~ | ~~CLI default CPI for `imbalance-ablation`~~ **Fixed:** `--event-id` required | [`apps/workbench/__main__.py`](apps/workbench/__main__.py) |
-| C-02 | P1 | Most models bound to **CPI_TIGHT / NFP_TIGHT** context families only (not equities/crypto) | [`apps/workbench/config/model_event_binding.yaml`](apps/workbench/config/model_event_binding.yaml) |
+| C-02 | P1 | Most slugs bound to **CPI_TIGHT / NFP_TIGHT** context families only (not equities/crypto) | [`apps/workbench/config/model_event_binding.yaml`](apps/workbench/config/model_event_binding.yaml) |
 | I-06 | P2 | Fast ablation = 4 modes unless `--imbalance-ablation-full` | workbench CLI |
 
 Macro futures: **no venue auction imbalance feed** in inventory (labels only) — [docs/hft3_imbalance_inventory.md](docs/hft3_imbalance_inventory.md).
@@ -148,7 +178,7 @@ Macro futures: **no venue auction imbalance feed** in inventory (labels only) �
 | CR-05 | θ convention audit **open** | [packages/crypto_lane/docs/VALIDATION_HONESTY.md](packages/crypto_lane/docs/VALIDATION_HONESTY.md) |
 | CR-06 | Venue RTT often **synthetic**, not measured | `venue_profiles.json` / calibrate-ws-rtt |
 
-Hypotheses: `CRYPTO_H1` … `CRYPTO_H7` — configs under `backtests/configs/crypto_hypotheses/`.
+Crypto hypotheses (lane-local ids, not workbench slugs): `CRYPTO_H1` … `CRYPTO_H7` — configs under `backtests/configs/crypto_hypotheses/`.
 
 ---
 
@@ -156,7 +186,7 @@ Hypotheses: `CRYPTO_H1` … `CRYPTO_H7` — configs under `backtests/configs/cry
 
 - `audit_all_research_data.py` exit 0 → macro + equity **files** present; **not** OPRA complete, **not** crypto, **not** scientifically valid ablation.
 - `download_all_research_data.ps1` → Databento workstation pull; **not** CHI404 live path.
-- `workbench run` / imbalance artifacts on **one CPI event** → **not** proof across catalog.
+- `workbench run` / imbalance artifacts on **one macro event** → **not** proof across the 55-row catalog.
 - Imbalance commit `8de7de3` + data commit `0171ced` → **not merge-ready** without full verify + reviewer + real ablation/PnL proof.
 
 ---
@@ -167,9 +197,9 @@ Hypotheses: `CRYPTO_H1` … `CRYPTO_H7` — configs under `backtests/configs/cry
 2. **I-01** — remove macro auction fixture fallback (fail closed).  
 3. **I-02 / I-03** — real ablation on feature slots; prove non-zero delta on ≥1 real event.  
 4. **I-04** — wire MBP-10 into replay when configured.  
-5. **C-01 / C-02** — de-CPI-default CLI and bindings; document NFP + prop-flatten + equities.  
+5. **C-02** — widen `model_event_binding.yaml` beyond CPI/NFP context families; document prop-flatten + equities.  
 6. **CR-02** — crypto ingest plan (B2 + optional bitcoind), separate from Databento scripts.  
-7. **D-02** — OPRA symbology failures: quarantine in catalog or alternate symbology — 10 sessions.  
+7. **D-02** — OPRA symbology failures (blocks **`DEALER_HEDGING`** only among workbench slugs): quarantine or alternate symbology — 10 sessions.  
 8. **Topology doc** — optional `scripts/sync_chi404_data.sh` if colo must hold NPZ.
 
 ---
@@ -178,6 +208,7 @@ Hypotheses: `CRYPTO_H1` … `CRYPTO_H7` — configs under `backtests/configs/cry
 
 | Task | Command |
 |------|---------|
+| **List workbench model slugs** | `python -m workbench list` |
 | **List macro event ids** | `python packages/data_system/src/macro_event_cli.py` |
 | Full data gap audit | `python scripts/audit_all_research_data.py` |
 | Imbalance-only gaps | `python scripts/audit_imbalance_data_gaps.py` |

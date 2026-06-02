@@ -27,7 +27,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command")
 
     run_p = sub.add_parser("run", help="Run model backtest on event window")
-    run_p.add_argument("--model", required=True, help="Model slug (e.g. SPREAD_BLOWOUT_RECOMPRESSION) or legacy HYP_N")
+    run_p.add_argument("--model", required=True, help="Canonical slug from model_registry.yaml (python -m workbench list)")
     run_p.add_argument("--event-id", required=True)
     run_p.add_argument("--symbol", default=None, help="Research symbol e.g. MES.v.0")
     run_p.add_argument("--chi404-summary", default="runtime/latency_reports/latency_summary.json")
@@ -45,7 +45,7 @@ def main(argv: list[str] | None = None) -> int:
     run_p.add_argument(
         "--defensive",
         default=None,
-        help="Defensive stubs: MODEL:phase[:budget_us],... e.g. PDF_MODEL_9:before,PDF_MODEL_11:during",
+        help="Defensive stubs: SLUG:phase[:budget_us],... e.g. QUANTUM_SPREAD_DEFENSE:before,HAWKES_TOXIC_FLOW:during",
     )
 
     camp_p = sub.add_parser("campaign", help="B4 walk-forward campaign")
@@ -74,7 +74,7 @@ def main(argv: list[str] | None = None) -> int:
         "imbalance-ablation",
         help="Replay-backed imbalance ablation matrix (requires NPZ)",
     )
-    abl_p.add_argument("--model", default="HYP_5", help="Model slug or legacy HYP_N")
+    abl_p.add_argument("--model", required=True, help="Canonical slug (python -m workbench list)")
     abl_p.add_argument(
         "--event-id",
         required=True,
