@@ -132,9 +132,13 @@ def cmd_replay_sample(args: argparse.Namespace) -> int:
         return 1
     runner = ReplayRunner(str(npz), tick_size=args.tick_size)
     use_strategy = not getattr(args, "simple", False)
+    max_steps = getattr(args, "max_steps", None)
+    if max_steps == 0:
+        max_steps = None
     result = runner.run_replay(
         latency_ms=args.latency_ms,
         use_combined_strategy=use_strategy,
+        max_steps=max_steps,
     )
     print(json.dumps(result, indent=2, default=str))
     if "error" in result:
@@ -224,6 +228,14 @@ def main() -> int:
     p_rep.add_argument("--npz", required=True)
     p_rep.add_argument("--latency-ms", type=float, default=1.0)
     p_rep.add_argument("--tick-size", type=float, default=0.25)
+    p_rep.add_argument(
+        "--max-steps",
+        type=int,
+        default=500,
+        help="Bounded step cap (smoke only). 0 disables the cap. hftbacktest 2.3.0 "
+        "does not always elapse-to-end on a short NPZ, so the cap is the only "
+        "guaranteed stop. Trial data is short by design — keep the default low.",
+    )
     p_rep.add_argument(
         "--simple",
         action="store_true",
