@@ -56,6 +56,8 @@ int main(int argc, char** argv) {
     }
 
     std::string repo = repo_root();
+    std::string ssl_path = repo + "/rithmic_gateway/RApiPlus/13.7.0.0/etc/rithmic_ssl_cert_auth_params";
+    env_vars.push_back("MML_SSL_CLNT_AUTH_FILE=" + ssl_path);
 
     hft::ConnectionConfig cfg;
     cfg.environment = use_test ? "Rithmic Test" : "Rithmic Paper Trading";
@@ -63,7 +65,6 @@ int main(int argc, char** argv) {
     cfg.password = pass;
     cfg.app_name = "HFT3-LatencyProbe";
     cfg.app_version = "1.0";
-    cfg.ssl_cert_path = repo + "/rithmic_gateway/RApiPlus/13.7.0.0/etc/rithmic_ssl_cert_auth_params";
     cfg.log_file_path = repo + "/runtime/rithmic_latency_probe.log";
     cfg.rep_connect_point = "login_agent_repositoryc";
     cfg.md_connect_point = "login_agent_tpc";
