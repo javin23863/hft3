@@ -1,0 +1,30 @@
+max_order_size: 1
+max_position_size: 3
+max_gross_exposure: 3
+max_net_exposure: 3
+max_daily_loss: 1000.0
+max_drawdown: 1000.0
+max_order_rate: 10
+max_cancel_rate: 20
+max_open_orders: 5
+
+symbol_eligibility:
+  - ES
+instrument_eligibility:
+  - ES
+model_eligibility:
+  - HYP_5
+
+stale_data_max_ns: 5000000
+stale_signal_max_ns: 50000000
+duplicate_order_check: true
+price_band_check: true
+price_band_ticks: 8
+liquidity_check: false
+spread_check: true
+max_spread_ticks: 4
+kill_switch_status: armed
+
+disconnect_grace_ns: 1000000000
+max_clock_drift_ns: 50000000
+max_position_mismatch_contracts: 1.0

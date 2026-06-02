@@ -22,6 +22,12 @@ from trade_manager.order_intent import (
     TradeManagerOrderIntent,
     order_intent_from_signal,
 )
+from trade_manager.risk_layer import (
+    TradeManagerRiskContext,
+    TradeManagerRiskDecision,
+    TradeManagerRiskError,
+    TradeManagerRiskLayer,
+)
 from trade_manager.signals import ModelSignal, SIGNAL_SIDES, SignalSource
 
 
@@ -140,6 +146,7 @@ class TradeManager:
         self.signal_sources: dict[str, SignalSource] = {}
         self.signals: dict[str, list[ModelSignal]] = {}
         self.order_intents: dict[str, list[TradeManagerOrderIntent]] = {}
+        self.risk_decisions: dict[str, list[TradeManagerRiskDecision]] = {}
 
     def promoted_records(self) -> list[PromotionRecord]:
         """Return latest promotion records that are currently PROMOTED."""
@@ -272,6 +279,31 @@ class TradeManager:
         )
         self.order_intents.setdefault(model_id, []).append(intent)
         return intent
+
+    def evaluate_order_intent_risk(
+        self,
+        model_id: str,
+        intent: TradeManagerOrderIntent,
+        risk_layer: TradeManagerRiskLayer,
+        context: TradeManagerRiskContext,
+    ) -> TradeManagerRiskDecision:
+        """Evaluate Phase 17 risk and store the decision without routing."""
+
+        active = self.active_models.get(model_id)
+        if active is None or active.activation_status != "ACTIVE":
+            raise TradeManagerRiskError(model_id, "MODEL_NOT_ACTIVE")
+        stored_intent = next(
+            (stored for stored in self.order_intents.get(model_id, []) if stored.order_intent_id == intent.order_intent_id),
+            None,
+        )
+        if stored_intent is None:
+            raise TradeManagerRiskError(model_id, "ORDER_INTENT_NOT_CREATED")
+        if intent != stored_intent:
+            raise TradeManagerRiskError(model_id, "ORDER_INTENT_ENVELOPE_MISMATCH")
+
+        decision = risk_layer.evaluate(active, stored_intent, context)
+        self.risk_decisions.setdefault(model_id, []).append(decision)
+        return decision
 
     def _active_model_from_record(self, record: PromotionRecord) -> ActiveModel:
         if record.promotion_status != "PROMOTED":

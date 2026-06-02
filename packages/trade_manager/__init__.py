@@ -12,6 +12,14 @@ from trade_manager.order_intent import (
     TradeManagerOrderIntent,
     order_intent_from_signal,
 )
+from trade_manager.risk_layer import (
+    TradeManagerRiskConfig,
+    TradeManagerRiskContext,
+    TradeManagerRiskDecision,
+    TradeManagerRiskError,
+    TradeManagerRiskLayer,
+    load_risk_config,
+)
 from trade_manager.signals import ModelSignal, SignalSource, StaticSignalSource
 
 __all__ = [
@@ -23,6 +31,12 @@ __all__ = [
     "OrderIntentValidationError",
     "TradeManagerOrderIntent",
     "order_intent_from_signal",
+    "TradeManagerRiskConfig",
+    "TradeManagerRiskContext",
+    "TradeManagerRiskDecision",
+    "TradeManagerRiskError",
+    "TradeManagerRiskLayer",
+    "load_risk_config",
     "ModelSignal",
     "SignalSource",
     "StaticSignalSource",
