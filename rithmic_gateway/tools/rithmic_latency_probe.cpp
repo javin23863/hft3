@@ -15,17 +15,11 @@ static const char* get_env_or(const char* key, const char* def) {
     return v ? v : def;
 }
 
-static std::string read_file(const char* path) {
-    FILE* f = std::fopen(path, "rb");
-    if (!f) return {};
-    std::fseek(f, 0, SEEK_END);
-    long sz = std::ftell(f);
-    std::rewind(f);
-    std::string buf(static_cast<size_t>(sz), '\0');
-    size_t n = std::fread(&buf[0], 1, static_cast<size_t>(sz), f);
-    std::fclose(f);
-    buf.resize(n);
-    return buf;
+static const char* repo_root() {
+    const char* env = std::getenv("HFT3_REPO_DIR");
+    if (env) return env;
+    // fallback: probe runs as build/rithmic_gateway/rithmic_latency_probe
+    return "/root/hft3/repo";
 }
 
 int main(int argc, char** argv) {
@@ -61,17 +55,7 @@ int main(int argc, char** argv) {
         };
     }
 
-    // SSL cert path
-    std::string ssl_path;
-    {
-        const char* ssl_env = get_env_or("RITHMIC_SSL_CERT", "");
-        if (ssl_env[0]) {
-            ssl_path = ssl_env;
-        } else {
-            // Look relative to probe location for RApiPlus etc/
-            ssl_path = "rithmic_ssl_cert_auth_params";
-        }
-    }
+    std::string repo = repo_root();
 
     hft::ConnectionConfig cfg;
     cfg.environment = use_test ? "Rithmic Test" : "Rithmic Paper Trading";
@@ -79,7 +63,8 @@ int main(int argc, char** argv) {
     cfg.password = pass;
     cfg.app_name = "HFT3-LatencyProbe";
     cfg.app_version = "1.0";
-    cfg.ssl_cert_path = ssl_path;
+    cfg.ssl_cert_path = repo + "/rithmic_gateway/RApiPlus/13.7.0.0/etc/rithmic_ssl_cert_auth_params";
+    cfg.log_file_path = repo + "/runtime/rithmic_latency_probe.log";
     cfg.rep_connect_point = "login_agent_repositoryc";
     cfg.md_connect_point = "login_agent_tpc";
     cfg.ts_connect_point = "login_agent_opc";
