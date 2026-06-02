@@ -103,11 +103,11 @@ python -m pytest tests/test_autonomous_runner.py tests/test_runner_honesty.py -v
 
 - **Phase 5 (backtest 33-timestamp)**: Implemented in Workbench audit artifacts. The autonomous runner's `stage_backtest` still writes stub metrics and is not wired to WorkbenchEngine.
 - **Phase 9 (25 robustness checks)**: Implemented in the Workbench robustness pack. The autonomous runner still emits blocking PENDING gates until WorkbenchEngine integration provides observed metrics.
-- **Phase 14-15 (Trade Manager handoff + signal ingress)**: Implemented as registry/manifest activation and side-effect-free signal envelopes. Phases 16-23 order intent, risk, execution, monitoring, kill switch, observer, and sessions remain future state.
+- **Phase 14-16 (Trade Manager handoff + signal ingress + order intent)**: Implemented as registry/manifest activation, side-effect-free signal envelopes, and inert order-intent envelopes. Phases 17-23 risk, execution, monitoring, kill switch, observer, and sessions remain future state.
 - **Phase 24 (resumability)**: Partially done (checkpoint state.json exists); crash recovery not fully tested.
 - **Phase 25 (22 required tests)**: Most exist; ~5 missing.
 
-## Completed phases (16 of 26)
+## Completed phases (17 of 26)
 
 | Phase | Status | Commit |
 |---|---|---|
@@ -126,11 +126,12 @@ python -m pytest tests/test_autonomous_runner.py tests/test_runner_honesty.py -v
 | 13 — Reporting 22 sections | ✅ DONE | (in Phase 2 runner) |
 | 14 — Trade Manager registry handoff | ✅ DONE | `packages/trade_manager/manager.py` |
 | 15 — Trade Manager signal ingress | ✅ DONE | `packages/trade_manager/signals.py` |
+| 16 — Trade Manager order intent | ✅ DONE | `packages/trade_manager/order_intent.py` |
 | 26 — Documentation | ✅ DONE | `bb87c1b` and `8149cd7` |
 
 ## Test scoreboard
 
-**174/174 passing** across 16 test files:
+**184/184 passing** across 17 test files:
 - `tests/test_autonomous_runner.py` (11 tests)
 - `tests/test_runner_honesty.py` (6 tests)
 - `tests/test_research_intake.py` (11 tests)
@@ -147,3 +148,4 @@ python -m pytest tests/test_autonomous_runner.py tests/test_runner_honesty.py -v
 - `tests/test_artifact_bundle.py` (11 tests)
 - `tests/test_trade_manager_phase14.py` (6 tests)
 - `tests/test_trade_manager_phase15.py` (9 tests)
+- `tests/test_trade_manager_phase16.py` (10 tests)

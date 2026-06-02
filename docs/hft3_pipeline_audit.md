@@ -34,7 +34,7 @@ observer/execution integration.
 | 17 | T0–T4 promotion gates | EXISTS | `hft3/validation/promotion_gate.py` |
 | 18 | Immutable `CertificationRecord` | EXISTS | atomic write, file lock, SHA-256 hash chain |
 | 19 | Artifacts tree (per-run + per-campaign + per-card) | EXISTS | `artifacts/research_cards/` |
-| 20 | Trade manager (signal → `OrderIntent`) | PARTIAL | Phase 14/15 handoff + signal ingress exist; no order/risk/execution orchestration yet |
+| 20 | Trade manager (signal → `OrderIntent`) | PARTIAL | Phase 14/15/16 handoff, signal ingress, and inert order intent exist; no risk/execution orchestration yet |
 | 21 | Execution adapter + safety guards | EXISTS (live STUB) | `packages/execution/adapters/live_broker.py:30-37` |
 | 22 | Risk layer (size/loss/kill/pos/clock) | EXISTS (not wired) | `production_safety.py` + `risk_engine/` (C++) |
 | 23 | NL-thesis / auto-research driver (PDF → candidate) | EXISTS | 14-file intake bundle + `scripts/run_pipeline.py` |
@@ -161,9 +161,10 @@ observer/execution integration.
 
 - **Phase 14 handoff exists** — `packages/trade_manager/manager.py` validates latest `PROMOTED` records, required registry fields, and run manifest evidence.
 - **Phase 15 signal ingress exists** — `packages/trade_manager/signals.py` defines `ModelSignal` and validates side-effect-free active-model signal envelopes.
+- **Phase 16 order intent exists** — `packages/trade_manager/order_intent.py` defines an inert 18-field `TradeManagerOrderIntent` distinct from adapter-level execution intents.
 - The only existing "trade manager" is the C++ `risk_engine/include/risk_manager.hpp`, which is a **risk** monitor, not a signal→intent orchestrator.
 - `OrderIntent` exists in `packages/execution/interfaces.py` (52 matches) but no orchestrator turns a registered model + market event into a sized, risk-checked, time-stamped intent.
-- **Phases 16–23** still need order intent, risk, execution, state, monitoring, kill-switch, observer, and session modules.
+- **Phases 17–23** still need risk, execution, state, monitoring, kill-switch, observer, and session modules.
 
 ## Section 17 — Risk-layer components
 
@@ -209,7 +210,7 @@ observer/execution integration.
 1. **Autonomous runner is still scaffolded** — it writes honest blocking gates but does not yet invoke `WorkbenchEngine`.
 2. **Workbench backtest-to-robustness evidence is not wired into the autonomous runner** — Workbench emits Phase 5/9 artifacts; the runner still writes stub backtest metrics.
 3. **Double-WF correlator exists but is not campaign/autonomous promotion input** — real independent WF matrix wiring is still pending.
-4. **Trade Manager is partial** — Phase 14 registry handoff and Phase 15 signal ingress exist, but no order/risk/execution orchestration exists yet.
+4. **Trade Manager is partial** — Phase 14 registry handoff, Phase 15 signal ingress, and Phase 16 order-intent schema exist, but no risk/execution orchestration exists yet.
 5. **Live broker adapter is a stub** — no real live execution path.
 6. **C++ `RiskManager` not wired into Python** — risk is enforced only at the C++ engine boundary, not the backtest.
 7. **Production safety monitors not wired into Trade Manager / adapter path** — `StaleDataMonitor` etc. are implemented but unused outside unit tests.
@@ -222,8 +223,8 @@ observer/execution integration.
 | Hypothesis → experiment spec | OK for Phase 3 intake bundles; autonomous runner experiment specs remain scaffolded until Workbench integration |
 | Backtest → robustness | OK inside Workbench; pending in autonomous runner |
 | Scoring → registry | Atomic registry writes exist; autonomous runner still quarantines because observed metrics are pending |
-| Registry → trade manager | OK for Phase 14/15 handoff and signal ingress; activation validates latest `PROMOTED` record and manifest evidence, then accepts validated `ModelSignal` envelopes |
-| Trade manager → execution | **MISSING**: no order/risk/execution orchestration yet |
+| Registry → trade manager | OK for Phase 14/15/16 handoff, signal ingress, and inert order intent; activation validates latest `PROMOTED` record and manifest evidence, accepts validated `ModelSignal` envelopes, then creates non-routed `TradeManagerOrderIntent` envelopes |
+| Trade manager → execution | **MISSING**: no risk/execution orchestration yet |
 | Trade manager → observer | **MISSING**: no observer path yet |
 | Trade manager → session report | **MISSING**: no session report path yet |
 
@@ -242,6 +243,7 @@ Phase 10 (double WF): `apps/workbench/src/robustness/wfc/double_wf.py` — indep
 Phase 11 (atomicity): `packages/hft3/validation/certification_registry.py` — hash-chain, file lock, and `os.replace`.
 Phase 14 (Trade Manager handoff): `packages/trade_manager/manager.py` — latest promoted registry record to active-model manifest handoff.
 Phase 15 (Trade Manager signal ingress): `packages/trade_manager/signals.py` — active-model signal envelope before order-intent conversion.
+Phase 16 (Trade Manager order intent): `packages/trade_manager/order_intent.py` — inert 18-field order-intent schema before risk/execution.
 
 ## Section 25 — Files that should remain untouched (hot path)
 
@@ -256,7 +258,7 @@ Phase 15 (Trade Manager signal ingress): `packages/trade_manager/signals.py` —
 
 ## Top-10 hardening priorities (consolidated)
 
-1. **Phase 16/17 Trade Manager modules** — add order-intent schema and risk-layer enforcement after the Phase 14 registry handoff.
+1. **Phase 17 Trade Manager risk layer** — add risk-layer enforcement after the Phase 16 inert order-intent schema.
 2. **Autonomous Workbench integration** — feed real `WorkbenchEngine` backtest, Phase 5 audit, Phase 9 robustness, and scoring evidence into the runner.
 3. **Campaign/autonomous double-WF wiring** — feed independent WF matrices into `double_wf.py` and promotion gates.
 4. **Wire `production_safety.py` into the adapter path** — enforce risk in `TradeManager.submit_order`.

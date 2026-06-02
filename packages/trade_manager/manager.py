@@ -17,6 +17,11 @@ from hft3.validation.certification_registry import (
     list_promotion_models,
     load_latest_promotion,
 )
+from trade_manager.order_intent import (
+    OrderIntentValidationError,
+    TradeManagerOrderIntent,
+    order_intent_from_signal,
+)
 from trade_manager.signals import ModelSignal, SIGNAL_SIDES, SignalSource
 
 
@@ -134,6 +139,7 @@ class TradeManager:
         self.active_models: dict[str, ActiveModel] = {}
         self.signal_sources: dict[str, SignalSource] = {}
         self.signals: dict[str, list[ModelSignal]] = {}
+        self.order_intents: dict[str, list[TradeManagerOrderIntent]] = {}
 
     def promoted_records(self) -> list[PromotionRecord]:
         """Return latest promotion records that are currently PROMOTED."""
@@ -220,6 +226,52 @@ class TradeManager:
 
         self.signals.setdefault(model_id, []).append(signal)
         return signal
+
+    def create_order_intent(
+        self,
+        model_id: str,
+        signal: ModelSignal,
+        *,
+        strategy_id: str,
+        quantity: float,
+        order_type: str,
+        risk_budget_id: str,
+        limit_price: float | None = None,
+        time_in_force: str = "GTC",
+        execution_profile: dict[str, Any] | None = None,
+        order_intent_id: str | None = None,
+    ) -> TradeManagerOrderIntent:
+        """Create an inert Phase 16 Trade Manager order-intent envelope."""
+
+        active = self.active_models.get(model_id)
+        if active is None or active.activation_status != "ACTIVE":
+            raise OrderIntentValidationError(model_id, "MODEL_NOT_ACTIVE")
+        stored_signal = next(
+            (stored for stored in self.signals.get(model_id, []) if stored.signal_id == signal.signal_id),
+            None,
+        )
+        if stored_signal is None:
+            raise OrderIntentValidationError(model_id, "SIGNAL_NOT_INGESTED")
+        if signal != stored_signal:
+            raise OrderIntentValidationError(model_id, "SIGNAL_ENVELOPE_MISMATCH")
+        existing_signal_ids = {intent.signal_id for intent in self.order_intents.get(model_id, [])}
+        if signal.signal_id in existing_signal_ids:
+            raise OrderIntentValidationError(model_id, "ORDER_INTENT_ALREADY_CREATED")
+
+        intent = order_intent_from_signal(
+            active,
+            stored_signal,
+            strategy_id=strategy_id,
+            quantity=quantity,
+            order_type=order_type,
+            risk_budget_id=risk_budget_id,
+            limit_price=limit_price,
+            time_in_force=time_in_force,
+            execution_profile=execution_profile,
+            order_intent_id=order_intent_id,
+        )
+        self.order_intents.setdefault(model_id, []).append(intent)
+        return intent
 
     def _active_model_from_record(self, record: PromotionRecord) -> ActiveModel:
         if record.promotion_status != "PROMOTED":

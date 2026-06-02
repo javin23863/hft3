@@ -118,7 +118,7 @@ This document maps each major requirement from the 26-phase spec to:
 |---|---|---|---|
 | Phase 14 registry handoff | `packages/trade_manager/manager.py::TradeManager`; `ActiveModel` | `tests/test_trade_manager_phase14.py` (6 tests) | Latest `PROMOTED` registry record + `manifest.json` activation evidence |
 | Phase 15 signal ingress | `packages/trade_manager/signals.py::ModelSignal`; `TradeManager.bind_signal_source()` / `evaluate_signal()` / `ingest_signal()` | `tests/test_trade_manager_phase15.py` (9 tests) | Validated signal envelope stored in Trade Manager state; no order/adapters |
-| Order intent | **NOT YET IMPLEMENTED** | N/A | N/A |
+| Phase 16 order intent | `packages/trade_manager/order_intent.py::TradeManagerOrderIntent`; `TradeManager.create_order_intent()` | `tests/test_trade_manager_phase16.py` (10 tests) | Inert 18-field order-intent envelope; no risk/adapters |
 | Risk layer | **NOT YET IMPLEMENTED** (production_safety.py exists but not wired) | N/A | N/A |
 | Order state machine | **NOT YET IMPLEMENTED** | N/A | N/A |
 | Execution adapter | **STUB** (`live_broker.py` returns ORDER_REJECTED) | N/A | N/A |
@@ -168,11 +168,12 @@ This document maps each major requirement from the 26-phase spec to:
 | 13 — Reporting 22 sections | ✅ DONE | 1 |
 | 14 — Trade Manager registry handoff | ✅ DONE | 6 |
 | 15 — Trade Manager signal ingress | ✅ DONE | 9 |
-| 16-23 — Trade Manager remaining modules | ❌ NOT DONE | 0 |
+| 16 — Trade Manager order intent | ✅ DONE | 10 |
+| 17-23 — Trade Manager remaining modules | ❌ NOT DONE | 0 |
 | 24 — Resumability | ⚠️ PARTIAL | 1 |
-| 25 — 22 required tests | ⚠️ PARTIAL | 174 total |
+| 25 — 22 required tests | ⚠️ PARTIAL | 184 total |
 | 26 — Documentation | ✅ DONE | N/A |
 
-**Total: 174 tests passing across 16 test files.**
+**Total: 184 tests passing across 17 test files.**
 
-**16 of 26 phases complete. 2 partially done. 8 not started.**
+**17 of 26 phases complete. 2 partially done. 7 not started.**
