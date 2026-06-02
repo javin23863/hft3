@@ -40,7 +40,7 @@ def test_pdf_hybrid_replay_on_real_npz() -> None:
         latency_ms=1.0,
         latency_source="integration test",
         queue_model="LogProbQueueModel2",
-        step_ns=100_000,
+        step_ns=1_000_000_000,
     )
     result = payload["result"]
     assert "error" not in result

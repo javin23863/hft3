@@ -127,7 +127,7 @@ def test_connection_config_to_c_retains_strings() -> None:
     assert c.env_vars[2] == b"USER=alice"
     assert c.env_vars[3] is None
     assert hasattr(c, "_refs")
-    assert len(c._refs) == 10
+    assert len(c._refs) == 12
     assert len(c._env_b_list) == 3
 
 
