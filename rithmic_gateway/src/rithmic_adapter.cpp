@@ -74,7 +74,7 @@ static OrderEvent make_order_event(RApi::OrderReport* pReport, char event_type) 
     } else {
         evt.price = 0.0;
     }
-    evt.size = static_cast<int32_t>(pReport->llOrderQty);
+    evt.size = static_cast<int32_t>(pReport->llTotalFilled + pReport->llTotalUnfilled);
     evt.filled_size = static_cast<int32_t>(pReport->llFillSize);
     evt.total_filled = static_cast<int32_t>(pReport->llTotalFilled);
     evt.total_unfilled = static_cast<int32_t>(pReport->llTotalUnfilled);
@@ -778,7 +778,7 @@ bool RithmicAdapter::subscribe_mbo(const std::string& symbol, const std::string&
     auto* pEngine = static_cast<RApi::REngine*>(engine_);
     tsNCharcb sExchange = make_ts(exchange.c_str());
     tsNCharcb sTicker = make_ts(symbol.c_str());
-    int iFlags = RApi::MD_PRINTS | RApi::MD_BEST | RApi::MD_MBO;
+    int iFlags = RApi::MD_PRINTS | RApi::MD_BEST;
     int iCode = 0;
 
     if (!pEngine->subscribe(&sExchange, &sTicker, iFlags, &iCode)) {
