@@ -109,13 +109,14 @@ int main(int argc, char** argv) {
     hft::risk::RiskLimits limits;
     hft::risk::RiskManager risk(limits);
     hft::SPSCQueue<hft::MarketDataEvent, 8192> mbo_queue;
+    hft::SPSCQueue<hft::OrderEvent, 8192> order_queue;
     hft::ConnectionConfig gw_cfg;
     gw_cfg.environment = "Rithmic Aurora";
     gw_cfg.username = "paper";
     gw_cfg.password = "paper";
     gw_cfg.app_name = "hft3_research_sim";
     gw_cfg.app_version = "1.0";
-    hft::RithmicAdapter gateway(gw_cfg, &mbo_queue);
+    hft::RithmicAdapter gateway(gw_cfg, &mbo_queue, &order_queue);
 
     StackChecks checks{};
     const bool stack_ok = run_stack_checks(extractor, engine, risk, gateway, mbo_queue, checks);
