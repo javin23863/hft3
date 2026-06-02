@@ -116,7 +116,8 @@ This document maps each major requirement from the 26-phase spec to:
 
 | Requirement | Implementation | Test | Artifact |
 |---|---|---|---|
-| Trade Manager | **NOT YET IMPLEMENTED** | N/A | N/A |
+| Phase 14 registry handoff | `packages/trade_manager/manager.py::TradeManager`; `ActiveModel` | `tests/test_trade_manager_phase14.py` (6 tests) | Latest `PROMOTED` registry record + `manifest.json` activation evidence |
+| Phase 15 signal ingress | `packages/trade_manager/signals.py::ModelSignal`; `TradeManager.bind_signal_source()` / `evaluate_signal()` / `ingest_signal()` | `tests/test_trade_manager_phase15.py` (9 tests) | Validated signal envelope stored in Trade Manager state; no order/adapters |
 | Order intent | **NOT YET IMPLEMENTED** | N/A | N/A |
 | Risk layer | **NOT YET IMPLEMENTED** (production_safety.py exists but not wired) | N/A | N/A |
 | Order state machine | **NOT YET IMPLEMENTED** | N/A | N/A |
@@ -165,11 +166,13 @@ This document maps each major requirement from the 26-phase spec to:
 | 11 — Atomic registry | ✅ DONE | 31 |
 | 12 — Artifact bundle | ✅ DONE | 11 |
 | 13 — Reporting 22 sections | ✅ DONE | 1 |
-| 14-23 — Trade Manager | ❌ NOT DONE | 0 |
+| 14 — Trade Manager registry handoff | ✅ DONE | 6 |
+| 15 — Trade Manager signal ingress | ✅ DONE | 9 |
+| 16-23 — Trade Manager remaining modules | ❌ NOT DONE | 0 |
 | 24 — Resumability | ⚠️ PARTIAL | 1 |
-| 25 — 22 required tests | ⚠️ PARTIAL | 159 total |
+| 25 — 22 required tests | ⚠️ PARTIAL | 174 total |
 | 26 — Documentation | ✅ DONE | N/A |
 
-**Total: 159 tests passing across 14 test files.**
+**Total: 174 tests passing across 16 test files.**
 
-**14 of 26 phases complete. 2 partially done. 10 not started.**
+**16 of 26 phases complete. 2 partially done. 8 not started.**

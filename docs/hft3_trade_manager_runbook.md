@@ -1,15 +1,26 @@
 # HFT3 Trade Manager Runbook (Phase 26)
 
-This runbook documents the Trade Manager layer (Phases 14-23). **These phases are not yet implemented.** This runbook describes the future state.
+This runbook documents the Trade Manager layer (Phases 14-23). Phase 14 is implemented as the registry-to-Trade-Manager handoff seam. Phase 15 is implemented as side-effect-free signal ingress. Phases 16-23 remain future state.
 
 ## 1. How a registered model is handed to the Trade Manager
 
-When a candidate is PROMOTED by the autonomous runner, the runner writes a YELLOW record to the certification registry (Phase 11). The Trade Manager (Phase 14) will:
-1. Read the registry for PROMOTED models
-2. Load the model's configuration from `artifacts/runs/{run_id}/manifest.json`
-3. Activate the model for live/paper trading
+When a candidate is PROMOTED by the autonomous runner, the runner writes a YELLOW record to the certification registry (Phase 11). The Trade Manager (Phase 14) now:
+1. Reads the registry for latest `PROMOTED` models
+2. Validates the required `PromotionRecord` fields
+3. Loads the model's configuration from `artifacts/runs/{run_id}/manifest.json`
+4. Produces an `ActiveModel` handoff object for future Trade Manager sessions
 
 Live/paper operation is future state and must run on CHI404 only. The development workstation remains offline research/replay only and must not route live/paper market data or orders.
+
+## 1A. How active models accept signals (Phase 15)
+
+Phase 15 adds `packages/trade_manager/signals.py` and the `TradeManager` signal-ingress API:
+1. Bind an active model to a side-effect-free `SignalSource`
+2. Evaluate the source into a normalized `ModelSignal`
+3. Validate registry identity, run identity, symbol allowlist, timestamp, side, strength, confidence, expected edge, and latency profile
+4. Store the signal in Trade Manager state for future Phase 16 conversion
+
+Signals are not orders. Phase 15 does not create `OrderIntent`, does not size orders, does not call risk, and does not create paper/live/Rithmic adapters.
 
 ## 2. Required registry fields for operation
 
@@ -125,11 +136,15 @@ python -m pytest tests/test_trade_manager_*.py -v
 
 ## 12. Test results
 
-**Not yet implemented.** Phase 14-23 tests will be added when the Trade Manager is built.
+Phase 14: `tests/test_trade_manager_phase14.py` has 6/6 passing tests.
+Phase 15: `tests/test_trade_manager_phase15.py` has 9/9 passing tests.
+
+Phases 16-23 tests will be added as order intent, risk, execution, monitoring, kill-switch, observer, and session modules are built.
 
 ## 13. Known limitations
 
-- **Trade Manager does not exist yet.** Phases 14-23 are not implemented.
+- **Trade Manager handoff exists.** Phase 14 validates promoted registry records and run manifests but does not route orders.
+- **Signal ingress exists.** Phase 15 validates and stores `ModelSignal` envelopes but does not create orders.
 - **Risk layer is not wired.** `packages/execution/production_safety.py` exists but is not called by the Trade Manager (Phase 17).
 - **Execution adapter is a stub.** `packages/execution/adapters/live_broker.py` returns `ORDER_REJECTED` with reason `"live_adapter_stub_not_wired"` (Phase 19).
 - **Order state machine does not exist.** Phase 18 is not implemented.
@@ -139,7 +154,7 @@ python -m pytest tests/test_trade_manager_*.py -v
 
 ## 14. Remaining risks
 
-- **Phase 14-23 are large.** The Trade Manager is a new package with ~10 sub-modules (order intent, risk layer, execution adapter, order state machine, position monitoring, kill switch, observer, session reporting, restart recovery).
+- **Phase 16-23 remain large.** The Trade Manager still needs sub-modules for order intent, risk layer, execution adapter, order state machine, position monitoring, kill switch, observer, session reporting, and restart recovery.
 - **Rithmic live adapter is not implemented.** The C++ `rithmic_gateway` exists but the Python execution adapter is a stub.
 - **Risk layer is not wired.** The 5 production safety monitors exist but are not called.
 - **Kill switch is not implemented.** The 12 triggers × 7 actions matrix is not built.
@@ -150,6 +165,15 @@ python -m pytest tests/test_trade_manager_*.py -v
 ## Implementation plan
 
 The Trade Manager will be built in 4 milestones:
+
+### Phase 14 complete: Registry handoff
+- `packages/trade_manager/manager.py` — validates latest `PROMOTED` records, required operational registry fields, and manifest evidence
+- Tests: `tests/test_trade_manager_phase14.py`
+
+### Phase 15 complete: Signal ingress
+- `packages/trade_manager/signals.py` — `ModelSignal`, `SignalSource`, and deterministic `StaticSignalSource`
+- `packages/trade_manager/manager.py` — bind/evaluate/ingest signal APIs with active-model validation
+- Tests: `tests/test_trade_manager_phase15.py`
 
 ### Milestone 1: Order intent + risk layer (Phases 16, 17)
 - `packages/trade_manager/order_intent.py` — OrderIntent dataclass with 18 fields
