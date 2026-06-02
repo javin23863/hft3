@@ -1,4 +1,19 @@
-"""T4 champion promotion gate logic."""
+"""T4 champion promotion gate logic.
+
+Phase 8 hardening: each check in the gate is now expressed as a
+`GateResult` (see `hft3.validation.gate_result`). The legacy
+`PromotionGateResult` shape is preserved for backward compatibility:
+- `passed` = True iff no blocking gate failed.
+- `failures` = list of free-text descriptions of blocking failures
+  (preserves the substrings the existing tests look for: "GREEN",
+  "MISSING", "missing", etc.).
+- `gates` = the new list[GateResult] (additive field).
+
+New functions:
+- `evaluate_promotion_gates(...)` returns the raw `list[GateResult]`.
+- `write_robustness_gates_for_promotion(...)` writes
+  `runtime/validation/robustness_gates.json` per Phase 12.
+"""
 from __future__ import annotations
 
 import json
@@ -12,9 +27,21 @@ from typing import Any
 from hft3.validation.certification_registry import git_sha, load_registry, repo_root
 from hft3.validation.certification_staleness import assess_staleness
 from hft3.validation.fast_gate_report import load_fast_gate_report
+from hft3.validation.gate_result import (
+    COMPARISON_OPERATORS,  # noqa: F401  (re-export)
+    GateCategory,
+    GateResult,
+    SCHEMA_VERSION,
+    Severity,
+    aggregate_promotion,
+    blocking_failures,
+    warnings as gate_warnings,
+    write_robustness_gates_json,
+)
 
 REPORT_JSON_REL = Path("runtime/validation/champion_promotion_gate_report.json")
 REPORT_MD_REL = Path("runtime/validation/champion_promotion_gate_report.md")
+ROBUSTNESS_GATES_REL = Path("runtime/validation/robustness_gates.json")
 
 
 @dataclass
@@ -29,9 +56,14 @@ class PromotionGateResult:
     certification_commit: str = ""
     current_commit: str = ""
     stale: bool = True
+    # ---- Phase 8 additions (backward compatible: both default to empty) ----
+    gates: list[GateResult] = field(default_factory=list)
+    gate_warnings: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        d = asdict(self)
+        d["gates"] = [g.to_dict() for g in self.gates]
+        return d
 
 
 def _run_t0_fast_gate(root: Path) -> tuple[bool, str]:
@@ -69,6 +101,210 @@ def _scorecard_covers(
     return True, ""
 
 
+def evaluate_promotion_gates(
+    *,
+    event_id: str = "",
+    symbol: str = "",
+    latency_ms: float = 0.0,
+    queue_model: str = "",
+    campaign_dir: Path | None = None,
+    skip_t0_rerun: bool = False,
+    root: Path | None = None,
+) -> list[GateResult]:
+    """Return the new `list[GateResult]` for the promotion gate.
+
+    Each pre-existing check is expressed as one `GateResult`. The
+    `aggregate_promotion` helper reduces this list to the legacy
+    `passed / failures / warnings` triple.
+    """
+    root = root or repo_root()
+    registry = load_registry(root)
+    staleness = assess_staleness(root, registry=registry)
+    gates: list[GateResult] = []
+
+    # 1. registry status
+    gates.append(
+        GateResult(
+            gate_name="registry_status_green",
+            gate_category=GateCategory.REGISTRY_ELIGIBILITY,
+            metric_name="latest_certification_status",
+            threshold=None,
+            observed_value=None,
+            comparison_operator="==",
+            pass_fail=registry.latest_certification_status == "GREEN",
+            severity=Severity.BLOCKING,
+            reason_code=(
+                "REGISTRY_STATUS_GREEN"
+                if registry.latest_certification_status == "GREEN"
+                else "REGISTRY_STATUS_NOT_GREEN"
+            ),
+            artifact_reference="runtime/validation/certification_registry.json",
+        )
+    )
+
+    # 2. certification not stale
+    gates.append(
+        GateResult(
+            gate_name="certification_not_stale",
+            gate_category=GateCategory.REGISTRY_ELIGIBILITY,
+            metric_name="certification_is_current",
+            threshold=None,
+            observed_value=None,
+            comparison_operator="==",
+            pass_fail=staleness.certification_is_current,
+            severity=Severity.BLOCKING,
+            reason_code=(
+                "CERTIFICATION_CURRENT"
+                if staleness.certification_is_current
+                else f"CERTIFICATION_STALE_{staleness.stale_reason.upper()}"
+            ),
+        )
+    )
+
+    # 3. scorecard present
+    scorecard_path = root / "runtime/validation/backtester_certification_scorecard.json"
+    scorecard_ok = scorecard_path.is_file()
+    gates.append(
+        GateResult(
+            gate_name="scorecard_present",
+            gate_category=GateCategory.REGISTRY_ELIGIBILITY,
+            metric_name="scorecard_path_exists",
+            threshold=None,
+            observed_value=None,
+            comparison_operator="==",
+            pass_fail=scorecard_ok,
+            severity=Severity.BLOCKING,
+            reason_code=(
+                "SCORECARD_PRESENT" if scorecard_ok else "SCORECARD_MISSING"
+            ),
+            artifact_reference="runtime/validation/backtester_certification_scorecard.json",
+        )
+    )
+
+    # 4–7. scorecard coverage (symbol / event / latency / queue)
+    if scorecard_ok:
+        covers_ok, covers_reason = _scorecard_covers(
+            registry,
+            event_id=event_id,
+            symbol=symbol,
+            latency_ms=latency_ms,
+            queue_model=queue_model,
+        )
+        gates.append(
+            GateResult(
+                gate_name="scorecard_covers",
+                gate_category=GateCategory.REGISTRY_ELIGIBILITY,
+                metric_name="coverage_check",
+                threshold=None,
+                observed_value=None,
+                comparison_operator="==",
+                pass_fail=covers_ok,
+                severity=Severity.BLOCKING,
+                reason_code="SCORECARD_COVERS" if covers_ok else f"SCORECARD_NOT_COVERED:{covers_reason}",
+            )
+        )
+
+    # 8. T0 pytest (or fast_gate_report reload)
+    if skip_t0_rerun:
+        fg = load_fast_gate_report(root)
+        fg_passed = bool(fg and fg.get("passed"))
+        fg_stale = bool(fg and fg.get("git_sha") and fg.get("git_sha") != git_sha(root))
+        gates.append(
+            GateResult(
+                gate_name="t0_fast_gate",
+                gate_category=GateCategory.BACKTEST_VALIDITY,
+                metric_name="fast_gate_passed",
+                threshold=None,
+                observed_value=None,
+                comparison_operator="==",
+                pass_fail=fg_passed and not fg_stale,
+                severity=Severity.BLOCKING,
+                reason_code=(
+                    "T0_FAST_GATE_PASSED"
+                    if fg_passed and not fg_stale
+                    else ("T0_FAST_GATE_FAILED" if not fg_passed else "T0_FAST_GATE_STALE")
+                ),
+                artifact_reference="runtime/validation/fast_gate_report.json",
+            )
+        )
+    else:
+        t0_ok, t0_out = _run_t0_fast_gate(root)
+        gates.append(
+            GateResult(
+                gate_name="t0_fast_gate",
+                gate_category=GateCategory.BACKTEST_VALIDITY,
+                metric_name="pytest_returncode",
+                threshold=0.0,
+                observed_value=0.0 if t0_ok else 1.0,
+                comparison_operator="==",
+                pass_fail=t0_ok,
+                severity=Severity.BLOCKING,
+                reason_code="T0_PYTEST_PASSED" if t0_ok else "T0_PYTEST_FAILED",
+                artifact_reference="runtime/validation/fast_gate_report.json",
+                extra={"output_tail": t0_out[-500:]} if not t0_ok else {},
+            )
+        )
+
+    # 9. campaign stamp promotion_eligible (if campaign_dir provided)
+    if campaign_dir is not None:
+        summary_path = campaign_dir / "summary.json"
+        if not summary_path.is_file():
+            gates.append(
+                GateResult(
+                    gate_name="campaign_summary_present",
+                    gate_category=GateCategory.REGISTRY_ELIGIBILITY,
+                    metric_name="campaign_summary_path",
+                    threshold=None,
+                    observed_value=None,
+                    comparison_operator="==",
+                    pass_fail=False,
+                    severity=Severity.BLOCKING,
+                    reason_code="CAMPAIGN_SUMMARY_MISSING",
+                    artifact_reference=str(summary_path),
+                )
+            )
+        else:
+            try:
+                summary = json.loads(summary_path.read_text(encoding="utf-8"))
+                stamp = summary.get("certification_stamp") or {}
+                eligible = bool(stamp.get("promotion_eligible"))
+                label = stamp.get("promotion_label", "")
+                gates.append(
+                    GateResult(
+                        gate_name="campaign_stamp_promotion_eligible",
+                        gate_category=GateCategory.REGISTRY_ELIGIBILITY,
+                        metric_name="stamp_promotion_eligible",
+                        threshold=None,
+                        observed_value=None,
+                        comparison_operator="==",
+                        pass_fail=eligible,
+                        severity=Severity.BLOCKING,
+                        reason_code=(
+                            "CAMPAIGN_STAMP_ELIGIBLE" if eligible else "CAMPAIGN_STAMP_NOT_ELIGIBLE"
+                        ),
+                        artifact_reference=str(summary_path),
+                        extra={"promotion_label": label},
+                    )
+                )
+            except json.JSONDecodeError:
+                gates.append(
+                    GateResult(
+                        gate_name="campaign_summary_valid_json",
+                        gate_category=GateCategory.REGISTRY_ELIGIBILITY,
+                        metric_name="json_parseable",
+                        threshold=None,
+                        observed_value=None,
+                        comparison_operator="==",
+                        pass_fail=False,
+                        severity=Severity.BLOCKING,
+                        reason_code="CAMPAIGN_SUMMARY_INVALID_JSON",
+                        artifact_reference=str(summary_path),
+                    )
+                )
+
+    return gates
+
+
 def evaluate_promotion_gate(
     *,
     event_id: str = "",
@@ -79,57 +315,24 @@ def evaluate_promotion_gate(
     skip_t0_rerun: bool = False,
     root: Path | None = None,
 ) -> PromotionGateResult:
+    """Backward-compatible T4 promotion gate. Returns the legacy
+    `PromotionGateResult` shape, populated with the new `gates` list and
+    `gate_warnings` field."""
     root = root or repo_root()
     registry = load_registry(root)
     staleness = assess_staleness(root, registry=registry)
-    failures: list[str] = []
-
-    if registry.latest_certification_status != "GREEN":
-        failures.append(f"latest_certification_status={registry.latest_certification_status} (need GREEN)")
-
-    if not staleness.certification_is_current:
-        failures.append(f"certification_stale: {staleness.stale_reason}")
-
-    scorecard_path = root / "runtime/validation/backtester_certification_scorecard.json"
-    if not scorecard_path.is_file():
-        failures.append("missing backtester_certification_scorecard.json")
-    else:
-        ok, reason = _scorecard_covers(
-            registry,
-            event_id=event_id,
-            symbol=symbol,
-            latency_ms=latency_ms,
-            queue_model=queue_model,
-        )
-        if not ok:
-            failures.append(reason)
-
-    if skip_t0_rerun:
-        fg = load_fast_gate_report(root)
-        if not fg or not fg.get("passed"):
-            failures.append("fast_gate_report missing or not passed")
-        elif fg.get("git_sha") and fg.get("git_sha") != git_sha(root):
-            failures.append("fast_gate_report stale (git_sha mismatch)")
-    else:
-        t0_ok, t0_out = _run_t0_fast_gate(root)
-        if not t0_ok:
-            failures.append(f"T0 fast gate failed on promotion check: {t0_out[-500:]}")
-
-    if campaign_dir is not None:
-        summary_path = campaign_dir / "summary.json"
-        if summary_path.is_file():
-            try:
-                summary = json.loads(summary_path.read_text(encoding="utf-8"))
-                stamp = summary.get("certification_stamp") or {}
-                if not stamp.get("promotion_eligible"):
-                    failures.append(
-                        f"campaign stamp not promotion_eligible: {stamp.get('promotion_label')}"
-                    )
-            except json.JSONDecodeError:
-                failures.append("campaign summary.json invalid JSON")
-
+    gates = evaluate_promotion_gates(
+        event_id=event_id,
+        symbol=symbol,
+        latency_ms=latency_ms,
+        queue_model=queue_model,
+        campaign_dir=campaign_dir,
+        skip_t0_rerun=skip_t0_rerun,
+        root=root,
+    )
+    passed, failures, warns = aggregate_promotion(gates)
     return PromotionGateResult(
-        passed=len(failures) == 0,
+        passed=passed,
         failures=failures,
         event_id=event_id,
         symbol=symbol,
@@ -139,6 +342,8 @@ def evaluate_promotion_gate(
         certification_commit=registry.latest_certification_commit,
         current_commit=git_sha(root),
         stale=not staleness.certification_is_current,
+        gates=gates,
+        gate_warnings=warns,
     )
 
 
@@ -146,6 +351,7 @@ def write_promotion_gate_report(result: PromotionGateResult, root: Path | None =
     root = root or repo_root()
     payload = {
         "tier": "T4",
+        "schema_version": SCHEMA_VERSION,
         "passed": result.passed,
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         **result.to_dict(),
@@ -169,8 +375,30 @@ def write_promotion_gate_report(result: PromotionGateResult, root: Path | None =
         for f in result.failures:
             md_lines.append(f"- {f}")
         md_lines.append("")
+    if result.gate_warnings:
+        md_lines.append("## Warnings")
+        for w in result.gate_warnings:
+            md_lines.append(f"- {w}")
+        md_lines.append("")
     md_path.write_text("\n".join(md_lines) + "\n", encoding="utf-8")
     return json_path, md_path
+
+
+def write_robustness_gates_for_promotion(
+    gates: list[GateResult], root: Path | None = None, *, run_id: str = ""
+) -> Path:
+    """Write `runtime/validation/robustness_gates.json` per Phase 12."""
+    root = root or repo_root()
+    out = root / ROBUSTNESS_GATES_REL
+    return write_robustness_gates_json(
+        out,
+        gates,
+        tier="T4",
+        run_id=run_id,
+        git_sha=git_sha(root),
+        thresholds_source="apps/workbench/config/wfc_gate.yaml",
+        timestamp_utc=datetime.now(timezone.utc).isoformat(),
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -183,6 +411,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--queue-model", default="")
     parser.add_argument("--campaign-dir", default="")
     parser.add_argument("--skip-t0-rerun", action="store_true")
+    parser.add_argument(
+        "--write-robustness-gates",
+        action="store_true",
+        help="Also write runtime/validation/robustness_gates.json (Phase 12).",
+    )
+    parser.add_argument("--run-id", default="")
     args = parser.parse_args(argv)
     campaign = Path(args.campaign_dir) if args.campaign_dir else None
     result = evaluate_promotion_gate(
@@ -194,6 +428,8 @@ def main(argv: list[str] | None = None) -> int:
         skip_t0_rerun=args.skip_t0_rerun,
     )
     write_promotion_gate_report(result)
+    if args.write_robustness_gates:
+        write_robustness_gates_for_promotion(result.gates, run_id=args.run_id)
     if result.failures:
         for f in result.failures:
             print(f"FAIL: {f}", file=sys.stderr)
