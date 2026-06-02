@@ -92,18 +92,6 @@ public:
         (void)pContext;
         int ignored;
         pInfo->dump(&ignored);
-        if (pInfo) {
-            std::string msg, rpc;
-            if (pInfo->sMessage.pData && pInfo->sMessage.iDataLen > 0)
-                msg.assign(pInfo->sMessage.pData, static_cast<size_t>(pInfo->sMessage.iDataLen));
-            if (pInfo->sRpCode.pData && pInfo->sRpCode.iDataLen > 0)
-                rpc.assign(pInfo->sRpCode.pData, static_cast<size_t>(pInfo->sRpCode.iDataLen));
-            std::cerr << "[ALERT-DETAIL] type=" << pInfo->iAlertType
-                      << " conn_id=" << pInfo->iConnectionId
-                      << " rp_code=" << pInfo->iRpCode
-                      << " sRpCode='" << rpc << "'"
-                      << " msg='" << msg << "'" << std::endl;
-        }
         *aiCode = API_OK;
         return OK;
     }
@@ -165,18 +153,6 @@ public:
         (void)pContext;
         int ignored;
         pInfo->dump(&ignored);
-        if (pInfo) {
-            std::string msg, rpc;
-            if (pInfo->sMessage.pData && pInfo->sMessage.iDataLen > 0)
-                msg.assign(pInfo->sMessage.pData, static_cast<size_t>(pInfo->sMessage.iDataLen));
-            if (pInfo->sRpCode.pData && pInfo->sRpCode.iDataLen > 0)
-                rpc.assign(pInfo->sRpCode.pData, static_cast<size_t>(pInfo->sRpCode.iDataLen));
-            std::cerr << "[ALERT-DETAIL] type=" << pInfo->iAlertType
-                      << " conn_id=" << pInfo->iConnectionId
-                      << " rp_code=" << pInfo->iRpCode
-                      << " sRpCode='" << rpc << "'"
-                      << " msg='" << msg << "'" << std::endl;
-        }
 
         if (pInfo->iConnectionId == RApi::MARKET_DATA_CONNECTION_ID) {
             if (pInfo->iAlertType == RApi::ALERT_LOGIN_COMPLETE) {
@@ -731,8 +707,7 @@ bool RithmicAdapter::connect() {
     // Leave sMdEnvKey/sTsEnvKey/sIhEnvKey EMPTY (use default environment from envp)
     // unless we have a SPECIFIC need for multi-environment routing.
     if (!discovered_env_key_.empty()) {
-        std::cerr << "[RithmicAdapter] discovered env key '" << discovered_env_key_
-                  << "' (not used — default env from envp is used for service logins)" << std::endl;
+        std::cerr << "[RithmicAdapter] discovered env key '" << discovered_env_key_ << "'" << std::endl;
     }
     login_params.pCallbacks = callbacks;
 

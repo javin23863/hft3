@@ -32,7 +32,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    bool use_test = get_env_or("RITHMIC_PROBE_ENV", "paper")[0] == 't';
+    bool use_test = get_env_or("RITHMIC_PROBE_ENV", "test")[0] == 't';
 
     std::vector<std::string> env_vars;
     if (use_test) {
