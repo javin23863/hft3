@@ -59,7 +59,8 @@ def build_minimal_mbo_npz(path: Path, *, n_levels: int = 5) -> Path:
     asset.data(str(path))
     asset.tick_size(tick)
     asset.lot_size(1.0)
-    asset.constant_order_latency(1_000_000, 1_000_000)
+    from backtest_pipeline.src.hft_backtest_builder import _apply_constant_latency
+    _apply_constant_latency(asset, 1_000_000, 1_000_000)
     asset.no_partial_fill_exchange()
     asset.log_prob_queue_model2()
     hbt = HashMapMarketDepthBacktest([asset])

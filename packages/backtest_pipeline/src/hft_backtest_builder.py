@@ -5,6 +5,20 @@ from hftbacktest import BacktestAsset, HashMapMarketDepthBacktest
 
 from backtest_pipeline.src.fee_model import FeeModel
 
+
+def _apply_constant_latency(asset: BacktestAsset, entry_ns: int, resp_ns: int) -> None:
+    """Set constant order latency using whichever method the installed hftbacktest exposes.
+
+    hftbacktest 2.4+ renamed ``constant_latency`` to ``constant_order_latency`` (with a
+    deprecation warning on the old name). hftbacktest 2.3 only ships the old name.
+    Pick whichever the running build provides.
+    """
+    if hasattr(asset, "constant_order_latency"):
+        asset.constant_order_latency(entry_ns, resp_ns)
+    else:
+        asset.constant_latency(entry_ns, resp_ns)
+
+
 LATENCY_BANDS_MS = [0.5, 1.0, 2.0, 5.0, 10.0]
 QUEUE_MODEL_BUILDERS = {
     "LogProbQueueModel2": lambda a: a.log_prob_queue_model2(),
@@ -31,7 +45,7 @@ def build_hftbacktest(
     asset.data(data_path)
     asset.tick_size(tick_size)
     asset.lot_size(lot_size)
-    asset.constant_order_latency(latency_ns, latency_ns)
+    _apply_constant_latency(asset, latency_ns, latency_ns)
     asset.no_partial_fill_exchange()
     asset.trading_value_fee_model(0.0, fee_model.get_fee_per_contract())
     QUEUE_MODEL_BUILDERS[queue_model_type](asset)
