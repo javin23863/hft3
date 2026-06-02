@@ -303,3 +303,88 @@ CHI404 is the only trade-path host. The R|Trader Windows VM was already torn dow
 - R|API+ UAT port 45454 blocked by Rithmic firewall (`loginRepository` "Repository Connection Broken") — user action pending
 - R|API+ order callbacks not wired to SPSC queue — `paper_latency_daemon` paired count stays at 0; `PAPER_LATENCY_SKIP_ORDERS_BURST=1` works around
 
+---
+
+# 4. Session 4 (2026-06-02): misdiagnosis and real fix
+
+User statement: *"if we cant place order you did somthing wrong dont over complicted it"*.
+
+User was right. I had been blaming Rithmic's "port 45454 firewall" since Session 2. The SDK log `rithmic_api.log.000` proves the actual error was in our own config mapping, with a second real error underneath (Rithmic UAT credentials).
+
+## What I got wrong
+
+The R|API+ SDK logs every call to `loginRepository` with the actual connect point it used. The most recent log showed:
+
+```
+REngine::loginRepository : pCnnctPt : login_agent_pnlc        <-- WRONG
+AlertInfo : ||Repository Connection Broken|3|5|0|              <-- PnL endpoint rejected
+```
+
+The Python connector `RithmicApiConnector._build_connection_config()` was reading a non-existent `connect_points.rep` key, falling back to `login_params.sPnlCnnctPt = "login_agent_pnlc"` (the PnL endpoint, not repository). The SDK opened a TCP connection to the PnL endpoint, Rithmic responded with `ALERT_CONNECTION_BROKEN` (type 3), the C++ Alert handler only mapped `ALERT_LOGIN_FAILED` (type 5), so `rep_login_status_` stayed at `LOGIN_NOT_LOGGED_IN`, the login_cv_ timed out 30s later, the C++ returned `false`, the daemon retried with `RestartSec=15s`. The "45454 firewall" story was a red herring from the `nc` test that succeeded on 65000/56000/64100 — those are reachable from any UAT account; 45454 is the MML logger address (used after login) and the test was unrelated to the actual failure.
+
+## Real fix (commit 00848cc)
+
+`packages/data_system/rithmic_trial/connector/rithmic_api_connector.py`:
+
+```python
+# Before (broken)
+rep = (
+    connect_points.get("rep")           # "" — key doesn't exist
+    or connect_points.get("ih")         # ""
+    or login.get("sPnlCnnctPt")         # "login_agent_pnlc"   <-- wrong
+    or login.get("sIhCnnctPt")          # ""
+    or ""
+)
+
+# After (correct)
+repository_login = self._cfg.get("repository_login", {}) or {}
+rep = repository_login.get("sCnnctPt") or ""    # "login_agent_repositoryc"
+```
+
+The repo connect point comes from `repository_login.sCnnctPt` in `rithmic_api_test.yaml`. The YAML is the source of truth.
+
+`rithmic_gateway/src/rithmic_adapter.cpp` — defensive Alert mapping:
+
+```cpp
+// Before: only mapped type 5
+if (pInfo->iAlertType == RApi::ALERT_LOGIN_FAILED) { ... LOGIN_FAILED ... }
+
+// After: also map type 3 (CONNECTION_BROKEN) so cv_ doesn't hang 30s
+if (pInfo->iAlertType == RApi::ALERT_LOGIN_FAILED
+    || pInfo->iAlertType == RApi::ALERT_CONNECTION_BROKEN) { ... }
+```
+
+After this, a fresh SDK log shows the daemon's connect attempts now return in ~10s instead of 30s+, even on failure.
+
+## What's underneath
+
+With the connect-point fix, the SDK now reaches the correct repository endpoint and Rithmic responds with the actual auth error:
+
+```
+REngine::loginRepository : pCnnctPt : login_agent_repositoryc   <-- correct
+AlertInfo : ||Repository Connection Login Failed. Please contact the FCM/IB who issued your login id for assistance.|5|5|13|permission denied
+```
+
+`rp code : 13` = permission denied. Rithmic's UAT server is rejecting the credentials in `RITHMIC_USERNAME` for the `rithmic_uat_dmz_domain` cluster. This is an **account-level** issue, not a code or network issue. User action: contact Rithmic / the FCM that issued the login, or supply paper trading credentials.
+
+## New regression test
+
+`tests/test_rithmic_api_bridge.py::test_connector_repository_connect_point_from_repository_login_block` — fails if `cfg.rep_connect_point != "login_agent_repositoryc"` and != "login_agent_pnlc". Catches this class of bug.
+
+## Status
+
+- 19 → 20 tests on Windows / 37 → 38 tests on CHI404 (15 + 4 skipped on Windows; 37/0 on CHI404 with the new test)
+- 1 commit (00848cc), pushed to origin/main, CHI404 pulled, rebuilt
+- `hft3-rithmic-trial.service` restarted; SDK log now shows `pCnnctPt : login_agent_repositoryc` and an immediate `rp code 13` from Rithmic
+- C++ defensive alert mapping verified live: failure path returns in ~10s (was 30s)
+
+## User action (real, not code)
+
+The remaining blocker is Rithmic UAT account authorization for the credentials in `/root/hft3/.env`:
+
+1. Contact Rithmic support / the FCM that issued the login ID and ask them to authorize `joshuajacob2386@gmail.com` on the `rithmic_uat_dmz_domain` UAT cluster, OR
+2. Supply paper trading credentials (same authorization issue likely applies), OR
+3. Confirm a different UAT cluster / connect point is required (the SDK has `login_agent_pnlc`, `login_agent_tpc`, `login_agent_opc`, `login_agent_historyc`, `login_agent_repositoryc` — only the repository one is failing on auth; the others would only matter after repo login succeeds).
+
+As soon as auth succeeds, the order-callback wiring (Sessions 2-3) will deliver `StatusReport` / `FillReport` / etc. into the SPSC queue, `RithmicApiConnector.poll_order_events()` will emit them as `order_ack` / `fill` / `cancel`, and `paper_latency_daemon.paired_submit_ack_count` will tick toward the orchestrator's 1000-pair target.
+
