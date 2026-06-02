@@ -416,7 +416,7 @@ public:
 
     int AccountUpdate(RApi::AccountUpdateInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
     int Aggregator(RApi::AggregatorInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
-    int AskQuote(RApi::AskInfo* pInfo, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int AskQuote(RApi::AskInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
     int AssignedUserList(RApi::AssignedUserListInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
     int AutoLiquidate(RApi::AutoLiquidateInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
     int AuxRefData(RApi::AuxRefDataInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
@@ -932,8 +932,7 @@ bool RithmicAdapter::send_order(const std::string& symbol, char side, int32_t qt
     params.dPrice = price;
     params.sTradeRoute = sTradeRoute;
 
-    RApi::AccountInfo dummy_acct;
-    std::memset(&dummy_acct, 0, sizeof(dummy_acct));
+    RApi::AccountInfo dummy_acct{};
     tsNCharcb sAccount = make_ts(account_id_.c_str());
     dummy_acct.sAccountId = sAccount;
     tsNCharcb sFcm = make_ts(fcm_id_.c_str());

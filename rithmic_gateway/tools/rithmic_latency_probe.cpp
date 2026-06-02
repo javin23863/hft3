@@ -80,7 +80,6 @@ int main(int argc, char** argv) {
     const char* env_name = use_test ? "test" : "paper";
 
     // --- Phase 1: Initialize ---
-    auto t0 = std::chrono::steady_clock::now();
     if (!adapter.initialize()) {
         std::fprintf(stderr, "FAIL [%s] initialize\n", env_name);
         return 2;
