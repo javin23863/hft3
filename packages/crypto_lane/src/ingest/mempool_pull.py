@@ -11,7 +11,7 @@ import polars as pl
 
 from crypto_lane.src.align.latency_profile import measure_node_profile_from_btc, save_node_profile
 from crypto_lane.src.ingest.btc_rpc import BtcRpc
-from crypto_lane.src.ingest.paths import bronze_dir, ensure_data_dirs
+from crypto_lane.src.ingest.paths import gold_dir, ensure_data_dirs
 
 
 @dataclass(frozen=True)
@@ -88,7 +88,7 @@ def snapshot_from_rpc(client: BtcRpc | None = None, *, tunnel_rtt_ms: float | No
 
 def write_mempool_snapshot(snapshot: MempoolSnapshot, out_dir: Path | None = None) -> Path:
     ensure_data_dirs()
-    root = out_dir or bronze_dir() / "bitcoind" / "mempool"
+    root = out_dir or gold_dir() / "bitcoind" / "mempool"
     root.mkdir(parents=True, exist_ok=True)
     day = snapshot.timestamp_iso[:10]
     path = root / f"{day}_mempool_snapshot.jsonl"
@@ -109,8 +109,8 @@ def pull_live_mempool(*, samples: int = 1, interval_minutes: int = 15, tunnel_rt
     return out
 
 
-def load_mempool_bronze(start: datetime, end: datetime) -> pl.DataFrame:
-    root = bronze_dir() / "bitcoind" / "mempool"
+def load_mempool_gold(start: datetime, end: datetime) -> pl.DataFrame:
+    root = gold_dir() / "bitcoind" / "mempool"
     if not root.is_dir():
         return pl.DataFrame()
     rows: list[dict[str, object]] = []
@@ -127,6 +127,11 @@ def load_mempool_bronze(start: datetime, end: datetime) -> pl.DataFrame:
     if not rows:
         return pl.DataFrame()
     return pl.DataFrame(rows)
+
+
+def load_mempool_bronze(start: datetime, end: datetime) -> pl.DataFrame:
+    """Deprecated alias for load_mempool_gold."""
+    return load_mempool_gold(start, end)
 
 
 def pull_mempool_backfill(*, hours: int = 24, interval_minutes: int = 15, tunnel_rtt_ms: float | None = None) -> int:

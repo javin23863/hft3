@@ -18,7 +18,7 @@ from crypto_lane.src.align.latency_profile import (
 )
 from crypto_lane.src.config.env_loader import ensure_crypto_env, redacted_env_report
 from crypto_lane.src.config_loader import load_hypotheses, load_manifest
-from crypto_lane.src.ingest.bronze_pull import pull_bronze
+from crypto_lane.src.ingest.gold_pull import pull_gold, supplement_perp_from_binance
 from crypto_lane.src.ingest.mempool_pull import pull_live_mempool, pull_mempool_backfill
 from crypto_lane.src.ingest.normalize import normalize_all
 from crypto_lane.src.ml.candidate_registry import discover_candidates, discover_backtest_configs
@@ -55,12 +55,19 @@ def cmd_env_check(_: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_pull_bronze(args: argparse.Namespace) -> int:
+def cmd_pull_gold(args: argparse.Namespace) -> int:
     ensure_crypto_env()
     sources = [s.strip() for s in args.sources.split(",")] if args.sources else None
-    result = pull_bronze(start=args.start, end=args.end, sources=sources)
-    print(json.dumps(result, indent=2))
+    counts = pull_gold(start=args.start, end=args.end, sources=sources)
+    if "binance" in {s.strip().lower() for s in (sources or ["binance", "deribit", "mempool"])}:
+        counts["perp_binance_api"] = supplement_perp_from_binance(start=args.start, end=args.end)
+    print(json.dumps(counts, indent=2))
     return 0
+
+
+def cmd_pull_bronze(args: argparse.Namespace) -> int:
+    """Deprecated: use pull-gold (production lake on crypto-alpha-datasets)."""
+    return cmd_pull_gold(args)
 
 
 def cmd_pull_mempool(args: argparse.Namespace) -> int:
@@ -96,7 +103,9 @@ def cmd_calibrate_ws_rtt(args: argparse.Namespace) -> int:
 def cmd_ingest(args: argparse.Namespace) -> int:
     ensure_crypto_env()
     sources = [s.strip() for s in args.sources.split(",")] if args.sources else None
-    bronze = pull_bronze(start=args.start, end=args.end, sources=sources)
+    gold = pull_gold(start=args.start, end=args.end, sources=sources)
+    if "binance" in {s.strip().lower() for s in (sources or ["binance", "deribit", "mempool"])}:
+        gold["perp_binance_api"] = supplement_perp_from_binance(start=args.start, end=args.end)
     mempool = {"written": 0}
     if args.with_mempool:
         try:
@@ -104,7 +113,7 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         except Exception as exc:
             mempool = {"written": 0, "error": str(exc)}
     paths = normalize_all(start=args.start, end=args.end)
-    print(json.dumps({"bronze": bronze, "mempool": mempool, "normalized": {k: str(v) for k, v in paths.items()}}, indent=2))
+    print(json.dumps({"gold": gold, "mempool": mempool, "normalized": {k: str(v) for k, v in paths.items()}}, indent=2))
     return 0
 
 
@@ -120,7 +129,13 @@ def main(argv: list[str] | None = None) -> int:
     p_smoke.add_argument("--candidate", default=None)
     p_smoke.set_defaults(func=cmd_smoke)
 
-    p_bronze = sub.add_parser("pull-bronze")
+    p_gold = sub.add_parser("pull-gold", help="Download production gold parquet from crypto-alpha-datasets")
+    p_gold.add_argument("--start", required=True)
+    p_gold.add_argument("--end", required=True)
+    p_gold.add_argument("--sources", default=None, help="binance,deribit,mempool")
+    p_gold.set_defaults(func=cmd_pull_gold)
+
+    p_bronze = sub.add_parser("pull-bronze", help="Deprecated alias for pull-gold")
     p_bronze.add_argument("--start", required=True)
     p_bronze.add_argument("--end", required=True)
     p_bronze.add_argument("--sources", default=None, help="binance,deribit,mempool")

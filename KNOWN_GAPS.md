@@ -132,7 +132,7 @@ Full lane pull: `python -m equities_lane.pipeline pull-decadal --resume --pull-o
 | Item | Status |
 |------|--------|
 | `data/crypto/normalized/*.csv` | **Empty** (only `.gitkeep` in repo) |
-| Production ingest | Requires `python -m crypto_lane.pipeline` (`pull-bronze`, `pull-mempool`, `normalize`) + B2/BTC env |
+| Production ingest | Requires `python -m crypto_lane.pipeline` (`pull-gold`, `pull-mempool`, `normalize`) + B2 crypto-alpha-datasets + optional btc-node tunnel |
 | Tests | Charter example: **not scope-green** (`tests/test_crypto_lane/`) |
 | PIT / clock | **Partial** — see [packages/crypto_lane/docs/PIT_AVAILABILITY_BOUNDARY.md](packages/crypto_lane/docs/PIT_AVAILABILITY_BOUNDARY.md) |
 
@@ -172,7 +172,7 @@ Macro futures: **no venue auction imbalance feed** in inventory (labels only) �
 | ID | Issue | Doc |
 |----|--------|-----|
 | CR-01 | Not in download orchestrator | This file §3.3 |
-| CR-02 | `data/crypto/` empty in git clone | Run crypto_lane ingest |
+| CR-02 | `data/crypto/` empty in git clone | Run `pull-gold` + `normalize` (B2 `crypto-alpha-datasets`, path `quantx/bronze/`) |
 | CR-03 | `tests/test_crypto_lane/` not green | [docs/VALIDATION_HONESTY.md](docs/VALIDATION_HONESTY.md) |
 | CR-04 | Default smokes use **fixtures** only | `packages/crypto_lane/fixtures/` |
 | CR-05 | θ convention audit **open** | [packages/crypto_lane/docs/VALIDATION_HONESTY.md](packages/crypto_lane/docs/VALIDATION_HONESTY.md) |

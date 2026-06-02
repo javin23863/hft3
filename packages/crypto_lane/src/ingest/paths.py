@@ -17,10 +17,15 @@ def bronze_dir() -> Path:
     return data_root() / "bronze"
 
 
+def gold_dir() -> Path:
+    return data_root() / "gold"
+
+
 def normalized_dir() -> Path:
     return data_root() / "normalized"
 
 
 def ensure_data_dirs() -> None:
     bronze_dir().mkdir(parents=True, exist_ok=True)
+    gold_dir().mkdir(parents=True, exist_ok=True)
     normalized_dir().mkdir(parents=True, exist_ok=True)

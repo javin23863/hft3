@@ -6,12 +6,12 @@ from pathlib import Path
 
 from crypto_lane.src.types import repo_root_from_lane
 
-_ENV_ALIASES: dict[str, str] = {
-    "HFT3_CRYPTO_B2_KEY_ID": "CAE_B2_KEY_ID",
-    "HFT3_CRYPTO_B2_APP_KEY": "CAE_B2_APP_KEY",
-    "HFT3_CRYPTO_B2_BUCKET": "CAE_B2_BUCKET",
-    "HFT3_CRYPTO_B2_SOURCE_BUCKET": "CAE_B2_SOURCE_BUCKET",
-    "HFT3_CRYPTO_B2_ENDPOINT": "CAE_B2_ENDPOINT",
+_ENV_FALLBACKS: dict[str, tuple[str, ...]] = {
+    "HFT3_CRYPTO_B2_KEY_ID": ("CAE_B2_KEY_ID", "AWS_ACCESS_KEY_ID"),
+    "HFT3_CRYPTO_B2_APP_KEY": ("CAE_B2_APP_KEY", "AWS_SECRET_ACCESS_KEY"),
+    "HFT3_CRYPTO_B2_BUCKET": ("CAE_B2_BUCKET",),
+    "HFT3_CRYPTO_B2_SOURCE_BUCKET": ("CAE_B2_SOURCE_BUCKET", "B2_BUCKET"),
+    "HFT3_CRYPTO_B2_ENDPOINT": ("CAE_B2_ENDPOINT",),
 }
 
 _LOADED_FILES: list[Path] = []
@@ -33,9 +33,17 @@ def repo_env_paths() -> list[Path]:
 
 
 def _apply_aliases() -> None:
-    for primary, fallback in _ENV_ALIASES.items():
-        if not os.environ.get(primary) and os.environ.get(fallback):
-            os.environ[primary] = os.environ[fallback]
+    for primary, fallbacks in _ENV_FALLBACKS.items():
+        if os.environ.get(primary):
+            continue
+        for fallback in fallbacks:
+            val = os.environ.get(fallback)
+            if val:
+                os.environ[primary] = val
+                break
+    ep = os.environ.get("HFT3_CRYPTO_B2_ENDPOINT", "")
+    if ep.startswith("https://s3.") or "backblazeb2.com" in ep and "/file/" not in ep:
+        os.environ.pop("HFT3_CRYPTO_B2_ENDPOINT", None)
 
 
 def _load_plain_env(path: Path) -> None:

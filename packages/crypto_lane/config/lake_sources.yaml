@@ -6,6 +6,8 @@ source_bucket_default: quant-x-datasets
 endpoint_env: HFT3_CRYPTO_B2_ENDPOINT
 forbidden_write_buckets:
   - quant-x-datasets
+# Production lake on crypto-alpha-datasets (operational "gold"; quantx/gold/ is empty on B2 today)
+gold_prefix: quantx/bronze
 bronze_prefix: quantx/bronze
 asset: crypto
 granularity_aliases:
@@ -14,6 +16,7 @@ granularity_aliases:
     spot_klines_1h: spot_klines_1h
     perp_klines_1h: perp_klines_1h
     perp_funding_rate: perp_funding_rate_8h
+    futures_um_bookticker_tick: futures_um_bookticker_tick
   deribit:
     options_chain_1h: options_chain_1h
   deribit_index:
@@ -28,7 +31,7 @@ symbols:
     deribit_options_prefix: BTC
     bitcoind: BTC
 source_bucket_by_source:
-  binance: source
+  binance: write
   deribit: write
   deribit_index: write
   bitcoind: write

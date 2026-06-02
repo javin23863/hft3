@@ -1,4 +1,4 @@
-"""Normalize bronze parquet into lane CSV schemas under data/crypto/normalized/."""
+"""Normalize gold parquet into lane CSV schemas under data/crypto/normalized/."""
 from __future__ import annotations
 
 import math
@@ -8,16 +8,17 @@ from pathlib import Path
 import polars as pl
 
 from crypto_lane.src.config_loader import load_yaml
-from crypto_lane.src.ingest.bronze_reader import (
-    BronzeReadError,
+from crypto_lane.src.ingest.gold_reader import (
+    GoldReadError,
     deribit_options_key,
-    read_bronze_range,
+    read_gold_day,
+    read_gold_range,
     read_mempool_snapshot_range,
     read_parquet_key,
     _local_cache_path,
 )
 from crypto_lane.src.align.latency_profile import default_venue_from_backtest, resolve_node_latency, resolve_theta_exch
-from crypto_lane.src.ingest.mempool_pull import load_mempool_bronze
+from crypto_lane.src.ingest.mempool_pull import load_mempool_gold
 from crypto_lane.src.ingest.paths import ensure_data_dirs, normalized_dir
 from crypto_lane.src.types import repo_root_from_lane
 
@@ -58,7 +59,47 @@ def _assign_validation_periods(df: pl.DataFrame) -> pl.DataFrame:
 
 
 def _read_klines(source: str, symbol: str, start: date, end: date, granularity: str) -> pl.DataFrame:
-    return read_bronze_range(source, symbol, start, end, granularity)
+    return read_gold_range(source, symbol, start, end, granularity)
+
+
+def _perp_mid_from_bookticker(symbol: str, start: date, end: date) -> pl.DataFrame:
+    frames: list[pl.DataFrame] = []
+    cur = start
+    while cur <= end:
+        try:
+            raw = read_gold_day("binance", symbol, cur, "futures_um_bookticker_tick")
+        except GoldReadError:
+            cur += timedelta(days=1)
+            continue
+        if raw.is_empty():
+            cur += timedelta(days=1)
+            continue
+        ts_col = "timestamp" if "timestamp" in raw.columns else "event_ts_ms"
+        if ts_col == "event_ts_ms":
+            raw = raw.with_columns(
+                pl.from_epoch(pl.col("event_ts_ms"), time_unit="ms").alias("timestamp"),
+            )
+        mid = ((pl.col("best_bid_px") + pl.col("best_ask_px")) / 2.0).alias("perp_mid")
+        hourly = (
+            raw.sort("timestamp")
+            .with_columns([
+                mid,
+                pl.col("timestamp").dt.truncate("1h").alias("bar_ts"),
+            ])
+            .group_by("bar_ts")
+            .agg(pl.col("perp_mid").last())
+            .sort("bar_ts")
+            .with_columns(
+                _ts_ms(pl.col("bar_ts").cast(pl.Datetime(time_zone="UTC"), strict=False)).alias("exchange_timestamp"),
+            )
+            .select(["exchange_timestamp", "perp_mid"])
+        )
+        if not hourly.is_empty():
+            frames.append(hourly)
+        cur += timedelta(days=1)
+    if not frames:
+        return pl.DataFrame()
+    return pl.concat(frames, how="vertical").unique(subset=["exchange_timestamp"]).sort("exchange_timestamp")
 
 
 def _mid_from_klines(df: pl.DataFrame, prefix: str) -> pl.DataFrame:
@@ -81,30 +122,43 @@ def build_spot_perp_ticks(start: str, end: str) -> pl.DataFrame:
         _read_klines("binance", sym["binance_spot"], start_d, end_d, "spot_klines_1h"),
         "spot",
     )
-    perp = _mid_from_klines(
-        _read_klines("binance", sym["binance_perp"], start_d, end_d, "perp_klines_1h"),
-        "perp",
-    )
+    try:
+        perp = _mid_from_klines(
+            _read_klines("binance", sym["binance_perp"], start_d, end_d, "perp_klines_1h"),
+            "perp",
+        )
+    except GoldReadError:
+        perp = pl.DataFrame()
+    if perp.is_empty():
+        perp = _perp_mid_from_bookticker(sym["binance_perp"], start_d, end_d)
     if spot.is_empty() and perp.is_empty():
         spot = _mid_from_klines(
             _read_klines("binance", sym["binance_spot"], start_d, end_d, "1h"),
             "spot",
         )
     if perp.is_empty():
-        raise BronzeReadError("perp_klines_1h bronze missing — cannot fabricate perp from spot")
+        raise GoldReadError(
+            "perp_klines_1h and futures_um_bookticker_tick gold missing — no synthetic perp fallback"
+        )
 
     funding = pl.DataFrame()
     try:
         funding = _read_klines("binance", sym["binance_perp"], start_d, end_d, "perp_funding_rate")
-    except BronzeReadError:
+    except GoldReadError:
         pass
     if not funding.is_empty():
         ts_col = "timestamp" if "timestamp" in funding.columns else "fundingTime"
-        rate_col = "fundingRate" if "fundingRate" in funding.columns else "funding_rate"
-        funding = funding.sort(ts_col).with_columns([
-            _ts_ms(pl.col(ts_col).cast(pl.Datetime(time_zone="UTC"), strict=False)).alias("exchange_timestamp"),
-            pl.col(rate_col).cast(pl.Float64).alias("funding_rate"),
-        ]).select(["exchange_timestamp", "funding_rate"])
+        rate_col = next(
+            (c for c in ("fundingRate", "funding_rate", "last_funding_rate") if c in funding.columns),
+            None,
+        )
+        if rate_col is None:
+            funding = pl.DataFrame()
+        else:
+            funding = funding.sort(ts_col).with_columns([
+                _ts_ms(pl.col(ts_col).cast(pl.Datetime(time_zone="UTC"), strict=False)).alias("exchange_timestamp"),
+                pl.col(rate_col).cast(pl.Float64).alias("funding_rate"),
+            ]).select(["exchange_timestamp", "funding_rate"])
 
     out = spot.join(perp, on="exchange_timestamp", how="outer_coalesce").sort("exchange_timestamp")
     if not funding.is_empty():
@@ -151,8 +205,8 @@ def build_deribit_surface(start: str, end: str, spot_ticks: pl.DataFrame) -> pl.
         local = _local_cache_path(key_path)
         if not local.is_file():
             try:
-                df = read_parquet_key(key_path, source="deribit")
-            except BronzeReadError:
+                df = read_parquet_key(key_path)
+            except GoldReadError:
                 cur += timedelta(days=1)
                 continue
         else:
@@ -238,13 +292,13 @@ def build_mempool_snapshots(start: str, end: str, spot_ticks: pl.DataFrame) -> p
     frames: list[pl.DataFrame] = []
 
     try:
-        bronze_mp = read_mempool_snapshot_range("bitcoind", sym["bitcoind"], start_dt, end_dt)
-        if not bronze_mp.is_empty():
-            frames.append(bronze_mp)
-    except BronzeReadError:
+        gold_mp = read_mempool_snapshot_range("bitcoind", sym["bitcoind"], start_dt, end_dt)
+        if not gold_mp.is_empty():
+            frames.append(gold_mp)
+    except GoldReadError:
         pass
 
-    local_mp = load_mempool_bronze(start_dt, end_dt)
+    local_mp = load_mempool_gold(start_dt, end_dt)
     if not local_mp.is_empty():
         frames.append(local_mp)
 
@@ -308,7 +362,7 @@ def normalize_all(*, start: str, end: str) -> dict[str, Path]:
     spot = build_spot_perp_ticks(start, end)
     if spot.is_empty():
         raise RuntimeError(
-            f"No spot/perp bronze for {start}..{end}. Run: python -m crypto_lane.pipeline pull-bronze --start {start} --end {end}"
+            f"No spot/perp gold for {start}..{end}. Run: python -m crypto_lane.pipeline pull-gold --start {start} --end {end}"
         )
     deribit = build_deribit_surface(start, end, spot)
     mempool = build_mempool_snapshots(start, end, spot)
