@@ -1,0 +1,55 @@
+# HFT3 autonomous research campaign (Phase 2)
+# Usage:
+#   python -m hft3.research.run_autonomous --config configs/research/autonomous_hft3.yaml
+#
+# See docs/hft3_autonomous_pipeline_runbook.md (Phase 26) for full field reference.
+
+campaign_id: "cpi-2024-uat-tight"
+
+# Optional: a Phase 3 intake bundle under research_inputs/{id}/
+# research_input: "research_inputs/cpi-mean-reversion"
+
+data:
+  dataset_id: "databento_es_mbo_v1"
+  source: "databento"
+  resolution: "L3_MBO"        # requested and resolved data class
+  symbol_universe: ["ES", "MES"]
+  event_windows:
+    - event_id: "CPI_2024_09_11_TIGHT"
+      start_ns: 1725600000000000000
+      end_ns:   1725772800000000000
+
+latency_profile:
+  decision_to_send_us: 80
+  send_to_ack_us: 200
+  ack_to_fill_us: 500
+  fill_model: "perfect"        # ideal in scaffolded mode
+  slippage_bps: 0.5
+  fees_per_side_usd: 1.5
+  idealized: true
+
+features:
+  feature_set_id: "core_64_v1"
+
+models:
+  alpha: ["HYP_1", "HYP_5"]
+  defensives: ["regime_filter", "throttle"]
+  structurals: ["pdf_topology_1"]
+
+robustness:
+  monte_carlo:
+    trials: 1000
+    sharpe_min: 0.5
+  walk_forward:
+    folds: 5
+    embargo_ns: 3600000000000   # 1 hour
+
+scoring:
+  min_sharpe: 0.5
+  max_drawdown: -0.10
+
+registry:
+  promote_on: "PROMOTE"   # only PROMOTE writes to the certification registry
+
+output:
+  artifacts_dir: "artifacts/runs"
