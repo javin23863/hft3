@@ -18,6 +18,31 @@ if [[ -f "$CG_ROOT/cgroup.controllers" ]]; then
   echo "cpuset hft3-hot cpus=$HOT_CPUS" | tee "$LOG_DIR/cpuset.txt"
 fi
 
+# Persistent systemd oneshot: re-create the cpuset cgroup on every boot
+# (cgroup v2 children don't survive reboot by default). Read HOT_CPUS from
+# the env file at boot time.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cat > /etc/systemd/system/hft3-cpuset.service << EOF
+[Unit]
+Description=HFT3 cpuset cgroup (CHI404)
+After=systemd-tmpfiles-setup.service
+Before=hft3-rithmic-trial.service
+ConditionPathExists=/sys/fs/cgroup/cgroup.controllers
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=-${ENV_FILE}
+ExecStart=/bin/bash -c 'CG=/sys/fs/cgroup/hft3-hot; mkdir -p \$\$CG; echo \$\${HOT_CPUS:-2-11} > \$\$CG/cpuset.cpus 2>/dev/null || (echo +cpuset > /sys/fs/cgroup/cgroup.subtree_control && echo \$\${HOT_CPUS:-2-11} > \$\$CG/cpuset.cpus); echo 0 > \$\$CG/cpuset.mems 2>/dev/null || true; echo hft3-hot cpuset: cpus=\$\${HOT_CPUS:-2-11} mems=0'
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable hft3-cpuset.service 2>/dev/null || true
+echo "systemd unit hft3-cpuset.service enabled (persistent cpuset cgroup)" | tee -a "$LOG_DIR/cpuset.txt"
+
 mkdir -p /etc/systemd/system/hft3-gateway.service.d
 cat > /etc/systemd/system/hft3-gateway.service << 'EOF'
 [Unit]
