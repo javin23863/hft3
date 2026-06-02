@@ -620,12 +620,36 @@ class AutonomousRunner:
             "double_wf_pending": True,
             "folds": self.config.robustness.get("walk_forward", {}).get("folds", 5),
         })
-        # walk_forward_correlation.json (Phase 10: pending)
+        # walk_forward_correlation.json (Phase 10: honest PENDING stub)
+        # The double-WF correlator exists in
+        # apps/workbench/src/robustness/wfc/double_wf.py but is not yet
+        # wired into the runner (requires real matrix data from Phase 5).
+        # Until then, emit a PENDING stub with pass_fail=False so the
+        # runner cannot PROMOTE.
         self._write_artifact("walk_forward_correlation.json", {
             "tier": "T3",
             "method": "PENDING",
             "double_wf_correlator": "PENDING",
+            "pass_fail": False,
+            "correlation_score": 0.0,
+            "minimum_required_score": 0.20,
+            "rejection_reasons": [
+                "Double-WF correlator not yet wired (requires Phase 5 matrix data)"
+            ],
         })
+        # Emit a PENDING gate for the double-WF correlation
+        gates.append(GateResult(
+            gate_name="double_wf_correlation",
+            gate_category=GateCategory.WALK_FORWARD_CORRELATION,
+            metric_name="spearman",
+            threshold=0.20,
+            observed_value=None,
+            comparison_operator=">=",
+            pass_fail=False,
+            severity=Severity.BLOCKING,
+            reason_code="DOUBLE_WF_PENDING",
+            artifact_reference="walk_forward_correlation.json",
+        ))
         self._stage_end("robustness_and_wf", rg_path)
         return rg_path
 
