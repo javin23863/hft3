@@ -2,6 +2,8 @@
 
 **Read the graph before prose.** Humans start at [docs/human/GETTING_STARTED.md](../human/GETTING_STARTED.md).
 
+**Known gaps billboard:** [KNOWN_GAPS.md](../../KNOWN_GAPS.md) — mandatory before data download, imbalance, or merge-ready claims.
+
 ## Step 0 — Code graph (mandatory)
 
 1. Open [graphify-out/wiki/index.md](../../graphify-out/wiki/index.md) — check **Freshness** banner (timestamp + git SHA).

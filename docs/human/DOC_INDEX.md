@@ -4,6 +4,7 @@ Chronological onboarding for human developers. AI agents: [../ai/ONBOARDING.md](
 
 | Step | Document | Why read it |
 |------|----------|-------------|
+| 0 | **[../../KNOWN_GAPS.md](../../KNOWN_GAPS.md)** | **Billboard:** missing data, CHI404 vs PC, imbalance/crypto/equities bugs — read before “done” |
 | 1 | [GETTING_STARTED.md](GETTING_STARTED.md) | Clone, setup, lanes, verification |
 | 2 | [../../BLUEPRINT.md](../../BLUEPRINT.md) | System spec: math invariants, topology, walk-forward |
 | 3 | [../references/README.md](../references/README.md) + [../references/MANIFEST.md](../references/MANIFEST.md) | Authority PDF bundle |
