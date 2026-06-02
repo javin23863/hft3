@@ -282,6 +282,9 @@ class AutonomousRunner:
         # on them after a run without AttributeError.
         self._data_resolution_tag: Any = None
         self._data_eligibility_gate: Any = None
+        # Phase 12: artifact bundle validation gate, populated by
+        # stage_artifact_bundle.
+        self._artifact_bundle_gate: Any = None
 
     # --- stage helpers ---
 
@@ -712,10 +715,41 @@ class AutonomousRunner:
         return path
 
     def stage_artifact_bundle(self) -> Path:
-        """Stage 13: write the structured artifact bundle (Phase 12)."""
+        """Stage 13: write the structured artifact bundle (Phase 12).
+
+        Writes the 3 missing required artifacts (git_commit.txt,
+        execution_assumptions.json, logs.txt). The bundle validation
+        runs at the end of the run (after all stages have written their
+        artifacts) via `_finalize_bundle()`.
+        """
         if self._stage_done("artifact_bundle"):
             return Path(self.state.artifacts["artifact_bundle"])
         self._stage_start("artifact_bundle")
+
+        # Write the 3 missing required artifacts
+        self._write_artifact("git_commit.txt", self.state.git_sha + "\n")
+        self._write_artifact("execution_assumptions.json", {
+            "fill_model": self.config.latency_profile.get("fill_model", "perfect"),
+            "slippage_bps": self.config.latency_profile.get("slippage_bps", 0.5),
+            "fees_per_side_usd": self.config.latency_profile.get("fees_per_side_usd", 1.5),
+            "idealized": self.config.latency_profile.get("idealized", True),
+            "decision_to_send_us": self.config.latency_profile.get("decision_to_send_us", 80),
+            "send_to_ack_us": self.config.latency_profile.get("send_to_ack_us", 200),
+            "ack_to_fill_us": self.config.latency_profile.get("ack_to_fill_us", 500),
+        })
+        # logs.txt: capture the runner's log output (if any)
+        logs_path = self.run_dir / "logs.txt"
+        if not logs_path.is_file():
+            logs_path.write_text(
+                f"Autonomous runner logs for {self.run_id}\n"
+                f"Started: {self.state.started_at}\n"
+                f"Git SHA: {self.state.git_sha}\n"
+                f"Campaign: {self.config.campaign_id}\n"
+                f"Stages completed: {len(self.state.completed_stages)}\n",
+                encoding="utf-8",
+            )
+
+        # Write the manifest (last, so it reflects the final state)
         manifest = {
             "run_id": self.run_id,
             "campaign_id": self.config.campaign_id,
@@ -729,6 +763,30 @@ class AutonomousRunner:
         path = self._write_artifact("manifest.json", manifest)
         self._stage_end("artifact_bundle", path)
         return path
+
+    def _finalize_bundle(self) -> None:
+        """Run bundle validation at the end of the run (after all stages
+        have written their artifacts). Writes artifact_bundle_validation.json
+        and re-writes the manifest with the validation result."""
+        from hft3.artifact_bundle import validate_bundle, to_gate_result
+        bundle_result = validate_bundle(self.run_dir)
+        self._write_artifact("artifact_bundle_validation.json", bundle_result.to_dict())
+        # Emit a gate result for bundle completeness
+        bundle_gate = to_gate_result(bundle_result)
+        self._artifact_bundle_gate = bundle_gate
+        # Re-write the manifest with the validation result
+        manifest = {
+            "run_id": self.run_id,
+            "campaign_id": self.config.campaign_id,
+            "git_sha": self.state.git_sha,
+            "started_at": self.state.started_at,
+            "last_updated_at": self.state.last_updated_at,
+            "completed_stages": self.state.completed_stages,
+            "artifacts": self.state.artifacts,
+            "schema_version": 1,
+            "bundle_validation": bundle_result.to_dict(),
+        }
+        self._write_artifact("manifest.json", manifest)
 
     def stage_registry_update(self) -> Path:
         """Stage 14: update the HFT3 registry atomically (Phase 11).
@@ -772,21 +830,6 @@ class AutonomousRunner:
         self._stage_end("registry_update", path)
         return path
 
-    def _finalize_manifest(self) -> Path:
-        """Re-write the manifest with the final completed_stages list
-        (after `stage_registry_update` has run)."""
-        manifest = {
-            "run_id": self.run_id,
-            "campaign_id": self.config.campaign_id,
-            "git_sha": self.state.git_sha,
-            "started_at": self.state.started_at,
-            "last_updated_at": datetime.now(timezone.utc).isoformat(),
-            "completed_stages": list(self.state.completed_stages),
-            "artifacts": dict(self.state.artifacts),
-            "schema_version": 1,
-        }
-        return self._write_artifact("manifest.json", manifest)
-
     # --- orchestrator ---
 
     def run(self) -> int:
@@ -805,8 +848,9 @@ class AutonomousRunner:
             self.stage_generate_report()
             self.stage_artifact_bundle()
             self.stage_registry_update()
-            # Re-write the manifest with the final state
-            self._finalize_manifest()
+            # Validate the bundle and re-write the manifest with the
+            # validation result (Phase 12).
+            self._finalize_bundle()
         except Exception as exc:
             logger.exception("autonomous run failed: %s", exc)
             # Persist the failure state so a re-run resumes correctly.
