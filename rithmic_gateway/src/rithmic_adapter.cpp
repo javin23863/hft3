@@ -497,7 +497,8 @@ bool RithmicAdapter::connect() {
 
     // Step 1: Repository login — establishes the authenticated session
     if (!config_.rep_connect_point.empty()) {
-        std::cerr << "[RithmicAdapter] repo login cp=" << config_.rep_connect_point << std::endl;
+        std::cerr << "[RithmicAdapter] repo login cp=" << config_.rep_connect_point
+                  << " pw_len=" << config_.password.size() << std::endl;
         tsNCharcb envKey = make_ts("");
         tsNCharcb user = make_ts(config_.username.c_str());
         tsNCharcb pw = make_ts(config_.password.c_str());
