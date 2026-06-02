@@ -279,6 +279,18 @@ python -m workbench campaign --model HYP_5 --symbol MES.v.0 --dry-run
 - Wraps `SignalBacktester` (primary) and documents HftBacktest queue path via matching config
 - Does **not** replace `run_event_replay.py`; use workbench for per-model latency viability and promotion gates
 
+### 6.1 Imbalance families (book / order-flow / auction)
+
+**When:** Classify tape capability, compute institutional imbalance features, or run eight-mode ablation before promotion.
+
+- Inventory: `python scripts/build_imbalance_inventory.py` → [docs/hft3_imbalance_inventory.md](../hft3_imbalance_inventory.md)
+- Runbook: [docs/hft3_imbalance_runbook.md](../hft3_imbalance_runbook.md)
+- Code: `packages/features_engine/src/imbalance/`
+- Workbench artifacts: `workbench_runs/<run_id>/imbalance/`
+- Ablation CLI: `python -m workbench imbalance-ablation --baseline-pnl 0.0`
+
+**Verify:** `python -m pytest tests/test_imbalance/ -q`
+
 ## 7. Economic event universe (macro calendar API)
 
 **When:** Query upcoming releases, user-timezone display, rebuild `events.csv`, or offline cross-asset L3 tensors.

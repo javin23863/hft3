@@ -1,0 +1,2183 @@
+{
+  "generated_at_utc": "2026-06-02T11:03:17.481408+00:00",
+  "repo_root": "C:\\Users\\MSI\\Documents\\GitHub\\hft3",
+  "dataset_count": 64,
+  "datasets": [
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:ES.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "ES.v.0",
+      "instrument_universe": "ES",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": true,
+      "mbp_10_available": false,
+      "trades_available": true,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "full",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [],
+      "recommended_action": "use",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:MES.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "MES.v.0",
+      "instrument_universe": "MES",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": true,
+      "mbp_10_available": false,
+      "trades_available": true,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "full",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [],
+      "recommended_action": "use",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:NQ.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "NQ.v.0",
+      "instrument_universe": "NQ",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:MNQ.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "MNQ.v.0",
+      "instrument_universe": "MNQ",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:RTY.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "RTY.v.0",
+      "instrument_universe": "RTY",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:M2K.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "M2K.v.0",
+      "instrument_universe": "M2K",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:YM.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "YM.v.0",
+      "instrument_universe": "YM",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:MYM.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "MYM.v.0",
+      "instrument_universe": "MYM",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:ZT.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "ZT.v.0",
+      "instrument_universe": "ZT",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:ZF.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "ZF.v.0",
+      "instrument_universe": "ZF",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:ZN.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "ZN.v.0",
+      "instrument_universe": "ZN",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:ZB.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "ZB.v.0",
+      "instrument_universe": "ZB",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:UB.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "UB.v.0",
+      "instrument_universe": "UB",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:SR3.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "SR3.v.0",
+      "instrument_universe": "SR3",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:ZQ.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "ZQ.v.0",
+      "instrument_universe": "ZQ",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:CL.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "CL.v.0",
+      "instrument_universe": "CL",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:MCL.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "MCL.v.0",
+      "instrument_universe": "MCL",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:NG.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "NG.v.0",
+      "instrument_universe": "NG",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:GC.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "GC.v.0",
+      "instrument_universe": "GC",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:MGC.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "MGC.v.0",
+      "instrument_universe": "MGC",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:HG.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "HG.v.0",
+      "instrument_universe": "HG",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:6E.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "6E.v.0",
+      "instrument_universe": "6E",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:CBOE:none:VIX",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "CBOE",
+      "symbol_universe": "VIX",
+      "instrument_universe": "VIX",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "unavailable",
+      "order_flow_imbalance_support": "unavailable",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=SENSOR_ONLY",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "ignore",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:CBOE:none:VVIX",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "CBOE",
+      "symbol_universe": "VVIX",
+      "instrument_universe": "VVIX",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "unavailable",
+      "order_flow_imbalance_support": "unavailable",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=SENSOR_ONLY",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "ignore",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:CFE:mbo:VX.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "CFE",
+      "symbol_universe": "VX.v.0",
+      "instrument_universe": "VX1",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:CFE:mbo:VX.v.1",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "CFE",
+      "symbol_universe": "VX.v.1",
+      "instrument_universe": "VX2",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:RB.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "RB.v.0",
+      "instrument_universe": "RB",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:HO.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "HO.v.0",
+      "instrument_universe": "HO",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:SI.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "SI.v.0",
+      "instrument_universe": "SI",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:6J.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "6J.v.0",
+      "instrument_universe": "6J",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:6B.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "6B.v.0",
+      "instrument_universe": "6B",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:6A.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "6A.v.0",
+      "instrument_universe": "6A",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:6C.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "6C.v.0",
+      "instrument_universe": "6C",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:ZC.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "ZC.v.0",
+      "instrument_universe": "ZC",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:ZS.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "ZS.v.0",
+      "instrument_universe": "ZS",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:ZW.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "ZW.v.0",
+      "instrument_universe": "ZW",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:KE.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "KE.v.0",
+      "instrument_universe": "KE",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:ZL.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "ZL.v.0",
+      "instrument_universe": "ZL",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "futures:databento:GLBX.MDP3:mbo:ZM.v.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "ZM.v.0",
+      "instrument_universe": "ZM",
+      "date_coverage": "events.csv macro windows; NPZ per event",
+      "available_schemas": [
+        "mbo",
+        "mbp-10",
+        "trades",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "CME Globex via events.csv",
+      "instrument_metadata_coverage": "hot_memory_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbo_status=MBO_MISSING",
+        "no_npz_on_disk"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "apps/workbench/config/hot_memory_universe.yaml",
+        "packages/data_system/config/events.csv"
+      ]
+    },
+    {
+      "dataset_id": "equities:databento:XNAS.ITCH:mbo:low_float_universe",
+      "asset_class": "equities",
+      "source_vendor": "databento",
+      "venue": "XNAS.ITCH",
+      "symbol_universe": "filtered low-float universe",
+      "instrument_universe": "packages/equities_lane/config/universe.yaml",
+      "date_coverage": "session-level decadal catalog",
+      "available_schemas": [
+        "mbo",
+        "mbp-1",
+        "mbp-10",
+        "ohlcv-1d",
+        "cbbo-1m",
+        "imbalance"
+      ],
+      "mbo_available": true,
+      "mbp_10_available": false,
+      "trades_available": true,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "full",
+      "session_calendar_coverage": "US RTH + premarket",
+      "instrument_metadata_coverage": "float_pit.csv",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "schema_fallback": "mbp-10",
+      "known_gaps": [
+        "auction imbalance ingest not yet populated"
+      ],
+      "recommended_action": "use",
+      "config_paths": [
+        "packages\\equities_lane\\config\\universe.yaml"
+      ]
+    },
+    {
+      "dataset_id": "equities:databento:XNAS.ITCH:mbo:DRYS:2016-11-11",
+      "asset_class": "equities",
+      "source_vendor": "databento",
+      "venue": "XNAS.ITCH",
+      "symbol_universe": "DRYS",
+      "instrument_universe": "drys_2016",
+      "date_coverage": "2016-11-11",
+      "available_schemas": [
+        "mbo",
+        "ohlcv-1d"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": true,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "full",
+      "session_calendar_coverage": "single session",
+      "instrument_metadata_coverage": "decadal_runners.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "databento_unavailable"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "packages\\equities_lane\\config\\decadal_runners.yaml"
+      ]
+    },
+    {
+      "dataset_id": "equities:databento:XNAS.ITCH:mbo:LFIN:2017-12-18",
+      "asset_class": "equities",
+      "source_vendor": "databento",
+      "venue": "XNAS.ITCH",
+      "symbol_universe": "LFIN",
+      "instrument_universe": "lfin_2017",
+      "date_coverage": "2017-12-18",
+      "available_schemas": [
+        "mbo",
+        "ohlcv-1d"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": true,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "full",
+      "session_calendar_coverage": "single session",
+      "instrument_metadata_coverage": "decadal_runners.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "databento_unavailable"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "packages\\equities_lane\\config\\decadal_runners.yaml"
+      ]
+    },
+    {
+      "dataset_id": "equities:databento:XNAS.ITCH:mbo:LBCC:2017-12-21",
+      "asset_class": "equities",
+      "source_vendor": "databento",
+      "venue": "XNAS.ITCH",
+      "symbol_universe": "LBCC",
+      "instrument_universe": "lbcc_2017",
+      "date_coverage": "2017-12-21",
+      "available_schemas": [
+        "mbo",
+        "ohlcv-1d"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": true,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "full",
+      "session_calendar_coverage": "single session",
+      "instrument_metadata_coverage": "decadal_runners.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "databento_unavailable"
+      ],
+      "recommended_action": "quarantine",
+      "config_paths": [
+        "packages\\equities_lane\\config\\decadal_runners.yaml"
+      ]
+    },
+    {
+      "dataset_id": "equities:databento:XNYS.PILLAR:mbo:KODK:2020-07-28",
+      "asset_class": "equities",
+      "source_vendor": "databento",
+      "venue": "XNYS.PILLAR",
+      "symbol_universe": "KODK",
+      "instrument_universe": "kodk_2020",
+      "date_coverage": "2020-07-28",
+      "available_schemas": [
+        "mbo",
+        "ohlcv-1d"
+      ],
+      "mbo_available": true,
+      "mbp_10_available": false,
+      "trades_available": true,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "full",
+      "session_calendar_coverage": "single session",
+      "instrument_metadata_coverage": "decadal_runners.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [],
+      "recommended_action": "enrich",
+      "config_paths": [
+        "packages\\equities_lane\\config\\decadal_runners.yaml"
+      ]
+    },
+    {
+      "dataset_id": "equities:databento:XNAS.ITCH:mbo:SPI:2020-09-23",
+      "asset_class": "equities",
+      "source_vendor": "databento",
+      "venue": "XNAS.ITCH",
+      "symbol_universe": "SPI",
+      "instrument_universe": "spi_2020",
+      "date_coverage": "2020-09-23",
+      "available_schemas": [
+        "mbo",
+        "ohlcv-1d"
+      ],
+      "mbo_available": true,
+      "mbp_10_available": false,
+      "trades_available": true,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "full",
+      "session_calendar_coverage": "single session",
+      "instrument_metadata_coverage": "decadal_runners.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [],
+      "recommended_action": "enrich",
+      "config_paths": [
+        "packages\\equities_lane\\config\\decadal_runners.yaml"
+      ]
+    },
+    {
+      "dataset_id": "equities:databento:XNYS.PILLAR:mbo:GME:2021-01-27",
+      "asset_class": "equities",
+      "source_vendor": "databento",
+      "venue": "XNYS.PILLAR",
+      "symbol_universe": "GME",
+      "instrument_universe": "gme_2021",
+      "date_coverage": "2021-01-27",
+      "available_schemas": [
+        "mbo",
+        "ohlcv-1d"
+      ],
+      "mbo_available": true,
+      "mbp_10_available": false,
+      "trades_available": true,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "full",
+      "session_calendar_coverage": "single session",
+      "instrument_metadata_coverage": "decadal_runners.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [],
+      "recommended_action": "enrich",
+      "config_paths": [
+        "packages\\equities_lane\\config\\decadal_runners.yaml"
+      ]
+    },
+    {
+      "dataset_id": "equities:databento:XNYS.PILLAR:mbo:EXPR:2021-01-27",
+      "asset_class": "equities",
+      "source_vendor": "databento",
+      "venue": "XNYS.PILLAR",
+      "symbol_universe": "EXPR",
+      "instrument_universe": "expr_2021",
+      "date_coverage": "2021-01-27",
+      "available_schemas": [
+        "mbo",
+        "ohlcv-1d"
+      ],
+      "mbo_available": true,
+      "mbp_10_available": false,
+      "trades_available": true,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "full",
+      "session_calendar_coverage": "single session",
+      "instrument_metadata_coverage": "decadal_runners.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [],
+      "recommended_action": "enrich",
+      "config_paths": [
+        "packages\\equities_lane\\config\\decadal_runners.yaml"
+      ]
+    },
+    {
+      "dataset_id": "equities:databento:XNYS.PILLAR:mbo:INDO:2022-03-07",
+      "asset_class": "equities",
+      "source_vendor": "databento",
+      "venue": "XNYS.PILLAR",
+      "symbol_universe": "INDO",
+      "instrument_universe": "indo_2022",
+      "date_coverage": "2022-03-07",
+      "available_schemas": [
+        "mbo",
+        "ohlcv-1d"
+      ],
+      "mbo_available": true,
+      "mbp_10_available": false,
+      "trades_available": true,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "full",
+      "session_calendar_coverage": "single session",
+      "instrument_metadata_coverage": "decadal_runners.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [],
+      "recommended_action": "enrich",
+      "config_paths": [
+        "packages\\equities_lane\\config\\decadal_runners.yaml"
+      ]
+    },
+    {
+      "dataset_id": "equities:databento:XNAS.ITCH:mbo:HKD:2022-08-02",
+      "asset_class": "equities",
+      "source_vendor": "databento",
+      "venue": "XNAS.ITCH",
+      "symbol_universe": "HKD",
+      "instrument_universe": "hkd_2022",
+      "date_coverage": "2022-08-02",
+      "available_schemas": [
+        "mbo",
+        "ohlcv-1d"
+      ],
+      "mbo_available": true,
+      "mbp_10_available": false,
+      "trades_available": true,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "full",
+      "session_calendar_coverage": "single session",
+      "instrument_metadata_coverage": "decadal_runners.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [],
+      "recommended_action": "enrich",
+      "config_paths": [
+        "packages\\equities_lane\\config\\decadal_runners.yaml"
+      ]
+    },
+    {
+      "dataset_id": "equities:databento:XNAS.ITCH:mbo:TOP:2023-04-27",
+      "asset_class": "equities",
+      "source_vendor": "databento",
+      "venue": "XNAS.ITCH",
+      "symbol_universe": "TOP",
+      "instrument_universe": "top_2023",
+      "date_coverage": "2023-04-27",
+      "available_schemas": [
+        "mbo",
+        "ohlcv-1d"
+      ],
+      "mbo_available": true,
+      "mbp_10_available": false,
+      "trades_available": true,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "full",
+      "session_calendar_coverage": "single session",
+      "instrument_metadata_coverage": "decadal_runners.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [],
+      "recommended_action": "enrich",
+      "config_paths": [
+        "packages\\equities_lane\\config\\decadal_runners.yaml"
+      ]
+    },
+    {
+      "dataset_id": "equities:databento:XNAS.ITCH:mbo:HOLO:2024-02-07",
+      "asset_class": "equities",
+      "source_vendor": "databento",
+      "venue": "XNAS.ITCH",
+      "symbol_universe": "HOLO",
+      "instrument_universe": "holo_2024",
+      "date_coverage": "2024-02-07",
+      "available_schemas": [
+        "mbo",
+        "ohlcv-1d"
+      ],
+      "mbo_available": true,
+      "mbp_10_available": false,
+      "trades_available": true,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "full",
+      "session_calendar_coverage": "single session",
+      "instrument_metadata_coverage": "decadal_runners.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [],
+      "recommended_action": "enrich",
+      "config_paths": [
+        "packages\\equities_lane\\config\\decadal_runners.yaml"
+      ]
+    },
+    {
+      "dataset_id": "equities:databento:XNAS.ITCH:mbo:CYCC:2025-07-15",
+      "asset_class": "equities",
+      "source_vendor": "databento",
+      "venue": "XNAS.ITCH",
+      "symbol_universe": "CYCC",
+      "instrument_universe": "cycc_2025",
+      "date_coverage": "2025-07-15",
+      "available_schemas": [
+        "mbo",
+        "ohlcv-1d"
+      ],
+      "mbo_available": true,
+      "mbp_10_available": false,
+      "trades_available": true,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "full",
+      "session_calendar_coverage": "single session",
+      "instrument_metadata_coverage": "decadal_runners.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [],
+      "recommended_action": "enrich",
+      "config_paths": [
+        "packages\\equities_lane\\config\\decadal_runners.yaml"
+      ]
+    },
+    {
+      "dataset_id": "equities:databento:XNAS.ITCH:mbo:AIRE:2025-07-10",
+      "asset_class": "equities",
+      "source_vendor": "databento",
+      "venue": "XNAS.ITCH",
+      "symbol_universe": "AIRE",
+      "instrument_universe": "aire_2025",
+      "date_coverage": "2025-07-10",
+      "available_schemas": [
+        "mbo",
+        "ohlcv-1d"
+      ],
+      "mbo_available": true,
+      "mbp_10_available": false,
+      "trades_available": true,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "full",
+      "session_calendar_coverage": "single session",
+      "instrument_metadata_coverage": "decadal_runners.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [],
+      "recommended_action": "enrich",
+      "config_paths": [
+        "packages\\equities_lane\\config\\decadal_runners.yaml"
+      ]
+    },
+    {
+      "dataset_id": "equities:databento:XNAS.ITCH:mbo:BIRD:2026-04-15",
+      "asset_class": "equities",
+      "source_vendor": "databento",
+      "venue": "XNAS.ITCH",
+      "symbol_universe": "BIRD",
+      "instrument_universe": "bird_2026",
+      "date_coverage": "2026-04-15",
+      "available_schemas": [
+        "mbo",
+        "ohlcv-1d"
+      ],
+      "mbo_available": true,
+      "mbp_10_available": false,
+      "trades_available": true,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "full",
+      "session_calendar_coverage": "single session",
+      "instrument_metadata_coverage": "decadal_runners.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [],
+      "recommended_action": "enrich",
+      "config_paths": [
+        "packages\\equities_lane\\config\\decadal_runners.yaml"
+      ]
+    },
+    {
+      "dataset_id": "equities:databento:XNAS.ITCH:mbo:AMST:2026-05-12",
+      "asset_class": "equities",
+      "source_vendor": "databento",
+      "venue": "XNAS.ITCH",
+      "symbol_universe": "AMST",
+      "instrument_universe": "amst_2026",
+      "date_coverage": "2026-05-12",
+      "available_schemas": [
+        "mbo",
+        "ohlcv-1d"
+      ],
+      "mbo_available": true,
+      "mbp_10_available": false,
+      "trades_available": true,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "full",
+      "session_calendar_coverage": "single session",
+      "instrument_metadata_coverage": "decadal_runners.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [],
+      "recommended_action": "enrich",
+      "config_paths": [
+        "packages\\equities_lane\\config\\decadal_runners.yaml"
+      ]
+    },
+    {
+      "dataset_id": "equities:databento:XNAS.ITCH:mbo:SNAL:2026-05-08",
+      "asset_class": "equities",
+      "source_vendor": "databento",
+      "venue": "XNAS.ITCH",
+      "symbol_universe": "SNAL",
+      "instrument_universe": "snal_2026",
+      "date_coverage": "2026-05-08",
+      "available_schemas": [
+        "mbo",
+        "ohlcv-1d"
+      ],
+      "mbo_available": true,
+      "mbp_10_available": false,
+      "trades_available": true,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "full",
+      "session_calendar_coverage": "single session",
+      "instrument_metadata_coverage": "decadal_runners.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [],
+      "recommended_action": "enrich",
+      "config_paths": [
+        "packages\\equities_lane\\config\\decadal_runners.yaml"
+      ]
+    },
+    {
+      "dataset_id": "equities_options:databento:OPRA.PILLAR:cbbo-1m:chain_per_session",
+      "asset_class": "equities_options",
+      "source_vendor": "databento",
+      "venue": "OPRA.PILLAR",
+      "symbol_universe": "OPRA chain per decadal session",
+      "instrument_universe": "options_chain_pull",
+      "date_coverage": "inherits session window",
+      "available_schemas": [
+        "cbbo-1m"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "minutes",
+      "event_sequencing_quality": "none",
+      "session_calendar_coverage": "per parent session",
+      "instrument_metadata_coverage": "chain_rules in decadal_runners.yaml",
+      "book_imbalance_support": "proxy",
+      "order_flow_imbalance_support": "trade-only",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "not full L3; contract-level imbalance needs eligibility gate"
+      ],
+      "recommended_action": "enrich",
+      "config_paths": [
+        "packages\\equities_lane\\config\\decadal_runners.yaml"
+      ]
+    },
+    {
+      "dataset_id": "options:databento:GLBX.MDP3:mbo:example_same_ul:future:ES.c.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "ES.c.0",
+      "instrument_universe": "example_same_ul",
+      "date_coverage": "parity replay windows",
+      "available_schemas": [
+        "mbo",
+        "definition"
+      ],
+      "mbo_available": true,
+      "mbp_10_available": false,
+      "trades_available": true,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "full",
+      "session_calendar_coverage": "parity_group",
+      "instrument_metadata_coverage": "parity_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbp-1 only for option legs; quote eligibility required"
+      ],
+      "recommended_action": "enrich",
+      "config_paths": [
+        "packages\\options_lane\\config\\parity_universe.yaml"
+      ]
+    },
+    {
+      "dataset_id": "options:databento:GLBX.MDP3:mbp-1:example_same_ul:call:ES.c.0",
+      "asset_class": "options",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "ES.c.0",
+      "instrument_universe": "example_same_ul",
+      "date_coverage": "parity replay windows",
+      "available_schemas": [
+        "mbp-1",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "top_of_book",
+      "event_sequencing_quality": "proxy",
+      "session_calendar_coverage": "parity_group",
+      "instrument_metadata_coverage": "parity_universe.yaml",
+      "book_imbalance_support": "proxy",
+      "order_flow_imbalance_support": "proxy",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbp-1 only for option legs; quote eligibility required"
+      ],
+      "recommended_action": "enrich",
+      "config_paths": [
+        "packages\\options_lane\\config\\parity_universe.yaml"
+      ]
+    },
+    {
+      "dataset_id": "options:databento:GLBX.MDP3:mbp-1:example_same_ul:put:ES.c.0",
+      "asset_class": "options",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "ES.c.0",
+      "instrument_universe": "example_same_ul",
+      "date_coverage": "parity replay windows",
+      "available_schemas": [
+        "mbp-1",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "top_of_book",
+      "event_sequencing_quality": "proxy",
+      "session_calendar_coverage": "parity_group",
+      "instrument_metadata_coverage": "parity_universe.yaml",
+      "book_imbalance_support": "proxy",
+      "order_flow_imbalance_support": "proxy",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbp-1 only for option legs; quote eligibility required"
+      ],
+      "recommended_action": "enrich",
+      "config_paths": [
+        "packages\\options_lane\\config\\parity_universe.yaml"
+      ]
+    },
+    {
+      "dataset_id": "options:databento:OPRA.PILLAR:mbp-1:example_cross_ul:spot:SPX",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "OPRA.PILLAR",
+      "symbol_universe": "SPX",
+      "instrument_universe": "example_cross_ul",
+      "date_coverage": "parity replay windows",
+      "available_schemas": [
+        "mbp-1",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "top_of_book",
+      "event_sequencing_quality": "proxy",
+      "session_calendar_coverage": "parity_group",
+      "instrument_metadata_coverage": "parity_universe.yaml",
+      "book_imbalance_support": "proxy",
+      "order_flow_imbalance_support": "proxy",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbp-1 only for option legs; quote eligibility required"
+      ],
+      "recommended_action": "enrich",
+      "config_paths": [
+        "packages\\options_lane\\config\\parity_universe.yaml"
+      ]
+    },
+    {
+      "dataset_id": "options:databento:GLBX.MDP3:mbo:example_cross_ul:future:ES.c.0",
+      "asset_class": "futures",
+      "source_vendor": "databento",
+      "venue": "GLBX.MDP3",
+      "symbol_universe": "ES.c.0",
+      "instrument_universe": "example_cross_ul",
+      "date_coverage": "parity replay windows",
+      "available_schemas": [
+        "mbo",
+        "definition"
+      ],
+      "mbo_available": true,
+      "mbp_10_available": false,
+      "trades_available": true,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "nanoseconds",
+      "event_sequencing_quality": "full",
+      "session_calendar_coverage": "parity_group",
+      "instrument_metadata_coverage": "parity_universe.yaml",
+      "book_imbalance_support": "full",
+      "order_flow_imbalance_support": "full",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbp-1 only for option legs; quote eligibility required"
+      ],
+      "recommended_action": "enrich",
+      "config_paths": [
+        "packages\\options_lane\\config\\parity_universe.yaml"
+      ]
+    },
+    {
+      "dataset_id": "options:databento:OPRA.PILLAR:mbp-1:example_cross_ul:call:SPX",
+      "asset_class": "options",
+      "source_vendor": "databento",
+      "venue": "OPRA.PILLAR",
+      "symbol_universe": "SPX",
+      "instrument_universe": "example_cross_ul",
+      "date_coverage": "parity replay windows",
+      "available_schemas": [
+        "mbp-1",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "top_of_book",
+      "event_sequencing_quality": "proxy",
+      "session_calendar_coverage": "parity_group",
+      "instrument_metadata_coverage": "parity_universe.yaml",
+      "book_imbalance_support": "proxy",
+      "order_flow_imbalance_support": "proxy",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbp-1 only for option legs; quote eligibility required"
+      ],
+      "recommended_action": "enrich",
+      "config_paths": [
+        "packages\\options_lane\\config\\parity_universe.yaml"
+      ]
+    },
+    {
+      "dataset_id": "options:databento:OPRA.PILLAR:mbp-1:example_cross_ul:put:SPX",
+      "asset_class": "options",
+      "source_vendor": "databento",
+      "venue": "OPRA.PILLAR",
+      "symbol_universe": "SPX",
+      "instrument_universe": "example_cross_ul",
+      "date_coverage": "parity replay windows",
+      "available_schemas": [
+        "mbp-1",
+        "definition"
+      ],
+      "mbo_available": false,
+      "mbp_10_available": false,
+      "trades_available": false,
+      "auction_imbalance_available": false,
+      "definition_available": true,
+      "timestamp_precision": "top_of_book",
+      "event_sequencing_quality": "proxy",
+      "session_calendar_coverage": "parity_group",
+      "instrument_metadata_coverage": "parity_universe.yaml",
+      "book_imbalance_support": "proxy",
+      "order_flow_imbalance_support": "proxy",
+      "auction_imbalance_support": "unavailable",
+      "known_gaps": [
+        "mbp-1 only for option legs; quote eligibility required"
+      ],
+      "recommended_action": "enrich",
+      "config_paths": [
+        "packages\\options_lane\\config\\parity_universe.yaml"
+      ]
+    }
+  ]
+}

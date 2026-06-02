@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from equities_lane.src.ingest.float_metadata import bars_before, load_daily_bars
 from equities_lane.src.models import DailyBar, SessionTick
 from equities_lane.src.types import DegradedModeFlags, SessionMeta
+from features_engine.src.imbalance.classification import resolve_data_class
 
 ET = ZoneInfo("America/New_York")
 
@@ -83,6 +84,15 @@ def build_session_meta(
             pm_open = prior
             assumptions.append("premarket_open fell back to prior_close")
 
+    resolution = resolve_data_class(
+        "mbo",
+        available_schema=schema,
+        asset_class="equities",
+        symbols=[symbol],
+        dates=[session_date],
+    )
+    if resolution.was_downgraded:
+        assumptions.append(resolution.downgrade_reason or "schema downgraded")
     degraded = DegradedModeFlags(
         degraded_mode=schema != "mbo",
         assumptions=(
@@ -90,13 +100,15 @@ def build_session_meta(
         )
         + assumptions,
     )
-    return SessionMeta(
+    meta = SessionMeta(
         symbol=symbol,
         session_date=session_date,
         prior_close=float(prior),
         premarket_open=float(pm_open),
         degraded=degraded,
     )
+    meta.data_class_resolution = resolution.to_dict()
+    return meta
 
 
 def _mid(t: SessionTick) -> float:

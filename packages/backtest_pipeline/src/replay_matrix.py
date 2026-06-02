@@ -19,14 +19,26 @@ def run_hypothesis_replay(
     latency_ms: float = 1.0,
     signal_threshold: float = 0.15,
     max_steps: int | None = None,
+    imbalance_ablation_mode_id: str = "",
+    auction_events: list | None = None,
+    event_window_id: str = "",
+    meta_out: dict | None = None,
 ) -> BacktestResult:
     strategy = HypothesisReplayStrategy(hypothesis, signal_threshold=signal_threshold)
     cfg = ReplaySessionConfig(
         npz_path=npz_path,
         latency_ms=latency_ms,
         max_steps=max_steps,
+        imbalance_ablation_mode_id=imbalance_ablation_mode_id,
+        auction_events=list(auction_events or []),
+        event_window_id=event_window_id,
     )
-    result = ReplaySession(cfg, strategy).run()
+    session = ReplaySession(cfg, strategy)
+    raw = session.run()
+    if meta_out is not None:
+        meta_out["imbalance_snapshot_summary"] = raw.get("imbalance_snapshot_summary")
+        meta_out["imbalance_samples"] = raw.get("imbalance_samples", [])
+    result = raw
     if result.get("error"):
         return BacktestResult(
             hypothesis_id=hypothesis.hyp_id,

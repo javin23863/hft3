@@ -132,6 +132,7 @@ class MBOFeatureExtractor:
         self._reload_at_level: Dict[Tuple[str, float], int] = {}
         self._prev_reload_score = 0.0
         self._trade_at_level: Dict[Tuple[str, float], int] = {}
+        self._max_trade_size = 0
         self.last_ts_ns = 0
         self._prev_mid = 0.0
         self._mid_returns: Deque[float] = deque(maxlen=100)
@@ -149,6 +150,7 @@ class MBOFeatureExtractor:
             self.near_touch_cancel_vol = 0
             self._mid_returns.clear()
             self._prev_mid = 0.0
+            self._max_trade_size = 0
         self.last_ts_ns = ts_ns
 
     def process_event(self, event: MBOEvent) -> np.ndarray:
@@ -158,6 +160,7 @@ class MBOFeatureExtractor:
         near_ticks = self.tick_size * 3
 
         if event.action == "TRADE":
+            self._max_trade_size = max(self._max_trade_size, event.size)
             if event.side == "A":
                 self.buy_agg_vol += event.size
             else:
@@ -196,6 +199,10 @@ class MBOFeatureExtractor:
         v[FeatureIndex.AGGRESSOR_VOLUME_IMBALANCE] = (
             (self.buy_agg_vol - self.sell_agg_vol) / total_agg if total_agg > 0 else 0.0
         )
+        if self._max_trade_size > 0 and total_agg > 0:
+            v[FeatureIndex.MAX_CONTRACT_TRADE_IMBALANCE] = (
+                self._max_trade_size / total_agg
+            ) * (1.0 if self.buy_agg_vol >= self.sell_agg_vol else -1.0)
 
         v[FeatureIndex.CANCEL_TO_ADD_RATIO] = (
             self.cancel_vol / self.add_vol if self.add_vol > 0 else 1.0
@@ -225,8 +232,12 @@ class MBOFeatureExtractor:
         v[FeatureIndex.TOP_10_DEPTH_ASK] = float(a10)
 
         curr_slope = (b10 - a10) / (b10 + a10 + 1e-9)
+        imb_l1 = (b1 - a1) / (b1 + a1 + 1e-9)
+        imb_l10 = (b10 - a10) / (b10 + a10 + 1e-9)
         v[FeatureIndex.BOOK_SLOPE] = curr_slope
         v[FeatureIndex.BOOK_SLOPE_CHANGE] = curr_slope - self.prev_book_slope
+        v[FeatureIndex.BOOK_IMBALANCE_L1] = imb_l1
+        v[FeatureIndex.BOOK_IMBALANCE_L10] = imb_l10
         self.prev_book_slope = curr_slope
 
         depth10 = b10 + a10
@@ -250,6 +261,9 @@ class MBOFeatureExtractor:
         if bb > 0 and ba < float("inf"):
             mid = (bb + ba) / 2.0
             v[FeatureIndex.MID_PRICE] = mid
+            denom = float(b1 + a1)
+            if denom > 0:
+                v[FeatureIndex.MICROPRICE] = (bb * a1 + ba * b1) / denom
             if self._prev_mid > 0:
                 self._mid_returns.append((mid - self._prev_mid) / self.tick_size)
             self._prev_mid = mid

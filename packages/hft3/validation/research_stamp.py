@@ -74,9 +74,21 @@ def build_certification_stamp(**run_context: Any) -> dict[str, Any]:
         "execution_mode",
         "event_id",
         "model_id",
+        "imbalance_feature_set",
+        "imbalance_ablation_verdict",
     ):
         if key in run_context and run_context[key] is not None:
             stamp[key] = run_context[key]
+
+    imbalance_set = run_context.get("imbalance_feature_set", "none")
+    ablation_verdict = run_context.get("imbalance_ablation_verdict")
+    if imbalance_set and imbalance_set != "none":
+        if not ablation_verdict or ablation_verdict not in ("promote", "quarantine"):
+            stamp["promotion_eligible"] = False
+            stamp["promotion_label"] = "IMBALANCE_ABLATION_REQUIRED"
+            stamp["reason_if_not_promotion_eligible"] = (
+                "imbalance_feature_set requires ablation verdict promote or quarantine"
+            )
     return stamp
 
 

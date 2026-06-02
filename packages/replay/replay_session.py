@@ -47,6 +47,9 @@ class ReplayStrategy(Protocol):
 class ReplaySessionConfig:
     npz_path: str
     run_id: str = ""
+    imbalance_ablation_mode_id: str = ""
+    auction_events: list = field(default_factory=list)
+    event_window_id: str = ""
     latency_ms: float = 1.0
     queue_model: str = "LogProbQueueModel2"
     tick_size: float = 0.25
@@ -73,6 +76,7 @@ class ReplaySession:
         self.clock = ReplayClock(seed=config.seed)
         self._lifecycle: List[dict[str, Any]] = []
         self._intent_count = 0
+        self._imbalance_collector: Any = None
 
     def run(self) -> Dict[str, Any]:
         from backtest_pipeline.src.hft_backtest_builder import build_hftbacktest
@@ -95,11 +99,26 @@ class ReplaySession:
         )
         safety.assert_replay_safe(adapter)
 
+        from features_engine.src.imbalance.ablation import all_ablation_modes
+        from features_engine.src.imbalance.snapshot_collect import SnapshotCollector
+
+        ablation_mode = None
+        if cfg.imbalance_ablation_mode_id:
+            ablation_mode = next(
+                (m for m in all_ablation_modes() if m.mode_id == cfg.imbalance_ablation_mode_id),
+                None,
+            )
+        collector = SnapshotCollector(max_samples=500, stride=50)
         mda = HistoricalReplayMarketDataAdapter.from_npz(
             cfg.npz_path,
             tick_size=cfg.tick_size,
             latency_ms=cfg.latency_ms,
+            imbalance_ablation_mode=ablation_mode,
+            snapshot_collector=collector,
+            auction_events=list(cfg.auction_events),
+            event_window_id=cfg.event_window_id,
         )
+        self._imbalance_collector = collector
 
         steps = 0
         while True:
@@ -166,9 +185,17 @@ class ReplaySession:
         summary["certification_stamp"] = stamp
         summary["certification_footer"] = format_stamp_footer(stamp)
         self._write_audits(summary)
+        imbalance_summary = {}
+        imbalance_samples: list = []
+        if self._imbalance_collector is not None:
+            imbalance_summary = self._imbalance_collector.summarize()
+            imbalance_samples = self._imbalance_collector.samples[-100:]
+
         return {
             "run_id": self.run_id,
             "steps": steps,
+            "imbalance_snapshot_summary": imbalance_summary,
+            "imbalance_samples": imbalance_samples,
             "balance": account.balance,
             "fee": account.fee,
             "num_trades": account.num_trades,

@@ -1,0 +1,11 @@
+{
+  "profile": "hft3_default",
+  "max_feature_compute_ns": 5000,
+  "families": {
+    "book_imbalance": 400,
+    "order_flow_imbalance": 350,
+    "order_flow_imbalance_proxy": 300,
+    "trade_pressure_only": 100,
+    "auction_imbalance": 80
+  }
+}

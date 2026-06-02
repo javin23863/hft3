@@ -47,6 +47,9 @@ class FeatureIndex(enum.IntEnum):
     PROP_REENTRY_SCORE = 32
     NEWS_RESTRICTION_FLATTEN_SCORE = 33
     MAX_CONTRACT_TRADE_IMBALANCE = 34
+    BOOK_IMBALANCE_L1 = 35
+    BOOK_IMBALANCE_L10 = 36
+    MICROPRICE = 37
     MID_PRICE = 40
     REGIME_NORMAL = 41
     REGIME_EVENT_SHOCK = 42
@@ -94,6 +97,9 @@ FEATURE_NAME_TO_INDEX: Dict[str, int] = {
     "prop_reentry_score": FeatureIndex.PROP_REENTRY_SCORE,
     "news_restriction_flatten_score": FeatureIndex.NEWS_RESTRICTION_FLATTEN_SCORE,
     "max_contract_trade_imbalance": FeatureIndex.MAX_CONTRACT_TRADE_IMBALANCE,
+    "book_imbalance_l1": FeatureIndex.BOOK_IMBALANCE_L1,
+    "book_imbalance_l10": FeatureIndex.BOOK_IMBALANCE_L10,
+    "microprice": FeatureIndex.MICROPRICE,
     "mid_price": FeatureIndex.MID_PRICE,
 }
 

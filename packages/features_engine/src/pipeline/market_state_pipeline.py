@@ -18,6 +18,15 @@ from features_engine.src.features.mbo_features import MBOEvent, MBOFeatureExtrac
 from features_engine.src.hypotheses.modules import MarketState
 from features_engine.src.regime.event_context import EventContextEngine
 from features_engine.src.regime.regime_filter import RegimeFilter
+from features_engine.src.imbalance.ablation import ImbalanceAblationMode
+from features_engine.src.imbalance.apply import (
+    apply_imbalance_to_vector,
+    mask_imbalance_catalog_slots,
+    merge_imbalance_features,
+)
+from features_engine.src.imbalance.classification import DataClass
+from features_engine.src.imbalance.engine import ImbalanceEngine
+from features_engine.src.imbalance.snapshot_collect import SnapshotCollector
 
 
 @dataclass
@@ -29,6 +38,10 @@ class MarketStatePipeline:
     latency_ms: float = 1.0
     current_inventory: int = 0
     cross_asset_features: Dict[str, Dict[str, float]] = field(default_factory=dict)
+    imbalance_engine: Optional[ImbalanceEngine] = None
+    emit_imbalance: bool = True
+    imbalance_ablation_mode: Optional[ImbalanceAblationMode] = None
+    snapshot_collector: Optional[SnapshotCollector] = None
 
     def __post_init__(self) -> None:
         self.extractor.tick_size = self.tick_size
@@ -37,7 +50,22 @@ class MarketStatePipeline:
 
     def process_event(self, event: MBOEvent) -> MarketState:
         vec = self.extractor.process_event(event)
+        if self.imbalance_ablation_mode is not None:
+            mask_imbalance_catalog_slots(vec, self.imbalance_ablation_mode)
         feat_dict = vector_to_feature_dict(vec)
+        imbalance_snap = None
+        if self.emit_imbalance:
+            if self.imbalance_engine is None:
+                self.imbalance_engine = ImbalanceEngine(
+                    DataClass.MBO,
+                    ablation_mode=self.imbalance_ablation_mode,
+                    shared_book=self.extractor.book,
+                    snapshot_collector=self.snapshot_collector,
+                )
+            snap = self.imbalance_engine.on_mbo_after_book(event)
+            imbalance_snap = snap.to_dict()
+            merge_imbalance_features(feat_dict, imbalance_snap, self.imbalance_ablation_mode)
+            apply_imbalance_to_vector(vec, imbalance_snap, self.imbalance_ablation_mode)
 
         assert self.event_engine is not None
         event_ctx = self.event_engine.resolve_ns(event.timestamp_ns)
@@ -72,4 +100,5 @@ class MarketStatePipeline:
             liquidity_state=liq_state,
             latency_ms=self.latency_ms,
             current_inventory=self.current_inventory,
+            imbalance_snapshot=imbalance_snap,
         )

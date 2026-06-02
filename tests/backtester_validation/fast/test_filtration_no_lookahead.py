@@ -31,8 +31,8 @@ def _fair_quotes() -> dict[str, LegQuote]:
     t_years = 0.25
     df = discount_factor(rate, t_years)
     theo = future_mid - df * strike
-    call_mid = theo / 2 + 10
-    put_mid = call_mid - theo
+    put_mid = 10.0
+    call_mid = theo + put_mid
     ts = 1_000_000_000
     return {
         "future": LegQuote("future", "UL.c.0", future_mid, future_mid, ts),

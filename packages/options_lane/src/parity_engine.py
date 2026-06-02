@@ -4,6 +4,7 @@ from __future__ import annotations
 import math
 
 from options_lane.src.basis import effective_underlying
+from options_lane.src.imbalance_eligibility import EligibilityConfig, OptionQuote, option_imbalance_eligible
 from options_lane.src.models import LegQuote, ParityGroup, QuoteSnapshot, Violation
 
 
@@ -64,6 +65,18 @@ def compute_violation(
 
     call = filtered["call"]
     put = filtered["put"]
+    elig_cfg = EligibilityConfig()
+    for leg in (call, put):
+        if leg.role not in ("call", "put"):
+            continue
+        if leg.bid <= 0 or leg.ask <= 0:
+            return None
+        ok, _reason = option_imbalance_eligible(
+            OptionQuote(leg.bid, leg.ask, 10.0, 10.0, leg.timestamp_ns),
+            elig_cfg,
+        )
+        if not ok:
+            return None
     observed = call.mid - put.mid
     residual = observed - theo
     edge_ticks = abs(residual) / group.tick_size if group.tick_size > 0 else 0.0

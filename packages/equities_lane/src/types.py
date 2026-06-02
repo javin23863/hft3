@@ -224,6 +224,7 @@ class SessionMeta:
     prior_close: float
     premarket_open: float
     degraded: DegradedModeFlags = field(default_factory=DegradedModeFlags)
+    data_class_resolution: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -231,6 +232,7 @@ class SessionMeta:
             "session_date": self.session_date,
             "prior_close": self.prior_close,
             "premarket_open": self.premarket_open,
+            "data_class_resolution": dict(self.data_class_resolution),
             **self.degraded.to_dict(),
         }
 

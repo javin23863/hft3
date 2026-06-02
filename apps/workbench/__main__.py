@@ -35,6 +35,11 @@ def main(argv: list[str] | None = None) -> int:
     run_p.add_argument("--history-years", type=float, default=0.0)
     run_p.add_argument("--enforce-history-gate", action="store_true")
     run_p.add_argument("--full-sweep", action="store_true", help="Run full latency band matrix")
+    run_p.add_argument(
+        "--imbalance-ablation-full",
+        action="store_true",
+        help="Run all 8 imbalance ablation modes (slow; default is 3-mode fast sweep)",
+    )
 
     run_p.add_argument("--composition", default=None, help="JSON file with ModelComposition")
     run_p.add_argument(
@@ -65,6 +70,22 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("list", help="List registered models")
 
+    abl_p = sub.add_parser(
+        "imbalance-ablation",
+        help="Replay-backed imbalance ablation matrix (requires NPZ)",
+    )
+    abl_p.add_argument("--model", default="HYP_5", help="Model slug or legacy HYP_N")
+    abl_p.add_argument("--event-id", default="CPI_2024_09_11_TIGHT")
+    abl_p.add_argument("--symbol", default=None)
+    abl_p.add_argument("--npz", default=None, help="Override NPZ path")
+    abl_p.add_argument("--seed", type=int, default=42)
+    abl_p.add_argument(
+        "--full",
+        action="store_true",
+        help="All 8 ablation modes (default: 3-mode fast sweep)",
+    )
+    abl_p.add_argument("--output", default=None, help="JSON output path")
+
     args = parser.parse_args(argv)
 
     if args.command == "list":
@@ -72,6 +93,25 @@ def main(argv: list[str] | None = None) -> int:
 
         for mid in list_models():
             print(mid)
+        return 0
+
+    if args.command == "imbalance-ablation":
+        from workbench.src.imbalance.ablation_runner import run_imbalance_ablation_matrix
+
+        _results, summary = run_imbalance_ablation_matrix(
+            _REPO,
+            args.model,
+            args.event_id,
+            npz_path=Path(args.npz) if args.npz else None,
+            symbol=args.symbol,
+            seed=args.seed,
+            ablation_full=args.full,
+            fast_sweep=not args.full,
+        )
+        text = json.dumps(summary, indent=2)
+        if args.output:
+            Path(args.output).write_text(text, encoding="utf-8")
+        print(text)
         return 0
 
     if args.command == "campaign":
@@ -145,6 +185,7 @@ def main(argv: list[str] | None = None) -> int:
         skip_history_gate=not args.enforce_history_gate,
         fast_sweep=not args.full_sweep,
         composition=composition,
+        imbalance_ablation_full=args.imbalance_ablation_full,
     )
     print(json.dumps(out, indent=2))
     return 0

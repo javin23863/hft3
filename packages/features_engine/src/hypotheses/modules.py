@@ -21,6 +21,7 @@ class MarketState:
     current_inventory: int  # I_t
     feature_vector: Optional[np.ndarray] = None
     regime_posterior: Dict[str, float] = field(default_factory=dict)
+    imbalance_snapshot: Optional[Dict[str, Any]] = None
 
     def f(self, name: str, default: float = 0.0) -> float:
         """Indexed feature access (no string hashing on hot path)."""

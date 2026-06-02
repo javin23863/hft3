@@ -1,4 +1,5 @@
 #include "feature_extractor.hpp"
+#include "feature_index.hpp"
 #include "regime_filter.hpp"
 
 #include <algorithm>
@@ -25,6 +26,7 @@ void FeatureExtractorCpp::reset() {
     buy_agg_ = sell_agg_ = add_vol_ = cancel_vol_ = 0;
     bid_add_ = ask_add_ = bid_cancel_ = ask_cancel_ = 0;
     near_touch_cancel_ = 0;
+    max_trade_size_ = 0;
     prev_top10_depth_ = 0.0;
     prev_book_slope_ = 0.0;
     prev_bid1_ = prev_ask1_ = 0;
@@ -49,6 +51,7 @@ void FeatureExtractorCpp::maybe_reset_window(int64_t ts_ns) {
         trade_at_level_.clear();
         mid_returns_.clear();
         prev_mid_ = 0.0;
+        max_trade_size_ = 0;
     }
     last_ts_ns_ = ts_ns;
 }
@@ -157,6 +160,7 @@ void FeatureExtractorCpp::process_event(const MBOEventCpp& event) {
     const double near_ticks = tick_size_ * 3;
 
     if (event.action == 'T') {
+        max_trade_size_ = std::max(max_trade_size_, event.size);
         if (event.side == 'A') buy_agg_ += event.size;
         else sell_agg_ += event.size;
         auto key = std::make_pair(event.side, event.price);
@@ -214,6 +218,15 @@ void FeatureExtractorCpp::extract() {
     vec_[13] = slope;
     vec_[14] = slope - prev_book_slope_;
     prev_book_slope_ = slope;
+    const double imb_l1 = (b1 - a1) / (b1 + a1 + 1e-9);
+    const double imb_l10 = (b10 - a10) / (b10 + a10 + 1e-9);
+    vec_[static_cast<size_t>(FeatureIndex::BOOK_IMBALANCE_L1)] = imb_l1;
+    vec_[static_cast<size_t>(FeatureIndex::BOOK_IMBALANCE_L10)] = imb_l10;
+    if (total_agg > 0 && max_trade_size_ > 0) {
+        const double sign = buy_agg_ >= sell_agg_ ? 1.0 : -1.0;
+        vec_[static_cast<size_t>(FeatureIndex::MAX_CONTRACT_TRADE_IMBALANCE)] =
+            sign * static_cast<double>(max_trade_size_) / static_cast<double>(total_agg);
+    }
 
     const double depth10 = b10 + a10;
     if (prev_top10_depth_ > 0)
@@ -233,6 +246,11 @@ void FeatureExtractorCpp::extract() {
         }
         vec_[16] = median > 1e-9 ? spread / median : 1.0;
         vec_[40] = (best_bid_ + best_ask_) / 2.0;
+        const double micro_denom = static_cast<double>(b1 + a1);
+        if (micro_denom > 0.0) {
+            vec_[static_cast<size_t>(FeatureIndex::MICROPRICE)] =
+                (best_bid_ * static_cast<double>(a1) + best_ask_ * static_cast<double>(b1)) / micro_denom;
+        }
         update_realized_vol(vec_[40]);
     }
 

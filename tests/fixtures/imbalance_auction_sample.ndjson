@@ -1,0 +1,1 @@
+{"ts_ns": 1000000000, "auction_type": "close", "imbalance_side": "buy", "paired_quantity": 1000, "total_imbalance_quantity": 500, "indicative_price": 101.0, "reference_price": 100.0, "near_price": 100.5, "far_price": 101.5, "auction_status": "open"}

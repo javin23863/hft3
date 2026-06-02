@@ -63,6 +63,7 @@ class WorkbenchEngine:
         composition: Optional[ModelComposition] = None,
         strategy_params: Optional[Dict[str, Any]] = None,
         wfc_status: Optional[str] = None,
+        imbalance_ablation_full: bool = False,
     ) -> Dict[str, Any]:
         effective = composition or CompositionOrchestrator.default_composition(model_id)
         primary_id = resolve_model_id(effective.primary_model_id)
@@ -112,6 +113,7 @@ class WorkbenchEngine:
         ctx.metadata["data_sufficient"] = manifest.data_sufficient
         if strategy_params:
             ctx.metadata["strategy_params"] = dict(strategy_params)
+        ctx.metadata["imbalance_ablation_full"] = imbalance_ablation_full
         if effective.defensive_stubs:
             ctx.metadata["composition"] = effective.to_dict()
         ctx.write_reproducibility_files()
@@ -255,7 +257,87 @@ class WorkbenchEngine:
             report["signal_adjusted"] = comp_trace.signal_adjusted
             report["phase_budgets_us"] = comp_trace.phase_budgets_us
 
+        from workbench.src.imbalance.artifacts import write_imbalance_artifacts
+        from workbench.src.imbalance.replay_runner import run_imbalance_ablation_replays
+
+        from features_engine.src.imbalance.auction_events import (
+            load_auction_events,
+            window_phase_for_event,
+        )
+        from workbench.src.imbalance.operational_cost import estimate_operational_cost
+        from workbench.src.imbalance.quality_report import build_quality_report_from_snapshots
+
+        ablation_results, imbalance_samples, ablation_meta = run_imbalance_ablation_replays(
+            ctx,
+            fast_sweep=fast_sweep,
+            ablation_full=bool(ctx.metadata.get("imbalance_ablation_full")),
+            latency_ok=viability.recommendation != "REJECT",
+            robustness_ok=bool(robustness.passed),
+            wfc_ok=wfc_status in (None, "PASS", "SKIPPED"),
+            walk_forward_correlation=float(ctx.metadata.get("wfc_correlation", 0.0)),
+        )
+        sym = symbol or cfg.symbol or "MES"
+        auction_events = load_auction_events(self.repo_root, event_id, sym)
+        auction_quality_report: dict = {"passed": True, "results": [], "note": "no auction feed"}
+        if auction_events:
+            from features_engine.src.imbalance.engine import ImbalanceEngine
+            from features_engine.src.imbalance.classification import DataClass
+            from replay.auction_replay_feed import auction_record
+
+            eng = ImbalanceEngine(DataClass.IMBALANCE)
+            auc_snaps = []
+            for ev in auction_events:
+                phase = window_phase_for_event(event_id, ev.auction_type)
+                auc_snaps.append(
+                    eng.on_auction_event(
+                        auction_record(ev),
+                        window_phase=phase,
+                        event_window_id=event_id,
+                    ).to_dict()
+                )
+            auction_quality_report = build_quality_report_from_snapshots(auc_snaps)
+
+        quality_report = build_quality_report_from_snapshots(imbalance_samples)
+        operational_cost = estimate_operational_cost(
+            imbalance_samples,
+            modes_run=len(ablation_meta.get("modes_run", [])),
+            replay_steps=int(ctx.metadata.get("replay_steps", len(imbalance_samples))),
+        )
+        write_imbalance_artifacts(
+            ctx.artifact_dir,
+            run_meta={
+                "run_id": ctx.run_id,
+                "model_id": primary_id,
+                "event_id": event_id,
+                "modes_run": ablation_meta.get("modes_run", []),
+                "auction_events_loaded": ablation_meta.get("auction_events_loaded", 0),
+            },
+            snapshots=imbalance_samples,
+            ablation_results=ablation_results,
+            quality_report=quality_report,
+            auction_quality_report=auction_quality_report,
+            latency_budget={"viability": viability.recommendation, "measured_p99_ms": measured_ms},
+            operational_cost=operational_cost,
+        )
+        cert_stamp = build_certification_stamp(
+            event_id=event_id,
+            model_id=primary_id,
+            instrument=cfg.symbol if hasattr(cfg, "symbol") else "",
+            execution_mode="REPLAY",
+            execution_adapter_mode="workbench_replay",
+            latency_band=viability.measured_production_p99_ms,
+            fee_model="FeeModel",
+            imbalance_feature_set=ctx.metadata.get("imbalance_feature_set", "none"),
+            imbalance_ablation_verdict=ablation_meta.get("verdict"),
+        )
+        report["certification_stamp"] = cert_stamp
+        report["certification_footer"] = format_stamp_footer(cert_stamp)
+        if cert_stamp.get("promotion_eligible") is False:
+            promote = False
+            report["promote_candidate"] = False
+
         md = render_markdown_report(primary_id, event_id, event_id, viability, robustness)
+        md = md + "\n\n## Imbalance artifacts\n\nSee `imbalance/` under this run directory.\n"
         md = md + "\n\n_" + format_stamp_footer(cert_stamp) + "_\n"
         write_run_report(ctx.artifact_dir, report, md)
 

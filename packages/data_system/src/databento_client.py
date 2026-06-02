@@ -27,6 +27,27 @@ class DatabentoResearchClient:
         schema="mbo",
         stype_in: str = "continuous",
     ) -> float:
+        return self._estimate(schema, dataset, symbols, start_utc, end_utc, stype_in)
+
+    def estimate_cost_mbp10(
+        self,
+        symbols: list,
+        start_utc: datetime,
+        end_utc: datetime,
+        dataset="GLBX.MDP3",
+        stype_in: str = "continuous",
+    ) -> float:
+        return self._estimate("mbp-10", dataset, symbols, start_utc, end_utc, stype_in)
+
+    def _estimate(
+        self,
+        schema: str,
+        dataset: str,
+        symbols: list,
+        start_utc: datetime,
+        end_utc: datetime,
+        stype_in: str,
+    ) -> float:
         return float(
             self.client.metadata.get_cost(
                 dataset=dataset,
@@ -36,6 +57,32 @@ class DatabentoResearchClient:
                 start=start_utc,
                 end=end_utc,
             )
+        )
+
+    def download_mbp10_window(
+        self,
+        event_id: str,
+        symbols: list,
+        start_utc: datetime,
+        end_utc: datetime,
+        dataset="GLBX.MDP3",
+        stype_in: str = "continuous",
+        output_path: str | None = None,
+        override_hard_limit: bool = False,
+        override_operating_cap: bool = False,
+    ) -> str:
+        """Download MBP-10 aggregated depth (not order-level MBO)."""
+        return self.download_event_window(
+            event_id,
+            symbols,
+            start_utc,
+            end_utc,
+            dataset=dataset,
+            schema="mbp-10",
+            stype_in=stype_in,
+            output_path=output_path,
+            override_hard_limit=override_hard_limit,
+            override_operating_cap=override_operating_cap,
         )
 
     def download_event_window(

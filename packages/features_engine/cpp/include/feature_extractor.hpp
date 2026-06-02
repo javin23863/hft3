@@ -63,6 +63,7 @@ private:
     int64_t bid_cancel_{0};
     int64_t ask_cancel_{0};
     int64_t near_touch_cancel_{0};
+    int32_t max_trade_size_{0};
     double prev_top10_depth_{0.0};
     double prev_book_slope_{0.0};
     int prev_bid1_{0};
