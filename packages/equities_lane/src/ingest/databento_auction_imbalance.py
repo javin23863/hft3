@@ -24,6 +24,8 @@ def pull_auction_imbalance(
 
     client = db.Historical(api_key)
     dest = output_path or Path(f"data/equities/raw/{symbol}_imbalance.dbn.zst")
+    if dest.is_file() and dest.stat().st_size > 0:
+        return dest
     dest.parent.mkdir(parents=True, exist_ok=True)
     client.timeseries.get_range(
         dataset=dataset,

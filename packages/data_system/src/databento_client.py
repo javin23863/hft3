@@ -117,6 +117,8 @@ class DatabentoResearchClient:
 
         dest = output_path or f"data/{event_id}_{schema}.dbn.zst"
         os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
+        if os.path.isfile(dest) and os.path.getsize(dest) > 0:
+            return dest
 
         self.client.timeseries.get_range(
             dataset=dataset,

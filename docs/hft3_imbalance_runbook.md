@@ -22,6 +22,26 @@ MBP-10 is **aggregated depth, not Level 3**.
 ## Commands
 
 ```bash
+# Download everything (macro imbalance enrich + estimate; pull only with --confirm-pull)
+.\scripts\download_all_research_data.ps1
+.\scripts\download_all_research_data.ps1 -ConfirmPull   # after approving estimate
+
+# Full manifest-backed audit (macro + equities daily/normalized/options)
+python scripts/audit_all_research_data.py
+
+# Imbalance-only enrich (55 macro events + MBP-10 + auction NDJSON)
+python scripts/download_imbalance_research_data.py --all --max-cost-usd 200
+
+# Imbalance filename gaps only
+python scripts/audit_imbalance_data_gaps.py
+
+# Single event
+python scripts/download_imbalance_research_data.py --event-id CPI_2024_09_11_TIGHT --symbol MES.v.0 --with-mbp10
+
+# Full workbench campaign catalog (all periods for a model)
+python apps/workbench/scripts/backfill_catalog.py --model HYP_5 --symbol MES.v.0 --dry-run
+python apps/workbench/scripts/backfill_catalog.py --model HYP_5 --symbol MES.v.0 --download-missing --max-cost-usd 50
+
 # Regenerate inventory
 python scripts/build_imbalance_inventory.py
 
