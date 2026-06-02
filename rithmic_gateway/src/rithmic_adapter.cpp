@@ -139,49 +139,6 @@ public:
         return OK;
     }
 
-    int AgreementList(RApi::AgreementListInfo* pInfo, void* pContext, int* aiCode) override {
-        (void)pContext;
-        std::lock_guard<std::mutex> lk(adapter_->agreement_mutex_);
-        std::ostringstream os;
-        if (pInfo) {
-            os << "rp_code=" << pInfo->iRpCode
-               << " bAccepted=" << (pInfo->bAccepted ? "true" : "false")
-               << " count=" << pInfo->iArrayLen;
-            if (pInfo->iArrayLen > 0 && pInfo->asAgreementInfoArray) {
-                os << "\n";
-                for (int i = 0; i < pInfo->iArrayLen; ++i) {
-                    RApi::AgreementInfo* a = &pInfo->asAgreementInfoArray[i];
-                    std::string title, status, accept_status, market_data;
-                    if (a->sTitle.pData && a->sTitle.iDataLen > 0)
-                        title.assign(a->sTitle.pData, static_cast<size_t>(a->sTitle.iDataLen));
-                    if (a->sStatus.pData && a->sStatus.iDataLen > 0)
-                        status.assign(a->sStatus.pData, static_cast<size_t>(a->sStatus.iDataLen));
-                    if (a->sEndUserAcceptanceStatus.pData && a->sEndUserAcceptanceStatus.iDataLen > 0)
-                        accept_status.assign(a->sEndUserAcceptanceStatus.pData,
-                                             static_cast<size_t>(a->sEndUserAcceptanceStatus.iDataLen));
-                    if (a->sMarketDataUsageCapacity.pData && a->sMarketDataUsageCapacity.iDataLen > 0)
-                        market_data.assign(a->sMarketDataUsageCapacity.pData,
-                                           static_cast<size_t>(a->sMarketDataUsageCapacity.iDataLen));
-                    os << "  [" << i << "]"
-                       << " mandatory=" << (a->bMandatory ? "true" : "false")
-                       << " status=" << status
-                       << " accept=" << accept_status
-                       << " md_capacity=" << market_data
-                       << " title=\"" << title << "\""
-                       << "\n";
-                }
-            }
-        } else {
-            os << "rp_code=-1 (no info)";
-        }
-        adapter_->last_agreement_list_text_ = os.str();
-        adapter_->agreement_list_ready_.store(true);
-        adapter_->agreement_cv_.notify_all();
-        std::cout << "[AdmCallbacks] AgreementList: " << adapter_->last_agreement_list_text_ << std::endl;
-        if (aiCode) *aiCode = API_OK;
-        return OK;
-    }
-
 private:
     RithmicAdapter* adapter_;
 };
@@ -250,6 +207,49 @@ public:
             adapter_->account_cv_.notify_all();
         }
         *aiCode = API_OK;
+        return OK;
+    }
+
+    int AgreementList(RApi::AgreementListInfo* pInfo, void* pContext, int* aiCode) override {
+        (void)pContext;
+        std::lock_guard<std::mutex> lk(adapter_->agreement_mutex_);
+        std::ostringstream os;
+        if (pInfo) {
+            os << "rp_code=" << pInfo->iRpCode
+               << " bAccepted=" << (pInfo->bAccepted ? "true" : "false")
+               << " count=" << pInfo->iArrayLen;
+            if (pInfo->iArrayLen > 0 && pInfo->asAgreementInfoArray) {
+                os << "\n";
+                for (int i = 0; i < pInfo->iArrayLen; ++i) {
+                    RApi::AgreementInfo* a = &pInfo->asAgreementInfoArray[i];
+                    std::string title, status, accept_status, market_data;
+                    if (a->sTitle.pData && a->sTitle.iDataLen > 0)
+                        title.assign(a->sTitle.pData, static_cast<size_t>(a->sTitle.iDataLen));
+                    if (a->sStatus.pData && a->sStatus.iDataLen > 0)
+                        status.assign(a->sStatus.pData, static_cast<size_t>(a->sStatus.iDataLen));
+                    if (a->sEndUserAcceptanceStatus.pData && a->sEndUserAcceptanceStatus.iDataLen > 0)
+                        accept_status.assign(a->sEndUserAcceptanceStatus.pData,
+                                             static_cast<size_t>(a->sEndUserAcceptanceStatus.iDataLen));
+                    if (a->sMarketDataUsageCapacity.pData && a->sMarketDataUsageCapacity.iDataLen > 0)
+                        market_data.assign(a->sMarketDataUsageCapacity.pData,
+                                           static_cast<size_t>(a->sMarketDataUsageCapacity.iDataLen));
+                    os << "  [" << i << "]"
+                       << " mandatory=" << (a->bMandatory ? "true" : "false")
+                       << " status=" << status
+                       << " accept=" << accept_status
+                       << " md_capacity=" << market_data
+                       << " title=\"" << title << "\""
+                       << "\n";
+                }
+            }
+        } else {
+            os << "rp_code=-1 (no info)";
+        }
+        adapter_->last_agreement_list_text_ = os.str();
+        adapter_->agreement_list_ready_.store(true);
+        adapter_->agreement_cv_.notify_all();
+        std::cout << "[Callbacks] AgreementList: " << adapter_->last_agreement_list_text_ << std::endl;
+        if (aiCode) *aiCode = API_OK;
         return OK;
     }
 
