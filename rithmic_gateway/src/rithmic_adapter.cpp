@@ -88,10 +88,7 @@ public:
         : adapter_(adapter) {}
     ~MyAdmCallbacks() override = default;
 
-    int Alert(RApi::AlertInfo* pInfo, void* pContext, int* aiCode) override {
-        (void)pContext;
-        int ignored;
-        pInfo->dump(&ignored);
+    int Alert(RApi::AlertInfo*, void*, int* aiCode) override {
         *aiCode = API_OK;
         return OK;
     }
@@ -149,11 +146,7 @@ public:
         : adapter_(adapter) {}
     ~MyCallbacks() override = default;
 
-    int Alert(RApi::AlertInfo* pInfo, void* pContext, int* aiCode) override {
-        (void)pContext;
-        int ignored;
-        pInfo->dump(&ignored);
-
+    int Alert(RApi::AlertInfo* pInfo, void*, int* aiCode) override {
         if (pInfo->iConnectionId == RApi::MARKET_DATA_CONNECTION_ID) {
             if (pInfo->iAlertType == RApi::ALERT_LOGIN_COMPLETE) {
                 adapter_->md_login_status_ = RithmicAdapter::LOGIN_COMPLETE;
