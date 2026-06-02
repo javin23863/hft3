@@ -531,7 +531,9 @@ bool RithmicAdapter::connect() {
     try {
         pEngine = new RApi::REngine(&params);
     } catch (OmneException& ex) {
-        last_connect_error_ = "REngine creation error: " + std::to_string(ex.getErrorCode());
+        const char* estr = ex.getErrorString();
+        last_connect_error_ = "REngine creation error: " + std::to_string(ex.getErrorCode())
+                            + " (" + (estr ? estr : "?") + ")";
         std::cerr << "[RithmicAdapter] " << last_connect_error_ << std::endl;
         return false;
     }
