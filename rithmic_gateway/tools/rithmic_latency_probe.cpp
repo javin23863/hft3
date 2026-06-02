@@ -32,35 +32,21 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    bool use_test = get_env_or("RITHMIC_PROBE_ENV", "test")[0] == 't';
-
-    std::vector<std::string> env_vars;
-    if (use_test) {
-        env_vars = {
-            "MML_DMN_SRVR_ADDR=rituz00100.00.rithmic.com:65000~rituz00100.00.rithmic.net:65000~rituz00100.00.theomne.net:65000~rituz00100.00.theomne.com:65000",
-            "MML_DOMAIN_NAME=rithmic_uat_dmz_domain",
-            "MML_LIC_SRVR_ADDR=rituz00100.00.rithmic.com:56000~rituz00100.00.rithmic.net:56000~rituz00100.00.theomne.net:56000~rituz00100.00.theomne.com:56000",
-            "MML_LOC_BROK_ADDR=rituz00100.00.rithmic.com:64100",
-            "MML_LOGGER_ADDR=rituz00100.00.rithmic.com:45454~rituz00100.00.rithmic.net:45454~rituz00100.00.theomne.net:45454~rituz00100.00.theomne.com:45454",
-            "MML_LOG_TYPE=log_net",
-        };
-    } else {
-        env_vars = {
-            "MML_DMN_SRVR_ADDR=ritpz04063.04.rithmic.com:65000",
-            "MML_DOMAIN_NAME=rithmic_paper_domain",
-            "MML_LIC_SRVR_ADDR=ritpz04063.04.rithmic.com:56000",
-            "MML_LOC_BROK_ADDR=ritpz04063.04.rithmic.com:64100",
-            "MML_LOGGER_ADDR=ritpz04063.04.rithmic.com:45454",
-            "MML_LOG_TYPE=log_net",
-        };
-    }
+    std::vector<std::string> env_vars = {
+        "MML_DMN_SRVR_ADDR=rituz00100.00.rithmic.com:65000~rituz00100.00.rithmic.net:65000~rituz00100.00.theomne.net:65000~rituz00100.00.theomne.com:65000",
+        "MML_DOMAIN_NAME=rithmic_uat_dmz_domain",
+        "MML_LIC_SRVR_ADDR=rituz00100.00.rithmic.com:56000~rituz00100.00.rithmic.net:56000~rituz00100.00.theomne.net:56000~rituz00100.00.theomne.com:56000",
+        "MML_LOC_BROK_ADDR=rituz00100.00.rithmic.com:64100",
+        "MML_LOGGER_ADDR=rituz00100.00.rithmic.com:45454~rituz00100.00.rithmic.net:45454~rituz00100.00.theomne.net:45454~rituz00100.00.theomne.com:45454",
+        "MML_LOG_TYPE=log_net",
+    };
 
     std::string repo = repo_root();
     std::string ssl_path = repo + "/rithmic_gateway/RApiPlus/13.7.0.0/etc/rithmic_ssl_cert_auth_params";
     env_vars.push_back("MML_SSL_CLNT_AUTH_FILE=" + ssl_path);
 
     hft::ConnectionConfig cfg;
-    cfg.environment = use_test ? "Rithmic Test" : "Rithmic Paper Trading";
+    cfg.environment = "Rithmic Test";
     cfg.username = user;
     cfg.password = pass;
     cfg.app_name = "HFT3-LatencyProbe";
@@ -77,7 +63,7 @@ int main(int argc, char** argv) {
     hft::SPSCQueue<hft::OrderEvent, 8192> order_queue;
 
     hft::RithmicAdapter adapter(cfg, &mbo_queue, &order_queue);
-    const char* env_name = use_test ? "test" : "paper";
+    const char* env_name = "test";
 
     // --- Phase 1: Initialize ---
     if (!adapter.initialize()) {

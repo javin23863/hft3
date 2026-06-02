@@ -8,7 +8,6 @@ enabled: false
 connector: fixture
 # When connector is rithmic_api, which API config to load:
 #   packages/data_system/config/rithmic_api_test.yaml  (Rithmic Test/Sandbox Orangeburg)
-#   packages/data_system/config/rithmic_api_paper.yaml (Rithmic Paper Trading Chicago)
 # If empty, defaults to rithmic_api_test.yaml
 rithmic_api_config: ""
 symbol: MES
