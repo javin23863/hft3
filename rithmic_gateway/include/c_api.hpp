@@ -57,6 +57,10 @@ int   hft_rithmic_adapter_cancel_order(void* handle, const char* order_id);
 int   hft_rithmic_adapter_try_pop_event(void* handle, MarketDataEvent* out_event);
 int   hft_rithmic_adapter_try_pop_order_event(void* handle, OrderEvent* out_event);
 const char* hft_rithmic_adapter_last_error(void* handle);
+const char* hft_rithmic_adapter_get_env_key(void* handle);
+const char* hft_rithmic_adapter_get_account_id(void* handle);
+const char* hft_rithmic_adapter_get_trade_route(void* handle);
+int         hft_rithmic_adapter_is_connected(void* handle);
 
 #ifdef __cplusplus
 }

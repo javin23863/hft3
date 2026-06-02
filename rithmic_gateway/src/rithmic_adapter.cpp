@@ -70,10 +70,11 @@ static OrderEvent make_order_event(RApi::OrderReport* pReport, char event_type) 
         evt.price = 0.0;
     }
     if (pReport->bFillPriceFlag) {
-        evt.size = static_cast<int32_t>(pReport->llFillSize);
+        evt.price = pReport->dFillPrice;
     } else {
-        evt.size = 0;
+        evt.price = 0.0;
     }
+    evt.size = static_cast<int32_t>(pReport->llOrderQty);
     evt.filled_size = static_cast<int32_t>(pReport->llFillSize);
     evt.total_filled = static_cast<int32_t>(pReport->llTotalFilled);
     evt.total_unfilled = static_cast<int32_t>(pReport->llTotalUnfilled);
@@ -116,14 +117,18 @@ public:
 
     int Environment(RApi::EnvironmentInfo* pInfo, void* pContext, int* aiCode) override {
         (void)pContext;
-        if (pInfo) {
+        if (pInfo && pInfo->asVariableArray && pInfo->sKey.pData && pInfo->sKey.iDataLen > 0) {
             std::string key(pInfo->sKey.pData, static_cast<size_t>(pInfo->sKey.iDataLen));
             std::cout << "[AdmCallbacks] Environment info for key='" << key << "' with "
                       << pInfo->iArrayLen << " variables" << std::endl;
             for (int i = 0; i < pInfo->iArrayLen; ++i) {
                 RApi::EnvironmentVariable& v = pInfo->asVariableArray[i];
+                if (!v.sName.pData || v.sName.iDataLen <= 0) continue;
                 std::string name(v.sName.pData, static_cast<size_t>(v.sName.iDataLen));
-                std::string value(v.sValue.pData, static_cast<size_t>(v.sValue.iDataLen));
+                std::string value;
+                if (v.sValue.pData && v.sValue.iDataLen > 0) {
+                    value.assign(v.sValue.pData, static_cast<size_t>(v.sValue.iDataLen));
+                }
                 std::cout << "  " << name << "=" << value << std::endl;
             }
         }
@@ -493,8 +498,8 @@ bool RithmicAdapter::initialize() {
         auto* adm = new MyAdmCallbacks(this);
         adm_callbacks_ = adm;
         return true;
-    } catch (OmneException& ex) {
-        std::cerr << "[RithmicAdapter] AdmCallbacks creation error: " << ex.getErrorCode() << std::endl;
+    } catch (std::exception& ex) {
+        std::cerr << "[RithmicAdapter] initialize error: " << ex.what() << std::endl;
         return false;
     }
 }
@@ -526,7 +531,8 @@ bool RithmicAdapter::connect() {
     try {
         pEngine = new RApi::REngine(&params);
     } catch (OmneException& ex) {
-        std::cerr << "[RithmicAdapter] REngine creation error: " << ex.getErrorCode() << std::endl;
+        last_connect_error_ = "REngine creation error: " + std::to_string(ex.getErrorCode());
+        std::cerr << "[RithmicAdapter] " << last_connect_error_ << std::endl;
         return false;
     }
     engine_ = pEngine;
@@ -548,7 +554,8 @@ bool RithmicAdapter::connect() {
         tsNCharcb cp = make_ts(config_.rep_connect_point.c_str());
         int iCode = 0;
         if (!pEngine->loginRepository(&envKey, &user, &pw, &cp, callbacks, &iCode)) {
-            std::cerr << "[RithmicAdapter] loginRepository error: " << iCode << std::endl;
+            last_connect_error_ = "loginRepository error: " + std::to_string(iCode);
+            std::cerr << "[RithmicAdapter] " << last_connect_error_ << std::endl;
             delete pEngine;
             delete callbacks;
             engine_ = nullptr;
@@ -562,7 +569,8 @@ bool RithmicAdapter::connect() {
             });
         }
         if (rep_login_status_ != LOGIN_COMPLETE) {
-            std::cerr << "[RithmicAdapter] repo login did not complete (status=" << rep_login_status_.load() << ")" << std::endl;
+            last_connect_error_ = "repo login did not complete (status=" + std::to_string(rep_login_status_.load()) + ")";
+            std::cerr << "[RithmicAdapter] " << last_connect_error_ << std::endl;
             delete pEngine;
             delete callbacks;
             engine_ = nullptr;
@@ -641,7 +649,8 @@ bool RithmicAdapter::connect() {
 
     int iCode = 0;
     if (!pEngine->login(&login_params, &iCode)) {
-        std::cerr << "[RithmicAdapter] login error: " << iCode << std::endl;
+        last_connect_error_ = "login error: " + std::to_string(iCode);
+        std::cerr << "[RithmicAdapter] " << last_connect_error_ << std::endl;
         delete pEngine;
         delete callbacks;
         engine_ = nullptr;
@@ -652,17 +661,27 @@ bool RithmicAdapter::connect() {
     {
         std::unique_lock<std::mutex> lk(login_mutex_);
         login_cv_.wait_for(lk, std::chrono::seconds(30), [&] {
-            return ts_login_status_ == LOGIN_COMPLETE || ts_login_status_ == LOGIN_FAILED;
+            bool md_done = md_login_status_ == LOGIN_COMPLETE || md_login_status_ == LOGIN_FAILED;
+            bool ts_done = ts_login_status_ == LOGIN_COMPLETE || ts_login_status_ == LOGIN_FAILED;
+            return md_done && ts_done;
         });
     }
 
-    if (ts_login_status_ != LOGIN_COMPLETE) {
-        std::cerr << "[RithmicAdapter] TS login did not complete (status=" << ts_login_status_.load() << ")" << std::endl;
+    bool md_ok = md_login_status_ == LOGIN_COMPLETE;
+    bool ts_ok = ts_login_status_ == LOGIN_COMPLETE;
+    if (!ts_ok) {
+        last_connect_error_ = "TS login status=" + std::to_string(ts_login_status_.load())
+                            + " MD status=" + std::to_string(md_login_status_.load());
+        std::cerr << "[RithmicAdapter] " << last_connect_error_ << std::endl;
         delete pEngine;
         delete callbacks;
         engine_ = nullptr;
         callbacks_ = nullptr;
         return false;
+    }
+    if (!md_ok) {
+        std::cerr << "[RithmicAdapter] MD login status=" << md_login_status_.load()
+                  << " (TS OK)" << std::endl;
     }
 
     {
@@ -672,7 +691,8 @@ bool RithmicAdapter::connect() {
         });
     }
     if (!account_ready_.load()) {
-        std::cerr << "[RithmicAdapter] No account received via AccountList" << std::endl;
+        last_connect_error_ = "No account received via AccountList";
+        std::cerr << "[RithmicAdapter] " << last_connect_error_ << std::endl;
         delete pEngine;
         delete callbacks;
         engine_ = nullptr;
@@ -682,7 +702,8 @@ bool RithmicAdapter::connect() {
 
     int iCodeRt = 0;
     if (!pEngine->listTradeRoutes(nullptr, &iCodeRt)) {
-        std::cerr << "[RithmicAdapter] listTradeRoutes error: " << iCodeRt << std::endl;
+        last_connect_error_ = "listTradeRoutes error: " + std::to_string(iCodeRt);
+        std::cerr << "[RithmicAdapter] " << last_connect_error_ << std::endl;
         delete pEngine;
         delete callbacks;
         engine_ = nullptr;
@@ -697,7 +718,8 @@ bool RithmicAdapter::connect() {
         });
     }
     if (!trade_route_ready_.load()) {
-        std::cerr << "[RithmicAdapter] No UP trade route available" << std::endl;
+        last_connect_error_ = "No UP trade route available";
+        std::cerr << "[RithmicAdapter] " << last_connect_error_ << std::endl;
         delete pEngine;
         delete callbacks;
         engine_ = nullptr;
@@ -716,12 +738,23 @@ bool RithmicAdapter::connect() {
     return true;
 }
 
+const char* RithmicAdapter::cached_account_id() {
+    std::lock_guard<std::mutex> lk(account_mutex_);
+    return account_id_.c_str();
+}
+
+const char* RithmicAdapter::cached_trade_route() {
+    std::lock_guard<std::mutex> lk(trade_route_mutex_);
+    return trade_route_.c_str();
+}
+
 void RithmicAdapter::disconnect() {
     if (engine_) {
         auto* pEngine = static_cast<RApi::REngine*>(engine_);
         if (logged_in_) {
             int iCode = 0;
             pEngine->logout(&iCode);
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
         }
         delete pEngine;
         engine_ = nullptr;
@@ -745,7 +778,7 @@ bool RithmicAdapter::subscribe_mbo(const std::string& symbol, const std::string&
     auto* pEngine = static_cast<RApi::REngine*>(engine_);
     tsNCharcb sExchange = make_ts(exchange.c_str());
     tsNCharcb sTicker = make_ts(symbol.c_str());
-    int iFlags = RApi::MD_PRINTS | RApi::MD_BEST;
+    int iFlags = RApi::MD_PRINTS | RApi::MD_BEST | RApi::MD_MBO;
     int iCode = 0;
 
     if (!pEngine->subscribe(&sExchange, &sTicker, iFlags, &iCode)) {

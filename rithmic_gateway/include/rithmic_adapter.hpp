@@ -71,8 +71,10 @@ public:
 
     bool has_account() const { return account_ready_.load(); }
     bool has_trade_route() const { return trade_route_ready_.load(); }
-    const char* cached_account_id() const { return account_id_.c_str(); }
-    const char* cached_trade_route() const { return trade_route_.c_str(); }
+    const char* cached_account_id();
+    const char* cached_trade_route();
+    const char* cached_env_key() const { return discovered_env_key_.c_str(); }
+    const char* last_connect_error() const { return last_connect_error_.c_str(); }
 
 private:
     ConnectionConfig config_;
@@ -106,6 +108,7 @@ private:
     std::string ib_id_;
     std::string trade_route_;
     std::string discovered_env_key_;
+    std::string last_connect_error_;
     std::atomic<bool> env_list_ready_{false};
     std::atomic<bool> env_ready_{false};
     std::vector<std::string> env_storage_;

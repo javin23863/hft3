@@ -350,6 +350,18 @@ class RithmicApiBridge:
         L.hft_rithmic_adapter_last_error.argtypes = [c_void_p]
         L.hft_rithmic_adapter_last_error.restype = c_char_p
 
+        L.hft_rithmic_adapter_get_env_key.argtypes = [c_void_p]
+        L.hft_rithmic_adapter_get_env_key.restype = c_char_p
+
+        L.hft_rithmic_adapter_get_account_id.argtypes = [c_void_p]
+        L.hft_rithmic_adapter_get_account_id.restype = c_char_p
+
+        L.hft_rithmic_adapter_get_trade_route.argtypes = [c_void_p]
+        L.hft_rithmic_adapter_get_trade_route.restype = c_char_p
+
+        L.hft_rithmic_adapter_is_connected.argtypes = [c_void_p]
+        L.hft_rithmic_adapter_is_connected.restype = c_int
+
     def _raise_if_nonzero(self, rc: int) -> None:
         if rc != 0:
             raise RithmicApiError(rc, self.last_error())
@@ -448,6 +460,26 @@ class RithmicApiBridge:
             return msg.decode("utf-8")
         except Exception:
             return str(msg)
+
+    def env_key(self) -> str:
+        h = self._require_handle()
+        msg = self._lib.hft_rithmic_adapter_get_env_key(h)
+        return msg.decode("utf-8") if msg else ""
+
+    def account_id(self) -> str:
+        h = self._require_handle()
+        msg = self._lib.hft_rithmic_adapter_get_account_id(h)
+        return msg.decode("utf-8") if msg else ""
+
+    def trade_route(self) -> str:
+        h = self._require_handle()
+        msg = self._lib.hft_rithmic_adapter_get_trade_route(h)
+        return msg.decode("utf-8") if msg else ""
+
+    def is_connected(self) -> bool:
+        if self._handle is None:
+            return False
+        return bool(self._lib.hft_rithmic_adapter_is_connected(self._handle))
 
 
 def locate_library() -> Path | None:

@@ -99,7 +99,7 @@ int hft_rithmic_adapter_connect(void* handle) {
     if (!e || !e->adapter) { return 1; }
     try {
         if (!e->adapter->connect()) {
-            set_error(e, "connect() failed");
+            set_error(e, e->adapter->last_connect_error());
             return 2;
         }
     } catch (...) {
@@ -218,6 +218,30 @@ const char* hft_rithmic_adapter_last_error(void* handle) {
     AdapterEntry* e = as_entry(handle);
     if (!e) return "invalid handle";
     return e->last_error.c_str();
+}
+
+const char* hft_rithmic_adapter_get_env_key(void* handle) {
+    AdapterEntry* e = as_entry(handle);
+    if (!e || !e->adapter) return "";
+    return e->adapter->cached_env_key();
+}
+
+const char* hft_rithmic_adapter_get_account_id(void* handle) {
+    AdapterEntry* e = as_entry(handle);
+    if (!e || !e->adapter) return "";
+    return e->adapter->cached_account_id();
+}
+
+const char* hft_rithmic_adapter_get_trade_route(void* handle) {
+    AdapterEntry* e = as_entry(handle);
+    if (!e || !e->adapter) return "";
+    return e->adapter->cached_trade_route();
+}
+
+int hft_rithmic_adapter_is_connected(void* handle) {
+    AdapterEntry* e = as_entry(handle);
+    if (!e || !e->adapter) return 0;
+    return e->adapter->has_account() ? 1 : 0;
 }
 
 } // extern "C"
