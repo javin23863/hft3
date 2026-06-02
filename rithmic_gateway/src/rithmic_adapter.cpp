@@ -165,6 +165,18 @@ public:
         (void)pContext;
         int ignored;
         pInfo->dump(&ignored);
+        if (pInfo) {
+            std::string msg, rpc;
+            if (pInfo->sMessage.pData && pInfo->sMessage.iDataLen > 0)
+                msg.assign(pInfo->sMessage.pData, static_cast<size_t>(pInfo->sMessage.iDataLen));
+            if (pInfo->sRpCode.pData && pInfo->sRpCode.iDataLen > 0)
+                rpc.assign(pInfo->sRpCode.pData, static_cast<size_t>(pInfo->sRpCode.iDataLen));
+            std::cerr << "[ALERT-DETAIL] type=" << pInfo->iAlertType
+                      << " conn_id=" << pInfo->iConnectionId
+                      << " rp_code=" << pInfo->iRpCode
+                      << " sRpCode='" << rpc << "'"
+                      << " msg='" << msg << "'" << std::endl;
+        }
 
         if (pInfo->iConnectionId == RApi::MARKET_DATA_CONNECTION_ID) {
             if (pInfo->iAlertType == RApi::ALERT_LOGIN_COMPLETE) {
