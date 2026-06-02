@@ -82,6 +82,44 @@ def ensure_rtrader_started(cfg: TrialConfig) -> Path | None:
     return launch
 
 
+def _connect_with_retry(connector, cfg, poll_interval_sec: float, *, max_attempts: int = 5) -> bool:
+    """Connect to the Rithmic backend with bounded retries.
+
+    A live capture daemon should not die on a single connect failure (transient
+    R|API+ 'Repository Connection Broken' alerts, an R|Trader VM still booting,
+    a network blip on the colo uplink). We retry with a short backoff, then
+    exit non-zero so systemd can restart us after RestartSec.
+
+    Returns True on successful connect, False if all attempts failed.
+    """
+    backoff = max(poll_interval_sec, 2.0)
+    for attempt in range(1, max_attempts + 1):
+        try:
+            connector.connect()
+            return True
+        except Exception as exc:
+            logging.warning(
+                "Connect attempt %d/%d failed for connector=%s: %s: %s",
+                attempt,
+                max_attempts,
+                connector.__class__.__name__,
+                type(exc).__name__,
+                exc,
+            )
+            try:
+                connector.close()
+            except Exception:
+                pass
+            if attempt < max_attempts:
+                time.sleep(backoff * attempt)
+    logging.error(
+        "Connect failed after %d attempts for connector=%s — exiting for systemd restart",
+        max_attempts,
+        connector.__class__.__name__,
+    )
+    return False
+
+
 def run_unattended(
     config_path: str | Path,
     *,
@@ -128,7 +166,8 @@ def run_unattended(
             logging.info("RTRADER_START_WINE=0 — expecting log_push bridge into watch_dirs")
 
     connector = build_connector(cfg)
-    connector.connect()
+    if not _connect_with_retry(connector, cfg, poll):
+        return 1
     capture = LiveCapture(cfg, date=_utc_date(), symbol=sym)
     total = 0
     market_total = 0
