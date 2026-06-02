@@ -108,7 +108,8 @@ public:
         if (pInfo->iConnectionId == RApi::REPOSITORY_CONNECTION_ID) {
             if (pInfo->iAlertType == RApi::ALERT_LOGIN_COMPLETE) {
                 adapter_->rep_login_status_ = RithmicAdapter::LOGIN_COMPLETE;
-            } else if (pInfo->iAlertType == RApi::ALERT_LOGIN_FAILED) {
+            } else if (pInfo->iAlertType == RApi::ALERT_LOGIN_FAILED
+                       || pInfo->iAlertType == RApi::ALERT_CONNECTION_BROKEN) {
                 adapter_->rep_login_status_ = RithmicAdapter::LOGIN_FAILED;
             }
         }
@@ -116,7 +117,8 @@ public:
         if (pInfo->iConnectionId == RApi::MARKET_DATA_CONNECTION_ID) {
             if (pInfo->iAlertType == RApi::ALERT_LOGIN_COMPLETE) {
                 adapter_->md_login_status_ = RithmicAdapter::LOGIN_COMPLETE;
-            } else if (pInfo->iAlertType == RApi::ALERT_LOGIN_FAILED) {
+            } else if (pInfo->iAlertType == RApi::ALERT_LOGIN_FAILED
+                       || pInfo->iAlertType == RApi::ALERT_CONNECTION_BROKEN) {
                 adapter_->md_login_status_ = RithmicAdapter::LOGIN_FAILED;
             }
         }

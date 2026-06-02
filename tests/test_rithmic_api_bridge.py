@@ -399,6 +399,26 @@ def test_connector_detected_event_types_includes_order_events() -> None:
     assert "order_failure" in types
 
 
+def test_connector_repository_connect_point_from_repository_login_block() -> None:
+    """Regression: repo connect point must come from repository_login.sCnnctPt,
+    NOT from login_params.sPnlCnnctPt (the previous bug sent login_agent_pnlc
+    which Rithmic rejected with 'Repository Connection Broken').
+    """
+    cfg_path = (
+        Path(__file__).resolve().parents[1]
+        / "packages"
+        / "data_system"
+        / "config"
+        / "rithmic_api_test.yaml"
+    )
+    connector = RithmicApiConnector(config_path=cfg_path)
+    cfg = connector._build_connection_config()
+    assert cfg.rep_connect_point == "login_agent_repositoryc"
+    assert cfg.rep_connect_point != "login_agent_pnlc"
+    assert cfg.md_connect_point == "login_agent_tpc"
+    assert cfg.ts_connect_point == "login_agent_opc"
+
+
 class _FakeBridge:
     def __init__(self, *queued_order_events: OrderEvent) -> None:
         self._order_events = list(queued_order_events)

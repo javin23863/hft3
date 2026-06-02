@@ -97,25 +97,11 @@ class RithmicApiConnector(ConnectorInterface):
 
         engine = self._cfg.get("engine_params", {}) or {}
         login = self._cfg.get("login_params", {}) or {}
-        connect_points = self._cfg.get("connect_points", {}) or {}
+        repository_login = self._cfg.get("repository_login", {}) or {}
 
-        md = (
-            connect_points.get("md")
-            or login.get("sMdCnnctPt")
-            or ""
-        )
-        ts = (
-            connect_points.get("ts")
-            or login.get("sTsCnnctPt")
-            or ""
-        )
-        rep = (
-            connect_points.get("rep")
-            or connect_points.get("ih")
-            or login.get("sPnlCnnctPt")
-            or login.get("sIhCnnctPt")
-            or ""
-        )
+        md = login.get("sMdCnnctPt") or ""
+        ts = login.get("sTsCnnctPt") or ""
+        rep = repository_login.get("sCnnctPt") or ""
 
         env_name = (
             self._cfg.get("system")
