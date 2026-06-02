@@ -26,6 +26,7 @@ class TrialConfig:
     rtrader: dict[str, Any] = field(default_factory=dict)
     unattended: dict[str, Any] = field(default_factory=dict)
     rithmic: dict[str, Any] = field(default_factory=dict)
+    rithmic_api_config: str = ""
 
     def raw_dir(self, date: str, symbol: str | None = None) -> Path:
         sym = symbol or self.symbol
@@ -124,4 +125,5 @@ def load_config(path: str | Path) -> TrialConfig:
         rtrader=rtrader,
         unattended=unattended,
         rithmic=rithmic,
+        rithmic_api_config=data.get("rithmic_api_config", ""),
     )
