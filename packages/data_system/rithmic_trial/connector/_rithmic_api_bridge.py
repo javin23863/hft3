@@ -125,6 +125,73 @@ class CMarketDataEvent(Structure):
     ]
 
 
+@dataclass
+class OrderEvent:
+    timestamp_ns: int = 0
+    order_id: int = 0
+    event_type: str = ""
+    side: str = ""
+    order_type: str = ""
+    price: float = 0.0
+    size: int = 0
+    filled_size: int = 0
+    total_filled: int = 0
+    total_unfilled: int = 0
+
+    @classmethod
+    def from_c(cls, ev: "COrderEvent") -> "OrderEvent":
+        def _decode_char(value) -> str:
+            if not value:
+                return ""
+            if isinstance(value, int):
+                return chr(value)
+            if isinstance(value, (bytes, bytearray)):
+                return value.decode("utf-8", errors="replace") if value else ""
+            return str(value)
+
+        return cls(
+            timestamp_ns=int(ev.timestamp_ns),
+            order_id=int(ev.order_id),
+            event_type=_decode_char(ev.event_type),
+            side=_decode_char(ev.side),
+            order_type=_decode_char(ev.order_type),
+            price=float(ev.price),
+            size=int(ev.size),
+            filled_size=int(ev.filled_size),
+            total_filled=int(ev.total_filled),
+            total_unfilled=int(ev.total_unfilled),
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "timestamp_ns": self.timestamp_ns,
+            "order_id": self.order_id,
+            "event_type": self.event_type,
+            "side": self.side,
+            "order_type": self.order_type,
+            "price": self.price,
+            "size": self.size,
+            "filled_size": self.filled_size,
+            "total_filled": self.total_filled,
+            "total_unfilled": self.total_unfilled,
+        }
+
+
+class COrderEvent(Structure):
+    _fields_ = [
+        ("timestamp_ns", c_uint64),
+        ("order_id", c_uint64),
+        ("event_type", ctypes.c_char),
+        ("side", ctypes.c_char),
+        ("order_type", ctypes.c_char),
+        ("price", c_double),
+        ("size", c_int32),
+        ("filled_size", c_int32),
+        ("total_filled", c_int32),
+        ("total_unfilled", c_int32),
+    ]
+
+
 class CConnectionConfig(Structure):
     pass
 
@@ -269,6 +336,9 @@ class RithmicApiBridge:
         L.hft_rithmic_adapter_try_pop_event.argtypes = [c_void_p, POINTER(CMarketDataEvent)]
         L.hft_rithmic_adapter_try_pop_event.restype = c_int
 
+        L.hft_rithmic_adapter_try_pop_order_event.argtypes = [c_void_p, POINTER(COrderEvent)]
+        L.hft_rithmic_adapter_try_pop_order_event.restype = c_int
+
         L.hft_rithmic_adapter_last_error.argtypes = [c_void_p]
         L.hft_rithmic_adapter_last_error.restype = c_char_p
 
@@ -347,6 +417,16 @@ class RithmicApiBridge:
             return None
         if rc == 0:
             return MarketDataEvent.from_c(ev)
+        raise RithmicApiError(rc, self.last_error())
+
+    def try_pop_order_event(self) -> Optional[OrderEvent]:
+        h = self._require_handle()
+        ev = COrderEvent()
+        rc = self._lib.hft_rithmic_adapter_try_pop_order_event(h, ctypes.byref(ev))
+        if rc == 2:
+            return None
+        if rc == 0:
+            return OrderEvent.from_c(ev)
         raise RithmicApiError(rc, self.last_error())
 
     def last_error(self) -> str:

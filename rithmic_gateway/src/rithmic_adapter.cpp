@@ -8,6 +8,78 @@
 
 namespace hft {
 
+static char report_type_char(RApi::OrderReport* pReport) {
+    const char* p = pReport->sReportType.pData;
+    int n = pReport->sReportType.iDataLen;
+    if (!p || n <= 0) return '?';
+    auto starts_with = [&](const char* s) {
+        int m = static_cast<int>(std::strlen(s));
+        return n >= m && std::memcmp(p, s, static_cast<size_t>(m)) == 0;
+    };
+    if (starts_with("OrderStatusReport"))        return 'A';
+    if (starts_with("OrderFillReport"))          return 'F';
+    if (starts_with("OrderCancelReport"))        return 'C';
+    if (starts_with("OrderNotCancelledReport"))  return 'C';
+    if (starts_with("OrderModifyReport"))        return 'M';
+    if (starts_with("OrderNotModifiedReport"))   return 'M';
+    if (starts_with("OrderRejectReport"))        return 'R';
+    if (starts_with("OrderFailureReport"))       return 'X';
+    if (starts_with("OrderBustReport"))          return 'X';
+    if (starts_with("OrderTradeCorrectReport"))  return 'F';
+    if (starts_with("OrderTriggerReport"))       return 'A';
+    if (starts_with("OrderTriggerPulledReport")) return 'C';
+    return '?';
+}
+
+static char buysell_to_side(const tsNCharcb& s) {
+    if (s.iDataLen <= 0 || s.pData == nullptr) return ' ';
+    char c = s.pData[0];
+    if (c == 'B' || c == 'b') return 'B';
+    if (c == 'S' || c == 's') return 'A';
+    return c;
+}
+
+static char entrytype_to_ordertype(const tsNCharcb& s) {
+    if (s.iDataLen <= 0 || s.pData == nullptr) return ' ';
+    return s.pData[0];
+}
+
+static uint64_t order_id_to_u64(const tsNCharcb& s) {
+    if (s.iDataLen <= 0 || s.pData == nullptr) return 0ULL;
+    char tmp[32];
+    int n = s.iDataLen < 31 ? s.iDataLen : 31;
+    std::memcpy(tmp, s.pData, static_cast<size_t>(n));
+    tmp[n] = '\0';
+    char* endp = nullptr;
+    return static_cast<uint64_t>(std::strtoull(tmp, &endp, 10));
+}
+
+static OrderEvent make_order_event(RApi::OrderReport* pReport, char event_type) {
+    OrderEvent evt{};
+    evt.timestamp_ns = static_cast<uint64_t>(pReport->iSsboe) * 1000000000ULL
+                     + static_cast<uint64_t>(pReport->iUsecs) * 1000ULL;
+    evt.order_id = order_id_to_u64(pReport->sOrderNum);
+    evt.event_type = event_type;
+    evt.side = buysell_to_side(pReport->sBuySellType);
+    evt.order_type = entrytype_to_ordertype(pReport->sEntryType);
+    if (pReport->bPriceToFillFlag) {
+        evt.price = pReport->dPriceToFill;
+    } else if (pReport->bFillPriceFlag) {
+        evt.price = pReport->dFillPrice;
+    } else {
+        evt.price = 0.0;
+    }
+    if (pReport->bFillPriceFlag) {
+        evt.size = static_cast<int32_t>(pReport->llFillSize);
+    } else {
+        evt.size = 0;
+    }
+    evt.filled_size = static_cast<int32_t>(pReport->llFillSize);
+    evt.total_filled = static_cast<int32_t>(pReport->llTotalFilled);
+    evt.total_unfilled = static_cast<int32_t>(pReport->llTotalUnfilled);
+    return evt;
+}
+
 class MyAdmCallbacks : public RApi::AdmCallbacks {
 public:
     MyAdmCallbacks() = default;
@@ -137,48 +209,72 @@ public:
 
     int FillReport(RApi::OrderFillReport* pReport, void* pContext, int* aiCode) override {
         (void)pContext;
-        int ignored;
-        pReport->dump(&ignored);
+        auto* base = static_cast<RApi::OrderReport*>(pReport);
+        OrderEvent evt = make_order_event(base, report_type_char(base));
+        if (adapter_->order_queue_ && !adapter_->order_queue_->push(evt)) {
+            std::cerr << "[CRITICAL] Order Queue overrun on event_type=" << evt.event_type
+                      << " order_id=" << evt.order_id << std::endl;
+        }
         *aiCode = API_OK;
         return OK;
     }
 
     int StatusReport(RApi::OrderStatusReport* pReport, void* pContext, int* aiCode) override {
         (void)pContext;
-        int ignored;
-        pReport->dump(&ignored);
+        auto* base = static_cast<RApi::OrderReport*>(pReport);
+        OrderEvent evt = make_order_event(base, report_type_char(base));
+        if (adapter_->order_queue_ && !adapter_->order_queue_->push(evt)) {
+            std::cerr << "[CRITICAL] Order Queue overrun on event_type=" << evt.event_type
+                      << " order_id=" << evt.order_id << std::endl;
+        }
         *aiCode = API_OK;
         return OK;
     }
 
     int CancelReport(RApi::OrderCancelReport* pReport, void* pContext, int* aiCode) override {
         (void)pContext;
-        int ignored;
-        pReport->dump(&ignored);
+        auto* base = static_cast<RApi::OrderReport*>(pReport);
+        OrderEvent evt = make_order_event(base, report_type_char(base));
+        if (adapter_->order_queue_ && !adapter_->order_queue_->push(evt)) {
+            std::cerr << "[CRITICAL] Order Queue overrun on event_type=" << evt.event_type
+                      << " order_id=" << evt.order_id << std::endl;
+        }
         *aiCode = API_OK;
         return OK;
     }
 
     int ModifyReport(RApi::OrderModifyReport* pReport, void* pContext, int* aiCode) override {
         (void)pContext;
-        int ignored;
-        pReport->dump(&ignored);
+        auto* base = static_cast<RApi::OrderReport*>(pReport);
+        OrderEvent evt = make_order_event(base, report_type_char(base));
+        if (adapter_->order_queue_ && !adapter_->order_queue_->push(evt)) {
+            std::cerr << "[CRITICAL] Order Queue overrun on event_type=" << evt.event_type
+                      << " order_id=" << evt.order_id << std::endl;
+        }
         *aiCode = API_OK;
         return OK;
     }
 
     int RejectReport(RApi::OrderRejectReport* pReport, void* pContext, int* aiCode) override {
         (void)pContext;
-        int ignored;
-        pReport->dump(&ignored);
+        auto* base = static_cast<RApi::OrderReport*>(pReport);
+        OrderEvent evt = make_order_event(base, report_type_char(base));
+        if (adapter_->order_queue_ && !adapter_->order_queue_->push(evt)) {
+            std::cerr << "[CRITICAL] Order Queue overrun on event_type=" << evt.event_type
+                      << " order_id=" << evt.order_id << std::endl;
+        }
         *aiCode = API_OK;
         return OK;
     }
 
     int FailureReport(RApi::OrderFailureReport* pReport, void* pContext, int* aiCode) override {
         (void)pContext;
-        int ignored;
-        pReport->dump(&ignored);
+        auto* base = static_cast<RApi::OrderReport*>(pReport);
+        OrderEvent evt = make_order_event(base, report_type_char(base));
+        if (adapter_->order_queue_ && !adapter_->order_queue_->push(evt)) {
+            std::cerr << "[CRITICAL] Order Queue overrun on event_type=" << evt.event_type
+                      << " order_id=" << evt.order_id << std::endl;
+        }
         *aiCode = API_OK;
         return OK;
     }
@@ -276,9 +372,11 @@ static tsNCharcb make_ts(const char* s) {
 }
 
 RithmicAdapter::RithmicAdapter(const ConnectionConfig& config,
-                               SPSCQueue<MarketDataEvent, 8192>* mbo_queue)
+                               SPSCQueue<MarketDataEvent, 8192>* mbo_queue,
+                               SPSCQueue<OrderEvent, 8192>* order_queue)
     : config_(config)
     , mbo_queue_(mbo_queue)
+    , order_queue_(order_queue)
     , engine_(nullptr)
     , callbacks_(nullptr)
     , adm_callbacks_(nullptr)

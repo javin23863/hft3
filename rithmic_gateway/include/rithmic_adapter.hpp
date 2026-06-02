@@ -20,6 +20,19 @@ struct MarketDataEvent {
     int32_t size;
 };
 
+struct OrderEvent {
+    uint64_t timestamp_ns;
+    uint64_t order_id;
+    char event_type;   // 'S' submit, 'A' ack, 'F' fill, 'C' cancel, 'M' modify, 'R' reject, 'X' failure
+    char side;         // 'B' buy, 'A' sell, ' ' unknown
+    char order_type;   // 'L' limit, 'M' market, ' ' unknown
+    double price;
+    int32_t size;
+    int32_t filled_size;
+    int32_t total_filled;
+    int32_t total_unfilled;
+};
+
 struct ConnectionConfig {
     std::string environment;
     std::string username;
@@ -42,7 +55,8 @@ class RithmicAdapter {
 
 public:
     explicit RithmicAdapter(const ConnectionConfig& config,
-                           SPSCQueue<MarketDataEvent, 8192>* mbo_queue);
+                           SPSCQueue<MarketDataEvent, 8192>* mbo_queue,
+                           SPSCQueue<OrderEvent, 8192>* order_queue);
     ~RithmicAdapter();
 
     bool initialize();
@@ -56,6 +70,7 @@ public:
 private:
     ConnectionConfig config_;
     SPSCQueue<MarketDataEvent, 8192>* mbo_queue_;
+    SPSCQueue<OrderEvent, 8192>* order_queue_;
 
     void* engine_;
     void* callbacks_;

@@ -14,6 +14,7 @@ struct AdapterEntry {
     hft::RithmicAdapter* adapter;
     std::string last_error;
     hft::SPSCQueue<hft::MarketDataEvent, 8192> queue;
+    hft::SPSCQueue<hft::OrderEvent, 8192> order_queue;
     std::vector<std::string> env_storage;
 };
 
@@ -66,7 +67,7 @@ void* hft_rithmic_adapter_create(const ConnectionConfig* cfg) {
     try {
         populate_env_storage(entry, cfg);
         hft::ConnectionConfig cpp_cfg = build_cpp_config(cfg, entry->env_storage);
-        entry->adapter = new hft::RithmicAdapter(cpp_cfg, &entry->queue);
+        entry->adapter = new hft::RithmicAdapter(cpp_cfg, &entry->queue, &entry->order_queue);
     } catch (...) {
         set_error(entry, "exception during adapter construction");
         delete entry->adapter;
@@ -188,6 +189,26 @@ int hft_rithmic_adapter_try_pop_event(void* handle, MarketDataEvent* out_event) 
     out_event->side         = evt.side;
     out_event->price        = evt.price;
     out_event->size         = evt.size;
+    return 0;
+}
+
+int hft_rithmic_adapter_try_pop_order_event(void* handle, OrderEvent* out_event) {
+    AdapterEntry* e = as_entry(handle);
+    if (!e || !out_event) { return 1; }
+    hft::OrderEvent evt;
+    if (!e->order_queue.pop(evt)) {
+        return 2;
+    }
+    out_event->timestamp_ns  = evt.timestamp_ns;
+    out_event->order_id      = evt.order_id;
+    out_event->event_type    = evt.event_type;
+    out_event->side          = evt.side;
+    out_event->order_type    = evt.order_type;
+    out_event->price         = evt.price;
+    out_event->size          = evt.size;
+    out_event->filled_size   = evt.filled_size;
+    out_event->total_filled  = evt.total_filled;
+    out_event->total_unfilled = evt.total_unfilled;
     return 0;
 }
 

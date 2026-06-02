@@ -31,6 +31,19 @@ typedef struct MarketDataEvent {
     int32_t size;
 } MarketDataEvent;
 
+typedef struct OrderEvent {
+    uint64_t timestamp_ns;
+    uint64_t order_id;
+    char event_type;
+    char side;
+    char order_type;
+    double price;
+    int32_t size;
+    int32_t filled_size;
+    int32_t total_filled;
+    int32_t total_unfilled;
+} OrderEvent;
+
 void* hft_rithmic_adapter_create(const ConnectionConfig* cfg);
 int   hft_rithmic_adapter_initialize(void* handle);
 int   hft_rithmic_adapter_connect(void* handle);
@@ -40,6 +53,7 @@ int   hft_rithmic_adapter_subscribe_mbo(void* handle, const char* symbol, const 
 int   hft_rithmic_adapter_send_order(void* handle, const char* symbol, char side, int32_t qty, double price);
 int   hft_rithmic_adapter_cancel_order(void* handle, const char* order_id);
 int   hft_rithmic_adapter_try_pop_event(void* handle, MarketDataEvent* out_event);
+int   hft_rithmic_adapter_try_pop_order_event(void* handle, OrderEvent* out_event);
 const char* hft_rithmic_adapter_last_error(void* handle);
 
 #ifdef __cplusplus

@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+
+def _now_ns() -> int:
+    return time.perf_counter_ns()
+
 from ._rithmic_api_bridge import (
     ConnectionConfig,
+    OrderEvent,
     RithmicApiBridge,
     RithmicApiError,
     RithmicApiLibraryNotFoundError,
@@ -21,10 +27,20 @@ __all__ = [
     "RithmicApiError",
     "RithmicApiLibraryNotFoundError",
     "ConnectionConfig",
+    "OrderEvent",
 ]
 
 
 _SIDE_MAP = {"BUY": "B", "B": "B", "SELL": "A", "A": "A"}
+
+_BRIDGE_TO_DAEMON_EVENT = {
+    "A": "order_ack",
+    "F": "fill",
+    "C": "cancel",
+    "M": "order_replace",
+    "R": "reject",
+    "X": "order_failure",
+}
 
 
 class RithmicApiConnector(ConnectorInterface):
@@ -42,6 +58,8 @@ class RithmicApiConnector(ConnectorInterface):
         self._ssl_cert_path: Path | None = None
         self._bridge: RithmicApiBridge | None = None
         self._connected = False
+        self._submit_seq = 0
+        self._pending_submits: list[dict[str, Any]] = []
         self._load_config()
 
     def _load_config(self) -> None:
@@ -168,6 +186,15 @@ class RithmicApiConnector(ConnectorInterface):
             raise ValueError(f"unknown side: {side!r}; expected one of {sorted(_SIDE_MAP)}")
         side_char = _SIDE_MAP[key]
         self._bridge.send_order(symbol, side_char, qty, price)
+        self._submit_seq += 1
+        self._pending_submits.append({
+            "client_order_id": f"local-{self._submit_seq}",
+            "symbol": symbol,
+            "side": key,
+            "qty": int(qty),
+            "price": float(price),
+            "ts_emit_ns": _now_ns(),
+        })
 
     def cancel_order(self, order_id: str) -> None:
         if not self._connected or self._bridge is None:
@@ -185,8 +212,55 @@ class RithmicApiConnector(ConnectorInterface):
             out.append(ev.to_dict())
         return out
 
+    def poll_order_events(self) -> list[dict[str, Any]]:
+        if self._bridge is None:
+            return []
+        out: list[dict[str, Any]] = []
+
+        while self._pending_submits:
+            submit = self._pending_submits[0]
+            submit_record = {
+                "event_type": "order_submit",
+                "order_id": submit["client_order_id"],
+                "symbol": submit["symbol"],
+                "side": submit["side"],
+                "qty": submit["qty"],
+                "price": submit["price"],
+                "ts_emit_ns": submit["ts_emit_ns"],
+            }
+            out.append(submit_record)
+            self._pending_submits.pop(0)
+            if len(out) >= 1000:
+                break
+
+        for _ in range(1000 - len(out)):
+            ev = self._bridge.try_pop_order_event()
+            if ev is None:
+                break
+            out.append(self._adapt_order_event(ev))
+        return out
+
+    def _adapt_order_event(self, ev: OrderEvent) -> dict[str, Any]:
+        bridge_evt = ev.event_type
+        daemon_evt = _BRIDGE_TO_DAEMON_EVENT.get(bridge_evt, "order_status")
+        order_id = ev.order_id if ev.order_id != 0 else f"unknown-{ev.timestamp_ns}"
+        return {
+            "event_type": daemon_evt,
+            "bridge_event_type": bridge_evt,
+            "order_id": str(order_id),
+            "side": ev.side,
+            "order_type": ev.order_type,
+            "price": ev.price,
+            "size": ev.size,
+            "filled_size": ev.filled_size,
+            "total_filled": ev.total_filled,
+            "total_unfilled": ev.total_unfilled,
+            "timestamp_ns": ev.timestamp_ns,
+        }
+
     def detected_event_types(self) -> set[str]:
-        return set()
+        return {"order_submit", "order_ack", "fill", "cancel",
+                "order_replace", "reject", "order_failure"}
 
     def limitations(self) -> dict[str, Any]:
         return {
