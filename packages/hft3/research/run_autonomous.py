@@ -20,7 +20,7 @@ What is real:
   - Promotion-gate wiring (writes to the atomic certification registry)
   - Report generator with the 22 spec sections
 
-What is pending (blocked on Phase 5 / Phase 9 / Phase 10):
+What is pending (blocked on WorkbenchEngine integration / Phase 10 wiring):
   - Real backtest metrics from WorkbenchEngine
   - Real robustness pack results
   - Walk-forward correlation (single WF only today; double-WF in Phase 10)
@@ -604,6 +604,20 @@ class AutonomousRunner:
             severity=Severity.BLOCKING,
             reason_code="ARTIFACT_PENDING",
         ))
+        # Emit a PENDING gate for the double-WF correlation before persisting
+        # robustness_gates.json; this keeps the blocking summary honest.
+        gates.append(GateResult(
+            gate_name="double_wf_correlation",
+            gate_category=GateCategory.WALK_FORWARD_CORRELATION,
+            metric_name="spearman",
+            threshold=0.20,
+            observed_value=None,
+            comparison_operator=">=",
+            pass_fail=False,
+            severity=Severity.BLOCKING,
+            reason_code="DOUBLE_WF_PENDING",
+            artifact_reference="walk_forward_correlation.json",
+        ))
         # Persist to robustness_gates.json
         rg_path = self.run_dir / "robustness_gates.json"
         rg_path.parent.mkdir(parents=True, exist_ok=True)
@@ -626,7 +640,7 @@ class AutonomousRunner:
         # walk_forward_correlation.json (Phase 10: honest PENDING stub)
         # The double-WF correlator exists in
         # apps/workbench/src/robustness/wfc/double_wf.py but is not yet
-        # wired into the runner (requires real matrix data from Phase 5).
+        # wired into the runner (requires real Workbench matrix data).
         # Until then, emit a PENDING stub with pass_fail=False so the
         # runner cannot PROMOTE.
         self._write_artifact("walk_forward_correlation.json", {
@@ -637,22 +651,9 @@ class AutonomousRunner:
             "correlation_score": 0.0,
             "minimum_required_score": 0.20,
             "rejection_reasons": [
-                "Double-WF correlator not yet wired (requires Phase 5 matrix data)"
+                "Double-WF correlator not yet wired (requires Workbench matrix data)"
             ],
         })
-        # Emit a PENDING gate for the double-WF correlation
-        gates.append(GateResult(
-            gate_name="double_wf_correlation",
-            gate_category=GateCategory.WALK_FORWARD_CORRELATION,
-            metric_name="spearman",
-            threshold=0.20,
-            observed_value=None,
-            comparison_operator=">=",
-            pass_fail=False,
-            severity=Severity.BLOCKING,
-            reason_code="DOUBLE_WF_PENDING",
-            artifact_reference="walk_forward_correlation.json",
-        ))
         self._stage_end("robustness_and_wf", rg_path)
         return rg_path
 
@@ -668,7 +669,8 @@ class AutonomousRunner:
         reason = (
             "Autonomous runner scaffolding: WorkbenchEngine integration is "
             "not yet wired. Candidate is quarantined pending real backtest + "
-            "robustness + walk-forward output. Re-run after Phase 5 lands."
+            "robustness + walk-forward output. Re-run after WorkbenchEngine "
+            "integration lands."
         )
         scoring_summary = {
             "decision": decision,

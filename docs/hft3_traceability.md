@@ -77,7 +77,7 @@ This document maps each major requirement from the 26-phase spec to:
 
 | Requirement | Implementation | Test | Artifact |
 |---|---|---|---|
-| 25 robustness checks | **PARTIALLY IMPLEMENTED** (most exist in workbench; ~8 missing) | N/A | N/A |
+| 25 robustness checks | `apps/workbench/src/robustness/pack.py::REQUIRED_ROBUSTNESS_CHECKS`; `RobustnessCheck`; autonomous double-WF gate persisted before `robustness_gates.json` write | `tests/test_workbench/test_robustness_pack_phase9.py` (9 tests); `tests/test_runner_honesty.py::test_runner_writes_double_wf_gate_to_robustness_gates` | `RobustnessResult.checks` with 25 checks; `robustness_gates.json` includes `double_wf_correlation` |
 
 ## Phase 10: Walk-Forward Correlation
 
@@ -160,16 +160,16 @@ This document maps each major requirement from the 26-phase spec to:
 | 6 — L3 data-resolution | ✅ DONE | 17 |
 | 7 — DefensiveModel ABC | ✅ DONE | 12 |
 | 8 — Gate schema | ✅ DONE | 12 |
-| 9 — 25 robustness checks | ⚠️ PARTIAL | 0 |
+| 9 — 25 robustness checks | ✅ DONE | 10 |
 | 10 — Double-WF correlator | ✅ DONE | 10 |
 | 11 — Atomic registry | ✅ DONE | 31 |
 | 12 — Artifact bundle | ✅ DONE | 11 |
 | 13 — Reporting 22 sections | ✅ DONE | 1 |
 | 14-23 — Trade Manager | ❌ NOT DONE | 0 |
 | 24 — Resumability | ⚠️ PARTIAL | 1 |
-| 25 — 22 required tests | ⚠️ PARTIAL | 149 total |
+| 25 — 22 required tests | ⚠️ PARTIAL | 159 total |
 | 26 — Documentation | ✅ DONE | N/A |
 
-**Total: 149 tests passing across 13 test files.**
+**Total: 159 tests passing across 14 test files.**
 
-**12 of 26 phases complete. 3 partially done. 11 not started.**
+**14 of 26 phases complete. 2 partially done. 10 not started.**

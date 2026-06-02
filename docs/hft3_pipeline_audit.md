@@ -7,36 +7,36 @@
 
 HFT3 is a research-grade event-replay workbench for hypothesis-driven and
 structural-model trading strategies on MBO L3 microstructure data. It already
-implements most of the surfaces required by the 26-phase hardening spec —
-the principal gaps are a missing `trade_manager/` package, a missing
-double-WF correlator, the absence of a distinct `DefensiveModel` base class,
-and a single-JSON certification registry with no atomic write or hash chain.
+implements most of the surfaces required by the 26-phase hardening spec. The
+principal gaps are a missing `trade_manager/` package, autonomous runner wiring
+to real Workbench backtest/robustness evidence, double-WF matrix wiring into
+campaign/autonomous promotion, and live observer/execution integration.
 
 | # | Item | Status | One-line |
 |---|------|--------|----------|
 | 1 | Workbench engine dispatching HYP/PDF | EXISTS | `apps/workbench/src/run/engine.py` |
 | 2 | Unified 55-model registry (44 HYP + 11 PDF) | EXISTS | `unified_registry.py` + `model_registry.yaml` |
 | 3 | `WorkbenchModel` base class | EXISTS | `apps/workbench/src/core/protocol.py:40-103` |
-| 4 | Distinct `DefensiveModel` base class | MISSING | defensives are role-tags, not a class |
+| 4 | Distinct `DefensiveModel` base class | EXISTS | `apps/workbench/src/core/defensive.py` |
 | 5 | Combined composition (primary+def+struct) | EXISTS | `composition_orchestrator.py` + `pdf_orchestrator.py` |
 | 6 | L3 MBO data loader | EXISTS | `apps/workbench/src/data/l3_loader.py` |
 | 7 | Databento + Rithmic data adapters | EXISTS | `packages/data_system/...` |
 | 8 | 64-dim `FeatureIndex` enum | EXISTS | `features/feature_index.py:11-126` |
 | 9 | Hypothesis replay strategy on `ReplayBus` | EXISTS | `backtest_pipeline/hypothesis_replay_strategy.py` |
 | 10 | Robustness pack (MC + WF + purged k-fold + param matrix) | EXISTS | `apps/workbench/src/robustness/` |
-| 11 | WFC gate (Pearson / Spearman / Kendall) | EXISTS (single WF) | `apps/workbench/src/robustness/wfc/gate.py` |
+| 11 | WFC gate (Pearson / Spearman / Kendall) | EXISTS | `apps/workbench/src/robustness/wfc/gate.py` + `double_wf.py` |
 | 12 | Walk-forward validator (D/C/H/R periods) | EXISTS | `decision_engine/python/src/walk_forward.py:11-78` |
 | 13 | Scoring / thresholds for promotion | EXISTS | `research_pipeline/types.py:33-50` |
 | 14 | Report generator + artifact tree (748 runs) | EXISTS | `report/generator.py` + `artifacts/paths.py` |
 | 15 | Research pipeline (LLM + KG + candidate gen) | EXISTS | `packages/research_pipeline/` |
 | 16 | Knowledge graph from research cards | EXISTS | `packages/data_layer/kg/store.py` |
-| 17 | T0–T4 promotion gates | EXISTS (atomicity PARTIAL) | `hft3/validation/promotion_gate.py` |
-| 18 | Immutable `CertificationRecord` | PARTIAL | no atomic write, no hash chain |
+| 17 | T0–T4 promotion gates | EXISTS | `hft3/validation/promotion_gate.py` |
+| 18 | Immutable `CertificationRecord` | EXISTS | atomic write, file lock, SHA-256 hash chain |
 | 19 | Artifacts tree (per-run + per-campaign + per-card) | EXISTS | `artifacts/research_cards/` |
 | 20 | Trade manager (signal → `OrderIntent`) | MISSING | no `trade_manager/` package |
 | 21 | Execution adapter + safety guards | EXISTS (live STUB) | `packages/execution/adapters/live_broker.py:30-37` |
 | 22 | Risk layer (size/loss/kill/pos/clock) | EXISTS (not wired) | `production_safety.py` + `risk_engine/` (C++) |
-| 23 | NL-thesis / auto-research driver (PDF → candidate) | EXISTS (shallow) | `scripts/run_pipeline.py` |
+| 23 | NL-thesis / auto-research driver (PDF → candidate) | EXISTS | 14-file intake bundle + `scripts/run_pipeline.py` |
 | 24 | Streamlit UI | EXISTS | `apps/workbench/ui/` — not on autonomous path |
 | 25 | CLI entry points | EXISTS (no `hft3` script) | `pyproject.toml [project.scripts]` |
 
@@ -45,8 +45,8 @@ and a single-JSON certification registry with no atomic write or hash chain.
 - **Workbench engine**: `apps/workbench/src/run/engine.py` — `WorkbenchEngine.run(model_id, event_id, ...)` dispatches per-model with composition and `strategy_params`.
 - **Adapters**: `apps/workbench/src/adapters/{hypothesis_adapter,structural_adapter}.py`.
 - **Canonical research entry**: `python scripts/run_event_replay.py --event-id CPI_2024_09_11_TIGHT --chi404-summary runtime/latency_reports/latency_summary.json` (per `docs/vault/RESEARCH_ENTRYPOINTS.md`).
-- **Headless autonomous runner**: **MISSING** — no `python -m hft3.research.run_autonomous` exists.
-- The current path is event-driven (CPI/macro replay), not a general end-to-end autonomous runner. Phase 2 will wrap `WorkbenchEngine` + `OptimizationRunner` + `CertificationRunner` into a single headless driver.
+- **Headless autonomous runner**: `python -m hft3.research.run_autonomous` exists and writes auditable scaffold artifacts.
+- The runner is not yet wired to `WorkbenchEngine` observed backtest, robustness, and double-WF matrix evidence, so it quarantines rather than promotes.
 
 ## Section 2 — Research / hypothesis-generation components
 
@@ -54,7 +54,7 @@ and a single-JSON certification registry with no atomic write or hash chain.
 - LLM backend: Ollama `glm-5.1:cloud` (per `packages/research_pipeline/llm.py`).
 - KG store: `packages/data_layer/kg/store.py`.
 - NL-thesis entry: `scripts/run_pipeline.py` (autoresearch mode).
-- **Gap (Phase 3)**: `document_ingestion.py` is shallow. It does not produce the 14-file output spec (`source_document_path`, `extracted_text.md`, `extracted_equations.json`, `extracted_tables.json`, `thesis_summary.json`, `assumptions.json`, `required_data.json`, `required_features.json`, `proposed_signal_logic.json`, `proposed_execution_logic.json`, `parameter_ranges.json`, `failure_modes.json`, `testable_hypotheses.json`, `experiment_translation_notes.json`).
+- **Phase 3 done**: `intake_schema.py` / `intake_bundle.py` produce the 14-file output spec (`source_document_path`, `extracted_text.md`, `extracted_equations.json`, `extracted_tables.json`, `thesis_summary.json`, `assumptions.json`, `required_data.json`, `required_features.json`, `proposed_signal_logic.json`, `proposed_execution_logic.json`, `parameter_ranges.json`, `failure_modes.json`, `testable_hypotheses.json`, `experiment_translation_notes.json`).
 
 ## Section 3 — Data-loader components
 
@@ -63,7 +63,7 @@ and a single-JSON certification registry with no atomic write or hash chain.
 - **Databento client**: `packages/data_system/src/{databento_client.py, npz_resolver.py, events_parser.py}`.
 - **Rithmic trial lane**: `packages/data_system/rithmic_trial/` (8 sub-modules: `pipeline`, `platform`, `capture`, `connector`, `convert`, `latency`, `normalize`, `reports`, `schema`, `validate`).
 - **Event catalog**: `data_system/config/events.csv` + `apps/workbench/config/model_event_binding.yaml`.
-- **Gap (Phase 6)**: the loader does not tag a run with `requested_data_class` / `resolved_data_class` / `downgrade_reason`. Promotion eligibility currently does not check data-resolution match.
+- **Phase 6 done**: `packages/hft3/data_class.py` defines data-resolution tags, downgrade reasons, and promotion eligibility gate conversion.
 
 ## Section 4 — Feature-generation components
 
@@ -78,7 +78,7 @@ and a single-JSON certification registry with no atomic write or hash chain.
 - Workbench configs: `apps/workbench/config/{model_catalog.yaml, wfc_gate.yaml, walk_forward.yaml, model_event_binding.yaml, ...}`.
 - Hypothesis/PDF registry: `packages/features_engine/config/model_registry.yaml`.
 - Trial config: `data_system/config/rithmic_trial.yaml`.
-- Phase 2 will introduce a new top-level `configs/research/autonomous_hft3.yaml` schema.
+- Phase 2 introduced `configs/research/autonomous_hft3.yaml`; Workbench integration remains pending.
 
 ## Section 6 — Alpha model interfaces
 
@@ -89,10 +89,10 @@ and a single-JSON certification registry with no atomic write or hash chain.
 
 ## Section 7 — Defensive model interfaces
 
-- **MISSING distinct base class** — defensives are a role-tag on `WorkbenchModel` (`_DEFENSIVE_IDS` in `apps/workbench/src/registry/model_catalog.py:17-29`).
+- **Distinct base class**: `DefensiveModel` in `apps/workbench/src/core/defensive.py` is a sibling contract to `WorkbenchModel`.
 - `DefensiveStub` exists in `apps/workbench/src/core/composition.py:13-50`.
 - The composition orchestrator wires primary+defensive via `composition_orchestrator.py`.
-- **Phase 7 will add** a real `DefensiveModel` ABC in `apps/workbench/src/core/defensive.py`, sibling to `WorkbenchModel`, with a `defend(ctx) -> FilterDecision` contract.
+- **Phase 7 done**: `DefensiveModel.defend(ctx) -> FilterDecision` locks the defensive contract and `MODEL_COMBINATIONS` enumerates the required test matrix.
 
 ## Section 8 — Hybrid model logic
 
@@ -107,7 +107,7 @@ and a single-JSON certification registry with no atomic write or hash chain.
 - **Purged k-fold**: `apps/workbench/src/robustness/purged_cv.py`.
 - **Parameter matrix**: `apps/workbench/src/optimization/matrix_runner.py` + `param_matrix.py`.
 - **Monte Carlo**: present in the pack.
-- **Gap (Phase 9)**: of the 25 robustness checks in the spec, the following are missing or partial: feature-leakage, label-leakage, timestamp-leakage, future-data leakage, parameter stability, regime stability, drawdown limit, tail-risk limit, turnover limit, transaction-cost sensitivity, slippage sensitivity, latency sensitivity, liquidity/capacity constraint, event-window stability, data-resolution eligibility, model-combination attribution, model-combination degradation detection, registry eligibility, artifact completeness.
+- **Phase 9 done**: `apps/workbench/src/robustness/pack.py::REQUIRED_ROBUSTNESS_CHECKS` registers all 25 required checks. Checks with unavailable inputs are `PENDING`/blocking rather than silently passing.
 
 ## Section 10 — Walk-forward logic
 
@@ -115,30 +115,30 @@ and a single-JSON certification registry with no atomic write or hash chain.
 - **Periods**: Discovery, Confirmation, Holdout, Recent holdout.
 - **Consumer**: `apps/workbench/src/run/campaign_runner.py`.
 - **Config**: `apps/workbench/config/walk_forward.yaml`.
-- **Single-WF only** — no `wf1_vs_wf2` correlator exists (Phase 10 gap).
+- **Single-WF campaign path** — the Phase 10 double-WF correlator exists, but campaign/autonomous wiring still emits pending/stub artifacts until independent WF matrices are available.
 
 ## Section 11 — Walk-forward correlation logic
 
 - **Single-WF WFC gate**: `apps/workbench/src/robustness/wfc/gate.py` — Pearson, Spearman, Kendall, fold-level correlation, cost-adjusted correlation, regime/universe sign check, outlier sensitivity, bootstrap CIs.
 - **Config**: `apps/workbench/config/wfc_gate.yaml`.
 - **Artifacts**: `apps/workbench/src/robustness/wfc/{metrics,artifacts,config}.py`.
-- **Gap (Phase 10)**: no second-level correlator runs two independent WFs and asserts they agree. The spec asks for `wf1_matrix_path` vs `wf2_matrix_path` correlation; current code only correlates IS↔OOS within one split.
+- **Phase 10 done / wiring gap remains**: `apps/workbench/src/robustness/wfc/double_wf.py` implements `wf1_matrix_path` vs `wf2_matrix_path` correlation. Campaign/autonomous paths still need real independent WF matrix inputs before promotion can depend on it.
 
 ## Section 12 — Scoring logic
 
 - **Gate thresholds**: `packages/research_pipeline/types.py:33-50` (`GateThresholds`, max-permissive defaults).
 - **Metrics**: `sharpe`, `profit_factor`, `max_drawdown`, `cagr` in `apps/workbench/src/robustness/wfc/metrics.py`.
 - **WFC gate thresholds**: `pearson_min`, `spearman_min`, `correlation_p_value_max` from `wfc_gate.yaml`.
-- **Gap (Phase 8)**: the 16 gate categories in the spec are not unified under a single `gate_result.py` schema.
+- **Phase 8 done**: `packages/hft3/validation/gate_result.py` defines the unified 17-category `GateResult` schema and atomic `robustness_gates.json` writer.
 
 ## Section 13 — Candidate / champion / model registry
 
-- **Certification registry**: `packages/hft3/validation/certification_registry.py` — `CertificationRecord` written to a single JSON file at `runtime/validation/certification_registry.json`.
+- **Certification registry**: `packages/hft3/validation/certification_registry.py` — `CertificationRecord` plus JSONL audit log with atomic writes, file lock, and SHA-256 hash chain.
 - **Promotion gate**: `packages/hft3/validation/promotion_gate.py` — `PromotionGateResult`, T0–T4 levels.
 - **Stamp metadata**: `packages/hft3/validation/research_stamp.py`.
 - **Fast gate report**: `packages/hft3/validation/fast_gate_report.py`.
 - **Staleness check**: `packages/hft3/validation/certification_staleness.py`.
-- **Gap (Phase 11)**: the registry is a single JSON file with no `os.replace` atomic write, no file lock, and no SHA-256 hash chain. Risk of torn writes on concurrent promotion.
+- **Phase 11 done**: registry updates use `os.replace`, fsync, cross-platform lock, and hash-chain audit verification.
 
 ## Section 14 — Reporting logic
 
@@ -146,7 +146,7 @@ and a single-JSON certification registry with no atomic write or hash chain.
 - **JSON schema**: `apps/workbench/schemas/run_report.schema.json`.
 - **Artifact paths**: `apps/workbench/src/artifacts/paths.py`.
 - **Per-run manifest**: `apps/workbench/src/run/engine.py:118` writes `manifest.json` in artifact dir.
-- **Gap (Phase 13)**: the 22 required `report.md` sections are not all present; the current generator does not include walk-forward correlation results or model-combination attribution.
+- **Phase 13 done**: the autonomous report generator covers the 22 required sections; observed WFC/model-combination values remain pending until Workbench integration feeds them.
 
 ## Section 15 — Artifact directories
 
@@ -154,7 +154,7 @@ and a single-JSON certification registry with no atomic write or hash chain.
 - `runtime/{latency_reports, replay_audits, validation, audits, event_snapshots, reports, data_audits, schemas, chi404}`.
 - `research_cards/{crypto, pipeline_runs, kg}`.
 - Helpers: `apps/workbench/src/artifacts/paths.py`.
-- **Gap (Phase 12)**: the 17-file artifact bundle spec is not enforced.
+- **Phase 12 done**: artifact bundle manifest/schema validation enforces the required run artifact set; runner values remain scaffolded where Workbench evidence is pending.
 
 ## Section 16 — Trade-management components
 
@@ -194,7 +194,7 @@ and a single-JSON certification registry with no atomic write or hash chain.
 - **No `hft3` console script**.
 - Launchers: `run_workbench.py`, `python -m workbench`, `python -m data_system.rithmic_trial.pipeline`.
 - Headless research entry: `python scripts/run_event_replay.py --event-id ...`.
-- **Gap (Phase 2)**: add `hft3` console script + `python -m hft3.research.run_autonomous` entry.
+- **Remaining CLI gap**: `python -m hft3.research.run_autonomous` exists; add a top-level `hft3` console script if the team wants one-command launch.
 
 ## Section 21 — Manual gates / human-dependent steps
 
@@ -204,40 +204,40 @@ and a single-JSON certification registry with no atomic write or hash chain.
 
 ## Section 22 — Current failure points
 
-1. **No top-level autonomous runner** — every component must be invoked manually.
-2. **No atomic registry write** — risk of torn writes on T4 promotion.
-3. **No double-WF correlator** — single WF means the system can pass on one window and fail on another.
-4. **Defensives are role-tags, not a class** — implicit composition contract.
+1. **Autonomous runner is still scaffolded** — it writes honest blocking gates but does not yet invoke `WorkbenchEngine`.
+2. **Workbench backtest-to-robustness evidence is not wired into the autonomous runner** — Workbench emits Phase 5/9 artifacts; the runner still writes stub backtest metrics.
+3. **Double-WF correlator exists but is not campaign/autonomous promotion input** — real independent WF matrix wiring is still pending.
+4. **Trade Manager is missing** — no signal-to-risk-to-execution orchestration package exists yet.
 5. **Live broker adapter is a stub** — no real live execution path.
 6. **C++ `RiskManager` not wired into Python** — risk is enforced only at the C++ engine boundary, not the backtest.
-7. **No `hft3` console script** — every CLI invocation is module-form.
-8. **Production safety monitors not wired into adapter path** — `StaleDataMonitor` etc. are implemented but unused outside unit tests.
+7. **Production safety monitors not wired into Trade Manager / adapter path** — `StaleDataMonitor` etc. are implemented but unused outside unit tests.
+8. **No production observer/session layer** — observer view, kill switch, position reconciliation, and session artifacts are still absent.
 
 ## Section 23 — Gaps between stages
 
 | Stage | Gap |
 |-------|-----|
-| Hypothesis → experiment spec | Partial: `document_ingestion.py` is shallow, no 14-file output |
-| Backtest → robustness | OK: `WorkbenchEngine` invokes robustness pack |
-| Scoring → registry | Partial: scoring exists, promotion gate exists, but atomicity missing |
+| Hypothesis → experiment spec | OK for Phase 3 intake bundles; autonomous runner experiment specs remain scaffolded until Workbench integration |
+| Backtest → robustness | OK inside Workbench; pending in autonomous runner |
+| Scoring → registry | Atomic registry writes exist; autonomous runner still quarantines because observed metrics are pending |
 | Registry → trade manager | **MISSING**: no trade manager at all |
 | Trade manager → execution | N/A: no trade manager |
 | Trade manager → observer | N/A: no trade manager |
 | Trade manager → session report | N/A: no trade manager |
 
-## Section 24 — Files that require modification (M1)
+## Section 24 — Phase implementation file map (M1)
 
-Phase 1 (audit): `docs/hft3_pipeline_audit.md` (this file).  
-Phase 2 (autonomous runner): new `packages/hft3/research/run_autonomous.py`, new `configs/research/autonomous_hft3.yaml`, new `pyproject.toml [project.scripts]` entry.  
-Phase 3 (intake): `packages/research_pipeline/document_ingestion.py` — extend with 14-file output writer.  
-Phase 4 (LLM boundary): new test `tests/test_llm_cannot_promote_model.py`.  
-Phase 5 (backtest hardening): `apps/workbench/src/run/engine.py` — add 33-timestamp capture to `run()`.  
-Phase 6 (L3 labeling): `apps/workbench/src/data/l3_loader.py` — add resolution tags.  
-Phase 7 (defensive ABC): new `apps/workbench/src/core/defensive.py`, refactor `_DEFENSIVE_IDS` to use it.  
-Phase 8 (gate schema): new `apps/workbench/src/validation/gate_result.py`, refactor existing gates.  
-Phase 9 (robustness): `apps/workbench/src/robustness/pack.py` — add missing checks.  
-Phase 10 (double WF): new `apps/workbench/src/robustness/wfc/double_wf.py`.  
-Phase 11 (atomicity): `packages/hft3/validation/certification_registry.py` — hash-chain + `os.replace`.  
+Phase 1 (audit): `docs/hft3_pipeline_audit.md` (this file).
+Phase 2 (autonomous runner): `packages/hft3/research/run_autonomous.py`, `configs/research/autonomous_hft3.yaml`; top-level `hft3` console script remains absent.
+Phase 3 (intake): `packages/research_pipeline/{intake_schema,intake_bundle,extractors}.py` — 14-file output writer and extractors.
+Phase 4 (LLM boundary): `tests/test_research_intake.py` boundary checks.
+Phase 5 (backtest hardening): `apps/workbench/src/run/engine.py`, `apps/workbench/src/core/trade_audit.py` — 33-timestamp capture.
+Phase 6 (L3 labeling): `packages/hft3/data_class.py` — data-resolution tags and gate conversion.
+Phase 7 (defensive ABC): `apps/workbench/src/core/defensive.py` — `DefensiveModel` and combination matrix.
+Phase 8 (gate schema): `packages/hft3/validation/gate_result.py` — 17-category gate schema and atomic writer.
+Phase 9 (robustness): `apps/workbench/src/robustness/pack.py` — 25-check schema and honest pending/fail statuses.
+Phase 10 (double WF): `apps/workbench/src/robustness/wfc/double_wf.py` — independent WF matrix correlation.
+Phase 11 (atomicity): `packages/hft3/validation/certification_registry.py` — hash-chain, file lock, and `os.replace`.
 
 ## Section 25 — Files that should remain untouched (hot path)
 
@@ -253,15 +253,15 @@ Phase 11 (atomicity): `packages/hft3/validation/certification_registry.py` — h
 ## Top-10 hardening priorities (consolidated)
 
 1. **`packages/trade_manager/`** — create `TradeManager` class for signal→OrderIntent orchestration.
-2. **Atomic certification registry** — `os.replace` + SHA-256 hash chain + file lock.
-3. **Double-WF correlator** — `wfc/double_wf.py` for WF1↔WF2 agreement.
-4. **`DefensiveModel` ABC** — sibling to `WorkbenchModel`, lock the defensive contract.
-5. **Wire `production_safety.py` into the adapter path** — enforce risk in `TradeManager.submit_order`.
-6. **Headless autonomous runner** — `python -m hft3.research.run_autonomous` + `hft3` console script.
-7. **L3 data-resolution labeling** — `requested_data_class` / `resolved_data_class` / `downgrade_reason` per run.
-8. **Unified gate schema** — `gate_result.py` covering the 16 spec categories.
-9. **`test_llm_cannot_promote_model`** — boundary test for the LLM research layer.
-10. **Hot-path / do-not-touch CI guard** — fail the build if `rithmic_gateway/`, `vendor/`, `*/cpp/`, `risk_engine/` appear in a PR diff.
+2. **Autonomous Workbench integration** — feed real `WorkbenchEngine` backtest, Phase 5 audit, Phase 9 robustness, and scoring evidence into the runner.
+3. **Campaign/autonomous double-WF wiring** — feed independent WF matrices into `double_wf.py` and promotion gates.
+4. **Wire `production_safety.py` into the adapter path** — enforce risk in `TradeManager.submit_order`.
+5. **Live broker adapter implementation** — replace the live stub with a CHI404-only execution path.
+6. **Production observer/session layer** — observer view, kill switch, position reconciliation, and session artifacts.
+7. **C++ `RiskManager` Python/backtest integration** — expose parity checks outside the C++ engine boundary.
+8. **Top-level `hft3` console script** — optional one-command wrapper for the existing module runner.
+9. **Hot-path / do-not-touch CI guard** — fail the build if `rithmic_gateway/`, `vendor/`, `*/cpp/`, `risk_engine/` appear in a PR diff.
+10. **Runner metric de-scaffolding** — replace remaining stub scoring/report values with observed Workbench artifacts before promotion can pass.
 
 ## Quick file map
 

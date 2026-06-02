@@ -51,6 +51,21 @@ def test_runner_no_dishonest_passes(tmp_path: Path) -> None:
             )
 
 
+def test_runner_writes_double_wf_gate_to_robustness_gates(tmp_path: Path) -> None:
+    cfg = CampaignConfig.from_yaml(Path("configs/research/autonomous_hft3.yaml"))
+    cfg.output["artifacts_dir"] = str(tmp_path / "artifacts")
+    runner = AutonomousRunner(config=cfg, root=tmp_path, run_id="HONEST_DOUBLE_WF")
+    runner.run()
+    import json
+    rg = json.loads(
+        (tmp_path / "artifacts" / "HONEST_DOUBLE_WF" / "robustness_gates.json").read_text(encoding="utf-8")
+    )
+    gates = {g["gate_name"]: g for g in rg["gates"]}
+    assert "double_wf_correlation" in gates
+    assert gates["double_wf_correlation"]["pass_fail"] is False
+    assert gates["double_wf_correlation"]["severity"] == "blocking"
+
+
 def test_runner_default_decision_is_quarantine(tmp_path: Path) -> None:
     """Without real backtest integration, the runner MUST default to
     QUARANTINE (or REJECT), never PROMOTE."""
