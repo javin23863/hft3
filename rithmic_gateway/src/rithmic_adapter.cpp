@@ -3,6 +3,7 @@
 #include <iostream>
 #include <cstring>
 #include <chrono>
+#include <sstream>
 
 #include "RApiPlus.h"
 
@@ -135,6 +136,49 @@ public:
         adapter_->env_ready_.store(true);
         adapter_->env_cv_.notify_all();
         *aiCode = API_OK;
+        return OK;
+    }
+
+    int AgreementList(RApi::AgreementListInfo* pInfo, void* pContext, int* aiCode) override {
+        (void)pContext;
+        std::lock_guard<std::mutex> lk(adapter_->agreement_mutex_);
+        std::ostringstream os;
+        if (pInfo) {
+            os << "rp_code=" << pInfo->iRpCode
+               << " bAccepted=" << (pInfo->bAccepted ? "true" : "false")
+               << " count=" << pInfo->iArrayLen;
+            if (pInfo->iArrayLen > 0 && pInfo->asAgreementInfoArray) {
+                os << "\n";
+                for (int i = 0; i < pInfo->iArrayLen; ++i) {
+                    RApi::AgreementInfo* a = &pInfo->asAgreementInfoArray[i];
+                    std::string title, status, accept_status, market_data;
+                    if (a->sTitle.pData && a->sTitle.iDataLen > 0)
+                        title.assign(a->sTitle.pData, static_cast<size_t>(a->sTitle.iDataLen));
+                    if (a->sStatus.pData && a->sStatus.iDataLen > 0)
+                        status.assign(a->sStatus.pData, static_cast<size_t>(a->sStatus.iDataLen));
+                    if (a->sEndUserAcceptanceStatus.pData && a->sEndUserAcceptanceStatus.iDataLen > 0)
+                        accept_status.assign(a->sEndUserAcceptanceStatus.pData,
+                                             static_cast<size_t>(a->sEndUserAcceptanceStatus.iDataLen));
+                    if (a->sMarketDataUsageCapacity.pData && a->sMarketDataUsageCapacity.iDataLen > 0)
+                        market_data.assign(a->sMarketDataUsageCapacity.pData,
+                                           static_cast<size_t>(a->sMarketDataUsageCapacity.iDataLen));
+                    os << "  [" << i << "]"
+                       << " mandatory=" << (a->bMandatory ? "true" : "false")
+                       << " status=" << status
+                       << " accept=" << accept_status
+                       << " md_capacity=" << market_data
+                       << " title=\"" << title << "\""
+                       << "\n";
+                }
+            }
+        } else {
+            os << "rp_code=-1 (no info)";
+        }
+        adapter_->last_agreement_list_text_ = os.str();
+        adapter_->agreement_list_ready_.store(true);
+        adapter_->agreement_cv_.notify_all();
+        std::cout << "[AdmCallbacks] AgreementList: " << adapter_->last_agreement_list_text_ << std::endl;
+        if (aiCode) *aiCode = API_OK;
         return OK;
     }
 
@@ -622,6 +666,37 @@ bool RithmicAdapter::connect() {
         } else {
             std::cerr << "[RithmicAdapter] no environments discovered from repository" << std::endl;
         }
+
+        // Step 2b: Discover agreements — list unaccepted agreements blocking service logins
+        agreement_list_ready_.store(false);
+        {
+            std::lock_guard<std::mutex> lk(agreement_mutex_);
+            last_agreement_list_text_.clear();
+        }
+        int iCodeAgr = 0;
+        if (!pEngine->listAgreements(false, nullptr, &iCodeAgr)) {
+            std::cerr << "[RithmicAdapter] listAgreements(unaccepted) submit error: "
+                      << iCodeAgr << std::endl;
+        } else {
+            std::unique_lock<std::mutex> lk(agreement_mutex_);
+            if (!agreement_cv_.wait_for(lk, std::chrono::seconds(5), [&] {
+                    return agreement_list_ready_.load();
+                })) {
+                std::cerr << "[RithmicAdapter] listAgreements(unaccepted) timed out" << std::endl;
+            }
+        }
+        int iCodeAgrAcc = 0;
+        if (!pEngine->listAgreements(true, nullptr, &iCodeAgrAcc)) {
+            std::cerr << "[RithmicAdapter] listAgreements(accepted) submit error: "
+                      << iCodeAgrAcc << std::endl;
+        } else {
+            std::unique_lock<std::mutex> lk(agreement_mutex_);
+            if (!agreement_cv_.wait_for(lk, std::chrono::seconds(5), [&] {
+                    return agreement_list_ready_.load();
+                })) {
+                std::cerr << "[RithmicAdapter] listAgreements(accepted) timed out" << std::endl;
+            }
+        }
     } else {
         std::cerr << "[RithmicAdapter] no repo connect point, skipping repository login" << std::endl;
     }
@@ -750,6 +825,42 @@ bool RithmicAdapter::connect() {
 const char* RithmicAdapter::cached_account_id() {
     std::lock_guard<std::mutex> lk(account_mutex_);
     return account_id_.c_str();
+}
+
+bool RithmicAdapter::list_agreements() {
+    auto* engine = static_cast<RApi::REngine*>(engine_);
+    if (!engine) {
+        last_connect_error_ = "list_agreements: not connected";
+        return false;
+    }
+    agreement_list_ready_.store(false);
+    {
+        std::lock_guard<std::mutex> lk(agreement_mutex_);
+        last_agreement_list_text_.clear();
+    }
+    int iCode = -1;
+    int rc = engine->listAgreements(false, nullptr, &iCode);
+    if (rc != RApi::OK) {
+        last_connect_error_ = "listAgreements submit error: rc=" + std::to_string(rc)
+                            + " iCode=" + std::to_string(iCode);
+        std::cerr << "[RithmicAdapter] " << last_connect_error_ << std::endl;
+        return false;
+    }
+    {
+        std::unique_lock<std::mutex> lk(agreement_mutex_);
+        if (!agreement_cv_.wait_for(lk, std::chrono::seconds(5),
+                                    [this]{ return agreement_list_ready_.load(); })) {
+            last_connect_error_ = "listAgreements: timeout waiting for AgreementList callback";
+            std::cerr << "[RithmicAdapter] " << last_connect_error_ << std::endl;
+            return false;
+        }
+    }
+    return true;
+}
+
+const char* RithmicAdapter::last_agreement_list_text() const {
+    std::lock_guard<std::mutex> lk(agreement_mutex_);
+    return last_agreement_list_text_.c_str();
 }
 
 const char* RithmicAdapter::cached_trade_route() {

@@ -76,6 +76,10 @@ public:
     const char* cached_env_key() const { return discovered_env_key_.c_str(); }
     const char* last_connect_error() const { return last_connect_error_.c_str(); }
 
+    bool list_agreements();
+    bool has_agreement_list() const { return agreement_list_ready_.load(); }
+    const char* last_agreement_list_text() const;
+
 private:
     ConnectionConfig config_;
     SPSCQueue<MarketDataEvent, 8192>* mbo_queue_;
@@ -109,8 +113,12 @@ private:
     std::string trade_route_;
     std::string discovered_env_key_;
     std::string last_connect_error_;
+    std::string last_agreement_list_text_;
+    mutable std::mutex agreement_mutex_;
+    std::condition_variable agreement_cv_;
     std::atomic<bool> env_list_ready_{false};
     std::atomic<bool> env_ready_{false};
+    std::atomic<bool> agreement_list_ready_{false};
     std::vector<std::string> env_storage_;
     std::vector<char*> env_strings_;
 

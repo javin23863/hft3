@@ -94,23 +94,27 @@ int main(int argc, char** argv) {
         std::fprintf(stderr,
             "FAIL [%s] connect (%.3f ms)\n"
             "  error: %s\n"
-            "  env_key='%s' account='%s' route='%s'\n",
+            "  env_key='%s' account='%s' route='%s'\n"
+            "  --- agreements ---\n%s\n",
             env_name, dur / 1000.0,
             adapter.last_connect_error(),
             adapter.cached_env_key(),
             adapter.cached_account_id(),
-            adapter.cached_trade_route());
+            adapter.cached_trade_route(),
+            adapter.last_agreement_list_text());
         return 3;
     }
     auto t_conn = std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::steady_clock::now() - t1).count();
 
     std::printf("OK [%s] connect %.3f ms\n"
-                "  env_key='%s' account='%s' route='%s'\n",
+                "  env_key='%s' account='%s' route='%s'\n"
+                "  --- agreements ---\n%s\n",
                 env_name, t_conn / 1000.0,
                 adapter.cached_env_key(),
                 adapter.cached_account_id(),
-                adapter.cached_trade_route());
+                adapter.cached_trade_route(),
+                adapter.last_agreement_list_text());
 
     // --- Phase 3: Subscribe MBO ---
     const char* symbol = get_env_or("RITHMIC_PROBE_SYMBOL", "MES");
