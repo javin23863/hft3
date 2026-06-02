@@ -116,3 +116,8 @@ rithmic_gateway/RApiPlus/
 # Runtime audit outputs (replay_audits, latency_reports, etc.) - not source
 packages/runtime/
 
+# R|API+ SDK downloads (per-user from Rithmic portal; not source)
+rithmic_gateway/RApiPlus.cpp.13.7.0.0.zip
+rithmic_gateway/RApiPlus.zip
+rithmic_gateway/RApiPlus_new/
+

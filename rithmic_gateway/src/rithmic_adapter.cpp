@@ -105,15 +105,6 @@ public:
         int ignored;
         pInfo->dump(&ignored);
 
-        if (pInfo->iConnectionId == RApi::REPOSITORY_CONNECTION_ID) {
-            if (pInfo->iAlertType == RApi::ALERT_LOGIN_COMPLETE) {
-                adapter_->rep_login_status_ = RithmicAdapter::LOGIN_COMPLETE;
-            } else if (pInfo->iAlertType == RApi::ALERT_LOGIN_FAILED
-                       || pInfo->iAlertType == RApi::ALERT_CONNECTION_BROKEN) {
-                adapter_->rep_login_status_ = RithmicAdapter::LOGIN_FAILED;
-            }
-        }
-
         if (pInfo->iConnectionId == RApi::MARKET_DATA_CONNECTION_ID) {
             if (pInfo->iAlertType == RApi::ALERT_LOGIN_COMPLETE) {
                 adapter_->md_login_status_ = RithmicAdapter::LOGIN_COMPLETE;
@@ -123,25 +114,74 @@ public:
             }
         }
 
+        if (pInfo->iConnectionId == RApi::TRADING_SYSTEM_CONNECTION_ID) {
+            if (pInfo->iAlertType == RApi::ALERT_LOGIN_COMPLETE) {
+                adapter_->ts_login_status_ = RithmicAdapter::LOGIN_COMPLETE;
+            } else if (pInfo->iAlertType == RApi::ALERT_LOGIN_FAILED
+                       || pInfo->iAlertType == RApi::ALERT_CONNECTION_BROKEN) {
+                adapter_->ts_login_status_ = RithmicAdapter::LOGIN_FAILED;
+            }
+        }
+
         adapter_->login_cv_.notify_all();
         *aiCode = API_OK;
         return OK;
     }
 
-    int AgreementList(RApi::AgreementListInfo* pInfo, void* pContext, int* aiCode) override {
+    int AccountList(RApi::AccountListInfo* pInfo, void* pContext, int* aiCode) override {
         (void)pContext;
-        if (!pInfo->bAccepted) {
-            for (int i = 0; i < pInfo->iArrayLen; i++) {
-                RApi::AgreementInfo ag = pInfo->asAgreementInfoArray[i];
-                tsNCharcb active = {const_cast<char*>("active"), 6};
-                bool is_active = (ag.sStatus.iDataLen == active.iDataLen &&
-                    memcmp(ag.sStatus.pData, active.pData, ag.sStatus.iDataLen) == 0);
-                if (ag.bMandatory && is_active) {
-                    adapter_->unaccepted_mandatory_agreements_++;
-                }
+        if (pInfo->iArrayLen > 0) {
+            const RApi::AccountInfo& a = pInfo->asAccountInfoArray[0];
+            std::lock_guard<std::mutex> lk(adapter_->account_mutex_);
+            if (a.sAccountId.pData && a.sAccountId.iDataLen > 0) {
+                adapter_->account_id_.assign(a.sAccountId.pData,
+                                             a.sAccountId.pData + a.sAccountId.iDataLen);
             }
-            adapter_->agreements_received_ = true;
+            if (a.sFcmId.pData && a.sFcmId.iDataLen > 0) {
+                adapter_->fcm_id_.assign(a.sFcmId.pData,
+                                         a.sFcmId.pData + a.sFcmId.iDataLen);
+            }
+            if (a.sIbId.pData && a.sIbId.iDataLen > 0) {
+                adapter_->ib_id_.assign(a.sIbId.pData,
+                                        a.sIbId.pData + a.sIbId.iDataLen);
+            }
+            adapter_->account_ready_.store(true);
+            adapter_->account_cv_.notify_all();
         }
+        *aiCode = API_OK;
+        return OK;
+    }
+
+    int TradeRouteList(RApi::TradeRouteListInfo* pInfo, void* pContext, int* aiCode) override {
+        (void)pContext;
+        std::lock_guard<std::mutex> lk(adapter_->trade_route_mutex_);
+        for (int i = 0; i < pInfo->iArrayLen; ++i) {
+            const RApi::TradeRouteInfo& r = pInfo->asTradeRouteInfoArray[i];
+            if (r.sTradeRoute.pData && r.sTradeRoute.iDataLen > 0
+                && r.sStatus.pData && r.sStatus.iDataLen == 2
+                && std::memcmp(r.sStatus.pData, "UP", 2) == 0) {
+                adapter_->trade_route_.assign(r.sTradeRoute.pData,
+                                              r.sTradeRoute.pData + r.sTradeRoute.iDataLen);
+                adapter_->trade_route_ready_.store(true);
+                break;
+            }
+        }
+        adapter_->trade_route_cv_.notify_all();
+        *aiCode = API_OK;
+        return OK;
+    }
+
+    int PriceIncrUpdate(RApi::PriceIncrInfo* pInfo, void* pContext, int* aiCode) override {
+        (void)pContext;
+        (void)pInfo;
+        *aiCode = API_OK;
+        return OK;
+    }
+
+    int LineUpdate(RApi::LineInfo* pInfo, void* pContext, int* aiCode) override {
+        (void)pContext;
+        int ignored;
+        pInfo->dump(&ignored);
         *aiCode = API_OK;
         return OK;
     }
@@ -197,14 +237,6 @@ public:
             adapter_->mbo_queue_->push(evt);
         }
 
-        *aiCode = API_OK;
-        return OK;
-    }
-
-    int LineUpdate(RApi::LineInfo* pInfo, void* pContext, int* aiCode) override {
-        (void)pContext;
-        int ignored;
-        pInfo->dump(&ignored);
         *aiCode = API_OK;
         return OK;
     }
@@ -281,7 +313,6 @@ public:
         return OK;
     }
 
-    int AccountList(RApi::AccountListInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
     int AccountUpdate(RApi::AccountUpdateInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
     int Aggregator(RApi::AggregatorInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
     int AskQuote(RApi::AskInfo* pInfo, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
@@ -336,7 +367,6 @@ public:
     int PnlReplay(RApi::PnlReplayInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
     int PnlUpdate(RApi::PnlInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
     int PositionExit(RApi::PositionExitInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
-    int PriceIncrUpdate(RApi::PriceIncrInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
     int ProductRmsList(RApi::ProductRmsListInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
     int ProjectedSettlementPrice(RApi::ProjectedSettlementPriceInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
     int RefData(RApi::RefDataInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
@@ -349,7 +379,6 @@ public:
     int TradeCorrectReport(RApi::OrderTradeCorrectReport*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
     int TradeReplay(RApi::TradeReplayInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
     int TradeRoute(RApi::TradeRouteInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
-    int TradeRouteList(RApi::TradeRouteListInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
     int TradeVolume(RApi::TradeVolumeInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
     int TriggerPulledReport(RApi::OrderTriggerPulledReport*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
     int TriggerReport(RApi::OrderTriggerReport*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
@@ -391,15 +420,20 @@ RithmicAdapter::~RithmicAdapter() {
 
 void RithmicAdapter::build_envp() {
     cleanup_envp();
-    env_strings_.reserve(config_.env_vars.size() + 1);
+    env_storage_.reserve(config_.env_vars.size());
     for (auto& v : config_.env_vars) {
-        env_strings_.push_back(const_cast<char*>(v.c_str()));
+        env_storage_.push_back(v);
+    }
+    env_strings_.reserve(env_storage_.size() + 1);
+    for (auto& s : env_storage_) {
+        env_strings_.push_back(const_cast<char*>(s.c_str()));
     }
     env_strings_.push_back(nullptr);
 }
 
 void RithmicAdapter::cleanup_envp() {
     env_strings_.clear();
+    env_storage_.clear();
 }
 
 bool RithmicAdapter::initialize() {
@@ -448,75 +482,8 @@ bool RithmicAdapter::connect() {
     auto* callbacks = new MyCallbacks(this);
     callbacks_ = callbacks;
 
-    rep_login_status_ = LOGIN_NOT_LOGGED_IN;
     md_login_status_ = LOGIN_NOT_LOGGED_IN;
-    agreements_received_ = false;
-    unaccepted_mandatory_agreements_ = 0;
-
-    tsNCharcb rep_env_key = make_ts("system");
-    tsNCharcb rep_user = make_ts(config_.username.c_str());
-    tsNCharcb rep_password = make_ts(config_.password.c_str());
-    tsNCharcb rep_cnnct_pt = make_ts(config_.rep_connect_point.c_str());
-
-    int iCode = 0;
-    if (!pEngine->loginRepository(&rep_env_key, &rep_user, &rep_password,
-                                   &rep_cnnct_pt, callbacks, &iCode)) {
-        std::cerr << "[RithmicAdapter] loginRepository error: " << iCode << std::endl;
-        delete pEngine;
-        delete callbacks;
-        engine_ = nullptr;
-        callbacks_ = nullptr;
-        return false;
-    }
-
-    {
-        std::unique_lock<std::mutex> lk(login_mutex_);
-        login_cv_.wait_for(lk, std::chrono::seconds(30), [&] {
-            return rep_login_status_ == LOGIN_COMPLETE || rep_login_status_ == LOGIN_FAILED;
-        });
-    }
-
-    if (rep_login_status_ == LOGIN_FAILED) {
-        std::cerr << "[RithmicAdapter] Repository login failed" << std::endl;
-        delete static_cast<RApi::REngine*>(engine_);
-        delete static_cast<MyCallbacks*>(callbacks_);
-        engine_ = nullptr;
-        callbacks_ = nullptr;
-        return false;
-    }
-
-    if (!pEngine->listAgreements(false, nullptr, &iCode)) {
-        std::cerr << "[RithmicAdapter] listAgreements error: " << iCode << std::endl;
-        int ignored;
-        pEngine->logoutRepository(&ignored);
-        delete pEngine;
-        delete callbacks;
-        engine_ = nullptr;
-        callbacks_ = nullptr;
-        return false;
-    }
-
-    {
-        auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
-        std::unique_lock<std::mutex> lk(login_mutex_);
-        login_cv_.wait_until(lk, deadline, [&] { return agreements_received_.load(); });
-    }
-
-    if (unaccepted_mandatory_agreements_ > 0) {
-        std::cerr << "[RithmicAdapter] " << unaccepted_mandatory_agreements_.load()
-                  << " unaccepted mandatory agreements. Log in via R|Trader to accept." << std::endl;
-        int ignored;
-        pEngine->logoutRepository(&ignored);
-        delete pEngine;
-        delete callbacks;
-        engine_ = nullptr;
-        callbacks_ = nullptr;
-        return false;
-    }
-
-    if (!pEngine->logoutRepository(&iCode)) {
-        std::cerr << "[RithmicAdapter] logoutRepository error: " << iCode << std::endl;
-    }
+    ts_login_status_ = LOGIN_NOT_LOGGED_IN;
 
     RApi::LoginParams login_params;
     login_params.pCallbacks = callbacks;
@@ -529,8 +496,7 @@ bool RithmicAdapter::connect() {
     login_params.sTsPassword = make_ts(config_.password.c_str());
     login_params.sTsCnnctPt = make_ts(config_.ts_connect_point.c_str());
 
-    md_login_status_ = LOGIN_NOT_LOGGED_IN;
-
+    int iCode = 0;
     if (!pEngine->login(&login_params, &iCode)) {
         std::cerr << "[RithmicAdapter] login error: " << iCode << std::endl;
         delete pEngine;
@@ -543,12 +509,52 @@ bool RithmicAdapter::connect() {
     {
         std::unique_lock<std::mutex> lk(login_mutex_);
         login_cv_.wait_for(lk, std::chrono::seconds(30), [&] {
-            return md_login_status_ == LOGIN_COMPLETE || md_login_status_ == LOGIN_FAILED;
+            return ts_login_status_ == LOGIN_COMPLETE || ts_login_status_ == LOGIN_FAILED;
         });
     }
 
-    if (md_login_status_ == LOGIN_FAILED) {
-        std::cerr << "[RithmicAdapter] MD/TS login failed" << std::endl;
+    if (ts_login_status_ != LOGIN_COMPLETE) {
+        std::cerr << "[RithmicAdapter] TS login did not complete (status=" << ts_login_status_ << ")" << std::endl;
+        delete pEngine;
+        delete callbacks;
+        engine_ = nullptr;
+        callbacks_ = nullptr;
+        return false;
+    }
+
+    {
+        std::unique_lock<std::mutex> lk(account_mutex_);
+        account_cv_.wait_for(lk, std::chrono::seconds(30), [&] {
+            return account_ready_.load();
+        });
+    }
+    if (!account_ready_.load()) {
+        std::cerr << "[RithmicAdapter] No account received via AccountList" << std::endl;
+        delete pEngine;
+        delete callbacks;
+        engine_ = nullptr;
+        callbacks_ = nullptr;
+        return false;
+    }
+
+    int iCodeRt = 0;
+    if (!pEngine->listTradeRoutes(nullptr, &iCodeRt)) {
+        std::cerr << "[RithmicAdapter] listTradeRoutes error: " << iCodeRt << std::endl;
+        delete pEngine;
+        delete callbacks;
+        engine_ = nullptr;
+        callbacks_ = nullptr;
+        return false;
+    }
+
+    {
+        std::unique_lock<std::mutex> lk(trade_route_mutex_);
+        trade_route_cv_.wait_for(lk, std::chrono::seconds(30), [&] {
+            return trade_route_ready_.load();
+        });
+    }
+    if (!trade_route_ready_.load()) {
+        std::cerr << "[RithmicAdapter] No UP trade route available" << std::endl;
         delete pEngine;
         delete callbacks;
         engine_ = nullptr;
@@ -558,7 +564,12 @@ bool RithmicAdapter::connect() {
 
     connected_ = true;
     logged_in_ = true;
-    std::cout << "[RithmicAdapter] Connected to " << config_.environment << " as " << config_.username << std::endl;
+    std::cout << "[RithmicAdapter] Connected to " << config_.environment
+              << " as " << config_.username
+              << " (MD=" << config_.md_connect_point
+              << ", TS=" << config_.ts_connect_point
+              << ", account=" << account_id_
+              << ", trade_route=" << trade_route_ << ")" << std::endl;
     return true;
 }
 
@@ -606,21 +617,35 @@ bool RithmicAdapter::send_order(const std::string& symbol, char side, int32_t qt
 
     auto* pEngine = static_cast<RApi::REngine*>(engine_);
 
+    if (!account_ready_.load() || !trade_route_ready_.load()) {
+        std::cerr << "[RithmicAdapter] send_order: account or trade route not ready" << std::endl;
+        return false;
+    }
+
     RApi::LimitOrderParams params;
-    params.pAccount = nullptr;
-    params.sExchange = make_ts("CME");
-    params.sTicker = make_ts(symbol.c_str());
+    tsNCharcb sExchange = make_ts("CME");
+    tsNCharcb sTicker = make_ts(symbol.c_str());
+    tsNCharcb sTradeRoute = make_ts(trade_route_.c_str());
+
+    params.sExchange = sExchange;
+    params.sTicker = sTicker;
     params.sBuySellType = make_ts(side == 'B' ? "Buy" : "Sell");
     params.sDuration = make_ts("Day");
     params.sEntryType = make_ts("Limit");
     params.sTradingAlgorithm = make_ts("System");
     params.llQty = static_cast<long long>(qty);
     params.dPrice = price;
-    params.sTradeRoute = make_ts("");
-    params.sRoutingInstructions = make_ts("");
-    params.sTag = make_ts("");
-    params.sUserMsg = make_ts("");
-    params.pContext = nullptr;
+    params.sTradeRoute = sTradeRoute;
+
+    RApi::AccountInfo dummy_acct;
+    std::memset(&dummy_acct, 0, sizeof(dummy_acct));
+    tsNCharcb sAccount = make_ts(account_id_.c_str());
+    dummy_acct.sAccountId = sAccount;
+    tsNCharcb sFcm = make_ts(fcm_id_.c_str());
+    dummy_acct.sFcmId = sFcm;
+    tsNCharcb sIb = make_ts(ib_id_.c_str());
+    dummy_acct.sIbId = sIb;
+    params.pAccount = &dummy_acct;
 
     int iCode = 0;
     if (!pEngine->sendOrder(&params, &iCode)) {

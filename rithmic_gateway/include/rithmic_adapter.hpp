@@ -67,6 +67,11 @@ public:
     bool send_order(const std::string& symbol, char side, int32_t qty, double price);
     bool cancel_order(const std::string& order_id);
 
+    bool has_account() const { return account_ready_.load(); }
+    bool has_trade_route() const { return trade_route_ready_.load(); }
+    const char* cached_account_id() const { return account_id_.c_str(); }
+    const char* cached_trade_route() const { return trade_route_.c_str(); }
+
 private:
     ConnectionConfig config_;
     SPSCQueue<MarketDataEvent, 8192>* mbo_queue_;
@@ -78,14 +83,23 @@ private:
 
     std::atomic<bool> connected_{false};
     std::atomic<bool> logged_in_{false};
+    std::atomic<bool> account_ready_{false};
+    std::atomic<bool> trade_route_ready_{false};
+    std::atomic<int> md_login_status_{0};
+    std::atomic<int> ts_login_status_{0};
 
     std::mutex login_mutex_;
     std::condition_variable login_cv_;
-    std::atomic<int> rep_login_status_{0};
-    std::atomic<int> md_login_status_{0};
-    std::atomic<bool> agreements_received_{false};
-    std::atomic<int> unaccepted_mandatory_agreements_{0};
+    std::mutex account_mutex_;
+    std::condition_variable account_cv_;
+    std::mutex trade_route_mutex_;
+    std::condition_variable trade_route_cv_;
 
+    std::string account_id_;
+    std::string fcm_id_;
+    std::string ib_id_;
+    std::string trade_route_;
+    std::vector<std::string> env_storage_;
     std::vector<char*> env_strings_;
 
     void build_envp();
