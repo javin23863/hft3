@@ -703,12 +703,12 @@ bool RithmicAdapter::connect() {
 
     // Step 3: Login to individual service endpoints (MD, TS, IH, PnL)
     RApi::LoginParams login_params;
+    // Per SDK Programmer's Guide line 643 and SampleMD.cpp lines 1604-1620:
+    // Leave sMdEnvKey/sTsEnvKey/sIhEnvKey EMPTY (use default environment from envp)
+    // unless we have a SPECIFIC need for multi-environment routing.
     if (!discovered_env_key_.empty()) {
-        login_params.sMdEnvKey = make_ts(discovered_env_key_.c_str());
-        login_params.sTsEnvKey = make_ts(discovered_env_key_.c_str());
-        login_params.sIhEnvKey = make_ts(discovered_env_key_.c_str());
-        std::cerr << "[RithmicAdapter] using discovered env key '" << discovered_env_key_
-                  << "' in LoginParams" << std::endl;
+        std::cerr << "[RithmicAdapter] discovered env key '" << discovered_env_key_
+                  << "' (not used — default env from envp is used for service logins)" << std::endl;
     }
     login_params.pCallbacks = callbacks;
 
