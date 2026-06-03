@@ -43,8 +43,26 @@ def _config() -> CampaignConfig:
     return CampaignConfig.from_yaml(CONFIG_PATH)
 
 
-def _write_passing_robustness_gates(path: Path, run_id: str, git_sha: str) -> None:
+def _write_passing_robustness_gates(
+    path: Path,
+    run_id: str,
+    git_sha: str,
+    *,
+    include_data_gate: bool = True,
+) -> None:
     gates = [
+        GateResult(
+            gate_name="data_resolution_eligibility",
+            gate_category=GateCategory.DATA_INTEGRITY,
+            metric_name="promotion_eligibility_impact",
+            threshold=None,
+            observed_value="eligible",
+            comparison_operator="==",
+            pass_fail=True,
+            severity=Severity.INFO,
+            blocking_status=False,
+            artifact_reference="data_resolution.json",
+        ),
         GateResult(
             gate_name="monte_carlo_sharpe_p05",
             gate_category=GateCategory.ROBUSTNESS,
@@ -96,6 +114,8 @@ def _write_passing_robustness_gates(path: Path, run_id: str, git_sha: str) -> No
             severity=Severity.BLOCKING,
         ),
     ]
+    if not include_data_gate:
+        gates = [g for g in gates if g.gate_name != "data_resolution_eligibility"]
     write_robustness_gates_json(path, gates, tier="T3", run_id=run_id, git_sha=git_sha)
 
 
@@ -201,13 +221,35 @@ def test_promote_writes_registry_atomically(tmp_path: Path) -> None:
             _write_passing_robustness_gates(
                 runner.run_dir / "robustness_gates.json", run_id, runner.state.git_sha
             )
+        elif gates == "passing_without_data":
+            _write_passing_robustness_gates(
+                runner.run_dir / "robustness_gates.json",
+                run_id,
+                runner.state.git_sha,
+                include_data_gate=False,
+            )
         elif gates == "forged":
             _write_passing_robustness_gates(
                 runner.run_dir / "robustness_gates.json", run_id, runner.state.git_sha
             )
             robustness_path = runner.run_dir / "robustness_gates.json"
             payload = json.loads(robustness_path.read_text(encoding="utf-8"))
-            payload["gates"][0]["observed_value"] = 0.1
+            for gate in payload["gates"]:
+                if gate["gate_name"] == "monte_carlo_sharpe_p05":
+                    gate["observed_value"] = 0.1
+                    break
+            robustness_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        elif gates == "forged_data":
+            _write_passing_robustness_gates(
+                runner.run_dir / "robustness_gates.json", run_id, runner.state.git_sha
+            )
+            robustness_path = runner.run_dir / "robustness_gates.json"
+            payload = json.loads(robustness_path.read_text(encoding="utf-8"))
+            for gate in payload["gates"]:
+                if gate["gate_name"] == "data_resolution_eligibility":
+                    gate["observed_value"] = "ineligible"
+                    gate["pass_fail"] = True
+                    break
             robustness_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         scoring = {
             "decision": "PROMOTE",
@@ -233,6 +275,16 @@ def test_promote_writes_registry_atomically(tmp_path: Path) -> None:
     runner.stage_score_and_decide = lambda: force_promote(runner, "P2", gates="forged")  # type: ignore[assignment]
     assert runner.run() == 3
     assert not (tmp_path / "artifacts" / "P2" / "registry_update.json").exists()
+
+    runner = AutonomousRunner(config=cfg, root=tmp_path, run_id="P4")
+    runner.stage_score_and_decide = lambda: force_promote(runner, "P4", gates="passing_without_data")  # type: ignore[assignment]
+    assert runner.run() == 3
+    assert not (tmp_path / "artifacts" / "P4" / "registry_update.json").exists()
+
+    runner = AutonomousRunner(config=cfg, root=tmp_path, run_id="P5")
+    runner.stage_score_and_decide = lambda: force_promote(runner, "P5", gates="forged_data")  # type: ignore[assignment]
+    assert runner.run() == 3
+    assert not (tmp_path / "artifacts" / "P5" / "registry_update.json").exists()
 
     runner = AutonomousRunner(config=cfg, root=tmp_path, run_id="P3")
     runner.stage_score_and_decide = lambda: force_promote(runner, "P3", gates="passing")  # type: ignore[assignment]

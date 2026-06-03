@@ -132,6 +132,7 @@ def test_to_gate_result_eligible() -> None:
     assert g.severity == Severity.INFO
     assert g.blocking_status is False
     assert g.pass_fail is True
+    assert g.observed_value == "eligible"
     assert g.reason_code == "DATA_ELIGIBLE"
 
 
@@ -149,6 +150,7 @@ def test_to_gate_result_ineligible_blocks() -> None:
     assert g.severity == Severity.BLOCKING
     assert g.blocking_status is True
     assert g.pass_fail is False
+    assert g.observed_value == "ineligible"
     assert g.reason_code == "DATA_INELIGIBLE_FOR_PROMOTION"
 
 
@@ -169,6 +171,22 @@ def test_data_resolution_tag_round_trip() -> None:
     assert tag2.symbols_affected == tag.symbols_affected
     assert tag2.time_windows_affected == tag.time_windows_affected
     assert tag2.promotion_eligibility_impact == tag.promotion_eligibility_impact
+
+
+def test_data_resolution_from_dict_requires_promotion_fields() -> None:
+    raw = make_tag("L3_MBO", "SYNTHETIC_OR_DEGRADED").to_dict()
+    raw.pop("promotion_eligibility_impact")
+
+    with pytest.raises(ValueError, match="missing required fields"):
+        DataResolutionTag.from_dict(raw)
+
+
+def test_data_resolution_from_dict_rejects_inconsistent_degraded_tag() -> None:
+    raw = make_tag("L3_MBO", "SYNTHETIC_OR_DEGRADED").to_dict()
+    raw["promotion_eligibility_impact"] = "eligible"
+
+    with pytest.raises(ValueError, match="ineligible for promotion"):
+        DataResolutionTag.from_dict(raw)
 
 
 # ---------- runner integration ----------
@@ -206,6 +224,21 @@ def test_runner_demotes_on_downgrade(tmp_path: Path) -> None:
     # The data-eligibility gate should be WARN (not BLOCKING)
     assert runner._data_eligibility_gate.severity == Severity.WARN
     assert runner._data_eligibility_gate.blocking_status is False
+
+
+def test_runner_persists_data_gate_in_robustness_gates(tmp_path: Path) -> None:
+    cfg = _config_with_data(requested="L3_MBO", resolved="TRADES_ONLY")
+    cfg.output["artifacts_dir"] = str(tmp_path / "artifacts")
+    runner = AutonomousRunner(config=cfg, root=tmp_path, run_id="DR2GATE")
+    runner.run()
+    payload = json.loads(
+        (tmp_path / "artifacts" / "DR2GATE" / "robustness_gates.json").read_text(encoding="utf-8")
+    )
+    gates = {gate["gate_name"]: gate for gate in payload["gates"]}
+
+    assert gates["data_resolution_eligibility"]["pass_fail"] is True
+    assert gates["data_resolution_eligibility"]["severity"] == "warn"
+    assert gates["data_resolution_eligibility"]["observed_value"] == "demoted"
 
 
 def test_runner_blocks_on_synthetic(tmp_path: Path) -> None:

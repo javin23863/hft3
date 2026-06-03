@@ -23,6 +23,18 @@ def _config(tmp_path: Path) -> CampaignConfig:
 def _write_passing_robustness_gates(path: Path, run_id: str, git_sha: str) -> None:
     gates = [
         GateResult(
+            gate_name="data_resolution_eligibility",
+            gate_category=GateCategory.DATA_INTEGRITY,
+            metric_name="promotion_eligibility_impact",
+            threshold=None,
+            observed_value="eligible",
+            comparison_operator="==",
+            pass_fail=True,
+            severity=Severity.INFO,
+            blocking_status=False,
+            artifact_reference="data_resolution.json",
+        ),
+        GateResult(
             gate_name="monte_carlo_sharpe_p05",
             gate_category=GateCategory.ROBUSTNESS,
             metric_name="sharpe_p05",

@@ -103,6 +103,7 @@ from hft3.validation.gate_result import (
 logger = logging.getLogger(__name__)
 
 PROMOTION_EVIDENCE_GATE_NAMES = frozenset({
+    "data_resolution_eligibility",
     "monte_carlo_sharpe_p05",
     "oos_max_drawdown",
     "walk_forward_pass",
@@ -382,6 +383,21 @@ class AutonomousRunner:
             _atomic_write_text(path, str(payload))
         return path
 
+    def _load_data_resolution_gate(self, path: Path) -> None:
+        from hft3.data_class import DataResolutionTag, to_gate_result
+
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            tag = DataResolutionTag.from_dict(payload)
+        except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+            self._classify_recovery(
+                RecoveryDecision.MANUAL_REVIEW_REQUIRED,
+                f"data_resolution artifact is missing or malformed: {exc}",
+            )
+            raise RuntimeError(self.recovery_reason)
+        self._data_resolution_tag = tag
+        self._data_eligibility_gate = to_gate_result(tag)
+
     # --- per-stage runners ---
 
     def stage_load_config(self) -> Path:
@@ -430,7 +446,9 @@ class AutonomousRunner:
         eligibility — silent downgrades are forbidden.
         """
         if self._stage_done("resolve_data"):
-            return Path(self.state.artifacts["resolve_data"])
+            path = Path(self.state.artifacts["resolve_data"])
+            self._load_data_resolution_gate(path)
+            return path
         self._stage_start("resolve_data")
 
         from hft3.data_class import DataClass, make_tag
@@ -615,6 +633,25 @@ class AutonomousRunner:
             return Path(self.state.artifacts["robustness_and_wf"])
         self._stage_start("robustness_and_wf")
         gates: list[GateResult] = []
+        if self._data_eligibility_gate is None:
+            data_resolution_path = self.run_dir / "data_resolution.json"
+            if data_resolution_path.is_file():
+                self._load_data_resolution_gate(data_resolution_path)
+        if self._data_eligibility_gate is not None:
+            gates.append(self._data_eligibility_gate)
+        else:
+            gates.append(GateResult(
+                gate_name="data_resolution_eligibility",
+                gate_category=GateCategory.DATA_INTEGRITY,
+                metric_name="promotion_eligibility_impact",
+                threshold=None,
+                observed_value=None,
+                comparison_operator="==",
+                pass_fail=False,
+                severity=Severity.BLOCKING,
+                reason_code="DATA_RESOLUTION_MISSING",
+                artifact_reference="data_resolution.json",
+            ))
         # Real pipeline replaces these with observed values when
         # WorkbenchEngine integration lands. Until then, every gate
         # has observed_value=None and pass_fail=False (BLOCKING).
@@ -934,19 +971,21 @@ class AutonomousRunner:
             raise RuntimeError(self.recovery_reason)
 
     def _require_promotion_evidence(self) -> None:
-        blocking = _blocking_gate_dicts(self._load_robustness_gate_dicts(), include_passed=True)
-        blocking_by_name = {g.get("gate_name"): g for g in blocking}
+        gates_by_name = {g.get("gate_name"): g for g in self._load_robustness_gate_dicts()}
+        data_gate = gates_by_name.get("data_resolution_eligibility", {})
+        data_observed = data_gate.get("observed_value")
         if (
-            not PROMOTION_EVIDENCE_GATE_NAMES.issubset(blocking_by_name)
+            not PROMOTION_EVIDENCE_GATE_NAMES.issubset(gates_by_name)
+            or data_observed not in {"eligible", "demoted"}
             or any(
-                blocking_by_name[name].get("pass_fail") is not True
-                or blocking_by_name[name].get("observed_value") is None
+                gates_by_name[name].get("pass_fail") is not True
+                or gates_by_name[name].get("observed_value") is None
                 for name in PROMOTION_EVIDENCE_GATE_NAMES
             )
         ):
             self._classify_recovery(
                 RecoveryDecision.MANUAL_REVIEW_REQUIRED,
-                "PROMOTE requires persisted passing blocking robustness gates",
+                "PROMOTE requires persisted passing data-resolution and robustness gates",
             )
             raise RuntimeError(self.recovery_reason)
 

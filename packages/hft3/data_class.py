@@ -133,21 +133,37 @@ class DataResolutionTag:
 
     @classmethod
     def from_dict(cls, raw: dict) -> "DataResolutionTag":
-        return cls(
+        if not isinstance(raw, dict):
+            raise TypeError("data resolution tag must be a mapping")
+        required = {
+            "requested_data_class",
+            "resolved_data_class",
+            "symbols_affected",
+            "time_windows_affected",
+            "downgrade_reason",
+            "validity_impact",
+            "promotion_eligibility_impact",
+        }
+        missing = sorted(required - set(raw))
+        if missing:
+            raise ValueError(f"data resolution tag missing required fields: {missing}")
+        tag = cls(
             requested_data_class=DataClass(raw["requested_data_class"]),
             resolved_data_class=DataClass(raw["resolved_data_class"]),
-            symbols_affected=list(raw.get("symbols_affected", [])),
+            symbols_affected=list(raw["symbols_affected"]),
             time_windows_affected=[
-                (int(s), int(e)) for s, e in raw.get("time_windows_affected", [])
+                (int(s), int(e)) for s, e in raw["time_windows_affected"]
             ],
-            downgrade_reason=str(raw.get("downgrade_reason", REASON_NO_DOWNGRADE)),
-            validity_impact=ValidityImpact(raw.get("validity_impact", "info")),
+            downgrade_reason=str(raw["downgrade_reason"]),
+            validity_impact=ValidityImpact(raw["validity_impact"]),
             promotion_eligibility_impact=PromotionEligibility(
-                raw.get("promotion_eligibility_impact", "eligible")
+                raw["promotion_eligibility_impact"]
             ),
             source=str(raw.get("source", "")),
             notes=str(raw.get("notes", "")),
         )
+        tag.validate()
+        return tag
 
     @property
     def is_downgrade(self) -> bool:
@@ -160,7 +176,7 @@ class DataResolutionTag:
         return self.requested_data_class != self.resolved_data_class
 
     def validate(self) -> None:
-        if self.is_mismatch and self.downgrade_reason == REASON_NO_DOWNGRADE:
+        if self.is_downgrade and self.downgrade_reason == REASON_NO_DOWNGRADE:
             raise ValueError(
                 f"downgrade_reason must be set when requested "
                 f"({self.requested_data_class.value}) != resolved "
@@ -179,6 +195,25 @@ class DataResolutionTag:
             raise ValueError(
                 f"downgrade_reason {self.downgrade_reason!r} not in {sorted(valid_reasons)}"
             )
+        if not self.is_downgrade:
+            if self.downgrade_reason != REASON_NO_DOWNGRADE:
+                raise ValueError("downgrade_reason must be empty when resolved data is not downgraded")
+            if self.validity_impact != ValidityImpact.INFO:
+                raise ValueError("non-downgraded data must have info validity impact")
+            if self.promotion_eligibility_impact != PromotionEligibility.ELIGIBLE:
+                raise ValueError("non-downgraded data must be promotion eligible")
+        elif self.resolved_data_class == DataClass.SYNTHETIC_OR_DEGRADED:
+            if self.downgrade_reason != REASON_FALLBACK_TO_SYNTHETIC:
+                raise ValueError("synthetic/degraded data must use DATA_FALLBACK_TO_SYNTHETIC")
+            if self.validity_impact != ValidityImpact.BLOCKING:
+                raise ValueError("synthetic/degraded data must have blocking validity impact")
+            if self.promotion_eligibility_impact != PromotionEligibility.INELIGIBLE:
+                raise ValueError("synthetic/degraded data must be ineligible for promotion")
+        else:
+            if self.validity_impact != ValidityImpact.WARN:
+                raise ValueError("downgraded non-synthetic data must have warn validity impact")
+            if self.promotion_eligibility_impact != PromotionEligibility.DEMOTED:
+                raise ValueError("downgraded non-synthetic data must be demoted")
 
 
 # ---------- factory helpers ----------
@@ -278,7 +313,7 @@ def to_gate_result(tag: DataResolutionTag) -> "GateResult":  # type: ignore[name
         gate_category=GateCategory.DATA_INTEGRITY,
         metric_name="promotion_eligibility_impact",
         threshold=None,
-        observed_value=None,
+        observed_value=tag.promotion_eligibility_impact.value,
         comparison_operator="==",
         pass_fail=(tag.promotion_eligibility_impact != PromotionEligibility.INELIGIBLE),
         severity=severity,
