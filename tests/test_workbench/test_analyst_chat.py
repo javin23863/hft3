@@ -6,10 +6,10 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
-from data_layer.llm.ollama_client import GenerateResult
+from data_layer.llm.openai_compatible_client import GenerateResult
 
 
-def test_chat_reply_uses_ollama(tmp_path: Path) -> None:
+def test_chat_reply_uses_openai_compatible_client(tmp_path: Path) -> None:
     from workbench.ui.analyst_panel import _chat_reply
 
     art = tmp_path / "run"
@@ -21,7 +21,7 @@ def test_chat_reply_uses_ollama(tmp_path: Path) -> None:
     )
 
     with patch(
-        "workbench.ui.analyst_panel.ollama_client.generate",
+        "workbench.ui.analyst_panel.llm_client.generate",
         return_value=GenerateResult("Follow-up answer.", model="test"),
     ):
         text = _chat_reply(art, "What is break-even?")

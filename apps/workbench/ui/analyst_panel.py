@@ -1,4 +1,4 @@
-"""Analyst tab: symbolic gate, KG slice, LLM narrative, Ollama chat."""
+"""Analyst tab: symbolic gate, KG slice, LLM narrative, GPT-5.5 chat."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 
 import streamlit as st
 
-from data_layer.llm import ollama_client
+from data_layer.llm import openai_compatible_client as llm_client
 from data_layer.llm.prompts import SYSTEM_PROMPT
 from workbench.src.artifacts.paths import AAR_RESPONSE_FILENAME, AAR_REPORT_FILENAME
 from workbench.ui.flow_state import event_artifact_dir, load_json_artifact
@@ -66,7 +66,12 @@ def _compact_context(art: Path) -> str:
 def _chat_reply(art: Path, question: str) -> str:
     ctx = _compact_context(art)
     user = f"Run artifacts:\n{ctx}\n\nQuestion: {question}"
-    result = ollama_client.generate(CHAT_SYSTEM, user, num_predict=1024)
+    result = llm_client.generate(
+        CHAT_SYSTEM,
+        user,
+        model=llm_client.DEFAULT_AAR_MODEL,
+        num_predict=1024,
+    )
     if result.error or not result.text:
         return f"LLM error: {result.error or 'empty response'}"
     return result.text
@@ -144,9 +149,9 @@ def analyst_panel(
     elif response_path.is_file():
         st.info("Response packet present but narrative_md empty.")
     else:
-        st.caption("Run full-sweep campaign with audit grade for Gemma after-action narrative.")
+        st.caption("Run full-sweep campaign with audit grade for GPT-5.5 after-action narrative.")
 
-    st.markdown("### Chat with local LM")
+    st.markdown("### Chat with GPT-5.5")
     ctx_key = f"{campaign_id}:{period}:{event_id}"
     if st.session_state.get("wb_chat_context_key") != ctx_key:
         st.session_state.wb_chat_context_key = ctx_key
@@ -156,10 +161,10 @@ def analyst_panel(
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    if not ollama_client.ollama_available():
+    if not llm_client.llm_available():
         st.warning(
-            "Ollama / Gemma model not available. Start Ollama and pull "
-            "`gemma4:31b-cloud` (or set HFT3_OLLAMA_MODEL)."
+            "OpenAI-compatible GPT-5.5 endpoint not configured. Set "
+            "HFT3_LLM_API_KEY or OPENAI_API_KEY."
         )
         return
 
@@ -170,7 +175,7 @@ def analyst_panel(
     question = st.chat_input("Ask about this run…", key="wb__analyst_chat")
     if question:
         st.session_state.wb_chat_messages.append({"role": "user", "content": question})
-        with st.spinner("Gemma thinking…"):
+        with st.spinner("GPT-5.5 thinking…"):
             answer = _chat_reply(art, question)
         st.session_state.wb_chat_messages.append({"role": "assistant", "content": answer})
         st.rerun()

@@ -12,7 +12,7 @@ Read [GETTING_STARTED.md §7–8](../GETTING_STARTED.md) first for setup order.
 | 2 | [MODEL_CATALOG.md](MODEL_CATALOG.md) | `HYP_*` and `PDF_MODEL_*` registry |
 | 3 | [WALK_FORWARD_CAMPAIGNS.md](WALK_FORWARD_CAMPAIGNS.md) | B4 periods, holdout discipline |
 | 4 | [GRADER_CHECKLIST.md](GRADER_CHECKLIST.md) | PASS artifacts and pytest gates |
-| 5 | [AFTER_ACTION_REPORTS.md](AFTER_ACTION_REPORTS.md) | Post-run packet, symbolic pass, Gemma |
+| 5 | [AFTER_ACTION_REPORTS.md](AFTER_ACTION_REPORTS.md) | Post-run packet, symbolic pass, GPT-5.5 |
 
 Optional: [SIM_SHADOW.md](SIM_SHADOW.md), [PERSONAL_SANDBOX.md](PERSONAL_SANDBOX.md).
 
@@ -42,5 +42,5 @@ Artifacts: `research_cards/workbench_runs/` (local, gitignored). Campaign copies
 
 ```bash
 pytest tests/test_workbench/ tests/test_data_layer/ -q
-pytest tests/test_data_layer/ -q -m "not slow"   # skip live Ollama test
+pytest tests/test_data_layer/ -q -m "not slow"   # skip live GPT-5.5 endpoint test
 ```

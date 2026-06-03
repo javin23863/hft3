@@ -17,8 +17,8 @@ class ParsedHypothesis:
     feature_list: List[str]
     param_ranges: Dict[str, List[float]]
     primary_model_id: str
-    source: str = "heuristic"  # heuristic | ollama
-    llm_status: Optional[str] = None  # hypothesis packet status when GLM path used
+    source: str = "heuristic"  # heuristic | openai_compatible
+    llm_status: Optional[str] = None  # hypothesis packet status when GPT-5.5 path used
 
 
 @dataclass

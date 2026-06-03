@@ -155,7 +155,7 @@ def test_pipeline_request_response_roundtrip():
 
 
 def test_hypothesis_packet_strict_mock(monkeypatch):
-    from data_layer.llm import ollama_client
+    from data_layer.llm import openai_compatible_client as llm_client
     from data_layer.llm.packet_runner import run_llm_on_hypothesis_request
     from research_pipeline.packets import build_pipeline_request
 
@@ -170,7 +170,7 @@ def test_hypothesis_packet_strict_mock(monkeypatch):
         {
             "schema_version": "1",
             "request_id": "req_hyp",
-            "llm_model": "mock-glm",
+            "llm_model": "mock-gpt55",
             "llm_status": "ok",
             "primary_model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
             "instrument_universe": ["MES"],
@@ -181,11 +181,11 @@ def test_hypothesis_packet_strict_mock(monkeypatch):
             "param_ranges": {"signal_threshold": [0.05, 0.35]},
         }
     )
-    monkeypatch.setattr(ollama_client, "ollama_available", lambda **kw: True)
+    monkeypatch.setattr(llm_client, "llm_available", lambda **kw: True)
     monkeypatch.setattr(
-        ollama_client,
+        llm_client,
         "generate",
-        lambda *a, **k: ollama_client.GenerateResult(mock_body, model="mock-glm", elapsed_s=0.1),
+        lambda *a, **k: llm_client.GenerateResult(mock_body, model="mock-gpt55", elapsed_s=0.1),
     )
     out = run_llm_on_hypothesis_request(
         request,
@@ -227,7 +227,7 @@ def test_parse_hypothesis_uses_packet_runner(monkeypatch):
         repo_root=REPO,
     )
     assert parsed.primary_model_id == "SPREAD_BLOWOUT_RECOMPRESSION"
-    assert parsed.source == "ollama"
+    assert parsed.source == "openai_compatible"
 
 
 NPZ = REPO / "data" / "npz" / "MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz"
@@ -253,7 +253,7 @@ def test_evaluate_model_smoke():
 
 
 def test_vendor_submodules_present():
-    """OpenFoundry + AlphaGeometry must be vendored in-repo (not confused with Ollama cloud LLMs)."""
+    """OpenFoundry + AlphaGeometry must be vendored in-repo, not confused with runtime LLMs."""
     assert (REPO / "vendor" / "openfoundry" / "domain-packs" / "core" / "pack.yaml").is_file()
     assert (REPO / "vendor" / "alphageometry").is_dir()
     lock = (REPO / "integrations" / "openfoundry" / "VENDOR.lock").read_text(encoding="utf-8")

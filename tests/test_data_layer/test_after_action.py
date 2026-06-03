@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -249,7 +250,7 @@ def test_after_action_skipped_on_fast_sweep():
         assert len(calls) == 1
 
 
-def test_ollama_mocked_pipeline(tmp_path, monkeypatch):
+def test_openai_compatible_mocked_pipeline(tmp_path, monkeypatch):
     from data_layer.pipeline.after_action import run_after_action_report
 
     art = tmp_path / "run_ok"
@@ -257,8 +258,8 @@ def test_ollama_mocked_pipeline(tmp_path, monkeypatch):
     for name in ("diagnostics.json", "manifest.json", "config.yaml", "trades.parquet"):
         (art / name).write_bytes((FIXTURE / name).read_bytes())
 
-    monkeypatch.setattr("data_layer.llm.ollama_client.ollama_available", lambda **kw: True)
-    from data_layer.llm.ollama_client import GenerateResult
+    monkeypatch.setattr("data_layer.llm.openai_compatible_client.llm_available", lambda **kw: True)
+    from data_layer.llm.openai_compatible_client import GenerateResult
 
     mock_response = json.dumps(
         {
@@ -275,7 +276,7 @@ def test_ollama_mocked_pipeline(tmp_path, monkeypatch):
         }
     )
     monkeypatch.setattr(
-        "data_layer.llm.ollama_client.generate",
+        "data_layer.llm.openai_compatible_client.generate",
         lambda *a, **k: GenerateResult(mock_response, model="mock", elapsed_s=0.1),
     )
     monkeypatch.setattr(
@@ -361,14 +362,16 @@ def test_after_action_skips_llm_on_pending_vendor_lock(tmp_path, monkeypatch):
 
 
 @pytest.mark.slow
-def test_ollama_live_gemma_fixture(tmp_path):
+def test_openai_compatible_live_gpt55_fixture(tmp_path):
     import shutil
 
-    from data_layer.llm import ollama_client
+    from data_layer.llm import openai_compatible_client as llm_client
     from data_layer.pipeline.after_action import run_after_action_report
 
-    if not ollama_client.ollama_available():
-        pytest.skip("Gemma cloud model not in ollama list")
+    if os.environ.get("HFT3_LIVE_LLM_TESTS") != "1":
+        pytest.skip("set HFT3_LIVE_LLM_TESTS=1 to run paid external GPT-5.5 fixture")
+    if not llm_client.llm_available():
+        pytest.skip("OpenAI-compatible GPT-5.5 endpoint not configured")
 
     art = tmp_path / "run_live"
     art.mkdir()

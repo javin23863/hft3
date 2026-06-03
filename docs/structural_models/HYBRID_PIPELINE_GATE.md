@@ -28,7 +28,7 @@ python scripts/run_hybrid_pipeline_gate.py --event-id CPI_2024_09_11_TIGHT --sym
 python scripts/run_hybrid_pipeline_gate.py --latency-ms 1.0
 python scripts/run_hybrid_pipeline_gate.py --skip-unit-tests
 python scripts/run_hybrid_pipeline_gate.py --skip-ablation          # ~5 min vs ~25 min
-python scripts/run_hybrid_pipeline_gate.py --skip-after-action      # no Ollama
+python scripts/run_hybrid_pipeline_gate.py --skip-after-action      # no GPT-5.5 endpoint
 python scripts/run_hybrid_pipeline_gate.py --min-trades 0           # replay-only check
 ```
 
@@ -40,7 +40,7 @@ python scripts/run_hybrid_pipeline_gate.py --min-trades 0           # replay-onl
 | `unit_tests` | `test_pdf_hybrid_strategy`, `test_pdf_defensive_ablation` |
 | `defensive_ablation` | 4 modes: `as_baseline`, `ofi_only`, `vpin_only`, `hybrid_full` |
 | `hybrid_backtest` | Primary `hybrid_full` card → `PDF_MODEL_4_hybrid_replay/` |
-| `after_action_report` | AAR artifacts + optional Gemma narrative (`after_action_response.json`) |
+| `after_action_report` | AAR artifacts + optional GPT-5.5 narrative (`after_action_response.json`) |
 | `validate_card` | `result.json` + `report.md`; `num_trades >= --min-trades` |
 
 ## Latency

@@ -1,6 +1,6 @@
 # Vendor repos vs LLM runtime (do not conflate)
 
-hft3 vendors **two separate upstream repos** as git submodules. They are **not** interchangeable with Ollama cloud model names (Gemma, GLM, etc.).
+hft3 vendors **two separate upstream repos** as git submodules. They are **not** interchangeable with the OpenAI-compatible GPT-5.5 runtime.
 
 ## Vendored codebases (inside this repo)
 
@@ -23,23 +23,23 @@ hft3 adapter: [`integrations/openfoundry/hft3-cme-mbo.yaml`](../integrations/ope
 
 | Name | What it is | Common mistake |
 |------|------------|----------------|
-| **Gemma (`gemma4:31b-cloud`)** | Ollama **cloud LLM** for after-action / analyst | Treating Gemma as the same as `vendor/alphageometry/` |
-| **glm-5.1:cloud** | Ollama cloud model for **autoresearch pipeline** NL parsing | Confusing with OpenFoundry ontology |
+| **GPT-5.5 (`gpt-5.5`)** | OpenAI-compatible runtime LLM for after-action, research, and model-development parsing | Treating GPT runtime as vendored OpenFoundry or AlphaGeometry code |
 | **AlphaGeometry Meliad/JAX** | Upstream research LM inside `vendor/alphageometry/` | Running it on MBO order books in production |
 
-**Google DeepMind** appears in this stack as the **AlphaGeometry submodule** (symbolic geometry research code). Gemma is a different product accessed via Ollama cloud — not vendored in git.
+**Google DeepMind** appears in this stack as the **AlphaGeometry submodule** (symbolic geometry research code). GPT-5.5 is a runtime LLM accessed through an OpenAI-compatible endpoint — not vendored in git.
 
 ## LLM lanes (workstation, post-run / NL only)
 
 | Lane | Default model | Env override | Entry |
 |------|---------------|--------------|-------|
-| After-action, analyst chat | `gemma4:31b-cloud` | `HFT3_OLLAMA_MODEL` | `data_layer.llm.packet_runner.run_llm_on_aar_packet` |
-| Autoresearch pipeline | `glm-5.1:cloud` | `HFT3_PIPELINE_LLM_MODEL` | `research_pipeline/llm.py` + `packets.py` |
-| Graphify semantic (optional) | `gemma4:31b-cloud` | `GRAPHIFY_OLLAMA_MODEL` | `scripts/graphify_semantic_local.ps1` |
+| After-action, analyst chat | `gpt-5.5` + `xhigh` reasoning | `HFT3_AAR_LLM_MODEL`, `HFT3_LLM_REASONING_EFFORT` | `data_layer.llm.packet_runner.run_llm_on_aar_packet` |
+| Autoresearch pipeline | `gpt-5.5` + `xhigh` reasoning | `HFT3_RESEARCH_LLM_MODEL`, `HFT3_PIPELINE_LLM_MODEL` | `research_pipeline/llm.py` + `packets.py` |
+| Model-development hypothesis parse | `gpt-5.5` + `xhigh` reasoning | `HFT3_MODEL_DEVELOPMENT_LLM_MODEL` | `data_layer.llm.packet_runner.run_llm_on_hypothesis_request` |
 
 ```bash
-ollama run gemma4:31b-cloud    # after-action
-ollama run glm-5.1:cloud       # research pipeline
+set HFT3_LLM_API_KEY=...       # or OPENAI_API_KEY
+set HFT3_LLM_BASE_URL=https://api.openai.com/v1
+set HFT3_LLM_REASONING_EFFORT=xhigh
 ```
 
 Packet I/O spec: [PACKET_LLM_CONTRACT.md](PACKET_LLM_CONTRACT.md)

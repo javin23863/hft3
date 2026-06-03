@@ -42,7 +42,7 @@ grep -r run_llm_on_pipeline_request packages/ scripts/ tests/
 |------|-------|
 | Schemas | `packages/data_layer/packet/schema_*.json`, `runtime/schemas/` |
 | Validation | `packages/data_layer/packet/validate.py` |
-| LLM | `packages/data_layer/llm/packet_runner.py`, `ollama_client.py`, `prompts.py` |
+| LLM | `packages/data_layer/llm/packet_runner.py`, `openai_compatible_client.py`, `prompts.py` |
 | AAR | `packages/data_layer/pipeline/after_action.py` |
 | Pipeline | `packages/research_pipeline/packets.py`, `scripts/run_pipeline.py` |
 | UI | `apps/workbench/ui/analyst_panel.py`, `flow_state.py`, `campaign_runner.py` |

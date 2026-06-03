@@ -31,6 +31,7 @@ from research_pipeline.packets import (
     write_pipeline_packets,
 )
 from research_pipeline.types import CandidateModel, GateThresholds, PipelineReport, ParsedHypothesis
+from data_layer.llm.openai_compatible_client import DEFAULT_MODEL_DEVELOPMENT_MODEL
 
 
 def _run_id() -> str:
@@ -43,7 +44,7 @@ def _pipeline_llm_status(parsed: ParsedHypothesis, *, no_llm: bool) -> str:
         return "skipped_no_llm"
     if parsed.llm_status:
         return parsed.llm_status
-    return "ok" if parsed.source == "ollama" else "unavailable"
+    return "ok" if parsed.source == "openai_compatible" else "unavailable"
 
 
 def main() -> int:
@@ -185,7 +186,7 @@ def main() -> int:
             report,
             request,
             llm_status=llm_status,
-            llm_model=None if llm_status != "ok" else "glm-5.1:cloud",
+            llm_model=None if llm_status != "ok" else DEFAULT_MODEL_DEVELOPMENT_MODEL,
         )
         write_pipeline_packets(artifact_dir, request, response)
         payload = {
@@ -242,7 +243,7 @@ def main() -> int:
         report,
         request,
         llm_status=llm_status,
-        llm_model=None if llm_status != "ok" else "glm-5.1:cloud",
+        llm_model=None if llm_status != "ok" else DEFAULT_MODEL_DEVELOPMENT_MODEL,
     )
     write_pipeline_packets(artifact_dir, request, response)
     print(json.dumps({"report": report.to_dict(), "response_packet": response}, indent=2))

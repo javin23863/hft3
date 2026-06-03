@@ -22,14 +22,14 @@ Override with environment variables:
 
 - `HFT3_AFTER_ACTION=1` — force enable (e.g. Linux dev box)
 - `HFT3_AFTER_ACTION=0` — force disable
-- `HFT3_OLLAMA_TIMEOUT_S=600` — LLM generation timeout (default 600; 8B on CPU often needs >120s)
+- `HFT3_LLM_TIMEOUT_S=600` — LLM generation timeout (default 600)
 
 Do not set `HFT3_AFTER_ACTION=1` on CHI404 production hosts.
 
 ## Setup
 
 1. Vendor submodules: `vendor/openfoundry/` ([syzygyhack/open-foundry](https://github.com/syzygyhack/open-foundry)), `vendor/alphageometry/` — pins in `integrations/openfoundry/VENDOR.lock`
-2. Ollama with Gemma: `ollama run gemma4:31b-cloud` (override `HFT3_OLLAMA_MODEL`)
+2. OpenAI-compatible GPT-5.5 endpoint: set `HFT3_LLM_API_KEY` or `OPENAI_API_KEY`; override model with `HFT3_AAR_LLM_MODEL`
 3. PDF bundle in `docs/references/` — see [MANIFEST.md](../references/MANIFEST.md)
 
 ## Time discipline
@@ -61,7 +61,7 @@ Global KG append: `research_cards/kg/nodes.jsonl`, `edges.jsonl`.
 | `data_sufficient == false` | `HISTORY_GATE` |
 | trades > 0 but incomplete audit | `AUDIT_INCOMPLETE` |
 | trades > 0, no `trades.parquet`, `execution_assumptions == quote_engine` | LLM allowed; packet `audit_waiver_reason: quote_engine_aggregate_only` (discovery hybrid gate only; not production promotion) |
-| Ollama unreachable | `LLM_UNAVAILABLE` |
+| GPT-5.5 endpoint unavailable or unconfigured | `LLM_UNAVAILABLE` |
 | Required PDFs missing | LLM skipped (`pdf_citations_complete: false`) |
 
 Symbolic checks and KG ingest still run when LLM is skipped.

@@ -40,7 +40,7 @@ artifacts/workbench_runs/{campaign_id}/
 | Mode | Flags | After-action LLM |
 |------|-------|------------------|
 | Quick trial | default UI quick run | Skipped |
-| Full audit | `--full-sweep`, `trial_mode=False` | Runs via `packet_runner` + Gemma (`HFT3_OLLAMA_MODEL`) |
+| Full audit | `--full-sweep`, `trial_mode=False` | Runs via `packet_runner` + GPT-5.5 XHIGH (`HFT3_AAR_LLM_MODEL`) |
 
 ## Event replay
 

@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from data_layer.llm import ollama_client
+from data_layer.llm import openai_compatible_client as llm_client
 from data_layer.llm.prompts import (
     build_aar_system_prompt,
     build_aar_user_envelope,
@@ -29,8 +28,9 @@ _PIPELINE_OUTPUT_SCHEMA = (
 _HYPOTHESIS_OUTPUT_SCHEMA = (
     Path(__file__).resolve().parents[1] / "packet" / "schema_pipeline_hypothesis_response_v1.json"
 )
-DEFAULT_AAR_MODEL = ollama_client.DEFAULT_AAR_MODEL
-DEFAULT_PIPELINE_MODEL = os.environ.get("HFT3_PIPELINE_LLM_MODEL", "glm-5.1:cloud")
+DEFAULT_AAR_MODEL = llm_client.DEFAULT_AAR_MODEL
+DEFAULT_PIPELINE_MODEL = llm_client.DEFAULT_PIPELINE_MODEL
+DEFAULT_MODEL_DEVELOPMENT_MODEL = llm_client.DEFAULT_MODEL_DEVELOPMENT_MODEL
 
 
 def _load_schema_text(path: Path) -> str:
@@ -152,7 +152,7 @@ def _pipeline_error_response(
             "primary_model_id": "",
             "instrument_universe": [],
             "indicators": [],
-            "source": "ollama",
+            "source": "unavailable",
         },
         "candidates_tested": 0,
         "results": [],
@@ -256,7 +256,7 @@ def run_llm_on_aar_packet(
             )
         )
 
-    if not ollama_client.ollama_available(model=model):
+    if not llm_client.llm_available():
         return _ensure_aar_response(
             packet_in,
             symbolic,
@@ -264,8 +264,8 @@ def run_llm_on_aar_packet(
                 packet_in,
                 symbolic,
                 llm_status="unavailable",
-                narrative_md="After-action LLM unavailable (Ollama or model not reachable).",
-                llm_error=f"model {model} not in ollama list",
+                narrative_md="After-action LLM unavailable (OpenAI-compatible GPT-5.5 endpoint not configured).",
+                llm_error="HFT3_LLM_API_KEY or OPENAI_API_KEY is not set",
             )
         )
 
@@ -273,7 +273,7 @@ def run_llm_on_aar_packet(
     system = build_aar_system_prompt(schema_text)
     user = build_aar_user_envelope(packet_in, symbolic, similar_prior_runs=similar_prior_runs)
 
-    result = ollama_client.generate(system, user, model=model, format_json=True, num_predict=4096)
+    result = llm_client.generate(system, user, model=model, format_json=True, num_predict=4096)
     if result.error or not result.text:
         return _ensure_aar_response(
             packet_in,
@@ -295,7 +295,7 @@ def run_llm_on_aar_packet(
             user
             + "\n\nYour prior response was invalid JSON. Return ONLY valid JSON matching the schema."
         )
-        result2 = ollama_client.generate(system, repair_user, model=model, format_json=True, num_predict=4096)
+        result2 = llm_client.generate(system, repair_user, model=model, format_json=True, num_predict=4096)
         if result2.text:
             parsed, parse_err = _parse_json_object(result2.text)
             result = result2
@@ -369,8 +369,8 @@ def run_llm_on_hypothesis_request(
     model: str | None = None,
     repo_root: Optional[Path] = None,
 ) -> Dict[str, Any]:
-    """Packet-strict GLM hypothesis parse (schema_pipeline_hypothesis_response_v1)."""
-    model = model or DEFAULT_PIPELINE_MODEL
+    """Packet-strict GPT-5.5 hypothesis parse (schema_pipeline_hypothesis_response_v1)."""
+    model = model or DEFAULT_MODEL_DEVELOPMENT_MODEL
     req_errors = validate_pipeline_request(request)
     if req_errors:
         raise ValueError(f"PipelineRequestPacket schema errors: {req_errors}")
@@ -390,14 +390,14 @@ def run_llm_on_hypothesis_request(
     )
     user = json.dumps({"pipeline_request": request, "thesis": thesis}, indent=2)
 
-    if not ollama_client.ollama_available(model=model):
+    if not llm_client.llm_available():
         return _hypothesis_error_response(
             request,
             llm_status="unavailable",
-            llm_error=f"model {model} not in ollama list",
+            llm_error="HFT3_LLM_API_KEY or OPENAI_API_KEY is not set",
         )
 
-    result = ollama_client.generate(system, user, model=model, format_json=True, num_predict=4096)
+    result = llm_client.generate(system, user, model=model, format_json=True, num_predict=4096)
     if result.error or not result.text:
         return _hypothesis_error_response(
             request,
@@ -458,14 +458,14 @@ def run_llm_on_pipeline_request(
     )
     user = json.dumps({"pipeline_request": request}, indent=2)
 
-    if not ollama_client.ollama_available(model=model):
+    if not llm_client.llm_available():
         return _pipeline_error_response(
             request,
             llm_status="unavailable",
-            llm_error=f"model {model} not in ollama list",
+            llm_error="HFT3_LLM_API_KEY or OPENAI_API_KEY is not set",
         )
 
-    result = ollama_client.generate(system, user, model=model, format_json=True, num_predict=4096)
+    result = llm_client.generate(system, user, model=model, format_json=True, num_predict=4096)
     if result.error or not result.text:
         return _pipeline_error_response(
             request,

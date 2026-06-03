@@ -66,6 +66,6 @@ graphify query "where is ReplaySession defined?"
 | [docs/human/RUNTIME_CONTRACT.md](docs/human/RUNTIME_CONTRACT.md) | Artifact schema |
 | [docs/vault/BACKTESTER_CERTIFICATION.md](docs/vault/BACKTESTER_CERTIFICATION.md) | Certification tiers |
 
-Post-run after-action (workstation + Ollama): [docs/workbench/AFTER_ACTION_REPORTS.md](docs/workbench/AFTER_ACTION_REPORTS.md).
+Post-run after-action (workstation + GPT-5.5 XHIGH): [docs/workbench/AFTER_ACTION_REPORTS.md](docs/workbench/AFTER_ACTION_REPORTS.md).
 
 Autoresearch pipeline (NL hypothesis → backtest): [docs/research/AUTORESEARCH_PIPELINE.md](docs/research/AUTORESEARCH_PIPELINE.md).

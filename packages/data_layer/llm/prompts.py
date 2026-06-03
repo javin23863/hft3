@@ -1,4 +1,4 @@
-"""After-action LLM prompts — packet-strict Gemma constraints."""
+"""After-action LLM prompts — packet-strict GPT-5.5 constraints."""
 
 from __future__ import annotations
 

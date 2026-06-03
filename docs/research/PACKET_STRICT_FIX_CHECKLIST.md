@@ -13,7 +13,7 @@ Plan: [packet-strict_llm_fix](../../.cursor/plans/packet-strict_llm_fix_16432bbd
 |------|-----------------|--------|
 | No Hawkish in active tree | `grep -ri hawkish packages/ scripts/ docs/ tests/` → empty | [x] |
 | jsonschema installable on fresh setup | `pip install -e .` or requirements include `jsonschema>=4.20` | [x] |
-| Mock AAR pytest | `pytest tests/test_data_layer/test_packet_*.py tests/test_data_layer/test_after_action.py -q -k "not live_gemma"` | [x] |
+| Mock AAR pytest | `pytest tests/test_data_layer/test_packet_*.py tests/test_data_layer/test_after_action.py -q -m "not slow"` | [x] |
 | Pipeline pytest | `pytest tests/test_research_pipeline.py -q` | [x] |
 | Cert fast gate | `pytest tests/backtester_validation/fast -q` | [x] |
 | Runtime schemas in sync | `powershell -File scripts/sync_runtime_schemas.ps1` then `test_sync_runtime_schemas.py` | [x] |
@@ -32,7 +32,7 @@ Plan: [packet-strict_llm_fix](../../.cursor/plans/packet-strict_llm_fix_16432bbd
 |------|---------|--------|
 | Wire NL hypothesis stage through `run_llm_on_hypothesis_request` | `hypothesis_parser.py`, `packet_runner.py` | [x] |
 | Deprecate loose `generate_json()` when `pipeline_request` + `repo_root` provided | `hypothesis_parser.py`, `research_pipeline/llm.py` | [x] |
-| Test: mock GLM hypothesis response validates | `tests/test_research_pipeline.py` | [x] |
+| Test: mock GPT-5.5 hypothesis response validates | `tests/test_research_pipeline.py` | [x] |
 
 **Verify:** `grep -r run_llm_on_hypothesis_request packages/` shows caller in `hypothesis_parser.py`.
 
@@ -115,7 +115,7 @@ Plan: [packet-strict_llm_fix](../../.cursor/plans/packet-strict_llm_fix_16432bbd
 |------|---------|--------|
 | `skipped_no_llm` in pipeline response schema + CLI | `schema_pipeline_response_v1.json`, `run_pipeline.py` | [x] |
 
-**Verify:** `--dry-run --no-llm` → response packet does not claim GLM success.
+**Verify:** `--dry-run --no-llm` → response packet does not claim GPT-5.5 success.
 
 ---
 
@@ -123,11 +123,11 @@ Plan: [packet-strict_llm_fix](../../.cursor/plans/packet-strict_llm_fix_16432bbd
 
 | Task | File(s) | Status |
 |------|---------|--------|
-| Add `scripts/spike_ollama_json_mode.py` (gemma + glm, CPI-sized fixture) | new script | [ ] |
+| Add OpenAI-compatible JSON-mode spike (GPT-5.5, CPI-sized fixture) | new script | [ ] |
 | Log parse rate, elapsed_s, context size estimate | script output / docs | [ ] |
 | Document spike results in checklist or PACKET_LLM_CONTRACT | docs | [ ] |
 
-**Verify:** Script runs (skip if Ollama offline) without crashing.
+**Verify:** Script runs (skip if GPT-5.5 endpoint is unconfigured) without crashing.
 
 ---
 
@@ -135,7 +135,7 @@ Plan: [packet-strict_llm_fix](../../.cursor/plans/packet-strict_llm_fix_16432bbd
 
 | Task | File(s) | Status |
 |------|---------|--------|
-| Raise `num_predict` for AAR or env `HFT3_AAR_NUM_PREDICT` | `ollama_client.py`, `.env.example` | [ ] |
+| Raise output-token budget for AAR or env `HFT3_AAR_NUM_PREDICT` | `openai_compatible_client.py`, `.env.example` | [ ] |
 | Test with fixture at upper trade count (or document known limit) | tests / docs | [ ] |
 
 ---
@@ -183,7 +183,7 @@ Plan: [packet-strict_llm_fix](../../.cursor/plans/packet-strict_llm_fix_16432bbd
 
 | Task | File(s) | Status |
 |------|---------|--------|
-| Regenerate `AAR_SMOKE_TEST` with Gemma + valid `after_action_response.json` | `artifacts/research_cards/workbench_runs/AAR_SMOKE_TEST/` | [-] |
+| Regenerate `AAR_SMOKE_TEST` with GPT-5.5 + valid `after_action_response.json` | `artifacts/research_cards/workbench_runs/AAR_SMOKE_TEST/` | [-] |
 | Update `after_action_meta.json` model field | smoke dir | [-] |
 
 ---
@@ -203,8 +203,8 @@ Plan: [packet-strict_llm_fix](../../.cursor/plans/packet-strict_llm_fix_16432bbd
 |------|----------------|
 | AAR uses `packet_runner` | `grep run_llm_on_aar_packet packages/data_layer/pipeline/after_action.py` |
 | Canonical response artifact | `grep after_action_response campaign_runner.py flow_state.py` |
-| Gemma default | `grep gemma4 packages/data_layer/llm/ollama_client.py` |
-| GLM pipeline default | `grep glm-5.1 packages/research_pipeline/llm.py` |
+| GPT-5.5 default | `grep gpt-5.5 packages/data_layer/llm/openai_compatible_client.py` |
+| Research pipeline default | `grep DEFAULT_RESEARCH_MODEL packages/research_pipeline/llm.py` |
 | Cross-field invariants | `pytest tests/test_data_layer/test_packet_schemas.py::test_aar_packet_in_fixture` |
 | Hybrid latency_authority string | `grep workstation_replay packages/backtest_pipeline/src/pipeline_aar_artifacts.py` |
 

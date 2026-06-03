@@ -52,7 +52,7 @@ observer/execution integration.
 ## Section 2 — Research / hypothesis-generation components
 
 - `packages/research_pipeline/`: `{llm.py, document_ingestion.py, knowledge_graph.py, model_generation.py, hypothesis_parser.py, types.py, evaluation.py, deployment.py}`.
-- LLM backend: Ollama `glm-5.1:cloud` (per `packages/research_pipeline/llm.py`).
+- LLM backend: OpenAI-compatible `gpt-5.5` with `xhigh` reasoning (per `packages/research_pipeline/llm.py`).
 - KG store: `packages/data_layer/kg/store.py`.
 - NL-thesis entry: `scripts/run_pipeline.py` (autoresearch mode).
 - **Phase 3 done**: `intake_schema.py` / `intake_bundle.py` produce the 14-file output spec (`source_document_path`, `extracted_text.md`, `extracted_equations.json`, `extracted_tables.json`, `thesis_summary.json`, `assumptions.json`, `required_data.json`, `required_features.json`, `proposed_signal_logic.json`, `proposed_execution_logic.json`, `parameter_ranges.json`, `failure_modes.json`, `testable_hypotheses.json`, `experiment_translation_notes.json`).

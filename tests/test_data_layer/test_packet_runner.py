@@ -13,7 +13,7 @@ FIXTURE = REPO / "tests" / "fixtures" / "workbench_run_minimal"
 
 pytest.importorskip("jsonschema")
 
-from data_layer.llm import ollama_client  # noqa: E402
+from data_layer.llm import openai_compatible_client as llm_client  # noqa: E402
 from data_layer.llm.packet_runner import run_llm_on_aar_packet  # noqa: E402
 from data_layer.packet.microstructure_aar_packet import build_microstructure_aar_packet  # noqa: E402
 from data_layer.symbolic.latency_invariants import check_latency_invariants  # noqa: E402
@@ -41,10 +41,10 @@ def test_run_llm_on_aar_packet_mock_ok():
     symbolic = check_latency_invariants(packet)
     assert symbolic["passed"] is True
 
-    with patch.object(ollama_client, "ollama_available", return_value=True), patch.object(
-        ollama_client,
+    with patch.object(llm_client, "llm_available", return_value=True), patch.object(
+        llm_client,
         "generate",
-        return_value=ollama_client.GenerateResult(_mock_response(packet["run_id"]), model="mock", elapsed_s=0.2),
+        return_value=llm_client.GenerateResult(_mock_response(packet["run_id"]), model="mock", elapsed_s=0.2),
     ):
         out = run_llm_on_aar_packet(
             packet,
@@ -71,10 +71,10 @@ def test_run_llm_schema_reject_on_bad_json():
     packet, skip_reasons = build_microstructure_aar_packet(FIXTURE, REPO)
     symbolic = check_latency_invariants(packet)
 
-    with patch.object(ollama_client, "ollama_available", return_value=True), patch.object(
-        ollama_client,
+    with patch.object(llm_client, "llm_available", return_value=True), patch.object(
+        llm_client,
         "generate",
-        return_value=ollama_client.GenerateResult('{"not": "schema"}', model="mock", elapsed_s=0.1),
+        return_value=llm_client.GenerateResult('{"not": "schema"}', model="mock", elapsed_s=0.1),
     ):
         out = run_llm_on_aar_packet(packet, symbolic, repo_root=REPO, skip_reasons=skip_reasons)
 

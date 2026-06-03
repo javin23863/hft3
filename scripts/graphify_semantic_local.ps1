@@ -24,9 +24,7 @@ if (-not (Get-Command ollama -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
-$Model = if ($env:GRAPHIFY_OLLAMA_MODEL) { $env:GRAPHIFY_OLLAMA_MODEL } else {
-    if ($env:HFT3_OLLAMA_MODEL) { $env:HFT3_OLLAMA_MODEL } else { 'gemma4:31b-cloud' }
-}
+$Model = if ($env:GRAPHIFY_OLLAMA_MODEL) { $env:GRAPHIFY_OLLAMA_MODEL } else { 'gemma4:31b-cloud' }
 $HostUrl = if ($env:OLLAMA_HOST) { $env:OLLAMA_HOST } else { 'http://127.0.0.1:11434' }
 $Timeout = if ($env:GRAPHIFY_OLLAMA_TIMEOUT_S) { $env:GRAPHIFY_OLLAMA_TIMEOUT_S } else { '600' }
 

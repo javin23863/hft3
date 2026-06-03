@@ -4,7 +4,7 @@ Authority: [dev_instructions.pdf](../references/dev_instructions.pdf)
 
 Workstation-only NL → hypothesis → backtest → artifact pipeline. Does **not** touch live Rithmic or CHI404 hot path until colo is stable (BLUEPRINT §4).
 
-**Vendor vs LLM:** OpenFoundry + AlphaGeometry are **git submodules** under `vendor/`. Ollama models are **runtime** choices — `glm-5.1:cloud` for this pipeline; Gemma for after-action separately. See [VENDOR_BOUNDARIES.md](VENDOR_BOUNDARIES.md) and [PACKET_LLM_CONTRACT.md](PACKET_LLM_CONTRACT.md).
+**Vendor vs LLM:** OpenFoundry + AlphaGeometry are **git submodules** under `vendor/`. GPT-5.5 is the OpenAI-compatible runtime LLM for research/model-development parsing and after-action analysis. See [VENDOR_BOUNDARIES.md](VENDOR_BOUNDARIES.md) and [PACKET_LLM_CONTRACT.md](PACKET_LLM_CONTRACT.md).
 
 ## Architecture map
 
@@ -50,9 +50,9 @@ python scripts/run_pipeline.py \
 
 ## LLM
 
-Default model: `glm-5.1:cloud` via Ollama (`ollama run glm-5.1:cloud`; override with `HFT3_PIPELINE_LLM_MODEL`). This is an Ollama cloud runtime — **not** OpenFoundry or AlphaGeometry. Heuristic fallback when Ollama is unavailable.
+Default model: `gpt-5.5` with `xhigh` reasoning through an OpenAI-compatible `/v1/chat/completions` endpoint. Override with `HFT3_RESEARCH_LLM_MODEL`, `HFT3_MODEL_DEVELOPMENT_LLM_MODEL`, `HFT3_LLM_BASE_URL`, and `HFT3_LLM_REASONING_EFFORT`. This runtime is **not** OpenFoundry or AlphaGeometry. Heuristic fallback remains active when the endpoint is unavailable.
 
-After-action reports use Gemma (`HFT3_OLLAMA_MODEL`, default `gemma4:31b-cloud`) via `packet_runner`. See [VENDOR_BOUNDARIES.md](VENDOR_BOUNDARIES.md).
+After-action reports use the same GPT-5.5 XHIGH runtime via `packet_runner`. See [VENDOR_BOUNDARIES.md](VENDOR_BOUNDARIES.md).
 
 ## Outputs
 

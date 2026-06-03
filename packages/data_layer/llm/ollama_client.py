@@ -1,4 +1,4 @@
-"""Ollama HTTP client for packet-strict LLM calls (Gemma AAR / GLM pipeline)."""
+"""Legacy local Ollama client; HFT3 default LLM uses openai_compatible_client."""
 
 from __future__ import annotations
 
@@ -8,10 +8,10 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 from urllib import error, request
 
-DEFAULT_AAR_MODEL = os.environ.get("HFT3_OLLAMA_MODEL", "gemma4:31b-cloud")
+DEFAULT_AAR_MODEL = os.environ.get("HFT3_LEGACY_OLLAMA_MODEL", "gemma4:31b-cloud")
 DEFAULT_MODEL = DEFAULT_AAR_MODEL
 DEFAULT_HOST = "http://127.0.0.1:11434"
-DEFAULT_TIMEOUT_S = float(os.environ.get("HFT3_OLLAMA_TIMEOUT_S", "600"))
+DEFAULT_TIMEOUT_S = float(os.environ.get("HFT3_LEGACY_OLLAMA_TIMEOUT_S", "600"))
 
 
 @dataclass

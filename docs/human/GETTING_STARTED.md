@@ -43,7 +43,7 @@ Mathematical and production rules live in PDFs ΓÇö not duplicated in prose he
 - **Python 3.11+**, **Git**, **pip**
 - **Optional:** CMake + C++17 for `features_engine/cpp/`
 - **Optional:** `graphify` CLI ΓÇö `pip install graphifyy` (AST rebuild; no cloud API required)
-- **Optional:** Ollama + Gemma (`gemma4:31b-cloud`) for workbench after-action reports and optional semantic graphify
+- **Optional:** OpenAI-compatible GPT-5.5 endpoint for workbench after-action reports; local Ollama remains optional only for semantic graphify
 - **CHI404:** SSH `Host chi404` in `~/.ssh/config`
 - **Rithmic trial live:** CHI404 only ΓÇö see [rithmic_trial/README.md](rithmic_trial/README.md)
 
@@ -80,7 +80,7 @@ pip install -r backtest_pipeline/requirements.txt
 pip install -r workbench/requirements.txt
 pip install -e .                    # pulls jsonschema for packet-strict LLM validation
 pip install graphifyy         # code navigation (recommended)
-pip install openai            # only if using graphify semantic via local Ollama
+pip install openai            # optional; only for graphify semantic local Ollama
 ```
 
 ### 4.3 Baseline verification
@@ -156,7 +156,7 @@ Runs **after** a full-sweep workbench event completes on the **workstation** (Wi
 Pipeline:
 
 ```
-diagnostics.json + trades.parquet → MicrostructureAARPacket → symbolic invariants → KG JSONL → Gemma (Ollama, packet-strict)
+diagnostics.json + trades.parquet → MicrostructureAARPacket → symbolic invariants → KG JSONL → GPT-5.5 (OpenAI-compatible, packet-strict)
 ```
 
 Per-run artifacts (when enabled):
@@ -172,7 +172,7 @@ Per-run artifacts (when enabled):
 Setup:
 
 1. Submodules initialized (┬º4.1).
-2. Ollama running with `gemma4:31b-cloud` (or `HFT3_OLLAMA_MODEL`).
+2. GPT-5.5 endpoint configured with `HFT3_LLM_API_KEY` or `OPENAI_API_KEY` (`pip install -e .` is enough; the runtime uses stdlib HTTP).
 3. Charter PDFs present in `docs/references/` (see MANIFEST).
 
 ```bash
@@ -249,7 +249,7 @@ Spec ΓåÆ GraphPre ΓåÆ Plan ΓåÆ Code ΓåÆ Review (Karpathy + math) Γ�
 hft3/
 Γö£ΓöÇΓöÇ BLUEPRINT.md                 # Spec summary
 Γö£ΓöÇΓöÇ AGENTS.md                    # Agent charter
-Γö£ΓöÇΓöÇ data_layer/                  # After-action: packet, symbolic, KG, Ollama
+Γö£ΓöÇΓöÇ data_layer/                  # After-action: packet, symbolic, KG, GPT-5.5 runtime
 Γö£ΓöÇΓöÇ integrations/openfoundry/    # hft3 CME MBO connector + VENDOR.lock
 Γö£ΓöÇΓöÇ vendor/openfoundry/          # syzygyhack/open-foundry submodule
 Γö£ΓöÇΓöÇ vendor/alphageometry/        # AlphaGeometry submodule (symbolic pattern ref)

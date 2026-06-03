@@ -2,7 +2,7 @@
 
 Authoritative I/O for workstation LLM lanes. All boundaries validated with `jsonschema` (draft-07).
 
-## After-action (Gemma)
+## After-action (GPT-5.5 XHIGH)
 
 **In:** Envelope JSON (transport, not schema_v1):
 
@@ -31,15 +31,15 @@ Authoritative I/O for workstation LLM lanes. All boundaries validated with `json
 3. `pdf_citations_complete == true`
 4. `symbolic.passed == true` (else deterministic symbolic-only narrative)
 
-**Env:** `HFT3_OLLAMA_MODEL=gemma4:31b-cloud`, `HFT3_OLLAMA_TIMEOUT_S=600`
+**Env:** `HFT3_AAR_LLM_MODEL=gpt-5.5`, `HFT3_LLM_REASONING_EFFORT=xhigh`, `HFT3_LLM_TIMEOUT_S=600`
 
-## Research pipeline (GLM)
+## Research pipeline (GPT-5.5 XHIGH)
 
-**Hypothesis parse (GLM):** `schema_pipeline_hypothesis_response_v1.json` via `run_llm_on_hypothesis_request` when `parse_hypothesis(..., pipeline_request=..., repo_root=...)`.
+**Hypothesis parse (model-development lane):** `schema_pipeline_hypothesis_response_v1.json` via `run_llm_on_hypothesis_request` when `parse_hypothesis(..., pipeline_request=..., repo_root=...)`.
 
 **Run artifacts:** `request_packet.json` / `response_packet.json` per pipeline request/response schemas.
 
-**Env:** `HFT3_PIPELINE_LLM_MODEL=glm-5.1:cloud`
+**Env:** `HFT3_RESEARCH_LLM_MODEL=gpt-5.5`, `HFT3_MODEL_DEVELOPMENT_LLM_MODEL=gpt-5.5`, `HFT3_LLM_API_KEY` or `OPENAI_API_KEY`
 
 ## Runtime schema mirror
 

@@ -1,8 +1,8 @@
-"""Ollama wrapper for pipeline LLM calls.
+"""OpenAI-compatible wrapper for pipeline LLM calls.
 
 Runtime model only — not a vendored repo. OpenFoundry (ontology) and AlphaGeometry
 (Google DeepMind symbolic reference) live under vendor/; see docs/research/VENDOR_BOUNDARIES.md.
-Do not default to Gemma; pipeline uses glm-5.1:cloud unless HFT3_PIPELINE_LLM_MODEL is set.
+HFT3 defaults research LLM calls to GPT-5.5 with xhigh reasoning.
 """
 
 from __future__ import annotations
@@ -12,9 +12,12 @@ import os
 import re
 from typing import Any, Dict, Optional
 
-from data_layer.llm.ollama_client import generate
+from data_layer.llm.openai_compatible_client import DEFAULT_RESEARCH_MODEL, generate
 
-DEFAULT_PIPELINE_MODEL = os.environ.get("HFT3_PIPELINE_LLM_MODEL", "glm-5.1:cloud")
+DEFAULT_PIPELINE_MODEL = os.environ.get(
+    "HFT3_RESEARCH_LLM_MODEL",
+    os.environ.get("HFT3_PIPELINE_LLM_MODEL", DEFAULT_RESEARCH_MODEL),
+)
 
 
 def generate_json(
