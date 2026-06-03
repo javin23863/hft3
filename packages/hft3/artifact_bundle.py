@@ -1,10 +1,10 @@
 """Artifact bundle validation (Phase 12).
 
 The Phase 12 spec requires every experiment to write a structured
-artifact bundle under `artifacts/runs/{run_id}/` with 17 required
+artifact bundle under `artifacts/runs/{run_id}/` with 19 required
 files. This module provides:
 
-  - `REQUIRED_ARTIFACTS` constant (the 17 files)
+  - `REQUIRED_ARTIFACTS` constant (the 19 files)
   - `OPTIONAL_ARTIFACTS` constant (files that may be present)
   - `ArtifactBundleResult` dataclass with validation results
   - `validate_bundle(bundle_dir)` function that checks all required
@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import List, Optional
 
 
-# The 17 required files per the Phase 12 spec.
+# The 19 required files per the Phase 12 spec.
 REQUIRED_ARTIFACTS: tuple[str, ...] = (
     "manifest.json",
     "config_snapshot.yaml",

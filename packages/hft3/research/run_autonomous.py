@@ -370,6 +370,7 @@ class AutonomousRunner:
         # Phase 12: artifact bundle validation gate, populated by
         # stage_artifact_bundle.
         self._artifact_bundle_gate: Any = None
+        self._final_decision: str = "QUARANTINE"
 
     # --- stage helpers ---
 
@@ -870,16 +871,15 @@ class AutonomousRunner:
     def stage_artifact_bundle(self) -> Path:
         """Stage 13: write the structured artifact bundle (Phase 12).
 
-        Writes the 3 missing required artifacts (git_commit.txt,
-        execution_assumptions.json, logs.txt). The bundle validation
-        runs at the end of the run (after all stages have written their
-        artifacts) via `_finalize_bundle()`.
+        Writes the 4 remaining artifacts (git_commit.txt,
+        execution_assumptions.json, logs.txt, manifest.json). The
+        bundle validation runs after this stage via `_finalize_bundle()`.
         """
         if self._stage_done("artifact_bundle"):
             return Path(self.state.artifacts["artifact_bundle"])
         self._stage_start("artifact_bundle")
 
-        # Write the 3 missing required artifacts
+        # Write the remaining required artifacts
         self._write_artifact("git_commit.txt", self.state.git_sha + "\n")
         self._write_artifact("execution_assumptions.json", {
             "fill_model": self.config.latency_profile.get("fill_model", "perfect"),
@@ -926,6 +926,8 @@ class AutonomousRunner:
         self._write_artifact("artifact_bundle_validation.json", bundle_result.to_dict())
         # Emit a gate result for bundle completeness
         bundle_gate = to_gate_result(bundle_result)
+        if bundle_result.required_missing:
+            bundle_gate.artifact_reference = ", ".join(sorted(bundle_result.required_missing))
         self._artifact_bundle_gate = bundle_gate
         # Re-write the manifest with the validation result
         manifest = {
@@ -1090,6 +1092,23 @@ class AutonomousRunner:
             (self.run_dir / "scoring_summary.json").read_text(encoding="utf-8")
         )
         decision = scoring.get("decision", "QUARANTINE")
+        # Pre-check the artifact bundle before allowing PROMOTE. Exclude
+        # registry_update.json since it is written by this stage. The
+        # full check runs in _finalize_bundle() after this stage.
+        if decision == "PROMOTE":
+            from hft3.artifact_bundle import REQUIRED_ARTIFACTS
+            pre_check_missing = [
+                name for name in REQUIRED_ARTIFACTS
+                if name != "registry_update.json"
+                and not (self.run_dir / name).is_file()
+            ]
+            if pre_check_missing:
+                decision = "QUARANTINE"
+                scoring["reason"] = (
+                    "Artifact bundle incomplete before registry update. "
+                    f"Missing: {', '.join(sorted(pre_check_missing))}"
+                )
+        self._final_decision = decision
         if self._stage_done("registry_update"):
             path = Path(self.state.artifacts["registry_update"])
             self._load_valid_registry_marker(path, decision)
@@ -1166,11 +1185,7 @@ class AutonomousRunner:
             self._save_state()
             return 3
 
-        scoring = json.loads(
-            (self.run_dir / "scoring_summary.json").read_text(encoding="utf-8")
-        )
-        decision = scoring.get("decision", "QUARANTINE")
-        return {"PROMOTE": 0, "REJECT": 1, "QUARANTINE": 2}.get(decision, 2)
+        return {"PROMOTE": 0, "REJECT": 1, "QUARANTINE": 2}.get(self._final_decision, 2)
 
 
 # ---------- helpers ----------
