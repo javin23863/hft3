@@ -1,0 +1,9 @@
+mode: REPLAY
+adapter: hftbacktest_simulated_exchange
+live_broker: ""
+venue: CME
+order_routing: direct
+reconnect_handling: manual
+heartbeat_interval_sec: 30
+route_enabled: false
+host_role: dev_workstation

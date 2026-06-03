@@ -12,6 +12,13 @@ from trade_manager.order_intent import (
     TradeManagerOrderIntent,
     order_intent_from_signal,
 )
+from trade_manager.execution_boundary import (
+    TradeManagerExecutionBoundary,
+    TradeManagerExecutionBoundaryError,
+    TradeManagerExecutionConfig,
+    load_execution_config,
+    prepare_execution_boundary,
+)
 from trade_manager.order_state import (
     ORDER_STATE_VALUES,
     TERMINAL_ORDER_STATES,
@@ -38,6 +45,11 @@ __all__ = [
     "OrderIntentValidationError",
     "TradeManagerOrderIntent",
     "order_intent_from_signal",
+    "TradeManagerExecutionBoundary",
+    "TradeManagerExecutionBoundaryError",
+    "TradeManagerExecutionConfig",
+    "load_execution_config",
+    "prepare_execution_boundary",
     "ORDER_STATE_VALUES",
     "TERMINAL_ORDER_STATES",
     "OrderStateTransitionError",

@@ -103,11 +103,11 @@ python -m pytest tests/test_autonomous_runner.py tests/test_runner_honesty.py -v
 
 - **Phase 5 (backtest 33-timestamp)**: Implemented in Workbench audit artifacts. The autonomous runner's `stage_backtest` still writes stub metrics and is not wired to WorkbenchEngine.
 - **Phase 9 (25 robustness checks)**: Implemented in the Workbench robustness pack. The autonomous runner still emits blocking PENDING gates until WorkbenchEngine integration provides observed metrics.
-- **Phase 14-18 (Trade Manager handoff + signal ingress + order intent + risk layer + order state)**: Implemented as registry/manifest activation, side-effect-free signal envelopes, inert order-intent envelopes, inert risk decisions, and inert order-state transitions. Phases 19-23 execution, monitoring, kill switch, observer, and sessions remain future state.
+- **Phase 14-19 (Trade Manager handoff + signal ingress + order intent + risk layer + order state + execution boundary)**: Implemented as registry/manifest activation, side-effect-free signal envelopes, inert order-intent envelopes, inert risk decisions, inert order-state transitions, and inert execution-boundary audit metadata. Phases 20-23 monitoring, kill switch, observer, and sessions remain future state. Real paper/live/Rithmic routing remains unimplemented.
 - **Phase 24 (resumability)**: Partially done (checkpoint state.json exists); crash recovery not fully tested.
 - **Phase 25 (22 required tests)**: Most exist; ~5 missing.
 
-## Completed phases (19 of 26)
+## Completed phases (20 of 26)
 
 | Phase | Status | Commit |
 |---|---|---|
@@ -129,11 +129,12 @@ python -m pytest tests/test_autonomous_runner.py tests/test_runner_honesty.py -v
 | 16 — Trade Manager order intent | ✅ DONE | `packages/trade_manager/order_intent.py` |
 | 17 — Trade Manager risk layer | ✅ DONE | `packages/trade_manager/risk_layer.py` |
 | 18 — Trade Manager order state machine | ✅ DONE | `packages/trade_manager/order_state.py` |
+| 19 — Trade Manager execution boundary | ✅ DONE (inert config/audit) | `packages/trade_manager/execution_boundary.py` |
 | 26 — Documentation | ✅ DONE | `bb87c1b` and `8149cd7` |
 
 ## Test scoreboard
 
-**248/248 passing** across 19 test files:
+**270/270 passing** across 20 test files:
 - `tests/test_autonomous_runner.py` (11 tests)
 - `tests/test_runner_honesty.py` (6 tests)
 - `tests/test_research_intake.py` (11 tests)
@@ -153,3 +154,4 @@ python -m pytest tests/test_autonomous_runner.py tests/test_runner_honesty.py -v
 - `tests/test_trade_manager_phase16.py` (10 tests)
 - `tests/test_trade_manager_phase17.py` (41 tests)
 - `tests/test_trade_manager_phase18.py` (23 tests)
+- `tests/test_trade_manager_phase19.py` (22 tests)

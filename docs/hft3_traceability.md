@@ -121,7 +121,8 @@ This document maps each major requirement from the 26-phase spec to:
 | Phase 16 order intent | `packages/trade_manager/order_intent.py::TradeManagerOrderIntent`; `TradeManager.create_order_intent()` | `tests/test_trade_manager_phase16.py` (10 tests) | Inert 18-field order-intent envelope; no risk/adapters |
 | Phase 17 risk layer | `packages/trade_manager/risk_layer.py::TradeManagerRiskLayer`; `TradeManager.evaluate_order_intent_risk()`; `configs/risk/limits.yaml` | `tests/test_trade_manager_phase17.py` (41 tests) | Stored inert `TradeManagerRiskDecision`; production-safety-first monitor result; static rejects; no adapter creation/routing |
 | Phase 18 order state machine | `packages/trade_manager/order_state.py::TradeManagerOrderState`; `TradeManager.order_state_transitions`; `TradeManager.transition_order_state()` | `tests/test_trade_manager_phase18.py` (23 tests) | Inert timestamped state transitions; 17 documented states; invalid transitions write `ERROR`; no adapter creation/routing |
-| Execution adapter | **STUB** (`live_broker.py` returns ORDER_REJECTED) | N/A | N/A |
+| Phase 19 execution boundary | `packages/trade_manager/execution_boundary.py::TradeManagerExecutionConfig`; `TradeManager.prepare_execution_boundary()`; `configs/execution/adapter.yaml` | `tests/test_trade_manager_phase19.py` (22 tests) | Inert boundary audit payload with `can_route=False`; no adapter creation/routing |
+| Real execution adapter routing | **STUB** (`live_broker.py` returns ORDER_REJECTED) | N/A | N/A |
 | Position monitoring | **NOT YET IMPLEMENTED** | N/A | N/A |
 | Kill switch | **NOT YET IMPLEMENTED** | N/A | N/A |
 | Observer view | **NOT YET IMPLEMENTED** | N/A | N/A |
@@ -171,11 +172,12 @@ This document maps each major requirement from the 26-phase spec to:
 | 16 — Trade Manager order intent | ✅ DONE | 10 |
 | 17 — Trade Manager risk layer | ✅ DONE | 41 |
 | 18 — Trade Manager order state machine | ✅ DONE | 23 |
-| 19-23 — Trade Manager remaining modules | ❌ NOT DONE | 0 |
+| 19 — Trade Manager execution boundary | ✅ DONE (inert config/audit) | 22 |
+| 20-23 — Trade Manager remaining modules | ❌ NOT DONE | 0 |
 | 24 — Resumability | ⚠️ PARTIAL | 1 |
-| 25 — 22 required tests | ⚠️ PARTIAL | 248 total |
+| 25 — 22 required tests | ⚠️ PARTIAL | 270 total |
 | 26 — Documentation | ✅ DONE | N/A |
 
-**Total: 248 tests passing across 19 test files.**
+**Total: 270 tests passing across 20 test files.**
 
-**19 of 26 phases complete. 2 partially done. 5 not started.**
+**20 of 26 phases complete. 2 partially done. 4 not started.**

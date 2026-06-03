@@ -23,6 +23,11 @@ from trade_manager.order_intent import (
     TradeManagerOrderIntent,
     order_intent_from_signal,
 )
+from trade_manager.execution_boundary import (
+    TradeManagerExecutionBoundary,
+    TradeManagerExecutionConfig,
+    prepare_execution_boundary,
+)
 from trade_manager.order_state import (
     TERMINAL_ORDER_STATES,
     OrderStateTransitionError,
@@ -346,6 +351,19 @@ class TradeManager:
             details=details,
         )
 
+    def prepare_execution_boundary(
+        self,
+        model_id: str,
+        intent: TradeManagerOrderIntent,
+        config: TradeManagerExecutionConfig,
+    ) -> TradeManagerExecutionBoundary:
+        """Prepare inert Phase 19 execution-boundary metadata without routing."""
+
+        stored_intent = self._require_stored_order_intent(model_id, intent)
+        latest_decision = self._latest_risk_decision(model_id, stored_intent.order_intent_id)
+        latest_transition = self._latest_order_transition(model_id, stored_intent.order_intent_id)
+        return prepare_execution_boundary(stored_intent, latest_decision, latest_transition, config)
+
     def _active_model_from_record(self, record: PromotionRecord) -> ActiveModel:
         if record.promotion_status != "PROMOTED":
             raise TradeManagerActivationError(record.model_id, "PROMOTION_STATUS_NOT_PROMOTED")
@@ -461,6 +479,16 @@ class TradeManager:
         for transition in reversed(self.order_state_transitions.get(model_id, [])):
             if transition.order_intent_id == order_intent_id:
                 return transition
+        return None
+
+    def _latest_risk_decision(
+        self,
+        model_id: str,
+        order_intent_id: str,
+    ) -> TradeManagerRiskDecision | None:
+        for decision in reversed(self.risk_decisions.get(model_id, [])):
+            if decision.order_intent_id == order_intent_id:
+                return decision
         return None
 
     def _append_order_state_transition(

@@ -1,6 +1,6 @@
 # HFT3 Trade Manager Runbook (Phase 26)
 
-This runbook documents the Trade Manager layer (Phases 14-23). Phase 14 is implemented as the registry-to-Trade-Manager handoff seam. Phase 15 is implemented as side-effect-free signal ingress. Phase 16 is implemented as an inert Trade Manager order-intent schema. Phase 17 is implemented as a risk-decision layer over inert intents. Phase 18 is implemented as an inert order-state machine. Phases 19-23 remain future state.
+This runbook documents the Trade Manager layer (Phases 14-23). Phase 14 is implemented as the registry-to-Trade-Manager handoff seam. Phase 15 is implemented as side-effect-free signal ingress. Phase 16 is implemented as an inert Trade Manager order-intent schema. Phase 17 is implemented as a risk-decision layer over inert intents. Phase 18 is implemented as an inert order-state machine. Phase 19 is implemented as an inert execution-boundary config/audit seam. Phases 20-23 remain future state.
 
 ## 1. How a registered model is handed to the Trade Manager
 
@@ -49,7 +49,7 @@ Phase 17 does not support a symbol/instrument split in the order-intent envelope
 
 ## 4. Required execution adapter config
 
-The Trade Manager will load mode-aware execution adapter config from `configs/execution/adapter.yaml` (Phase 19):
+The Trade Manager loads mode-aware execution-boundary config from `configs/execution/adapter.yaml` (Phase 19):
 - `mode`: "REPLAY" | "PAPER" | "LIVE"
 - `adapter`: "hftbacktest_simulated_exchange" | "paper_broker" | "live_broker"
 - `live_broker`: "rithmic" (LIVE only; stub today)
@@ -57,6 +57,10 @@ The Trade Manager will load mode-aware execution adapter config from `configs/ex
 - `order_routing`: "direct" | "aggregated"
 - `reconnect_handling`: "automatic" | "manual"
 - `heartbeat_interval_sec`: 30
+- `route_enabled`: false (Phase 19 rejects true)
+- `host_role`: "dev_workstation" by default
+
+Phase 19 validates this config and exposes `TradeManager.prepare_execution_boundary()` as audit metadata only. It does not call `execution.adapter_factory.create_adapter()`, does not instantiate paper/live/Rithmic adapters, does not submit/cancel/replace orders, and does not transition orders to `SENT_TO_EXECUTION`.
 
 ## 5. Order-intent schema (Phase 16)
 
@@ -96,7 +100,18 @@ Phase 18 adds `packages/trade_manager/order_state.py` and stores timestamped `Tr
 5. Re-risking an approved order can safely move `RISK_APPROVED -> SENT_TO_RISK -> RISK_REJECTED` before execution
 6. Invalid transitions append an `ERROR` transition and raise `OrderStateTransitionError`
 
-Phase 18 is inert. It does not create adapters, submit orders, cancel orders, replace orders, or route to paper/live/Rithmic. `SENT_TO_EXECUTION` and adapter event states are state-machine vocabulary for future Phase 19+ consumers only.
+Phase 18 is inert. It does not create adapters, submit orders, cancel orders, replace orders, or route to paper/live/Rithmic. `SENT_TO_EXECUTION` and adapter event states are state-machine vocabulary for future consumers only.
+
+## 6A. Execution boundary (Phase 19)
+
+Phase 19 adds `packages/trade_manager/execution_boundary.py`, `configs/execution/adapter.yaml`, and `TradeManager.prepare_execution_boundary()`:
+1. Loads and validates the execution-boundary config fail-closed, including direct dataclass construction and unknown YAML keys
+2. Requires a stored Phase 16 order intent through the Trade Manager API
+3. Reads the latest Phase 17 risk decision and Phase 18 order-state transition for the intent
+4. Produces a `TradeManagerExecutionBoundary` audit payload with `can_route=False`, `route_enabled=False`, `adapter_created=False`, and `adapter_instance=None`
+5. Marks risk-approved orders as blocked by `PHASE19_INERT_BOUNDARY` rather than sending to execution
+
+Phase 19 is not a live or paper execution adapter. It deliberately leaves `TradeManager.submit_order()`, `cancel_order()`, and `replace_order()` undefined.
 
 ## 7. Kill-switch configuration (Phase 21)
 
@@ -168,8 +183,9 @@ Phase 15: `tests/test_trade_manager_phase15.py` has 9/9 passing tests.
 Phase 16: `tests/test_trade_manager_phase16.py` has 10/10 passing tests.
 Phase 17: `tests/test_trade_manager_phase17.py` has 41/41 passing tests.
 Phase 18: `tests/test_trade_manager_phase18.py` has 23/23 passing tests.
+Phase 19: `tests/test_trade_manager_phase19.py` has 22/22 passing tests.
 
-Phases 19-23 tests will be added as execution, monitoring, kill-switch, observer, and session modules are built.
+Phases 20-23 tests will be added as monitoring, kill-switch, observer, and session modules are built.
 
 ## 13. Known limitations
 
@@ -178,6 +194,7 @@ Phases 19-23 tests will be added as execution, monitoring, kill-switch, observer
 - **Order-intent schema exists.** Phase 16 creates inert `TradeManagerOrderIntent` envelopes but does not call risk or execution.
 - **Risk-decision layer exists.** Phase 17 calls `production_safety.py` through a supplied adapter context and stores decisions, but it does not route execution.
 - **Order-state machine exists.** Phase 18 records inert state transitions and error events, but it does not route execution.
+- **Execution boundary exists.** Phase 19 validates config and produces an inert audit payload, but it does not create adapters or route execution.
 - **Execution adapter is a stub.** `packages/execution/adapters/live_broker.py` returns `ORDER_REJECTED` with reason `"live_adapter_stub_not_wired"` (Phase 19).
 - **Kill switch does not exist.** Phase 21 is not implemented.
 - **Observer view does not exist.** Phase 22 is not implemented.
@@ -185,9 +202,9 @@ Phases 19-23 tests will be added as execution, monitoring, kill-switch, observer
 
 ## 14. Remaining risks
 
-- **Phase 19-23 remain large.** The Trade Manager still needs sub-modules for execution adapter, position monitoring, kill switch, observer, session reporting, and restart recovery.
+- **Phase 20-23 remain large.** The Trade Manager still needs sub-modules for position monitoring, kill switch, observer, session reporting, and restart recovery.
 - **Rithmic live adapter is not implemented.** The C++ `rithmic_gateway` exists but the Python execution adapter is a stub.
-- **Risk/state decisions are not execution.** Phases 17-18 record approvals/rejections/state transitions only; no adapter lifecycle or session artifacts exist yet.
+- **Risk/state/boundary decisions are not execution.** Phases 17-19 record approvals/rejections/state transitions and boundary audit metadata only; no adapter lifecycle or session artifacts exist yet.
 - **Kill switch is not implemented.** The 12 triggers × 7 actions matrix is not built.
 - **Observer view is not implemented.** The read-only CLI does not exist.
 - **Session reporting is not implemented.** The 16 session files are not written.
@@ -222,9 +239,15 @@ The Trade Manager will be built in 4 milestones:
 - `packages/trade_manager/manager.py` — records `CREATED`, `SENT_TO_RISK`, `RISK_APPROVED`, `RISK_REJECTED`, and invalid-transition `ERROR` records without execution routing
 - Tests: `tests/test_trade_manager_phase18.py`
 
-### Milestone 2: Execution adapter (Phase 19)
-- `packages/execution/adapters/live_broker.py` — replace stub with real Rithmic adapter
-- Tests: `test_execution_adapter_boundary.py`
+### Phase 19 complete: Execution boundary config/audit seam
+- `packages/trade_manager/execution_boundary.py` — fail-closed config validation and inert `TradeManagerExecutionBoundary` audit payload
+- `packages/trade_manager/manager.py` — `prepare_execution_boundary()` reads stored intent, latest risk decision, and latest order state without routing
+- `configs/execution/adapter.yaml` — default `REPLAY` config with `route_enabled: false`
+- Tests: `tests/test_trade_manager_phase19.py`
+
+### Future milestone: Real execution adapter routing
+- `packages/execution/adapters/live_broker.py` — replace stub with real CHI404-only Rithmic adapter when explicitly authorized
+- Tests: `test_execution_adapter_boundary.py` and CHI404 safety gates
 
 ### Milestone 3: Position monitoring + kill switch (Phases 20, 21)
 - `packages/trade_manager/monitor.py` — 24 metrics
