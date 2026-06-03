@@ -1,0 +1,22 @@
+# Bitcoin Core ZMQ endpoints
+BTC_ZMQ_RAWTX=tcp://127.0.0.1:28333
+BTC_ZMQ_RAWBLOCK=tcp://127.0.0.1:28332
+
+# Bitcoin Core RPC (for fee estimation)
+BTC_RPC_URL=http://127.0.0.1:8332
+BTC_RPC_USER=your_rpc_user
+BTC_RPC_PASS=your_rpc_password
+
+# Chicago receiver address (via SSH tunnel)
+CHICAGO_ADDR=127.0.0.1:9876
+
+# Processing parameters
+PACKET_INTERVAL=100
+FEE_FILTER_ENABLED=true
+FEE_FILTER_BLOCKS=1
+
+# Metrics
+METRICS_PORT=9090
+
+# Logging
+RUST_LOG=info

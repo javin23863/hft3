@@ -1,0 +1,57 @@
+[package]
+name = "btc-edge-daemon"
+version = "0.1.0"
+edition = "2021"
+authors = ["HFT3 Team"]
+description = "Bitcoin edge processing daemon for streaming feature computation"
+
+[dependencies]
+# ZMQ for Bitcoin Core notifications
+zmq = "0.10"
+
+# Protocol Buffers
+prost = "0.12"
+prost-types = "0.12"
+
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Logging
+log = "0.4"
+env_logger = "0.10"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Configuration
+config = "0.13"
+
+# Metrics
+prometheus = "0.13"
+
+# Time
+chrono = "0.4"
+
+# HTTP client for RPC
+reqwest = { version = "0.11", features = ["json"] }
+
+# t-digest for streaming quantiles
+tdigest = "0.1"
+
+[build-dependencies]
+prost-build = "0.12"
+
+[[bin]]
+name = "btc-edge-daemon"
+path = "src/main.rs"
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
