@@ -215,9 +215,10 @@ def build_manifest(
             "normalized_path": str(norm_path),
             "failure_path": str(failure_path),
         }
-        if norm_path.exists() and norm_path.stat().st_size > 0:
-            rec["status"] = "skipped_already_normalized"
-            rec["normalized_size_bytes"] = norm_path.stat().st_size
+        if norm_path.exists():
+            size = norm_path.stat().st_size
+            rec["status"] = "skipped_already_normalized" if size > 0 else "skipped_already_empty_normalized"
+            rec["normalized_size_bytes"] = size
             records.append(rec)
             continue
         if raw_path.exists() and raw_path.stat().st_size > 0:

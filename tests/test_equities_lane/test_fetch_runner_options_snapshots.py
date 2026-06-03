@@ -134,6 +134,35 @@ def test_existing_normalized_file_skips_before_costing(tmp_path, monkeypatch):
     assert manifest["estimated_total_cost_usd"] == 0.0
 
 
+def test_existing_empty_normalized_file_is_terminal_no_data(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATABENTO_API_KEY", "db-test-key")
+    plan = tmp_path / "options_snapshot_plan.json"
+    row = _row("AAA")
+    _write_plan(plan, [row])
+    _, norm = _paths_for_row(tmp_path / "options", row)
+    norm.parent.mkdir(parents=True, exist_ok=True)
+    norm.write_text("", encoding="utf-8")
+
+    def _boom(_row):
+        raise AssertionError("estimate should not run for already-normalized no-data snapshots")
+
+    monkeypatch.setattr("fetch_runner_options_snapshots._estimate_row_cost", _boom)
+    manifest = build_manifest(
+        plan,
+        tmp_path / "options",
+        dry_run=False,
+        confirm_purchase=True,
+        max_total_cost_usd=None,
+        max_requests=None,
+        override_operating_cap=False,
+        override_hard_limit=False,
+    )
+
+    assert manifest["ticker_records"][0]["status"] == "skipped_already_empty_normalized"
+    assert manifest["ticker_records"][0]["normalized_size_bytes"] == 0
+    assert manifest["estimated_total_cost_usd"] == 0.0
+
+
 def test_existing_raw_normalizes_before_costing(tmp_path, monkeypatch):
     monkeypatch.setenv("DATABENTO_API_KEY", "db-test-key")
     plan = tmp_path / "options_snapshot_plan.json"
