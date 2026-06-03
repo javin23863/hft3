@@ -28,7 +28,7 @@ EXPECTED_SCOREBOARD = {
     "tests/test_backtester_certification_governance.py": 8,
     "tests/test_promotion_record.py": 12,
     "tests/test_data_class.py": 20,
-    "tests/test_workbench/test_double_wf.py": 10,
+    "tests/test_workbench/test_double_wf.py": 16,
     "tests/test_artifact_bundle.py": 11,
     "tests/test_trade_manager_phase14.py": 6,
     "tests/test_trade_manager_phase15.py": 9,

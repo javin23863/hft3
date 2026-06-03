@@ -26,7 +26,11 @@ and `double_wf.wf2_fold_ids` to allow user-defined splits.
 """
 from __future__ import annotations
 
+import hashlib
+import json
+import math
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -79,26 +83,48 @@ _CORR_FNS = {
 }
 
 
+def _matrix_fingerprint(rows: List[Dict[str, Any]]) -> str:
+    canonical_rows = sorted(
+        json.dumps(row, sort_keys=True, separators=(",", ":"), default=str)
+        for row in rows
+    )
+    encoded = json.dumps(canonical_rows, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _same_nonempty_path(wf1_path: str, wf2_path: str) -> bool:
+    if not wf1_path or not wf2_path:
+        return False
+    return Path(wf1_path).expanduser().resolve() == Path(wf2_path).expanduser().resolve()
+
+
 def _aggregate_oos_by_param(
     rows: List[Dict[str, Any]], primary: str
-) -> Dict[str, float]:
+) -> tuple[Dict[str, float], List[str]]:
     """Map parameter_hash → mean OOS primary metric across folds."""
     buckets: Dict[str, List[float]] = {}
+    reasons: List[str] = []
     for r in rows:
         ph = str(r.get("parameter_hash", ""))
         if not ph:
             continue
         oos_metrics = r.get("oos_metrics", {})
         if not isinstance(oos_metrics, dict):
+            reasons.append(f"Malformed oos_metrics for parameter_hash={ph}")
             continue
         val = oos_metrics.get(primary)
         if val is None:
             continue
         try:
-            buckets.setdefault(ph, []).append(float(val))
+            observed = float(val)
         except (TypeError, ValueError):
+            reasons.append(f"Malformed OOS metric for parameter_hash={ph}")
             continue
-    return {ph: float(np.mean(vs)) for ph, vs in buckets.items() if vs}
+        if not math.isfinite(observed):
+            reasons.append(f"Non-finite OOS metric for parameter_hash={ph}")
+            continue
+        buckets.setdefault(ph, []).append(observed)
+    return {ph: float(np.mean(vs)) for ph, vs in buckets.items() if vs}, reasons
 
 
 def evaluate_double_wf(
@@ -130,6 +156,52 @@ def evaluate_double_wf(
         parameter regions, and stability summary.
     """
     reasons: List[str] = []
+    if join_keys != ["parameter_hash"]:
+        return DoubleWfResult(
+            wf1_matrix_path=wf1_path,
+            wf2_matrix_path=wf2_path,
+            matrix_join_keys=join_keys,
+            correlation_method=method,
+            minimum_required_score=min_score,
+            rejection_reasons=["Unsupported double-WF join_keys; expected ['parameter_hash']"],
+        )
+    try:
+        min_score = float(min_score)
+    except (TypeError, ValueError):
+        return DoubleWfResult(
+            wf1_matrix_path=wf1_path,
+            wf2_matrix_path=wf2_path,
+            matrix_join_keys=join_keys,
+            correlation_method=method,
+            rejection_reasons=["Malformed minimum_required_score"],
+        )
+    if not math.isfinite(min_score) or not -1.0 <= min_score <= 1.0:
+        return DoubleWfResult(
+            wf1_matrix_path=wf1_path,
+            wf2_matrix_path=wf2_path,
+            matrix_join_keys=join_keys,
+            correlation_method=method,
+            minimum_required_score=min_score,
+            rejection_reasons=["minimum_required_score must be finite and within [-1.0, 1.0]"],
+        )
+    if wf1_matrix is wf2_matrix or _same_nonempty_path(wf1_path, wf2_path):
+        return DoubleWfResult(
+            wf1_matrix_path=wf1_path,
+            wf2_matrix_path=wf2_path,
+            matrix_join_keys=join_keys,
+            correlation_method=method,
+            minimum_required_score=min_score,
+            rejection_reasons=["WF1 and WF2 matrices must be independent artifacts"],
+        )
+    if wf1_matrix and wf2_matrix and _matrix_fingerprint(wf1_matrix) == _matrix_fingerprint(wf2_matrix):
+        return DoubleWfResult(
+            wf1_matrix_path=wf1_path,
+            wf2_matrix_path=wf2_path,
+            matrix_join_keys=join_keys,
+            correlation_method=method,
+            minimum_required_score=min_score,
+            rejection_reasons=["WF1 and WF2 matrix contents are identical"],
+        )
     corr_fn = _CORR_FNS.get(method)
     if corr_fn is None:
         return DoubleWfResult(
@@ -141,8 +213,17 @@ def evaluate_double_wf(
             rejection_reasons=[f"Unknown correlation method: {method}"],
         )
 
-    wf1_agg = _aggregate_oos_by_param(wf1_matrix, primary_metric)
-    wf2_agg = _aggregate_oos_by_param(wf2_matrix, primary_metric)
+    wf1_agg, wf1_reasons = _aggregate_oos_by_param(wf1_matrix, primary_metric)
+    wf2_agg, wf2_reasons = _aggregate_oos_by_param(wf2_matrix, primary_metric)
+    if wf1_reasons or wf2_reasons:
+        return DoubleWfResult(
+            wf1_matrix_path=wf1_path,
+            wf2_matrix_path=wf2_path,
+            matrix_join_keys=join_keys,
+            correlation_method=method,
+            minimum_required_score=min_score,
+            rejection_reasons=wf1_reasons + wf2_reasons,
+        )
 
     shared = sorted(set(wf1_agg) & set(wf2_agg))
     if len(shared) < 3:
@@ -171,6 +252,15 @@ def evaluate_double_wf(
         )
 
     score = corr_fn(v1, v2)
+    if not math.isfinite(score):
+        return DoubleWfResult(
+            wf1_matrix_path=wf1_path,
+            wf2_matrix_path=wf2_path,
+            matrix_join_keys=join_keys,
+            correlation_method=method,
+            minimum_required_score=min_score,
+            rejection_reasons=["Double-WF correlation score is non-finite"],
+        )
     passed = score >= min_score
     if not passed:
         reasons.append(
@@ -218,21 +308,41 @@ def to_gate_result(result: DoubleWfResult) -> Any:
     from hft3.validation.gate_result import (
         GateCategory, GateResult, Severity,
     )
-    blocking = not result.pass_fail
+    malformed = False
+    try:
+        threshold = float(result.minimum_required_score)
+    except (TypeError, ValueError):
+        threshold = 1.0
+        malformed = True
+    if not math.isfinite(threshold) or not -1.0 <= threshold <= 1.0:
+        threshold = 1.0
+        malformed = True
+    try:
+        observed = float(result.correlation_score)
+    except (TypeError, ValueError):
+        observed = -1.0
+        malformed = True
+    if not math.isfinite(observed):
+        observed = -1.0
+        malformed = True
+    gate_pass = bool(result.pass_fail) and not malformed and observed >= threshold
+    if not gate_pass and observed >= threshold:
+        observed = threshold - 1e-12
+    blocking = not gate_pass
     severity = Severity.BLOCKING if blocking else Severity.INFO
     return GateResult(
         gate_name="double_wf_correlation",
         gate_category=GateCategory.WALK_FORWARD_CORRELATION,
         metric_name=result.correlation_method,
-        threshold=result.minimum_required_score,
-        observed_value=result.correlation_score,
+        threshold=threshold,
+        observed_value=observed,
         comparison_operator=">=",
-        pass_fail=result.pass_fail,
+        pass_fail=gate_pass,
         severity=severity,
         blocking_status=blocking,
         reason_code=(
             "DOUBLE_WF_CORRELATION_PASS"
-            if result.pass_fail
+            if gate_pass
             else "DOUBLE_WF_CORRELATION_BELOW_MIN"
         ),
         artifact_reference=result.artifact_reference,

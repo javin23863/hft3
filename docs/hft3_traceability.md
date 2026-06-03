@@ -186,6 +186,6 @@ This document maps each major requirement from the 26-phase spec to:
 | 25 — Required-test closure | DONE | 5 |
 | 26 — Documentation | ✅ DONE | N/A |
 
-**Total: 346/346 passing across 26 test files.**
+**Total: 352/352 passing across 26 test files.**
 
 **26 of 26 phases complete.**

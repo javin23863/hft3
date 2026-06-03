@@ -10,6 +10,8 @@ Covers:
 - test_double_wf_zero_variance: zero variance in WF1 or WF2 fails
 - test_double_wf_unknown_method: unknown correlation method fails
 - test_double_wf_round_trip: to_dict / from_dict round-trip
+- regression tests: non-independent matrices, unsupported join keys,
+  malformed/non-finite metrics, invalid thresholds, and malformed gate results
 """
 from __future__ import annotations
 
@@ -93,6 +95,118 @@ def test_double_wf_matrix_join() -> None:
         method="pearson", min_score=0.0,
     )
     assert result.stability_summary["n_shared"] == 3  # p2, p3, p4
+
+
+def test_double_wf_rejects_same_matrix_object_path_or_content() -> None:
+    wf1 = [
+        _row("p1", 0.8), _row("p2", 0.6), _row("p3", 0.4),
+        _row("p4", 0.2), _row("p5", 0.1),
+    ]
+    wf2 = [
+        _row("p1", 0.7), _row("p2", 0.5), _row("p3", 0.35),
+        _row("p4", 0.15), _row("p5", 0.05),
+    ]
+
+    same_object = evaluate_double_wf(wf1, wf1, ["parameter_hash"])
+    same_path = evaluate_double_wf(wf1, wf2, ["parameter_hash"], wf1_path="wf.json", wf2_path="wf.json")
+    same_content = evaluate_double_wf(wf1, list(wf1), ["parameter_hash"])
+    same_content_shuffled = evaluate_double_wf(wf1, list(reversed(wf1)), ["parameter_hash"])
+
+    assert same_object.pass_fail is False
+    assert same_path.pass_fail is False
+    assert same_content.pass_fail is False
+    assert same_content_shuffled.pass_fail is False
+    assert any("independent" in r for r in same_object.rejection_reasons)
+    assert any("independent" in r for r in same_path.rejection_reasons)
+    assert any("identical" in r for r in same_content.rejection_reasons)
+    assert any("identical" in r for r in same_content_shuffled.rejection_reasons)
+
+
+def test_double_wf_rejects_unsupported_join_keys() -> None:
+    wf1 = [_row("p1", 0.5), _row("p2", 0.6), _row("p3", 0.7)]
+    wf2 = [_row("p1", 0.4), _row("p2", 0.5), _row("p3", 0.6)]
+
+    result = evaluate_double_wf(wf1, wf2, ["parameter_hash", "symbol"])
+
+    assert result.pass_fail is False
+    assert any("join_keys" in r for r in result.rejection_reasons)
+
+
+def test_double_wf_rejects_nonfinite_matrix_values() -> None:
+    wf1 = [_row("p1", 0.5), _row("p2", float("nan")), _row("p3", 0.7)]
+    wf2 = [_row("p1", 0.4), _row("p2", 0.5), _row("p3", 0.6)]
+
+    result = evaluate_double_wf(wf1, wf2, ["parameter_hash"])
+
+    assert result.pass_fail is False
+    assert any("Non-finite" in r for r in result.rejection_reasons)
+
+
+def test_double_wf_rejects_malformed_oos_metrics_container() -> None:
+    wf1 = [_row("p1", 0.5), _row("p2", 0.6), _row("p3", 0.7), _row("p4", 0.8)]
+    wf1[1]["oos_metrics"] = []
+    wf2 = [_row("p1", 0.4), _row("p2", 0.5), _row("p3", 0.6), _row("p4", 0.7)]
+
+    result = evaluate_double_wf(wf1, wf2, ["parameter_hash"])
+
+    assert result.pass_fail is False
+    assert any("Malformed oos_metrics" in r for r in result.rejection_reasons)
+
+
+def test_double_wf_rejects_invalid_min_score_and_gate_still_blocks() -> None:
+    wf1 = [
+        _row("p1", 0.9), _row("p2", 0.1), _row("p3", 0.8),
+        _row("p4", 0.2), _row("p5", 0.7),
+    ]
+    wf2 = [
+        _row("p1", 0.1), _row("p2", 0.9), _row("p3", 0.2),
+        _row("p4", 0.8), _row("p5", 0.3),
+    ]
+
+    result = evaluate_double_wf(wf1, wf2, ["parameter_hash"], min_score=-2.0)
+    gate = to_gate_result(result)
+
+    assert result.pass_fail is False
+    assert any("minimum_required_score" in r for r in result.rejection_reasons)
+    assert gate.pass_fail is False
+    assert gate.severity == Severity.BLOCKING
+
+
+def test_double_wf_gate_result_handles_malformed_failure_values() -> None:
+    result = DoubleWfResult(
+        pass_fail=False,
+        minimum_required_score="bad",  # type: ignore[arg-type]
+        correlation_score="nan",  # type: ignore[arg-type]
+        rejection_reasons=["malformed"],
+    )
+
+    gate = to_gate_result(result)
+
+    assert gate.pass_fail is False
+    assert gate.severity == Severity.BLOCKING
+    assert gate.threshold == 1.0
+    assert gate.observed_value == -1.0
+
+    finite_score = DoubleWfResult(
+        pass_fail=False,
+        minimum_required_score="bad",  # type: ignore[arg-type]
+        correlation_score=1.0,
+        rejection_reasons=["malformed"],
+    )
+    finite_score_gate = to_gate_result(finite_score)
+    assert finite_score_gate.pass_fail is False
+    assert finite_score_gate.severity == Severity.BLOCKING
+    assert finite_score_gate.observed_value < finite_score_gate.threshold
+
+    malformed_pass = DoubleWfResult(
+        pass_fail=True,
+        minimum_required_score="bad",  # type: ignore[arg-type]
+        correlation_score=1.0,
+    )
+    malformed_pass_gate = to_gate_result(malformed_pass)
+    assert malformed_pass_gate.pass_fail is False
+    assert malformed_pass_gate.severity == Severity.BLOCKING
+    assert malformed_pass_gate.reason_code == "DOUBLE_WF_CORRELATION_BELOW_MIN"
 
 
 def test_double_wf_insufficient_shared_params() -> None:

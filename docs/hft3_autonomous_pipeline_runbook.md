@@ -140,7 +140,7 @@ python -m pytest tests/test_autonomous_runner.py tests/test_autonomous_runner_re
 
 ## Test scoreboard
 
-**346/346 passing** across 26 test files:
+**352/352 passing** across 26 test files:
 - `tests/test_autonomous_runner.py` (11 tests)
 - `tests/test_autonomous_runner_recovery.py` (13 tests)
 - `tests/test_phase25_required_tests.py` (5 tests)
@@ -155,7 +155,7 @@ python -m pytest tests/test_autonomous_runner.py tests/test_autonomous_runner_re
 - `tests/test_backtester_certification_governance.py` (8 tests)
 - `tests/test_promotion_record.py` (12 tests)
 - `tests/test_data_class.py` (20 tests)
-- `tests/test_workbench/test_double_wf.py` (10 tests)
+- `tests/test_workbench/test_double_wf.py` (16 tests)
 - `tests/test_artifact_bundle.py` (11 tests)
 - `tests/test_trade_manager_phase14.py` (6 tests)
 - `tests/test_trade_manager_phase15.py` (9 tests)
