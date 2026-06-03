@@ -9,7 +9,7 @@ This roadmap turns the remaining HFT3 phases into parallel workstreams with clea
 | Phases 1-13 | Complete | Autonomous/research pipeline scaffold, gates, registry, artifacts, reporting |
 | Phases 14-21 | Complete | Trade Manager handoff through inert kill-switch decisions |
 | Phase 22 | Complete | Read-only local artifact observer CLI |
-| Phase 23 | Not started | Session reporting |
+| Phase 23 | Complete | Inert session reporting artifacts |
 | Phase 24 | Partial | Autonomous-runner checkpoint state exists; full crash/recovery safety not complete |
 | Phase 25 | Partial | Original required-test matrix remains incomplete |
 

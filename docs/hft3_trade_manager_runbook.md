@@ -1,6 +1,6 @@
 # HFT3 Trade Manager Runbook (Phase 26)
 
-This runbook documents the Trade Manager layer (Phases 14-23). Phase 14 is implemented as the registry-to-Trade-Manager handoff seam. Phase 15 is implemented as side-effect-free signal ingress. Phase 16 is implemented as an inert Trade Manager order-intent schema. Phase 17 is implemented as a risk-decision layer over inert intents. Phase 18 is implemented as an inert order-state machine. Phase 19 is implemented as an inert execution-boundary config/audit seam. Phase 20 is implemented as an inert position monitor. Phase 21 is implemented as an inert kill-switch decision module. Phase 22 is implemented as a read-only observer CLI over local session artifacts. Phase 23 remains future state.
+This runbook documents the Trade Manager layer (Phases 14-23). Phase 14 is implemented as the registry-to-Trade-Manager handoff seam. Phase 15 is implemented as side-effect-free signal ingress. Phase 16 is implemented as an inert Trade Manager order-intent schema. Phase 17 is implemented as a risk-decision layer over inert intents. Phase 18 is implemented as an inert order-state machine. Phase 19 is implemented as an inert execution-boundary config/audit seam. Phase 20 is implemented as an inert position monitor. Phase 21 is implemented as an inert kill-switch decision module. Phase 22 is implemented as a read-only observer CLI over local session artifacts. Phase 23 is implemented as an inert session artifact writer.
 
 ## 1. How a registered model is handed to the Trade Manager
 
@@ -139,12 +139,18 @@ Phase 21 adds `packages/trade_manager/kill_switch.py` and `configs/risk/kill_swi
 
 ## 8. Session artifact path (Phase 23)
 
-Each trading session will produce artifacts under `artifacts/sessions/{session_id}/`:
+Phase 23 adds `packages/trade_manager/session.py` with `SessionReportInput`, `SessionArtifacts`, `resolve_session_path()`, and `write_session_report()`.
+
+Each trading session report writes artifacts under `artifacts/sessions/{session_id}/`:
 - `session_manifest.json`, `active_models.json`, `registry_references.json`
 - `risk_limits.json`, `order_intents.jsonl`, `order_state_transitions.jsonl`
 - `risk_rejections.jsonl`, `fills.jsonl`, `positions.jsonl`, `pnl_timeseries.jsonl`
 - `latency_metrics.json`, `slippage_metrics.json`, `incident_log.jsonl`
 - `kill_switch_events.jsonl`, `session_metrics.json`, `session_report.md`
+
+The writer is observer-compatible with `apps/observer/read_model.py`: the seven `.json` artifacts are JSON objects, the eight `.jsonl` artifacts contain JSON object records only, and missing optional streams are written as empty JSONL files or `{}` object defaults. Values are serialized via `to_dict()` when supplied and non-finite numbers are rejected recursively with `allow_nan=False`.
+
+Phase 23 is inert. It does not mutate `TradeManager`, create execution adapters, submit orders, cancel orders, replace orders, flatten positions, or route to paper/live/Rithmic.
 
 ## 9. Observer view instructions (Phase 22)
 
@@ -203,8 +209,7 @@ Phase 19: `tests/test_trade_manager_phase19.py` has 22/22 passing tests.
 Phase 20: `tests/test_trade_manager_phase20.py` has 11/11 passing tests.
 Phase 21: `tests/test_trade_manager_phase21.py` has 12/12 passing tests.
 Phase 22: `tests/test_observer_view_read_only.py` has 10/10 passing tests.
-
-Phase 23 tests will be added as session modules are built.
+Phase 23: `tests/test_trade_manager_phase23.py` has 10/10 passing tests.
 
 ## 13. Known limitations
 
@@ -218,14 +223,13 @@ Phase 23 tests will be added as session modules are built.
 - **Kill switch exists.** Phase 21 returns inert decisions for documented trigger families and requested actions, but it does not create adapters, cancel orders, flatten positions, or route execution.
 - **Execution adapter is a stub.** `packages/execution/adapters/live_broker.py` returns `ORDER_REJECTED` with reason `"live_adapter_stub_not_wired"` (Phase 19).
 - **Observer view exists.** Phase 22 reads local session artifacts and renders a deterministic read-only CLI view without adapters or routing.
-- **Session reporting does not exist.** Phase 23 is not implemented.
+- **Session reporting exists.** Phase 23 writes the 16 observer-compatible artifacts atomically from supplied data only.
 
 ## 14. Remaining risks
 
-- **Phase 23 remains large.** The Trade Manager still needs session reporting and restart-recovery integration.
+- **Restart-recovery integration remains future work.** Phase 23 writes session reports, but Phase 24 restart recovery is not fully tested.
 - **Rithmic live adapter is not implemented.** The C++ `rithmic_gateway` exists but the Python execution adapter is a stub.
-- **Risk/state/boundary/monitor/kill-switch/observer outputs are not execution.** Phases 17-22 record approvals/rejections/state transitions, boundary audit metadata, reconciliation results, kill-switch requested actions, and read-only local artifact views only; no adapter lifecycle or session writer exists yet.
-- **Session reporting is not implemented.** The 16 session files are not written.
+- **Risk/state/boundary/monitor/kill-switch/observer/session outputs are not execution.** Phases 17-23 record approvals/rejections/state transitions, boundary audit metadata, reconciliation results, kill-switch requested actions, read-only local artifact views, and session artifacts only; no adapter lifecycle exists yet.
 - **Restart recovery is not fully tested.** Phase 24 is partially done (checkpoint state.json exists) but crash recovery is not fully tested.
 
 ## Implementation plan
@@ -271,6 +275,10 @@ The Trade Manager will be built in 4 milestones:
 - `packages/trade_manager/kill_switch.py` — closed 12-trigger and 7-action inventory, inert decision/event payloads, Phase 20 mismatch/unknown mapping
 - `configs/risk/kill_switch.yaml` — default trigger-action matrix for requested decisions only
 - Tests: `tests/test_trade_manager_phase21.py`
+
+### Phase 23 complete: Session reporting
+- `packages/trade_manager/session.py` — observer-compatible 16-artifact session writer with path traversal rejection, JSON/JSONL object enforcement, recursive non-finite rejection, and atomic same-directory writes
+- Tests: `tests/test_trade_manager_phase23.py`
 
 ### Future milestone: Real execution adapter routing
 - `packages/execution/adapters/live_broker.py` — replace stub with real CHI404-only Rithmic adapter when explicitly authorized

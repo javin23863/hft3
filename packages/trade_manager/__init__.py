@@ -46,6 +46,16 @@ from trade_manager.risk_layer import (
     TradeManagerRiskLayer,
     load_risk_config,
 )
+from trade_manager.session import (
+    JSON_OBJECT_ARTIFACTS,
+    JSONL_OBJECT_ARTIFACTS,
+    SESSION_ARTIFACTS,
+    SessionArtifacts,
+    SessionReportError,
+    SessionReportInput,
+    resolve_session_path,
+    write_session_report,
+)
 from trade_manager.signals import ModelSignal, SignalSource, StaticSignalSource
 
 __all__ = [
@@ -83,6 +93,14 @@ __all__ = [
     "TradeManagerRiskError",
     "TradeManagerRiskLayer",
     "load_risk_config",
+    "JSON_OBJECT_ARTIFACTS",
+    "JSONL_OBJECT_ARTIFACTS",
+    "SESSION_ARTIFACTS",
+    "SessionArtifacts",
+    "SessionReportError",
+    "SessionReportInput",
+    "resolve_session_path",
+    "write_session_report",
     "ModelSignal",
     "SignalSource",
     "StaticSignalSource",
