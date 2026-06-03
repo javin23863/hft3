@@ -46,7 +46,9 @@ class LaneRunResult:
         }
 
 
-def _run_pytest_for_lane(test_paths: list[str], root: Path) -> LaneRunResult:
+def _run_pytest_for_lane(
+    test_paths: list[str], root: Path, *, pytest_timeout: float | None = 60.0
+) -> LaneRunResult:
     """Run pytest for a single lane's test paths. Returns the first non-empty path's result."""
     if not test_paths:
         return LaneRunResult(
@@ -69,7 +71,7 @@ def _run_pytest_for_lane(test_paths: list[str], root: Path) -> LaneRunResult:
                 cwd=str(root),
                 capture_output=True,
                 text=True,
-                timeout=60,
+                timeout=pytest_timeout,
             )
         except subprocess.TimeoutExpired:
             combined_output += f"[timeout] {tp}\n"
@@ -101,12 +103,14 @@ def run_unified_certification(
     lanes: list[Lane] | None = None,
     auto_register: bool = True,
     skip_pytest: bool = False,
+    pytest_timeout: float | None = 60.0,
 ) -> LaneScorecard:
     """Run certification across all registered lanes and return a LaneScorecard.
 
     - root: repo root (defaults to LaneRegistry's known root or cwd)
     - lanes: if given, restrict to these lanes; otherwise run all registered
     - skip_pytest: if True, skip pytest execution and only build the scorecard
+    - pytest_timeout: per-test-path timeout in seconds (None = no timeout)
     """
     if auto_register:
         register_all_lanes()
@@ -132,7 +136,9 @@ def run_unified_certification(
                 test_paths=list(lane_reg.test_paths),
             )
             continue
-        result = _run_pytest_for_lane(list(lane_reg.test_paths), root)
+        result = _run_pytest_for_lane(
+            list(lane_reg.test_paths), root, pytest_timeout=pytest_timeout
+        )
         result.lane = lane.value
         run_results[lane.value] = result
     if not hasattr(card, "extra") or card.extra is None:

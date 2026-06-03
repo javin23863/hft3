@@ -1,22 +1,47 @@
 {
-  "latest_certification_run_id": "CERT-20260601T021203Z-961f7900",
-  "latest_certification_commit": "a88321c4629ad22cb5f453cc5f691878d7474d95",
-  "latest_certification_timestamp": "2026-06-01T02:12:15.816266+00:00",
+  "latest_certification_run_id": "CERT-20260603T124741Z-a83ae1ee",
+  "latest_certification_commit": "ceb6b466f55107176f941eb6be193d046d51ef35",
+  "latest_certification_timestamp": "2026-06-03T12:48:20.694073+00:00",
   "latest_certification_status": "GREEN",
-  "backtester_version": "a88321c-dirty",
+  "backtester_version": "ceb6b46-dirty",
   "covered_modules": [
     "backtest_pipeline",
+    "crypto_lane",
+    "equities_lane",
     "execution",
-    "replay",
     "features_engine",
+    "options_lane",
+    "replay",
     "workbench"
   ],
   "covered_symbols": [
+    "BTC/USD",
+    "BTCUSDT",
+    "CL",
     "ES",
-    "MES"
+    "ETH/USD",
+    "ETHUSDT",
+    "GC",
+    "HG",
+    "MES",
+    "MNQ",
+    "NQ",
+    "RTY",
+    "RUNNER",
+    "SI",
+    "SOLUSDT",
+    "YM",
+    "ZB",
+    "ZN"
   ],
   "covered_event_types": [
+    "crypto_l2",
+    "crypto_l3",
+    "crypto_shock_event",
+    "equities_low_float",
+    "equities_runner_event",
     "macro",
+    "options_parity",
     "synthetic"
   ],
   "covered_latency_bands": [
@@ -24,7 +49,9 @@
     1.0,
     2.0,
     5.0,
-    10.0
+    10.0,
+    50.0,
+    200.0
   ],
   "covered_queue_models": [
     "LogProbQueueModel2",

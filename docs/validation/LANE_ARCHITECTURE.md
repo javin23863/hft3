@@ -1,6 +1,6 @@
 # Lane Architecture (hft3 backtester validation)
 
-**Status:** Phase 38 design plan implemented (phases 1-5); phase 39 test suite green (62 tests).
+**Status:** Phase 38 design plan implemented (phases 1-5); phase 39 test suite green (62 tests); phase 41 lane-aware backtester certification integrated (`run_full_certification` runs all 4 lanes).
 
 ## Purpose
 
@@ -77,7 +77,7 @@ backward compatibility with code that reads the legacy CME scorecard.
 
 ## Unified certification runner
 
-`run_unified_certification(lanes=None, skip_pytest=False)` discovers
+`run_unified_certification(lanes=None, skip_pytest=False, pytest_timeout=60.0)` discovers
 all registered lanes and runs each lane's test paths under pytest. The
 resulting `LaneScorecard` includes a `run_result` per lane
 (`passed`, `returncode`, `output_tail`, `test_paths`,
@@ -90,6 +90,64 @@ resulting `LaneScorecard` includes a `run_result` per lane
 ```
 python -m hft3.validation.lanes.unified_certification_runner \
     --lanes crypto equities --skip-pytest
+```
+
+## Lane-aware backtester certification (Phase 41)
+
+The T2 backtester certification tier (`run_full_certification` in
+`packages/hft3/validation/certification_runner.py`) now runs the
+lane-aware unified runner for **all 4 lanes** in addition to the
+legacy T0 fast gate and T2 full suite:
+
+- **T0 fast gate** — `tests/backtester_validation/fast` (CME core, fast).
+- **T2 full suite** — `tests/backtester_validation/full` (CME core, adversarial).
+- **Crypto lane** — `tests/test_crypto_lane` (137 tests).
+- **Equities lane** — `tests/test_equities_lane` (43 tests).
+- **Options lane** — `tests/test_options_lane` (currently no test dir; marked as PASS when skipped).
+
+CME core is not duplicated — `run_full_certification` calls
+`run_unified_certification(lanes=[CRYPTO, EQUITIES, OPTIONS])` to
+avoid running the backtester_validation/{fast,full} tests twice. CME
+is recorded in `lane_results["cme_futures"]` with `covered_by: "T0
+fast gate + T2 full suite (CME core)"`.
+
+### Status decision
+
+| Condition | Status |
+|-----------|--------|
+| T0 fast gate fails | **RED** |
+| T2 full suite fails (>2 tests) | **RED** |
+| T2 full suite fails (≤2 tests) | **YELLOW** |
+| Any non-CME lane pytest fails | **YELLOW** (warning, not blocking) |
+| All pass | **GREEN** |
+
+### Coverage aggregation
+
+`covered_symbols`, `covered_event_types`, `covered_latency_bands_ms`,
+and `covered_modules` in the scorecard are the **union across all 4
+lanes**, not just CME:
+
+- 18 symbols (12 CME + 5 crypto + 1 equities)
+- 8 event types (2 CME + 3 crypto + 2 equities + 1 options)
+- 7 latency bands (5 CME + 2 crypto)
+- 8 modules (5 CME + crypto_lane + equities_lane + options_lane)
+
+### Artifacts
+
+- `runtime/validation/backtester_certification_scorecard.json` — full
+  scorecard with `lane_results`, `lane_coverage`, `legacy_cme_fields`.
+- `runtime/validation/backtester_certification_scorecard.md` — human-readable.
+- `runtime/validation/certification_registry.json` + `.jsonl` — registry with status + git SHA + union coverage.
+- `runtime/validation/lane_certification_report.json` — separate lane-only report (written by `write_unified_certification_report`).
+
+### Skipping lane pytest
+
+For CI scenarios where you only want the CME core (T0/T2) and not the
+lane tests (which take ~30s extra), pass `skip_lane_pytest=True`:
+
+```python
+from hft3.validation.certification_runner import run_full_certification
+result = run_full_certification(skip_lane_pytest=True)
 ```
 
 ## Per-lane staleness
