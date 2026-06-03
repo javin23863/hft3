@@ -103,6 +103,25 @@ positive_seed_tickers:
     - ABTS
 
 notes:
-  - Cohort tickers are positive-event labels only, never model inputs.
-  - Resolve actual event dates from free daily OHLCV before any L2/L3 spend.
-  - L2/L3 pulls must be limited to snapshot windows, not full ticker histories.
+  - "Cohort tickers are positive-event labels only, never model inputs."
+  - "Resolve actual event dates from free daily OHLCV before any L2/L3 spend."
+  - "L2/L3 pulls must be limited to snapshot windows, not full ticker histories."
+  - "Tickers in delisted_seed_tickers are documented as data_source_exhausted; see that section."
+
+delisted_seed_tickers:
+  status: data_source_exhausted_free_daily
+  description: "No free daily OHLCV source retains historical prices for these delisted small-cap names."
+  sources_attempted:
+    - "yahoo_v8_chart_period1_period2 (404 not_found)"
+    - "stooq_csv (apikey_required)"
+    - "sec_edgar_company_filings (no_daily_ohlcv_endpoint)"
+  known_delisted:
+    - APRN
+    - RDBX
+    - AERC
+    - ANPC
+    - WETG
+    - MULN
+    - SGN
+    - SGBX
+  remediation: "Requires a paid historical source such as Databento ohlcv-1d on a delisted-retaining dataset, or Polygon historical aggregates. Out of scope for the free-data phase."

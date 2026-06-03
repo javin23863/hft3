@@ -40,7 +40,9 @@ def _write_seed_config(path: Path, daily_root: Path) -> None:
         "positive_seed_tickers:\n"
         "  '2024':\n"
         "    - ABCD\n"
-        "    - MISS\n",
+        "    - MISS\n"
+        "delisted_seed_tickers:\n"
+        "  known_delisted: [ZZZZ, YYYY]\n",
         encoding="utf-8",
     )
 
@@ -144,6 +146,7 @@ def test_resolve_runner_seed_events_writes_free_daily_plan(tmp_path):
     assert result["cohort_rows"][0]["ticker"] == "ABCD"
     assert result["unresolved_tickers"][0]["ticker"] == "MISS"
     assert result["unresolved_tickers"][0]["reason"] == "missing_daily_bars"
+    assert sorted(result["delisted_seed_tickers"]) == ["YYYY", "ZZZZ"]
     assert result["l2_l3_minimal_pull_plan"][0]["download_now"] is False
     assert result["l2_l3_minimal_pull_plan"][0]["download_policy"] == "plan_only_until_free_daily_benchmark_passes"
     assert (output / "runner_seed_resolution_manifest.json").exists()
@@ -237,3 +240,34 @@ def test_free_daily_benchmark_blocks_concentration():
     assert benchmark.passed is False
     assert benchmark.lift_l2_l3_download is False
     assert any("largest_ticker" in f for f in benchmark.failures)
+
+
+def test_resolve_runner_seed_events_marks_delisted_as_data_source_exhausted(tmp_path):
+    daily_root = tmp_path / "daily"
+    seed_config = tmp_path / "seeds.yaml"
+    output = tmp_path / "out"
+    seed_config.write_text(
+        "repo_root: .\n"
+        "paths:\n"
+        f"  daily_root: {daily_root.as_posix()}\n"
+        "free_data_phase:\n"
+        "  event_detection:\n"
+        "    volume_lookback_days: 3\n"
+        "    event_cooldown_trading_days: 5\n"
+        "positive_seed_tickers:\n"
+        "  '2024':\n"
+        "    - ABCD\n"
+        "    - DELIST\n"
+        "delisted_seed_tickers:\n"
+        "  known_delisted: [DELIST]\n",
+        encoding="utf-8",
+    )
+    _write_daily_csv(daily_root / "ABCD.csv", _daily_rows())
+
+    result = resolve_runner_seed_events(seed_config, daily_root=daily_root, output_dir=output)
+
+    delisted_record = next(r for r in result["unresolved_tickers"] if r["ticker"] == "DELIST")
+    assert delisted_record["reason"] == "data_source_exhausted_free_daily"
+    assert "delisted" in delisted_record["note"].lower()
+    assert result["delisted_seed_tickers"] == ["DELIST"]
+    assert (output / "runner_seed_resolution_manifest.json").exists()

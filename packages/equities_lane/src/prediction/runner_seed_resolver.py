@@ -159,6 +159,7 @@ def resolve_runner_seed_events(
     seeds = load_seed_tickers(seed_config_path)
     detection = _detection_config(cfg)
     benchmark_cfg = _benchmark_config(cfg)
+    delisted = _delisted_tickers(cfg)
     root = Path(daily_root) if daily_root is not None else _cfg_path(cfg, Path(seed_config_path), "daily_root", "data/equities/daily")
 
     events: list[RunnerEvent] = []
@@ -167,6 +168,16 @@ def resolve_runner_seed_events(
     l2_l3_plan: list[dict[str, Any]] = []
 
     for seed in seeds:
+        if seed.ticker in delisted:
+            unresolved.append({
+                "ticker": seed.ticker,
+                "seed_cohort": seed.cohort,
+                "reason": "data_source_exhausted_free_daily",
+                "expected_paths": _expected_daily_paths(root, seed.ticker),
+                "note": "Documented as delisted; free daily sources do not retain history. See delisted_seed_tickers in seed config.",
+            })
+            continue
+
         bars = _load_symbol_daily_bars(root, seed.ticker)
         if not bars:
             unresolved.append({
@@ -206,6 +217,7 @@ def resolve_runner_seed_events(
         "n_seed_tickers": len(seeds),
         "n_resolved_events": len(events),
         "n_unresolved_tickers": len(unresolved),
+        "delisted_seed_tickers": sorted(delisted),
         "detection_config": detection.__dict__,
         "benchmark_config": benchmark_cfg.__dict__,
         "free_daily_benchmark": {
@@ -494,6 +506,12 @@ def _benchmark_config(data: dict[str, Any]) -> BenchmarkConfig:
         min_median_event_strength=float(rules.get("min_median_event_strength", 1.0)),
         max_share_of_events_in_a_single_ticker=float(rules.get("max_share_of_events_in_a_single_ticker", 0.75)),
     )
+
+
+def _delisted_tickers(data: dict[str, Any]) -> set[str]:
+    block = data.get("delisted_seed_tickers") or {}
+    raw = block.get("known_delisted") or []
+    return {str(t).strip().upper() for t in raw if str(t).strip()}
 
 
 def _cfg_path(data: dict[str, Any], cfg_path: Path, key: str, default: str) -> Path:
