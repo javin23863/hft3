@@ -31,11 +31,14 @@ python tools/graphify/build_wiki_index.py
 Full layout: [docs/REPO_MAP.md](docs/REPO_MAP.md)
 
 ```
-apps/workbench     CLI + Streamlit UI
-packages/*         Python libraries (features, backtest, replay, …)
-artifacts/         Research outputs
-runtime/           Certification, latency, audits
-graphify-out/      Code graph (AI entry)
+apps/              runnable apps (`workbench`, observer)
+packages/          Python libraries and lane packages
+scripts/           operational/research entrypoints and data fetchers
+infrastructure/    CHI404/edge service deployment assets
+artifacts/         durable research outputs
+research_cards/    legacy research-card artifacts still in use
+runtime/           certification, latency, and audit state
+graphify-out/      code graph (AI entry)
 ```
 
 ## Common commands
