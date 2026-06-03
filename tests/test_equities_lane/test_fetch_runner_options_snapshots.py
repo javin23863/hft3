@@ -134,6 +134,46 @@ def test_existing_normalized_file_skips_before_costing(tmp_path, monkeypatch):
     assert manifest["estimated_total_cost_usd"] == 0.0
 
 
+def test_terminal_symbology_failure_is_cached_and_skipped(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATABENTO_API_KEY", "db-test-key")
+    plan = tmp_path / "options_snapshot_plan.json"
+    _write_plan(plan, [_row("RDBX")])
+    calls = {"n": 0}
+
+    def _fail(_row):
+        calls["n"] += 1
+        raise RuntimeError("422 symbology_invalid_request None of the symbols could be resolved")
+
+    monkeypatch.setattr("fetch_runner_options_snapshots._estimate_row_cost", _fail)
+
+    first = build_manifest(
+        plan,
+        tmp_path / "options",
+        dry_run=True,
+        confirm_purchase=False,
+        max_total_cost_usd=None,
+        max_requests=None,
+        override_operating_cap=False,
+        override_hard_limit=False,
+    )
+    assert first["ticker_records"][0]["status"] == "estimate_failed"
+    failure_path = Path(first["ticker_records"][0]["failure_path"])
+    assert failure_path.exists()
+
+    second = build_manifest(
+        plan,
+        tmp_path / "options",
+        dry_run=True,
+        confirm_purchase=False,
+        max_total_cost_usd=None,
+        max_requests=None,
+        override_operating_cap=False,
+        override_hard_limit=False,
+    )
+    assert second["ticker_records"][0]["status"] == "skipped_terminal_failure"
+    assert calls["n"] == 1
+
+
 def test_cli_refuses_live_without_key(tmp_path):
     plan = tmp_path / "options_snapshot_plan.json"
     _write_plan(plan, [_row("AAA")])

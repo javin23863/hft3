@@ -59,7 +59,7 @@ def _safe_slug(value: str) -> str:
     return slug.strip("_") or "snapshot"
 
 
-def _paths_for_row(output_dir: Path, row: dict[str, Any]) -> tuple[Path, Path]:
+def _artifact_base(row: dict[str, Any]) -> tuple[str, str, str]:
     ticker = str(row["ticker"]).upper()
     event_id = _safe_slug(str(row["runner_label_id"]))
     snap = _safe_slug(str(row["snapshot_name"]).lower())
@@ -69,9 +69,19 @@ def _paths_for_row(output_dir: Path, row: dict[str, Any]) -> tuple[Path, Path]:
     time_span = f"{start_dt.strftime('%H%M%S')}_{end_dt.strftime('%H%M%S')}"
     schema = str(row.get("schema", "cbbo-1m"))
     base = f"{start_date}_{time_span}_{snap}_{schema}"
+    return ticker, event_id, base
+
+
+def _paths_for_row(output_dir: Path, row: dict[str, Any]) -> tuple[Path, Path]:
+    ticker, event_id, base = _artifact_base(row)
     raw = output_dir / "raw" / ticker / event_id / f"{base}.dbn.zst"
     norm = output_dir / "normalized" / ticker / event_id / f"{base}.ndjson"
     return raw, norm
+
+
+def _failure_path_for_row(output_dir: Path, row: dict[str, Any]) -> Path:
+    ticker, event_id, base = _artifact_base(row)
+    return output_dir / "failures" / ticker / event_id / f"{base}.json"
 
 
 def _estimate_row_cost(row: dict[str, Any]) -> float:
@@ -189,6 +199,7 @@ def build_manifest(
     n_downloaded = 0
     for row in executable:
         raw_path, norm_path = _paths_for_row(output_dir, row)
+        failure_path = _failure_path_for_row(output_dir, row)
         rec = {
             "ticker": row["ticker"],
             "runner_label_id": row["runner_label_id"],
@@ -202,10 +213,19 @@ def build_manifest(
             "options_market_status": row["options_market_status"],
             "raw_path": str(raw_path),
             "normalized_path": str(norm_path),
+            "failure_path": str(failure_path),
         }
         if norm_path.exists() and norm_path.stat().st_size > 0:
             rec["status"] = "skipped_already_normalized"
             rec["normalized_size_bytes"] = norm_path.stat().st_size
+            records.append(rec)
+            continue
+        if failure_path.exists() and failure_path.stat().st_size > 0:
+            rec["status"] = "skipped_terminal_failure"
+            try:
+                rec["terminal_failure"] = json.loads(failure_path.read_text(encoding="utf-8"))
+            except Exception:  # noqa: BLE001
+                rec["terminal_failure"] = {"path": str(failure_path)}
             records.append(rec)
             continue
         if max_requests is not None and n_priced >= max_requests:
@@ -221,6 +241,17 @@ def build_manifest(
         except Exception as exc:  # noqa: BLE001
             rec["status"] = "estimate_failed"
             rec["estimate_error"] = _redact(f"{type(exc).__name__}: {exc}")
+            if _is_terminal_symbology_failure(str(exc)):
+                failure_path.parent.mkdir(parents=True, exist_ok=True)
+                failure_path.write_text(
+                    json.dumps({
+                        "status": "terminal_symbology_failure",
+                        "ticker": row["ticker"],
+                        "underlying_parent_symbol": row["underlying_parent_symbol"],
+                        "error": rec["estimate_error"],
+                    }, indent=2, sort_keys=True),
+                    encoding="utf-8",
+                )
             records.append(rec)
             continue
         if max_total_cost_usd is not None and (running_total + cost) > max_total_cost_usd and not override_operating_cap:
@@ -259,6 +290,10 @@ def build_manifest(
         encoding="utf-8",
     )
     return manifest
+
+
+def _is_terminal_symbology_failure(message: str) -> bool:
+    return "symbology_invalid_request" in message or "None of the symbols could be resolved" in message
 
 
 def main(argv: list[str] | None = None) -> int:
