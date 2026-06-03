@@ -4,6 +4,7 @@ Live R|API+ capture on CHI404 into the quarantined HftBacktest replay workflow. 
 
 Spec: [rithmic_trial_hftbacktest_pipeline_prompt.pdf](../../rithmic_trial_hftbacktest_pipeline_prompt.pdf)
 Handoff: [RAPI_PLUS_HANDOFF_2026_06_02.md](../RAPI_PLUS_HANDOFF_2026_06_02.md)
+Diamond / Diamond Cutter access packet: [DIAMOND_CUTTER_ACCESS_SAMPLE.md](DIAMOND_CUTTER_ACCESS_SAMPLE.md)
 
 ## Topology
 
