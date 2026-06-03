@@ -11,7 +11,12 @@ import yaml
 def _now_ns() -> int:
     return time.perf_counter_ns()
 
+
+def _wall_ns() -> int:
+    return time.time_ns()
+
 from ._rithmic_api_bridge import (
+    MarketDataEvent,
     ConnectionConfig,
     OrderEvent,
     RithmicApiBridge,
@@ -60,6 +65,9 @@ class RithmicApiConnector(ConnectorInterface):
         self._connected = False
         self._submit_seq = 0
         self._pending_submits: list[dict[str, Any]] = []
+        self._inflight_submits: list[dict[str, Any]] = []
+        self._last_symbol = ""
+        self._last_exchange = ""
         self._load_config()
 
     def _load_config(self) -> None:
@@ -110,12 +118,14 @@ class RithmicApiConnector(ConnectorInterface):
             or self._cfg.get("environment_name")
             or "Rithmic Test"
         )
-        log_file = str(
+        log_file_path = (
             Path(self._find_repo_root())
             / "runtime"
             / "rithmic_trial"
             / "rithmic_api.log"
         )
+        log_file_path.parent.mkdir(parents=True, exist_ok=True)
+        log_file = str(log_file_path)
 
         return ConnectionConfig(
             environment=str(env_name),
@@ -167,24 +177,38 @@ class RithmicApiConnector(ConnectorInterface):
         if not self._connected or self._bridge is None:
             raise RuntimeError("Not connected — call connect() first")
         self._bridge.subscribe_mbo(symbol, exchange)
+        self._last_symbol = symbol
+        self._last_exchange = exchange
 
-    def send_order(self, symbol: str, side: str, qty: int, price: float) -> None:
+    def send_order(self, symbol: str, side: str, qty: int, price: float) -> str:
         if not self._connected or self._bridge is None:
             raise RuntimeError("Not connected — call connect() first")
         key = side.upper() if isinstance(side, str) else side
         if key not in _SIDE_MAP:
             raise ValueError(f"unknown side: {side!r}; expected one of {sorted(_SIDE_MAP)}")
         side_char = _SIDE_MAP[key]
-        self._bridge.send_order(symbol, side_char, qty, price)
         self._submit_seq += 1
-        self._pending_submits.append({
-            "client_order_id": f"local-{self._submit_seq}",
+        client_order_id = f"hft3-{self._submit_seq}-{_now_ns()}"
+        emit_mono_ns = _now_ns()
+        emit_wall_ns = _wall_ns()
+        self._bridge.send_order(symbol, side_char, qty, price, user_msg=client_order_id)
+        submit = {
+            "client_order_id": client_order_id,
+            "order_id": client_order_id,
             "symbol": symbol,
+            "exchange": self._last_exchange or "CME",
             "side": key,
             "qty": int(qty),
+            "size": int(qty),
             "price": float(price),
-            "ts_emit_ns": _now_ns(),
-        })
+            "ts_emit_ns": emit_mono_ns,
+            "local_monotonic_receive_ns": emit_mono_ns,
+            "local_receive_timestamp_ns": emit_wall_ns,
+        }
+        self._pending_submits.append(submit)
+        self._inflight_submits.append(submit)
+        self._last_symbol = symbol
+        return client_order_id
 
     def cancel_order(self, order_id: str) -> None:
         if not self._connected or self._bridge is None:
@@ -199,45 +223,94 @@ class RithmicApiConnector(ConnectorInterface):
             ev = self._bridge.try_pop_event()
             if ev is None:
                 break
-            out.append(ev.to_dict())
+            out.append(self._adapt_market_event(ev))
+        if len(out) < 1000:
+            out.extend(self.poll_order_events(limit=1000 - len(out)))
         return out
 
-    def poll_order_events(self) -> list[dict[str, Any]]:
+    def poll_order_events(self, limit: int = 1000) -> list[dict[str, Any]]:
         if self._bridge is None:
             return []
         out: list[dict[str, Any]] = []
 
-        while self._pending_submits:
+        while self._pending_submits and len(out) < limit:
             submit = self._pending_submits[0]
             submit_record = {
                 "event_type": "order_submit",
-                "order_id": submit["client_order_id"],
+                "order_id": submit["order_id"],
+                "client_order_id": submit["client_order_id"],
                 "symbol": submit["symbol"],
+                "exchange": submit["exchange"],
                 "side": submit["side"],
                 "qty": submit["qty"],
+                "size": submit["size"],
                 "price": submit["price"],
                 "ts_emit_ns": submit["ts_emit_ns"],
+                "local_monotonic_receive_ns": submit["local_monotonic_receive_ns"],
+                "local_receive_timestamp_ns": submit["local_receive_timestamp_ns"],
             }
             out.append(submit_record)
             self._pending_submits.pop(0)
-            if len(out) >= 1000:
-                break
 
-        for _ in range(1000 - len(out)):
+        for _ in range(limit - len(out)):
             ev = self._bridge.try_pop_order_event()
             if ev is None:
                 break
             out.append(self._adapt_order_event(ev))
         return out
 
+    def _adapt_market_event(self, ev: MarketDataEvent) -> dict[str, Any]:
+        recv_mono_ns = _now_ns()
+        recv_wall_ns = _wall_ns()
+        if ev.action == "T":
+            event_type = "trade"
+        elif ev.action == "M":
+            event_type = "quote"
+        else:
+            event_type = "depth"
+        out: dict[str, Any] = {
+            "event_type": event_type,
+            "bridge_event_type": ev.action,
+            "symbol": self._last_symbol,
+            "exchange": self._last_exchange,
+            "exchange_timestamp_ns": ev.timestamp_ns or None,
+            "timestamp_ns": ev.timestamp_ns,
+            "order_id": ev.order_id,
+            "side": ev.side,
+            "price": ev.price,
+            "size": ev.size,
+            "local_monotonic_receive_ns": recv_mono_ns,
+            "local_receive_timestamp_ns": recv_wall_ns,
+        }
+        if event_type == "quote" and ev.side == "B":
+            out["bid_price"] = ev.price
+            out["bid_size"] = ev.size
+        elif event_type == "quote" and ev.side == "A":
+            out["ask_price"] = ev.price
+            out["ask_size"] = ev.size
+        return out
+
     def _adapt_order_event(self, ev: OrderEvent) -> dict[str, Any]:
+        recv_mono_ns = _now_ns()
+        recv_wall_ns = _wall_ns()
         bridge_evt = ev.event_type
         daemon_evt = _BRIDGE_TO_DAEMON_EVENT.get(bridge_evt, "order_status")
-        order_id = ev.order_id if ev.order_id != 0 else f"unknown-{ev.timestamp_ns}"
+        broker_order_id = str(ev.order_id) if ev.order_id != 0 else ""
+        client_order_id = ev.user_msg or ev.tag or ""
+        inflight = self._find_inflight(client_order_id)
+        if not client_order_id and inflight is not None:
+            client_order_id = str(inflight["client_order_id"])
+        order_id = client_order_id or broker_order_id or f"unknown-{ev.timestamp_ns}"
+        if daemon_evt in {"order_ack", "reject", "order_failure"} and inflight is not None:
+            self._mark_inflight_observed(inflight["client_order_id"])
         return {
             "event_type": daemon_evt,
             "bridge_event_type": bridge_evt,
             "order_id": str(order_id),
+            "broker_order_id": broker_order_id,
+            "client_order_id": client_order_id,
+            "symbol": inflight.get("symbol", self._last_symbol) if inflight else self._last_symbol,
+            "exchange": inflight.get("exchange", self._last_exchange) if inflight else self._last_exchange,
             "side": ev.side,
             "order_type": ev.order_type,
             "price": ev.price,
@@ -245,8 +318,26 @@ class RithmicApiConnector(ConnectorInterface):
             "filled_size": ev.filled_size,
             "total_filled": ev.total_filled,
             "total_unfilled": ev.total_unfilled,
+            "user_msg": ev.user_msg,
+            "tag": ev.tag,
+            "exchange_timestamp_ns": ev.timestamp_ns or None,
             "timestamp_ns": ev.timestamp_ns,
+            "local_monotonic_receive_ns": recv_mono_ns,
+            "local_receive_timestamp_ns": recv_wall_ns,
         }
+
+    def _find_inflight(self, client_order_id: str) -> dict[str, Any] | None:
+        if client_order_id:
+            for submit in self._inflight_submits:
+                if submit["client_order_id"] == client_order_id:
+                    return submit
+        return self._inflight_submits[0] if self._inflight_submits else None
+
+    def _mark_inflight_observed(self, client_order_id: str) -> None:
+        self._inflight_submits = [
+            submit for submit in self._inflight_submits
+            if submit["client_order_id"] != client_order_id
+        ]
 
     def detected_event_types(self) -> set[str]:
         return {"order_submit", "order_ack", "fill", "cancel",

@@ -3,6 +3,12 @@
 
 #include <stdint.h>
 
+#if defined(_WIN32) && defined(HFT_RITHMIC_C_API_EXPORTS)
+#define HFT_RITHMIC_C_API __declspec(dllexport)
+#else
+#define HFT_RITHMIC_C_API
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -44,26 +50,31 @@ typedef struct OrderEvent {
     int32_t filled_size;
     int32_t total_filled;
     int32_t total_unfilled;
+    char user_msg[64];
+    char tag[64];
 } OrderEvent;
 
-void* hft_rithmic_adapter_create(const ConnectionConfig* cfg);
-int   hft_rithmic_adapter_initialize(void* handle);
-int   hft_rithmic_adapter_connect(void* handle);
-void  hft_rithmic_adapter_disconnect(void* handle);
-void  hft_rithmic_adapter_destroy(void* handle);
-int   hft_rithmic_adapter_subscribe_mbo(void* handle, const char* symbol, const char* exchange);
-int   hft_rithmic_adapter_send_order(void* handle, const char* symbol, char side, int32_t qty, double price);
-int   hft_rithmic_adapter_cancel_order(void* handle, const char* order_id);
-int   hft_rithmic_adapter_try_pop_event(void* handle, MarketDataEvent* out_event);
-int   hft_rithmic_adapter_try_pop_order_event(void* handle, OrderEvent* out_event);
-const char* hft_rithmic_adapter_last_error(void* handle);
-const char* hft_rithmic_adapter_get_env_key(void* handle);
-const char* hft_rithmic_adapter_get_account_id(void* handle);
-const char* hft_rithmic_adapter_get_trade_route(void* handle);
-int         hft_rithmic_adapter_is_connected(void* handle);
+HFT_RITHMIC_C_API void* hft_rithmic_adapter_create(const ConnectionConfig* cfg);
+HFT_RITHMIC_C_API int   hft_rithmic_adapter_initialize(void* handle);
+HFT_RITHMIC_C_API int   hft_rithmic_adapter_connect(void* handle);
+HFT_RITHMIC_C_API void  hft_rithmic_adapter_disconnect(void* handle);
+HFT_RITHMIC_C_API void  hft_rithmic_adapter_destroy(void* handle);
+HFT_RITHMIC_C_API int   hft_rithmic_adapter_subscribe_mbo(void* handle, const char* symbol, const char* exchange);
+HFT_RITHMIC_C_API int   hft_rithmic_adapter_send_order(void* handle, const char* symbol, char side, int32_t qty, double price);
+HFT_RITHMIC_C_API int   hft_rithmic_adapter_send_order_with_user_msg(void* handle, const char* symbol, char side, int32_t qty, double price, const char* user_msg);
+HFT_RITHMIC_C_API int   hft_rithmic_adapter_cancel_order(void* handle, const char* order_id);
+HFT_RITHMIC_C_API int   hft_rithmic_adapter_try_pop_event(void* handle, MarketDataEvent* out_event);
+HFT_RITHMIC_C_API int   hft_rithmic_adapter_try_pop_order_event(void* handle, OrderEvent* out_event);
+HFT_RITHMIC_C_API const char* hft_rithmic_adapter_last_error(void* handle);
+HFT_RITHMIC_C_API const char* hft_rithmic_adapter_get_env_key(void* handle);
+HFT_RITHMIC_C_API const char* hft_rithmic_adapter_get_account_id(void* handle);
+HFT_RITHMIC_C_API const char* hft_rithmic_adapter_get_trade_route(void* handle);
+HFT_RITHMIC_C_API int         hft_rithmic_adapter_is_connected(void* handle);
 
 #ifdef __cplusplus
 }
 #endif
+
+#undef HFT_RITHMIC_C_API
 
 #endif

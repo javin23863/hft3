@@ -1,24 +1,24 @@
-# Rithmic trial lane — CHI404 colo only for live capture (BLUEPRINT §4).
-# Workstation: use connector fixture + pytest only.
+# Direct Rithmic Test lane using R|API Plus.
+# Credentials are supplied at runtime with RITHMIC_USERNAME / RITHMIC_PASSWORD.
 enabled: false
 # connector options:
-#   fixture     — offline synthetic data (default, safe for workstation)
-#   rtrader     — R|Trader Wine bridge (old, CHI404 only)
-#   rithmic_api — R|API Plus direct ctypes bridge (CHI404 only, BLUEPRINT §4)
-connector: fixture
+#   rithmic_api — R|API Plus direct ctypes bridge for Rithmic Test
+#   fixture     — offline CI data
+#   rtrader     — legacy R|Trader Wine bridge
+connector: rithmic_api
 # When connector is rithmic_api, which API config to load:
 #   packages/data_system/config/rithmic_api_test.yaml  (Rithmic Test/Sandbox Orangeburg)
 # If empty, defaults to rithmic_api_test.yaml
-rithmic_api_config: ""
+rithmic_api_config: packages/data_system/config/rithmic_api_test.yaml
 symbol: MES
 exchange: CME
 contract: ""
-capture_environment: paper_or_trial
+capture_environment: rithmic_test
 source: rithmic_trial
 
 rithmic:
-  environment: "Rithmic Paper Trading"
-  gateway: "Chicago"
+  environment: "Rithmic Test"
+  gateway: "Orangeburg"
 
 paths:
   repo_root: .

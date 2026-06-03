@@ -205,32 +205,40 @@ int main(int argc, char** argv) {
     }
 
     // --- Phase 4: Send order ---
-    auto t_ord = std::chrono::steady_clock::now();
-    bool order_sent = adapter.send_order(symbol, 'B', 1, 0.0);
-    if (!order_sent) {
-        std::fprintf(stderr, "WARN [%s] send_order rejected\n", env_name);
+    const char* order_price_raw = get_env_or("RITHMIC_PROBE_ORDER_PRICE", "");
+    double order_price = order_price_raw[0] ? std::atof(order_price_raw) : 0.0;
+    if (order_price <= 0.0) {
+        std::printf("WARN [%s] skipping send_order; set RITHMIC_PROBE_ORDER_PRICE"
+                    " to a positive test limit price to exercise order ack\n",
+                    env_name);
     } else {
-        auto t_poll = std::chrono::steady_clock::now();
-        bool got_ack = false;
-        while (std::chrono::duration_cast<std::chrono::milliseconds>(
-                   std::chrono::steady_clock::now() - t_poll).count() < 10000) {
-            hft::OrderEvent ev;
-            if (order_queue.pop(ev)) {
-                long long submit_ack_us = std::chrono::duration_cast<std::chrono::microseconds>(
-                    std::chrono::steady_clock::now() - t_ord).count();
-                std::printf("OK [%s] order_event type=%c id=%llu side=%c price=%.2f"
-                            "  (submit=ack=%.3f ms)\n",
-                            env_name, ev.event_type,
-                            (unsigned long long)ev.order_id,
-                            ev.side, ev.price,
-                            submit_ack_us / 1000.0);
-                got_ack = true;
-                break;
+        auto t_ord = std::chrono::steady_clock::now();
+        bool order_sent = adapter.send_order(symbol, 'B', 1, order_price);
+        if (!order_sent) {
+            std::fprintf(stderr, "WARN [%s] send_order rejected\n", env_name);
+        } else {
+            auto t_poll = std::chrono::steady_clock::now();
+            bool got_ack = false;
+            while (std::chrono::duration_cast<std::chrono::milliseconds>(
+                       std::chrono::steady_clock::now() - t_poll).count() < 10000) {
+                hft::OrderEvent ev;
+                if (order_queue.pop(ev)) {
+                    long long submit_ack_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                        std::chrono::steady_clock::now() - t_ord).count();
+                    std::printf("OK [%s] order_event type=%c id=%llu side=%c price=%.2f"
+                                "  (submit=ack=%.3f ms)\n",
+                                env_name, ev.event_type,
+                                (unsigned long long)ev.order_id,
+                                ev.side, ev.price,
+                                submit_ack_us / 1000.0);
+                    got_ack = true;
+                    break;
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
-        if (!got_ack) {
-            std::fprintf(stderr, "WARN [%s] no order ack within 10s\n", env_name);
+            if (!got_ack) {
+                std::fprintf(stderr, "WARN [%s] no order ack within 10s\n", env_name);
+            }
         }
     }
 

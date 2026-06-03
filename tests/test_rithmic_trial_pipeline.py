@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -21,7 +22,7 @@ from data_system.rithmic_trial.config import load_config
 from data_system.rithmic_trial.connector.fixture_connector import FixtureConnector
 from data_system.rithmic_trial.convert.hftbacktest_converter import convert_to_npz
 from data_system.rithmic_trial.normalize.mapper import normalize_file
-from data_system.rithmic_trial.pipeline import cmd_process
+from data_system.rithmic_trial.pipeline import cmd_order_latency_burst, cmd_process
 from data_system.rithmic_trial.reports.emit_reports import build_latency_profile, emit_all_reports
 from data_system.rithmic_trial.validate.book_reconstruction import reconstruct_book
 from data_system.rithmic_trial.validate.quality_checks import validate_events
@@ -139,3 +140,112 @@ def test_replay_sample_smoke(trial_cfg, tmp_path: Path) -> None:
     assert r.returncode == 0, r.stderr + r.stdout
     payload = json.loads(r.stdout.strip())
     assert "error" not in payload
+
+
+def test_order_latency_burst_writes_rithmic_test_summary(
+    trial_cfg,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = _FakeOrderLatencyConnector()
+    monkeypatch.setattr("data_system.rithmic_trial.pipeline.build_connector", lambda cfg: fake)
+    args = type(
+        "Args",
+        (),
+        {
+            "config": str(trial_cfg.repo_root / "rithmic_trial.yaml"),
+            "symbol": "MES",
+            "exchange": "CME",
+            "side": "BUY",
+            "qty": 1,
+            "price": 5000.0,
+            "count": 1,
+            "ack_timeout_sec": 1.0,
+            "interval_ms": 0.0,
+            "run_id": "unit-test-run",
+            "subscribe_md": False,
+            "cancel_after_ack": True,
+        },
+    )()
+
+    assert cmd_order_latency_burst(args) == 0
+    date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    summary_path = trial_cfg.reports_dir(date) / "rithmic_test_order_summary_unit-test-run.json"
+    assert summary_path.exists()
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary["status"] == "pass"
+    assert summary["system"] == "Rithmic Test"
+    assert summary["gateway"] == "Orangeburg"
+    assert summary["ack_count"] == 1
+    assert summary["cancel_submit_count"] == 1
+    assert summary["cancel_broker_order_ids"] == ["12345"]
+    assert summary["cancel_count"] == 1
+    assert "paper" not in summary_path.name
+
+
+class _FakeOrderLatencyConnector:
+    def __init__(self) -> None:
+        self._events: list[dict[str, object]] = []
+        self._seq = 0
+
+    def connect(self) -> None:
+        return None
+
+    def subscribe_mbo(self, symbol: str, exchange: str) -> None:
+        return None
+
+    def send_order(self, symbol: str, side: str, qty: int, price: float) -> str:
+        self._seq += 1
+        client_order_id = f"hft3-fake-{self._seq}"
+        base_ns = time.perf_counter_ns()
+        wall_ns = time.time_ns()
+        self._events.extend(
+            [
+                {
+                    "event_type": "order_submit",
+                    "order_id": client_order_id,
+                    "client_order_id": client_order_id,
+                    "symbol": symbol,
+                    "exchange": "CME",
+                    "side": side,
+                    "qty": qty,
+                    "price": price,
+                    "local_monotonic_receive_ns": base_ns,
+                    "local_receive_timestamp_ns": wall_ns,
+                },
+                {
+                    "event_type": "order_ack",
+                    "order_id": client_order_id,
+                    "client_order_id": client_order_id,
+                    "broker_order_id": "12345",
+                    "symbol": symbol,
+                    "exchange": "CME",
+                    "side": side,
+                    "price": price,
+                    "local_monotonic_receive_ns": base_ns + 250_000,
+                    "local_receive_timestamp_ns": wall_ns + 250_000,
+                },
+            ]
+        )
+        return client_order_id
+
+    def poll_events(self) -> list[dict[str, object]]:
+        events, self._events = self._events, []
+        return events
+
+    def cancel_order(self, order_id: str) -> None:
+        base_ns = time.perf_counter_ns()
+        self._events.append(
+            {
+                "event_type": "cancel",
+                "order_id": f"hft3-fake-{self._seq}",
+                "client_order_id": f"hft3-fake-{self._seq}",
+                "broker_order_id": order_id,
+                "symbol": "MES",
+                "exchange": "CME",
+                "local_monotonic_receive_ns": base_ns,
+                "local_receive_timestamp_ns": time.time_ns(),
+            }
+        )
+
+    def close(self) -> None:
+        return None

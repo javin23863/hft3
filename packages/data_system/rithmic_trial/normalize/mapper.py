@@ -40,10 +40,14 @@ def normalize_event(raw: dict[str, Any], cfg: TrialConfig) -> dict[str, Any]:
         "local_write_timestamp_ns": int(raw.get("local_write_timestamp_ns") or now),
     }
     for key in (
+        "local_monotonic_receive_ns",
         "price",
         "size",
+        "qty",
         "side",
         "order_id",
+        "client_order_id",
+        "broker_order_id",
         "fill_id",
         "sequence",
         "bid_price",

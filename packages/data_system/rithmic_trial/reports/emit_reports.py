@@ -15,6 +15,11 @@ def _local_mono_ns(ev: dict[str, Any]) -> int | None:
     return int(v) if v is not None else None
 
 
+def _local_wall_ns(ev: dict[str, Any]) -> int | None:
+    v = ev.get("local_receive_timestamp_ns")
+    return int(v) if v is not None else None
+
+
 def build_latency_profile(events: list[dict[str, Any]]) -> dict[str, Any]:
     feed_latencies_us: list[float] = []
     order_rtts_us: list[float] = []
@@ -24,9 +29,10 @@ def build_latency_profile(events: list[dict[str, Any]]) -> dict[str, Any]:
     for ev in events:
         et = ev.get("event_type")
         local_ts = _local_mono_ns(ev)
+        local_wall_ts = _local_wall_ns(ev)
         exch_ts = ev.get("exchange_timestamp_ns")
-        if local_ts is not None and exch_ts is not None:
-            feed_latencies_us.append((int(local_ts) - int(exch_ts)) / 1000.0)
+        if local_wall_ts is not None and exch_ts is not None:
+            feed_latencies_us.append((int(local_wall_ts) - int(exch_ts)) / 1000.0)
         oid = ev.get("order_id")
         if not oid:
             continue
@@ -81,6 +87,17 @@ def build_paper_order_summary(events: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def build_rithmic_test_order_summary(events: list[dict[str, Any]]) -> dict[str, Any]:
+    profile = build_latency_profile(events)
+    orders = profile.get("order_submit_to_ack_us") or {}
+    return {
+        "paired_count": int(orders.get("count") or 0),
+        "order_submit_to_ack_us": orders,
+        "dimensions": profile.get("dimensions"),
+        "latency_profile_status": profile.get("status"),
+    }
+
+
 def _write(path: Path, payload: dict[str, Any]) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
@@ -101,7 +118,18 @@ def emit_all_reports(
 ) -> dict[str, str]:
     reports_dir.mkdir(parents=True, exist_ok=True)
     latency = build_latency_profile(events)
-    paper_summary = build_paper_order_summary(events)
+    capture_env = str(manifest.get("capture_environment") or "").lower()
+    use_legacy_paper_summary = "paper" in capture_env or waterfall_records_path is not None
+    order_summary_name = (
+        "paper_order_summary.json"
+        if use_legacy_paper_summary
+        else "rithmic_test_order_summary.json"
+    )
+    order_summary = (
+        build_paper_order_summary(events)
+        if use_legacy_paper_summary
+        else build_rithmic_test_order_summary(events)
+    )
 
     paths = {
         "data_capture_report.json": _write(
@@ -141,10 +169,7 @@ def emit_all_reports(
                 **latency,
             },
         ),
-        "paper_order_summary.json": _write(
-            reports_dir / "paper_order_summary.json",
-            paper_summary,
-        ),
+        order_summary_name: _write(reports_dir / order_summary_name, order_summary),
         "hftbacktest_conversion_report.json": _write(
             reports_dir / "hftbacktest_conversion_report.json",
             conversion,

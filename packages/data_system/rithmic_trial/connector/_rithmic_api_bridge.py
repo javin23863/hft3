@@ -44,8 +44,9 @@ def _repo_root() -> Path:
 
 _BUILD_HINT = (
     "Build the C++ gateway: "
-    "`cmake -S . -B build -G 'Unix Makefiles' && cmake --build build` "
-    "(run on CHI404 Linux; Windows cannot build the .so without MSVC)"
+    "Linux/CHI404: `cmake -S . -B build -G 'Unix Makefiles' && cmake --build build`; "
+    "Windows/MSVC: `cmake -S . -B build-msvc -G Ninja -DCMAKE_BUILD_TYPE=Release "
+    "&& cmake --build build-msvc --target rithmic_gateway_shared`"
 )
 
 
@@ -56,8 +57,12 @@ def _candidate_so_paths() -> list[Path]:
     if env:
         paths.append(Path(env))
         return paths
-    paths.append(repo / "rithmic_gateway_shared.so")
-    paths.append(repo / "build" / "rithmic_gateway" / "librithmic_gateway_shared.so")
+    if os.name == "nt":
+        paths.append(repo / "build-msvc" / "rithmic_gateway" / "rithmic_gateway_shared.dll")
+        paths.append(repo / "build" / "rithmic_gateway" / "rithmic_gateway_shared.dll")
+    else:
+        paths.append(repo / "rithmic_gateway_shared.so")
+        paths.append(repo / "build" / "rithmic_gateway" / "librithmic_gateway_shared.so")
     return paths
 
 
@@ -68,7 +73,7 @@ def _load_library() -> CDLL:
             return CDLL(str(p), mode=RTLD_LOCAL)
         tried.append(p)
     raise RithmicApiLibraryNotFoundError(
-        "librithmic_gateway_shared.so not found. Tried: "
+        "Rithmic gateway shared library not found. Tried: "
         + ", ".join(str(p) for p in tried)
         + ". " + _BUILD_HINT
     )
@@ -137,6 +142,8 @@ class OrderEvent:
     filled_size: int = 0
     total_filled: int = 0
     total_unfilled: int = 0
+    user_msg: str = ""
+    tag: str = ""
 
     @classmethod
     def from_c(cls, ev: "COrderEvent") -> "OrderEvent":
@@ -147,6 +154,13 @@ class OrderEvent:
                 return chr(value)
             if isinstance(value, (bytes, bytearray)):
                 return value.decode("utf-8", errors="replace") if value else ""
+            return str(value)
+
+        def _decode_string(value) -> str:
+            if not value:
+                return ""
+            if isinstance(value, (bytes, bytearray)):
+                return bytes(value).split(b"\0", 1)[0].decode("utf-8", errors="replace")
             return str(value)
 
         return cls(
@@ -160,6 +174,8 @@ class OrderEvent:
             filled_size=int(ev.filled_size),
             total_filled=int(ev.total_filled),
             total_unfilled=int(ev.total_unfilled),
+            user_msg=_decode_string(ev.user_msg),
+            tag=_decode_string(ev.tag),
         )
 
     def to_dict(self) -> dict:
@@ -174,6 +190,8 @@ class OrderEvent:
             "filled_size": self.filled_size,
             "total_filled": self.total_filled,
             "total_unfilled": self.total_unfilled,
+            "user_msg": self.user_msg,
+            "tag": self.tag,
         }
 
 
@@ -189,6 +207,8 @@ class COrderEvent(Structure):
         ("filled_size", c_int32),
         ("total_filled", c_int32),
         ("total_unfilled", c_int32),
+        ("user_msg", ctypes.c_char * 64),
+        ("tag", ctypes.c_char * 64),
     ]
 
 
@@ -338,6 +358,23 @@ class RithmicApiBridge:
         ]
         L.hft_rithmic_adapter_send_order.restype = c_int
 
+        self._send_order_with_user_msg = None
+        try:
+            send_with_msg = L.hft_rithmic_adapter_send_order_with_user_msg
+        except AttributeError:
+            send_with_msg = None
+        if send_with_msg is not None:
+            send_with_msg.argtypes = [
+                c_void_p,
+                c_char_p,
+                ctypes.c_char,
+                c_int32,
+                c_double,
+                c_char_p,
+            ]
+            send_with_msg.restype = c_int
+            self._send_order_with_user_msg = send_with_msg
+
         L.hft_rithmic_adapter_cancel_order.argtypes = [c_void_p, c_char_p]
         L.hft_rithmic_adapter_cancel_order.restype = c_int
 
@@ -409,17 +446,34 @@ class RithmicApiBridge:
         )
         self._raise_if_nonzero(rc)
 
-    def send_order(self, symbol: str, side: str, qty: int, price: float) -> None:
+    def send_order(
+        self,
+        symbol: str,
+        side: str,
+        qty: int,
+        price: float,
+        user_msg: str | None = None,
+    ) -> None:
         h = self._require_handle()
         if not isinstance(side, str) or len(side) != 1:
             raise ValueError(f"side must be a single character; got {side!r}")
-        rc = self._lib.hft_rithmic_adapter_send_order(
-            h,
-            symbol.encode("utf-8"),
-            ctypes.c_char(side.encode("utf-8")),
-            c_int32(int(qty)),
-            c_double(float(price)),
-        )
+        if user_msg and self._send_order_with_user_msg is not None:
+            rc = self._send_order_with_user_msg(
+                h,
+                symbol.encode("utf-8"),
+                ctypes.c_char(side.encode("utf-8")),
+                c_int32(int(qty)),
+                c_double(float(price)),
+                user_msg.encode("utf-8"),
+            )
+        else:
+            rc = self._lib.hft_rithmic_adapter_send_order(
+                h,
+                symbol.encode("utf-8"),
+                ctypes.c_char(side.encode("utf-8")),
+                c_int32(int(qty)),
+                c_double(float(price)),
+            )
         self._raise_if_nonzero(rc)
 
     def cancel_order(self, order_id: str) -> None:

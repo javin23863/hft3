@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 _REPO = Path(__file__).resolve().parents[3]
@@ -13,10 +14,10 @@ if str(_REPO) not in sys.path:
 
 from data_system.rithmic_trial.capture.live_capture import LiveCapture
 from data_system.rithmic_trial.config import load_config
-from data_system.rithmic_trial.connector import build_connector
+from data_system.rithmic_trial.connector import RithmicApiError, build_connector
 from data_system.rithmic_trial.convert.hftbacktest_converter import convert_to_npz
 from data_system.rithmic_trial.normalize.mapper import normalize_file
-from data_system.rithmic_trial.reports.emit_reports import emit_all_reports
+from data_system.rithmic_trial.reports.emit_reports import build_latency_profile, emit_all_reports
 from data_system.rithmic_trial.schema.normalized_v1 import SCHEMA_VERSION
 from data_system.rithmic_trial.validate.book_reconstruction import reconstruct_book
 from data_system.rithmic_trial.validate.quality_checks import validate_events
@@ -28,10 +29,10 @@ def cmd_capture(args: argparse.Namespace) -> int:
     if not cfg.enabled and not args.force:
         print("Rithmic trial lane disabled. Set enabled: true or RITHMIC_TRIAL_ENABLED=1")
         return 1
-    if is_windows() and cfg.connector.lower() != "fixture":
+    if is_windows() and cfg.connector.lower() in ("rtrader", "rtrader_bridge", "r-trader"):
         print(
-            "ERROR: Live Rithmic capture runs on CHI404 only (BLUEPRINT §4). "
-            "Use connector: fixture for local tests, or SSH to CHI404 for live capture.",
+            "ERROR: Legacy R|Trader capture runs on CHI404 only. "
+            "Use connector: rithmic_api for direct Rithmic Test capture on this machine.",
             file=sys.stderr,
         )
         return 1
@@ -59,6 +60,163 @@ def cmd_capture(args: argparse.Namespace) -> int:
     print(f"Captured {total} events -> {capture.raw_path}")
     print(f"Manifest -> {manifest_path}")
     return 0 if total > 0 else 1
+
+
+def _utc_run_id() -> str:
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def _utc_date() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def _matches_client_order(ev: dict[str, object], client_order_id: str) -> bool:
+    values = (
+        ev.get("client_order_id"),
+        ev.get("order_id"),
+        ev.get("user_msg"),
+        ev.get("tag"),
+    )
+    return any(str(v) == client_order_id for v in values if v not in (None, ""))
+
+
+def cmd_order_latency_burst(args: argparse.Namespace) -> int:
+    cfg = load_config(args.config)
+    connector_name = cfg.connector.lower()
+    if connector_name not in ("rithmic_api", "rithmicapi", "api"):
+        print(
+            "ERROR: order-latency-burst requires connector: rithmic_api "
+            "against Rithmic Test.",
+            file=sys.stderr,
+        )
+        return 2
+    if args.price is None or args.price <= 0:
+        print("ERROR: --price must be a positive limit price before any order is sent.", file=sys.stderr)
+        return 2
+    if args.qty <= 0 or args.count <= 0:
+        print("ERROR: --qty and --count must be positive.", file=sys.stderr)
+        return 2
+
+    symbol = args.symbol or cfg.symbol
+    exchange = args.exchange or cfg.exchange
+    run_id = args.run_id or _utc_run_id()
+    raw_dir = cfg.repo_root / "runtime" / "rithmic_test_latency" / "raw" / run_id
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    events_path = raw_dir / "events.ndjson"
+    reports_dir = cfg.reports_dir(_utc_date())
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    summary_path = reports_dir / f"rithmic_test_order_summary_{run_id}.json"
+
+    connector = build_connector(cfg)
+    all_events: list[dict[str, object]] = []
+    sent_ids: list[str] = []
+    cancel_submitted_ids: list[str] = []
+
+    def record_batch(batch: list[dict[str, object]]) -> None:
+        if not batch:
+            return
+        with events_path.open("a", encoding="utf-8") as fh:
+            for ev in batch:
+                rec = dict(ev)
+                rec.setdefault("run_id", run_id)
+                rec.setdefault("symbol", symbol)
+                rec.setdefault("exchange", exchange)
+                all_events.append(rec)
+                fh.write(json.dumps(rec, sort_keys=True) + "\n")
+
+    try:
+        connector.connect()
+        if args.subscribe_md:
+            connector.subscribe_mbo(symbol, exchange)
+
+        for i in range(args.count):
+            client_order_id = connector.send_order(symbol, args.side, args.qty, args.price)
+            sent_ids.append(client_order_id)
+            deadline = time.monotonic() + args.ack_timeout_sec
+            observed_response = False
+            ack_broker_order_id = ""
+            while time.monotonic() < deadline:
+                batch = connector.poll_events()
+                record_batch(batch)
+                for ev in batch:
+                    if not _matches_client_order(ev, client_order_id):
+                        continue
+                    event_type = ev.get("event_type")
+                    if event_type == "order_ack":
+                        ack_broker_order_id = str(ev.get("broker_order_id") or "")
+                    if event_type in ("order_ack", "reject", "order_failure"):
+                        observed_response = True
+                        break
+                if observed_response:
+                    break
+                time.sleep(0.01)
+            if args.cancel_after_ack and ack_broker_order_id:
+                connector.cancel_order(ack_broker_order_id)
+                cancel_submitted_ids.append(ack_broker_order_id)
+                cancel_deadline = time.monotonic() + args.ack_timeout_sec
+                while time.monotonic() < cancel_deadline:
+                    batch = connector.poll_events()
+                    record_batch(batch)
+                    if any(
+                        ev.get("event_type") == "cancel"
+                        and (
+                            _matches_client_order(ev, client_order_id)
+                            or str(ev.get("broker_order_id") or "") == ack_broker_order_id
+                        )
+                        for ev in batch
+                    ):
+                        break
+                    time.sleep(0.01)
+            if i + 1 < args.count and args.interval_ms > 0:
+                time.sleep(args.interval_ms / 1000.0)
+
+        drain_deadline = time.monotonic() + 1.0
+        while time.monotonic() < drain_deadline:
+            batch = connector.poll_events()
+            record_batch(batch)
+            if not batch:
+                break
+            time.sleep(0.01)
+    except RithmicApiError as exc:
+        print(f"ERROR: {exc.message}", file=sys.stderr)
+        return 1
+    finally:
+        connector.close()
+
+    profile = build_latency_profile(all_events)
+    ack_count = sum(1 for ev in all_events if ev.get("event_type") == "order_ack")
+    reject_count = sum(1 for ev in all_events if ev.get("event_type") == "reject")
+    failure_count = sum(1 for ev in all_events if ev.get("event_type") == "order_failure")
+    cancel_count = sum(1 for ev in all_events if ev.get("event_type") == "cancel")
+    status = "pass" if ack_count >= args.count else ("warn" if ack_count or reject_count or failure_count else "fail")
+    summary = {
+        "status": status,
+        "run_id": run_id,
+        "system": cfg.rithmic.get("environment", "Rithmic Test"),
+        "gateway": cfg.rithmic.get("gateway", "Orangeburg"),
+        "connector": cfg.connector,
+        "symbol": symbol,
+        "exchange": exchange,
+        "side": args.side,
+        "qty": args.qty,
+        "limit_price": args.price,
+        "orders_requested": args.count,
+        "client_order_ids": sent_ids,
+        "ack_count": ack_count,
+        "reject_count": reject_count,
+        "failure_count": failure_count,
+        "cancel_after_ack": args.cancel_after_ack,
+        "cancel_submit_count": len(cancel_submitted_ids),
+        "cancel_broker_order_ids": cancel_submitted_ids,
+        "cancel_count": cancel_count,
+        "raw_events": str(events_path),
+        "latency_profile": profile,
+    }
+    summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    print(f"Raw events -> {events_path}")
+    print(f"Rithmic Test order latency summary -> {summary_path}")
+    print(json.dumps(summary, indent=2))
+    return 0 if status in ("pass", "warn") else 1
 
 
 def cmd_process(args: argparse.Namespace) -> int:
@@ -196,7 +354,7 @@ def main() -> int:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     def _add_config(p: argparse.ArgumentParser) -> None:
-        p.add_argument("--config", default="data_system/config/rithmic_trial.yaml")
+        p.add_argument("--config", default="packages/data_system/config/rithmic_trial.yaml")
 
     p_cap = sub.add_parser("capture")
     _add_config(p_cap)
@@ -268,6 +426,25 @@ def main() -> int:
     p_un.add_argument("--symbol", default=None)
     p_un.add_argument("--no-start-rtrader", action="store_true")
     p_un.set_defaults(func=cmd_run_unattended)
+
+    p_ol = sub.add_parser(
+        "order-latency-burst",
+        help="Send explicit Rithmic Test limit orders and measure submit-to-ack latency",
+    )
+    _add_config(p_ol)
+    p_ol.add_argument("--symbol", default=None)
+    p_ol.add_argument("--exchange", default=None)
+    p_ol.add_argument("--side", choices=("BUY", "SELL"), default="BUY")
+    p_ol.add_argument("--qty", type=int, default=1)
+    p_ol.add_argument("--price", type=float, required=True)
+    p_ol.add_argument("--count", type=int, default=1)
+    p_ol.add_argument("--ack-timeout-sec", type=float, default=15.0)
+    p_ol.add_argument("--interval-ms", type=float, default=250.0)
+    p_ol.add_argument("--run-id", default=None)
+    p_ol.add_argument("--subscribe-md", action="store_true")
+    p_ol.add_argument("--no-cancel-after-ack", dest="cancel_after_ack", action="store_false")
+    p_ol.set_defaults(cancel_after_ack=True)
+    p_ol.set_defaults(func=cmd_order_latency_burst)
 
     p_pl = sub.add_parser(
         "paper-latency-daemon",

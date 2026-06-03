@@ -41,6 +41,7 @@ htmlcov/
 
 # C++ / Build
 build/
+build-msvc/
 CMakeCache.txt
 CMakeFiles/
 Makefile
@@ -68,6 +69,7 @@ data/replay/hftbacktest/rithmic_trial/**
 reports/rithmic_trial/**
 !reports/rithmic_trial/.gitkeep
 logs/rithmic_trial/**
+runtime/rithmic_latency_probe.log*
 data/options/**
 !data/options/.gitkeep
 data/equities/**

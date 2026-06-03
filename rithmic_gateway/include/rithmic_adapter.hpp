@@ -31,6 +31,8 @@ struct OrderEvent {
     int32_t filled_size;
     int32_t total_filled;
     int32_t total_unfilled;
+    char user_msg[64];
+    char tag[64];
 };
 
 struct ConnectionConfig {
@@ -66,7 +68,8 @@ public:
     void disconnect();
 
     bool subscribe_mbo(const std::string& symbol, const std::string& exchange = "CME");
-    bool send_order(const std::string& symbol, char side, int32_t qty, double price);
+    bool send_order(const std::string& symbol, char side, int32_t qty, double price,
+                    const std::string& user_msg = "");
     bool cancel_order(const std::string& order_id);
 
     bool has_account() const { return account_ready_.load(); }
@@ -103,6 +106,8 @@ private:
     std::condition_variable account_cv_;
     std::mutex trade_route_mutex_;
     std::condition_variable trade_route_cv_;
+    std::mutex price_incr_mutex_;
+    std::condition_variable price_incr_cv_;
     std::mutex env_mutex_;
     std::condition_variable env_cv_;
     std::condition_variable env_list_cv_;
@@ -119,6 +124,8 @@ private:
     std::atomic<bool> env_list_ready_{false};
     std::atomic<bool> env_ready_{false};
     std::atomic<bool> agreement_list_ready_{false};
+    std::atomic<int> unaccepted_mandatory_agreements_{0};
+    std::atomic<bool> price_incr_ready_{false};
     std::vector<std::string> env_storage_;
     std::vector<char*> env_strings_;
 

@@ -145,12 +145,17 @@ int hft_rithmic_adapter_subscribe_mbo(void* handle, const char* symbol, const ch
 }
 
 int hft_rithmic_adapter_send_order(void* handle, const char* symbol, char side, int32_t qty, double price) {
+    return hft_rithmic_adapter_send_order_with_user_msg(handle, symbol, side, qty, price, nullptr);
+}
+
+int hft_rithmic_adapter_send_order_with_user_msg(void* handle, const char* symbol, char side, int32_t qty, double price, const char* user_msg) {
     AdapterEntry* e = as_entry(handle);
     if (!e || !e->adapter) { return 1; }
     if (!symbol) { set_error(e, "symbol is null"); return 4; }
     try {
         std::string sym(symbol);
-        if (!e->adapter->send_order(sym, side, qty, price)) {
+        std::string msg = user_msg ? std::string(user_msg) : std::string();
+        if (!e->adapter->send_order(sym, side, qty, price, msg)) {
             set_error(e, "send_order() failed for " + sym);
             return 2;
         }
@@ -211,6 +216,8 @@ int hft_rithmic_adapter_try_pop_order_event(void* handle, OrderEvent* out_event)
     out_event->filled_size   = evt.filled_size;
     out_event->total_filled  = evt.total_filled;
     out_event->total_unfilled = evt.total_unfilled;
+    std::memcpy(out_event->user_msg, evt.user_msg, sizeof(out_event->user_msg));
+    std::memcpy(out_event->tag, evt.tag, sizeof(out_event->tag));
     return 0;
 }
 

@@ -1,4 +1,9 @@
 cmake_minimum_required(VERSION 3.16)
+
+if(POLICY CMP0091)
+    cmake_policy(SET CMP0091 NEW)
+endif()
+
 project(hft3 CXX)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -50,9 +55,7 @@ add_executable(hft_research_sim
 )
 target_link_libraries(hft_research_sim PRIVATE hft_features hft_risk hft_decision hft_rithmic_gateway)
 
-add_executable(hft_rithmic_latency_probe
-    scripts/latency_probe/rithmic_latency_probe.cpp
-)
+add_custom_target(hft_rithmic_latency_probe DEPENDS rithmic_latency_probe)
 
 add_executable(hft_feature_golden
     tools/feature_golden_main.cpp

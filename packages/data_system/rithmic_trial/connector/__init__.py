@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from ..config import TrialConfig
@@ -22,5 +23,10 @@ def build_connector(cfg: TrialConfig) -> ConnectorInterface:
         return RTraderBridgeConnector(cfg)
     if name in ("rithmic_api", "rithmicapi", "api"):
         config_path = getattr(cfg, "rithmic_api_config", None)
+        if config_path:
+            path = Path(config_path)
+            if not path.is_absolute():
+                path = cfg.repo_root / path
+            return RithmicApiConnector(config_path=path)
         return RithmicApiConnector(config_path=config_path) if config_path else RithmicApiConnector()
     raise ValueError(f"Unknown connector: {cfg.connector}")

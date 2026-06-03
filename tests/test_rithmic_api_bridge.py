@@ -257,6 +257,8 @@ def test_order_event_dataclass_fields() -> None:
         filled_size=0,
         total_filled=0,
         total_unfilled=1,
+        user_msg="hft3-1",
+        tag="hft3-1",
     )
     assert ev.timestamp_ns == 1234
     assert ev.order_id == 42
@@ -268,6 +270,8 @@ def test_order_event_dataclass_fields() -> None:
     assert ev.filled_size == 0
     assert ev.total_filled == 0
     assert ev.total_unfilled == 1
+    assert ev.user_msg == "hft3-1"
+    assert ev.tag == "hft3-1"
     d = ev.to_dict()
     assert d == {
         "timestamp_ns": 1234,
@@ -280,6 +284,8 @@ def test_order_event_dataclass_fields() -> None:
         "filled_size": 0,
         "total_filled": 0,
         "total_unfilled": 1,
+        "user_msg": "hft3-1",
+        "tag": "hft3-1",
     }
 
 
@@ -295,6 +301,8 @@ def test_order_event_from_c_roundtrip() -> None:
     c_ev.filled_size = 2
     c_ev.total_filled = 2
     c_ev.total_unfilled = 0
+    c_ev.user_msg = b"hft3-rt-1"
+    c_ev.tag = b"hft3-tag-1"
     py = OrderEvent.from_c(c_ev)
     assert py.timestamp_ns == 9999
     assert py.order_id == 7
@@ -306,6 +314,8 @@ def test_order_event_from_c_roundtrip() -> None:
     assert py.filled_size == 2
     assert py.total_filled == 2
     assert py.total_unfilled == 0
+    assert py.user_msg == "hft3-rt-1"
+    assert py.tag == "hft3-tag-1"
 
 
 def test_connector_poll_order_events_emits_empty_when_no_bridge() -> None:
@@ -333,19 +343,25 @@ def test_connector_send_order_queues_synthetic_submit() -> None:
     connector._connected = True
     connector._bridge = _FakeBridge()
 
-    connector.send_order("MES", "BUY", 1, 5000.0)
-    connector.send_order("MES", "SELL", 2, 5001.0)
+    id1 = connector.send_order("MES", "BUY", 1, 5000.0)
+    id2 = connector.send_order("MES", "SELL", 2, 5001.0)
 
     events = connector.poll_order_events()
     assert len(events) == 2
     assert events[0]["event_type"] == "order_submit"
     assert events[0]["symbol"] == "MES"
+    assert events[0]["exchange"] == "CME"
     assert events[0]["side"] == "BUY"
     assert events[0]["qty"] == 1
+    assert events[0]["size"] == 1
     assert events[0]["price"] == 5000.0
-    assert events[0]["order_id"] == "local-1"
-    assert events[1]["order_id"] == "local-2"
+    assert events[0]["order_id"] == id1
+    assert events[0]["client_order_id"] == id1
+    assert events[0]["local_monotonic_receive_ns"] > 0
+    assert events[1]["order_id"] == id2
     assert events[1]["side"] == "SELL"
+    assert connector._bridge.sends[0]["user_msg"] == id1
+    assert connector._bridge.sends[1]["user_msg"] == id2
 
     assert connector.poll_order_events() == []
     connector.close()
@@ -362,21 +378,65 @@ def test_connector_poll_order_events_adapts_bridge_events() -> None:
     connector = RithmicApiConnector(config_path=cfg_path)
     connector._connected = True
     bridge = _FakeBridge(
-        OrderEvent(timestamp_ns=10, order_id=99, event_type="A", side="B", order_type="L"),
+        OrderEvent(timestamp_ns=10, order_id=99, event_type="A", side="B", order_type="L",
+                   user_msg="hft3-1"),
         OrderEvent(timestamp_ns=11, order_id=99, event_type="F", side="B", order_type="L",
-                   price=5000.0, size=1, filled_size=1, total_filled=1, total_unfilled=0),
-        OrderEvent(timestamp_ns=12, order_id=99, event_type="C", side="B", order_type="L"),
+                   price=5000.0, size=1, filled_size=1, total_filled=1, total_unfilled=0,
+                   user_msg="hft3-1"),
+        OrderEvent(timestamp_ns=12, order_id=99, event_type="C", side="B", order_type="L",
+                   user_msg="hft3-1"),
     )
     connector._bridge = bridge
 
     events = connector.poll_order_events()
     assert [e["event_type"] for e in events] == ["order_ack", "fill", "cancel"]
     assert [e["bridge_event_type"] for e in events] == ["A", "F", "C"]
-    assert events[0]["order_id"] == "99"
+    assert events[0]["order_id"] == "hft3-1"
+    assert events[0]["broker_order_id"] == "99"
+    assert events[0]["client_order_id"] == "hft3-1"
+    assert events[0]["local_monotonic_receive_ns"] > 0
     assert events[1]["price"] == 5000.0
     assert events[1]["filled_size"] == 1
-    assert events[2]["order_id"] == "99"
+    assert events[2]["order_id"] == "hft3-1"
     assert connector.poll_order_events() == []
+    connector.close()
+
+
+def test_connector_poll_events_returns_market_and_order_events() -> None:
+    cfg_path = (
+        Path(__file__).resolve().parents[1]
+        / "packages"
+        / "data_system"
+        / "config"
+        / "rithmic_api_test.yaml"
+    )
+    connector = RithmicApiConnector(config_path=cfg_path)
+    connector._connected = True
+    connector._last_symbol = "MES"
+    connector._last_exchange = "CME"
+    connector._bridge = _FakeBridge(
+        OrderEvent(timestamp_ns=22, order_id=101, event_type="A", side="B", order_type="L",
+                   user_msg="hft3-101"),
+        market_events=[
+            MarketDataEvent(
+                timestamp_ns=11,
+                order_id=0,
+                action="M",
+                side="B",
+                price=5000.0,
+                size=4,
+            )
+        ],
+    )
+
+    events = connector.poll_events()
+    assert [ev["event_type"] for ev in events] == ["quote", "order_ack"]
+    assert events[0]["symbol"] == "MES"
+    assert events[0]["exchange"] == "CME"
+    assert events[0]["bid_price"] == 5000.0
+    assert events[0]["local_monotonic_receive_ns"] > 0
+    assert events[1]["order_id"] == "hft3-101"
+    assert events[1]["exchange_timestamp_ns"] == 22
     connector.close()
 
 
@@ -420,8 +480,14 @@ def test_connector_repository_connect_point_from_repository_login_block() -> Non
 
 
 class _FakeBridge:
-    def __init__(self, *queued_order_events: OrderEvent) -> None:
+    def __init__(
+        self,
+        *queued_order_events: OrderEvent,
+        market_events: list[MarketDataEvent] | None = None,
+    ) -> None:
         self._order_events = list(queued_order_events)
+        self._events = list(market_events or [])
+        self.sends: list[dict[str, object]] = []
 
     def try_pop_order_event(self) -> OrderEvent | None:
         if not self._order_events:
@@ -429,9 +495,18 @@ class _FakeBridge:
         return self._order_events.pop(0)
 
     def try_pop_event(self):
-        return None
+        if not self._events:
+            return None
+        return self._events.pop(0)
 
-    def send_order(self, *args, **kwargs) -> None:
+    def send_order(self, symbol, side, qty, price, user_msg=None) -> None:
+        self.sends.append({
+            "symbol": symbol,
+            "side": side,
+            "qty": qty,
+            "price": price,
+            "user_msg": user_msg,
+        })
         return None
 
     def cancel_order(self, *args, **kwargs) -> None:

@@ -55,6 +55,25 @@ static uint64_t order_id_to_u64(const tsNCharcb& s) {
     return static_cast<uint64_t>(std::strtoull(tmp, &endp, 10));
 }
 
+static void copy_nchar(char* dst, size_t dst_len, const tsNCharcb& src) {
+    if (!dst || dst_len == 0) return;
+    dst[0] = '\0';
+    if (src.iDataLen <= 0 || src.pData == nullptr) return;
+    size_t n = static_cast<size_t>(src.iDataLen);
+    if (n >= dst_len) n = dst_len - 1;
+    std::memcpy(dst, src.pData, n);
+    dst[n] = '\0';
+}
+
+static std::string nchar_to_string(const tsNCharcb& src) {
+    if (src.iDataLen <= 0 || src.pData == nullptr) return std::string();
+    return std::string(src.pData, src.pData + src.iDataLen);
+}
+
+static bool contains_text(const std::string& haystack, const char* needle) {
+    return haystack.find(needle) != std::string::npos;
+}
+
 static OrderEvent make_order_event(RApi::OrderReport* pReport, char event_type) {
     OrderEvent evt{};
     evt.timestamp_ns = static_cast<uint64_t>(pReport->iSsboe) * 1000000000ULL
@@ -63,15 +82,10 @@ static OrderEvent make_order_event(RApi::OrderReport* pReport, char event_type) 
     evt.event_type = event_type;
     evt.side = buysell_to_side(pReport->sBuySellType);
     evt.order_type = entrytype_to_ordertype(pReport->sEntryType);
-    if (pReport->bPriceToFillFlag) {
-        evt.price = pReport->dPriceToFill;
-    } else if (pReport->bFillPriceFlag) {
-        evt.price = pReport->dFillPrice;
-    } else {
-        evt.price = 0.0;
-    }
     if (pReport->bFillPriceFlag) {
         evt.price = pReport->dFillPrice;
+    } else if (pReport->bPriceToFillFlag) {
+        evt.price = pReport->dPriceToFill;
     } else {
         evt.price = 0.0;
     }
@@ -79,6 +93,52 @@ static OrderEvent make_order_event(RApi::OrderReport* pReport, char event_type) 
     evt.filled_size = static_cast<int32_t>(pReport->llFillSize);
     evt.total_filled = static_cast<int32_t>(pReport->llTotalFilled);
     evt.total_unfilled = static_cast<int32_t>(pReport->llTotalUnfilled);
+    copy_nchar(evt.user_msg, sizeof(evt.user_msg), pReport->sUserMsg);
+    copy_nchar(evt.tag, sizeof(evt.tag), pReport->sTag);
+    return evt;
+}
+
+static char line_event_type(RApi::LineInfo* pInfo) {
+    std::string status = nchar_to_string(pInfo->sStatus);
+    std::string reason = nchar_to_string(pInfo->sCompletionReason);
+
+    if (pInfo->iRpCode != 0) {
+        if (contains_text(reason, "R") || contains_text(status, "reject")) return 'R';
+        return 'X';
+    }
+    if (contains_text(reason, "FA") || contains_text(status, "fail")) return 'X';
+    if (contains_text(reason, "R") || contains_text(status, "reject")) return 'R';
+    if (pInfo->llCancelled > 0 || contains_text(status, "cancel")) return 'C';
+    if (contains_text(status, "modified")) return 'M';
+    if (pInfo->llFilled > 0 || contains_text(reason, "F") || contains_text(status, "partial")) return 'F';
+    return 'A';
+}
+
+static OrderEvent make_line_event(RApi::LineInfo* pInfo) {
+    OrderEvent evt{};
+    evt.timestamp_ns = static_cast<uint64_t>(pInfo->iSsboe) * 1000000000ULL
+                     + static_cast<uint64_t>(pInfo->iUsecs) * 1000ULL;
+    evt.order_id = order_id_to_u64(pInfo->sOrderNum);
+    evt.event_type = line_event_type(pInfo);
+    evt.side = buysell_to_side(pInfo->sBuySellType);
+    evt.order_type = entrytype_to_ordertype(pInfo->sEntryType);
+    if (pInfo->bPriceToFillFlag) {
+        evt.price = pInfo->dPriceToFill;
+    } else if (pInfo->bAvgFillPriceFlag) {
+        evt.price = pInfo->dAvgFillPrice;
+    } else {
+        evt.price = 0.0;
+    }
+    long long total_size = pInfo->llFilled + pInfo->llUnfilled;
+    if (total_size <= 0) {
+        total_size = pInfo->llQuantityToFill;
+    }
+    evt.size = static_cast<int32_t>(total_size);
+    evt.filled_size = static_cast<int32_t>(pInfo->llFilled);
+    evt.total_filled = static_cast<int32_t>(pInfo->llFilled);
+    evt.total_unfilled = static_cast<int32_t>(pInfo->llUnfilled);
+    copy_nchar(evt.user_msg, sizeof(evt.user_msg), pInfo->sUserMsg);
+    copy_nchar(evt.tag, sizeof(evt.tag), pInfo->sTag);
     return evt;
 }
 
@@ -100,7 +160,6 @@ public:
                 tsNCharcb& key = pInfo->asKeyArray[i];
                 if (key.pData && key.iDataLen > 0) {
                     std::string env_key(key.pData, static_cast<size_t>(key.iDataLen));
-                    std::cout << "[AdmCallbacks] Environment[" << i << "]: " << env_key << std::endl;
                     if (adapter_->discovered_env_key_.empty()) {
                         adapter_->discovered_env_key_ = env_key;
                     }
@@ -115,21 +174,7 @@ public:
 
     int Environment(RApi::EnvironmentInfo* pInfo, void* pContext, int* aiCode) override {
         (void)pContext;
-        if (pInfo && pInfo->asVariableArray && pInfo->sKey.pData && pInfo->sKey.iDataLen > 0) {
-            std::string key(pInfo->sKey.pData, static_cast<size_t>(pInfo->sKey.iDataLen));
-            std::cout << "[AdmCallbacks] Environment info for key='" << key << "' with "
-                      << pInfo->iArrayLen << " variables" << std::endl;
-            for (int i = 0; i < pInfo->iArrayLen; ++i) {
-                RApi::EnvironmentVariable& v = pInfo->asVariableArray[i];
-                if (!v.sName.pData || v.sName.iDataLen <= 0) continue;
-                std::string name(v.sName.pData, static_cast<size_t>(v.sName.iDataLen));
-                std::string value;
-                if (v.sValue.pData && v.sValue.iDataLen > 0) {
-                    value.assign(v.sValue.pData, static_cast<size_t>(v.sValue.iDataLen));
-                }
-                std::cout << "  " << name << "=" << value << std::endl;
-            }
-        }
+        (void)pInfo;
         adapter_->env_ready_.store(true);
         adapter_->env_cv_.notify_all();
         *aiCode = API_OK;
@@ -211,10 +256,14 @@ public:
             os << "rp_code=" << pInfo->iRpCode
                << " bAccepted=" << (pInfo->bAccepted ? "true" : "false")
                << " count=" << pInfo->iArrayLen;
+            int unaccepted_mandatory = 0;
             if (pInfo->iArrayLen > 0 && pInfo->asAgreementInfoArray) {
                 os << "\n";
                 for (int i = 0; i < pInfo->iArrayLen; ++i) {
                     RApi::AgreementInfo* a = &pInfo->asAgreementInfoArray[i];
+                    if (!pInfo->bAccepted && a->bMandatory) {
+                        ++unaccepted_mandatory;
+                    }
                     std::string title, status, accept_status, market_data;
                     if (a->sTitle.pData && a->sTitle.iDataLen > 0)
                         title.assign(a->sTitle.pData, static_cast<size_t>(a->sTitle.iDataLen));
@@ -235,13 +284,15 @@ public:
                        << "\n";
                 }
             }
+            if (!pInfo->bAccepted) {
+                adapter_->unaccepted_mandatory_agreements_.store(unaccepted_mandatory);
+            }
         } else {
             os << "rp_code=-1 (no info)";
         }
         adapter_->last_agreement_list_text_ = os.str();
         adapter_->agreement_list_ready_.store(true);
         adapter_->agreement_cv_.notify_all();
-        std::cout << "[Callbacks] AgreementList: " << adapter_->last_agreement_list_text_ << std::endl;
         if (aiCode) *aiCode = API_OK;
         return OK;
     }
@@ -268,14 +319,21 @@ public:
     int PriceIncrUpdate(RApi::PriceIncrInfo* pInfo, void* pContext, int* aiCode) override {
         (void)pContext;
         (void)pInfo;
+        adapter_->price_incr_ready_.store(true);
+        adapter_->price_incr_cv_.notify_all();
         *aiCode = API_OK;
         return OK;
     }
 
     int LineUpdate(RApi::LineInfo* pInfo, void* pContext, int* aiCode) override {
         (void)pContext;
-        int ignored;
-        pInfo->dump(&ignored);
+        if (pInfo) {
+            OrderEvent evt = make_line_event(pInfo);
+            if (adapter_->order_queue_ && !adapter_->order_queue_->push(evt)) {
+                std::cerr << "[CRITICAL] Order Queue overrun on LineUpdate event_type="
+                          << evt.event_type << " order_id=" << evt.order_id << std::endl;
+            }
+        }
         *aiCode = API_OK;
         return OK;
     }
@@ -446,7 +504,17 @@ public:
     int LowPriceLimit(RApi::LowPriceLimitInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
     int MarketMode(RApi::MarketModeInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
     int MidPrice(RApi::MidPriceInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
-    int NotCancelledReport(RApi::OrderNotCancelledReport*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int NotCancelledReport(RApi::OrderNotCancelledReport* pReport, void* pContext, int* aiCode) override {
+        (void)pContext;
+        auto* base = static_cast<RApi::OrderReport*>(pReport);
+        OrderEvent evt = make_order_event(base, 'X');
+        if (adapter_->order_queue_ && !adapter_->order_queue_->push(evt)) {
+            std::cerr << "[CRITICAL] Order Queue overrun on NotCancelledReport order_id="
+                      << evt.order_id << std::endl;
+        }
+        *aiCode = API_OK;
+        return OK;
+    }
     int NotModifiedReport(RApi::OrderNotModifiedReport*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
     int OpenInterest(RApi::OpenInterestInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
     int OpenOrderReplay(RApi::OrderReplayInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
@@ -592,8 +660,6 @@ bool RithmicAdapter::connect() {
 
     // Step 1: Repository login — establishes the authenticated session
     if (!config_.rep_connect_point.empty()) {
-        std::cerr << "[RithmicAdapter] repo login cp=" << config_.rep_connect_point
-                  << " pw_len=" << config_.password.size() << std::endl;
         tsNCharcb envKey = make_ts("");
         tsNCharcb user = make_ts(config_.username.c_str());
         tsNCharcb pw = make_ts(config_.password.c_str());
@@ -623,7 +689,6 @@ bool RithmicAdapter::connect() {
             callbacks_ = nullptr;
             return false;
         }
-        std::cerr << "[RithmicAdapter] repo login OK" << std::endl;
 
         // Step 2: Discover available environments and their variables
         discovered_env_key_.clear();
@@ -642,7 +707,6 @@ bool RithmicAdapter::connect() {
             }
         }
         if (!discovered_env_key_.empty()) {
-            std::cerr << "[RithmicAdapter] discovered environment key: '" << discovered_env_key_ << "'" << std::endl;
             tsNCharcb envKey = make_ts(discovered_env_key_.c_str());
             int iCodeGet = 0;
             if (!pEngine->getEnvironment(&envKey, nullptr, &iCodeGet)) {
@@ -662,6 +726,7 @@ bool RithmicAdapter::connect() {
 
         // Step 2b: Discover agreements — list unaccepted agreements blocking service logins
         agreement_list_ready_.store(false);
+        unaccepted_mandatory_agreements_.store(0);
         {
             std::lock_guard<std::mutex> lk(agreement_mutex_);
             last_agreement_list_text_.clear();
@@ -677,6 +742,13 @@ bool RithmicAdapter::connect() {
                 })) {
                 std::cerr << "[RithmicAdapter] listAgreements(unaccepted) timed out" << std::endl;
             }
+        }
+        if (unaccepted_mandatory_agreements_.load() > 0) {
+            std::cerr << "[RithmicAdapter] WARNING: listAgreements(false) returned "
+                      << unaccepted_mandatory_agreements_.load()
+                      << " mandatory inactive agreements; continuing because "
+                      << "Rithmic Trader Pro Web may already allow service login."
+                      << std::endl;
         }
         int iCodeAgrAcc = 0;
         if (!pEngine->listAgreements(true, nullptr, &iCodeAgrAcc)) {
@@ -696,32 +768,26 @@ bool RithmicAdapter::connect() {
 
     // Step 3: Login to individual service endpoints (MD, TS, IH, PnL)
     RApi::LoginParams login_params;
-    // Per SDK Programmer's Guide line 643 and SampleMD.cpp lines 1604-1620:
-    // Leave sMdEnvKey/sTsEnvKey/sIhEnvKey EMPTY (use default environment from envp)
-    // unless we have a SPECIFIC need for multi-environment routing.
+    tsNCharcb login_env_key = make_ts("");
     if (!discovered_env_key_.empty()) {
-        std::cerr << "[RithmicAdapter] discovered env key '" << discovered_env_key_ << "'" << std::endl;
+        login_env_key = make_ts(discovered_env_key_.c_str());
     }
     login_params.pCallbacks = callbacks;
 
+    login_params.sMdEnvKey = login_env_key;
     login_params.sMdUser = make_ts(config_.username.c_str());
     login_params.sMdPassword = make_ts(config_.password.c_str());
     login_params.sMdCnnctPt = make_ts(config_.md_connect_point.c_str());
 
+    login_params.sTsEnvKey = login_env_key;
     login_params.sTsUser = make_ts(config_.username.c_str());
     login_params.sTsPassword = make_ts(config_.password.c_str());
     login_params.sTsCnnctPt = make_ts(config_.ts_connect_point.c_str());
     login_params.sPnlCnnctPt = make_ts(config_.pnl_connect_point.c_str());
+    login_params.sIhEnvKey = login_env_key;
     login_params.sIhUser = make_ts(config_.username.c_str());
     login_params.sIhPassword = make_ts(config_.password.c_str());
     login_params.sIhCnnctPt = make_ts(config_.ih_connect_point.c_str());
-
-    std::cerr << "[RithmicAdapterDBG] connecting user=" << config_.username
-              << " pw_len=" << config_.password.size()
-              << " md_cp=" << config_.md_connect_point
-              << " ts_cp=" << config_.ts_connect_point
-              << " pnl_cp=" << config_.pnl_connect_point
-              << " ih_cp=" << config_.ih_connect_point << std::endl;
 
     int iCode = 0;
     if (!pEngine->login(&login_params, &iCode)) {
@@ -806,7 +872,6 @@ bool RithmicAdapter::connect() {
     connected_ = true;
     logged_in_ = true;
     std::cout << "[RithmicAdapter] Connected to " << config_.environment
-              << " as " << config_.username
               << " (MD=" << config_.md_connect_point
               << ", TS=" << config_.ts_connect_point
               << ", account=" << account_id_
@@ -900,7 +965,8 @@ bool RithmicAdapter::subscribe_mbo(const std::string& symbol, const std::string&
     return true;
 }
 
-bool RithmicAdapter::send_order(const std::string& symbol, char side, int32_t qty, double price) {
+bool RithmicAdapter::send_order(const std::string& symbol, char side, int32_t qty, double price,
+                                const std::string& user_msg) {
     if (!connected_ || !engine_) return false;
 
     auto* pEngine = static_cast<RApi::REngine*>(engine_);
@@ -915,15 +981,36 @@ bool RithmicAdapter::send_order(const std::string& symbol, char side, int32_t qt
     tsNCharcb sTicker = make_ts(symbol.c_str());
     tsNCharcb sTradeRoute = make_ts(trade_route_.c_str());
 
+    price_incr_ready_.store(false);
+    int iPriceCode = 0;
+    if (!pEngine->getPriceIncrInfo(&sExchange, &sTicker, &iPriceCode)) {
+        std::cerr << "[RithmicAdapter] getPriceIncrInfo error: " << iPriceCode
+                  << " for CME/" << symbol << std::endl;
+        return false;
+    }
+    {
+        std::unique_lock<std::mutex> lk(price_incr_mutex_);
+        if (!price_incr_cv_.wait_for(lk, std::chrono::seconds(10), [&] {
+                return price_incr_ready_.load();
+            })) {
+            std::cerr << "[RithmicAdapter] getPriceIncrInfo timeout for CME/"
+                      << symbol << std::endl;
+            return false;
+        }
+    }
+
     params.sExchange = sExchange;
     params.sTicker = sTicker;
-    params.sBuySellType = make_ts(side == 'B' ? "Buy" : "Sell");
-    params.sDuration = make_ts("Day");
-    params.sEntryType = make_ts("Limit");
-    params.sTradingAlgorithm = make_ts("System");
+    params.sBuySellType = make_ts(side == 'B' ? "B" : "S");
+    params.sDuration = make_ts("DAY");
+    params.sEntryType = make_ts("M");
     params.llQty = static_cast<long long>(qty);
     params.dPrice = price;
     params.sTradeRoute = sTradeRoute;
+    if (!user_msg.empty()) {
+        params.sTag = make_ts(user_msg.c_str());
+        params.sUserMsg = make_ts(user_msg.c_str());
+    }
 
     RApi::AccountInfo dummy_acct{};
     tsNCharcb sAccount = make_ts(account_id_.c_str());
@@ -947,13 +1034,21 @@ bool RithmicAdapter::cancel_order(const std::string& order_id) {
 
     auto* pEngine = static_cast<RApi::REngine*>(engine_);
     tsNCharcb sOrderNum = make_ts(order_id.c_str());
-    tsNCharcb sEntryType = make_ts("Limit");
-    tsNCharcb sTradingAlgorithm = make_ts("System");
+    tsNCharcb sEntryType = make_ts("M");
+    tsNCharcb sTradingAlgorithm = make_ts("");
     tsNCharcb sUserMsg = make_ts("");
     tsNCharcb sWindowName = make_ts("");
 
+    RApi::AccountInfo dummy_acct{};
+    tsNCharcb sAccount = make_ts(account_id_.c_str());
+    dummy_acct.sAccountId = sAccount;
+    tsNCharcb sFcm = make_ts(fcm_id_.c_str());
+    dummy_acct.sFcmId = sFcm;
+    tsNCharcb sIb = make_ts(ib_id_.c_str());
+    dummy_acct.sIbId = sIb;
+
     int iCode = 0;
-    if (!pEngine->cancelOrder(nullptr, &sOrderNum, &sEntryType,
+    if (!pEngine->cancelOrder(&dummy_acct, &sOrderNum, &sEntryType,
                                &sTradingAlgorithm, &sUserMsg,
                                nullptr, &sWindowName, &iCode)) {
         std::cerr << "[RithmicAdapter] cancelOrder error: " << iCode << std::endl;

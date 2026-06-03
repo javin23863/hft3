@@ -14,7 +14,10 @@ engine_params:
 
 environment:
   MML_DMN_SRVR_ADDR: "rituz00100.00.rithmic.com:65000~rituz00100.00.rithmic.net:65000~rituz00100.00.theomne.net:65000~rituz00100.00.theomne.com:65000"
-  MML_DOMAIN_NAME: "rithmic_uat_dmz_domain"
+  # Rithmic Trader Pro Web reports active Test/Orangeburg sessions on
+  # rithmic_uat_domain. Use that domain so R|API+ lands on the same UAT
+  # environment as the working web login.
+  MML_DOMAIN_NAME: "rithmic_uat_domain"
   MML_LIC_SRVR_ADDR: "rituz00100.00.rithmic.com:56000~rituz00100.00.rithmic.net:56000~rituz00100.00.theomne.net:56000~rituz00100.00.theomne.com:56000"
   MML_LOC_BROK_ADDR: "rituz00100.00.rithmic.com:64100"
   MML_LOGGER_ADDR: "rituz00100.00.rithmic.com:45454~rituz00100.00.rithmic.net:45454~rituz00100.00.theomne.net:45454~rituz00100.00.theomne.com:45454"

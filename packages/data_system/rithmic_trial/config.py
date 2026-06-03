@@ -114,7 +114,7 @@ def load_config(path: str | Path) -> TrialConfig:
         symbol=symbol,
         exchange=exchange,
         contract=data.get("contract", ""),
-        capture_environment=data.get("capture_environment", "paper_or_trial"),
+        capture_environment=data.get("capture_environment", "rithmic_test"),
         source=data.get("source", "rithmic_trial"),
         schema_version=data.get("schema_version", "normalized_v1"),
         repo_root=repo_root,
