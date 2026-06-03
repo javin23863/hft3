@@ -8,6 +8,7 @@ run manifest needed for a future trading session is present.
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,14 @@ from trade_manager.order_intent import (
     OrderIntentValidationError,
     TradeManagerOrderIntent,
     order_intent_from_signal,
+)
+from trade_manager.order_state import (
+    TERMINAL_ORDER_STATES,
+    OrderStateTransitionError,
+    TradeManagerOrderState,
+    TradeManagerOrderTransition,
+    make_order_transition,
+    transition_from_risk_decision,
 )
 from trade_manager.risk_layer import (
     TradeManagerRiskContext,
@@ -147,6 +156,7 @@ class TradeManager:
         self.signals: dict[str, list[ModelSignal]] = {}
         self.order_intents: dict[str, list[TradeManagerOrderIntent]] = {}
         self.risk_decisions: dict[str, list[TradeManagerRiskDecision]] = {}
+        self.order_state_transitions: dict[str, list[TradeManagerOrderTransition]] = {}
 
     def promoted_records(self) -> list[PromotionRecord]:
         """Return latest promotion records that are currently PROMOTED."""
@@ -278,6 +288,7 @@ class TradeManager:
             order_intent_id=order_intent_id,
         )
         self.order_intents.setdefault(model_id, []).append(intent)
+        self._ensure_order_created(intent)
         return intent
 
     def evaluate_order_intent_risk(
@@ -302,8 +313,38 @@ class TradeManager:
             raise TradeManagerRiskError(model_id, "ORDER_INTENT_ENVELOPE_MISMATCH")
 
         decision = risk_layer.evaluate(active, stored_intent, context)
+        try:
+            self._record_risk_order_state(stored_intent, decision)
+        except OrderStateTransitionError:
+            if decision.allowed:
+                raise
+            self.risk_decisions.setdefault(model_id, []).append(decision)
+            return decision
         self.risk_decisions.setdefault(model_id, []).append(decision)
         return decision
+
+    def transition_order_state(
+        self,
+        model_id: str,
+        intent: TradeManagerOrderIntent,
+        next_state: TradeManagerOrderState,
+        *,
+        reason: str,
+        source: str = "TradeManager.transition_order_state",
+        timestamp_ns: int | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> TradeManagerOrderTransition:
+        """Record an inert Phase 18 order-state transition without routing."""
+
+        stored_intent = self._require_stored_order_intent(model_id, intent)
+        return self._append_order_state_transition(
+            stored_intent,
+            next_state,
+            reason=reason,
+            source=source,
+            timestamp_ns=timestamp_ns,
+            details=details,
+        )
 
     def _active_model_from_record(self, record: PromotionRecord) -> ActiveModel:
         if record.promotion_status != "PROMOTED":
@@ -352,6 +393,170 @@ class TradeManager:
         if active is None or active.activation_status != "ACTIVE":
             raise TradeManagerSignalError(model_id, "MODEL_NOT_ACTIVE")
         return active
+
+    def _require_stored_order_intent(self, model_id: str, intent: TradeManagerOrderIntent) -> TradeManagerOrderIntent:
+        active = self.active_models.get(model_id)
+        if active is None or active.activation_status != "ACTIVE":
+            raise OrderStateTransitionError(model_id, intent.order_intent_id, "MODEL_NOT_ACTIVE")
+        stored_intent = next(
+            (stored for stored in self.order_intents.get(model_id, []) if stored.order_intent_id == intent.order_intent_id),
+            None,
+        )
+        if stored_intent is None:
+            raise OrderStateTransitionError(model_id, intent.order_intent_id, "ORDER_INTENT_NOT_CREATED")
+        if intent != stored_intent:
+            raise OrderStateTransitionError(model_id, intent.order_intent_id, "ORDER_INTENT_ENVELOPE_MISMATCH")
+        return stored_intent
+
+    def _record_risk_order_state(
+        self,
+        intent: TradeManagerOrderIntent,
+        decision: TradeManagerRiskDecision,
+    ) -> TradeManagerOrderTransition:
+        self._ensure_order_created(intent)
+        latest = self._latest_order_transition(intent.model_id, intent.order_intent_id)
+        if latest is None:
+            raise OrderStateTransitionError(intent.model_id, intent.order_intent_id, "ORDER_STATE_NOT_CREATED")
+        if latest.state in TERMINAL_ORDER_STATES:
+            return self._append_order_state_transition(
+                intent,
+                TradeManagerOrderState.SENT_TO_RISK,
+                reason="RISK_REEVALUATION_REQUESTED",
+                source="TradeManager.evaluate_order_intent_risk",
+            )
+        if latest.state != TradeManagerOrderState.SENT_TO_RISK:
+            reason = "RISK_REEVALUATION_REQUESTED" if latest.state == TradeManagerOrderState.RISK_APPROVED else "RISK_EVALUATION_REQUESTED"
+            latest = self._append_order_state_transition(
+                intent,
+                TradeManagerOrderState.SENT_TO_RISK,
+                reason=reason,
+                source="TradeManager.evaluate_order_intent_risk",
+            )
+        target_state = transition_from_risk_decision(decision)
+        return self._append_order_state_transition(
+            intent,
+            target_state,
+            reason=decision.reason,
+            source="TradeManager.evaluate_order_intent_risk",
+            risk_decision=decision,
+            details=decision.to_dict(),
+        )
+
+    def _ensure_order_created(self, intent: TradeManagerOrderIntent) -> TradeManagerOrderTransition:
+        latest = self._latest_order_transition(intent.model_id, intent.order_intent_id)
+        if latest is not None:
+            return latest
+        return self._append_order_state_transition(
+            intent,
+            TradeManagerOrderState.CREATED,
+            reason="ORDER_INTENT_CREATED",
+            source="TradeManager.create_order_intent",
+        )
+
+    def _latest_order_transition(
+        self,
+        model_id: str,
+        order_intent_id: str,
+    ) -> TradeManagerOrderTransition | None:
+        for transition in reversed(self.order_state_transitions.get(model_id, [])):
+            if transition.order_intent_id == order_intent_id:
+                return transition
+        return None
+
+    def _append_order_state_transition(
+        self,
+        intent: TradeManagerOrderIntent,
+        next_state: TradeManagerOrderState,
+        *,
+        reason: str,
+        source: str,
+        risk_decision: TradeManagerRiskDecision | None = None,
+        details: dict[str, Any] | None = None,
+        timestamp_ns: int | None = None,
+    ) -> TradeManagerOrderTransition:
+        previous = self._latest_order_transition(intent.model_id, intent.order_intent_id)
+        previous_state = previous.state if previous is not None else None
+        timestamp_error = self._timestamp_error(previous, timestamp_ns)
+        if timestamp_error is not None:
+            error_transition = TradeManagerOrderTransition(
+                order_intent_id=intent.order_intent_id,
+                model_id=intent.model_id,
+                previous_state=previous_state,
+                state=TradeManagerOrderState.ERROR,
+                timestamp_ns=self._automatic_transition_timestamp(previous),
+                reason=timestamp_error,
+                source=source,
+                details={
+                    "requested_state": next_state.value,
+                    "previous_state": previous_state.value if previous_state is not None else None,
+                    "requested_timestamp_ns": timestamp_ns,
+                    "previous_timestamp_ns": previous.timestamp_ns if previous is not None else None,
+                },
+            )
+            self.order_state_transitions.setdefault(intent.model_id, []).append(error_transition)
+            raise OrderStateTransitionError(
+                intent.model_id,
+                intent.order_intent_id,
+                timestamp_error,
+                previous_state=previous_state,
+                next_state=next_state,
+            )
+        try:
+            transition = make_order_transition(
+                order_intent_id=intent.order_intent_id,
+                model_id=intent.model_id,
+                previous_state=previous_state,
+                state=next_state,
+                reason=reason,
+                source=source,
+                risk_decision=risk_decision,
+                details=details,
+                timestamp_ns=timestamp_ns if timestamp_ns is not None else self._automatic_transition_timestamp(previous),
+            )
+        except OrderStateTransitionError as exc:
+            error_transition = TradeManagerOrderTransition(
+                order_intent_id=intent.order_intent_id,
+                model_id=intent.model_id,
+                previous_state=previous_state,
+                state=TradeManagerOrderState.ERROR,
+                timestamp_ns=timestamp_ns if timestamp_ns is not None else self._automatic_transition_timestamp(previous),
+                reason=exc.reason,
+                source=source,
+                details={
+                    "requested_state": next_state.value,
+                    "previous_state": previous_state.value if previous_state is not None else None,
+                },
+            )
+            self.order_state_transitions.setdefault(intent.model_id, []).append(error_transition)
+            raise OrderStateTransitionError(
+                intent.model_id,
+                intent.order_intent_id,
+                exc.reason,
+                previous_state=previous_state,
+                next_state=next_state,
+            ) from exc
+        self.order_state_transitions.setdefault(intent.model_id, []).append(transition)
+        return transition
+
+    @staticmethod
+    def _timestamp_error(
+        previous: TradeManagerOrderTransition | None,
+        timestamp_ns: int | None,
+    ) -> str | None:
+        if timestamp_ns is None:
+            return None
+        if timestamp_ns <= 0:
+            return "INVALID_TRANSITION_TIMESTAMP"
+        if previous is not None and timestamp_ns < previous.timestamp_ns:
+            return "NON_MONOTONIC_TRANSITION_TIMESTAMP"
+        return None
+
+    @staticmethod
+    def _automatic_transition_timestamp(previous: TradeManagerOrderTransition | None) -> int:
+        now_ns = time.monotonic_ns()
+        if previous is not None and now_ns < previous.timestamp_ns:
+            return previous.timestamp_ns
+        return now_ns
 
     def _invalid_signal_fields(self, active: ActiveModel, signal: ModelSignal) -> list[str]:
         invalid: list[str] = []

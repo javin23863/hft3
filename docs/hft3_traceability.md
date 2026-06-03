@@ -120,7 +120,7 @@ This document maps each major requirement from the 26-phase spec to:
 | Phase 15 signal ingress | `packages/trade_manager/signals.py::ModelSignal`; `TradeManager.bind_signal_source()` / `evaluate_signal()` / `ingest_signal()` | `tests/test_trade_manager_phase15.py` (9 tests) | Validated signal envelope stored in Trade Manager state; no order/adapters |
 | Phase 16 order intent | `packages/trade_manager/order_intent.py::TradeManagerOrderIntent`; `TradeManager.create_order_intent()` | `tests/test_trade_manager_phase16.py` (10 tests) | Inert 18-field order-intent envelope; no risk/adapters |
 | Phase 17 risk layer | `packages/trade_manager/risk_layer.py::TradeManagerRiskLayer`; `TradeManager.evaluate_order_intent_risk()`; `configs/risk/limits.yaml` | `tests/test_trade_manager_phase17.py` (41 tests) | Stored inert `TradeManagerRiskDecision`; production-safety-first monitor result; static rejects; no adapter creation/routing |
-| Order state machine | **NOT YET IMPLEMENTED** | N/A | N/A |
+| Phase 18 order state machine | `packages/trade_manager/order_state.py::TradeManagerOrderState`; `TradeManager.order_state_transitions`; `TradeManager.transition_order_state()` | `tests/test_trade_manager_phase18.py` (23 tests) | Inert timestamped state transitions; 17 documented states; invalid transitions write `ERROR`; no adapter creation/routing |
 | Execution adapter | **STUB** (`live_broker.py` returns ORDER_REJECTED) | N/A | N/A |
 | Position monitoring | **NOT YET IMPLEMENTED** | N/A | N/A |
 | Kill switch | **NOT YET IMPLEMENTED** | N/A | N/A |
@@ -170,11 +170,12 @@ This document maps each major requirement from the 26-phase spec to:
 | 15 — Trade Manager signal ingress | ✅ DONE | 9 |
 | 16 — Trade Manager order intent | ✅ DONE | 10 |
 | 17 — Trade Manager risk layer | ✅ DONE | 41 |
-| 18-23 — Trade Manager remaining modules | ❌ NOT DONE | 0 |
+| 18 — Trade Manager order state machine | ✅ DONE | 23 |
+| 19-23 — Trade Manager remaining modules | ❌ NOT DONE | 0 |
 | 24 — Resumability | ⚠️ PARTIAL | 1 |
-| 25 — 22 required tests | ⚠️ PARTIAL | 225 total |
+| 25 — 22 required tests | ⚠️ PARTIAL | 248 total |
 | 26 — Documentation | ✅ DONE | N/A |
 
-**Total: 225 tests passing across 18 test files.**
+**Total: 248 tests passing across 19 test files.**
 
-**18 of 26 phases complete. 2 partially done. 6 not started.**
+**19 of 26 phases complete. 2 partially done. 5 not started.**

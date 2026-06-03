@@ -1,6 +1,6 @@
 # HFT3 Autonomous Pipeline Runbook (Phase 26)
 
-This runbook documents the autonomous research runner and the 18 completed phases of the 26-phase hardening spec.
+This runbook documents the autonomous research runner and the 19 completed phases of the 26-phase hardening spec.
 
 ## 1. Exact CLI command for autonomous research run
 
@@ -103,11 +103,11 @@ python -m pytest tests/test_autonomous_runner.py tests/test_runner_honesty.py -v
 
 - **Phase 5 (backtest 33-timestamp)**: Implemented in Workbench audit artifacts. The autonomous runner's `stage_backtest` still writes stub metrics and is not wired to WorkbenchEngine.
 - **Phase 9 (25 robustness checks)**: Implemented in the Workbench robustness pack. The autonomous runner still emits blocking PENDING gates until WorkbenchEngine integration provides observed metrics.
-- **Phase 14-17 (Trade Manager handoff + signal ingress + order intent + risk layer)**: Implemented as registry/manifest activation, side-effect-free signal envelopes, inert order-intent envelopes, and inert risk decisions. Phases 18-23 execution, monitoring, kill switch, observer, and sessions remain future state.
+- **Phase 14-18 (Trade Manager handoff + signal ingress + order intent + risk layer + order state)**: Implemented as registry/manifest activation, side-effect-free signal envelopes, inert order-intent envelopes, inert risk decisions, and inert order-state transitions. Phases 19-23 execution, monitoring, kill switch, observer, and sessions remain future state.
 - **Phase 24 (resumability)**: Partially done (checkpoint state.json exists); crash recovery not fully tested.
 - **Phase 25 (22 required tests)**: Most exist; ~5 missing.
 
-## Completed phases (17 of 26)
+## Completed phases (19 of 26)
 
 | Phase | Status | Commit |
 |---|---|---|
@@ -128,11 +128,12 @@ python -m pytest tests/test_autonomous_runner.py tests/test_runner_honesty.py -v
 | 15 — Trade Manager signal ingress | ✅ DONE | `packages/trade_manager/signals.py` |
 | 16 — Trade Manager order intent | ✅ DONE | `packages/trade_manager/order_intent.py` |
 | 17 — Trade Manager risk layer | ✅ DONE | `packages/trade_manager/risk_layer.py` |
+| 18 — Trade Manager order state machine | ✅ DONE | `packages/trade_manager/order_state.py` |
 | 26 — Documentation | ✅ DONE | `bb87c1b` and `8149cd7` |
 
 ## Test scoreboard
 
-**225/225 passing** across 18 test files:
+**248/248 passing** across 19 test files:
 - `tests/test_autonomous_runner.py` (11 tests)
 - `tests/test_runner_honesty.py` (6 tests)
 - `tests/test_research_intake.py` (11 tests)
@@ -151,3 +152,4 @@ python -m pytest tests/test_autonomous_runner.py tests/test_runner_honesty.py -v
 - `tests/test_trade_manager_phase15.py` (9 tests)
 - `tests/test_trade_manager_phase16.py` (10 tests)
 - `tests/test_trade_manager_phase17.py` (41 tests)
+- `tests/test_trade_manager_phase18.py` (23 tests)

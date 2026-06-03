@@ -12,6 +12,13 @@ from trade_manager.order_intent import (
     TradeManagerOrderIntent,
     order_intent_from_signal,
 )
+from trade_manager.order_state import (
+    ORDER_STATE_VALUES,
+    TERMINAL_ORDER_STATES,
+    OrderStateTransitionError,
+    TradeManagerOrderState,
+    TradeManagerOrderTransition,
+)
 from trade_manager.risk_layer import (
     TradeManagerRiskConfig,
     TradeManagerRiskContext,
@@ -31,6 +38,11 @@ __all__ = [
     "OrderIntentValidationError",
     "TradeManagerOrderIntent",
     "order_intent_from_signal",
+    "ORDER_STATE_VALUES",
+    "TERMINAL_ORDER_STATES",
+    "OrderStateTransitionError",
+    "TradeManagerOrderState",
+    "TradeManagerOrderTransition",
     "TradeManagerRiskConfig",
     "TradeManagerRiskContext",
     "TradeManagerRiskDecision",

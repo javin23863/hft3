@@ -163,9 +163,10 @@ observer/execution integration.
 - **Phase 15 signal ingress exists** — `packages/trade_manager/signals.py` defines `ModelSignal` and validates side-effect-free active-model signal envelopes.
 - **Phase 16 order intent exists** — `packages/trade_manager/order_intent.py` defines an inert 18-field `TradeManagerOrderIntent` distinct from adapter-level execution intents.
 - **Phase 17 risk-decision layer exists** — `packages/trade_manager/risk_layer.py` evaluates exact stored intents with configured static checks and `production_safety.py` monitor results.
+- **Phase 18 order-state machine exists** — `packages/trade_manager/order_state.py` defines the 17 documented states and inert timestamped transitions.
 - The only existing "trade manager" is the C++ `risk_engine/include/risk_manager.hpp`, which is a **risk** monitor, not a signal→intent orchestrator.
 - `OrderIntent` exists in `packages/execution/interfaces.py` (52 matches); Phase 17 creates one only as production-safety monitor input, not as a routed execution request.
-- **Phases 18–23** still need execution, state, monitoring, kill-switch, observer, and session modules.
+- **Phases 19–23** still need execution, monitoring, kill-switch, observer, and session modules.
 
 ## Section 17 — Risk-layer components
 
@@ -173,7 +174,7 @@ observer/execution integration.
 - **Python production safety**: `packages/execution/production_safety.py` — `StaleDataMonitor`, `DisconnectMonitor`, `ClockDriftMonitor`, `PositionMismatchGuard`, `DailyLossLimitFlatten`.
 - **C++**: `risk_engine/{include/risk_manager.hpp, src/risk_manager.cpp}` — `FailureState` enum.
 - **Live-mode env vars**: `LIVE_MAX_ORDER_SIZE`, `LIVE_DAILY_LOSS_LIMIT`, `LIVE_KILL_SWITCH`, `LIVE_RISK_ENABLED`.
-- **Gap**: Phase 17 stores risk decisions only. Neither an order state machine nor the live broker (stub) consumes the decision yet. The C++ `RiskManager` is not exposed via pybind. There is no `validate_live_env()` function.
+- **Gap**: Phase 17 stores risk decisions and Phase 18 records state transitions only. The live broker (stub) does not consume the decision/state yet. The C++ `RiskManager` is not exposed via pybind. There is no `validate_live_env()` function.
 
 ## Section 18 — Execution-adapter components
 
@@ -212,7 +213,7 @@ observer/execution integration.
 1. **Autonomous runner is still scaffolded** — it writes honest blocking gates but does not yet invoke `WorkbenchEngine`.
 2. **Workbench backtest-to-robustness evidence is not wired into the autonomous runner** — Workbench emits Phase 5/9 artifacts; the runner still writes stub backtest metrics.
 3. **Double-WF correlator exists but is not campaign/autonomous promotion input** — real independent WF matrix wiring is still pending.
-4. **Trade Manager is partial** — Phase 14 registry handoff, Phase 15 signal ingress, Phase 16 order-intent schema, and Phase 17 risk decisions exist, but no execution orchestration exists yet.
+4. **Trade Manager is partial** — Phase 14 registry handoff, Phase 15 signal ingress, Phase 16 order-intent schema, Phase 17 risk decisions, and Phase 18 order-state transitions exist, but no execution orchestration exists yet.
 5. **Live broker adapter is a stub** — no real live execution path.
 6. **C++ `RiskManager` not wired into Python** — risk is enforced only at the C++ engine boundary, not the backtest.
 7. **Production safety monitors are only used for Trade Manager decisions** — no adapter path consumes risk approvals/rejections yet.
@@ -225,7 +226,7 @@ observer/execution integration.
 | Hypothesis → experiment spec | OK for Phase 3 intake bundles; autonomous runner experiment specs remain scaffolded until Workbench integration |
 | Backtest → robustness | OK inside Workbench; pending in autonomous runner |
 | Scoring → registry | Atomic registry writes exist; autonomous runner still quarantines because observed metrics are pending |
-| Registry → trade manager | OK for Phase 14/15/16/17 handoff, signal ingress, inert order intent, and inert risk decision; activation validates latest `PROMOTED` record and manifest evidence, accepts validated `ModelSignal` envelopes, creates non-routed `TradeManagerOrderIntent` envelopes, then records risk decisions |
+| Registry → trade manager | OK for Phase 14/15/16/17/18 handoff, signal ingress, inert order intent, inert risk decision, and inert order state; activation validates latest `PROMOTED` record and manifest evidence, accepts validated `ModelSignal` envelopes, creates non-routed `TradeManagerOrderIntent` envelopes, records risk decisions, then records state transitions |
 | Trade manager → execution | **MISSING**: no execution orchestration yet |
 | Trade manager → observer | **MISSING**: no observer path yet |
 | Trade manager → session report | **MISSING**: no session report path yet |
@@ -247,6 +248,7 @@ Phase 14 (Trade Manager handoff): `packages/trade_manager/manager.py` — latest
 Phase 15 (Trade Manager signal ingress): `packages/trade_manager/signals.py` — active-model signal envelope before order-intent conversion.
 Phase 16 (Trade Manager order intent): `packages/trade_manager/order_intent.py` — inert 18-field order-intent schema before risk/execution.
 Phase 17 (Trade Manager risk layer): `packages/trade_manager/risk_layer.py`, `configs/risk/limits.yaml` — inert risk decisions before order state/execution.
+Phase 18 (Trade Manager order state): `packages/trade_manager/order_state.py` — inert 17-state machine before execution.
 
 ## Section 25 — Files that should remain untouched (hot path)
 
