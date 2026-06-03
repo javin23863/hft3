@@ -30,8 +30,9 @@ def partition_function(work: Sequence[float], beta: float) -> float:
     if w.size == 0 or beta <= 0:
         return 1.0
     logits = -beta * w
-    logits -= np.max(logits)
-    return float(np.exp(logits).sum())
+    max_logit = np.max(logits)
+    logits -= max_logit
+    return float(math.exp(max_logit) * np.exp(logits).sum())
 
 
 def shannon_entropy_probs(probs: Sequence[float]) -> float:

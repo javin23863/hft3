@@ -24,6 +24,8 @@ def bessel_i0(x: float, n_steps: int = 64) -> float:
 
 def spread_params(xi1: float, kappa1: float) -> tuple[float, float]:
     """a, b from liquidity components xi1, kappa1."""
+    if xi1 <= 0 or kappa1 <= 0:
+        return 0.0, 0.0
     xi2 = xi1 * xi1
     ka2 = kappa1 * kappa1
     a = 0.25 * (1.0 / xi2 + 1.0 / ka2)

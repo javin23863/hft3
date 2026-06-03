@@ -401,6 +401,61 @@ def write_robustness_gates_for_promotion(
     )
 
 
+PROMOTION_ELIGIBILITY_REQUIRED_GATES = frozenset({
+    "data_resolution_eligibility",
+    "monte_carlo_sharpe_p05",
+    "oos_max_drawdown",
+    "walk_forward_pass",
+    "artifact_completeness",
+    "double_wf_correlation",
+})
+
+PROMOTION_ELIGIBILITY_OPTIONAL_GATES = frozenset({
+    "survives_latency",
+    "ev_positive",
+})
+
+
+@dataclass
+class PromotionEligibilityVerdict:
+    eligible: bool
+    failed_gates: list[str] = field(default_factory=list)
+    missing_gates: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+def evaluate_promotion_eligibility(
+    gate_dicts: list[dict[str, Any]],
+) -> PromotionEligibilityVerdict:
+    """Single combined invariant for promotion eligibility.
+
+    All required gates must be present and passing. Optional gates
+    (survives_latency, ev_positive) are checked only when present.
+    Any failure yields ineligible.
+    """
+    gates_by_name = {g.get("gate_name"): g for g in gate_dicts}
+    failed: list[str] = []
+    missing: list[str] = []
+    for name in PROMOTION_ELIGIBILITY_REQUIRED_GATES:
+        gate = gates_by_name.get(name)
+        if gate is None:
+            missing.append(name)
+        elif gate.get("pass_fail") is not True:
+            failed.append(name)
+    for name in PROMOTION_ELIGIBILITY_OPTIONAL_GATES:
+        gate = gates_by_name.get(name)
+        if gate is not None and gate.get("pass_fail") is not True:
+            failed.append(name)
+    eligible = not failed and not missing
+    return PromotionEligibilityVerdict(
+        eligible=eligible,
+        failed_gates=failed,
+        missing_gates=missing,
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     import argparse
 

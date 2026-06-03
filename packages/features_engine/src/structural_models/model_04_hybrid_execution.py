@@ -17,6 +17,7 @@ def as_reservation_price(
     time_remaining: float,
 ) -> float:
     """r(t) = S_t - q_t * gamma * sigma^2 * (T - t)."""
+    time_remaining = max(time_remaining, 0.0)
     return mid - inventory * gamma * (sigma ** 2) * time_remaining
 
 

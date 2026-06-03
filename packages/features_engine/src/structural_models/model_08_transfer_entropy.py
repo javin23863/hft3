@@ -48,6 +48,44 @@ def conditional_entropy(y: Sequence[float], x: Sequence[float], bins: int = 16) 
     return max(h, 0.0)
 
 
+def conditional_entropy_3d(
+    y: Sequence[float],
+    x1: Sequence[float],
+    x2: Sequence[float],
+    bins: int = 16,
+) -> float:
+    """H(Y | X1, X2) via 3D joint histogram."""
+    y_arr = np.asarray(y, dtype=float)
+    x1_arr = np.asarray(x1, dtype=float)
+    x2_arr = np.asarray(x2, dtype=float)
+    n = min(len(y_arr), len(x1_arr), len(x2_arr))
+    if n == 0:
+        return 0.0
+    y_arr = y_arr[:n]
+    x1_arr = x1_arr[:n]
+    x2_arr = x2_arr[:n]
+    joint_3d, _ = np.histogramdd(
+        np.column_stack([x1_arr, x2_arr, y_arr]), bins=bins
+    )
+    total = joint_3d.sum()
+    if total <= 0:
+        return 0.0
+    joint_3d = joint_3d / total
+    p_x1x2 = joint_3d.sum(axis=2)
+    h = 0.0
+    for i in range(bins):
+        for j in range(bins):
+            px = p_x1x2[i, j]
+            if px <= 0:
+                continue
+            for k in range(bins):
+                pxyz = joint_3d[i, j, k]
+                if pxyz <= 0:
+                    continue
+                h -= pxyz * math.log(pxyz / px)
+    return max(h, 0.0)
+
+
 def transfer_entropy(
     x: Sequence[float],
     y: Sequence[float],
@@ -68,9 +106,7 @@ def transfer_entropy(
     y_lag = y_arr[: n - lag]
     x_lag = x_arr[: n - lag]
     h_y_given_ylag = conditional_entropy(y_t, y_lag, bins=bins)
-    # H(Y_t | X_{t-k}, Y_{t-k}) via stacked conditioning variable
-    cond = x_lag + y_lag
-    h_y_given_xylag = conditional_entropy(y_t, cond, bins=bins)
+    h_y_given_xylag = conditional_entropy_3d(y_t, x_lag, y_lag, bins=bins)
     return max(h_y_given_ylag - h_y_given_xylag, 0.0)
 
 
@@ -99,7 +135,8 @@ class TransferEntropyModel(BaseStructuralModel[TransferEntropyOutput]):
         self.lag = int(cfg.get("lag", 1))
         self.bins = int(cfg.get("bins", 16))
         self.ucl_multiplier = float(cfg.get("ucl_multiplier", 2.0))
-        self._baseline_te = 0.0
+        self.baseline_window = int(cfg.get("baseline_window", 50))
+        self._te_history: List[float] = []
 
     def evaluate(self, **kwargs: Any) -> ModelOutput[TransferEntropyOutput]:
         leader = str(kwargs.get("leader_asset", "ES"))
@@ -113,9 +150,17 @@ class TransferEntropyModel(BaseStructuralModel[TransferEntropyOutput]):
         else:
             te_val = transfer_entropy(x_series, y_series, lag=self.lag, bins=self.bins)
 
-        if self._baseline_te <= 0 and te_val > 0:
-            self._baseline_te = te_val
-        ucl = self._baseline_te * self.ucl_multiplier if self._baseline_te > 0 else te_val
+        if te_val > 0:
+            self._te_history.append(te_val)
+            if len(self._te_history) > self.baseline_window:
+                self._te_history = self._te_history[-self.baseline_window:]
+        if len(self._te_history) >= 2:
+            arr = np.array(self._te_history, dtype=float)
+            ucl = float(arr.mean() + self.ucl_multiplier * arr.std())
+        elif len(self._te_history) == 1:
+            ucl = self._te_history[0] * self.ucl_multiplier
+        else:
+            ucl = te_val
         aggressive = te_val > ucl and te_val > 0
 
         payload = TransferEntropyOutput(

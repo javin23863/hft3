@@ -99,6 +99,24 @@ def test_skip_paths_emit_valid_response():
     assert validate_aar_packet_out(out) == []
 
 
+def test_run_llm_skips_on_pdf_citations_incomplete():
+    from data_layer.packet.validate import validate_aar_packet_out
+    from data_layer.packet import microstructure_aar_packet as pkt_mod
+
+    packet, skip_reasons = build_microstructure_aar_packet(FIXTURE, REPO)
+    symbolic = check_latency_invariants(packet)
+
+    citations = [{"field": "test", "pdf": "missing.pdf", "present_on_disk": False}]
+    with patch.object(pkt_mod, "load_pdf_citations", return_value=(citations, False)):
+        packet["pdf_citations_complete"] = False
+        out = run_llm_on_aar_packet(packet, symbolic, repo_root=REPO, skip_reasons=skip_reasons)
+
+    assert out["llm_status"] == "skipped_pdf"
+    assert "PDF citations incomplete" in out["narrative_md"]
+    assert out["decision"]["promote_candidate_recommendation"] is False
+    assert validate_aar_packet_out(out) == []
+
+
 def test_promote_clamp_when_lane_pass_false():
     from data_layer.llm.packet_runner import _clamp_promote_recommendation
 

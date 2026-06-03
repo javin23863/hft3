@@ -25,8 +25,9 @@ def fit_ridge_cross_impact(
         return 0.0, 0.0, 0.0
     X = np.column_stack([np.ones(n), own_ofi[:n], leader_ofi[:n]])
     y = target_returns[:n]
-    # (X'X + alpha I)^{-1} X'y
-    xt_x = X.T @ X + alpha * np.eye(X.shape[1])
+    # (X'X + alpha diag(0,1,1))^{-1} X'y — intercept excluded from penalty
+    penalty = np.diag([0.0, 1.0, 1.0])
+    xt_x = X.T @ X + alpha * penalty
     coef = np.linalg.solve(xt_x, X.T @ y)
     y_hat = X @ coef
     ss_res = float(np.sum((y - y_hat) ** 2))

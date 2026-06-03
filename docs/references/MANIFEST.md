@@ -23,6 +23,10 @@ Each packet field cites a source PDF section. Missing PDFs on disk → `pdf_cita
 | `live_topology` | `BLUEPRINT.md` | Live architecture §4 | repo doc |
 | `autoresearch_pipeline` | `dev_instructions.pdf` | Pipeline overview §1–6 | **present** |
 
+> **Parser note:** The citation parser captures 17 rows (those with `**present**` or `**absent**` in the Present column). Row `live_topology` uses `repo doc` and is excluded from automated on-disk checks. Visual row count: 18.
+>
+> **Field classification:** Rows 1–5 (`event_context` through `simulation_fidelity`) are materialized as top-level packet fields. Rows 6–18 are concept-only citations — the codebase modules/configs exist but are not serialized into the AAR packet.
+
 ## Authority copies
 
 Charter PDFs live in this directory (`docs/references/`). Repo-root copies remain for legacy links; after-action citation checks use `docs/references/` only.

@@ -45,8 +45,6 @@ def bs_charm(spot: float, strike: float, t: float, r: float, sigma: float, is_ca
     if t <= 0 or sigma <= 0:
         return 0.0
     charm = -_norm_pdf(d1) * (2 * r * t - d2 * sigma * math.sqrt(t)) / (2 * t * sigma * math.sqrt(t))
-    if not is_call:
-        charm += r * _norm_cdf(-d1)
     return charm
 
 

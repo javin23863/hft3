@@ -1096,6 +1096,19 @@ class AutonomousRunner:
                 "PROMOTE requires persisted passing data-resolution and robustness gates",
             )
             raise RuntimeError(self.recovery_reason)
+        from hft3.validation.promotion_gate import evaluate_promotion_eligibility
+        verdict = evaluate_promotion_eligibility(gate_dicts)
+        if not verdict.eligible:
+            reasons = []
+            if verdict.failed_gates:
+                reasons.append(f"failed: {', '.join(verdict.failed_gates)}")
+            if verdict.missing_gates:
+                reasons.append(f"missing: {', '.join(verdict.missing_gates)}")
+            self._classify_recovery(
+                RecoveryDecision.MANUAL_REVIEW_REQUIRED,
+                f"Promotion eligibility invariant violated ({'; '.join(reasons)})",
+            )
+            raise RuntimeError(self.recovery_reason)
 
     def stage_registry_update(self) -> Path:
         """Stage 14: update the HFT3 registry atomically (Phase 11).

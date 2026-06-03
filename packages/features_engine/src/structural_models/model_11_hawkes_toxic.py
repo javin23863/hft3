@@ -80,12 +80,30 @@ class HawkesToxicFlowModel(BaseStructuralModel[HawkesToxicOutput]):
         event_times: List[float] = list(kwargs.get("market_order_times", []))
         events_by_type = kwargs.get("events_by_type")
         if events_by_type:
-            mu = {k: self.mu for k in events_by_type}
+            types = sorted(events_by_type.keys())
+            n = len(types)
+            mu = {k: self.mu for k in types}
             alpha = {
                 (src, tgt): self.alpha
-                for src in events_by_type
-                for tgt in events_by_type
+                for src in types
+                for tgt in types
             }
+            if n > 1 and self.beta > 0:
+                branch_matrix = np.full((n, n), self.alpha / self.beta)
+                spectral_radius = float(np.max(np.abs(np.linalg.eigvals(branch_matrix))))
+                if spectral_radius >= 1.0:
+                    payload = HawkesToxicOutput(
+                        intensity_by_class={},
+                        toxic_cascade_score=0.0,
+                        risk_aversion_gamma=self.gamma_base,
+                        reservation_price_skew=0.0,
+                        toxic_flow_detected=False,
+                    )
+                    return ModelOutput(
+                        model_id=self.model_id,
+                        timestamp_ns=int(kwargs.get("timestamp_ns", 0)),
+                        payload=payload,
+                    )
             intensities = multivariate_hawkes_intensity(
                 t, events_by_type, mu, alpha, self.beta
             )
