@@ -54,7 +54,7 @@ python -m economic_event_universe.cli validate
 
 ## Current Documented Scoreboard
 
-The current documented scoreboard is `270/270` across 20 files in `docs/hft3_autonomous_pipeline_runbook.md` and `docs/hft3_traceability.md`. Phase 25 must update this when new phase tests are added.
+The current documented scoreboard is `281/281` across 21 files in `docs/hft3_autonomous_pipeline_runbook.md` and `docs/hft3_traceability.md`. Phase 25 must update this when new phase tests are added.
 
 ## Slow And External Tests
 

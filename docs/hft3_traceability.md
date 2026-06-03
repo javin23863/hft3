@@ -122,8 +122,8 @@ This document maps each major requirement from the 26-phase spec to:
 | Phase 17 risk layer | `packages/trade_manager/risk_layer.py::TradeManagerRiskLayer`; `TradeManager.evaluate_order_intent_risk()`; `configs/risk/limits.yaml` | `tests/test_trade_manager_phase17.py` (41 tests) | Stored inert `TradeManagerRiskDecision`; production-safety-first monitor result; static rejects; no adapter creation/routing |
 | Phase 18 order state machine | `packages/trade_manager/order_state.py::TradeManagerOrderState`; `TradeManager.order_state_transitions`; `TradeManager.transition_order_state()` | `tests/test_trade_manager_phase18.py` (23 tests) | Inert timestamped state transitions; 17 documented states; invalid transitions write `ERROR`; no adapter creation/routing |
 | Phase 19 execution boundary | `packages/trade_manager/execution_boundary.py::TradeManagerExecutionConfig`; `TradeManager.prepare_execution_boundary()`; `configs/execution/adapter.yaml` | `tests/test_trade_manager_phase19.py` (22 tests) | Inert boundary audit payload with `can_route=False`; no adapter creation/routing |
+| Phase 20 position monitor | `packages/trade_manager/monitor.py::PositionSnapshot`; `ExpectedPosition`; `PositionReconciliationResult`; `PositionMonitorConfig` | `tests/test_trade_manager_phase20.py` (11 tests) | Inert position snapshots and reconciliation results; stale/missing/future/duplicate data is `UNKNOWN`; no adapter creation/routing/flattening |
 | Real execution adapter routing | **STUB** (`live_broker.py` returns ORDER_REJECTED) | N/A | N/A |
-| Position monitoring | **NOT YET IMPLEMENTED** | N/A | N/A |
 | Kill switch | **NOT YET IMPLEMENTED** | N/A | N/A |
 | Observer view | **NOT YET IMPLEMENTED** | N/A | N/A |
 | Session reporting | **NOT YET IMPLEMENTED** | N/A | N/A |
@@ -173,11 +173,12 @@ This document maps each major requirement from the 26-phase spec to:
 | 17 — Trade Manager risk layer | ✅ DONE | 41 |
 | 18 — Trade Manager order state machine | ✅ DONE | 23 |
 | 19 — Trade Manager execution boundary | ✅ DONE (inert config/audit) | 22 |
-| 20-23 — Trade Manager remaining modules | ❌ NOT DONE | 0 |
+| 20 — Trade Manager position monitor | ✅ DONE (inert reconciliation) | 11 |
+| 21-23 — Trade Manager remaining modules | ❌ NOT DONE | 0 |
 | 24 — Resumability | ⚠️ PARTIAL | 1 |
-| 25 — 22 required tests | ⚠️ PARTIAL | 270 total |
+| 25 — 22 required tests | ⚠️ PARTIAL | 281 total |
 | 26 — Documentation | ✅ DONE | N/A |
 
-**Total: 270 tests passing across 20 test files.**
+**Total: 281 tests passing across 21 test files.**
 
-**20 of 26 phases complete. 2 partially done. 4 not started.**
+**21 of 26 phases complete. 2 partially done. 3 not started.**

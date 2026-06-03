@@ -1,6 +1,6 @@
 # HFT3 Trade Manager Runbook (Phase 26)
 
-This runbook documents the Trade Manager layer (Phases 14-23). Phase 14 is implemented as the registry-to-Trade-Manager handoff seam. Phase 15 is implemented as side-effect-free signal ingress. Phase 16 is implemented as an inert Trade Manager order-intent schema. Phase 17 is implemented as a risk-decision layer over inert intents. Phase 18 is implemented as an inert order-state machine. Phase 19 is implemented as an inert execution-boundary config/audit seam. Phases 20-23 remain future state.
+This runbook documents the Trade Manager layer (Phases 14-23). Phase 14 is implemented as the registry-to-Trade-Manager handoff seam. Phase 15 is implemented as side-effect-free signal ingress. Phase 16 is implemented as an inert Trade Manager order-intent schema. Phase 17 is implemented as a risk-decision layer over inert intents. Phase 18 is implemented as an inert order-state machine. Phase 19 is implemented as an inert execution-boundary config/audit seam. Phase 20 is implemented as an inert position monitor. Phases 21-23 remain future state.
 
 ## 1. How a registered model is handed to the Trade Manager
 
@@ -113,6 +113,16 @@ Phase 19 adds `packages/trade_manager/execution_boundary.py`, `configs/execution
 
 Phase 19 is not a live or paper execution adapter. It deliberately leaves `TradeManager.submit_order()`, `cancel_order()`, and `replace_order()` undefined.
 
+## 6B. Position monitor (Phase 20)
+
+Phase 20 adds `packages/trade_manager/monitor.py` as a standalone, read-only reconciliation contract:
+1. `PositionSnapshot` stores observed positions and account state.
+2. `ExpectedPosition` stores expected symbol quantity and source order-intent IDs.
+3. `PositionReconciliationResult` returns `OK`, `MISMATCH`, or `UNKNOWN` with mismatch details.
+4. `PositionMonitorConfig` controls mismatch and staleness thresholds.
+
+The monitor can read supplied adapter state with `get_position()` and `get_account_state()` or reconcile a supplied snapshot. It does not create adapters, submit orders, cancel orders, replace orders, flatten positions, mutate `TradeManager`, or route to paper/live/Rithmic.
+
 ## 7. Kill-switch configuration (Phase 21)
 
 The Trade Manager will respect 12 kill-switch triggers:
@@ -184,8 +194,9 @@ Phase 16: `tests/test_trade_manager_phase16.py` has 10/10 passing tests.
 Phase 17: `tests/test_trade_manager_phase17.py` has 41/41 passing tests.
 Phase 18: `tests/test_trade_manager_phase18.py` has 23/23 passing tests.
 Phase 19: `tests/test_trade_manager_phase19.py` has 22/22 passing tests.
+Phase 20: `tests/test_trade_manager_phase20.py` has 11/11 passing tests.
 
-Phases 20-23 tests will be added as monitoring, kill-switch, observer, and session modules are built.
+Phases 21-23 tests will be added as kill-switch, observer, and session modules are built.
 
 ## 13. Known limitations
 
@@ -195,6 +206,7 @@ Phases 20-23 tests will be added as monitoring, kill-switch, observer, and sessi
 - **Risk-decision layer exists.** Phase 17 calls `production_safety.py` through a supplied adapter context and stores decisions, but it does not route execution.
 - **Order-state machine exists.** Phase 18 records inert state transitions and error events, but it does not route execution.
 - **Execution boundary exists.** Phase 19 validates config and produces an inert audit payload, but it does not create adapters or route execution.
+- **Position monitor exists.** Phase 20 records/reconciles supplied position snapshots, but it does not flatten positions, create adapters, or route execution.
 - **Execution adapter is a stub.** `packages/execution/adapters/live_broker.py` returns `ORDER_REJECTED` with reason `"live_adapter_stub_not_wired"` (Phase 19).
 - **Kill switch does not exist.** Phase 21 is not implemented.
 - **Observer view does not exist.** Phase 22 is not implemented.
@@ -202,9 +214,9 @@ Phases 20-23 tests will be added as monitoring, kill-switch, observer, and sessi
 
 ## 14. Remaining risks
 
-- **Phase 20-23 remain large.** The Trade Manager still needs sub-modules for position monitoring, kill switch, observer, session reporting, and restart recovery.
+- **Phase 21-23 remain large.** The Trade Manager still needs sub-modules for kill switch, observer, session reporting, and restart recovery.
 - **Rithmic live adapter is not implemented.** The C++ `rithmic_gateway` exists but the Python execution adapter is a stub.
-- **Risk/state/boundary decisions are not execution.** Phases 17-19 record approvals/rejections/state transitions and boundary audit metadata only; no adapter lifecycle or session artifacts exist yet.
+- **Risk/state/boundary/monitor decisions are not execution.** Phases 17-20 record approvals/rejections/state transitions, boundary audit metadata, and reconciliation results only; no adapter lifecycle or session artifacts exist yet.
 - **Kill switch is not implemented.** The 12 triggers × 7 actions matrix is not built.
 - **Observer view is not implemented.** The read-only CLI does not exist.
 - **Session reporting is not implemented.** The 16 session files are not written.
@@ -245,14 +257,18 @@ The Trade Manager will be built in 4 milestones:
 - `configs/execution/adapter.yaml` — default `REPLAY` config with `route_enabled: false`
 - Tests: `tests/test_trade_manager_phase19.py`
 
+### Phase 20 complete: Position monitor
+- `packages/trade_manager/monitor.py` — `PositionSnapshot`, `ExpectedPosition`, `PositionReconciliationResult`, and `PositionMonitorConfig` with inert reconciliation helpers
+- Tests: `tests/test_trade_manager_phase20.py`
+
 ### Future milestone: Real execution adapter routing
 - `packages/execution/adapters/live_broker.py` — replace stub with real CHI404-only Rithmic adapter when explicitly authorized
 - Tests: `test_execution_adapter_boundary.py` and CHI404 safety gates
 
 ### Milestone 3: Position monitoring + kill switch (Phases 20, 21)
-- `packages/trade_manager/monitor.py` — 24 metrics
+- `packages/trade_manager/monitor.py` — Phase 20 complete: inert snapshots and reconciliation results
 - `packages/trade_manager/kill_switch.py` — 12 triggers × 7 actions
-- Tests: `test_position_reconciliation.py`, `test_kill_switch_daily_loss.py`, `test_kill_switch_market_data_stale.py`
+- Tests: `tests/test_trade_manager_phase20.py`, `test_kill_switch_daily_loss.py`, `test_kill_switch_market_data_stale.py`
 
 ### Milestone 4: Observer + session reporting + restart recovery (Phases 22, 23, 24)
 - `apps/observer/` — read-only CLI
