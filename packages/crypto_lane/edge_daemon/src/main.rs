@@ -31,7 +31,17 @@ async fn main() -> Result<()> {
     
     // Load configuration
     let config = Config::load()?;
-    info!("Configuration loaded: {:?}", config);
+    info!(
+        "Configuration loaded: zmq_rawtx={}, zmq_rawblock={}, rpc_url={}, chicago_addr={}, packet_interval={}, fee_filter_enabled={}, fee_filter_blocks={}, metrics_port={}",
+        config.zmq_rawtx,
+        config.zmq_rawblock,
+        config.rpc_url,
+        config.chicago_addr,
+        config.packet_interval,
+        config.fee_filter_enabled,
+        config.fee_filter_blocks,
+        config.metrics_port,
+    );
     
     // Initialize components
     let mempool_state = Arc::new(RwLock::new(MempoolState::new()));
