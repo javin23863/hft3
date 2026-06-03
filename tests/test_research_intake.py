@@ -282,8 +282,8 @@ def test_llm_cannot_promote_model_capability_check() -> None:
 
     A name check (test_llm_cannot_promote_model_static_check) can be
     bypassed by `getattr(importlib.import_module('hft3.validation.certification_registry'), 'save_registry')`.
-    A capability check walks the import graph and asserts that the
-    LLM-facing modules have no transitive path to the promotion surface.
+    A capability check walks source imports and asserts that the LLM-facing
+    modules have no direct or transitive path to the promotion surface.
     """
     import hft3.validation.certification_registry as cert_registry
     import hft3.validation.promotion_gate as promo_gate
@@ -299,11 +299,6 @@ def test_llm_cannot_promote_model_capability_check() -> None:
     for name, fn in forbidden_callables.items():
         assert fn is not None, f"{name} should be defined"
 
-    # Walk the LLM-facing module's transitive imports and assert no
-    # module in the closure imports the promotion/registry modules.
-    import importlib
-    import sys
-
     llm_roots = [
         "research_pipeline.llm",
         "research_pipeline.document_ingestion",
@@ -311,14 +306,67 @@ def test_llm_cannot_promote_model_capability_check() -> None:
         "research_pipeline.intake_schema",
         "research_pipeline.extractors",
     ]
-    # Forbidden target modules
     forbidden_modules = {
         "hft3.validation.certification_registry",
         "hft3.validation.promotion_gate",
         "hft3.validation.certification_runner",
         "hft3.validation.fast_gate_report",
     }
-    # Collect all modules the LLM roots import (transitively)
+    package_root = Path("packages")
+
+    def module_path(module_name: str) -> Path | None:
+        parts = module_name.split(".")
+        module_file = package_root.joinpath(*parts).with_suffix(".py")
+        if module_file.is_file():
+            return module_file
+        package_file = package_root.joinpath(*parts, "__init__.py")
+        if package_file.is_file():
+            return package_file
+        return None
+
+    def is_forbidden(module_name: str) -> bool:
+        return any(
+            module_name == forbidden or module_name.startswith(f"{forbidden}.")
+            for forbidden in forbidden_modules
+        )
+
+    def import_from_base(module_name: str, node: ast.ImportFrom) -> str | None:
+        if node.level == 0:
+            return node.module
+
+        current_path = module_path(module_name)
+        package_parts = module_name.split(".")
+        if current_path is None or current_path.name != "__init__.py":
+            package_parts = package_parts[:-1]
+        if node.level > len(package_parts) + 1:
+            return None
+        base_parts = package_parts[: len(package_parts) - node.level + 1]
+        if node.module:
+            base_parts.extend(node.module.split("."))
+        return ".".join(base_parts) if base_parts else None
+
+    def imported_modules(module_name: str, path: Path) -> set[str]:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        modules: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                modules.update(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom):
+                base_module = import_from_base(module_name, node)
+                if not base_module:
+                    continue
+                modules.add(base_module)
+                for alias in node.names:
+                    imported = f"{base_module}.{alias.name}"
+                    if module_path(imported) is not None or is_forbidden(imported):
+                        modules.add(imported)
+            elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+                if is_forbidden(node.value):
+                    modules.add(node.value)
+        return modules
+
+    # Collect source-level imports transitively. A runtime dir() walk misses
+    # aliases like `import hft3.validation.certification_registry as reg`.
     visited: set[str] = set()
     stack: list[str] = list(llm_roots)
     while stack:
@@ -326,33 +374,22 @@ def test_llm_cannot_promote_model_capability_check() -> None:
         if mod_name in visited:
             continue
         visited.add(mod_name)
-        if mod_name in forbidden_modules:
+        if is_forbidden(mod_name):
             pytest.fail(
                 f"LLM-facing module {mod_name} is the forbidden promotion surface"
             )
-        if mod_name not in sys.modules:
-            try:
-                importlib.import_module(mod_name)
-            except Exception:
-                # Unimportable (e.g. optional dep); skip
-                continue
-        mod = sys.modules.get(mod_name)
-        if mod is None:
+        path = module_path(mod_name)
+        if path is None:
             continue
-        # Walk the module's __dict__ for submodules
-        for attr_name in dir(mod):
-            if attr_name.startswith("__"):
-                continue
-            attr = getattr(mod, attr_name, None)
-            if attr is None:
-                continue
-            # Detect submodules (their __name__ starts with mod_name + ".")
-            sub_name = getattr(attr, "__name__", None)
-            if sub_name and sub_name.startswith(mod_name + ".") and sub_name not in visited:
-                stack.append(sub_name)
+        for imported in imported_modules(mod_name, path):
+            if is_forbidden(imported):
+                pytest.fail(
+                    f"LLM-facing module {mod_name} imports forbidden promotion surface {imported}"
+                )
+            if module_path(imported) is not None and imported not in visited:
+                stack.append(imported)
 
-    # Negative test: confirm forbidden modules are NOT in the visited set
-    leaked = visited & forbidden_modules
+    leaked = {module for module in visited if is_forbidden(module)}
     assert not leaked, (
         f"LLM-facing module closure leaks promotion/registry modules: {leaked}"
     )
