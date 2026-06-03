@@ -177,7 +177,7 @@ async fn build_feature_packet(
     let quintiles = quantile_state.quantiles();
     
     edge_features::EdgeFeaturePacket {
-        timestamp_ns: chrono::Utc::now().timestamp_nanos() as u64,
+        timestamp_ns: chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0) as u64,
         sequence_number,
         fee_mean_sat_vb: welford_state.mean(),
         fee_stddev_sat_vb: welford_state.stddev(),
@@ -195,7 +195,7 @@ async fn build_feature_packet(
         filtered_tx_count: filter.filtered_count() as u32,
         delta_count: 0, // Will be set after drain
         uptime_seconds: 0, // TODO: Track uptime
-        packets_sent: metrics.packets_sent.get(),
-        bytes_sent: metrics.bytes_sent.get(),
+        packets_sent: metrics.packets_sent.get() as u64,
+        bytes_sent: metrics.bytes_sent.get() as u64,
     }
 }
