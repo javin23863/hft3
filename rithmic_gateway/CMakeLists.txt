@@ -150,3 +150,22 @@ if(NOT MSVC)
     )
     target_compile_definitions(rithmic_latency_probe PRIVATE LINUX _REENTRANT)
 endif()
+
+add_executable(rithmic_capi_latency_probe
+    tools/rithmic_capi_latency_probe.cpp
+)
+target_include_directories(rithmic_capi_latency_probe PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${RAPIPLUS_ROOT}/include
+)
+target_link_libraries(rithmic_capi_latency_probe PRIVATE rithmic_gateway_shared)
+target_compile_features(rithmic_capi_latency_probe PRIVATE cxx_std_17)
+configure_rapiplus_msvc_runtime(rithmic_capi_latency_probe)
+if(NOT MSVC)
+    target_compile_options(rithmic_capi_latency_probe PRIVATE
+        -Wall -Wextra -Wno-sign-compare -Wno-write-strings
+        -Wpointer-arith -Winline -Wno-deprecated
+        -fno-strict-aliasing
+    )
+    target_compile_definitions(rithmic_capi_latency_probe PRIVATE LINUX _REENTRANT)
+endif()

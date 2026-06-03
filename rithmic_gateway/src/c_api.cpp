@@ -144,6 +144,24 @@ int hft_rithmic_adapter_subscribe_mbo(void* handle, const char* symbol, const ch
     return 0;
 }
 
+int hft_rithmic_adapter_warm_price_increment(void* handle, const char* symbol, const char* exchange) {
+    AdapterEntry* e = as_entry(handle);
+    if (!e || !e->adapter) { return 1; }
+    if (!symbol) { set_error(e, "symbol is null"); return 4; }
+    try {
+        std::string sym(symbol);
+        std::string ex = exchange ? std::string(exchange) : std::string("CME");
+        if (!e->adapter->warm_price_increment(sym, ex)) {
+            set_error(e, "warm_price_increment() failed for " + ex + "/" + sym);
+            return 2;
+        }
+    } catch (...) {
+        set_error(e, "exception during warm_price_increment()");
+        return 3;
+    }
+    return 0;
+}
+
 int hft_rithmic_adapter_send_order(void* handle, const char* symbol, char side, int32_t qty, double price) {
     return hft_rithmic_adapter_send_order_with_user_msg(handle, symbol, side, qty, price, nullptr);
 }

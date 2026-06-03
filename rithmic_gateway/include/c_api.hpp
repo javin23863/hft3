@@ -62,6 +62,7 @@ HFT_RITHMIC_C_API int   hft_rithmic_adapter_connect(void* handle);
 HFT_RITHMIC_C_API void  hft_rithmic_adapter_disconnect(void* handle);
 HFT_RITHMIC_C_API void  hft_rithmic_adapter_destroy(void* handle);
 HFT_RITHMIC_C_API int   hft_rithmic_adapter_subscribe_mbo(void* handle, const char* symbol, const char* exchange);
+HFT_RITHMIC_C_API int   hft_rithmic_adapter_warm_price_increment(void* handle, const char* symbol, const char* exchange);
 HFT_RITHMIC_C_API int   hft_rithmic_adapter_send_order(void* handle, const char* symbol, char side, int32_t qty, double price);
 HFT_RITHMIC_C_API int   hft_rithmic_adapter_send_order_with_user_msg(void* handle, const char* symbol, char side, int32_t qty, double price, const char* user_msg);
 HFT_RITHMIC_C_API int   hft_rithmic_adapter_cancel_order(void* handle, const char* order_id);
