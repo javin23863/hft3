@@ -57,12 +57,13 @@ def test_before_veto_blocks_backtest(mock_get_model):
     with patch.object(orch, "_run_pdf_stub", side_effect=fake_pdf_stub):
         with patch.object(orch, "_ensure_pdf_context"):
             with patch("workbench.src.registry.composition_orchestrator.get_catalog_entry") as mock_cat:
-                mock_cat.return_value = MagicMock(blocks_trade=True)
+                mock_cat.return_value = MagicMock(blocks_trade=True, role="defensive")
                 result, trace = orch.run(ctx, composition)
 
     assert trace.trades_vetoed >= 1
     assert trace.signal_adjusted == 0.0
     assert result.num_trades == 0
+    assert trace.steps[0].output_summary["diagnostics"]["metrics"]["vetoed"] is True
 
 
 def test_phase_budget_summary_sums():
@@ -98,7 +99,7 @@ def test_vpin_continuous_scales_once():
 
     with patch.object(orch, "_run_pdf_stub", return_value=({"VPIN_percentile": 0.995}, 1.0)):
         with patch("workbench.src.registry.composition_orchestrator.get_catalog_entry") as mock_cat:
-            mock_cat.return_value = MagicMock(blocks_trade=False)
+            mock_cat.return_value = MagicMock(blocks_trade=False, role="defensive")
             ctx.metadata["pdf_composition_outputs"] = {"VPIN_TOXICITY": mock_out}
             adjusted, _ = orch._apply_stub(stub, ctx, trace, 1.0, "continuous")
     assert adjusted == pytest.approx(0.5)

@@ -151,6 +151,8 @@ def resolve_stub_dependencies(stubs: List[DefensiveStub], repo_root: Optional[Pa
                 req_slug = resolve_model_id(req)
                 if req_slug not in present:
                     req_entry = cat[req_slug]
+                    if req_entry.role != "defensive":
+                        continue
                     out.append(
                         DefensiveStub(
                             model_id=req_slug,
@@ -182,7 +184,10 @@ def validate_composition(composition: ModelComposition, repo_root: Optional[Path
         if stub_slug not in cat:
             errors.append(f"Unknown defensive stub: {stub.model_id}")
             continue
-        if cat[stub_slug].role == "alpha" and stub_slug == primary:
+        if cat[stub_slug].role != "defensive":
+            errors.append(f"Defensive stub must have defensive role: {stub.model_id}")
+            continue
+        if stub_slug == primary:
             errors.append(f"Primary cannot also be defensive stub: {stub.model_id}")
 
     return errors

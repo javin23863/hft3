@@ -43,7 +43,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from types import MappingProxyType
+from typing import Any, Dict, List, Mapping, Optional
 
 __all__ = [
     "FilterDecision",
@@ -78,17 +79,26 @@ class FilterDecision:
     vetoed: bool = False
     skew: float = 1.0
     reason_code: str = ""
-    tags: Dict[str, Any] = field(default_factory=dict)
+    tags: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.action != FilterAction.TAG and not self.reason_code.strip():
+            raise ValueError("non-passthrough defensive decisions require reason_code")
+        object.__setattr__(self, "tags", MappingProxyType(dict(self.tags)))
 
     @classmethod
-    def passthrough(cls, reason_code: str = "DEFENSIVE_PASSTHROUGH") -> "FilterDecision":
-        return cls(action=FilterAction.TAG, reason_code=reason_code)
+    def passthrough(
+        cls,
+        reason_code: str = "DEFENSIVE_PASSTHROUGH",
+        tags: Optional[Dict[str, Any]] = None,
+    ) -> "FilterDecision":
+        return cls(action=FilterAction.TAG, reason_code=reason_code, tags=dict(tags or {}))
 
     @classmethod
     def veto(cls, reason_code: str, tags: Optional[Dict[str, Any]] = None) -> "FilterDecision":
         return cls(
             action=FilterAction.VETO, vetoed=True,
-            reason_code=reason_code, tags=tags or {},
+            reason_code=reason_code, tags=dict(tags or {}),
         )
 
     @classmethod
@@ -97,13 +107,13 @@ class FilterDecision:
     ) -> "FilterDecision":
         return cls(
             action=FilterAction.SKEW, skew=multiplier,
-            reason_code=reason_code, tags=tags or {},
+            reason_code=reason_code, tags=dict(tags or {}),
         )
 
     @classmethod
     def throttle(cls, reason_code: str, tags: Optional[Dict[str, Any]] = None) -> "FilterDecision":
         return cls(
-            action=FilterAction.THROTTLE, reason_code=reason_code, tags=tags or {},
+            action=FilterAction.THROTTLE, reason_code=reason_code, tags=dict(tags or {}),
         )
 
 
@@ -149,12 +159,12 @@ class DefensiveModel(ABC):
 MODEL_COMBINATIONS: List[Dict[str, Any]] = [
     {"name": "alpha_only", "alpha": True, "defensives": [], "structurals": []},
     {"name": "no_defensive_baseline", "alpha": True, "defensives": [], "structurals": []},
-    {"name": "alpha_plus_one_defensive", "alpha": True, "defensives": ["regime_filter"], "structurals": []},
-    {"name": "alpha_plus_multiple_defensives", "alpha": True, "defensives": ["regime_filter", "throttle", "skew"], "structurals": []},
-    {"name": "hybrid_alpha_plus_structural", "alpha": True, "defensives": [], "structurals": ["pdf_topology_1"]},
-    {"name": "hybrid_alpha_plus_defensive_plus_structural", "alpha": True, "defensives": ["regime_filter"], "structurals": ["pdf_topology_1"]},
-    {"name": "defensive_only", "alpha": False, "defensives": ["regime_filter"], "structurals": []},
+    {"name": "alpha_plus_one_defensive", "alpha": True, "defensives": ["VPIN_TOXICITY"], "structurals": []},
+    {"name": "alpha_plus_multiple_defensives", "alpha": True, "defensives": ["VPIN_TOXICITY", "QUANTUM_SPREAD_DEFENSE", "HAWKES_TOXIC_FLOW"], "structurals": []},
+    {"name": "hybrid_alpha_plus_structural", "alpha": True, "defensives": [], "structurals": ["DEALER_HEDGING"]},
+    {"name": "hybrid_alpha_plus_defensive_plus_structural", "alpha": True, "defensives": ["VPIN_TOXICITY"], "structurals": ["DEALER_HEDGING"]},
+    {"name": "defensive_only", "alpha": False, "defensives": ["VPIN_TOXICITY"], "structurals": []},
     {"name": "ablation_no_defensives", "alpha": True, "defensives": [], "structurals": []},
-    {"name": "ablation_regime_filter_only", "alpha": True, "defensives": ["regime_filter"], "structurals": []},
-    {"name": "ablation_throttle_only", "alpha": True, "defensives": ["throttle"], "structurals": []},
+    {"name": "ablation_vpin_only", "alpha": True, "defensives": ["VPIN_TOXICITY"], "structurals": []},
+    {"name": "ablation_quantum_spread_only", "alpha": True, "defensives": ["QUANTUM_SPREAD_DEFENSE"], "structurals": []},
 ]

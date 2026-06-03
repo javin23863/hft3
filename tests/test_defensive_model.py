@@ -14,6 +14,8 @@ Covers:
 """
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any, List
 
 import pytest
@@ -44,6 +46,21 @@ def test_filter_decision_veto() -> None:
     assert d.vetoed is True
     assert d.action == FilterAction.VETO
     assert d.tags == {"regime": "fomc"}
+
+
+def test_filter_decision_rejects_empty_veto_reason() -> None:
+    with pytest.raises(ValueError, match="reason_code"):
+        FilterDecision.veto("")
+
+
+def test_filter_decision_tags_are_copied_and_immutable() -> None:
+    tags = {"regime": "fomc"}
+    d = FilterDecision.veto("REGIME_BLACKLIST", tags=tags)
+    tags["regime"] = "changed"
+
+    assert d.tags == {"regime": "fomc"}
+    with pytest.raises(TypeError):
+        d.tags["regime"] = "mutated"  # type: ignore[index]
 
 
 def test_filter_decision_skew() -> None:
@@ -145,6 +162,32 @@ def test_model_combinations_data_driven() -> None:
             assert isinstance(d, str)
         for s in c["structurals"]:
             assert isinstance(s, str)
+
+
+def test_model_combinations_use_canonical_catalog_ids() -> None:
+    from apps.workbench.src.registry.model_catalog import load_catalog
+
+    catalog = load_catalog(Path(__file__).resolve().parents[1])
+    placeholders = {"regime_filter", "throttle", "skew", "pdf_topology_1"}
+    for combo in MODEL_COMBINATIONS:
+        ids = set(combo["defensives"]) | set(combo["structurals"])
+        assert not (ids & placeholders)
+        for model_id in ids:
+            assert model_id in catalog
+
+
+def test_runner_ablation_no_defensives_is_empty(tmp_path: Path) -> None:
+    from hft3.research.run_autonomous import AutonomousRunner, CampaignConfig
+
+    cfg = CampaignConfig.from_yaml(Path("configs/research/autonomous_hft3.yaml"))
+    cfg.output["artifacts_dir"] = str(tmp_path / "artifacts")
+    runner = AutonomousRunner(config=cfg, root=tmp_path, run_id="PHASE7_COMBOS")
+
+    path = runner.stage_resolve_model_combinations()
+    combos = {c["name"]: c for c in json.loads(path.read_text(encoding="utf-8"))}
+
+    assert combos["ablation_no_defensives"]["defensive_ids"] == []
+    assert combos["alpha_plus_one_defensive"]["defensive_ids"] == ["VPIN_TOXICITY"]
 
 
 # ---------- hybrid degradation detection ----------

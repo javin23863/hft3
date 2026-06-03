@@ -139,8 +139,8 @@ class CampaignConfig:
       feature_set_id: "core_64_v1"
     models:
       alpha: ["HYP_1", "HYP_5"]
-      defensives: ["regime_filter", "throttle"]
-      structurals: ["pdf_topology_1"]
+      defensives: ["VPIN_TOXICITY", "QUANTUM_SPREAD_DEFENSE"]
+      structurals: ["DEALER_HEDGING"]
     robustness:
       monte_carlo: {trials: 1000, sharpe_min: 0.5}
       walk_forward: {folds: 5, embargo_ns: 3600000000000}
@@ -536,14 +536,13 @@ class AutonomousRunner:
         structural_ids = self.config.models.get("structurals", [])
         combinations: list[dict[str, Any]] = []
         for combo in MODEL_COMBINATIONS:
+            combo_defensives = [d for d in defensive_ids if d in combo["defensives"]]
+            combo_structurals = [s for s in structural_ids if s in combo["structurals"]]
             combinations.append({
                 "name": combo["name"],
                 "alpha_ids": alpha_ids if combo["alpha"] else [],
-                "defensive_ids": (
-                    [d for d in defensive_ids if d in combo["defensives"]]
-                    if combo["defensives"] else (defensive_ids if combo["name"] == "ablation_no_defensives" else [])
-                ) if combo["alpha"] else combo["defensives"],
-                "structural_ids": structural_ids if combo["structurals"] else [],
+                "defensive_ids": combo_defensives,
+                "structural_ids": combo_structurals,
             })
         path = self._write_artifact("model_combination.json", combinations)
         self._stage_end("resolve_model_combinations", path)

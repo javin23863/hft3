@@ -15,7 +15,8 @@ from workbench.src.core.composition import (
     ModelComposition,
     Phase,
 )
-from workbench.src.registry.model_catalog import get_catalog_entry, load_catalog, resolve_stub_dependencies
+from workbench.src.core.defensive import DefensiveDiagnostics, DefensiveModel, FilterAction, FilterDecision
+from workbench.src.registry.model_catalog import get_catalog_entry, resolve_stub_dependencies, validate_composition
 from workbench.src.registry.pdf_orchestrator import PdfOrchestrator
 from workbench.src.registry.unified_registry import build_models_config, get_model_by_id
 from workbench.src.run.run_context import RunContext
@@ -24,6 +25,81 @@ _PHASE_ORDER: tuple[Phase, ...] = ("continuous", "before", "during", "after")
 _PDF_SIGNAL_PRIMARIES = frozenset(
     {"TRANSFER_ENTROPY", "STOCHASTIC_THERMO", "CROSS_ASSET_LEAD_LAG", "DOW_YM_INDEX"}
 )
+
+
+class _CatalogDefensiveShim(DefensiveModel):
+    """Adapter that forces catalog stubs through the DefensiveModel contract."""
+
+    def __init__(self, orchestrator: "CompositionOrchestrator", stub: DefensiveStub, entry: Any, phase: Phase) -> None:
+        self._orchestrator = orchestrator
+        self._stub = stub
+        self._entry = entry
+        self._phase = phase
+        self.model_id = stub.model_id
+        self.phase = phase
+        self.budget_us = stub.budget_us
+        self.blocks_trade = bool(entry.blocks_trade)
+        self.last_summary: dict[str, Any] = {}
+        self.last_actual_us = 0.0
+        self.last_skew = 0.0
+        self.adjusted_signal = 0.0
+
+    def validate_inputs(self, ctx: Any) -> List[str]:
+        if getattr(self._entry, "role", None) != "defensive":
+            return [f"Defensive stub {self.model_id} has non-defensive catalog role"]
+        return []
+
+    def defend(self, ctx: Any, signal: Any) -> FilterDecision:
+        self.adjusted_signal = float(signal)
+        veto = False
+        skew = 0.0
+        summary: dict[str, Any] = {}
+
+        from workbench.src.registry.unified_registry import get_model_config
+
+        stub_cfg = get_model_config(self._stub.model_id)
+        if stub_cfg.kind == "pdf":
+            summary, self.last_actual_us = self._orchestrator._run_pdf_stub(self._stub, ctx, self._phase)
+            out = ctx.metadata.get("pdf_composition_outputs", {}).get(self._stub.model_id)
+            if out and out.payload is not None:
+                payload = out.payload
+                if self._entry.blocks_trade and getattr(payload, "cancel_all_quotes", False):
+                    veto = True
+                if hasattr(payload, "reservation_price_skew"):
+                    skew = float(getattr(payload, "reservation_price_skew", 0.0))
+                if self._phase == "continuous" and self._stub.model_id == "VPIN_TOXICITY":
+                    vp = float(getattr(payload, "VPIN_percentile", 0.0))
+                    if vp >= 0.99:
+                        self.adjusted_signal *= 0.5
+                if hasattr(payload, "toxic_cascade_score"):
+                    skew = float(getattr(payload, "reservation_price_skew", 0.0))
+        else:
+            summary, self.last_actual_us, hyp_sig = self._orchestrator._run_hyp_stub(self._stub, ctx)
+            if self._entry.blocks_trade and abs(hyp_sig) > 0.5:
+                veto = True
+
+        self.last_summary = dict(summary)
+        self.last_skew = skew
+        if veto:
+            return FilterDecision.veto("DEFENSIVE_VETO", tags=summary)
+        if skew:
+            return FilterDecision.skew_signal(skew, "DEFENSIVE_SKEW", tags=summary)
+        return FilterDecision.passthrough(tags=summary)
+
+    def produce_diagnostics(self, ctx: Any, result: FilterDecision) -> DefensiveDiagnostics:
+        warnings: list[str] = []
+        if self.last_actual_us > self.budget_us:
+            warnings.append("DEFENSIVE_BUDGET_EXCEEDED")
+        return DefensiveDiagnostics(
+            model_id=self.model_id,
+            metrics={
+                "actual_us": self.last_actual_us,
+                "budget_us": self.budget_us,
+                "vetoed": result.vetoed,
+                "skew": self.last_skew,
+            },
+            warnings=warnings,
+        )
 
 
 class CompositionOrchestrator:
@@ -92,36 +168,27 @@ class CompositionOrchestrator:
         phase: Phase,
     ) -> Tuple[float, bool]:
         entry = get_catalog_entry(stub.model_id)
-        veto = False
-        skew = 0.0
-        summary: dict[str, Any] = {}
-        actual_us = 0.0
+        defensive = _CatalogDefensiveShim(self, stub, entry, phase)
+        validation_errors = defensive.validate_inputs(ctx)
+        if validation_errors:
+            raise ValueError("; ".join(validation_errors))
+        decision = defensive.defend(ctx, signal)
+        diagnostics = defensive.produce_diagnostics(ctx, decision)
+        veto = decision.vetoed
+        skew = defensive.last_skew
+        summary = dict(defensive.last_summary)
+        actual_us = defensive.last_actual_us
+        signal = defensive.adjusted_signal
 
-        from workbench.src.registry.unified_registry import get_model_config
-
-        stub_cfg = get_model_config(stub.model_id)
-        if stub_cfg.kind == "pdf":
-            summary, actual_us = self._run_pdf_stub(stub, ctx, phase)
-            out = ctx.metadata.get("pdf_composition_outputs", {}).get(stub.model_id)
-            if out and out.payload is not None:
-                payload = out.payload
-                if entry.blocks_trade and getattr(payload, "cancel_all_quotes", False):
-                    veto = True
-                if hasattr(payload, "reservation_price_skew"):
-                    skew = float(getattr(payload, "reservation_price_skew", 0.0))
-                if phase == "continuous" and stub.model_id == "VPIN_TOXICITY":
-                    vp = float(getattr(payload, "VPIN_percentile", 0.0))
-                    if vp >= 0.99:
-                        signal *= 0.5
-                if hasattr(payload, "toxic_cascade_score"):
-                    skew = float(getattr(payload, "reservation_price_skew", 0.0))
-        else:
-            summary, actual_us, hyp_sig = self._run_hyp_stub(stub, ctx)
-            if entry.blocks_trade and abs(hyp_sig) > 0.5:
-                veto = True
-
-        if phase == "during" and skew:
+        if phase == "during" and decision.action == FilterAction.SKEW and skew:
             signal = signal + skew
+
+        if diagnostics.metrics or diagnostics.series or diagnostics.warnings:
+            summary["diagnostics"] = {
+                "metrics": diagnostics.metrics,
+                "series": diagnostics.series,
+                "warnings": diagnostics.warnings,
+            }
 
         trace.steps.append(
             CompositionTraceStep(
@@ -178,6 +245,9 @@ class CompositionOrchestrator:
         ctx: RunContext,
         composition: ModelComposition,
     ) -> Tuple[Any, CompositionTrace]:
+        validation_errors = validate_composition(composition)
+        if validation_errors:
+            raise ValueError("; ".join(validation_errors))
         stubs = resolve_stub_dependencies(composition.defensive_stubs)
         if stubs:
             self._ensure_pdf_context(ctx)

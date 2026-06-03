@@ -54,7 +54,7 @@ python -m economic_event_universe.cli validate
 
 ## Current Documented Scoreboard
 
-The current documented scoreboard is `337/337 passing` across 26 test files in `docs/hft3_autonomous_pipeline_runbook.md` and `docs/hft3_traceability.md`. Phase 25 required-test closure is concrete and complete.
+The current documented scoreboard is `341/341 passing` across 26 test files in `docs/hft3_autonomous_pipeline_runbook.md` and `docs/hft3_traceability.md`. Phase 25 required-test closure is concrete and complete.
 
 ## Slow And External Tests
 

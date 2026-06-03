@@ -53,8 +53,8 @@ features:
 
 models:
   alpha: ["HYP_1", "HYP_5"]
-  defensives: ["regime_filter", "throttle"]
-  structurals: ["pdf_topology_1"]
+  defensives: ["VPIN_TOXICITY", "QUANTUM_SPREAD_DEFENSE"]
+  structurals: ["DEALER_HEDGING"]
 
 robustness:
   monte_carlo:
