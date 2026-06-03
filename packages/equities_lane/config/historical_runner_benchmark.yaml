@@ -8,7 +8,7 @@ free_data_phase:
   mode: local_daily_ohlcv_only
   no_paid_market_data_downloads: true
   event_detection:
-    max_pre_event_close: 5.0
+    max_pre_event_close: 20.0
     min_intraday_return_pct: 30.0
     min_close_return_pct: 20.0
     min_volume_expansion: 3.0
