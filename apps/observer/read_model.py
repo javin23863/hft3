@@ -256,4 +256,4 @@ def _brief(item: dict[str, Any] | None, keys: tuple[str, ...]) -> str:
     if not item:
         return "UNAVAILABLE"
     parts = [f"{key}={item[key]}" for key in keys if key in item]
-    return ", ".join(parts) if parts else json.dumps(item, sort_keys=True, separators=(",", ":"))
+    return ", ".join(parts) if parts else json.dumps(item, sort_keys=True, separators=(",", ":"), allow_nan=False)

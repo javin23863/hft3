@@ -1,4 +1,4 @@
-"""Phase 14 Trade Manager handoff package."""
+"""Trade Manager package (Phases 14-23)."""
 
 from trade_manager.manager import (
     ActiveModel,

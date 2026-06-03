@@ -197,7 +197,10 @@ class TradeManager:
         if not manifest_path.is_file():
             raise TradeManagerActivationError(record.model_id, "MANIFEST_NOT_FOUND")
         try:
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            raw_text = manifest_path.read_text(encoding="utf-8")
+            if any(kw in raw_text for kw in ("NaN", "Infinity", "-Infinity")):
+                raise TradeManagerActivationError(record.model_id, "MANIFEST_NON_FINITE")
+            manifest = json.loads(raw_text)
         except json.JSONDecodeError as exc:
             raise TradeManagerActivationError(record.model_id, "MANIFEST_INVALID_JSON") from exc
         if not isinstance(manifest, dict):
@@ -645,5 +648,11 @@ class TradeManager:
     def _resolve_path(self, value: str) -> Path:
         path = Path(value)
         if path.is_absolute():
-            return path
-        return self.root / path
+            resolved = path.resolve()
+            if self.root not in resolved.parents and resolved != self.root:
+                raise TradeManagerActivationError("", "ARTIFACT_PATH_OUTSIDE_ROOT")
+            return resolved
+        resolved = (self.root / path).resolve()
+        if self.root not in resolved.parents and resolved != self.root:
+            raise TradeManagerActivationError("", "ARTIFACT_PATH_OUTSIDE_ROOT")
+        return resolved

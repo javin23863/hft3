@@ -201,6 +201,18 @@ def _json_summary(value: dict[str, Any]) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False) if value else "{}"
 
 
+def _fsync_parent(path: Path) -> None:
+    try:
+        flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+        dir_fd = os.open(path.parent, flags)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    except OSError:
+        pass
+
+
 def _atomic_write_text(path: Path, text: str) -> None:
     tmp_name: str | None = None
     try:
@@ -210,6 +222,7 @@ def _atomic_write_text(path: Path, text: str) -> None:
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(tmp_name, path)
+        _fsync_parent(path)
     except Exception:
         if tmp_name is not None:
             try:
