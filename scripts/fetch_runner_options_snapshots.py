@@ -220,6 +220,21 @@ def build_manifest(
             rec["normalized_size_bytes"] = norm_path.stat().st_size
             records.append(rec)
             continue
+        if raw_path.exists() and raw_path.stat().st_size > 0:
+            try:
+                count = normalize_options_dbn(
+                    raw_path,
+                    norm_path,
+                    session_id=str(row["runner_label_id"]),
+                    underlying=str(row["ticker"]).upper(),
+                )
+                rec["status"] = "normalized_existing_raw"
+                rec["resolved_symbol_count"] = count
+            except Exception as exc:  # noqa: BLE001
+                rec["status"] = "normalize_existing_raw_failed"
+                rec["error"] = _redact(f"{type(exc).__name__}: {exc}")
+            records.append(rec)
+            continue
         if failure_path.exists() and failure_path.stat().st_size > 0:
             rec["status"] = "skipped_terminal_failure"
             try:

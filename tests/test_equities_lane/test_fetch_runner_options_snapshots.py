@@ -134,6 +134,45 @@ def test_existing_normalized_file_skips_before_costing(tmp_path, monkeypatch):
     assert manifest["estimated_total_cost_usd"] == 0.0
 
 
+def test_existing_raw_normalizes_before_costing(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATABENTO_API_KEY", "db-test-key")
+    plan = tmp_path / "options_snapshot_plan.json"
+    row = _row("AAA")
+    _write_plan(plan, [row])
+    raw, norm = _paths_for_row(tmp_path / "options", row)
+    raw.parent.mkdir(parents=True, exist_ok=True)
+    raw.write_bytes(b"dbn")
+
+    def _boom(_row):
+        raise AssertionError("estimate should not run for already-downloaded raw snapshots")
+
+    def _normalize(raw_path, output_path, *, session_id, underlying):
+        assert raw_path == raw
+        assert session_id == "AAA-2024-01-18"
+        assert underlying == "AAA"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text('{"ok": true}\n', encoding="utf-8")
+        return 1
+
+    monkeypatch.setattr("fetch_runner_options_snapshots._estimate_row_cost", _boom)
+    monkeypatch.setattr("fetch_runner_options_snapshots.normalize_options_dbn", _normalize)
+    manifest = build_manifest(
+        plan,
+        tmp_path / "options",
+        dry_run=False,
+        confirm_purchase=True,
+        max_total_cost_usd=None,
+        max_requests=None,
+        override_operating_cap=False,
+        override_hard_limit=False,
+    )
+
+    assert manifest["ticker_records"][0]["status"] == "normalized_existing_raw"
+    assert manifest["ticker_records"][0]["resolved_symbol_count"] == 1
+    assert norm.exists()
+    assert manifest["estimated_total_cost_usd"] == 0.0
+
+
 def test_terminal_symbology_failure_is_cached_and_skipped(tmp_path, monkeypatch):
     monkeypatch.setenv("DATABENTO_API_KEY", "db-test-key")
     plan = tmp_path / "options_snapshot_plan.json"
