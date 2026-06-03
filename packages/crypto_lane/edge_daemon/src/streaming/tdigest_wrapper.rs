@@ -1,11 +1,12 @@
-use tdigest::TDigest;
+use std::collections::VecDeque;
 
-/// Streaming quantile estimation using t-digest algorithm
+/// Streaming quantile estimation using a sorted buffer
 /// 
-/// Provides accurate quantile estimates with minimal memory footprint (~2KB for 100 centroids)
+/// Maintains a fixed-size sorted buffer for quantile estimation.
+/// Memory footprint: ~800 bytes for 100 samples.
 pub struct FeeQuantiles {
-    digest: TDigest,
-    compression: f64,
+    buffer: VecDeque<f64>,
+    max_size: usize,
 }
 
 pub struct FeeQuintiles {
@@ -18,39 +19,55 @@ pub struct FeeQuintiles {
 impl FeeQuantiles {
     pub fn new() -> Self {
         Self {
-            digest: TDigest::new_with_size(100),
-            compression: 100.0,
+            buffer: VecDeque::with_capacity(100),
+            max_size: 100,
         }
     }
     
     /// Add a new fee rate observation
     pub fn add(&mut self, fee_rate: f64) {
-        self.digest = self.digest.insert(fee_rate);
+        // Insert in sorted order
+        let pos = self.buffer.partition_point(|&x| x < fee_rate);
+        if pos < self.buffer.len() {
+            self.buffer.insert(pos, fee_rate);
+        } else {
+            self.buffer.push_back(fee_rate);
+        }
+        
+        // Maintain max size by removing oldest if needed
+        if self.buffer.len() > self.max_size {
+            self.buffer.pop_front();
+        }
     }
     
     /// Get current quantile estimates
     pub fn quantiles(&self) -> FeeQuintiles {
         FeeQuintiles {
-            p20: self.digest.estimate(0.20),
-            p40: self.digest.estimate(0.40),
-            p60: self.digest.estimate(0.60),
-            p80: self.digest.estimate(0.80),
+            p20: self.quantile(0.20),
+            p40: self.quantile(0.40),
+            p60: self.quantile(0.60),
+            p80: self.quantile(0.80),
         }
     }
     
     /// Get arbitrary quantile
     pub fn quantile(&self, q: f64) -> f64 {
-        self.digest.estimate(q)
+        if self.buffer.is_empty() {
+            return 0.0;
+        }
+        
+        let index = (q * (self.buffer.len() - 1) as f64).round() as usize;
+        self.buffer[index]
     }
     
     /// Reset the digest
     pub fn reset(&mut self) {
-        self.digest = TDigest::new_with_size(self.compression as usize);
+        self.buffer.clear();
     }
     
     /// Number of observations
     pub fn count(&self) -> usize {
-        self.digest.count() as usize
+        self.buffer.len()
     }
 }
 
