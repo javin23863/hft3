@@ -16,7 +16,7 @@ session-reporting/execution integration.
 | # | Item | Status | One-line |
 |---|------|--------|----------|
 | 1 | Workbench engine dispatching HYP/PDF | EXISTS | `apps/workbench/src/run/engine.py` |
-| 2 | Unified 55-model registry (44 HYP + 11 PDF) | EXISTS | `unified_registry.py` + `model_registry.yaml` |
+| 2 | Unified model registry (39 default HYP, 44 with `HFT3_CROSS_ASSET`, + 11 PDF) | EXISTS | `unified_registry.py` + `model_registry.yaml` |
 | 3 | `WorkbenchModel` base class | EXISTS | `apps/workbench/src/core/protocol.py:40-103` |
 | 4 | Distinct `DefensiveModel` base class | EXISTS | `apps/workbench/src/core/defensive.py` |
 | 5 | Combined composition (primary+def+struct) | EXISTS | `composition_orchestrator.py` + `pdf_orchestrator.py` |
@@ -71,8 +71,8 @@ session-reporting/execution integration.
 - **Feature engine**: `packages/features_engine/src/`.
 - **64-dim `FeatureIndex`**: `packages/features_engine/src/features/feature_index.py:11-126`.
 - **Structural / PDF models (11)**: `packages/features_engine/src/structural_models/model_01..11.py`.
-- **Hypotheses (44)**: `packages/features_engine/src/hypotheses/`.
-- **HYP registry**: `get_active_hypotheses()` (44). **PDF registry**: `get_structural_models()` (7 visible in the source; the 11 figure may include per-pdf helpers; clarify in Phase 7). **Total registry**: 55 in the unified registry.
+- **Hypotheses**: `packages/features_engine/src/hypotheses/` contains 44 configured HYP implementations; `get_active_hypotheses()` returns 39 by default and 44 when `HFT3_CROSS_ASSET=1` enables HYP 16-20.
+- **PDF registry**: `get_structural_models()` returns 11 structural model instances. **Total registry**: 55 in the unified registry when cross-asset hypotheses are enabled.
 
 ## Section 5 — Experiment / campaign configuration files
 
@@ -86,7 +86,7 @@ session-reporting/execution integration.
 - **Base class**: `WorkbenchModel` ABC in `apps/workbench/src/core/protocol.py:40-103`.
 - **Required method**: `predict(ctx) -> ActionValue`.
 - **Supporting types**: `ModelConfig`, `Diagnostics`, `Phase`, `ModelRole`, `ModelComposition` in `apps/workbench/src/core/composition.py`.
-- 44 hypothesis implementations + 11 PDF structural models all implement this contract.
+- 44 configured hypothesis implementations + 11 PDF structural models implement this contract; 39 HYP are active by default, with HYP 16-20 gated by `HFT3_CROSS_ASSET`.
 
 ## Section 7 — Defensive model interfaces
 
@@ -167,7 +167,7 @@ session-reporting/execution integration.
 - **Phase 19 execution boundary exists** — `packages/trade_manager/execution_boundary.py` validates `configs/execution/adapter.yaml` and produces inert boundary audit metadata with `can_route=False`.
 - **Phase 20 position monitor exists** — `packages/trade_manager/monitor.py` captures supplied position snapshots and returns `OK`, `MISMATCH`, or `UNKNOWN` reconciliation results without adapter creation, routing, or flattening.
 - **Phase 21 kill switch exists** — `packages/trade_manager/kill_switch.py` and `configs/risk/kill_switch.yaml` return requested action decisions across the 12 documented trigger families without adapter creation, routing, cancelling, or flattening.
-- The only existing "trade manager" is the C++ `risk_engine/include/risk_manager.hpp`, which is a **risk** monitor, not a signal→intent orchestrator.
+- The Python `packages/trade_manager/manager.py` Trade Manager now provides the Phase 14-23 signal-to-observer surfaces listed above. The C++ `risk_engine/include/risk_manager.hpp` remains a separate risk monitor, not the Trade Manager orchestrator.
 - `OrderIntent` exists in `packages/execution/interfaces.py` (52 matches); Phase 17 creates one only as production-safety monitor input, not as a routed execution request.
 - **Phase 22 observer exists** — `apps/observer/` reads local session artifacts and renders a deterministic read-only CLI view without Trade Manager mutation, adapter creation, routing, or paper/live/Rithmic calls.
 - **Phase 23 session reporting exists** — `packages/trade_manager/session.py` writes the 16 observer-compatible session artifacts from supplied data only, with traversal rejection, object-only JSON/JSONL validation, recursive non-finite rejection, and atomic same-directory replacement.
