@@ -66,9 +66,15 @@ static std::string fixed_cstr(const char* data, size_t len) {
     return std::string(data, data + n);
 }
 
-static bool order_event_matches(const hft::OrderEvent& ev, const std::string& user_msg) {
-    return fixed_cstr(ev.user_msg, sizeof(ev.user_msg)) == user_msg
-        || fixed_cstr(ev.tag, sizeof(ev.tag)) == user_msg;
+static bool order_event_matches(const hft::OrderEvent& ev, const std::string& user_msg,
+                                uint64_t send_ns) {
+    std::string ev_user_msg = fixed_cstr(ev.user_msg, sizeof(ev.user_msg));
+    std::string ev_tag = fixed_cstr(ev.tag, sizeof(ev.tag));
+    if (!ev_user_msg.empty() || !ev_tag.empty()) {
+        return ev_user_msg == user_msg || ev_tag == user_msg;
+    }
+    uint64_t event_ns = ev.callback_monotonic_ns ? ev.callback_monotonic_ns : steady_now_ns();
+    return event_ns >= send_ns;
 }
 
 static double pct_us(const std::vector<double>& sorted_us, double pct) {
@@ -151,6 +157,8 @@ static bool load_mml_env_vars(const std::string& path, std::vector<std::string>&
 
 int main(int argc, char** argv) {
     (void)argc; (void)argv;
+    std::setvbuf(stdout, nullptr, _IONBF, 0);
+    std::setvbuf(stderr, nullptr, _IONBF, 0);
 
     const char* user = get_env_or("RITHMIC_USERNAME", "");
     const char* pass = get_env_or("RITHMIC_PASSWORD", "");
@@ -329,7 +337,7 @@ int main(int argc, char** argv) {
                 if (!order_queue.pop(ev)) {
                     continue;
                 }
-                if (!order_event_matches(ev, user_msg)) {
+                if (!order_event_matches(ev, user_msg, send_ns)) {
                     continue;
                 }
 
