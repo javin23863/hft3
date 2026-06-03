@@ -69,6 +69,19 @@ def _dump_json(path: Path, payload: Any) -> None:
     )
 
 
+def _safe_bundle_dir(intake_dir: Path, research_id: str) -> Path:
+    if not research_id:
+        raise ValueError("research_id must be non-empty")
+    research_path = Path(research_id)
+    if research_path.is_absolute():
+        raise ValueError("research_id must be relative")
+    root = intake_dir.resolve()
+    bundle = (root / research_path).resolve()
+    if bundle == root or root not in bundle.parents:
+        raise ValueError("research_id escapes intake_dir")
+    return bundle
+
+
 def write_intake_bundle(
     research_id: str,
     source_path: Path,
@@ -89,7 +102,7 @@ def write_intake_bundle(
     tables: Optional[List[Table]] = None,
 ) -> Path:
     """Write the 14 files into `intake_dir / research_id`. Returns the bundle dir."""
-    bundle = intake_dir / research_id
+    bundle = _safe_bundle_dir(intake_dir, research_id)
     bundle.mkdir(parents=True, exist_ok=True)
 
     reasons = detect_intake_quarantine(
@@ -99,7 +112,7 @@ def write_intake_bundle(
         hypotheses=testable_hypotheses,
         notes=translation_notes,
     )
-    if reasons and not translation_notes.quarantine:
+    if reasons:
         translation_notes.quarantine = True
         translation_notes.quarantine_reasons = sorted(
             set(translation_notes.quarantine_reasons) | set(reasons)
@@ -128,11 +141,13 @@ def is_quarantined(bundle_dir: Path) -> bool:
     """Read `experiment_translation_notes.json` and return its `quarantine` flag."""
     notes_path = bundle_dir / "experiment_translation_notes.json"
     if not notes_path.is_file():
-        return False
+        return True
     try:
         data = json.loads(notes_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return False
+        return True
+    if not isinstance(data, dict) or "quarantine" not in data:
+        return True
     return bool(data.get("quarantine"))
 
 

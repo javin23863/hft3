@@ -131,6 +131,7 @@ def test_intake_bundle_writes_all_14_files(tmp_path: Path) -> None:
     for name in BUNDLE_FILES:
         path = bundle / name
         assert path.is_file(), f"missing file: {name}"
+    assert {path.name for path in bundle.iterdir()} == set(BUNDLE_FILES)
     assert not is_quarantined(bundle)
 
 
@@ -147,6 +148,22 @@ def test_source_document_path_is_absolute(tmp_path: Path) -> None:
     )
     content = (bundle / "source_document_path").read_text(encoding="utf-8").strip()
     assert Path(content).is_absolute()
+    with pytest.raises(ValueError):
+        write_intake_bundle(
+            research_id="../escape",
+            source_path=src,
+            intake_dir=tmp_path / "intake",
+            extracted_text="body",
+            **payload,
+        )
+    with pytest.raises(ValueError):
+        write_intake_bundle(
+            research_id=".",
+            source_path=src,
+            intake_dir=tmp_path / "intake",
+            extracted_text="body",
+            **payload,
+        )
 
 
 def test_intake_bundle_invalid_thesis_is_quarantined(tmp_path: Path) -> None:
@@ -161,6 +178,8 @@ def test_intake_bundle_invalid_thesis_is_quarantined(tmp_path: Path) -> None:
     )
     payload["parameter_ranges"] = []
     payload["testable_hypotheses"] = []
+    payload["translation_notes"].quarantine = True
+    payload["translation_notes"].quarantine_reasons = ["existing_llm_quarantine"]
     bundle = write_intake_bundle(
         research_id="vague1",
         source_path=src,
@@ -172,7 +191,12 @@ def test_intake_bundle_invalid_thesis_is_quarantined(tmp_path: Path) -> None:
     notes = json.loads((bundle / "experiment_translation_notes.json").read_text(encoding="utf-8"))
     assert notes["quarantine"] is True
     assert notes["quarantine_reasons"], "expected at least one quarantine reason"
+    assert "existing_llm_quarantine" in notes["quarantine_reasons"]
     assert any("thesis" in r for r in notes["quarantine_reasons"])
+    (bundle / "experiment_translation_notes.json").unlink()
+    assert is_quarantined(bundle)
+    (bundle / "experiment_translation_notes.json").write_text("{not-json", encoding="utf-8")
+    assert is_quarantined(bundle)
 
 
 def test_param_range_min_eq_max_is_quarantined(tmp_path: Path) -> None:

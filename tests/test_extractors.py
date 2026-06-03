@@ -150,7 +150,7 @@ def test_extract_no_table_returns_empty() -> None:
 # ---------- integration with write_intake_bundle ----------
 
 
-def test_ingest_bundle_writes_equations_and_tables() -> None:
+def test_ingest_bundle_writes_equations_and_tables(tmp_path: Path) -> None:
     """The 14-file bundle now contains real equations and tables from the
     extractor (not always [])."""
     text = (
@@ -163,12 +163,12 @@ def test_ingest_bundle_writes_equations_and_tables() -> None:
     assert len(equations) >= 1
     assert len(tables) >= 1
     # Now write a bundle and verify the JSON files contain the data
-    src = Path("dummy.md")
+    src = tmp_path / "dummy.md"
     src.write_text(text, encoding="utf-8")
     bundle = write_intake_bundle(
         research_id="r1",
         source_path=src,
-        intake_dir=Path("intake_test"),
+        intake_dir=tmp_path / "intake_test",
         extracted_text=text,
         thesis_summary=ThesisSummary(
             main_thesis="Mean reversion on NQ after 9:30 stop runs " * 3,
