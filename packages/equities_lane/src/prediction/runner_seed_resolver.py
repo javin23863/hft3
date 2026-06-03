@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from statistics import median
 from typing import Any
@@ -98,6 +98,18 @@ class BenchmarkResult:
     thresholds: dict[str, float]
     failures: list[str]
     lift_l2_l3_download: bool
+
+
+@dataclass(frozen=True)
+class OptionsSnapshotConfig:
+    dataset: str = "OPRA.PILLAR"
+    schema: str = "cbbo-1m"
+    stype_in: str = "parent"
+    parent_symbol_suffix: str = ".OPT"
+    quote_window_seconds: int = 60
+    regular_open: str = "09:30:00"
+    regular_close: str = "16:00:00"
+    closed_market_policy: str = "use_last_regular_quote_before_snapshot"
 
 
 @dataclass(frozen=True)
@@ -230,6 +242,11 @@ def resolve_runner_seed_events(
 
     benchmark = evaluate_free_daily_benchmark(events, seeds, benchmark_cfg)
     l2_l3_plan = _apply_benchmark_to_l2_l3_plan(l2_l3_plan, benchmark)
+    options_snapshot_plan = build_options_snapshot_plan(
+        snapshots,
+        benchmark,
+        _options_snapshot_config(cfg),
+    )
 
     cohort_rows = [_cohort_row(event) for event in events]
     payload = {
@@ -245,6 +262,7 @@ def resolve_runner_seed_events(
         "delisted_resolved_via": delisted_resolved_via,
         "detection_config": detection.__dict__,
         "benchmark_config": benchmark_cfg.__dict__,
+        "options_snapshot_config": _options_snapshot_config(cfg).__dict__,
         "free_daily_benchmark": {
             "passed": benchmark.passed,
             "metrics": benchmark.metrics,
@@ -256,6 +274,7 @@ def resolve_runner_seed_events(
         "cohort_rows": cohort_rows,
         "snapshot_rows": snapshots,
         "l2_l3_minimal_pull_plan": l2_l3_plan,
+        "options_snapshot_plan": options_snapshot_plan,
         "unresolved_tickers": unresolved,
     }
 
@@ -374,6 +393,39 @@ def build_l2_l3_pull_plan(event: RunnerEvent, snapshots: list[dict[str, Any]]) -
     return rows
 
 
+def build_options_snapshot_plan(
+    snapshots: list[dict[str, Any]],
+    benchmark: BenchmarkResult,
+    config: OptionsSnapshotConfig,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for snap in snapshots:
+        if snap.get("status") == "missing_daily_history" or not snap.get("snapshot_timestamp_et"):
+            continue
+        quote = _options_quote_window(snap, config)
+        rows.append({
+            "ticker": snap["ticker"],
+            "runner_label_id": snap["runner_label_id"],
+            "event_date": snap["event_date"],
+            "snapshot_name": snap["snapshot_name"],
+            "equity_snapshot_timestamp_et": snap["snapshot_timestamp_et"],
+            "options_reference_timestamp_et": quote["reference_timestamp_et"],
+            "options_window_start_et": quote["window_start_et"],
+            "options_window_end_et": quote["window_end_et"],
+            "options_market_status": quote["market_status"],
+            "underlying_parent_symbol": f"{snap['ticker'].upper()}{config.parent_symbol_suffix}",
+            "dataset": config.dataset,
+            "schema": config.schema,
+            "stype_in": config.stype_in,
+            "quote_window_seconds": config.quote_window_seconds,
+            "download_now": benchmark.lift_l2_l3_download,
+            "download_policy": "free_daily_benchmark_passed" if benchmark.lift_l2_l3_download else "plan_only_until_free_daily_benchmark_passes",
+            "purpose": "options feature snapshot aligned to equity runner snapshot",
+            "leakage_guard": quote["leakage_guard"],
+        })
+    return rows
+
+
 def _cohort_row(event: RunnerEvent) -> dict[str, Any]:
     return {
         "ticker": event.ticker,
@@ -400,6 +452,7 @@ def _write_outputs(output_dir: Path, payload: dict[str, Any]) -> None:
     _write_json(output_dir / "runner_cohorts.json", payload["cohort_rows"])
     _write_json(output_dir / "snapshot_plan.json", payload["snapshot_rows"])
     _write_json(output_dir / "l2_l3_minimal_pull_plan.json", payload["l2_l3_minimal_pull_plan"])
+    _write_json(output_dir / "options_snapshot_plan.json", payload["options_snapshot_plan"])
     _write_json(output_dir / "unresolved_tickers.json", payload["unresolved_tickers"])
     _write_json(output_dir / "free_daily_benchmark.json", payload["free_daily_benchmark"])
 
@@ -550,6 +603,67 @@ def _benchmark_config(data: dict[str, Any]) -> BenchmarkConfig:
         min_median_event_strength=float(rules.get("min_median_event_strength", 1.0)),
         max_share_of_events_in_a_single_ticker=float(rules.get("max_share_of_events_in_a_single_ticker", 0.75)),
     )
+
+
+def _options_snapshot_config(data: dict[str, Any]) -> OptionsSnapshotConfig:
+    raw = data.get("options_feature_phase") or {}
+    hours = raw.get("market_hours_et") or {}
+    return OptionsSnapshotConfig(
+        dataset=str(raw.get("dataset", "OPRA.PILLAR")),
+        schema=str(raw.get("schema", "cbbo-1m")),
+        stype_in=str(raw.get("stype_in", "parent")),
+        parent_symbol_suffix=str(raw.get("parent_symbol_suffix", ".OPT")),
+        quote_window_seconds=int(raw.get("quote_window_seconds", 60)),
+        regular_open=str(hours.get("regular_open", "09:30:00")),
+        regular_close=str(hours.get("regular_close", "16:00:00")),
+        closed_market_policy=str(raw.get("closed_market_policy", "use_last_regular_quote_before_snapshot")),
+    )
+
+
+def _options_quote_window(snap: dict[str, Any], config: OptionsSnapshotConfig) -> dict[str, str]:
+    equity_ts = datetime.fromisoformat(str(snap["snapshot_timestamp_et"]))
+    market_open = _combine_time(equity_ts.date(), config.regular_open)
+    market_close = _combine_time(equity_ts.date(), config.regular_close)
+    window = timedelta(seconds=config.quote_window_seconds)
+
+    if equity_ts < market_open:
+        reference_date = _parse_date(str(snap.get("free_daily_cutoff_date") or _previous_calendar_day(equity_ts.date().isoformat())))
+        ref_ts = _combine_time(reference_date, config.regular_close)
+        return {
+            "reference_timestamp_et": ref_ts.isoformat(timespec="seconds"),
+            "window_start_et": (ref_ts - window).isoformat(timespec="seconds"),
+            "window_end_et": ref_ts.isoformat(timespec="seconds"),
+            "market_status": "options_market_closed_carried_forward",
+            "leakage_guard": "OPRA equity options are closed at this equity snapshot; use latest regular quote before the snapshot.",
+        }
+    if equity_ts > market_close:
+        ref_ts = market_close
+        return {
+            "reference_timestamp_et": ref_ts.isoformat(timespec="seconds"),
+            "window_start_et": (ref_ts - window).isoformat(timespec="seconds"),
+            "window_end_et": ref_ts.isoformat(timespec="seconds"),
+            "market_status": "options_market_closed_carried_forward",
+            "leakage_guard": "OPRA equity options are closed at this equity snapshot; use latest regular quote before the snapshot.",
+        }
+    if equity_ts == market_open:
+        return {
+            "reference_timestamp_et": equity_ts.isoformat(timespec="seconds"),
+            "window_start_et": equity_ts.isoformat(timespec="seconds"),
+            "window_end_et": (equity_ts + window).isoformat(timespec="seconds"),
+            "market_status": "options_opening_quote_window",
+            "leakage_guard": "Opening options quote is only available after the one-minute window completes.",
+        }
+    return {
+        "reference_timestamp_et": equity_ts.isoformat(timespec="seconds"),
+        "window_start_et": (equity_ts - window).isoformat(timespec="seconds"),
+        "window_end_et": equity_ts.isoformat(timespec="seconds"),
+        "market_status": "options_regular_session",
+        "leakage_guard": "Uses only options quotes at or before the equity snapshot timestamp.",
+    }
+
+
+def _combine_time(day: date, value: str) -> datetime:
+    return datetime.combine(day, time.fromisoformat(value))
 
 
 def _delisted_tickers(data: dict[str, Any]) -> set[str]:

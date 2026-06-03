@@ -41,6 +41,20 @@ l2_l3_phase:
     - T0 opening auction
     - T0 first 5 minutes
 
+options_feature_phase:
+  status: plan_only_until_free_daily_benchmark_passes
+  description: "OPRA options feature snapshots aligned to the same point-in-time equity snapshots. This is an equities-lane feature, not a separate options lane."
+  dataset: OPRA.PILLAR
+  schema: cbbo-1m
+  stype_in: parent
+  parent_symbol_suffix: .OPT
+  quote_window_seconds: 60
+  market_hours_et:
+    regular_open: "09:30:00"
+    regular_close: "16:00:00"
+  closed_market_policy: use_last_regular_quote_before_snapshot
+  leakage_guard: "For equity snapshots outside OPRA regular hours, use the latest regular-session options quote strictly before the equity snapshot timestamp."
+
 positive_seed_tickers:
   "2022":
     - TBLT
