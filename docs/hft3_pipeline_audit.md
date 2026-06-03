@@ -260,6 +260,7 @@ Phase 21 (Trade Manager kill switch): `packages/trade_manager/kill_switch.py`, `
 Phase 22 (Trade Manager observer): `apps/observer/` — read-only local session-artifact view before session writer integration.
 Phase 23 (Trade Manager session reporting): `packages/trade_manager/session.py` — inert observer-compatible session artifact writer.
 Phase 24 (autonomous-runner resumability): `packages/hft3/research/run_autonomous.py`, `tests/test_autonomous_runner_recovery.py` — checkpoint recovery decisions, atomic runner writes, fail-closed completed-stage artifact validation, idempotent valid registry marker resume, and corrupt/non-object/mismatched registry marker rejection.
+Phase 25 (required tests): `tests/test_phase25_required_tests.py`, `docs/project/VALIDATION_MATRIX.md` — validation matrix, scoreboard, and blocker-honesty closure tests.
 
 ## Section 25 — Files that should remain untouched (hot path)
 

@@ -11,7 +11,7 @@ This roadmap turns the remaining HFT3 phases into parallel workstreams with clea
 | Phase 22 | Complete | Read-only local artifact observer CLI |
 | Phase 23 | Complete | Inert session reporting artifacts |
 | Phase 24 | Complete | Autonomous-runner checkpoint recovery is hardened and tested; Trade Manager restart recovery remains future work |
-| Phase 25 | Partial | Original required-test matrix remains incomplete |
+| Phase 25 | Complete | Validation matrix and required-test honesty are guarded by tests |
 
 ## Non-Negotiable Constraints
 
@@ -39,7 +39,7 @@ This roadmap turns the remaining HFT3 phases into parallel workstreams with clea
 | 22 | `apps/observer/` | CLI reads session state and cannot mutate or route |
 | 23 | `packages/trade_manager/session.py` | 16 documented session artifacts are written and validated |
 | 24 | autonomous-runner resumability and failure safety | Existing checkpoint flow is hardened and crash recovery is tested |
-| 25 | required-test closure and validation docs/scripts | Required gate matrix is explicit, runnable, and honest about blockers |
+| 25 | required-test closure and validation docs/scripts | Required gate matrix is explicit, runnable, honest about blockers, and guarded by tests |
 
 ## Dependency Rules
 

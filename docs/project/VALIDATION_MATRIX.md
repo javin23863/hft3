@@ -18,7 +18,7 @@ git diff --check
 | Phase 22 Observer CLI | `$env:PYTHONPATH = "packages;apps"; python -m pytest tests/test_observer_view_read_only.py -q` | Must prove read-only behavior |
 | Phase 23 Session Reporting | `$env:PYTHONPATH = "packages;apps"; python -m pytest tests/test_trade_manager_phase23.py -q` | Must validate 16 artifacts |
 | Phase 24 Resumability Safety | `$env:PYTHONPATH = "packages;apps"; python -m pytest tests/test_autonomous_runner.py tests/test_autonomous_runner_recovery.py -q` | Must reject corrupted/partial runner artifacts and prove idempotent resume |
-| Phase 25 Required Tests | documented scoreboard command plus missing required tests | Must update this matrix and traceability |
+| Phase 25 Required Tests | `$env:PYTHONPATH = "packages;apps"; python -m pytest tests/test_phase25_required_tests.py -q` | Proves scoreboard consistency and blocker honesty |
 
 ## Integration Gates
 
@@ -54,7 +54,7 @@ python -m economic_event_universe.cli validate
 
 ## Current Documented Scoreboard
 
-The current documented scoreboard is `326/326` across 25 files in `docs/hft3_autonomous_pipeline_runbook.md` and `docs/hft3_traceability.md`. Phase 25 must keep this current when additional tests are added.
+The current documented scoreboard is `331/331 passing` across 26 test files in `docs/hft3_autonomous_pipeline_runbook.md` and `docs/hft3_traceability.md`. Phase 25 required-test closure is concrete and complete.
 
 ## Slow And External Tests
 

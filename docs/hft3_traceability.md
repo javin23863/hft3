@@ -145,7 +145,7 @@ This document maps each major requirement from the 26-phase spec to:
 
 | Requirement | Implementation | Test | Artifact |
 |---|---|---|---|
-| 22 required tests | **PARTIALLY IMPLEMENTED** (most exist; ~5 missing) | N/A | N/A |
+| Required-test closure and validation matrix | `docs/project/VALIDATION_MATRIX.md`; `docs/hft3_autonomous_pipeline_runbook.md`; `docs/hft3_traceability.md` | `tests/test_phase25_required_tests.py` | Validation matrix, runbook, and traceability scoreboard stay concrete and honest |
 
 ## Phase 26: Required Documentation
 
@@ -183,9 +183,9 @@ This document maps each major requirement from the 26-phase spec to:
 | 22 — Trade Manager observer CLI | ✅ DONE (read-only artifacts) | 10 |
 | 23 — Trade Manager session reporting | ✅ DONE (inert artifacts) | 10 |
 | 24 — Resumability | ✅ DONE | 14 |
-| 25 — 22 required tests | ⚠️ PARTIAL | 326 total |
+| 25 — Required-test closure | DONE | 5 |
 | 26 — Documentation | ✅ DONE | N/A |
 
-**Total: 326 tests passing across 25 test files.**
+**Total: 331/331 passing across 26 test files.**
 
-**25 of 26 phases complete. 1 partially done.**
+**26 of 26 phases complete.**
