@@ -66,10 +66,10 @@ Usage:
 """
 from __future__ import annotations
 
-# --- bootstrap pythonpath for headless `python -m` invocations ---
-# This makes `python -m hft3.research.run_autonomous` work from the repo
-# root even before `pip install -e .`. Once hft3 is installed the
-# bootstrap is a no-op (the path is already on sys.path).
+# --- bootstrap pythonpath for headless launcher invocations ---
+# The repo-root `hft3-research.py` launcher works before install. Direct
+# `python -m hft3.research.run_autonomous` invocation still requires
+# `PYTHONPATH=packages;apps` or an editable install so Python can find hft3.
 from . import _path_bootstrap  # noqa: F401  (side-effect: path setup)
 
 import json
@@ -97,12 +97,18 @@ from hft3.validation.gate_result import (
     GateCategory,
     GateResult,
     Severity,
-    aggregate_promotion,
-    blocking_failures,
     write_robustness_gates_json,
 )
 
 logger = logging.getLogger(__name__)
+
+PROMOTION_EVIDENCE_GATE_NAMES = frozenset({
+    "monte_carlo_sharpe_p05",
+    "oos_max_drawdown",
+    "walk_forward_pass",
+    "artifact_completeness",
+    "double_wf_correlation",
+})
 
 
 # ---------- config schema (lightweight pydantic-free dataclass) ----------
@@ -739,10 +745,11 @@ class AutonomousRunner:
             "max_drawdown_threshold": self.config.scoring.get("max_drawdown", -0.10),
         }
         path = self._write_artifact("scoring_summary.json", scoring_summary)
+        persisted_gates = self._load_robustness_gate_dicts()
         pd_path = self._write_artifact("promotion_decision.json", {
             "decision": decision,
             "reason": reason,
-            "blocking_gates": [g.to_dict() for g in blocking_failures(_gates_from_summary(scoring_summary))],
+            "blocking_gates": _blocking_gate_dicts(persisted_gates),
         })
         self._stage_end("score_and_decide", path)
         return path
@@ -873,6 +880,76 @@ class AutonomousRunner:
             raise RuntimeError(self.recovery_reason)
         return marker
 
+    def _load_robustness_gate_dicts(self) -> list[dict[str, Any]]:
+        path = self.run_dir / "robustness_gates.json"
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            self._classify_recovery(
+                RecoveryDecision.MANUAL_REVIEW_REQUIRED,
+                "robustness_gates artifact is missing or malformed",
+            )
+            raise RuntimeError(self.recovery_reason)
+        if (
+            not isinstance(payload, dict)
+            or payload.get("run_id") != self.run_id
+            or payload.get("git_sha") != self.state.git_sha
+            or not isinstance(payload.get("gates"), list)
+        ):
+            self._classify_recovery(
+                RecoveryDecision.MANUAL_REVIEW_REQUIRED,
+                "robustness_gates artifact is malformed",
+            )
+            raise RuntimeError(self.recovery_reason)
+        gates = payload["gates"]
+        if not all(isinstance(gate, dict) for gate in gates):
+            self._classify_recovery(
+                RecoveryDecision.MANUAL_REVIEW_REQUIRED,
+                "robustness_gates artifact contains malformed gates",
+            )
+            raise RuntimeError(self.recovery_reason)
+        try:
+            return [
+                GateResult(
+                    gate_name=gate["gate_name"],
+                    gate_category=GateCategory(gate["gate_category"]),
+                    metric_name=gate["metric_name"],
+                    threshold=gate.get("threshold"),
+                    observed_value=gate.get("observed_value"),
+                    comparison_operator=gate["comparison_operator"],
+                    pass_fail=gate["pass_fail"],
+                    severity=Severity(gate["severity"]),
+                    reason_code=gate.get("reason_code", ""),
+                    artifact_reference=gate.get("artifact_reference"),
+                    blocking_status=gate.get("blocking_status", True),
+                    extra=gate.get("extra", {}),
+                ).to_dict()
+                for gate in gates
+            ]
+        except (KeyError, TypeError, ValueError):
+            self._classify_recovery(
+                RecoveryDecision.MANUAL_REVIEW_REQUIRED,
+                "robustness_gates artifact contains malformed gates",
+            )
+            raise RuntimeError(self.recovery_reason)
+
+    def _require_promotion_evidence(self) -> None:
+        blocking = _blocking_gate_dicts(self._load_robustness_gate_dicts(), include_passed=True)
+        blocking_by_name = {g.get("gate_name"): g for g in blocking}
+        if (
+            not PROMOTION_EVIDENCE_GATE_NAMES.issubset(blocking_by_name)
+            or any(
+                blocking_by_name[name].get("pass_fail") is not True
+                or blocking_by_name[name].get("observed_value") is None
+                for name in PROMOTION_EVIDENCE_GATE_NAMES
+            )
+        ):
+            self._classify_recovery(
+                RecoveryDecision.MANUAL_REVIEW_REQUIRED,
+                "PROMOTE requires persisted passing blocking robustness gates",
+            )
+            raise RuntimeError(self.recovery_reason)
+
     def stage_registry_update(self) -> Path:
         """Stage 14: update the HFT3 registry atomically (Phase 11).
 
@@ -887,10 +964,14 @@ class AutonomousRunner:
         if self._stage_done("registry_update"):
             path = Path(self.state.artifacts["registry_update"])
             self._load_valid_registry_marker(path, decision)
+            if decision == "PROMOTE":
+                self._require_promotion_evidence()
             return path
         existing = self.run_dir / "registry_update.json"
         if existing.is_file():
             self._load_valid_registry_marker(existing, decision)
+            if decision == "PROMOTE":
+                self._require_promotion_evidence()
             self._stage_end("registry_update", existing)
             return existing
         self._stage_start("registry_update")
@@ -903,6 +984,7 @@ class AutonomousRunner:
             "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         }
         if decision == "PROMOTE":
+            self._require_promotion_evidence()
             cert_run_id = (
                 f"CERT-AR-{self.run_id}" if not self.run_id.startswith("CERT-")
                 else self.run_id
@@ -1012,6 +1094,15 @@ def _gates_from_summary(scoring: dict[str, Any]) -> list[GateResult]:
             reason_code=scoring.get("decision", "QUARANTINE"),
         )
     ]
+
+
+def _blocking_gate_dicts(gates: list[dict[str, Any]], *, include_passed: bool = False) -> list[dict[str, Any]]:
+    blocking: list[dict[str, Any]] = []
+    for gate in gates:
+        is_blocking = gate.get("severity") == Severity.BLOCKING.value or gate.get("blocking_status") is True
+        if is_blocking and (include_passed or gate.get("pass_fail") is not True):
+            blocking.append(gate)
+    return blocking
 
 
 def _build_report(

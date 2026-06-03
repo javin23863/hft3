@@ -8,6 +8,7 @@ import pytest
 import hft3.research.run_autonomous as run_autonomous
 from hft3.research.run_autonomous import AutonomousRunner, CampaignConfig, RecoveryDecision
 from hft3.validation.certification_registry import CertificationRecord, save_registry
+from hft3.validation.gate_result import GateCategory, GateResult, Severity, write_robustness_gates_json
 
 
 CONFIG_PATH = Path("configs/research/autonomous_hft3.yaml")
@@ -17,6 +18,62 @@ def _config(tmp_path: Path) -> CampaignConfig:
     cfg = CampaignConfig.from_yaml(CONFIG_PATH)
     cfg.output["artifacts_dir"] = str(tmp_path / "artifacts")
     return cfg
+
+
+def _write_passing_robustness_gates(path: Path, run_id: str, git_sha: str) -> None:
+    gates = [
+        GateResult(
+            gate_name="monte_carlo_sharpe_p05",
+            gate_category=GateCategory.ROBUSTNESS,
+            metric_name="sharpe_p05",
+            threshold=0.5,
+            observed_value=0.7,
+            comparison_operator=">=",
+            pass_fail=True,
+            severity=Severity.BLOCKING,
+        ),
+        GateResult(
+            gate_name="oos_max_drawdown",
+            gate_category=GateCategory.DRAWDOWN_TAIL_RISK,
+            metric_name="max_drawdown",
+            threshold=-0.10,
+            observed_value=-0.05,
+            comparison_operator=">=",
+            pass_fail=True,
+            severity=Severity.BLOCKING,
+        ),
+        GateResult(
+            gate_name="walk_forward_pass",
+            gate_category=GateCategory.WALK_FORWARD,
+            metric_name="wf_passed",
+            threshold=1.0,
+            observed_value=1.0,
+            comparison_operator="==",
+            pass_fail=True,
+            severity=Severity.BLOCKING,
+        ),
+        GateResult(
+            gate_name="artifact_completeness",
+            gate_category=GateCategory.ARTIFACT_COMPLETENESS,
+            metric_name="expected_files_present",
+            threshold=1.0,
+            observed_value=1.0,
+            comparison_operator="==",
+            pass_fail=True,
+            severity=Severity.BLOCKING,
+        ),
+        GateResult(
+            gate_name="double_wf_correlation",
+            gate_category=GateCategory.WALK_FORWARD_CORRELATION,
+            metric_name="spearman",
+            threshold=0.2,
+            observed_value=0.3,
+            comparison_operator=">=",
+            pass_fail=True,
+            severity=Severity.BLOCKING,
+        ),
+    ]
+    write_robustness_gates_json(path, gates, tier="T3", run_id=run_id, git_sha=git_sha)
 
 
 def test_corrupt_state_requires_manual_review_and_run_fails(tmp_path: Path) -> None:
@@ -146,6 +203,11 @@ def test_registry_update_existing_marker_does_not_duplicate_registry_audit(
         "run_id": "REGRESUME",
         "git_sha": runner.state.git_sha,
     })
+    _write_passing_robustness_gates(
+        tmp_path / "artifacts" / "REGRESUME" / "robustness_gates.json",
+        "REGRESUME",
+        runner.state.git_sha,
+    )
     runner._write_artifact("registry_update.json", {
         "decision": "PROMOTE",
         "promoted_to_certification_registry": True,

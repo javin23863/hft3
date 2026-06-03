@@ -33,6 +33,7 @@ from hft3.validation.certification_registry import (
     CertificationRecord,
     load_registry,
 )
+from hft3.validation.gate_result import GateCategory, GateResult, Severity, write_robustness_gates_json
 
 
 CONFIG_PATH = Path("configs/research/autonomous_hft3.yaml")
@@ -40,6 +41,62 @@ CONFIG_PATH = Path("configs/research/autonomous_hft3.yaml")
 
 def _config() -> CampaignConfig:
     return CampaignConfig.from_yaml(CONFIG_PATH)
+
+
+def _write_passing_robustness_gates(path: Path, run_id: str, git_sha: str) -> None:
+    gates = [
+        GateResult(
+            gate_name="monte_carlo_sharpe_p05",
+            gate_category=GateCategory.ROBUSTNESS,
+            metric_name="sharpe_p05",
+            threshold=0.5,
+            observed_value=0.7,
+            comparison_operator=">=",
+            pass_fail=True,
+            severity=Severity.BLOCKING,
+        ),
+        GateResult(
+            gate_name="oos_max_drawdown",
+            gate_category=GateCategory.DRAWDOWN_TAIL_RISK,
+            metric_name="max_drawdown",
+            threshold=-0.10,
+            observed_value=-0.05,
+            comparison_operator=">=",
+            pass_fail=True,
+            severity=Severity.BLOCKING,
+        ),
+        GateResult(
+            gate_name="walk_forward_pass",
+            gate_category=GateCategory.WALK_FORWARD,
+            metric_name="wf_passed",
+            threshold=1.0,
+            observed_value=1.0,
+            comparison_operator="==",
+            pass_fail=True,
+            severity=Severity.BLOCKING,
+        ),
+        GateResult(
+            gate_name="artifact_completeness",
+            gate_category=GateCategory.ARTIFACT_COMPLETENESS,
+            metric_name="expected_files_present",
+            threshold=1.0,
+            observed_value=1.0,
+            comparison_operator="==",
+            pass_fail=True,
+            severity=Severity.BLOCKING,
+        ),
+        GateResult(
+            gate_name="double_wf_correlation",
+            gate_category=GateCategory.WALK_FORWARD_CORRELATION,
+            metric_name="spearman",
+            threshold=0.2,
+            observed_value=0.3,
+            comparison_operator=">=",
+            pass_fail=True,
+            severity=Severity.BLOCKING,
+        ),
+    ]
+    write_robustness_gates_json(path, gates, tier="T3", run_id=run_id, git_sha=git_sha)
 
 
 # ---------- config loading ----------
@@ -71,7 +128,7 @@ def test_autonomous_runner_headless(tmp_path: Path) -> None:
     runner = AutonomousRunner(config=_config(), root=tmp_path)
     rc = runner.run()
     # Default scaffolded decision is QUARANTINE → rc 2
-    assert rc in (0, 1, 2)
+    assert rc == 2
 
 
 def test_autonomous_runner_no_input_or_gui_imports() -> None:
@@ -97,13 +154,13 @@ def test_resumable_rerun(tmp_path: Path) -> None:
     cfg = _config()
     cfg.output["artifacts_dir"] = str(tmp_path / "artifacts")
     runner = AutonomousRunner(config=cfg, root=tmp_path, run_id="R1")
-    assert runner.run() in (0, 1, 2)
+    assert runner.run() == 2
     first_manifest = json.loads(
         (tmp_path / "artifacts" / "R1" / "manifest.json").read_text(encoding="utf-8")
     )
     # Re-run with the same id
     runner2 = AutonomousRunner(config=cfg, root=tmp_path, run_id="R1")
-    assert runner2.run() in (0, 1, 2)
+    assert runner2.run() == 2
     second_manifest = json.loads(
         (tmp_path / "artifacts" / "R1" / "manifest.json").read_text(encoding="utf-8")
     )
@@ -126,26 +183,38 @@ def test_quarantine_path_does_not_write_registry(tmp_path: Path) -> None:
     )
     assert ru["decision"] == "QUARANTINE"
     assert ru["promoted_to_certification_registry"] is False
+    decision = json.loads(
+        (tmp_path / "artifacts" / "Q1" / "promotion_decision.json").read_text(encoding="utf-8")
+    )
+    gate_names = {gate["gate_name"] for gate in decision["blocking_gates"]}
+    assert "monte_carlo_sharpe_p05" in gate_names
+    assert "double_wf_correlation" in gate_names
 
 
 def test_promote_writes_registry_atomically(tmp_path: Path) -> None:
     cfg = _config()
     cfg.output["artifacts_dir"] = str(tmp_path / "artifacts")
-    # Patch the decision to PROMOTE by directly calling stage_score_and_decide
-    # after monkey-patching the stage's decision default.
-    runner = AutonomousRunner(config=cfg, root=tmp_path, run_id="P1")
-    # Force PROMOTE by overriding the score_and_decide stage
-    from hft3.research.run_autonomous import GateResult
-    from hft3.validation.gate_result import GateCategory, Severity
 
-    def force_promote() -> Path:
+    def force_promote(runner: AutonomousRunner, run_id: str, *, gates: str) -> Path:
         runner._stage_start("score_and_decide")
+        if gates == "passing":
+            _write_passing_robustness_gates(
+                runner.run_dir / "robustness_gates.json", run_id, runner.state.git_sha
+            )
+        elif gates == "forged":
+            _write_passing_robustness_gates(
+                runner.run_dir / "robustness_gates.json", run_id, runner.state.git_sha
+            )
+            robustness_path = runner.run_dir / "robustness_gates.json"
+            payload = json.loads(robustness_path.read_text(encoding="utf-8"))
+            payload["gates"][0]["observed_value"] = 0.1
+            robustness_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         scoring = {
             "decision": "PROMOTE",
             "reason": "test_forced",
             "campaign_id": cfg.campaign_id,
-            "run_id": "P1",
-            "git_sha": "abc",
+            "run_id": run_id,
+            "git_sha": runner.state.git_sha,
             "timestamp_utc": "2026-06-02T00:00:00Z",
         }
         path = runner._write_artifact("scoring_summary.json", scoring)
@@ -155,10 +224,21 @@ def test_promote_writes_registry_atomically(tmp_path: Path) -> None:
         runner._stage_end("score_and_decide", path)
         return path
 
-    runner.stage_score_and_decide = force_promote  # type: ignore[assignment]
+    runner = AutonomousRunner(config=cfg, root=tmp_path, run_id="P1")
+    runner.stage_score_and_decide = lambda: force_promote(runner, "P1", gates="missing")  # type: ignore[assignment]
+    assert runner.run() == 3
+    assert not (tmp_path / "artifacts" / "P1" / "registry_update.json").exists()
+
+    runner = AutonomousRunner(config=cfg, root=tmp_path, run_id="P2")
+    runner.stage_score_and_decide = lambda: force_promote(runner, "P2", gates="forged")  # type: ignore[assignment]
+    assert runner.run() == 3
+    assert not (tmp_path / "artifacts" / "P2" / "registry_update.json").exists()
+
+    runner = AutonomousRunner(config=cfg, root=tmp_path, run_id="P3")
+    runner.stage_score_and_decide = lambda: force_promote(runner, "P3", gates="passing")  # type: ignore[assignment]
     assert runner.run() == 0
     ru = json.loads(
-        (tmp_path / "artifacts" / "P1" / "registry_update.json").read_text(encoding="utf-8")
+        (tmp_path / "artifacts" / "P3" / "registry_update.json").read_text(encoding="utf-8")
     )
     assert ru["promoted_to_certification_registry"] is True
     # Verify the legacy single-JSON file has been migrated + has a YELLOW record
@@ -166,7 +246,7 @@ def test_promote_writes_registry_atomically(tmp_path: Path) -> None:
     assert reg.latest_certification_status == "YELLOW"
     # Run ids from autonomous research are prefixed CERT-AR- to satisfy the
     # registry validator (latest_certification_run_id must start with "CERT-").
-    assert reg.latest_certification_run_id == "CERT-AR-P1"
+    assert reg.latest_certification_run_id == "CERT-AR-P3"
 
 
 # ---------- artifacts ----------
@@ -229,7 +309,7 @@ def test_cli_dry_run(tmp_path: Path) -> None:
          "--config", str(cfg_path), "--root", str(tmp_path), "--run-id", "CLI1"],
         capture_output=True, text=True, timeout=60,
     )
-    assert proc.returncode in (0, 1, 2), (
+    assert proc.returncode == 2, (
         f"rc={proc.returncode} stdout={proc.stdout} stderr={proc.stderr}"
     )
     assert (tmp_path / "artifacts" / "CLI1" / "manifest.json").is_file()
