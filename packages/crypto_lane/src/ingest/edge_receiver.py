@@ -13,6 +13,96 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+_EDGE_FEATURE_PACKET_MESSAGE_CLASS = None
+
+
+def _build_edge_feature_packet_message_class():
+    """Build the EdgeFeaturePacket protobuf class without generated code."""
+    global _EDGE_FEATURE_PACKET_MESSAGE_CLASS
+    if _EDGE_FEATURE_PACKET_MESSAGE_CLASS is not None:
+        return _EDGE_FEATURE_PACKET_MESSAGE_CLASS
+
+    from google.protobuf import descriptor_pb2, descriptor_pool, message_factory
+
+    field_types = descriptor_pb2.FieldDescriptorProto.Type
+    labels = descriptor_pb2.FieldDescriptorProto.Label
+
+    file_proto = descriptor_pb2.FileDescriptorProto(
+        name="edge_features.proto",
+        package="edge_features",
+        syntax="proto3",
+    )
+
+    removal_reason = file_proto.enum_type.add(name="RemovalReason")
+    for name, number in (
+        ("BLOCK_INCLUSION", 0),
+        ("RBF", 1),
+        ("EXPIRY", 2),
+        ("CONFLICT", 3),
+    ):
+        removal_reason.value.add(name=name, number=number)
+
+    delta = file_proto.message_type.add(name="MempoolDelta")
+    delta_type = delta.enum_type.add(name="DeltaType")
+    for name, number in (("ADD", 0), ("REMOVE", 1), ("REPLACE", 2)):
+        delta_type.value.add(name=name, number=number)
+
+    for name, number, field_type, type_name in (
+        ("type", 1, field_types.Value("TYPE_ENUM"), ".edge_features.MempoolDelta.DeltaType"),
+        ("txid", 2, field_types.Value("TYPE_BYTES"), None),
+        ("fee_rate", 3, field_types.Value("TYPE_DOUBLE"), None),
+        ("size_bytes", 4, field_types.Value("TYPE_UINT32"), None),
+        ("timestamp_ns", 5, field_types.Value("TYPE_UINT64"), None),
+        ("removal_reason", 6, field_types.Value("TYPE_ENUM"), ".edge_features.RemovalReason"),
+        ("old_txid", 7, field_types.Value("TYPE_BYTES"), None),
+    ):
+        field = delta.field.add(
+            name=name,
+            number=number,
+            label=labels.Value("LABEL_OPTIONAL"),
+            type=field_type,
+        )
+        if type_name:
+            field.type_name = type_name
+
+    packet = file_proto.message_type.add(name="EdgeFeaturePacket")
+    for name, number, field_type, label, type_name in (
+        ("timestamp_ns", 1, field_types.Value("TYPE_UINT64"), labels.Value("LABEL_OPTIONAL"), None),
+        ("sequence_number", 2, field_types.Value("TYPE_UINT64"), labels.Value("LABEL_OPTIONAL"), None),
+        ("fee_mean_sat_vb", 3, field_types.Value("TYPE_DOUBLE"), labels.Value("LABEL_OPTIONAL"), None),
+        ("fee_stddev_sat_vb", 4, field_types.Value("TYPE_DOUBLE"), labels.Value("LABEL_OPTIONAL"), None),
+        ("fee_zscore_latest", 5, field_types.Value("TYPE_DOUBLE"), labels.Value("LABEL_OPTIONAL"), None),
+        ("fee_sample_count", 6, field_types.Value("TYPE_UINT64"), labels.Value("LABEL_OPTIONAL"), None),
+        ("fee_p20", 7, field_types.Value("TYPE_DOUBLE"), labels.Value("LABEL_OPTIONAL"), None),
+        ("fee_p40", 8, field_types.Value("TYPE_DOUBLE"), labels.Value("LABEL_OPTIONAL"), None),
+        ("fee_p60", 9, field_types.Value("TYPE_DOUBLE"), labels.Value("LABEL_OPTIONAL"), None),
+        ("fee_p80", 10, field_types.Value("TYPE_DOUBLE"), labels.Value("LABEL_OPTIONAL"), None),
+        ("mempool_tx_count", 11, field_types.Value("TYPE_UINT32"), labels.Value("LABEL_OPTIONAL"), None),
+        ("mempool_bytes", 12, field_types.Value("TYPE_UINT64"), labels.Value("LABEL_OPTIONAL"), None),
+        ("blockspace_stress_score", 13, field_types.Value("TYPE_DOUBLE"), labels.Value("LABEL_OPTIONAL"), None),
+        ("deltas", 14, field_types.Value("TYPE_MESSAGE"), labels.Value("LABEL_REPEATED"), ".edge_features.MempoolDelta"),
+        ("min_fee_threshold", 15, field_types.Value("TYPE_DOUBLE"), labels.Value("LABEL_OPTIONAL"), None),
+        ("filtered_tx_count", 16, field_types.Value("TYPE_UINT32"), labels.Value("LABEL_OPTIONAL"), None),
+        ("delta_count", 17, field_types.Value("TYPE_UINT32"), labels.Value("LABEL_OPTIONAL"), None),
+        ("uptime_seconds", 18, field_types.Value("TYPE_UINT64"), labels.Value("LABEL_OPTIONAL"), None),
+        ("packets_sent", 19, field_types.Value("TYPE_UINT64"), labels.Value("LABEL_OPTIONAL"), None),
+        ("bytes_sent", 20, field_types.Value("TYPE_UINT64"), labels.Value("LABEL_OPTIONAL"), None),
+    ):
+        field = packet.field.add(
+            name=name,
+            number=number,
+            label=label,
+            type=field_type,
+        )
+        if type_name:
+            field.type_name = type_name
+
+    pool = descriptor_pool.DescriptorPool()
+    pool.Add(file_proto)
+    descriptor = pool.FindMessageTypeByName("edge_features.EdgeFeaturePacket")
+    _EDGE_FEATURE_PACKET_MESSAGE_CLASS = message_factory.GetMessageClass(descriptor)
+    return _EDGE_FEATURE_PACKET_MESSAGE_CLASS
+
 
 @dataclass
 class EdgeFeaturePacket:
@@ -162,42 +252,43 @@ class EdgeReceiver:
     def _deserialize_packet(self, data: bytes) -> Optional[EdgeFeaturePacket]:
         """Deserialize Protocol Buffer packet."""
         try:
-            # Import generated protobuf classes
-            # Note: This requires running protoc on edge_features.proto
-            # For now, we'll use a simple manual deserialization
-            # In production, use: from . import edge_features_pb2
-            
-            # Placeholder: Manual deserialization
-            # In production, replace with:
-            # pb_packet = edge_features_pb2.EdgeFeaturePacket()
-            # pb_packet.ParseFromString(data)
-            
-            logger.warning("Using placeholder deserialization. Generate protobuf classes for production.")
-            
-            # For now, return a dummy packet
-            # TODO: Implement proper protobuf deserialization
+            pb_packet = _build_edge_feature_packet_message_class()()
+            pb_packet.ParseFromString(data)
+
             return EdgeFeaturePacket(
-                timestamp_ns=0,
-                sequence_number=0,
-                fee_mean_sat_vb=0.0,
-                fee_stddev_sat_vb=0.0,
-                fee_zscore_latest=0.0,
-                fee_sample_count=0,
-                fee_p20=0.0,
-                fee_p40=0.0,
-                fee_p60=0.0,
-                fee_p80=0.0,
-                mempool_tx_count=0,
-                mempool_bytes=0,
-                blockspace_stress_score=0.0,
-                min_fee_threshold=0.0,
-                filtered_tx_count=0,
-                delta_count=0,
-                uptime_seconds=0,
-                packets_sent=0,
-                bytes_sent=0,
+                timestamp_ns=pb_packet.timestamp_ns,
+                sequence_number=pb_packet.sequence_number,
+                fee_mean_sat_vb=pb_packet.fee_mean_sat_vb,
+                fee_stddev_sat_vb=pb_packet.fee_stddev_sat_vb,
+                fee_zscore_latest=pb_packet.fee_zscore_latest,
+                fee_sample_count=pb_packet.fee_sample_count,
+                fee_p20=pb_packet.fee_p20,
+                fee_p40=pb_packet.fee_p40,
+                fee_p60=pb_packet.fee_p60,
+                fee_p80=pb_packet.fee_p80,
+                mempool_tx_count=pb_packet.mempool_tx_count,
+                mempool_bytes=pb_packet.mempool_bytes,
+                blockspace_stress_score=pb_packet.blockspace_stress_score,
+                min_fee_threshold=pb_packet.min_fee_threshold,
+                filtered_tx_count=pb_packet.filtered_tx_count,
+                delta_count=pb_packet.delta_count,
+                uptime_seconds=pb_packet.uptime_seconds,
+                packets_sent=pb_packet.packets_sent,
+                bytes_sent=pb_packet.bytes_sent,
+                deltas=[
+                    {
+                        "type": delta.type,
+                        "txid": delta.txid.hex(),
+                        "fee_rate": delta.fee_rate,
+                        "size_bytes": delta.size_bytes,
+                        "timestamp_ns": delta.timestamp_ns,
+                        "removal_reason": delta.removal_reason,
+                        "old_txid": delta.old_txid.hex(),
+                    }
+                    for delta in pb_packet.deltas
+                ],
             )
-            
+
         except Exception as e:
             logger.error(f"Failed to deserialize packet: {e}")
             return None

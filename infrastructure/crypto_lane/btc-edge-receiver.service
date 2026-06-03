@@ -1,0 +1,19 @@
+[Unit]
+Description=Bitcoin Edge Receiver for live BTC node packets
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Environment=BTC_EDGE_ALLOWED_SOURCE=213.199.46.118
+Environment=BTC_EDGE_PORT=9876
+ExecStartPre=/usr/local/sbin/btc-edge-receiver-firewall
+ExecStart=/usr/local/bin/btc-edge-receiver-run
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

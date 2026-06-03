@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ -f /root/.cae-rpc.env ]; then
+  set -a
+  . /root/.cae-rpc.env
+  set +a
+fi
+
+if [ -f /etc/btc-edge-daemon/env ]; then
+  set -a
+  . /etc/btc-edge-daemon/env
+  set +a
+fi
+
+: "${BTC_RPC_USER:?BTC_RPC_USER is required}"
+: "${BTC_RPC_PASS:?BTC_RPC_PASS is required}"
+
+export BTC_RPC_URL="${BTC_RPC_URL:-http://127.0.0.1:8332}"
+export BTC_ZMQ_RAWTX="${BTC_ZMQ_RAWTX:-tcp://127.0.0.1:28333}"
+# The daemon currently subscribes to hashblock on this setting.
+export BTC_ZMQ_RAWBLOCK="${BTC_ZMQ_RAWBLOCK:-tcp://127.0.0.1:28334}"
+export CHICAGO_ADDR="${CHICAGO_ADDR:-64.44.98.219:9876}"
+export PACKET_INTERVAL="${PACKET_INTERVAL:-100}"
+export FEE_FILTER_ENABLED="${FEE_FILTER_ENABLED:-true}"
+export FEE_FILTER_BLOCKS="${FEE_FILTER_BLOCKS:-1}"
+export METRICS_PORT="${METRICS_PORT:-9090}"
+export RUST_LOG="${RUST_LOG:-info}"
+
+exec /usr/local/bin/btc-edge-daemon

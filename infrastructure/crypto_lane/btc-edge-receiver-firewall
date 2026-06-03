@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+allowed_source="${BTC_EDGE_ALLOWED_SOURCE:-213.199.46.118}"
+port="${BTC_EDGE_PORT:-9876}"
+
+while /usr/sbin/iptables -D INPUT -p tcp -s "${allowed_source}" --dport "${port}" -j ACCEPT >/dev/null 2>&1; do
+  :
+done
+
+while /usr/sbin/iptables -D INPUT -p tcp --dport "${port}" -j DROP >/dev/null 2>&1; do
+  :
+done
+
+/usr/sbin/iptables -I INPUT 1 -p tcp --dport "${port}" -j DROP
+/usr/sbin/iptables -I INPUT 1 -p tcp -s "${allowed_source}" --dport "${port}" -j ACCEPT
