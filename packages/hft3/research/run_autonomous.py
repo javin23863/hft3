@@ -79,6 +79,7 @@ import sys
 import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -88,6 +89,7 @@ from hft3.validation.certification_registry import (
     CertificationRecord,
     backtester_version,
     git_sha,
+    load_registry,
     repo_root,
     save_registry as save_certification_registry,
 )
@@ -225,6 +227,12 @@ class RunState:
 # ---------- runner ----------
 
 
+class RecoveryDecision(str, Enum):
+    SAFE_TO_RESUME = "SAFE_TO_RESUME"
+    MANUAL_REVIEW_REQUIRED = "MANUAL_REVIEW_REQUIRED"
+    UNRECOVERABLE = "UNRECOVERABLE"
+
+
 class AutonomousRunner:
     """End-to-end headless orchestrator. Single entry point per run.
 
@@ -262,6 +270,8 @@ class AutonomousRunner:
         self.run_dir = self.artifacts_root / self.run_id
         self.state_dir = self.root / "runtime" / "research" / self.run_id
         self.state_path = self.state_dir / "state.json"
+        self.recovery_decision = RecoveryDecision.SAFE_TO_RESUME
+        self.recovery_reason = "fresh run"
 
         # Resume from checkpoint if present
         if self.state_path.is_file():
@@ -270,12 +280,28 @@ class AutonomousRunner:
                     json.loads(self.state_path.read_text(encoding="utf-8"))
                 )
                 if saved.campaign_id == self.config.campaign_id and saved.run_id == self.run_id:
-                    self.state = saved
-                    logger.info(
-                        "resuming from checkpoint: stages=%s", self.state.completed_stages
+                    if _timestamp_regressed(saved.started_at, saved.last_updated_at):
+                        self._classify_recovery(
+                            RecoveryDecision.MANUAL_REVIEW_REQUIRED,
+                            "checkpoint timestamps regress",
+                        )
+                    else:
+                        self.state = saved
+                        self.recovery_reason = "checkpoint loaded"
+                        logger.info(
+                            "resuming from checkpoint: stages=%s", self.state.completed_stages
+                        )
+                else:
+                    self._classify_recovery(
+                        RecoveryDecision.MANUAL_REVIEW_REQUIRED,
+                        "checkpoint run_id/campaign_id mismatch",
                     )
             except (OSError, json.JSONDecodeError, TypeError) as exc:
-                logger.warning("could not load state, starting fresh: %s", exc)
+                self._classify_recovery(
+                    RecoveryDecision.MANUAL_REVIEW_REQUIRED,
+                    f"could not load checkpoint: {exc}",
+                )
+                logger.warning("could not load state; manual review required: %s", exc)
 
         # Phase 6: data-resolution tag and derived gate, populated by
         # stage_resolve_data. Initialized to None so tests can assert
@@ -289,7 +315,37 @@ class AutonomousRunner:
     # --- stage helpers ---
 
     def _stage_done(self, name: str) -> bool:
-        return name in self.state.completed_stages
+        if name not in self.state.completed_stages:
+            return False
+        artifact = self.state.artifacts.get(name)
+        if not artifact:
+            self._classify_recovery(
+                RecoveryDecision.MANUAL_REVIEW_REQUIRED,
+                f"completed stage {name} has no artifact path",
+            )
+            raise RuntimeError(self.recovery_reason)
+        path = Path(artifact)
+        if not path.is_file():
+            self._classify_recovery(
+                RecoveryDecision.MANUAL_REVIEW_REQUIRED,
+                f"completed stage {name} artifact missing: {path}",
+            )
+            raise RuntimeError(self.recovery_reason)
+        if path.suffix == ".json":
+            try:
+                json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                self._classify_recovery(
+                    RecoveryDecision.MANUAL_REVIEW_REQUIRED,
+                    f"completed stage {name} artifact corrupt: {exc}",
+                )
+                raise RuntimeError(self.recovery_reason)
+        return True
+
+    def _classify_recovery(self, decision: RecoveryDecision, reason: str) -> None:
+        if self.recovery_decision != RecoveryDecision.UNRECOVERABLE:
+            self.recovery_decision = decision
+            self.recovery_reason = reason
 
     def _stage_start(self, name: str) -> None:
         logger.info("[%s] stage start: %s", self.run_id, name)
@@ -303,21 +359,21 @@ class AutonomousRunner:
 
     def _save_state(self) -> None:
         self.state_dir.mkdir(parents=True, exist_ok=True)
-        self.state_path.write_text(
-            json.dumps(self.state.to_dict(), indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
+        _atomic_write_text(
+            self.state_path,
+            json.dumps(self.state.to_dict(), indent=2, sort_keys=True, allow_nan=False) + "\n",
         )
 
     def _write_artifact(self, name: str, payload: Any) -> Path:
         self.run_dir.mkdir(parents=True, exist_ok=True)
         path = self.run_dir / name
         if isinstance(payload, (dict, list)):
-            path.write_text(
-                json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
-                encoding="utf-8",
+            _atomic_write_text(
+                path,
+                json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False) + "\n",
             )
         else:
-            path.write_text(str(payload), encoding="utf-8")
+            _atomic_write_text(path, str(payload))
         return path
 
     # --- per-stage runners ---
@@ -333,7 +389,8 @@ class AutonomousRunner:
         # snapshot
         snapshot_path = self.run_dir / "config_snapshot.yaml"
         snapshot_path.parent.mkdir(parents=True, exist_ok=True)
-        snapshot_path.write_text(
+        _atomic_write_text(
+            snapshot_path,
             yaml.safe_dump(
                 {
                     "campaign_id": self.config.campaign_id,
@@ -349,7 +406,6 @@ class AutonomousRunner:
                 },
                 sort_keys=True,
             ),
-            encoding="utf-8",
         )
         self._write_artifact(
             "config_hash.txt", _hash_file(snapshot_path)
@@ -742,13 +798,13 @@ class AutonomousRunner:
         # logs.txt: capture the runner's log output (if any)
         logs_path = self.run_dir / "logs.txt"
         if not logs_path.is_file():
-            logs_path.write_text(
+            _atomic_write_text(
+                logs_path,
                 f"Autonomous runner logs for {self.run_id}\n"
                 f"Started: {self.state.started_at}\n"
                 f"Git SHA: {self.state.git_sha}\n"
                 f"Campaign: {self.config.campaign_id}\n"
                 f"Stages completed: {len(self.state.completed_stages)}\n",
-                encoding="utf-8",
             )
 
         # Write the manifest (last, so it reflects the final state)
@@ -790,6 +846,33 @@ class AutonomousRunner:
         }
         self._write_artifact("manifest.json", manifest)
 
+    def _load_valid_registry_marker(self, path: Path, decision: str) -> dict[str, Any]:
+        try:
+            marker = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            self._classify_recovery(
+                RecoveryDecision.MANUAL_REVIEW_REQUIRED,
+                "registry_update marker is corrupt",
+            )
+            raise RuntimeError(self.recovery_reason)
+        if not isinstance(marker, dict):
+            self._classify_recovery(
+                RecoveryDecision.MANUAL_REVIEW_REQUIRED,
+                "registry_update marker is not an object",
+            )
+            raise RuntimeError(self.recovery_reason)
+        if (
+            marker.get("run_id") != self.run_id
+            or marker.get("campaign_id") != self.config.campaign_id
+            or marker.get("decision") != decision
+        ):
+            self._classify_recovery(
+                RecoveryDecision.MANUAL_REVIEW_REQUIRED,
+                "registry_update marker identity mismatch",
+            )
+            raise RuntimeError(self.recovery_reason)
+        return marker
+
     def stage_registry_update(self) -> Path:
         """Stage 14: update the HFT3 registry atomically (Phase 11).
 
@@ -797,13 +880,20 @@ class AutonomousRunner:
         REJECT and QUARANTINE decisions write a `registry_update.json`
         marker artifact but do not touch the certification registry.
         """
-        if self._stage_done("registry_update"):
-            return Path(self.state.artifacts["registry_update"])
-        self._stage_start("registry_update")
         scoring = json.loads(
             (self.run_dir / "scoring_summary.json").read_text(encoding="utf-8")
         )
         decision = scoring.get("decision", "QUARANTINE")
+        if self._stage_done("registry_update"):
+            path = Path(self.state.artifacts["registry_update"])
+            self._load_valid_registry_marker(path, decision)
+            return path
+        existing = self.run_dir / "registry_update.json"
+        if existing.is_file():
+            self._load_valid_registry_marker(existing, decision)
+            self._stage_end("registry_update", existing)
+            return existing
+        self._stage_start("registry_update")
         registry_update = {
             "decision": decision,
             "promoted_to_certification_registry": False,
@@ -817,15 +907,17 @@ class AutonomousRunner:
                 f"CERT-AR-{self.run_id}" if not self.run_id.startswith("CERT-")
                 else self.run_id
             )
-            record = CertificationRecord(
-                latest_certification_run_id=cert_run_id,
-                latest_certification_commit=self.state.git_sha,
-                latest_certification_timestamp=datetime.now(timezone.utc).isoformat(),
-                latest_certification_status="YELLOW",
-                backtester_version=backtester_version(self.root),
-                warnings=[f"Autonomous-research promotion: {self.config.campaign_id}"],
-            )
-            save_certification_registry(record, self.root)
+            current = load_registry(self.root)
+            if current.latest_certification_run_id != cert_run_id:
+                record = CertificationRecord(
+                    latest_certification_run_id=cert_run_id,
+                    latest_certification_commit=self.state.git_sha,
+                    latest_certification_timestamp=datetime.now(timezone.utc).isoformat(),
+                    latest_certification_status="YELLOW",
+                    backtester_version=backtester_version(self.root),
+                    warnings=[f"Autonomous-research promotion: {self.config.campaign_id}"],
+                )
+                save_certification_registry(record, self.root)
             registry_update["promoted_to_certification_registry"] = True
             registry_update["certification_status"] = "YELLOW"
         path = self._write_artifact("registry_update.json", registry_update)
@@ -837,6 +929,9 @@ class AutonomousRunner:
     def run(self) -> int:
         """Execute the full pipeline. Returns 0 (PROMOTE) / 1 (REJECT) /
         2 (QUARANTINE) / 3 (infrastructure failure)."""
+        if self.recovery_decision == RecoveryDecision.MANUAL_REVIEW_REQUIRED:
+            logger.error("manual review required before recovery: %s", self.recovery_reason)
+            return 3
         try:
             self.stage_load_config()
             self.stage_resolve_data()
@@ -873,6 +968,32 @@ class AutonomousRunner:
 def _hash_file(path: Path) -> str:
     import hashlib
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.{time.time_ns()}.tmp")
+    try:
+        with tmp.open("w", encoding="utf-8") as fh:
+            fh.write(text)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+    finally:
+        try:
+            if tmp.exists():
+                tmp.unlink()
+        except OSError:
+            pass
+
+
+def _timestamp_regressed(started_at: str, last_updated_at: str) -> bool:
+    try:
+        started = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+        updated = datetime.fromisoformat(last_updated_at.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return True
+    return updated < started
 
 
 def _gates_from_summary(scoring: dict[str, Any]) -> list[GateResult]:

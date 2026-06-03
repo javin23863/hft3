@@ -134,7 +134,12 @@ This document maps each major requirement from the 26-phase spec to:
 |---|---|---|---|
 | Checkpoint state.json | `packages/hft3/research/run_autonomous.py::RunState` | `tests/test_autonomous_runner.py::test_resumable_rerun` | `runtime/research/{run_id}/state.json` |
 | Atomic registry write | Phase 11 | Phase 11 tests | JSONL append with hash chain |
-| Crash recovery | **PARTIALLY IMPLEMENTED** (state.json exists; full crash recovery not tested) | N/A | N/A |
+| Recovery decision | `RecoveryDecision`; `AutonomousRunner.recovery_decision`; `AutonomousRunner.run()` fail-closed recovery guard | `tests/test_autonomous_runner_recovery.py::test_corrupt_state_requires_manual_review_and_run_fails`; `test_checkpoint_identity_mismatch_requires_manual_review_and_run_fails`; `test_checkpoint_timestamp_regression_requires_manual_review_and_run_fails` | `MANUAL_REVIEW_REQUIRED` with return code `3` and no manifest |
+| Completed-stage artifact rejection | `AutonomousRunner._stage_done()` JSON/path validation | `tests/test_autonomous_runner_recovery.py::test_completed_stage_missing_artifact_requires_manual_review_and_run_fails`; `test_completed_stage_corrupt_json_artifact_requires_manual_review_and_run_fails` | `MANUAL_REVIEW_REQUIRED`, return code `3`, no manifest, no artifact rewrite |
+| Atomic runner writes | `AutonomousRunner._save_state()`; `_write_artifact()`; `_atomic_write_text()` | `tests/test_autonomous_runner_recovery.py::test_atomic_writes_leave_no_temp_on_replace_failure`; `test_write_artifact_rejects_nan_without_final_artifact` | Same-directory temp write with cleanup and non-finite JSON rejection |
+| Registry idempotent resume | `AutonomousRunner.stage_registry_update()` marker reuse and certification-registry check | `tests/test_autonomous_runner_recovery.py::test_registry_update_existing_marker_does_not_duplicate_registry_audit` | Existing valid `registry_update.json` marker and unchanged audit log |
+| Registry marker rejection | `AutonomousRunner.stage_registry_update()` marker validation before `_stage_start()` or registry writes | `tests/test_autonomous_runner_recovery.py::test_registry_update_corrupt_existing_marker_requires_manual_review_without_registry_save`; `test_registry_update_non_object_existing_marker_requires_manual_review_without_registry_save`; `test_registry_update_mismatched_existing_marker_requires_manual_review_without_registry_save`; `test_completed_registry_update_mismatched_decision_requires_manual_review_without_rewrite` | Corrupt/non-object/mismatched marker remains unchanged, completed markers are revalidated, and no registry state is written |
+| No recovery routing | Static import/source guard in recovery tests | `tests/test_autonomous_runner_recovery.py::test_autonomous_runner_has_no_live_or_routing_imports` | No Rithmic/Trade Manager/execution routing terms in autonomous runner |
 
 ## Phase 25: Tests
 
@@ -177,10 +182,10 @@ This document maps each major requirement from the 26-phase spec to:
 | 21 — Trade Manager kill switch | ✅ DONE (inert decisions) | 12 |
 | 22 — Trade Manager observer CLI | ✅ DONE (read-only artifacts) | 10 |
 | 23 — Trade Manager session reporting | ✅ DONE (inert artifacts) | 10 |
-| 24 — Resumability | ⚠️ PARTIAL | 1 |
-| 25 — 22 required tests | ⚠️ PARTIAL | 313 total |
+| 24 — Resumability | ✅ DONE | 14 |
+| 25 — 22 required tests | ⚠️ PARTIAL | 326 total |
 | 26 — Documentation | ✅ DONE | N/A |
 
-**Total: 313 tests passing across 24 test files.**
+**Total: 326 tests passing across 25 test files.**
 
-**24 of 26 phases complete. 2 partially done.**
+**25 of 26 phases complete. 1 partially done.**

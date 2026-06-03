@@ -10,7 +10,7 @@ This roadmap turns the remaining HFT3 phases into parallel workstreams with clea
 | Phases 14-21 | Complete | Trade Manager handoff through inert kill-switch decisions |
 | Phase 22 | Complete | Read-only local artifact observer CLI |
 | Phase 23 | Complete | Inert session reporting artifacts |
-| Phase 24 | Partial | Autonomous-runner checkpoint state exists; full crash/recovery safety not complete |
+| Phase 24 | Complete | Autonomous-runner checkpoint recovery is hardened and tested; Trade Manager restart recovery remains future work |
 | Phase 25 | Partial | Original required-test matrix remains incomplete |
 
 ## Non-Negotiable Constraints

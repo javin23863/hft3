@@ -94,7 +94,7 @@ Required artifacts under `artifacts/sessions/{session_id}/`:
 
 ## Phase 24: Resumability And Failure Safety
 
-Existing phase definition: autonomous-runner resumability and failure safety. This phase is already partial because checkpoint `state.json` exists, but full crash recovery is not tested.
+Existing phase definition: autonomous-runner resumability and failure safety. This phase hardens the existing checkpoint `state.json` flow and does not close future Trade Manager restart recovery.
 
 Owned implementation paths:
 
@@ -102,7 +102,7 @@ Owned implementation paths:
 |---|---|
 | `packages/hft3/research/run_autonomous.py` | existing checkpoint/resumability implementation |
 | `tests/test_autonomous_runner.py` | existing resumability test surface |
-| future recovery tests | crash/corruption/idempotency coverage |
+| `tests/test_autonomous_runner_recovery.py` | crash/corruption/idempotency coverage |
 
 Contract:
 

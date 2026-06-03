@@ -173,9 +173,9 @@ The system will continue operating according to configured rules without requiri
 
 Phase 22 does not mutate `TradeManager`, create execution adapters, submit orders, cancel orders, replace orders, flatten positions, or call paper/live/Rithmic paths.
 
-## 10. Restart/recovery procedure (Phase 24)
+## 10. Restart/recovery procedure (future Trade Manager work)
 
-The Trade Manager will support:
+Autonomous-runner resumability is Phase 24 and is implemented in `packages/hft3/research/run_autonomous.py`. Trade Manager restart recovery remains future work and will need to support:
 - Checkpointing (state.json per session)
 - Stage status tracking
 - Resumable runs
@@ -227,10 +227,10 @@ Phase 23: `tests/test_trade_manager_phase23.py` has 10/10 passing tests.
 
 ## 14. Remaining risks
 
-- **Restart-recovery integration remains future work.** Phase 23 writes session reports, but Phase 24 restart recovery is not fully tested.
+- **Restart-recovery integration remains future work.** Phase 23 writes session reports, but Trade Manager restart recovery is not implemented yet.
 - **Rithmic live adapter is not implemented.** The C++ `rithmic_gateway` exists but the Python execution adapter is a stub.
 - **Risk/state/boundary/monitor/kill-switch/observer/session outputs are not execution.** Phases 17-23 record approvals/rejections/state transitions, boundary audit metadata, reconciliation results, kill-switch requested actions, read-only local artifact views, and session artifacts only; no adapter lifecycle exists yet.
-- **Restart recovery is not fully tested.** Phase 24 is partially done (checkpoint state.json exists) but crash recovery is not fully tested.
+- **Autonomous Phase 24 is not Trade Manager restart recovery.** Phase 24 hardens the autonomous runner; a separate Trade Manager restart module is still needed.
 
 ## Implementation plan
 
@@ -289,7 +289,7 @@ The Trade Manager will be built in 4 milestones:
 - `packages/trade_manager/kill_switch.py` — Phase 21 complete: 12 triggers x 7 actions as decisions only
 - Tests: `tests/test_trade_manager_phase20.py`, `tests/test_trade_manager_phase21.py`
 
-### Milestone 4: Observer + session reporting + restart recovery (Phases 22, 23, 24)
+### Milestone 4: Observer + session reporting + future restart recovery (Phases 22, 23, future)
 - `apps/observer/` — read-only CLI
 - `packages/trade_manager/session.py` — 16 session files
 - `packages/trade_manager/restart.py` — crash recovery
