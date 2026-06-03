@@ -18,8 +18,9 @@ Chronological onboarding for human developers. AI agents: [../ai/ONBOARDING.md](
 | 7b | [../chi404/CPU_MEMORY_OVERCLOCK.md](../chi404/CPU_MEMORY_OVERCLOCK.md) | UEFI EXPO/PBO + market-load stability |
 | 8 | [../GRAPHIFY_WORKFLOW.md](../GRAPHIFY_WORKFLOW.md) | Code graph rebuild |
 | 9 | [../../AGENTS.md](../../AGENTS.md) + [../AGENTIC_ENGINEERING.md](../AGENTIC_ENGINEERING.md) | Agent delegation |
-| 10 | [../REPO_MAP.md](../REPO_MAP.md) | Complete top-level directory map |
-| 11 | [RUNTIME_CONTRACT.md](RUNTIME_CONTRACT.md) | Backend ↔ UI artifact schema |
+| 10 | [../project/ROADMAP.md](../project/ROADMAP.md) + [../project/WORKSTREAMS.md](../project/WORKSTREAMS.md) | Parallel phase execution plan |
+| 11 | [../REPO_MAP.md](../REPO_MAP.md) | Complete top-level directory map |
+| 12 | [RUNTIME_CONTRACT.md](RUNTIME_CONTRACT.md) | Backend ↔ UI artifact schema |
 
 ## Subsystem deep dives
 
@@ -28,5 +29,8 @@ Chronological onboarding for human developers. AI agents: [../ai/ONBOARDING.md](
 | Workbench latency | [../workbench/LATENCY_ARCHITECTURE.md](../workbench/LATENCY_ARCHITECTURE.md) |
 | Model catalog | [../workbench/MODEL_CATALOG.md](../workbench/MODEL_CATALOG.md) |
 | After-action LLM | [../workbench/AFTER_ACTION_REPORTS.md](../workbench/AFTER_ACTION_REPORTS.md) |
+| Project merge protocol | [../project/MERGE_PROTOCOL.md](../project/MERGE_PROTOCOL.md) |
+| Phase contracts | [../project/PHASE_CONTRACTS.md](../project/PHASE_CONTRACTS.md) |
+| Validation matrix | [../project/VALIDATION_MATRIX.md](../project/VALIDATION_MATRIX.md) |
 | Structural PDF models | [../structural_models/PDF_MODELS.md](../structural_models/PDF_MODELS.md) |
 | Contributing | [../../CONTRIBUTING.md](../../CONTRIBUTING.md) |
