@@ -289,6 +289,7 @@ int main(int argc, char** argv) {
         const int timeout_ms = get_env_int_or("RITHMIC_PROBE_ORDER_TIMEOUT_MS", 10000);
         const int interval_us = get_env_int_or("RITHMIC_PROBE_ORDER_INTERVAL_US", 0);
         const bool cancel_after_ack = get_env_bool_or("RITHMIC_PROBE_CANCEL_AFTER_ACK", true);
+        const bool debug_events = get_env_bool_or("RITHMIC_PROBE_DEBUG_EVENTS", false);
         const char side = get_env_or("RITHMIC_PROBE_ORDER_SIDE", "B")[0] == 'S' ? 'S' : 'B';
         const std::string run_id = run_id_utc();
         std::vector<double> latencies_us;
@@ -298,6 +299,7 @@ int main(int argc, char** argv) {
         int failure_count = 0;
         int timeout_count = 0;
         int cancel_submit_count = 0;
+        int debug_event_count = 0;
 
         hft::OrderEvent stale;
         while (order_queue.pop(stale)) {}
@@ -329,6 +331,11 @@ int main(int argc, char** argv) {
                 std::printf("ORDER_RESULT index=%d status=send_failed\n", i + 1);
                 continue;
             }
+            if (debug_events) {
+                std::printf("ORDER_SENT index=%d user_msg=%s send_ns=%llu\n",
+                            i + 1, user_msg.c_str(),
+                            static_cast<unsigned long long>(send_ns));
+            }
 
             const uint64_t deadline_ns = send_ns + static_cast<uint64_t>(timeout_ms) * 1000000ULL;
             bool finished = false;
@@ -336,6 +343,16 @@ int main(int argc, char** argv) {
                 hft::OrderEvent ev;
                 if (!order_queue.pop(ev)) {
                     continue;
+                }
+                if (debug_events && debug_event_count < 40) {
+                    ++debug_event_count;
+                    std::printf("ORDER_DEBUG index=%d event_type=%c broker_order_id=%llu"
+                                " cb_ns=%llu user_msg='%s' tag='%s'\n",
+                                i + 1, ev.event_type,
+                                static_cast<unsigned long long>(ev.order_id),
+                                static_cast<unsigned long long>(ev.callback_monotonic_ns),
+                                fixed_cstr(ev.user_msg, sizeof(ev.user_msg)).c_str(),
+                                fixed_cstr(ev.tag, sizeof(ev.tag)).c_str());
                 }
                 if (!order_event_matches(ev, user_msg, send_ns)) {
                     continue;
