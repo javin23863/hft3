@@ -1,0 +1,99 @@
+repo_root: .
+description: Historical low-float runner benchmark seed set. Positive labels only.
+paths:
+  daily_root: data/equities/daily
+  output_root: research_cards/equities/historical_runner_benchmark
+
+free_data_phase:
+  mode: local_daily_ohlcv_only
+  no_paid_market_data_downloads: true
+  event_detection:
+    max_pre_event_close: 5.0
+    min_intraday_return_pct: 30.0
+    min_close_return_pct: 20.0
+    min_volume_expansion: 3.0
+    volume_lookback_days: 20
+    event_cooldown_trading_days: 5
+  snapshots:
+    - T-10 trading days
+    - T-5 trading days
+    - T-3 trading days
+    - T-2 trading days
+    - T-1 close
+    - T-1 after-hours
+    - T0 premarket
+    - T0 open
+
+l2_l3_phase:
+  status: plan_only_until_free_daily_benchmark_passes
+  minimal_windows:
+    - T-1 after-hours
+    - T0 premarket
+    - T0 opening auction
+    - T0 first 5 minutes
+
+positive_seed_tickers:
+  "2022":
+    - TBLT
+    - APRN
+    - BBBY
+    - RDBX
+    - AERC
+    - ANPC
+  "2023":
+    - TOP
+    - CXAI
+    - WETG
+    - MULN
+  "2024":
+    - SERV
+    - SOUN
+    - NNE
+    - APLD
+    - POET
+    - LASE
+    - RR
+    - ONCO
+    - CNEY
+    - KAVL
+    - QUBT
+    - DRUG
+    - WHLR
+  "2025":
+    - MLGO
+    - AREB
+    - SGN
+    - ASST
+    - SGBX
+    - SMX
+    - SAFX
+  2026_trailing_365:
+    - DXST
+    - BJDX
+    - HKIT
+    - MASK
+    - OLOX
+    - QTEX
+    - ATPC
+    - PCLA
+    - PETZ
+    - INM
+    - QUCY
+    - JZXN
+    - TDIC
+    - SOBR
+    - AKAN
+    - ERNA
+    - RMSG
+    - ELAB
+    - PN
+    - HCAI
+    - AEHL
+    - ONMD
+    - LOBO
+    - ABTS
+
+notes:
+  - Cohort tickers are positive-event labels only, never model inputs.
+  - Resolve actual event dates from free daily OHLCV before any L2/L3 spend.
+  - L2/L3 pulls must be limited to snapshot windows, not full ticker histories.
