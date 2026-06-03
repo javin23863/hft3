@@ -928,6 +928,22 @@ class AutonomousRunner:
         bundle_gate = to_gate_result(bundle_result)
         if bundle_result.required_missing:
             bundle_gate.artifact_reference = ", ".join(sorted(bundle_result.required_missing))
+            # If the bundle is incomplete, downgrade PROMOTE to QUARANTINE
+            # by overwriting registry_update.json.
+            ru_path = self.run_dir / "registry_update.json"
+            if ru_path.is_file():
+                try:
+                    ru = json.loads(ru_path.read_text(encoding="utf-8"))
+                    if ru.get("decision") == "PROMOTE":
+                        ru["decision"] = "QUARANTINE"
+                        ru["promoted_to_certification_registry"] = False
+                        ru["reason"] = (
+                            "Artifact bundle incomplete after registry update. "
+                            f"Missing: {bundle_gate.artifact_reference}"
+                        )
+                        _atomic_write_text(ru_path, json.dumps(ru, indent=2, allow_nan=False) + "\n")
+                except (OSError, json.JSONDecodeError):
+                    pass
         self._artifact_bundle_gate = bundle_gate
         # Re-write the manifest with the validation result
         manifest = {
@@ -1092,22 +1108,6 @@ class AutonomousRunner:
             (self.run_dir / "scoring_summary.json").read_text(encoding="utf-8")
         )
         decision = scoring.get("decision", "QUARANTINE")
-        # Pre-check the artifact bundle before allowing PROMOTE. Exclude
-        # registry_update.json since it is written by this stage. The
-        # full check runs in _finalize_bundle() after this stage.
-        if decision == "PROMOTE":
-            from hft3.artifact_bundle import REQUIRED_ARTIFACTS
-            pre_check_missing = [
-                name for name in REQUIRED_ARTIFACTS
-                if name != "registry_update.json"
-                and not (self.run_dir / name).is_file()
-            ]
-            if pre_check_missing:
-                decision = "QUARANTINE"
-                scoring["reason"] = (
-                    "Artifact bundle incomplete before registry update. "
-                    f"Missing: {', '.join(sorted(pre_check_missing))}"
-                )
         self._final_decision = decision
         if self._stage_done("registry_update"):
             path = Path(self.state.artifacts["registry_update"])
@@ -1185,6 +1185,8 @@ class AutonomousRunner:
             self._save_state()
             return 3
 
+        if self._artifact_bundle_gate is not None and self._artifact_bundle_gate.blocking_status:
+            return 2
         return {"PROMOTE": 0, "REJECT": 1, "QUARANTINE": 2}.get(self._final_decision, 2)
 
 
