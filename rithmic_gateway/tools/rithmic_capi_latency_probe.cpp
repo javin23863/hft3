@@ -214,6 +214,7 @@ int main() {
     const int interval_us = get_env_int_or("RITHMIC_PROBE_ORDER_INTERVAL_US", 0);
     const bool cancel_after_ack = get_env_bool_or("RITHMIC_PROBE_CANCEL_AFTER_ACK", true);
     const bool debug_events = get_env_bool_or("RITHMIC_PROBE_DEBUG_EVENTS", false);
+    const bool skip_external_warm = get_env_bool_or("RITHMIC_PROBE_SKIP_EXTERNAL_WARM", false);
     if (price <= 0.0 || count <= 0 || qty <= 0) {
         std::fprintf(stderr, "FAIL: set positive RITHMIC_PROBE_ORDER_PRICE/count/qty\n");
         hft_rithmic_adapter_destroy(handle);
@@ -221,7 +222,7 @@ int main() {
     }
 
     uint64_t warm_start = steady_now_ns();
-    rc = hft_rithmic_adapter_warm_price_increment(handle, symbol, exchange);
+    rc = skip_external_warm ? 0 : hft_rithmic_adapter_warm_price_increment(handle, symbol, exchange);
     uint64_t warm_end = steady_now_ns();
     if (rc != 0) {
         std::fprintf(stderr, "FAIL: warm_price_increment rc=%d error=%s\n", rc, last_error(handle));
