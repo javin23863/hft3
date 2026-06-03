@@ -19,6 +19,17 @@ from equities_lane.src.ingest.decadal_pull import estimate_catalog_cost, pull_ca
 from equities_lane.src.ingest.normalize import normalize_dbn, normalize_fixture
 from equities_lane.src.report.experiment_report import run_experiment
 from equities_lane.src.screen.universe_screener import screen_session
+from equities_lane.src.prediction.trainer import (
+    build_training_dataset,
+    generate_predictions,
+    load_models,
+    run_timing_policy_analysis,
+    run_walk_forward_validation,
+    save_models,
+    train_full_model,
+    write_report,
+)
+from equities_lane.src.prediction.types import ModelConfig
 
 _DEFAULT_CONFIG = _LANE / "config" / "universe.yaml"
 _DECADAL_CONFIG = _LANE / "config" / "decadal_runners.yaml"
@@ -155,6 +166,295 @@ def cmd_pull_decadal(args: argparse.Namespace) -> int:
     return 1 if failed and not args.dry_run else 0
 
 
+def cmd_predict_train(args: argparse.Namespace) -> int:
+    from equities_lane.src.ingest.daily_bars_io import load_daily_bars
+    from equities_lane.src.ingest.float_metadata import load_float_csv
+
+    _, universe, paths = load_universe(args.config)
+    config = ModelConfig()
+
+    daily_root = paths.get("daily_bars", paths.get("daily_root", _REPO / "data" / "equities" / "daily"))
+    symbol_bars: dict[str, list] = {}
+    for sym_file in Path(daily_root).glob("*.parquet"):
+        sym = sym_file.stem
+        symbol_bars[sym] = load_daily_bars(str(sym_file), sym)
+    for sym_file in Path(daily_root).glob("*.csv"):
+        sym = sym_file.stem
+        symbol_bars[sym] = load_daily_bars(str(sym_file), sym)
+
+    float_csv = paths.get("float_metadata", _REPO / "data" / "equities" / "metadata" / "float_pit.csv")
+    float_records: dict[str, list] = {}
+    if Path(float_csv).exists():
+        recs = load_float_csv(str(float_csv))
+        for rec in recs:
+            float_records.setdefault(rec.symbol, []).append(rec)
+
+    X, dates, label_dict, labels = build_training_dataset(symbol_bars, float_records, config)
+    if len(X) == 0:
+        print(json.dumps({"error": "no training data available"}, indent=2))
+        return 1
+
+    hazard, payoff, risk, metrics = train_full_model(X, label_dict, config)
+
+    output_dir = Path(args.output or str(_REPO / "research_cards" / "equities" / "prediction_model"))
+    save_models(hazard, payoff, risk, output_dir)
+
+    fi = hazard.feature_importance(horizon=5)
+    report_path = write_report(metrics, [], [], fi, output_dir)
+
+    print(json.dumps({
+        "model_dir": str(output_dir),
+        "n_samples": len(X),
+        "n_runners": int(label_dict["runner_labels"].sum()),
+        "base_rate": float(label_dict["runner_labels"].mean()),
+        "train_metrics": metrics,
+        "report": str(report_path),
+    }, indent=2))
+    return 0
+
+
+def cmd_predict_validate(args: argparse.Namespace) -> int:
+    from equities_lane.src.ingest.daily_bars_io import load_daily_bars
+    from equities_lane.src.ingest.float_metadata import load_float_csv
+
+    _, universe, paths = load_universe(args.config)
+    config = ModelConfig(
+        walk_forward_n_folds=args.folds or 5,
+        walk_forward_embargo_days=args.embargo or 5,
+    )
+
+    daily_root = paths.get("daily_bars", paths.get("daily_root", _REPO / "data" / "equities" / "daily"))
+    symbol_bars: dict[str, list] = {}
+    for sym_file in Path(daily_root).glob("*.parquet"):
+        sym = sym_file.stem
+        symbol_bars[sym] = load_daily_bars(str(sym_file), sym)
+    for sym_file in Path(daily_root).glob("*.csv"):
+        sym = sym_file.stem
+        symbol_bars[sym] = load_daily_bars(str(sym_file), sym)
+
+    float_csv = paths.get("float_metadata", _REPO / "data" / "equities" / "metadata" / "float_pit.csv")
+    float_records: dict[str, list] = {}
+    if Path(float_csv).exists():
+        recs = load_float_csv(str(float_csv))
+        for rec in recs:
+            float_records.setdefault(rec.symbol, []).append(rec)
+
+    X, dates, label_dict, labels = build_training_dataset(symbol_bars, float_records, config)
+    if len(X) == 0:
+        print(json.dumps({"error": "no data available for validation"}, indent=2))
+        return 1
+
+    wf_metrics = run_walk_forward_validation(X, dates, label_dict, config)
+
+    timing_reports = run_timing_policy_analysis(X, dates, label_dict, config)
+
+    output_dir = Path(args.output or str(_REPO / "research_cards" / "equities" / "prediction_validation"))
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (output_dir / "walk_forward.json").write_text(
+        json.dumps([m.to_dict() for m in wf_metrics], indent=2)
+    )
+    (output_dir / "timing_policies.json").write_text(
+        json.dumps([t.to_dict() for t in timing_reports], indent=2)
+    )
+
+    print(json.dumps({
+        "walk_forward": [m.to_dict() for m in wf_metrics],
+        "timing_policies": [t.to_dict() for t in timing_reports],
+        "output_dir": str(output_dir),
+    }, indent=2))
+    return 0
+
+
+def cmd_predict_score(args: argparse.Namespace) -> int:
+    from equities_lane.src.ingest.daily_bars_io import load_daily_bars
+    from equities_lane.src.ingest.float_metadata import load_float_csv
+
+    _, universe, paths = load_universe(args.config)
+    config = ModelConfig()
+
+    model_dir = Path(args.model_dir or str(_REPO / "research_cards" / "equities" / "prediction_model"))
+    hazard, payoff, risk = load_models(model_dir, config)
+
+    daily_root = paths.get("daily_bars", paths.get("daily_root", _REPO / "data" / "equities" / "daily"))
+    symbol_bars: dict[str, list] = {}
+    for sym_file in Path(daily_root).glob("*.parquet"):
+        sym = sym_file.stem
+        symbol_bars[sym] = load_daily_bars(str(sym_file), sym)
+    for sym_file in Path(daily_root).glob("*.csv"):
+        sym = sym_file.stem
+        symbol_bars[sym] = load_daily_bars(str(sym_file), sym)
+
+    float_csv = paths.get("float_metadata", _REPO / "data" / "equities" / "metadata" / "float_pit.csv")
+    float_records: dict[str, list] = {}
+    if Path(float_csv).exists():
+        recs = load_float_csv(str(float_csv))
+        for rec in recs:
+            float_records.setdefault(rec.symbol, []).append(rec)
+
+    predictions = generate_predictions(
+        symbol_bars, float_records, hazard, payoff, risk, config
+    )
+
+    output_dir = Path(args.output or str(_REPO / "research_cards" / "equities" / "predictions"))
+    output_dir.mkdir(parents=True, exist_ok=True)
+    out_path = output_dir / "predictions.json"
+    out_path.write_text(json.dumps(predictions, indent=2))
+
+    print(json.dumps({
+        "n_predictions": len(predictions),
+        "top_5": predictions[:5],
+        "output_path": str(out_path),
+    }, indent=2))
+    return 0
+
+
+def cmd_l3_extract(args: argparse.Namespace) -> int:
+    from equities_lane.src.prediction.l3.event_types import MBOEvent
+    from equities_lane.src.prediction.l3.features import L3FeatureExtractor
+    from equities_lane.src.prediction.l3.queue_state import OrderBookReconstructor
+
+    session_path = Path(args.session)
+    if not session_path.exists():
+        print(json.dumps({"error": f"session file not found: {session_path}"}, indent=2))
+        return 1
+
+    events = []
+    with open(session_path) as f:
+        for line in f:
+            if line.strip():
+                data = json.loads(line)
+                if "ts_event_ns" in data:
+                    events.append(MBOEvent.from_dict(data))
+
+    if not events:
+        print(json.dumps({"error": "no MBO events found in session"}, indent=2))
+        return 1
+
+    reconstructor = OrderBookReconstructor()
+    snapshots = []
+    for event in events:
+        snap = reconstructor.process_event(event)
+        if snap:
+            snapshots.append(snap)
+
+    extractor = L3FeatureExtractor(window_ns=args.window_ns)
+    features = extractor.extract(events, snapshots)
+
+    output_dir = Path(args.output or str(_REPO / "research_cards" / "equities" / "l3_features"))
+    output_dir.mkdir(parents=True, exist_ok=True)
+    out_path = output_dir / f"{args.symbol}_l3_features.json"
+    out_path.write_text(json.dumps(features.to_dict(), indent=2))
+
+    print(json.dumps({
+        "symbol": args.symbol,
+        "n_events": len(events),
+        "n_snapshots": len(snapshots),
+        "n_features": len(features.to_dict()),
+        "output_path": str(out_path),
+    }, indent=2))
+    return 0
+
+
+def cmd_l3_snapshot(args: argparse.Namespace) -> int:
+    from equities_lane.src.prediction.l3.event_types import MBOEvent
+    from equities_lane.src.prediction.l3.snapshots import L3SnapshotBuilder, L3SnapshotType
+
+    session_path = Path(args.session)
+    if not session_path.exists():
+        print(json.dumps({"error": f"session file not found: {session_path}"}, indent=2))
+        return 1
+
+    events = []
+    with open(session_path) as f:
+        for line in f:
+            if line.strip():
+                data = json.loads(line)
+                if "ts_event_ns" in data:
+                    events.append(MBOEvent.from_dict(data))
+
+    if not events:
+        print(json.dumps({"error": "no MBO events found in session"}, indent=2))
+        return 1
+
+    builder = L3SnapshotBuilder(args.symbol)
+    for event in events:
+        builder.add_event(event)
+
+    snapshot_type = L3SnapshotType(args.snapshot_type)
+    snapshots = builder.build_multi_resolution_snapshots(snapshot_type)
+
+    output_dir = Path(args.output or str(_REPO / "research_cards" / "equities" / "l3_snapshots"))
+    output_dir.mkdir(parents=True, exist_ok=True)
+    out_path = output_dir / f"{args.symbol}_l3_snapshots.json"
+    out_path.write_text(json.dumps([s.to_dict() for s in snapshots], indent=2))
+
+    print(json.dumps({
+        "symbol": args.symbol,
+        "n_events": len(events),
+        "n_snapshots": len(snapshots),
+        "snapshot_type": args.snapshot_type,
+        "output_path": str(out_path),
+    }, indent=2))
+    return 0
+
+
+def cmd_l3_integrate(args: argparse.Namespace) -> int:
+    from equities_lane.src.prediction.l3.event_types import MBOEvent
+    from equities_lane.src.prediction.l3.integration import L3IntegrationLayer
+    from equities_lane.src.prediction.types import HazardEstimate, ModelConfig
+
+    session_path = Path(args.session)
+    if not session_path.exists():
+        print(json.dumps({"error": f"session file not found: {session_path}"}, indent=2))
+        return 1
+
+    events = []
+    with open(session_path) as f:
+        for line in f:
+            if line.strip():
+                data = json.loads(line)
+                if "ts_event_ns" in data:
+                    events.append(MBOEvent.from_dict(data))
+
+    if not events:
+        print(json.dumps({"error": "no MBO events found in session"}, indent=2))
+        return 1
+
+    config = ModelConfig()
+    base_hazard = HazardEstimate(
+        p_run_5d=0.15,
+        p_run_2d=0.10,
+        p_run_1d=0.05,
+        p_afterhours_ignite=0.03,
+        p_premarket_ignite=0.04,
+        p_intraday_continuation=0.06,
+    )
+
+    integration = L3IntegrationLayer(config)
+    enhanced = integration.process_event_stream(args.symbol, events, base_hazard)
+
+    if not enhanced:
+        print(json.dumps({"error": "failed to generate L3 enhanced prediction"}, indent=2))
+        return 1
+
+    output_dir = Path(args.output or str(_REPO / "research_cards" / "equities" / "l3_integrated"))
+    output_dir.mkdir(parents=True, exist_ok=True)
+    out_path = output_dir / f"{args.symbol}_l3_integrated.json"
+    out_path.write_text(json.dumps(enhanced.to_dict(), indent=2))
+
+    print(json.dumps({
+        "symbol": args.symbol,
+        "n_events": len(events),
+        "base_p_run_5d": base_hazard.p_run_5d,
+        "enhanced_p_run_5d": enhanced.enhanced_hazard.p_run_5d,
+        "incremental_alpha": enhanced.incremental_alpha,
+        "timing_recommendation": enhanced.l3_timing_recommendation,
+        "reject_reasons": enhanced.l3_reject_reasons,
+        "output_path": str(out_path),
+    }, indent=2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="equities_lane.pipeline")
     parser.add_argument("--config", default=str(_DEFAULT_CONFIG))
@@ -249,6 +549,42 @@ def main(argv: list[str] | None = None) -> int:
         help="Re-download options even if normalized file exists",
     )
     p_pull.set_defaults(func=cmd_pull_decadal)
+
+    p_ptrain = sub.add_parser("predict-train")
+    p_ptrain.add_argument("--output")
+    p_ptrain.set_defaults(func=cmd_predict_train)
+
+    p_pval = sub.add_parser("predict-validate")
+    p_pval.add_argument("--folds", type=int, default=5)
+    p_pval.add_argument("--embargo", type=int, default=5)
+    p_pval.add_argument("--output")
+    p_pval.set_defaults(func=cmd_predict_validate)
+
+    p_pscore = sub.add_parser("predict-score")
+    p_pscore.add_argument("--model-dir")
+    p_pscore.add_argument("--output")
+    p_pscore.set_defaults(func=cmd_predict_score)
+
+    p_l3_extract = sub.add_parser("l3-extract")
+    p_l3_extract.add_argument("--session", required=True)
+    p_l3_extract.add_argument("--symbol", required=True)
+    p_l3_extract.add_argument("--window-ns", type=int, default=1_000_000_000)
+    p_l3_extract.add_argument("--output")
+    p_l3_extract.set_defaults(func=cmd_l3_extract)
+
+    p_l3_snapshot = sub.add_parser("l3-snapshot")
+    p_l3_snapshot.add_argument("--session", required=True)
+    p_l3_snapshot.add_argument("--symbol", required=True)
+    p_l3_snapshot.add_argument("--snapshot-type", default="event_window")
+    p_l3_snapshot.add_argument("--output")
+    p_l3_snapshot.set_defaults(func=cmd_l3_snapshot)
+
+    p_l3_integrate = sub.add_parser("l3-integrate")
+    p_l3_integrate.add_argument("--session", required=True)
+    p_l3_integrate.add_argument("--symbol", required=True)
+    p_l3_integrate.add_argument("--model-dir")
+    p_l3_integrate.add_argument("--output")
+    p_l3_integrate.set_defaults(func=cmd_l3_integrate)
 
     args = parser.parse_args(argv)
     return args.func(args)
