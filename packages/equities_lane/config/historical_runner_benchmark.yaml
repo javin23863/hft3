@@ -23,6 +23,15 @@ free_data_phase:
     - T-1 after-hours
     - T0 premarket
     - T0 open
+  free_daily_benchmark:
+    description: "Pass/fail gate that lifts download_now=false on the L2/L3 plan."
+    lift_l2_l3_download_when_passed: true
+    rules:
+      min_resolved_events: 5
+      min_resolved_ticker_ratio: 0.10
+      min_active_cohorts: 2
+      min_median_event_strength: 1.0
+      max_share_of_events_in_a_single_ticker: 0.75
 
 l2_l3_phase:
   status: plan_only_until_free_daily_benchmark_passes
