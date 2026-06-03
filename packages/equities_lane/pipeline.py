@@ -33,6 +33,7 @@ from equities_lane.src.prediction.types import ModelConfig
 
 _DEFAULT_CONFIG = _LANE / "config" / "universe.yaml"
 _DECADAL_CONFIG = _LANE / "config" / "decadal_runners.yaml"
+_RUNNER_BENCHMARK_CONFIG = _LANE / "config" / "historical_runner_benchmark.yaml"
 _FIXTURE = _LANE / "fixtures" / "low_float_session_v1.ndjson"
 
 
@@ -455,6 +456,18 @@ def cmd_l3_integrate(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_resolve_runner_seeds(args: argparse.Namespace) -> int:
+    from equities_lane.src.prediction.runner_seed_resolver import resolve_runner_seed_events
+
+    result = resolve_runner_seed_events(
+        args.seeds,
+        daily_root=args.daily_root,
+        output_dir=args.output,
+    )
+    print(json.dumps(result, indent=2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="equities_lane.pipeline")
     parser.add_argument("--config", default=str(_DEFAULT_CONFIG))
@@ -585,6 +598,15 @@ def main(argv: list[str] | None = None) -> int:
     p_l3_integrate.add_argument("--model-dir")
     p_l3_integrate.add_argument("--output")
     p_l3_integrate.set_defaults(func=cmd_l3_integrate)
+
+    p_seed = sub.add_parser(
+        "resolve-runner-seeds",
+        help="Resolve runner seed events from free daily OHLCV (no paid market data downloads).",
+    )
+    p_seed.add_argument("--seeds", default=str(_RUNNER_BENCHMARK_CONFIG))
+    p_seed.add_argument("--daily-root", default=None)
+    p_seed.add_argument("--output", default=None)
+    p_seed.set_defaults(func=cmd_resolve_runner_seeds)
 
     args = parser.parse_args(argv)
     return args.func(args)
