@@ -34,10 +34,16 @@ def gold_prefix() -> str:
     return str(cfg.get("gold_prefix") or cfg.get("bronze_prefix") or "quantx/bronze")
 
 
+def source_asset(source: str) -> str:
+    cfg = _lake_config()
+    by_source = cfg.get("asset_by_source") or {}
+    return str(by_source.get(source, cfg.get("asset", "crypto")))
+
+
 def gold_key(source: str, symbol: str, day: date, granularity: str) -> str:
     cfg = _lake_config()
     prefix = gold_prefix()
-    asset = cfg.get("asset", "crypto")
+    asset = source_asset(source)
     gran = normalize_gold_granularity(source, granularity)
     ds = day.isoformat()
     fname = f"{source}_{asset}_{symbol}_{ds}_{gran}.parquet"
@@ -45,9 +51,8 @@ def gold_key(source: str, symbol: str, day: date, granularity: str) -> str:
 
 
 def deribit_options_key(symbol: str, day: date, expiration: str | None = None) -> str:
-    cfg = _lake_config()
     prefix = gold_prefix()
-    asset = cfg.get("asset", "crypto")
+    asset = source_asset("deribit")
     ds = day.isoformat()
     exp = expiration or ds.replace("-", "")
     sym = f"{symbol}-OPTIONS-{exp}"

@@ -172,7 +172,7 @@ Macro futures: **no venue auction imbalance feed** in inventory (labels only) �
 | ID | Issue | Doc |
 |----|--------|-----|
 | CR-01 | Not in download orchestrator | This file §3.3 |
-| CR-02 | `data/crypto/` empty in git clone | Run `pull-gold` + `normalize` (B2 `crypto-alpha-datasets`, path `quantx/bronze/`) |
+| CR-02 | `data/crypto/` empty in git clone | Run `pull-gold` + optional `backfill-blockspace` + `normalize` (B2 `crypto-alpha-datasets`, path `quantx/bronze/`; bitcoind B2 uses `asset=onchain`) |
 | CR-03 | `tests/test_crypto_lane/` not green | [docs/VALIDATION_HONESTY.md](docs/VALIDATION_HONESTY.md) |
 | CR-04 | Default smokes use **fixtures** only | `packages/crypto_lane/fixtures/` |
 | CR-05 | θ convention audit **open** | [packages/crypto_lane/docs/VALIDATION_HONESTY.md](packages/crypto_lane/docs/VALIDATION_HONESTY.md) |

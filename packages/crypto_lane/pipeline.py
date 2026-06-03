@@ -18,8 +18,12 @@ from crypto_lane.src.align.latency_profile import (
 )
 from crypto_lane.src.config.env_loader import ensure_crypto_env, redacted_env_report
 from crypto_lane.src.config_loader import load_hypotheses, load_manifest
-from crypto_lane.src.ingest.gold_pull import pull_gold, supplement_perp_from_binance
-from crypto_lane.src.ingest.mempool_pull import pull_live_mempool, pull_mempool_backfill
+from crypto_lane.src.ingest.gold_pull import pull_gold, supplement_dvol_from_deribit, supplement_perp_from_binance
+from crypto_lane.src.ingest.mempool_pull import (
+    backfill_blockspace_from_node,
+    pull_live_mempool,
+    pull_mempool_backfill,
+)
 from crypto_lane.src.ingest.normalize import normalize_all
 from crypto_lane.src.ml.candidate_registry import discover_candidates, discover_backtest_configs
 from crypto_lane.src.ml.walk_forward_runner import run_all_smokes, run_smoke
@@ -61,6 +65,8 @@ def cmd_pull_gold(args: argparse.Namespace) -> int:
     counts = pull_gold(start=args.start, end=args.end, sources=sources)
     if "binance" in {s.strip().lower() for s in (sources or ["binance", "deribit", "mempool"])}:
         counts["perp_binance_api"] = supplement_perp_from_binance(start=args.start, end=args.end)
+    if "deribit" in {s.strip().lower() for s in (sources or ["binance", "deribit", "mempool"])}:
+        counts["dvol_deribit_api"] = supplement_dvol_from_deribit(start=args.start, end=args.end)
     print(json.dumps(counts, indent=2))
     return 0
 
@@ -79,6 +85,17 @@ def cmd_pull_mempool(args: argparse.Namespace) -> int:
         count = pull_mempool_backfill(hours=args.hours, interval_minutes=args.interval_minutes)
         print(json.dumps({"written": count}, indent=2))
     return 0
+
+
+def cmd_backfill_blockspace(args: argparse.Namespace) -> int:
+    ensure_crypto_env()
+    count = backfill_blockspace_from_node(
+        start=args.start,
+        end=args.end,
+        step_hours=args.step_hours,
+    )
+    print(json.dumps({"written": count}, indent=2))
+    return 0 if count else 1
 
 
 def cmd_normalize(args: argparse.Namespace) -> int:
@@ -106,6 +123,8 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     gold = pull_gold(start=args.start, end=args.end, sources=sources)
     if "binance" in {s.strip().lower() for s in (sources or ["binance", "deribit", "mempool"])}:
         gold["perp_binance_api"] = supplement_perp_from_binance(start=args.start, end=args.end)
+    if "deribit" in {s.strip().lower() for s in (sources or ["binance", "deribit", "mempool"])}:
+        gold["dvol_deribit_api"] = supplement_dvol_from_deribit(start=args.start, end=args.end)
     mempool = {"written": 0}
     if args.with_mempool:
         try:
@@ -146,6 +165,15 @@ def main(argv: list[str] | None = None) -> int:
     p_mp.add_argument("--interval-minutes", type=int, default=15)
     p_mp.add_argument("--samples", type=int, default=0)
     p_mp.set_defaults(func=cmd_pull_mempool)
+
+    p_bf = sub.add_parser(
+        "backfill-blockspace",
+        help="Historical block-fee proxy from synced bitcoind (not live mempool)",
+    )
+    p_bf.add_argument("--start", required=True)
+    p_bf.add_argument("--end", required=True)
+    p_bf.add_argument("--step-hours", type=int, default=1)
+    p_bf.set_defaults(func=cmd_backfill_blockspace)
 
     p_norm = sub.add_parser("normalize")
     p_norm.add_argument("--start", required=True)

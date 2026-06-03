@@ -10,6 +10,9 @@ forbidden_write_buckets:
 gold_prefix: quantx/bronze
 bronze_prefix: quantx/bronze
 asset: crypto
+# crypto-alpha-engine node ingest writes bitcoind under asset=onchain
+asset_by_source:
+  bitcoind: onchain
 granularity_aliases:
   binance:
     1h: spot_klines_1h
@@ -19,6 +22,7 @@ granularity_aliases:
     futures_um_bookticker_tick: futures_um_bookticker_tick
   deribit:
     options_chain_1h: options_chain_1h
+    dvol_1h: dvol_1h
   deribit_index:
     1h: 1h
   bitcoind:

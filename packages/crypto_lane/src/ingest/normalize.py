@@ -11,6 +11,7 @@ from crypto_lane.src.config_loader import load_yaml
 from crypto_lane.src.ingest.gold_reader import (
     GoldReadError,
     deribit_options_key,
+    gold_key,
     read_gold_day,
     read_gold_range,
     read_mempool_snapshot_range,
@@ -193,6 +194,51 @@ def build_spot_perp_ticks(start: str, end: str) -> pl.DataFrame:
     return out.select(cols)
 
 
+def _build_deribit_from_dvol(
+    start_d: date,
+    end_d: date,
+    spot_ticks: pl.DataFrame,
+) -> list[dict[str, object]]:
+    """Deribit public DVOL index when options-chain gold is absent (quality_flag=2)."""
+    rows: list[dict[str, object]] = []
+    cur = start_d
+    while cur <= end_d:
+        key_path = gold_key("deribit", "BTC-DVOL", cur, "dvol_1h")
+        local = _local_cache_path(key_path)
+        if not local.is_file():
+            cur += timedelta(days=1)
+            continue
+        df = pl.read_parquet(local)
+        for bar in df.iter_rows(named=True):
+            ts_ms = int(bar.get("timestamp_ms") or 0)
+            if not ts_ms and "timestamp" in bar:
+                ts = bar["timestamp"]
+                ts_ms = int(ts.timestamp() * 1000) if hasattr(ts, "timestamp") else 0
+            if not ts_ms:
+                continue
+            spot_row = spot_ticks.filter(pl.col("exchange_timestamp") <= ts_ms).tail(1)
+            spot_mid = float(spot_row["spot_mid"][0]) if spot_row.height else 0.0
+            dvol_pct = float(bar.get("close") or 0.0)
+            atm_iv = dvol_pct / 100.0 if dvol_pct > 1.0 else dvol_pct
+            rows.append({
+                "exchange_timestamp": ts_ms,
+                "atm_iv": atm_iv,
+                "skew_25d": 0.0,
+                "term_structure_slope": 0.0,
+                "call_mid": 0.0,
+                "put_mid": 0.0,
+                "spot_mid": spot_mid,
+                "strike": round(spot_mid / 100) * 100 if spot_mid else 0.0,
+                "rate": 0.05,
+                "yield_q": 0.0,
+                "tau_years": 0.08,
+                "iv_rv_zscore": 0.0,
+                "vol_surface_quality_flag": 2,
+            })
+        cur += timedelta(days=1)
+    return rows
+
+
 def build_deribit_surface(start: str, end: str, spot_ticks: pl.DataFrame) -> pl.DataFrame:
     sym = _symbol_map()
     prefix = sym.get("deribit_options_prefix", "BTC")
@@ -249,6 +295,9 @@ def build_deribit_surface(start: str, end: str, spot_ticks: pl.DataFrame) -> pl.
                 "vol_surface_quality_flag": 1,
             })
         cur += timedelta(days=1)
+
+    if not rows:
+        rows = _build_deribit_from_dvol(start_d, end_d, spot_ticks)
 
     if not rows:
         return pl.DataFrame(schema={
@@ -315,6 +364,7 @@ def build_mempool_snapshots(start: str, end: str, spot_ticks: pl.DataFrame) -> p
             "processing_latency_ms": pl.Float64,
             "exchange_clock_drift_ms": pl.Float64,
             "estimated_latency_ms": pl.Float64,
+            "snapshot_kind": pl.Utf8,
         })
 
     raw = pl.concat(frames, how="diagonal_relaxed")
@@ -336,6 +386,7 @@ def build_mempool_snapshots(start: str, end: str, spot_ticks: pl.DataFrame) -> p
         if not min_fee and row.get("mempool_min_fee"):
             min_fee = float(row["mempool_min_fee"]) * 1e8 / 1000.0
         stress = float(row.get("btc_blockspace_stress_score") or row.get("blockspace_stress_score") or usage / max(max_bytes, 1))
+        kind = str(row.get("snapshot_kind") or "blockspace_proxy")
         rows.append({
             "node_observation_time": node_ms,
             "mempool_bytes": int(usage),
@@ -343,6 +394,7 @@ def build_mempool_snapshots(start: str, end: str, spot_ticks: pl.DataFrame) -> p
             "mempool_tx_count": int(row.get("mempool_tx_count") or row.get("size_txs") or 0),
             "min_fee_sat": min_fee,
             "btc_blockspace_stress_score": min(1.0, stress),
+            "snapshot_kind": kind,
             "node_clock_drift_ms": float(row.get("node_clock_drift_ms") or node_lat.theta_node_ms),
             "network_latency_ms": float(row.get("network_latency_ms") or node_lat.network_latency_ms),
             "processing_latency_ms": float(row.get("processing_latency_ms") or node_lat.processing_latency_ms),
@@ -412,4 +464,5 @@ def _empty_mempool() -> pl.DataFrame:
         "processing_latency_ms": pl.Float64,
         "exchange_clock_drift_ms": pl.Float64,
         "estimated_latency_ms": pl.Float64,
+        "snapshot_kind": pl.Utf8,
     })

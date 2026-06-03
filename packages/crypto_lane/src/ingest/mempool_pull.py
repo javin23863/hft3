@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import polars as pl
@@ -28,6 +28,7 @@ class MempoolSnapshot:
     processing_latency_ms: float
     exchange_clock_drift_ms: float
     estimated_latency_ms: float
+    snapshot_kind: str = "mempool_live"
 
     def to_bronze_row(self) -> dict[str, object]:
         usage = self.mempool_bytes / max(self.mempool_max_bytes, 1)
@@ -138,3 +139,66 @@ def pull_mempool_backfill(*, hours: int = 24, interval_minutes: int = 15, tunnel
     """Sample live mempool at interval; returns snapshot count written."""
     samples = max(1, (hours * 60) // max(1, interval_minutes))
     return len(pull_live_mempool(samples=samples, interval_minutes=interval_minutes, tunnel_rtt_ms=tunnel_rtt_ms))
+
+
+def _height_at_time(rpc: BtcRpc, target: int, lo: int, hi: int) -> int:
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        hdr = rpc.call("getblockheader", rpc.call("getblockhash", mid))
+        if int(hdr["time"]) <= target:
+            lo = mid
+        else:
+            hi = mid - 1
+    return lo
+
+
+def backfill_blockspace_from_node(
+    *,
+    start: str,
+    end: str,
+    step_hours: int = 1,
+    client: BtcRpc | None = None,
+) -> int:
+    """Historical block-fee proxy from synced bitcoind (not live mempool snapshots)."""
+    ensure_data_dirs()
+    rpc = client or BtcRpc(timeout=30.0)
+    chain = rpc.getblockchaininfo()
+    start_dt = datetime.strptime(start, "%Y-%m-%d").replace(tzinfo=UTC)
+    end_dt = datetime.strptime(end, "%Y-%m-%d").replace(hour=23, minute=59, tzinfo=UTC)
+    lo, hi = 825_000, min(chain.blocks, 890_000)
+    out_dir = gold_dir() / "bitcoind" / "mempool"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    written = 0
+    cur = start_dt
+    height = _height_at_time(rpc, int(cur.timestamp()), lo, hi)
+    blocks_per_hour = 6
+    while cur <= end_dt:
+        block_hash = rpc.call("getblockhash", height)
+        stats = rpc.call("getblockstats", block_hash)
+        avg_fee = float(stats.get("avgfeerate") or 0.0)
+        num_tx = int(stats.get("num_tx") or 0)
+        weight = int(stats.get("total_weight") or 0)
+        usage = min(DEFAULT_MEMPOOL_MAX_BYTES, max(num_tx * 400, weight // 4))
+        stress = min(1.0, usage / DEFAULT_MEMPOOL_MAX_BYTES)
+        row = {
+            "node_observation_time": int(cur.timestamp() * 1000),
+            "timestamp_iso": cur.isoformat(),
+            "mempool_bytes": usage,
+            "mempool_max_bytes": DEFAULT_MEMPOOL_MAX_BYTES,
+            "mempool_tx_count": num_tx,
+            "min_fee_sat": avg_fee,
+            "btc_blockspace_stress_score": stress,
+            "node_clock_drift_ms": 0.0,
+            "network_latency_ms": 0.0,
+            "processing_latency_ms": 0.0,
+            "exchange_clock_drift_ms": 0.0,
+            "estimated_latency_ms": 0.0,
+            "snapshot_kind": "blockspace_proxy",
+        }
+        path = out_dir / f"{cur.strftime('%Y-%m-%d')}_mempool_snapshot.jsonl"
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row) + "\n")
+        written += 1
+        cur += timedelta(hours=step_hours)
+        height = min(hi, height + blocks_per_hour * step_hours)
+    return written

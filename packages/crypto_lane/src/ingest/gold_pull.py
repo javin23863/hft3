@@ -103,6 +103,55 @@ def supplement_perp_from_binance(*, start: str, end: str) -> dict[str, int]:
     return {"written": written, "skipped": (end_d - start_d).days + 1 - len(missing)}
 
 
+def supplement_dvol_from_deribit(*, start: str, end: str) -> dict[str, int]:
+    """Fill missing options-chain gold from Deribit public DVOL index (real market data)."""
+    ensure_data_dirs()
+    start_d = _parse_date(start)
+    end_d = _parse_date(end)
+    symbol = "BTC-DVOL"
+    missing = [
+        day
+        for day in _date_range(start_d, end_d)
+        if not _local_cache_path(gold_key("deribit", symbol, day, "dvol_1h")).is_file()
+    ]
+    if not missing:
+        return {"written": 0, "skipped": (end_d - start_d).days + 1}
+
+    written = 0
+    for day in missing:
+        day_start = datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc)
+        day_end = datetime.combine(day, datetime.max.time(), tzinfo=timezone.utc)
+        start_ms = int(day_start.timestamp() * 1000)
+        end_ms = int(day_end.timestamp() * 1000)
+        url = (
+            "https://www.deribit.com/api/v2/public/get_volatility_index_data?"
+            f"currency=BTC&start_timestamp={start_ms}&end_timestamp={end_ms}&resolution=3600"
+        )
+        payload = _http_json(url)
+        chunk = (payload or {}).get("result", {}).get("data") if isinstance(payload, dict) else None
+        if not chunk:
+            time.sleep(0.15)
+            continue
+        df = pl.DataFrame(
+            {
+                "timestamp_ms": [int(r[0]) for r in chunk],
+                "open": [float(r[1]) for r in chunk],
+                "high": [float(r[2]) for r in chunk],
+                "low": [float(r[3]) for r in chunk],
+                "close": [float(r[4]) for r in chunk],
+                "timestamp": [
+                    datetime.fromtimestamp(int(r[0]) / 1000, tz=timezone.utc) for r in chunk
+                ],
+            }
+        ).unique(subset=["timestamp_ms"]).sort("timestamp_ms")
+        dest = _local_cache_path(gold_key("deribit", symbol, day, "dvol_1h"))
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        df.write_parquet(dest)
+        written += 1
+        time.sleep(0.15)
+    return {"written": written, "skipped": (end_d - start_d).days + 1 - len(missing)}
+
+
 def pull_gold(
     *,
     start: str,
