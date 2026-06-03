@@ -1,0 +1,16 @@
+# citations/QueuePositionEstimate.yaml
+# Companion to schema/QueuePositionEstimate.odl
+extension: QueuePositionEstimate
+namespace: hft3
+primary:
+  pdf: chicago_cme_microstructure_mathematical_model.pdf
+  section: "§6 Queue / Fill model"
+  page: 3
+secondary: []
+claims:
+  - "Queue position and size-ahead are the two state variables for fill probability."
+  - "Cancel-rate estimate is a first-class input — passive fills are canceled before they fill."
+blueprint_invariant: "§2 #3 execution realism"
+notes: |
+  The structural-models PDF mentions queue dynamics at a higher level but
+  does not formalize size-ahead. Math model only.

@@ -1,0 +1,18 @@
+# hft3 — EventContext
+# Composite event context: information set + feature families + event
+# window. Citation: citations/EventContext.yaml -> math model PDF §1
+# (Information set, p.1) + §15 (Feature families, p.5) + §17 (Event
+# windows, p.6). This is the macro/Fed context surface for AAR packets.
+
+extend schema @namespace(name: "hft3", version: "1.0.0")
+
+type EventContext @objectType {
+  id: ID! @primary
+  eventId: String! @indexed
+  eventState: String! @indexed
+  eventWindowStartNs: Int! @indexed
+  eventWindowEndNs: Int! @indexed
+  featureFamilies: [String!]!
+  macroRelease: String
+  expectedVolatilityBps: Float
+}

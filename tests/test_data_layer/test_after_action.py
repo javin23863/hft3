@@ -301,9 +301,18 @@ def test_openai_compatible_mocked_pipeline(tmp_path, monkeypatch):
     (tmp_repo / "integrations" / "openfoundry" / "hft3-cme-mbo.yaml").write_bytes(
         (REPO / "integrations" / "openfoundry" / "hft3-cme-mbo.yaml").read_bytes()
     )
+    # Mirror the hft3 ODL pack + sidecar citations into the fake repo so
+    # assert_connector_valid() passes the post-phase-5 ontology citation check.
+    hft3_pack_src = REPO / "integrations" / "openfoundry" / "domain-packs" / "hft3"
+    if hft3_pack_src.is_dir():
+        import shutil
+        shutil.copytree(hft3_pack_src, tmp_repo / "integrations" / "openfoundry" / "domain-packs" / "hft3")
     (tmp_repo / "docs" / "references").mkdir(parents=True)
     (tmp_repo / "docs" / "references" / "MANIFEST.md").write_bytes(
         (REPO / "docs" / "references" / "MANIFEST.md").read_bytes()
+    )
+    (tmp_repo / "docs" / "references" / "chicago_cme_microstructure_mathematical_model.pdf").write_bytes(
+        (REPO / "docs" / "references" / "chicago_cme_microstructure_mathematical_model.pdf").read_bytes()
     )
 
     meta = run_after_action_report(art, tmp_repo, skip_llm=False)

@@ -1,0 +1,17 @@
+# citations/FillOutcome.yaml
+# Companion to schema/FillOutcome.odl
+extension: FillOutcome
+namespace: hft3
+primary:
+  pdf: chicago_cme_microstructure_mathematical_model.pdf
+  section: "§6 Queue / Fill model"
+  page: 3
+secondary: []
+claims:
+  - "FILLED, PARTIAL, CANCELLED, TIMED_OUT, REJECTED are the five terminal outcomes."
+  - "fill_size and fill_price_ticks are populated only for FILLED or PARTIAL."
+  - "Slippage in ticks is the realized vs expected price delta."
+blueprint_invariant: "§2 #3 execution realism"
+notes: |
+  Outcomes are the per-trade audit tail. The validator must accept only the
+  five enumerated values.

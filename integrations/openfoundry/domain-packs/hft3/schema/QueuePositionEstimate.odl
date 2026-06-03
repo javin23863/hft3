@@ -1,0 +1,15 @@
+# hft3 — QueuePositionEstimate
+# Queue position estimate for a passive order. Citation:
+# citations/QueuePositionEstimate.yaml -> math model PDF §6 (Queue / Fill
+# model, p.3). Execution realism (BLUEPRINT §2 #3); queue + cancel dynamics.
+
+extend schema @namespace(name: "hft3", version: "1.0.0")
+
+type QueuePositionEstimate @objectType {
+  id: ID! @primary
+  orderId: String! @indexed
+  venuePosition: Int!
+  sizeAhead: Int!
+  estimatedFillTimeUs: Float
+  cancelRateEstimate: Float @constraint(expr: "value >= 0 and value <= 1")
+}

@@ -1,0 +1,17 @@
+# citations/InjectionSweepResult.yaml
+# Companion to schema/InjectionSweepResult.odl
+extension: InjectionSweepResult
+namespace: hft3
+primary:
+  pdf: chicago_cme_microstructure_mathematical_model.pdf
+  section: "§10 Optimization"
+  page: 5
+secondary: []
+claims:
+  - "Latency injection sweeps measure sensitivity to µs-level delays."
+  - "Fill rate and net PnL delta are the two outcome fields."
+  - "Sweep rows are the inputs to model-agnostic composition scoring."
+blueprint_invariant: "§2 #4 model agnosticism"
+notes: |
+  The structural-models PDF covers optimization in general but not
+  injection-sweep protocol specifics. Math model only.

@@ -22,7 +22,7 @@
     "llm_model": { "type": ["string", "null"] },
     "llm_status": {
       "type": "string",
-      "enum": ["ok", "skipped_connector", "skipped_no_llm", "unavailable", "schema_reject"]
+      "enum": ["ok", "skipped_connector", "skipped_uncited_ontology", "skipped_broken_pdf_cite", "skipped_no_llm", "unavailable", "schema_reject"]
     },
     "openfoundry_meta": {
       "type": "object",

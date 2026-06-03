@@ -1,0 +1,21 @@
+# citations/MarkedMicroEvent.yaml
+# Companion to schema/MarkedMicroEvent.odl
+extension: MarkedMicroEvent
+namespace: hft3
+primary:
+  pdf: chicago_cme_microstructure_mathematical_model.pdf
+  section: "§4 MBO Marked Point Process"
+  page: 2
+secondary:
+  - pdf: chicago_cme_microstructure_mathematical_model.pdf
+    section: "§3 Limit Order Book"
+    page: 1
+claims:
+  - "Every MBO event has a unique event-time in the filtration."
+  - "The 33-timestamp schema is consistent with the marked point process."
+  - "ADD, MODIFY, CANCEL, EXECUTE are the four terminal kinds of an MBO point."
+blueprint_invariant: "§2 #1 filtration integrity"
+notes: |
+  The structural-models PDF does not cover MBO event-time semantics, so this
+  extension cites the math model only. Filename uses MixedCase to match the
+  ODL type and the connector's ontology_extensions list.

@@ -27,6 +27,8 @@
         "skipped_symbolic",
         "skipped_pdf",
         "skipped_connector",
+        "skipped_uncited_ontology",
+        "skipped_broken_pdf_cite",
         "skipped_history_gate",
         "skipped_audit_incomplete",
         "skipped_flag",
@@ -49,14 +51,23 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["from", "to", "relation", "scope"],
+        "required": ["source_type", "source_id", "field", "value"],
         "properties": {
-          "from": { "type": "string" },
-          "to": { "type": "string" },
-          "relation": { "type": "string" },
-          "scope": {
+          "source_type": {
             "type": "string",
-            "enum": ["discovery_only", "infra", "latency_probe"]
+            "enum": ["ONTOLOGY_EXTENSION", "PDF_CITATION", "LATENCY_AUTHORITY_FIELD", "SYMBOLIC_RESULT"]
+          },
+          "source_id": { "type": "string" },
+          "field": { "type": "string" },
+          "value": {},
+          "cite": {
+            "type": "object",
+            "required": ["pdf", "section", "page"],
+            "properties": {
+              "pdf": { "type": "string" },
+              "section": { "type": "string" },
+              "page": { "type": "integer", "minimum": 1 }
+            }
           }
         },
         "additionalProperties": false

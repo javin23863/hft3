@@ -1,0 +1,16 @@
+# hft3 — CppLatencyBudget
+# C++ hot-path latency budget — the production source of truth per
+# docs/workbench/LATENCY_ARCHITECTURE.md. Citation:
+# citations/CppLatencyBudget.yaml -> math model PDF §19 (Validation
+# framework, p.7). The Python research runtime is non-authoritative.
+
+extend schema @namespace(name: "hft3", version: "1.0.0")
+
+type CppLatencyBudget @objectType {
+  id: ID! @primary
+  budgetUsP50: Float!
+  budgetUsP99: Float!
+  enforced: Boolean! @constraint(expr: "value == true")
+  cppStackVerified: Boolean! @constraint(expr: "value == true")
+  pythonResearchRuntimeAuthoritative: Boolean! @constraint(expr: "value == false")
+}

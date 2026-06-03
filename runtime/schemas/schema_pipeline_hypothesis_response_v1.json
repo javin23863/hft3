@@ -21,7 +21,7 @@
     "llm_model": { "type": ["string", "null"] },
     "llm_status": {
       "type": "string",
-      "enum": ["ok", "skipped_connector", "unavailable", "schema_reject"]
+      "enum": ["ok", "skipped_connector", "skipped_uncited_ontology", "skipped_broken_pdf_cite", "unavailable", "schema_reject"]
     },
     "primary_model_id": { "type": "string" },
     "instrument_universe": { "type": "array", "items": { "type": "string" } },

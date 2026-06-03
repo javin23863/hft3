@@ -1,9 +1,9 @@
 {
-  "latest_certification_run_id": "CERT-20260603T124741Z-a83ae1ee",
-  "latest_certification_commit": "ceb6b466f55107176f941eb6be193d046d51ef35",
-  "latest_certification_timestamp": "2026-06-03T12:48:20.694073+00:00",
+  "latest_certification_run_id": "CERT-20260603T142035Z-4fd9a16b",
+  "latest_certification_commit": "80a61840568ca69349587ca881135890fff4a739",
+  "latest_certification_timestamp": "2026-06-03T14:21:14.917354+00:00",
   "latest_certification_status": "GREEN",
-  "backtester_version": "ceb6b46-dirty",
+  "backtester_version": "80a6184-dirty",
   "covered_modules": [
     "backtest_pipeline",
     "crypto_lane",

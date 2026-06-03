@@ -1,0 +1,18 @@
+# hft3 — InjectionSweepResult
+# Result row from a latency injection sweep (microsecond-level
+# perturbation). Citation: citations/InjectionSweepResult.yaml -> math
+# model PDF §10 (Optimization, p.5). Model agnosticism (BLUEPRINT §2 #4);
+# sweeps are how candidates are scored against the latency envelope.
+
+extend schema @namespace(name: "hft3", version: "1.0.0")
+
+type InjectionSweepResult @objectType {
+  id: ID! @primary
+  sweepId: String! @indexed
+  modelId: String! @indexed
+  latencyInjectedUs: Float!
+  fillRate: Float @constraint(expr: "value >= 0 and value <= 1")
+  expectedPnl: Float
+  actualPnl: Float
+  netDeltaPnl: Float
+}

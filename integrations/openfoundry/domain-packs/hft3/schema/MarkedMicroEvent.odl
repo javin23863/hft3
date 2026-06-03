@@ -1,0 +1,18 @@
+# hft3 — MarkedMicroEvent
+# Single MBO event as a marked point in the filtration. Citation:
+# citations/MarkedMicroEvent.yaml -> math model PDF §4 (MBO Marked Point
+# Process, p.2) + §3 (Limit Order Book, p.1). Filtration integrity
+# (BLUEPRINT §2 #1); timestamp 1 of 33.
+
+extend schema @namespace(name: "hft3", version: "1.0.0")
+
+type MarkedMicroEvent @objectType {
+  id: ID! @primary
+  eventId: String! @indexed
+  kind: String! @constraint(expr: "value in ['ADD','MODIFY','CANCEL','EXECUTE']")
+  exchangeTsNs: Int! @indexed
+  receiveTsNs: Int! @indexed
+  priceTicks: Int
+  size: Int
+  side: String @constraint(expr: "value in ['BID','ASK']")
+}

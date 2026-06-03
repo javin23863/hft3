@@ -1,0 +1,48 @@
+# hft3 microstructure domain pack — CME MBO + queue + latency
+#
+# Extends openfoundry.core with hft3-specific object types. Every object type
+# has a sidecar citation in citations/<Type>.yaml grounded in
+# docs/references/chicago_cme_microstructure_mathematical_model.pdf.
+# See docs/research/ONTOLOGY_CITATIONS.md for the citation table.
+
+name: hft3
+version: 1.0.0
+description: "hft3 microstructure domain pack — CME MBO marked point process, queue/fill, latency chain, C++ budget, injection sweep, event context."
+namespace: hft3
+
+dependencies:
+  openfoundry.core: ">=1.0.0"
+
+provides:
+  objectTypes: 9
+  linkTypes: 0
+  actionTypes: 0
+  functions: 0
+  connectors: 0
+  widgets: 0
+  qualityRules: 0
+
+schema:
+  - schema/MarkedMicroEvent.odl
+  - schema/BookSnapshotAtDecision.odl
+  - schema/QueuePositionEstimate.odl
+  - schema/LatencyChainUs.odl
+  - schema/CppLatencyBudget.odl
+  - schema/InjectionSweepResult.odl
+  - schema/StrategySignal.odl
+  - schema/FillOutcome.odl
+  - schema/EventContext.odl
+
+# All 9 object types are grounded in citations/<Type>.yaml. The
+# `validate_ontology_citations()` check (planned phase 5) loads the sidecars
+# and refuses to register the pack if any are missing or stale.
+citations:
+  - citations/MarkedMicroEvent.yaml
+  - citations/BookSnapshotAtDecision.yaml
+  - citations/QueuePositionEstimate.yaml
+  - citations/LatencyChainUs.yaml
+  - citations/CppLatencyBudget.yaml
+  - citations/InjectionSweepResult.yaml
+  - citations/StrategySignal.yaml
+  - citations/FillOutcome.yaml
+  - citations/EventContext.yaml

@@ -32,15 +32,15 @@ def _load_config(artifact_dir: Path) -> Dict[str, Any]:
 
 
 def _valid_kg_annotations(annotations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    return [
-        e
-        for e in annotations
-        if isinstance(e, dict)
-        and e.get("from")
-        and e.get("to")
-        and e.get("relation")
-        and e.get("scope") in ("discovery_only", "infra", "latency_probe")
-    ]
+    """Filter to closed-claim kg_annotations only (post phase 7 contract).
+
+    The packet_runner already drops invalid annotations before they reach
+    `kg_annotations` in the response. This is a defense-in-depth re-filter
+    so a malformed response can't pollute the KG slice on disk.
+    """
+    from data_layer.packet.validate import drop_uncited_kg_annotations
+
+    return drop_uncited_kg_annotations(annotations)
 
 
 def run_after_action_report(

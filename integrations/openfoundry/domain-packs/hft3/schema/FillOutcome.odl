@@ -1,0 +1,17 @@
+# hft3 — FillOutcome
+# Outcome of a submitted order — the realized path through the queue/fill
+# model. Citation: citations/FillOutcome.yaml -> math model PDF §6 (Queue
+# / Fill model, p.3). Execution realism (BLUEPRINT §2 #3); the outcome
+# enum mirrors the queue model.
+
+extend schema @namespace(name: "hft3", version: "1.0.0")
+
+type FillOutcome @objectType {
+  id: ID! @primary
+  orderId: String! @indexed
+  outcome: String! @constraint(expr: "value in ['FILLED','PARTIAL','CANCELLED','TIMED_OUT','REJECTED']")
+  fillSize: Int
+  fillPriceTicks: Int
+  fillTsNs: Int
+  slippageTicks: Int
+}

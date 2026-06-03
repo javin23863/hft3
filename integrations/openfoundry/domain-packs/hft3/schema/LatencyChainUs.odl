@@ -1,0 +1,19 @@
+# hft3 — LatencyChainUs
+# End-to-end latency chain in microseconds. Citation:
+# citations/LatencyChainUs.yaml -> math model PDF §4 (MBO Marked Point
+# Process, p.2, primary) + §19 (Validation framework, p.7, secondary).
+# The four µs fields trace the marked point process; the tick-to-ack
+# total is the validation target.
+
+extend schema @namespace(name: "hft3", version: "1.0.0")
+
+type LatencyChainUs @objectType {
+  id: ID! @primary
+  eventId: String! @indexed
+  feedDelayUs: Float!
+  decisionComputeUs: Float!
+  decisionToSendUs: Float!
+  sendToAckUs: Float!
+  tickToAckUs: Float!
+  @constraint(expr: "abs(tickToAckUs - (feedDelayUs + decisionComputeUs + decisionToSendUs + sendToAckUs)) <= 5.0")
+}

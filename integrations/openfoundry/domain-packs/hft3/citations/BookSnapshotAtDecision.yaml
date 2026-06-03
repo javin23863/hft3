@@ -1,0 +1,19 @@
+# citations/BookSnapshotAtDecision.yaml
+# Companion to schema/BookSnapshotAtDecision.odl
+extension: BookSnapshotAtDecision
+namespace: hft3
+primary:
+  pdf: chicago_cme_microstructure_mathematical_model.pdf
+  section: "§3 Limit Order Book"
+  page: 1
+secondary:
+  - pdf: chicago_cme_microstructure_mathematical_model.pdf
+    section: "§3 Limit Order Book"
+    page: 2
+claims:
+  - "The LOB snapshot at decision time is a slice of the LOB state at the marked point."
+  - "Best bid, best ask, and top-5 sizes are the minimum sufficient state for µs-scale decisions."
+blueprint_invariant: "§2 #2 event-time correctness"
+notes: |
+  The snapshot must be taken at decision time, not at fill time, to avoid
+  look-ahead. The primary citation spans pages 1-2 of the math model.

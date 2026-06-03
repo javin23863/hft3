@@ -1,9 +1,9 @@
 {
   "tier": "T2",
   "status": "GREEN",
-  "run_id": "CERT-20260603T124741Z-a83ae1ee",
-  "git_sha": "ceb6b466f55107176f941eb6be193d046d51ef35",
-  "timestamp_utc": "2026-06-03T12:48:20.694073+00:00",
+  "run_id": "CERT-20260603T142035Z-4fd9a16b",
+  "git_sha": "80a61840568ca69349587ca881135890fff4a739",
+  "timestamp_utc": "2026-06-03T14:21:14.917354+00:00",
   "t0_passed": true,
   "full_passed": true,
   "t0_test_count": 19,
@@ -15,7 +15,7 @@
       "lane": "crypto",
       "passed": true,
       "returncode": 0,
-      "output_tail": "=== tests/test_crypto_lane (rc=0) ===\nst_normalize_correctness.py::test_l2_data_quality_flag_default_zero\n  C:\\Users\\MSI\\Documents\\opencode\\hft3\\packages\\crypto_lane\\src\\ingest\\normalize.py:116: DeprecationWarning: use of `how='outer_coalesce'` should be replaced with `how='full', coalesce=True`.\n  (Deprecated in version 0.20.29)\n    out = spot.join(perp, on=\"exchange_timestamp\", how=\"outer_coalesce\").sort(\"exchange_timestamp\")\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n137 passed, 3 warnings in 20.09s\n",
+      "output_tail": "=== tests/test_crypto_lane (rc=0) ===\nst_normalize_correctness.py::test_l2_data_quality_flag_default_zero\n  C:\\Users\\MSI\\Documents\\opencode\\hft3\\packages\\crypto_lane\\src\\ingest\\normalize.py:116: DeprecationWarning: use of `how='outer_coalesce'` should be replaced with `how='full', coalesce=True`.\n  (Deprecated in version 0.20.29)\n    out = spot.join(perp, on=\"exchange_timestamp\", how=\"outer_coalesce\").sort(\"exchange_timestamp\")\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n137 passed, 3 warnings in 20.31s\n",
       "test_paths": [
         "tests/test_crypto_lane"
       ],
@@ -25,7 +25,7 @@
       "lane": "equities",
       "passed": true,
       "returncode": 0,
-      "output_tail": "=== tests/test_equities_lane (rc=0) ===\n...........................................                              [100%]\n43 passed in 5.35s\n",
+      "output_tail": "=== tests/test_equities_lane (rc=0) ===\n...........................................                              [100%]\n43 passed in 5.43s\n",
       "test_paths": [
         "tests/test_equities_lane"
       ],
@@ -54,7 +54,7 @@
     }
   },
   "lane_failures": [],
-  "backtester_version": "ceb6b46-dirty",
+  "backtester_version": "80a6184-dirty",
   "covered_modules": [
     "backtest_pipeline",
     "crypto_lane",
@@ -180,7 +180,7 @@
         "lane": "crypto",
         "passed": true,
         "returncode": 0,
-        "output_tail": "=== tests/test_crypto_lane (rc=0) ===\nst_normalize_correctness.py::test_l2_data_quality_flag_default_zero\n  C:\\Users\\MSI\\Documents\\opencode\\hft3\\packages\\crypto_lane\\src\\ingest\\normalize.py:116: DeprecationWarning: use of `how='outer_coalesce'` should be replaced with `how='full', coalesce=True`.\n  (Deprecated in version 0.20.29)\n    out = spot.join(perp, on=\"exchange_timestamp\", how=\"outer_coalesce\").sort(\"exchange_timestamp\")\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n137 passed, 3 warnings in 20.09s\n",
+        "output_tail": "=== tests/test_crypto_lane (rc=0) ===\nst_normalize_correctness.py::test_l2_data_quality_flag_default_zero\n  C:\\Users\\MSI\\Documents\\opencode\\hft3\\packages\\crypto_lane\\src\\ingest\\normalize.py:116: DeprecationWarning: use of `how='outer_coalesce'` should be replaced with `how='full', coalesce=True`.\n  (Deprecated in version 0.20.29)\n    out = spot.join(perp, on=\"exchange_timestamp\", how=\"outer_coalesce\").sort(\"exchange_timestamp\")\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n137 passed, 3 warnings in 20.31s\n",
         "test_paths": [
           "tests/test_crypto_lane"
         ],
@@ -211,7 +211,7 @@
         "lane": "equities",
         "passed": true,
         "returncode": 0,
-        "output_tail": "=== tests/test_equities_lane (rc=0) ===\n...........................................                              [100%]\n43 passed in 5.35s\n",
+        "output_tail": "=== tests/test_equities_lane (rc=0) ===\n...........................................                              [100%]\n43 passed in 5.43s\n",
         "test_paths": [
           "tests/test_equities_lane"
         ],

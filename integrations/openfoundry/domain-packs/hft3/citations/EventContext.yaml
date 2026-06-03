@@ -1,0 +1,23 @@
+# citations/EventContext.yaml
+# Companion to schema/EventContext.odl
+extension: EventContext
+namespace: hft3
+primary:
+  pdf: chicago_cme_microstructure_mathematical_model.pdf
+  section: "§1 Information set"
+  page: 1
+secondary:
+  - pdf: chicago_cme_microstructure_mathematical_model.pdf
+    section: "§15 Feature families"
+    page: 5
+  - pdf: chicago_cme_microstructure_mathematical_model.pdf
+    section: "§17 Event windows"
+    page: 6
+claims:
+  - "The information set at decision time is a function of the marked point and the LOB state."
+  - "Feature families are the seven PDF structural models + 44 HYP inventory (51-model surface)."
+  - "Event windows are closed intervals; the strategy may only use information from within the window."
+blueprint_invariant: "§2 #1 filtration integrity, §2 #5 walk-forward evaluation"
+notes: |
+  This is the macro/Fed context surface for AAR packets. The citation is a
+  composite of three math-model sections; the validator must accept multi-cite.

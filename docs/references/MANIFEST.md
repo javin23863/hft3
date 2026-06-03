@@ -23,9 +23,27 @@ Each packet field cites a source PDF section. Missing PDFs on disk → `pdf_cita
 | `live_topology` | `BLUEPRINT.md` | Live architecture §4 | repo doc |
 | `autoresearch_pipeline` | `dev_instructions.pdf` | Pipeline overview §1–6 | **present** |
 
-> **Parser note:** The citation parser captures 17 rows (those with `**present**` or `**absent**` in the Present column). Row `live_topology` uses `repo doc` and is excluded from automated on-disk checks. Visual row count: 18.
+## hft3 ontology extensions (ODL object types)
+
+The hft3 OpenFoundry domain pack at `integrations/openfoundry/domain-packs/hft3/` declares 9 object types. Each has a sidecar citation under `citations/<Type>.yaml`; the table below mirrors those sidecars. See [`docs/research/ONTOLOGY_CITATIONS.md`](../research/ONTOLOGY_CITATIONS.md) for the rationale and ground section for every type.
+
+| ODL extension | PDF | Section | Page | Sidecar present |
+|---------------|-----|---------|------|-----------------|
+| `MarkedMicroEvent` | `chicago_cme_microstructure_mathematical_model.pdf` | §4 MBO Marked Point Process | 2 | **present** |
+| `BookSnapshotAtDecision` | `chicago_cme_microstructure_mathematical_model.pdf` | §3 Limit Order Book | 1 | **present** |
+| `QueuePositionEstimate` | `chicago_cme_microstructure_mathematical_model.pdf` | §6 Queue / Fill model | 3 | **present** |
+| `LatencyChainUs` | `chicago_cme_microstructure_mathematical_model.pdf` | §4 MBO Marked Point Process | 2 | **present** |
+| `CppLatencyBudget` | `chicago_cme_microstructure_mathematical_model.pdf` | §19 Validation framework | 7 | **present** |
+| `InjectionSweepResult` | `chicago_cme_microstructure_mathematical_model.pdf` | §10 Optimization | 5 | **present** |
+| `StrategySignal` | `chicago_cme_microstructure_mathematical_model.pdf` | §8 Action space | 4 | **present** |
+| `FillOutcome` | `chicago_cme_microstructure_mathematical_model.pdf` | §6 Queue / Fill model | 3 | **present** |
+| `EventContext` | `chicago_cme_microstructure_mathematical_model.pdf` | §1 Information set (also §15, §17) | 1 | **present** |
+
+> **Parser note (post phase 4):** The packet-field citation parser still captures 17 rows in the first table (rows 1–5 + 6–17 are auto-parsed; row 18 `live_topology` is `repo doc` and excluded from on-disk checks). The ODL-extension table adds 9 rows; the full visual row count is now 18 + 9 = 27.
 >
-> **Field classification:** Rows 1–5 (`event_context` through `simulation_fidelity`) are materialized as top-level packet fields. Rows 6–18 are concept-only citations — the codebase modules/configs exist but are not serialized into the AAR packet.
+> **Field classification (post phase 4):** The first 5 packet-field rows (1–5) are materialized as top-level packet fields; rows 6–17 are concept-only; row 18 is a repo-doc cite. The new ODL-extension rows (19–27) are schema entities, not packet fields — they are loaded by `validate_ontology_citations()` (planned phase 5) and used as the closure set for closed-claim LLM `kg_annotations[].source_type=ONTOLOGY_EXTENSION` (planned phase 7).
+>
+> **Sidecar rule:** Every ODL extension row in this table must have a `citations/<Type>.yaml` sidecar file with non-empty `primary.{pdf,section,page}` and at least one `claims[]` entry. The validator fails the connector if a sidecar is missing or stale.
 
 ## Authority copies
 

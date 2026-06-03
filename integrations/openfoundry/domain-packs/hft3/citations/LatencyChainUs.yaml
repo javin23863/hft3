@@ -1,0 +1,20 @@
+# citations/LatencyChainUs.yaml
+# Companion to schema/LatencyChainUs.odl
+extension: LatencyChainUs
+namespace: hft3
+primary:
+  pdf: chicago_cme_microstructure_mathematical_model.pdf
+  section: "§4 MBO Marked Point Process"
+  page: 2
+secondary:
+  - pdf: chicago_cme_microstructure_mathematical_model.pdf
+    section: "§19 Validation framework"
+    page: 7
+claims:
+  - "feed_delay_us + decision_compute_us + decision_to_send_us + send_to_ack_us ≈ tick_to_ack_us (tol 5 µs)."
+  - "The four µs fields are the marked point process realized in the engine."
+  - "tick_to_ack_us is the validation target — it must be within budget."
+blueprint_invariant: "§2 #2 event-time correctness, §2 #3 execution realism"
+notes: |
+  Both primary and secondary cites are in the math model. The structural-models
+  PDF does not formalize µs-level chains.

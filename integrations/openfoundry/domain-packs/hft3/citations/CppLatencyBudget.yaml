@@ -1,0 +1,18 @@
+# citations/CppLatencyBudget.yaml
+# Companion to schema/CppLatencyBudget.odl
+extension: CppLatencyBudget
+namespace: hft3
+primary:
+  pdf: chicago_cme_microstructure_mathematical_model.pdf
+  section: "§19 Validation framework"
+  page: 7
+secondary: []
+claims:
+  - "C++ hot-path latency is the production source of truth; Python research runtime is non-authoritative."
+  - "The p50 and p99 µs budgets are gates for promote_candidate."
+  - "If cpp_stack_verified is false, the budget is not enforceable."
+blueprint_invariant: "§2 #3 execution realism"
+notes: |
+  Per docs/workbench/LATENCY_ARCHITECTURE.md, C++ is the source of truth.
+  The validator must reject any CppLatencyBudget with
+  pythonResearchRuntimeAuthoritative == true.

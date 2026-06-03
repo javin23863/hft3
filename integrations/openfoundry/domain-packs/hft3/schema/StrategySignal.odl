@@ -1,0 +1,17 @@
+# hft3 — StrategySignal
+# Output of a strategy at decision time. Citation:
+# citations/StrategySignal.yaml -> math model PDF §8 (Action space, p.4).
+# Walk-forward evaluation (BLUEPRINT §2 #5); signals are the inputs to
+# promotion scoring.
+
+extend schema @namespace(name: "hft3", version: "1.0.0")
+
+type StrategySignal @objectType {
+  id: ID! @primary
+  signalId: String! @indexed
+  modelId: String! @indexed
+  action: String! @constraint(expr: "value in ['BUY','SELL','HOLD']")
+  confidence: Float @constraint(expr: "value >= 0 and value <= 1")
+  expectedValue: Float
+  decisionTsNs: Int! @indexed
+}

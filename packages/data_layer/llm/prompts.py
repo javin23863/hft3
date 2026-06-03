@@ -1,4 +1,10 @@
-"""After-action LLM prompts — packet-strict GPT-5.5 constraints."""
+"""After-action LLM prompts — packet-strict GPT-5.5 closed-claim constraints.
+
+The LLM no longer writes `narrative_md` (deterministic renderer does that).
+The LLM only emits `kg_annotations` in the strict closed-claim shape:
+{source_type, source_id, field, value, cite?} where source_type is one
+of {ONTOLOGY_EXTENSION, PDF_CITATION, LATENCY_AUTHORITY_FIELD, SYMBOLIC_RESULT}.
+"""
 
 from __future__ import annotations
 
@@ -8,7 +14,18 @@ from typing import Any, Dict, List
 
 SYSTEM_PROMPT = """You are an HFT microstructure after-action analyst for CME MBO backtests.
 
-Rules:
+Closed-claim contract (post phase 7):
+- You emit `kg_annotations` only. Each annotation is a strict object:
+  { source_type, source_id, field, value, cite? }.
+- `source_type` is one of: ONTOLOGY_EXTENSION | PDF_CITATION | LATENCY_AUTHORITY_FIELD | SYMBOLIC_RESULT.
+- For ONTOLOGY_EXTENSION, PDF_CITATION, SYMBOLIC_RESULT: `cite` is required and must
+  contain {pdf, section, page} where pdf is a real PDF in docs/references/,
+  section is a real section heading, page is a positive integer.
+- For LATENCY_AUTHORITY_FIELD: cite is optional (the value is a runtime measurement).
+- `narrative_md` is NOT written by you. The pipeline renders it deterministically
+  from the packet + symbolic gate + your annotations. Do not put prose here.
+
+Domain rules (still binding):
 - Cite µs fields for execution latency diagnosis; cite ns fields for event ordering only.
 - Treat symbolic invariant violations as ground truth — do not override them.
 - python_research_runtime_us is NON-AUTHORITATIVE; never use it for promotion narrative.
@@ -23,14 +40,20 @@ Rules:
 Output: respond with JSON only matching MicrostructureAARResponse schema.
 Required keys: schema_version ("1"), run_id, input_schema_version, llm_model, llm_elapsed_s,
 llm_status ("ok"), symbolic_passed, decision.promote_candidate_recommendation (bool),
-kg_annotations (array), narrative_md (markdown string).
+kg_annotations (array of closed-claim objects — empty if nothing to claim).
+narrative_md: set to "" (the pipeline will render the deterministic narrative).
 """
 
 
 def build_symbolic_narrative(symbolic: Dict[str, Any], packet: Dict[str, Any]) -> str:
-    """Deterministic narrative when LLM is skipped due to symbolic failure."""
+    """Deterministic narrative when LLM is skipped due to symbolic failure.
+
+    Used as a fallback when the LLM call is skipped (e.g. skipped_connector
+    or skipped_symbolic). The normal success path uses
+    `narrative_renderer.render_deterministic_narrative()` instead.
+    """
     run_id = packet.get("run_id", "unknown")
-    violations = symbolic.get("violations") or []
+    violation_cites = symbolic.get("violation_cites") or []
     passed = symbolic.get("passed", False)
     lines = [
         f"# After-action report (symbolic-only) — `{run_id}`",
@@ -38,10 +61,14 @@ def build_symbolic_narrative(symbolic: Dict[str, Any], packet: Dict[str, Any]) -
         f"**Symbolic check:** {'PASSED' if passed else 'FAILED'}",
         "",
     ]
-    if violations:
-        lines.append("## Invariant violations")
-        for v in violations:
-            lines.append(f"- {v}")
+    if violation_cites:
+        lines.append("## Invariant violations (each carries a cite)")
+        for cite in violation_cites:
+            msg = cite.get("message", "<unknown>")
+            c = cite.get("cite") or {}
+            lines.append(
+                f"- `{msg}` — cite: `{c.get('pdf', '?')} §{c.get('section', '?')} p.{c.get('page', '?')}`"
+            )
         lines.append("")
     lines.append(
         "LLM narrative skipped: symbolic invariant gate failed (AlphaGeometry pattern). "

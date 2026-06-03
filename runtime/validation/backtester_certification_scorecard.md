@@ -1,10 +1,10 @@
 # Backtester Certification Scorecard
 
 - **Status:** GREEN
-- **Run ID:** CERT-20260603T124741Z-a83ae1ee
-- **Git SHA:** ceb6b466f55107176f941eb6be193d046d51ef35
-- **Timestamp UTC:** 2026-06-03T12:48:20.694073+00:00
-- **Backtester Version:** ceb6b46-dirty
+- **Run ID:** CERT-20260603T142035Z-4fd9a16b
+- **Git SHA:** 80a61840568ca69349587ca881135890fff4a739
+- **Timestamp UTC:** 2026-06-03T14:21:14.917354+00:00
+- **Backtester Version:** 80a6184-dirty
 
 ## T0 Fast Gate (CME core)
 - Passed: True

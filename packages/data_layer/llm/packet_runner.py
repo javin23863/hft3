@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from data_layer.llm import openai_compatible_client as llm_client
+from data_layer.llm.narrative_renderer import render_deterministic_narrative
 from data_layer.llm.prompts import (
     build_aar_system_prompt,
     build_aar_user_envelope,
@@ -14,6 +15,7 @@ from data_layer.llm.prompts import (
 )
 from data_layer.openfoundry_bridge import assert_connector_valid, validate_connector
 from data_layer.packet.validate import (
+    drop_uncited_kg_annotations,
     validate_aar_packet_in,
     validate_aar_packet_out,
     validate_pipeline_hypothesis_response,
@@ -124,6 +126,41 @@ def _connector_gate(repo_root: Path) -> Optional[str]:
     except (ValueError, FileNotFoundError, OSError) as exc:
         return str(exc)
     return None
+
+
+def _classify_connector_error(err: str) -> str:
+    """Map a connector-gate error string to a specific `llm_status` enum value.
+
+    Ontology citation failures (post phase 5) get their own statuses so the
+    AAR pipeline can tell apart "vendor missing", "no PDF on disk for the
+    ODL extension", and "sidecar malformed/uncited". All other connector
+    failures stay as the legacy `skipped_connector` value.
+
+    The inner reason is checked first because a broken-pdf error message
+    also contains the wrapper phrase `ontology citation sidecars failed`.
+    """
+    if "primary.pdf not on disk" in err:
+        return "skipped_broken_pdf_cite"
+    if "ontology citation sidecars" in err:
+        return "skipped_uncited_ontology"
+    return "skipped_connector"
+
+
+def _apply_closed_claim_postprocess(
+    parsed: Dict[str, Any], packet_in: Dict[str, Any], symbolic: Dict[str, Any]
+) -> None:
+    """Drop uncited kg_annotations and replace narrative_md with deterministic render.
+
+    Mutates `parsed` in place. Runs only on the success path; skipped
+    responses (symbolic, connector, etc.) keep their existing narrative.
+    """
+    raw_annotations = parsed.get("kg_annotations") or []
+    if not isinstance(raw_annotations, list):
+        raw_annotations = []
+    parsed["kg_annotations"] = drop_uncited_kg_annotations(raw_annotations)
+    parsed["narrative_md"] = render_deterministic_narrative(
+        packet_in, symbolic, parsed["kg_annotations"]
+    )
 
 
 def _validated_pipeline_response(resp: Dict[str, Any]) -> Dict[str, Any]:
@@ -239,7 +276,7 @@ def run_llm_on_aar_packet(
             _base_aar_response(
                 packet_in,
                 symbolic,
-                llm_status="skipped_connector",
+                llm_status=_classify_connector_error(conn_err),
                 narrative_md=f"After-action LLM skipped: OpenFoundry connector invalid ({conn_err}).",
             ),
         )
@@ -323,6 +360,7 @@ def run_llm_on_aar_packet(
     parsed["llm_status"] = "ok"
     parsed["symbolic_passed"] = bool(symbolic.get("passed"))
     _clamp_promote_recommendation(parsed, packet_in, symbolic)
+    _apply_closed_claim_postprocess(parsed, packet_in, symbolic)
 
     return _ensure_aar_response(
         packet_in,
@@ -379,7 +417,7 @@ def run_llm_on_hypothesis_request(
         conn_err = _connector_gate(repo_root)
         if conn_err:
             return _hypothesis_error_response(
-                request, llm_status="skipped_connector", llm_error=conn_err
+                request, llm_status=_classify_connector_error(conn_err), llm_error=conn_err
             )
 
     schema_text = _load_schema_text(_HYPOTHESIS_OUTPUT_SCHEMA)

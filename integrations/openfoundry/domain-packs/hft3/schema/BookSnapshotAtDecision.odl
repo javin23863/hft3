@@ -1,0 +1,17 @@
+# hft3 — BookSnapshotAtDecision
+# LOB snapshot captured at the strategy decision time. Citation:
+# citations/BookSnapshotAtDecision.yaml -> math model PDF §3 (Limit Order
+# Book, p.1-2). Event-time correctness (BLUEPRINT §2 #2).
+
+extend schema @namespace(name: "hft3", version: "1.0.0")
+
+type BookSnapshotAtDecision @objectType {
+  id: ID! @primary
+  eventId: String! @indexed
+  decisionTsNs: Int! @indexed
+  bestBidTicks: Int
+  bestAskTicks: Int
+  bidSizeTop5: Int
+  askSizeTop5: Int
+  midTicks: Int
+}
