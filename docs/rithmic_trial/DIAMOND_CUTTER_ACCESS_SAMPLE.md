@@ -215,4 +215,3 @@ We can provide the C++ source file, build command, sanitized run output, and
 connection-parameter mapping on request. Credentials are not embedded in the
 sample and are supplied only via runtime environment variables.
 ```
-
