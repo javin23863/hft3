@@ -107,6 +107,70 @@ static bool load_mml_env_vars(const std::string& path, std::vector<std::string>&
     return found > 0;
 }
 
+static size_t leading_spaces(const std::string& s) {
+    size_t n = 0;
+    while (n < s.size() && s[n] == ' ') ++n;
+    return n;
+}
+
+static bool yaml_scalar_at(const std::string& line, const std::string& key,
+                           std::string& value) {
+    std::string s = line;
+    trim(s);
+    if (s.empty() || s[0] == '#') return false;
+    if (s.compare(0, key.size(), key) != 0) return false;
+    size_t pos = key.size();
+    while (pos < s.size() && (s[pos] == ' ' || s[pos] == '\t')) ++pos;
+    if (pos >= s.size() || s[pos] != ':') return false;
+    ++pos;
+    while (pos < s.size() && (s[pos] == ' ' || s[pos] == '\t')) ++pos;
+    value = s.substr(pos);
+    size_t hash = value.find('#');
+    if (hash != std::string::npos) value = value.substr(0, hash);
+    trim(value);
+    unquote(value);
+    return !value.empty();
+}
+
+static std::string load_yaml_scalar(const std::string& path,
+                                    const std::string& section,
+                                    const std::string& key,
+                                    const std::string& def) {
+    std::ifstream f(path);
+    if (!f.is_open()) return def;
+    std::string line;
+    bool in_section = section.empty();
+    size_t section_indent = 0;
+    while (std::getline(f, line)) {
+        if (section.empty()) {
+            std::string value;
+            if (yaml_scalar_at(line, key, value)) return value;
+            continue;
+        }
+
+        std::string stripped = line;
+        trim(stripped);
+        if (stripped.empty() || stripped[0] == '#') continue;
+        size_t indent = leading_spaces(line);
+        if (!in_section) {
+            if (stripped == section + ":") {
+                in_section = true;
+                section_indent = indent;
+            }
+            continue;
+        }
+        if (indent <= section_indent) break;
+        std::string value;
+        if (yaml_scalar_at(line, key, value)) return value;
+    }
+    return def;
+}
+
+static std::string get_env_or_string(const char* key, const std::string& def) {
+    const char* v = std::getenv(key);
+    return v && v[0] ? std::string(v) : def;
+}
+
 static std::string fixed_cstr(const char* data, size_t len) {
     size_t n = 0;
     while (n < len && data[n] != '\0') ++n;
@@ -150,30 +214,59 @@ int main() {
 
     std::string repo = repo_root();
     std::vector<std::string> env_vars;
-    std::string yaml_path = repo + "/packages/data_system/config/rithmic_api_test.yaml";
+    std::string yaml_path = get_env_or_string(
+        "RITHMIC_CONFIG_PATH",
+        repo + "/packages/data_system/config/rithmic_api_test.yaml"
+    );
     if (!load_mml_env_vars(yaml_path, env_vars)) {
         std::fprintf(stderr, "FAIL: could not load MML_* env from %s\n", yaml_path.c_str());
         return 2;
     }
     env_vars.push_back("MML_SSL_CLNT_AUTH_FILE=" + repo + "/rithmic_gateway/RApiPlus/13.7.0.0/etc/rithmic_ssl_cert_auth_params");
+    env_vars.push_back(std::string("USER=") + user);
 
     std::vector<const char*> env_ptrs;
     env_ptrs.reserve(env_vars.size());
     for (const std::string& v : env_vars) env_ptrs.push_back(v.c_str());
 
     std::string log_path = repo + "/runtime/rithmic_capi_latency_probe.log";
+    std::string environment = get_env_or_string(
+        "RITHMIC_ENVIRONMENT",
+        load_yaml_scalar(yaml_path, "", "system", "Rithmic Test")
+    );
+    std::string md_connect_point = get_env_or_string(
+        "RITHMIC_MD_CONNECT_POINT",
+        load_yaml_scalar(yaml_path, "login_params", "sMdCnnctPt", "login_agent_tpc")
+    );
+    std::string ts_connect_point = get_env_or_string(
+        "RITHMIC_TS_CONNECT_POINT",
+        load_yaml_scalar(yaml_path, "login_params", "sTsCnnctPt", "login_agent_opc")
+    );
+    std::string rep_connect_point = get_env_or_string(
+        "RITHMIC_REP_CONNECT_POINT",
+        load_yaml_scalar(yaml_path, "repository_login", "sCnnctPt", "login_agent_repositoryc")
+    );
+    std::string pnl_connect_point = get_env_or_string(
+        "RITHMIC_PNL_CONNECT_POINT",
+        load_yaml_scalar(yaml_path, "login_params", "sPnlCnnctPt", "login_agent_pnlc")
+    );
+    std::string ih_connect_point = get_env_or_string(
+        "RITHMIC_IH_CONNECT_POINT",
+        load_yaml_scalar(yaml_path, "login_params", "sIhCnnctPt", "login_agent_historyc")
+    );
+
     ConnectionConfig cfg{};
-    cfg.environment = "Rithmic Test";
+    cfg.environment = environment.c_str();
     cfg.username = user;
     cfg.password = pass;
     cfg.app_name = "HFT3-CAPI-LatencyProbe";
     cfg.app_version = "1.0";
     cfg.log_file_path = log_path.c_str();
-    cfg.md_connect_point = "login_agent_tpc";
-    cfg.ts_connect_point = "login_agent_opc";
-    cfg.rep_connect_point = "login_agent_repositoryc";
-    cfg.pnl_connect_point = "login_agent_pnlc";
-    cfg.ih_connect_point = "login_agent_historyc";
+    cfg.md_connect_point = md_connect_point.c_str();
+    cfg.ts_connect_point = ts_connect_point.c_str();
+    cfg.rep_connect_point = rep_connect_point.c_str();
+    cfg.pnl_connect_point = pnl_connect_point.c_str();
+    cfg.ih_connect_point = ih_connect_point.c_str();
     cfg.env_vars = env_ptrs.data();
     cfg.env_vars_count = static_cast<int>(env_ptrs.size());
 
