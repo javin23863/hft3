@@ -12,7 +12,15 @@ from pathlib import Path
 from typing import Any
 
 from ..backtester_protocol import validate_lane_config
-from ..lane import GenericBacktestResult, HorizonConfig, Lane, LaneConfig, WindowConfig
+from ..lane import (
+    CME_TRUE_HFT_DMA_PROFILE,
+    GenericBacktestResult,
+    HorizonConfig,
+    Lane,
+    LaneCapabilityProfile,
+    LaneConfig,
+    WindowConfig,
+)
 
 CME_SYMBOLS = ["ES", "MES", "NQ", "MNQ", "ZN", "ZB", "YM", "CL", "GC", "SI", "HG", "RTY"]
 CME_LATENCY_BANDS_MS = [0.5, 1.0, 2.0, 5.0, 10.0]
@@ -37,6 +45,7 @@ class CMEConfig:
     event_types: list[str] = field(default_factory=lambda: list(CME_EVENT_TYPES))
     events_csv_path: str = "packages/data_system/config/events.csv"
     queue_models: list[str] = field(default_factory=lambda: list(CME_QUEUE_MODELS))
+    capability_profile: LaneCapabilityProfile = CME_TRUE_HFT_DMA_PROFILE
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -56,6 +65,7 @@ class CMEConfig:
             "test_paths": list(self.test_paths),
             "event_types": list(self.event_types),
             "queue_models": list(self.queue_models),
+            "capability_profile": self.capability_profile.to_dict(),
         }
 
 

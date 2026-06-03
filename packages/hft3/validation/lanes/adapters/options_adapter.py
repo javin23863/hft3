@@ -9,7 +9,14 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ..backtester_protocol import validate_lane_config
-from ..lane import GenericBacktestResult, HorizonConfig, Lane, WindowConfig
+from ..lane import (
+    OPTIONS_RESEARCH_PROFILE,
+    GenericBacktestResult,
+    HorizonConfig,
+    Lane,
+    LaneCapabilityProfile,
+    WindowConfig,
+)
 
 OPTIONS_LATENCY_BANDS_MS = [1.0]
 OPTIONS_EVENT_TYPES = ["options_parity"]
@@ -29,6 +36,7 @@ class OptionsConfig:
     test_paths: list[str] = field(default_factory=lambda: ["tests/test_options_lane"])
     event_types: list[str] = field(default_factory=lambda: list(OPTIONS_EVENT_TYPES))
     latency_ms: float = 1.0
+    capability_profile: LaneCapabilityProfile = OPTIONS_RESEARCH_PROFILE
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -42,6 +50,7 @@ class OptionsConfig:
             "test_paths": list(self.test_paths),
             "event_types": list(self.event_types),
             "latency_ms": self.latency_ms,
+            "capability_profile": self.capability_profile.to_dict(),
         }
 
 

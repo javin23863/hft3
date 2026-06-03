@@ -173,7 +173,7 @@ Scorecard structure:
 ## Success Criteria
 
 - All existing 352 tests still pass
-- New tests verify: crypto candidate with `BTCUSDT` symbol can be promoted when crypto lane coverage includes it
+- New tests verify: crypto candidates are promoted only when crypto config/provenance or the validated data environment covers the instrument
 - New tests verify: equities candidate with `RUNNER` symbol can be promoted when equities lane coverage includes it
 - New tests verify: cross-lane promotion is rejected
 - Scorecard includes `lane_coverage` field with all four lanes

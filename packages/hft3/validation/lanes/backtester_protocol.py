@@ -59,4 +59,6 @@ def validate_lane_config(cfg: Any) -> list[str]:
         getattr(cfg, "event_types", None), list
     ):
         errors.append("missing or invalid 'event_types' (must be list[str])")
+    if not hasattr(cfg, "capability_profile"):
+        errors.append("missing 'capability_profile'")
     return errors

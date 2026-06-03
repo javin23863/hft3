@@ -38,16 +38,19 @@ from hft3.validation.gate_result import (
     warnings as gate_warnings,
     write_robustness_gates_json,
 )
+from hft3.validation.lanes.lane_aware_promotion import check_candidate_lane_coverage
 
 REPORT_JSON_REL = Path("runtime/validation/champion_promotion_gate_report.json")
 REPORT_MD_REL = Path("runtime/validation/champion_promotion_gate_report.md")
 ROBUSTNESS_GATES_REL = Path("runtime/validation/robustness_gates.json")
+SCORECARD_JSON_REL = Path("runtime/validation/backtester_certification_scorecard.json")
 
 
 @dataclass
 class PromotionGateResult:
     passed: bool
     failures: list[str] = field(default_factory=list)
+    model_id: str = ""
     event_id: str = ""
     symbol: str = ""
     latency_ms: float = 0.0
@@ -101,8 +104,45 @@ def _scorecard_covers(
     return True, ""
 
 
+def _scorecard_path(root: Path, registry: Any) -> Path:
+    scorecard_path = Path(getattr(registry, "scorecard_path", "") or SCORECARD_JSON_REL)
+    if scorecard_path.is_absolute():
+        return scorecard_path
+    return root / scorecard_path
+
+
+def _load_scorecard_payload(scorecard_path: Path) -> dict[str, Any] | None:
+    try:
+        raw = json.loads(scorecard_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return raw if isinstance(raw, dict) else None
+
+
+def _artifact_ref(path: Path, root: Path) -> str:
+    if path.is_relative_to(root):
+        return str(path.relative_to(root)).replace("\\", "/")
+    return str(path).replace("\\", "/")
+
+
+def _coverage_reason_code(covers_reason: str) -> str:
+    reason = covers_reason.upper()
+    if "SYMBOL" in reason:
+        return "SCORECARD_NOT_COVERED_SYMBOL"
+    if "EVENT" in reason:
+        return "SCORECARD_NOT_COVERED_EVENT_TYPE"
+    if "LATENCY" in reason:
+        return "SCORECARD_NOT_COVERED_LATENCY"
+    if "QUEUE" in reason:
+        return "SCORECARD_NOT_COVERED_QUEUE_MODEL"
+    if "REGISTRY_STATUS" in reason:
+        return "SCORECARD_NOT_COVERED_REGISTRY_STATUS"
+    return "SCORECARD_NOT_COVERED"
+
+
 def evaluate_promotion_gates(
     *,
+    model_id: str = "",
     event_id: str = "",
     symbol: str = "",
     latency_ms: float = 0.0,
@@ -162,8 +202,9 @@ def evaluate_promotion_gates(
     )
 
     # 3. scorecard present
-    scorecard_path = root / "runtime/validation/backtester_certification_scorecard.json"
+    scorecard_path = _scorecard_path(root, registry)
     scorecard_ok = scorecard_path.is_file()
+    scorecard_payload = _load_scorecard_payload(scorecard_path) if scorecard_ok else None
     gates.append(
         GateResult(
             gate_name="scorecard_present",
@@ -181,28 +222,72 @@ def evaluate_promotion_gates(
         )
     )
 
-    # 4–7. scorecard coverage (symbol / event / latency / queue)
-    if scorecard_ok:
-        covers_ok, covers_reason = _scorecard_covers(
-            registry,
-            event_id=event_id,
-            symbol=symbol,
-            latency_ms=latency_ms,
-            queue_model=queue_model,
-        )
+    if scorecard_ok and scorecard_payload is None:
         gates.append(
             GateResult(
-                gate_name="scorecard_covers",
+                gate_name="scorecard_valid_json",
                 gate_category=GateCategory.REGISTRY_ELIGIBILITY,
-                metric_name="coverage_check",
+                metric_name="scorecard_json_parseable",
                 threshold=None,
                 observed_value=None,
                 comparison_operator="==",
-                pass_fail=covers_ok,
+                pass_fail=False,
                 severity=Severity.BLOCKING,
-                reason_code="SCORECARD_COVERS" if covers_ok else f"SCORECARD_NOT_COVERED:{covers_reason}",
+                reason_code="SCORECARD_INVALID_JSON",
+                artifact_reference=_artifact_ref(scorecard_path, root),
             )
         )
+
+    # 4-7. scorecard coverage (lane-aware when available, legacy flat registry otherwise)
+    if scorecard_ok and scorecard_payload is not None:
+        lane_coverage = scorecard_payload.get("lane_coverage") if scorecard_payload else None
+        if isinstance(lane_coverage, dict):
+            lane_result = check_candidate_lane_coverage(
+                model_id=model_id,
+                symbol=symbol,
+                event_id=event_id,
+                latency_ms=latency_ms,
+                queue_model=queue_model,
+                scorecard=scorecard_payload,
+            )
+            gates.append(
+                GateResult(
+                    gate_name="lane_scorecard_covers",
+                    gate_category=GateCategory.REGISTRY_ELIGIBILITY,
+                    metric_name="lane_coverage_check",
+                    threshold=None,
+                    observed_value=None,
+                    comparison_operator="==",
+                    pass_fail=lane_result.passed,
+                    severity=Severity.BLOCKING,
+                    reason_code="LANE_SCORECARD_COVERS" if lane_result.passed else "LANE_SCORECARD_NOT_COVERED",
+                    artifact_reference=_artifact_ref(scorecard_path, root),
+                    extra=lane_result.to_dict(),
+                )
+            )
+        else:
+            covers_ok, covers_reason = _scorecard_covers(
+                registry,
+                event_id=event_id,
+                symbol=symbol,
+                latency_ms=latency_ms,
+                queue_model=queue_model,
+            )
+            gates.append(
+                GateResult(
+                    gate_name="scorecard_covers",
+                    gate_category=GateCategory.REGISTRY_ELIGIBILITY,
+                    metric_name="coverage_check",
+                    threshold=None,
+                    observed_value=None,
+                    comparison_operator="==",
+                    pass_fail=covers_ok,
+                    severity=Severity.BLOCKING,
+                    reason_code="SCORECARD_COVERS" if covers_ok else _coverage_reason_code(covers_reason),
+                    artifact_reference=_artifact_ref(scorecard_path, root),
+                    extra={"failure_reason": covers_reason} if covers_reason else {},
+                )
+            )
 
     # 8. T0 pytest (or fast_gate_report reload)
     if skip_t0_rerun:
@@ -307,6 +392,7 @@ def evaluate_promotion_gates(
 
 def evaluate_promotion_gate(
     *,
+    model_id: str = "",
     event_id: str = "",
     symbol: str = "",
     latency_ms: float = 0.0,
@@ -322,6 +408,7 @@ def evaluate_promotion_gate(
     registry = load_registry(root)
     staleness = assess_staleness(root, registry=registry)
     gates = evaluate_promotion_gates(
+        model_id=model_id,
         event_id=event_id,
         symbol=symbol,
         latency_ms=latency_ms,
@@ -334,6 +421,7 @@ def evaluate_promotion_gate(
     return PromotionGateResult(
         passed=passed,
         failures=failures,
+        model_id=model_id,
         event_id=event_id,
         symbol=symbol,
         latency_ms=latency_ms,
@@ -461,6 +549,7 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(description="T4 champion promotion gate")
     parser.add_argument("--event-id", default="")
+    parser.add_argument("--model-id", default="")
     parser.add_argument("--symbol", default="")
     parser.add_argument("--latency-ms", type=float, default=0.0)
     parser.add_argument("--queue-model", default="")
@@ -476,6 +565,7 @@ def main(argv: list[str] | None = None) -> int:
     campaign = Path(args.campaign_dir) if args.campaign_dir else None
     result = evaluate_promotion_gate(
         event_id=args.event_id,
+        model_id=args.model_id,
         symbol=args.symbol,
         latency_ms=args.latency_ms,
         queue_model=args.queue_model,

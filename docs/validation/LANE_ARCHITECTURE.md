@@ -1,6 +1,6 @@
 # Lane Architecture (hft3 backtester validation)
 
-**Status:** Phase 38 design plan implemented (phases 1-5); phase 39 test suite green (62 tests); phase 41 lane-aware backtester certification integrated (`run_full_certification` runs all 4 lanes).
+**Status:** Phase 38 design plan implemented (phases 1-5); phase 39 test suite green; phase 41 lane-aware backtester certification integrated (`run_full_certification` runs all 4 lanes); phase 44 capability profiles added.
 
 ## Purpose
 
@@ -21,9 +21,14 @@ A `Lane` is one of: `CME_FUTURES`, `CRYPTO`, `EQUITIES`, `OPTIONS`.
 Resolution priority for a candidate (model + symbol + event):
 
 1. `model_id` prefix → registered lane (e.g. `CRYPTO_H7` → `CRYPTO`)
-2. `symbol` prefix → BTC/ETH/SOL → `CRYPTO`; RUNNER/LOW_FLOAT → `EQUITIES`; OPTIONS/PARITY → `OPTIONS`
-3. `event_id` prefix → `CRYPTO_`/`BTC_`/`ETH_`/`SOL_` → `CRYPTO`; etc.
+2. non-crypto `symbol` prefix → RUNNER/LOW_FLOAT → `EQUITIES`; OPTIONS/PARITY → `OPTIONS`
+3. `event_id` prefix → `CRYPTO_` → `CRYPTO`; `EQUITY_`/`LOW_FLOAT_` → `EQUITIES`; `OPTIONS_`/`PARITY_` → `OPTIONS`
 4. Default: `CME_FUTURES`
+
+Crypto is intentionally **not** inferred from ticker names such as BTC,
+ETH, SOL, or any other symbol. Crypto lane identity currently comes from a
+`CRYPTO_` model or event id; instrument coverage then comes from candidate
+config or the validated crypto data environment.
 
 Implemented in `resolve_lane_for_candidate()` at
 `packages/hft3/validation/lanes/lane_aware_promotion.py:43`.
@@ -32,8 +37,9 @@ Implemented in `resolve_lane_for_candidate()` at
 
 - `Lane` (StrEnum): identity.
 - `WindowConfig` / `HorizonConfig`: per-lane windowing params.
+- `LaneCapabilityProfile`: lane execution capability profile.
 - `LaneConfig` (Protocol): per-lane static config (symbols, event_types,
-  latency_bands_ms, tick_size, lot_size, windows, horizons, …).
+  latency_bands_ms, tick_size, lot_size, windows, horizons, capability profile, ...).
 - `Backtester` (Protocol): `validate_config() -> list[str]`,
   `run(target) -> BacktestResult`.
 - `BacktestResult` (Protocol): per-run outcome.
@@ -53,16 +59,21 @@ Each lane ships an adapter in
 - `cme_adapter.py`: `CMEConfig`, `load_cme_config()`, `CMEBacktester`.
   Loads `packages/data_system/config/events.csv` by default; falls back
   to built-in CME defaults. Latency bands `[0.5, 1, 2, 5, 10] ms`.
+  Capability: true HFT/DMA with proof required.
 - `crypto_adapter.py`: `CryptoConfig`, `load_crypto_config()`,
   `CryptoBacktester`. Reads candidate YAML; parses `90d`/`30d`/`24h`
-  durations; defaults to BTC/ETH/SOL spot+perp. Latency bands
-  `[5, 50, 200] ms`. 24h embargo; 90/30-day walk-forward.
+  durations; instruments come from candidate YAML or explicit validated
+  BTC-computer crypto data environment provenance, not from hard-coded
+  tickers. Candidate YAML cannot self-attest validated environment-wide
+  coverage. Latency bands `[5, 50, 200] ms`. 24h embargo; 90/30-day
+  walk-forward. Capability: node-direct HFT with proof required.
 - `equities_adapter.py`: `EquitiesConfig`, `load_equities_config()`,
   `EquitiesBacktester`. Reads `universe.yaml`; extracts session symbols
-  + walk-forward config. Latency bands `[5, 50] ms` default.
+  + walk-forward config. Latency bands `[5, 50] ms` default. Capability:
+  speed-advantage non-DMA; not blocked for lacking true HFT/DMA.
 - `options_adapter.py`: `OptionsConfig`, `load_options_config()`,
   `OptionsBacktester`. Defaults; lot size 100, tick 0.01. Latency
-  1 ms.
+  1 ms. Capability: research/non-HFT unless separately proven.
 
 `registration.py` calls `register_all_lanes()` to auto-register all
 four on first import.
@@ -71,7 +82,7 @@ four on first import.
 
 `build_lane_scorecard()` produces a `LaneScorecard` keyed by lane,
 with per-lane `LaneCoverage` (symbols, event_types, latency_bands_ms,
-test_paths, run_result). `legacy_cme_scorecard_fields()` extracts the
+test_paths, capability_profile, run_result). `legacy_cme_scorecard_fields()` extracts the
 old `covered_symbols` / `covered_event_types` / etc. fields for
 backward compatibility with code that reads the legacy CME scorecard.
 
@@ -125,12 +136,13 @@ fast gate + T2 full suite (CME core)"`.
 
 `covered_symbols`, `covered_event_types`, `covered_latency_bands_ms`,
 and `covered_modules` in the scorecard are the **union across all 4
-lanes**, not just CME:
-
-- 18 symbols (12 CME + 5 crypto + 1 equities)
-- 8 event types (2 CME + 3 crypto + 2 equities + 1 options)
-- 7 latency bands (5 CME + 2 crypto)
-- 8 modules (5 CME + crypto_lane + equities_lane + options_lane)
+lanes**, not just CME. Crypto instruments are not populated from a
+static BTC/ETH/SOL list. By default the crypto adapter records
+`instrument_coverage=candidate_config` with `environment_validated=false`;
+promotion accepts data-environment wildcard coverage only when the
+scorecard supplies `instrument_coverage=validated_crypto_data_environment`,
+`environment_validated=true`, `data_environment=btc_computer_validated_crypto_data_environment`,
+and a BTC-computer-scoped `environment_source_ref`.
 
 ### Artifacts
 
@@ -168,23 +180,33 @@ paths invalidates the lane-aware GREEN certification.
 
 `check_candidate_lane_coverage(model_id, symbol, event_id, latency_ms)`
 resolves the candidate's lane and checks whether the symbol, event
-type, and latency band are covered by that lane's scorecard.
+type, latency band, and capability profile are covered by that lane's
+scorecard.
 
-- **Passes** when symbol matches a coverage symbol, event_id contains
-  a registered event_type, and latency_ms is within a registered band.
+The production T4 promotion gate uses this lane-aware check when the
+certification scorecard contains `lane_coverage`; older flat scorecards
+fall back to the legacy registry coverage check.
+
+- **Passes** when symbol matches lane coverage, event_id contains a
+  registered event_type, latency_ms is within a registered band, and
+  lane-specific capability requirements are met.
+- **Crypto** passes when the instrument is covered by candidate config
+  or by explicit validated crypto data environment provenance. Ticker
+  prefixes are not promotion authority.
 - **Fails** for cross-lane mismatches (e.g. crypto symbol against CME
   coverage).
-- **Rejects** unknown symbols (must be on the lane's coverage list).
+- **Rejects** symbols that are not covered by the lane's config or data
+  provenance.
 
 ## Test surface
 
-`tests/test_hft3_validation/` (62 tests, phase 39):
+`tests/test_hft3_validation/` covers the lane validation surface:
 
-- `test_lane_registry.py` (9): enum, prefix resolution, registration.
-- `test_lane_adapters.py` (18): Protocol satisfaction, defaults, YAML/CSV loading, validation.
-- `test_unified_scorecard.py` (8): per-lane coverage, legacy CME fields.
-- `test_unified_certification_runner.py` (11): full + subset runs, report, staleness.
-- `test_lane_aware_promotion.py` (18): lane resolution, cross-lane rejection, latency bands.
+- `test_lane_registry.py`: enum, prefix resolution, registration.
+- `test_lane_adapters.py`: Protocol satisfaction, defaults, YAML/CSV loading, validation, capability profiles.
+- `test_unified_scorecard.py`: per-lane coverage, capability profiles, legacy CME fields.
+- `test_unified_certification_runner.py`: full + subset runs, report, staleness.
+- `test_lane_aware_promotion.py`: lane resolution, crypto environment coverage, cross-lane rejection, latency bands, capability gates.
 
 Run with: `pytest tests/test_hft3_validation/ -v`.
 

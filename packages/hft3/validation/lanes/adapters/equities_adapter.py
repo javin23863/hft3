@@ -13,7 +13,15 @@ from typing import Any
 import yaml
 
 from ..backtester_protocol import validate_lane_config
-from ..lane import GenericBacktestResult, HorizonConfig, Lane, LaneConfig, WindowConfig
+from ..lane import (
+    EQUITIES_SPEED_ADVANTAGE_PROFILE,
+    GenericBacktestResult,
+    HorizonConfig,
+    Lane,
+    LaneCapabilityProfile,
+    LaneConfig,
+    WindowConfig,
+)
 
 EQUITIES_SYMBOLS = ["RUNNER", "LOW_FLOAT"]
 EQUITIES_LATENCY_BANDS_MS = [5.0, 50.0]
@@ -40,6 +48,7 @@ class EquitiesConfig:
     test_days: int = 20
     step_days: int = 20
     universe_yaml_path: str = "packages/equities_lane/config/universe.yaml"
+    capability_profile: LaneCapabilityProfile = EQUITIES_SPEED_ADVANTAGE_PROFILE
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -65,6 +74,7 @@ class EquitiesConfig:
                 "test_days": self.test_days,
                 "step_days": self.step_days,
             },
+            "capability_profile": self.capability_profile.to_dict(),
         }
 
 

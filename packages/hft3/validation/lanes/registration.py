@@ -49,7 +49,7 @@ def register_all_lanes() -> None:
             config_loader=load_crypto_config,
             validator=_crypto_validator,
             test_paths=["tests/test_crypto_lane"],
-            model_id_prefixes=("CRYPTO_", "BTC_", "ETH_", "SOL_"),
+            model_id_prefixes=("CRYPTO_",),
         )
     if reg.get(Lane.EQUITIES) is None:
         register_lane(

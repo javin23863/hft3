@@ -95,7 +95,6 @@ def test_coverage_union_across_lanes(certification_result):
     modules = data["covered_modules"]
     bands = data["covered_latency_bands"]
     assert "ES" in symbols
-    assert "BTCUSDT" in symbols
     assert "RUNNER" in symbols
     assert "macro" in event_types
     assert "crypto_l2" in event_types
@@ -106,6 +105,8 @@ def test_coverage_union_across_lanes(certification_result):
     assert 0.5 in bands
     assert 50.0 in bands
     assert 200.0 in bands
+    assert data["lane_coverage"]["crypto"]["instrument_coverage"] == "candidate_config"
+    assert data["lane_coverage"]["crypto"]["environment_validated"] is False
 
 
 def test_lane_aware_payload_omitted_when_skip_lane_pytest(tmp_path):

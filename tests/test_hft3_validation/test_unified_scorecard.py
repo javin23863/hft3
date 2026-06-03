@@ -24,6 +24,7 @@ def test_scorecard_per_lane_coverage_fields():
         assert "event_types" in cov
         assert "latency_bands_ms" in cov
         assert "test_paths" in cov
+        assert "capability_profile" in cov
 
 
 def test_scorecard_cme_symbols():
@@ -33,16 +34,22 @@ def test_scorecard_cme_symbols():
     assert "MES" in cme["symbols"]
 
 
-def test_scorecard_crypto_symbols():
+def test_scorecard_crypto_environment_coverage():
     card = build_lane_scorecard()
     crypto = card.lane_coverage["crypto"]
-    assert "BTCUSDT" in crypto["symbols"]
+    assert crypto["symbols"] == []
+    assert crypto["instrument_coverage"] == "candidate_config"
+    assert crypto["environment_validated"] is False
+    assert crypto["environment_source_ref"] == ""
+    assert crypto["capability_profile"]["node_direct"] is True
 
 
 def test_scorecard_equities_symbols():
     card = build_lane_scorecard()
     equities = card.lane_coverage["equities"]
     assert "RUNNER" in equities["symbols"]
+    assert equities["capability_profile"]["is_hft"] is False
+    assert equities["capability_profile"]["dma"] is False
 
 
 def test_scorecard_event_types_per_lane():

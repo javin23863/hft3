@@ -44,6 +44,8 @@ def test_cme_config_defaults():
     assert cfg.tick_size == 0.25
     assert cfg.lot_size == 1.0
     assert cfg.latency_bands_ms == [0.5, 1.0, 2.0, 5.0, 10.0]
+    assert cfg.capability_profile.is_hft is True
+    assert cfg.capability_profile.dma is True
 
 
 def test_cme_config_satisfies_protocol():
@@ -78,7 +80,12 @@ def test_cme_backtester_satisfies_protocol():
 def test_crypto_config_defaults():
     cfg = CryptoConfig()
     assert cfg.lane == Lane.CRYPTO
-    assert "BTCUSDT" in cfg.symbols
+    assert cfg.symbols == []
+    assert cfg.instrument_coverage == "candidate_config"
+    assert cfg.environment_validated is False
+    assert cfg.environment_source_ref == ""
+    assert cfg.capability_profile.is_hft is True
+    assert cfg.capability_profile.node_direct is True
     assert cfg.tick_size == 0.1
     assert cfg.latency_bands_ms == [5.0, 50.0, 200.0]
 
@@ -96,11 +103,15 @@ def test_crypto_config_loads_from_yaml(tmp_path):
         "hypothesis_id: CRYPTO_H_TEST\n"
         "candidate_id: crypto_h_test\n"
         "universe:\n"
-        "- BTC\n"
-        "- ETH\n"
+        "- DOGEUSDT\n"
+        "- WIF/USDT\n"
         "venues:\n"
         "- binance_spot\n"
         "- deribit\n"
+        "data_environment: btc_computer_validated_crypto_data_environment\n"
+        "instrument_coverage: validated_crypto_data_environment\n"
+        "environment_validated: true\n"
+        "environment_source_ref: config://candidate/self-attested.yaml\n"
         "training_window: 90d\n"
         "test_window: 30d\n"
         "embargo: 24h\n"
@@ -109,8 +120,12 @@ def test_crypto_config_loads_from_yaml(tmp_path):
     cfg = load_crypto_config(yaml_path)
     assert cfg.candidate_id == "crypto_h_test"
     assert cfg.hypothesis_id == "CRYPTO_H_TEST"
-    assert "BTCUSDT" in cfg.symbols
-    assert "ETHUSDT" in cfg.symbols
+    assert "DOGEUSDT" in cfg.symbols
+    assert "WIF/USDT" in cfg.symbols
+    assert cfg.data_environment == ""
+    assert cfg.instrument_coverage == "candidate_config"
+    assert cfg.environment_validated is False
+    assert cfg.environment_source_ref == ""
     assert cfg.windows.training_window_days == 90
     assert cfg.windows.test_window_days == 30
     assert cfg.windows.embargo_seconds == 86400.0
@@ -120,7 +135,8 @@ def test_crypto_config_loads_from_yaml(tmp_path):
 def test_crypto_config_handles_missing_yaml():
     cfg = load_crypto_config(Path("/nonexistent/path.yaml"))
     assert cfg.candidate_id == ""
-    assert cfg.symbols == ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BTC/USD", "ETH/USD"]
+    assert cfg.symbols == []
+    assert cfg.environment_validated is False
 
 
 def test_crypto_backtester_satisfies_protocol():
@@ -141,6 +157,9 @@ def test_equities_config_defaults():
     assert cfg.horizons.horizons == [1, 2, 5]
     assert cfg.horizons.lookback_days == 60
     assert cfg.latency_bands_ms == [5.0, 50.0]
+    assert cfg.capability_profile.speed_advantage is True
+    assert cfg.capability_profile.is_hft is False
+    assert cfg.capability_profile.dma is False
 
 
 def test_equities_config_satisfies_protocol():
@@ -190,6 +209,8 @@ def test_options_config_defaults():
     assert cfg.lane == Lane.OPTIONS
     assert cfg.latency_ms == 1.0
     assert cfg.lot_size == 100.0
+    assert cfg.capability_profile.research_only is True
+    assert cfg.capability_profile.is_hft is False
 
 
 def test_options_config_satisfies_protocol():
@@ -233,3 +254,4 @@ def test_all_adapters_round_trip_to_dict():
         assert isinstance(d["symbols"], list)
         assert isinstance(d["latency_bands_ms"], list)
         assert isinstance(d["tick_size"], (int, float))
+        assert isinstance(d["capability_profile"], dict)

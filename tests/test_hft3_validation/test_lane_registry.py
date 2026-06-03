@@ -25,9 +25,12 @@ def test_lane_enum_values():
 
 def test_lane_from_model_id_crypto():
     assert Lane.from_model_id("CRYPTO_H1") == Lane.CRYPTO
-    assert Lane.from_model_id("BTC_FEE_SPIKE") == Lane.CRYPTO
-    assert Lane.from_model_id("ETH_BASIS") == Lane.CRYPTO
-    assert Lane.from_model_id("SOL_VOLATILITY") == Lane.CRYPTO
+
+
+def test_lane_from_model_id_does_not_infer_crypto_from_tickers():
+    assert Lane.from_model_id("BTC_FEE_SPIKE") == Lane.CME_FUTURES
+    assert Lane.from_model_id("ETH_BASIS") == Lane.CME_FUTURES
+    assert Lane.from_model_id("SOL_VOLATILITY") == Lane.CME_FUTURES
 
 
 def test_lane_from_model_id_equities():

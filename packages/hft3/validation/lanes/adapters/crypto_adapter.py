@@ -13,12 +13,20 @@ from typing import Any
 import yaml
 
 from ..backtester_protocol import validate_lane_config
-from ..lane import GenericBacktestResult, HorizonConfig, Lane, LaneConfig, WindowConfig
+from ..lane import (
+    CRYPTO_NODE_DIRECT_HFT_PROFILE,
+    GenericBacktestResult,
+    HorizonConfig,
+    Lane,
+    LaneCapabilityProfile,
+    LaneConfig,
+    WindowConfig,
+)
 
-CRYPTO_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BTC/USD", "ETH/USD"]
 CRYPTO_LATENCY_BANDS_MS = [5.0, 50.0, 200.0]
 CRYPTO_VENUES = ["binance_spot", "binance_perp", "deribit", "kraken"]
 CRYPTO_EVENT_TYPES = ["crypto_l2", "crypto_l3", "crypto_shock_event"]
+CRYPTO_CONFIG_INSTRUMENT_COVERAGE = "candidate_config"
 
 
 def _parse_duration_to_ms(s: str | int | float | None) -> int | None:
@@ -66,7 +74,7 @@ class CryptoConfig:
     """Crypto lane LaneConfig. Loaded from per-candidate YAML."""
 
     lane: Lane = Lane.CRYPTO
-    symbols: list[str] = field(default_factory=lambda: list(CRYPTO_SYMBOLS))
+    symbols: list[str] = field(default_factory=list)
     windows: WindowConfig = field(default_factory=WindowConfig)
     horizons: HorizonConfig = field(default_factory=HorizonConfig)
     latency_bands_ms: list[float] = field(default_factory=lambda: list(CRYPTO_LATENCY_BANDS_MS))
@@ -77,6 +85,11 @@ class CryptoConfig:
     venues: list[str] = field(default_factory=lambda: list(CRYPTO_VENUES))
     candidate_id: str = ""
     hypothesis_id: str = ""
+    data_environment: str = ""
+    instrument_coverage: str = CRYPTO_CONFIG_INSTRUMENT_COVERAGE
+    environment_validated: bool = False
+    environment_source_ref: str = ""
+    capability_profile: LaneCapabilityProfile = CRYPTO_NODE_DIRECT_HFT_PROFILE
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -102,6 +115,11 @@ class CryptoConfig:
             "venues": list(self.venues),
             "candidate_id": self.candidate_id,
             "hypothesis_id": self.hypothesis_id,
+            "data_environment": self.data_environment,
+            "instrument_coverage": self.instrument_coverage,
+            "environment_validated": self.environment_validated,
+            "environment_source_ref": self.environment_source_ref,
+            "capability_profile": self.capability_profile.to_dict(),
         }
 
 
@@ -118,7 +136,7 @@ def load_crypto_config(backtest_yaml: Path | None = None) -> CryptoConfig:
         return cfg
     universe = data.get("universe", [])
     if isinstance(universe, list):
-        cfg.symbols = [f"{s}USDT" for s in universe if isinstance(s, str)]
+        cfg.symbols = [s for s in universe if isinstance(s, str)]
     venues = data.get("venues", [])
     if isinstance(venues, list):
         cfg.venues = [v for v in venues if isinstance(v, str)]
