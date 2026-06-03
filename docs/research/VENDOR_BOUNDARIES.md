@@ -28,7 +28,19 @@ hft3 domain pack: [`integrations/openfoundry/domain-packs/hft3/`](../../integrat
 | **GPT-5.5 (`gpt-5.5`)** | OpenAI-compatible runtime LLM for after-action, research, and model-development parsing | Treating GPT runtime as vendored OpenFoundry or AlphaGeometry code |
 | **AlphaGeometry Meliad/JAX** | Upstream research LM inside `vendor/alphageometry/` | Running it on MBO order books in production |
 
-**Google DeepMind** appears in this stack as the **AlphaGeometry submodule** (symbolic geometry research code). GPT-5.5 is a runtime LLM accessed through an OpenAI-compatible endpoint — not vendored in git.
+**Google DeepMind** appears in this stack as the **AlphaGeometry submodule** (symbolic geometry research code) and as a pattern reference for slow neuro-symbolic verification. GPT-5.5 is a runtime LLM accessed through an OpenAI-compatible endpoint — not vendored in git.
+
+## Three separate layers
+
+| Layer | hft3 path | Authority boundary |
+|-------|-----------|--------------------|
+| OpenFoundry operational ontology | `integrations/openfoundry/` + `packages/data_layer/openfoundry_bridge.py` | Object/link/action/schema/governance adapter. This is not a relationship search engine. |
+| Per-LLM closed-world contract | `packages/data_layer/packet/` + `packages/data_layer/llm/` | Lane-specific packet schema and closed-claim `kg_annotations[]`; prevents free-form LLM KG claims. |
+| DeepMind-style relationship reasoning | `packages/research_pipeline/relationship_reasoning/` | Slow/offline candidate relationship lifecycle: proposal → defined evidence source → proof trace → validation → non-authoritative promotion record. No trading, no hot path, no direct KG/OpenFoundry write. |
+
+The relationship-reasoning layer is hft3 code. It does not run AlphaGeometry on order books, does not replace the OpenFoundry ontology, and does not bypass packet closed-claim validation. It rejects evidence from undefined sources, spoofed refs, and definition-only evidence. `world_event` evidence is valid only through the hft3-authored backend `GDELT_WORLD_EVENTS` cache source.
+
+FinceptTerminal was reviewed only as a public reference for connector categories. hft3 does not copy, vendor, import, or link FinceptTerminal code.
 
 ## LLM lanes (workstation, post-run / NL only)
 
@@ -57,6 +69,8 @@ All graph slices (workbench runs, pipeline documents, after-action) append to **
 After-action LLM output may only persist closed-claim `kg_annotations[]` in the `{source_type, source_id, field, value, cite}` shape. Free-form KG relation proposals are dropped before persistence.
 
 `narrative_md` is deterministic renderer output, not LLM-written prose.
+
+Slow relationship-reasoning promotion records are review artifacts only. They can become KG/OpenFoundry relations only through a separate validated adapter path; this module performs no write. World-event backend details: [WORLD_EVENT_DATA_BACKEND.md](WORLD_EVENT_DATA_BACKEND.md).
 
 ## Quant X
 

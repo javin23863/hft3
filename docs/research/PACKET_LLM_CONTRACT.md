@@ -52,6 +52,8 @@ Failure statuses:
 
 `kg_annotations[]` is a closed-claim array. The old `{from,to,relation,scope}` proposal shape is not valid.
 
+Each LLM lane has its own closed-world packet contract. This contract is not the OpenFoundry operational ontology and not the slow relationship-reasoning layer; it is the boundary that prevents lane-specific LLM output from inventing uncited graph claims.
+
 Each item:
 
 ```json
@@ -82,6 +84,12 @@ Validation functions:
 - `validate_kg_annotations_closed_claim(annotations)` returns human-readable errors.
 - `drop_uncited_kg_annotations(annotations)` keeps only valid closed-claim annotations.
 - `data_layer.pipeline.after_action._valid_kg_annotations()` re-filters before KG persistence.
+
+## Relationship-Reasoning Boundary
+
+`packages/research_pipeline/relationship_reasoning/` models slow/offline relationship candidates across defined source contexts. Each evidence item must name a defined `RelationshipDataSource` and canonical `source_ref`; at least one evidence item must be an empirical offline source. `world_event` evidence is valid only through cached `GDELT_WORLD_EVENTS` source refs. Those candidates are not packet `kg_annotations[]`, not LLM prose, and not authoritative KG/OpenFoundry writes.
+
+If a future packet summarizes a validated relationship candidate, it must still emit a valid closed-claim `kg_annotations[]` item with an allowed `source_type` and required citation. The relationship layer cannot bypass this contract.
 
 ## Deterministic narrative_md
 
