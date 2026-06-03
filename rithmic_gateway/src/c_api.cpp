@@ -207,6 +207,8 @@ int hft_rithmic_adapter_try_pop_order_event(void* handle, OrderEvent* out_event)
         return 2;
     }
     out_event->timestamp_ns  = evt.timestamp_ns;
+    out_event->callback_monotonic_ns = evt.callback_monotonic_ns;
+    out_event->callback_wall_ns = evt.callback_wall_ns;
     out_event->order_id      = evt.order_id;
     out_event->event_type    = evt.event_type;
     out_event->side          = evt.side;

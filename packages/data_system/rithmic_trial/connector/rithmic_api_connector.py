@@ -291,8 +291,8 @@ class RithmicApiConnector(ConnectorInterface):
         return out
 
     def _adapt_order_event(self, ev: OrderEvent) -> dict[str, Any]:
-        recv_mono_ns = _now_ns()
-        recv_wall_ns = _wall_ns()
+        recv_mono_ns = int(ev.callback_monotonic_ns or _now_ns())
+        recv_wall_ns = int(ev.callback_wall_ns or _wall_ns())
         bridge_evt = ev.event_type
         daemon_evt = _BRIDGE_TO_DAEMON_EVENT.get(bridge_evt, "order_status")
         broker_order_id = str(ev.order_id) if ev.order_id != 0 else ""

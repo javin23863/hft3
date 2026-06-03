@@ -275,6 +275,8 @@ def test_order_event_dataclass_fields() -> None:
     d = ev.to_dict()
     assert d == {
         "timestamp_ns": 1234,
+        "callback_monotonic_ns": 0,
+        "callback_wall_ns": 0,
         "order_id": 42,
         "event_type": "A",
         "side": "B",
@@ -292,6 +294,8 @@ def test_order_event_dataclass_fields() -> None:
 def test_order_event_from_c_roundtrip() -> None:
     c_ev = COrderEvent()
     c_ev.timestamp_ns = 9999
+    c_ev.callback_monotonic_ns = 123456
+    c_ev.callback_wall_ns = 1780526500000000000
     c_ev.order_id = 7
     c_ev.event_type = b"F"
     c_ev.side = b"A"
@@ -305,6 +309,8 @@ def test_order_event_from_c_roundtrip() -> None:
     c_ev.tag = b"hft3-tag-1"
     py = OrderEvent.from_c(c_ev)
     assert py.timestamp_ns == 9999
+    assert py.callback_monotonic_ns == 123456
+    assert py.callback_wall_ns == 1780526500000000000
     assert py.order_id == 7
     assert py.event_type == "F"
     assert py.side == "A"

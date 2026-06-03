@@ -133,6 +133,8 @@ class CMarketDataEvent(Structure):
 @dataclass
 class OrderEvent:
     timestamp_ns: int = 0
+    callback_monotonic_ns: int = 0
+    callback_wall_ns: int = 0
     order_id: int = 0
     event_type: str = ""
     side: str = ""
@@ -165,6 +167,8 @@ class OrderEvent:
 
         return cls(
             timestamp_ns=int(ev.timestamp_ns),
+            callback_monotonic_ns=int(ev.callback_monotonic_ns),
+            callback_wall_ns=int(ev.callback_wall_ns),
             order_id=int(ev.order_id),
             event_type=_decode_char(ev.event_type),
             side=_decode_char(ev.side),
@@ -181,6 +185,8 @@ class OrderEvent:
     def to_dict(self) -> dict:
         return {
             "timestamp_ns": self.timestamp_ns,
+            "callback_monotonic_ns": self.callback_monotonic_ns,
+            "callback_wall_ns": self.callback_wall_ns,
             "order_id": self.order_id,
             "event_type": self.event_type,
             "side": self.side,
@@ -198,6 +204,8 @@ class OrderEvent:
 class COrderEvent(Structure):
     _fields_ = [
         ("timestamp_ns", c_uint64),
+        ("callback_monotonic_ns", c_uint64),
+        ("callback_wall_ns", c_uint64),
         ("order_id", c_uint64),
         ("event_type", ctypes.c_char),
         ("side", ctypes.c_char),

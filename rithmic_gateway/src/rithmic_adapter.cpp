@@ -74,10 +74,28 @@ static bool contains_text(const std::string& haystack, const char* needle) {
     return haystack.find(needle) != std::string::npos;
 }
 
+static uint64_t steady_now_ns() {
+    return static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()
+        ).count()
+    );
+}
+
+static uint64_t wall_now_ns() {
+    return static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::system_clock::now().time_since_epoch()
+        ).count()
+    );
+}
+
 static OrderEvent make_order_event(RApi::OrderReport* pReport, char event_type) {
     OrderEvent evt{};
     evt.timestamp_ns = static_cast<uint64_t>(pReport->iSsboe) * 1000000000ULL
                      + static_cast<uint64_t>(pReport->iUsecs) * 1000ULL;
+    evt.callback_monotonic_ns = steady_now_ns();
+    evt.callback_wall_ns = wall_now_ns();
     evt.order_id = order_id_to_u64(pReport->sOrderNum);
     evt.event_type = event_type;
     evt.side = buysell_to_side(pReport->sBuySellType);
@@ -118,6 +136,8 @@ static OrderEvent make_line_event(RApi::LineInfo* pInfo) {
     OrderEvent evt{};
     evt.timestamp_ns = static_cast<uint64_t>(pInfo->iSsboe) * 1000000000ULL
                      + static_cast<uint64_t>(pInfo->iUsecs) * 1000ULL;
+    evt.callback_monotonic_ns = steady_now_ns();
+    evt.callback_wall_ns = wall_now_ns();
     evt.order_id = order_id_to_u64(pInfo->sOrderNum);
     evt.event_type = line_event_type(pInfo);
     evt.side = buysell_to_side(pInfo->sBuySellType);

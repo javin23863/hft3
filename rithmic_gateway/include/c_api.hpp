@@ -41,6 +41,8 @@ typedef struct MarketDataEvent {
 
 typedef struct OrderEvent {
     uint64_t timestamp_ns;
+    uint64_t callback_monotonic_ns;
+    uint64_t callback_wall_ns;
     uint64_t order_id;
     char event_type;
     char side;

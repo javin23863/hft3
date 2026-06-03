@@ -22,6 +22,8 @@ struct MarketDataEvent {
 
 struct OrderEvent {
     uint64_t timestamp_ns;
+    uint64_t callback_monotonic_ns;
+    uint64_t callback_wall_ns;
     uint64_t order_id;
     char event_type;   // 'S' submit, 'A' ack, 'F' fill, 'C' cancel, 'M' modify, 'R' reject, 'X' failure
     char side;         // 'B' buy, 'A' sell, ' ' unknown
