@@ -7,6 +7,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <atomic>
+#include <set>
 #include "spsc_queue.hpp"
 
 namespace hft {
@@ -70,6 +71,7 @@ public:
     void disconnect();
 
     bool subscribe_mbo(const std::string& symbol, const std::string& exchange = "CME");
+    bool warm_price_increment(const std::string& symbol, const std::string& exchange = "CME");
     bool send_order(const std::string& symbol, char side, int32_t qty, double price,
                     const std::string& user_msg = "");
     bool cancel_order(const std::string& order_id);
@@ -128,6 +130,7 @@ private:
     std::atomic<bool> agreement_list_ready_{false};
     std::atomic<int> unaccepted_mandatory_agreements_{0};
     std::atomic<bool> price_incr_ready_{false};
+    std::set<std::string> price_incr_ready_keys_;
     std::vector<std::string> env_storage_;
     std::vector<char*> env_strings_;
 

@@ -2,9 +2,12 @@
 #include "spsc_queue.hpp"
 
 #include <chrono>
+#include <algorithm>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -15,6 +18,65 @@
 static const char* get_env_or(const char* key, const char* def) {
     const char* v = std::getenv(key);
     return v ? v : def;
+}
+
+static int get_env_int_or(const char* key, int def) {
+    const char* v = std::getenv(key);
+    if (!v || !v[0]) return def;
+    char* endp = nullptr;
+    long parsed = std::strtol(v, &endp, 10);
+    return endp == v ? def : static_cast<int>(parsed);
+}
+
+static bool get_env_bool_or(const char* key, bool def) {
+    const char* v = std::getenv(key);
+    if (!v || !v[0]) return def;
+    if (std::strcmp(v, "0") == 0 || std::strcmp(v, "false") == 0
+        || std::strcmp(v, "FALSE") == 0 || std::strcmp(v, "no") == 0
+        || std::strcmp(v, "NO") == 0) {
+        return false;
+    }
+    return true;
+}
+
+static uint64_t steady_now_ns() {
+    return static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()
+        ).count()
+    );
+}
+
+static std::string run_id_utc() {
+    std::time_t t = std::time(nullptr);
+    std::tm tm{};
+#if defined(_WIN32)
+    gmtime_s(&tm, &t);
+#else
+    gmtime_r(&t, &tm);
+#endif
+    char buf[32];
+    std::strftime(buf, sizeof(buf), "%Y%m%dT%H%M%SZ", &tm);
+    return std::string(buf);
+}
+
+static std::string fixed_cstr(const char* data, size_t len) {
+    size_t n = 0;
+    while (n < len && data[n] != '\0') ++n;
+    return std::string(data, data + n);
+}
+
+static bool order_event_matches(const hft::OrderEvent& ev, const std::string& user_msg) {
+    return fixed_cstr(ev.user_msg, sizeof(ev.user_msg)) == user_msg
+        || fixed_cstr(ev.tag, sizeof(ev.tag)) == user_msg;
+}
+
+static double pct_us(const std::vector<double>& sorted_us, double pct) {
+    if (sorted_us.empty()) return 0.0;
+    double rank = (pct / 100.0) * static_cast<double>(sorted_us.size() - 1);
+    size_t idx = static_cast<size_t>(rank + 0.5);
+    if (idx >= sorted_us.size()) idx = sorted_us.size() - 1;
+    return sorted_us[idx];
 }
 
 static const char* repo_root() {
@@ -173,38 +235,40 @@ int main(int argc, char** argv) {
                 adapter.cached_trade_route(),
                 adapter.last_agreement_list_text());
 
-    // --- Phase 3: Subscribe MBO ---
-    const char* symbol = get_env_or("RITHMIC_PROBE_SYMBOL", "MES");
+    // --- Phase 3: Optional market-data smoke check ---
+    const char* symbol = get_env_or("RITHMIC_PROBE_SYMBOL", "MESM6");
     const char* exchange = get_env_or("RITHMIC_PROBE_EXCHANGE", "CME");
 
-    auto t_sub = std::chrono::steady_clock::now();
-    if (!adapter.subscribe_mbo(symbol, exchange)) {
-        std::fprintf(stderr, "WARN [%s] subscribe_mbo(%s) failed\n",
-                     env_name, symbol);
-    } else {
-        auto t_poll_start = std::chrono::steady_clock::now();
-        bool got_md = false;
-        while (std::chrono::duration_cast<std::chrono::milliseconds>(
-                   std::chrono::steady_clock::now() - t_poll_start).count() < 5000) {
-            hft::MarketDataEvent ev;
-            if (mbo_queue.pop(ev)) {
-                long long md_us = std::chrono::duration_cast<std::chrono::microseconds>(
-                    std::chrono::steady_clock::now() - t_sub).count();
-                std::printf("OK [%s] md_event action=%c side=%c price=%.2f size=%d"
-                            "  (subscribe=%.3f ms)\n",
-                            env_name, ev.action, ev.side, ev.price, ev.size,
-                            md_us / 1000.0);
-                got_md = true;
-                break;
+    if (!get_env_bool_or("RITHMIC_PROBE_SKIP_MD", true)) {
+        auto t_sub = std::chrono::steady_clock::now();
+        if (!adapter.subscribe_mbo(symbol, exchange)) {
+            std::fprintf(stderr, "WARN [%s] subscribe_mbo(%s) failed\n",
+                         env_name, symbol);
+        } else {
+            auto t_poll_start = std::chrono::steady_clock::now();
+            bool got_md = false;
+            while (std::chrono::duration_cast<std::chrono::milliseconds>(
+                       std::chrono::steady_clock::now() - t_poll_start).count() < 5000) {
+                hft::MarketDataEvent ev;
+                if (mbo_queue.pop(ev)) {
+                    long long md_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                        std::chrono::steady_clock::now() - t_sub).count();
+                    std::printf("OK [%s] md_event action=%c side=%c price=%.2f size=%d"
+                                "  (subscribe=%.3f ms)\n",
+                                env_name, ev.action, ev.side, ev.price, ev.size,
+                                md_us / 1000.0);
+                    got_md = true;
+                    break;
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
-        if (!got_md) {
-            std::printf("WARN [%s] no md event within 5s\n", env_name);
+            if (!got_md) {
+                std::printf("WARN [%s] no md event within 5s\n", env_name);
+            }
         }
     }
 
-    // --- Phase 4: Send order ---
+    // --- Phase 4: Native C++ order latency burst ---
     const char* order_price_raw = get_env_or("RITHMIC_PROBE_ORDER_PRICE", "");
     double order_price = order_price_raw[0] ? std::atof(order_price_raw) : 0.0;
     if (order_price <= 0.0) {
@@ -212,33 +276,126 @@ int main(int argc, char** argv) {
                     " to a positive test limit price to exercise order ack\n",
                     env_name);
     } else {
-        auto t_ord = std::chrono::steady_clock::now();
-        bool order_sent = adapter.send_order(symbol, 'B', 1, order_price);
-        if (!order_sent) {
-            std::fprintf(stderr, "WARN [%s] send_order rejected\n", env_name);
-        } else {
-            auto t_poll = std::chrono::steady_clock::now();
-            bool got_ack = false;
-            while (std::chrono::duration_cast<std::chrono::milliseconds>(
-                       std::chrono::steady_clock::now() - t_poll).count() < 10000) {
+        const int count = get_env_int_or("RITHMIC_PROBE_ORDER_COUNT", 1);
+        const int qty = get_env_int_or("RITHMIC_PROBE_ORDER_QTY", 1);
+        const int timeout_ms = get_env_int_or("RITHMIC_PROBE_ORDER_TIMEOUT_MS", 10000);
+        const int interval_us = get_env_int_or("RITHMIC_PROBE_ORDER_INTERVAL_US", 0);
+        const bool cancel_after_ack = get_env_bool_or("RITHMIC_PROBE_CANCEL_AFTER_ACK", true);
+        const char side = get_env_or("RITHMIC_PROBE_ORDER_SIDE", "B")[0] == 'S' ? 'S' : 'B';
+        const std::string run_id = run_id_utc();
+        std::vector<double> latencies_us;
+        latencies_us.reserve(static_cast<size_t>(count > 0 ? count : 1));
+        int ack_count = 0;
+        int reject_count = 0;
+        int failure_count = 0;
+        int timeout_count = 0;
+        int cancel_submit_count = 0;
+
+        hft::OrderEvent stale;
+        while (order_queue.pop(stale)) {}
+
+        auto t_warm = std::chrono::steady_clock::now();
+        if (!adapter.warm_price_increment(symbol, exchange)) {
+            std::fprintf(stderr, "FAIL [%s] warm_price_increment(%s/%s)\n",
+                         env_name, exchange, symbol);
+            adapter.disconnect();
+            return 4;
+        }
+        auto warm_us = std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now() - t_warm).count();
+
+        std::printf("OK [%s] order_burst_start run_id=%s symbol=%s exchange=%s"
+                    " side=%c qty=%d price=%.2f count=%d warm_price_incr=%.3f ms\n",
+                    env_name, run_id.c_str(), symbol, exchange, side, qty,
+                    order_price, count, warm_us / 1000.0);
+
+        for (int i = 0; i < count; ++i) {
+            std::ostringstream tag;
+            tag << "hft3cpp-" << run_id << "-" << (i + 1);
+            std::string user_msg = tag.str();
+
+            const uint64_t send_ns = steady_now_ns();
+            bool order_sent = adapter.send_order(symbol, side, qty, order_price, user_msg);
+            if (!order_sent) {
+                ++failure_count;
+                std::printf("ORDER_RESULT index=%d status=send_failed\n", i + 1);
+                continue;
+            }
+
+            const uint64_t deadline_ns = send_ns + static_cast<uint64_t>(timeout_ms) * 1000000ULL;
+            bool finished = false;
+            while (steady_now_ns() < deadline_ns) {
                 hft::OrderEvent ev;
-                if (order_queue.pop(ev)) {
-                    long long submit_ack_us = std::chrono::duration_cast<std::chrono::microseconds>(
-                        std::chrono::steady_clock::now() - t_ord).count();
-                    std::printf("OK [%s] order_event type=%c id=%llu side=%c price=%.2f"
-                                "  (submit=ack=%.3f ms)\n",
-                                env_name, ev.event_type,
-                                (unsigned long long)ev.order_id,
-                                ev.side, ev.price,
-                                submit_ack_us / 1000.0);
-                    got_ack = true;
-                    break;
+                if (!order_queue.pop(ev)) {
+                    continue;
                 }
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                if (!order_event_matches(ev, user_msg)) {
+                    continue;
+                }
+
+                const uint64_t ack_ns = ev.callback_monotonic_ns ? ev.callback_monotonic_ns : steady_now_ns();
+                const double latency_us = ack_ns >= send_ns
+                    ? static_cast<double>(ack_ns - send_ns) / 1000.0
+                    : 0.0;
+
+                if (ev.event_type == 'A') {
+                    ++ack_count;
+                    latencies_us.push_back(latency_us);
+                    if (cancel_after_ack && ev.order_id != 0) {
+                        if (adapter.cancel_order(std::to_string(ev.order_id))) {
+                            ++cancel_submit_count;
+                        }
+                    }
+                    std::printf("ORDER_RESULT index=%d status=ack latency_us=%.3f broker_order_id=%llu\n",
+                                i + 1, latency_us, static_cast<unsigned long long>(ev.order_id));
+                } else if (ev.event_type == 'R') {
+                    ++reject_count;
+                    std::printf("ORDER_RESULT index=%d status=reject latency_us=%.3f broker_order_id=%llu\n",
+                                i + 1, latency_us, static_cast<unsigned long long>(ev.order_id));
+                } else if (ev.event_type == 'X') {
+                    ++failure_count;
+                    std::printf("ORDER_RESULT index=%d status=failure latency_us=%.3f broker_order_id=%llu\n",
+                                i + 1, latency_us, static_cast<unsigned long long>(ev.order_id));
+                } else {
+                    continue;
+                }
+                finished = true;
+                break;
             }
-            if (!got_ack) {
-                std::fprintf(stderr, "WARN [%s] no order ack within 10s\n", env_name);
+
+            if (!finished) {
+                ++timeout_count;
+                std::printf("ORDER_RESULT index=%d status=timeout\n", i + 1);
             }
+
+            if (i + 1 < count && interval_us > 0) {
+                const uint64_t pause_until = steady_now_ns() + static_cast<uint64_t>(interval_us) * 1000ULL;
+                while (steady_now_ns() < pause_until) {}
+            }
+        }
+
+        std::sort(latencies_us.begin(), latencies_us.end());
+        if (!latencies_us.empty()) {
+            std::printf("CPP_ORDER_LATENCY_SUMMARY run_id=%s count=%zu ack=%d reject=%d failure=%d"
+                        " timeout=%d cancel_submit=%d min_us=%.3f avg_us=%.3f p50_us=%.3f"
+                        " p90_us=%.3f p99_us=%.3f max_us=%.3f\n",
+                        run_id.c_str(), latencies_us.size(), ack_count, reject_count,
+                        failure_count, timeout_count, cancel_submit_count,
+                        latencies_us.front(),
+                        [&] {
+                            double s = 0.0;
+                            for (double v : latencies_us) s += v;
+                            return s / static_cast<double>(latencies_us.size());
+                        }(),
+                        pct_us(latencies_us, 50.0),
+                        pct_us(latencies_us, 90.0),
+                        pct_us(latencies_us, 99.0),
+                        latencies_us.back());
+        } else {
+            std::printf("CPP_ORDER_LATENCY_SUMMARY run_id=%s count=0 ack=%d reject=%d"
+                        " failure=%d timeout=%d cancel_submit=%d\n",
+                        run_id.c_str(), ack_count, reject_count, failure_count,
+                        timeout_count, cancel_submit_count);
         }
     }
 

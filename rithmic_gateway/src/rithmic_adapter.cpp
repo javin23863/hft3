@@ -985,6 +985,42 @@ bool RithmicAdapter::subscribe_mbo(const std::string& symbol, const std::string&
     return true;
 }
 
+bool RithmicAdapter::warm_price_increment(const std::string& symbol, const std::string& exchange) {
+    if (!connected_ || !engine_) return false;
+
+    const std::string key = exchange + "/" + symbol;
+    {
+        std::lock_guard<std::mutex> lk(price_incr_mutex_);
+        if (price_incr_ready_keys_.find(key) != price_incr_ready_keys_.end()) {
+            return true;
+        }
+    }
+
+    auto* pEngine = static_cast<RApi::REngine*>(engine_);
+    tsNCharcb sExchange = make_ts(exchange.c_str());
+    tsNCharcb sTicker = make_ts(symbol.c_str());
+
+    price_incr_ready_.store(false);
+    int iPriceCode = 0;
+    if (!pEngine->getPriceIncrInfo(&sExchange, &sTicker, &iPriceCode)) {
+        std::cerr << "[RithmicAdapter] getPriceIncrInfo error: " << iPriceCode
+                  << " for " << exchange << "/" << symbol << std::endl;
+        return false;
+    }
+    {
+        std::unique_lock<std::mutex> lk(price_incr_mutex_);
+        if (!price_incr_cv_.wait_for(lk, std::chrono::seconds(10), [&] {
+                return price_incr_ready_.load();
+            })) {
+            std::cerr << "[RithmicAdapter] getPriceIncrInfo timeout for "
+                      << exchange << "/" << symbol << std::endl;
+            return false;
+        }
+        price_incr_ready_keys_.insert(key);
+    }
+    return true;
+}
+
 bool RithmicAdapter::send_order(const std::string& symbol, char side, int32_t qty, double price,
                                 const std::string& user_msg) {
     if (!connected_ || !engine_) return false;
@@ -1001,22 +1037,8 @@ bool RithmicAdapter::send_order(const std::string& symbol, char side, int32_t qt
     tsNCharcb sTicker = make_ts(symbol.c_str());
     tsNCharcb sTradeRoute = make_ts(trade_route_.c_str());
 
-    price_incr_ready_.store(false);
-    int iPriceCode = 0;
-    if (!pEngine->getPriceIncrInfo(&sExchange, &sTicker, &iPriceCode)) {
-        std::cerr << "[RithmicAdapter] getPriceIncrInfo error: " << iPriceCode
-                  << " for CME/" << symbol << std::endl;
+    if (!warm_price_increment(symbol, "CME")) {
         return false;
-    }
-    {
-        std::unique_lock<std::mutex> lk(price_incr_mutex_);
-        if (!price_incr_cv_.wait_for(lk, std::chrono::seconds(10), [&] {
-                return price_incr_ready_.load();
-            })) {
-            std::cerr << "[RithmicAdapter] getPriceIncrInfo timeout for CME/"
-                      << symbol << std::endl;
-            return false;
-        }
     }
 
     params.sExchange = sExchange;
