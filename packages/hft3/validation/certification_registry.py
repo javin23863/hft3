@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import subprocess
 import sys
@@ -42,6 +43,32 @@ DEFAULT_BAK_REL = Path("runtime/validation/certification_registry.json.bak")
 
 GENESIS_HASH = "0" * 64
 ALLOWED_CERT_STATUSES = frozenset({"MISSING", "GREEN", "YELLOW", "RED"})
+
+
+def _reject_json_constant(value: str) -> None:
+    raise ValueError(f"non-standard JSON constant {value!r} is not allowed")
+
+
+def _json_loads_strict(payload: str | bytes) -> Any:
+    if isinstance(payload, bytes):
+        payload = payload.decode("utf-8")
+    return json.loads(payload, parse_constant=_reject_json_constant)
+
+
+def _json_dumps_strict(payload: Any, **kwargs: Any) -> str:
+    return json.dumps(payload, allow_nan=False, **kwargs)
+
+
+def _fsync_parent(path: Path) -> None:
+    try:
+        flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+        dir_fd = os.open(path.parent, flags)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    except OSError:
+        pass
 
 
 @dataclass
@@ -322,7 +349,15 @@ def validate_record(record: dict[str, Any]) -> None:
             raise RegistrySchemaError(f"{list_field} must be List[str], got {v!r}")
 
     bands = record.get("covered_latency_bands", [])
-    if not isinstance(bands, list) or any(not isinstance(x, (int, float)) for x in bands):
+    if (
+        not isinstance(bands, list)
+        or any(
+            isinstance(x, bool)
+            or not isinstance(x, (int, float))
+            or not math.isfinite(float(x))
+            for x in bands
+        )
+    ):
         raise RegistrySchemaError(f"covered_latency_bands must be List[float], got {bands!r}")
 
 
@@ -331,7 +366,12 @@ def canonical_json(payload: dict[str, Any]) -> bytes:
 
     Used as the input to SHA-256. Stable across Python versions and platforms.
     """
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return _json_dumps_strict(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
 
 
 def record_hash(record: dict[str, Any]) -> str:
@@ -350,6 +390,7 @@ def _atomic_write_text(path: Path, payload: str, *, encoding: str = "utf-8") -> 
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp_name, path)
+        _fsync_parent(path)
     except Exception:
         try:
             os.unlink(tmp_name)
@@ -422,16 +463,19 @@ def _append_audit_line(audit: Path, record: dict[str, Any]) -> dict[str, Any]:
     """
     parent = audit.parent
     parent.mkdir(parents=True, exist_ok=True)
+    _validate_audit_record(record)
     if not audit.is_file():
         record["record_seq"] = 1
         record["prev_hash"] = GENESIS_HASH
         record["self_hash"] = record_hash(record)
         with open(audit, "a", encoding="utf-8") as f:
-            f.write(json.dumps(record, sort_keys=True, ensure_ascii=False) + "\n")
+            f.write(_json_dumps_strict(record, sort_keys=True, ensure_ascii=False) + "\n")
             f.flush()
             os.fsync(f.fileno())
+        _fsync_parent(audit)
         return record
 
+    verified_records = load_audit_log(audit.parent.parent.parent)
     with open(audit, "rb") as f:
         data = f.read()
     lines = [ln for ln in data.split(b"\n") if ln]
@@ -439,13 +483,7 @@ def _append_audit_line(audit: Path, record: dict[str, Any]) -> dict[str, Any]:
         seq = 1
         prev = GENESIS_HASH
     else:
-        try:
-            last = json.loads(lines[-1])
-        except json.JSONDecodeError as exc:
-            raise RegistryCorruptError(
-                f"audit log tail is corrupt: {exc}",
-                error_code="registry_corrupt",
-            ) from exc
+        last = verified_records[-1]
         seq = int(last.get("record_seq", 0)) + 1
         prev = str(last.get("self_hash", GENESIS_HASH))
 
@@ -460,11 +498,12 @@ def _append_audit_line(audit: Path, record: dict[str, Any]) -> dict[str, Any]:
             if data and not data.endswith(b"\n"):
                 f.write(b"\n")
             f.write(
-                (json.dumps(record, sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8")
+                (_json_dumps_strict(record, sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8")
             )
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp_name, audit)
+        _fsync_parent(audit)
     except Exception:
         try:
             os.unlink(tmp_name)
@@ -484,13 +523,20 @@ def _load_audit_unchecked(audit: Path) -> list[dict[str, Any]]:
             if not line:
                 continue
             try:
-                records.append(json.loads(line))
-            except json.JSONDecodeError as exc:
+                records.append(_json_loads_strict(line))
+            except (json.JSONDecodeError, ValueError) as exc:
                 raise RegistryCorruptError(
                     f"audit log line is corrupt: {exc}",
                     error_code="registry_corrupt",
                 ) from exc
     return records
+
+
+def _validate_audit_record(record: dict[str, Any]) -> None:
+    if record.get("record_type") == "promotion":
+        validate_promotion_record(record)
+    else:
+        validate_record(record)
 
 
 def load_audit_log(root: Path | None = None) -> list[dict[str, Any]]:
@@ -511,6 +557,7 @@ def load_audit_log(root: Path | None = None) -> list[dict[str, Any]]:
                 f"record_seq={rec.get('record_seq')} self_hash mismatch",
                 error_code="hash_chain_broken",
             )
+        _validate_audit_record(rec)
         prev = rec["self_hash"]
     return records
 
@@ -525,8 +572,8 @@ def _migrate_legacy_to_audit(legacy: Path, audit: Path, lock: _RegistryLock) -> 
     if audit.is_file() and audit.stat().st_size > 0:
         return
     try:
-        raw = json.loads(legacy.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        raw = _json_loads_strict(legacy.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
         raise RegistryCorruptError(
             f"legacy registry is corrupt: {exc}",
             error_code="registry_corrupt",
@@ -561,7 +608,10 @@ def load_registry(root: Path | None = None) -> CertificationRecord:
             raise
         if not records:
             return CertificationRecord()
-        return CertificationRecord.from_dict(records[-1])
+        for rec in reversed(records):
+            if rec.get("record_type") in (None, "certification"):
+                return CertificationRecord.from_dict(rec)
+        return CertificationRecord()
     return CertificationRecord()
 
 
@@ -581,16 +631,27 @@ def save_registry(record: CertificationRecord, root: Path | None = None) -> Path
     backup = backup_path(root)
 
     with _RegistryLock(lock_path(root)):
+        previous_legacy = legacy.read_bytes() if legacy.is_file() else None
         if legacy.is_file():
             try:
-                backup.write_bytes(legacy.read_bytes())
+                backup.write_bytes(previous_legacy or b"")
             except OSError:
                 pass
-        _append_audit_line(audit, record_dict)
         _atomic_write_text(
             legacy,
-            json.dumps(record_dict, indent=2, ensure_ascii=False) + "\n",
+            _json_dumps_strict(record_dict, indent=2, ensure_ascii=False) + "\n",
         )
+        try:
+            _append_audit_line(audit, record_dict)
+        except Exception:
+            if previous_legacy is None:
+                try:
+                    legacy.unlink()
+                except FileNotFoundError:
+                    pass
+            else:
+                _atomic_write_text(legacy, previous_legacy.decode("utf-8"))
+            raise
     return legacy
 
 
