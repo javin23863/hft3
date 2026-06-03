@@ -6,7 +6,10 @@ from datetime import date, timedelta
 from pathlib import Path
 
 from equities_lane.src.prediction.runner_seed_resolver import (
+    BenchmarkResult,
+    OptionsSnapshotConfig,
     build_pre_event_snapshots,
+    build_options_snapshot_plan,
     detect_runner_events,
     load_seed_tickers,
     resolve_runner_seed_events,
@@ -306,3 +309,90 @@ def test_resolve_runner_seed_events_resolves_delisted_via_secondary_root(tmp_pat
     assert not any(r["ticker"] == "DELIST" for r in result["unresolved_tickers"])
     assert result["delisted_resolved_via"]["DELIST"] == f"fallback:{secondary_root}"
     assert any(e["ticker"] == "DELIST" for e in result["cohort_rows"])
+
+
+def test_options_snapshot_plan_aligns_to_equity_snapshots_without_new_lane():
+    rows = _daily_rows()
+    bars = [
+        DailyBar(
+            symbol=str(r["symbol"]),
+            date=str(r["date"]),
+            open=float(r["open"]),
+            high=float(r["high"]),
+            low=float(r["low"]),
+            close=float(r["close"]),
+            volume=float(r["volume"]),
+        )
+        for r in rows
+    ]
+    event = detect_runner_events(load_seed_tickers_from_inline("ABCD", "2024"), bars, seed_config_for_test())[0]
+    snapshots = build_pre_event_snapshots(event, bars)
+    benchmark = BenchmarkResult(
+        passed=True,
+        metrics={},
+        thresholds={},
+        failures=[],
+        lift_l2_l3_download=True,
+    )
+
+    plan = build_options_snapshot_plan(snapshots, benchmark, OptionsSnapshotConfig())
+
+    assert len(plan) == len([s for s in snapshots if s.get("status") != "missing_daily_history"])
+    assert {r["ticker"] for r in plan} == {"ABCD"}
+    assert {r["underlying_parent_symbol"] for r in plan} == {"ABCD.OPT"}
+    assert {r["dataset"] for r in plan} == {"OPRA.PILLAR"}
+    assert {r["schema"] for r in plan} == {"cbbo-1m"}
+    assert {r["stype_in"] for r in plan} == {"parent"}
+    assert all(r["download_now"] is True for r in plan)
+    assert all(r["download_policy"] == "free_daily_benchmark_passed" for r in plan)
+
+
+def test_options_snapshot_plan_uses_last_regular_quote_when_options_closed():
+    snapshots = [
+        {
+            "ticker": "ABCD",
+            "runner_label_id": "ABCD-2024-01-18",
+            "event_date": "2024-01-18",
+            "snapshot_name": "T-1 after-hours",
+            "snapshot_timestamp_et": "2024-01-17T20:00:00",
+            "free_daily_cutoff_date": "2024-01-17",
+            "status": "ready_from_free_daily",
+        },
+        {
+            "ticker": "ABCD",
+            "runner_label_id": "ABCD-2024-01-18",
+            "event_date": "2024-01-18",
+            "snapshot_name": "T0 premarket",
+            "snapshot_timestamp_et": "2024-01-18T09:00:00",
+            "free_daily_cutoff_date": "2024-01-17",
+            "status": "planned_not_scoreable_with_daily_only",
+        },
+        {
+            "ticker": "ABCD",
+            "runner_label_id": "ABCD-2024-01-18",
+            "event_date": "2024-01-18",
+            "snapshot_name": "T0 open",
+            "snapshot_timestamp_et": "2024-01-18T09:30:00",
+            "free_daily_cutoff_date": "2024-01-17",
+            "status": "planned_not_scoreable_with_daily_only",
+        },
+    ]
+    benchmark = BenchmarkResult(
+        passed=True,
+        metrics={},
+        thresholds={},
+        failures=[],
+        lift_l2_l3_download=True,
+    )
+
+    plan = build_options_snapshot_plan(snapshots, benchmark, OptionsSnapshotConfig())
+    by_name = {r["snapshot_name"]: r for r in plan}
+
+    assert by_name["T-1 after-hours"]["options_reference_timestamp_et"] == "2024-01-17T16:00:00"
+    assert by_name["T-1 after-hours"]["options_window_start_et"] == "2024-01-17T15:59:00"
+    assert by_name["T-1 after-hours"]["options_market_status"] == "options_market_closed_carried_forward"
+    assert by_name["T0 premarket"]["options_reference_timestamp_et"] == "2024-01-17T16:00:00"
+    assert by_name["T0 premarket"]["options_window_end_et"] < by_name["T0 premarket"]["equity_snapshot_timestamp_et"]
+    assert by_name["T0 open"]["options_window_start_et"] == "2024-01-18T09:30:00"
+    assert by_name["T0 open"]["options_window_end_et"] == "2024-01-18T09:31:00"
+    assert by_name["T0 open"]["options_market_status"] == "options_opening_quote_window"
