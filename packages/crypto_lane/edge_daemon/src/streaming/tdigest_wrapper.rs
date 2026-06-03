@@ -18,34 +18,34 @@ pub struct FeeQuintiles {
 impl FeeQuantiles {
     pub fn new() -> Self {
         Self {
-            digest: TDigest::new_with_compression(100.0),
+            digest: TDigest::new_with_size(100),
             compression: 100.0,
         }
     }
     
     /// Add a new fee rate observation
     pub fn add(&mut self, fee_rate: f64) {
-        self.digest.insert(fee_rate);
+        self.digest = self.digest.insert(fee_rate);
     }
     
     /// Get current quantile estimates
     pub fn quantiles(&self) -> FeeQuintiles {
         FeeQuintiles {
-            p20: self.digest.estimate_quantile(0.20),
-            p40: self.digest.estimate_quantile(0.40),
-            p60: self.digest.estimate_quantile(0.60),
-            p80: self.digest.estimate_quantile(0.80),
+            p20: self.digest.quantile(0.20),
+            p40: self.digest.quantile(0.40),
+            p60: self.digest.quantile(0.60),
+            p80: self.digest.quantile(0.80),
         }
     }
     
     /// Get arbitrary quantile
     pub fn quantile(&self, q: f64) -> f64 {
-        self.digest.estimate_quantile(q)
+        self.digest.quantile(q)
     }
     
     /// Reset the digest
     pub fn reset(&mut self) {
-        self.digest = TDigest::new_with_compression(self.compression);
+        self.digest = TDigest::new_with_size(self.compression as usize);
     }
     
     /// Number of observations
