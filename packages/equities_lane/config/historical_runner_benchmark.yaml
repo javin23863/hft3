@@ -135,7 +135,7 @@ delisted_seed_tickers:
     date_range_per_ticker:
       mode: cohort_year_window
       start_offset_days: -30
-      end_offset_days: 365
+      end_offset_days: 0
     output_root: data/equities/daily_delisted
     script: scripts/fetch_delisted_daily.py
     refusal_policy:

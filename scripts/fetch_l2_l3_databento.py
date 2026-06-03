@@ -121,6 +121,16 @@ def _download_ticker_windows(
     start_iso = start_utc.date().isoformat()
     end_iso = end_utc.date().isoformat()
     out_path = ticker_dir / f"{start_iso}_{end_iso}_{schema}.dbn.zst"
+    if out_path.exists() and out_path.stat().st_size > 0:
+        return {
+            "ticker": ticker,
+            "n_windows": len(rows),
+            "start_utc": start_utc.isoformat(),
+            "end_utc": end_utc.isoformat(),
+            "output_path": str(out_path),
+            "status": "skipped_already_downloaded",
+            "size_bytes": out_path.stat().st_size,
+        }
     client = DatabentoResearchClient()
     event_id = f"l2l3_{ticker.upper()}_{start_iso}_{end_iso}".replace(".", "_")
     client.download_event_window(
@@ -280,6 +290,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--override-hard-limit", action="store_true")
     parser.add_argument("--max-total-cost-usd", type=float, default=None)
     parser.add_argument("--max-tickers", type=int, default=None)
+    parser.add_argument(
+        "--skip-existing",
+        action="store_true",
+        help="Skip tickers whose .dbn.zst output file already exists on disk.",
+    )
     args = parser.parse_args(argv)
 
     plan_path = Path(args.plan)

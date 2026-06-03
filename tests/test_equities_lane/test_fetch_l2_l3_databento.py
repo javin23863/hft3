@@ -276,6 +276,39 @@ def test_dry_run_max_tickers_cap(tmp_path, monkeypatch):
     assert statuses == ["dry_run_estimate", "skipped_max_tickers", "skipped_max_tickers"]
 
 
+def test_skip_existing_skips_tickers_with_existing_dbn_zst(tmp_path, monkeypatch):
+    """If out_path already exists with size > 0, the download function returns
+    skipped_already_downloaded without calling the Databento client."""
+    from fetch_l2_l3_databento import _download_ticker_windows  # noqa: E402
+
+    rows = [
+        _row("AAA", "T-1 close", "2024-05-28T09:30:00", "2024-05-28T16:00:00", download_now=True, download_policy="free_daily_benchmark_passed"),
+    ]
+    out_dir = tmp_path / "l2_l3"
+    ticker_dir = out_dir / "AAA"
+    ticker_dir.mkdir(parents=True, exist_ok=True)
+    existing = ticker_dir / "2024-05-28_2024-05-28_mbo.dbn.zst"
+    existing.write_bytes(b"\x28\xb5\x2f\xfd" + b"x" * 4096)  # zstd magic + payload
+
+    called = {"n": 0}
+
+    def _would_call(*a, **kw):
+        called["n"] += 1
+        raise AssertionError("Databento client should not be called when --skip-existing is set and file exists")
+
+    monkeypatch.setattr("data_system.src.databento_client.DatabentoResearchClient.download_event_window", _would_call)
+    monkeypatch.setattr("data_system.src.databento_client.DatabentoResearchClient", _would_call)
+
+    result = _download_ticker_windows(
+        "AAA", rows, out_dir, "XNAS.ITCH", "mbo", "raw_symbol",
+        override_operating_cap=False, override_hard_limit=False,
+    )
+    assert result["status"] == "skipped_already_downloaded"
+    assert result["size_bytes"] == existing.stat().st_size
+    assert result["output_path"] == str(existing)
+    assert called["n"] == 0
+
+
 def test_main_cli_dry_run_exits_zero(tmp_path):
     plan_path = tmp_path / "plan.json"
     rows = [

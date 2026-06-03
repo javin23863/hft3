@@ -122,7 +122,7 @@ def test_build_pull_plan_uses_cohort_year_window():
     assert aprn.cohort == "2022"
     assert aprn.target_year == 2022
     assert aprn.start_iso == "2021-12-02"
-    assert aprn.end_iso == "2023-12-31"
+    assert aprn.end_iso == "2022-12-31"
     assert aprn.dataset == "XNAS.ITCH"
     assert aprn.schema == "ohlcv-1d"
     assert aprn.stype_in == "raw_symbol"
