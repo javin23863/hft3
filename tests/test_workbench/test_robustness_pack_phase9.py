@@ -48,7 +48,7 @@ def test_phase9_required_robustness_check_registry_has_25_names():
 def test_phase9_pack_emits_all_required_checks_in_order():
     result = run_robustness_pack(
         _passing_metrics,
-        [10.0] * 10,
+        [10.0] * 30,
         sweep_count=2,
         campaign_periods=_passing_periods(),
     )
@@ -82,6 +82,75 @@ def test_phase9_empty_trade_sample_blocks_monte_carlo_checks():
     checks = {check.name: check for check in result.checks}
     assert checks["monte_carlo_sharpe"].status == "PENDING"
     assert checks["monte_carlo_drawdown"].status == "PENDING"
+    assert checks["purged_cv"].status == "PENDING"
+    assert result.purged_cv == []
+    assert result.passed is False
+
+
+def test_phase9_undersized_trade_sample_keeps_purged_cv_pending():
+    result = run_robustness_pack(
+        _passing_metrics,
+        [10.0] * 4,
+        sweep_count=1,
+        campaign_periods=_passing_periods(),
+    )
+
+    checks = {check.name: check for check in result.checks}
+    assert checks["purged_cv"].status == "PENDING"
+    assert result.purged_cv == []
+    assert result.passed is False
+
+
+def test_phase9_malformed_and_nonfinite_inputs_fail_closed():
+    metrics = _passing_metrics()
+    metrics["feature_leakage_detected"] = "False"
+    metrics["parameter_stability_score"] = float("inf")
+    metrics["regime_stability_score"] = True
+
+    result = run_robustness_pack(
+        lambda: metrics,
+        [10.0] * 10,
+        sweep_count=1,
+        campaign_periods=_passing_periods(),
+    )
+
+    checks = {check.name: check for check in result.checks}
+    assert checks["feature_leakage"].status == "FAIL"
+    assert checks["feature_leakage"].reason_code == "ROBUSTNESS_INPUT_MALFORMED"
+    assert checks["parameter_stability"].status == "FAIL"
+    assert checks["parameter_stability"].reason_code == "ROBUSTNESS_INPUT_MALFORMED"
+    assert checks["regime_stability"].status == "FAIL"
+    assert checks["regime_stability"].reason_code == "ROBUSTNESS_INPUT_MALFORMED"
+    assert result.passed is False
+
+    sample_result = run_robustness_pack(
+        _passing_metrics,
+        [True] * 30,  # type: ignore[list-item]
+        sweep_count=1,
+        campaign_periods=_passing_periods(),
+    )
+    sample_checks = {check.name: check for check in sample_result.checks}
+    assert sample_checks["purged_cv"].status == "PENDING"
+    assert sample_checks["monte_carlo_sharpe"].status == "PENDING"
+
+
+def test_phase9_malformed_thresholds_fail_closed_without_raising():
+    metrics = _passing_metrics()
+    metrics["parameter_stability_min"] = "bad"
+    metrics["regime_stability_min"] = True
+
+    result = run_robustness_pack(
+        lambda: metrics,
+        [10.0] * 10,
+        sweep_count=1,
+        campaign_periods=_passing_periods(),
+    )
+
+    checks = {check.name: check for check in result.checks}
+    assert checks["parameter_stability"].status == "FAIL"
+    assert checks["parameter_stability"].reason_code == "ROBUSTNESS_INPUT_MALFORMED"
+    assert checks["regime_stability"].status == "FAIL"
+    assert checks["regime_stability"].reason_code == "ROBUSTNESS_INPUT_MALFORMED"
     assert result.passed is False
 
 

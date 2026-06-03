@@ -77,7 +77,7 @@ This document maps each major requirement from the 26-phase spec to:
 
 | Requirement | Implementation | Test | Artifact |
 |---|---|---|---|
-| 25 robustness checks | `apps/workbench/src/robustness/pack.py::REQUIRED_ROBUSTNESS_CHECKS`; `RobustnessCheck`; autonomous double-WF gate persisted before `robustness_gates.json` write | `tests/test_workbench/test_robustness_pack_phase9.py` (9 tests); `tests/test_runner_honesty.py::test_runner_writes_double_wf_gate_to_robustness_gates` | `RobustnessResult.checks` with 25 checks; `robustness_gates.json` includes `double_wf_correlation` |
+| 25 robustness checks | `apps/workbench/src/robustness/pack.py::REQUIRED_ROBUSTNESS_CHECKS`; `RobustnessCheck`; autonomous double-WF gate persisted before `robustness_gates.json` write | `tests/test_workbench/test_robustness_pack_phase9.py` (12 tests); `tests/test_runner_honesty.py::test_runner_writes_double_wf_gate_to_robustness_gates` | `RobustnessResult.checks` with 25 checks; `robustness_gates.json` includes `double_wf_correlation` |
 
 ## Phase 10: Walk-Forward Correlation
 
@@ -186,6 +186,6 @@ This document maps each major requirement from the 26-phase spec to:
 | 25 — Required-test closure | DONE | 5 |
 | 26 — Documentation | ✅ DONE | N/A |
 
-**Total: 343/343 passing across 26 test files.**
+**Total: 346/346 passing across 26 test files.**
 
 **26 of 26 phases complete.**

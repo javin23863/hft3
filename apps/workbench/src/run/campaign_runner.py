@@ -695,6 +695,17 @@ def run_campaign(
         holdout_used_for_tuning=holdout_used_for_tuning,
         campaign_periods=[asdict(p) for p in period_results],
     )
+    robustness_pending_checks = [check.name for check in robustness.checks if check.status == "PENDING"]
+    robustness_failed_checks = [check.name for check in robustness.checks if check.status == "FAIL"]
+    robustness_input_status = (
+        "PASS"
+        if robustness.passed
+        else (
+            "PENDING_PHASE9_METRICS"
+            if robustness_pending_checks
+            else "FAILED_PHASE9_CHECKS"
+        )
+    )
 
     sim_cfg = load_sim_shadow_config(repo_root)
     sim_status = _sim_shadow_status(artifact_dir)
@@ -736,6 +747,10 @@ def run_campaign(
         "trades_vetoed_by_defense": trades_vetoed,
         "periods": [asdict(p) for p in period_results],
         "robustness_passed": robustness.passed,
+        "robustness_input_status": robustness_input_status,
+        "robustness_pending_checks": robustness_pending_checks,
+        "robustness_failed_checks": robustness_failed_checks,
+        "robustness_checks": robustness.checks_dict(),
         "overfit_risk": robustness.overfit_risk,
         "walk_forward": robustness.walk_forward,
         "wfc_status": wfc_status,

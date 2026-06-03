@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import random
+import math
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
@@ -13,6 +14,7 @@ from workbench.src.robustness.purged_cv import purged_splits
 
 
 HOLDOUT_YEARS = (2023, 2024)
+PURGED_CV_EMBARGO = 10
 REQUIRED_ROBUSTNESS_CHECKS = (
     "feature_leakage",
     "label_leakage",
@@ -86,7 +88,9 @@ def _pending(name: str, reason_code: str = "ROBUSTNESS_INPUT_MISSING") -> Robust
 def _bool_check(name: str, value: Any, *, expected: bool = True) -> RobustnessCheck:
     if value is None:
         return _pending(name)
-    observed = bool(value)
+    if not isinstance(value, bool):
+        return RobustnessCheck(name=name, status="FAIL", passed=False, reason_code="ROBUSTNESS_INPUT_MALFORMED")
+    observed = value
     passed = observed is expected
     return RobustnessCheck(
         name=name,
@@ -102,7 +106,15 @@ def _bool_check(name: str, value: Any, *, expected: bool = True) -> RobustnessCh
 def _metric_check(name: str, value: Any, threshold: float, op: str) -> RobustnessCheck:
     if value is None:
         return _pending(name)
-    observed = float(value)
+    if isinstance(value, bool) or isinstance(threshold, bool):
+        return RobustnessCheck(name=name, status="FAIL", passed=False, reason_code="ROBUSTNESS_INPUT_MALFORMED")
+    try:
+        observed = float(value)
+        threshold = float(threshold)
+    except (TypeError, ValueError):
+        return RobustnessCheck(name=name, status="FAIL", passed=False, reason_code="ROBUSTNESS_INPUT_MALFORMED")
+    if not math.isfinite(observed) or not math.isfinite(threshold):
+        return RobustnessCheck(name=name, status="FAIL", passed=False, reason_code="ROBUSTNESS_INPUT_MALFORMED")
     if op == ">=":
         passed = observed >= threshold
     elif op == "<=":
@@ -132,11 +144,11 @@ def _required_checks(
     holdout_used_for_tuning: bool,
     trade_sample_observed: bool,
 ) -> List[RobustnessCheck]:
-    max_drawdown_limit = float(metrics.get("max_drawdown_limit", -500.0))
-    tail_risk_limit = float(metrics.get("tail_risk_limit", -500.0))
-    turnover_limit = float(metrics.get("turnover_limit", 100_000.0))
-    parameter_stability_min = float(metrics.get("parameter_stability_min", 0.50))
-    regime_stability_min = float(metrics.get("regime_stability_min", 0.0))
+    max_drawdown_limit = metrics.get("max_drawdown_limit", -500.0)
+    tail_risk_limit = metrics.get("tail_risk_limit", -500.0)
+    turnover_limit = metrics.get("turnover_limit", 100_000.0)
+    parameter_stability_min = metrics.get("parameter_stability_min", 0.50)
+    regime_stability_min = metrics.get("regime_stability_min", 0.0)
     sharpe_min = -0.5 / bonferroni_penalty
 
     wf_status = str(wf_result.get("status", "")).upper()
@@ -233,6 +245,21 @@ def monte_carlo_ci(
     }
 
 
+def _finite_trade_pnls(trade_pnls: List[float]) -> List[float]:
+    out: List[float] = []
+    for pnl in trade_pnls:
+        if isinstance(pnl, bool):
+            return []
+        try:
+            value = float(pnl)
+        except (TypeError, ValueError):
+            return []
+        if not math.isfinite(value):
+            return []
+        out.append(value)
+    return out
+
+
 def walk_forward_from_campaign_periods(
     period_summaries: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
@@ -274,16 +301,24 @@ def run_robustness_pack(
     campaign_periods: Optional[List[Dict[str, Any]]] = None,
 ) -> RobustnessResult:
     base_metrics = backtest_fn()
+    finite_trade_pnls = _finite_trade_pnls(trade_pnls)
     wf = WalkForwardValidator()
     if campaign_periods is not None:
         wf_result = walk_forward_from_campaign_periods(campaign_periods)
     else:
         wf_result = {"periods": [p.name for p in wf.periods], "status": "single_window"}
     purged = []
-    if n_purged_splits > 0:
-        for train_idx, test_idx in purged_splits(max(len(trade_pnls), 10), n_purged_splits):
+    min_purged_sample = n_purged_splits + PURGED_CV_EMBARGO + 1
+    if n_purged_splits > 0 and len(finite_trade_pnls) >= min_purged_sample:
+        for train_idx, test_idx in purged_splits(
+            len(finite_trade_pnls),
+            n_purged_splits,
+            embargo=PURGED_CV_EMBARGO,
+        ):
+            if not train_idx or not test_idx:
+                continue
             purged.append({"train_size": len(train_idx), "test_size": len(test_idx), "score": base_metrics.get("expectancy", 0.0)})
-    mc = monte_carlo_ci(trade_pnls)
+    mc = monte_carlo_ci(finite_trade_pnls)
     penalty = max(1.0, sweep_count)
     checks = _required_checks(
         base_metrics,
@@ -292,7 +327,7 @@ def run_robustness_pack(
         monte_carlo=mc,
         bonferroni_penalty=penalty,
         holdout_used_for_tuning=holdout_used_for_tuning,
-        trade_sample_observed=bool(trade_pnls),
+        trade_sample_observed=bool(finite_trade_pnls),
     )
     passed = all(check.passed for check in checks)
     risk = "low" if passed else ("high" if holdout_used_for_tuning else "medium")
