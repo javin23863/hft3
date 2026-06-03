@@ -177,9 +177,18 @@ def _row_to_audit(row: pd.Series) -> Dict[str, Any]:
 
 def _audit_complete(rec: Dict[str, Any], *, require_phase5: bool = False) -> bool:
     ns_fields = _PHASE5_AUDIT_NS_FIELDS if require_phase5 else _AUDIT_NS_FIELDS
+    previous = None
     for f in ns_fields:
         if f not in rec:
             return False
+        if require_phase5:
+            try:
+                current = int(rec[f])
+            except (TypeError, ValueError):
+                return False
+            if previous is not None and current < previous:
+                return False
+            previous = current
     for f in ("feed_delay_us", "decision_compute_us", "decision_to_send_us", "send_to_ack_us", "tick_to_ack_us"):
         if f not in rec:
             return False
@@ -188,18 +197,18 @@ def _audit_complete(rec: Dict[str, Any], *, require_phase5: bool = False) -> boo
 
 def _load_per_trade_audit(
     artifact_dir: Path,
-    num_trades: int,
+    expected_audit_count: int,
     *,
     require_phase5: bool = False,
 ) -> Tuple[List[Dict[str, Any]], bool]:
-    if num_trades <= 0:
+    if expected_audit_count <= 0:
         return [], True
     path = artifact_dir / "trades.parquet"
     if not path.is_file():
         return [], False
     df = pd.read_parquet(path)
     audits = [_row_to_audit(row) for _, row in df.iterrows()]
-    complete = len(audits) == num_trades and all(
+    complete = len(audits) == expected_audit_count and all(
         _audit_complete(a, require_phase5=require_phase5) for a in audits
     )
     return audits, complete
@@ -252,16 +261,17 @@ def build_microstructure_aar_packet(
     num_trades = int(diagnostics.get("num_trades", 0))
     phase5_schema = diagnostics.get("phase5_timestamp_schema") or {}
     require_phase5_audit = phase5_schema.get("schema_version") == "phase5_33_timestamp_v1"
+    expected_audit_count = int(phase5_schema.get("expected_trade_count", num_trades))
     per_trade_audit, audit_complete = _load_per_trade_audit(
         artifact_dir,
-        num_trades,
+        expected_audit_count,
         require_phase5=require_phase5_audit,
     )
     execution_assumptions = str(
         config.get("execution_assumptions") or diagnostics.get("execution_assumptions") or ""
     )
     audit_waiver_reason: Optional[str] = None
-    if num_trades > 0 and not audit_complete:
+    if expected_audit_count > 0 and not audit_complete:
         if execution_assumptions == "quote_engine":
             audit_waiver_reason = "quote_engine_aggregate_only"
         else:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Mapping, Optional
 
 import yaml
 
@@ -42,6 +42,10 @@ def _after_action_allowed() -> bool:
     if os.environ.get("HFT3_AFTER_ACTION") == "1":
         return True
     return sys.platform in ("win32", "darwin")
+
+
+def _phase5_timestamp_schema_passes(schema: Mapping[str, Any]) -> bool:
+    return bool(schema.get("complete") is True and schema.get("monotonic_non_decreasing") is True)
 
 
 class WorkbenchEngine:
@@ -150,12 +154,15 @@ class WorkbenchEngine:
 
         if isinstance(result, BacktestResult):
             base = {"net_pnl": result.net_pnl, "expectancy": result.expectancy, "num_trades": result.num_trades}
+            expected_audit_count = max(int(result.num_trades), len(result.fills))
         else:
             base = {"net_pnl": 0.0, "expectancy": 0.0, "num_trades": 0}
+            expected_audit_count = 0
         phase5_timestamp_schema = summarize_phase5_timestamp_schema(
             audit_records,
-            expected_trade_count=int(base["num_trades"]),
+            expected_trade_count=expected_audit_count,
         )
+        phase5_audit_passes = _phase5_timestamp_schema_passes(phase5_timestamp_schema)
 
         def _run_at_latency(lat_ms: float) -> Dict[str, float]:
             m = get_model_by_id(model_id)
@@ -201,6 +208,7 @@ class WorkbenchEngine:
             viability.survives_cpp_execution_delay
             and viability.simulated_latency_adjusted_pnl > 0
             and robustness.passed
+            and phase5_audit_passes
             and (wfc_status is None or wfc_status in ("PASS", "SKIPPED"))
         )
 

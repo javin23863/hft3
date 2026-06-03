@@ -43,7 +43,7 @@ This document maps each major requirement from the 26-phase spec to:
 
 | Requirement | Implementation | Test | Artifact |
 |---|---|---|---|
-| 33-timestamp capture | `apps/workbench/src/core/trade_audit.py::PHASE5_TIMESTAMP_FIELDS`; `WorkbenchEngine.run()` reports `phase5_timestamp_schema` | `tests/test_workbench/test_phase5_trade_audit.py` (7 tests) | `trades.parquet` with 33 `_ts` columns; `diagnostics.json.phase5_timestamp_schema` |
+| 33-timestamp capture | `apps/workbench/src/core/trade_audit.py::PHASE5_TIMESTAMP_FIELDS`; `WorkbenchEngine.run()` reports `phase5_timestamp_schema` | `tests/test_workbench/test_phase5_trade_audit.py` (10 tests) | `trades.parquet` with 33 `_ts` columns; `diagnostics.json.phase5_timestamp_schema` |
 
 ## Phase 6: Level 3 / Event-Driven Data Handling
 
@@ -186,6 +186,6 @@ This document maps each major requirement from the 26-phase spec to:
 | 25 — Required-test closure | DONE | 5 |
 | 26 — Documentation | ✅ DONE | N/A |
 
-**Total: 331/331 passing across 26 test files.**
+**Total: 334/334 passing across 26 test files.**
 
 **26 of 26 phases complete.**

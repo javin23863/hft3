@@ -20,7 +20,7 @@ EXPECTED_SCOREBOARD = {
     "tests/test_runner_honesty.py": 6,
     "tests/test_research_intake.py": 11,
     "tests/test_extractors.py": 14,
-    "tests/test_workbench/test_phase5_trade_audit.py": 7,
+    "tests/test_workbench/test_phase5_trade_audit.py": 10,
     "tests/test_workbench/test_robustness_pack_phase9.py": 9,
     "tests/test_defensive_model.py": 12,
     "tests/test_gate_schema.py": 12,

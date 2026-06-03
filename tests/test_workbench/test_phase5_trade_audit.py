@@ -8,6 +8,7 @@ import pandas as pd
 
 from data_layer.packet.microstructure_aar_packet import _row_to_audit
 from data_layer.packet.microstructure_aar_packet import build_microstructure_aar_packet
+from workbench.src.run.engine import _phase5_timestamp_schema_passes
 from workbench.src.core.trade_audit import (
     PHASE5_TIMESTAMP_FIELDS,
     TradeAuditRecord,
@@ -91,6 +92,11 @@ def test_phase5_schema_summary_reports_trade_count():
         "missing_fields": [],
     }
 
+    mismatched = summarize_phase5_timestamp_schema([record], expected_trade_count=2)
+    assert mismatched["complete"] is False
+    assert mismatched["expected_trade_count"] == 2
+    assert mismatched["trade_count"] == 1
+
 
 def test_phase5_schema_summary_rejects_missing_audits_for_trades():
     status = summarize_phase5_timestamp_schema([], expected_trade_count=1)
@@ -143,3 +149,68 @@ def test_aar_rejects_legacy_timestamp_audit_when_phase5_declared(tmp_path):
     _, skips = build_microstructure_aar_packet(artifact, REPO_ROOT)
 
     assert "AUDIT_INCOMPLETE" in skips
+
+
+def test_aar_rejects_non_monotonic_phase5_audit(tmp_path):
+    artifact = tmp_path / "run"
+    artifact.mkdir()
+    diagnostics = {
+        "event_id": "CPI_2024_09_11_TIGHT",
+        "num_trades": 1,
+        "phase5_timestamp_schema": {
+            "schema_version": "phase5_33_timestamp_v1",
+            "expected_trade_count": 1,
+        },
+    }
+    (artifact / "diagnostics.json").write_text(json.dumps(diagnostics), encoding="utf-8")
+    (artifact / "manifest.json").write_text('{"data_sufficient": true}', encoding="utf-8")
+    (artifact / "config.yaml").write_text("model_id: HYP_1\nevent_id: CPI_2024_09_11_TIGHT\n", encoding="utf-8")
+    row = {field: i for i, field in enumerate(PHASE5_TIMESTAMP_FIELDS, start=1)}
+    row["fill_ts"] = 0
+    row.update({
+        "feed_delay_us": 1.0,
+        "decision_compute_us": 1.0,
+        "decision_to_send_us": 1.0,
+        "send_to_ack_us": 1.0,
+        "tick_to_ack_us": 4.0,
+    })
+    pd.DataFrame([row]).to_parquet(artifact / "trades.parquet", index=False)
+
+    _, skips = build_microstructure_aar_packet(artifact, REPO_ROOT)
+
+    assert "AUDIT_INCOMPLETE" in skips
+
+
+def test_aar_uses_phase5_expected_trade_count_when_num_trades_zero(tmp_path):
+    artifact = tmp_path / "run"
+    artifact.mkdir()
+    diagnostics = {
+        "event_id": "CPI_2024_09_11_TIGHT",
+        "num_trades": 0,
+        "phase5_timestamp_schema": {
+            "schema_version": "phase5_33_timestamp_v1",
+            "expected_trade_count": 1,
+        },
+    }
+    (artifact / "diagnostics.json").write_text(json.dumps(diagnostics), encoding="utf-8")
+    (artifact / "manifest.json").write_text('{"data_sufficient": true}', encoding="utf-8")
+    (artifact / "config.yaml").write_text("model_id: HYP_1\nevent_id: CPI_2024_09_11_TIGHT\n", encoding="utf-8")
+
+    _, skips = build_microstructure_aar_packet(artifact, REPO_ROOT)
+
+    assert "AUDIT_INCOMPLETE" in skips
+
+
+def test_phase5_schema_status_is_required_for_promotion():
+    assert _phase5_timestamp_schema_passes({
+        "complete": True,
+        "monotonic_non_decreasing": True,
+    }) is True
+    assert _phase5_timestamp_schema_passes({
+        "complete": False,
+        "monotonic_non_decreasing": True,
+    }) is False
+    assert _phase5_timestamp_schema_passes({
+        "complete": True,
+        "monotonic_non_decreasing": False,
+    }) is False

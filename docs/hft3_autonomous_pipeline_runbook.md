@@ -140,14 +140,14 @@ python -m pytest tests/test_autonomous_runner.py tests/test_autonomous_runner_re
 
 ## Test scoreboard
 
-**331/331 passing** across 26 test files:
+**334/334 passing** across 26 test files:
 - `tests/test_autonomous_runner.py` (11 tests)
 - `tests/test_autonomous_runner_recovery.py` (13 tests)
 - `tests/test_phase25_required_tests.py` (5 tests)
 - `tests/test_runner_honesty.py` (6 tests)
 - `tests/test_research_intake.py` (11 tests)
 - `tests/test_extractors.py` (14 tests)
-- `tests/test_workbench/test_phase5_trade_audit.py` (7 tests)
+- `tests/test_workbench/test_phase5_trade_audit.py` (10 tests)
 - `tests/test_workbench/test_robustness_pack_phase9.py` (9 tests)
 - `tests/test_defensive_model.py` (12 tests)
 - `tests/test_gate_schema.py` (12 tests)
