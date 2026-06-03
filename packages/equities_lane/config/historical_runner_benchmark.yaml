@@ -125,3 +125,25 @@ delisted_seed_tickers:
     - SGN
     - SGBX
   remediation: "Requires a paid historical source such as Databento ohlcv-1d on a delisted-retaining dataset, or Polygon historical aggregates. Out of scope for the free-data phase."
+  paid_remediation:
+    description: "Optional paid-source pull path for delisted small-cap names. Requires API key. Will NOT run without it."
+    source: databento
+    dataset: XNAS.ITCH
+    schema: ohlcv-1d
+    stype_in: raw_symbol
+    cost_per_symbol_per_year_usd_estimate: 0.05
+    date_range_per_ticker:
+      mode: cohort_year_window
+      start_offset_days: -30
+      end_offset_days: 365
+    output_root: data/equities/daily_delisted
+    script: scripts/fetch_delisted_daily.py
+    refusal_policy:
+      live_mode_requires_confirm: "--confirm-purchase"
+      live_mode_requires_env: "DATABENTO_API_KEY"
+      dry_run_default: true
+      cost_controls:
+        - "--max-total-cost-usd"
+        - "--max-tickers"
+        - "--override-operating-cap"
+        - "--override-hard-limit"

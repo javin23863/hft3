@@ -271,3 +271,38 @@ def test_resolve_runner_seed_events_marks_delisted_as_data_source_exhausted(tmp_
     assert "delisted" in delisted_record["note"].lower()
     assert result["delisted_seed_tickers"] == ["DELIST"]
     assert (output / "runner_seed_resolution_manifest.json").exists()
+
+
+def test_resolve_runner_seed_events_resolves_delisted_via_secondary_root(tmp_path):
+    daily_root = tmp_path / "daily"
+    secondary_root = tmp_path / "delisted"
+    secondary_root.mkdir(parents=True, exist_ok=True)
+    seed_config = tmp_path / "seeds.yaml"
+    output = tmp_path / "out"
+    seed_config.write_text(
+        "repo_root: .\n"
+        "paths:\n"
+        f"  daily_root: {daily_root.as_posix()}\n"
+        "free_data_phase:\n"
+        "  event_detection:\n"
+        "    volume_lookback_days: 3\n"
+        "    event_cooldown_trading_days: 5\n"
+        "positive_seed_tickers:\n"
+        "  '2024':\n"
+        "    - DELIST\n"
+        "delisted_seed_tickers:\n"
+        "  known_delisted: [DELIST]\n",
+        encoding="utf-8",
+    )
+    _write_daily_csv(secondary_root / "DELIST.csv", _daily_rows(symbol="DELIST"))
+
+    result = resolve_runner_seed_events(
+        seed_config,
+        daily_root=daily_root,
+        output_dir=output,
+        delisted_daily_roots=[secondary_root],
+    )
+
+    assert not any(r["ticker"] == "DELIST" for r in result["unresolved_tickers"])
+    assert result["delisted_resolved_via"]["DELIST"] == f"fallback:{secondary_root}"
+    assert any(e["ticker"] == "DELIST" for e in result["cohort_rows"])

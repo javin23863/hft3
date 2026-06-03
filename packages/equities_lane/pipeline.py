@@ -459,10 +459,12 @@ def cmd_l3_integrate(args: argparse.Namespace) -> int:
 def cmd_resolve_runner_seeds(args: argparse.Namespace) -> int:
     from equities_lane.src.prediction.runner_seed_resolver import resolve_runner_seed_events
 
+    delisted_roots = list(getattr(args, "delisted_daily_roots", None) or [])
     result = resolve_runner_seed_events(
         args.seeds,
         daily_root=args.daily_root,
         output_dir=args.output,
+        delisted_daily_roots=delisted_roots,
     )
     print(json.dumps(result, indent=2))
     return 0
@@ -606,6 +608,12 @@ def main(argv: list[str] | None = None) -> int:
     p_seed.add_argument("--seeds", default=str(_RUNNER_BENCHMARK_CONFIG))
     p_seed.add_argument("--daily-root", default=None)
     p_seed.add_argument("--output", default=None)
+    p_seed.add_argument(
+        "--delisted-daily-roots",
+        nargs="*",
+        default=None,
+        help="Optional fallback roots for delisted tickers (CSV/parquet per-ticker, DailyBar format).",
+    )
     p_seed.set_defaults(func=cmd_resolve_runner_seeds)
 
     args = parser.parse_args(argv)
