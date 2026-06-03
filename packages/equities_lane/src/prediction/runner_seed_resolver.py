@@ -154,6 +154,7 @@ def resolve_runner_seed_events(
     seed_config_path: str | Path,
     daily_root: str | Path | None = None,
     output_dir: str | Path | None = None,
+    delisted_daily_roots: list[str | Path] | None = None,
 ) -> dict[str, Any]:
     cfg = load_seed_config(seed_config_path)
     seeds = load_seed_tickers(seed_config_path)
@@ -161,21 +162,43 @@ def resolve_runner_seed_events(
     benchmark_cfg = _benchmark_config(cfg)
     delisted = _delisted_tickers(cfg)
     root = Path(daily_root) if daily_root is not None else _cfg_path(cfg, Path(seed_config_path), "daily_root", "data/equities/daily")
+    delisted_roots = [Path(p) for p in (delisted_daily_roots or [])]
 
     events: list[RunnerEvent] = []
     unresolved: list[dict[str, Any]] = []
     snapshots: list[dict[str, Any]] = []
     l2_l3_plan: list[dict[str, Any]] = []
+    delisted_resolved_via: dict[str, str] = {}
 
     for seed in seeds:
         if seed.ticker in delisted:
-            unresolved.append({
-                "ticker": seed.ticker,
-                "seed_cohort": seed.cohort,
-                "reason": "data_source_exhausted_free_daily",
-                "expected_paths": _expected_daily_paths(root, seed.ticker),
-                "note": "Documented as delisted; free daily sources do not retain history. See delisted_seed_tickers in seed config.",
-            })
+            bars, source_label = _load_with_fallback(root, delisted_roots, seed.ticker)
+            if not bars:
+                unresolved.append({
+                    "ticker": seed.ticker,
+                    "seed_cohort": seed.cohort,
+                    "reason": "data_source_exhausted_free_daily",
+                    "expected_paths": _expected_daily_paths(root, seed.ticker) + _flatten_expected_paths(delisted_roots, seed.ticker),
+                    "note": "Documented as delisted; free daily sources do not retain history. See delisted_seed_tickers in seed config. Pass delisted_daily_roots to retry with a paid pull.",
+                })
+                continue
+            delisted_resolved_via[seed.ticker] = source_label
+            symbol_events = detect_runner_events(seed, bars, detection)
+            if not symbol_events:
+                unresolved.append({
+                    "ticker": seed.ticker,
+                    "seed_cohort": seed.cohort,
+                    "reason": "no_runner_event_detected_from_daily_bars",
+                    "n_daily_bars": len(bars),
+                    "target_year": seed.target_year,
+                    "delisted_resolved_via": source_label,
+                })
+                continue
+            for event in symbol_events:
+                events.append(event)
+                event_snapshots = build_pre_event_snapshots(event, bars)
+                snapshots.extend(event_snapshots)
+                l2_l3_plan.extend(build_l2_l3_pull_plan(event, event_snapshots))
             continue
 
         bars = _load_symbol_daily_bars(root, seed.ticker)
@@ -213,11 +236,13 @@ def resolve_runner_seed_events(
         "mode": "free_daily_ohlcv_event_resolution",
         "seed_config_path": str(seed_config_path),
         "daily_root": str(root),
+        "delisted_daily_roots": [str(p) for p in delisted_roots],
         "no_paid_market_data_downloads": True,
         "n_seed_tickers": len(seeds),
         "n_resolved_events": len(events),
         "n_unresolved_tickers": len(unresolved),
         "delisted_seed_tickers": sorted(delisted),
+        "delisted_resolved_via": delisted_resolved_via,
         "detection_config": detection.__dict__,
         "benchmark_config": benchmark_cfg.__dict__,
         "free_daily_benchmark": {
@@ -475,6 +500,25 @@ def _load_symbol_daily_bars(root: Path, ticker: str) -> list[DailyBar]:
     if csv_path.exists():
         return [b for b in load_daily_bars(csv_path) if b.symbol.upper() == ticker]
     return []
+
+
+def _load_with_fallback(primary: Path, fallbacks: list[Path], ticker: str) -> tuple[list[DailyBar], str]:
+    """Try primary root, then each fallback root in order. Returns (bars, source_label)."""
+    bars = _load_symbol_daily_bars(primary, ticker)
+    if bars:
+        return bars, f"primary:{primary}"
+    for fb in fallbacks:
+        bars = _load_symbol_daily_bars(fb, ticker)
+        if bars:
+            return bars, f"fallback:{fb}"
+    return [], "none"
+
+
+def _flatten_expected_paths(roots: list[Path], ticker: str) -> list[str]:
+    out: list[str] = []
+    for r in roots:
+        out.extend(_expected_daily_paths(r, ticker))
+    return out
 
 
 def _expected_daily_paths(root: Path, ticker: str) -> list[str]:
