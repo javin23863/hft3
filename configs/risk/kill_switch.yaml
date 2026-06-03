@@ -1,0 +1,77 @@
+thresholds:
+  max_daily_loss: 1000.0
+  max_drawdown: 1000.0
+  max_position_abs: 3.0
+  max_order_rate: 10
+  max_cancel_rate: 20
+  stale_market_data_max_ns: 5000000
+  max_slippage_ticks: 8
+  max_latency_ns: 50000000
+
+trigger_actions:
+  max_daily_loss_breach:
+    - stop_new_orders
+    - cancel_open_orders
+    - flatten_positions_if_configured
+    - log_event
+    - create_incident_report
+    - update_observer_state
+  max_drawdown_breach:
+    - stop_new_orders
+    - cancel_open_orders
+    - log_event
+    - create_incident_report
+    - update_observer_state
+  position_limit_breach:
+    - stop_new_orders
+    - cancel_open_orders
+    - flatten_positions_if_configured
+    - log_event
+    - update_observer_state
+  runaway_order_rate:
+    - stop_new_orders
+    - cancel_open_orders
+    - log_event
+    - update_observer_state
+  runaway_cancel_rate:
+    - stop_new_orders
+    - log_event
+    - update_observer_state
+  stale_market_data:
+    - stop_new_orders
+    - log_event
+    - update_observer_state
+  broker_disconnect:
+    - stop_new_orders
+    - cancel_open_orders
+    - log_event
+    - create_incident_report
+    - update_observer_state
+  execution_adapter_failure:
+    - stop_new_orders
+    - cancel_open_orders
+    - log_event
+    - create_incident_report
+    - update_observer_state
+  position_mismatch:
+    - stop_new_orders
+    - cancel_open_orders
+    - flatten_positions_if_configured
+    - disable_affected_model
+    - log_event
+    - create_incident_report
+    - update_observer_state
+  fill_reconciliation_failure:
+    - stop_new_orders
+    - cancel_open_orders
+    - log_event
+    - create_incident_report
+    - update_observer_state
+  abnormal_slippage:
+    - stop_new_orders
+    - log_event
+    - update_observer_state
+  abnormal_latency:
+    - stop_new_orders
+    - log_event
+    - update_observer_state

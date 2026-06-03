@@ -166,9 +166,10 @@ observer/execution integration.
 - **Phase 18 order-state machine exists** — `packages/trade_manager/order_state.py` defines the 17 documented states and inert timestamped transitions.
 - **Phase 19 execution boundary exists** — `packages/trade_manager/execution_boundary.py` validates `configs/execution/adapter.yaml` and produces inert boundary audit metadata with `can_route=False`.
 - **Phase 20 position monitor exists** — `packages/trade_manager/monitor.py` captures supplied position snapshots and returns `OK`, `MISMATCH`, or `UNKNOWN` reconciliation results without adapter creation, routing, or flattening.
+- **Phase 21 kill switch exists** — `packages/trade_manager/kill_switch.py` and `configs/risk/kill_switch.yaml` return requested action decisions across the 12 documented trigger families without adapter creation, routing, cancelling, or flattening.
 - The only existing "trade manager" is the C++ `risk_engine/include/risk_manager.hpp`, which is a **risk** monitor, not a signal→intent orchestrator.
 - `OrderIntent` exists in `packages/execution/interfaces.py` (52 matches); Phase 17 creates one only as production-safety monitor input, not as a routed execution request.
-- **Phases 21–23** still need kill-switch, observer, and session modules. Real execution adapter routing is still unimplemented.
+- **Phases 22–23** still need observer and session modules. Real execution adapter routing is still unimplemented.
 
 ## Section 17 — Risk-layer components
 
@@ -176,7 +177,7 @@ observer/execution integration.
 - **Python production safety**: `packages/execution/production_safety.py` — `StaleDataMonitor`, `DisconnectMonitor`, `ClockDriftMonitor`, `PositionMismatchGuard`, `DailyLossLimitFlatten`.
 - **C++**: `risk_engine/{include/risk_manager.hpp, src/risk_manager.cpp}` — `FailureState` enum.
 - **Live-mode env vars**: `LIVE_MAX_ORDER_SIZE`, `LIVE_DAILY_LOSS_LIMIT`, `LIVE_KILL_SWITCH`, `LIVE_RISK_ENABLED`.
-- **Gap**: Phases 17-19 store risk decisions, state transitions, and inert execution-boundary audit metadata only. The live broker (stub) does not consume the decision/state/boundary yet. The C++ `RiskManager` is not exposed via pybind. There is no `validate_live_env()` function.
+- **Gap**: Phases 17-21 store risk decisions, state transitions, inert execution-boundary audit metadata, position reconciliation, and kill-switch requested actions only. The live broker (stub) does not consume those decisions yet. The C++ `RiskManager` is not exposed via pybind. There is no `validate_live_env()` function.
 
 ## Section 18 — Execution-adapter components
 
@@ -216,11 +217,11 @@ observer/execution integration.
 1. **Autonomous runner is still scaffolded** — it writes honest blocking gates but does not yet invoke `WorkbenchEngine`.
 2. **Workbench backtest-to-robustness evidence is not wired into the autonomous runner** — Workbench emits Phase 5/9 artifacts; the runner still writes stub backtest metrics.
 3. **Double-WF correlator exists but is not campaign/autonomous promotion input** — real independent WF matrix wiring is still pending.
-4. **Trade Manager is partial** — Phase 14 registry handoff, Phase 15 signal ingress, Phase 16 order-intent schema, Phase 17 risk decisions, Phase 18 order-state transitions, Phase 19 inert execution boundary, and Phase 20 inert position monitor exist, but no execution orchestration exists yet.
+4. **Trade Manager is partial** — Phase 14 registry handoff, Phase 15 signal ingress, Phase 16 order-intent schema, Phase 17 risk decisions, Phase 18 order-state transitions, Phase 19 inert execution boundary, Phase 20 inert position monitor, and Phase 21 inert kill switch exist, but no execution orchestration exists yet.
 5. **Live broker adapter is a stub** — no real live execution path.
 6. **C++ `RiskManager` not wired into Python** — risk is enforced only at the C++ engine boundary, not the backtest.
 7. **Production safety monitors are only used for Trade Manager decisions** — no adapter path consumes risk approvals/rejections yet.
-8. **No production observer/session layer** — observer view, kill switch, and session artifacts are still absent; Phase 20 position reconciliation is standalone and not integrated into sessions.
+8. **No production observer/session layer** — observer view and session artifacts are still absent; Phase 20 position reconciliation and Phase 21 kill-switch decisions are standalone and not integrated into sessions.
 
 ## Section 23 — Gaps between stages
 
@@ -229,7 +230,7 @@ observer/execution integration.
 | Hypothesis → experiment spec | OK for Phase 3 intake bundles; autonomous runner experiment specs remain scaffolded until Workbench integration |
 | Backtest → robustness | OK inside Workbench; pending in autonomous runner |
 | Scoring → registry | Atomic registry writes exist; autonomous runner still quarantines because observed metrics are pending |
-| Registry → trade manager | OK for Phase 14/15/16/17/18/19 handoff, signal ingress, inert order intent, inert risk decision, inert order state, and inert execution-boundary audit; Phase 20 adds standalone position reconciliation. Activation validates latest `PROMOTED` record and manifest evidence, accepts validated `ModelSignal` envelopes, creates non-routed `TradeManagerOrderIntent` envelopes, records risk decisions, records state transitions, then prepares non-routed boundary metadata |
+| Registry → trade manager | OK for Phase 14/15/16/17/18/19 handoff, signal ingress, inert order intent, inert risk decision, inert order state, and inert execution-boundary audit; Phase 20 adds standalone position reconciliation; Phase 21 adds standalone kill-switch requested actions. Activation validates latest `PROMOTED` record and manifest evidence, accepts validated `ModelSignal` envelopes, creates non-routed `TradeManagerOrderIntent` envelopes, records risk decisions, records state transitions, then prepares non-routed boundary metadata |
 | Trade manager → execution | **BOUNDARY ONLY**: config/audit seam exists; no execution orchestration yet |
 | Trade manager → observer | **MISSING**: no observer path yet |
 | Trade manager → session report | **MISSING**: no session report path yet |
@@ -254,6 +255,7 @@ Phase 17 (Trade Manager risk layer): `packages/trade_manager/risk_layer.py`, `co
 Phase 18 (Trade Manager order state): `packages/trade_manager/order_state.py` — inert 17-state machine before execution.
 Phase 19 (Trade Manager execution boundary): `packages/trade_manager/execution_boundary.py`, `configs/execution/adapter.yaml` — inert config/audit seam before real adapter routing.
 Phase 20 (Trade Manager position monitor): `packages/trade_manager/monitor.py` — inert position snapshots and reconciliation results before kill switch/session integration.
+Phase 21 (Trade Manager kill switch): `packages/trade_manager/kill_switch.py`, `configs/risk/kill_switch.yaml` — inert requested-action decisions before observer/session integration.
 
 ## Section 25 — Files that should remain untouched (hot path)
 
@@ -273,7 +275,7 @@ Phase 20 (Trade Manager position monitor): `packages/trade_manager/monitor.py` �
 3. **Campaign/autonomous double-WF wiring** — feed independent WF matrices into `double_wf.py` and promotion gates.
 4. **Wire `production_safety.py` into the adapter path** — enforce risk in the future execution-layer order-submission path.
 5. **Live broker adapter implementation** — replace the live stub with a CHI404-only execution path.
-6. **Production observer/session layer** — observer view, kill switch, session artifacts, and integration of Phase 20 position reconciliation.
+6. **Production observer/session layer** — observer view, session artifacts, and integration of Phase 20 position reconciliation plus Phase 21 kill-switch decisions.
 7. **C++ `RiskManager` Python/backtest integration** — expose parity checks outside the C++ engine boundary.
 8. **Top-level `hft3` console script** — optional one-command wrapper for the existing module runner.
 9. **Hot-path / do-not-touch CI guard** — fail the build if `rithmic_gateway/`, `vendor/`, `*/cpp/`, `risk_engine/` appear in a PR diff.
