@@ -82,6 +82,25 @@ class DetectionConfig:
 
 
 @dataclass(frozen=True)
+class BenchmarkConfig:
+    lift_l2_l3_download_when_passed: bool = True
+    min_resolved_events: int = 5
+    min_resolved_ticker_ratio: float = 0.10
+    min_active_cohorts: int = 2
+    min_median_event_strength: float = 1.0
+    max_share_of_events_in_a_single_ticker: float = 0.75
+
+
+@dataclass(frozen=True)
+class BenchmarkResult:
+    passed: bool
+    metrics: dict[str, float]
+    thresholds: dict[str, float]
+    failures: list[str]
+    lift_l2_l3_download: bool
+
+
+@dataclass(frozen=True)
 class RunnerEvent:
     ticker: str
     seed_cohort: str
@@ -139,6 +158,7 @@ def resolve_runner_seed_events(
     cfg = load_seed_config(seed_config_path)
     seeds = load_seed_tickers(seed_config_path)
     detection = _detection_config(cfg)
+    benchmark_cfg = _benchmark_config(cfg)
     root = Path(daily_root) if daily_root is not None else _cfg_path(cfg, Path(seed_config_path), "daily_root", "data/equities/daily")
 
     events: list[RunnerEvent] = []
@@ -174,6 +194,9 @@ def resolve_runner_seed_events(
             snapshots.extend(event_snapshots)
             l2_l3_plan.extend(build_l2_l3_pull_plan(event, event_snapshots))
 
+    benchmark = evaluate_free_daily_benchmark(events, seeds, benchmark_cfg)
+    l2_l3_plan = _apply_benchmark_to_l2_l3_plan(l2_l3_plan, benchmark)
+
     cohort_rows = [_cohort_row(event) for event in events]
     payload = {
         "mode": "free_daily_ohlcv_event_resolution",
@@ -184,6 +207,14 @@ def resolve_runner_seed_events(
         "n_resolved_events": len(events),
         "n_unresolved_tickers": len(unresolved),
         "detection_config": detection.__dict__,
+        "benchmark_config": benchmark_cfg.__dict__,
+        "free_daily_benchmark": {
+            "passed": benchmark.passed,
+            "metrics": benchmark.metrics,
+            "thresholds": benchmark.thresholds,
+            "failures": benchmark.failures,
+            "lift_l2_l3_download": benchmark.lift_l2_l3_download,
+        },
         "seed_tickers": [seed.__dict__ for seed in seeds],
         "cohort_rows": cohort_rows,
         "snapshot_rows": snapshots,
@@ -333,6 +364,92 @@ def _write_outputs(output_dir: Path, payload: dict[str, Any]) -> None:
     _write_json(output_dir / "snapshot_plan.json", payload["snapshot_rows"])
     _write_json(output_dir / "l2_l3_minimal_pull_plan.json", payload["l2_l3_minimal_pull_plan"])
     _write_json(output_dir / "unresolved_tickers.json", payload["unresolved_tickers"])
+    _write_json(output_dir / "free_daily_benchmark.json", payload["free_daily_benchmark"])
+
+
+def evaluate_free_daily_benchmark(
+    events: list[RunnerEvent],
+    seeds: list[SeedTicker],
+    config: BenchmarkConfig,
+) -> BenchmarkResult:
+    metrics: dict[str, float] = {
+        "n_resolved_events": float(len(events)),
+        "n_resolved_tickers": float(len({e.ticker for e in events})),
+        "n_seed_tickers": float(len(seeds)),
+        "resolved_ticker_ratio": float(len({e.ticker for e in events})) / float(len(seeds)) if seeds else 0.0,
+        "n_active_cohorts": float(len({e.seed_cohort for e in events})),
+        "median_event_strength": _median([e.event_strength_score for e in events]) if events else 0.0,
+        "share_of_events_in_largest_ticker": _largest_ticker_share(events) if events else 0.0,
+    }
+
+    failures: list[str] = []
+    if metrics["n_resolved_events"] < config.min_resolved_events:
+        failures.append(
+            f"n_resolved_events={int(metrics['n_resolved_events'])} < min_resolved_events={config.min_resolved_events}"
+        )
+    if metrics["resolved_ticker_ratio"] < config.min_resolved_ticker_ratio:
+        failures.append(
+            f"resolved_ticker_ratio={metrics['resolved_ticker_ratio']:.4f} < min_resolved_ticker_ratio={config.min_resolved_ticker_ratio:.4f}"
+        )
+    if metrics["n_active_cohorts"] < config.min_active_cohorts:
+        failures.append(
+            f"n_active_cohorts={int(metrics['n_active_cohorts'])} < min_active_cohorts={config.min_active_cohorts}"
+        )
+    if events and metrics["median_event_strength"] < config.min_median_event_strength:
+        failures.append(
+            f"median_event_strength={metrics['median_event_strength']:.4f} < min_median_event_strength={config.min_median_event_strength:.4f}"
+        )
+    if events and metrics["share_of_events_in_largest_ticker"] > config.max_share_of_events_in_a_single_ticker:
+        failures.append(
+            f"share_of_events_in_largest_ticker={metrics['share_of_events_in_largest_ticker']:.4f} > max_share_of_events_in_a_single_ticker={config.max_share_of_events_in_a_single_ticker:.4f}"
+        )
+
+    passed = not failures
+    lift = config.lift_l2_l3_download_when_passed and passed
+    thresholds = {
+        "min_resolved_events": float(config.min_resolved_events),
+        "min_resolved_ticker_ratio": float(config.min_resolved_ticker_ratio),
+        "min_active_cohorts": float(config.min_active_cohorts),
+        "min_median_event_strength": float(config.min_median_event_strength),
+        "max_share_of_events_in_a_single_ticker": float(config.max_share_of_events_in_a_single_ticker),
+    }
+    return BenchmarkResult(
+        passed=passed,
+        metrics=metrics,
+        thresholds=thresholds,
+        failures=failures,
+        lift_l2_l3_download=lift,
+    )
+
+
+def _apply_benchmark_to_l2_l3_plan(
+    plan: list[dict[str, Any]],
+    benchmark: BenchmarkResult,
+) -> list[dict[str, Any]]:
+    if not benchmark.lift_l2_l3_download:
+        return plan
+    out: list[dict[str, Any]] = []
+    for row in plan:
+        updated = dict(row)
+        updated["download_now"] = True
+        updated["download_policy"] = "free_daily_benchmark_passed"
+        out.append(updated)
+    return out
+
+
+def _median(values: list[float]) -> float:
+    if not values:
+        return 0.0
+    return float(median(values))
+
+
+def _largest_ticker_share(events: list[RunnerEvent]) -> float:
+    if not events:
+        return 0.0
+    counts: dict[str, int] = {}
+    for event in events:
+        counts[event.ticker] = counts.get(event.ticker, 0) + 1
+    return max(counts.values()) / float(len(events))
 
 
 def _load_symbol_daily_bars(root: Path, ticker: str) -> list[DailyBar]:
@@ -363,6 +480,19 @@ def _detection_config(data: dict[str, Any]) -> DetectionConfig:
         min_volume_expansion=float(raw.get("min_volume_expansion", 3.0)),
         volume_lookback_days=int(raw.get("volume_lookback_days", 20)),
         event_cooldown_trading_days=int(raw.get("event_cooldown_trading_days", 5)),
+    )
+
+
+def _benchmark_config(data: dict[str, Any]) -> BenchmarkConfig:
+    raw = ((data.get("free_data_phase") or {}).get("free_daily_benchmark") or {})
+    rules = raw.get("rules") or {}
+    return BenchmarkConfig(
+        lift_l2_l3_download_when_passed=bool(raw.get("lift_l2_l3_download_when_passed", True)),
+        min_resolved_events=int(rules.get("min_resolved_events", 5)),
+        min_resolved_ticker_ratio=float(rules.get("min_resolved_ticker_ratio", 0.10)),
+        min_active_cohorts=int(rules.get("min_active_cohorts", 2)),
+        min_median_event_strength=float(rules.get("min_median_event_strength", 1.0)),
+        max_share_of_events_in_a_single_ticker=float(rules.get("max_share_of_events_in_a_single_ticker", 0.75)),
     )
 
 

@@ -162,3 +162,78 @@ def seed_config_for_test():
     from equities_lane.src.prediction.runner_seed_resolver import DetectionConfig
 
     return DetectionConfig(volume_lookback_days=3)
+
+
+def test_free_daily_benchmark_fails_when_not_enough_events(tmp_path):
+    daily_root = tmp_path / "daily"
+    seed_config = tmp_path / "seeds.yaml"
+    output = tmp_path / "out"
+    _write_seed_config(seed_config, daily_root)
+    _write_daily_csv(daily_root / "ABCD.csv", _daily_rows())
+
+    result = resolve_runner_seed_events(seed_config, daily_root=daily_root, output_dir=output)
+
+    benchmark = result["free_daily_benchmark"]
+    assert benchmark["passed"] is False
+    assert benchmark["lift_l2_l3_download"] is False
+    assert benchmark["metrics"]["n_resolved_events"] == 1
+    assert any("n_resolved_events" in f for f in benchmark["failures"])
+    assert result["l2_l3_minimal_pull_plan"][0]["download_now"] is False
+    assert result["l2_l3_minimal_pull_plan"][0]["download_policy"] == "plan_only_until_free_daily_benchmark_passes"
+    assert (output / "free_daily_benchmark.json").exists()
+
+
+def test_free_daily_benchmark_lifts_l2_l3_when_passed():
+    from equities_lane.src.prediction.runner_seed_resolver import (
+        BenchmarkConfig,
+        RunnerEvent,
+        SeedTicker,
+        evaluate_free_daily_benchmark,
+    )
+
+    seeds = [
+        SeedTicker("A", "2024", 2024),
+        SeedTicker("B", "2024", 2024),
+        SeedTicker("C", "2025", 2025),
+        SeedTicker("D", "2025", 2025),
+        SeedTicker("E", "2025", 2025),
+    ]
+    events = [
+        RunnerEvent("A", "2024", "2024-05-01", 1, 1.0, 0.5, 0.5, 0.6, 4.0, 2.0),
+        RunnerEvent("B", "2024", "2024-06-01", 1, 1.0, 0.4, 0.4, 0.5, 3.0, 1.5),
+        RunnerEvent("C", "2025", "2025-05-01", 1, 1.0, 0.3, 0.3, 0.4, 3.5, 1.4),
+        RunnerEvent("D", "2025", "2025-06-01", 1, 1.0, 0.6, 0.5, 0.7, 5.0, 3.0),
+        RunnerEvent("E", "2025", "2025-07-01", 1, 1.0, 0.5, 0.4, 0.6, 4.5, 2.5),
+    ]
+
+    benchmark = evaluate_free_daily_benchmark(events, seeds, BenchmarkConfig())
+
+    assert benchmark.passed is True
+    assert benchmark.lift_l2_l3_download is True
+    assert benchmark.metrics["n_active_cohorts"] == 2
+    assert benchmark.metrics["resolved_ticker_ratio"] == 1.0
+    assert benchmark.failures == []
+
+
+def test_free_daily_benchmark_blocks_concentration():
+    from equities_lane.src.prediction.runner_seed_resolver import (
+        BenchmarkConfig,
+        RunnerEvent,
+        SeedTicker,
+        evaluate_free_daily_benchmark,
+    )
+
+    seeds = [SeedTicker(f"T{i}", "2024", 2024) for i in range(4)]
+    events = [
+        RunnerEvent("T0", "2024", "2024-05-01", 1, 1.0, 0.5, 0.5, 0.6, 4.0, 2.0),
+        RunnerEvent("T0", "2024", "2024-06-01", 1, 1.0, 0.4, 0.4, 0.5, 3.0, 1.5),
+        RunnerEvent("T0", "2024", "2024-07-01", 1, 1.0, 0.6, 0.5, 0.7, 5.0, 3.0),
+        RunnerEvent("T0", "2024", "2024-08-01", 1, 1.0, 0.5, 0.4, 0.6, 4.5, 2.5),
+        RunnerEvent("T1", "2024", "2024-05-15", 1, 1.0, 0.3, 0.3, 0.4, 3.5, 1.4),
+    ]
+
+    benchmark = evaluate_free_daily_benchmark(events, seeds, BenchmarkConfig())
+
+    assert benchmark.passed is False
+    assert benchmark.lift_l2_l3_download is False
+    assert any("largest_ticker" in f for f in benchmark.failures)
