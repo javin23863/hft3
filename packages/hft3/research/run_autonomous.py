@@ -5,7 +5,7 @@ STATUS: SCAFFOLD. NOT YET PRODUCTION-READY.
 ========================================================================
 
 This module is the headless orchestrator shell. It loads a campaign
-config, walks 12 stages, writes 14 artifacts per run, and persists a
+config, walks 14 stages, writes 19 artifacts per run, and persists a
 checkpoint. **The actual backtest, robustness pack, walk-forward, and
 scoring work is NOT yet wired** — those stages emit GateResults with
 `observed_value=None` and `pass_fail=False` (BLOCKING) so the run
@@ -20,11 +20,11 @@ What is real:
   - Promotion-gate wiring (writes to the atomic certification registry)
   - Report generator with the 22 spec sections
 
-What is pending (blocked on WorkbenchEngine integration / Phase 10 wiring):
+What is pending (blocked on WorkbenchEngine integration):
   - Real backtest metrics from WorkbenchEngine
   - Real robustness pack results
-  - Walk-forward correlation (single WF only today; double-WF in Phase 10)
   - Real scoring (not the QUARANTINE default)
+  - Double-WF correlator exists (Phase 10) but not wired into runner
 
 Do NOT ship a candidate as PROMOTE through this runner until
 `stage_robustness_and_wf` produces real observed values. The
@@ -42,7 +42,7 @@ a single deterministic, resumable, auditable pipeline:
   6. Run backtests (delegates to existing WorkbenchEngine)
   7. Run robustness checks
   8. Run walk-forward validation
-  9. Run walk-forward correlation (Phase 10 stub: single WFC today)
+   9. Run walk-forward correlation (Phase 10 double-WF correlator exists)
   10. Score candidates (delegates to existing scoring)
   11. Decide REJECT / QUARANTINE / PROMOTE
   12. Generate reports
@@ -657,7 +657,7 @@ class AutonomousRunner:
         )
         metrics = {
             "specs": specs,
-            "idealized": True,  # Phase 5 will replace with real metrics
+            "idealized": True,  # WorkbenchEngine integration provides real metrics
             "timestamp_utc": datetime.now(timezone.utc).isoformat(),
             "git_sha": self.state.git_sha,
             "metrics": {},  # populated when WorkbenchEngine integration lands
@@ -1289,7 +1289,8 @@ def _build_report(
         f"- Resolution: {config.data.get('resolution', 'L3_MBO')}",
         "",
         "## 6. Data-quality status",
-        f"Requested = resolved = `{config.data.get('resolution', 'L3_MBO')}`.",
+        f"Resolution: `{config.data.get('resolution', 'L3_MBO')}`. "
+        f"(Phase 6 requested/resolved pair is pending scaffold wiring.)",
         "",
         "## 7. Feature set used",
         f"- Feature set: `{config.features.get('feature_set_id', 'core_64_v1')}`",
@@ -1326,7 +1327,7 @@ def _build_report(
         f"See `walk_forward_results.json` and `walk_forward_correlation.json`.",
         "",
         "## 16. Walk-forward correlation results",
-        f"Double-WF correlator is pending (Phase 10).",
+        f"Double-WF correlator exists (Phase 10) but is not yet wired into the runner.",
         "",
         "## 17. Gate results",
         f"See `robustness_gates.json`.",
