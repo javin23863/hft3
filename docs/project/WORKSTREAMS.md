@@ -16,7 +16,7 @@ This file defines ownership boundaries so multiple phase teams can work at the s
 |---|---|---|---|
 | Phase 20 Position Monitor | `packages/trade_manager/monitor.py`, `tests/test_trade_manager_phase20.py` | `order_state.py`, `risk_layer.py`, `execution/interfaces.py` | `manager.py` integration, execution adapters |
 | Phase 21 Kill Switch | `packages/trade_manager/kill_switch.py`, `configs/risk/kill_switch.yaml`, `tests/test_trade_manager_phase21.py` | Phase 20 contracts, production safety monitors | execution routing, C++ risk engine |
-| Phase 22 Observer CLI | `apps/observer/`, `tests/test_observer_*.py` | session artifacts, position snapshots, kill-switch events | Trade Manager mutation APIs, adapters |
+| Phase 22 Observer CLI | `apps/observer/`, `tests/test_observer_view_read_only.py` | session artifacts, position snapshots, kill-switch events | Trade Manager mutation APIs, adapters |
 | Phase 23 Session Reporting | `packages/trade_manager/session.py`, `tests/test_trade_manager_phase23.py` | order intents, risk decisions, order states | observer CLI, execution adapters |
 | Phase 24 Resumability Safety | `packages/hft3/research/run_autonomous.py`, `tests/test_autonomous_runner.py`, recovery tests/docs | checkpoints, registry atomicity, session artifacts | live adapters, Rithmic gateway, Trade Manager routing |
 | Phase 25 Required Tests | `docs/project/VALIDATION_MATRIX.md`, validation scripts, missing required tests | all tests/docs | product behavior; test helpers only under `tests/` or test-support paths |

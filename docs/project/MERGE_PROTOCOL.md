@@ -57,7 +57,7 @@ Integration branch minimum after all Phase 20-23 modules land:
 
 ```powershell
 $env:PYTHONPATH = "packages;apps"
-python -m pytest tests/test_trade_manager_phase14.py tests/test_trade_manager_phase15.py tests/test_trade_manager_phase16.py tests/test_trade_manager_phase17.py tests/test_trade_manager_phase18.py tests/test_trade_manager_phase19.py tests/test_trade_manager_phase20.py tests/test_trade_manager_phase21.py tests/test_trade_manager_phase22.py tests/test_trade_manager_phase23.py -q
+python -m pytest tests/test_trade_manager_phase14.py tests/test_trade_manager_phase15.py tests/test_trade_manager_phase16.py tests/test_trade_manager_phase17.py tests/test_trade_manager_phase18.py tests/test_trade_manager_phase19.py tests/test_trade_manager_phase20.py tests/test_trade_manager_phase21.py tests/test_observer_view_read_only.py tests/test_trade_manager_phase23.py -q
 python -m pytest tests/test_production_safety.py -q
 python -m economic_event_universe.cli validate
 git diff --check

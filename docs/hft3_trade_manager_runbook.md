@@ -1,6 +1,6 @@
 # HFT3 Trade Manager Runbook (Phase 26)
 
-This runbook documents the Trade Manager layer (Phases 14-23). Phase 14 is implemented as the registry-to-Trade-Manager handoff seam. Phase 15 is implemented as side-effect-free signal ingress. Phase 16 is implemented as an inert Trade Manager order-intent schema. Phase 17 is implemented as a risk-decision layer over inert intents. Phase 18 is implemented as an inert order-state machine. Phase 19 is implemented as an inert execution-boundary config/audit seam. Phase 20 is implemented as an inert position monitor. Phase 21 is implemented as an inert kill-switch decision module. Phases 22-23 remain future state.
+This runbook documents the Trade Manager layer (Phases 14-23). Phase 14 is implemented as the registry-to-Trade-Manager handoff seam. Phase 15 is implemented as side-effect-free signal ingress. Phase 16 is implemented as an inert Trade Manager order-intent schema. Phase 17 is implemented as a risk-decision layer over inert intents. Phase 18 is implemented as an inert order-state machine. Phase 19 is implemented as an inert execution-boundary config/audit seam. Phase 20 is implemented as an inert position monitor. Phase 21 is implemented as an inert kill-switch decision module. Phase 22 is implemented as a read-only observer CLI over local session artifacts. Phase 23 remains future state.
 
 ## 1. How a registered model is handed to the Trade Manager
 
@@ -148,12 +148,14 @@ Each trading session will produce artifacts under `artifacts/sessions/{session_i
 
 ## 9. Observer view instructions (Phase 22)
 
-The observer view will be a read-only CLI (not Streamlit):
+The observer view is a read-only CLI (not Streamlit). With `apps` on `PYTHONPATH`, run:
 ```bash
-python -m hft3.observer view --session-id SESSION_ID
+python -m observer view --session-id SESSION_ID --sessions-root artifacts/sessions
 ```
 
-The observer will display:
+The observer reads only local session artifacts under `artifacts/sessions/{session_id}` and rejects path traversal. It parses JSON object files and JSONL object records only, rejects malformed artifacts, rejects non-object JSON/JSONL payloads, and rejects non-finite numbers. Missing expected artifacts are shown in `unavailable_artifacts` and render as `UNAVAILABLE` sections rather than silently passing.
+
+The observer displays:
 - Active registered models, active symbols, current positions, open orders
 - Recent fills, rejected orders, realized PnL, unrealized PnL, total PnL
 - Drawdown, risk-limit usage, latency, slippage
@@ -162,6 +164,8 @@ The observer will display:
 - Incident log, audit trail, current registry reference
 
 The system will continue operating according to configured rules without requiring observer approval.
+
+Phase 22 does not mutate `TradeManager`, create execution adapters, submit orders, cancel orders, replace orders, flatten positions, or call paper/live/Rithmic paths.
 
 ## 10. Restart/recovery procedure (Phase 24)
 
@@ -198,8 +202,9 @@ Phase 18: `tests/test_trade_manager_phase18.py` has 23/23 passing tests.
 Phase 19: `tests/test_trade_manager_phase19.py` has 22/22 passing tests.
 Phase 20: `tests/test_trade_manager_phase20.py` has 11/11 passing tests.
 Phase 21: `tests/test_trade_manager_phase21.py` has 12/12 passing tests.
+Phase 22: `tests/test_observer_view_read_only.py` has 10/10 passing tests.
 
-Phases 22-23 tests will be added as observer and session modules are built.
+Phase 23 tests will be added as session modules are built.
 
 ## 13. Known limitations
 
@@ -212,15 +217,14 @@ Phases 22-23 tests will be added as observer and session modules are built.
 - **Position monitor exists.** Phase 20 records/reconciles supplied position snapshots, but it does not flatten positions, create adapters, or route execution.
 - **Kill switch exists.** Phase 21 returns inert decisions for documented trigger families and requested actions, but it does not create adapters, cancel orders, flatten positions, or route execution.
 - **Execution adapter is a stub.** `packages/execution/adapters/live_broker.py` returns `ORDER_REJECTED` with reason `"live_adapter_stub_not_wired"` (Phase 19).
-- **Observer view does not exist.** Phase 22 is not implemented.
+- **Observer view exists.** Phase 22 reads local session artifacts and renders a deterministic read-only CLI view without adapters or routing.
 - **Session reporting does not exist.** Phase 23 is not implemented.
 
 ## 14. Remaining risks
 
-- **Phase 22-23 remain large.** The Trade Manager still needs sub-modules for observer, session reporting, and restart recovery.
+- **Phase 23 remains large.** The Trade Manager still needs session reporting and restart-recovery integration.
 - **Rithmic live adapter is not implemented.** The C++ `rithmic_gateway` exists but the Python execution adapter is a stub.
-- **Risk/state/boundary/monitor/kill-switch decisions are not execution.** Phases 17-21 record approvals/rejections/state transitions, boundary audit metadata, reconciliation results, and kill-switch requested actions only; no adapter lifecycle or session artifacts exist yet.
-- **Observer view is not implemented.** The read-only CLI does not exist.
+- **Risk/state/boundary/monitor/kill-switch/observer outputs are not execution.** Phases 17-22 record approvals/rejections/state transitions, boundary audit metadata, reconciliation results, kill-switch requested actions, and read-only local artifact views only; no adapter lifecycle or session writer exists yet.
 - **Session reporting is not implemented.** The 16 session files are not written.
 - **Restart recovery is not fully tested.** Phase 24 is partially done (checkpoint state.json exists) but crash recovery is not fully tested.
 

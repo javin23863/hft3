@@ -8,7 +8,8 @@ This roadmap turns the remaining HFT3 phases into parallel workstreams with clea
 |---|---|---|
 | Phases 1-13 | Complete | Autonomous/research pipeline scaffold, gates, registry, artifacts, reporting |
 | Phases 14-21 | Complete | Trade Manager handoff through inert kill-switch decisions |
-| Phases 22-23 | Not started | Observer and session reporting |
+| Phase 22 | Complete | Read-only local artifact observer CLI |
+| Phase 23 | Not started | Session reporting |
 | Phase 24 | Partial | Autonomous-runner checkpoint state exists; full crash/recovery safety not complete |
 | Phase 25 | Partial | Original required-test matrix remains incomplete |
 
@@ -35,7 +36,7 @@ This roadmap turns the remaining HFT3 phases into parallel workstreams with clea
 |---|---|---|
 | 20 | `packages/trade_manager/monitor.py` | Position snapshots and reconciliation decisions are tested and inert |
 | 21 | `packages/trade_manager/kill_switch.py` | 12 trigger families and configured actions are tested and inert |
-| 22 | `apps/observer/` | CLI can read session state and cannot mutate or route |
+| 22 | `apps/observer/` | CLI reads session state and cannot mutate or route |
 | 23 | `packages/trade_manager/session.py` | 16 documented session artifacts are written and validated |
 | 24 | autonomous-runner resumability and failure safety | Existing checkpoint flow is hardened and crash recovery is tested |
 | 25 | required-test closure and validation docs/scripts | Required gate matrix is explicit, runnable, and honest about blockers |

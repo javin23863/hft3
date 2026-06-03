@@ -103,11 +103,11 @@ python -m pytest tests/test_autonomous_runner.py tests/test_runner_honesty.py -v
 
 - **Phase 5 (backtest 33-timestamp)**: Implemented in Workbench audit artifacts. The autonomous runner's `stage_backtest` still writes stub metrics and is not wired to WorkbenchEngine.
 - **Phase 9 (25 robustness checks)**: Implemented in the Workbench robustness pack. The autonomous runner still emits blocking PENDING gates until WorkbenchEngine integration provides observed metrics.
-- **Phase 14-21 (Trade Manager handoff + signal ingress + order intent + risk layer + order state + execution boundary + position monitor + kill switch)**: Implemented as registry/manifest activation, side-effect-free signal envelopes, inert order-intent envelopes, inert risk decisions, inert order-state transitions, inert execution-boundary audit metadata, inert position reconciliation, and inert kill-switch requested actions. Phases 22-23 observer and sessions remain future state. Real paper/live/Rithmic routing remains unimplemented.
+- **Phase 14-22 (Trade Manager handoff + signal ingress + order intent + risk layer + order state + execution boundary + position monitor + kill switch + observer)**: Implemented as registry/manifest activation, side-effect-free signal envelopes, inert order-intent envelopes, inert risk decisions, inert order-state transitions, inert execution-boundary audit metadata, inert position reconciliation, inert kill-switch requested actions, and a read-only local artifact observer. Phase 23 sessions remain future state. Real paper/live/Rithmic routing remains unimplemented.
 - **Phase 24 (resumability)**: Partially done (checkpoint state.json exists); crash recovery not fully tested.
 - **Phase 25 (22 required tests)**: Most exist; ~5 missing.
 
-## Completed phases (22 of 26)
+## Completed phases (23 of 26)
 
 | Phase | Status | Commit |
 |---|---|---|
@@ -132,11 +132,12 @@ python -m pytest tests/test_autonomous_runner.py tests/test_runner_honesty.py -v
 | 19 — Trade Manager execution boundary | ✅ DONE (inert config/audit) | `packages/trade_manager/execution_boundary.py` |
 | 20 — Trade Manager position monitor | ✅ DONE (inert reconciliation) | `packages/trade_manager/monitor.py` |
 | 21 — Trade Manager kill switch | ✅ DONE (inert decisions) | `packages/trade_manager/kill_switch.py` |
+| 22 — Trade Manager observer CLI | ✅ DONE (read-only artifacts) | `apps/observer/` |
 | 26 — Documentation | ✅ DONE | `bb87c1b` and `8149cd7` |
 
 ## Test scoreboard
 
-**293/293 passing** across 22 test files:
+**303/303 passing** across 23 test files:
 - `tests/test_autonomous_runner.py` (11 tests)
 - `tests/test_runner_honesty.py` (6 tests)
 - `tests/test_research_intake.py` (11 tests)
@@ -159,3 +160,4 @@ python -m pytest tests/test_autonomous_runner.py tests/test_runner_honesty.py -v
 - `tests/test_trade_manager_phase19.py` (22 tests)
 - `tests/test_trade_manager_phase20.py` (11 tests)
 - `tests/test_trade_manager_phase21.py` (12 tests)
+- `tests/test_observer_view_read_only.py` (10 tests)

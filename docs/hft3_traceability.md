@@ -124,8 +124,8 @@ This document maps each major requirement from the 26-phase spec to:
 | Phase 19 execution boundary | `packages/trade_manager/execution_boundary.py::TradeManagerExecutionConfig`; `TradeManager.prepare_execution_boundary()`; `configs/execution/adapter.yaml` | `tests/test_trade_manager_phase19.py` (22 tests) | Inert boundary audit payload with `can_route=False`; no adapter creation/routing |
 | Phase 20 position monitor | `packages/trade_manager/monitor.py::PositionSnapshot`; `ExpectedPosition`; `PositionReconciliationResult`; `PositionMonitorConfig` | `tests/test_trade_manager_phase20.py` (11 tests) | Inert position snapshots and reconciliation results; stale/missing/future/duplicate data is `UNKNOWN`; no adapter creation/routing/flattening |
 | Phase 21 kill switch | `packages/trade_manager/kill_switch.py::KillSwitchConfig`; `KillSwitchContext`; `KillSwitchDecision`; `KillSwitchEvent`; `configs/risk/kill_switch.yaml` | `tests/test_trade_manager_phase21.py` (12 tests) | Closed 12-trigger and 7-action inventory; Phase 20 mismatch/unknown maps to `position_mismatch`; requested actions only; no adapter creation/routing/cancel/flatten |
+| Phase 22 observer CLI | `apps/observer/read_model.py`; `apps/observer/cli.py` | `tests/test_observer_view_read_only.py` (10 tests) | With `PYTHONPATH=packages;apps`: `python -m observer view --session-id SESSION_ID --sessions-root artifacts/sessions`; missing artifacts shown unavailable; malformed/non-finite artifacts fail closed; no adapter creation/routing |
 | Real execution adapter routing | **STUB** (`live_broker.py` returns ORDER_REJECTED) | N/A | N/A |
-| Observer view | **NOT YET IMPLEMENTED** | N/A | N/A |
 | Session reporting | **NOT YET IMPLEMENTED** | N/A | N/A |
 
 ## Phase 24: Resumability and Failure Safety
@@ -175,11 +175,12 @@ This document maps each major requirement from the 26-phase spec to:
 | 19 — Trade Manager execution boundary | ✅ DONE (inert config/audit) | 22 |
 | 20 — Trade Manager position monitor | ✅ DONE (inert reconciliation) | 11 |
 | 21 — Trade Manager kill switch | ✅ DONE (inert decisions) | 12 |
-| 22-23 — Trade Manager remaining modules | ❌ NOT DONE | 0 |
+| 22 — Trade Manager observer CLI | ✅ DONE (read-only artifacts) | 10 |
+| 23 — Trade Manager session reporting | ❌ NOT DONE | 0 |
 | 24 — Resumability | ⚠️ PARTIAL | 1 |
-| 25 — 22 required tests | ⚠️ PARTIAL | 293 total |
+| 25 — 22 required tests | ⚠️ PARTIAL | 303 total |
 | 26 — Documentation | ✅ DONE | N/A |
 
-**Total: 293 tests passing across 22 test files.**
+**Total: 303 tests passing across 23 test files.**
 
-**22 of 26 phases complete. 2 partially done. 2 not started.**
+**23 of 26 phases complete. 2 partially done. 1 not started.**

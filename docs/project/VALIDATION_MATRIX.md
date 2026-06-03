@@ -15,7 +15,7 @@ git diff --check
 |---|---|---|
 | Phase 20 Position Monitor | `python -m pytest tests/test_trade_manager_phase20.py -q` | Must prove no routing or flattening |
 | Phase 21 Kill Switch | `python -m pytest tests/test_trade_manager_phase21.py -q` | Must prove decisions only, no adapter calls |
-| Phase 22 Observer CLI | `python -m pytest tests/test_observer_*.py -q` | Must prove read-only behavior |
+| Phase 22 Observer CLI | `$env:PYTHONPATH = "packages;apps"; python -m pytest tests/test_observer_view_read_only.py -q` | Must prove read-only behavior |
 | Phase 23 Session Reporting | `python -m pytest tests/test_trade_manager_phase23.py -q` | Must validate 16 artifacts |
 | Phase 24 Resumability Safety | `python -m pytest tests/test_autonomous_runner.py -q` plus new recovery tests | Must reject corrupted/partial runner artifacts and prove idempotent resume |
 | Phase 25 Required Tests | documented scoreboard command plus missing required tests | Must update this matrix and traceability |
@@ -33,7 +33,7 @@ Trade Manager integrated scope after all Phase 20-23 modules land:
 
 ```powershell
 $env:PYTHONPATH = "packages;apps"
-python -m pytest tests/test_trade_manager_phase14.py tests/test_trade_manager_phase15.py tests/test_trade_manager_phase16.py tests/test_trade_manager_phase17.py tests/test_trade_manager_phase18.py tests/test_trade_manager_phase19.py tests/test_trade_manager_phase20.py tests/test_trade_manager_phase21.py tests/test_trade_manager_phase22.py tests/test_trade_manager_phase23.py -q
+python -m pytest tests/test_trade_manager_phase14.py tests/test_trade_manager_phase15.py tests/test_trade_manager_phase16.py tests/test_trade_manager_phase17.py tests/test_trade_manager_phase18.py tests/test_trade_manager_phase19.py tests/test_trade_manager_phase20.py tests/test_trade_manager_phase21.py tests/test_observer_view_read_only.py tests/test_trade_manager_phase23.py -q
 ```
 
 After each phase merge, its test file must exist and be included. Missing expected phase tests block integration.
@@ -54,7 +54,7 @@ python -m economic_event_universe.cli validate
 
 ## Current Documented Scoreboard
 
-The current documented scoreboard is `293/293` across 22 files in `docs/hft3_autonomous_pipeline_runbook.md` and `docs/hft3_traceability.md`. Phase 25 must update this when new phase tests are added.
+The current documented scoreboard is `303/303` across 23 files in `docs/hft3_autonomous_pipeline_runbook.md` and `docs/hft3_traceability.md`. Phase 25 must update this when new phase tests are added.
 
 ## Slow And External Tests
 
