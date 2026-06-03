@@ -455,6 +455,19 @@ def cmd_l3_integrate(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_historical_cohort_benchmark(args: argparse.Namespace) -> int:
+    from equities_lane.src.prediction.historical_cohort_benchmark import run_historical_cohort_benchmark
+
+    result = run_historical_cohort_benchmark(
+        args.cohorts,
+        args.predictions,
+        args.output,
+        locked_test_year=args.locked_test_year,
+    )
+    print(json.dumps(result, indent=2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="equities_lane.pipeline")
     parser.add_argument("--config", default=str(_DEFAULT_CONFIG))
@@ -585,6 +598,13 @@ def main(argv: list[str] | None = None) -> int:
     p_l3_integrate.add_argument("--model-dir")
     p_l3_integrate.add_argument("--output")
     p_l3_integrate.set_defaults(func=cmd_l3_integrate)
+
+    p_hcb = sub.add_parser("historical-cohort-benchmark")
+    p_hcb.add_argument("--cohorts", required=True)
+    p_hcb.add_argument("--predictions", required=True)
+    p_hcb.add_argument("--output", required=True)
+    p_hcb.add_argument("--locked-test-year", type=int)
+    p_hcb.set_defaults(func=cmd_historical_cohort_benchmark)
 
     args = parser.parse_args(argv)
     return args.func(args)
