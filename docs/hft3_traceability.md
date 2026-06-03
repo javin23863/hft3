@@ -183,7 +183,7 @@ This document maps each major requirement from the 26-phase spec to:
 | 22 — Trade Manager observer CLI | ✅ DONE (read-only artifacts) | 10 |
 | 23 — Trade Manager session reporting | ✅ DONE (inert artifacts) | 10 |
 | 24 — Resumability | ✅ DONE | 14 |
-| 25 — Required-test closure | DONE | 5 |
+| 25 — Required-test closure | ✅ DONE | 5 |
 | 26 — Documentation | ✅ DONE | N/A |
 
 **Total: 352/352 passing across 26 test files.**
