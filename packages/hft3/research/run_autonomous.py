@@ -74,6 +74,7 @@ from . import _path_bootstrap  # noqa: F401  (side-effect: path setup)
 
 import json
 import logging
+import math
 import os
 import sys
 import time
@@ -110,6 +111,57 @@ PROMOTION_EVIDENCE_GATE_NAMES = frozenset({
     "artifact_completeness",
     "double_wf_correlation",
 })
+PROMOTION_EVIDENCE_GATE_SCHEMA = {
+    "data_resolution_eligibility": {
+        "gate_category": GateCategory.DATA_INTEGRITY.value,
+        "metric_name": "promotion_eligibility_impact",
+        "comparison_operator": "==",
+        "severity": {Severity.INFO.value, Severity.WARN.value},
+        "blocking_status": False,
+        "observed_values": {"eligible", "demoted"},
+        "numeric": False,
+    },
+    "monte_carlo_sharpe_p05": {
+        "gate_category": GateCategory.ROBUSTNESS.value,
+        "metric_name": "sharpe_p05",
+        "comparison_operator": ">=",
+        "severity": {Severity.BLOCKING.value},
+        "blocking_status": True,
+        "numeric": True,
+    },
+    "oos_max_drawdown": {
+        "gate_category": GateCategory.DRAWDOWN_TAIL_RISK.value,
+        "metric_name": "max_drawdown",
+        "comparison_operator": ">=",
+        "severity": {Severity.BLOCKING.value},
+        "blocking_status": True,
+        "numeric": True,
+    },
+    "walk_forward_pass": {
+        "gate_category": GateCategory.WALK_FORWARD.value,
+        "metric_name": "wf_passed",
+        "comparison_operator": "==",
+        "severity": {Severity.BLOCKING.value},
+        "blocking_status": True,
+        "numeric": True,
+    },
+    "artifact_completeness": {
+        "gate_category": GateCategory.ARTIFACT_COMPLETENESS.value,
+        "metric_name": "expected_files_present",
+        "comparison_operator": "==",
+        "severity": {Severity.BLOCKING.value},
+        "blocking_status": True,
+        "numeric": True,
+    },
+    "double_wf_correlation": {
+        "gate_category": GateCategory.WALK_FORWARD_CORRELATION.value,
+        "metric_name": "spearman",
+        "comparison_operator": ">=",
+        "severity": {Severity.BLOCKING.value},
+        "blocking_status": True,
+        "numeric": True,
+    },
+}
 
 
 # ---------- config schema (lightweight pydantic-free dataclass) ----------
@@ -969,16 +1021,55 @@ class AutonomousRunner:
             )
             raise RuntimeError(self.recovery_reason)
 
-    def _require_promotion_evidence(self) -> None:
-        gates_by_name = {g.get("gate_name"): g for g in self._load_robustness_gate_dicts()}
-        data_gate = gates_by_name.get("data_resolution_eligibility", {})
-        data_observed = data_gate.get("observed_value")
+    @staticmethod
+    def _finite_number(value: Any) -> bool:
+        return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(float(value))
+
+    def _promotion_evidence_gate_valid(self, gate: dict[str, Any]) -> bool:
+        name = gate.get("gate_name")
+        schema = PROMOTION_EVIDENCE_GATE_SCHEMA.get(str(name))
+        if schema is None:
+            return False
         if (
-            not PROMOTION_EVIDENCE_GATE_NAMES.issubset(gates_by_name)
-            or data_observed not in {"eligible", "demoted"}
+            gate.get("gate_category") != schema["gate_category"]
+            or gate.get("metric_name") != schema["metric_name"]
+            or gate.get("comparison_operator") != schema["comparison_operator"]
+            or gate.get("severity") not in schema["severity"]
+            or gate.get("blocking_status") is not schema["blocking_status"]
+            or gate.get("pass_fail") is not True
+        ):
+            return False
+        observed = gate.get("observed_value")
+        if schema["numeric"]:
+            threshold = gate.get("threshold")
+            if not self._finite_number(threshold) or not self._finite_number(observed):
+                return False
+            try:
+                GateResult(
+                    gate_name=str(name),
+                    gate_category=GateCategory(gate["gate_category"]),
+                    metric_name=str(gate["metric_name"]),
+                    threshold=threshold,
+                    observed_value=observed,
+                    comparison_operator=str(gate["comparison_operator"]),
+                    pass_fail=True,
+                    severity=Severity(gate["severity"]),
+                    blocking_status=bool(gate["blocking_status"]),
+                )
+            except (TypeError, ValueError):
+                return False
+            return True
+        return observed in schema["observed_values"]
+
+    def _require_promotion_evidence(self) -> None:
+        gate_dicts = self._load_robustness_gate_dicts()
+        gate_names = [g.get("gate_name") for g in gate_dicts]
+        gates_by_name = {g.get("gate_name"): g for g in gate_dicts}
+        if (
+            len(gate_names) != len(set(gate_names))
+            or not PROMOTION_EVIDENCE_GATE_NAMES.issubset(gates_by_name)
             or any(
-                gates_by_name[name].get("pass_fail") is not True
-                or gates_by_name[name].get("observed_value") is None
+                not self._promotion_evidence_gate_valid(gates_by_name[name])
                 for name in PROMOTION_EVIDENCE_GATE_NAMES
             )
         ):

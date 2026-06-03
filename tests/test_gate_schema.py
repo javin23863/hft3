@@ -67,6 +67,31 @@ def test_gate_schema_round_trip() -> None:
     assert parsed == d
 
 
+def test_gate_result_rejects_non_finite_numeric_values() -> None:
+    with pytest.raises(ValueError, match="finite"):
+        GateResult(
+            gate_name="nan_gate",
+            gate_category=GateCategory.ROBUSTNESS,
+            metric_name="m",
+            threshold=0.5,
+            observed_value=float("nan"),
+            comparison_operator=">=",
+            pass_fail=True,
+            severity=Severity.BLOCKING,
+        )
+    with pytest.raises(ValueError, match="finite"):
+        GateResult(
+            gate_name="inf_gate",
+            gate_category=GateCategory.ROBUSTNESS,
+            metric_name="m",
+            threshold=float("inf"),
+            observed_value=1.0,
+            comparison_operator=">=",
+            pass_fail=True,
+            severity=Severity.BLOCKING,
+        )
+
+
 # ---------- all 17 categories registered ----------
 
 
@@ -215,6 +240,20 @@ def test_write_robustness_gates_json_atomic(tmp_path: Path) -> None:
     assert payload["summary"]["passed_overall"] is True
     # No leftover .tmp file
     assert not list(tmp_path.glob("robustness_gates.json.*.tmp"))
+
+
+def test_write_robustness_gates_json_rejects_non_finite_extra(tmp_path: Path) -> None:
+    gate = GateResult(
+        gate_name="g1", gate_category=GateCategory.ROBUSTNESS,
+        metric_name="m", threshold=0.5, observed_value=0.7,
+        comparison_operator=">=", pass_fail=True,
+        severity=Severity.BLOCKING, reason_code="G1_OK",
+        extra={"bad": float("nan")},
+    )
+
+    with pytest.raises(ValueError):
+        write_robustness_gates_json(tmp_path / "robustness_gates.json", [gate])
+    assert not (tmp_path / "robustness_gates.json").exists()
 
 
 # ---------- promotion gate emits gates list ----------

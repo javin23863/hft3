@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import enum
 import json
+import math
 from dataclasses import asdict, dataclass, field
 from typing import Any, Optional
 
@@ -87,6 +88,9 @@ class GateResult:
     extra: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        for field_name, value in (("threshold", self.threshold), ("observed_value", self.observed_value)):
+            if isinstance(value, (int, float)) and not isinstance(value, bool) and not math.isfinite(float(value)):
+                raise ValueError(f"{field_name} must be finite, got {value!r}")
         if self.comparison_operator not in COMPARISON_OPERATORS:
             raise ValueError(
                 f"comparison_operator must be one of {sorted(COMPARISON_OPERATORS)}, "
@@ -110,7 +114,7 @@ class GateResult:
         return d
 
     def to_json(self) -> str:
-        return json.dumps(self.to_dict(), indent=2, sort_keys=True)
+        return json.dumps(self.to_dict(), indent=2, sort_keys=True, allow_nan=False)
 
 
 def _check(observed: float, threshold: float, op: str, expected_pass: bool) -> None:
@@ -208,11 +212,20 @@ def write_robustness_gates_json(
     fd, tmp_name = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(payload, f, indent=2, sort_keys=True, ensure_ascii=False)
+            json.dump(payload, f, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False)
             f.write("\n")
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp_name, path)
+        try:
+            flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+            dir_fd = os.open(path.parent, flags)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
+        except OSError:
+            pass
     except Exception:
         try:
             os.unlink(tmp_name)

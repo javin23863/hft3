@@ -251,6 +251,36 @@ def test_promote_writes_registry_atomically(tmp_path: Path) -> None:
                     gate["pass_fail"] = True
                     break
             robustness_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        elif gates == "missing_threshold":
+            _write_passing_robustness_gates(
+                runner.run_dir / "robustness_gates.json", run_id, runner.state.git_sha
+            )
+            robustness_path = runner.run_dir / "robustness_gates.json"
+            payload = json.loads(robustness_path.read_text(encoding="utf-8"))
+            for gate in payload["gates"]:
+                if gate["gate_name"] == "monte_carlo_sharpe_p05":
+                    gate.pop("threshold")
+                    break
+            robustness_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        elif gates == "wrong_category":
+            _write_passing_robustness_gates(
+                runner.run_dir / "robustness_gates.json", run_id, runner.state.git_sha
+            )
+            robustness_path = runner.run_dir / "robustness_gates.json"
+            payload = json.loads(robustness_path.read_text(encoding="utf-8"))
+            for gate in payload["gates"]:
+                if gate["gate_name"] == "monte_carlo_sharpe_p05":
+                    gate["gate_category"] = "data_integrity"
+                    break
+            robustness_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        elif gates == "duplicate_gate":
+            _write_passing_robustness_gates(
+                runner.run_dir / "robustness_gates.json", run_id, runner.state.git_sha
+            )
+            robustness_path = runner.run_dir / "robustness_gates.json"
+            payload = json.loads(robustness_path.read_text(encoding="utf-8"))
+            payload["gates"].append(dict(payload["gates"][-1]))
+            robustness_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         scoring = {
             "decision": "PROMOTE",
             "reason": "test_forced",
@@ -285,6 +315,21 @@ def test_promote_writes_registry_atomically(tmp_path: Path) -> None:
     runner.stage_score_and_decide = lambda: force_promote(runner, "P5", gates="forged_data")  # type: ignore[assignment]
     assert runner.run() == 3
     assert not (tmp_path / "artifacts" / "P5" / "registry_update.json").exists()
+
+    runner = AutonomousRunner(config=cfg, root=tmp_path, run_id="P6")
+    runner.stage_score_and_decide = lambda: force_promote(runner, "P6", gates="missing_threshold")  # type: ignore[assignment]
+    assert runner.run() == 3
+    assert not (tmp_path / "artifacts" / "P6" / "registry_update.json").exists()
+
+    runner = AutonomousRunner(config=cfg, root=tmp_path, run_id="P7")
+    runner.stage_score_and_decide = lambda: force_promote(runner, "P7", gates="wrong_category")  # type: ignore[assignment]
+    assert runner.run() == 3
+    assert not (tmp_path / "artifacts" / "P7" / "registry_update.json").exists()
+
+    runner = AutonomousRunner(config=cfg, root=tmp_path, run_id="P8")
+    runner.stage_score_and_decide = lambda: force_promote(runner, "P8", gates="duplicate_gate")  # type: ignore[assignment]
+    assert runner.run() == 3
+    assert not (tmp_path / "artifacts" / "P8" / "registry_update.json").exists()
 
     runner = AutonomousRunner(config=cfg, root=tmp_path, run_id="P3")
     runner.stage_score_and_decide = lambda: force_promote(runner, "P3", gates="passing")  # type: ignore[assignment]
