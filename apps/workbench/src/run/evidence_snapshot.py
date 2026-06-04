@@ -67,13 +67,32 @@ LANE_RUN_SOURCES = {
     "options": "options",
 }
 
+ALL_LANES_TERMINAL_STATES = {
+    "EXECUTED",
+    "BLOCKED_MISSING_DATA",
+    "BLOCKED_ENDPOINT",
+    "BLOCKED_VALIDATION",
+    "BLOCKED_ROBUSTNESS",
+    "BLOCKED_LATENCY",
+    "QUARANTINED",
+    "PROMOTED",
+}
+
 
 def _source_lane(source: str) -> str:
     return source_to_lane(source)
 
 
 def workbench_run_sources() -> list[str]:
-    return ["crypto_lane", "cme_rithmic", "equities", "options", "workbench_campaign", "autonomous"]
+    return ["all_lanes", "cme_rithmic", "equities", "options", "workbench_campaign", "autonomous"]
+
+
+def _active_run_path(repo: Path) -> Path:
+    return repo / "runtime" / "workbench" / "active_run.json"
+
+
+def _active_run_manifest(repo: Path) -> dict[str, Any]:
+    return read_json(_active_run_path(repo))
 
 
 def _lane_registry_snapshot(repo: Path) -> dict[str, Any]:
@@ -3004,15 +3023,207 @@ def _autonomous_snapshot(repo: Path) -> RunEvidenceSnapshot:
     )
 
 
+def _all_lanes_snapshot(repo: Path) -> RunEvidenceSnapshot:
+    active = _active_run_manifest(repo)
+    lane_registry = _lane_registry_snapshot(repo)
+    if not active:
+        return RunEvidenceSnapshot(
+            source="all_lanes",
+            state="idle",
+            current_stage="fresh_start_required",
+            root=str(repo / "runtime" / "workbench"),
+            stages=[
+                {"name": "fresh_start", "status": "missing"},
+                {"name": "all_lane_execution", "status": "blocked"},
+            ],
+            registry={"lanes": lane_registry.get("rows", []), "lane_registry": lane_registry},
+            decision={
+                "action": "BLOCKED",
+                "reason": "No active all-lane run manifest exists. Run fresh-start before all-model testing.",
+                "live_registry_ready": False,
+                "blocking_gates": [
+                    {
+                        "gate": "active_run_manifest",
+                        "status": "MISSING",
+                        "reason": "runtime/workbench/active_run.json is missing.",
+                    }
+                ],
+            },
+            system={
+                "lane_registry": lane_registry,
+                "active_run": {},
+                "artifact_reuse_policy": "active_run_id_only",
+            },
+        )
+
+    run_id = str(active.get("run_id") or "")
+    run_dir = repo / "runtime" / "workbench" / "all_lanes" / run_id if run_id else repo / "runtime" / "workbench" / "all_lanes"
+    plan = read_json(run_dir / "plan.json") or read_json(run_dir / "all_lanes_plan.json")
+    summary = read_json(run_dir / "summary.json")
+    model_rows = (
+        plan.get("models")
+        or plan.get("model_plan")
+        or summary.get("models")
+        or summary.get("model_states")
+        or []
+    )
+    if isinstance(model_rows, dict):
+        model_rows = list(model_rows.values())
+    model_rows = [dict(row) for row in model_rows if isinstance(row, dict)]
+    terminal_counts = {state: 0 for state in sorted(ALL_LANES_TERMINAL_STATES)}
+    missing_state_rows: list[dict[str, Any]] = []
+    invalid_state_rows: list[dict[str, Any]] = []
+    lane_counts: dict[str, int] = {}
+    for row in model_rows:
+        state = str(row.get("terminal_state") or row.get("state") or row.get("status") or "")
+        lane = str(row.get("lane") or row.get("resolved_lane") or "unknown")
+        lane_counts[lane] = lane_counts.get(lane, 0) + 1
+        if not state:
+            missing_state_rows.append(row)
+        elif state not in ALL_LANES_TERMINAL_STATES:
+            invalid_state_rows.append(row)
+        else:
+            terminal_counts[state] += 1
+
+    blocking_gates: list[dict[str, Any]] = []
+    if not run_id:
+        blocking_gates.append(
+            {
+                "gate": "active_run_id",
+                "status": "MISSING",
+                "reason": "Active run manifest does not contain run_id.",
+            }
+        )
+    if not model_rows:
+        blocking_gates.append(
+            {
+                "gate": "all_lanes_model_plan",
+                "status": "MISSING",
+                "reason": "Active all-lane run has not emitted a model execution plan yet.",
+            }
+        )
+    if missing_state_rows:
+        blocking_gates.append(
+            {
+                "gate": "terminal_state_contract",
+                "status": "BLOCKING",
+                "reason": f"{len(missing_state_rows)} model rows are missing terminal_state.",
+            }
+        )
+    if invalid_state_rows:
+        blocking_gates.append(
+            {
+                "gate": "terminal_state_contract",
+                "status": "BLOCKING",
+                "reason": f"{len(invalid_state_rows)} model rows have invalid terminal_state.",
+            }
+        )
+
+    state = str(summary.get("state") or active.get("state") or ("blocked" if blocking_gates else "planned"))
+    planned = len(model_rows)
+    executed = terminal_counts["EXECUTED"] + terminal_counts["PROMOTED"] + terminal_counts["QUARANTINED"]
+    blocked = sum(
+        count
+        for key, count in terminal_counts.items()
+        if key.startswith("BLOCKED_")
+    )
+    return RunEvidenceSnapshot(
+        source="all_lanes",
+        run_id=run_id,
+        state=state,
+        current_stage=str(summary.get("current_stage") or active.get("current_stage") or "awaiting_all_lane_execution"),
+        started_at=str(active.get("created_at_utc") or active.get("started_at") or ""),
+        finished_at=str(summary.get("finished_at") or ""),
+        root=str(run_dir),
+        stages=[
+            {"name": "active_run_manifest", "status": "observed" if run_id else "missing"},
+            {"name": "lane_registry", "status": lane_registry.get("status", "UNKNOWN")},
+            {"name": "model_execution_plan", "status": "observed" if model_rows else "missing"},
+            {"name": "pit_feature_audit", "status": summary.get("pit_feature_audit_status", "pending")},
+            {"name": "backtest_replay", "status": summary.get("backtest_status", "pending")},
+            {"name": "robustness_wfc", "status": summary.get("robustness_status", "pending")},
+            {"name": "latency_operating_envelope", "status": summary.get("latency_status", "pending")},
+            {"name": "decision", "status": summary.get("decision_status", "pending")},
+        ],
+        artifacts={
+            "active_run": str(_active_run_path(repo)),
+            "active_run_lock": str(repo / "runtime" / "workbench" / "active_run.lock"),
+            "all_lanes_plan": str(run_dir / "plan.json"),
+            "all_lanes_summary": str(run_dir / "summary.json"),
+            "rejected_stale_artifacts": str(run_dir / "rejected_stale_artifacts.json"),
+        },
+        registry={
+            "lanes": lane_registry.get("rows", []),
+            "lane_registry": lane_registry,
+            "planned_models": model_rows,
+            "terminal_states": sorted(ALL_LANES_TERMINAL_STATES),
+        },
+        data={
+            "planned_model_count": planned,
+            "lane_counts": lane_counts,
+            "source_data_reused": active.get("source_data_reused", True),
+            "previous_run_artifacts_reused": active.get("previous_run_artifacts_reused", False),
+        },
+        backtest={
+            "rows": model_rows,
+            "summary": {
+                "planned": planned,
+                "executed": executed,
+                "blocked": blocked,
+                "terminal_counts": terminal_counts,
+            },
+        },
+        diagnostics={
+            "leakage_boundary": {
+                "artifact_reuse_policy": active.get("artifact_reuse_policy", "active_run_id_only"),
+                "missing_terminal_state_count": len(missing_state_rows),
+                "invalid_terminal_state_count": len(invalid_state_rows),
+            },
+            "rejected_stale_artifacts": read_json(run_dir / "rejected_stale_artifacts.json"),
+        },
+        robustness={
+            "status": summary.get("robustness_status", "pending"),
+            "wfc": summary.get("wfc", {}),
+            "pending": summary.get("robustness_pending_checks", []),
+            "failed": summary.get("robustness_failed_checks", []),
+        },
+        decision={
+            "action": summary.get("decision_action") or ("BLOCKED" if blocking_gates else "QUARANTINE"),
+            "reason": summary.get("decision_reason") or (
+                "Active all-lane run is waiting for model evidence."
+                if blocking_gates
+                else "All-lane model plan is present; promotion remains gated by observed evidence."
+            ),
+            "live_registry_ready": bool(summary.get("live_registry_ready", False)),
+            "blocking_gates": blocking_gates + list(summary.get("blocking_gates") or []),
+            "terminal_counts": terminal_counts,
+        },
+        reports={
+            "summary": str(run_dir / "summary.json"),
+            "report": str(run_dir / "report.md"),
+        },
+        system={
+            "active_run": active,
+            "lane_registry": lane_registry,
+            "all_lanes_summary": summary,
+            "artifact_reuse_policy": active.get("artifact_reuse_policy", "active_run_id_only"),
+        },
+    )
+
+
 def load_run_evidence(repo: Path, source: str, *, campaign_id: str = "") -> RunEvidenceSnapshot:
-    if source == "workbench_campaign":
+    if source == "all_lanes":
+        snapshot = _all_lanes_snapshot(repo)
+    elif source == "workbench_campaign":
         snapshot = _workbench_snapshot(repo, campaign_id)
     elif source == "autonomous":
         snapshot = _autonomous_snapshot(repo)
     elif source in LANE_RUN_SOURCES:
         snapshot = _lane_source_snapshot(repo, source)
-    else:
+    elif source == "crypto_lane":
         snapshot = _crypto_snapshot(repo)
+    else:
+        snapshot = _all_lanes_snapshot(repo)
     lane = _source_lane(snapshot.source)
     lane_registry = _lane_registry_snapshot(repo)
     selected_feature_root = Path(snapshot.root) if snapshot.root and Path(snapshot.root).is_dir() else None
@@ -3086,22 +3297,22 @@ def load_run_evidence(repo: Path, source: str, *, campaign_id: str = "") -> RunE
 
 
 def default_source(repo: Path) -> str:
+    if _active_run_path(repo).is_file():
+        return "all_lanes"
     crypto_path = repo / "runtime" / "workbench" / "crypto_smoke" / "latest_status.json"
     crypto_status = read_json(crypto_path)
     if crypto_status.get("state") == "running":
-        return "crypto_lane"
+        return "all_lanes"
     runs = workbench_runs_dir_for(repo)
     for path in runs.glob("*/status.json") if runs.is_dir() else []:
         status = read_json(path)
         if str(status.get("state", "")).lower() == "running":
             return "workbench_campaign"
     choices: list[tuple[float, str]] = []
-    if crypto_path.is_file():
-        choices.append((_mtime(crypto_path), "crypto_lane"))
     latest_campaign = _latest_dir_with(runs, "summary.json")
     if latest_campaign is not None:
         choices.append((_mtime(latest_campaign / "summary.json"), "workbench_campaign"))
     latest_autonomous = _latest_dir_with(repo / "artifacts" / "runs", "manifest.json")
     if latest_autonomous is not None:
         choices.append((_mtime(latest_autonomous / "manifest.json"), "autonomous"))
-    return max(choices, default=(0.0, "crypto_lane"))[1]
+    return max(choices, default=(0.0, "all_lanes"))[1]

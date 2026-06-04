@@ -135,6 +135,8 @@ def run_defensive_ablation(
     event_id: str,
     npz_path: Path,
     latency_ms: float | None,
+    *,
+    ablation_dir: Path | None = None,
 ) -> Tuple[bool, str, Dict[str, Any]]:
     from backtest_pipeline.src.pdf_hybrid_ablation import run_defensive_ablation_matrix
 
@@ -166,7 +168,7 @@ def run_defensive_ablation(
             errors.append(f"{mode.get('mode_id')}: {metrics['error']}")
 
     ablation_mod = _load_ablation_writer()
-    ablation_mod.write_ablation_report(ABLATION_DIR, matrix, event_meta)
+    ablation_mod.write_ablation_report(ablation_dir or ABLATION_DIR, matrix, event_meta)
 
     if errors:
         return False, "; ".join(errors), {"modes": summary_rows, "matrix": matrix}
@@ -180,6 +182,8 @@ def run_hybrid_backtest(
     event_id: str,
     npz_path: Path,
     latency_ms: float | None,
+    *,
+    card_dir: Path | None = None,
 ) -> Tuple[bool, str, Dict[str, Any]]:
     mod = _load_pdf_hybrid_replay_module()
     ms, src, note = resolve_latency(latency_ms)
@@ -202,7 +206,7 @@ def run_hybrid_backtest(
     if "error" in result:
         return False, str(result["error"]), payload
 
-    mod.write_research_card(CARD_DIR, payload, event_meta)
+    mod.write_research_card(card_dir or CARD_DIR, payload, event_meta)
     detail = (
         f"steps={result.get('steps')} trades={result.get('num_trades')} "
         f"balance={result.get('balance')} latency={ms}ms ({src})"
@@ -216,6 +220,8 @@ def run_after_action_step(
     hybrid_payload: Dict[str, Any],
     ablation_bundle: Dict[str, Any],
     latency_ms: float | None,
+    *,
+    aar_dir: Path | None = None,
 ) -> Tuple[bool, str, Dict[str, Any]]:
     if not _after_action_allowed():
         return True, "skipped (after-action disabled on this host)", {"llm_status": "skipped_host"}
@@ -224,9 +230,10 @@ def run_after_action_step(
     from data_layer.pipeline.after_action import run_after_action_report
 
     ms, src, _ = resolve_latency(latency_ms)
+    output_dir = aar_dir or HYBRID_AAR_DIR
     matrix = ablation_bundle.get("matrix") if ablation_bundle else None
     write_hybrid_aar_artifacts(
-        HYBRID_AAR_DIR,
+        output_dir,
         event_id=event_id,
         symbol=symbol,
         hybrid_payload=hybrid_payload,
@@ -235,13 +242,13 @@ def run_after_action_step(
         latency_source=src,
     )
     try:
-        meta = run_after_action_report(HYBRID_AAR_DIR, _REPO)
+        meta = run_after_action_report(output_dir, _REPO)
     except Exception as exc:
         logging.getLogger(__name__).warning("after-action report failed: %s", exc)
         return False, str(exc), {"llm_status": "failed", "after_action_failed": str(exc)}
 
     status = str(meta.get("llm_status", "unknown"))
-    report_path = HYBRID_AAR_DIR / "after_action_report.md"
+    report_path = output_dir / "after_action_report.md"
     if report_path.is_file():
         detail = f"llm_status={status} report written"
     else:
@@ -249,9 +256,10 @@ def run_after_action_step(
     return True, detail, meta
 
 
-def validate_card(min_trades: int = 0) -> Tuple[bool, str]:
-    result_path = CARD_DIR / "result.json"
-    report_path = CARD_DIR / "report.md"
+def validate_card(min_trades: int = 0, *, card_dir: Path | None = None) -> Tuple[bool, str]:
+    output_dir = card_dir or CARD_DIR
+    result_path = output_dir / "result.json"
+    report_path = output_dir / "report.md"
     if not result_path.is_file() or not report_path.is_file():
         return False, "research card missing"
     card = json.loads(result_path.read_text(encoding="utf-8"))
@@ -294,6 +302,7 @@ def main() -> int:
         default="hybrid",
         help="hybrid: PDF_MODEL_4 only (default); smoke/catalog: delegate to run_full_pipeline_gate.py",
     )
+    parser.add_argument("--run-id", default=None, help="Run-id scoped artifact folder/report id for delegated smoke/catalog tiers")
     args = parser.parse_args()
 
     if args.tier in ("smoke", "catalog"):
@@ -308,6 +317,8 @@ def main() -> int:
             args.event_id,
             "--symbol",
             args.symbol,
+            "--run-id",
+            args.run_id or "full_pipeline_" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"),
             "--min-trades",
             str(args.min_trades),
         ]

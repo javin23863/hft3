@@ -18,7 +18,7 @@ Non-executed models get manifest rows with `NOT_RUN_SMOKE` (smoke) or `NOT_RUN` 
 python scripts/run_full_pipeline_gate.py --tier smoke --event-id CPI_2024_09_11_TIGHT --symbol MES.v.0
 
 # Nightly / manual full catalog
-python scripts/run_full_pipeline_gate.py --tier catalog --event-id CPI_2024_09_11_TIGHT --symbol MES.v.0
+python scripts/run_full_pipeline_gate.py --tier catalog --event-id CPI_2024_09_11_TIGHT --symbol MES.v.0 --run-id FULL_CATALOG_20260605T000000Z
 
 # Skip slow hybrid block (MBO fan-out only)
 python scripts/run_full_pipeline_gate.py --tier smoke --skip-hybrid --skip-unit-tests
@@ -28,10 +28,10 @@ python scripts/run_full_pipeline_gate.py --tier smoke --skip-hybrid --skip-unit-
 
 | Path | Content |
 |------|---------|
-| `runtime/reports/full_pipeline_gate.json` | Gate manifest: `models[]` (always len 55), `validation_scope`, steps |
-| `research_cards/pipeline_runs/report.md` | Master table with **backend honesty** column |
-| `research_cards/pipeline_runs/result.json` | Machine-readable copy |
-| `research_cards/pipeline_runs/{MODEL}_{event_id}/` | Per-model artifact dirs |
+| `runtime/reports/full_pipeline_gate/<run_id>/manifest.json` | Gate manifest: `models[]` (always len 55), `validation_scope`, steps |
+| `research_cards/pipeline_runs/<run_id>/report.md` | Master table with **backend honesty** column |
+| `research_cards/pipeline_runs/<run_id>/result.json` | Machine-readable copy |
+| `research_cards/pipeline_runs/<run_id>/{MODEL}_{event_id}/` | Per-model artifact dirs |
 
 ## Engine honesty
 

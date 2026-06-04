@@ -23,6 +23,7 @@ from workbench.src.run.evidence_snapshot import (
     _positive_proxy_pnl_count,
     _trade_manager_snapshot,
     load_run_evidence,
+    default_source,
     workbench_run_sources,
 )
 from workbench.src.run.feature_fabric import ensure_catalog_feature_fabric
@@ -101,11 +102,66 @@ def test_crypto_snapshot_surfaces_bitcoin_edge_packet_gate() -> None:
 def test_workbench_run_sources_cover_registered_model_lanes() -> None:
     sources = workbench_run_sources()
 
-    assert "crypto_lane" in sources
+    assert "all_lanes" in sources
+    assert "crypto_lane" not in sources
     assert "cme_rithmic" in sources
     assert "equities" in sources
     assert "options" in sources
     assert "autonomous" in sources
+
+
+def test_active_run_manifest_makes_all_lanes_default(tmp_path: Path) -> None:
+    active = tmp_path / "runtime" / "workbench" / "active_run.json"
+    active.parent.mkdir(parents=True)
+    active.write_text('{"run_id":"fresh_all_lanes_1","scope":"all_lanes"}', encoding="utf-8")
+    old_smoke = tmp_path / "runtime" / "workbench" / "crypto_smoke" / "latest_status.json"
+    old_smoke.parent.mkdir(parents=True)
+    old_smoke.write_text('{"run_id":"old_smoke","state":"completed"}', encoding="utf-8")
+
+    assert default_source(tmp_path) == "all_lanes"
+
+
+def test_all_lanes_snapshot_requires_active_run_and_terminal_states(tmp_path: Path) -> None:
+    snapshot = load_run_evidence(tmp_path, "all_lanes")
+    assert snapshot.source == "all_lanes"
+    assert snapshot.current_stage == "fresh_start_required"
+    assert any(gate["gate"] == "active_run_manifest" for gate in snapshot.decision["blocking_gates"])
+
+    active = tmp_path / "runtime" / "workbench" / "active_run.json"
+    active.parent.mkdir(parents=True, exist_ok=True)
+    active.write_text(
+        json.dumps(
+            {
+                "run_id": "fresh_all_lanes_1",
+                "scope": "all_lanes",
+                "artifact_reuse_policy": "active_run_id_only",
+                "source_data_reused": True,
+                "previous_run_artifacts_reused": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    run_dir = tmp_path / "runtime" / "workbench" / "all_lanes" / "fresh_all_lanes_1"
+    run_dir.mkdir(parents=True)
+    (run_dir / "plan.json").write_text(
+        json.dumps(
+            {
+                "run_id": "fresh_all_lanes_1",
+                "models": [
+                    {"model_id": "A", "lane": "crypto", "terminal_state": "BLOCKED_MISSING_DATA"},
+                    {"model_id": "B", "lane": "equities", "terminal_state": "EXECUTED"},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    snapshot = load_run_evidence(tmp_path, "all_lanes")
+    assert snapshot.run_id == "fresh_all_lanes_1"
+    assert snapshot.backtest["summary"]["planned"] == 2
+    assert snapshot.decision["terminal_counts"]["EXECUTED"] == 1
+    assert snapshot.decision["terminal_counts"]["BLOCKED_MISSING_DATA"] == 1
+    assert not snapshot.decision["blocking_gates"]
 
 
 def test_cme_rithmic_snapshot_surfaces_paper_endpoint_readiness() -> None:

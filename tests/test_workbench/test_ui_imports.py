@@ -234,16 +234,24 @@ def test_workbench_ui_has_no_stale_operator_surface_strings() -> None:
             assert pattern not in text, f"{path.name} must not contain {pattern!r}"
 
 
-def test_autonomous_panel_is_registry_and_status_driven() -> None:
-    from workbench.ui import autonomous_panel
+def test_workbench_cli_removes_crypto_smoke_operator_command() -> None:
+    cli_src = (Path(__file__).resolve().parents[2] / "apps" / "workbench" / "__main__.py").read_text(
+        encoding="utf-8"
+    )
 
-    src = inspect.getsource(autonomous_panel)
-    assert "discover_candidates" in src
-    assert "latest_status_path" in src
-    assert "Run All Crypto Candidates" in src
-    assert "Run smoke reports" in src
-    assert "crypto_h1_basis_compression" not in src
-    assert "Candidate filter" not in src
+    assert "crypto-smoke" not in cli_src
+    assert "fresh-start" in cli_src
+    assert "all-lanes" in cli_src
+
+
+def test_autonomous_panel_is_registry_and_status_driven() -> None:
+    app_src = (Path(__file__).resolve().parents[2] / "apps" / "workbench" / "ui" / "app.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "render_crypto_run_controls" not in app_src
+    assert "crypto-smoke" not in app_src
+    assert "all-lanes --run-id" in app_src
 
 
 def test_autonomous_panel_latest_reports_are_run_local(tmp_path) -> None:
@@ -273,13 +281,14 @@ def test_autonomous_panel_latest_reports_are_run_local(tmp_path) -> None:
 
 def test_app_tabs_use_shared_run_evidence_snapshot() -> None:
     import workbench.ui.app as app
-    from workbench.ui import autonomous_panel, evidence_panels
+    from workbench.ui import evidence_panels
 
     src = inspect.getsource(app)
     assert "load_run_evidence" in src
     assert "workbench_run_sources()" in src
     assert 'st.query_params.get("source"' in src
-    assert src.index("render_crypto_run_controls(REPO)") < src.index("snapshot = load_run_evidence")
+    assert "render_crypto_run_controls" not in src
+    assert "all-lanes --run-id" in src
     assert "render_backtest_evidence(snapshot)" in src
     assert "render_latency_evidence(snapshot)" in src
     assert "render_signal_diagnostics(snapshot)" in src
@@ -315,7 +324,8 @@ def test_app_tabs_use_shared_run_evidence_snapshot() -> None:
     assert "Leakage controls" in panel_src
     assert "Smoke passes" in panel_src
     assert "Self-Learning Loop" in panel_src
-    assert "LLM can promote" in panel_src
+    assert "Parameter learning is controlled by config bounds" in panel_src
+    assert "Analyst can promote" in panel_src
     assert "After-Action Packet" in panel_src
     assert "AlphaGeometry/OpenFoundry Relationship Review" in panel_src
     assert "Failed Required Checks" in panel_src
@@ -333,11 +343,7 @@ def test_app_tabs_use_shared_run_evidence_snapshot() -> None:
     assert "Top diagnostic candidate" not in panel_src
     assert "Candidate ranking" not in panel_src
     assert "research_pass_count" not in panel_src
-    autonomous_src = inspect.getsource(autonomous_panel)
-    assert "Smoke leader" in autonomous_src
-    assert "Smoke triage order" in autonomous_src
-    assert "Research leader" not in autonomous_src
-    assert "Candidate ranking" not in autonomous_src
+    assert "crypto-smoke" not in src
 
 
 def test_wallet_panel_is_guarded_operator_surface() -> None:
@@ -375,11 +381,12 @@ def test_verify_command_does_not_overclaim_full_pipeline_readiness() -> None:
     assert "Workbench preflight check" in verify_src
 
 
-def test_crypto_smoke_cli_blocked_state_is_not_success() -> None:
+def test_crypto_smoke_cli_is_not_a_production_workbench_command() -> None:
     repo = Path(__file__).resolve().parents[2]
     main_src = (repo / "apps" / "workbench" / "__main__.py").read_text(encoding="utf-8")
 
-    assert 'result.get("state") == "completed"' in main_src
+    assert "crypto-smoke" not in main_src
+    assert 'result.get("state") == "completed"' not in main_src
     assert '{"completed", "blocked"}' not in main_src
 
 

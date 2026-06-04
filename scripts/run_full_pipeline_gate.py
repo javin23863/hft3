@@ -84,13 +84,21 @@ def _run_hybrid_block(
     min_trades: int,
 ) -> Tuple[bool, str, Dict[str, Any]]:
     hg = _load_hybrid_gate()
+    card_dir = PIPELINE_RUNS / f"HYBRID_EXECUTION_{event_id}"
+    ablation_dir = PIPELINE_RUNS / f"HYBRID_EXECUTION_{event_id}_ablation"
+    aar_dir = PIPELINE_RUNS / f"HYBRID_EXECUTION_{event_id}_aar"
 
     ablation_bundle: Dict[str, Any] = {}
     if not skip_ablation:
-        ok, detail, ablation_bundle = hg.run_defensive_ablation(event_id, npz, latency_ms)
+        ok, detail, ablation_bundle = hg.run_defensive_ablation(
+            event_id,
+            npz,
+            latency_ms,
+            ablation_dir=ablation_dir,
+        )
         if not ok:
             return False, detail, {}
-    ok, detail, payload = hg.run_hybrid_backtest(event_id, npz, latency_ms)
+    ok, detail, payload = hg.run_hybrid_backtest(event_id, npz, latency_ms, card_dir=card_dir)
     if not ok:
         return False, detail, {}
     res = payload.get("result") or {}
@@ -99,7 +107,12 @@ def _run_hybrid_block(
         return False, f"hybrid num_trades={trades} < min_trades={min_trades}", payload
     if not skip_after_action:
         aa_ok, aa_detail, _ = hg.run_after_action_step(
-            event_id, symbol, payload, ablation_bundle, latency_ms
+            event_id,
+            symbol,
+            payload,
+            ablation_bundle,
+            latency_ms,
+            aar_dir=aar_dir,
         )
         if not aa_ok:
             return False, aa_detail, {"payload": payload}
@@ -108,7 +121,7 @@ def _run_hybrid_block(
         "model_id": "HYBRID_EXECUTION",
         "engine_kind": rt.engine_kind,
         "status": "PASS",
-        "artifact_dir": _relative(hg.CARD_DIR),
+        "artifact_dir": _relative(card_dir),
         "num_trades": trades,
         "net_pnl_usd": float(res.get("balance") or 0.0),
         "backend_label": rt.backend_label,
@@ -329,10 +342,12 @@ def _run_pdf_options(event_id: str) -> Dict[str, Any]:
 
 
 def main() -> int:
+    global PIPELINE_RUNS
     parser = argparse.ArgumentParser(description="Full 55-model catalog pipeline gate")
     parser.add_argument("--tier", choices=("smoke", "catalog"), default="smoke")
     parser.add_argument("--event-id", default=DEFAULT_EVENT)
     parser.add_argument("--symbol", default=DEFAULT_SYMBOL)
+    parser.add_argument("--run-id", default=None, help="Run-id scoped artifact folder/report id")
     parser.add_argument("--latency-ms", type=float, default=None)
     parser.add_argument("--skip-hybrid", action="store_true")
     parser.add_argument("--skip-unit-tests", action="store_true")
@@ -340,6 +355,8 @@ def main() -> int:
     parser.add_argument("--skip-after-action", action="store_true")
     parser.add_argument("--min-trades", type=int, default=1)
     args = parser.parse_args()
+    run_id = args.run_id or "full_pipeline_" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    PIPELINE_RUNS = PIPELINE_RUNS / run_id
 
     steps: List[Dict[str, Any]] = []
     executed: List[Dict[str, Any]] = []
@@ -417,6 +434,7 @@ def main() -> int:
         models=models,
         steps=steps,
         overall_pass=overall,
+        run_id=run_id,
     )
 
     manifest = json.loads(gate_path.read_text(encoding="utf-8"))

@@ -82,13 +82,21 @@ def main(argv: list[str] | None = None) -> int:
     status_p = sub.add_parser("status", help="Current state snapshot — campaigns, data, certification")
     status_p.add_argument("--json", action="store_true")
 
-    crypto_p = sub.add_parser("crypto-smoke", help="Run observable crypto candidate smoke loop")
-    crypto_p.add_argument("--candidate", default=None, help="Optional candidate_id filter")
-
     fabric_p = sub.add_parser("feature-fabric", help="Generate catalog-backed cross-lane feature fabric artifacts")
     fabric_p.add_argument("--source", default="cme_rithmic", help="Workbench source or lane name")
     fabric_p.add_argument("--output-root", default=None, help="Optional artifact output root")
     fabric_p.add_argument("--json", action="store_true", help="Machine-readable output")
+
+    fresh_p = sub.add_parser("fresh-start", help="Create a fresh all-lane no-leakage run boundary")
+    fresh_p.add_argument("--scope", default="all-lanes", choices=("all-lanes",))
+    fresh_p.add_argument("--confirm-hard-delete", action="store_true")
+    fresh_p.add_argument("--run-id", default=None)
+    fresh_p.add_argument("--json", action="store_true", help="Machine-readable output")
+
+    all_lanes_p = sub.add_parser("all-lanes", help="Write the active all-lane run plan")
+    all_lanes_p.add_argument("--run-id", required=True)
+    all_lanes_p.add_argument("--execute", action="store_true", help="Execute models when the full executor is wired")
+    all_lanes_p.add_argument("--json", action="store_true", help="Machine-readable output")
 
     ibkr_p = sub.add_parser("ibkr-endpoint", help="Check equities lane IBKR headless socket/API endpoint")
     ibkr_p.add_argument("--config", default=None, help="Optional IBKR endpoint YAML path")
@@ -178,13 +186,6 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"{k}: {v}")
         return 0
 
-    if args.command == "crypto-smoke":
-        from workbench.src.run.crypto_smoke_runner import run_crypto_smoke
-
-        result = run_crypto_smoke(_REPO, candidate_id=args.candidate)
-        print(json.dumps(result, indent=2, default=str))
-        return 0 if result.get("state") == "completed" else 1
-
     if args.command == "feature-fabric":
         from workbench.src.run.feature_fabric import ensure_catalog_feature_fabric, source_to_lane
 
@@ -202,6 +203,51 @@ def main(argv: list[str] | None = None) -> int:
             for label, path in (result.get("artifact_paths") or {}).items():
                 print(f"  {label}: {path}")
         return 0 if result.get("status") == "PASS" else 1
+
+    if args.command == "fresh-start":
+        from workbench.src.run.fresh_start import FreshStartError, fresh_start
+
+        try:
+            result = fresh_start(
+                _REPO,
+                scope=args.scope,
+                confirm_hard_delete=args.confirm_hard_delete,
+                run_id=args.run_id,
+            )
+        except FreshStartError as exc:
+            result = {"status": "FAIL", "error": str(exc)}
+            if args.json:
+                print(json.dumps(result, indent=2, default=str))
+            else:
+                print(f"Fresh start failed: {exc}")
+            return 1
+        if args.json:
+            print(json.dumps(result, indent=2, default=str))
+        else:
+            print(f"Fresh all-lane run: {result['run_id']}")
+            print(f"Deleted generated paths: {result['deleted_count']}")
+            print(f"Active manifest: {result['active_run']}")
+        return 0
+
+    if args.command == "all-lanes":
+        from workbench.src.run.all_lanes import run_all_lanes
+
+        try:
+            result = run_all_lanes(_REPO, args.run_id, execute=args.execute)
+        except NotImplementedError as exc:
+            result = {"status": "FAIL", "error": str(exc), "run_id": args.run_id}
+            if args.json:
+                print(json.dumps(result, indent=2, default=str))
+            else:
+                print(f"All-lane run failed: {exc}")
+            return 1
+        if args.json:
+            print(json.dumps(result, indent=2, default=str))
+        else:
+            print(f"All-lane plan: {result['run_id']}")
+            print(f"Planned models: {result['planned_model_count']}")
+            print(f"Run dir: {result['run_dir']}")
+        return 0
 
     if args.command == "ibkr-endpoint":
         from equities_lane.src.ibkr_endpoint import endpoint_status

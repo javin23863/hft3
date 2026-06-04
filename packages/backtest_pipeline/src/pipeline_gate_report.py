@@ -54,10 +54,12 @@ def write_catalog_artifacts(
     models: List[Dict[str, Any]],
     steps: List[Dict[str, Any]],
     overall_pass: bool,
+    run_id: str | None = None,
 ) -> Path:
-    catalog_dir = repo_root / "research_cards" / "pipeline_runs"
+    run_id = run_id or f"full_pipeline_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+    catalog_dir = repo_root / "research_cards" / "pipeline_runs" / run_id
     catalog_dir.mkdir(parents=True, exist_ok=True)
-    gate_path = repo_root / "runtime" / "reports" / "full_pipeline_gate.json"
+    gate_path = repo_root / "runtime" / "reports" / "full_pipeline_gate" / run_id / "manifest.json"
 
     executed = [m for m in models if m.get("status") in ("PASS", "FAIL", "SKIP_NO_FIXTURE")]
     not_run = len(models) - len(executed)
@@ -75,6 +77,10 @@ def write_catalog_artifacts(
             else "PASS means all model routes executed for this event/symbol tier."
         ),
         "runtime_tier": tier,
+        "run_id": run_id,
+        "artifact_reuse_policy": "active_run_id_only",
+        "artifact_dir": str(catalog_dir.relative_to(repo_root)).replace("\\", "/"),
+        "gate_report_path": str(gate_path.relative_to(repo_root)).replace("\\", "/"),
         "runtime_budget_note": RUNTIME_BUDGET_NOTES.get(tier, tier),
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "event_id": event_id,
@@ -85,7 +91,7 @@ def write_catalog_artifacts(
         "steps": steps,
         "repeat_command": (
             f"python scripts/run_full_pipeline_gate.py --tier {tier} "
-            f"--event-id {event_id} --symbol {symbol}"
+            f"--event-id {event_id} --symbol {symbol} --run-id {run_id}"
         ),
     }
     gate_path.parent.mkdir(parents=True, exist_ok=True)

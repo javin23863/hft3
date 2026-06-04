@@ -16,7 +16,6 @@ from workbench.src.artifacts.paths import workbench_runs_dir
 st.set_page_config(page_title="HFT3 Workbench", layout="wide")
 
 from workbench.ui.analyst_panel import analyst_panel  # noqa: E402
-from workbench.ui.autonomous_panel import render_crypto_run_controls  # noqa: E402
 from workbench.ui.campaign_panel import (  # noqa: E402
     campaign_events,
     campaign_periods,
@@ -58,7 +57,7 @@ with st.sidebar:
         key="wb_run_source",
     )
     st.caption("Campaign CLI: `python -m workbench campaign`")
-    st.caption("Crypto CLI: `python -m workbench crypto-smoke`")
+    st.caption("All lanes CLI: `python -m workbench all-lanes --run-id <active_run_id>`")
     st.caption("Verify: `powershell -File scripts/verify_workbench.ps1`")
 
 st.title("Microstructure Backtesting Workbench")
@@ -82,9 +81,7 @@ selected_symbol = st.session_state.get("wb_symbol", "MES.v.0")
 selected_campaign = st.session_state.get("wb_active_campaign", "")
 
 with tabs[0]:
-    if run_source == "crypto_lane":
-        render_crypto_run_controls(REPO)
-        st.divider()
+    pass
 
 with tabs[1]:
     if run_source == "workbench_campaign":

@@ -11,6 +11,7 @@ import yaml
 
 
 SOURCE_TO_LANE = {
+    "all_lanes": "all_lanes",
     "crypto_lane": "crypto",
     "cme_rithmic": "cme_futures",
     "equities": "equities",

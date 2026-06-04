@@ -200,8 +200,9 @@ def render_autonomous_run(snapshot: RunEvidenceSnapshot) -> None:
     if loop_rows:
         st.subheader("Self-Learning Loop")
         st.caption(
-            "This is the feedback loop for the selected run. GPT-5.5 xhigh must produce the after-action "
-            "packet response for this gate to pass; promotion remains controlled by observed data gates."
+            "Parameter learning is controlled by config bounds, WFC matrix evidence, plateau selection, "
+            "and robustness gates. GPT-5.5 after-action is analyst feedback only and cannot tune "
+            "parameters or promote candidates."
         )
         _display_df(
             loop_rows,
@@ -212,8 +213,8 @@ def render_autonomous_run(snapshot: RunEvidenceSnapshot) -> None:
             },
         )
         c1, c2, c3 = st.columns(3)
-        c1.metric("LLM status", loop.get("llm_status", "missing"))
-        c2.metric("LLM can promote", bool(loop.get("llm_can_promote")))
+        c1.metric("Analyst LLM status", loop.get("llm_status", "missing"))
+        c2.metric("Analyst can promote", bool(loop.get("llm_can_promote")))
         c3.metric("Relationship review only", bool(loop.get("relationship_review_only")))
     coverage = (snapshot.system or {}).get("pipeline_coverage") or []
     if coverage:
