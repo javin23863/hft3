@@ -14,6 +14,7 @@ from model_metrics.envelope import generate_behavior_envelope
 from model_metrics.persistence import write_metric_bundle
 from model_metrics.registry import calculate_metric_values
 from model_metrics.scorecard import generate_model_scorecard
+from model_metrics.schemas import finite_or_none
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -271,6 +272,10 @@ def run_inputs_from_run_dir(run_dir: Path) -> dict[str, Any]:
     walk_forward_results = _read_json(run_dir / "walk_forward_results.json")
     walk_forward_correlation = _read_json(run_dir / "walk_forward_correlation.json")
     vectorbt = _read_json(run_dir / "vectorbt_summary.json")
+    latency_operating_envelope = (
+        _read_json(run_dir / "campaign_latency_operating_envelope.json")
+        or _read_json(run_dir / "latency_operating_envelope.json")
+    )
     config = _read_json(run_dir / "manifest.json")
     validation = _validation_reports(run_dir)
     raw_decision = status.get("decision") or scoring.get("decision") or {}
@@ -306,7 +311,18 @@ def run_inputs_from_run_dir(run_dir: Path) -> dict[str, Any]:
         "fill_rate": _first(result_rows, "fill_rate"),
         "slippage_bps": _first(result_rows, "slippage_bps"),
         "adverse_selection_rate": _first(result_rows, "adverse_selection_cost"),
-        "latency_order_to_ack": decision.get("latency_order_to_ack_ms") or status.get("latency_order_to_ack_ms"),
+        "latency_event_to_signal": _latency_us_to_ms(latency_operating_envelope, ("offensive", "placement", "tick_to_decision_us")),
+        "latency_signal_to_order": _latency_us_to_ms(latency_operating_envelope, ("offensive", "placement", "decision_to_send_us")),
+        "tick_to_send_us": _latency_us(latency_operating_envelope, ("offensive", "placement", "tick_to_send_us")),
+        "decision_to_send_us": _latency_us(latency_operating_envelope, ("offensive", "placement", "decision_to_send_us")),
+        "cancel_to_send_us": _latency_us(latency_operating_envelope, ("defensive", "placement", "cancel_to_send_us")),
+        "replace_to_send_us": _latency_us(latency_operating_envelope, ("defensive", "placement", "replace_to_send_us")),
+        "send_to_ack_us": _latency_us(latency_operating_envelope, ("external_confirmation", "confirmation", "send_to_ack_us")),
+        "cancel_to_ack_us": _latency_us(latency_operating_envelope, ("defensive", "confirmation", "cancel_to_ack_us")),
+        "replace_to_ack_us": _latency_us(latency_operating_envelope, ("defensive", "confirmation", "replace_to_ack_us")),
+        "latency_order_to_ack": _latency_us_to_ms(latency_operating_envelope, ("external_confirmation", "confirmation", "send_to_ack_us"))
+        or decision.get("latency_order_to_ack_ms")
+        or status.get("latency_order_to_ack_ms"),
         "alpha_half_life": decision.get("alpha_half_life_ms") or status.get("alpha_half_life_ms"),
     }
     robustness_pack = robustness.get("robustness_pack") or {}
@@ -371,11 +387,14 @@ def run_inputs_from_run_dir(run_dir: Path) -> dict[str, Any]:
             "robustness_gates.json",
             "walk_forward_results.json",
             "walk_forward_correlation.json",
+            "latency_operating_envelope.json",
+            "campaign_latency_operating_envelope.json",
         ) if (run_dir / name).is_file()]
         + [str(report.get("_artifact_id")) for report in validation if report.get("_artifact_id")],
         "returns": returns,
         "trades": trades,
         "execution": execution,
+        "latency_operating_envelope": latency_operating_envelope,
         "robustness": robustness_input,
         "portfolio": status.get("portfolio_metrics") or {},
         "prediction": status.get("prediction_metrics") or {},
@@ -393,8 +412,28 @@ def run_inputs_from_run_dir(run_dir: Path) -> dict[str, Any]:
             "walk_forward_results": walk_forward_results,
             "walk_forward_correlation": walk_forward_correlation,
             "vectorbt_summary": vectorbt,
+            "latency_operating_envelope": latency_operating_envelope,
         },
     }
+
+
+def _latency_us_to_ms(payload: dict[str, Any], path: tuple[str, ...]) -> float | None:
+    parsed = _latency_us(payload, path)
+    return parsed / 1000.0 if parsed is not None else None
+
+
+def _latency_us(payload: dict[str, Any], path: tuple[str, ...]) -> float | None:
+    current: Any = payload
+    for key in path:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    if isinstance(current, dict):
+        value = current.get("p99_9")
+        if value is None:
+            value = current.get("p99")
+        return finite_or_none(value)
+    return None
 
 
 def _first(rows: list[dict[str, Any]], name: str) -> Any:

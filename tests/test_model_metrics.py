@@ -33,7 +33,46 @@ def _inputs() -> dict:
             {"realized_pnl": value, "gross_pnl": value + 0.25, "fill_status": "FILLED", "slippage_bps": 1.0}
             for value in returns
         ],
-        "execution": {"fill_rate": 1.0, "latency_order_to_ack": 1.5, "alpha_half_life": 10.0},
+        "execution": {
+            "fill_rate": 1.0,
+            "latency_order_to_ack": 1.5,
+            "alpha_half_life": 10.0,
+            "tick_to_send_us": 950.0,
+            "decision_to_send_us": 125.0,
+            "send_to_ack_us": 1500.0,
+        },
+        "latency_operating_envelope": {
+            "offensive": {
+                "operating_band": "sub_millisecond_loop",
+                "placement": {
+                    "tick_to_send_us": {"p99": 900.0, "p99_9": 950.0},
+                    "decision_to_send_us": {"p99": 100.0, "p99_9": 125.0},
+                },
+                "opportunity_window_compatible": {"100": False, "1000": True},
+            },
+            "defensive": {
+                "placement": {
+                    "cancel_to_send_us": {"p99": 150.0},
+                    "replace_to_send_us": {"p99": 175.0},
+                },
+                "confirmation": {
+                    "cancel_to_ack_us": {"p99": 2500.0},
+                    "replace_to_ack_us": {"p99": 3000.0},
+                },
+            },
+            "external_confirmation": {
+                "modeled_as_async_state_confirmation": True,
+                "confirmation": {"send_to_ack_us": {"p99": 1500.0}},
+            },
+            "pending_state_risk": {
+                "max_pending_orders": 3,
+                "max_pending_quantity": 2.0,
+                "max_pending_notional": 0.0,
+                "stale_pending_timeout_us": 500000.0,
+                "stale_state_risk": "managed",
+            },
+            "competitor_speed_sensitivity": {"tested": True, "equal_speed_viable": True},
+        },
         "robustness": {
             "folds": [
                 {"return": 5.0, "sharpe": 1.1, "max_drawdown": -2.0},
@@ -63,6 +102,10 @@ def test_metric_registry_is_deterministic_and_marks_missing_inputs() -> None:
     by_name = {row["metric_name"]: row for row in first}
     assert by_name["net_return"]["metric_value"] == pytest.approx(37.5)
     assert by_name["slippage_bps"]["metric_value"] == pytest.approx(1.0)
+    assert by_name["tick_to_send_us"]["metric_value"] == pytest.approx(950.0)
+    assert by_name["tick_to_send_us"]["metric_unit"] == "us"
+    assert by_name["send_to_ack_us"]["metric_value"] == pytest.approx(1500.0)
+    assert by_name["send_to_ack_us"]["metric_unit"] == "us"
     assert by_name["queue_position_decay"]["status"] == "unavailable"
     assert "required input not observed" in by_name["queue_position_decay"]["errors"][0]
 
@@ -77,6 +120,11 @@ def test_scorecard_and_behavior_envelope_are_asset_class_neutral() -> None:
     assert scorecard.weighted_score > 0
     assert envelope.model_id == scorecard.model_id
     assert envelope.feature_training_domain_bounds["basis_zscore"] == (-3.0, 3.0)
+    assert envelope.latency_bounds["tick_to_send_us"] == (0.0, 950.0)
+    assert envelope.latency_bounds["send_to_ack_us"] == (0.0, 1500.0)
+    assert envelope.operating_band == "sub_millisecond_loop"
+    assert envelope.async_state_model_required is True
+    assert envelope.max_pending_orders == 3
 
 
 def test_model_behavior_engine_green_yellow_red() -> None:
@@ -93,9 +141,36 @@ def test_model_behavior_engine_green_yellow_red() -> None:
             slippage_bps=1.0,
             fill_rate=1.0,
             latency_order_to_ack=1.0,
+            tick_to_send_us=900.0,
+            decision_to_send_us=100.0,
+            send_to_ack_us=1000.0,
             alpha_half_life=10.0,
             feature_values={"basis_zscore": 0.5},
         ),
+    )
+    placement_red = engine.evaluate(
+        envelope,
+        {
+            "model_id": "FUTURES_MODEL_A",
+            "regime_id": "NORMAL",
+            "tick_to_send_us": 2_000.0,
+            "decision_to_send_us": 100.0,
+            "send_to_ack_us": 1_000.0,
+            "latency_order_to_ack": 1.0,
+            "alpha_half_life": 10.0,
+        },
+    )
+    ack_red = engine.evaluate(
+        envelope,
+        {
+            "model_id": "FUTURES_MODEL_A",
+            "regime_id": "NORMAL",
+            "tick_to_send_us": 900.0,
+            "decision_to_send_us": 100.0,
+            "send_to_ack_us": 600_000.0,
+            "latency_order_to_ack": 1.0,
+            "alpha_half_life": 10.0,
+        },
     )
     red = engine.evaluate(
         envelope,
@@ -113,6 +188,10 @@ def test_model_behavior_engine_green_yellow_red() -> None:
     )
 
     assert green.state == "GREEN"
+    assert placement_red.state == "RED"
+    assert any(trigger["name"] == "placement_exceeds_opportunity_window" for trigger in placement_red.triggers)
+    assert ack_red.state == "RED"
+    assert any(trigger["name"] == "async_ack_stale_state" for trigger in ack_red.triggers)
     assert red.state == "RED"
     assert {trigger["name"] for trigger in red.triggers} >= {
         "blocked_regime",
@@ -291,3 +370,4 @@ def test_sim_shadow_cannot_reopen_promotion_when_behavior_envelope_inactive(tmp_
     summary = json.loads((campaign_dir / "summary.json").read_text(encoding="utf-8"))
     assert summary["promote_candidate"] is False
     assert any(gate.get("gate") == "model_behavior_envelope" for gate in summary["blocking_gates"])
+    assert any(gate.get("gate") == "campaign_latency_operating_envelope" for gate in summary["blocking_gates"])

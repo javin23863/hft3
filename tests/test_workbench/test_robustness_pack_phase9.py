@@ -20,6 +20,12 @@ def _passing_metrics() -> dict:
         "transaction_cost_sensitivity_pass": True,
         "slippage_sensitivity_pass": True,
         "survives_cpp_execution_delay": True,
+        "operating_envelope_generated": True,
+        "placement_speed_sensitivity_pass": True,
+        "async_ack_state_risk_pass": True,
+        "pending_exposure_guardrails_pass": True,
+        "composition_latency_feasibility_pass": True,
+        "competitor_speed_sensitivity_pass": True,
         "liquidity_capacity_pass": True,
         "event_window_stability_pass": True,
         "data_resolution_eligible": True,
@@ -40,9 +46,9 @@ def _passing_periods() -> list[dict]:
     ]
 
 
-def test_phase9_required_robustness_check_registry_has_25_names():
-    assert len(REQUIRED_ROBUSTNESS_CHECKS) == 25
-    assert len(set(REQUIRED_ROBUSTNESS_CHECKS)) == 25
+def test_phase9_required_robustness_check_registry_has_31_names():
+    assert len(REQUIRED_ROBUSTNESS_CHECKS) == 31
+    assert len(set(REQUIRED_ROBUSTNESS_CHECKS)) == 31
 
 
 def test_phase9_pack_emits_all_required_checks_in_order():
@@ -54,7 +60,7 @@ def test_phase9_pack_emits_all_required_checks_in_order():
     )
 
     assert [check.name for check in result.checks] == list(REQUIRED_ROBUSTNESS_CHECKS)
-    assert len(result.checks_dict()) == 25
+    assert len(result.checks_dict()) == 31
     assert result.passed is True
 
 
@@ -67,6 +73,7 @@ def test_phase9_missing_required_inputs_are_pending_and_blocking():
 
     checks = {check.name: check for check in result.checks}
     assert checks["feature_leakage"].status == "PENDING"
+    assert checks["operating_envelope_generated"].status == "PENDING"
     assert checks["walk_forward_validation"].status == "PENDING"
     assert result.passed is False
 

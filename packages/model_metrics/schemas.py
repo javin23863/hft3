@@ -157,6 +157,14 @@ class ModelBehaviorEnvelope:
     venue_specific_limits: dict[str, Any] = field(default_factory=dict)
     symbol_specific_limits: dict[str, Any] = field(default_factory=dict)
     latency_bounds: dict[str, tuple[float | None, float | None]] = field(default_factory=dict)
+    operating_band: str = ""
+    async_state_model_required: bool = False
+    max_pending_orders: int | None = None
+    max_pending_quantity: float | None = None
+    max_pending_notional: float | None = None
+    stale_pending_timeout_policy: dict[str, Any] = field(default_factory=dict)
+    competitor_speed_assumption_used: dict[str, Any] = field(default_factory=dict)
+    opportunity_decay_window_used: float | None = None
     alpha_half_life_bounds: tuple[float | None, float | None] = (None, None)
     data_freshness_requirements: dict[str, Any] = field(default_factory=dict)
     warnings: tuple[str, ...] = ()
@@ -185,6 +193,13 @@ class ModelLiveObservation:
     slippage_bps: float | None = None
     spread_bps: float | None = None
     fill_rate: float | None = None
+    tick_to_send_us: float | None = None
+    decision_to_send_us: float | None = None
+    cancel_to_send_us: float | None = None
+    replace_to_send_us: float | None = None
+    send_to_ack_us: float | None = None
+    cancel_to_ack_us: float | None = None
+    replace_to_ack_us: float | None = None
     latency_order_to_ack: float | None = None
     alpha_half_life: float | None = None
     signal_score: float | None = None

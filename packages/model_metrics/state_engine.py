@@ -79,6 +79,17 @@ def classify_model_state(
         triggers.append(_trigger("latency_exceeds_alpha_half_life", "RED", obs.latency_order_to_ack, obs.alpha_half_life, "execution latency exceeds alpha half-life"))
     elif _above(obs.latency_order_to_ack, latency_hi):
         triggers.append(_trigger("latency_drift", "YELLOW", obs.latency_order_to_ack, latency_hi, "execution latency above expected range"))
+    tick_to_send_hi = (env.latency_bounds.get("tick_to_send_us") or (None, None))[1]
+    decision_to_send_hi = (env.latency_bounds.get("decision_to_send_us") or (None, None))[1]
+    if _above(obs.tick_to_send_us, env.opportunity_decay_window_used):
+        triggers.append(_trigger("placement_exceeds_opportunity_window", "RED", obs.tick_to_send_us, env.opportunity_decay_window_used, "tick-to-send exceeded the operating opportunity window"))
+    elif _above(obs.tick_to_send_us, tick_to_send_hi):
+        triggers.append(_trigger("placement_latency_drift", "YELLOW", obs.tick_to_send_us, tick_to_send_hi, "tick-to-send above expected operating envelope"))
+    if _above(obs.decision_to_send_us, decision_to_send_hi):
+        triggers.append(_trigger("decision_to_send_latency_drift", "YELLOW", obs.decision_to_send_us, decision_to_send_hi, "decision-to-send above expected operating envelope"))
+    stale_timeout_us = finite_or_none(env.stale_pending_timeout_policy.get("stale_pending_timeout_us"))
+    if env.async_state_model_required and _above(obs.send_to_ack_us, stale_timeout_us):
+        triggers.append(_trigger("async_ack_stale_state", "RED", obs.send_to_ack_us, stale_timeout_us, "send-to-ack exceeded stale pending timeout"))
     max_age = finite_or_none(env.data_freshness_requirements.get("max_age_ns"))
     if obs.data_age_ns is not None and max_age is not None and obs.data_age_ns > max_age:
         triggers.append(_trigger("data_freshness", "RED", obs.data_age_ns, max_age, "data feed is stale"))

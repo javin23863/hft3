@@ -2203,6 +2203,8 @@ def _workbench_snapshot(repo: Path, campaign_id: str = "") -> RunEvidenceSnapsho
             latest_event_dir = event_dir
             break
     event_diag = read_json(latest_event_dir / "diagnostics.json") if latest_event_dir else {}
+    event_latency_envelope = read_json(latest_event_dir / "latency_operating_envelope.json") if latest_event_dir else {}
+    campaign_latency_envelope = read_json(run_dir / "campaign_latency_operating_envelope.json")
     wfc = read_json(run_dir / "wfc" / "wfc_summary.json") or summary.get("wfc", {})
     institutional_metrics = _model_metrics_artifacts(run_dir)
     return RunEvidenceSnapshot(
@@ -2221,13 +2223,20 @@ def _workbench_snapshot(repo: Path, campaign_id: str = "") -> RunEvidenceSnapsho
             "campaign": str(run_dir / "campaign.json"),
             "summary": str(run_dir / "summary.json"),
             "latest_event": str(latest_event_dir or ""),
+            "latest_event_latency_operating_envelope": str(latest_event_dir / "latency_operating_envelope.json") if latest_event_dir else "",
+            "campaign_latency_operating_envelope": str(run_dir / "campaign_latency_operating_envelope.json"),
             "model_scorecard": (institutional_metrics.get("paths") or {}).get("model_scorecard", ""),
             "model_behavior_envelope": (institutional_metrics.get("paths") or {}).get("model_behavior_envelope", ""),
         },
         registry={"model_id": summary.get("model_id") or campaign.get("model_id"), "composition": summary.get("composition") or campaign.get("composition")},
         data={"symbol": summary.get("symbol") or campaign.get("symbol"), "periods": periods},
         backtest={"rows": event_rows, "periods": periods, "summary": summary},
-        latency={"latest_event_diagnostics": event_diag, "cpp_latency_profile": event_diag.get("cpp_latency_profile", {})},
+        latency={
+            "latest_event_diagnostics": event_diag,
+            "cpp_latency_profile": event_diag.get("cpp_latency_profile", {}),
+            "latency_operating_envelope": event_latency_envelope,
+            "campaign_latency_operating_envelope": campaign_latency_envelope,
+        },
         diagnostics={"composition": summary.get("composition", {}), "latest_event_diagnostics": event_diag},
         robustness={
             "wfc": wfc,
@@ -2235,6 +2244,8 @@ def _workbench_snapshot(repo: Path, campaign_id: str = "") -> RunEvidenceSnapsho
             "robustness_passed": summary.get("robustness_passed"),
             "pending": summary.get("robustness_pending_checks", []),
             "failed": summary.get("robustness_failed_checks", []),
+            "latency_operating_envelope_status": summary.get("latency_operating_envelope_status"),
+            "latency_operating_envelope_blockers": summary.get("latency_operating_envelope_blockers", []),
         },
         decision={
             "action": "PROMOTE" if summary.get("promote_candidate") else "QUARANTINE",
@@ -2242,15 +2253,24 @@ def _workbench_snapshot(repo: Path, campaign_id: str = "") -> RunEvidenceSnapsho
             "live_registry_ready": bool(summary.get("promote_candidate")),
             "ranking": event_rows,
             "institutional_metrics": institutional_metrics,
+            "blocking_gates": summary.get("blocking_gates", []),
         },
         reports={
             "summary": str(run_dir / "summary.json"),
             "latest_report": str(latest_event_dir / "report.md") if latest_event_dir else "",
+            "latest_latency_operating_envelope": str(latest_event_dir / "latency_operating_envelope.md") if latest_event_dir else "",
+            "campaign_latency_operating_envelope": str(run_dir / "campaign_latency_operating_envelope.md"),
             "after_action_report": str(latest_event_dir / "after_action_report.md") if latest_event_dir else "",
             "model_scorecard": (institutional_metrics.get("paths") or {}).get("model_scorecard", ""),
             "model_behavior_envelope": (institutional_metrics.get("paths") or {}).get("model_behavior_envelope", ""),
         },
-        system={"summary": summary, "status": status, "campaign": campaign, "institutional_metrics": institutional_metrics},
+        system={
+            "summary": summary,
+            "status": status,
+            "campaign": campaign,
+            "institutional_metrics": institutional_metrics,
+            "campaign_latency_operating_envelope": campaign_latency_envelope,
+        },
     )
 
 

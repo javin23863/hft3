@@ -777,6 +777,32 @@ def render_latency_evidence(snapshot: RunEvidenceSnapshot) -> None:
                 "btc_node": "BTC node",
             },
         )
+    elif latency.get("latency_operating_envelope") or latency.get("campaign_latency_operating_envelope"):
+        envelope = latency.get("latency_operating_envelope") or latency.get("campaign_latency_operating_envelope")
+        offensive = envelope.get("offensive") or {}
+        placement = offensive.get("placement") or {}
+        tick_to_send = placement.get("tick_to_send_us") or {}
+        external = envelope.get("external_confirmation") or {}
+        confirmation = external.get("confirmation") or {}
+        send_to_ack = confirmation.get("send_to_ack_us") or {}
+        pending = envelope.get("pending_state_risk") or {}
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Envelope", str(envelope.get("status", "unknown")))
+        c2.metric("Tick→send p99 us", f"{_num(tick_to_send.get('p99')):,.1f}")
+        c3.metric("Send→ack p99 us", f"{_num(send_to_ack.get('p99')):,.1f}")
+        c4.metric("Placement band", str(offensive.get("operating_band", "unknown")))
+        st.caption("Placement speed is separate from acknowledgment latency; acknowledgments update local state asynchronously.")
+        blockers = envelope.get("promotion_blockers") or []
+        if blockers:
+            _display_df(
+                blockers,
+                {
+                    "gate": "Gate",
+                    "status": "Status",
+                    "reason": "Reason",
+                },
+            )
+        _json_expander("Pending state risk", pending)
     elif latency.get("latest_event_diagnostics"):
         diag = latency["latest_event_diagnostics"]
         _df([

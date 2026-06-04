@@ -84,6 +84,7 @@ def _run_events(
             strategy_params=params,
         )
         rep = out.get("report", {})
+        latency_compact = rep.get("latency_operating_envelope", {})
         pnl = float(rep.get("net_pnl", 0.0))
         adj = float(rep.get("simulated_latency_adjusted_pnl", pnl))
         ntr = int(rep.get("num_trades", 0))
@@ -95,6 +96,7 @@ def _run_events(
                 "net_return_adjusted": adj,
                 "num_trades": ntr,
                 "expectancy": pnl / ntr if ntr else 0.0,
+                **latency_compact,
             }
         )
     return outcomes
@@ -193,6 +195,7 @@ def run_full_matrix_oos(
             )
             is_metrics = aggregate_event_metrics(is_out, years=is_years, notional_capital=notional)
             oos_metrics = aggregate_event_metrics(oos_out, years=oos_years, notional_capital=notional)
+            oos_latency = _aggregate_latency_fields(oos_out)
             rows.append(
                 {
                     "run_id": campaign_id,
@@ -224,6 +227,10 @@ def run_full_matrix_oos(
                     "oos_max_drawdown": oos_metrics["max_drawdown"],
                     "is_trade_count": is_metrics["trade_count"],
                     "oos_trade_count": oos_metrics["trade_count"],
+                    "latency_operating_envelope_status": oos_latency["status"],
+                    "placement_speed_p99_us": oos_latency["placement_speed_p99_us"],
+                    "placement_speed_p99_9_us": oos_latency["placement_speed_p99_9_us"],
+                    "send_to_ack_p99_us": oos_latency["send_to_ack_p99_us"],
                     "turnover": oos_metrics["turnover"],
                     "slippage_assumptions": model_cfg.execution_assumptions,
                     "transaction_cost_assumptions": model_cfg.execution_assumptions,
@@ -231,6 +238,19 @@ def run_full_matrix_oos(
                 }
             )
     return rows
+
+
+def _aggregate_latency_fields(outcomes: List[Dict[str, Any]]) -> Dict[str, Any]:
+    statuses = [str(row.get("latency_operating_envelope_status") or "").upper() for row in outcomes]
+    p99 = [float(row["placement_speed_p99_us"]) for row in outcomes if isinstance(row.get("placement_speed_p99_us"), (int, float))]
+    p99_9 = [float(row["placement_speed_p99_9_us"]) for row in outcomes if isinstance(row.get("placement_speed_p99_9_us"), (int, float))]
+    ack = [float(row["send_to_ack_p99_us"]) for row in outcomes if isinstance(row.get("send_to_ack_p99_us"), (int, float))]
+    return {
+        "status": "PASS" if statuses and all(status == "PASS" for status in statuses) else "FAIL",
+        "placement_speed_p99_us": max(p99) if p99 else None,
+        "placement_speed_p99_9_us": max(p99_9) if p99_9 else None,
+        "send_to_ack_p99_us": max(ack) if ack else None,
+    }
 
 
 def save_matrix_rows(rows: List[Dict[str, Any]], out_dir: Path) -> Path:

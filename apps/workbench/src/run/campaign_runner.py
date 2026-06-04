@@ -28,6 +28,11 @@ from workbench.src.registry.unified_registry import build_models_config, get_mod
 from workbench.src.optimization.matrix_runner import MatrixFoldDataError, run_full_matrix_oos, save_matrix_rows
 from workbench.src.optimization.param_matrix import load_parameter_bounds
 from workbench.src.optimization.plateau_selector import select_robust_plateau
+from workbench.src.latency.operating_envelope import (
+    aggregate_campaign_latency_envelopes,
+    compact_envelope_fields,
+    write_campaign_latency_operating_envelope,
+)
 from workbench.src.robustness.wfc import evaluate_wfc_gate, write_wfc_artifacts
 from workbench.src.robustness.wfc.config import load_wfc_config
 from workbench.src.robustness.wfc.gate import WfcResult
@@ -228,6 +233,16 @@ def record_sim_shadow(repo_root: Path, campaign_id: str, status: str) -> Path:
         metrics_ok, metrics_gate = _institutional_metrics_gate(summary.get("institutional_metrics"))
         if metrics_gate:
             _append_blocking_gate(summary, metrics_gate)
+        latency_ok = summary.get("latency_operating_envelope_status") == "PASS"
+        if not latency_ok:
+            _append_blocking_gate(
+                summary,
+                {
+                    "gate": "campaign_latency_operating_envelope",
+                    "status": summary.get("latency_operating_envelope_status", "MISSING"),
+                    "reason": "campaign latency operating envelope is not promotion-eligible",
+                },
+            )
         summary["promote_candidate"] = (
             summary.get("status") == "PASS"
             and status == "PASS"
@@ -235,6 +250,7 @@ def record_sim_shadow(repo_root: Path, campaign_id: str, status: str) -> Path:
             and wfc_ok
             and cert_ok
             and metrics_ok
+            and latency_ok
         )
         summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     return artifact_dir / "sim_shadow.json"
@@ -473,6 +489,7 @@ def run_campaign(
     engine = WorkbenchEngine(repo_root)
     period_results: List[PeriodResult] = []
     status = "PASS"
+    campaign_latency_event_envelopes: List[Dict[str, Any]] = []
 
     wfc_cfg = load_wfc_config(repo_root)
     wfc_result: Optional[WfcResult] = None
@@ -693,6 +710,8 @@ def run_campaign(
                     "config.yaml",
                     "research_card.json",
                     "composition_trace.json",
+                    "latency_operating_envelope.json",
+                    "latency_operating_envelope.md",
                     "after_action_packet.json",
                     "after_action_symbolic.json",
                     "after_action_response.json",
@@ -713,6 +732,16 @@ def run_campaign(
                 trades = src_run / "trades.parquet"
                 if trades.is_file():
                     dest.joinpath("trades.parquet").write_bytes(trades.read_bytes())
+                latency_envelope_path = src_run / "latency_operating_envelope.json"
+                latency_envelope = {}
+                if latency_envelope_path.is_file():
+                    latency_envelope = json.loads(latency_envelope_path.read_text(encoding="utf-8"))
+                    campaign_latency_event_envelopes.append(latency_envelope)
+                latency_compact = (
+                    compact_envelope_fields(latency_envelope)
+                    if latency_envelope
+                    else rep.get("latency_operating_envelope", {})
+                )
 
                 event_outcomes.append(
                     {
@@ -724,6 +753,7 @@ def run_campaign(
                         "survives_cpp_execution_delay": surv,
                         "trades_vetoed_by_defense": rep.get("trades_vetoed_by_defense", 0),
                         "run_id": out.get("run_id"),
+                        **latency_compact,
                     }
                 )
 
@@ -757,11 +787,36 @@ def run_campaign(
 
     from workbench.src.robustness.pack import run_robustness_pack
 
+    campaign_latency_envelope = aggregate_campaign_latency_envelopes(
+        campaign_id=campaign_id,
+        model_id=primary_id,
+        symbol=symbol,
+        period_results=period_results,
+        event_envelopes=campaign_latency_event_envelopes,
+    )
+    campaign_latency_blocker_gates = {
+        str(gate.get("gate"))
+        for gate in (campaign_latency_envelope.get("promotion_blockers") or [])
+        if isinstance(gate, dict)
+    }
+
+    def _campaign_latency_check_passed(name: str) -> bool:
+        return campaign_latency_envelope.get("status") == "PASS" and name not in campaign_latency_blocker_gates
+
     trade_pnls = [float(e.get("net_pnl", 0.0)) for p in period_results for e in p.event_results]
     holdout_used_for_tuning = _holdout_used_for_tuning(artifact_dir, period_results, wf_cfg)
     sweep_count = len({r["parameter_hash"] for r in matrix_rows}) if matrix_rows else 1
     robustness = run_robustness_pack(
-        lambda: {"expectancy": sum(trade_pnls) / max(len(trade_pnls), 1)},
+        lambda: {
+            "expectancy": sum(trade_pnls) / max(len(trade_pnls), 1),
+            "survives_cpp_execution_delay": bool(period_results and all(p.survives_cpp for p in period_results)),
+            "operating_envelope_generated": _campaign_latency_check_passed("operating_envelope_generated"),
+            "placement_speed_sensitivity_pass": _campaign_latency_check_passed("placement_speed_sensitivity"),
+            "async_ack_state_risk_pass": _campaign_latency_check_passed("async_ack_state_risk"),
+            "pending_exposure_guardrails_pass": _campaign_latency_check_passed("pending_exposure_guardrails"),
+            "composition_latency_feasibility_pass": _campaign_latency_check_passed("composition_latency_feasibility"),
+            "competitor_speed_sensitivity_pass": _campaign_latency_check_passed("competitor_speed_sensitivity"),
+        },
         trade_pnls,
         sweep_count=sweep_count,
         holdout_used_for_tuning=holdout_used_for_tuning,
@@ -808,6 +863,9 @@ def run_campaign(
         and (not wfc_required or wfc_status == "PASS")
         and cert_stamp.get("promotion_eligible", False)
     )
+    write_campaign_latency_operating_envelope(artifact_dir, campaign_latency_envelope)
+    campaign_latency_ok = campaign_latency_envelope.get("status") == "PASS"
+    promote_ok = promote_ok and campaign_latency_ok
     summary = {
         "campaign_id": campaign_id,
         "status": status,
@@ -833,11 +891,26 @@ def run_campaign(
         "sim_shadow_required": status == "PASS",
         "certification_stamp": cert_stamp,
         "certification_footer": format_stamp_footer(cert_stamp),
+        "latency_operating_envelope_status": campaign_latency_envelope.get("status"),
+        "latency_operating_envelope": {
+            "placement_speed_p99_us": campaign_latency_envelope.get("placement_speed_p99_us"),
+            "events_observed": campaign_latency_envelope.get("events_observed"),
+        },
+        "latency_operating_envelope_blockers": campaign_latency_envelope.get("promotion_blockers", []),
         "promote_candidate": promote_ok,
         "promote_note": "WFC PASS + sim shadow (60 CME days on CHI404) + backtester certification stamp required before promotion — BLUEPRINT §8",
         "trial_mode": trial_mode,
         "events_ran": events_ran,
     }
+    if not campaign_latency_ok:
+        _append_blocking_gate(
+            summary,
+            {
+                "gate": "campaign_latency_operating_envelope",
+                "status": campaign_latency_envelope.get("status", "FAIL"),
+                "reason": "campaign latency operating envelope is not promotion-eligible",
+            },
+        )
     (artifact_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     metrics_status = _run_institutional_model_metrics(repo_root, artifact_dir)
     summary["institutional_metrics"] = metrics_status

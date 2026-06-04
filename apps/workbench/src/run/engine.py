@@ -14,6 +14,11 @@ from workbench.src.core.trade_audit import audit_records_to_dataframe, summarize
 from workbench.src.data.l3_loader import L3Loader
 from workbench.src.data.manifest import DatasetManifest
 from workbench.src.latency.viability import analyze_latency_viability, sweep_injection_pnl
+from workbench.src.latency.operating_envelope import (
+    build_latency_operating_envelope,
+    compact_envelope_fields,
+    write_latency_operating_envelope,
+)
 from workbench.src.core.composition import ModelComposition
 from workbench.src.registry.composition_orchestrator import CompositionOrchestrator
 from features_engine.src.model_registry import resolve_model_id
@@ -82,7 +87,8 @@ class WorkbenchEngine:
         raw = loader.load(str(resolved_npz))
 
         chi404 = chi404_summary or (self.repo_root / "runtime/latency_reports/latency_summary.json")
-        if chi404.is_file():
+        chi404_observed = chi404.is_file()
+        if chi404_observed:
             cpp_profile = CppLatencyProfile.from_chi404_summary(chi404)
             policy = LatencyPolicy.from_cpp_profile(cpp_profile)
             measured_ms = cpp_profile.measured_production_p99_ms
@@ -197,7 +203,53 @@ class WorkbenchEngine:
         )
 
         trade_pnls = [result.expectancy] * max(result.num_trades, 1) if isinstance(result, BacktestResult) else []
-        robustness = run_robustness_pack(lambda: base, trade_pnls, sweep_count=1)
+        latency_envelope = build_latency_operating_envelope(
+            run_id=ctx.run_id,
+            model_id=primary_id,
+            event_id=event_id,
+            viability=viability,
+            cpp_profile=cpp_profile,
+            phase5_timestamp_schema=phase5_timestamp_schema,
+            audit_records=audit_records,
+            composition=effective,
+            composition_trace=comp_trace,
+            chi404_observed=chi404_observed,
+            wfc_status=wfc_status,
+        )
+        latency_checks = latency_envelope.get("checks", {})
+
+        def _latency_check_passed(name: str) -> bool:
+            check = latency_checks.get(name)
+            return bool(isinstance(check, dict) and check.get("passed") is True)
+
+        robustness_metrics = {
+            **base,
+            "survives_cpp_execution_delay": viability.survives_cpp_execution_delay,
+            "operating_envelope_generated": _latency_check_passed("operating_envelope_generated"),
+            "placement_speed_sensitivity_pass": _latency_check_passed("placement_speed_sensitivity"),
+            "async_ack_state_risk_pass": _latency_check_passed("async_ack_state_risk"),
+            "pending_exposure_guardrails_pass": _latency_check_passed("pending_exposure_guardrails"),
+            "composition_latency_feasibility_pass": _latency_check_passed("composition_latency_feasibility"),
+            "competitor_speed_sensitivity_pass": _latency_check_passed("competitor_speed_sensitivity"),
+        }
+        robustness = run_robustness_pack(lambda: robustness_metrics, trade_pnls, sweep_count=1)
+        latency_envelope = build_latency_operating_envelope(
+            run_id=ctx.run_id,
+            model_id=primary_id,
+            event_id=event_id,
+            viability=viability,
+            cpp_profile=cpp_profile,
+            phase5_timestamp_schema=phase5_timestamp_schema,
+            audit_records=audit_records,
+            composition=effective,
+            composition_trace=comp_trace,
+            chi404_observed=chi404_observed,
+            wfc_status=wfc_status,
+            robustness=robustness,
+        )
+        write_latency_operating_envelope(ctx.artifact_dir, latency_envelope)
+        latency_envelope_compact = compact_envelope_fields(latency_envelope)
+        latency_envelope_passes = latency_envelope.get("status") == "PASS"
 
         net_pnl = base["net_pnl"]
         num_trades = base["num_trades"]
@@ -209,6 +261,7 @@ class WorkbenchEngine:
             and viability.simulated_latency_adjusted_pnl > 0
             and robustness.passed
             and phase5_audit_passes
+            and latency_envelope_passes
             and (wfc_status is None or wfc_status in ("PASS", "SKIPPED"))
         )
 
@@ -260,6 +313,10 @@ class WorkbenchEngine:
             "cpp_stack_checks": cpp_verify.checks,
             "cpp_stack_verify_reason": cpp_verify.reason,
             "phase5_timestamp_schema": phase5_timestamp_schema,
+            "latency_operating_envelope_status": latency_envelope.get("status"),
+            "latency_operating_envelope": latency_envelope_compact,
+            "latency_operating_envelope_checks": latency_envelope.get("checks", {}),
+            "latency_operating_envelope_blockers": latency_envelope.get("promotion_blockers", []),
         }
         if comp_trace is not None:
             report["composition"] = effective.to_dict()

@@ -42,6 +42,49 @@ def _metric(scorecard: ModelScorecard, name: str) -> float | None:
     return None
 
 
+def _latency_metric_bounds(value: Any) -> tuple[float | None, float | None]:
+    parsed = finite_or_none(value)
+    return (0.0, parsed) if parsed is not None else (None, None)
+
+
+def _nested(payload: dict[str, Any], *path: str) -> Any:
+    current: Any = payload
+    for key in path:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return current
+
+
+def _latency_operating_bounds(envelope: dict[str, Any], legacy_ack_ms: float | None, max_latency_ms: float) -> dict[str, tuple[float | None, float | None]]:
+    placement = _nested(envelope, "offensive", "placement") or {}
+    defensive = _nested(envelope, "defensive", "placement") or {}
+    confirmation = _nested(envelope, "external_confirmation", "confirmation") or {}
+    defensive_confirmation = _nested(envelope, "defensive", "confirmation") or {}
+    return {
+        "latency_order_to_ack": (0.0, legacy_ack_ms if legacy_ack_ms is not None else max_latency_ms),
+        "tick_to_send_us": _latency_metric_bounds(_nested(placement, "tick_to_send_us", "p99_9") or _nested(placement, "tick_to_send_us", "p99")),
+        "decision_to_send_us": _latency_metric_bounds(_nested(placement, "decision_to_send_us", "p99_9") or _nested(placement, "decision_to_send_us", "p99")),
+        "cancel_to_send_us": _latency_metric_bounds(_nested(defensive, "cancel_to_send_us", "p99_9") or _nested(defensive, "cancel_to_send_us", "p99")),
+        "replace_to_send_us": _latency_metric_bounds(_nested(defensive, "replace_to_send_us", "p99_9") or _nested(defensive, "replace_to_send_us", "p99")),
+        "send_to_ack_us": _latency_metric_bounds(_nested(confirmation, "send_to_ack_us", "p99_9") or _nested(confirmation, "send_to_ack_us", "p99")),
+        "cancel_to_ack_us": _latency_metric_bounds(_nested(defensive_confirmation, "cancel_to_ack_us", "p99_9") or _nested(defensive_confirmation, "cancel_to_ack_us", "p99")),
+        "replace_to_ack_us": _latency_metric_bounds(_nested(defensive_confirmation, "replace_to_ack_us", "p99_9") or _nested(defensive_confirmation, "replace_to_ack_us", "p99")),
+    }
+
+
+def _first_compatible_window(envelope: dict[str, Any]) -> float | None:
+    compat = _nested(envelope, "offensive", "opportunity_window_compatible")
+    if isinstance(compat, dict):
+        for key, value in sorted(compat.items(), key=lambda item: float(item[0])):
+            if value is True:
+                return float(key)
+    windows = _nested(envelope, "competitor_speed_sensitivity", "opportunity_decay_windows_us")
+    if isinstance(windows, list) and windows:
+        return finite_or_none(windows[-1])
+    return None
+
+
 def generate_behavior_envelope(
     inputs: dict[str, Any],
     scorecard: ModelScorecard,
@@ -75,6 +118,10 @@ def generate_behavior_envelope(
     max_dd = abs(_metric(scorecard, "max_drawdown") or float(threshold["maximum_drawdown"]))
     latency = _metric(scorecard, "latency_order_to_ack")
     alpha_half_life = _metric(scorecard, "alpha_half_life")
+    latency_envelope = inputs.get("latency_operating_envelope") or {}
+    if not isinstance(latency_envelope, dict):
+        latency_envelope = {}
+    pending_state = latency_envelope.get("pending_state_risk") if isinstance(latency_envelope.get("pending_state_risk"), dict) else {}
     warning = max_dd * float(threshold.get("warning_drawdown_multiplier", 1.0))
     kill = max_dd * float(threshold.get("kill_drawdown_multiplier", 1.5))
     payload = {
@@ -135,7 +182,18 @@ def generate_behavior_envelope(
         asset_class_specific_limits=(cfg.get("asset_class_overrides") or {}).get(str(scorecard.asset_class), {}),
         venue_specific_limits=(cfg.get("venue_overrides") or {}).get(str(meta.get("venue", "")), {}),
         symbol_specific_limits=(cfg.get("symbol_overrides") or {}).get(str(scorecard.symbol), {}),
-        latency_bounds={"latency_order_to_ack": (0.0, latency if latency is not None else float(threshold["maximum_latency_ms"]))},
+        latency_bounds=_latency_operating_bounds(latency_envelope, latency, float(threshold["maximum_latency_ms"])),
+        operating_band=str(_nested(latency_envelope, "offensive", "operating_band") or ""),
+        async_state_model_required=bool(_nested(latency_envelope, "external_confirmation", "modeled_as_async_state_confirmation")),
+        max_pending_orders=int(pending_state["max_pending_orders"]) if pending_state.get("max_pending_orders") is not None else None,
+        max_pending_quantity=finite_or_none(pending_state.get("max_pending_quantity")),
+        max_pending_notional=finite_or_none(pending_state.get("max_pending_notional")),
+        stale_pending_timeout_policy={
+            "stale_pending_timeout_us": pending_state.get("stale_pending_timeout_us"),
+            "stale_state_risk": pending_state.get("stale_state_risk"),
+        },
+        competitor_speed_assumption_used=latency_envelope.get("competitor_speed_sensitivity") or {},
+        opportunity_decay_window_used=_first_compatible_window(latency_envelope),
         alpha_half_life_bounds=(alpha_half_life, alpha_half_life),
         data_freshness_requirements={"max_age_ns": int(threshold["data_freshness_max_ns"])},
         warnings=tuple(warnings),
