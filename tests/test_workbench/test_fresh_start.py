@@ -26,6 +26,9 @@ def test_fresh_start_deletes_generated_artifacts_and_writes_active_run(tmp_path:
     old_file = tmp_path / "runtime" / "workbench" / "crypto_smoke" / "latest_status.json"
     old_file.parent.mkdir(parents=True)
     old_file.write_text('{"run_id":"old"}', encoding="utf-8")
+    stale_fabric = tmp_path / "runtime" / "workbench" / "feature_fabric" / "feature_fabric_manifest.json"
+    stale_fabric.parent.mkdir(parents=True)
+    stale_fabric.write_text('{"run_id":"old"}', encoding="utf-8")
     source_data = tmp_path / "data" / "source.ndjson"
     source_data.parent.mkdir(parents=True)
     source_data.write_text("keep\n", encoding="utf-8")
@@ -42,6 +45,7 @@ def test_fresh_start_deletes_generated_artifacts_and_writes_active_run(tmp_path:
 
     assert result["status"] == "PASS"
     assert not old_file.exists()
+    assert not stale_fabric.exists()
     assert source_data.read_text(encoding="utf-8") == "keep\n"
     assert baseline.read_text(encoding="utf-8") == "{}"
     active = json.loads((tmp_path / "runtime" / "workbench" / "active_run.json").read_text(encoding="utf-8"))
@@ -52,7 +56,7 @@ def test_fresh_start_deletes_generated_artifacts_and_writes_active_run(tmp_path:
     assert Path(active["pre_delete_manifest"]).is_file()
 
 
-def test_fresh_start_preserves_tracked_files_inside_generated_roots(tmp_path: Path) -> None:
+def test_fresh_start_rejects_tracked_files_inside_generated_roots(tmp_path: Path) -> None:
     tracked_file = tmp_path / "research_cards" / "crypto" / ".gitkeep"
     generated_file = tmp_path / "research_cards" / "crypto" / "old" / "smoke_report.json"
     generated_file.parent.mkdir(parents=True)
@@ -69,6 +73,19 @@ def test_fresh_start_preserves_tracked_files_inside_generated_roots(tmp_path: Pa
     assert tracked_file.exists()
     assert not generated_file.exists()
     assert (tmp_path / "runtime" / "workbench" / "fresh_start_manifests").exists()
+    rejected = json.loads(
+        (
+            tmp_path
+            / "runtime"
+            / "workbench"
+            / "all_lanes"
+            / "fresh_all_lanes_test"
+            / "rejected_stale_artifacts.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert rejected["rejected_count"] == 1
+    assert rejected["rows"][0]["path"] == "research_cards/crypto/.gitkeep"
+    assert rejected["rows"][0]["status"] == "REJECTED"
 
 
 def test_fresh_start_rejects_preserved_scope_if_added_to_targets(

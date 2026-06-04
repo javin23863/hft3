@@ -123,6 +123,13 @@ def run_all_lanes(repo: Path, run_id: str, *, execute: bool = False) -> dict[str
         raise NotImplementedError("all-lane model execution is not wired in this conservative planning pass")
     plan = build_all_lanes_plan(repo, run_id)
     run_dir = repo / "runtime" / "workbench" / "all_lanes" / run_id
+    rejected_stale = {}
+    rejected_stale_path = run_dir / "rejected_stale_artifacts.json"
+    if rejected_stale_path.is_file():
+        try:
+            rejected_stale = json.loads(rejected_stale_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            rejected_stale = {}
     _write_json(run_dir / "plan.json", plan)
     summary = {
         "schema_version": "workbench_all_lanes_summary_v1",
@@ -143,18 +150,39 @@ def run_all_lanes(repo: Path, run_id: str, *, execute: bool = False) -> dict[str
     }
     _write_json(run_dir / "summary.json", summary)
     _write_json(
-        run_dir / "rejected_stale_artifacts.json",
-        {
+        rejected_stale_path,
+        rejected_stale
+        if rejected_stale and str(rejected_stale.get("run_id") or "") == run_id
+        else {
             "schema_version": "rejected_stale_artifacts_v1",
             "run_id": run_id,
             "rows": [],
             "rejected_count": 0,
         },
     )
+    from workbench.src.run.leakage_detector import run_leakage_detection
+
+    leakage = run_leakage_detection(repo, run_id=run_id)
+    summary["leakage_detection_status"] = leakage.get("status", "FAIL")
+    summary["leakage_detection_path"] = (leakage.get("artifact_paths") or {}).get("json", "")
+    summary["leakage_detection_blockers"] = leakage.get("blocking", [])
+    if leakage.get("status") != "PASS":
+        summary["blocking_gates"].append(
+            {
+                "gate": "leakage_detection",
+                "status": "FAIL",
+                "reason": "Leakage detector found stale, cross-run, or unquarantined evidence before model execution.",
+                "blocker_count": len(leakage.get("blocking") or []),
+            }
+        )
+    _write_json(run_dir / "summary.json", summary)
+    status = "PASS" if leakage.get("status") == "PASS" else "FAIL"
     return {
-        "status": "PASS",
+        "status": status,
         "run_id": run_id,
         "run_dir": str(run_dir),
         "planned_model_count": plan["model_count"],
         "terminal_counts": plan["terminal_counts"],
+        "leakage_detection_status": leakage.get("status", "FAIL"),
+        "leakage_detection_path": summary["leakage_detection_path"],
     }

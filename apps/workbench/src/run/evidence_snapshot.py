@@ -66,6 +66,7 @@ LANE_RUN_SOURCES = {
     "equities": "equities",
     "options": "options",
 }
+STALE_WHEN_ACTIVE_SOURCES = {"workbench_campaign", "autonomous", "crypto_lane"}
 
 ALL_LANES_TERMINAL_STATES = {
     "EXECUTED",
@@ -93,6 +94,14 @@ def _active_run_path(repo: Path) -> Path:
 
 def _active_run_manifest(repo: Path) -> dict[str, Any]:
     return read_json(_active_run_path(repo))
+
+
+def _active_all_lanes_run_dir(repo: Path) -> tuple[str, Path | None]:
+    active = _active_run_manifest(repo)
+    run_id = str(active.get("run_id") or "")
+    if not run_id:
+        return "", None
+    return run_id, repo / "runtime" / "workbench" / "all_lanes" / run_id
 
 
 def _lane_registry_snapshot(repo: Path) -> dict[str, Any]:
@@ -302,11 +311,49 @@ def _pit_issues(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return issues
 
 
+def _run_identity_issues(
+    *,
+    selected_run_id: str,
+    artifacts: dict[str, dict[str, Any]],
+    rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if not selected_run_id:
+        return []
+    issues: list[dict[str, Any]] = []
+    for name, payload in artifacts.items():
+        if not payload:
+            continue
+        artifact_run_id = str(payload.get("run_id") or "")
+        if artifact_run_id != selected_run_id:
+            issues.append(
+                {
+                    "artifact": name,
+                    "issue": "artifact_run_id_mismatch",
+                    "expected_run_id": selected_run_id,
+                    "observed_run_id": artifact_run_id,
+                }
+            )
+    for index, row in enumerate(rows):
+        row_run_id = str(row.get("run_id") or "")
+        if row_run_id != selected_run_id:
+            issues.append(
+                {
+                    "artifact": "feature_lineage",
+                    "feature": row.get("feature", f"row_{index}"),
+                    "issue": "lineage_row_run_id_mismatch",
+                    "expected_run_id": selected_run_id,
+                    "observed_run_id": row_run_id,
+                }
+            )
+    return issues
+
+
 def _feature_fabric_snapshot(
     repo: Path,
     *,
     selected_root: str | Path | None = None,
     consumer_lane: str = "",
+    selected_run_id: str = "",
 ) -> dict[str, Any]:
     root = Path(selected_root) if selected_root else repo / "runtime" / "workbench" / "feature_fabric"
     artifact_names = (
@@ -329,6 +376,16 @@ def _feature_fabric_snapshot(
     )
     missing_artifacts = [name for name, path in paths.items() if not path.is_file()]
     issues = _pit_issues(lineage_rows)
+    identity_issues = _run_identity_issues(
+        selected_run_id=selected_run_id,
+        artifacts={
+            "feature_fabric_manifest.json": manifest,
+            "feature_lineage.json": lineage,
+            "feature_pit_audit.json": pit_audit,
+            "rejected_features.json": rejected,
+        },
+        rows=lineage_rows,
+    )
     blocking_gates: list[dict[str, Any]] = []
     if missing_artifacts:
         blocking_gates.append(
@@ -354,6 +411,16 @@ def _feature_fabric_snapshot(
                 "status": "FAIL",
                 "reason": "One or more cross-lane features failed point-in-time validation.",
                 "issue_count": len(issues),
+            }
+        )
+    if identity_issues:
+        blocking_gates.append(
+            {
+                "gate": "feature_fabric_run_identity",
+                "status": "STALE",
+                "reason": "Feature fabric artifacts do not belong to the selected active run.",
+                "issue_count": len(identity_issues),
+                "selected_run_id": selected_run_id,
             }
         )
     pit_validation_status = "PASS" if lineage_rows and not issues else ("FAIL" if issues else "MISSING")
@@ -387,6 +454,7 @@ def _feature_fabric_snapshot(
         "lineage": lineage,
         "pit_audit": pit_audit,
         "pit_issues": issues,
+        "run_identity_issues": identity_issues,
         "blocking_gates": blocking_gates,
         "rejected_features": rejected,
         "rows": lineage_rows,
@@ -403,10 +471,13 @@ def _ensure_catalog_feature_fabric(
     *,
     consumer_lane: str,
     selected_root: str | Path | None = None,
+    run_id: str = "",
 ) -> Path:
     root = Path(selected_root) if selected_root else repo / "runtime" / "workbench" / "feature_fabric"
-    if not _has_feature_fabric_artifacts(root):
-        ensure_catalog_feature_fabric(repo, consumer_lane, output_root=root)
+    manifest = read_json(root / "feature_fabric_manifest.json") if _has_feature_fabric_artifacts(root) else {}
+    identity_mismatch = bool(run_id) and str(manifest.get("run_id") or "") != run_id
+    if not _has_feature_fabric_artifacts(root) or identity_mismatch:
+        ensure_catalog_feature_fabric(repo, consumer_lane, output_root=root, run_id=run_id)
     return root
 
 
@@ -2488,7 +2559,26 @@ def _crypto_snapshot(repo: Path) -> RunEvidenceSnapshot:
 
 def _workbench_snapshot(repo: Path, campaign_id: str = "") -> RunEvidenceSnapshot:
     root = workbench_runs_dir_for(repo)
-    run_dir = root / campaign_id if campaign_id else _latest_dir_with(root, "summary.json")
+    if not campaign_id:
+        return RunEvidenceSnapshot(
+            source="workbench_campaign",
+            state="blocked",
+            current_stage="campaign_selection_required",
+            root=str(root),
+            decision={
+                "action": "BLOCKED",
+                "reason": "Workbench campaign evidence requires an explicit selected campaign id.",
+                "live_registry_ready": False,
+                "blocking_gates": [
+                    {
+                        "gate": "campaign_selection",
+                        "status": "MISSING",
+                        "reason": "Latest-campaign fallback is disabled to prevent stale artifact leakage.",
+                    }
+                ],
+            },
+        )
+    run_dir = root / campaign_id
     if run_dir is None or not run_dir.is_dir():
         return RunEvidenceSnapshot(source="workbench_campaign", state="idle")
     summary = read_json(run_dir / "summary.json")
@@ -2597,8 +2687,20 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
     endpoint_blocked = is_cme and not endpoint_ready
     ibkr_endpoint_status = str(ibkr_endpoint.get("status") or "").upper()
     ibkr_endpoint_blocked = is_ibkr_lane and bool(ibkr_endpoint.get("pipeline_blocking"))
-    feature_fabric_root = _ensure_catalog_feature_fabric(repo, consumer_lane=lane)
-    feature_fabric = _feature_fabric_snapshot(repo, selected_root=feature_fabric_root, consumer_lane=lane)
+    active_run_id, active_run_dir = _active_all_lanes_run_dir(repo)
+    feature_root = active_run_dir / "feature_fabric" / lane if active_run_dir else None
+    feature_fabric_root = _ensure_catalog_feature_fabric(
+        repo,
+        consumer_lane=lane,
+        selected_root=feature_root,
+        run_id=active_run_id,
+    )
+    feature_fabric = _feature_fabric_snapshot(
+        repo,
+        selected_root=feature_fabric_root,
+        consumer_lane=lane,
+        selected_run_id=active_run_id,
+    )
     lane_registry_blocked = str(lane_registry.get("status") or "") == "BLOCKING" or not lane_row
     feature_fabric_blocked = str(feature_fabric.get("gate_status") or "") == "BLOCKING"
     has_rithmic_trial = bool(rithmic_trial)
@@ -2965,60 +3067,93 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
 
 
 def _autonomous_snapshot(repo: Path) -> RunEvidenceSnapshot:
-    artifacts_root = repo / "artifacts" / "runs"
-    state_root = repo / "runtime" / "research"
-    run_dir = _latest_dir_with(artifacts_root, "manifest.json")
-    if run_dir is None:
-        return RunEvidenceSnapshot(source="autonomous", state="idle")
-    run_id = run_dir.name
-    state = read_json(state_root / run_id / "state.json")
-    manifest = read_json(run_dir / "manifest.json")
-    stages = [
-        {"name": name, "status": "done", "artifact": path}
-        for name, path in (manifest.get("artifacts") or {}).items()
-    ]
-    data_resolution = read_json(run_dir / "data_resolution.json")
-    data_lineage = read_json(run_dir / "data_lineage.json")
-    feature_lineage = read_json(run_dir / "feature_lineage.json")
-    model_combo = read_json(run_dir / "model_combination.json")
-    experiment_spec = read_json(run_dir / "experiment_spec.json")
-    backtest = read_json(run_dir / "backtest_metrics.json")
-    gates = read_json(run_dir / "robustness_gates.json")
-    wf = read_json(run_dir / "walk_forward_results.json")
-    wfc = read_json(run_dir / "walk_forward_correlation.json")
-    scoring = read_json(run_dir / "scoring_summary.json")
-    decision = read_json(run_dir / "promotion_decision.json")
-    institutional_metrics = _model_metrics_artifacts(run_dir)
     return RunEvidenceSnapshot(
         source="autonomous",
-        run_id=run_id,
-        state="completed" if manifest else "unknown",
-        current_stage=str((state.get("completed_stages") or [""])[-1] if state else ""),
-        started_at=str(manifest.get("started_at", "")),
-        root=str(run_dir),
-        stages=stages,
-        artifacts={
-            **{k: str(run_dir / Path(v).name) for k, v in (manifest.get("artifacts") or {}).items()},
-            "model_scorecard": (institutional_metrics.get("paths") or {}).get("model_scorecard", ""),
-            "model_behavior_envelope": (institutional_metrics.get("paths") or {}).get("model_behavior_envelope", ""),
+        state="blocked",
+        current_stage="active_run_required",
+        root=str(repo / "artifacts" / "runs"),
+        decision={
+            "action": "BLOCKED",
+            "reason": "Autonomous latest-run fallback is disabled for the fresh all-lane boundary.",
+            "live_registry_ready": False,
+            "blocking_gates": [
+                {
+                    "gate": "autonomous_latest_fallback",
+                    "status": "DISABLED",
+                    "reason": "Use active all-lane run evidence instead of latest autonomous artifacts.",
+                }
+            ],
         },
-        registry={"model_combination": model_combo, "experiment_spec": experiment_spec},
-        data={"data_resolution": data_resolution, "data_lineage": data_lineage},
-        backtest=backtest,
-        latency={"feature_lineage": feature_lineage, "latency_profile": feature_lineage.get("latency_profile", {})},
-        diagnostics={"feature_lineage": feature_lineage, "model_combination": model_combo},
-        robustness={"gates": gates, "walk_forward": wf, "wfc": wfc},
-        decision={**decision, "scoring_summary": scoring, "institutional_metrics": institutional_metrics},
-        reports={
-            "report_md": str(run_dir / "report.md"),
-            "model_scorecard": (institutional_metrics.get("paths") or {}).get("model_scorecard", ""),
-            "model_behavior_envelope": (institutional_metrics.get("paths") or {}).get("model_behavior_envelope", ""),
+    )
+
+
+def _stale_source_blocked_snapshot(repo: Path, source: str, active: dict[str, Any]) -> RunEvidenceSnapshot:
+    run_id = str(active.get("run_id") or "")
+    run_dir = repo / "runtime" / "workbench" / "all_lanes" / run_id if run_id else repo / "runtime" / "workbench"
+    return RunEvidenceSnapshot(
+        source=source,
+        run_id=run_id,
+        state="blocked",
+        current_stage="stale_source_blocked",
+        root=str(run_dir),
+        stages=[
+            {"name": "active_run_manifest", "status": "observed" if run_id else "missing"},
+            {"name": source, "status": "stale_blocked"},
+        ],
+        artifacts={
+            "active_run": str(_active_run_path(repo)),
+            "active_run_root": str(run_dir),
+        },
+        registry={"lanes": _lane_registry_snapshot(repo).get("rows", [])},
+        diagnostics={
+            "leakage_boundary": {
+                "artifact_reuse_policy": active.get("artifact_reuse_policy", "active_run_id_only"),
+                "blocked_source": source,
+                "active_run_id": run_id,
+            }
+        },
+        decision={
+            "action": "BLOCKED",
+            "reason": (
+                f"{source} artifacts are outside the active all-lane run boundary. "
+                "They cannot be used as evidence for the fresh run."
+            ),
+            "live_registry_ready": False,
+            "blocking_gates": [
+                {
+                    "gate": "stale_artifact_source",
+                    "status": "STALE",
+                    "source": source,
+                    "reason": "Active all-lane run requires active_run_id_only evidence.",
+                }
+            ],
         },
         system={
-            "manifest": manifest,
-            "artifact_bundle_validation": read_json(run_dir / "artifact_bundle_validation.json"),
-            "registry_update": read_json(run_dir / "registry_update.json"),
-            "institutional_metrics": institutional_metrics,
+            "active_run": active,
+            "artifact_reuse_policy": active.get("artifact_reuse_policy", "active_run_id_only"),
+            "stale_source_blocked": source,
+        },
+    )
+
+
+def _legacy_source_disabled_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
+    return RunEvidenceSnapshot(
+        source=source,
+        state="blocked",
+        current_stage="legacy_source_disabled",
+        root=str(repo / "runtime" / "workbench"),
+        decision={
+            "action": "BLOCKED",
+            "reason": f"{source} is not a production Workbench run source for the fresh all-lane boundary.",
+            "live_registry_ready": False,
+            "blocking_gates": [
+                {
+                    "gate": "legacy_source_disabled",
+                    "status": "DISABLED",
+                    "source": source,
+                    "reason": "Use all_lanes or a lane view backed by the active run.",
+                }
+            ],
         },
     )
 
@@ -3060,6 +3195,7 @@ def _all_lanes_snapshot(repo: Path) -> RunEvidenceSnapshot:
     run_dir = repo / "runtime" / "workbench" / "all_lanes" / run_id if run_id else repo / "runtime" / "workbench" / "all_lanes"
     plan = read_json(run_dir / "plan.json") or read_json(run_dir / "all_lanes_plan.json")
     summary = read_json(run_dir / "summary.json")
+    leakage_detection = read_json(run_dir / "leakage_detection.json")
     model_rows = (
         plan.get("models")
         or plan.get("model_plan")
@@ -3118,6 +3254,22 @@ def _all_lanes_snapshot(repo: Path) -> RunEvidenceSnapshot:
                 "reason": f"{len(invalid_state_rows)} model rows have invalid terminal_state.",
             }
         )
+    for artifact_name, payload in (
+        ("plan.json", plan),
+        ("summary.json", summary),
+        ("rejected_stale_artifacts.json", read_json(run_dir / "rejected_stale_artifacts.json")),
+    ):
+        if payload and run_id and str(payload.get("run_id") or "") != run_id:
+            blocking_gates.append(
+                {
+                    "gate": "active_run_artifact_identity",
+                    "status": "STALE",
+                    "artifact": artifact_name,
+                    "reason": f"{artifact_name} does not declare the active run id.",
+                    "expected_run_id": run_id,
+                    "observed_run_id": str(payload.get("run_id") or ""),
+                }
+            )
 
     state = str(summary.get("state") or active.get("state") or ("blocked" if blocking_gates else "planned"))
     planned = len(model_rows)
@@ -3137,6 +3289,7 @@ def _all_lanes_snapshot(repo: Path) -> RunEvidenceSnapshot:
         root=str(run_dir),
         stages=[
             {"name": "active_run_manifest", "status": "observed" if run_id else "missing"},
+            {"name": "leakage_detection", "status": leakage_detection.get("status", summary.get("leakage_detection_status", "pending"))},
             {"name": "lane_registry", "status": lane_registry.get("status", "UNKNOWN")},
             {"name": "model_execution_plan", "status": "observed" if model_rows else "missing"},
             {"name": "pit_feature_audit", "status": summary.get("pit_feature_audit_status", "pending")},
@@ -3151,6 +3304,7 @@ def _all_lanes_snapshot(repo: Path) -> RunEvidenceSnapshot:
             "all_lanes_plan": str(run_dir / "plan.json"),
             "all_lanes_summary": str(run_dir / "summary.json"),
             "rejected_stale_artifacts": str(run_dir / "rejected_stale_artifacts.json"),
+            "leakage_detection": str(run_dir / "leakage_detection.json"),
         },
         registry={
             "lanes": lane_registry.get("rows", []),
@@ -3178,6 +3332,8 @@ def _all_lanes_snapshot(repo: Path) -> RunEvidenceSnapshot:
                 "artifact_reuse_policy": active.get("artifact_reuse_policy", "active_run_id_only"),
                 "missing_terminal_state_count": len(missing_state_rows),
                 "invalid_terminal_state_count": len(invalid_state_rows),
+                "leakage_detection_status": leakage_detection.get("status", summary.get("leakage_detection_status", "")),
+                "leakage_detection_blockers": leakage_detection.get("blocking", summary.get("leakage_detection_blockers", [])),
             },
             "rejected_stale_artifacts": read_json(run_dir / "rejected_stale_artifacts.json"),
         },
@@ -3201,17 +3357,22 @@ def _all_lanes_snapshot(repo: Path) -> RunEvidenceSnapshot:
         reports={
             "summary": str(run_dir / "summary.json"),
             "report": str(run_dir / "report.md"),
+            "leakage_detection": str(run_dir / "leakage_detection.md"),
         },
         system={
             "active_run": active,
             "lane_registry": lane_registry,
             "all_lanes_summary": summary,
+            "leakage_detection": leakage_detection,
             "artifact_reuse_policy": active.get("artifact_reuse_policy", "active_run_id_only"),
         },
     )
 
 
 def load_run_evidence(repo: Path, source: str, *, campaign_id: str = "") -> RunEvidenceSnapshot:
+    active = _active_run_manifest(repo)
+    if active and source in STALE_WHEN_ACTIVE_SOURCES:
+        return _stale_source_blocked_snapshot(repo, source, active)
     if source == "all_lanes":
         snapshot = _all_lanes_snapshot(repo)
     elif source == "workbench_campaign":
@@ -3221,7 +3382,7 @@ def load_run_evidence(repo: Path, source: str, *, campaign_id: str = "") -> RunE
     elif source in LANE_RUN_SOURCES:
         snapshot = _lane_source_snapshot(repo, source)
     elif source == "crypto_lane":
-        snapshot = _crypto_snapshot(repo)
+        snapshot = _legacy_source_disabled_snapshot(repo, source)
     else:
         snapshot = _all_lanes_snapshot(repo)
     lane = _source_lane(snapshot.source)
@@ -3233,11 +3394,13 @@ def load_run_evidence(repo: Path, source: str, *, campaign_id: str = "") -> RunE
             repo,
             consumer_lane=lane,
             selected_root=selected_feature_root,
+            run_id=snapshot.run_id,
         )
         feature_fabric = _feature_fabric_snapshot(
             repo,
             selected_root=feature_fabric_root,
             consumer_lane=lane,
+            selected_run_id=snapshot.run_id,
         )
     is_cme_lane = lane == "cme_futures"
     is_ibkr_lane = lane in {"equities", "options"}
@@ -3299,20 +3462,4 @@ def load_run_evidence(repo: Path, source: str, *, campaign_id: str = "") -> RunE
 def default_source(repo: Path) -> str:
     if _active_run_path(repo).is_file():
         return "all_lanes"
-    crypto_path = repo / "runtime" / "workbench" / "crypto_smoke" / "latest_status.json"
-    crypto_status = read_json(crypto_path)
-    if crypto_status.get("state") == "running":
-        return "all_lanes"
-    runs = workbench_runs_dir_for(repo)
-    for path in runs.glob("*/status.json") if runs.is_dir() else []:
-        status = read_json(path)
-        if str(status.get("state", "")).lower() == "running":
-            return "workbench_campaign"
-    choices: list[tuple[float, str]] = []
-    latest_campaign = _latest_dir_with(runs, "summary.json")
-    if latest_campaign is not None:
-        choices.append((_mtime(latest_campaign / "summary.json"), "workbench_campaign"))
-    latest_autonomous = _latest_dir_with(repo / "artifacts" / "runs", "manifest.json")
-    if latest_autonomous is not None:
-        choices.append((_mtime(latest_autonomous / "manifest.json"), "autonomous"))
-    return max(choices, default=(0.0, "all_lanes"))[1]
+    return "all_lanes"

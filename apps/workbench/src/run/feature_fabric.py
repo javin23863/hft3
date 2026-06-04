@@ -50,8 +50,9 @@ def _safe_row(
     source_symbol: str,
     feature: str,
     evidence_source: str,
+    run_id: str = "",
 ) -> dict[str, Any]:
-    return {
+    row = {
         "consumer_lane": consumer_lane,
         "source_lane": source_lane,
         "asset": asset,
@@ -67,6 +68,9 @@ def _safe_row(
         "model_feature_usage": "not_observed",
         "evidence_source": evidence_source,
     }
+    if run_id:
+        row["run_id"] = run_id
+    return row
 
 
 def _reject_row(
@@ -79,6 +83,7 @@ def _reject_row(
     feature: str,
     reason: str,
     evidence_source: str,
+    run_id: str = "",
 ) -> dict[str, Any]:
     row = _safe_row(
         generated_at=generated_at,
@@ -88,6 +93,7 @@ def _reject_row(
         source_symbol=source_symbol,
         feature=feature,
         evidence_source=evidence_source,
+        run_id=run_id,
     )
     row.update(
         {
@@ -106,6 +112,7 @@ def _lane_config_rows(
     consumer_lane: str,
     source_lane: str,
     config: dict[str, Any],
+    run_id: str = "",
 ) -> list[dict[str, Any]]:
     symbols = [str(symbol) for symbol in (config.get("symbols") or []) if str(symbol).strip()]
     if not symbols:
@@ -121,12 +128,19 @@ def _lane_config_rows(
                 source_symbol=symbol,
                 feature=f"{source_lane}_{symbol}_catalog_feature",
                 evidence_source="lane_config",
+                run_id=run_id,
             )
         )
     return rows
 
 
-def _crypto_candidate_rows(repo: Path, *, generated_at: str, consumer_lane: str) -> list[dict[str, Any]]:
+def _crypto_candidate_rows(
+    repo: Path,
+    *,
+    generated_at: str,
+    consumer_lane: str,
+    run_id: str = "",
+) -> list[dict[str, Any]]:
     root = repo / "packages" / "crypto_lane" / "config" / "candidates"
     rows: list[dict[str, Any]] = []
     if not root.is_dir():
@@ -156,12 +170,19 @@ def _crypto_candidate_rows(repo: Path, *, generated_at: str, consumer_lane: str)
                         source_symbol=symbol,
                         feature=feature,
                         evidence_source=str(path.relative_to(repo)) if path.is_relative_to(repo) else str(path),
+                        run_id=run_id,
                     )
                 )
     return rows
 
 
-def _cme_rows(repo: Path, *, generated_at: str, consumer_lane: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def _cme_rows(
+    repo: Path,
+    *,
+    generated_at: str,
+    consumer_lane: str,
+    run_id: str = "",
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     try:
         from workbench.src.data.instrument_registry import load_instrument_registry
 
@@ -177,6 +198,7 @@ def _cme_rows(repo: Path, *, generated_at: str, consumer_lane: str) -> tuple[lis
                 feature="cme_catalog_feature",
                 reason=f"hot_memory_universe_load_failed: {exc}",
                 evidence_source="apps/workbench/config/hot_memory_universe.yaml",
+                run_id=run_id,
             )
         ]
     safe: list[dict[str, Any]] = []
@@ -193,6 +215,7 @@ def _cme_rows(repo: Path, *, generated_at: str, consumer_lane: str) -> tuple[lis
                     source_symbol=rec.canonical_internal_symbol,
                     feature=feature,
                     evidence_source="apps/workbench/config/hot_memory_universe.yaml",
+                    run_id=run_id,
                 )
             )
         else:
@@ -206,6 +229,7 @@ def _cme_rows(repo: Path, *, generated_at: str, consumer_lane: str) -> tuple[lis
                     feature=feature,
                     reason="point_in_time_safe_false",
                     evidence_source="apps/workbench/config/hot_memory_universe.yaml",
+                    run_id=run_id,
                 )
             )
     return safe, rejected
@@ -254,6 +278,7 @@ def ensure_catalog_feature_fabric(
     repo: Path,
     consumer_lane: str,
     output_root: str | Path | None = None,
+    run_id: str = "",
 ) -> dict[str, Any]:
     """Write catalog feature-fabric artifacts for a selected consumer lane."""
 
@@ -265,6 +290,7 @@ def ensure_catalog_feature_fabric(
     if lane_registry["status"] == "BLOCKING":
         manifest = {
             "schema_version": "feature_fabric_manifest_v1",
+            "run_id": run_id,
             "generated_at_utc": generated_at,
             "consumer_lane": consumer_lane,
             "artifact_scope": "catalog_eligibility_not_model_usage",
@@ -272,11 +298,15 @@ def ensure_catalog_feature_fabric(
             "blocking_gates": lane_registry["errors"],
         }
         _write_json(artifact_paths["feature_fabric_manifest.json"], manifest)
-        _write_json(artifact_paths["feature_lineage.json"], {"schema_version": "feature_lineage_v1", "features": []})
+        _write_json(
+            artifact_paths["feature_lineage.json"],
+            {"schema_version": "feature_lineage_v1", "run_id": run_id, "features": []},
+        )
         _write_json(
             artifact_paths["feature_pit_audit.json"],
             {
                 "schema_version": "feature_pit_audit_v1",
+                "run_id": run_id,
                 "generated_at_utc": generated_at,
                 "pit_rule": "source_available_timestamp <= decision_timestamp",
                 "rows": [],
@@ -288,6 +318,7 @@ def ensure_catalog_feature_fabric(
             artifact_paths["rejected_features.json"],
             {
                 "schema_version": "rejected_features_v1",
+                "run_id": run_id,
                 "rows": lane_registry["errors"],
                 "rejected_count": len(lane_registry["errors"]),
             },
@@ -297,6 +328,7 @@ def ensure_catalog_feature_fabric(
             "artifact_paths": {key: str(value) for key, value in artifact_paths.items()},
             "row_count": 0,
             "rejected_count": len(lane_registry["errors"]),
+            "run_id": run_id,
         }
 
     lineage_rows: list[dict[str, Any]] = []
@@ -304,11 +336,16 @@ def ensure_catalog_feature_fabric(
     lane_configs = {row["lane"]: row.get("config") or {} for row in lane_registry["rows"]}
     for source_lane, config in lane_configs.items():
         if source_lane == "cme_futures":
-            safe, rejected = _cme_rows(repo, generated_at=generated_at, consumer_lane=consumer_lane)
+            safe, rejected = _cme_rows(repo, generated_at=generated_at, consumer_lane=consumer_lane, run_id=run_id)
             lineage_rows.extend(safe)
             rejected_rows.extend(rejected)
         elif source_lane == "crypto":
-            crypto_rows = _crypto_candidate_rows(repo, generated_at=generated_at, consumer_lane=consumer_lane)
+            crypto_rows = _crypto_candidate_rows(
+                repo,
+                generated_at=generated_at,
+                consumer_lane=consumer_lane,
+                run_id=run_id,
+            )
             lineage_rows.extend(
                 crypto_rows
                 or _lane_config_rows(
@@ -316,6 +353,7 @@ def ensure_catalog_feature_fabric(
                     consumer_lane=consumer_lane,
                     source_lane=source_lane,
                     config=config,
+                    run_id=run_id,
                 )
             )
         else:
@@ -325,11 +363,13 @@ def ensure_catalog_feature_fabric(
                     consumer_lane=consumer_lane,
                     source_lane=source_lane,
                     config=config,
+                    run_id=run_id,
                 )
             )
 
     manifest = {
         "schema_version": "feature_fabric_manifest_v1",
+        "run_id": run_id,
         "generated_at_utc": generated_at,
         "consumer_lane": consumer_lane,
         "artifact_scope": "catalog_eligibility_not_model_usage",
@@ -342,6 +382,7 @@ def ensure_catalog_feature_fabric(
     }
     pit_audit = {
         "schema_version": "feature_pit_audit_v1",
+        "run_id": run_id,
         "generated_at_utc": generated_at,
         "pit_rule": "source_available_timestamp <= decision_timestamp",
         "rows": lineage_rows,
@@ -351,11 +392,13 @@ def ensure_catalog_feature_fabric(
     }
     rejected = {
         "schema_version": "rejected_features_v1",
+        "run_id": run_id,
         "rows": rejected_rows,
         "rejected_count": len(rejected_rows),
     }
     lineage = {
         "schema_version": "feature_lineage_v1",
+        "run_id": run_id,
         "features": lineage_rows,
         "model_feature_usage_status": "not_observed",
     }
@@ -368,4 +411,5 @@ def ensure_catalog_feature_fabric(
         "artifact_paths": {key: str(value) for key, value in artifact_paths.items()},
         "row_count": len(lineage_rows),
         "rejected_count": len(rejected_rows),
+        "run_id": run_id,
     }

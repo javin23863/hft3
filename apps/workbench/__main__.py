@@ -98,6 +98,10 @@ def main(argv: list[str] | None = None) -> int:
     all_lanes_p.add_argument("--execute", action="store_true", help="Execute models when the full executor is wired")
     all_lanes_p.add_argument("--json", action="store_true", help="Machine-readable output")
 
+    leak_p = sub.add_parser("leakage-detect", help="Run the active-run data leakage detector")
+    leak_p.add_argument("--run-id", default=None, help="Optional active all-lane run id")
+    leak_p.add_argument("--json", action="store_true", help="Machine-readable output")
+
     ibkr_p = sub.add_parser("ibkr-endpoint", help="Check equities lane IBKR headless socket/API endpoint")
     ibkr_p.add_argument("--config", default=None, help="Optional IBKR endpoint YAML path")
     ibkr_p.add_argument("--connect", action="store_true", help="Attempt a real ibapi headless handshake")
@@ -247,7 +251,25 @@ def main(argv: list[str] | None = None) -> int:
             print(f"All-lane plan: {result['run_id']}")
             print(f"Planned models: {result['planned_model_count']}")
             print(f"Run dir: {result['run_dir']}")
-        return 0
+            print(f"Leakage detection: {result['leakage_detection_status']}")
+            print(f"Leakage report: {result['leakage_detection_path']}")
+        return 0 if result.get("status") == "PASS" else 1
+
+    if args.command == "leakage-detect":
+        from workbench.src.run.leakage_detector import run_leakage_detection
+
+        result = run_leakage_detection(_REPO, run_id=args.run_id)
+        if args.json:
+            print(json.dumps(result, indent=2, default=str))
+        else:
+            print(f"Leakage detection: {result['status']}")
+            print(f"Run ID: {result.get('run_id', '')}")
+            for blocker in result.get("blocking", []):
+                print(f"  {blocker.get('gate', '')}: {blocker.get('reason', '')}")
+            paths = result.get("artifact_paths") or {}
+            if paths.get("json"):
+                print(f"Report: {paths['json']}")
+        return 0 if result.get("status") == "PASS" else 1
 
     if args.command == "ibkr-endpoint":
         from equities_lane.src.ibkr_endpoint import endpoint_status

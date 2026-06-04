@@ -254,7 +254,7 @@ def test_autonomous_panel_is_registry_and_status_driven() -> None:
     assert "all-lanes --run-id" in app_src
 
 
-def test_autonomous_panel_latest_reports_are_run_local(tmp_path) -> None:
+def test_autonomous_panel_does_not_read_legacy_candidate_reports(tmp_path) -> None:
     from workbench.ui import autonomous_panel
 
     global_report = tmp_path / "research_cards" / "crypto" / "old_candidate" / "smoke_report.json"
@@ -263,20 +263,11 @@ def test_autonomous_panel_latest_reports_are_run_local(tmp_path) -> None:
         '{"candidate_id":"old_candidate","runs":{"with_btc_node":{"oos_ic_baseline_mean":0.1,"n_rows":1,"n_folds":1}}}',
         encoding="utf-8",
     )
-    latest = tmp_path / "runtime" / "workbench" / "crypto_smoke" / "latest_status.json"
-    latest.parent.mkdir(parents=True, exist_ok=True)
-    latest.write_text('{"run_id":"run_1"}', encoding="utf-8")
-    run_report = latest.parent / "run_1" / "smoke_reports" / "current_candidate.json"
-    run_report.parent.mkdir(parents=True, exist_ok=True)
-    run_report.write_text(
-        '{"candidate_id":"current_candidate","runs":{"with_btc_node":{"oos_ic_baseline_mean":0.2,"n_rows":2,"n_folds":2}}}',
-        encoding="utf-8",
-    )
 
     reports = autonomous_panel._latest_crypto_reports(tmp_path)
 
-    assert [report["candidate_id"] for report in reports] == ["current_candidate"]
-    assert reports[0]["run_id"] == "run_1"
+    assert reports == []
+    assert not hasattr(autonomous_panel, "_start_crypto_smoke")
 
 
 def test_app_tabs_use_shared_run_evidence_snapshot() -> None:

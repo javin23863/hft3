@@ -62,41 +62,13 @@ def _fake_ibkr_endpoint_status(status: str = "CONNECTED", api_status: str = "CON
     }
 
 
-def test_crypto_snapshot_surfaces_bitcoin_edge_packet_gate() -> None:
+def test_crypto_lane_source_is_blocked_inside_active_all_lane_boundary() -> None:
     snapshot = load_run_evidence(REPO, "crypto_lane")
 
-    edge_data = snapshot.data["bitcoin_edge_packets"]
-    edge_latency = snapshot.latency["bitcoin_edge_packets"]
-
-    assert edge_data["configured"] is True
-    assert edge_data["transport"] == "length_prefixed_protobuf_tcp"
-    assert edge_data["chicago_addr"] == "64.44.98.219:9876"
-    assert edge_data["bitcoin_node_source_ip"] == "213.199.46.118"
-    assert edge_latency["status"] == edge_data["status"]
-    assert snapshot.decision["bitcoin_edge_packet_status"] == edge_data["status"]
-    decision_action = str(snapshot.decision.get("action") or "").upper()
-    if not edge_data["observed"]:
-        if decision_action == "REJECT":
-            assert not any(gate["gate"] == "bitcoin_edge_packets" for gate in snapshot.decision["blocking_gates"])
-            assert "failed_gates" in snapshot.decision
-        else:
-            assert any(gate["gate"] == "bitcoin_edge_packets" for gate in snapshot.decision["blocking_gates"])
-    assert snapshot.diagnostics["edge_packet_schema"]
-    assert "proxy_leaderboard" in snapshot.backtest
-    assert "equity_curves" in snapshot.backtest
-    assert "smoke_pass_count" in snapshot.decision
-    assert "research_pass_count" not in snapshot.decision
-    assert "economic_diagnostic_pass_count" in snapshot.decision
-    assert "trade_manager" in snapshot.system
-    assert snapshot.trade_manager["live_routing_status"] in {"NOT_WIRED", "not_observed"}
-    assert {row["lane"] for row in snapshot.registry["lanes"]} >= {
-        "cme_futures",
-        "crypto",
-        "equities",
-        "options",
-    }
-    assert snapshot.diagnostics["feature_fabric"]["policy"] == "cross_lane_features_allowed_only_when_point_in_time_safe"
-    assert (snapshot.system.get("rithmic_endpoint") or {}).get("secret_exposed", False) is False
+    assert snapshot.current_stage == "stale_source_blocked"
+    assert snapshot.decision["action"] == "BLOCKED"
+    assert snapshot.diagnostics["leakage_boundary"]["blocked_source"] == "crypto_lane"
+    assert any(gate["gate"] == "stale_artifact_source" for gate in snapshot.decision["blocking_gates"])
 
 
 def test_workbench_run_sources_cover_registered_model_lanes() -> None:
@@ -620,10 +592,16 @@ def test_feature_fabric_blocks_when_artifacts_are_missing(tmp_path: Path) -> Non
 def test_catalog_feature_fabric_generation_passes_all_lanes(tmp_path: Path) -> None:
     for lane in ("cme_futures", "crypto", "equities", "options"):
         root = tmp_path / lane
-        result = ensure_catalog_feature_fabric(REPO, lane, output_root=root)
-        snapshot = _feature_fabric_snapshot(REPO, selected_root=root, consumer_lane=lane)
+        result = ensure_catalog_feature_fabric(REPO, lane, output_root=root, run_id="fresh_run")
+        snapshot = _feature_fabric_snapshot(
+            REPO,
+            selected_root=root,
+            consumer_lane=lane,
+            selected_run_id="fresh_run",
+        )
 
         assert result["status"] == "PASS"
+        assert result["run_id"] == "fresh_run"
         assert result["row_count"] > 0
         assert snapshot["gate_status"] == "PASS"
         assert snapshot["pit_validation_status"] == "PASS"
@@ -642,7 +620,23 @@ def test_catalog_feature_fabric_generation_passes_all_lanes(tmp_path: Path) -> N
             "equities",
             "options",
         }
+        assert all(row["run_id"] == "fresh_run" for row in snapshot["rows"])
         assert all(row["evidence_scope"] == "catalog_eligibility_not_model_usage" for row in snapshot["rows"])
+
+
+def test_feature_fabric_blocks_missing_active_run_identity(tmp_path: Path) -> None:
+    ensure_catalog_feature_fabric(REPO, "equities", output_root=tmp_path)
+
+    snapshot = _feature_fabric_snapshot(
+        REPO,
+        selected_root=tmp_path,
+        consumer_lane="equities",
+        selected_run_id="fresh_all_lanes",
+    )
+
+    assert snapshot["gate_status"] == "BLOCKING"
+    assert any(gate["gate"] == "feature_fabric_run_identity" for gate in snapshot["blocking_gates"])
+    assert snapshot["run_identity_issues"]
 
 
 def test_feature_fabric_passes_with_observed_pit_safe_rows(tmp_path: Path) -> None:
@@ -742,7 +736,7 @@ def test_catalog_feature_fabric_rejects_unsafe_cme_instrument(monkeypatch, tmp_p
 
 
 def test_load_run_evidence_uses_catalog_feature_fabric_for_all_lane_sources() -> None:
-    for source in ("cme_rithmic", "crypto_lane", "equities", "options"):
+    for source in ("all_lanes", "cme_rithmic", "equities", "options"):
         snapshot = load_run_evidence(REPO, source)
         fabric = snapshot.diagnostics["feature_fabric"]
 
@@ -751,6 +745,42 @@ def test_load_run_evidence_uses_catalog_feature_fabric_for_all_lane_sources() ->
         assert fabric["catalog_pit_eligibility_status"] == "PASS"
         assert fabric["model_feature_usage_status"] == "not_observed"
         assert snapshot.current_stage != "feature_fabric_blocked"
+
+
+def test_active_run_blocks_legacy_artifact_sources(tmp_path: Path) -> None:
+    active = tmp_path / "runtime" / "workbench" / "active_run.json"
+    active.parent.mkdir(parents=True, exist_ok=True)
+    active.write_text(
+        '{"run_id":"fresh_all_lanes","artifact_reuse_policy":"active_run_id_only"}',
+        encoding="utf-8",
+    )
+    old_campaign = tmp_path / "research_cards" / "workbench_runs" / "old" / "summary.json"
+    old_campaign.parent.mkdir(parents=True, exist_ok=True)
+    old_campaign.write_text('{"run_id":"old","promote_candidate":true}', encoding="utf-8")
+
+    snapshot = load_run_evidence(tmp_path, "workbench_campaign")
+
+    assert snapshot.current_stage == "stale_source_blocked"
+    assert snapshot.decision["action"] == "BLOCKED"
+    assert any(gate["gate"] == "stale_artifact_source" for gate in snapshot.decision["blocking_gates"])
+
+
+def test_no_active_run_does_not_load_latest_campaign_or_autonomous(tmp_path: Path) -> None:
+    old_campaign = tmp_path / "research_cards" / "workbench_runs" / "old" / "summary.json"
+    old_campaign.parent.mkdir(parents=True, exist_ok=True)
+    old_campaign.write_text('{"run_id":"old","promote_candidate":true}', encoding="utf-8")
+    old_autonomous = tmp_path / "artifacts" / "runs" / "old_ar" / "manifest.json"
+    old_autonomous.parent.mkdir(parents=True, exist_ok=True)
+    old_autonomous.write_text('{"run_id":"old_ar"}', encoding="utf-8")
+
+    campaign = load_run_evidence(tmp_path, "workbench_campaign")
+    autonomous = load_run_evidence(tmp_path, "autonomous")
+    crypto = load_run_evidence(tmp_path, "crypto_lane")
+
+    assert campaign.current_stage == "campaign_selection_required"
+    assert autonomous.current_stage == "active_run_required"
+    assert crypto.current_stage == "legacy_source_disabled"
+    assert campaign.decision["action"] == autonomous.decision["action"] == crypto.decision["action"] == "BLOCKED"
 
 
 def test_lane_registry_errors_are_workbench_blockers(monkeypatch) -> None:

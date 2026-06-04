@@ -13,6 +13,7 @@ from typing import Any, Callable, Iterable
 
 GENERATED_TARGETS = (
     "runtime/workbench/crypto_smoke",
+    "runtime/workbench/feature_fabric",
     "runtime/workbench/screenshots",
     "runtime/research",
     "runtime/reports/full_pipeline_gate.json",
@@ -184,6 +185,23 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def _tracked_generated_artifact_rows(tracked: set[str]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for rel_target in GENERATED_TARGETS:
+        prefix = rel_target.strip("/").replace("\\", "/")
+        for rel in sorted(tracked):
+            if rel == prefix or rel.startswith(prefix + "/"):
+                rows.append(
+                    {
+                        "path": rel,
+                        "target": prefix,
+                        "status": "REJECTED",
+                        "reason": "tracked_generated_artifact_outside_active_run_boundary",
+                    }
+                )
+    return rows
+
+
 def fresh_start(
     repo: Path,
     scope: str = "all-lanes",
@@ -204,6 +222,7 @@ def fresh_start(
     if tracked_paths_fn is not None and tracked_checker is not None:
         raise FreshStartError("Provide either tracked_paths_fn or tracked_checker, not both")
     tracked = tracked_paths_fn(repo) if tracked_paths_fn else _tracked_paths(repo)
+    rejected_stale_rows = _tracked_generated_artifact_rows(tracked)
     delete_candidates: list[DeleteCandidate] = []
     for rel_target in GENERATED_TARGETS:
         target = (repo / rel_target).resolve()
@@ -231,7 +250,8 @@ def fresh_start(
             }
             for candidate in delete_candidates
         ],
-        "preserved_paths": sorted(tracked),
+        "preserved_paths": [row["path"] for row in rejected_stale_rows],
+        "rejected_stale_artifacts": rejected_stale_rows,
     }
     _write_json(pre_delete_path, pre_delete)
 
@@ -248,7 +268,9 @@ def fresh_start(
         "fresh_start": True,
         "artifact_reuse_policy": "active_run_id_only",
         "deleted_paths": deleted_paths,
-        "preserved_paths": sorted(tracked),
+        "preserved_paths": [row["path"] for row in rejected_stale_rows],
+        "rejected_stale_artifacts": rejected_stale_rows,
+        "rejected_stale_artifact_count": len(rejected_stale_rows),
         "source_data_reused": True,
         "previous_run_artifacts_reused": False,
         "pre_delete_manifest": str(pre_delete_path),
@@ -269,8 +291,8 @@ def fresh_start(
         {
             "schema_version": "rejected_stale_artifacts_v1",
             "run_id": run_id,
-            "rows": [],
-            "rejected_count": 0,
+            "rows": rejected_stale_rows,
+            "rejected_count": len(rejected_stale_rows),
         },
     )
 
