@@ -121,6 +121,7 @@ def generate_behavior_envelope(
     latency_envelope = inputs.get("latency_operating_envelope") or {}
     if not isinstance(latency_envelope, dict):
         latency_envelope = {}
+    execution_audit = latency_envelope.get("execution_path_audit") if isinstance(latency_envelope.get("execution_path_audit"), dict) else {}
     pending_state = latency_envelope.get("pending_state_risk") if isinstance(latency_envelope.get("pending_state_risk"), dict) else {}
     warning = max_dd * float(threshold.get("warning_drawdown_multiplier", 1.0))
     kill = max_dd * float(threshold.get("kill_drawdown_multiplier", 1.5))
@@ -136,6 +137,9 @@ def generate_behavior_envelope(
         warnings.append("scorecard grade is not eligible for active live operation")
     if not returns:
         warnings.append("return samples missing; PnL envelope ranges unavailable")
+    audit_status = str(execution_audit.get("status") or "missing").lower()
+    if audit_status in {"missing", "fail", "failed", "blocked"}:
+        warnings.append("low-latency execution-path audit is missing, failed, or blocked")
     return ModelBehaviorEnvelope(
         envelope_id=stable_id("envelope", payload),
         model_id=scorecard.model_id,
@@ -194,6 +198,7 @@ def generate_behavior_envelope(
         },
         competitor_speed_assumption_used=latency_envelope.get("competitor_speed_sensitivity") or {},
         opportunity_decay_window_used=_first_compatible_window(latency_envelope),
+        low_latency_execution_path_status=execution_audit,
         alpha_half_life_bounds=(alpha_half_life, alpha_half_life),
         data_freshness_requirements={"max_age_ns": int(threshold["data_freshness_max_ns"])},
         warnings=tuple(warnings),

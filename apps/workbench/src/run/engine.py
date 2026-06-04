@@ -19,6 +19,7 @@ from workbench.src.latency.operating_envelope import (
     compact_envelope_fields,
     write_latency_operating_envelope,
 )
+from workbench.src.latency.execution_path_audit import load_current_low_latency_status
 from workbench.src.core.composition import ModelComposition
 from workbench.src.registry.composition_orchestrator import CompositionOrchestrator
 from features_engine.src.model_registry import resolve_model_id
@@ -202,6 +203,7 @@ class WorkbenchEngine:
             python_research_runtime_us=python_runtime_us,
         )
 
+        execution_path_audit_status = load_current_low_latency_status(self.repo_root)
         trade_pnls = [result.expectancy] * max(result.num_trades, 1) if isinstance(result, BacktestResult) else []
         latency_envelope = build_latency_operating_envelope(
             run_id=ctx.run_id,
@@ -215,6 +217,7 @@ class WorkbenchEngine:
             composition_trace=comp_trace,
             chi404_observed=chi404_observed,
             wfc_status=wfc_status,
+            execution_path_audit_status=execution_path_audit_status,
         )
         latency_checks = latency_envelope.get("checks", {})
 
@@ -226,6 +229,7 @@ class WorkbenchEngine:
             **base,
             "survives_cpp_execution_delay": viability.survives_cpp_execution_delay,
             "operating_envelope_generated": _latency_check_passed("operating_envelope_generated"),
+            "low_latency_execution_path_audit_pass": _latency_check_passed("low_latency_execution_path_audit"),
             "placement_speed_sensitivity_pass": _latency_check_passed("placement_speed_sensitivity"),
             "async_ack_state_risk_pass": _latency_check_passed("async_ack_state_risk"),
             "pending_exposure_guardrails_pass": _latency_check_passed("pending_exposure_guardrails"),
@@ -246,6 +250,7 @@ class WorkbenchEngine:
             chi404_observed=chi404_observed,
             wfc_status=wfc_status,
             robustness=robustness,
+            execution_path_audit_status=execution_path_audit_status,
         )
         write_latency_operating_envelope(ctx.artifact_dir, latency_envelope)
         latency_envelope_compact = compact_envelope_fields(latency_envelope)

@@ -42,6 +42,7 @@ def build_latency_operating_envelope(
     wfc_status: str | None = None,
     assumptions: CapabilityAssumptions | None = None,
     robustness: Any = None,
+    execution_path_audit_status: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     assumptions = assumptions or CapabilityAssumptions(
         opportunity_decay_us=1_000.0,
@@ -72,6 +73,7 @@ def build_latency_operating_envelope(
         composition_payload=composition_payload,
         competitor=competitor,
         defensive_timing_required=defensive_timing_required,
+        execution_path_audit=_execution_path_audit_payload(execution_path_audit_status),
     )
     promotion_blockers = [
         {
@@ -134,6 +136,7 @@ def build_latency_operating_envelope(
         },
         "competitor_speed_sensitivity": competitor,
         "pending_state_risk": pending_controls,
+        "execution_path_audit": _execution_path_audit_payload(execution_path_audit_status),
         "checks": checks,
         "promotion_blockers": promotion_blockers,
         "robustness": robustness_payload,
@@ -156,6 +159,8 @@ def compact_envelope_fields(envelope: Mapping[str, Any]) -> dict[str, Any]:
         "placement_speed_p99_us": tick_to_send.get("p99"),
         "placement_speed_p99_9_us": tick_to_send.get("p99_9"),
         "send_to_ack_p99_us": send_to_ack.get("p99"),
+        "execution_path_audit_status": (envelope.get("execution_path_audit") or {}).get("status"),
+        "execution_path_audit_run_id": (envelope.get("execution_path_audit") or {}).get("run_id"),
         "promotion_blockers": envelope.get("promotion_blockers", []),
     }
 
@@ -175,6 +180,15 @@ def aggregate_campaign_latency_envelopes(
         for blocker in (row.get("promotion_blockers") or [])
         if isinstance(blocker, Mapping)
     ]
+    expected_events = _expected_event_count(period_results)
+    if expected_events and len(rows) < expected_events:
+        blockers.append(
+            {
+                "gate": "campaign_latency_operating_envelope",
+                "status": "MISSING_EVENT_ENVELOPE",
+                "reason": f"expected {expected_events} event latency envelopes but observed {len(rows)}",
+            }
+        )
     statuses = [str(row.get("status", "")).upper() for row in rows]
     placement_p99s = [
         float(v)
@@ -182,7 +196,7 @@ def aggregate_campaign_latency_envelopes(
         for v in [_nested(row, ("offensive", "placement", "tick_to_send_us", "p99"))]
         if isinstance(v, (int, float))
     ]
-    status = "PASS" if rows and all(s == "PASS" for s in statuses) else "FAIL"
+    status = "PASS" if rows and not blockers and all(s == "PASS" for s in statuses) else "FAIL"
     if not rows:
         blockers.append(
             {
@@ -240,6 +254,7 @@ def render_latency_operating_envelope_markdown(envelope: Mapping[str, Any]) -> s
         f"Tick-to-send p99: `{_fmt(compact.get('placement_speed_p99_us'))}`",
         f"Send-to-ack p99: `{_fmt(compact.get('send_to_ack_p99_us'))}`",
         f"Async ack risk: `{compact.get('async_ack_risk', 'unknown')}`",
+        f"Execution-path audit: `{compact.get('execution_path_audit_status') or 'missing'}`",
         "",
         "## Interpretation",
         "Placement speed is measured separately from acknowledgment latency. Acknowledgments reconcile official state asynchronously and are not treated as placement speed.",
@@ -307,8 +322,9 @@ def _checks(
     composition_payload: Mapping[str, Any],
     competitor: Mapping[str, Any],
     defensive_timing_required: bool,
+    execution_path_audit: Mapping[str, Any],
 ) -> dict[str, dict[str, Any]]:
-    return {
+    checks = {
         "operating_envelope_generated": _check(
             tick_to_send is not None and bool(latency_authority.get("authoritative")),
             "envelope generated from CHI404/C++ authority",
@@ -348,6 +364,13 @@ def _checks(
             "Phase 5 timestamp chain is incomplete or non-monotonic",
         ),
     }
+    status = str(execution_path_audit.get("status") or "").lower()
+    checks["low_latency_execution_path_audit"] = _check(
+        bool(execution_path_audit.get("observed")) and status not in {"fail", "failed", "blocked", "missing"},
+        "latest low-latency execution-path audit is present and not failing",
+        str(execution_path_audit.get("reason") or "latest low-latency execution-path audit is missing, failing, or blocked"),
+    )
+    return checks
 
 
 def _pending_controls(
@@ -412,6 +435,40 @@ def _latency_authority(profile: CppLatencyProfile, chi404_observed: bool) -> dic
         "order_send_source": send_source,
         "gateway_ack_source": ack_source,
         "reason": reason,
+    }
+
+
+def _execution_path_audit_payload(status: Mapping[str, Any] | None) -> dict[str, Any]:
+    if not status:
+        return {
+            "observed": False,
+            "status": "missing",
+            "reason": "current_low_latency_status.json not found",
+        }
+    failures = status.get("failures") if isinstance(status.get("failures"), list) else []
+    warnings = status.get("warnings") if isinstance(status.get("warnings"), list) else []
+    failure_reasons = [
+        str(row.get("reason") or row.get("gate") or "")
+        for row in failures
+        if isinstance(row, Mapping)
+    ]
+    return {
+        "observed": True,
+        "run_id": status.get("run_id"),
+        "status": status.get("status"),
+        "mode": status.get("mode"),
+        "primary_kpi": status.get("primary_kpi"),
+        "tick_to_send_p50_us": status.get("tick_to_send_p50_us"),
+        "tick_to_send_p99_us": status.get("tick_to_send_p99_us"),
+        "tick_to_send_p99_9_us": status.get("tick_to_send_p99_9_us"),
+        "summary_json": status.get("summary_json"),
+        "summary_md": status.get("summary_md"),
+        "spans_path": status.get("spans_path"),
+        "runtime_env_path": status.get("runtime_env_path"),
+        "optimization_status": status.get("optimization_status") or {},
+        "failure_count": len(failures),
+        "warning_count": len(warnings),
+        "reason": "; ".join(reason for reason in failure_reasons if reason) or status.get("blocked_reason") or "",
     }
 
 
@@ -542,6 +599,21 @@ def _period_latency_summary(period: Any) -> dict[str, Any]:
         "events_run": payload.get("events_run"),
         "latency_operating_envelope_status": "PASS" if statuses and all(s == "PASS" for s in statuses) else "FAIL",
     }
+
+
+def _expected_event_count(period_results: Sequence[Any]) -> int:
+    expected = 0
+    for period in period_results:
+        payload = asdict(period) if is_dataclass(period) else dict(period)
+        events = payload.get("event_results") or []
+        if isinstance(events, Sequence) and not isinstance(events, (str, bytes)):
+            expected += len([event for event in events if isinstance(event, Mapping)])
+        else:
+            try:
+                expected += int(payload.get("events_run") or 0)
+            except (TypeError, ValueError):
+                continue
+    return expected
 
 
 def _check(condition: bool, pass_reason: str, fail_reason: str) -> dict[str, Any]:

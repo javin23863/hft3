@@ -165,6 +165,7 @@ class ModelBehaviorEnvelope:
     stale_pending_timeout_policy: dict[str, Any] = field(default_factory=dict)
     competitor_speed_assumption_used: dict[str, Any] = field(default_factory=dict)
     opportunity_decay_window_used: float | None = None
+    low_latency_execution_path_status: dict[str, Any] = field(default_factory=dict)
     alpha_half_life_bounds: tuple[float | None, float | None] = (None, None)
     data_freshness_requirements: dict[str, Any] = field(default_factory=dict)
     warnings: tuple[str, ...] = ()

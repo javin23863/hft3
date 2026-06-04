@@ -56,6 +56,20 @@ def _viability() -> LatencyViability:
     )
 
 
+def _passing_execution_audit() -> dict:
+    return {
+        "run_id": "lataudit-pass",
+        "status": "pass",
+        "mode": "synthetic",
+        "primary_kpi": "tick_to_send_us",
+        "tick_to_send_p50_us": 45.0,
+        "tick_to_send_p99_us": 50.0,
+        "tick_to_send_p99_9_us": 55.0,
+        "failures": [],
+        "warnings": [],
+    }
+
+
 def test_operating_envelope_separates_placement_from_ack_latency() -> None:
     envelope = build_latency_operating_envelope(
         run_id="RUN_A",
@@ -66,6 +80,7 @@ def test_operating_envelope_separates_placement_from_ack_latency() -> None:
         phase5_timestamp_schema={"complete": True, "monotonic_non_decreasing": True},
         audit_records=[],
         chi404_observed=True,
+        execution_path_audit_status=_passing_execution_audit(),
     )
 
     compact = compact_envelope_fields(envelope)
@@ -78,6 +93,23 @@ def test_operating_envelope_separates_placement_from_ack_latency() -> None:
     assert envelope["external_confirmation"]["blocks_on_ack"] is False
 
 
+def test_operating_envelope_blocks_when_execution_path_audit_is_missing() -> None:
+    envelope = build_latency_operating_envelope(
+        run_id="RUN_MISSING_AUDIT",
+        model_id="HYP_5",
+        event_id="EV_A",
+        viability=_viability(),
+        cpp_profile=_profile(),
+        phase5_timestamp_schema={"complete": True, "monotonic_non_decreasing": True},
+        audit_records=[],
+        chi404_observed=True,
+    )
+
+    assert envelope["status"] == "FAIL"
+    assert envelope["execution_path_audit"]["status"] == "missing"
+    assert any(gate["gate"] == "low_latency_execution_path_audit" for gate in envelope["promotion_blockers"])
+
+
 def test_operating_envelope_blocks_without_chi404_authority() -> None:
     envelope = build_latency_operating_envelope(
         run_id="RUN_A",
@@ -88,6 +120,7 @@ def test_operating_envelope_blocks_without_chi404_authority() -> None:
         phase5_timestamp_schema={"complete": True, "monotonic_non_decreasing": True},
         audit_records=[],
         chi404_observed=False,
+        execution_path_audit_status=_passing_execution_audit(),
     )
 
     assert envelope["status"] == "FAIL"
@@ -104,11 +137,38 @@ def test_operating_envelope_blocks_when_order_ack_is_not_measured() -> None:
         phase5_timestamp_schema={"complete": True, "monotonic_non_decreasing": True},
         audit_records=[],
         chi404_observed=True,
+        execution_path_audit_status=_passing_execution_audit(),
     )
 
     assert envelope["status"] == "FAIL"
     assert envelope["source_authority_detail"]["order_ack_blocked"] is True
     assert any(gate["gate"] == "async_ack_state_risk" for gate in envelope["promotion_blockers"])
+
+
+def test_operating_envelope_blocks_when_execution_path_audit_failed() -> None:
+    envelope = build_latency_operating_envelope(
+        run_id="RUN_AUDIT_FAIL",
+        model_id="HYP_5",
+        event_id="EV_A",
+        viability=_viability(),
+        cpp_profile=_profile(),
+        phase5_timestamp_schema={"complete": True, "monotonic_non_decreasing": True},
+        audit_records=[],
+        chi404_observed=True,
+        execution_path_audit_status={
+            "run_id": "lataudit-bad",
+            "status": "fail",
+            "primary_kpi": "tick_to_send_us",
+            "failures": [{"gate": "no_sync_persistence_before_order_send", "reason": "blocking I/O before send was observed"}],
+        },
+    )
+
+    compact = compact_envelope_fields(envelope)
+
+    assert envelope["status"] == "FAIL"
+    assert compact["execution_path_audit_status"] == "fail"
+    assert compact["execution_path_audit_run_id"] == "lataudit-bad"
+    assert any(gate["gate"] == "low_latency_execution_path_audit" for gate in envelope["promotion_blockers"])
 
 
 def test_operating_envelope_writer_emits_json_and_markdown(tmp_path: Path) -> None:
@@ -121,6 +181,7 @@ def test_operating_envelope_writer_emits_json_and_markdown(tmp_path: Path) -> No
         phase5_timestamp_schema={"complete": True, "monotonic_non_decreasing": True},
         audit_records=[],
         chi404_observed=True,
+        execution_path_audit_status=_passing_execution_audit(),
     )
 
     json_path, md_path = write_latency_operating_envelope(tmp_path, envelope)
@@ -145,6 +206,7 @@ def test_competitor_speed_sensitivity_applies_latency_penalty() -> None:
         phase5_timestamp_schema={"complete": True, "monotonic_non_decreasing": True},
         audit_records=[],
         chi404_observed=True,
+        execution_path_audit_status=_passing_execution_audit(),
     )
 
     faster = envelope["competitor_speed_sensitivity"]["scenarios"]["faster"]
@@ -165,6 +227,7 @@ def test_defensive_composition_blocks_when_cancel_replace_timing_is_missing() ->
         phase5_timestamp_schema={"complete": True, "monotonic_non_decreasing": True},
         audit_records=[],
         chi404_observed=True,
+        execution_path_audit_status=_passing_execution_audit(),
         composition=ModelComposition(
             primary_model_id="HYP_5",
             defensive_stubs=[DefensiveStub("VPIN_TOXICITY", "continuous", 50.0)],
@@ -187,6 +250,7 @@ def test_campaign_latency_envelope_aggregates_event_blockers() -> None:
         phase5_timestamp_schema={"complete": True, "monotonic_non_decreasing": True},
         audit_records=[],
         chi404_observed=True,
+        execution_path_audit_status=_passing_execution_audit(),
     )
     failing = build_latency_operating_envelope(
         run_id="RUN_FAIL",
@@ -197,6 +261,7 @@ def test_campaign_latency_envelope_aggregates_event_blockers() -> None:
         phase5_timestamp_schema={"complete": True, "monotonic_non_decreasing": True},
         audit_records=[],
         chi404_observed=False,
+        execution_path_audit_status=_passing_execution_audit(),
     )
 
     campaign = aggregate_campaign_latency_envelopes(
@@ -210,3 +275,34 @@ def test_campaign_latency_envelope_aggregates_event_blockers() -> None:
     assert campaign["status"] == "FAIL"
     assert campaign["events_observed"] == 2
     assert any(gate["gate"] == "operating_envelope_generated" for gate in campaign["promotion_blockers"])
+
+
+def test_campaign_latency_envelope_blocks_missing_event_envelopes() -> None:
+    passing = build_latency_operating_envelope(
+        run_id="RUN_PASS",
+        model_id="HYP_5",
+        event_id="EV_A",
+        viability=_viability(),
+        cpp_profile=_profile(),
+        phase5_timestamp_schema={"complete": True, "monotonic_non_decreasing": True},
+        audit_records=[],
+        chi404_observed=True,
+        execution_path_audit_status=_passing_execution_audit(),
+    )
+
+    campaign = aggregate_campaign_latency_envelopes(
+        campaign_id="CAMP_A",
+        model_id="HYP_5",
+        symbol="ES",
+        period_results=[
+            {
+                "name": "Discovery",
+                "events_run": 2,
+                "event_results": [{"event_id": "EV_A"}, {"event_id": "EV_B"}],
+            }
+        ],
+        event_envelopes=[passing],
+    )
+
+    assert campaign["status"] == "FAIL"
+    assert any(gate["status"] == "MISSING_EVENT_ENVELOPE" for gate in campaign["promotion_blockers"])

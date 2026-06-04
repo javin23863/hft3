@@ -48,6 +48,18 @@ def classify_model_state(
 
     if not env.active:
         triggers.append(_trigger("envelope_inactive", "RED", env.active, True, "behavior envelope is not active"))
+    audit_status = env.low_latency_execution_path_status if isinstance(env.low_latency_execution_path_status, dict) else {}
+    audit_state = str(audit_status.get("status") or "missing").lower()
+    if audit_state in {"missing", "fail", "failed", "blocked"}:
+        triggers.append(
+            _trigger(
+                "low_latency_execution_path_audit",
+                "RED",
+                audit_state,
+                "pass",
+                "low-latency execution-path audit is missing, failed, or blocked",
+            )
+        )
     if obs.regime_id and obs.regime_id in env.blocked_regime_ids:
         triggers.append(_trigger("blocked_regime", "RED", obs.regime_id, env.blocked_regime_ids, "model is in a blocked regime"))
     if env.approved_regime_ids and obs.regime_id and obs.regime_id not in env.approved_regime_ids:

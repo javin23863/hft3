@@ -72,6 +72,14 @@ def _inputs() -> dict:
                 "stale_state_risk": "managed",
             },
             "competitor_speed_sensitivity": {"tested": True, "equal_speed_viable": True},
+            "execution_path_audit": {
+                "run_id": "lataudit-pass",
+                "status": "pass",
+                "primary_kpi": "tick_to_send_us",
+                "tick_to_send_p99_9_us": 950.0,
+                "failure_count": 0,
+                "warning_count": 0,
+            },
         },
         "robustness": {
             "folds": [
@@ -125,6 +133,7 @@ def test_scorecard_and_behavior_envelope_are_asset_class_neutral() -> None:
     assert envelope.operating_band == "sub_millisecond_loop"
     assert envelope.async_state_model_required is True
     assert envelope.max_pending_orders == 3
+    assert envelope.low_latency_execution_path_status["status"] == "pass"
 
 
 def test_model_behavior_engine_green_yellow_red() -> None:
@@ -200,6 +209,32 @@ def test_model_behavior_engine_green_yellow_red() -> None:
         "slippage",
         "feature_training_domain",
     }
+
+
+def test_model_behavior_engine_red_when_low_latency_audit_failed() -> None:
+    inputs = _inputs()
+    inputs["latency_operating_envelope"]["execution_path_audit"] = {
+        "run_id": "lataudit-fail",
+        "status": "fail",
+        "reason": "blocking I/O before send was observed",
+    }
+    scorecard = build_post_robustness_scorecard(inputs)
+    envelope = generate_behavior_envelope(inputs, scorecard)
+    decision = ModelBehaviorRuleEngine().evaluate(
+        envelope,
+        ModelLiveObservation(
+            model_id="FUTURES_MODEL_A",
+            regime_id="NORMAL",
+            tick_to_send_us=900.0,
+            decision_to_send_us=100.0,
+            send_to_ack_us=1000.0,
+            latency_order_to_ack=1.0,
+            alpha_half_life=10.0,
+        ),
+    )
+
+    assert decision.state == "RED"
+    assert any(trigger["name"] == "low_latency_execution_path_audit" for trigger in decision.triggers)
 
 
 def test_backfill_writes_run_local_metric_artifacts(tmp_path: Path) -> None:

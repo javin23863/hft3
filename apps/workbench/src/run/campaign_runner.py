@@ -736,6 +736,28 @@ def run_campaign(
                 latency_envelope = {}
                 if latency_envelope_path.is_file():
                     latency_envelope = json.loads(latency_envelope_path.read_text(encoding="utf-8"))
+                    identity_errors = []
+                    if str(latency_envelope.get("run_id") or "") != str(out.get("run_id") or ""):
+                        identity_errors.append("run_id")
+                    if str(latency_envelope.get("event_id") or "") != str(ev.event_id):
+                        identity_errors.append("event_id")
+                    if str(latency_envelope.get("model_id") or "") != str(primary_id):
+                        identity_errors.append("model_id")
+                    if identity_errors:
+                        latency_envelope = {
+                            "schema_version": "latency_operating_envelope.v1",
+                            "run_id": out.get("run_id"),
+                            "event_id": ev.event_id,
+                            "model_id": primary_id,
+                            "status": "FAIL",
+                            "promotion_blockers": [
+                                {
+                                    "gate": "campaign_latency_operating_envelope",
+                                    "status": "STALE_EVENT_ENVELOPE",
+                                    "reason": "latency envelope identity mismatch: " + ", ".join(identity_errors),
+                                }
+                            ],
+                        }
                     campaign_latency_event_envelopes.append(latency_envelope)
                 latency_compact = (
                     compact_envelope_fields(latency_envelope)
@@ -811,6 +833,7 @@ def run_campaign(
             "expectancy": sum(trade_pnls) / max(len(trade_pnls), 1),
             "survives_cpp_execution_delay": bool(period_results and all(p.survives_cpp for p in period_results)),
             "operating_envelope_generated": _campaign_latency_check_passed("operating_envelope_generated"),
+            "low_latency_execution_path_audit_pass": _campaign_latency_check_passed("low_latency_execution_path_audit"),
             "placement_speed_sensitivity_pass": _campaign_latency_check_passed("placement_speed_sensitivity"),
             "async_ack_state_risk_pass": _campaign_latency_check_passed("async_ack_state_risk"),
             "pending_exposure_guardrails_pass": _campaign_latency_check_passed("pending_exposure_guardrails"),
