@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -18,11 +19,373 @@ from data_layer.packet.validate import (  # noqa: E402
     validate_pipeline_idea_set,
     validate_pipeline_request,
     validate_pipeline_response,
+    validate_research_decision_packet,
 )
 
 
 def _load(name: str) -> dict:
     return json.loads((PACKET_DIR / name).read_text(encoding="utf-8"))
+
+
+def _minimal_research_decision_packet() -> dict:
+    return {
+        "packet_schema_version": "research_decision_packet_v1",
+        "packet_id": "rdp_001",
+        "created_at_utc": "2026-06-04T13:43:02Z",
+        "decision_context": {
+            "mode": "research",
+            "allowed_actions": [
+                "generate_hypothesis",
+                "write_validation_code",
+                "interpret_sandbox_result",
+                "reject_hypothesis",
+            ],
+            "forbidden_actions": [
+                "invent_variable",
+                "invent_formula",
+                "infer_trade_direction_from_news_only",
+                "skip_validation",
+                "modify_hypothesis_after_failure_without_audit",
+                "promote_without_validation",
+            ],
+            "no_promotion_authority": True,
+        },
+        "market_state": {
+            "market_state_id": "mkt_001",
+            "as_of_utc": "2026-06-04T13:42:55Z",
+            "lookback_window": "5m",
+            "instruments": [
+                {
+                    "symbol": "MES",
+                    "canonical_instrument_id": "CME_MES_FRONT",
+                    "asset_class": "future",
+                    "venue": "CME",
+                    "session_state": "open",
+                    "mid_price": 5300.25,
+                    "spread": 0.25,
+                    "spread_bps": 0.47,
+                    "top_of_book_imbalance": 0.1,
+                    "depth_imbalance_10": 0.05,
+                    "order_flow_imbalance": 0.02,
+                    "microprice": 5300.27,
+                    "realized_volatility": 0.12,
+                    "book_update_rate": 10.0,
+                    "trade_rate": 2.0,
+                    "cancel_rate": 3.0,
+                    "toxicity_metric": None,
+                    "liquidity_regime": "normal",
+                    "volatility_regime": "normal",
+                    "data_quality_status": "passed",
+                }
+            ],
+            "cross_asset_features": {
+                "basis_spreads": [],
+                "rolling_correlations": [],
+                "cointegration_residuals": [],
+                "lead_lag_candidates": [],
+                "funding_rate_features": [],
+                "macro_alignment_features": [],
+            },
+            "data_validation": {
+                "status": "passed",
+                "failed_checks": [],
+                "warnings": [],
+            },
+        },
+        "event_state": {
+            "active_events": [],
+            "event_clusters": [],
+            "ignored_events": [],
+            "contradictory_events": [],
+        },
+        "knowledge_state": {
+            "approved_sources_retrieved": [
+                {
+                    "source_id": "src_microstructure_pdf",
+                    "source_type": "approved_pdf",
+                    "source_registry_key": "microstructure_pdf_v1",
+                    "title": "Chicago CME Microstructure Mathematical Model",
+                    "version": "1",
+                    "citation": "section 4",
+                }
+            ],
+            "formulas_available": [
+                {
+                    "formula_id": "top_of_book_imbalance_v1",
+                    "name": "Top of book imbalance",
+                    "expression": "(bid_size - ask_size) / (bid_size + ask_size)",
+                    "variable_ids": ["top_of_book_imbalance"],
+                    "source_ids": ["src_microstructure_pdf"],
+                }
+            ],
+            "concepts_available": [
+                {
+                    "concept_id": "liquidity_shift",
+                    "name": "Liquidity shift",
+                    "source_ids": ["src_microstructure_pdf"],
+                }
+            ],
+            "source_gaps": [],
+        },
+        "ontology_state": {
+            "allowed_entities": [
+                {
+                    "entity_id": "CME_MES_FRONT",
+                    "entity_name": "Micro E-mini S&P 500 front contract",
+                    "entity_type": "future",
+                    "source_ids": ["src_microstructure_pdf"],
+                }
+            ],
+            "allowed_variables": [
+                {
+                    "variable_id": "top_of_book_imbalance",
+                    "name": "Top of book imbalance",
+                    "data_type": "number",
+                    "unit": None,
+                    "source_ids": ["src_microstructure_pdf"],
+                }
+            ],
+            "allowed_formulas": [
+                {
+                    "formula_id": "top_of_book_imbalance_v1",
+                    "name": "Top of book imbalance",
+                    "expression": "(bid_size - ask_size) / (bid_size + ask_size)",
+                    "variable_ids": ["top_of_book_imbalance"],
+                    "source_ids": ["src_microstructure_pdf"],
+                }
+            ],
+            "allowed_transformations": [],
+            "forbidden_variables": [],
+        },
+        "candidate_research_questions": [
+            {
+                "question_id": "rq_001",
+                "question": "Did top-of-book imbalance become predictive after the event window?",
+                "trigger_source": "market_state",
+                "required_variables": ["top_of_book_imbalance"],
+                "required_sources": ["src_microstructure_pdf"],
+                "required_formulas": ["top_of_book_imbalance_v1"],
+                "required_entities": ["CME_MES_FRONT"],
+                "testability_status": "testable",
+                "rejection_reason": None,
+            }
+        ],
+        "validation_requirements": {
+            "required_tests": [
+                "source_traceability",
+                "ontology_membership",
+                "math_consistency",
+                "data_quality",
+                "point_in_time_safety",
+                "walk_forward",
+                "out_of_sample",
+                "multiple_testing_correction",
+                "regime_break",
+                "liquidity_conditioning",
+            ],
+            "minimum_sample_size": 100,
+            "walk_forward_required": True,
+            "out_of_sample_required": True,
+            "multiple_testing_correction_required": True,
+            "regime_break_test_required": True,
+            "liquidity_conditioning_required": True,
+        },
+        "risk_handoff_requirements": {
+            "must_emit_typed_logic": True,
+            "must_emit_failure_conditions": True,
+            "must_emit_regime_sensitivity": True,
+            "must_emit_liquidity_sensitivity": True,
+            "must_emit_latency_sensitivity": True,
+        },
+        "audit": {
+            "data_snapshot_ids": ["snapshot_001"],
+            "source_registry_version": "registry_v1",
+            "ontology_version": "ontology_v1",
+            "code_commit": "abc123",
+        },
+    }
+
+
+def test_research_decision_packet_valid_minimal():
+    assert validate_research_decision_packet(_minimal_research_decision_packet()) == []
+
+
+def test_research_decision_packet_rejects_extra_fields():
+    sample = _minimal_research_decision_packet()
+    sample["unexpected"] = "not allowed"
+    errors = validate_research_decision_packet(sample)
+    assert any("Additional properties" in err and "unexpected" in err for err in errors)
+
+
+def test_research_decision_packet_rejects_missing_required_top_level_key():
+    sample = _minimal_research_decision_packet()
+    del sample["market_state"]
+    errors = validate_research_decision_packet(sample)
+    assert any("'market_state' is a required property" in err for err in errors)
+
+
+def test_research_decision_packet_requires_no_promotion_authority_true():
+    sample = _minimal_research_decision_packet()
+    sample["decision_context"]["no_promotion_authority"] = False
+    errors = validate_research_decision_packet(sample)
+    assert any("no_promotion_authority" in err and "True was expected" in err for err in errors)
+
+
+def test_research_decision_packet_rejects_unknown_action():
+    sample = _minimal_research_decision_packet()
+    sample["decision_context"]["allowed_actions"].append("submit_order")
+    errors = validate_research_decision_packet(sample)
+    assert any("allowed_actions" in err and "submit_order" in err for err in errors)
+
+
+def test_research_decision_packet_rejects_execution_routing_field():
+    sample = _minimal_research_decision_packet()
+    sample["execution_routing"] = {"target": "live"}
+    errors = validate_research_decision_packet(sample)
+    assert any("Additional properties" in err and "execution_routing" in err for err in errors)
+
+
+def test_research_decision_packet_questions_require_sources_and_variables():
+    sample = deepcopy(_minimal_research_decision_packet())
+    sample["candidate_research_questions"][0]["required_sources"] = []
+    sample["candidate_research_questions"][0]["required_variables"] = []
+    errors = validate_research_decision_packet(sample)
+    assert any("required_sources" in err and "should be non-empty" in err for err in errors)
+    assert any("required_variables" in err and "should be non-empty" in err for err in errors)
+
+
+def test_research_decision_packet_rejects_unknown_required_ids():
+    sample = deepcopy(_minimal_research_decision_packet())
+    question = sample["candidate_research_questions"][0]
+    question["required_variables"] = ["unknown_variable"]
+    question["required_formulas"] = ["unknown_formula"]
+    question["required_entities"] = ["UNKNOWN_ENTITY"]
+    question["required_sources"] = ["unknown_source"]
+
+    errors = validate_research_decision_packet(sample)
+
+    assert any("required_variables" in err and "unknown_variable" in err for err in errors)
+    assert any("ontology_state.allowed_formulas" in err and "unknown_formula" in err for err in errors)
+    assert any("knowledge_state.formulas_available" in err and "unknown_formula" in err for err in errors)
+    assert any("required_entities" in err and "UNKNOWN_ENTITY" in err for err in errors)
+    assert any("knowledge_state.approved_sources_retrieved" in err and "unknown_source" in err for err in errors)
+
+
+def test_research_decision_packet_rejects_object_feature_value():
+    sample = deepcopy(_minimal_research_decision_packet())
+    sample["market_state"]["cross_asset_features"]["basis_spreads"] = [
+        {
+            "feature_id": "basis_001",
+            "feature_type": "basis_spread",
+            "variable_ids": ["top_of_book_imbalance"],
+            "formula_ids": ["top_of_book_imbalance_v1"],
+            "source_ids": ["src_microstructure_pdf"],
+            "value": {"execution_routing": "live"},
+            "as_of_utc": "2026-06-04T13:42:55Z",
+        }
+    ]
+
+    errors = validate_research_decision_packet(sample)
+
+    assert any("basis_spreads.0.value" in err for err in errors)
+
+
+def test_research_decision_packet_rejects_unknown_cross_asset_feature_refs():
+    sample = deepcopy(_minimal_research_decision_packet())
+    sample["market_state"]["cross_asset_features"]["basis_spreads"] = [
+        {
+            "feature_id": "basis_001",
+            "feature_type": "basis_spread",
+            "variable_ids": ["unknown_feature_variable"],
+            "formula_ids": ["unknown_feature_formula"],
+            "source_ids": ["unknown_feature_source"],
+            "value": 1.25,
+            "as_of_utc": "2026-06-04T13:42:55Z",
+        }
+    ]
+
+    errors = validate_research_decision_packet(sample)
+
+    assert any(
+        "market_state.cross_asset_features.basis_spreads[0].variable_ids" in err
+        and "unknown_feature_variable" in err
+        for err in errors
+    )
+    assert any(
+        "market_state.cross_asset_features.basis_spreads[0].formula_ids" in err
+        and "ontology_state.allowed_formulas" in err
+        and "unknown_feature_formula" in err
+        for err in errors
+    )
+    assert any(
+        "market_state.cross_asset_features.basis_spreads[0].formula_ids" in err
+        and "knowledge_state.formulas_available" in err
+        and "unknown_feature_formula" in err
+        for err in errors
+    )
+    assert any(
+        "market_state.cross_asset_features.basis_spreads[0].source_ids" in err
+        and "knowledge_state.approved_sources_retrieved" in err
+        and "unknown_feature_source" in err
+        for err in errors
+    )
+    assert any(
+        "market_state.cross_asset_features.basis_spreads[0].source_ids" in err
+        and "ontology/formula/source refs" in err
+        and "unknown_feature_source" in err
+        for err in errors
+    )
+
+
+def test_research_decision_packet_rejects_unknown_ontology_and_knowledge_refs():
+    sample = deepcopy(_minimal_research_decision_packet())
+    sample["ontology_state"]["allowed_entities"][0]["source_ids"] = ["unknown_entity_source"]
+    sample["ontology_state"]["allowed_variables"][0]["source_ids"] = ["unknown_variable_source"]
+    sample["ontology_state"]["allowed_formulas"][0]["source_ids"] = ["unknown_ontology_formula_source"]
+    sample["ontology_state"]["allowed_formulas"][0]["variable_ids"] = ["unknown_ontology_formula_variable"]
+    sample["ontology_state"]["allowed_transformations"] = [
+        {
+            "transformation_id": "xform_001",
+            "name": "Unknown variable transformation",
+            "input_variable_ids": ["unknown_input_variable"],
+            "output_variable_ids": ["unknown_output_variable"],
+            "source_ids": ["unknown_transformation_source"],
+        }
+    ]
+    sample["knowledge_state"]["formulas_available"][0]["source_ids"] = ["unknown_knowledge_formula_source"]
+    sample["knowledge_state"]["formulas_available"][0]["variable_ids"] = ["unknown_knowledge_formula_variable"]
+    sample["knowledge_state"]["concepts_available"][0]["source_ids"] = ["unknown_concept_source"]
+
+    errors = validate_research_decision_packet(sample)
+
+    expected = (
+        ("ontology_state.allowed_entities[0].source_ids", "unknown_entity_source"),
+        ("ontology_state.allowed_variables[0].source_ids", "unknown_variable_source"),
+        ("ontology_state.allowed_formulas[0].source_ids", "unknown_ontology_formula_source"),
+        ("ontology_state.allowed_formulas[0].variable_ids", "unknown_ontology_formula_variable"),
+        ("ontology_state.allowed_transformations[0].input_variable_ids", "unknown_input_variable"),
+        ("ontology_state.allowed_transformations[0].output_variable_ids", "unknown_output_variable"),
+        ("ontology_state.allowed_transformations[0].source_ids", "unknown_transformation_source"),
+        ("knowledge_state.formulas_available[0].source_ids", "unknown_knowledge_formula_source"),
+        ("knowledge_state.formulas_available[0].variable_ids", "unknown_knowledge_formula_variable"),
+        ("knowledge_state.concepts_available[0].source_ids", "unknown_concept_source"),
+    )
+    for path, unknown_id in expected:
+        assert any(path in err and unknown_id in err for err in errors), (path, unknown_id, errors)
+
+
+def test_research_decision_packet_rejects_empty_forbidden_actions():
+    sample = deepcopy(_minimal_research_decision_packet())
+    sample["decision_context"]["forbidden_actions"] = []
+    errors = validate_research_decision_packet(sample)
+    assert any("forbidden_actions" in err for err in errors)
+
+
+def test_research_decision_packet_rejects_empty_required_tests():
+    sample = deepcopy(_minimal_research_decision_packet())
+    sample["validation_requirements"]["required_tests"] = []
+    errors = validate_research_decision_packet(sample)
+    assert any("required_tests" in err for err in errors)
 
 
 def test_aar_response_valid_minimal():

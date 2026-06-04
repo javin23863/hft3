@@ -74,6 +74,302 @@ def validate_pipeline_response(response: Dict[str, Any]) -> List[str]:
     return validate_json("schema_pipeline_response_v1.json", response)
 
 
+REQUIRED_RESEARCH_FORBIDDEN_ACTIONS = (
+    "invent_variable",
+    "invent_formula",
+    "infer_trade_direction_from_news_only",
+    "skip_validation",
+    "modify_hypothesis_after_failure_without_audit",
+    "promote_without_validation",
+)
+
+REQUIRED_RESEARCH_VALIDATION_TESTS = (
+    "source_traceability",
+    "ontology_membership",
+    "math_consistency",
+    "data_quality",
+    "point_in_time_safety",
+    "walk_forward",
+    "out_of_sample",
+    "multiple_testing_correction",
+    "regime_break",
+    "liquidity_conditioning",
+)
+
+
+def validate_research_decision_packet(packet: Dict[str, Any]) -> List[str]:
+    errors = validate_json("schema_research_decision_packet_v1.json", packet)
+    errors.extend(_research_decision_packet_invariants(packet))
+    return errors
+
+
+def _research_decision_packet_invariants(packet: Dict[str, Any]) -> List[str]:
+    if not isinstance(packet, dict):
+        return []
+
+    errors: List[str] = []
+    decision_context = _dict_value(packet, "decision_context")
+    forbidden_actions = decision_context.get("forbidden_actions")
+    if isinstance(forbidden_actions, list):
+        present = {action for action in forbidden_actions if isinstance(action, str)}
+        missing = sorted(set(REQUIRED_RESEARCH_FORBIDDEN_ACTIONS).difference(present))
+        if missing:
+            errors.append(
+                "decision_context.forbidden_actions missing required guardrails: "
+                + ", ".join(missing)
+            )
+
+    validation_requirements = _dict_value(packet, "validation_requirements")
+    required_tests = validation_requirements.get("required_tests")
+    if isinstance(required_tests, list):
+        present = {test_name for test_name in required_tests if isinstance(test_name, str)}
+        missing = sorted(set(REQUIRED_RESEARCH_VALIDATION_TESTS).difference(present))
+        if missing:
+            errors.append(
+                "validation_requirements.required_tests missing required guardrails: "
+                + ", ".join(missing)
+            )
+
+    ontology_state = _dict_value(packet, "ontology_state")
+    knowledge_state = _dict_value(packet, "knowledge_state")
+    allowed_variable_ids = _ids_from_records(ontology_state.get("allowed_variables"), "variable_id")
+    allowed_entity_ids = _ids_from_records(ontology_state.get("allowed_entities"), "entity_id")
+    ontology_formula_ids = _ids_from_records(ontology_state.get("allowed_formulas"), "formula_id")
+    knowledge_formula_ids = _ids_from_records(knowledge_state.get("formulas_available"), "formula_id")
+    approved_source_ids = _ids_from_records(knowledge_state.get("approved_sources_retrieved"), "source_id")
+    referenced_source_ids: set[str] = set()
+    source_id_record_sets = (
+        ("ontology_state.allowed_entities", ontology_state.get("allowed_entities")),
+        ("ontology_state.allowed_variables", ontology_state.get("allowed_variables")),
+        ("ontology_state.allowed_formulas", ontology_state.get("allowed_formulas")),
+        ("ontology_state.allowed_transformations", ontology_state.get("allowed_transformations")),
+        ("knowledge_state.formulas_available", knowledge_state.get("formulas_available")),
+        ("knowledge_state.concepts_available", knowledge_state.get("concepts_available")),
+    )
+    for path, records in source_id_record_sets:
+        referenced_source_ids.update(_source_ids_from_records(records))
+        _validate_record_ids(
+            errors,
+            path,
+            records,
+            "source_ids",
+            approved_source_ids,
+            "not in knowledge_state.approved_sources_retrieved",
+        )
+
+    for path, records in (
+        ("ontology_state.allowed_formulas", ontology_state.get("allowed_formulas")),
+        ("knowledge_state.formulas_available", knowledge_state.get("formulas_available")),
+    ):
+        _validate_record_ids(
+            errors,
+            path,
+            records,
+            "variable_ids",
+            allowed_variable_ids,
+            "not in ontology_state.allowed_variables",
+        )
+
+    transformations = ontology_state.get("allowed_transformations")
+    for field in ("input_variable_ids", "output_variable_ids"):
+        _validate_record_ids(
+            errors,
+            "ontology_state.allowed_transformations",
+            transformations,
+            field,
+            allowed_variable_ids,
+            "not in ontology_state.allowed_variables",
+        )
+
+    _validate_cross_asset_feature_refs(
+        errors,
+        packet,
+        allowed_variable_ids,
+        ontology_formula_ids,
+        knowledge_formula_ids,
+        approved_source_ids,
+        referenced_source_ids,
+    )
+
+    questions = packet.get("candidate_research_questions")
+    if isinstance(questions, list):
+        for idx, question in enumerate(questions):
+            if not isinstance(question, dict):
+                continue
+            prefix = f"candidate_research_questions[{idx}]"
+            _append_unknown_ids(
+                errors,
+                prefix,
+                "required_variables",
+                question.get("required_variables"),
+                allowed_variable_ids,
+                "not in ontology_state.allowed_variables",
+            )
+            _append_unknown_ids(
+                errors,
+                prefix,
+                "required_formulas",
+                question.get("required_formulas"),
+                ontology_formula_ids,
+                "not in ontology_state.allowed_formulas",
+            )
+            _append_unknown_ids(
+                errors,
+                prefix,
+                "required_formulas",
+                question.get("required_formulas"),
+                knowledge_formula_ids,
+                "not in knowledge_state.formulas_available",
+            )
+            _append_unknown_ids(
+                errors,
+                prefix,
+                "required_entities",
+                question.get("required_entities"),
+                allowed_entity_ids,
+                "not in ontology_state.allowed_entities",
+            )
+            _append_unknown_ids(
+                errors,
+                prefix,
+                "required_sources",
+                question.get("required_sources"),
+                approved_source_ids,
+                "not in knowledge_state.approved_sources_retrieved",
+            )
+            _append_unknown_ids(
+                errors,
+                prefix,
+                "required_sources",
+                question.get("required_sources"),
+                referenced_source_ids,
+                "not referenced by ontology/formula/source refs",
+            )
+    return errors
+
+
+def _dict_value(obj: Dict[str, Any], key: str) -> Dict[str, Any]:
+    value = obj.get(key)
+    return value if isinstance(value, dict) else {}
+
+
+def _ids_from_records(records: Any, key: str) -> set[str]:
+    if not isinstance(records, list):
+        return set()
+    out: set[str] = set()
+    for record in records:
+        if isinstance(record, dict) and isinstance(record.get(key), str):
+            out.add(record[key])
+    return out
+
+
+def _source_ids_from_records(records: Any) -> set[str]:
+    if not isinstance(records, list):
+        return set()
+    out: set[str] = set()
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        source_ids = record.get("source_ids")
+        if isinstance(source_ids, list):
+            out.update(source_id for source_id in source_ids if isinstance(source_id, str))
+    return out
+
+
+def _validate_record_ids(
+    errors: List[str],
+    path: str,
+    records: Any,
+    field: str,
+    allowed: set[str],
+    reason: str,
+) -> None:
+    if not isinstance(records, list):
+        return
+    for idx, record in enumerate(records):
+        if not isinstance(record, dict):
+            continue
+        _append_unknown_ids(errors, f"{path}[{idx}]", field, record.get(field), allowed, reason)
+
+
+def _validate_cross_asset_feature_refs(
+    errors: List[str],
+    packet: Dict[str, Any],
+    allowed_variable_ids: set[str],
+    ontology_formula_ids: set[str],
+    knowledge_formula_ids: set[str],
+    approved_source_ids: set[str],
+    referenced_source_ids: set[str],
+) -> None:
+    market_state = _dict_value(packet, "market_state")
+    cross_asset_features = market_state.get("cross_asset_features")
+    if not isinstance(cross_asset_features, dict):
+        return
+    for feature_group in sorted(cross_asset_features):
+        features = cross_asset_features.get(feature_group)
+        if not isinstance(features, list):
+            continue
+        for idx, feature in enumerate(features):
+            if not isinstance(feature, dict):
+                continue
+            prefix = f"market_state.cross_asset_features.{feature_group}[{idx}]"
+            _append_unknown_ids(
+                errors,
+                prefix,
+                "variable_ids",
+                feature.get("variable_ids"),
+                allowed_variable_ids,
+                "not in ontology_state.allowed_variables",
+            )
+            _append_unknown_ids(
+                errors,
+                prefix,
+                "formula_ids",
+                feature.get("formula_ids"),
+                ontology_formula_ids,
+                "not in ontology_state.allowed_formulas",
+            )
+            _append_unknown_ids(
+                errors,
+                prefix,
+                "formula_ids",
+                feature.get("formula_ids"),
+                knowledge_formula_ids,
+                "not in knowledge_state.formulas_available",
+            )
+            _append_unknown_ids(
+                errors,
+                prefix,
+                "source_ids",
+                feature.get("source_ids"),
+                approved_source_ids,
+                "not in knowledge_state.approved_sources_retrieved",
+            )
+            _append_unknown_ids(
+                errors,
+                prefix,
+                "source_ids",
+                feature.get("source_ids"),
+                referenced_source_ids,
+                "not referenced by ontology/formula/source refs",
+            )
+
+
+def _append_unknown_ids(
+    errors: List[str],
+    prefix: str,
+    field: str,
+    values: Any,
+    allowed: set[str],
+    reason: str,
+) -> None:
+    if not isinstance(values, list):
+        return
+    missing = sorted(value for value in values if isinstance(value, str) and value not in allowed)
+    if missing:
+        errors.append(f"{prefix}.{field}: {reason}: {', '.join(missing)}")
+
+
 CITATION_REQUIRED_SOURCE_TYPES = ("ONTOLOGY_EXTENSION", "PDF_CITATION", "SYMBOLIC_RESULT")
 VALID_SOURCE_TYPES = (
     "ONTOLOGY_EXTENSION",

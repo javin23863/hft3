@@ -138,6 +138,14 @@ Idea records are non-authoritative queue inputs. Static validation may move an i
 
 Review memory is advisory and bounded. Prior AAR/KG artifacts may be compacted into `review_memory[]` facts, but those facts cannot set parameters, promote candidates, skip tests, or override gate results. Idea `param_ranges` are validated for packet integrity, then clamped to deterministic pipeline ranges before candidate generation.
 
+## Research Decision Packet Lane
+
+Schema: `schema_research_decision_packet_v1.json`.
+
+The Research Decision Packet is an offline, advisory-only input contract for future ontology-governed research. It carries market, event, knowledge, ontology, validation, risk-handoff, and audit state in one closed JSON object. It has no promotion authority and contains no live routing, CHI404, Rithmic, order-submit, or deploy fields.
+
+Candidate research questions must name required ontology variables and evidence sources. `ontology_state` must carry allowed entities, variables, and formulas, and `audit` must include `source_registry_version`, `ontology_version`, and `code_commit`.
+
 ## Runtime Schema Mirror
 
 Packet schemas must stay mirrored under `runtime/schemas/`:

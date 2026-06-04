@@ -16,7 +16,12 @@ NAMES = (
     "schema_pipeline_response_v1.json",
     "schema_pipeline_hypothesis_response_v1.json",
     "schema_pipeline_idea_set_v1.json",
+    "schema_research_decision_packet_v1.json",
 )
+
+
+def test_runtime_schema_list_includes_research_decision_packet():
+    assert "schema_research_decision_packet_v1.json" in NAMES
 
 
 def test_runtime_schemas_match_packet_dir():

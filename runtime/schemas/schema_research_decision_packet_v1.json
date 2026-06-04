@@ -1,0 +1,743 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ResearchDecisionPacketV1",
+  "type": "object",
+  "required": [
+    "packet_schema_version",
+    "packet_id",
+    "created_at_utc",
+    "decision_context",
+    "market_state",
+    "event_state",
+    "knowledge_state",
+    "ontology_state",
+    "candidate_research_questions",
+    "validation_requirements",
+    "risk_handoff_requirements",
+    "audit"
+  ],
+  "properties": {
+    "packet_schema_version": {
+      "type": "string",
+      "const": "research_decision_packet_v1"
+    },
+    "packet_id": { "$ref": "#/definitions/non_empty_string" },
+    "created_at_utc": { "$ref": "#/definitions/nullable_string" },
+    "decision_context": {
+      "type": "object",
+      "required": [
+        "mode",
+        "allowed_actions",
+        "forbidden_actions",
+        "no_promotion_authority"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["research", "validation", "monitoring", "unknown"]
+        },
+        "allowed_actions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "generate_hypothesis",
+              "write_validation_code",
+              "interpret_sandbox_result",
+              "reject_hypothesis"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "forbidden_actions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "invent_variable",
+              "invent_formula",
+              "infer_trade_direction_from_news_only",
+              "skip_validation",
+              "modify_hypothesis_after_failure_without_audit",
+              "promote_without_validation"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "no_promotion_authority": {
+          "type": "boolean",
+          "const": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "market_state": {
+      "type": "object",
+      "required": [
+        "market_state_id",
+        "as_of_utc",
+        "lookback_window",
+        "instruments",
+        "cross_asset_features",
+        "data_validation"
+      ],
+      "properties": {
+        "market_state_id": { "$ref": "#/definitions/non_empty_string" },
+        "as_of_utc": { "$ref": "#/definitions/nullable_string" },
+        "lookback_window": { "$ref": "#/definitions/nullable_string" },
+        "instruments": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/market_instrument" }
+        },
+        "cross_asset_features": {
+          "type": "object",
+          "required": [
+            "basis_spreads",
+            "rolling_correlations",
+            "cointegration_residuals",
+            "lead_lag_candidates",
+            "funding_rate_features",
+            "macro_alignment_features"
+          ],
+          "properties": {
+            "basis_spreads": {
+              "type": "array",
+              "items": { "$ref": "#/definitions/typed_feature_ref" }
+            },
+            "rolling_correlations": {
+              "type": "array",
+              "items": { "$ref": "#/definitions/typed_feature_ref" }
+            },
+            "cointegration_residuals": {
+              "type": "array",
+              "items": { "$ref": "#/definitions/typed_feature_ref" }
+            },
+            "lead_lag_candidates": {
+              "type": "array",
+              "items": { "$ref": "#/definitions/typed_feature_ref" }
+            },
+            "funding_rate_features": {
+              "type": "array",
+              "items": { "$ref": "#/definitions/typed_feature_ref" }
+            },
+            "macro_alignment_features": {
+              "type": "array",
+              "items": { "$ref": "#/definitions/typed_feature_ref" }
+            }
+          },
+          "additionalProperties": false
+        },
+        "data_validation": { "$ref": "#/definitions/data_validation" }
+      },
+      "additionalProperties": false
+    },
+    "event_state": {
+      "type": "object",
+      "required": [
+        "active_events",
+        "event_clusters",
+        "ignored_events",
+        "contradictory_events"
+      ],
+      "properties": {
+        "active_events": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/canonical_event" }
+        },
+        "event_clusters": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/event_cluster" }
+        },
+        "ignored_events": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/event_ref" }
+        },
+        "contradictory_events": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/event_contradiction" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "knowledge_state": {
+      "type": "object",
+      "required": [
+        "approved_sources_retrieved",
+        "formulas_available",
+        "concepts_available",
+        "source_gaps"
+      ],
+      "properties": {
+        "approved_sources_retrieved": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/source_ref" }
+        },
+        "formulas_available": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/formula_ref" }
+        },
+        "concepts_available": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/concept_ref" }
+        },
+        "source_gaps": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/source_gap" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ontology_state": {
+      "type": "object",
+      "required": [
+        "allowed_entities",
+        "allowed_variables",
+        "allowed_formulas",
+        "allowed_transformations",
+        "forbidden_variables"
+      ],
+      "properties": {
+        "allowed_entities": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/entity_ref" },
+          "minItems": 1
+        },
+        "allowed_variables": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/variable_ref" },
+          "minItems": 1
+        },
+        "allowed_formulas": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/formula_ref" },
+          "minItems": 1
+        },
+        "allowed_transformations": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/transformation_ref" }
+        },
+        "forbidden_variables": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/non_empty_string" },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "candidate_research_questions": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/research_question" }
+    },
+    "validation_requirements": {
+      "type": "object",
+      "required": [
+        "required_tests",
+        "minimum_sample_size",
+        "walk_forward_required",
+        "out_of_sample_required",
+        "multiple_testing_correction_required",
+        "regime_break_test_required",
+        "liquidity_conditioning_required"
+      ],
+      "properties": {
+        "required_tests": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "source_traceability",
+              "ontology_membership",
+              "math_consistency",
+              "data_quality",
+              "point_in_time_safety",
+              "minimum_sample_size",
+              "walk_forward",
+              "out_of_sample",
+              "multiple_testing_correction",
+              "regime_break",
+              "liquidity_conditioning",
+              "latency_sensitivity"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "minimum_sample_size": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
+        "walk_forward_required": {
+          "type": "boolean",
+          "const": true
+        },
+        "out_of_sample_required": {
+          "type": "boolean",
+          "const": true
+        },
+        "multiple_testing_correction_required": {
+          "type": "boolean",
+          "const": true
+        },
+        "regime_break_test_required": {
+          "type": "boolean",
+          "const": true
+        },
+        "liquidity_conditioning_required": {
+          "type": "boolean",
+          "const": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "risk_handoff_requirements": {
+      "type": "object",
+      "required": [
+        "must_emit_typed_logic",
+        "must_emit_failure_conditions",
+        "must_emit_regime_sensitivity",
+        "must_emit_liquidity_sensitivity",
+        "must_emit_latency_sensitivity"
+      ],
+      "properties": {
+        "must_emit_typed_logic": {
+          "type": "boolean",
+          "const": true
+        },
+        "must_emit_failure_conditions": {
+          "type": "boolean",
+          "const": true
+        },
+        "must_emit_regime_sensitivity": {
+          "type": "boolean",
+          "const": true
+        },
+        "must_emit_liquidity_sensitivity": {
+          "type": "boolean",
+          "const": true
+        },
+        "must_emit_latency_sensitivity": {
+          "type": "boolean",
+          "const": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "audit": {
+      "type": "object",
+      "required": [
+        "data_snapshot_ids",
+        "source_registry_version",
+        "ontology_version",
+        "code_commit"
+      ],
+      "properties": {
+        "data_snapshot_ids": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/non_empty_string" },
+          "uniqueItems": true
+        },
+        "source_registry_version": { "$ref": "#/definitions/non_empty_string" },
+        "ontology_version": { "$ref": "#/definitions/non_empty_string" },
+        "code_commit": { "$ref": "#/definitions/non_empty_string" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "non_empty_string": {
+      "type": "string",
+      "minLength": 1
+    },
+    "nullable_string": {
+      "type": ["string", "null"]
+    },
+    "nullable_number": {
+      "type": ["number", "null"]
+    },
+    "string_array": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/non_empty_string" },
+      "uniqueItems": true
+    },
+    "market_instrument": {
+      "type": "object",
+      "required": [
+        "symbol",
+        "canonical_instrument_id",
+        "asset_class",
+        "venue",
+        "session_state",
+        "mid_price",
+        "spread",
+        "spread_bps",
+        "top_of_book_imbalance",
+        "depth_imbalance_10",
+        "order_flow_imbalance",
+        "microprice",
+        "realized_volatility",
+        "book_update_rate",
+        "trade_rate",
+        "cancel_rate",
+        "toxicity_metric",
+        "liquidity_regime",
+        "volatility_regime",
+        "data_quality_status"
+      ],
+      "properties": {
+        "symbol": { "$ref": "#/definitions/non_empty_string" },
+        "canonical_instrument_id": { "$ref": "#/definitions/non_empty_string" },
+        "asset_class": { "$ref": "#/definitions/non_empty_string" },
+        "venue": { "$ref": "#/definitions/non_empty_string" },
+        "session_state": {
+          "type": ["string", "null"],
+          "enum": ["open", "closed", "pre_market", "post_market", "halted", "unknown", null]
+        },
+        "mid_price": { "$ref": "#/definitions/nullable_number" },
+        "spread": { "$ref": "#/definitions/nullable_number" },
+        "spread_bps": { "$ref": "#/definitions/nullable_number" },
+        "top_of_book_imbalance": { "$ref": "#/definitions/nullable_number" },
+        "depth_imbalance_10": { "$ref": "#/definitions/nullable_number" },
+        "order_flow_imbalance": { "$ref": "#/definitions/nullable_number" },
+        "microprice": { "$ref": "#/definitions/nullable_number" },
+        "realized_volatility": { "$ref": "#/definitions/nullable_number" },
+        "book_update_rate": { "$ref": "#/definitions/nullable_number" },
+        "trade_rate": { "$ref": "#/definitions/nullable_number" },
+        "cancel_rate": { "$ref": "#/definitions/nullable_number" },
+        "toxicity_metric": { "$ref": "#/definitions/nullable_number" },
+        "liquidity_regime": {
+          "type": "string",
+          "enum": ["normal", "thin", "stressed", "unknown"]
+        },
+        "volatility_regime": {
+          "type": "string",
+          "enum": ["low", "normal", "high", "extreme", "unknown"]
+        },
+        "data_quality_status": {
+          "type": "string",
+          "enum": ["passed", "failed", "degraded", "unknown"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "typed_feature_ref": {
+      "type": "object",
+      "required": [
+        "feature_id",
+        "feature_type",
+        "variable_ids",
+        "formula_ids",
+        "source_ids",
+        "value",
+        "as_of_utc"
+      ],
+      "properties": {
+        "feature_id": { "$ref": "#/definitions/non_empty_string" },
+        "feature_type": { "$ref": "#/definitions/non_empty_string" },
+        "variable_ids": { "$ref": "#/definitions/string_array" },
+        "formula_ids": { "$ref": "#/definitions/string_array" },
+        "source_ids": { "$ref": "#/definitions/string_array" },
+        "value": {
+          "oneOf": [
+            { "type": ["string", "number", "boolean", "null"] },
+            {
+              "type": "array",
+              "items": { "type": ["string", "number", "boolean", "null"] }
+            }
+          ]
+        },
+        "as_of_utc": { "$ref": "#/definitions/nullable_string" }
+      },
+      "additionalProperties": false
+    },
+    "data_validation": {
+      "type": "object",
+      "required": ["status", "failed_checks", "warnings"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["passed", "failed", "degraded", "unknown"]
+        },
+        "failed_checks": { "$ref": "#/definitions/string_array" },
+        "warnings": { "$ref": "#/definitions/string_array" }
+      },
+      "additionalProperties": false
+    },
+    "canonical_event": {
+      "type": "object",
+      "required": [
+        "event_id",
+        "event_type",
+        "event_subtype",
+        "event_time_utc",
+        "first_seen_utc",
+        "last_updated_utc",
+        "source_ids",
+        "entity_ids",
+        "market_channels",
+        "tradability_status",
+        "allowed_llm_interpretation",
+        "forbidden_llm_interpretations"
+      ],
+      "properties": {
+        "event_id": { "$ref": "#/definitions/non_empty_string" },
+        "event_type": { "$ref": "#/definitions/non_empty_string" },
+        "event_subtype": { "$ref": "#/definitions/nullable_string" },
+        "event_time_utc": { "$ref": "#/definitions/nullable_string" },
+        "first_seen_utc": { "$ref": "#/definitions/nullable_string" },
+        "last_updated_utc": { "$ref": "#/definitions/nullable_string" },
+        "source_ids": { "$ref": "#/definitions/string_array" },
+        "entity_ids": { "$ref": "#/definitions/string_array" },
+        "market_channels": { "$ref": "#/definitions/string_array" },
+        "tradability_status": {
+          "type": "string",
+          "enum": ["ignore", "monitor", "research_candidate", "urgent_research_candidate", "unknown"]
+        },
+        "allowed_llm_interpretation": { "$ref": "#/definitions/nullable_string" },
+        "forbidden_llm_interpretations": { "$ref": "#/definitions/string_array" }
+      },
+      "additionalProperties": false
+    },
+    "event_cluster": {
+      "type": "object",
+      "required": ["cluster_id", "event_ids", "dedup_status"],
+      "properties": {
+        "cluster_id": { "$ref": "#/definitions/non_empty_string" },
+        "event_ids": { "$ref": "#/definitions/string_array" },
+        "dedup_status": {
+          "type": "string",
+          "enum": ["unique", "deduplicated", "conflicting", "unknown"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "event_ref": {
+      "type": "object",
+      "required": ["event_id", "reason"],
+      "properties": {
+        "event_id": { "$ref": "#/definitions/non_empty_string" },
+        "reason": { "$ref": "#/definitions/non_empty_string" }
+      },
+      "additionalProperties": false
+    },
+    "event_contradiction": {
+      "type": "object",
+      "required": ["contradiction_id", "event_ids", "source_ids", "status"],
+      "properties": {
+        "contradiction_id": { "$ref": "#/definitions/non_empty_string" },
+        "event_ids": { "$ref": "#/definitions/string_array" },
+        "source_ids": { "$ref": "#/definitions/string_array" },
+        "status": {
+          "type": "string",
+          "enum": ["open", "resolved", "unknown"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "source_ref": {
+      "type": "object",
+      "required": [
+        "source_id",
+        "source_type",
+        "source_registry_key",
+        "title",
+        "version",
+        "citation"
+      ],
+      "properties": {
+        "source_id": { "$ref": "#/definitions/non_empty_string" },
+        "source_type": {
+          "type": "string",
+          "enum": [
+            "approved_pdf",
+            "internal_doc",
+            "market_data_snapshot",
+            "macro_data",
+            "formal_math_output",
+            "source_registry",
+            "ontology_registry",
+            "sandbox_artifact",
+            "event_feed_snapshot",
+            "unknown"
+          ]
+        },
+        "source_registry_key": { "$ref": "#/definitions/non_empty_string" },
+        "title": { "$ref": "#/definitions/non_empty_string" },
+        "version": { "$ref": "#/definitions/nullable_string" },
+        "citation": { "$ref": "#/definitions/nullable_string" }
+      },
+      "additionalProperties": false
+    },
+    "formula_ref": {
+      "type": "object",
+      "required": [
+        "formula_id",
+        "name",
+        "expression",
+        "variable_ids",
+        "source_ids"
+      ],
+      "properties": {
+        "formula_id": { "$ref": "#/definitions/non_empty_string" },
+        "name": { "$ref": "#/definitions/non_empty_string" },
+        "expression": { "$ref": "#/definitions/non_empty_string" },
+        "variable_ids": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/non_empty_string" },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "source_ids": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/non_empty_string" },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "concept_ref": {
+      "type": "object",
+      "required": ["concept_id", "name", "source_ids"],
+      "properties": {
+        "concept_id": { "$ref": "#/definitions/non_empty_string" },
+        "name": { "$ref": "#/definitions/non_empty_string" },
+        "source_ids": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/non_empty_string" },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "source_gap": {
+      "type": "object",
+      "required": ["gap_id", "description", "severity"],
+      "properties": {
+        "gap_id": { "$ref": "#/definitions/non_empty_string" },
+        "description": { "$ref": "#/definitions/non_empty_string" },
+        "severity": {
+          "type": "string",
+          "enum": ["low", "medium", "high", "blocking", "unknown"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "entity_ref": {
+      "type": "object",
+      "required": ["entity_id", "entity_name", "entity_type", "source_ids"],
+      "properties": {
+        "entity_id": { "$ref": "#/definitions/non_empty_string" },
+        "entity_name": { "$ref": "#/definitions/non_empty_string" },
+        "entity_type": {
+          "type": "string",
+          "enum": [
+            "country",
+            "company",
+            "commodity",
+            "currency",
+            "rate",
+            "index",
+            "future",
+            "equity",
+            "crypto",
+            "sector",
+            "region",
+            "concept",
+            "unknown"
+          ]
+        },
+        "source_ids": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/non_empty_string" },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "variable_ref": {
+      "type": "object",
+      "required": ["variable_id", "name", "data_type", "unit", "source_ids"],
+      "properties": {
+        "variable_id": { "$ref": "#/definitions/non_empty_string" },
+        "name": { "$ref": "#/definitions/non_empty_string" },
+        "data_type": {
+          "type": "string",
+          "enum": ["integer", "number", "boolean", "string", "timestamp", "category", "unknown"]
+        },
+        "unit": { "$ref": "#/definitions/nullable_string" },
+        "source_ids": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/non_empty_string" },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "transformation_ref": {
+      "type": "object",
+      "required": [
+        "transformation_id",
+        "name",
+        "input_variable_ids",
+        "output_variable_ids",
+        "source_ids"
+      ],
+      "properties": {
+        "transformation_id": { "$ref": "#/definitions/non_empty_string" },
+        "name": { "$ref": "#/definitions/non_empty_string" },
+        "input_variable_ids": { "$ref": "#/definitions/string_array" },
+        "output_variable_ids": { "$ref": "#/definitions/string_array" },
+        "source_ids": { "$ref": "#/definitions/string_array" }
+      },
+      "additionalProperties": false
+    },
+    "research_question": {
+      "type": "object",
+      "required": [
+        "question_id",
+        "question",
+        "trigger_source",
+        "required_variables",
+        "required_sources",
+        "required_formulas",
+        "required_entities",
+        "testability_status",
+        "rejection_reason"
+      ],
+      "properties": {
+        "question_id": { "$ref": "#/definitions/non_empty_string" },
+        "question": { "$ref": "#/definitions/non_empty_string" },
+        "trigger_source": {
+          "type": "string",
+          "enum": ["market_state", "event_state", "knowledge_state", "ontology_state"]
+        },
+        "required_variables": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/non_empty_string" },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "required_sources": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/non_empty_string" },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "required_formulas": { "$ref": "#/definitions/string_array" },
+        "required_entities": { "$ref": "#/definitions/string_array" },
+        "testability_status": {
+          "type": "string",
+          "enum": ["testable", "not_testable", "insufficient_data"]
+        },
+        "rejection_reason": { "$ref": "#/definitions/nullable_string" }
+      },
+      "additionalProperties": false
+    }
+  }
+}
