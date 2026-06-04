@@ -33,7 +33,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--strategy", default="latency_probe", dest="strategy_id")
     parser.add_argument("--model-id", default="")
     parser.add_argument("--trade-manager-id", default="")
-    parser.add_argument("--samples", type=int, default=None, help="Synthetic sample override for fast verification.")
+    parser.add_argument("--samples", type=int, default=None, help="Sample count override. Applies to synthetic and broker modes.")
     parser.add_argument(
         "--interaction-mode",
         default="offensive_only",
@@ -233,68 +233,111 @@ def _run_broker_baseline(
     try:
         connector.connect()
         connector.subscribe_mbo(symbol, exchange)
-        market_event = _wait_for_market_event(
-            connector=connector,
-            record_events=record_events,
-            deadline=time.monotonic() + min(max(float(args.duration), 1.0), 30.0),
-        )
-        market_event_received_ts = int(market_event["local_monotonic_receive_ns"])
-        features_ready_ts = time.perf_counter_ns()
-        price = args.limit_price
-        if price is None:
-            price = _derive_probe_price(market_event, side=args.side)
-        decision_ready_ts = time.perf_counter_ns()
-        risk_check_ready_ts = time.perf_counter_ns()
-        order_ready_ts = time.perf_counter_ns()
-        client_order_id = connector.send_order(symbol, args.side, args.qty, price)
-        ack_event = _wait_for_order_response(
-            connector=connector,
-            client_order_id=client_order_id,
-            record_events=record_events,
-            deadline=time.monotonic() + float(args.ack_timeout_sec),
-        )
-        submit_event = _find_order_submit(events, client_order_id)
-        order_send_ts = int(
-            (submit_event or {}).get("ts_emit_ns")
-            or (submit_event or {}).get("local_monotonic_receive_ns")
-            or order_ready_ts
-        )
-        ack_received_ts = int(ack_event["local_monotonic_receive_ns"]) if ack_event else None
-        success = bool(ack_event and ack_event.get("event_type") == "order_ack")
-        reject_reason = "" if success else str((ack_event or {}).get("event_type") or "ack_timeout")
-        timestamps = {
-            "market_event_received_ts": market_event_received_ts,
-            "features_ready_ts": features_ready_ts,
-            "decision_ready_ts": decision_ready_ts,
-            "risk_check_ready_ts": risk_check_ready_ts,
-            "order_ready_ts": order_ready_ts,
-            "order_send_ts": order_send_ts,
-            "ack_received_ts": ack_received_ts,
-        }
-        if success and args.cancel_after_ack:
-            broker_order_id = str(ack_event.get("broker_order_id") or "")
-            if broker_order_id:
-                cancel_send_ts = time.perf_counter_ns()
-                connector.cancel_order(broker_order_id)
-                cancel_ack = _wait_for_cancel_ack(
-                    connector=connector,
-                    client_order_id=client_order_id,
-                    broker_order_id=broker_order_id,
-                    record_events=record_events,
-                    deadline=time.monotonic() + float(args.ack_timeout_sec),
+        target_samples = max(1, int(args.samples or 1))
+        records: list[dict] = []
+        client_order_ids: list[str] = []
+        derived_prices: list[str] = []
+        stop_reason = ""
+        run_deadline = time.monotonic() + max(float(args.duration), 1.0)
+        for _sample_idx in range(target_samples):
+            if time.monotonic() >= run_deadline:
+                if not records:
+                    raise TimeoutError("duration expired before any broker latency sample completed")
+                break
+            market_event = _wait_for_market_event(
+                connector=connector,
+                record_events=record_events,
+                deadline=min(run_deadline, time.monotonic() + min(max(float(args.duration), 1.0), 30.0)),
+            )
+            market_event_received_ts = int(market_event["local_monotonic_receive_ns"])
+            features_ready_ts = time.perf_counter_ns()
+            price = args.limit_price
+            if price is None:
+                price = _derive_probe_price(market_event, side=args.side)
+            derived_prices.append(str(price))
+            decision_ready_ts = time.perf_counter_ns()
+            risk_check_ready_ts = time.perf_counter_ns()
+            order_ready_ts = time.perf_counter_ns()
+            client_order_id = connector.send_order(symbol, args.side, args.qty, price)
+            client_order_ids.append(client_order_id)
+            ack_event = _wait_for_order_response(
+                connector=connector,
+                client_order_id=client_order_id,
+                record_events=record_events,
+                deadline=min(run_deadline, time.monotonic() + float(args.ack_timeout_sec)),
+            )
+            submit_event = _find_order_submit(events, client_order_id)
+            order_send_ts = int(
+                (submit_event or {}).get("ts_emit_ns")
+                or (submit_event or {}).get("local_monotonic_receive_ns")
+                or order_ready_ts
+            )
+            ack_received_ts = int(ack_event["local_monotonic_receive_ns"]) if ack_event else None
+            success = bool(ack_event and ack_event.get("event_type") == "order_ack")
+            reject_reason = "" if success else str((ack_event or {}).get("event_type") or "ack_timeout")
+            order_timestamps = {
+                "market_event_received_ts": market_event_received_ts,
+                "features_ready_ts": features_ready_ts,
+                "decision_ready_ts": decision_ready_ts,
+                "risk_check_ready_ts": risk_check_ready_ts,
+                "order_ready_ts": order_ready_ts,
+                "order_send_ts": order_send_ts,
+                "ack_received_ts": ack_received_ts,
+            }
+            records.append(
+                recorder.write_sample(
+                    order_action="new",
+                    side=args.side,
+                    order_type="limit",
+                    quantity=args.qty,
+                    timestamps=order_timestamps,
+                    success=success,
+                    reject_reason=reject_reason,
                 )
-                timestamps["cancel_send_ts"] = cancel_send_ts
-                if cancel_ack:
-                    timestamps["cancel_ack_received_ts"] = int(cancel_ack["local_monotonic_receive_ns"])
-        record = recorder.write_sample(
-            order_action="new",
-            side=args.side,
-            order_type="limit",
-            quantity=args.qty,
-            timestamps=timestamps,
-            success=success,
-            reject_reason=reject_reason,
-        )
+            )
+            if not success:
+                stop_reason = reject_reason
+                break
+
+            if args.cancel_after_ack:
+                broker_order_id = str(ack_event.get("broker_order_id") or "")
+                if not broker_order_id:
+                    stop_reason = "broker_order_id_missing"
+                    break
+                cancel_decision_ts = time.perf_counter_ns()
+                cancel_send_ts = time.perf_counter_ns()
+                try:
+                    connector.cancel_order(broker_order_id)
+                    cancel_ack = _wait_for_cancel_ack(
+                        connector=connector,
+                        client_order_id=client_order_id,
+                        broker_order_id=broker_order_id,
+                        record_events=record_events,
+                        deadline=min(run_deadline, time.monotonic() + float(args.ack_timeout_sec)),
+                    )
+                    cancel_success = bool(cancel_ack)
+                    cancel_reject = "" if cancel_success else "cancel_ack_timeout"
+                except Exception as exc:
+                    cancel_ack = None
+                    cancel_success = False
+                    cancel_reject = f"cancel_submit_failed:{exc}"
+                cancel_record = recorder.write_sample(
+                    order_action="cancel",
+                    side=args.side,
+                    order_type="limit",
+                    quantity=args.qty,
+                    timestamps={
+                        "decision_ready_ts": cancel_decision_ts,
+                        "cancel_send_ts": cancel_send_ts,
+                        "cancel_ack_received_ts": int(cancel_ack["local_monotonic_receive_ns"]) if cancel_ack else None,
+                    },
+                    success=cancel_success,
+                    reject_reason=cancel_reject,
+                )
+                records.append(cancel_record)
+                if not cancel_success:
+                    stop_reason = cancel_reject
+                    break
     finally:
         connector.close()
         _flush_events(raw_events_path, events)
@@ -304,10 +347,13 @@ def _run_broker_baseline(
         "resolved_symbol": symbol,
         "requested_symbol": args.symbol,
         "event_count": str(len(events)),
-        "client_order_id": str(client_order_id) if "client_order_id" in locals() else "",
-        "derived_limit_price": str(price) if "price" in locals() else "",
+        "client_order_id": ",".join(client_order_ids) if "client_order_ids" in locals() else "",
+        "derived_limit_price": ",".join(derived_prices) if "derived_prices" in locals() else "",
+        "target_samples": str(target_samples) if "target_samples" in locals() else "1",
+        "records_written": str(len(records)) if "records" in locals() else "0",
+        "stop_reason": stop_reason if "stop_reason" in locals() else "",
     }
-    return recorder.sample_path(), [record], artifacts
+    return recorder.sample_path(), records, artifacts
 
 
 def _wait_for_market_event(*, connector, record_events, deadline: float) -> dict:

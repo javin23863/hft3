@@ -87,8 +87,8 @@ def _coerce_timestamps(raw: dict[str, Any]) -> dict[str, int | None]:
     return timestamps
 
 
-def _metric_values(timestamps: dict[str, int | None]) -> dict[str, float | None]:
-    return {
+def _metric_values(timestamps: dict[str, int | None], *, order_action: str) -> dict[str, float | None]:
+    values = {
         "tick_to_decision_us": _duration_us(
             timestamps["market_event_received_ts"],
             timestamps["decision_ready_ts"],
@@ -122,6 +122,26 @@ def _metric_values(timestamps: dict[str, int | None]) -> dict[str, float | None]
             timestamps["replace_ack_received_ts"],
         ),
     }
+    if order_action == "new":
+        values["cancel_to_send_us"] = None
+        values["cancel_to_ack_us"] = None
+        values["replace_to_send_us"] = None
+        values["replace_to_ack_us"] = None
+    elif order_action == "cancel":
+        values["tick_to_decision_us"] = None
+        values["decision_to_send_us"] = None
+        values["tick_to_send_us"] = None
+        values["send_to_ack_us"] = None
+        values["replace_to_send_us"] = None
+        values["replace_to_ack_us"] = None
+    elif order_action == "replace":
+        values["tick_to_decision_us"] = None
+        values["decision_to_send_us"] = None
+        values["tick_to_send_us"] = None
+        values["send_to_ack_us"] = None
+        values["cancel_to_send_us"] = None
+        values["cancel_to_ack_us"] = None
+    return values
 
 
 def build_latency_sample(
@@ -161,7 +181,7 @@ def build_latency_sample(
         "side": side,
         "order_type": order_type,
         "quantity": quantity,
-        **_metric_values(raw_timestamps),
+        **_metric_values(raw_timestamps, order_action=order_action),
         "success": bool(success),
         "reject_reason": reject_reason,
         "raw_timestamps": raw_timestamps,
