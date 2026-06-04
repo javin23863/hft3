@@ -59,6 +59,7 @@ data/**/*.zst
 data/**/*.npz
 data/**/*.parquet
 data/**/*.csv
+data/latency_baselines/**/*.jsonl
 !data_system/config/events.csv
 data/raw/rithmic_trial_live_capture/**
 !data/raw/rithmic_trial_live_capture/.gitkeep
@@ -68,6 +69,9 @@ data/replay/hftbacktest/rithmic_trial/**
 !data/replay/hftbacktest/rithmic_trial/.gitkeep
 reports/rithmic_trial/**
 !reports/rithmic_trial/.gitkeep
+reports/latency_baselines/*_summary.json
+reports/latency_baselines/*_summary.md
+reports/latency_baselines/*_broker_blocker.json
 logs/rithmic_trial/**
 runtime/rithmic_latency_probe.log*
 data/options/**
