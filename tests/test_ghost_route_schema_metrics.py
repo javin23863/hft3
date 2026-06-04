@@ -3,6 +3,7 @@ import json
 import pytest
 
 from models.ghost_route.ghost_route_backtest import EVENT_LOG_FIELDS
+from models.ghost_route.ghost_route_model import load_config
 from models.ghost_route.ghost_route_metrics import summarize_event_log
 
 
@@ -54,3 +55,12 @@ def test_ghost_route_event_log_schema_validates_minimal_row() -> None:
     )
 
     jsonschema.validate(row, schema)
+
+
+def test_ghost_route_loads_tracked_config() -> None:
+    cfg = load_config("models/ghost_route/ghost_route_config.yaml")
+
+    assert cfg.timestamp_unit == "ns"
+    assert cfg.compute_latency_us == 0
+    assert cfg.compute_latency_source == "default_zero_requires_measured_override"
+    assert cfg.pair_calibration["ES_MES"].tau_hat_us == 50

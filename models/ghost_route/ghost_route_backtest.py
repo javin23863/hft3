@@ -12,6 +12,7 @@ from .ghost_route_model import (
     GhostRouteConfig,
     GhostRouteModel,
     MBOEvent,
+    load_config,
     simulate_fak_order,
     sort_events,
     validate_event_window,
@@ -54,6 +55,10 @@ EVENT_LOG_FIELDS = (
     "markout_100us",
     "markout_250us",
     "markout_1ms",
+    "gross_pnl",
+    "fees",
+    "slippage_cost",
+    "adverse_selection_cost",
     "net_pnl",
     "reject_reason",
 )
@@ -69,9 +74,79 @@ def _event_by_time(events: list[MBOEvent], timestamp: int) -> MBOEvent | None:
     return candidate
 
 
-def _event_log_row(signal_id: int, macro: MBOEvent, micro: MBOEvent, intent: Any, fill: Any) -> dict[str, Any]:
+def _event_at_or_after(events: list[MBOEvent], timestamp: int) -> MBOEvent | None:
+    for event in events:
+        if event.exchange_timestamp >= timestamp:
+            return event
+    return events[-1] if events else None
+
+
+def _mid_price(event: MBOEvent) -> float:
+    return (event.best_bid + event.best_ask) / 2.0
+
+
+def _markout_ticks(fill_price: float, book: MBOEvent | None, direction: str, tick_size: float) -> float:
+    if book is None or fill_price <= 0.0:
+        return 0.0
+    mid = _mid_price(book)
+    if direction == "BUY":
+        return (mid - fill_price) / tick_size
+    return (fill_price - mid) / tick_size
+
+
+def _micro_reprice_time(events: list[MBOEvent], *, signal_ts: int, direction: str, target_price: float) -> int | str:
+    for event in events:
+        if event.exchange_timestamp < signal_ts:
+            continue
+        if direction == "BUY" and event.best_ask > target_price:
+            return event.exchange_timestamp
+        if direction == "SELL" and event.best_bid < target_price:
+            return event.exchange_timestamp
+    return ""
+
+
+def _event_log_row(
+    signal_id: int,
+    macro: MBOEvent,
+    micro: MBOEvent,
+    intent: Any,
+    fill: Any,
+    *,
+    micro_events: list[MBOEvent],
+    config: GhostRouteConfig,
+) -> dict[str, Any]:
     reason = intent.reason
     decay = reason.get("shadow_decay", {})
+    tick_size = config.tick_sizes[intent.micro_contract]
+    filled_qty = int(fill.filled_quantity)
+    horizons = {
+        "markout_10us": 10,
+        "markout_25us": 25,
+        "markout_50us": 50,
+        "markout_100us": 100,
+        "markout_250us": 250,
+        "markout_1ms": 1_000,
+    }
+    markouts = {
+        key: _markout_ticks(
+            fill.fill_price,
+            _event_at_or_after(micro_events, intent.timestamp_order_arrival + config.us_to_timestamp_delta(horizon_us)),
+            intent.direction,
+            tick_size,
+        )
+        for key, horizon_us in horizons.items()
+    }
+    horizon_key = "markout_1ms" if config.pnl_markout_horizon_us == 1_000 else f"markout_{config.pnl_markout_horizon_us}us"
+    gross_per_contract = markouts.get(horizon_key, markouts["markout_250us"])
+    gross_pnl = gross_per_contract * filled_qty
+    fees = config.fees_ticks * filled_qty
+    slippage = config.estimated_slippage_ticks * filled_qty
+    adverse = config.adverse_selection_penalty_ticks * filled_qty
+    if filled_qty:
+        net_pnl = gross_pnl - fees - slippage - adverse
+    else:
+        net_pnl = -config.miss_penalty_ticks * int(intent.target_quantity)
+    lead_time_us = config.timestamp_delta_to_us(intent.timestamp_order_arrival - intent.timestamp_signal)
     return {
         "signal_id": f"ghost_route_{signal_id}",
         "timestamp_signal": intent.timestamp_signal,
@@ -100,19 +175,19 @@ def _event_log_row(signal_id: int, macro: MBOEvent, micro: MBOEvent, intent: Any
         "fill_status": fill.fill_status,
         "filled_quantity": fill.filled_quantity,
         "fill_price": fill.fill_price,
-        "micro_reprice_time": "",
-        "lead_time_us": "",
-        "markout_10us": "",
-        "markout_25us": "",
-        "markout_50us": "",
-        "markout_100us": "",
-        "markout_250us": "",
-        "markout_1ms": "",
-        "gross_pnl": 0.0,
-        "fees": 0.0,
-        "slippage_cost": 0.0,
-        "adverse_selection_cost": 0.0,
-        "net_pnl": 0.0,
+        "micro_reprice_time": _micro_reprice_time(
+            micro_events,
+            signal_ts=intent.timestamp_signal,
+            direction=intent.direction,
+            target_price=intent.target_price,
+        ),
+        "lead_time_us": lead_time_us,
+        **markouts,
+        "gross_pnl": gross_pnl,
+        "fees": fees,
+        "slippage_cost": slippage,
+        "adverse_selection_cost": adverse,
+        "net_pnl": net_pnl,
         "reject_reason": fill.reject_reason,
     }
 
@@ -123,6 +198,7 @@ def run_backtest(
     *,
     macro_contract: str,
     config: GhostRouteConfig | None = None,
+    config_path: Path | None = None,
     reports_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Replay events and return summary plus event log.
@@ -134,7 +210,7 @@ def run_backtest(
 
     if macro_contract not in CONTRACT_PAIRS:
         raise ValueError(f"unsupported macro contract: {macro_contract}")
-    cfg = config or GhostRouteConfig()
+    cfg = config or load_config(config_path)
     macro = sort_events(macro_events)
     micro = sort_events(micro_events)
     macro_quality = validate_event_window(macro)
@@ -155,7 +231,7 @@ def run_backtest(
         current_micro = _event_by_time(micro, current_macro.exchange_timestamp)
         if current_micro is None:
             continue
-        window_start = current_macro.exchange_timestamp - cfg.delta_t_us
+        window_start = current_macro.exchange_timestamp - cfg.us_to_timestamp_delta(cfg.delta_t_us)
         window = [event for event in macro if window_start <= event.exchange_timestamp <= current_macro.exchange_timestamp]
         intent = model.evaluate(
             macro_contract=macro_contract,
@@ -170,7 +246,17 @@ def run_backtest(
             continue
         arrival_book = _event_by_time(micro, intent.timestamp_order_arrival)
         fill = simulate_fak_order(intent, arrival_book or current_micro)
-        rows.append(_event_log_row(len(rows) + 1, current_macro, current_micro, intent, fill))
+        rows.append(
+            _event_log_row(
+                len(rows) + 1,
+                current_macro,
+                current_micro,
+                intent,
+                fill,
+                micro_events=micro,
+                config=cfg,
+            )
+        )
     summary = summarize_event_log(rows)
     summary.update(
         {

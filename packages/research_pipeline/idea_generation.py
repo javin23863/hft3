@@ -195,7 +195,8 @@ def _static_errors(
     errors: List[str] = []
     allowed_models = set(constraints.get("allowed_model_ids") or [])
     allowed_lanes = set(constraints.get("allowed_lane_codes") or [])
-    valid_feature_refs = set(all_slugs()) | allowed_models
+    model_slugs = set(all_slugs())
+    valid_feature_refs = model_slugs | allowed_models
     memory_ids = {str(item.get("memory_id")) for item in review_memory}
     ref_ids = set(refs) | memory_ids
 
@@ -208,6 +209,9 @@ def _static_errors(
     for feature_id in idea.get("feature_ids") or []:
         if feature_id not in valid_feature_refs:
             errors.append("feature_id_not_valid")
+            break
+        if feature_id in model_slugs and feature_id not in allowed_models:
+            errors.append("feature_model_id_not_allowed")
             break
     param_ranges = idea.get("param_ranges") or {}
     if not param_ranges:
@@ -252,13 +256,14 @@ def static_filter_ideas(packet: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 def parsed_from_idea(idea: Dict[str, Any]) -> ParsedHypothesis:
     model_id = str(idea.get("primary_model_id") or "")
+    feature_ids = list(idea.get("feature_ids") or [])
     return ParsedHypothesis(
         thesis=str(idea.get("thesis_code") or ""),
         instrument_universe=list(idea.get("instrument_ids") or ["MES"]),
         entry_rules=list(idea.get("entry_rule_codes") or []),
         exit_rules=list(idea.get("exit_rule_codes") or []),
-        indicators=list(idea.get("feature_ids") or [model_id]),
-        feature_list=list(idea.get("feature_ids") or [model_id]),
+        indicators=feature_ids or [model_id],
+        feature_list=[model_id],
         param_ranges={"signal_threshold": [0.05, 0.35]},
         primary_model_id=model_id,
         source="idea_set",

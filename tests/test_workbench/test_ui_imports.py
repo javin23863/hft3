@@ -159,6 +159,36 @@ def test_campaign_controls_only_render_for_workbench_campaign_source() -> None:
     assert 'if run_source != "workbench_campaign":\n    selected_campaign = ""' in app_src
 
 
+def test_workbench_llm_console_is_not_campaign_gated() -> None:
+    app_src = (Path(__file__).resolve().parents[2] / "apps" / "workbench" / "ui" / "app.py").read_text(
+        encoding="utf-8"
+    )
+    tree = ast.parse(app_src)
+    for parent in ast.walk(tree):
+        for child in ast.iter_child_nodes(parent):
+            child.parent = parent  # type: ignore[attr-defined]
+
+    console_calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "workbench_llm_console"
+    ]
+    assert console_calls
+
+    for node in console_calls:
+        parent = getattr(node, "parent", None)
+        while parent is not None:
+            if isinstance(parent, ast.If):
+                test = ast.unparse(parent.test)
+                assert test not in {
+                    "run_source == 'workbench_campaign'",
+                    'run_source == "workbench_campaign"',
+                }
+            parent = getattr(parent, "parent", None)
+
+
 def test_model_selector_uses_backend_catalog_not_hardcoded_starters() -> None:
     from workbench.ui import campaign_panel
 

@@ -87,11 +87,13 @@ def load_model_binding(repo_root: Path, model_id: str) -> dict[str, Any]:
     if cfg.get("campaign_blocked_reason"):
         raise RuntimeError(cfg["campaign_blocked_reason"])
     required = set(cfg.get("required_event_contexts") or [])
-    default_macro = set(cfg.get("default_macro_contexts") or [])
     return {
         "required_event_contexts": required,
-        "default_macro_contexts": default_macro,
-        "allowed_contexts": required if required else default_macro,
+        "allowed_contexts": required,
+        "event_context_policy": cfg.get(
+            "event_context_policy",
+            "explicit_filter" if required else "catalog_all_contexts",
+        ),
         "campaign_mode": cfg.get("campaign_mode", "mbo"),
         "required_datasets": cfg.get("required_datasets", []),
     }
@@ -140,7 +142,7 @@ def list_campaign_events(
         if symbol not in syms:
             continue
         ctx = row_to_event_context(str(row["event_type"]), str(row["window_name"]))
-        if ctx not in allowed:
+        if allowed and ctx not in allowed:
             continue
         eid = str(row["event_id"])
         parsed = tuple(str(s) for s in syms)
@@ -206,6 +208,7 @@ def campaign_preview(
         "model_id": model_id,
         "symbol": symbol,
         "allowed_contexts": sorted(binding["allowed_contexts"]),
+        "event_context_policy": binding["event_context_policy"],
         "catalog_years": catalog_years_available(model_id, symbol, repo_root),
         "personal_locked": is_locked(repo_root),
         "personal_range": list(personal_date_range(repo_root)),

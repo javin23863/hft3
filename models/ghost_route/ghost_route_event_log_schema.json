@@ -38,6 +38,10 @@
     "markout_100us",
     "markout_250us",
     "markout_1ms",
+    "gross_pnl",
+    "fees",
+    "slippage_cost",
+    "adverse_selection_cost",
     "net_pnl",
     "reject_reason"
   ],

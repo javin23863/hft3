@@ -22,10 +22,17 @@ def test_hyp_29_requires_flatten_contexts():
     assert "CPI_TIGHT" not in ctx
 
 
-def test_hyp_5_uses_macro_defaults():
+def test_no_model_uses_default_macro_contexts():
     raw = yaml.safe_load(BINDING.read_text(encoding="utf-8"))
-    ctx = raw["hypothesis"]["SPREAD_BLOWOUT_RECOMPRESSION"]["default_macro_contexts"]
-    assert "CPI_TIGHT" in ctx
+    for section in ("hypothesis", "pdf"):
+        for model_id, cfg in raw[section].items():
+            assert "default_macro_contexts" not in cfg, model_id
+
+
+def test_hyp_5_uses_catalog_context_policy():
+    raw = yaml.safe_load(BINDING.read_text(encoding="utf-8"))
+    cfg = raw["hypothesis"]["SPREAD_BLOWOUT_RECOMPRESSION"]
+    assert cfg["event_context_policy"] == "catalog_all_contexts"
 
 
 def test_pdf_model_5_options_lane():

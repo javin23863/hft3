@@ -159,6 +159,49 @@ def test_idea_static_filter_rejects_invalid_and_orders_queue():
     }
 
 
+def test_idea_feature_ids_do_not_expand_candidate_model_families():
+    from research_pipeline.idea_generation import candidates_from_ideas, parsed_from_idea
+    from research_pipeline.model_generation import generate_candidates
+
+    packet = _idea_packet()
+    packet["constraints"]["allowed_model_ids"] = ["SPREAD_BLOWOUT_RECOMPRESSION"]
+    packet["constraints"]["max_candidates"] = 6
+    packet["ideas"] = [
+        {
+            "idea_id": "idea_feature_ref",
+            "status": "proposed",
+            "lane_code": "cme",
+            "thesis_code": "spread_recompression_uses_book_pressure_context",
+            "instrument_ids": ["MES"],
+            "primary_model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+            "feature_ids": ["BOOK_PRESSURE"],
+            "param_ranges": {"signal_threshold": [0.05, 0.35]},
+            "entry_rule_codes": ["enter_spread_signal"],
+            "exit_rule_codes": ["exit_revert"],
+            "risk_codes": ["latency_gate_required"],
+            "evidence_ref_ids": ["mem_001"],
+            "rank_inputs": {
+                "novelty": 0.6,
+                "evidence_coverage": 0.6,
+                "lane_fit": 1.0,
+                "prior_failure_overlap": 0.0,
+                "validation_readiness": 1.0,
+            },
+        }
+    ]
+
+    parsed = parsed_from_idea(packet["ideas"][0])
+    assert parsed.indicators == ["BOOK_PRESSURE"]
+    assert parsed.feature_list == ["SPREAD_BLOWOUT_RECOMPRESSION"]
+    generated = list(generate_candidates(parsed, max_candidates=6))
+    assert {candidate.model_id for candidate in generated} == {"SPREAD_BLOWOUT_RECOMPRESSION"}
+
+    candidates = candidates_from_ideas(packet, max_candidates=6)
+    assert candidates == []
+    assert packet["ideas"][0]["status"] == "static_reject"
+    assert "feature_model_id_not_allowed" in packet["ideas"][0]["static_error_codes"]
+
+
 def test_idea_status_updates_only_from_evaluation_results():
     from research_pipeline.idea_generation import update_idea_statuses_from_results
     from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds

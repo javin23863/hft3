@@ -2,9 +2,12 @@ ghost_route:
   model_id: GHOST_ROUTE
   research_only: true
   live_routing_authorized: false
+  timestamp_unit: ns
   latency_wire_to_wire_us: 23
-  compute_latency_us: measured_from_benchmark
+  compute_latency_us: 0
+  compute_latency_source: default_zero_requires_measured_override
   delta_t_us: 250
+  pnl_markout_horizon_us: 250
   min_depth_contracts: 1
   max_spread_ticks: 1.0
   tau_decay_norm: 0.40

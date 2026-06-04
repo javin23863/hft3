@@ -4,18 +4,18 @@ from models.ghost_route import GhostRouteConfig, GhostRouteModel, OrderIntent, s
 def test_fak_simulation_uses_total_latency_and_partial_fill() -> None:
     intent = OrderIntent(
         model="GHOST_ROUTE",
-        timestamp_signal=1_000,
+        timestamp_signal=1_000_000,
         macro_contract="ES",
         micro_contract="MES",
         direction="BUY",
         target_price=100.25,
         target_quantity=3,
         order_type="FAK_LIMIT",
-        reason={"total_latency_us": 30},
+        reason={"timestamp_unit": "ns", "total_latency_us": 30},
     )
     arrival_book = {
-        "exchange_timestamp": 1_030,
-        "local_receive_timestamp": 1_030,
+        "exchange_timestamp": 1_030_000,
+        "local_receive_timestamp": 1_030_000,
         "sequence_number": 10,
         "instrument": "MES",
         "best_bid": 100.0,
@@ -26,7 +26,7 @@ def test_fak_simulation_uses_total_latency_and_partial_fill() -> None:
 
     fill = simulate_fak_order(intent, arrival_book)
 
-    assert intent.timestamp_order_arrival == 1_030
+    assert intent.timestamp_order_arrival == 1_030_000
     assert fill.fill_status == "PARTIAL_FILL"
     assert fill.filled_quantity == 2
     assert fill.fill_price == 100.25
@@ -43,8 +43,8 @@ def test_ghost_route_emits_research_order_intent_only_when_all_gates_pass() -> N
     )
     model = GhostRouteModel(cfg)
     previous_macro = {
-        "exchange_timestamp": 100,
-        "local_receive_timestamp": 100,
+        "exchange_timestamp": 100_000,
+        "local_receive_timestamp": 100_000,
         "sequence_number": 1,
         "instrument": "ES",
         "best_bid": 100.0,
@@ -53,8 +53,8 @@ def test_ghost_route_emits_research_order_intent_only_when_all_gates_pass() -> N
         "best_ask_size": 100,
     }
     current_macro = {
-        "exchange_timestamp": 200,
-        "local_receive_timestamp": 200,
+        "exchange_timestamp": 200_000,
+        "local_receive_timestamp": 200_000,
         "sequence_number": 4,
         "instrument": "ES",
         "best_bid": 100.0,
@@ -64,8 +64,8 @@ def test_ghost_route_emits_research_order_intent_only_when_all_gates_pass() -> N
     }
     macro_window = [
         {
-            "exchange_timestamp": 150,
-            "local_receive_timestamp": 150,
+            "exchange_timestamp": 150_000,
+            "local_receive_timestamp": 150_000,
             "sequence_number": 2,
             "instrument": "ES",
             "event_type": "cancel",
@@ -77,8 +77,8 @@ def test_ghost_route_emits_research_order_intent_only_when_all_gates_pass() -> N
         }
     ]
     micro = {
-        "exchange_timestamp": 200,
-        "local_receive_timestamp": 200,
+        "exchange_timestamp": 200_000,
+        "local_receive_timestamp": 200_000,
         "sequence_number": 5,
         "instrument": "MES",
         "best_bid": 102.0,
@@ -99,5 +99,6 @@ def test_ghost_route_emits_research_order_intent_only_when_all_gates_pass() -> N
     assert intent.model == "GHOST_ROUTE"
     assert intent.direction == "SELL"
     assert intent.order_type == "FAK_LIMIT"
-    assert intent.timestamp_order_arrival == 230
+    assert intent.timestamp_order_arrival == 230_000
     assert intent.reason["expected_edge_ticks"] >= cfg.min_expected_edge_ticks
+    assert intent.reason["total_latency_timestamp_delta"] == 30_000

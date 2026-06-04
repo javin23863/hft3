@@ -8,7 +8,10 @@ from __future__ import annotations
 
 import math
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import Any, Iterable, Literal
+
+import yaml
 
 
 CONTRACT_PAIRS: dict[str, str] = {
@@ -19,6 +22,7 @@ CONTRACT_PAIRS: dict[str, str] = {
 
 Side = Literal["bid", "ask"]
 Direction = Literal["BUY", "SELL"]
+TimestampUnit = Literal["ns", "us"]
 FillStatus = Literal[
     "FULL_FILL",
     "PARTIAL_FILL",
@@ -41,9 +45,12 @@ class PairCalibration:
 
 @dataclass(frozen=True)
 class GhostRouteConfig:
+    timestamp_unit: TimestampUnit = "ns"
     latency_wire_to_wire_us: int = 23
     compute_latency_us: int = 0
+    compute_latency_source: str = "default_zero_requires_measured_override"
     delta_t_us: int = 250
+    pnl_markout_horizon_us: int = 250
     min_depth_contracts: int = 1
     max_spread_ticks: float = 1.0
     tau_decay_norm: float = 0.40
@@ -86,6 +93,20 @@ class GhostRouteConfig:
     @property
     def total_latency_us(self) -> int:
         return int(self.compute_latency_us) + int(self.latency_wire_to_wire_us)
+
+    def us_to_timestamp_delta(self, duration_us: float) -> int:
+        if self.timestamp_unit == "ns":
+            return int(round(float(duration_us) * 1_000.0))
+        if self.timestamp_unit == "us":
+            return int(round(float(duration_us)))
+        raise ValueError(f"unsupported timestamp_unit: {self.timestamp_unit}")
+
+    def timestamp_delta_to_us(self, delta: float) -> float:
+        if self.timestamp_unit == "ns":
+            return float(delta) / 1_000.0
+        if self.timestamp_unit == "us":
+            return float(delta)
+        raise ValueError(f"unsupported timestamp_unit: {self.timestamp_unit}")
 
 
 @dataclass(frozen=True)
@@ -198,8 +219,13 @@ class OrderIntent:
 
     @property
     def timestamp_order_arrival(self) -> int:
-        latency = int(self.reason.get("total_latency_us", 0))
-        return int(self.timestamp_signal) + latency
+        explicit_delta = self.reason.get("total_latency_timestamp_delta")
+        if explicit_delta is not None:
+            return int(self.timestamp_signal) + int(explicit_delta)
+        latency_us = float(self.reason.get("total_latency_us", 0))
+        unit = str(self.reason.get("timestamp_unit", "ns"))
+        multiplier = 1_000 if unit == "ns" else 1
+        return int(self.timestamp_signal) + int(round(latency_us * multiplier))
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
@@ -219,6 +245,35 @@ class FillResult:
 def sort_events(events: Iterable[MBOEvent | dict[str, Any]]) -> list[MBOEvent]:
     rows = [event if isinstance(event, MBOEvent) else MBOEvent.from_mapping(event) for event in events]
     return sorted(rows, key=lambda e: (e.sequence_number, e.exchange_timestamp, e.local_receive_timestamp))
+
+
+def config_from_mapping(raw: dict[str, Any]) -> GhostRouteConfig:
+    cfg_raw = dict(raw.get("ghost_route") or raw)
+    pair_raw = raw.get("pair_calibration") or cfg_raw.pop("pair_calibration", None) or {}
+    pairs = {
+        str(pair): PairCalibration(
+            alpha=float(values.get("alpha", 0.0)),
+            beta=float(values.get("beta", 1.0)),
+            mu_spread=float(values.get("mu_spread", 0.0)),
+            sigma_spread=float(values.get("sigma_spread", 1.0)),
+            tau_hat_us=int(values.get("tau_hat_us", 0)),
+        )
+        for pair, values in pair_raw.items()
+        if isinstance(values, dict)
+    }
+    if pairs:
+        cfg_raw["pair_calibration"] = pairs
+    if "compute_latency_us" in cfg_raw and not isinstance(cfg_raw["compute_latency_us"], (int, float)):
+        raise ValueError("ghost_route.compute_latency_us must be numeric")
+    allowed = set(GhostRouteConfig.__dataclass_fields__)
+    filtered = {key: value for key, value in cfg_raw.items() if key in allowed}
+    return GhostRouteConfig(**filtered)
+
+
+def load_config(path: str | Path | None = None) -> GhostRouteConfig:
+    cfg_path = Path(path) if path is not None else Path(__file__).with_name("ghost_route_config.yaml")
+    raw = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+    return config_from_mapping(raw)
 
 
 def validate_event_window(events: Iterable[MBOEvent | dict[str, Any]], *, allow_locked_books: bool = False) -> DataQualityResult:
@@ -541,6 +596,8 @@ class GhostRouteModel:
                 "expected_edge_ticks": edge,
                 "available_depth": stale.available_depth,
                 "toxicity_state": tox.toxicity_state,
+                "timestamp_unit": cfg.timestamp_unit,
                 "total_latency_us": cfg.total_latency_us,
+                "total_latency_timestamp_delta": cfg.us_to_timestamp_delta(cfg.total_latency_us),
             },
         )

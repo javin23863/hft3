@@ -18,7 +18,11 @@ workbench = "workbench.__main__:main"
 economic-event-universe = "economic_event_universe.cli:main"
 
 [tool.setuptools.packages.find]
-where = ["apps", "packages"]
+where = ["apps", "packages", "."]
+exclude = ["connectors*"]
+
+[tool.setuptools.package-data]
+"models.ghost_route" = ["*.yaml", "*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

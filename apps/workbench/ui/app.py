@@ -15,7 +15,7 @@ from workbench.src.artifacts.paths import workbench_runs_dir
 
 st.set_page_config(page_title="HFT3 Workbench", layout="wide")
 
-from workbench.ui.analyst_panel import analyst_panel  # noqa: E402
+from workbench.ui.analyst_panel import analyst_panel, workbench_llm_console  # noqa: E402
 from workbench.ui.campaign_panel import (  # noqa: E402
     campaign_events,
     campaign_periods,
@@ -141,6 +141,8 @@ with tabs[7]:
 
 with tabs[8]:
     render_reports_analyst(snapshot)
+    st.divider()
+    workbench_llm_console(snapshot)
     if run_source == "workbench_campaign":
         st.divider()
         analyst_panel(REPO, selected_campaign, period_choice, event_choice)
