@@ -274,6 +274,8 @@ def build_microstructure_aar_packet(
     if expected_audit_count > 0 and not audit_complete:
         if execution_assumptions == "quote_engine":
             audit_waiver_reason = "quote_engine_aggregate_only"
+        elif execution_assumptions == "crypto_order_book_replay":
+            audit_waiver_reason = "crypto_replay_aggregate_only"
         else:
             skip_reasons.append("AUDIT_INCOMPLETE")
 
@@ -322,6 +324,7 @@ def build_microstructure_aar_packet(
             "cpp_stack_verified": _cpp_stack_verified_from_diagnostics(diagnostics),
             "matching_config": str(repo_root / "workbench" / "src" / "sim" / "matching_config.yaml"),
             "quote_engine_replay": execution_assumptions == "quote_engine",
+            "crypto_order_book_replay": execution_assumptions == "crypto_order_book_replay",
             "queue_tracker_status": (
                 "available"
                 if diagnostics.get("cpp_replay_available")

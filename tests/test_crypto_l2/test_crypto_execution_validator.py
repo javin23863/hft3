@@ -88,6 +88,33 @@ def test_crypto_replay_strategy_skips_below_threshold():
     assert strategy.on_step(ctx) == []
 
 
+def test_crypto_replay_strategy_marketable_limit_crosses_spread():
+    """Marketable replay mode crosses to the opposite quote instead of resting passively."""
+    from replay.replay_session import ReplayStepContext
+    from replay.replay_clock import ReplayClock
+    from unittest.mock import MagicMock
+
+    strategy = CryptoReplayStrategy(signal_threshold=0.1, marketable_limit=True)
+    strategy.set_signal_getter(lambda: 0.5)
+    ctx = ReplayStepContext(
+        run_id="test",
+        clock=ReplayClock(),
+        market_state=None,
+        best_bid=50000.0,
+        best_ask=50001.0,
+        position=0.0,
+        order_events=[],
+        execution=MagicMock(),
+        symbol="BTC/USD",
+    )
+
+    actions = strategy.on_step(ctx)
+
+    assert len(actions) == 1
+    assert actions[0].side == "BUY"
+    assert actions[0].price == 50001.0
+
+
 @pytest.mark.skipif(not _real_binance_npz(), reason="No real Binance L2 NPZ data. Run: python -m crypto_lane.pipeline convert-l2 <ndjson> --routing-symbol btcusdt")
 def test_run_crypto_replay_with_binance_l2():
     """run_crypto_replay executes against real Binance L2 NPZ data."""
@@ -166,6 +193,16 @@ def test_compute_crypto_metrics_returns_defaults_for_empty_run():
     assert result.fill_rate == 0.0
     assert result.execution_classification == "L2_PROXY_ONLY"
     assert result.error == ""
+    assert result.trade_pnls == []
+
+
+def test_compute_crypto_metrics_preserves_replay_error():
+    """compute_crypto_metrics exposes replay engine errors instead of dropping them."""
+    result = compute_crypto_metrics({"error": 10, "fill_events": []}, "L3_VALIDATED")
+
+    assert result.error == "10"
+    assert result.execution_classification == "L3_VALIDATED"
+    assert result.num_trades == 0
 
 
 def test_compute_crypto_metrics_with_simulated_fills():
@@ -185,3 +222,4 @@ def test_compute_crypto_metrics_with_simulated_fills():
     assert result.fill_rate == 1.0
     assert result.execution_classification == "L3_VALIDATED"
     assert result.gross_pnl > 0
+    assert result.trade_pnls == [10.0, 15.0]

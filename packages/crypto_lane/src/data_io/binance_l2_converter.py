@@ -20,6 +20,7 @@ from hftbacktest.types import (
     BUY_EVENT,
     CANCEL_ORDER_EVENT,
     EXCH_EVENT,
+    LOCAL_EVENT,
     SELL_EVENT,
     event_dtype,
 )
@@ -41,7 +42,7 @@ class BinanceOrderBook:
             qty = float(qty_str)
             if qty > 0:
                 self.bids[price] = qty
-                events.append((ADD_ORDER_EVENT | BUY_EVENT | EXCH_EVENT, ts_ns, ts_ns, price, qty, oid, 0, 0.0))
+                events.append((ADD_ORDER_EVENT | BUY_EVENT | EXCH_EVENT | LOCAL_EVENT, ts_ns, ts_ns, price, qty, oid, 0, 0.0))
                 oid += 1
 
         for price_str, qty_str in data.get("asks", []):
@@ -49,7 +50,7 @@ class BinanceOrderBook:
             qty = float(qty_str)
             if qty > 0:
                 self.asks[price] = qty
-                events.append((ADD_ORDER_EVENT | SELL_EVENT | EXCH_EVENT, ts_ns, ts_ns, price, qty, oid, 0, 0.0))
+                events.append((ADD_ORDER_EVENT | SELL_EVENT | EXCH_EVENT | LOCAL_EVENT, ts_ns, ts_ns, price, qty, oid, 0, 0.0))
                 oid += 1
 
         return events
@@ -70,10 +71,10 @@ class BinanceOrderBook:
 
                 if qty > 0:
                     side_store[price] = qty
-                    events.append((ADD_ORDER_EVENT | buy_flag | EXCH_EVENT, ts_ns, ts_ns, price, qty, oid, 0, 0.0))
+                    events.append((ADD_ORDER_EVENT | buy_flag | EXCH_EVENT | LOCAL_EVENT, ts_ns, ts_ns, price, qty, oid, 0, 0.0))
                 elif price in side_store:
                     del side_store[price]
-                    events.append((CANCEL_ORDER_EVENT | buy_flag | EXCH_EVENT, ts_ns, ts_ns, price, 0.0, oid, 0, 0.0))
+                    events.append((CANCEL_ORDER_EVENT | buy_flag | EXCH_EVENT | LOCAL_EVENT, ts_ns, ts_ns, price, 0.0, oid, 0, 0.0))
 
         return events
 
@@ -159,9 +160,28 @@ def convert_ndjson_to_npz(
     if not all_events:
         raise ValueError(f"No events parsed from {ndjson_path}")
 
-    data = np.array(all_events, dtype=event_dtype)
+    data = np.array(_normalize_replay_clock(all_events, start_time_ns), dtype=event_dtype)
     np.savez_compressed(npz_path, data=data)
     return npz_path
+
+
+def _normalize_replay_clock(events: List[Tuple], start_time_ns: int) -> List[Tuple]:
+    events = sorted(events, key=lambda row: (int(row[2]), int(row[1]), int(row[0])))
+    if not events:
+        return []
+    base_local = int(events[0][2])
+    normalized: List[Tuple] = []
+    last_local = start_time_ns - 1
+    for ev, exch_ts, local_ts, px, qty, oid, ival, fval in events:
+        local_norm = start_time_ns + max(0, int(local_ts) - base_local)
+        if local_norm <= last_local:
+            local_norm = last_local + 1
+        last_local = local_norm
+        exch_norm = start_time_ns + max(0, int(exch_ts) - base_local)
+        if exch_norm > local_norm:
+            exch_norm = local_norm
+        normalized.append((ev, exch_norm, local_norm, px, qty, oid, ival, fval))
+    return normalized
 
 
 def _routing_npz_path(symbol: str) -> Path:

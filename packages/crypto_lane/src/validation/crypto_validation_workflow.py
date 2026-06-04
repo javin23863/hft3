@@ -48,6 +48,7 @@ def validate_crypto_candidate(
     signal_threshold: float = 0.1,
     latency_ms: float = 50.0,
     max_steps: Optional[int] = None,
+    signal_sequence: Optional[List[float]] = None,
 ) -> CryptoValidationReport:
     path = resolve_validation_path(candidate, data_catalog_root)
     symbol = candidate.metadata.get("symbol", "BTCUSDT")
@@ -78,7 +79,10 @@ def validate_crypto_candidate(
             latency_ms=latency_ms,
             model_id=candidate.model_id,
             is_perp=True,
+            marketable_limit=True,
         )
+        if signal_sequence:
+            _attach_signal_sequence(strategy, signal_sequence)
         run_result = run_crypto_replay(
             hbt=hbt,
             strategy=strategy,
@@ -98,7 +102,7 @@ def validate_crypto_candidate(
             validation_path=ExecutionCapability.L2_PROXY_VALIDATION,
             npz_path=npz_path,
             result=result,
-            notes=[f"Validated via Binance L2 proxy for {l2_sym}"],
+            notes=[f"Validated via Binance L2 proxy for {l2_sym}", "Execution style: marketable limit replay"],
         )
 
     elif path.execution_capability == ExecutionCapability.L3_VALIDATED:
@@ -114,7 +118,7 @@ def validate_crypto_candidate(
                 validation_path=ExecutionCapability.NO_EXECUTION_VALIDATION,
                 npz_path="",
                 result=CryptoExecutionResult(error="No L3 NPZ files found"),
-                notes=["No Kraken L3 NPZ files in expected path"],
+                notes=["No Kraken order-book replay NPZ files in expected path"],
             )
         npz_path = str(npz_files[0])
         hbt = build_kraken_hftbacktest(npz_path, symbol=kraken_sym, latency_ms=latency_ms)
@@ -126,7 +130,10 @@ def validate_crypto_candidate(
             latency_ms=latency_ms,
             model_id=candidate.model_id,
             is_perp=False,
+            marketable_limit=True,
         )
+        if signal_sequence:
+            _attach_signal_sequence(strategy, signal_sequence)
         run_result = run_crypto_replay(
             hbt=hbt,
             strategy=strategy,
@@ -134,7 +141,7 @@ def validate_crypto_candidate(
             symbol=kraken_sym,
             tick_size=0.1,
             latency_ms=latency_ms,
-            queue_model="LogProbQueueModel2",
+            queue_model="L3FifoQueueModel",
             max_steps=max_steps,
         )
         result = compute_crypto_metrics(run_result, "L3_VALIDATED")
@@ -146,7 +153,7 @@ def validate_crypto_candidate(
             validation_path=ExecutionCapability.L3_VALIDATED,
             npz_path=npz_path,
             result=result,
-            notes=[f"Validated via Kraken L3 MBO for {kraken_sym}"],
+            notes=[f"Validated via Kraken order-book replay for {kraken_sym}", "Execution style: marketable limit replay"],
         )
 
     else:
@@ -160,3 +167,17 @@ def validate_crypto_candidate(
             result=CryptoExecutionResult(error="No execution data available for this candidate"),
             notes=path.notes,
         )
+
+
+def _attach_signal_sequence(strategy: CryptoReplayStrategy, signal_sequence: List[float]) -> None:
+    idx = 0
+
+    def next_signal() -> float:
+        nonlocal idx
+        if idx >= len(signal_sequence):
+            return 0.0
+        value = float(signal_sequence[idx])
+        idx += 1
+        return value
+
+    strategy.set_signal_getter(next_signal)

@@ -155,6 +155,41 @@ def test_packet_waives_audit_for_quote_engine(tmp_path):
     assert len(packet.get("ablation_modes", [])) == 1
 
 
+def test_packet_waives_audit_for_crypto_order_book_replay(tmp_path):
+    from data_layer.packet.microstructure_aar_packet import build_microstructure_aar_packet
+
+    art = tmp_path / "run_crypto"
+    art.mkdir()
+    (art / "diagnostics.json").write_text(
+        json.dumps(
+            {
+                "event_id": "CRYPTO_SMOKE_run_1",
+                "symbol": "BTCUSDT",
+                "num_trades": 5,
+                "execution_assumptions": "crypto_order_book_replay",
+                "latency_authority": "crypto_venue_submit_ack",
+                "pnl_by_injection_us": {"0": 12.5},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (art / "manifest.json").write_text(json.dumps({"data_sufficient": True}), encoding="utf-8")
+    (art / "config.yaml").write_text(
+        "model_id: crypto_candidate\n"
+        "event_id: CRYPTO_SMOKE_run_1\n"
+        "symbol: BTCUSDT\n"
+        "execution_assumptions: crypto_order_book_replay\n",
+        encoding="utf-8",
+    )
+
+    packet, skips = build_microstructure_aar_packet(art, REPO)
+
+    assert "AUDIT_INCOMPLETE" not in skips
+    assert packet.get("audit_waiver_reason") == "crypto_replay_aggregate_only"
+    assert packet.get("simulation_fidelity", {}).get("crypto_order_book_replay") is True
+    assert packet["latency_authority"]["authority"] == "crypto_venue_submit_ack"
+
+
 def test_symbolic_exchange_receive_ordering():
     from data_layer.symbolic.latency_invariants import check_latency_invariants
 

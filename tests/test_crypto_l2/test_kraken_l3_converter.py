@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from hftbacktest.types import ADD_ORDER_EVENT, BUY_EVENT, CANCEL_ORDER_EVENT, EXCH_EVENT, SELL_EVENT, event_dtype
+from hftbacktest.types import ADD_ORDER_EVENT, BUY_EVENT, CANCEL_ORDER_EVENT, EXCH_EVENT, LOCAL_EVENT, SELL_EVENT, event_dtype
 
 from crypto_lane.src.data_io.kraken_l3_converter import (
     KrakenOrderBook,
@@ -63,6 +63,12 @@ class TestKrakenOrderBook:
         assert book.asks[50000.1] == 1.0
         assert book.asks[50000.2] == 3.0
 
+    def test_extracts_kraken_entry_timestamp_as_nanoseconds(self):
+        assert KrakenOrderBook._extract_ts_ns(
+            ["50000.0", "1.0", "1780299151.807140"],
+            1_000_000_000,
+        ) == 1_780_299_151_807_140_000
+
     def test_update_adds_bid(self):
         book = KrakenOrderBook()
         book.bids[50000.0] = 1.0
@@ -77,7 +83,7 @@ class TestKrakenOrderBook:
         data = {"a": [["50000.1", "0"]]}
         events = book.apply_update(data, 2000)
         assert 50000.1 not in book.asks
-        assert any((ev[0] & 0xf) == CANCEL_ORDER_EVENT for ev in events)
+        assert events == []
 
     def test_update_zero_qty_not_in_book_ignored(self):
         book = KrakenOrderBook()
@@ -124,8 +130,9 @@ class TestConvertNdjsonToNpz:
         data = np.load(npz_path)["data"]
         assert len(data) > 0
         assert data.dtype == event_dtype
-        assert data[0]["px"] == 50000.0
-        assert data[0]["qty"] == 1.0
+        assert 50000.0 in data["px"]
+        assert 50000.1 in data["px"]
+        assert 1.0 in data["qty"]
 
     def test_empty_file_raises(self, tmp_dir: Path):
         ndjson_path = _ndjson(tmp_dir, [])
@@ -136,8 +143,12 @@ class TestConvertNdjsonToNpz:
 
     def test_assigns_monotonic_timestamps(self, tmp_dir: Path):
         lines = [
-            _make_snapshot(1000, [["50000.0", "1.0"]], [["50000.1", "1.0"]]),
-            _make_update("bid", [["50000.0", "2.0"]]),
+            _make_snapshot(
+                1000,
+                [["50000.0", "1.0", "1780299151.807140"]],
+                [["50000.1", "1.0", "1780299151.807141"]],
+            ),
+            _make_update("bid", [["50000.0", "2.0", "1780299152.016379"]]),
         ]
         ndjson_path = _ndjson(tmp_dir, lines)
         npz_path = tmp_dir / "out.npz"
@@ -146,6 +157,7 @@ class TestConvertNdjsonToNpz:
         data = np.load(npz_path)["data"]
         timestamps = data["exch_ts"]
         assert np.all(np.diff(timestamps) >= 0)
+        assert timestamps[0] == 1_000_000_000
 
     def test_converts_multiple_snapshots(self, tmp_dir: Path):
         lines = [
@@ -174,3 +186,4 @@ class TestConvertNdjsonToNpz:
         assert len(ask_events) == 1
         assert bid_events[0]["px"] == 100.0
         assert ask_events[0]["px"] == 101.0
+        assert all(int(ev) & LOCAL_EVENT for ev in data["ev"])

@@ -26,6 +26,7 @@ from workbench.ui.campaign_panel import (  # noqa: E402
     personal_runs_panel,
 )
 from workbench.ui.workflow_tabs import WORKFLOW_TABS  # noqa: E402
+from workbench.ui.wallet_panel import render_wallet_panel  # noqa: E402
 from workbench.ui.flow_state import campaign_progress_panel, resolve_period_event  # noqa: E402
 from workbench.src.run.evidence_snapshot import default_source, load_run_evidence  # noqa: E402
 from workbench.ui.evidence_panels import (  # noqa: E402
@@ -77,17 +78,13 @@ run_labels = [d.name for d in run_dirs]
 selected_model = st.session_state.get("wb_selected_model", "")
 selected_symbol = st.session_state.get("wb_symbol", "MES.v.0")
 selected_campaign = st.session_state.get("wb_active_campaign", "")
-snapshot = load_run_evidence(REPO, st.session_state.wb_run_source, campaign_id=selected_campaign)
 
 with tabs[0]:
     if st.session_state.wb_run_source == "crypto_lane":
         render_crypto_run_controls(REPO)
         st.divider()
-    render_autonomous_run(snapshot)
 
 with tabs[1]:
-    render_registry_data(snapshot)
-    st.divider()
     st.subheader("Workbench Campaign Controls")
     selected_model, selected_symbol, selected_campaign = model_selector_panel(REPO)
     with st.expander("Recent campaign artifacts"):
@@ -113,6 +110,14 @@ if not selected_campaign:
     selected_campaign = st.session_state.get("wb_active_campaign", "")
 
 period_choice, event_choice = resolve_period_event(REPO, selected_campaign)
+snapshot = load_run_evidence(REPO, st.session_state.wb_run_source, campaign_id=selected_campaign)
+
+with tabs[0]:
+    render_autonomous_run(snapshot)
+
+with tabs[1]:
+    st.divider()
+    render_registry_data(snapshot)
 
 with tabs[2]:
     render_backtest_evidence(snapshot)
@@ -135,8 +140,11 @@ with tabs[7]:
     analyst_panel(REPO, selected_campaign, period_choice, event_choice)
 
 with tabs[8]:
-    render_system(snapshot, REPO)
+    render_wallet_panel()
 
 with tabs[9]:
+    render_system(snapshot, REPO)
+
+with tabs[10]:
     st.header("Personal Runs")
     personal_runs_panel(REPO, selected_model, selected_symbol)

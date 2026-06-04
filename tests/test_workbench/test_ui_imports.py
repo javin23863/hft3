@@ -198,17 +198,44 @@ def test_autonomous_panel_is_registry_and_status_driven() -> None:
     assert "discover_candidates" in src
     assert "latest_status_path" in src
     assert "Run All Crypto Candidates" in src
+    assert "Run smoke reports" in src
     assert "crypto_h1_basis_compression" not in src
     assert "Candidate filter" not in src
 
 
+def test_autonomous_panel_latest_reports_are_run_local(tmp_path) -> None:
+    from workbench.ui import autonomous_panel
+
+    global_report = tmp_path / "research_cards" / "crypto" / "old_candidate" / "smoke_report.json"
+    global_report.parent.mkdir(parents=True, exist_ok=True)
+    global_report.write_text(
+        '{"candidate_id":"old_candidate","runs":{"with_btc_node":{"oos_ic_baseline_mean":0.1,"n_rows":1,"n_folds":1}}}',
+        encoding="utf-8",
+    )
+    latest = tmp_path / "runtime" / "workbench" / "crypto_smoke" / "latest_status.json"
+    latest.parent.mkdir(parents=True, exist_ok=True)
+    latest.write_text('{"run_id":"run_1"}', encoding="utf-8")
+    run_report = latest.parent / "run_1" / "smoke_reports" / "current_candidate.json"
+    run_report.parent.mkdir(parents=True, exist_ok=True)
+    run_report.write_text(
+        '{"candidate_id":"current_candidate","runs":{"with_btc_node":{"oos_ic_baseline_mean":0.2,"n_rows":2,"n_folds":2}}}',
+        encoding="utf-8",
+    )
+
+    reports = autonomous_panel._latest_crypto_reports(tmp_path)
+
+    assert [report["candidate_id"] for report in reports] == ["current_candidate"]
+    assert reports[0]["run_id"] == "run_1"
+
+
 def test_app_tabs_use_shared_run_evidence_snapshot() -> None:
     import workbench.ui.app as app
-    from workbench.ui import evidence_panels
+    from workbench.ui import autonomous_panel, evidence_panels
 
     src = inspect.getsource(app)
     assert "load_run_evidence" in src
     assert 'st.query_params.get("source"' in src
+    assert src.index("render_crypto_run_controls(REPO)") < src.index("snapshot = load_run_evidence")
     assert "render_backtest_evidence(snapshot)" in src
     assert "render_latency_evidence(snapshot)" in src
     assert "render_signal_diagnostics(snapshot)" in src
@@ -216,8 +243,102 @@ def test_app_tabs_use_shared_run_evidence_snapshot() -> None:
     assert "render_decision_registry(snapshot)" in src
     assert hasattr(evidence_panels, "render_registry_data")
     panel_src = inspect.getsource(evidence_panels)
+    assert panel_src.count("render_run_header(snapshot)") >= 9
     assert "Bitcoin state packet transport" in panel_src
     assert "Bitcoin edge packet schema" in panel_src
-    assert "P&L ranking" in panel_src
-    assert "OOS equity curve" in panel_src
+    assert "Top diagnostic P&L" in panel_src
+    assert "Diagnostic P&L ranking" in panel_src
+    assert "Top research P&L" not in panel_src
+    assert "Smoke OOS equity proxy" in panel_src
+    assert "Smoke OOS diagnostic rows" in panel_src
+    assert "Backtest rows" not in panel_src
+    assert "Backtest & P&L Evidence" not in panel_src
+    assert "Smoke robustness prerequisites" in panel_src
+    assert "Replay robustness remains blocked" in panel_src
+    assert "Holdout passes" not in panel_src
+    assert "VectorBT Filter" in panel_src
+    assert "Adapter invoked" in panel_src
+    assert "Filter backend" in panel_src
+    assert "Rejection reason" in panel_src
+    assert "Safe OOS Signal Source" in panel_src
+    assert "Signal Adapter Rejection" in panel_src
+    assert "Required for adapter acceptance" in panel_src
+    assert "Existing repo sources for this boundary" in panel_src
+    assert "Crypto Execution Replay" in panel_src
+    assert "Only L3_VALIDATED or FULL_EXECUTION rows satisfy" in panel_src
+    assert "No crypto execution replay artifact is attached to this selected crypto run." in panel_src
+    assert "HFT Replay Validation" not in panel_src
     assert "Leakage controls" in panel_src
+    assert "Smoke passes" in panel_src
+    assert "Self-Learning Loop" in panel_src
+    assert "LLM can promote" in panel_src
+    assert "After-Action Packet" in panel_src
+    assert "AlphaGeometry/OpenFoundry Relationship Review" in panel_src
+    assert "Failed Required Checks" in panel_src
+    assert "Smoke pass is only a prerequisite" not in panel_src
+    assert "Provider Status" in panel_src
+    assert "Google/Gemini" not in panel_src
+    assert "Evidence candidate" in panel_src
+    assert "Smoke triage order" in panel_src
+    assert "Positive P&L diagnostics" in panel_src
+    assert "Research passes" not in panel_src
+    assert "Top diagnostic candidate" not in panel_src
+    assert "Candidate ranking" not in panel_src
+    assert "research_pass_count" not in panel_src
+    autonomous_src = inspect.getsource(autonomous_panel)
+    assert "Smoke leader" in autonomous_src
+    assert "Smoke triage order" in autonomous_src
+    assert "Research leader" not in autonomous_src
+    assert "Candidate ranking" not in autonomous_src
+
+
+def test_wallet_panel_is_guarded_operator_surface() -> None:
+    from workbench.ui.workflow_tabs import WORKFLOW_TABS
+    from workbench.ui import wallet_panel
+    from workbench.src.run import wallet_ops
+
+    assert "Wallet" in WORKFLOW_TABS
+    panel_src = inspect.getsource(wallet_panel)
+    ops_src = inspect.getsource(wallet_ops)
+    assert "Operational hot wallet only" in panel_src
+    assert "Refresh Wallet" in panel_src
+    assert "Refresh Activity" in panel_src
+    assert "Preview Transaction" in panel_src
+    assert "Broadcast BTC" in panel_src
+    assert "Scan to receive BTC" in panel_src
+    assert "Wallet passphrase" in panel_src
+    assert "There is no Workbench amount cap" in panel_src
+    assert "approved small operational transfer" not in panel_src
+    assert "MAX_UI_SEND_BTC" not in panel_src
+    assert "MAX_UI_SEND_BTC" not in ops_src
+    assert "walletlock" in ops_src
+    assert "sendtoaddress" in ops_src
+    assert "walletcreatefundedpsbt" in ops_src
+    assert "stdin=passphrase" in ops_src
+
+
+def test_verify_command_does_not_overclaim_full_pipeline_readiness() -> None:
+    repo = Path(__file__).resolve().parents[2]
+    main_src = (repo / "apps" / "workbench" / "__main__.py").read_text(encoding="utf-8")
+    verify_src = (repo / "apps" / "workbench" / "src" / "verify.py").read_text(encoding="utf-8")
+
+    assert "Full readiness gate" not in main_src
+    assert "Full readiness gate" not in verify_src
+    assert "Workbench preflight check" in verify_src
+
+
+def test_crypto_smoke_cli_blocked_state_is_not_success() -> None:
+    repo = Path(__file__).resolve().parents[2]
+    main_src = (repo / "apps" / "workbench" / "__main__.py").read_text(encoding="utf-8")
+
+    assert 'result.get("state") == "completed"' in main_src
+    assert '{"completed", "blocked"}' not in main_src
+
+
+def test_crypto_execution_replay_ui_does_not_make_l2_gate_equivalent() -> None:
+    repo = Path(__file__).resolve().parents[2]
+    panel_src = (repo / "apps" / "workbench" / "ui" / "evidence_panels.py").read_text(encoding="utf-8")
+
+    assert "Crypto Execution Replay (L2/L3)" not in panel_src
+    assert "Observed L2/L3 crypto execution-replay evidence" not in panel_src
+    assert "Only L3_VALIDATED or FULL_EXECUTION rows satisfy" in panel_src

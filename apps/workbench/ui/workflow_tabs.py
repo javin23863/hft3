@@ -9,6 +9,7 @@ WORKFLOW_TABS = [
     "Walk-Forward & Robustness",
     "Decision & Registry",
     "Reports & Analyst",
+    "Wallet",
     "System",
     "Personal Runs",
 ]

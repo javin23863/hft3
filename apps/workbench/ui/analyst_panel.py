@@ -163,8 +163,9 @@ def analyst_panel(
 
     if not llm_client.llm_available():
         st.warning(
-            "OpenAI-compatible GPT-5.5 endpoint not configured. Set "
-            "HFT3_LLM_API_KEY or OPENAI_API_KEY."
+            "GPT-5.5 xhigh target is defined, but the Workbench process has no OpenAI-compatible "
+            "runtime transport. ChatGPT Pro/browser access is operator access; this backend packet "
+            "lane needs a reachable runtime transport to call the model."
         )
         return
 

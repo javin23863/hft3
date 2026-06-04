@@ -47,7 +47,7 @@ CRYPTO_LANE_MODEL_PREFIXES = ("CRYPTO_", "BTC_", "ETH_")
 # Crypto symbols that may have Binance L2 depth data
 CRYPTO_BINANCE_L2_SYMBOLS = {"BTCUSDT", "ETHUSDT", "SOLUSDT"}
 
-# Crypto symbols that may have Kraken L3 MBO data (spot only, using wsname format)
+# Crypto symbols that may have Kraken order-book replay data (spot only, using wsname format)
 CRYPTO_KRAKEN_L3_SYMBOLS = {"BTC/USD", "ETH/USD", "SOL/USD"}
 
 # Mapping from perp symbol (as used by hypotheses) to Binance L2 symbol
@@ -139,16 +139,16 @@ def resolve_validation_path(
         l2_sym = CRYPTO_PERP_TO_L2.get(perp_symbol)
         kraken_sym = CRYPTO_PERP_TO_KRAKEN_SPOT.get(perp_symbol)
 
-        if l2_sym and _crypto_l2_npz_exists(data_catalog_root, l2_sym):
+        if kraken_sym and _crypto_l3_npz_exists(data_catalog_root, kraken_sym):
+            has_order_book = True
+            has_tick = True
+            exec_cap = ExecutionCapability.L3_VALIDATED
+            notes.append(f"Kraken order-book replay NPZ found for {kraken_sym}; L3_VALIDATED")
+        elif l2_sym and _crypto_l2_npz_exists(data_catalog_root, l2_sym):
             has_order_book = True
             has_tick = True
             exec_cap = ExecutionCapability.L2_PROXY_VALIDATION
             notes.append(f"Binance L2 depth NPZ found for {l2_sym}; L2_PROXY_VALIDATION")
-        elif kraken_sym and _crypto_l3_npz_exists(data_catalog_root, kraken_sym):
-            has_order_book = True
-            has_tick = True
-            exec_cap = ExecutionCapability.L3_VALIDATED
-            notes.append(f"Kraken L3 MBO NPZ found for {kraken_sym}; L3_VALIDATED")
         else:
             exec_cap = ExecutionCapability.NO_EXECUTION_VALIDATION
             if data_catalog_root and (data_catalog_root / "data" / "crypto" / "normalized").exists():

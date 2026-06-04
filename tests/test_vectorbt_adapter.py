@@ -175,6 +175,20 @@ class TestMetricsFallback:
             f"oos_expectancy unreasonably large for random walk: {wf['oos_expectancy']}"
         )
 
+    def test_walk_forward_preserves_open_position_at_oos_boundary(self):
+        n = 120
+        close = 100.0 + np.arange(n, dtype=float) * 0.1
+        ohlcv = np.column_stack([close, close, close, close, np.ones(n) * 1000])
+        entry = np.zeros(n)
+        exit = np.zeros(n)
+        entry[10] = 1.0
+        exit[110] = -1.0
+
+        wf = _simulate_walk_forward(ohlcv, entry, exit, n_windows=4)
+
+        assert wf["wf_consistency"] > 0.0
+        assert wf["oos_expectancy"] > 0.0
+
     def test_no_data_returns_empty(self):
         empty = np.zeros((10, 5), dtype=np.float64)
         entry = np.zeros(10)
@@ -199,6 +213,23 @@ class TestAssetClassRouting:
         assert path.route_to_vectorbt
         assert not path.route_to_hftbacktest
         assert path.execution_capability.name == "NO_EXECUTION_VALIDATION"
+
+    def test_crypto_routes_to_l3_before_l2_when_both_exist(self, tmp_path):
+        from backtest_pipeline.src.asset_class_routing import resolve_validation_path
+
+        l2 = tmp_path / "data" / "replay" / "hftbacktest" / "crypto" / "binance" / "BTCUSDT"
+        l3 = tmp_path / "data" / "replay" / "hftbacktest" / "crypto" / "kraken" / "BTC_USD"
+        l2.mkdir(parents=True)
+        l3.mkdir(parents=True)
+        (l2 / "sample_l2.npz").write_bytes(b"placeholder")
+        (l3 / "sample_l3.npz").write_bytes(b"placeholder")
+
+        c = _mock_candidate("CRYPTO_H4")
+        c.metadata["symbol"] = "BTCUSDT"
+        path = resolve_validation_path(c, tmp_path)
+
+        assert path.execution_capability.name == "L3_VALIDATED"
+        assert any("Kraken order-book replay" in note for note in path.notes)
 
     def test_equities_no_execution(self):
         from backtest_pipeline.src.asset_class_routing import resolve_validation_path
@@ -225,3 +256,107 @@ class TestFilterCandidates:
             assert prom.asset_class in ("CME_FUTURES", ""), f"Unexpected asset_class: {prom.asset_class}"
             assert prom.param_values, "param_values must be populated"
             assert prom.vectorbt_results, "vectorbt_results must be populated"
+
+    def test_filter_without_vectorbt_uses_numpy_fallback_when_data_and_signal_exist(self, monkeypatch):
+        from backtest_pipeline.src import vectorbt_adapter
+
+        monkeypatch.setattr(vectorbt_adapter, "_has_vectorbt", False)
+        cands = [_mock_candidate("HYP_5", 0.15)]
+        close = 100.0 + np.arange(120, dtype=float) * 0.1
+        ohlcv = np.column_stack([close, close, close, close, np.ones_like(close)])
+
+        def data_loader(event_id, repo_root):
+            return ohlcv
+
+        def signal_computer(cand, bars, parsed, repo_root):
+            entry = np.zeros(len(bars))
+            exit_ = np.zeros(len(bars))
+            entry[1] = 1.0
+            exit_[-1] = -1.0
+            return entry, exit_
+
+        result = filter_candidates(
+            candidates=cands,
+            parsed=None,
+            event_id="SYNTHETIC",
+            repo_root=Path(__file__).resolve().parents[1],
+            gates=PromotionGate(min_oos_expectancy=0.0, min_walk_forward_consistency=0.0, min_trades=1),
+            param_grid={"signal_threshold": [0.15], "holding_period_bars": [15], "stop_loss_pct": [None], "take_profit_pct": [None]},
+            data_loader=data_loader,
+            signal_computer=signal_computer,
+        )
+
+        assert result.vectorbt_available is False
+        assert result.backend == "numpy_fallback"
+        assert len(result.promoted) == 1
+        assert result.promoted[0].vectorbt_results["filter_backend"] == "numpy_fallback"
+        assert result.promoted[0].pass_reason == "all_gates_passed"
+
+    def test_filter_without_vectorbt_rejects_missing_signal_binding(self, monkeypatch):
+        from backtest_pipeline.src import vectorbt_adapter
+
+        monkeypatch.setattr(vectorbt_adapter, "_has_vectorbt", False)
+        cands = [_mock_candidate("CRYPTO_H1", 0.15)]
+        close = 100.0 + np.arange(40, dtype=float) * 0.1
+        ohlcv = np.column_stack([close, close, close, close, np.ones_like(close)])
+
+        result = filter_candidates(
+            candidates=cands,
+            parsed=None,
+            event_id="SYNTHETIC",
+            repo_root=Path(__file__).resolve().parents[1],
+            data_loader=lambda *_: ohlcv,
+            signal_computer=lambda *_: (_ for _ in ()).throw(ValueError("signal binding unavailable")),
+        )
+
+        assert result.vectorbt_available is False
+        assert result.backend == "numpy_fallback"
+        assert not result.promoted
+        assert result.rejected[0].reject_reason == "unresolvable_model_id"
+        assert "signal binding unavailable" in result.rejected[0].metric_values["error"]
+
+    def test_filter_skips_global_promotion_persistence_by_default(self, monkeypatch, tmp_path):
+        from backtest_pipeline.src import vectorbt_adapter
+
+        monkeypatch.setattr(vectorbt_adapter, "_has_vectorbt", False)
+        cands = [_mock_candidate("HYP_5", 0.15)]
+        close = 100.0 + np.arange(120, dtype=float) * 0.1
+        ohlcv = np.column_stack([close, close, close, close, np.ones_like(close)])
+
+        def signal_computer(cand, bars, parsed, repo_root):
+            entry = np.zeros(len(bars))
+            exit_ = np.zeros(len(bars))
+            entry[1] = 1.0
+            exit_[-1] = -1.0
+            return entry, exit_
+
+        result = filter_candidates(
+            candidates=cands,
+            parsed=None,
+            event_id="SYNTHETIC",
+            repo_root=tmp_path,
+            gates=PromotionGate(min_oos_expectancy=0.0, min_walk_forward_consistency=0.0, min_trades=1),
+            param_grid={"signal_threshold": [0.15], "holding_period_bars": [15], "stop_loss_pct": [None], "take_profit_pct": [None]},
+            data_loader=lambda *_: ohlcv,
+            signal_computer=signal_computer,
+        )
+
+        assert result.promoted
+        assert not (tmp_path / "research_cards" / "promotion").exists()
+
+    def test_missing_ohlcv_escape_hatch_cannot_promote(self, monkeypatch, tmp_path):
+        cands = [_mock_candidate("HYP_5", 0.15)]
+        monkeypatch.setenv("HFT3_ALLOW_UNFILTERED", "1")
+
+        result = filter_candidates(
+            candidates=cands,
+            parsed=None,
+            event_id="NO_DATA",
+            repo_root=tmp_path,
+            data_loader=lambda *_: None,
+        )
+
+        assert not result.promoted
+        assert result.rejected[0].reject_reason == "no_ohlcv_data"
+        assert result.rejected[0].metric_values["operator_escape_ignored"] is True
+        assert not (tmp_path / "research_cards" / "promotion").exists()

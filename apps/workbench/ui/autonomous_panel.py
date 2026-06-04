@@ -69,11 +69,16 @@ def _crypto_registry_snapshot(repo: Path) -> dict[str, Any]:
 
 
 def _latest_crypto_reports(repo: Path) -> list[dict[str, Any]]:
-    root = repo / "research_cards" / "crypto"
+    status = _read_json(latest_status_path(repo))
+    run_id = str(status.get("run_id") or "")
+    run_reports = latest_status_path(repo).parent / run_id / "smoke_reports"
+    run_local = run_reports.is_dir()
+    root = run_reports if run_local else repo / "research_cards" / "crypto"
     reports: list[dict[str, Any]] = []
     if not root.is_dir():
         return reports
-    for path in sorted(root.glob("*/smoke_report.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+    pattern = "*.json" if run_local else "*/smoke_report.json"
+    for path in sorted(root.glob(pattern), key=lambda p: p.stat().st_mtime, reverse=True):
         payload = _read_json(path)
         if not payload:
             continue
@@ -88,6 +93,7 @@ def _latest_crypto_reports(repo: Path) -> list[dict[str, Any]]:
                 "n_folds": int(primary.get("n_folds", 0) or 0),
                 "holdout": (payload.get("holdout_gate") or {}).get("status", ""),
                 "ack_gate": payload.get("execution_ack_status", ""),
+                "run_id": run_id if run_local else "",
                 "report": str(path),
             }
         )
@@ -173,8 +179,9 @@ def _render_decision(status: dict[str, Any]) -> None:
         st.warning(text)
     elif action:
         st.info(text)
-    if decision.get("top_research_candidate"):
-        st.caption(f"Research leader: `{decision['top_research_candidate']}`")
+    smoke_leader = decision.get("top_smoke_candidate")
+    if smoke_leader:
+        st.caption(f"Smoke leader: `{smoke_leader}`")
 
 
 @st.fragment(run_every=timedelta(seconds=2))
@@ -199,9 +206,10 @@ def crypto_smoke_progress_panel(repo: Path) -> None:
                 st.caption(f"Active candidate: `{status['active_candidate']}`")
         st.subheader("Candidate Evidence")
         _render_candidates(status)
-        if status.get("ranking"):
-            with st.expander("Candidate ranking"):
-                st.dataframe(pd.DataFrame(status["ranking"]), width="stretch", hide_index=True)
+        smoke_triage_order = status.get("smoke_triage_order") or status.get("ranking")
+        if smoke_triage_order:
+            with st.expander("Smoke triage order"):
+                st.dataframe(pd.DataFrame(smoke_triage_order), width="stretch", hide_index=True)
     else:
         st.info("No autonomous crypto run observed yet.")
 
@@ -226,7 +234,7 @@ def render_crypto_run_controls(repo: Path) -> None:
     c1.metric("Crypto hypotheses", len(registry.get("hypotheses", [])))
     c2.metric("Crypto candidates", len(registry.get("candidates", [])))
     c3.metric("Backtest configs", len(registry.get("backtests", [])))
-    c4.metric("Smoke reports", len(_latest_crypto_reports(repo)))
+    c4.metric("Run smoke reports", len(_latest_crypto_reports(repo)))
     if not registry.get("ok", False):
         st.error(f"Crypto registry error: {registry.get('error', 'unknown')}")
     st.caption(

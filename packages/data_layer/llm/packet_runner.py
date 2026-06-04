@@ -301,8 +301,13 @@ def run_llm_on_aar_packet(
                 packet_in,
                 symbolic,
                 llm_status="unavailable",
-                narrative_md="After-action LLM unavailable (OpenAI-compatible GPT-5.5 endpoint not configured).",
-                llm_error="HFT3_LLM_API_KEY or OPENAI_API_KEY is not set",
+                narrative_md=(
+                    "After-action GPT-5.5 xhigh lane is not callable from the Workbench runtime. "
+                    "OpenAI API auth is not used by this lane."
+                ),
+                llm_error=(
+                    "Approved non-API GPT-5.5 xhigh runtime transport is not available to Workbench"
+                ),
             )
         )
 

@@ -151,6 +151,13 @@ def _run_after_action_report_impl(
         skip_llm_reasons.append("PDF_CITATIONS_INCOMPLETE")
     elif llm_status.startswith("skipped"):
         skip_llm_reasons.append(llm_status.upper())
+    elif llm_status == "unavailable":
+        skip_llm_reasons.append(
+            str(
+                response.get("llm_error")
+                or "Approved non-API GPT-5.5 xhigh runtime transport is not available to Workbench"
+            )
+        )
 
     meta = {
         "generated_at": datetime.now(timezone.utc).isoformat(),

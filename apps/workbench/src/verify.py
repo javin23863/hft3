@@ -1,4 +1,4 @@
-"""Full readiness gate: preflight imports, grader tests, latency summary, NPZ data."""
+"""Workbench preflight check: imports, UI tests, latency summary, and required files."""
 from __future__ import annotations
 
 import subprocess

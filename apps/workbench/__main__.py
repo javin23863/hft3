@@ -69,7 +69,7 @@ def main(argv: list[str] | None = None) -> int:
     setup_p.add_argument("--json", action="store_true", help="Machine-readable output")
     setup_p.add_argument("--rebuild-graph", action="store_true", help="Rebuild graphify-out/ if missing")
 
-    verify_p = sub.add_parser("verify", help="Full readiness gate — run before any backtest")
+    verify_p = sub.add_parser("verify", help="Workbench preflight check — imports, UI tests, and required files")
     verify_p.add_argument("--json", action="store_true", help="Machine-readable output")
 
     download_p = sub.add_parser("download", help="Download missing NPZ for a model/symbol")
@@ -170,7 +170,7 @@ def main(argv: list[str] | None = None) -> int:
 
         result = run_crypto_smoke(_REPO, candidate_id=args.candidate)
         print(json.dumps(result, indent=2, default=str))
-        return 0 if result.get("state") in {"completed", "blocked"} else 1
+        return 0 if result.get("state") == "completed" else 1
 
     if args.command == "campaign":
         from workbench.src.run.campaign_runner import record_sim_shadow, run_campaign

@@ -40,6 +40,7 @@ def _build(
     lot_size: float,
     maker_fee: float,
     taker_fee: float,
+    partial_fill: bool = True,
 ) -> HashMapMarketDepthBacktest:
     asset = BacktestAsset()
     asset.data(data_path)
@@ -47,12 +48,17 @@ def _build(
     asset.lot_size(lot_size)
     from backtest_pipeline.src.hft_backtest_builder import _apply_constant_latency
     _apply_constant_latency(asset, lat_ns, lat_ns)
-    asset.partial_fill_exchange()
+    if partial_fill:
+        asset.partial_fill_exchange()
+    else:
+        asset.no_partial_fill_exchange()
     asset.trading_value_fee_model(maker_fee, taker_fee)
     if queue_model_type == "SquareProbQueueModel":
         asset.power_prob_queue_model2(2)
     elif queue_model_type == "LogProbQueueModel2":
         asset.log_prob_queue_model2()
+    elif queue_model_type == "L3FifoQueueModel":
+        asset.l3_fifo_queue_model()
     else:
         raise ValueError(f"Unsupported queue model: {queue_model_type}")
     return HashMapMarketDepthBacktest([asset])
@@ -101,9 +107,10 @@ def build_kraken_hftbacktest(
     return _build(
         data_path=data_path,
         lat_ns=int(latency_ms * 1_000_000),
-        queue_model_type="LogProbQueueModel2",
+        queue_model_type="L3FifoQueueModel",
         tick_size=cfg["tick_size"],
         lot_size=cfg["lot_size"],
         maker_fee=fees[0],
         taker_fee=fees[1],
+        partial_fill=False,
     )

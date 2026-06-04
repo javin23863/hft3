@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+import math
 from execution.adapter_factory import create_adapter
 from execution.interfaces import (
     CancelIntent,
@@ -44,6 +45,7 @@ class CryptoExecutionResult:
     mean_qqe: float = 0.0
     execution_classification: str = "L2_PROXY_ONLY"
     error: str = ""
+    trade_pnls: List[float] = field(default_factory=list)
 
 
 class CryptoReplayStrategy:
@@ -64,6 +66,7 @@ class CryptoReplayStrategy:
         model_id: str = "crypto_model",
         strategy_id: str = "crypto_replay",
         is_perp: bool = True,
+        marketable_limit: bool = False,
     ):
         self.signal_threshold = signal_threshold
         self.base_quantity = base_quantity
@@ -73,6 +76,7 @@ class CryptoReplayStrategy:
         self.model_id = model_id
         self.strategy_id = strategy_id
         self.is_perp = is_perp
+        self.marketable_limit = marketable_limit
         self._signal_getter: Optional[Callable[[], float]] = None
 
     def set_signal_getter(self, getter: Callable[[], float]) -> None:
@@ -91,7 +95,10 @@ class CryptoReplayStrategy:
             new_pos = current_pos + (qty if side == "BUY" else -qty)
             if abs(new_pos) > self.max_position:
                 return []
-        price = ctx.best_bid if side == "BUY" else ctx.best_ask
+        if self.marketable_limit:
+            price = ctx.best_ask if side == "BUY" else ctx.best_bid
+        else:
+            price = ctx.best_bid if side == "BUY" else ctx.best_ask
         intent = OrderIntent(
             intent_id=new_intent_id(),
             run_id=ctx.run_id,
@@ -108,6 +115,36 @@ class CryptoReplayStrategy:
             latency_budget_ms=self.latency_ms,
         )
         return [intent]
+
+
+def _order_event_row(
+    ev: OrderEvent,
+    *,
+    replay_time_ns: int,
+    best_bid: float,
+    best_ask: float,
+) -> Dict[str, Any]:
+    return {
+        "run_id": ev.run_id,
+        "timestamp_ns": ev.timestamp_ns,
+        "replay_time_ns": replay_time_ns,
+        "event_type": ev.event_type.value,
+        "intent_id": ev.intent_id,
+        "order_id": ev.order_id,
+        "symbol": ev.symbol,
+        "side": ev.side,
+        "price": ev.price,
+        "quantity": ev.quantity,
+        "filled_quantity": ev.filled_quantity,
+        "remaining_quantity": ev.remaining_quantity,
+        "avg_fill_price": ev.avg_fill_price,
+        "reference_price": best_ask if ev.side == "BUY" else best_bid,
+        "best_bid": best_bid,
+        "best_ask": best_ask,
+        "fees": ev.fees,
+        "latency_ms": ev.latency_ms,
+        "queue_position_estimate": ev.queue_position_estimate,
+    }
 
 
 def run_crypto_replay(
@@ -149,7 +186,12 @@ def run_crypto_replay(
         adapter.after_elapse(ts)
 
         depth = hbt.depth(0)
-        if depth.best_bid <= 0 or depth.best_ask <= 0:
+        if (
+            not math.isfinite(float(depth.best_bid))
+            or not math.isfinite(float(depth.best_ask))
+            or depth.best_bid <= 0
+            or depth.best_ask <= 0
+        ):
             steps += 1
             if max_steps and steps >= max_steps:
                 break
@@ -167,32 +209,28 @@ def run_crypto_replay(
             execution=adapter,
             symbol=symbol,
         )
+        for ev in drained:
+            lifecycle.append(
+                _order_event_row(
+                    ev,
+                    replay_time_ns=ts,
+                    best_bid=float(depth.best_bid),
+                    best_ask=float(depth.best_ask),
+                )
+            )
         actions = strategy.on_step(ctx)
         for action in actions:
             if isinstance(action, OrderIntent):
                 intent_count += 1
                 ev = adapter.submit_order(action)
-                lifecycle.append({
-                    "run_id": run_id,
-                    "timestamp_ns": ev.timestamp_ns,
-                    "replay_time_ns": ts,
-                    "event_type": ev.event_type.value,
-                    "intent_id": ev.intent_id,
-                    "order_id": ev.order_id,
-                    "symbol": ev.symbol,
-                    "side": ev.side,
-                    "price": ev.price,
-                    "quantity": ev.quantity,
-                    "filled_quantity": ev.filled_quantity,
-                    "remaining_quantity": ev.remaining_quantity,
-                    "avg_fill_price": ev.avg_fill_price,
-                    "reference_price": ctx.best_ask if ev.side == "BUY" else ctx.best_bid,
-                    "best_bid": float(depth.best_bid),
-                    "best_ask": float(depth.best_ask),
-                    "fees": ev.fees,
-                    "latency_ms": ev.latency_ms,
-                    "queue_position_estimate": ev.queue_position_estimate,
-                })
+                lifecycle.append(
+                    _order_event_row(
+                        ev,
+                        replay_time_ns=ts,
+                        best_bid=float(depth.best_bid),
+                        best_ask=float(depth.best_ask),
+                    )
+                )
             elif isinstance(action, CancelIntent):
                 ev = adapter.cancel_order(action.order_id)
             elif isinstance(action, ReplaceIntent):
@@ -220,6 +258,7 @@ def compute_crypto_metrics(
     run_result: Dict[str, Any],
     execution_classification: str,
 ) -> CryptoExecutionResult:
+    error = str(run_result.get("error") or "")
     balance = float(run_result.get("balance", 0.0))
     fee = float(run_result.get("fee", 0.0))
     num_trades = int(run_result.get("num_trades", 0))
@@ -302,4 +341,6 @@ def compute_crypto_metrics(
         mean_jump_bps=jmp,
         mean_qqe=qqe_val,
         execution_classification=execution_classification,
+        error=error,
+        trade_pnls=realized_trades,
     )

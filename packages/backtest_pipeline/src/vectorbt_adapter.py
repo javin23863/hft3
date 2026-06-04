@@ -4,8 +4,10 @@ Consumes HFT3 CandidateModel objects + data from the existing pipeline.
 Produces FilterResult with promoted/rejected lists. Every promoted candidate
 carries full traceable metadata (PromotedCandidate) for the promotion gate.
 
-VectorBT is optional. If not installed, the adapter falls back gracefully
-and passes all candidates through (no filtering).
+VectorBT is optional. If not installed, the adapter falls back to the
+numpy signal-return simulator in this module and still applies the same
+promotion gate. Missing data or missing signal bindings reject candidates;
+they are never counted as a filtered pass.
 """
 from __future__ import annotations
 
@@ -70,6 +72,7 @@ class FilterResult:
     promoted: List[PromotedCandidate] = field(default_factory=list)
     rejected: List[RejectedCandidate] = field(default_factory=list)
     vectorbt_available: bool = False
+    backend: str = ""
     run_id: str = ""
     total_candidates: int = 0
 
@@ -77,6 +80,7 @@ class FilterResult:
         return {
             "run_id": self.run_id,
             "vectorbt_available": self.vectorbt_available,
+            "backend": self.backend,
             "total_candidates": self.total_candidates,
             "promoted_count": len(self.promoted),
             "rejected_count": len(self.rejected),
@@ -154,9 +158,21 @@ def _compute_metrics_for_params(
     stop_loss_pct: Optional[float],
     take_profit_pct: Optional[float],
     price_col: int = 3,
+    start_index: int = 1,
+    end_index: Optional[int] = None,
 ) -> Dict[str, Any]:
     close = ohlcv[:, price_col]
     n = len(close)
+    if n == 0:
+        return {
+            "net_return_pct": 0.0,
+            "expectancy": 0.0,
+            "win_rate": 0.0,
+            "num_trades": 0,
+            "max_drawdown_pct": 0.0,
+        }
+    start = max(1, min(int(start_index), n - 1))
+    end = n if end_index is None else max(start + 1, min(int(end_index), n))
     position = 0.0
     entry_price = 0.0
     trades: List[float] = []
@@ -164,7 +180,23 @@ def _compute_metrics_for_params(
     peak = 0.0
     max_dd = 0.0
 
-    for i in range(1, n):
+    for i in range(1, start):
+        if position != 0:
+            ret = (close[i] - entry_price) / entry_price
+            hit_stop = stop_loss_pct is not None and ret < -stop_loss_pct / 100.0
+            hit_target = take_profit_pct is not None and ret > take_profit_pct / 100.0
+            if hit_stop or hit_target or (position > 0 and exit_signal[i] < 0):
+                entry_price = 0.0
+                position = 0.0
+                continue
+        if position == 0 and entry_signal[i] > 0:
+            entry_price = close[i]
+            position = 1.0
+
+    if position != 0:
+        entry_price = close[start - 1]
+
+    for i in range(start, end):
         if position != 0:
             ret = (close[i] - entry_price) / entry_price
             hit_stop = stop_loss_pct is not None and ret < -stop_loss_pct / 100.0
@@ -203,7 +235,7 @@ def _compute_metrics_for_params(
             position = 0.0
 
     if position != 0:
-        trade_return = (close[-1] - entry_price) / entry_price
+        trade_return = (close[end - 1] - entry_price) / entry_price
         trades.append(trade_return)
         cum_return += trade_return
 
@@ -232,14 +264,23 @@ def _simulate_walk_forward(
         return {"wf_consistency": 0.0, "oos_expectancy": 0.0}
 
     oos_expectancies: List[float] = []
-    for w in range(1, n_windows + 1):
-        split = int(n * (train_ratio + (1 - train_ratio) * (w - 1) / max(n_windows - 1, 1)))
-        if split < 10 or split >= n - 10:
+    first_oos = int(n * train_ratio)
+    if first_oos < 10 or first_oos >= n - 5:
+        return {"wf_consistency": 0.0, "oos_expectancy": 0.0}
+    bounds = np.linspace(first_oos, n, n_windows + 1, dtype=int)
+    for start, end in zip(bounds[:-1], bounds[1:]):
+        if end - start < 5:
             continue
-        oos_data = ohlcv[split:], entry_signal[split:], exit_signal[split:]
-        metrics_oos = _compute_metrics_for_params(*oos_data, None, None)
-        if metrics_oos["num_trades"] >= 5:
-            oos_expectancies.append(metrics_oos["expectancy"])
+        metrics_oos = _compute_metrics_for_params(
+            ohlcv,
+            entry_signal,
+            exit_signal,
+            None,
+            None,
+            start_index=int(start),
+            end_index=int(end),
+        )
+        oos_expectancies.append(float(metrics_oos["expectancy"]) if metrics_oos["num_trades"] > 0 else 0.0)
 
     consistency = 0.0
     if oos_expectancies:
@@ -309,7 +350,10 @@ def _run_vectorbt_simulation(
 
     signal_computer = signal_computer or _default_signal_computer
 
-    import vectorbt as vbt
+    vbt = None
+    vectorbt_available = _vectorbt_available()
+    if vectorbt_available:
+        import vectorbt as vbt  # type: ignore[no-redef]
     close = ohlcv[:, 3]
     open_p = ohlcv[:, 0]
     high = ohlcv[:, 1]
@@ -317,8 +361,13 @@ def _run_vectorbt_simulation(
     volume = ohlcv[:, 4]
 
     result = FilterResult(
-        vectorbt_available=True,
-        run_id=f"vbt_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}",
+        vectorbt_available=vectorbt_available,
+        backend="vectorbt" if vectorbt_available else "numpy_fallback",
+        run_id=(
+            f"vbt_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+            if vectorbt_available
+            else f"np_vbt_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+        ),
         total_candidates=len(candidates) * _grid_size(grid),
     )
 
@@ -331,7 +380,10 @@ def _run_vectorbt_simulation(
                 candidate_id=cand.candidate_id,
                 hypothesis_id=cand.model_id,
                 reject_reason="unresolvable_model_id",
-                metric_values={},
+                metric_values={
+                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                },
             )) 
             continue
 
@@ -346,19 +398,24 @@ def _run_vectorbt_simulation(
             take_profit_f = float(take_profit) if take_profit is not None else None
 
             vbt_stats = {}
-            try:
-                entries = entry_signal > 0
-                exits = exit_signal < 0
-                pf = vbt.Portfolio.from_signals(
-                    close, entries=entries, exits=exits,
-                    init_cash=10000.0, freq="1min",
-                    sl_stop=stop_loss_f / 100.0 if stop_loss_f else None,
-                    tp_stop=take_profit_f / 100.0 if take_profit_f else None,
-                )
-                vbt_stats = dict(pf.stats())
-            except Exception as exc:
-                print(f"Warning: VectorBT portfolio sim failed for {cand.candidate_id}: {exc}", file=sys.stderr)
-                pf = None
+            if vbt is not None:
+                try:
+                    entries = entry_signal > 0
+                    exits = exit_signal < 0
+                    pf = vbt.Portfolio.from_signals(
+                        close, entries=entries, exits=exits,
+                        init_cash=10000.0, freq="1min",
+                        sl_stop=stop_loss_f / 100.0 if stop_loss_f else None,
+                        tp_stop=take_profit_f / 100.0 if take_profit_f else None,
+                    )
+                    vbt_stats = dict(pf.stats())
+                except Exception as exc:
+                    print(f"Warning: VectorBT portfolio sim failed for {cand.candidate_id}: {exc}", file=sys.stderr)
+            else:
+                vbt_stats = {
+                    "backend": "numpy_fallback",
+                    "reason": "vectorbt package unavailable; using numpy signal-return simulator",
+                }
 
             metrics = _compute_metrics_for_params(
                 ohlcv, entry_signal, exit_signal, stop_loss_f, take_profit_f,
@@ -372,6 +429,7 @@ def _run_vectorbt_simulation(
                 "stop_loss_pct": stop_loss_f,
                 "take_profit_pct": take_profit_f,
                 "vbt_stats": vbt_stats,
+                "filter_backend": result.backend,
                 **metrics,
                 **wf,
                 "param_stability_score": 1.0,
@@ -423,11 +481,14 @@ def filter_candidates(
     param_grid: Optional[Dict[str, List[Any]]] = None,
     data_loader: Optional[Callable[[str, Path], Optional[np.ndarray]]] = None,
     signal_computer: Optional[Callable] = None,
+    persist_promotions: bool = False,
 ) -> FilterResult:
     """Run VectorBT filter on candidates. Returns promoted+rejected lists.
 
-    If VectorBT is not installed, rejects all candidates by default.
-    Set env var HFT3_ALLOW_UNFILTERED=1 to promote without filtering instead.
+    If VectorBT is not installed, this still runs the numpy fallback simulator
+    with the same data, signal computer, and promotion gate. Missing OHLCV data
+    rejects candidates; production promotion artifacts are only written when
+    the caller explicitly passes persist_promotions=True.
     """
     gates = gates or PromotionGate()
     repo_root = repo_root or _REPO
@@ -435,76 +496,28 @@ def filter_candidates(
     grid = param_grid or DEFAULT_PARAM_GRID
     signal_computer = signal_computer or _default_signal_computer
 
-    if not _vectorbt_available():
-        logger.warning("vectorbt not installed — rejecting all candidates")
-        result = FilterResult(
-            vectorbt_available=False,
-            run_id=f"no_vbt_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}",
-            total_candidates=len(candidates),
-        )
-        allow_unfiltered = os.environ.get("HFT3_ALLOW_UNFILTERED", "").lower() in ("1", "true")
-        if allow_unfiltered:
-            for cand in candidates:
-                prom = PromotedCandidate(
-                    candidate_id=cand.candidate_id,
-                    hypothesis_id=cand.model_id,
-                    strategy_family=cand.metadata.get("strategy_family", cand.model_id),
-                    asset_class="CME_FUTURES",
-                    symbol=cand.metadata.get("symbol", "MES"),
-                    timeframe="1m",
-                    param_values=dict(cand.strategy_params),
-                    vectorbt_run_id=result.run_id,
-                    vectorbt_results={"note": "vectorbt not installed — promoted without filter"},
-                    pass_reason="vectorbt_unavailable_fallback",
-                )
-                result.promoted.append(prom)
-        else:
-            for cand in candidates:
-                result.rejected.append(RejectedCandidate(
-                    candidate_id=cand.candidate_id,
-                    hypothesis_id=cand.model_id,
-                    reject_reason="vectorbt_not_installed",
-                    metric_values={},
-                ))
-        return result
-
     ohlcv = data_loader(event_id, repo_root)
     if ohlcv is None:
         logger.warning("No OHLCV data for %s — rejecting all candidates", event_id)
         result = FilterResult(
-            vectorbt_available=True,
+            vectorbt_available=_vectorbt_available(),
+            backend="no_ohlcv_data",
             run_id=f"no_data_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}",
             total_candidates=len(candidates),
         )
-        allow_unfiltered = os.environ.get("HFT3_ALLOW_UNFILTERED", "").lower() in ("1", "true")
-        if allow_unfiltered:
-            for cand in candidates:
-                prom = PromotedCandidate(
-                    candidate_id=cand.candidate_id,
-                    hypothesis_id=cand.model_id,
-                    strategy_family=cand.metadata.get("strategy_family", cand.model_id),
-                    asset_class="CME_FUTURES",
-                    symbol=cand.metadata.get("symbol", "MES"),
-                    timeframe="1m",
-                    param_values=dict(cand.strategy_params),
-                    vectorbt_run_id=result.run_id,
-                    vectorbt_results={"note": f"No OHLCV data for {event_id} — promoted without filter"},
-                    pass_reason="no_ohlcv_data_fallback",
-                )
-                result.promoted.append(prom)
-        else:
-            for cand in candidates:
-                result.rejected.append(RejectedCandidate(
-                    candidate_id=cand.candidate_id,
-                    hypothesis_id=cand.model_id,
-                    reject_reason="no_ohlcv_data",
-                    metric_values={},
-                ))
+        ignored_escape = os.environ.get("HFT3_ALLOW_UNFILTERED", "").lower() in ("1", "true")
+        for cand in candidates:
+            result.rejected.append(RejectedCandidate(
+                candidate_id=cand.candidate_id,
+                hypothesis_id=cand.model_id,
+                reject_reason="no_ohlcv_data",
+                metric_values={"operator_escape_ignored": ignored_escape} if ignored_escape else {},
+            ))
         return result
 
     result = _run_vectorbt_simulation(ohlcv, candidates, parsed, grid, repo_root, signal_computer)
     promoted_out: List[PromotedCandidate] = []
-    rejected_out: List[RejectedCandidate] = []
+    rejected_out: List[RejectedCandidate] = list(result.rejected)
 
     git_commit = _resolve_git_commit()
 
@@ -520,7 +533,8 @@ def filter_candidates(
         if gate_pass:
             prom.pass_reason = "all_gates_passed"
             prom.in_sample_results["gate_pass"] = True
-            serialize_promoted(prom, repo_root / "research_cards" / "promotion")
+            if persist_promotions:
+                serialize_promoted(prom, repo_root / "research_cards" / "promotion")
             promoted_out.append(prom)
         else:
             rejected_out.append(RejectedCandidate(

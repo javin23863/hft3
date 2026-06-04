@@ -532,6 +532,11 @@ def test_defined_sources_are_explicit_by_context():
     assert micro_sources == {
         RelationshipDataSource.DATABENTO_CME_MBO_NPZ,
         RelationshipDataSource.MICROSTRUCTURE_PDF_MANIFEST,
+        RelationshipDataSource.CRYPTO_SMOKE_REPORT,
+        RelationshipDataSource.CRYPTO_VALIDATION_REPORT,
+        RelationshipDataSource.CRYPTO_ROBUSTNESS_SUMMARY,
+        RelationshipDataSource.CRYPTO_EDGE_PACKET_STATUS,
+        RelationshipDataSource.CRYPTO_DOUBLE_WF_ARTIFACT,
     }
     assert macro_sources == {
         RelationshipDataSource.ECONOMIC_EVENT_UNIVERSE,
@@ -539,6 +544,10 @@ def test_defined_sources_are_explicit_by_context():
         RelationshipDataSource.DATA_SYSTEM_EVENTS_CSV,
     }
     assert regime_sources == {
+        RelationshipDataSource.CRYPTO_SMOKE_REPORT,
+        RelationshipDataSource.CRYPTO_ROBUSTNESS_SUMMARY,
+        RelationshipDataSource.CRYPTO_EDGE_PACKET_STATUS,
+        RelationshipDataSource.CRYPTO_DOUBLE_WF_ARTIFACT,
         RelationshipDataSource.ECONOMIC_EVENT_UNIVERSE,
         RelationshipDataSource.SOURCED_RELEASE_CALENDAR,
         RelationshipDataSource.DATA_SYSTEM_EVENTS_CSV,
@@ -557,3 +566,77 @@ def test_context_enum_includes_required_contexts():
         "world_event",
         "regime",
     }
+
+
+def test_crypto_relationship_sources_validate_run_local_artifacts(tmp_path):
+    run_dir = tmp_path / "runtime" / "workbench" / "crypto_smoke" / "run_1"
+    for rel in (
+        "smoke_reports/crypto_candidate.json",
+        "validation_reports/crypto_candidate.json",
+        "robustness_summary.json",
+        "status.json",
+        "walk_forward_correlation.json",
+    ):
+        path = run_dir / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{}", encoding="utf-8")
+
+    candidate = propose_relationship(
+        "candidate:crypto_candidate",
+        "failed_required_robustness_check",
+        "robustness:latency_sensitivity",
+        RelationshipContext.MICRO,
+        evidence=(
+            RelationshipEvidence(
+                "Run-local smoke evidence.",
+                RelationshipDataSource.CRYPTO_SMOKE_REPORT,
+                "runtime/workbench/crypto_smoke/run_1/smoke_reports/crypto_candidate.json",
+            ),
+            RelationshipEvidence(
+                "Run-local validation evidence.",
+                RelationshipDataSource.CRYPTO_VALIDATION_REPORT,
+                "runtime/workbench/crypto_smoke/run_1/validation_reports/crypto_candidate.json",
+            ),
+            RelationshipEvidence(
+                "Run-local robustness failure.",
+                RelationshipDataSource.CRYPTO_ROBUSTNESS_SUMMARY,
+                "runtime/workbench/crypto_smoke/run_1/robustness_summary.json:check=latency_sensitivity",
+            ),
+            RelationshipEvidence(
+                "Run-local double walk-forward artifact.",
+                RelationshipDataSource.CRYPTO_DOUBLE_WF_ARTIFACT,
+                "runtime/workbench/crypto_smoke/run_1/walk_forward_correlation.json",
+            ),
+        ),
+        proof_trace=("read run-local artifacts", "mark as review candidate only"),
+    )
+
+    assert validate_relationship_candidate(candidate, repo_root=tmp_path) == ()
+    assert mark_validated(candidate, repo_root=tmp_path).status == RelationshipStatus.VALIDATED
+
+
+def test_crypto_relationship_candidate_rejects_write_claims(tmp_path):
+    run_dir = tmp_path / "runtime" / "workbench" / "crypto_smoke" / "run_1"
+    (run_dir / "status.json").parent.mkdir(parents=True, exist_ok=True)
+    (run_dir / "status.json").write_text("{}", encoding="utf-8")
+
+    candidate = RelationshipCandidate(
+        subject="candidate:crypto_candidate",
+        predicate="bitcoin_edge_packets_not_current",
+        object="btc_node_state:missing_or_stale",
+        context=RelationshipContext.MICRO,
+        evidence=(
+            RelationshipEvidence(
+                "Run-local edge packet status.",
+                RelationshipDataSource.CRYPTO_EDGE_PACKET_STATUS,
+                "runtime/workbench/crypto_smoke/run_1/status.json:bitcoin_edge_packets",
+            ),
+        ),
+        proof_trace=("read status.json",),
+        openfoundry_written=True,
+        kg_written=True,
+    )
+
+    errors = validate_relationship_candidate(candidate, repo_root=tmp_path)
+    assert "candidate must not claim an OpenFoundry write" in errors
+    assert "candidate must not claim a KG write" in errors

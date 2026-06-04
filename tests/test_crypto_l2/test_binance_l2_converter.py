@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from hftbacktest.types import ADD_ORDER_EVENT, BUY_EVENT, CANCEL_ORDER_EVENT, EXCH_EVENT, SELL_EVENT, event_dtype
+from hftbacktest.types import ADD_ORDER_EVENT, BUY_EVENT, CANCEL_ORDER_EVENT, EXCH_EVENT, LOCAL_EVENT, SELL_EVENT, event_dtype
 
 from crypto_lane.src.data_io.binance_l2_converter import BinanceOrderBook, convert_ndjson_to_npz
 
@@ -81,8 +81,9 @@ class TestConvertBinanceL2:
         data = np.load(npz_path)["data"]
         assert len(data) > 0
         assert data.dtype == event_dtype
-        assert data[0]["px"] == 50000.0
-        assert data[0]["qty"] == 1.0
+        assert 50000.0 in data["px"]
+        assert 50001.0 in data["px"]
+        assert 1.0 in data["qty"]
 
     def test_empty_file_raises(self, tmp_dir: Path):
         ndjson_path = tmp_dir / "empty.ndjson"
@@ -138,6 +139,7 @@ class TestConvertBinanceL2:
         px = data["px"]
         assert 100.0 in px
         assert 101.0 in px
+        assert all(int(ev) & LOCAL_EVENT for ev in data["ev"])
 
     def test_monotonic_timestamps(self, tmp_dir: Path):
         lines = [

@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import sys
 from dataclasses import dataclass, field
+from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -24,15 +26,15 @@ from hftbacktest.types import (
 class KrakenOrderBook:
     bids: Dict[float, float] = field(default_factory=dict)
     asks: Dict[float, float] = field(default_factory=dict)
+    next_order_id: int = 0
 
     @staticmethod
     def _extract_ts_ns(entry: tuple, fallback_ns: int) -> int:
-        """Extract exchange timestamp (microseconds) from Kraken book entry third field."""
-        if len(entry) >= 4:
+        """Extract exchange timestamp in nanoseconds from Kraken book entry third field."""
+        if len(entry) >= 3:
             try:
-                us = int(float(entry[2]) * 1_000_000)
-                return us
-            except (ValueError, IndexError):
+                return int(Decimal(str(entry[2])) * Decimal("1000000000"))
+            except (ValueError, InvalidOperation, IndexError):
                 pass
         return fallback_ns
 
@@ -40,46 +42,44 @@ class KrakenOrderBook:
         events: List[Tuple] = []
         self.bids.clear()
         self.asks.clear()
-        oid = 0
+        self.next_order_id = 0
 
         for entry in data.get("bs", []):
             price = float(entry[0])
             qty = float(entry[1])
-            ts_ns = self._extract_ts_ns(entry, fallback_ns)
+            ts_ns = fallback_ns
             if qty > 0:
                 self.bids[price] = qty
-                events.append((ADD_ORDER_EVENT | BUY_EVENT | EXCH_EVENT, ts_ns, ts_ns, price, qty, oid, 0, 0.0))
-                oid += 1
+                events.append((ADD_ORDER_EVENT | BUY_EVENT | EXCH_EVENT | LOCAL_EVENT, ts_ns, ts_ns, price, qty, self.next_order_id, 0, 0.0))
+                self.next_order_id += 1
 
         for entry in data.get("as", []):
             price = float(entry[0])
             qty = float(entry[1])
-            ts_ns = self._extract_ts_ns(entry, fallback_ns)
+            ts_ns = fallback_ns
             if qty > 0:
                 self.asks[price] = qty
-                events.append((ADD_ORDER_EVENT | SELL_EVENT | EXCH_EVENT, ts_ns, ts_ns, price, qty, oid, 0, 0.0))
-                oid += 1
+                events.append((ADD_ORDER_EVENT | SELL_EVENT | EXCH_EVENT | LOCAL_EVENT, ts_ns, ts_ns, price, qty, self.next_order_id, 0, 0.0))
+                self.next_order_id += 1
 
         return events
 
     def apply_update(self, data: Dict[str, Any], fallback_ns: int = 1_000_000_000) -> List[Tuple]:
         events: List[Tuple] = []
-        oid_offset = max(len(self.bids), len(self.asks)) + 1
 
         for side_key, side_store, buy_flag in [("b", self.bids, BUY_EVENT), ("a", self.asks, SELL_EVENT)]:
             entries = data.get(side_key, [])
-            for i, entry in enumerate(entries):
+            for entry in entries:
                 price = float(entry[0])
                 qty = float(entry[1])
-                ts_ns = self._extract_ts_ns(entry, fallback_ns)
-                oid = oid_offset + i
+                ts_ns = fallback_ns
 
                 if qty > 0:
                     side_store[price] = qty
-                    events.append((ADD_ORDER_EVENT | buy_flag | EXCH_EVENT, ts_ns, ts_ns, price, qty, oid, 0, 0.0))
+                    events.append((ADD_ORDER_EVENT | buy_flag | EXCH_EVENT | LOCAL_EVENT, ts_ns, ts_ns, price, qty, self.next_order_id, 0, 0.0))
+                    self.next_order_id += 1
                 elif price in side_store:
                     del side_store[price]
-                    events.append((CANCEL_ORDER_EVENT | buy_flag | EXCH_EVENT, ts_ns, ts_ns, price, 0.0, oid, 0, 0.0))
 
         return events
 
@@ -105,7 +105,7 @@ def convert_ndjson_to_npz(
             if not line:
                 continue
             msg = json.loads(line)
-            fallback_ns = start_time_ns + ticks * step_ns
+            fallback_ns = _message_ts_ns(msg, start_time_ns + ticks * step_ns)
             msg_type = msg.get("type", "update")
             data = msg.get("data", {})
 
@@ -120,9 +120,38 @@ def convert_ndjson_to_npz(
     if not all_events:
         raise ValueError(f"No events parsed from {ndjson_path}")
 
-    data = np.array(all_events, dtype=event_dtype)
+    data = np.array(_normalize_replay_clock(all_events, start_time_ns), dtype=event_dtype)
     np.savez_compressed(npz_path, data=data)
     return npz_path
+
+
+def _message_ts_ns(msg: Dict[str, Any], fallback_ns: int) -> int:
+    raw = msg.get("timestamp_utc")
+    if not raw:
+        return fallback_ns
+    try:
+        return int(datetime.fromisoformat(str(raw).replace("Z", "+00:00")).timestamp() * 1_000_000_000)
+    except ValueError:
+        return fallback_ns
+
+
+def _normalize_replay_clock(events: List[Tuple], start_time_ns: int) -> List[Tuple]:
+    events = sorted(events, key=lambda row: (int(row[2]), int(row[1]), int(row[0])))
+    if not events:
+        return []
+    base_local = int(events[0][2])
+    normalized: List[Tuple] = []
+    last_local = start_time_ns - 1
+    for ev, exch_ts, local_ts, px, qty, oid, ival, fval in events:
+        local_norm = start_time_ns + max(0, int(local_ts) - base_local)
+        if local_norm <= last_local:
+            local_norm = last_local + 1
+        last_local = local_norm
+        exch_norm = start_time_ns + max(0, int(exch_ts) - base_local)
+        if exch_norm > local_norm:
+            exch_norm = local_norm
+        normalized.append((ev, exch_norm, local_norm, px, qty, oid, ival, fval))
+    return normalized
 
 
 def _routing_npz_path(symbol: str) -> Path:
