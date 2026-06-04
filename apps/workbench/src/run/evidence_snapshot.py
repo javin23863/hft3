@@ -13,6 +13,11 @@ from typing import Any, Literal
 import yaml
 
 from workbench.src.artifacts.paths import workbench_runs_dir_for
+from workbench.src.run.feature_fabric import (
+    ARTIFACT_NAMES as FEATURE_FABRIC_ARTIFACT_NAMES,
+    ensure_catalog_feature_fabric,
+    source_to_lane,
+)
 
 
 CoverageStatus = Literal[
@@ -64,9 +69,7 @@ LANE_RUN_SOURCES = {
 
 
 def _source_lane(source: str) -> str:
-    if source == "crypto_lane":
-        return "crypto"
-    return LANE_RUN_SOURCES.get(source, source)
+    return source_to_lane(source)
 
 
 def workbench_run_sources() -> list[str]:
@@ -345,6 +348,17 @@ def _feature_fabric_snapshot(
         "allowed_source_lanes": lane_values,
         "pit_rule": "source_available_timestamp <= decision_timestamp",
         "pit_validation_status": pit_validation_status,
+        "catalog_pit_eligibility_status": manifest.get("catalog_pit_eligibility_status", pit_validation_status),
+        "model_feature_usage_status": manifest.get(
+            "model_feature_usage_status",
+            lineage.get("model_feature_usage_status", "not_observed"),
+        ),
+        "model_feature_usage_observed": str(
+            manifest.get("model_feature_usage_status")
+            or lineage.get("model_feature_usage_status")
+            or "not_observed"
+        ).lower()
+        not in {"", "not_observed", "none", "missing"},
         "artifact_root": str(root),
         "artifact_paths": observed_paths,
         "expected_artifacts": {name: str(path) for name, path in paths.items()},
@@ -359,6 +373,22 @@ def _feature_fabric_snapshot(
         "rows": lineage_rows,
         "secret_exposed": False,
     }
+
+
+def _has_feature_fabric_artifacts(root: Path) -> bool:
+    return all((root / name).is_file() for name in FEATURE_FABRIC_ARTIFACT_NAMES)
+
+
+def _ensure_catalog_feature_fabric(
+    repo: Path,
+    *,
+    consumer_lane: str,
+    selected_root: str | Path | None = None,
+) -> Path:
+    root = Path(selected_root) if selected_root else repo / "runtime" / "workbench" / "feature_fabric"
+    if not _has_feature_fabric_artifacts(root):
+        ensure_catalog_feature_fabric(repo, consumer_lane, output_root=root)
+    return root
 
 
 def _shared_blocking_gates(lane_registry: dict[str, Any], feature_fabric: dict[str, Any]) -> list[dict[str, Any]]:
@@ -411,6 +441,76 @@ def _rithmic_endpoint_status(repo: Path, *, force_paper: bool = False) -> dict[s
             PAPER_ENDPOINT_PROFILE if profile == PAPER_ENDPOINT_PROFILE or force_paper else "test_orangeburg",
         )
     return endpoint_status_from_config(config_path, repo_root=repo)
+
+
+def _ibkr_endpoint_status(repo: Path, *, connect: bool = True) -> dict[str, Any]:
+    try:
+        from equities_lane.src.ibkr_endpoint import default_config_path, endpoint_status
+
+        env_config = os.environ.get("IBKR_ENDPOINT_CONFIG", "").strip()
+        config_path = Path(env_config) if env_config else default_config_path(repo)
+        if not config_path.is_absolute():
+            config_path = repo / config_path
+        timeout = float(os.environ.get("IBKR_ENDPOINT_TIMEOUT_SEC", "0.35") or "0.35")
+        return endpoint_status(
+            repo,
+            config_path=config_path,
+            connect=connect,
+            timeout_sec=timeout,
+            write_status=True,
+        )
+    except Exception as exc:
+        runtime_status = repo / "runtime" / "equities_lane" / "ibkr_endpoint_status.json"
+        return {
+            "schema_version": "ibkr_endpoint_status_v1",
+            "generated_at_utc": datetime.now().astimezone().isoformat(),
+            "status": "BLOCKING",
+            "reason_code": "IBKR_ENDPOINT_STATUS_ERROR",
+            "profile": "ibkr_paper_socket",
+            "provider": "interactive_brokers",
+            "transport": "tws_socket",
+            "mode": os.environ.get("IBKR_SOCKET_MODE", "paper"),
+            "system": "IBKR Paper Trading",
+            "gateway": "TWS or IB Gateway headless socket",
+            "credentials": {"account_id_set": False, "redacted": True},
+            "secret_exposed": False,
+            "runtime_status_path": str(runtime_status),
+            "blocking_gates": [
+                {
+                    "gate": "ibkr_endpoint_status",
+                    "status": "BLOCKING",
+                    "reason": str(exc),
+                }
+            ],
+        }
+
+
+def _decorate_ibkr_endpoint_for_pipeline(endpoint: dict[str, Any]) -> dict[str, Any]:
+    """Separate model-pipeline readiness from broker live-routing readiness."""
+
+    if not endpoint:
+        return {}
+    decorated = dict(endpoint)
+    reason_code = str(decorated.get("reason_code") or "").upper()
+    status = str(decorated.get("status") or "").upper()
+    routing_ready = status == "CONNECTED"
+    hard_pipeline_blockers = {
+        "IBKR_ENDPOINT_STATUS_ERROR",
+        "IBKR_SOCKET",
+        "IBKR_API_PACKAGE",
+    }
+    pipeline_blocking = reason_code in hard_pipeline_blockers
+    decorated["routing_ready"] = routing_ready
+    decorated["pipeline_blocking"] = pipeline_blocking
+    decorated["pipeline_gate_status"] = "BLOCKING" if pipeline_blocking else "PASS"
+    decorated["live_routing_gate_status"] = "PASS" if routing_ready else "ROUTING_BLOCKED"
+    decorated["routing_blocking_gates"] = decorated.get("blocking_gates", [])
+    if not routing_ready and not pipeline_blocking:
+        decorated["pipeline_note"] = (
+            "Equities/options research pipeline is allowed to continue. "
+            "IBKR live routing remains gated until the headless API session is connected."
+        )
+    return decorated
 
 
 def _same_path(left: str | Path | None, right: str | Path | None) -> bool:
@@ -2460,7 +2560,13 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
     lane_row = (lane_registry.get("by_lane") or {}).get(lane, {})
     config = lane_row.get("config") or {}
     is_cme = lane == "cme_futures"
+    is_ibkr_lane = lane in {"equities", "options"}
     rithmic_endpoint = _rithmic_endpoint_status(repo, force_paper=is_cme) if is_cme else {}
+    ibkr_endpoint = (
+        _decorate_ibkr_endpoint_for_pipeline(_ibkr_endpoint_status(repo, connect=True))
+        if is_ibkr_lane
+        else {}
+    )
     rithmic_trial = _latest_rithmic_trial_bundle(repo) if is_cme else {}
     latency_baseline = _latest_latency_baseline_summary(
         repo,
@@ -2470,7 +2576,10 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
     endpoint_status = str(rithmic_endpoint.get("status") or "").upper()
     endpoint_ready = (not is_cme) or endpoint_status in {"READY_TO_CONNECT", "CONNECTED"}
     endpoint_blocked = is_cme and not endpoint_ready
-    feature_fabric = _feature_fabric_snapshot(repo, consumer_lane=lane)
+    ibkr_endpoint_status = str(ibkr_endpoint.get("status") or "").upper()
+    ibkr_endpoint_blocked = is_ibkr_lane and bool(ibkr_endpoint.get("pipeline_blocking"))
+    feature_fabric_root = _ensure_catalog_feature_fabric(repo, consumer_lane=lane)
+    feature_fabric = _feature_fabric_snapshot(repo, selected_root=feature_fabric_root, consumer_lane=lane)
     lane_registry_blocked = str(lane_registry.get("status") or "") == "BLOCKING" or not lane_row
     feature_fabric_blocked = str(feature_fabric.get("gate_status") or "") == "BLOCKING"
     has_rithmic_trial = bool(rithmic_trial)
@@ -2487,13 +2596,14 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
         if has_rithmic_trial
         and (
             endpoint_blocked
+            or ibkr_endpoint_blocked
             or lane_registry_blocked
             or feature_fabric_blocked
             or report_binding_blocked
             or not order_ack_measured
         )
         else "blocked"
-        if endpoint_blocked or lane_registry_blocked or feature_fabric_blocked
+        if endpoint_blocked or ibkr_endpoint_blocked or lane_registry_blocked or feature_fabric_blocked
         else "catalogued"
     )
     if report_binding_blocked:
@@ -2525,6 +2635,23 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
             reason = "Rithmic C++ gateway library is not built or not pointed to by HFT3_RITHMIC_GATEWAY_SO."
         else:
             reason = f"Rithmic endpoint is not ready: {reason_code}."
+    elif ibkr_endpoint_blocked:
+        current_stage = "ibkr_endpoint_not_ready"
+        reason_code = str(ibkr_endpoint.get("reason_code") or ibkr_endpoint_status or "IBKR_ENDPOINT_NOT_READY")
+        if reason_code == "IBKR_SOCKET":
+            reason = "IBKR TWS/Gateway socket is not reachable for the equities lane."
+        elif reason_code == "IBKR_API_PACKAGE":
+            reason = "IBKR API package is missing, so a headless API handshake cannot run."
+        elif reason_code == "IBKR_PAPER_DISCLAIMER":
+            reason = (
+                "IBKR rejected the headless API handshake because the paper trading disclaimer is pending."
+            )
+        elif reason_code == "IBKR_API_HANDSHAKE":
+            reason = "IBKR socket is reachable, but the headless API handshake did not complete."
+        elif reason_code == "IBKR_ACCOUNT":
+            reason = "IBKR account ID is not loaded into the runtime environment."
+        else:
+            reason = f"IBKR endpoint is not ready: {reason_code}."
     elif lane_registry_blocked:
         current_stage = "lane_registry_blocked"
         reason = "Lane registry failed to load cleanly."
@@ -2538,6 +2665,8 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
         {
             "gate": "rithmic_paper_endpoint"
             if endpoint_blocked
+            else "ibkr_equities_endpoint"
+            if ibkr_endpoint_blocked
             else "rithmic_report_binding"
             if report_binding_blocked
             else "rithmic_order_ack"
@@ -2545,14 +2674,22 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
             else "observed_lane_run",
             "status": rithmic_endpoint.get("status", "PENDING")
             if endpoint_blocked
+            else ibkr_endpoint.get("status", "PENDING")
+            if ibkr_endpoint_blocked
             else "BLOCKING"
             if report_binding_blocked
             else "INSUFFICIENT_ORDER_ACK_EVIDENCE"
             if has_rithmic_trial and not order_ack_measured
             else "PENDING",
-            "reason": rithmic_endpoint.get("reason_code", reason) if endpoint_blocked else reason,
+            "reason": rithmic_endpoint.get("reason_code", reason)
+            if endpoint_blocked
+            else ibkr_endpoint.get("reason_code", reason)
+            if ibkr_endpoint_blocked
+            else reason,
         }
     ]
+    if ibkr_endpoint_blocked:
+        blocking_gates.extend(ibkr_endpoint.get("blocking_gates") or [])
     blocking_gates.extend(_shared_blocking_gates(lane_registry, feature_fabric))
     rithmic_reports = rithmic_trial.get("reports") or {}
     data_quality = rithmic_reports.get("data_quality") or {}
@@ -2641,6 +2778,12 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
                 "status": rithmic_endpoint.get("status", "not_applicable") if is_cme else "not_applicable",
             },
             {
+                "name": "ibkr_equities_endpoint",
+                "status": ibkr_endpoint.get("pipeline_gate_status", "not_applicable")
+                if is_ibkr_lane
+                else "not_applicable",
+            },
+            {
                 "name": "paper_market_data_capture",
                 "status": "observed" if has_rithmic_trial else "missing",
             },
@@ -2671,6 +2814,8 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
             "rithmic_endpoint_status": rithmic_endpoint.get("runtime_status_path", "") if is_cme else "",
             "rithmic_latency_baseline_summary": latency_baseline.get("_path", "") if is_cme else "",
             "rithmic_latency_baseline_samples": latency_baseline.get("_sample_path", "") if is_cme else "",
+            "ibkr_endpoint_config": ibkr_endpoint.get("config_path", "") if is_ibkr_lane else "",
+            "ibkr_endpoint_status": ibkr_endpoint.get("runtime_status_path", "") if is_ibkr_lane else "",
             **trial_artifacts,
         },
         registry={
@@ -2750,6 +2895,7 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
             },
             "rithmic_endpoint": rithmic_endpoint,
             "rithmic_capture_endpoint": rithmic_trial.get("capture_endpoint", {}),
+            "ibkr_endpoint": ibkr_endpoint,
             "latency_baseline": latency_baseline,
             "latency_profile": latency_profile,
             "feed_latency_us": latency_profile.get("feed_latency_us", {}),
@@ -2790,6 +2936,7 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
         system={
             "lane_registry": lane_registry,
             "rithmic_endpoint": rithmic_endpoint,
+            "ibkr_endpoint": ibkr_endpoint,
             "rithmic_trial": rithmic_trial,
             "latency_baseline": latency_baseline,
             "rithmic_report_binding": rithmic_trial.get("report_binding", {}),
@@ -2868,15 +3015,29 @@ def load_run_evidence(repo: Path, source: str, *, campaign_id: str = "") -> RunE
         snapshot = _crypto_snapshot(repo)
     lane = _source_lane(snapshot.source)
     lane_registry = _lane_registry_snapshot(repo)
-    feature_fabric = (snapshot.diagnostics or {}).get("feature_fabric") or _feature_fabric_snapshot(
-        repo,
-        selected_root=snapshot.root if snapshot.root and Path(snapshot.root).is_dir() else None,
-        consumer_lane=lane,
+    selected_feature_root = Path(snapshot.root) if snapshot.root and Path(snapshot.root).is_dir() else None
+    feature_fabric = (snapshot.diagnostics or {}).get("feature_fabric")
+    if not feature_fabric:
+        feature_fabric_root = _ensure_catalog_feature_fabric(
+            repo,
+            consumer_lane=lane,
+            selected_root=selected_feature_root,
+        )
+        feature_fabric = _feature_fabric_snapshot(
+            repo,
+            selected_root=feature_fabric_root,
+            consumer_lane=lane,
+        )
+    is_cme_lane = lane == "cme_futures"
+    is_ibkr_lane = lane in {"equities", "options"}
+    rithmic_endpoint = (snapshot.system or {}).get("rithmic_endpoint") or (
+        _rithmic_endpoint_status(repo, force_paper=True) if is_cme_lane else {}
     )
-    rithmic_endpoint = (snapshot.system or {}).get("rithmic_endpoint") or _rithmic_endpoint_status(
-        repo,
-        force_paper=lane == "cme_futures",
+    ibkr_endpoint = (snapshot.system or {}).get("ibkr_endpoint") or (
+        _ibkr_endpoint_status(repo, connect=True) if is_ibkr_lane else {}
     )
+    if is_ibkr_lane:
+        ibkr_endpoint = _decorate_ibkr_endpoint_for_pipeline(ibkr_endpoint)
     snapshot.registry = {
         **(snapshot.registry or {}),
         "lanes": lane_registry.get("rows", []),
@@ -2886,10 +3047,12 @@ def load_run_evidence(repo: Path, source: str, *, campaign_id: str = "") -> RunE
         **(snapshot.diagnostics or {}),
         "feature_fabric": feature_fabric,
     }
-    snapshot.latency = {
+    latency_payload = {
         **(snapshot.latency or {}),
-        "rithmic_endpoint": rithmic_endpoint,
-        "rithmic_order_ack": (snapshot.latency or {}).get(
+    }
+    if is_cme_lane:
+        latency_payload["rithmic_endpoint"] = rithmic_endpoint
+        latency_payload["rithmic_order_ack"] = (snapshot.latency or {}).get(
             "rithmic_order_ack",
             {
                 "status": "CONFIGURED_NOT_OBSERVED",
@@ -2898,20 +3061,26 @@ def load_run_evidence(repo: Path, source: str, *, campaign_id: str = "") -> RunE
                 "order_ack_measured": False,
                 "endpoint_profile": rithmic_endpoint.get("profile", ""),
             },
-        ),
-    }
+        )
+    if is_ibkr_lane:
+        latency_payload["ibkr_endpoint"] = ibkr_endpoint
+    snapshot.latency = latency_payload
     snapshot.trade_manager = _trade_manager_snapshot(
         repo,
         selected_run_id=snapshot.run_id,
         selected_root=snapshot.root,
     )
-    snapshot.system = {
+    system_payload = {
         **(snapshot.system or {}),
         "lane_registry": lane_registry,
         "feature_fabric": feature_fabric,
-        "rithmic_endpoint": rithmic_endpoint,
         "trade_manager": snapshot.trade_manager,
     }
+    if is_cme_lane:
+        system_payload["rithmic_endpoint"] = rithmic_endpoint
+    if is_ibkr_lane:
+        system_payload["ibkr_endpoint"] = ibkr_endpoint
+    snapshot.system = system_payload
     _append_decision_blocking_gates(snapshot, _shared_blocking_gates(lane_registry, feature_fabric))
     return snapshot
 

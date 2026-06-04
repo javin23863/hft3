@@ -80,6 +80,7 @@ runtime/latency_baselines/**
 runtime/rithmic_paper_latency/**
 runtime/rithmic_test_latency/**
 runtime/crypto_edge/**
+runtime/equities_lane/**
 runtime/rithmic_trial/**
 runtime/workbench/**
 data/options/**

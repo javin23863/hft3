@@ -85,6 +85,19 @@ def main(argv: list[str] | None = None) -> int:
     crypto_p = sub.add_parser("crypto-smoke", help="Run observable crypto candidate smoke loop")
     crypto_p.add_argument("--candidate", default=None, help="Optional candidate_id filter")
 
+    fabric_p = sub.add_parser("feature-fabric", help="Generate catalog-backed cross-lane feature fabric artifacts")
+    fabric_p.add_argument("--source", default="cme_rithmic", help="Workbench source or lane name")
+    fabric_p.add_argument("--output-root", default=None, help="Optional artifact output root")
+    fabric_p.add_argument("--json", action="store_true", help="Machine-readable output")
+
+    ibkr_p = sub.add_parser("ibkr-endpoint", help="Check equities lane IBKR headless socket/API endpoint")
+    ibkr_p.add_argument("--config", default=None, help="Optional IBKR endpoint YAML path")
+    ibkr_p.add_argument("--connect", action="store_true", help="Attempt a real ibapi headless handshake")
+    ibkr_p.add_argument("--start-gateway", action="store_true", help="Start the configured local TWS/IB Gateway if no socket is open")
+    ibkr_p.add_argument("--startup-timeout-sec", type=float, default=20.0)
+    ibkr_p.add_argument("--timeout-sec", type=float, default=2.0)
+    ibkr_p.add_argument("--json", action="store_true", help="Machine-readable output")
+
     args = parser.parse_args(argv)
 
     if args.command == "list":
@@ -171,6 +184,48 @@ def main(argv: list[str] | None = None) -> int:
         result = run_crypto_smoke(_REPO, candidate_id=args.candidate)
         print(json.dumps(result, indent=2, default=str))
         return 0 if result.get("state") == "completed" else 1
+
+    if args.command == "feature-fabric":
+        from workbench.src.run.feature_fabric import ensure_catalog_feature_fabric, source_to_lane
+
+        result = ensure_catalog_feature_fabric(
+            _REPO,
+            source_to_lane(args.source),
+            output_root=Path(args.output_root) if args.output_root else None,
+        )
+        if args.json:
+            print(json.dumps(result, indent=2, default=str))
+        else:
+            print(f"Feature fabric: {result.get('status')}")
+            print(f"Rows: {result.get('row_count', 0)}")
+            print(f"Rejected: {result.get('rejected_count', 0)}")
+            for label, path in (result.get("artifact_paths") or {}).items():
+                print(f"  {label}: {path}")
+        return 0 if result.get("status") == "PASS" else 1
+
+    if args.command == "ibkr-endpoint":
+        from equities_lane.src.ibkr_endpoint import endpoint_status
+
+        result = endpoint_status(
+            _REPO,
+            config_path=Path(args.config) if args.config else None,
+            connect=args.connect,
+            start_gateway=args.start_gateway,
+            startup_timeout_sec=args.startup_timeout_sec,
+            timeout_sec=args.timeout_sec,
+            write_status=True,
+        )
+        if args.json:
+            print(json.dumps(result, indent=2, default=str))
+        else:
+            print(f"IBKR endpoint: {result.get('status')}")
+            print(f"Profile: {result.get('profile')}")
+            print(f"Socket: {result.get('host')}:{result.get('port')}")
+            print(f"API: {(result.get('api') or {}).get('api_client_status')}")
+            print(f"Status artifact: {result.get('runtime_status_path')}")
+            for gate in result.get("blocking_gates") or []:
+                print(f"  BLOCKING {gate.get('gate')}: {gate.get('reason')}")
+        return 0 if result.get("status") in {"READY_TO_CONNECT", "CONNECTED"} else 1
 
     if args.command == "campaign":
         from workbench.src.run.campaign_runner import record_sim_shadow, run_campaign

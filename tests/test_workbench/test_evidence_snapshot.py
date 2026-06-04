@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+import workbench.src.run.evidence_snapshot as evidence_snapshot
 from workbench.src.run.evidence_snapshot import (
     _crypto_after_action,
     _crypto_pipeline_coverage,
@@ -24,9 +25,40 @@ from workbench.src.run.evidence_snapshot import (
     load_run_evidence,
     workbench_run_sources,
 )
+from workbench.src.run.feature_fabric import ensure_catalog_feature_fabric
 
 
 REPO = Path(__file__).resolve().parents[2]
+
+
+def _fake_ibkr_endpoint_status(status: str = "CONNECTED", api_status: str = "CONNECTED") -> dict[str, object]:
+    return {
+        "schema_version": "ibkr_endpoint_status_v1",
+        "status": status,
+        "reason_code": "" if status == "CONNECTED" else "IBKR_API_HANDSHAKE",
+        "profile": "ibkr_paper_socket",
+        "provider": "interactive_brokers",
+        "transport": "tws_socket",
+        "mode": "paper",
+        "system": "IBKR Paper Trading",
+        "gateway": "TWS or IB Gateway headless socket",
+        "host": "127.0.0.1",
+        "port": 7497,
+        "credentials": {"account_id_set": True, "redacted": True},
+        "secret_exposed": False,
+        "headless_handshake_required": True,
+        "socket": {"reachable": True},
+        "api": {
+            "api_client_status": api_status,
+            "api_package_present": True,
+            "connected": status == "CONNECTED",
+        },
+        "blocking_gates": []
+        if status == "CONNECTED"
+        else [{"gate": "ibkr_api_handshake", "status": "BLOCKING", "reason": api_status}],
+        "runtime_status_path": "",
+        "config_path": str(REPO / "packages" / "equities_lane" / "config" / "ibkr_endpoint.yaml"),
+    }
 
 
 def test_crypto_snapshot_surfaces_bitcoin_edge_packet_gate() -> None:
@@ -63,7 +95,7 @@ def test_crypto_snapshot_surfaces_bitcoin_edge_packet_gate() -> None:
         "options",
     }
     assert snapshot.diagnostics["feature_fabric"]["policy"] == "cross_lane_features_allowed_only_when_point_in_time_safe"
-    assert snapshot.system["rithmic_endpoint"]["secret_exposed"] is False
+    assert (snapshot.system.get("rithmic_endpoint") or {}).get("secret_exposed", False) is False
 
 
 def test_workbench_run_sources_cover_registered_model_lanes() -> None:
@@ -442,7 +474,9 @@ def test_latest_rithmic_trial_bundle_blocks_stale_reports(tmp_path: Path) -> Non
     assert "replay_output_mismatch" in issues
 
 
-def test_equities_and_options_sources_are_lane_registry_backed() -> None:
+def test_equities_and_options_sources_are_lane_registry_backed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(evidence_snapshot, "_ibkr_endpoint_status", lambda _repo, connect=True: _fake_ibkr_endpoint_status())
+
     equities = load_run_evidence(REPO, "equities")
     options = load_run_evidence(REPO, "options")
 
@@ -450,6 +484,70 @@ def test_equities_and_options_sources_are_lane_registry_backed() -> None:
     assert options.registry["selected_lane"] == "options"
     assert equities.diagnostics["feature_fabric"]["consumer_lane"] == "equities"
     assert options.diagnostics["feature_fabric"]["consumer_lane"] == "options"
+
+
+def test_equities_snapshot_surfaces_ibkr_endpoint_readiness(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[bool] = []
+
+    def fake_status(_repo: Path, *, connect: bool = True) -> dict[str, object]:
+        calls.append(connect)
+        return _fake_ibkr_endpoint_status()
+
+    monkeypatch.setattr(evidence_snapshot, "_ibkr_endpoint_status", fake_status)
+
+    snapshot = load_run_evidence(REPO, "equities")
+
+    endpoint = snapshot.system["ibkr_endpoint"]
+    stages = {row["name"]: row["status"] for row in snapshot.stages}
+
+    assert endpoint["profile"] == "ibkr_paper_socket"
+    assert endpoint["provider"] == "interactive_brokers"
+    assert endpoint["transport"] == "tws_socket"
+    assert endpoint["mode"] in {"paper", "live"}
+    assert int(endpoint["port"]) > 0
+    assert endpoint["credentials"]["redacted"] is True
+    assert endpoint["secret_exposed"] is False
+    assert endpoint["headless_handshake_required"] is True
+    assert endpoint["api"]["api_client_status"] == "CONNECTED"
+    assert "account_id" not in endpoint
+    assert "ibkr_equities_endpoint" in stages
+    assert snapshot.latency["ibkr_endpoint"]["profile"] == "ibkr_paper_socket"
+    assert calls and all(calls)
+    if endpoint["status"] == "BLOCKING":
+        assert any(gate["gate"].startswith("ibkr_") for gate in endpoint["blocking_gates"])
+
+
+def test_equities_snapshot_allows_pipeline_when_live_routing_handshake_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        evidence_snapshot,
+        "_ibkr_endpoint_status",
+        lambda _repo, connect=True: {
+            **_fake_ibkr_endpoint_status("BLOCKING", "PAPER_DISCLAIMER_PENDING"),
+            "reason_code": "IBKR_PAPER_DISCLAIMER",
+            "blocking_gates": [
+                {
+                    "gate": "ibkr_paper_disclaimer",
+                    "status": "BLOCKING",
+                    "reason": "Paper trading disclaimer must be accepted before IBKR allows API connections.",
+                }
+            ],
+        },
+    )
+
+    snapshot = load_run_evidence(REPO, "equities")
+
+    endpoint = snapshot.system["ibkr_endpoint"]
+    stages = {row["name"]: row["status"] for row in snapshot.stages}
+
+    assert snapshot.state == "catalogued"
+    assert snapshot.current_stage == "lane_catalogued"
+    assert stages["ibkr_equities_endpoint"] == "PASS"
+    assert endpoint["pipeline_gate_status"] == "PASS"
+    assert endpoint["live_routing_gate_status"] == "ROUTING_BLOCKED"
+    assert endpoint["pipeline_blocking"] is False
+    assert endpoint["routing_ready"] is False
+    assert snapshot.system["ibkr_endpoint"]["api"]["api_client_status"] == "PAPER_DISCLAIMER_PENDING"
+    assert not any(gate["gate"] == "ibkr_equities_endpoint" for gate in snapshot.decision["blocking_gates"])
 
 
 def test_feature_fabric_blocks_when_artifacts_are_missing(tmp_path: Path) -> None:
@@ -461,6 +559,34 @@ def test_feature_fabric_blocks_when_artifacts_are_missing(tmp_path: Path) -> Non
     assert snapshot["pit_validation_status"] == "MISSING"
     assert any(gate["gate"] == "feature_fabric_artifacts" for gate in snapshot["blocking_gates"])
     assert any(gate["gate"] == "feature_fabric_lineage" for gate in snapshot["blocking_gates"])
+
+
+def test_catalog_feature_fabric_generation_passes_all_lanes(tmp_path: Path) -> None:
+    for lane in ("cme_futures", "crypto", "equities", "options"):
+        root = tmp_path / lane
+        result = ensure_catalog_feature_fabric(REPO, lane, output_root=root)
+        snapshot = _feature_fabric_snapshot(REPO, selected_root=root, consumer_lane=lane)
+
+        assert result["status"] == "PASS"
+        assert result["row_count"] > 0
+        assert snapshot["gate_status"] == "PASS"
+        assert snapshot["pit_validation_status"] == "PASS"
+        assert snapshot["catalog_pit_eligibility_status"] == "PASS"
+        assert snapshot["model_feature_usage_status"] == "not_observed"
+        assert snapshot["blocking_gates"] == []
+        assert {path.name for path in root.iterdir()} >= {
+            "feature_fabric_manifest.json",
+            "feature_lineage.json",
+            "feature_pit_audit.json",
+            "rejected_features.json",
+        }
+        assert {row["source_lane"] for row in snapshot["rows"]} >= {
+            "cme_futures",
+            "crypto",
+            "equities",
+            "options",
+        }
+        assert all(row["evidence_scope"] == "catalog_eligibility_not_model_usage" for row in snapshot["rows"])
 
 
 def test_feature_fabric_passes_with_observed_pit_safe_rows(tmp_path: Path) -> None:
@@ -500,6 +626,75 @@ def test_feature_fabric_blocks_pit_leakage_rows(tmp_path: Path) -> None:
     assert snapshot["pit_validation_status"] == "FAIL"
     assert any(gate["gate"] == "feature_pit_audit" for gate in snapshot["blocking_gates"])
     assert snapshot["pit_issues"][0]["issue"] == "source_available_after_decision_timestamp"
+
+
+def test_catalog_feature_fabric_rejects_unsafe_cme_instrument(monkeypatch, tmp_path: Path) -> None:
+    from workbench.src.data import instrument_registry
+    from workbench.src.data.instrument_registry import InstrumentRecord
+
+    safe = InstrumentRecord(
+        canonical_internal_symbol="SAFE",
+        research_symbol="SAFE.v.0",
+        data_vendor_symbol="SAFE.c.0",
+        hot_memory_tier="HOT_EXECUTABLE",
+        instrument_type="futures",
+        exchange="CME",
+        venue="GLBX",
+        asset_class="futures",
+        tradable=True,
+        order_book_available=True,
+        trade_print_available=True,
+        index_sensor_available=False,
+        point_in_time_safe=True,
+        data_delay_status="LIVE",
+        live_feed_status="LIVE",
+        historical_feed_status="LIVE",
+    )
+    unsafe = InstrumentRecord(
+        canonical_internal_symbol="UNSAFE",
+        research_symbol="UNSAFE.v.0",
+        data_vendor_symbol="UNSAFE.c.0",
+        hot_memory_tier="HOT_EXECUTABLE",
+        instrument_type="futures",
+        exchange="CME",
+        venue="GLBX",
+        asset_class="futures",
+        tradable=True,
+        order_book_available=True,
+        trade_print_available=True,
+        index_sensor_available=False,
+        point_in_time_safe=False,
+        data_delay_status="LIVE",
+        live_feed_status="LIVE",
+        historical_feed_status="LIVE",
+    )
+    monkeypatch.setattr(
+        instrument_registry,
+        "load_instrument_registry",
+        lambda repo: {"SAFE": safe, "UNSAFE": unsafe},
+    )
+
+    result = ensure_catalog_feature_fabric(REPO, "cme_futures", output_root=tmp_path)
+    snapshot = _feature_fabric_snapshot(REPO, selected_root=tmp_path, consumer_lane="cme_futures")
+    rejected = json.loads((tmp_path / "rejected_features.json").read_text(encoding="utf-8"))
+
+    assert result["status"] == "PASS"
+    assert snapshot["gate_status"] == "PASS"
+    assert any(row["source_symbol"] == "SAFE" for row in snapshot["rows"])
+    assert not any(row["source_symbol"] == "UNSAFE" for row in snapshot["rows"])
+    assert any(row["source_symbol"] == "UNSAFE" and row["reject_reason"] == "point_in_time_safe_false" for row in rejected["rows"])
+
+
+def test_load_run_evidence_uses_catalog_feature_fabric_for_all_lane_sources() -> None:
+    for source in ("cme_rithmic", "crypto_lane", "equities", "options"):
+        snapshot = load_run_evidence(REPO, source)
+        fabric = snapshot.diagnostics["feature_fabric"]
+
+        assert fabric["gate_status"] == "PASS"
+        assert fabric["pit_validation_status"] == "PASS"
+        assert fabric["catalog_pit_eligibility_status"] == "PASS"
+        assert fabric["model_feature_usage_status"] == "not_observed"
+        assert snapshot.current_stage != "feature_fabric_blocked"
 
 
 def test_lane_registry_errors_are_workbench_blockers(monkeypatch) -> None:

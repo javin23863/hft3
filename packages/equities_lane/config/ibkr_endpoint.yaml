@@ -1,0 +1,54 @@
+schema_version: ibkr_endpoint_v1
+profile: ibkr_paper_socket
+provider: interactive_brokers
+transport: tws_socket
+source_reference: C:/Users/MSI/Documents/GitHub/quant-x/docs/ibkr_weekly_login.md
+mode: paper
+system: IBKR Paper Trading
+gateway: TWS or IB Gateway headless socket
+host: 127.0.0.1
+ports:
+  paper: 7497
+  live: 7496
+  legacy_gateway_paper: 4002
+  legacy_gateway_live: 4001
+candidate_ports:
+  paper:
+    - 7497
+    - 4002
+  live:
+    - 7496
+    - 4001
+client_ids:
+  broker_primary: 17
+  market_data: 18
+env:
+  host: IBKR_SOCKET_HOST
+  mode: IBKR_SOCKET_MODE
+  paper_port: IBKR_SOCKET_PORT_PAPER
+  live_port: IBKR_SOCKET_PORT_LIVE
+  broker_client_id: IBKR_SOCKET_CLIENT_ID_PRIMARY
+  market_data_client_id: IBKR_SOCKET_CLIENT_ID_MARKETDATA
+  account_primary: IBKR_ACCOUNT_ID_PRIMARY
+  account_fallback: IBKR_ACCOUNT_ID
+  broker_socket_enabled: BROKER_SOCKET_ENABLED
+  market_data_provider: MARKET_DATA_PROVIDER
+env_files:
+  - C:/QuantX/keys.env
+  - C:/QuantX/.env
+  - '%USERPROFILE%/.config/quant-x/keys.env'
+  - '%USERPROFILE%/.config/quant-x/.env'
+  - '%USERPROFILE%/Documents/GitHub/quant-x/.env.local'
+  - '%USERPROFILE%/Documents/GitHub/quant-x/.env'
+required_runtime:
+  broker_socket_enabled: true
+  market_data_provider: ibkr-socket
+launchers:
+  ib_gateway:
+    - C:/Jts/ibgateway/latest/ibgateway1.exe
+  tws:
+    - C:/Jts/1030/tws.exe
+notes:
+  - QuantX uses the TWS or IB Gateway socket path for daily headless operation.
+  - Client Portal on port 5000 is legacy/auxiliary and is not the equities lane default.
+  - Account identifiers and credentials are runtime secrets and must not be serialized.
