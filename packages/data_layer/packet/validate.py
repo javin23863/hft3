@@ -66,6 +66,10 @@ def validate_pipeline_hypothesis_response(response: Dict[str, Any]) -> List[str]
     return validate_json("schema_pipeline_hypothesis_response_v1.json", response)
 
 
+def validate_pipeline_idea_set(response: Dict[str, Any]) -> List[str]:
+    return validate_json("schema_pipeline_idea_set_v1.json", response)
+
+
 def validate_pipeline_response(response: Dict[str, Any]) -> List[str]:
     return validate_json("schema_pipeline_response_v1.json", response)
 

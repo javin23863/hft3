@@ -58,6 +58,8 @@ After-action reports use the same GPT-5.5 XHIGH runtime via `packet_runner`. See
 
 Relationship reasoning is not a packet LLM output surface. It may hold slow/offline candidate links across defined contexts only, but those candidates are non-authoritative until evidence and proof trace validation passes.
 
+Optional pre-run idea generation (`--idea-set`) emits `schema_pipeline_idea_set_v1` machine packets. Ideas expand the candidate queue only after static validation; full idea-set runs require VectorBT prefiltering and still must pass workbench gates. Ideas do not select models, tune parameters, or promote candidates. AAR-derived review memory is compacted into advisory fact codes for ideation context only.
+
 ## Relationship Data Sources
 
 Every evidence item must name a defined `RelationshipDataSource` and exact canonical `source_ref`. There is no implicit data feed. Every validated candidate also needs at least one empirical offline source; code/config/PDF definitions alone cannot validate a relationship.

@@ -126,6 +126,18 @@ Schema: `schema_pipeline_hypothesis_response_v1.json`.
 
 The hypothesis lane does not emit `kg_annotations[]` or `narrative_md`; it still shares the same connector gate and `llm_status` ontology failure values.
 
+## Machine Idea-Set Lane
+
+Runtime entry: `data_layer.llm.packet_runner.run_llm_on_idea_generation_request`.
+
+Schema: `schema_pipeline_idea_set_v1.json`.
+
+This lane is opt-in (`scripts/run_pipeline.py --idea-set`) and emits compact machine-review packets only: IDs, enums, numeric ranges, ref tables, rank inputs, and status codes. It must not emit markdown, narrative fields, promotion claims, or human review text.
+
+Idea records are non-authoritative queue inputs. Static validation may move an idea from `proposed` to `static_reject` or `queued_for_test`; only existing VectorBT/workbench/promotion-gate evaluation may move it to `tested_fail` or `tested_pass`. Server-side deterministic ordering and fair candidate allocation control test order; LLM-provided `rank_inputs` are packet telemetry only and never mark an idea as good.
+
+Review memory is advisory and bounded. Prior AAR/KG artifacts may be compacted into `review_memory[]` facts, but those facts cannot set parameters, promote candidates, skip tests, or override gate results. Idea `param_ranges` are validated for packet integrity, then clamped to deterministic pipeline ranges before candidate generation.
+
 ## Runtime Schema Mirror
 
 Packet schemas must stay mirrored under `runtime/schemas/`:

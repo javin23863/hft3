@@ -83,6 +83,8 @@ def generate(
     num_predict: int = 2048,
     format_json: bool = False,
     reasoning_effort: str = DEFAULT_REASONING_EFFORT,
+    temperature: float | None = None,
+    top_p: float | None = None,
 ) -> GenerateResult:
     import time
 
@@ -107,6 +109,10 @@ def generate(
     }
     if format_json:
         payload["response_format"] = {"type": "json_object"}
+    if temperature is not None:
+        payload["temperature"] = temperature
+    if top_p is not None:
+        payload["top_p"] = top_p
 
     data = json.dumps(payload).encode("utf-8")
     req = request.Request(

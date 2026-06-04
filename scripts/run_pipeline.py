@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import uuid
 from datetime import datetime, timezone
@@ -23,6 +24,14 @@ from research_pipeline.evaluation import evaluate_model
 from research_pipeline.hypothesis_parser import parse_hypothesis
 from research_pipeline.knowledge_graph import persist_graph_slice
 from research_pipeline.model_generation import generate_candidates
+from research_pipeline.idea_generation import (
+    candidates_from_ideas,
+    generate_idea_set,
+    idea_summary as summarize_ideas,
+    mark_queued_ideas_without_candidates_failed,
+    parsed_from_idea,
+    update_idea_statuses_from_results,
+)
 from backtest_pipeline.src.vectorbt_adapter import filter_candidates
 from backtest_pipeline.src.promotion_gate import PromotionGate
 from research_pipeline.packets import (
@@ -47,6 +56,26 @@ def _pipeline_llm_status(parsed: ParsedHypothesis, *, no_llm: bool) -> str:
     return "ok" if parsed.source == "openai_compatible" else "unavailable"
 
 
+def _optional_float(value: str | None) -> float | None:
+    if value is None or value == "":
+        return None
+    return float(value)
+
+
+def _deployment_allowed(idea_set_enabled: bool, results: list[EvaluationResult]) -> bool:
+    return (not idea_set_enabled) or any(r.passes_all_gates() for r in results)
+
+
+def _idea_set_missing_prefilter(
+    *,
+    idea_set_enabled: bool,
+    dry_run: bool,
+    vectorbt: bool,
+    vectorbt_only: bool,
+) -> bool:
+    return idea_set_enabled and not dry_run and not (vectorbt or vectorbt_only)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Autoresearch pipeline")
     parser.add_argument("--thesis", required=True, help="Natural-language trading thesis")
@@ -59,6 +88,11 @@ def main() -> int:
     parser.add_argument("--repo-root", type=Path, default=REPO)
     parser.add_argument("--vectorbt", action="store_true", help="Enable VectorBT pre-filter before HftBacktest")
     parser.add_argument("--vectorbt-only", action="store_true", help="Run VectorBT filter only, skip HftBacktest")
+    parser.add_argument("--idea-set", action="store_true", help="Use packet-strict LLM idea set before candidate tests")
+    parser.add_argument("--max-ideas", type=int, default=None, help="Maximum idea records to accept before static filtering")
+    parser.add_argument("--review-memory-limit", type=int, default=5, help="Prior AAR/KG memory facts to include")
+    parser.add_argument("--idea-temperature", type=float, default=None, help="Sampling temperature for idea generation only")
+    parser.add_argument("--idea-top-p", type=float, default=None, help="Top-p sampling for idea generation only")
     args = parser.parse_args()
 
     repo_root = args.repo_root.resolve()
@@ -91,19 +125,75 @@ def main() -> int:
             print(f"Warning: document ingestion failed, continuing without doc: {exc}", file=sys.stderr)
             doc_summary = {"error": str(exc)}
 
-    parsed = parse_hypothesis(
-        args.thesis,
-        use_llm=not args.no_llm,
-        pipeline_request=request,
-        repo_root=repo_root,
-    )
-    candidates = list(generate_candidates(
-        parsed, max_candidates=args.max_candidates,
-        expand_for_vectorbt=bool(args.vectorbt or args.vectorbt_only),
-    ))
+    idea_packet = None
+    idea_candidates_count = 0
+    if args.idea_set:
+        idea_packet = generate_idea_set(
+            request,
+            thesis=args.thesis,
+            repo_root=repo_root,
+            max_ideas=args.max_ideas or min(3, args.max_candidates),
+            max_candidates=args.max_candidates,
+            review_memory_limit=args.review_memory_limit,
+            use_llm=not args.no_llm,
+            temperature=(
+                args.idea_temperature
+                if args.idea_temperature is not None
+                else _optional_float(os.environ.get("HFT3_IDEA_TEMPERATURE")) or 0.7
+            ),
+            top_p=(
+                args.idea_top_p
+                if args.idea_top_p is not None
+                else _optional_float(os.environ.get("HFT3_IDEA_TOP_P")) or 0.95
+            ),
+        )
+        candidates = candidates_from_ideas(
+            idea_packet,
+            max_candidates=args.max_candidates,
+            expand_for_vectorbt=bool(args.vectorbt or args.vectorbt_only),
+        )
+        idea_candidates_count = len(candidates)
+        queued = [idea for idea in idea_packet.get("ideas", []) if idea.get("status") == "queued_for_test"]
+        parsed = parsed_from_idea(queued[0]) if queued else parse_hypothesis(args.thesis, use_llm=False)
+        (artifact_dir / "review_memory.json").write_text(
+            json.dumps(
+                {
+                    "refs": idea_packet.get("refs", {}),
+                    "review_memory": idea_packet.get("review_memory", []),
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        (artifact_dir / "idea_set_packet.json").write_text(
+            json.dumps(idea_packet, indent=2), encoding="utf-8"
+        )
+        if _idea_set_missing_prefilter(
+            idea_set_enabled=args.idea_set,
+            dry_run=args.dry_run,
+            vectorbt=args.vectorbt,
+            vectorbt_only=args.vectorbt_only,
+        ):
+            print(
+                "Error: --idea-set full runs require --vectorbt so generated ideas pass the prefilter before evaluation.",
+                file=sys.stderr,
+            )
+            return 1
+    else:
+        parsed = parse_hypothesis(
+            args.thesis,
+            use_llm=not args.no_llm,
+            pipeline_request=request,
+            repo_root=repo_root,
+        )
+        candidates = list(generate_candidates(
+            parsed, max_candidates=args.max_candidates,
+            expand_for_vectorbt=bool(args.vectorbt or args.vectorbt_only),
+        ))
 
     if args.vectorbt or args.vectorbt_only:
         print(f"Running VectorBT filter on {len(candidates)} candidates x grid...")
+        source_meta = {c.candidate_id: dict(c.metadata) for c in candidates}
         vbt_gates = PromotionGate(
             min_oos_expectancy=0.0,
             max_drawdown_pct=-50.0,
@@ -126,14 +216,101 @@ def main() -> int:
                     model_id=p.hypothesis_id,
                     strategy_params=p.param_values,
                     thesis=parsed.thesis,
-                    metadata={"strategy_family": p.strategy_family, "promoted": True, "vectorbt_run_id": p.vectorbt_run_id, "vectorbt_results": p.vectorbt_results, "asset_class": p.asset_class, "symbol": p.symbol},
+                    metadata={
+                        **source_meta.get(p.candidate_id, {}),
+                        "strategy_family": p.strategy_family,
+                        "promoted": True,
+                        "vectorbt_run_id": p.vectorbt_run_id,
+                        "vectorbt_results": p.vectorbt_results,
+                        "asset_class": p.asset_class,
+                        "symbol": p.symbol,
+                    },
                 )
                 for p in filter_result.promoted
             ]
         else:
             print("No candidates survived VectorBT filter.")
-            if args.vectorbt_only:
-                return 1
+            candidates = []
+            if idea_packet:
+                mark_queued_ideas_without_candidates_failed(idea_packet, [])
+                (artifact_dir / "idea_set_packet.json").write_text(
+                    json.dumps(idea_packet, indent=2), encoding="utf-8"
+                )
+        if idea_packet and candidates:
+            mark_queued_ideas_without_candidates_failed(
+                idea_packet,
+                {
+                    str(candidate.metadata.get("idea_id"))
+                    for candidate in candidates
+                    if candidate.metadata.get("idea_id")
+                },
+            )
+            (artifact_dir / "idea_set_packet.json").write_text(
+                json.dumps(idea_packet, indent=2), encoding="utf-8"
+            )
+        if args.vectorbt_only:
+            (artifact_dir / "vectorbt_filter.json").write_text(
+                json.dumps(filter_result.to_dict(), indent=2), encoding="utf-8"
+            )
+            idea_summary = (
+                summarize_ideas(idea_packet, candidates_from_ideas_count=idea_candidates_count)
+                if idea_packet
+                else None
+            )
+            report = PipelineReport(
+                run_id=run_id,
+                thesis=args.thesis,
+                event_id=args.event_id,
+                parsed=parsed,
+                candidates_tested=int(filter_result.total_candidates),
+                results=[],
+                selected=None,
+                artifact_dir=str(artifact_dir),
+                document_summary=doc_summary,
+            )
+            llm_status = (
+                str(idea_packet.get("llm_status"))
+                if idea_packet
+                else _pipeline_llm_status(parsed, no_llm=args.no_llm)
+            )
+            response = build_pipeline_response(
+                report,
+                request,
+                llm_status=llm_status,
+                llm_model=(
+                    idea_packet.get("llm_model")
+                    if idea_packet and llm_status == "ok"
+                    else None if llm_status != "ok" else DEFAULT_MODEL_DEVELOPMENT_MODEL
+                ),
+                idea_summary=idea_summary,
+            )
+            write_pipeline_packets(artifact_dir, request, response)
+            payload = {
+                "run_id": run_id,
+                "artifact_dir": str(artifact_dir),
+                "request_packet": request,
+                "response_packet": response,
+                "vectorbt_filter": filter_result.to_dict(),
+                "parsed": {
+                    "primary_model_id": parsed.primary_model_id,
+                    "source": parsed.source,
+                    "param_ranges": parsed.param_ranges,
+                },
+                "candidates": [
+                    {
+                        "candidate_id": c.candidate_id,
+                        "model_id": c.model_id,
+                        "params": c.strategy_params,
+                    }
+                    for c in candidates
+                ],
+                "document_summary": doc_summary,
+            }
+            if idea_packet:
+                payload["idea_summary"] = idea_summary
+                payload["idea_set_packet"] = idea_packet
+            print(json.dumps(payload, indent=2))
+            return 0 if candidates else 1
 
     # === Crypto execution validation for promoted candidates ===
     if args.vectorbt and not args.vectorbt_only:
@@ -170,6 +347,11 @@ def main() -> int:
                     cand.metadata["execution_quality"] = {"error": str(exc)}
 
     if args.dry_run:
+        idea_summary = (
+            summarize_ideas(idea_packet, candidates_from_ideas_count=idea_candidates_count)
+            if idea_packet
+            else None
+        )
         report = PipelineReport(
             run_id=run_id,
             thesis=args.thesis,
@@ -181,12 +363,21 @@ def main() -> int:
             artifact_dir=str(artifact_dir),
             document_summary=doc_summary,
         )
-        llm_status = _pipeline_llm_status(parsed, no_llm=args.no_llm)
+        llm_status = (
+            str(idea_packet.get("llm_status"))
+            if idea_packet
+            else _pipeline_llm_status(parsed, no_llm=args.no_llm)
+        )
         response = build_pipeline_response(
             report,
             request,
             llm_status=llm_status,
-            llm_model=None if llm_status != "ok" else DEFAULT_MODEL_DEVELOPMENT_MODEL,
+            llm_model=(
+                idea_packet.get("llm_model")
+                if idea_packet and llm_status == "ok"
+                else None if llm_status != "ok" else DEFAULT_MODEL_DEVELOPMENT_MODEL
+            ),
+            idea_summary=idea_summary,
         )
         write_pipeline_packets(artifact_dir, request, response)
         payload = {
@@ -205,6 +396,9 @@ def main() -> int:
             ],
             "document_summary": doc_summary,
         }
+        if idea_packet:
+            payload["idea_summary"] = idea_summary
+            payload["idea_set_packet"] = idea_packet
         print(json.dumps(payload, indent=2))
         return 0
 
@@ -223,6 +417,12 @@ def main() -> int:
             evaluate_model(cand, args.event_id, repo_root, chi404_summary=chi404, gates=gates)
         )
 
+    if idea_packet:
+        update_idea_statuses_from_results(idea_packet, results)
+        (artifact_dir / "idea_set_packet.json").write_text(
+            json.dumps(idea_packet, indent=2), encoding="utf-8"
+        )
+
     report = PipelineReport(
         run_id=run_id,
         thesis=args.thesis,
@@ -235,15 +435,30 @@ def main() -> int:
         document_summary=doc_summary,
     )
 
-    artifact = deploy_best(repo_root, report)
+    artifact = None
+    if _deployment_allowed(args.idea_set, results):
+        artifact = deploy_best(repo_root, report)
     if artifact is None:
         print("Note: deploy_best returned None (no passing candidates)", file=sys.stderr)
-    llm_status = _pipeline_llm_status(parsed, no_llm=args.no_llm)
+    llm_status = (
+        str(idea_packet.get("llm_status"))
+        if idea_packet
+        else _pipeline_llm_status(parsed, no_llm=args.no_llm)
+    )
     response = build_pipeline_response(
         report,
         request,
         llm_status=llm_status,
-        llm_model=None if llm_status != "ok" else DEFAULT_MODEL_DEVELOPMENT_MODEL,
+        llm_model=(
+            idea_packet.get("llm_model")
+            if idea_packet and llm_status == "ok"
+            else None if llm_status != "ok" else DEFAULT_MODEL_DEVELOPMENT_MODEL
+        ),
+        idea_summary=(
+            summarize_ideas(idea_packet, candidates_from_ideas_count=idea_candidates_count)
+            if idea_packet
+            else None
+        ),
     )
     write_pipeline_packets(artifact_dir, request, response)
     print(json.dumps({"report": report.to_dict(), "response_packet": response}, indent=2))

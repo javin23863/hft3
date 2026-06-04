@@ -49,6 +49,7 @@ def build_pipeline_response(
     llm_status: str = "ok",
     llm_model: Optional[str] = None,
     llm_error: Optional[str] = None,
+    idea_summary: Optional[Dict[str, int]] = None,
 ) -> Dict[str, Any]:
     """Slim response — paths/refs only, no embedded workbench_out blobs."""
     resp: Dict[str, Any] = {
@@ -84,6 +85,8 @@ def build_pipeline_response(
     }
     if llm_error:
         resp["llm_error"] = llm_error
+    if idea_summary is not None:
+        resp["idea_summary"] = dict(idea_summary)
     errors = validate_pipeline_response(resp)
     if errors:
         raise ValueError(f"PipelineResponsePacket schema errors: {errors}")

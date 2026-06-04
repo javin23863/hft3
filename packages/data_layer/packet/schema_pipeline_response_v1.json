@@ -58,6 +58,26 @@
         }
       }
     },
+    "idea_summary": {
+      "type": "object",
+      "required": [
+        "ideas_generated",
+        "ideas_static_rejected",
+        "ideas_queued_for_test",
+        "ideas_tested_fail",
+        "ideas_tested_pass",
+        "candidates_from_ideas"
+      ],
+      "properties": {
+        "ideas_generated": { "type": "integer", "minimum": 0 },
+        "ideas_static_rejected": { "type": "integer", "minimum": 0 },
+        "ideas_queued_for_test": { "type": "integer", "minimum": 0 },
+        "ideas_tested_fail": { "type": "integer", "minimum": 0 },
+        "ideas_tested_pass": { "type": "integer", "minimum": 0 },
+        "candidates_from_ideas": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
     "llm_error": { "type": "string" }
   },
   "additionalProperties": false

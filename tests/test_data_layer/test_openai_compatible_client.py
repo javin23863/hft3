@@ -45,6 +45,31 @@ def test_openai_compatible_client_sends_gpt55_xhigh_json_request(monkeypatch):
     assert captured["payload"]["reasoning_effort"] == "xhigh"
     assert captured["payload"]["max_completion_tokens"] == 123
     assert captured["payload"]["response_format"] == {"type": "json_object"}
+    assert "temperature" not in captured["payload"]
+    assert "top_p" not in captured["payload"]
+
+
+def test_openai_compatible_client_optional_sampling_controls(monkeypatch):
+    captured = {}
+
+    def fake_urlopen(req, timeout):
+        captured["payload"] = json.loads(req.data.decode("utf-8"))
+        return _Response()
+
+    monkeypatch.setenv("HFT3_LLM_API_KEY", "test-key")
+    monkeypatch.setattr(llm_client.request, "urlopen", fake_urlopen)
+
+    result = llm_client.generate(
+        "system",
+        "user",
+        model="gpt-5.5",
+        temperature=0.7,
+        top_p=0.95,
+    )
+
+    assert result.text == '{"ok": true}'
+    assert captured["payload"]["temperature"] == 0.7
+    assert captured["payload"]["top_p"] == 0.95
 
 
 def test_openai_compatible_client_requires_api_key(monkeypatch):

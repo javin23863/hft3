@@ -15,6 +15,7 @@ jsonschema = pytest.importorskip("jsonschema")
 from data_layer.packet.validate import (  # noqa: E402
     validate_aar_packet_in,
     validate_aar_packet_out,
+    validate_pipeline_idea_set,
     validate_pipeline_request,
     validate_pipeline_response,
 )
@@ -92,6 +93,150 @@ def test_pipeline_response_valid_minimal():
         "generated_at": "2026-01-01T00:00:00+00:00",
     }
     assert validate_pipeline_response(sample) == []
+
+
+def test_pipeline_response_valid_with_idea_summary():
+    sample = {
+        "schema_version": "1",
+        "request_id": "req_idea",
+        "run_id": "run_idea",
+        "event_id": "CPI_2024_09_11_TIGHT",
+        "llm_model": "gpt-5.5",
+        "llm_status": "ok",
+        "parsed": {
+            "primary_model_id": "HYP_5",
+            "instrument_universe": ["ES"],
+            "indicators": ["ofi"],
+            "source": "idea_set",
+        },
+        "candidates_tested": 0,
+        "results": [],
+        "generated_at": "2026-01-01T00:00:00+00:00",
+        "idea_summary": {
+            "ideas_generated": 2,
+            "ideas_static_rejected": 1,
+            "ideas_queued_for_test": 1,
+            "ideas_tested_fail": 0,
+            "ideas_tested_pass": 0,
+            "candidates_from_ideas": 1,
+        },
+    }
+    assert validate_pipeline_response(sample) == []
+
+
+def test_pipeline_idea_set_valid_compact_packet():
+    sample = {
+        "schema_version": "1",
+        "request_id": "req_idea",
+        "llm_model": "mock",
+        "llm_status": "ok",
+        "refs": {
+            "ref_event": {"type": "event", "value": "CPI_2024_09_11_TIGHT"},
+            "mem_001": {"type": "artifact", "value": "artifacts/run/after_action_response.json"},
+        },
+        "constraints": {
+            "allowed_model_ids": ["SPREAD_BLOWOUT_RECOMPRESSION"],
+            "allowed_lane_codes": ["cme"],
+            "max_candidates": 3,
+            "no_promotion_authority": True,
+        },
+        "review_memory": [
+            {
+                "memory_id": "mem_001",
+                "ref_id": "mem_001",
+                "fact_codes": ["llm:ok", "symbolic:pass"],
+                "metric_values": {"net_pnl": 1.0},
+                "authority": "advisory",
+            }
+        ],
+        "ideas": [
+            {
+                "idea_id": "idea_001",
+                "status": "queued_for_test",
+                "lane_code": "cme",
+                "thesis_code": "spread_recompression",
+                "instrument_ids": ["MES"],
+                "primary_model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+                "feature_ids": ["SPREAD_BLOWOUT_RECOMPRESSION"],
+                "param_ranges": {"signal_threshold": [0.05, 0.35]},
+                "entry_rule_codes": ["enter_spread_signal"],
+                "exit_rule_codes": ["exit_revert"],
+                "risk_codes": ["latency_gate_required"],
+                "evidence_ref_ids": ["mem_001"],
+                "rank_inputs": {
+                    "novelty": 0.1,
+                    "evidence_coverage": 0.2,
+                    "lane_fit": 1.0,
+                    "prior_failure_overlap": 0.0,
+                    "validation_readiness": 1.0,
+                },
+            }
+        ],
+    }
+    assert validate_pipeline_idea_set(sample) == []
+
+
+def test_pipeline_idea_set_rejects_narrative_field():
+    sample = {
+        "schema_version": "1",
+        "request_id": "req_idea",
+        "llm_model": "mock",
+        "llm_status": "ok",
+        "refs": {},
+        "constraints": {
+            "allowed_model_ids": ["SPREAD_BLOWOUT_RECOMPRESSION"],
+            "allowed_lane_codes": ["cme"],
+            "max_candidates": 3,
+            "no_promotion_authority": True,
+        },
+        "review_memory": [],
+        "ideas": [],
+        "narrative_md": "not allowed",
+    }
+    errors = validate_pipeline_idea_set(sample)
+    assert any("Additional properties" in err and "narrative_md" in err for err in errors)
+
+
+def test_pipeline_idea_set_rejects_unknown_idea_status():
+    sample = {
+        "schema_version": "1",
+        "request_id": "req_idea",
+        "llm_model": "mock",
+        "llm_status": "ok",
+        "refs": {},
+        "constraints": {
+            "allowed_model_ids": ["SPREAD_BLOWOUT_RECOMPRESSION"],
+            "allowed_lane_codes": ["cme"],
+            "max_candidates": 3,
+            "no_promotion_authority": True,
+        },
+        "review_memory": [],
+        "ideas": [
+            {
+                "idea_id": "idea_001",
+                "status": "ok",
+                "lane_code": "cme",
+                "thesis_code": "spread_recompression",
+                "instrument_ids": ["MES"],
+                "primary_model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+                "feature_ids": ["SPREAD_BLOWOUT_RECOMPRESSION"],
+                "param_ranges": {"signal_threshold": [0.05, 0.35]},
+                "entry_rule_codes": ["enter_spread_signal"],
+                "exit_rule_codes": ["exit_revert"],
+                "risk_codes": ["latency_gate_required"],
+                "evidence_ref_ids": [],
+                "rank_inputs": {
+                    "novelty": 0.1,
+                    "evidence_coverage": 0.2,
+                    "lane_fit": 1.0,
+                    "prior_failure_overlap": 0.0,
+                    "validation_readiness": 1.0,
+                },
+            }
+        ],
+    }
+    errors = validate_pipeline_idea_set(sample)
+    assert any("status" in err and "is not one of" in err for err in errors)
 
 
 def test_aar_packet_in_fixture():

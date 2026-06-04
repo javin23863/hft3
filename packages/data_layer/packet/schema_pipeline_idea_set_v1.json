@@ -1,0 +1,200 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PipelineIdeaSet",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "request_id",
+    "llm_model",
+    "llm_status",
+    "refs",
+    "constraints",
+    "review_memory",
+    "ideas"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "const": "1" },
+    "request_id": { "type": "string" },
+    "llm_model": { "type": ["string", "null"] },
+    "llm_status": {
+      "type": "string",
+      "enum": [
+        "ok",
+        "skipped_no_llm",
+        "skipped_connector",
+        "skipped_uncited_ontology",
+        "skipped_broken_pdf_cite",
+        "unavailable",
+        "schema_reject"
+      ]
+    },
+    "refs": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["type", "value"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["event", "artifact", "model", "source", "memory"]
+          },
+          "value": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "constraints": {
+      "type": "object",
+      "required": [
+        "allowed_model_ids",
+        "allowed_lane_codes",
+        "max_candidates",
+        "no_promotion_authority"
+      ],
+      "properties": {
+        "allowed_model_ids": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "allowed_lane_codes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["cme", "crypto", "options", "equities"]
+          },
+          "minItems": 1
+        },
+        "max_candidates": { "type": "integer", "minimum": 1 },
+        "no_promotion_authority": { "type": "boolean", "const": true }
+      },
+      "additionalProperties": false
+    },
+    "review_memory": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["memory_id", "ref_id", "fact_codes", "authority"],
+        "properties": {
+          "memory_id": { "type": "string" },
+          "ref_id": { "type": "string" },
+          "fact_codes": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "metric_values": {
+            "type": "object",
+            "additionalProperties": { "type": "number" }
+          },
+          "authority": { "type": "string", "const": "advisory" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "ideas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "idea_id",
+          "status",
+          "lane_code",
+          "thesis_code",
+          "instrument_ids",
+          "primary_model_id",
+          "feature_ids",
+          "param_ranges",
+          "entry_rule_codes",
+          "exit_rule_codes",
+          "risk_codes",
+          "evidence_ref_ids",
+          "rank_inputs"
+        ],
+        "properties": {
+          "idea_id": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": [
+              "proposed",
+              "schema_reject",
+              "static_reject",
+              "queued_for_test",
+              "tested_fail",
+              "tested_pass"
+            ]
+          },
+          "lane_code": {
+            "type": "string",
+            "enum": ["cme", "crypto", "options", "equities"]
+          },
+          "thesis_code": { "type": "string" },
+          "instrument_ids": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1
+          },
+          "primary_model_id": { "type": "string" },
+          "feature_ids": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "param_ranges": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": { "type": "number" },
+              "minItems": 2,
+              "maxItems": 2
+            }
+          },
+          "entry_rule_codes": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "exit_rule_codes": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "risk_codes": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "evidence_ref_ids": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "rank_inputs": {
+            "type": "object",
+            "required": [
+              "novelty",
+              "evidence_coverage",
+              "lane_fit",
+              "prior_failure_overlap",
+              "validation_readiness"
+            ],
+            "properties": {
+              "novelty": { "type": "number", "minimum": 0, "maximum": 1 },
+              "evidence_coverage": { "type": "number", "minimum": 0, "maximum": 1 },
+              "lane_fit": { "type": "number", "minimum": 0, "maximum": 1 },
+              "prior_failure_overlap": { "type": "number", "minimum": 0, "maximum": 1 },
+              "validation_readiness": { "type": "number", "minimum": 0, "maximum": 1 }
+            },
+            "additionalProperties": false
+          },
+          "rationale_tokens": {
+            "type": "array",
+            "items": { "type": "string" },
+            "maxItems": 8
+          },
+          "static_error_codes": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "llm_error": { "type": "string" }
+  },
+  "additionalProperties": false
+}

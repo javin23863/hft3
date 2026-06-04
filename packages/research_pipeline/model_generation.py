@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import itertools
+import copy
 from typing import Any, Dict, Iterator, List
 
 from workbench.src.core.params import DEFAULT_STRATEGY_PARAMS, param_hash_from_dict

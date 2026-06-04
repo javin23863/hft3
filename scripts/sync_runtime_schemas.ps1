@@ -12,7 +12,8 @@ $files = @(
     "schema_aar_response_v1.json",
     "schema_pipeline_request_v1.json",
     "schema_pipeline_response_v1.json",
-    "schema_pipeline_hypothesis_response_v1.json"
+    "schema_pipeline_hypothesis_response_v1.json",
+    "schema_pipeline_idea_set_v1.json"
 )
 
 $drift = $false

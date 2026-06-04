@@ -18,6 +18,7 @@ from data_layer.packet.validate import (
     drop_uncited_kg_annotations,
     validate_aar_packet_in,
     validate_aar_packet_out,
+    validate_pipeline_idea_set,
     validate_pipeline_hypothesis_response,
     validate_pipeline_request,
     validate_pipeline_response,
@@ -29,6 +30,9 @@ _PIPELINE_OUTPUT_SCHEMA = (
 )
 _HYPOTHESIS_OUTPUT_SCHEMA = (
     Path(__file__).resolve().parents[1] / "packet" / "schema_pipeline_hypothesis_response_v1.json"
+)
+_IDEA_SET_OUTPUT_SCHEMA = (
+    Path(__file__).resolve().parents[1] / "packet" / "schema_pipeline_idea_set_v1.json"
 )
 DEFAULT_AAR_MODEL = llm_client.DEFAULT_AAR_MODEL
 DEFAULT_PIPELINE_MODEL = llm_client.DEFAULT_PIPELINE_MODEL
@@ -404,6 +408,41 @@ def _hypothesis_error_response(
     return resp
 
 
+def _idea_set_error_response(
+    request: Dict[str, Any],
+    *,
+    llm_status: str,
+    allowed_model_ids: List[str],
+    allowed_lane_codes: List[str],
+    max_candidates: int,
+    review_memory: List[Dict[str, Any]],
+    refs: Dict[str, Any],
+    llm_model: Optional[str] = None,
+    llm_error: Optional[str] = None,
+) -> Dict[str, Any]:
+    resp: Dict[str, Any] = {
+        "schema_version": "1",
+        "request_id": request["request_id"],
+        "llm_model": llm_model,
+        "llm_status": llm_status,
+        "refs": refs,
+        "constraints": {
+            "allowed_model_ids": allowed_model_ids,
+            "allowed_lane_codes": allowed_lane_codes,
+            "max_candidates": max_candidates,
+            "no_promotion_authority": True,
+        },
+        "review_memory": review_memory,
+        "ideas": [],
+    }
+    if llm_error:
+        resp["llm_error"] = llm_error
+    errors = validate_pipeline_idea_set(resp)
+    if errors:
+        raise ValueError(f"PipelineIdeaSet error envelope schema errors: {errors}")
+    return resp
+
+
 def run_llm_on_hypothesis_request(
     request: Dict[str, Any],
     thesis: str,
@@ -478,6 +517,146 @@ def run_llm_on_hypothesis_request(
             llm_status="schema_reject",
             llm_model=result.model,
             llm_error=f"primary_model_id not in allowed slugs: {slug!r}",
+        )
+    return parsed
+
+
+def run_llm_on_idea_generation_request(
+    request: Dict[str, Any],
+    thesis: str,
+    *,
+    allowed_model_ids: List[str],
+    review_memory: List[Dict[str, Any]],
+    refs: Dict[str, Any],
+    max_candidates: int,
+    allowed_lane_codes: List[str] | None = None,
+    model: str | None = None,
+    repo_root: Optional[Path] = None,
+    temperature: float | None = None,
+    top_p: float | None = None,
+) -> Dict[str, Any]:
+    """Packet-strict GPT-5.5 idea-set generation (schema_pipeline_idea_set_v1)."""
+    model = model or DEFAULT_MODEL_DEVELOPMENT_MODEL
+    allowed_lane_codes = allowed_lane_codes or ["cme", "crypto", "options", "equities"]
+    req_errors = validate_pipeline_request(request)
+    if req_errors:
+        raise ValueError(f"PipelineRequestPacket schema errors: {req_errors}")
+
+    if repo_root is not None:
+        conn_err = _connector_gate(repo_root)
+        if conn_err:
+            return _idea_set_error_response(
+                request,
+                llm_status=_classify_connector_error(conn_err),
+                allowed_model_ids=allowed_model_ids,
+                allowed_lane_codes=allowed_lane_codes,
+                max_candidates=max_candidates,
+                review_memory=review_memory,
+                refs=refs,
+                llm_error=conn_err,
+            )
+
+    if not llm_client.llm_available():
+        return _idea_set_error_response(
+            request,
+            llm_status="unavailable",
+            allowed_model_ids=allowed_model_ids,
+            allowed_lane_codes=allowed_lane_codes,
+            max_candidates=max_candidates,
+            review_memory=review_memory,
+            refs=refs,
+            llm_error="HFT3_LLM_API_KEY or OPENAI_API_KEY is not set",
+        )
+
+    schema_text = _load_schema_text(_IDEA_SET_OUTPUT_SCHEMA)
+    system = (
+        "Generate compact machine-reviewable research idea packets only. "
+        "Do not write markdown or human narrative. Ideas are non-authoritative: "
+        "they only queue candidates for existing empirical tests and cannot promote, "
+        "select, tune, or bypass gates.\n\n"
+        f"Output JSON Schema:\n{schema_text}"
+    )
+    user = json.dumps(
+        {
+            "pipeline_request": request,
+            "thesis": thesis,
+            "refs": refs,
+            "constraints": {
+                "allowed_model_ids": allowed_model_ids,
+                "allowed_lane_codes": allowed_lane_codes,
+                "max_candidates": max_candidates,
+                "no_promotion_authority": True,
+            },
+            "review_memory": review_memory,
+        },
+        indent=2,
+    )
+
+    result = llm_client.generate(
+        system,
+        user,
+        model=model,
+        format_json=True,
+        num_predict=4096,
+        temperature=temperature,
+        top_p=top_p,
+    )
+    if result.error or not result.text:
+        return _idea_set_error_response(
+            request,
+            llm_status="unavailable",
+            allowed_model_ids=allowed_model_ids,
+            allowed_lane_codes=allowed_lane_codes,
+            max_candidates=max_candidates,
+            review_memory=review_memory,
+            refs=refs,
+            llm_model=result.model,
+            llm_error=result.error or "empty response",
+        )
+
+    parsed, parse_err = _parse_json_object(result.text)
+    if parse_err or not parsed:
+        return _idea_set_error_response(
+            request,
+            llm_status="schema_reject",
+            allowed_model_ids=allowed_model_ids,
+            allowed_lane_codes=allowed_lane_codes,
+            max_candidates=max_candidates,
+            review_memory=review_memory,
+            refs=refs,
+            llm_model=result.model,
+            llm_error=parse_err or "invalid JSON",
+        )
+
+    parsed["schema_version"] = "1"
+    parsed["request_id"] = request["request_id"]
+    parsed["llm_model"] = result.model
+    parsed["llm_status"] = "ok"
+    parsed["refs"] = refs
+    parsed["constraints"] = {
+        "allowed_model_ids": allowed_model_ids,
+        "allowed_lane_codes": allowed_lane_codes,
+        "max_candidates": max_candidates,
+        "no_promotion_authority": True,
+    }
+    parsed["review_memory"] = review_memory
+    for index, idea in enumerate(parsed.get("ideas") or []):
+        if isinstance(idea, dict):
+            idea.setdefault("idea_id", f"idea_{index + 1:03d}")
+            idea["status"] = "proposed"
+
+    out_errors = validate_pipeline_idea_set(parsed)
+    if out_errors:
+        return _idea_set_error_response(
+            request,
+            llm_status="schema_reject",
+            allowed_model_ids=allowed_model_ids,
+            allowed_lane_codes=allowed_lane_codes,
+            max_candidates=max_candidates,
+            review_memory=review_memory,
+            refs=refs,
+            llm_model=result.model,
+            llm_error="; ".join(out_errors[:5]),
         )
     return parsed
 
