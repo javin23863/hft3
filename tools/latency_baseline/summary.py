@@ -7,6 +7,7 @@ import json
 import math
 import statistics
 from pathlib import Path
+import sys
 from typing import Any
 
 from .recorder import METRIC_FIELDS, load_jsonl
@@ -332,6 +333,12 @@ def write_summary_reports(
     run_id = str(summary["run_id"])
     json_path = reports_root / f"{run_id}_summary.json"
     md_path = reports_root / f"{run_id}_summary.md"
+    capability_paths = _write_capability_report(summary, reports_root)
+    if capability_paths is not None:
+        summary["capability_report"] = {
+            "json_path": str(capability_paths[0]),
+            "md_path": str(capability_paths[1]),
+        }
     json_path.write_text(json.dumps(summary, indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8")
     md_path.write_text(render_markdown(summary), encoding="utf-8")
     baseline_path: Path | None = None
@@ -339,6 +346,42 @@ def write_summary_reports(
         baseline_path = reports_root / "current_baseline.json"
         baseline_path.write_text(json.dumps(summary, indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8")
     return json_path, md_path, baseline_path
+
+
+def _write_capability_report(summary: dict[str, Any], reports_root: Path) -> tuple[Path, Path] | None:
+    repo_root = reports_root.resolve().parents[1]
+    packages_path = repo_root / "packages"
+    if str(packages_path) not in sys.path:
+        sys.path.insert(0, str(packages_path))
+    from trade_manager.latency_capability import (
+        CapabilityAssumptions,
+        ModelInteractionMode,
+        PendingExposureConfig,
+        build_capability_report,
+        write_capability_reports,
+    )
+    inputs = summary.get("capability_inputs") if isinstance(summary.get("capability_inputs"), dict) else {}
+    pending_raw = inputs.get("pending_exposure") if isinstance(inputs.get("pending_exposure"), dict) else {}
+    assumptions = CapabilityAssumptions(
+        opportunity_decay_us=float(inputs.get("opportunity_decay_us", 1_000.0)),
+        competitor_tick_to_send_us=(
+            None if inputs.get("competitor_tick_to_send_us") is None else float(inputs.get("competitor_tick_to_send_us"))
+        ),
+        arbitration_latency_us=float(inputs.get("arbitration_latency_us", 0.0)),
+        defensive_activation_latency_us=float(inputs.get("defensive_activation_latency_us", 0.0)),
+        hybrid_coordination_latency_us=float(inputs.get("hybrid_coordination_latency_us", 0.0)),
+        queue_position_penalty_us=float(inputs.get("queue_position_penalty_us", 0.0)),
+        pending_exposure=PendingExposureConfig(
+            max_pending_orders=int(pending_raw.get("max_pending_orders", 1)),
+            max_pending_quantity=float(pending_raw.get("max_pending_quantity", 1.0)),
+            max_pending_notional=float(pending_raw.get("max_pending_notional", 0.0)),
+            stale_pending_timeout_us=float(pending_raw.get("stale_pending_timeout_us", 500_000.0)),
+            cancel_replace_throttle_us=float(pending_raw.get("cancel_replace_throttle_us", 50_000.0)),
+        ),
+    )
+    mode = ModelInteractionMode(str(inputs.get("model_interaction_mode", "offensive_only")))
+    capability_report = build_capability_report(summary, mode=mode, assumptions=assumptions)
+    return write_capability_reports(capability_report, reports_root=reports_root)
 
 
 def summarize_jsonl(

@@ -62,9 +62,13 @@ Each run writes:
 ```text
 reports/latency_baselines/<run_id>_summary.json
 reports/latency_baselines/<run_id>_summary.md
+reports/latency_baselines/<run_id>_capability.json
+reports/latency_baselines/<run_id>_capability.md
 ```
 
 The JSON and Markdown reports include min, mean, p50, p90, p95, p99, p99.9, max, and sample count for every latency metric.
+
+The capability reports convert raw latency into operational statements for offensive, defensive, and hybrid model testing. They classify internal placement speed separately from external acknowledgment lag, describe pending-state risk, and explain whether the selected model interaction mode fits inside the configured opportunity window.
 
 ## Run Synthetic Mode
 
@@ -101,6 +105,38 @@ For `--broker rithmic --env paper`, broker mode uses the configured Rithmic Pape
 Broker mode fails loudly with `BROKER_LATENCY_BASELINE_FAILED` when the endpoint, credentials, market data, or order acknowledgment path is unavailable. It does not fall back to synthetic samples.
 
 The runner buffers raw Rithmic events in memory while measuring placement speed and flushes them after the send/ack path. This keeps JSONL persistence and report writing outside the measured hot path.
+
+## Capability Modeling
+
+The baseline command also accepts speed-aware testing assumptions:
+
+```powershell
+python -m tools.latency_baseline.run `
+  --env paper `
+  --broker rithmic `
+  --symbol ES `
+  --exchange CME `
+  --duration 300 `
+  --strategy latency_probe `
+  --interaction-mode hybrid_configuration `
+  --opportunity-decay-us 1000 `
+  --competitor-tick-to-send-us 250 `
+  --arbitration-latency-us 25 `
+  --hybrid-coordination-latency-us 50 `
+  --max-pending-orders 3
+```
+
+Supported interaction modes:
+
+- `offensive_only`
+- `defensive_always_active`
+- `defensive_pre_action_only`
+- `defensive_during_action`
+- `defensive_post_action`
+- `concurrent_offensive_defensive`
+- `hybrid_configuration`
+
+Capability modeling is nonblocking by default: when a probe order is sent, local state moves to `PENDING_NEW`; cancel and replace actions move to `PENDING_CANCEL` and `PENDING_REPLACE`. Acknowledgments reconcile official state asynchronously. The capability report flags stale-state risk, pending exposure limits, duplicate-order protection, client order ID tracking, and kill-switch requirements.
 
 ## Reading The Report
 

@@ -34,6 +34,31 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--model-id", default="")
     parser.add_argument("--trade-manager-id", default="")
     parser.add_argument("--samples", type=int, default=None, help="Synthetic sample override for fast verification.")
+    parser.add_argument(
+        "--interaction-mode",
+        default="offensive_only",
+        choices=[
+            "offensive_only",
+            "defensive_always_active",
+            "defensive_pre_action_only",
+            "defensive_during_action",
+            "defensive_post_action",
+            "concurrent_offensive_defensive",
+            "hybrid_configuration",
+        ],
+        help="Model interaction mode used by the generated capability report.",
+    )
+    parser.add_argument("--opportunity-decay-us", type=float, default=1_000.0)
+    parser.add_argument("--competitor-tick-to-send-us", type=float, default=None)
+    parser.add_argument("--arbitration-latency-us", type=float, default=0.0)
+    parser.add_argument("--defensive-activation-latency-us", type=float, default=0.0)
+    parser.add_argument("--hybrid-coordination-latency-us", type=float, default=0.0)
+    parser.add_argument("--queue-position-penalty-us", type=float, default=0.0)
+    parser.add_argument("--max-pending-orders", type=int, default=1)
+    parser.add_argument("--max-pending-quantity", type=float, default=1.0)
+    parser.add_argument("--max-pending-notional", type=float, default=0.0)
+    parser.add_argument("--stale-pending-timeout-us", type=float, default=500_000.0)
+    parser.add_argument("--cancel-replace-throttle-us", type=float, default=50_000.0)
     parser.add_argument("--side", choices=["BUY", "SELL"], default="BUY")
     parser.add_argument("--qty", type=int, default=1)
     parser.add_argument(
@@ -78,6 +103,7 @@ def main(argv: list[str] | None = None) -> int:
             sample_path=sample_path,
             baseline_path=baseline_path,
         )
+        _attach_capability_inputs(summary, args)
         summary["broker_artifacts"] = broker_artifacts
         summary["broker_mode"] = {
             "status": "observed" if records else "missing",
@@ -119,6 +145,7 @@ def main(argv: list[str] | None = None) -> int:
         sample_path=sample_path,
         baseline_path=baseline_path,
     )
+    _attach_capability_inputs(summary, args)
     json_path, md_path, current_path = write_summary_reports(
         summary,
         reports_root=reports_root,
@@ -126,6 +153,25 @@ def main(argv: list[str] | None = None) -> int:
     )
     print(json.dumps({"run_id": run_id, "sample_path": str(sample_path), "summary_json": str(json_path), "summary_md": str(md_path), "current_baseline": str(current_path) if current_path else ""}, indent=2))
     return 0
+
+
+def _attach_capability_inputs(summary: dict[str, object], args: argparse.Namespace) -> None:
+    summary["capability_inputs"] = {
+        "model_interaction_mode": args.interaction_mode,
+        "opportunity_decay_us": args.opportunity_decay_us,
+        "competitor_tick_to_send_us": args.competitor_tick_to_send_us,
+        "arbitration_latency_us": args.arbitration_latency_us,
+        "defensive_activation_latency_us": args.defensive_activation_latency_us,
+        "hybrid_coordination_latency_us": args.hybrid_coordination_latency_us,
+        "queue_position_penalty_us": args.queue_position_penalty_us,
+        "pending_exposure": {
+            "max_pending_orders": args.max_pending_orders,
+            "max_pending_quantity": args.max_pending_quantity,
+            "max_pending_notional": args.max_pending_notional,
+            "stale_pending_timeout_us": args.stale_pending_timeout_us,
+            "cancel_replace_throttle_us": args.cancel_replace_throttle_us,
+        },
+    }
 
 
 def _run_broker_baseline(

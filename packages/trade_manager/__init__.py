@@ -64,6 +64,19 @@ from trade_manager.model_behavior import (
     ModelStateDecision,
     classify_model_state,
 )
+from trade_manager.latency_capability import (
+    CapabilityAssumptions,
+    LatencyCapabilityError,
+    LocalOrderState,
+    ModelInteractionMode,
+    PendingExposureConfig,
+    build_capability_report,
+    classify_ack_lag,
+    classify_internal_speed,
+    local_state_after_send,
+    state_after_external_message,
+    write_capability_reports,
+)
 
 __all__ = [
     "ActiveModel",
@@ -116,4 +129,15 @@ __all__ = [
     "ModelLiveObservation",
     "ModelStateDecision",
     "classify_model_state",
+    "CapabilityAssumptions",
+    "LatencyCapabilityError",
+    "LocalOrderState",
+    "ModelInteractionMode",
+    "PendingExposureConfig",
+    "build_capability_report",
+    "classify_ack_lag",
+    "classify_internal_speed",
+    "local_state_after_send",
+    "state_after_external_message",
+    "write_capability_reports",
 ]

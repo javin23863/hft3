@@ -71,6 +71,8 @@ reports/rithmic_trial/**
 !reports/rithmic_trial/.gitkeep
 reports/latency_baselines/*_summary.json
 reports/latency_baselines/*_summary.md
+reports/latency_baselines/*_capability.json
+reports/latency_baselines/*_capability.md
 reports/latency_baselines/*_broker_blocker.json
 logs/rithmic_trial/**
 runtime/rithmic_latency_probe.log*
