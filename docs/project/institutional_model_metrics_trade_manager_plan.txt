@@ -1,0 +1,643 @@
+Developer Task: Add Institutional Model Metrics Tracking + Trade Manager Behavior Envelope
+
+Objective:
+Implement a metrics and monitoring layer that grades every model after robustness testing and continuously monitors live/paper/shadow behavior against expected bounds. This is not a redesign of the research pipeline, robustness engine, execution engine, or trade manager. Add a clean, versioned measurement layer that plugs into the existing backtest, robustness, portfolio, and live-monitoring flows.
+
+Core Principle:
+Robustness testing qualifies the model. The trade manager governs the model. Every promoted model must produce a model scorecard and a model behavior envelope that can be monitored in live/paper/shadow mode.
+
+Do not remove existing functionality. Do not change existing model logic unless required to expose metrics. Do not hardcode for one symbol or one asset class. This must work across equities, options, futures, crypto/BTC, and prediction-market forks where applicable.
+
+============================================================
+1. IMPLEMENT A MODEL METRICS REGISTRY
+============================================================
+
+Create a central metrics registry that defines, calculates, validates, stores, and versions all model-grade metrics.
+
+Required design:
+- Add a reusable metrics module.
+- All metrics must be calculated from standardized inputs:
+  - model_id
+  - model_version
+  - run_id
+  - campaign_id
+  - asset_class
+  - symbol / contract / market_id
+  - timeframe
+  - regime_id
+  - fold_id
+  - train_start / train_end
+  - test_start / test_end
+  - robustness_run_id
+  - signal timestamps
+  - trade timestamps
+  - intended orders
+  - actual fills
+  - fees
+  - commissions
+  - slippage
+  - spread
+  - realized PnL
+  - unrealized PnL where applicable
+  - exposure
+  - portfolio allocation
+  - model confidence / score / probability where applicable
+  - feature snapshot or feature summary hash
+  - data source lineage
+
+Metrics must be deterministic and reproducible. Given the same input artifacts, the metric output must be identical.
+
+Persist all metrics with:
+- metric_name
+- metric_value
+- metric_unit
+- metric_window
+- sample_size
+- calculation_version
+- source_artifact_ids
+- created_at
+- warnings
+- errors
+- confidence / reliability flag when applicable
+
+============================================================
+2. POST-ROBUSTNESS MODEL SCORECARD
+============================================================
+
+After a model exits robustness testing, automatically generate a model scorecard.
+
+Required metric groups:
+
+A. Net Alpha / Return Quality
+Track:
+- net_return
+- gross_return
+- CAGR where applicable
+- annualized_volatility
+- Sharpe
+- Sortino
+- Calmar / MAR
+- profit_factor
+- expectancy_per_trade
+- hit_rate
+- average_win
+- average_loss
+- average_win_loss_ratio
+- median_trade_return
+- return_skew
+- return_kurtosis
+- alpha_t_stat where applicable
+- information_ratio where benchmark exists
+
+B. Drawdown / Loss Behavior
+Track:
+- max_drawdown
+- average_drawdown
+- median_drawdown
+- drawdown_duration_max
+- drawdown_duration_average
+- time_under_water
+- recovery_factor
+- ulcer_index
+- drawdown_velocity
+- worst_day
+- worst_week
+- worst_month
+- max_consecutive_losses
+- loss_streak_distribution
+- loss_clustering_score
+- VaR_95
+- VaR_99
+- CVaR_95 / expected_shortfall_95
+- CVaR_99 / expected_shortfall_99
+- tail_ratio
+- downside_deviation
+
+C. Robustness Stability
+Track:
+- walk_forward_efficiency
+- fold_to_fold_return_dispersion
+- fold_to_fold_sharpe_dispersion
+- fold_to_fold_drawdown_dispersion
+- parameter_stability_score
+- feature_stability_score
+- regime_stability_score
+- symbol_stability_score
+- timeframe_stability_score
+- cost_sensitivity_score
+- slippage_sensitivity_score
+- capacity_sensitivity_score
+- turnover_sensitivity_score
+- out_of_sample_decay
+- in_sample_vs_out_of_sample_gap
+- probabilistic_sharpe_ratio where possible
+- deflated_sharpe_ratio where possible
+- PBO / probability_of_backtest_overfitting where possible
+
+D. Execution Realism
+Track:
+- average_slippage_per_trade
+- median_slippage_per_trade
+- slippage_bps
+- spread_cost
+- spread_capture
+- fill_rate
+- partial_fill_rate
+- order_reject_rate
+- cancel_replace_rate
+- queue_position_decay where available
+- latency_event_to_signal
+- latency_signal_to_order
+- latency_order_to_ack
+- latency_ack_to_fill
+- alpha_half_life
+- execution_latency_vs_alpha_half_life
+- turnover
+- market_impact_estimate
+- adverse_selection_rate
+- capacity_estimate
+- capacity_at_10pct_edge_decay
+- capacity_at_25pct_edge_decay
+- capacity_at_50pct_edge_decay
+
+E. Portfolio Fit
+Track:
+- correlation_to_existing_models
+- drawdown_correlation_to_existing_models
+- marginal_sharpe_contribution
+- marginal_calmar_contribution
+- marginal_drawdown_contribution
+- marginal_CVaR_contribution
+- risk_contribution
+- gross_exposure_contribution
+- net_exposure_contribution
+- factor_exposures where available
+- beta_to_benchmark where available
+- liquidity_overlap_with_existing_models
+- crowding_overlap_score
+- regime_complementarity_score
+- crisis_period_contribution where stress windows exist
+
+F. Prediction / Calibration Quality
+For models with scores, probabilities, ranks, or classifications, track:
+- IC / information_coefficient
+- rank_IC
+- ICIR
+- Brier_score
+- log_loss
+- ROC_AUC where applicable
+- PR_AUC where applicable
+- precision
+- recall
+- F1
+- false_positive_cost
+- false_negative_cost
+- prediction_decile_returns
+- signal_bucket_monotonicity
+- calibration_error
+- expected_calibration_error
+- confidence_vs_realized_accuracy
+- high_confidence_trade_performance
+- low_confidence_trade_performance
+
+============================================================
+3. MODEL BEHAVIOR ENVELOPE
+============================================================
+
+For every promoted model, generate and persist a Model Behavior Envelope. This is the live operating contract that the trade manager monitors.
+
+The envelope must include expected ranges from historical robustness / OOS / paper data.
+
+Required envelope fields:
+- expected_daily_PnL_range
+- expected_weekly_PnL_range
+- expected_intraday_drawdown_range
+- warning_drawdown_threshold
+- kill_drawdown_threshold
+- expected_drawdown_velocity
+- max_allowed_drawdown_velocity
+- expected_trade_count_per_session
+- min_trade_count_per_session
+- max_trade_count_per_session
+- expected_holding_period_min
+- expected_holding_period_median
+- expected_holding_period_max
+- expected_win_rate_range
+- expected_payoff_ratio_range
+- expected_expectancy_range
+- expected_slippage_range
+- max_allowed_slippage
+- expected_spread_range
+- max_allowed_spread
+- expected_fill_rate_range
+- min_allowed_fill_rate
+- expected_signal_score_distribution
+- abnormal_signal_score_thresholds
+- expected_model_confidence_distribution
+- expected_feature_ranges
+- feature_training_domain_bounds
+- approved_regime_ids
+- blocked_regime_ids
+- expected_correlation_range_to_book
+- max_allowed_correlation_to_book
+- max_allowed_position_size
+- max_allowed_gross_exposure
+- max_allowed_net_exposure
+- asset_class_specific_limits
+- venue_specific_limits where applicable
+- symbol_specific_limits where applicable
+- latency_bounds
+- alpha_half_life_bounds
+- data_freshness_requirements
+
+Each envelope must be versioned:
+- envelope_id
+- model_id
+- model_version
+- robustness_run_id
+- calculation_version
+- created_at
+- approved_by_system_rule
+- active / inactive flag
+
+============================================================
+4. GREEN / YELLOW / RED MODEL STATE ENGINE
+============================================================
+
+Implement a live model-state engine for the trade manager.
+
+Every active model must be classified as:
+- GREEN: behavior inside expected bounds
+- YELLOW: degraded but not failed
+- RED: outside allowed bounds; reduce, pause, or kill according to policy
+
+Required state checks:
+
+GREEN state:
+- PnL inside expected distribution
+- drawdown inside normal range
+- trade frequency normal
+- slippage normal
+- fill rate normal
+- latency normal
+- signal distribution normal
+- feature values inside training domain
+- approved regime active
+- correlation to active book acceptable
+- no abnormal data-quality warnings
+
+YELLOW triggers:
+- drawdown approaching warning band
+- slippage above normal but below kill threshold
+- fill rate weakening
+- trade count materially above or below expected
+- signal distribution drift
+- feature drift near boundary
+- confidence rising while realized accuracy falls
+- correlation to other models increasing
+- latency nearing alpha half-life
+- regime uncertainty
+- defensive overlay blocks increasing
+- rolling win rate below expected range but sample size still small
+
+RED triggers:
+- drawdown breaches kill threshold
+- live PnL breaches historical 99% adverse envelope
+- slippage exceeds max allowed slippage
+- execution latency exceeds alpha half-life
+- fill quality collapses
+- feature values outside training support
+- model trades in blocked regime
+- alpha inversion: strongest signals lose more than weak signals
+- high-confidence predictions become systematically wrong
+- trade frequency explodes or drops to zero abnormally
+- data feed stale or conflicting
+- order reject rate abnormal
+- correlation spike creates portfolio-level concentration
+- defensive model repeatedly blocks but alpha model keeps firing
+- model behavior statistically inconsistent with robustness/OOS expectations
+
+State actions:
+- GREEN: allow normal operation
+- YELLOW: reduce size, raise signal threshold, reduce frequency, increase monitoring
+- RED: pause new trades, flatten or reduce according to risk policy, generate incident report, require review before reactivation
+
+Do not make the state engine discretionary. It must be rule-based, auditable, and replayable.
+
+============================================================
+5. TRADE MANAGER LIVE MONITORING
+============================================================
+
+Add live monitoring hooks so the trade manager can check behavior before, during, and after trades.
+
+Pre-trade checks:
+- data freshness
+- feature validity
+- approved regime
+- signal strength
+- signal calibration
+- spread/liquidity
+- expected slippage
+- position limits
+- portfolio risk budget
+- model correlation
+- active drawdown state
+- execution venue status
+- latency viability versus alpha half-life
+
+In-trade checks:
+- MAE / maximum adverse excursion
+- MFE / maximum favorable excursion
+- time-to-profit
+- time-in-trade
+- deviation from expected holding period
+- spread widening
+- liquidity decay
+- realized volatility shock
+- correlation spike
+- slippage after entry
+- hedge / defensive overlay behavior
+- exit discipline
+
+Post-trade checks:
+- realized versus expected PnL
+- realized versus expected slippage
+- signal bucket performance
+- regime attribution
+- execution attribution
+- alpha attribution
+- risk attribution
+- model agreement / conflict
+- feature drift
+- PnL drift
+- calibration drift
+- fill-quality drift
+
+Post-trade classification must separate:
+- alpha failure
+- execution failure
+- regime mismatch
+- data failure
+- sizing failure
+- portfolio interaction failure
+
+============================================================
+6. STORAGE / DATA CONTRACTS
+============================================================
+
+Create durable tables or equivalent persisted artifacts for:
+
+1. model_metric_values
+Stores all calculated metrics.
+
+2. model_scorecards
+Stores the final post-robustness scorecard per model version.
+
+3. model_behavior_envelopes
+Stores expected live operating ranges per model version.
+
+4. model_state_history
+Stores GREEN/YELLOW/RED state over time.
+
+5. model_alerts
+Stores warnings, breaches, kill events, and state transitions.
+
+6. model_live_observations
+Stores rolling live/paper/shadow behavior snapshots.
+
+7. model_metric_calculation_logs
+Stores calculation version, source data, errors, and warnings.
+
+Required properties:
+- idempotent writes
+- reproducible calculations
+- schema versioning
+- backward compatibility with existing runs
+- support for batch backtest metrics and streaming live metrics
+- ability to recalculate metrics when formulas are upgraded
+- no silent metric failure; missing inputs must create explicit warnings
+
+============================================================
+7. DASHBOARD / MISSION CONTROL OUTPUTS
+============================================================
+
+Expose the metrics in Mission Control or the existing UI layer.
+
+Required views:
+
+A. Model Scorecard View
+Show:
+- model grade
+- net alpha metrics
+- drawdown metrics
+- robustness metrics
+- execution metrics
+- portfolio contribution
+- calibration metrics
+- promotion / rejection reason
+
+B. Behavior Envelope View
+Show:
+- expected ranges
+- current live values
+- warning thresholds
+- kill thresholds
+- envelope version
+- active regime
+- approved / blocked regimes
+
+C. Live Trade Manager View
+Show:
+- model state: GREEN / YELLOW / RED
+- active alerts
+- current drawdown
+- current slippage
+- current fill rate
+- current signal distribution
+- current feature drift
+- latency versus alpha half-life
+- correlation to active book
+- recommended action from rule engine
+
+D. Drilldown View
+For each model, allow inspection by:
+- symbol
+- asset class
+- timeframe
+- regime
+- fold
+- date range
+- signal bucket
+- confidence bucket
+- execution venue
+- live / paper / shadow mode
+
+============================================================
+8. SCORING SYSTEM
+============================================================
+
+Add a weighted institutional model grade.
+
+Default weights:
+- Net Alpha Quality: 20%
+- Drawdown / Tail Risk: 20%
+- Robustness Stability: 20%
+- Execution Realism: 15%
+- Portfolio Contribution: 15%
+- Live Behavioral Control: 10%
+
+Each category should produce:
+- raw metrics
+- normalized score
+- pass / warning / fail
+- explanation
+- sample size warning if unreliable
+
+Final model grades:
+- A: production candidate
+- B: paper/shadow candidate or limited capital
+- C: research only
+- D: reject
+- F: invalid / failed / non-reproducible
+
+The grade must not be based on Sharpe alone. Penalize:
+- high drawdown velocity
+- unstable folds
+- high slippage sensitivity
+- poor capacity
+- low sample size
+- poor calibration
+- concentrated return source
+- high correlation to existing models
+- alpha inversion
+- excessive parameter sensitivity
+- unrealistic execution assumptions
+
+============================================================
+9. CONFIGURATION
+============================================================
+
+Add a config file for metric thresholds.
+
+Example structure:
+- global defaults
+- asset-class overrides
+- symbol overrides
+- strategy-family overrides
+- regime overrides
+- venue overrides
+- live/paper/shadow overrides
+
+The config should allow threshold tuning without code changes.
+
+Example:
+metrics_config.yaml
+
+Required configurable items:
+- minimum Sharpe
+- minimum Sortino
+- minimum Calmar
+- maximum drawdown
+- maximum drawdown velocity
+- maximum time under water
+- minimum profit factor
+- minimum expectancy
+- maximum slippage
+- minimum fill rate
+- maximum latency
+- maximum correlation to book
+- minimum walk-forward efficiency
+- maximum fold dispersion
+- maximum PBO
+- minimum deflated Sharpe where available
+- minimum sample size
+- yellow thresholds
+- red thresholds
+- kill-switch thresholds
+
+============================================================
+10. BACKFILL EXISTING RUNS
+============================================================
+
+Add a backfill script that scans existing robustness/backtest outputs and generates:
+- model_metric_values
+- model_scorecards
+- model_behavior_envelopes
+
+The backfill should:
+- not overwrite existing artifacts unless --force is passed
+- log missing inputs
+- skip invalid runs gracefully
+- produce a summary report:
+  - models processed
+  - models skipped
+  - metrics calculated
+  - missing-data warnings
+  - failed calculations
+  - top models by grade
+  - models rejected by category
+
+============================================================
+11. TESTING REQUIREMENTS
+============================================================
+
+Add tests for:
+- metric formula correctness
+- deterministic output
+- missing-data handling
+- zero-trade handling
+- negative-return handling
+- extreme drawdown handling
+- slippage sensitivity
+- fold aggregation
+- state transition logic
+- yellow / red trigger logic
+- behavior envelope generation
+- backfill script
+- UI/API output contract if applicable
+
+Include fixture data with known expected outputs.
+
+No metric should silently return nonsense. If calculation is impossible, return:
+- value = null
+- status = unavailable
+- reason = explicit missing input or invalid condition
+
+============================================================
+12. ACCEPTANCE CRITERIA
+============================================================
+
+This task is complete only when:
+
+1. Every model exiting robustness testing automatically produces a full model scorecard.
+2. Every promoted model receives a versioned Model Behavior Envelope.
+3. The trade manager can read the envelope and classify the model as GREEN, YELLOW, or RED.
+4. Live/paper/shadow behavior is compared against historical expected ranges.
+5. Alerts are generated for drift, drawdown breaches, slippage breaches, latency breaches, and abnormal signal behavior.
+6. Metrics are persisted, versioned, auditable, and reproducible.
+7. Existing backtest/robustness outputs can be backfilled.
+8. Mission Control or the existing UI exposes the scorecard, behavior envelope, and live model state.
+9. Tests cover formula correctness, state transitions, and missing-data cases.
+10. No existing research, robustness, execution, or trade-manager functionality is broken.
+
+Deliverables:
+- metrics registry/module
+- scorecard generator
+- behavior envelope generator
+- live state engine
+- metric persistence schemas
+- config file for thresholds
+- backfill script
+- dashboard/API hooks
+- tests
+- documentation explaining formulas, thresholds, and model-state logic
+
+Implementation priority:
+1. Storage/data contracts
+2. Metric calculators
+3. Scorecard generator
+4. Behavior envelope generator
+5. GREEN/YELLOW/RED state engine
+6. Backfill script
+7. Dashboard/Mission Control integration
+8. Tests and documentation
