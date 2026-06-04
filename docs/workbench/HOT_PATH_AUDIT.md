@@ -7,7 +7,10 @@
 | **CHI404** | Live/paper MBO capture, order submit, Rithmic trial lane, latency probes |
 | **Dev workstation** | Offline replay, pytest, git, after-action LLM — **never** in exchange hot loop |
 
-Python trial capture (`data_system/rithmic_trial/`) is quarantined interim wiring on CHI404 only. Production order path is **C++** via `rithmic_gateway/`.
+Python trial capture (`data_system/rithmic_trial/`) is quarantined non-hot
+wiring on CHI404 only. Production order placement and placement-speed authority
+are **C++** via `rithmic_gateway/`; no Python broker wrapper is allowed in the
+measured send path.
 
 ## CMake targets
 
@@ -18,7 +21,7 @@ Python trial capture (`data_system/rithmic_trial/`) is quarantined interim wirin
 | `hft_decision` | Zero-alloc decision engine | same |
 | `hft_rithmic_gateway` | R\|API+ adapter + SPSC queue | same (queue roundtrip in self-test) |
 | `hft_research_sim` | Runtime stack self-test | **required** in `.github/workflows/cpp_stack_verify.yml` |
-| `hft_rithmic_latency_probe` | Tick→ack RTT on colo | Blocked until R\|API+ SDK |
+| `hft_rithmic_latency_probe` | Tick→send placement and send→ack confirmation on colo | C++ build + observed broker summary |
 | `hft_feature_golden` | Python/C++ feature parity | pytest on CI |
 
 Memory/concurrency authority: [MEMORY_ARCHITECTURE.md](MEMORY_ARCHITECTURE.md) (`SPSCQueue` padding, zero-alloc decision path).
@@ -64,10 +67,10 @@ Diagnostics:
 
 ## Remaining gaps
 
-1. R\|API+ SDK on CHI404 — live gateway
-2. pybind — approach 1 parity
-3. Full NPZ replay through C++ queue
-4. Latency probe — R\|API+ timestamps
+1. Full NPZ replay through C++ queue
+2. C++ feature/model parity expansion beyond current stack verify
+3. CHI404 tuning until native C++ `tick_to_send_us` meets the operating envelope
+4. Cancel/replace callback pairing hardening for larger sample runs
 
 ## Tests
 

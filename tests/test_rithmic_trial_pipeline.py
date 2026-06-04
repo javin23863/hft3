@@ -229,6 +229,7 @@ def test_replay_sample_smoke(trial_cfg, tmp_path: Path) -> None:
 def test_order_latency_burst_writes_rithmic_test_summary(
     trial_cfg,
     monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     fake = _FakeOrderLatencyConnector()
     monkeypatch.setattr("data_system.rithmic_trial.pipeline.build_connector", lambda cfg: fake)
@@ -251,24 +252,19 @@ def test_order_latency_burst_writes_rithmic_test_summary(
         },
     )()
 
-    assert cmd_order_latency_burst(args) == 0
+    assert cmd_order_latency_burst(args) == 2
+    captured = capsys.readouterr()
+    assert "PYTHON_ORDER_LATENCY_BURST_DISABLED_USE_NATIVE_CPP_PROBE" in captured.err
     date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     summary_path = trial_cfg.reports_dir(date) / "rithmic_test_order_summary_unit-test-run.json"
-    assert summary_path.exists()
-    summary = json.loads(summary_path.read_text(encoding="utf-8"))
-    assert summary["status"] == "pass"
-    assert summary["system"] == "Rithmic Test"
-    assert summary["gateway"] == "Orangeburg"
-    assert summary["ack_count"] == 1
-    assert summary["cancel_submit_count"] == 1
-    assert summary["cancel_broker_order_ids"] == ["12345"]
-    assert summary["cancel_count"] == 1
+    assert not summary_path.exists()
     assert "paper" not in summary_path.name
 
 
 def test_order_latency_burst_uses_paper_label_for_paper_profile(
     trial_cfg,
     monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     fake = _FakeOrderLatencyConnector()
     monkeypatch.setattr("data_system.rithmic_trial.pipeline.build_connector", lambda cfg: fake)
@@ -301,10 +297,12 @@ def test_order_latency_burst_uses_paper_label_for_paper_profile(
         },
     )()
 
-    assert cmd_order_latency_burst(args) == 0
+    assert cmd_order_latency_burst(args) == 2
+    captured = capsys.readouterr()
+    assert "rithmic_latency_probe.cpp" in captured.err
     date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     summary_path = trial_cfg.reports_dir(date) / "rithmic_paper_order_summary_paper-unit-run.json"
-    assert summary_path.exists()
+    assert not summary_path.exists()
 
 
 class _FakeOrderLatencyConnector:

@@ -666,6 +666,186 @@ def _latest_rithmic_trial_bundle(repo: Path) -> dict[str, Any]:
     }
 
 
+def _iso_timestamp_seconds(value: Any) -> float | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+def _latest_latency_baseline_summary(
+    repo: Path,
+    *,
+    broker: str = "",
+    environment: str = "",
+) -> dict[str, Any]:
+    reports_root = repo / "reports" / "latency_baselines"
+    if not reports_root.is_dir():
+        return {}
+
+    def matches_requested_endpoint(payload: dict[str, Any]) -> bool:
+        broker_mode = payload.get("broker_mode") or {}
+        if not broker_mode:
+            return False
+        if str(broker_mode.get("status") or "").lower() != "observed":
+            return False
+        if broker and str(broker_mode.get("broker") or "").lower() != broker.lower():
+            return False
+        if environment and str(broker_mode.get("environment") or "").lower() != environment.lower():
+            return False
+        return True
+
+    def normalized_payload(path: Path, payload: dict[str, Any], *, role: str) -> dict[str, Any]:
+        payload = dict(payload)
+        payload["_path"] = str(path)
+        payload["_baseline_role"] = payload.get("baseline_role") or role
+        sample_path = payload.get("sample_path")
+        if sample_path:
+            resolved_sample_path = _resolve_latency_sample_path(repo, sample_path)
+            payload["_sample_path"] = str(resolved_sample_path or sample_path)
+            _backfill_latency_trigger_metrics(payload, resolved_sample_path)
+        return payload
+
+    current_path = reports_root / "current_baseline.json"
+    current_payload = read_json(current_path)
+    if (
+        current_payload.get("schema_version") == "latency_baseline_summary_v1"
+        and matches_requested_endpoint(current_payload)
+    ):
+        return normalized_payload(current_path, current_payload, role="current_baseline")
+
+    candidates: list[tuple[float, Path, dict[str, Any]]] = []
+    for path in reports_root.glob("*_summary.json"):
+        payload = read_json(path)
+        if payload.get("schema_version") != "latency_baseline_summary_v1":
+            continue
+        if not matches_requested_endpoint(payload):
+            continue
+        timestamp = _iso_timestamp_seconds(payload.get("generated_at_utc"))
+        candidates.append((timestamp if timestamp is not None else _mtime(path), path, payload))
+    if not candidates:
+        return {}
+    _, path, payload = max(candidates, key=lambda item: item[0])
+    return normalized_payload(path, payload, role="latest_observed_summary")
+
+
+def _resolve_latency_sample_path(repo: Path, sample_path: Any) -> Path | None:
+    if not sample_path:
+        return None
+    path = Path(str(sample_path))
+    if path.is_file():
+        return path
+    text = str(sample_path).replace("\\", "/")
+    marker = "data/latency_baselines/"
+    if marker in text:
+        candidate = repo / text[text.index(marker):]
+        if candidate.is_file():
+            return candidate
+    candidate = repo / str(sample_path)
+    if candidate.is_file():
+        return candidate
+    return None
+
+
+def _read_latency_jsonl(path: Path | None) -> list[dict[str, Any]]:
+    if path is None or not path.is_file():
+        return []
+    rows: list[dict[str, Any]] = []
+    for raw_line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict):
+            rows.append(payload)
+    return rows
+
+
+def _duration_us_from_raw(raw: dict[str, Any], start: str, end: str) -> float | None:
+    try:
+        start_ns = int(raw.get(start) or 0)
+        end_ns = int(raw.get(end) or 0)
+    except (TypeError, ValueError):
+        return None
+    if start_ns <= 0 or end_ns <= 0 or end_ns < start_ns:
+        return None
+    return (end_ns - start_ns) / 1000.0
+
+
+def _metric_from_values(values: list[float]) -> dict[str, Any]:
+    if not values:
+        return {
+            "count": 0,
+            "min_us": None,
+            "mean_us": None,
+            "p50_us": None,
+            "p90_us": None,
+            "p95_us": None,
+            "p99_us": None,
+            "p99_9_us": None,
+            "max_us": None,
+        }
+    ordered = sorted(values)
+
+    def percentile(pct: float) -> float:
+        idx = round((pct / 100.0) * (len(ordered) - 1))
+        idx = max(0, min(len(ordered) - 1, int(idx)))
+        return ordered[idx]
+
+    return {
+        "count": len(ordered),
+        "min_us": ordered[0],
+        "mean_us": sum(ordered) / len(ordered),
+        "p50_us": percentile(50.0),
+        "p90_us": percentile(90.0),
+        "p95_us": percentile(95.0),
+        "p99_us": percentile(99.0),
+        "p99_9_us": percentile(99.9),
+        "max_us": ordered[-1],
+    }
+
+
+def _backfill_latency_trigger_metrics(payload: dict[str, Any], sample_path: Path | None) -> None:
+    metrics = payload.setdefault("metrics", {})
+    if not isinstance(metrics, dict):
+        return
+    trigger_metric = metrics.get("tick_to_send_trigger_us")
+    if isinstance(trigger_metric, dict) and int(trigger_metric.get("count") or 0) > 0:
+        return
+    rows = [
+        row for row in _read_latency_jsonl(sample_path)
+        if row.get("order_action") == "new" and row.get("success") is True
+    ]
+    decision_values: list[float] = []
+    tick_values: list[float] = []
+    for row in rows:
+        raw = row.get("raw_timestamps")
+        if not isinstance(raw, dict):
+            continue
+        decision = _duration_us_from_raw(raw, "decision_ready_ts", "order_api_call_start_ts")
+        tick = _duration_us_from_raw(raw, "market_event_received_ts", "order_api_call_start_ts")
+        if decision is not None:
+            decision_values.append(decision)
+        if tick is not None:
+            tick_values.append(tick)
+    if tick_values:
+        metrics["decision_to_send_trigger_us"] = _metric_from_values(decision_values)
+        metrics["tick_to_send_trigger_us"] = _metric_from_values(tick_values)
+        payload.setdefault("placement_trigger_kpi", "tick_to_send_trigger_us")
+
+
+def _latency_metric_count(summary: dict[str, Any], metric: str) -> int:
+    try:
+        return int(((summary.get("metrics") or {}).get(metric) or {}).get("count") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 @dataclass
 class RunEvidenceSnapshot:
     source: str
@@ -2282,6 +2462,11 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
     is_cme = lane == "cme_futures"
     rithmic_endpoint = _rithmic_endpoint_status(repo, force_paper=is_cme) if is_cme else {}
     rithmic_trial = _latest_rithmic_trial_bundle(repo) if is_cme else {}
+    latency_baseline = _latest_latency_baseline_summary(
+        repo,
+        broker="rithmic",
+        environment="paper",
+    ) if is_cme else {}
     endpoint_status = str(rithmic_endpoint.get("status") or "").upper()
     endpoint_ready = (not is_cme) or endpoint_status in {"READY_TO_CONNECT", "CONNECTED"}
     endpoint_blocked = is_cme and not endpoint_ready
@@ -2291,7 +2476,12 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
     has_rithmic_trial = bool(rithmic_trial)
     reports_bound = str(rithmic_trial.get("report_binding_status") or "") == "PASS"
     report_binding_blocked = has_rithmic_trial and not reports_bound
-    order_ack_measured = bool(rithmic_trial.get("paired_count", 0)) and reports_bound if has_rithmic_trial else False
+    baseline_order_ack_count = _latency_metric_count(latency_baseline, "send_to_ack_us")
+    baseline_order_ack_measured = baseline_order_ack_count > 0
+    order_ack_measured = (
+        (bool(rithmic_trial.get("paired_count", 0)) and reports_bound if has_rithmic_trial else False)
+        or baseline_order_ack_measured
+    )
     state = (
         "observed_blocked"
         if has_rithmic_trial
@@ -2317,6 +2507,12 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
         reason = (
             "Rithmic Paper market data capture and trade-only replay are observed, "
             "but no tagged submit-to-ack order pairs have been captured yet."
+        )
+    elif baseline_order_ack_measured:
+        current_stage = "paper_latency_baseline_observed"
+        reason = (
+            "Rithmic Paper submit-to-ack baseline is observed. Placement speed is separate from broker "
+            "acknowledgment latency; remaining Workbench gates still control promotion."
         )
     elif endpoint_blocked:
         current_stage = "endpoint_not_ready"
@@ -2473,6 +2669,8 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
             "rejected_features": feature_fabric.get("expected_artifacts", {}).get("rejected_features.json", ""),
             "rithmic_api_config": rithmic_endpoint.get("config_path", "") if is_cme else "",
             "rithmic_endpoint_status": rithmic_endpoint.get("runtime_status_path", "") if is_cme else "",
+            "rithmic_latency_baseline_summary": latency_baseline.get("_path", "") if is_cme else "",
+            "rithmic_latency_baseline_samples": latency_baseline.get("_sample_path", "") if is_cme else "",
             **trial_artifacts,
         },
         registry={
@@ -2546,11 +2744,13 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
                 else "",
                 "order_ack_measured": order_ack_measured,
                 "endpoint_profile": rithmic_endpoint.get("profile", "") if is_cme else "",
-                "paired_count": rithmic_trial.get("paired_count", 0),
-                "summary": paper_order_summary,
+                "paired_count": baseline_order_ack_count or rithmic_trial.get("paired_count", 0),
+                "summary": latency_baseline or paper_order_summary,
+                "source": "latency_baseline" if baseline_order_ack_measured else "rithmic_trial_capture",
             },
             "rithmic_endpoint": rithmic_endpoint,
             "rithmic_capture_endpoint": rithmic_trial.get("capture_endpoint", {}),
+            "latency_baseline": latency_baseline,
             "latency_profile": latency_profile,
             "feed_latency_us": latency_profile.get("feed_latency_us", {}),
             "paper_order_summary": paper_order_summary,
@@ -2591,6 +2791,7 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
             "lane_registry": lane_registry,
             "rithmic_endpoint": rithmic_endpoint,
             "rithmic_trial": rithmic_trial,
+            "latency_baseline": latency_baseline,
             "rithmic_report_binding": rithmic_trial.get("report_binding", {}),
             "feature_fabric": feature_fabric,
         },

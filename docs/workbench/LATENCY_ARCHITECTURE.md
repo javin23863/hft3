@@ -48,11 +48,13 @@ Derived (microseconds): `feed_delay_us`, `decision_compute_us`, `decision_to_sen
 Loaded from CHI404 `runtime/latency_reports/latency_summary.json` + `workbench/config/cpp_latency_profile.yaml`:
 
 - `cpp_decision_compute_p50/p95/p99_us` — cyclictest loaded (until dedicated C++ probe)
-- `gateway_ack_p50/p95/p99_us` — **measured R|Trader paper submit→ack** when `order_ack_measured=true` (≥1,000 paired orders)
-- `order_send_*` — zero when ack is folded into `gateway_ack`; blocked until paper measurement
+- `gateway_ack_p50/p95/p99_us` — measured by native C++ Rithmic submit→ack when `order_ack_measured=true`
+- `order_send_*` — native SDK call-return boundary; do not replace it with Python wall-clock timing
 - `network.rithmic_tcp_65000` — **network health only**; never used for `gateway_ack` or replay default latency
 
-Paper waterfall: `runtime/paper_latency/raw/<run_id>/records.ndjson` → `latency_waterfall.json` via `scripts/latency_probe/build_waterfall_report.py`. Daemon: `python -m data_system.rithmic_trial.pipeline paper-latency-daemon` (CHI404 only).
+Real paper placement evidence comes from `rithmic_gateway/tools/rithmic_latency_probe.cpp`
+with `hot_path_language=c++` and `wrapper=none`. The Python paper-latency daemon is
+capture/orchestration plumbing only and is not a placement-speed authority.
 
 Until `order_ack_measured=true`, replay scripts require explicit `--latency-ms`; TCP connect is not a silent fallback.
 

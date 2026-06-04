@@ -205,6 +205,21 @@ def test_connector_send_order_rejects_unknown_side() -> None:
         connector.send_order("ES", "x", 1, 5000.0)
 
 
+def test_connector_send_order_disabled_without_test_override() -> None:
+    cfg_path = (
+        Path(__file__).resolve().parents[1]
+        / "packages"
+        / "data_system"
+        / "config"
+        / "rithmic_api_test.yaml"
+    )
+    connector = RithmicApiConnector(config_path=cfg_path)
+    connector._connected = True
+    connector._bridge = _FakeBridge()
+    with pytest.raises(RuntimeError, match="PYTHON_RITHMIC_ORDER_SEND_DISABLED_USE_NATIVE_CPP_PROBE"):
+        connector.send_order("ES", "BUY", 1, 5000.0)
+
+
 def test_connector_libraries_missing_raises_clear_error(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -241,7 +256,7 @@ def test_connector_poll_events_returns_empty_when_no_bridge() -> None:
     assert types == set()
     lim = connector.limitations()
     assert lim["connector"] == "rithmic_api"
-    assert "order_submit" in lim["supported_event_types"]
+    assert "order_submit" not in lim["supported_event_types"]
     assert "order_ack" in lim["supported_event_types"]
     assert "fill" in lim["supported_event_types"]
     connector.close()
@@ -339,7 +354,7 @@ def test_connector_poll_order_events_emits_empty_when_no_bridge() -> None:
     connector.close()
 
 
-def test_connector_send_order_queues_synthetic_submit() -> None:
+def test_connector_send_order_bridge_route_is_disabled() -> None:
     cfg_path = (
         Path(__file__).resolve().parents[1]
         / "packages"
@@ -351,26 +366,9 @@ def test_connector_send_order_queues_synthetic_submit() -> None:
     connector._connected = True
     connector._bridge = _FakeBridge()
 
-    id1 = connector.send_order("MES", "BUY", 1, 5000.0)
-    id2 = connector.send_order("MES", "SELL", 2, 5001.0)
-
-    events = connector.poll_order_events()
-    assert len(events) == 2
-    assert events[0]["event_type"] == "order_submit"
-    assert events[0]["symbol"] == "MES"
-    assert events[0]["exchange"] == "CME"
-    assert events[0]["side"] == "BUY"
-    assert events[0]["qty"] == 1
-    assert events[0]["size"] == 1
-    assert events[0]["price"] == 5000.0
-    assert events[0]["order_id"] == id1
-    assert events[0]["client_order_id"] == id1
-    assert events[0]["local_monotonic_receive_ns"] > 0
-    assert events[1]["order_id"] == id2
-    assert events[1]["side"] == "SELL"
-    assert connector._bridge.sends[0]["user_msg"] == id1
-    assert connector._bridge.sends[1]["user_msg"] == id2
-
+    with pytest.raises(RuntimeError, match="PYTHON_RITHMIC_ORDER_SEND_DISABLED_USE_NATIVE_CPP_PROBE"):
+        connector.send_order("MES", "BUY", 1, 5000.0)
+    assert connector._bridge.sends == []
     assert connector.poll_order_events() == []
     connector.close()
 
@@ -448,7 +446,7 @@ def test_connector_poll_events_returns_market_and_order_events() -> None:
     connector.close()
 
 
-def test_connector_supported_event_types_include_order_events() -> None:
+def test_connector_supported_event_types_exclude_python_order_submit() -> None:
     cfg_path = (
         Path(__file__).resolve().parents[1]
         / "packages"
@@ -458,7 +456,7 @@ def test_connector_supported_event_types_include_order_events() -> None:
     )
     connector = RithmicApiConnector(config_path=cfg_path)
     types = set(connector.limitations()["supported_event_types"])
-    assert "order_submit" in types
+    assert "order_submit" not in types
     assert "order_ack" in types
     assert "fill" in types
     assert "cancel" in types

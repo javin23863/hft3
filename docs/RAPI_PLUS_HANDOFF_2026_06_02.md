@@ -34,7 +34,7 @@ The R|API+ path bypasses the R|Trader GUI and the `.cur.txt` log scrape. The C++
 
 ### Python (`packages/data_system/rithmic_trial/connector/`)
 - `_rithmic_api_bridge.py` (360 lines) — ctypes wrapper. `ConnectionConfig` (dataclass) + `CConnectionConfig` (ctypes.Structure) + `MarketDataEvent` (dataclass) + `CMarketDataEvent` (ctypes.Structure) + `RithmicApiBridge` class + `RithmicApiError` + `RithmicApiLibraryNotFoundError`. `to_c()` keeps a `_refs` list of bytes for GC anchoring; env_vars built as null-terminated `c_char_p * (N+1)` array.
-- `rithmic_api_connector.py` — `NotImplementedError` stubs replaced with bridge calls. `send_order` validates side against `_SIDE_MAP = {"BUY": "B", "B": "B", "SELL": "A", "A": "A"}`; raises `ValueError` on unmapped side (no silent SELL fallthrough). `connect()` calls `bridge.create(cfg).initialize().connect()`. `poll_events` drains up to 1000 events per call.
+- `rithmic_api_connector.py` — `connect()` calls `bridge.create(cfg).initialize().connect()`. `poll_events` drains up to 1000 events per call. Current contract: the Python/ctypes bridge is capture plumbing only; `send_order` and `cancel_order` fail loudly and direct operators to the native C++ latency probe.
 
 ### Tests (`tests/test_rithmic_api_bridge.py`, 220 lines, 12 tests)
 - 8 tests run on both Windows and CHI404 (env-free)
@@ -72,7 +72,7 @@ print('env vars (preview):', c._build_connection_config().env_vars[:3])
 
 ## What is NOT done (and why)
 
-- **Live paper order/ack loop**: the R|API+ path can now issue paper orders, but this is a live-Rithmic action. The `RithmicApiConnector.connect()` requires `RITHMIC_USERNAME` and `RITHMIC_PASSWORD` env vars (already set in `/root/hft3/.env` on CHI404). A live test would issue real paper orders and consume the user's allotment. Not done in this turn.
+- **Live paper order/ack loop**: superseded. The Python/ctypes connector must not issue paper orders. Real paper placement-speed evidence now comes only from the direct native C++ `rithmic_latency_probe` target; the shared-library wrapper returns explicit order-entry blockers.
 - **VM teardown**: the KVM R|Trader VM is still RUNNING on CHI404. With R|API+ it is not needed. Tearing it down is a separate decision (might be kept for parity tests, or for fallback).
 - **`hft_research_sim` Windows build**: pre-existing breakage; not from this diff. Static `rithmic_gateway` target still uses MSVC-format `.lib` archives. Fix is to add a Linux-branch-aware static target as well, but that is a separate concern.
 - **Sync to CHI404**: the new Python files were scp'd to `/root/hft3/repo/` for the test run, but they are not yet committed. Operator should commit on the workstation, push to origin, then `git pull` on CHI404.
@@ -382,7 +382,7 @@ AlertInfo : ||Repository Connection Login Failed. Please contact the FCM/IB who 
 
 The remaining blocker is Rithmic UAT account authorization for the credentials in `/root/hft3/.env`:
 
-1. Contact Rithmic support / the FCM that issued the login ID and ask them to authorize `joshuajacob2386@gmail.com` on the `rithmic_uat_dmz_domain` UAT cluster, OR
+1. Contact Rithmic support / the FCM that issued the login ID and ask them to authorize the runtime Rithmic UAT login in `/root/hft3/.env` on the `rithmic_uat_dmz_domain` UAT cluster, OR
 2. Supply paper trading credentials (same authorization issue likely applies), OR
 3. Confirm a different UAT cluster / connect point is required (the SDK has `login_agent_pnlc`, `login_agent_tpc`, `login_agent_opc`, `login_agent_historyc`, `login_agent_repositoryc` — only the repository one is failing on auth; the others would only matter after repo login succeeds).
 

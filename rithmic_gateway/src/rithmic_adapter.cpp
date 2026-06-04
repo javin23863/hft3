@@ -363,6 +363,7 @@ public:
         MarketDataEvent evt{};
         evt.timestamp_ns = static_cast<uint64_t>(pInfo->iSsboe) * 1000000000ULL
                          + static_cast<uint64_t>(pInfo->iUsecs) * 1000ULL;
+        evt.callback_monotonic_ns = steady_now_ns();
         evt.price = pInfo->dPrice;
         evt.size = static_cast<int32_t>(pInfo->llSize);
         evt.action = 'T';
@@ -389,6 +390,7 @@ public:
             MarketDataEvent evt{};
             evt.timestamp_ns = static_cast<uint64_t>(pBid->iSsboe) * 1000000000ULL
                              + static_cast<uint64_t>(pBid->iUsecs) * 1000ULL;
+            evt.callback_monotonic_ns = steady_now_ns();
             evt.price = pBid->dPrice;
             evt.size = static_cast<int32_t>(pBid->llSize);
             evt.action = 'M';
@@ -401,6 +403,7 @@ public:
             MarketDataEvent evt{};
             evt.timestamp_ns = static_cast<uint64_t>(pAsk->iSsboe) * 1000000000ULL
                              + static_cast<uint64_t>(pAsk->iUsecs) * 1000ULL;
+            evt.callback_monotonic_ns = steady_now_ns();
             evt.price = pAsk->dPrice;
             evt.size = static_cast<int32_t>(pAsk->llSize);
             evt.action = 'M';
@@ -583,6 +586,44 @@ static tsNCharcb make_ts(const char* s) {
     cb.iDataLen = static_cast<int>(std::strlen(s));
     return cb;
 }
+
+static void copy_cstr(char* dst, size_t dst_len, const std::string& src) {
+    if (!dst || dst_len == 0) return;
+    size_t n = src.size();
+    if (n >= dst_len) n = dst_len - 1;
+    std::memcpy(dst, src.data(), n);
+    dst[n] = '\0';
+}
+
+static void copy_cstr(char* dst, size_t dst_len, const char* src) {
+    if (!dst || dst_len == 0) return;
+    if (!src) {
+        dst[0] = '\0';
+        return;
+    }
+    size_t n = std::strlen(src);
+    if (n >= dst_len) n = dst_len - 1;
+    std::memcpy(dst, src, n);
+    dst[n] = '\0';
+}
+
+struct PreparedLimitOrder {
+    RApi::REngine* engine = nullptr;
+    RApi::LimitOrderParams params{};
+    RApi::AccountInfo account{};
+    char exchange[32]{};
+    char symbol[64]{};
+    char trade_route[64]{};
+    char account_id[64]{};
+    char fcm_id[64]{};
+    char ib_id[64]{};
+    char buy[2]{"B"};
+    char sell[2]{"S"};
+    char duration[4]{"DAY"};
+    char entry_type[2]{"M"};
+    char tag[64]{};
+    char user_msg[64]{};
+};
 
 RithmicAdapter::RithmicAdapter(const ConnectionConfig& config,
                                SPSCQueue<MarketDataEvent, 8192>* mbo_queue,
@@ -1019,6 +1060,72 @@ bool RithmicAdapter::warm_price_increment(const std::string& symbol, const std::
         price_incr_ready_keys_.insert(key);
     }
     return true;
+}
+
+PreparedLimitOrder* RithmicAdapter::prepare_limit_order(const std::string& symbol,
+                                                        const std::string& exchange) {
+    if (!connected_ || !engine_) return nullptr;
+    if (!account_ready_.load() || !trade_route_ready_.load()) {
+        std::cerr << "[RithmicAdapter] prepare_limit_order: account or trade route not ready" << std::endl;
+        return nullptr;
+    }
+    if (!warm_price_increment(symbol, exchange)) {
+        return nullptr;
+    }
+
+    auto* prepared = new PreparedLimitOrder();
+    prepared->engine = static_cast<RApi::REngine*>(engine_);
+    copy_cstr(prepared->exchange, sizeof(prepared->exchange), exchange);
+    copy_cstr(prepared->symbol, sizeof(prepared->symbol), symbol);
+    copy_cstr(prepared->trade_route, sizeof(prepared->trade_route), trade_route_);
+    copy_cstr(prepared->account_id, sizeof(prepared->account_id), account_id_);
+    copy_cstr(prepared->fcm_id, sizeof(prepared->fcm_id), fcm_id_);
+    copy_cstr(prepared->ib_id, sizeof(prepared->ib_id), ib_id_);
+
+    prepared->account.sAccountId = make_ts(prepared->account_id);
+    prepared->account.sFcmId = make_ts(prepared->fcm_id);
+    prepared->account.sIbId = make_ts(prepared->ib_id);
+
+    prepared->params.sExchange = make_ts(prepared->exchange);
+    prepared->params.sTicker = make_ts(prepared->symbol);
+    prepared->params.sDuration = make_ts(prepared->duration);
+    prepared->params.sEntryType = make_ts(prepared->entry_type);
+    prepared->params.sTradeRoute = make_ts(prepared->trade_route);
+    prepared->params.pAccount = &prepared->account;
+    return prepared;
+}
+
+bool RithmicAdapter::set_prepared_limit_order_tag(PreparedLimitOrder* prepared,
+                                                  const char* user_msg) {
+    if (!prepared) return false;
+    copy_cstr(prepared->tag, sizeof(prepared->tag), user_msg);
+    copy_cstr(prepared->user_msg, sizeof(prepared->user_msg), user_msg);
+    prepared->params.sTag = make_ts(prepared->tag);
+    prepared->params.sUserMsg = make_ts(prepared->user_msg);
+    return true;
+}
+
+bool RithmicAdapter::send_prepared_limit_order(PreparedLimitOrder* prepared, char side,
+                                               int32_t qty, double price,
+                                               const char* user_msg) {
+    if (!connected_ || !engine_ || !prepared || !prepared->engine) return false;
+    prepared->params.sBuySellType = make_ts(side == 'B' ? prepared->buy : prepared->sell);
+    prepared->params.llQty = static_cast<long long>(qty);
+    prepared->params.dPrice = price;
+    if (user_msg) {
+        set_prepared_limit_order_tag(prepared, user_msg);
+    }
+
+    int iCode = 0;
+    if (!prepared->engine->sendOrder(&prepared->params, &iCode)) {
+        std::cerr << "[RithmicAdapter] sendOrder prepared error: " << iCode << std::endl;
+        return false;
+    }
+    return true;
+}
+
+void RithmicAdapter::destroy_prepared_limit_order(PreparedLimitOrder* prepared) {
+    delete prepared;
 }
 
 bool RithmicAdapter::send_order(const std::string& symbol, char side, int32_t qty, double price,

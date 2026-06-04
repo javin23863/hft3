@@ -36,8 +36,11 @@ def test_synthetic_audit_writes_required_outputs_and_separates_ack(tmp_path: Pat
     summary = run_audit(_config(tmp_path))
 
     assert summary["primary_kpi"] == "tick_to_send_us"
-    assert summary["principle"] == "placement_speed_is_tick_to_send_us_ack_latency_is_reported_separately"
+    assert summary["placement_trigger_kpi"] == "tick_to_send_trigger_us"
+    assert summary["principle"] == "placement_trigger_and_sdk_return_are_separate_from_ack_latency"
+    assert summary["metrics"]["tick_to_send_trigger_us"]["count"] == 3
     assert summary["metrics"]["tick_to_send_us"]["count"] == 3
+    assert summary["metrics"]["rithmic_send_call_us"]["count"] == 3
     assert summary["metrics"]["send_to_ack_us"]["count"] == 3
     assert summary["metrics"]["tick_to_send_us"]["p99_us"] < summary["metrics"]["send_to_ack_us"]["p99_us"]
 
@@ -69,7 +72,7 @@ def test_paper_live_mode_fails_loudly_without_execution_boundaries(tmp_path: Pat
     assert rc == 2
     summary = json.loads((tmp_path / "reports" / "latency_audit" / "paper-blocked_summary.json").read_text(encoding="utf-8"))
     assert summary["status"] == "blocked"
-    assert summary["blocked_reason"] == "PAPER_LIVE_EXECUTION_BOUNDARIES_NOT_WIRED"
+    assert summary["blocked_reason"] == "PAPER_LIVE_REPLACED_BY_NATIVE_CPP_PROBE"
     assert summary["sample_count"] == 0
 
 

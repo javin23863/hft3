@@ -1,7 +1,7 @@
 """Latency baseline sample schema and JSONL recorder.
 
-This module intentionally separates placement speed from broker/exchange
-acknowledgment latency. The primary placement KPI is tick_to_send_us.
+This module intentionally separates placement trigger speed, native SDK
+call-return cost, and broker/exchange acknowledgment latency.
 """
 
 from __future__ import annotations
@@ -23,7 +23,9 @@ TIMESTAMP_FIELDS = (
     "decision_ready_ts",
     "risk_check_ready_ts",
     "order_ready_ts",
+    "order_api_call_start_ts",
     "order_send_ts",
+    "order_send_return_ts",
     "ack_received_ts",
     "cancel_send_ts",
     "cancel_ack_received_ts",
@@ -33,8 +35,11 @@ TIMESTAMP_FIELDS = (
 
 METRIC_FIELDS = (
     "tick_to_decision_us",
+    "decision_to_send_trigger_us",
+    "tick_to_send_trigger_us",
     "decision_to_send_us",
     "tick_to_send_us",
+    "rithmic_send_call_us",
     "send_to_ack_us",
     "cancel_to_send_us",
     "cancel_to_ack_us",
@@ -84,6 +89,10 @@ def _coerce_timestamps(raw: dict[str, Any]) -> dict[str, int | None]:
     for field in TIMESTAMP_FIELDS:
         value = raw.get(field)
         timestamps[field] = None if value is None else int(value)
+    if timestamps["order_api_call_start_ts"] is None and timestamps["order_send_ts"] is not None:
+        timestamps["order_api_call_start_ts"] = timestamps["order_send_ts"]
+    if timestamps["order_send_return_ts"] is None and timestamps["order_send_ts"] is not None:
+        timestamps["order_send_return_ts"] = timestamps["order_send_ts"]
     return timestamps
 
 
@@ -93,16 +102,28 @@ def _metric_values(timestamps: dict[str, int | None], *, order_action: str) -> d
             timestamps["market_event_received_ts"],
             timestamps["decision_ready_ts"],
         ),
+        "decision_to_send_trigger_us": _duration_us(
+            timestamps["decision_ready_ts"],
+            timestamps["order_api_call_start_ts"],
+        ),
+        "tick_to_send_trigger_us": _duration_us(
+            timestamps["market_event_received_ts"],
+            timestamps["order_api_call_start_ts"],
+        ),
         "decision_to_send_us": _duration_us(
             timestamps["decision_ready_ts"],
-            timestamps["order_send_ts"],
+            timestamps["order_send_return_ts"],
         ),
         "tick_to_send_us": _duration_us(
             timestamps["market_event_received_ts"],
-            timestamps["order_send_ts"],
+            timestamps["order_send_return_ts"],
+        ),
+        "rithmic_send_call_us": _duration_us(
+            timestamps["order_api_call_start_ts"],
+            timestamps["order_send_return_ts"],
         ),
         "send_to_ack_us": _duration_us(
-            timestamps["order_send_ts"],
+            timestamps["order_send_return_ts"],
             timestamps["ack_received_ts"],
         ),
         "cancel_to_send_us": _duration_us(
@@ -129,15 +150,21 @@ def _metric_values(timestamps: dict[str, int | None], *, order_action: str) -> d
         values["replace_to_ack_us"] = None
     elif order_action == "cancel":
         values["tick_to_decision_us"] = None
+        values["decision_to_send_trigger_us"] = None
+        values["tick_to_send_trigger_us"] = None
         values["decision_to_send_us"] = None
         values["tick_to_send_us"] = None
+        values["rithmic_send_call_us"] = None
         values["send_to_ack_us"] = None
         values["replace_to_send_us"] = None
         values["replace_to_ack_us"] = None
     elif order_action == "replace":
         values["tick_to_decision_us"] = None
+        values["decision_to_send_trigger_us"] = None
+        values["tick_to_send_trigger_us"] = None
         values["decision_to_send_us"] = None
         values["tick_to_send_us"] = None
+        values["rithmic_send_call_us"] = None
         values["send_to_ack_us"] = None
         values["cancel_to_send_us"] = None
         values["cancel_to_ack_us"] = None
@@ -242,7 +269,15 @@ def validate_latency_sample(record: dict[str, Any]) -> list[str]:
         _check_order(
             errors,
             raw,
-            ("decision_ready_ts", "risk_check_ready_ts", "order_ready_ts", "order_send_ts", "ack_received_ts"),
+            (
+                "decision_ready_ts",
+                "risk_check_ready_ts",
+                "order_ready_ts",
+                "order_api_call_start_ts",
+                "order_send_ts",
+                "order_send_return_ts",
+                "ack_received_ts",
+            ),
         )
         _check_order(errors, raw, ("decision_ready_ts", "cancel_send_ts", "cancel_ack_received_ts"))
         _check_order(errors, raw, ("decision_ready_ts", "replace_send_ts", "replace_ack_received_ts"))

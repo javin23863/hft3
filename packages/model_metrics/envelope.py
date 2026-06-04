@@ -63,8 +63,11 @@ def _latency_operating_bounds(envelope: dict[str, Any], legacy_ack_ms: float | N
     defensive_confirmation = _nested(envelope, "defensive", "confirmation") or {}
     return {
         "latency_order_to_ack": (0.0, legacy_ack_ms if legacy_ack_ms is not None else max_latency_ms),
+        "tick_to_send_trigger_us": _latency_metric_bounds(_nested(placement, "tick_to_send_trigger_us", "p99_9") or _nested(placement, "tick_to_send_trigger_us", "p99")),
+        "decision_to_send_trigger_us": _latency_metric_bounds(_nested(placement, "decision_to_send_trigger_us", "p99_9") or _nested(placement, "decision_to_send_trigger_us", "p99")),
         "tick_to_send_us": _latency_metric_bounds(_nested(placement, "tick_to_send_us", "p99_9") or _nested(placement, "tick_to_send_us", "p99")),
         "decision_to_send_us": _latency_metric_bounds(_nested(placement, "decision_to_send_us", "p99_9") or _nested(placement, "decision_to_send_us", "p99")),
+        "rithmic_send_call_us": _latency_metric_bounds(_nested(placement, "rithmic_send_call_us", "p99_9") or _nested(placement, "rithmic_send_call_us", "p99")),
         "cancel_to_send_us": _latency_metric_bounds(_nested(defensive, "cancel_to_send_us", "p99_9") or _nested(defensive, "cancel_to_send_us", "p99")),
         "replace_to_send_us": _latency_metric_bounds(_nested(defensive, "replace_to_send_us", "p99_9") or _nested(defensive, "replace_to_send_us", "p99")),
         "send_to_ack_us": _latency_metric_bounds(_nested(confirmation, "send_to_ack_us", "p99_9") or _nested(confirmation, "send_to_ack_us", "p99")),

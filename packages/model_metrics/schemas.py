@@ -194,8 +194,11 @@ class ModelLiveObservation:
     slippage_bps: float | None = None
     spread_bps: float | None = None
     fill_rate: float | None = None
+    tick_to_send_trigger_us: float | None = None
+    decision_to_send_trigger_us: float | None = None
     tick_to_send_us: float | None = None
     decision_to_send_us: float | None = None
+    rithmic_send_call_us: float | None = None
     cancel_to_send_us: float | None = None
     replace_to_send_us: float | None = None
     send_to_ack_us: float | None = None

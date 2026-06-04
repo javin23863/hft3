@@ -14,8 +14,16 @@ from .recorder import METRIC_FIELDS, load_jsonl
 
 
 PRIMARY_KPI = "tick_to_send_us"
+PLACEMENT_TRIGGER_KPI = "tick_to_send_trigger_us"
 ROUND_TRIP_ACK_METRIC = "round_trip_ack_latency_us"
-OFFENSIVE_METRICS = ("tick_to_decision_us", "decision_to_send_us", "tick_to_send_us")
+OFFENSIVE_METRICS = (
+    "tick_to_decision_us",
+    "decision_to_send_trigger_us",
+    "tick_to_send_trigger_us",
+    "decision_to_send_us",
+    "tick_to_send_us",
+    "rithmic_send_call_us",
+)
 DEFENSIVE_METRICS = (
     "cancel_to_send_us",
     "cancel_to_ack_us",
@@ -110,7 +118,8 @@ def build_summary(
         "sample_path": str(sample_path),
         "sample_count": len(records),
         "primary_kpi": PRIMARY_KPI,
-        "principle": "placement_speed_is_tick_to_send_us_ack_latency_is_reported_separately",
+        "placement_trigger_kpi": PLACEMENT_TRIGGER_KPI,
+        "principle": "placement_trigger_and_sdk_return_are_separate_from_ack_latency",
         "metrics": metrics,
         "views": {
             "offensive": {field: metrics[field] for field in OFFENSIVE_METRICS},
@@ -251,9 +260,13 @@ def render_markdown(summary: dict[str, Any]) -> str:
         f"Run ID: `{summary.get('run_id', '')}`",
         f"Samples: `{summary.get('sample_count', 0)}`",
         "",
-        "Primary KPI: `tick_to_send_us`.",
+        "Primary strict KPI: `tick_to_send_us`.",
         "",
-        "`send_to_ack_us`, `cancel_to_ack_us`, and `replace_to_ack_us` are broker/exchange response latency. They are not placement speed.",
+        "Placement trigger KPI: `tick_to_send_trigger_us`.",
+        "",
+        "`tick_to_send_trigger_us` is market callback to native send-call entry. "
+        "`tick_to_send_us` is market callback through native SDK send-call return. "
+        "`send_to_ack_us`, `cancel_to_ack_us`, and `replace_to_ack_us` are broker/exchange response latency.",
         "",
     ]
     for title, view in (

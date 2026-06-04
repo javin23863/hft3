@@ -21,8 +21,11 @@ Those are different numbers. The primary KPI for this module is `tick_to_send_us
 | Metric | Definition | View |
 | --- | --- | --- |
 | `tick_to_decision_us` | Market event received to decision produced | Offensive |
-| `decision_to_send_us` | Decision produced to order sent by the application | Offensive |
-| `tick_to_send_us` | Market event received to order sent by the application | Offensive, primary KPI |
+| `decision_to_send_trigger_us` | Decision produced to Rithmic SDK send-call entry | Offensive placement trigger |
+| `tick_to_send_trigger_us` | Market event received to Rithmic SDK send-call entry | Offensive placement trigger |
+| `decision_to_send_us` | Decision produced to Rithmic SDK send-call return | Native API |
+| `tick_to_send_us` | Market event received to Rithmic SDK send-call return | Native API, strict placement boundary |
+| `rithmic_send_call_us` | Time spent inside the synchronous Rithmic `sendOrder` call | Native API |
 | `send_to_ack_us` | Order sent to broker/exchange acknowledgment received | Round trip |
 | `cancel_to_send_us` | Cancel decision produced to cancel sent | Defensive |
 | `cancel_to_ack_us` | Cancel sent to cancel acknowledgment received | Defensive and round trip |
@@ -38,6 +41,8 @@ The recorder accepts high-resolution monotonic timestamps at these boundaries:
 - `decision_ready_ts`
 - `risk_check_ready_ts`
 - `order_ready_ts`
+- `order_api_call_start_ts`
+- `order_api_call_end_ts`
 - `order_send_ts`
 - `ack_received_ts`
 - `cancel_send_ts`
@@ -88,10 +93,12 @@ Synthetic output is labeled with the selected environment, broker, venue, and st
 
 ## Broker Mode
 
-The broker command shape is:
+Python broker mode is intentionally blocked. Python can generate synthetic
+samples and write reports, but it is not allowed to submit broker orders for
+placement-speed authority.
 
 ```powershell
-python -m tools.latency_baseline.run `
+python -m tools.latency_baseline.run --mode broker `
   --env paper `
   --broker rithmic `
   --symbol ES `
@@ -100,11 +107,89 @@ python -m tools.latency_baseline.run `
   --strategy latency_probe
 ```
 
-For `--broker rithmic --env paper`, broker mode uses the configured Rithmic Paper/Chicago endpoint and sends a tagged passive limit-order probe. If `--symbol ES` is supplied, the runner resolves it to the current front-month contract before subscribing and sending. The default `latency_probe` derives a passive limit price from the first live quote/trade so the command can run without an explicit price.
+That command writes a loud blocker:
 
-Broker mode fails loudly with `BROKER_LATENCY_BASELINE_FAILED` when the endpoint, credentials, market data, or order acknowledgment path is unavailable. It does not fall back to synthetic samples.
+```text
+BROKER_MODE_REPLACED_BY_NATIVE_CPP_PROBE
+```
 
-The runner buffers raw Rithmic events in memory while measuring placement speed and flushes them after the send/ack path. This keeps JSONL persistence and report writing outside the measured hot path.
+Real Rithmic Paper placement-speed evidence comes from the native C++ probe:
+
+```powershell
+cmake --build build --target rithmic_latency_probe --config Release
+$env:RITHMIC_CONFIG_PATH="packages/data_system/config/rithmic_api_paper.yaml"
+$env:RITHMIC_ENDPOINT_PROFILE="paper_chicago"
+$env:RITHMIC_PROBE_RUN_ID="rithmic-cpp-paper-baseline"
+$env:RITHMIC_PROBE_ORDER_COUNT="30"
+$env:RITHMIC_PROBE_ORDER_SIDE="B"
+$env:RITHMIC_PROBE_ORDER_QTY="1"
+$env:RITHMIC_PROBE_CANCEL_AFTER_ACK="1"
+.\build\rithmic_gateway\Release\rithmic_latency_probe.exe
+```
+
+On CHI404, run the Linux binary from the same target:
+
+```bash
+cmake --build build --target rithmic_latency_probe --config Release
+RITHMIC_CONFIG_PATH=/root/hft3/repo/packages/data_system/config/rithmic_api_paper.yaml \
+RITHMIC_ENDPOINT_PROFILE=paper_chicago \
+RITHMIC_PROBE_RUN_ID=rithmic-cpp-chi404-paper-baseline \
+RITHMIC_PROBE_ORDER_COUNT=30 \
+RITHMIC_PROBE_ORDER_SIDE=B \
+RITHMIC_PROBE_ORDER_QTY=1 \
+RITHMIC_PROBE_CANCEL_AFTER_ACK=1 \
+RITHMIC_PROBE_CPU=-1 \
+RITHMIC_PROBE_RT_PRIORITY=0 \
+RITHMIC_PROBE_MLOCK=1 \
+RITHMIC_PROBE_PREFAULT_BYTES=16777216 \
+./build/rithmic_gateway/rithmic_latency_probe
+```
+
+The C++ probe buffers runtime evidence while measuring the send path and writes
+JSONL plus summary reports after the measured boundary. Its report must show
+`hot_path_language=c++` and `wrapper=none` before it can be treated as
+promotion-authoritative latency evidence.
+
+The C++ report keeps two send boundaries visible:
+
+- `tick_to_send_trigger_us`: market callback to Rithmic SDK call entry. This is
+  the internal placement-trigger speed of the HFT3 process.
+- `tick_to_send_us`: market callback to Rithmic SDK call return. This is the
+  stricter boundary that includes synchronous time spent inside Rithmic
+  `sendOrder`.
+
+Both are useful. Do not hide one inside the other.
+
+## Current CHI404 Baseline
+
+The accepted current baseline is stored at:
+
+```text
+reports/latency_baselines/current_baseline.json
+```
+
+Accepted run:
+
+```text
+opt_floor_noaff_nort_20260605
+```
+
+Accepted profile:
+
+- `RITHMIC_PROBE_CPU=-1`
+- `RITHMIC_PROBE_RT_PRIORITY=0`
+- `RITHMIC_PROBE_MLOCK=1`
+- `RITHMIC_PROBE_PREFAULT_BYTES=16777216`
+
+Observed native C++ Paper/Chicago values:
+
+- `tick_to_send_trigger_us` p50/p99/p99.9: `0.792 us`
+- `tick_to_send_us` p50/p99/p99.9: `23.314 us`
+- `rithmic_send_call_us` p50/p99/p99.9: `22.522 us`
+- `send_to_ack_us` p50/p99/p99.9: `3477.580 us`
+
+The Workbench Latency Evidence tab treats `current_baseline.json` as the stable
+comparison base before falling back to the latest observed summary file.
 
 ## Capability Modeling
 
@@ -112,6 +197,7 @@ The baseline command also accepts speed-aware testing assumptions:
 
 ```powershell
 python -m tools.latency_baseline.run `
+  --mode synthetic `
   --env paper `
   --broker rithmic `
   --symbol ES `
@@ -142,11 +228,15 @@ Capability modeling is nonblocking by default: when a probe order is sent, local
 
 Use the three report views:
 
-- Offensive: `tick_to_decision_us`, `decision_to_send_us`, and `tick_to_send_us`
+- Offensive trigger: `tick_to_decision_us`, `decision_to_send_trigger_us`, and `tick_to_send_trigger_us`
+- Native API: `decision_to_send_us`, `tick_to_send_us`, and `rithmic_send_call_us`
 - Defensive: cancel and replace send/ack timings
 - Round Trip: order, cancel, and replace acknowledgment timings
 
-The first number to inspect for model reaction speed is `tick_to_send_us`. The first number to inspect for broker or venue response behavior is `send_to_ack_us`.
+The first number to inspect for HFT3 reaction speed is `tick_to_send_trigger_us`.
+The first number to inspect for synchronous Rithmic SDK cost is
+`rithmic_send_call_us`. The first number to inspect for broker or venue response
+behavior is `send_to_ack_us`.
 
 ## Baseline Comparison
 
@@ -173,4 +263,4 @@ After a run is accepted as the new authority, update the canonical baseline expl
 python -m tools.latency_baseline.run --mode synthetic --run-id accepted-baseline --update-current-baseline
 ```
 
-For broker evidence, only update `current_baseline.json` after the run is produced from real execution-boundary probes.
+For broker evidence, only update `current_baseline.json` after the run is produced by the native C++ `rithmic_latency_probe`.

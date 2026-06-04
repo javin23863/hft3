@@ -6,18 +6,20 @@
 ## Topology (non-negotiable)
 
 Per [BLUEPRINT.md §4](../../BLUEPRINT.md#4-live-architecture): live/paper capture and order measurement run on **CHI404 bare metal** only.  
-Path: **R|API+ C++ adapter (in-process) → `librithmic_gateway_shared.so` → Python ctypes → capture / latency daemon**.
+Latency authority path: **R|API+ C++ adapter (in-process) → `rithmic_latency_probe` → JSONL/summary artifacts**.
+
+The legacy capture daemon may still use `librithmic_gateway_shared.so` and Python ctypes for non-hot orchestration/capture plumbing. It is **not** the placement-speed authority. Order placement timing must come from the direct native C++ probe, with no Python broker wrapper in the measured path.
 
 - No Windows VM.
 - No R|Trader GUI.
 - No SMB watch_dir.
 - No `.cur.txt` ingest.
 
-The `rtrader_bridge` connector (`RTraderBridgeConnector`) is **defensive legacy** for synthetic file-based ingest only. Live R|API+ traffic is `rithmic_api` connector.
+The `rtrader_bridge` connector (`RTraderBridgeConnector`) is **defensive legacy** for synthetic file-based ingest only. Live R|API+ market-data capture is the `rithmic_api` connector. Order placement is not.
 
-## Trade-path daemon
+## Capture Daemon
 
-The R|API+ capture + order-event daemon is a single systemd unit on CHI404:
+The R|API+ market-data capture daemon is a single systemd unit on CHI404:
 
 ```bash
 systemctl status hft3-rithmic-trial.service
@@ -31,7 +33,7 @@ Config (in `/root/hft3/.env`):
 | Var | Required | Default | Purpose |
 |-----|----------|---------|---------|
 | `RITHMIC_TRIAL_ENABLED` | yes | unset | `1` to allow live capture |
-| `RITHMIC_TRIAL_CONNECTOR` | yes | — | `rithmic_api` (the only live path) |
+| `RITHMIC_TRIAL_CONNECTOR` | yes | — | `rithmic_api` (the only live capture path) |
 | `RITHMIC_TRIAL_CONFIG` | yes | — | `packages/data_system/config/rithmic_trial.yaml` |
 | `HFT3_RITHMIC_GATEWAY_SO` | yes | — | `/root/hft3/repo/build/rithmic_gateway/librithmic_gateway_shared.so` |
 | `RITHMIC_USERNAME` / `RITHMIC_PASSWORD` | yes | — | UAT (paper) creds; user-deployed, never committed |
@@ -55,31 +57,52 @@ Requires `EVENT_ID` (e.g. `CPI_2024_09_11_TIGHT`) for canonical research. Withou
 
 **Forbidden:** `Add-Content`, host `f.write` order lines, `SWEEP-*` synthetic order IDs, TCP :65000 as ack.
 
+Use the direct native C++ probe for placement-speed and submit-to-ack baselines:
+
+```bash
+cd /root/hft3/repo
+cmake --build build --target rithmic_latency_probe --config Release
+set -a; . /root/hft3/.env; set +a
+RITHMIC_ENDPOINT_PROFILE=paper_chicago \
+RITHMIC_CONFIG_PATH=/root/hft3/repo/packages/data_system/config/rithmic_api_paper.yaml \
+RITHMIC_PROBE_ENV_LABEL=paper \
+RITHMIC_PROBE_SYMBOL=ESM6 \
+RITHMIC_PROBE_EXCHANGE=CME \
+RITHMIC_PROBE_ORDER_COUNT=30 \
+RITHMIC_PROBE_CANCEL_AFTER_ACK=1 \
+RITHMIC_PROBE_SKIP_MD=0 \
+RITHMIC_PROBE_CPU=-1 \
+RITHMIC_PROBE_RT_PRIORITY=0 \
+RITHMIC_PROBE_MLOCK=1 \
+RITHMIC_PROBE_PREFAULT_BYTES=16777216 \
+./build/rithmic_gateway/rithmic_latency_probe
+```
+
+The accepted current baseline profile is no CPU affinity and no realtime
+priority, with memory locking and 16 MiB prefault enabled. The realtime-priority
+profile measured slower because it can starve Rithmic callback processing during
+busy polling.
+
+This writes:
+
+| Artifact | Path |
+|----------|------|
+| Samples | `data/latency_baselines/YYYY-MM-DD/<run_id>.jsonl` |
+| Summary | `reports/latency_baselines/<run_id>_summary.json` |
+| Markdown | `reports/latency_baselines/<run_id>_summary.md` |
+
+The compatibility sweep script now refuses Python/ctypes latency measurement and
+prints this native-probe command shape:
+
 ```bash
 bash scripts/chi404_run_paper_latency_sweep.sh
 ```
 
-The orchestrator:
-
-1. Runs an R|API+ reachability gate (connect, fetch `limitations()`).
-2. Starts `paper_latency_daemon` (5-attempt retry-safe connect).
-3. Waits for `paired_submit_ack_count >= PAPER_LATENCY_TARGET_ORDERS` (default 1000).
-4. Promotes records to `reports/rithmic_trial/<date>/`.
-5. Refreshes `latency_summary.json`.
-
-**Known gap (2026-06-02, RAPI+ handoff §3):** the R|API+ order callbacks (`orderSubmit` / `orderAck`) are not yet wired into the SPSC queue the daemon polls. Until that wiring lands, the paired count stays at 0 and the orchestrator times out after ~20 min. To verify connectivity and the daemon plumbing without real orders:
-
-```bash
-PAPER_LATENCY_SKIP_ORDERS_BURST=1 bash scripts/chi404_run_paper_latency_sweep.sh
-```
-
 | Artifact | Path |
 |----------|------|
-| Raw audit | `runtime/paper_latency/raw/<run_id>/records.ndjson` |
 | R|API+ SDK log | `runtime/rithmic_trial/rithmic_api.log` |
-| Daemon log | `logs/rithmic_trial/unattended.log` |
-| Trial reports | `reports/rithmic_trial/<date>/` |
-| Summary | `runtime/latency_reports/latency_summary.json` |
+| Native baseline | `data/latency_baselines/YYYY-MM-DD/<run_id>.jsonl` |
+| Summary | `reports/latency_baselines/<run_id>_summary.json` |
 
 Refresh probe summary:
 

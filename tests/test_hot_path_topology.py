@@ -38,17 +38,48 @@ def test_cmake_lists_hot_path_targets() -> None:
     assert "rithmic_gateway/src/rithmic_adapter.cpp" in root_text or "src/rithmic_adapter.cpp" in gw_text
 
 
-def test_capi_latency_probe_requires_paired_order_ack_evidence() -> None:
-    src = (_REPO / "rithmic_gateway" / "tools" / "rithmic_capi_latency_probe.cpp").read_text(
+def test_latency_probe_authority_is_native_cpp_not_capi_wrapper() -> None:
+    src = (_REPO / "rithmic_gateway" / "tools" / "rithmic_latency_probe.cpp").read_text(
         encoding="utf-8"
     )
-    assert "hft_rithmic_adapter_send_order_with_user_msg" in src
+    c_api = (_REPO / "rithmic_gateway" / "src" / "c_api.cpp").read_text(encoding="utf-8")
+    cmake = (_REPO / "rithmic_gateway" / "CMakeLists.txt").read_text(encoding="utf-8")
+    assert "rithmic_latency_probe" in cmake
+    assert "rithmic_capi_latency_probe" not in cmake
+    assert not (_REPO / "rithmic_gateway" / "tools" / "rithmic_capi_latency_probe.cpp").exists()
+    assert '#include "rithmic_adapter.hpp"' in src
+    assert '#include "c_api.hpp"' not in src
     assert "steady_now_ns()" in src
     assert "order_event_matches" in src
-    assert "capi_order_latency_" in src
-    assert "RITHMIC_PROBE_MEASURED_MIN_ACKS" in src
-    assert "order_ack_measured" in src
-    assert "ack_count >= measured_min_acks" in src
+    assert "send_prepared_limit_order(" in src
+    assert "send_bound_prepared_limit_order" not in src
+    assert "bind_prepared_limit_order_static_fields" not in src
+    assert '\\"hot_path_language\\": \\"c++\\"' in src
+    assert '\\"wrapper\\": \\"none\\"' in src
+    assert "tick_to_send_trigger_us" in src
+    assert "placement_trigger_kpi" in src
+    assert "apply_runtime_tuning" in src
+    assert "runtime_tuning" in src
+    assert "RITHMIC_PROBE_CPU" in src
+    assert "RITHMIC_PROBE_RT_PRIORITY" in src
+    assert "RITHMIC_PROBE_MLOCK" in src
+    assert "RITHMIC_PROBE_PREFAULT_BYTES" in src
+    assert "RITHMIC_PROBE_SUBSCRIBE_FOR_ORDER_EVENTS" in src
+    assert "RITHMIC_PROBE_POST_SUBSCRIBE_WARM_MS" in src
+    assert "order-event warming" in src
+    assert "sched_setaffinity" in src or "SetProcessAffinityMask" in src
+    assert "sched_setscheduler" in src or "SetPriorityClass" in src
+    assert "mlockall" in src
+    assert "while (mbo_queue->pop(stale_md))" not in src
+    assert src.index("native_baseline_start") < src.index(
+        "if ((require_md || subscribe_for_order_events) && !subscribed_mbo)"
+    )
+    assert "primed_for_sample=1" in src
+    assert "primed_md_available = false" in src
+    assert "adapter->send_order" not in c_api
+    assert "adapter->cancel_order" not in c_api
+    assert "C_API_ORDER_SEND_DISABLED_USE_NATIVE_CPP_PROBE" in c_api
+    assert "C_API_CANCEL_DISABLED_USE_NATIVE_CPP_PROBE" in c_api
 
 
 def test_stack_verify_skips_without_binary(tmp_path: Path) -> None:

@@ -12,8 +12,11 @@
 
 namespace hft {
 
+struct PreparedLimitOrder;
+
 struct MarketDataEvent {
     uint64_t timestamp_ns;
+    uint64_t callback_monotonic_ns;
     uint64_t order_id;
     char action; // 'A' add, 'C' cancel, 'M' modify, 'T' trade
     char side;    // 'B' bid, 'A' ask
@@ -72,6 +75,14 @@ public:
 
     bool subscribe_mbo(const std::string& symbol, const std::string& exchange = "CME");
     bool warm_price_increment(const std::string& symbol, const std::string& exchange = "CME");
+    PreparedLimitOrder* prepare_limit_order(const std::string& symbol,
+                                            const std::string& exchange = "CME");
+    bool set_prepared_limit_order_tag(PreparedLimitOrder* prepared,
+                                      const char* user_msg);
+    bool send_prepared_limit_order(PreparedLimitOrder* prepared, char side,
+                                   int32_t qty, double price,
+                                   const char* user_msg = nullptr);
+    void destroy_prepared_limit_order(PreparedLimitOrder* prepared);
     bool send_order(const std::string& symbol, char side, int32_t qty, double price,
                     const std::string& user_msg = "");
     bool cancel_order(const std::string& order_id);

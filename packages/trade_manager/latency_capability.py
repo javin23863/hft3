@@ -17,8 +17,11 @@ from typing import Any
 
 INTERNAL_LATENCY_FIELDS = (
     "tick_to_decision_us",
+    "decision_to_send_trigger_us",
+    "tick_to_send_trigger_us",
     "decision_to_send_us",
     "tick_to_send_us",
+    "rithmic_send_call_us",
     "cancel_to_send_us",
     "replace_to_send_us",
 )
@@ -178,7 +181,10 @@ def build_capability_report(
     internal = {field: _extract_stat(metrics, field) for field in INTERNAL_LATENCY_FIELDS}
     external = {field: _extract_stat(metrics, field) for field in EXTERNAL_CONFIRMATION_FIELDS}
     tick_to_send = internal["tick_to_send_us"]
-    operating_band = classify_internal_speed(tick_to_send)
+    trigger_tick_to_send = internal["tick_to_send_trigger_us"]
+    effective_trigger = trigger_tick_to_send if trigger_tick_to_send is not None else tick_to_send
+    operating_band = classify_internal_speed(effective_trigger)
+    sdk_return_band = classify_internal_speed(tick_to_send)
     ack_lag = classify_ack_lag(external["send_to_ack_us"])
     hybrid = _hybrid_capability(interaction_mode, internal, external, assumptions)
     risk = _risk_control_report(internal, external, assumptions)
@@ -205,11 +211,19 @@ def build_capability_report(
         "external_confirmation_speed": external,
         "offensive_capability": {
             "tick_to_decision_us": internal["tick_to_decision_us"],
+            "decision_to_send_trigger_us": internal["decision_to_send_trigger_us"],
+            "tick_to_send_trigger_us": trigger_tick_to_send,
             "decision_to_send_us": internal["decision_to_send_us"],
             "tick_to_send_us": tick_to_send,
+            "rithmic_send_call_us": internal["rithmic_send_call_us"],
+            "placement_trigger_kpi": "tick_to_send_trigger_us" if trigger_tick_to_send is not None else "tick_to_send_us",
             "operating_band": operating_band,
+            "sdk_return_operating_band": sdk_return_band,
             "opportunity_window_compatible": _lte(tick_to_send, assumptions.opportunity_decay_us),
+            "trigger_opportunity_window_compatible": _lte(effective_trigger, assumptions.opportunity_decay_us),
+            "sdk_return_opportunity_window_compatible": _lte(tick_to_send, assumptions.opportunity_decay_us),
             "competitor_relation": _competitor_relation(tick_to_send, assumptions.competitor_tick_to_send_us),
+            "trigger_competitor_relation": _competitor_relation(effective_trigger, assumptions.competitor_tick_to_send_us),
         },
         "defensive_capability": {
             "cancel_to_send_us": internal["cancel_to_send_us"],
@@ -277,8 +291,11 @@ def render_capability_markdown(report: dict[str, Any]) -> str:
         "## Offensive Capability",
         f"- Operating band: `{offensive.get('operating_band', 'unknown')}`",
         f"- Tick-to-decision: `{_fmt_us(offensive.get('tick_to_decision_us'))}`",
+        f"- Decision-to-trigger: `{_fmt_us(offensive.get('decision_to_send_trigger_us'))}`",
+        f"- Tick-to-trigger: `{_fmt_us(offensive.get('tick_to_send_trigger_us'))}`",
         f"- Decision-to-send: `{_fmt_us(offensive.get('decision_to_send_us'))}`",
-        f"- Tick-to-send: `{_fmt_us(offensive.get('tick_to_send_us'))}`",
+        f"- Tick-to-SDK-return: `{_fmt_us(offensive.get('tick_to_send_us'))}`",
+        f"- Rithmic send call: `{_fmt_us(offensive.get('rithmic_send_call_us'))}`",
         f"- Opportunity window compatible: `{offensive.get('opportunity_window_compatible')}`",
         f"- Competitor relation: `{offensive.get('competitor_relation', 'unknown')}`",
         "",
@@ -361,7 +378,8 @@ def _hybrid_capability(
     assumptions: CapabilityAssumptions,
 ) -> dict[str, Any]:
     decision_to_send = internal.get("decision_to_send_us")
-    base = 0.0 if decision_to_send is None else decision_to_send
+    trigger_base = internal.get("decision_to_send_trigger_us")
+    base = 0.0 if decision_to_send is None and trigger_base is None else float(decision_to_send if decision_to_send is not None else trigger_base)
     arbitration = _mode_arbitration_latency(mode, assumptions)
     total = base + arbitration + assumptions.queue_position_penalty_us
     send_to_ack = external.get("send_to_ack_us")
@@ -369,6 +387,9 @@ def _hybrid_capability(
     return {
         "selected_model_interaction_mode": mode.value,
         "arbitration_sequencing_latency_us": arbitration,
+        "total_decision_to_trigger_latency_us": (
+            None if trigger_base is None else trigger_base + arbitration + assumptions.queue_position_penalty_us
+        ),
         "total_decision_to_action_latency_us": total,
         "pending_exposure_behavior": "continues_processing_with_pending_state",
         "ack_delay_creates_stale_state_risk": stale_ack,
@@ -455,11 +476,11 @@ def _risk_control_report(
 
 def _capability_blockers(internal: dict[str, float | None], risk: dict[str, Any]) -> list[str]:
     blockers: list[str] = []
-    if internal.get("tick_to_send_us") is None:
+    if internal.get("tick_to_send_us") is None and internal.get("tick_to_send_trigger_us") is None:
         blockers.append("TICK_TO_SEND_MISSING")
     if internal.get("tick_to_decision_us") is None:
         blockers.append("TICK_TO_DECISION_MISSING")
-    if internal.get("decision_to_send_us") is None:
+    if internal.get("decision_to_send_us") is None and internal.get("decision_to_send_trigger_us") is None:
         blockers.append("DECISION_TO_SEND_MISSING")
     blockers.extend(str(reason) for reason in risk.get("blocking_reasons", []))
     return blockers
@@ -476,6 +497,8 @@ def _feasibility_statement(
     assumptions: CapabilityAssumptions,
 ) -> str:
     tick = internal.get("tick_to_send_us")
+    trigger = internal.get("tick_to_send_trigger_us")
+    effective_trigger = trigger if trigger is not None else tick
     total = hybrid.get("total_decision_to_action_latency_us")
     window_ok = _lte(tick, assumptions.opportunity_decay_us)
     stale = risk.get("stale_state_risk")
@@ -483,7 +506,9 @@ def _feasibility_statement(
         f"The system is operating in the {operating_band.replace('_', ' ')} band for placement speed.",
     ]
     if tick is not None:
-        parts.append(f"Measured tick-to-send is {tick:.1f} us against a {assumptions.opportunity_decay_us:.1f} us opportunity decay assumption.")
+        parts.append(f"Measured tick-to-SDK-return is {tick:.1f} us against a {assumptions.opportunity_decay_us:.1f} us opportunity decay assumption.")
+    if trigger is not None:
+        parts.append(f"Measured tick-to-trigger is {trigger:.1f} us; this is call-entry, not broker acknowledgment.")
     parts.append("Offensive behavior is feasible inside the configured opportunity window." if window_ok else "Offensive behavior is too slow for the configured opportunity window.")
     if total is not None:
         parts.append(f"The selected interaction mode has {float(total):.1f} us total decision-to-action latency.")
@@ -494,7 +519,7 @@ def _feasibility_statement(
         parts.append("Acknowledgment delay is within the configured stale-state timeout, but pending state still must be reconciled.")
     else:
         parts.append("Acknowledgment risk is unknown because confirmation latency is missing.")
-    competitor = _competitor_relation(tick, assumptions.competitor_tick_to_send_us)
+    competitor = _competitor_relation(effective_trigger, assumptions.competitor_tick_to_send_us)
     if competitor != "unknown":
         parts.append(f"Against the assumed competitor speed, our placement speed is {competitor.replace('_', ' ')}.")
     return " ".join(parts)

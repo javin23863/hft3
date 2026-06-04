@@ -47164,7 +47164,7 @@ Nodes (19): avg_ms, host, jitter_ms, loss_pct, max_ms, p50_ms, p95_ms, p999_ms (
 
 ### Community 2289 - "Community 2289"
 Cohesion: 0.11
-Nodes (18): Build And Run, code:text (rithmic_gateway/tools/rithmic_capi_latency_probe.cpp), code:text (Hello Rithmic API team,), code:text (rithmic_gateway/src/rithmic_adapter.cpp), code:bash (cd /root/hft3/repo), code:bash (cd /root/hft3/repo), code:text (count=20), code:text (count=5) (+10 more)
+Nodes (18): Build And Run, code:text (rithmic_gateway/tools/rithmic_latency_probe.cpp), code:text (Hello Rithmic API team,), code:text (rithmic_gateway/src/rithmic_adapter.cpp), code:bash (cd /root/hft3/repo), code:bash (cd /root/hft3/repo), code:text (count=20), code:text (count=5) (+10 more)
 
 ### Community 2290 - "Community 2290"
 Cohesion: 0.11

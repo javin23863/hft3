@@ -43,6 +43,7 @@ __all__ = [
 
 
 _SIDE_MAP = {"BUY": "B", "B": "B", "SELL": "A", "A": "A"}
+PYTHON_ORDER_SEND_BLOCKER = "PYTHON_RITHMIC_ORDER_SEND_DISABLED_USE_NATIVE_CPP_PROBE"
 
 _BRIDGE_TO_DAEMON_EVENT = {
     "A": "order_ack",
@@ -57,7 +58,6 @@ RITHMIC_API_SUPPORTED_EVENT_TYPES = {
     "trade",
     "quote",
     "depth",
-    "order_submit",
     "order_ack",
     "fill",
     "cancel",
@@ -82,9 +82,6 @@ class RithmicApiConnector(ConnectorInterface):
         self._ssl_cert_path: Path | None = None
         self._bridge: RithmicApiBridge | None = None
         self._connected = False
-        self._submit_seq = 0
-        self._pending_submits: list[dict[str, Any]] = []
-        self._inflight_submits: list[dict[str, Any]] = []
         self._last_symbol = ""
         self._last_exchange = ""
         self._detected: set[str] = set()
@@ -233,34 +230,18 @@ class RithmicApiConnector(ConnectorInterface):
         key = side.upper() if isinstance(side, str) else side
         if key not in _SIDE_MAP:
             raise ValueError(f"unknown side: {side!r}; expected one of {sorted(_SIDE_MAP)}")
-        side_char = _SIDE_MAP[key]
-        self._submit_seq += 1
-        client_order_id = f"hft3-{self._submit_seq}-{_now_ns()}"
-        emit_mono_ns = _now_ns()
-        emit_wall_ns = _wall_ns()
-        self._bridge.send_order(symbol, side_char, qty, price, user_msg=client_order_id)
-        submit = {
-            "client_order_id": client_order_id,
-            "order_id": client_order_id,
-            "symbol": symbol,
-            "exchange": self._last_exchange or "CME",
-            "side": key,
-            "qty": int(qty),
-            "size": int(qty),
-            "price": float(price),
-            "ts_emit_ns": emit_mono_ns,
-            "local_monotonic_receive_ns": emit_mono_ns,
-            "local_receive_timestamp_ns": emit_wall_ns,
-        }
-        self._pending_submits.append(submit)
-        self._inflight_submits.append(submit)
-        self._last_symbol = symbol
-        return client_order_id
+        raise RuntimeError(
+            f"{PYTHON_ORDER_SEND_BLOCKER}: Rithmic order submit/cancel hot paths "
+            "must use rithmic_gateway/tools/rithmic_latency_probe.cpp or another native C++ executable."
+        )
 
     def cancel_order(self, order_id: str) -> None:
         if not self._connected or self._bridge is None:
             raise RuntimeError("Not connected — call connect() first")
-        self._bridge.cancel_order(order_id)
+        _ = order_id
+        raise RuntimeError(
+            f"{PYTHON_ORDER_SEND_BLOCKER}: Python connector cancel is disabled for hot-path execution."
+        )
 
     def poll_events(self) -> list[dict[str, Any]]:
         if self._bridge is None:
@@ -282,27 +263,7 @@ class RithmicApiConnector(ConnectorInterface):
             return []
         out: list[dict[str, Any]] = []
 
-        while self._pending_submits and len(out) < limit:
-            submit = self._pending_submits[0]
-            submit_record = {
-                "event_type": "order_submit",
-                "order_id": submit["order_id"],
-                "client_order_id": submit["client_order_id"],
-                "symbol": submit["symbol"],
-                "exchange": submit["exchange"],
-                "side": submit["side"],
-                "qty": submit["qty"],
-                "size": submit["size"],
-                "price": submit["price"],
-                "ts_emit_ns": submit["ts_emit_ns"],
-                "local_monotonic_receive_ns": submit["local_monotonic_receive_ns"],
-                "local_receive_timestamp_ns": submit["local_receive_timestamp_ns"],
-            }
-            self._detected.add("order_submit")
-            out.append(submit_record)
-            self._pending_submits.pop(0)
-
-        for _ in range(limit - len(out)):
+        for _ in range(limit):
             ev = self._bridge.try_pop_order_event()
             if ev is None:
                 break
@@ -349,20 +310,15 @@ class RithmicApiConnector(ConnectorInterface):
         daemon_evt = _BRIDGE_TO_DAEMON_EVENT.get(bridge_evt, "order_status")
         broker_order_id = str(ev.order_id) if ev.order_id != 0 else ""
         client_order_id = ev.user_msg or ev.tag or ""
-        inflight = self._find_inflight(client_order_id)
-        if not client_order_id and inflight is not None:
-            client_order_id = str(inflight["client_order_id"])
         order_id = client_order_id or broker_order_id or f"unknown-{ev.timestamp_ns}"
-        if daemon_evt in {"order_ack", "reject", "order_failure"} and inflight is not None:
-            self._mark_inflight_observed(inflight["client_order_id"])
         return {
             "event_type": daemon_evt,
             "bridge_event_type": bridge_evt,
             "order_id": str(order_id),
             "broker_order_id": broker_order_id,
             "client_order_id": client_order_id,
-            "symbol": inflight.get("symbol", self._last_symbol) if inflight else self._last_symbol,
-            "exchange": inflight.get("exchange", self._last_exchange) if inflight else self._last_exchange,
+            "symbol": self._last_symbol,
+            "exchange": self._last_exchange,
             "side": ev.side,
             "order_type": ev.order_type,
             "price": ev.price,
@@ -378,19 +334,6 @@ class RithmicApiConnector(ConnectorInterface):
             "local_receive_timestamp_ns": recv_wall_ns,
         }
 
-    def _find_inflight(self, client_order_id: str) -> dict[str, Any] | None:
-        if client_order_id:
-            for submit in self._inflight_submits:
-                if submit["client_order_id"] == client_order_id:
-                    return submit
-        return self._inflight_submits[0] if self._inflight_submits else None
-
-    def _mark_inflight_observed(self, client_order_id: str) -> None:
-        self._inflight_submits = [
-            submit for submit in self._inflight_submits
-            if submit["client_order_id"] != client_order_id
-        ]
-
     def detected_event_types(self) -> set[str]:
         return set(self._detected)
 
@@ -399,7 +342,7 @@ class RithmicApiConnector(ConnectorInterface):
             "connector": "rithmic_api",
             "status": "ctypes_bridge" if self._connected else "skeleton",
             "note": "Bridges to librithmic_gateway_shared.so via ctypes; "
-                    "detected_event_types are observed events only",
+                    "detected_event_types are observed events only; order entry is disabled here",
             "supported_event_types": sorted(RITHMIC_API_SUPPORTED_EVENT_TYPES),
             "detected_event_types": sorted(self.detected_event_types()),
             "endpoint_status": self.endpoint_status(),

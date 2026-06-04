@@ -82,8 +82,10 @@ def test_reprocess_sweep_log_is_stub() -> None:
 def test_sweep_orchestrator_no_virsh_fallback() -> None:
     sh = (SCRIPTS / "chi404_run_paper_latency_sweep.sh").read_text(encoding="utf-8")
     assert "virsh" not in sh, "orchestrator must not depend on libvirt (VM is gone)"
-    assert "rithmic_api" in sh
-    assert "RITHMIC_TRIAL_CONNECTOR" in sh
+    assert "rithmic_latency_probe" in sh
+    assert "hot_path_language=c++" in sh
+    assert "wrapper=none" in sh
+    assert "python3 -m data_system.rithmic_trial.pipeline paper-latency-daemon" not in sh
 
 
 def test_no_windows_only_doc_asserts_chi404() -> None:

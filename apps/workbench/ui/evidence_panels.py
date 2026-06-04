@@ -106,6 +106,45 @@ def _ack_display_row(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _latency_metric_row(metrics: dict[str, Any], metric: str, label: str, view: str) -> dict[str, Any]:
+    payload = metrics.get(metric) or {}
+    count = int(_num(payload.get("count")))
+
+    def value(field: str) -> float | None:
+        if count <= 0 or payload.get(field) is None:
+            return None
+        return _num(payload.get(field))
+
+    return {
+        "view": view,
+        "metric": label,
+        "count": count,
+        "p50_us": value("p50_us"),
+        "p90_us": value("p90_us"),
+        "p95_us": value("p95_us"),
+        "p99_us": value("p99_us"),
+        "p99_9_us": value("p99_9_us"),
+        "max_us": value("max_us"),
+    }
+
+
+def _latency_metric_label(metrics: dict[str, Any], metric: str, field: str = "p50_us") -> str:
+    payload = metrics.get(metric) or {}
+    count = int(_num(payload.get("count")))
+    if count <= 0 or payload.get(field) is None:
+        return "blocked"
+    return f"{_num(payload.get(field)):,.1f} us"
+
+
+def _envelope_metric_label(metric: dict[str, Any], field: str) -> str:
+    if not isinstance(metric, dict) or metric.get(field) is None:
+        return "blocked"
+    count = metric.get("count")
+    if count is not None and _num(count) <= 0 and metric.get("observed") is False:
+        return "blocked"
+    return f"{_num(metric.get(field)):,.1f} us"
+
+
 def _display_df(rows: list[dict[str, Any]], columns: dict[str, str]) -> None:
     if not rows:
         st.info("No observed rows for this stage.")
@@ -745,6 +784,100 @@ def render_latency_evidence(snapshot: RunEvidenceSnapshot) -> None:
                     "secret_exposed": "Secret exposed",
                 },
             )
+    latency_baseline = latency.get("latency_baseline") or {}
+    if latency_baseline:
+        metrics = latency_baseline.get("metrics") or {}
+        artifacts = latency_baseline.get("broker_artifacts") or {}
+        baseline_role = str(latency_baseline.get("_baseline_role") or latency_baseline.get("baseline_role") or "latest_observed_summary")
+        role_label = "CURRENT BASE" if baseline_role == "current_baseline" else "LATEST RUN"
+        records_written = int(_num(artifacts.get("records_written")))
+        c1, c2, c3, c4, c5 = st.columns(5)
+        c1.metric("Latency base", role_label)
+        c2.metric("Tick→trigger p50", _latency_metric_label(metrics, "tick_to_send_trigger_us"))
+        c3.metric("SDK return p50", _latency_metric_label(metrics, "tick_to_send_us"))
+        c4.metric("Send→ack p50", _latency_metric_label(metrics, "send_to_ack_us"))
+        c5.metric("Hot path", str(artifacts.get("hot_path_language") or "unknown").upper())
+        st.caption(f"Run: `{latency_baseline.get('run_id') or ''}`")
+        st.caption(f"Stop reason: `{artifacts.get('stop_reason') or 'completed'}`")
+        if baseline_role == "current_baseline":
+            st.success(str(latency_baseline.get("baseline_reason") or "This is the accepted current latency baseline."))
+        if records_written <= 0:
+            st.error(
+                "Latest native latency run produced no paired samples. "
+                f"Blocker: {artifacts.get('stop_reason') or 'missing_samples'}."
+            )
+        st.caption(
+            "Latest broker baseline. Tick→trigger is the internal C++ placement trigger at Rithmic SDK call entry; "
+                "SDK return is the synchronous sendOrder call returning; send→ack is Rithmic/broker response latency. "
+                "Promotion-authoritative runs must show a native C++ hot path with no Python broker wrapper."
+        )
+        runtime_tuning = latency_baseline.get("runtime_tuning") or {}
+        operating_profile = latency_baseline.get("operating_profile") or {}
+        if runtime_tuning or operating_profile:
+            st.subheader("Accepted Speed Profile")
+            profile_rows = [
+                {"setting": "Host", "value": operating_profile.get("host", "")},
+                {"setting": "Gateway", "value": operating_profile.get("gateway", "")},
+                {"setting": "Symbol", "value": f"{operating_profile.get('symbol', '')} {operating_profile.get('exchange', '')}".strip()},
+                {"setting": "CPU affinity", "value": f"requested={runtime_tuning.get('requested_cpu', operating_profile.get('rithmic_probe_cpu', ''))}, applied={runtime_tuning.get('affinity_applied', '')}"},
+                {"setting": "Realtime priority", "value": f"requested={runtime_tuning.get('requested_rt_priority', operating_profile.get('rithmic_probe_rt_priority', ''))}, applied={runtime_tuning.get('rt_priority_applied', '')}"},
+                {"setting": "Memory lock", "value": f"requested={runtime_tuning.get('memory_lock_requested', '')}, applied={runtime_tuning.get('memory_lock_applied', '')}"},
+                {"setting": "Prefault bytes", "value": runtime_tuning.get("prefault_bytes", operating_profile.get("rithmic_probe_prefault_bytes", ""))},
+                {"setting": "Market-data dependency", "value": f"skip_md={operating_profile.get('rithmic_probe_skip_md', '')}, require_md={operating_profile.get('rithmic_probe_require_md', '')}"},
+            ]
+            _display_df(
+                profile_rows,
+                {
+                    "setting": "Setting",
+                    "value": "Accepted value",
+                },
+            )
+        rows = [
+            _latency_metric_row(metrics, "tick_to_decision_us", "Tick→decision", "placement"),
+            _latency_metric_row(metrics, "decision_to_send_trigger_us", "Decision→trigger", "placement trigger"),
+            _latency_metric_row(metrics, "tick_to_send_trigger_us", "Tick→trigger", "placement trigger"),
+            _latency_metric_row(metrics, "decision_to_send_us", "Decision→SDK return", "native API"),
+            _latency_metric_row(metrics, "tick_to_send_us", "Tick→SDK return", "native API"),
+            _latency_metric_row(metrics, "rithmic_send_call_us", "Rithmic send call", "native API"),
+            _latency_metric_row(metrics, "send_to_ack_us", "Send→ack", "broker response"),
+            _latency_metric_row(metrics, "cancel_to_send_us", "Cancel→send", "defensive"),
+            _latency_metric_row(metrics, "cancel_to_ack_us", "Cancel→ack", "broker response"),
+        ]
+        _display_df(
+            rows,
+            {
+                "view": "View",
+                "metric": "Metric",
+                "count": "Samples",
+                "p50_us": "p50 us",
+                "p90_us": "p90 us",
+                "p95_us": "p95 us",
+                "p99_us": "p99 us",
+                "p99_9_us": "p99.9 us",
+                "max_us": "max us",
+            },
+        )
+        _display_df(
+            [
+                {
+                    "artifact": "summary",
+                    "path": latency_baseline.get("_path", ""),
+                },
+                {
+                    "artifact": "samples",
+                    "path": latency_baseline.get("_sample_path") or latency_baseline.get("sample_path", ""),
+                },
+                {
+                    "artifact": "raw_events",
+                    "path": artifacts.get("raw_events_path", ""),
+                },
+                {
+                    "artifact": "hot_path",
+                    "path": f"language={artifacts.get('hot_path_language') or 'unknown'}, wrapper={artifacts.get('wrapper') or 'unknown'}",
+                },
+            ],
+            {"artifact": "Artifact", "path": "Path"},
+        )
     feed_latency = latency.get("feed_latency_us") or {}
     if feed_latency:
         st.subheader("Rithmic Feed Timing")
@@ -757,6 +890,10 @@ def render_latency_evidence(snapshot: RunEvidenceSnapshot) -> None:
         st.caption(
             "Feed timing is server/local timestamp evidence. Submit-to-ack latency is separate and requires paired tagged order events."
         )
+        if any(_num(feed_latency.get(field)) < 0 for field in ("p50_us", "p90_us", "p99_us")):
+            st.warning(
+                "Feed timing has negative clock-derived values. Treat this as timestamp alignment evidence, not usable latency."
+            )
     rows = latency.get("execution_ack_rows") or []
     if rows:
         measured = sum(1 for row in rows if row.get("measured"))
@@ -781,6 +918,7 @@ def render_latency_evidence(snapshot: RunEvidenceSnapshot) -> None:
         envelope = latency.get("latency_operating_envelope") or latency.get("campaign_latency_operating_envelope")
         offensive = envelope.get("offensive") or {}
         placement = offensive.get("placement") or {}
+        tick_to_trigger = placement.get("tick_to_send_trigger_us") or {}
         tick_to_send = placement.get("tick_to_send_us") or {}
         external = envelope.get("external_confirmation") or {}
         confirmation = external.get("confirmation") or {}
@@ -788,10 +926,18 @@ def render_latency_evidence(snapshot: RunEvidenceSnapshot) -> None:
         pending = envelope.get("pending_state_risk") or {}
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Envelope", str(envelope.get("status", "unknown")))
-        c2.metric("Tick→send p99 us", f"{_num(tick_to_send.get('p99')):,.1f}")
-        c3.metric("Send→ack p99 us", f"{_num(send_to_ack.get('p99')):,.1f}")
+        c2.metric("Tick→trigger p99", _envelope_metric_label(tick_to_trigger, "p99"))
+        c3.metric("Send→ack p99", _envelope_metric_label(send_to_ack, "p99"))
         c4.metric("Placement band", str(offensive.get("operating_band", "unknown")))
-        st.caption("Placement speed is separate from acknowledgment latency; acknowledgments update local state asynchronously.")
+        st.caption("Trigger speed, SDK return, and acknowledgment latency are separate C++ evidence boundaries; acknowledgments update local state asynchronously.")
+        _display_df(
+            [
+                {"boundary": "Tick to trigger", "p50_us": tick_to_trigger.get("p50"), "p99_us": tick_to_trigger.get("p99")},
+                {"boundary": "Tick to SDK return", "p50_us": tick_to_send.get("p50"), "p99_us": tick_to_send.get("p99")},
+                {"boundary": "Send to ack", "p50_us": send_to_ack.get("p50"), "p99_us": send_to_ack.get("p99")},
+            ],
+            {"boundary": "Boundary", "p50_us": "p50 us", "p99_us": "p99 us"},
+        )
         blockers = envelope.get("promotion_blockers") or []
         if blockers:
             _display_df(
@@ -819,6 +965,8 @@ def render_latency_evidence(snapshot: RunEvidenceSnapshot) -> None:
                 "value": diag.get("latency_profitability_buffer_us"),
             },
         ])
+    elif latency_baseline:
+        st.caption("Broker latency baseline is shown above.")
     else:
         st.info("No observed latency evidence for this run.")
     _json_expander("Venue profiles", latency.get("venue_profiles"))

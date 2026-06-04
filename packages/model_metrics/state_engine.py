@@ -92,13 +92,24 @@ def classify_model_state(
     elif _above(obs.latency_order_to_ack, latency_hi):
         triggers.append(_trigger("latency_drift", "YELLOW", obs.latency_order_to_ack, latency_hi, "execution latency above expected range"))
     tick_to_send_hi = (env.latency_bounds.get("tick_to_send_us") or (None, None))[1]
+    tick_to_trigger_hi = (env.latency_bounds.get("tick_to_send_trigger_us") or (None, None))[1]
     decision_to_send_hi = (env.latency_bounds.get("decision_to_send_us") or (None, None))[1]
+    decision_to_trigger_hi = (env.latency_bounds.get("decision_to_send_trigger_us") or (None, None))[1]
+    send_call_hi = (env.latency_bounds.get("rithmic_send_call_us") or (None, None))[1]
+    if _above(obs.tick_to_send_trigger_us, env.opportunity_decay_window_used):
+        triggers.append(_trigger("placement_trigger_exceeds_opportunity_window", "RED", obs.tick_to_send_trigger_us, env.opportunity_decay_window_used, "tick-to-trigger exceeded the operating opportunity window"))
+    elif _above(obs.tick_to_send_trigger_us, tick_to_trigger_hi):
+        triggers.append(_trigger("placement_trigger_latency_drift", "YELLOW", obs.tick_to_send_trigger_us, tick_to_trigger_hi, "tick-to-trigger above expected operating envelope"))
     if _above(obs.tick_to_send_us, env.opportunity_decay_window_used):
-        triggers.append(_trigger("placement_exceeds_opportunity_window", "RED", obs.tick_to_send_us, env.opportunity_decay_window_used, "tick-to-send exceeded the operating opportunity window"))
+        triggers.append(_trigger("placement_exceeds_opportunity_window", "RED", obs.tick_to_send_us, env.opportunity_decay_window_used, "tick-to-SDK-return exceeded the operating opportunity window"))
     elif _above(obs.tick_to_send_us, tick_to_send_hi):
-        triggers.append(_trigger("placement_latency_drift", "YELLOW", obs.tick_to_send_us, tick_to_send_hi, "tick-to-send above expected operating envelope"))
+        triggers.append(_trigger("placement_latency_drift", "YELLOW", obs.tick_to_send_us, tick_to_send_hi, "tick-to-SDK-return above expected operating envelope"))
+    if _above(obs.decision_to_send_trigger_us, decision_to_trigger_hi):
+        triggers.append(_trigger("decision_to_trigger_latency_drift", "YELLOW", obs.decision_to_send_trigger_us, decision_to_trigger_hi, "decision-to-trigger above expected operating envelope"))
     if _above(obs.decision_to_send_us, decision_to_send_hi):
         triggers.append(_trigger("decision_to_send_latency_drift", "YELLOW", obs.decision_to_send_us, decision_to_send_hi, "decision-to-send above expected operating envelope"))
+    if _above(obs.rithmic_send_call_us, send_call_hi):
+        triggers.append(_trigger("rithmic_send_call_latency_drift", "YELLOW", obs.rithmic_send_call_us, send_call_hi, "Rithmic SDK send-call cost above expected operating envelope"))
     stale_timeout_us = finite_or_none(env.stale_pending_timeout_policy.get("stale_pending_timeout_us"))
     if env.async_state_model_required and _above(obs.send_to_ack_us, stale_timeout_us):
         triggers.append(_trigger("async_ack_stale_state", "RED", obs.send_to_ack_us, stale_timeout_us, "send-to-ack exceeded stale pending timeout"))

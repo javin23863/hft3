@@ -15,7 +15,7 @@ $(date -u +%F) 00:00:02.000000,Trade,MES,5000.50,1
 EOF
 
 export RITHMIC_TRIAL_ENABLED=1
-export RITHMIC_TRIAL_CONNECTOR=rtrader
+export RITHMIC_TRIAL_CONNECTOR=fixture
 export RTRADER_WATCH_DIRS="$WATCH"
 
 echo "=== smoke capture (synthetic export) ==="

@@ -357,35 +357,6 @@ class RithmicApiBridge:
         L.hft_rithmic_adapter_subscribe_mbo.argtypes = [c_void_p, c_char_p, c_char_p]
         L.hft_rithmic_adapter_subscribe_mbo.restype = c_int
 
-        L.hft_rithmic_adapter_send_order.argtypes = [
-            c_void_p,
-            c_char_p,
-            ctypes.c_char,
-            c_int32,
-            c_double,
-        ]
-        L.hft_rithmic_adapter_send_order.restype = c_int
-
-        self._send_order_with_user_msg = None
-        try:
-            send_with_msg = L.hft_rithmic_adapter_send_order_with_user_msg
-        except AttributeError:
-            send_with_msg = None
-        if send_with_msg is not None:
-            send_with_msg.argtypes = [
-                c_void_p,
-                c_char_p,
-                ctypes.c_char,
-                c_int32,
-                c_double,
-                c_char_p,
-            ]
-            send_with_msg.restype = c_int
-            self._send_order_with_user_msg = send_with_msg
-
-        L.hft_rithmic_adapter_cancel_order.argtypes = [c_void_p, c_char_p]
-        L.hft_rithmic_adapter_cancel_order.restype = c_int
-
         L.hft_rithmic_adapter_try_pop_event.argtypes = [c_void_p, POINTER(CMarketDataEvent)]
         L.hft_rithmic_adapter_try_pop_event.restype = c_int
 
@@ -465,31 +436,20 @@ class RithmicApiBridge:
         h = self._require_handle()
         if not isinstance(side, str) or len(side) != 1:
             raise ValueError(f"side must be a single character; got {side!r}")
-        if user_msg and self._send_order_with_user_msg is not None:
-            rc = self._send_order_with_user_msg(
-                h,
-                symbol.encode("utf-8"),
-                ctypes.c_char(side.encode("utf-8")),
-                c_int32(int(qty)),
-                c_double(float(price)),
-                user_msg.encode("utf-8"),
-            )
-        else:
-            rc = self._lib.hft_rithmic_adapter_send_order(
-                h,
-                symbol.encode("utf-8"),
-                ctypes.c_char(side.encode("utf-8")),
-                c_int32(int(qty)),
-                c_double(float(price)),
-            )
-        self._raise_if_nonzero(rc)
+        _ = (h, symbol, qty, price, user_msg)
+        raise RithmicApiError(
+            2,
+            "PYTHON_RITHMIC_ORDER_SEND_DISABLED_USE_NATIVE_CPP_PROBE: "
+            "use rithmic_gateway/tools/rithmic_latency_probe.cpp or another native C++ executable",
+        )
 
     def cancel_order(self, order_id: str) -> None:
         h = self._require_handle()
-        rc = self._lib.hft_rithmic_adapter_cancel_order(
-            h, order_id.encode("utf-8")
+        _ = (h, order_id)
+        raise RithmicApiError(
+            2,
+            "PYTHON_RITHMIC_ORDER_SEND_DISABLED_USE_NATIVE_CPP_PROBE: Python bridge cancel is disabled",
         )
-        self._raise_if_nonzero(rc)
 
     def try_pop_event(self) -> Optional[MarketDataEvent]:
         h = self._require_handle()

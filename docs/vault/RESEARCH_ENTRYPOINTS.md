@@ -209,7 +209,7 @@ EVENT_ID=CPI_2024_09_11_TIGHT bash scripts/chi404_run_trial_live.sh
 - `--date` / folder `YYYY-MM-DD` = **capture session date** (ingest only).
 - `EVENT_ID` / `replay-event` = **research event** (from `events.csv`).
 
-**Paper order latency (≥1,000 real pairs):** [CHI404_CANONICAL_ENTRYPOINTS.md](CHI404_CANONICAL_ENTRYPOINTS.md) — `chi404_vm_deploy.sh` then `chi404_run_paper_latency_sweep.sh`. No synthetic log inject.
+**Paper order latency:** [CHI404_CANONICAL_ENTRYPOINTS.md](CHI404_CANONICAL_ENTRYPOINTS.md) — build and run native `rithmic_latency_probe` on CHI404. The compatibility sweep script refuses Python/ctypes hot-path measurement. No synthetic log inject.
 
 **Verify (scope-green workstation):** `python -m pytest tests/test_rithmic_trial_pipeline.py tests/test_rithmic_topology_guards.py -q`. CHI404 PASS requires `validate_pass_criteria.py` on real logs — see [docs/chi404/VALIDATION_ADDENDUM.md](../chi404/VALIDATION_ADDENDUM.md).
 

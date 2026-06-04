@@ -16,6 +16,8 @@ from tools.latency_baseline.recorder import (
 from tools.latency_baseline.run import main as latency_baseline_main
 from tools.latency_baseline.summary import build_summary, write_summary_reports
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
 
 class _FakeBrokerConnector:
     def __init__(self, *, cancel_ack: bool = True) -> None:
@@ -73,6 +75,7 @@ class _FakeBrokerConnector:
 
     def cancel_order(self, order_id: str) -> None:
         if self.cancel_ack:
+            self._ns = max(self._ns, time.perf_counter_ns())
             cancel_ns = self._next_ns(500)
             self._pending.append(
                 {
@@ -94,7 +97,7 @@ class _FakeBrokerConnector:
             return out
         if self._ready_for_market:
             self._ready_for_market = False
-            ns = self._next_ns(100)
+            ns = self._market_event_ns()
             return [
                 {
                     "event_type": "quote",
@@ -108,12 +111,81 @@ class _FakeBrokerConnector:
             ]
         return []
 
+    def _market_event_ns(self) -> int:
+        self._ns = min(self._ns, time.perf_counter_ns() - 200_000)
+        return self._next_ns(10)
+
     def close(self) -> None:
         self.connected = False
 
     def _next_ns(self, delta_us: int) -> int:
         self._ns += delta_us * 1000
         return self._ns
+
+
+def test_native_cpp_probe_is_latency_authority_without_wrapper() -> None:
+    probe = (REPO_ROOT / "rithmic_gateway" / "tools" / "rithmic_latency_probe.cpp").read_text(
+        encoding="utf-8"
+    )
+    assert '#include "rithmic_adapter.hpp"' in probe
+    assert '#include "c_api.hpp"' not in probe
+    assert "hot_path_language" in probe
+    assert '\\"c++\\"' in probe
+    assert "wrapper" in probe
+    assert '\\"none\\"' in probe
+    assert "C++ direct Rithmic adapter, no Python broker wrapper" in probe
+    assert "tick_to_send_trigger_us" in probe
+    assert "placement_trigger_kpi" in probe
+    assert "order_api_call_start_ns" in probe
+
+
+def test_native_cpp_summary_keeps_placement_metrics_on_ack_timeout() -> None:
+    probe = (REPO_ROOT / "rithmic_gateway" / "tools" / "rithmic_latency_probe.cpp").read_text(
+        encoding="utf-8"
+    )
+    assert "if (sample.success && sample.has_order_metrics)" not in probe
+    assert "if (sample.has_order_metrics)" in probe
+    assert "if (sample.success && sample.has_send_to_ack)" in probe
+
+
+class _OrderPriorityFakeConnector(_FakeBrokerConnector):
+    def __init__(self) -> None:
+        super().__init__(cancel_ack=True)
+        self.poll_order_calls = 0
+
+    def poll_events(self) -> list[dict]:
+        if self._ready_for_market:
+            self._ready_for_market = False
+            ns = self._market_event_ns()
+            return [
+                {
+                    "event_type": "quote",
+                    "symbol": self.symbol,
+                    "exchange": self.exchange,
+                    "bid_price": 5000.0,
+                    "ask_price": 5000.25,
+                    "price": 5000.0,
+                    "local_monotonic_receive_ns": ns,
+                }
+            ]
+        ns = self._next_ns(10)
+        return [
+            {
+                "event_type": "trade",
+                "symbol": self.symbol,
+                "exchange": self.exchange,
+                "price": 5000.0,
+                "local_monotonic_receive_ns": ns,
+            }
+        ]
+
+    def poll_order_events(self) -> list[dict]:
+        self.poll_order_calls += 1
+        if not self._pending:
+            return []
+        out = self._pending
+        self._pending = []
+        return out
 
 
 def test_tick_to_send_is_separate_from_send_to_ack() -> None:
@@ -289,14 +361,17 @@ def test_synthetic_cli_writes_jsonl_and_reports(tmp_path: Path) -> None:
     summary_path = tmp_path / "reports" / "latency_baselines" / "syn1_summary.json"
     report = json.loads(summary_path.read_text(encoding="utf-8"))
     assert report["primary_kpi"] == "tick_to_send_us"
+    assert report["placement_trigger_kpi"] == "tick_to_send_trigger_us"
+    assert report["metrics"]["tick_to_send_trigger_us"]["count"] == 3
     assert report["metrics"]["tick_to_send_us"]["count"] == 3
+    assert report["metrics"]["rithmic_send_call_us"]["count"] == 3
     assert report["metrics"]["send_to_ack_us"]["count"] == 3
     assert report["metrics"]["cancel_to_ack_us"]["count"] == 3
     assert (tmp_path / "reports" / "latency_baselines" / "syn1_summary.md").is_file()
 
 
 def test_invalid_samples_fail_loudly(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="order_send_ts before decision_ready_ts"):
+    with pytest.raises(ValueError, match="order_api_call_start_ts before decision_ready_ts"):
         build_latency_sample(
             run_id="bad",
             environment="paper",
@@ -320,21 +395,29 @@ def test_invalid_samples_fail_loudly(tmp_path: Path) -> None:
 
 
 def test_broker_mode_fails_loudly_until_execution_adapter_is_wired(tmp_path: Path) -> None:
-    rc = latency_baseline_main(["--repo-root", str(tmp_path), "--run-id", "blocked"])
+    rc = latency_baseline_main(["--mode", "broker", "--repo-root", str(tmp_path), "--run-id", "blocked"])
     assert rc == 2
     blocker = tmp_path / "reports" / "latency_baselines" / "blocked_broker_blocker.json"
     payload = json.loads(blocker.read_text(encoding="utf-8"))
-    assert payload["blocker"] == "BROKER_MODE_REQUIRES_EXECUTION_ADAPTER"
-    assert payload["principle"] == "do_not_treat_ack_latency_as_placement_speed"
+    assert payload["blocker"] == "BROKER_MODE_REPLACED_BY_NATIVE_CPP_PROBE"
+    assert payload["principle"] == "hot_paths_are_native_cpp_no_python_wrappers"
+    assert payload["authority"] == {
+        "hot_path_language": "c++",
+        "wrapper": "none",
+        "target": "rithmic_latency_probe",
+    }
+    assert not list((tmp_path / "data" / "latency_baselines").glob("*/*.jsonl"))
 
 
-def test_broker_mode_writes_multiple_order_and_cancel_records(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_broker_mode_refuses_fake_python_connector(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_fake_broker(monkeypatch, _FakeBrokerConnector(cancel_ack=True), tmp_path)
 
     rc = latency_baseline_main(
         [
             "--repo-root",
             str(tmp_path),
+            "--mode",
+            "broker",
             "--run-id",
             "broker-multi",
             "--env",
@@ -355,18 +438,15 @@ def test_broker_mode_writes_multiple_order_and_cancel_records(tmp_path: Path, mo
         ]
     )
 
-    assert rc == 0
-    sample_path = next((tmp_path / "data" / "latency_baselines").glob("*/*.jsonl"))
-    records = load_jsonl(sample_path)
-    assert [row["order_action"] for row in records] == ["new", "cancel", "new", "cancel"]
-    assert sum(row["order_action"] == "new" for row in records) == 2
-    assert sum(row["order_action"] == "cancel" for row in records) == 2
-    assert all(row["cancel_to_send_us"] is None for row in records if row["order_action"] == "new")
-    assert all(row["tick_to_send_us"] is None for row in records if row["order_action"] == "cancel")
-    summary = json.loads((tmp_path / "reports" / "latency_baselines" / "broker-multi_summary.json").read_text(encoding="utf-8"))
-    assert summary["metrics"]["tick_to_send_us"]["count"] == 2
-    assert summary["metrics"]["cancel_to_send_us"]["count"] == 2
-    assert summary["broker_artifacts"]["records_written"] == "4"
+    assert rc == 2
+    blocker = json.loads(
+        (tmp_path / "reports" / "latency_baselines" / "broker-multi_broker_blocker.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert blocker["blocker"] == "BROKER_MODE_REPLACED_BY_NATIVE_CPP_PROBE"
+    assert blocker["authority"]["target"] == "rithmic_latency_probe"
+    assert not list((tmp_path / "data" / "latency_baselines").glob("*/*.jsonl"))
 
 
 def test_broker_mode_records_cancel_timeout_without_faking_ack(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -376,6 +456,8 @@ def test_broker_mode_records_cancel_timeout_without_faking_ack(tmp_path: Path, m
         [
             "--repo-root",
             str(tmp_path),
+            "--mode",
+            "broker",
             "--run-id",
             "broker-cancel-timeout",
             "--env",
@@ -396,16 +478,54 @@ def test_broker_mode_records_cancel_timeout_without_faking_ack(tmp_path: Path, m
         ]
     )
 
-    assert rc == 0
-    sample_path = next((tmp_path / "data" / "latency_baselines").glob("*/*.jsonl"))
-    records = load_jsonl(sample_path)
-    assert [row["order_action"] for row in records] == ["new", "cancel"]
-    cancel = records[-1]
-    assert cancel["success"] is False
-    assert cancel["reject_reason"] == "cancel_ack_timeout"
-    assert cancel["cancel_to_ack_us"] is None
-    summary = json.loads((tmp_path / "reports" / "latency_baselines" / "broker-cancel-timeout_summary.json").read_text(encoding="utf-8"))
-    assert summary["broker_artifacts"]["stop_reason"] == "cancel_ack_timeout"
+    assert rc == 2
+    blocker = json.loads(
+        (tmp_path / "reports" / "latency_baselines" / "broker-cancel-timeout_broker_blocker.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert blocker["principle"] == "hot_paths_are_native_cpp_no_python_wrappers"
+    assert not list((tmp_path / "data" / "latency_baselines").glob("*/*.jsonl"))
+
+
+def test_broker_mode_prioritizes_order_event_queue_after_submit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    connector = _OrderPriorityFakeConnector()
+    _patch_fake_broker(monkeypatch, connector, tmp_path)
+
+    rc = latency_baseline_main(
+        [
+            "--repo-root",
+            str(tmp_path),
+            "--mode",
+            "broker",
+            "--run-id",
+            "broker-order-priority",
+            "--env",
+            "paper",
+            "--broker",
+            "rithmic",
+            "--symbol",
+            "ES",
+            "--exchange",
+            "CME",
+            "--samples",
+            "1",
+            "--duration",
+            "5",
+            "--ack-timeout-sec",
+            "0.01",
+            "--no-cancel-after-ack",
+        ]
+    )
+
+    assert rc == 2
+    assert connector.poll_order_calls == 0
+    blocker = json.loads(
+        (tmp_path / "reports" / "latency_baselines" / "broker-order-priority_broker_blocker.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert blocker["authority"]["wrapper"] == "none"
 
 
 def _patch_fake_broker(monkeypatch: pytest.MonkeyPatch, connector: _FakeBrokerConnector, repo_root: Path) -> None:

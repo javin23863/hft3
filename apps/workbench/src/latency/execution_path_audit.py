@@ -29,8 +29,11 @@ RUNTIME_ENV_SCHEMA_VERSION = "execution_path_audit_runtime_env_v1"
 
 INTERNAL_PLACEMENT_METRICS = (
     "tick_to_decision_us",
+    "decision_to_send_trigger_us",
+    "tick_to_send_trigger_us",
     "decision_to_send_us",
     "tick_to_send_us",
+    "rithmic_send_call_us",
     "cancel_to_send_us",
     "replace_to_send_us",
 )
@@ -348,7 +351,7 @@ def write_blocked_paper_live(config: AuditConfig, *, runtime_env: Mapping[str, A
         runtime_env_path=runtime_path,
         runtime_env=runtime_env,
         current_status=_load_json(report_paths(config.repo_root, config.run_id)[2]),
-        blocked_reason="PAPER_LIVE_EXECUTION_BOUNDARIES_NOT_WIRED",
+        blocked_reason="PAPER_LIVE_REPLACED_BY_NATIVE_CPP_PROBE",
     )
     write_summary_reports(summary, config.repo_root, config.run_id)
     return summary
@@ -386,7 +389,8 @@ def build_summary(
         "spans_path": str(spans_path),
         "runtime_env_path": str(runtime_env_path),
         "primary_kpi": "tick_to_send_us",
-        "principle": "placement_speed_is_tick_to_send_us_ack_latency_is_reported_separately",
+        "placement_trigger_kpi": "tick_to_send_trigger_us",
+        "principle": "placement_trigger_and_sdk_return_are_separate_from_ack_latency",
         "environment": {
             "environment": config.environment,
             "broker": config.broker,
@@ -399,7 +403,17 @@ def build_summary(
         },
         "metrics": metrics,
         "views": {
-            "offensive": {field: metrics[field] for field in ("tick_to_decision_us", "decision_to_send_us", "tick_to_send_us")},
+            "offensive": {
+                field: metrics[field]
+                for field in (
+                    "tick_to_decision_us",
+                    "decision_to_send_trigger_us",
+                    "tick_to_send_trigger_us",
+                    "decision_to_send_us",
+                    "tick_to_send_us",
+                    "rithmic_send_call_us",
+                )
+            },
             "defensive": {
                 field: metrics[field]
                 for field in ("cancel_to_send_us", "cancel_to_ack_us", "replace_to_send_us", "replace_to_ack_us")
@@ -426,6 +440,10 @@ def build_summary(
         "mode": config.mode,
         "generated_at_utc": summary["generated_at_utc"],
         "primary_kpi": "tick_to_send_us",
+        "placement_trigger_kpi": "tick_to_send_trigger_us",
+        "tick_to_send_trigger_p50_us": metrics["tick_to_send_trigger_us"].get("p50_us"),
+        "tick_to_send_trigger_p99_us": metrics["tick_to_send_trigger_us"].get("p99_us"),
+        "tick_to_send_trigger_p99_9_us": metrics["tick_to_send_trigger_us"].get("p99_9_us"),
         "tick_to_send_p50_us": metrics["tick_to_send_us"].get("p50_us"),
         "tick_to_send_p99_us": metrics["tick_to_send_us"].get("p99_us"),
         "tick_to_send_p99_9_us": metrics["tick_to_send_us"].get("p99_9_us"),
@@ -691,9 +709,12 @@ def render_markdown(summary: Mapping[str, Any]) -> str:
         f"Status: `{summary.get('status', 'unknown')}`",
         f"Samples: `{summary.get('sample_count', 0)}`",
         "",
-        "Primary KPI: `tick_to_send_us`.",
+        "Primary strict KPI: `tick_to_send_us`.",
         "",
-        "`send_to_ack_us`, `cancel_to_ack_us`, and `replace_to_ack_us` are external confirmation latency. They are not placement speed.",
+        "Placement trigger KPI: `tick_to_send_trigger_us`.",
+        "",
+        "`tick_to_send_trigger_us` is call-entry timing. `tick_to_send_us` runs through native SDK call return. "
+        "`send_to_ack_us`, `cancel_to_ack_us`, and `replace_to_ack_us` are external confirmation latency.",
         "",
     ]
     if summary.get("blocked_reason"):
@@ -917,7 +938,10 @@ def _metric_values(raw: Mapping[str, int | None]) -> dict[str, float | None]:
     return {
         "tick_to_decision_us": _duration_us(raw.get("market_event_received_ts"), raw.get("decision_ready_ts")),
         "decision_to_send_us": _duration_us(raw.get("decision_ready_ts"), raw.get("order_send_ts")),
+        "decision_to_send_trigger_us": _duration_us(raw.get("decision_ready_ts"), raw.get("order_send_call_ts")),
+        "tick_to_send_trigger_us": _duration_us(raw.get("market_event_received_ts"), raw.get("order_send_call_ts")),
         "tick_to_send_us": _duration_us(raw.get("market_event_received_ts"), raw.get("order_send_ts")),
+        "rithmic_send_call_us": _duration_us(raw.get("order_send_call_ts"), raw.get("order_send_ts")),
         "send_to_ack_us": _duration_us(raw.get("order_send_ts"), raw.get("ack_received_ts")),
         "cancel_to_send_us": _duration_us(raw.get("cancel_decision_ready_ts"), raw.get("cancel_send_ts")),
         "cancel_to_ack_us": _duration_us(raw.get("cancel_send_ts"), raw.get("cancel_ack_received_ts")),
@@ -989,7 +1013,11 @@ def _check_order(errors: list[str], raw: Mapping[str, Any], fields: tuple[str, .
 
 
 def _placement_ack_separated(metrics: Mapping[str, Mapping[str, Any]]) -> bool:
-    return "tick_to_send_us" in metrics and "send_to_ack_us" in metrics
+    return (
+        "tick_to_send_trigger_us" in metrics
+        and "tick_to_send_us" in metrics
+        and "send_to_ack_us" in metrics
+    )
 
 
 def _above(value: Any, threshold: float) -> bool:

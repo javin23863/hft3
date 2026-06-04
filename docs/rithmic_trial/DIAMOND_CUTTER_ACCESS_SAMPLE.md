@@ -19,8 +19,9 @@ Current status:
 - API currently integrated: R|API+ C++ 13.7.0.0.
 - Current authorized system: Rithmic Test / Orangeburg.
 - Current host: CHI404, QuantVPS Chicago bare metal.
-- Current hot sample: `rithmic_gateway/tools/rithmic_capi_latency_probe.cpp`.
-- Current bottleneck: Test/Orangeburg route, not Python or local app overhead.
+- Current hot sample: `rithmic_gateway/tools/rithmic_latency_probe.cpp`.
+- Current bottleneck: native R|API+ send-call time and broker acknowledgment
+  latency are measured separately; Python is not in the measured hot path.
 
 Target:
 
@@ -30,10 +31,10 @@ Target:
 
 ## Included Sample
 
-The meaningful sample is the native C++ C API probe:
+The meaningful sample is the direct native C++ probe:
 
 ```text
-rithmic_gateway/tools/rithmic_capi_latency_probe.cpp
+rithmic_gateway/tools/rithmic_latency_probe.cpp
 ```
 
 The sample:
@@ -46,7 +47,7 @@ The sample:
   - `RITHMIC_REP_CONNECT_POINT`
   - `RITHMIC_PNL_CONNECT_POINT`
   - `RITHMIC_IH_CONNECT_POINT`
-- Initializes the native R|API+ adapter through `librithmic_gateway_shared`.
+- Initializes the native R|API+ adapter in-process.
 - Logs into repository, order, market data, PnL, and history connect points.
 - Warms price-increment metadata once, outside the measured order loop.
 - Sends tagged limit orders using unique `user_msg` values.
@@ -55,14 +56,16 @@ The sample:
 - Cancels after ack when configured.
 - Emits machine-readable per-order results and summary percentiles.
 
-The adapter side is implemented in:
+The hot-path adapter side is implemented in:
 
 ```text
 rithmic_gateway/src/rithmic_adapter.cpp
-rithmic_gateway/src/c_api.cpp
-rithmic_gateway/include/c_api.hpp
 rithmic_gateway/include/rithmic_adapter.hpp
 ```
+
+`rithmic_gateway/src/c_api.cpp` and `rithmic_gateway/include/c_api.hpp` exist
+for non-hot capture plumbing only. They are not the latency authority and are
+not used by this sample.
 
 ## Build And Run
 
@@ -70,7 +73,7 @@ Build on CHI404:
 
 ```bash
 cd /root/hft3/repo
-cmake --build build --target rithmic_capi_latency_probe -j2
+cmake --build build --target rithmic_latency_probe -j2
 ```
 
 Run against the currently provided Rithmic Test / Orangeburg config:
@@ -91,10 +94,13 @@ export RITHMIC_PROBE_ORDER_QTY=1
 export RITHMIC_PROBE_ORDER_TIMEOUT_MS=7000
 export RITHMIC_PROBE_ORDER_INTERVAL_US=0
 export RITHMIC_PROBE_CANCEL_AFTER_ACK=1
-export RITHMIC_PROBE_SKIP_EXTERNAL_WARM=0
+export RITHMIC_PROBE_SKIP_MD=0
+export RITHMIC_PROBE_CPU=-1
+export RITHMIC_PROBE_RT_PRIORITY=0
+export RITHMIC_PROBE_MLOCK=1
+export RITHMIC_PROBE_PREFAULT_BYTES=16777216
 
-timeout 90s chrt -f 80 taskset -c 0,1 \
-  ./build/rithmic_gateway/rithmic_capi_latency_probe
+timeout 90s ./build/rithmic_gateway/rithmic_latency_probe
 ```
 
 When Rithmic provides a Chicago/Aurora Test or Diamond-compatible config, the

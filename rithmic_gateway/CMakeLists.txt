@@ -9,6 +9,24 @@ function(configure_rapiplus_msvc_runtime target_name)
     endif()
 endfunction()
 
+function(configure_hft_release_latency target_name)
+    if(MSVC)
+        target_compile_options(${target_name} PRIVATE
+            $<$<CONFIG:Release>:/O2 /Oi /Ot /Ob3 /GL /Gw /Gy>
+        )
+        target_link_options(${target_name} PRIVATE
+            $<$<CONFIG:Release>:/LTCG /OPT:REF /OPT:ICF>
+        )
+    else()
+        target_compile_options(${target_name} PRIVATE
+            $<$<CONFIG:Release>:-O3 -march=native -flto>
+        )
+        target_link_options(${target_name} PRIVATE
+            $<$<CONFIG:Release>:-flto>
+        )
+    endif()
+endfunction()
+
 add_library(rithmic_gateway
     src/rithmic_adapter.cpp
 )
@@ -20,6 +38,7 @@ target_include_directories(rithmic_gateway PUBLIC
 
 target_compile_features(rithmic_gateway PUBLIC cxx_std_17)
 configure_rapiplus_msvc_runtime(rithmic_gateway)
+configure_hft_release_latency(rithmic_gateway)
 
 if(NOT MSVC)
     target_compile_options(rithmic_gateway PRIVATE
@@ -142,6 +161,7 @@ target_include_directories(rithmic_latency_probe PRIVATE
 target_link_libraries(rithmic_latency_probe PRIVATE rithmic_gateway)
 target_compile_features(rithmic_latency_probe PRIVATE cxx_std_17)
 configure_rapiplus_msvc_runtime(rithmic_latency_probe)
+configure_hft_release_latency(rithmic_latency_probe)
 if(NOT MSVC)
     target_compile_options(rithmic_latency_probe PRIVATE
         -Wall -Wextra -Wno-sign-compare -Wno-write-strings
@@ -149,23 +169,4 @@ if(NOT MSVC)
         -fno-strict-aliasing
     )
     target_compile_definitions(rithmic_latency_probe PRIVATE LINUX _REENTRANT)
-endif()
-
-add_executable(rithmic_capi_latency_probe
-    tools/rithmic_capi_latency_probe.cpp
-)
-target_include_directories(rithmic_capi_latency_probe PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${RAPIPLUS_ROOT}/include
-)
-target_link_libraries(rithmic_capi_latency_probe PRIVATE rithmic_gateway_shared)
-target_compile_features(rithmic_capi_latency_probe PRIVATE cxx_std_17)
-configure_rapiplus_msvc_runtime(rithmic_capi_latency_probe)
-if(NOT MSVC)
-    target_compile_options(rithmic_capi_latency_probe PRIVATE
-        -Wall -Wextra -Wno-sign-compare -Wno-write-strings
-        -Wpointer-arith -Winline -Wno-deprecated
-        -fno-strict-aliasing
-    )
-    target_compile_definitions(rithmic_capi_latency_probe PRIVATE LINUX _REENTRANT)
 endif()

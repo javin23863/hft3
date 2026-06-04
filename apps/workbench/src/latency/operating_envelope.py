@@ -51,6 +51,8 @@ def build_latency_operating_envelope(
     placement = _placement_percentiles(audit_records, cpp_profile)
     confirmation = _confirmation_percentiles(audit_records, cpp_profile)
     tick_to_send = _p(placement, "tick_to_send_us", "p99")
+    tick_to_trigger = _p(placement, "tick_to_send_trigger_us", "p99")
+    effective_trigger = tick_to_trigger if tick_to_trigger is not None else tick_to_send
     send_to_ack = _p(confirmation, "send_to_ack_us", "p99")
     latency_authority = _latency_authority(cpp_profile, chi404_observed)
     role = _catalog_role(model_id)
@@ -60,7 +62,7 @@ def build_latency_operating_envelope(
         or (composition is not None and composition.defensive_stubs)
     )
     competitor = _competitor_sensitivity(
-        tick_to_send=tick_to_send,
+        tick_to_send=effective_trigger,
         viability=viability,
     )
     pending_controls = _pending_controls(assumptions.pending_exposure, send_to_ack, latency_authority)
@@ -108,9 +110,11 @@ def build_latency_operating_envelope(
         "latency_lane_measured": viability.lane_measured,
         "offensive": {
             "placement": placement,
-            "operating_band": classify_internal_speed(tick_to_send),
+            "operating_band": classify_internal_speed(effective_trigger),
+            "sdk_return_operating_band": classify_internal_speed(tick_to_send),
             "opportunity_decay_windows_us": list(DEFAULT_OPPORTUNITY_DECAY_WINDOWS_US),
             "opportunity_window_compatible": _compatible_windows(tick_to_send),
+            "trigger_opportunity_window_compatible": _compatible_windows(effective_trigger),
             "latency_adjusted_pnl": viability.simulated_latency_adjusted_pnl,
             "latency_profitability_buffer_us": viability.latency_profitability_buffer_us,
         },
@@ -149,12 +153,16 @@ def compact_envelope_fields(envelope: Mapping[str, Any]) -> dict[str, Any]:
     placement = offensive.get("placement") if isinstance(offensive.get("placement"), Mapping) else {}
     confirmation = external.get("confirmation") if isinstance(external.get("confirmation"), Mapping) else {}
     send_to_ack = confirmation.get("send_to_ack_us") if isinstance(confirmation.get("send_to_ack_us"), Mapping) else {}
+    tick_to_trigger = placement.get("tick_to_send_trigger_us") if isinstance(placement.get("tick_to_send_trigger_us"), Mapping) else {}
     tick_to_send = placement.get("tick_to_send_us") if isinstance(placement.get("tick_to_send_us"), Mapping) else {}
     return {
         "latency_operating_envelope_status": envelope.get("status"),
         "latency_operating_envelope_source": envelope.get("source_authority"),
         "offensive_operating_band": offensive.get("operating_band"),
         "async_ack_risk": (envelope.get("pending_state_risk") or {}).get("stale_state_risk"),
+        "placement_trigger_p50_us": tick_to_trigger.get("p50"),
+        "placement_trigger_p99_us": tick_to_trigger.get("p99"),
+        "placement_trigger_p99_9_us": tick_to_trigger.get("p99_9"),
         "placement_speed_p50_us": tick_to_send.get("p50"),
         "placement_speed_p99_us": tick_to_send.get("p99"),
         "placement_speed_p99_9_us": tick_to_send.get("p99_9"),
@@ -196,6 +204,12 @@ def aggregate_campaign_latency_envelopes(
         for v in [_nested(row, ("offensive", "placement", "tick_to_send_us", "p99"))]
         if isinstance(v, (int, float))
     ]
+    trigger_p99s = [
+        float(v)
+        for row in rows
+        for v in [_nested(row, ("offensive", "placement", "tick_to_send_trigger_us", "p99"))]
+        if isinstance(v, (int, float))
+    ]
     status = "PASS" if rows and not blockers and all(s == "PASS" for s in statuses) else "FAIL"
     if not rows:
         blockers.append(
@@ -221,6 +235,7 @@ def aggregate_campaign_latency_envelopes(
             }
             for row in rows
         ],
+        "placement_trigger_p99_us": max(trigger_p99s) if trigger_p99s else None,
         "placement_speed_p99_us": max(placement_p99s) if placement_p99s else None,
         "promotion_blockers": blockers,
     }
@@ -251,7 +266,8 @@ def render_latency_operating_envelope_markdown(envelope: Mapping[str, Any]) -> s
         f"Status: `{envelope.get('status', 'unknown')}`",
         f"Source authority: `{envelope.get('source_authority', 'unknown')}`",
         f"Placement band: `{compact.get('offensive_operating_band', 'unknown')}`",
-        f"Tick-to-send p99: `{_fmt(compact.get('placement_speed_p99_us'))}`",
+        f"Tick-to-trigger p99: `{_fmt(compact.get('placement_trigger_p99_us'))}`",
+        f"Tick-to-SDK-return p99: `{_fmt(compact.get('placement_speed_p99_us'))}`",
         f"Send-to-ack p99: `{_fmt(compact.get('send_to_ack_p99_us'))}`",
         f"Async ack risk: `{compact.get('async_ack_risk', 'unknown')}`",
         f"Execution-path audit: `{compact.get('execution_path_audit_status') or 'missing'}`",
@@ -275,7 +291,8 @@ def render_campaign_latency_operating_envelope_markdown(envelope: Mapping[str, A
         f"Campaign ID: `{envelope.get('campaign_id', '')}`",
         f"Status: `{envelope.get('status', 'unknown')}`",
         f"Events observed: `{envelope.get('events_observed', 0)}`",
-        f"Worst tick-to-send p99: `{_fmt(envelope.get('placement_speed_p99_us'))}`",
+        f"Worst tick-to-trigger p99: `{_fmt(envelope.get('placement_trigger_p99_us'))}`",
+        f"Worst tick-to-SDK-return p99: `{_fmt(envelope.get('placement_speed_p99_us'))}`",
         "",
     ]
     blockers = envelope.get("promotion_blockers") or []
@@ -292,17 +309,26 @@ def _placement_percentiles(records: Sequence[TradeAuditRecord], profile: CppLate
         decision = [float(r.feed_delay_us + r.decision_compute_us) for r in records]
         send = [float(r.decision_to_send_us) for r in records]
         tick_to_send = [float(r.feed_delay_us + r.decision_compute_us + r.decision_to_send_us) for r in records]
+        decision_to_trigger = _optional_record_values(records, "decision_to_send_trigger_us")
+        tick_to_trigger = _optional_record_values(records, "tick_to_send_trigger_us")
+        rithmic_send_call = _optional_record_values(records, "rithmic_send_call_us")
         return {
             "feed_delay_us": _metric(feed),
             "tick_to_decision_us": _metric(decision),
+            "decision_to_send_trigger_us": _metric(decision_to_trigger) if decision_to_trigger else _missing_metric(),
+            "tick_to_send_trigger_us": _metric(tick_to_trigger) if tick_to_trigger else _missing_metric(),
             "decision_to_send_us": _metric(send),
             "tick_to_send_us": _metric(tick_to_send),
+            "rithmic_send_call_us": _metric(rithmic_send_call) if rithmic_send_call else _missing_metric(),
         }
     return {
         "feed_delay_us": _metric_from_percentiles(profile.feed_delay),
         "tick_to_decision_us": _sum_percentiles(profile.feed_delay, profile.cpp_decision_compute),
+        "decision_to_send_trigger_us": _missing_metric(),
+        "tick_to_send_trigger_us": _missing_metric(),
         "decision_to_send_us": _metric_from_percentiles(profile.order_send),
         "tick_to_send_us": _sum_percentiles(profile.feed_delay, profile.cpp_decision_compute, profile.order_send),
+        "rithmic_send_call_us": _metric_from_percentiles(profile.order_send),
     }
 
 
@@ -632,6 +658,15 @@ def _metric(values: Iterable[float]) -> dict[str, float]:
         "p99_9": _quantile(ordered, 0.999),
         "max": float(max(ordered)),
     }
+
+
+def _optional_record_values(records: Sequence[TradeAuditRecord], attr: str) -> list[float]:
+    values: list[float] = []
+    for record in records:
+        value = getattr(record, attr, None)
+        if isinstance(value, (int, float)):
+            values.append(float(value))
+    return values
 
 
 def _empty_metric() -> dict[str, float]:

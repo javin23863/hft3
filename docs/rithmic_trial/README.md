@@ -8,10 +8,18 @@ Diamond / Diamond Cutter access packet: [DIAMOND_CUTTER_ACCESS_SAMPLE.md](DIAMON
 
 ## Topology
 
-CHI404 bare metal only. R|API+ C++ adapter (in-process) loads `librithmic_gateway_shared.so`, exposes a ctypes surface, and is consumed by `RithmicApiConnector`. There is no Windows VM, no R|Trader GUI, and no SMB watch dir.
+CHI404 bare metal only. The live capture lane may use `librithmic_gateway_shared.so`
+and `RithmicApiConnector` for non-hot data plumbing. Placement-speed authority
+does not go through that Python/ctypes connector; it is measured by the direct
+native C++ `rithmic_latency_probe`. There is no Windows VM, no R|Trader GUI, and
+no SMB watch dir.
 
 ```
+[ R|API+ adapter C++ ]  ->  rithmic_latency_probe  ->  data/latency_baselines + reports/latency_baselines
+        (placement-speed authority, no Python wrapper)
+
 [ R|API+ adapter C++ ]  ->  librithmic_gateway_shared.so  ->  Python ctypes (RithmicApiConnector)
+        (non-hot capture plumbing)
         ->  hft3-rithmic-trial.service (systemd, pinned to CPUs 2-11)
                 ->  runtime/rithmic_trial/  (R|API+ SDK log)
                 ->  logs/rithmic_trial/unattended.log
@@ -87,7 +95,12 @@ See [docs/vault/RESEARCH_ENTRYPOINTS.md](../vault/RESEARCH_ENTRYPOINTS.md) and [
 
 Live Rithmic trial capture **must run on CHI404** — not on a Windows workstation. Millisecond latency cannot tolerate a remote desktop or file-bridge loop through your PC.
 
-**Supported path:** native R|API+ adapter (libRApiPlus 13.7.0.0), consumed via the `librithmic_gateway_shared.so` ctypes bridge.
+**Supported capture path:** native R|API+ adapter (libRApiPlus 13.7.0.0),
+consumed via the `librithmic_gateway_shared.so` ctypes bridge.
+
+**Supported latency authority:** direct native C++ `rithmic_latency_probe`,
+compiled from `rithmic_gateway/tools/rithmic_latency_probe.cpp`, reporting
+`hot_path_language=c++` and `wrapper=none`.
 
 ```bash
 # On CHI404 (/root/hft3)
@@ -121,25 +134,40 @@ TCP connect probes (`network.rithmic_tcp_65000`) are **network health only** —
 
 **Canonical agent doc:** [docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md](../vault/CHI404_CANONICAL_ENTRYPOINTS.md)
 
-Measured paper submit→ack requires ≥1,000 **real** paired orders via the R|API+ connector (`RithmicApiConnector.send_order` + matching `order_ack`). **Synthetic log inject (`Add-Content`, host `f.write`) is forbidden** and blocked by pytest.
+Measured paper submit→ack and placement speed require real paired orders through the native C++ `rithmic_latency_probe` target. Python/ctypes connector paths are capture/orchestration plumbing only and are not hot-path authority. **Synthetic log inject (`Add-Content`, host `f.write`) is forbidden** and blocked by pytest.
 
 ```bash
-# Full sweep (live gate -> daemon -> wait for paired>=1000 -> promote -> latency_summary)
-bash scripts/chi404_run_paper_latency_sweep.sh
-
-# Or connectivity / daemon plumbing check, no real orders:
-PAPER_LATENCY_SKIP_ORDERS_BURST=1 bash scripts/chi404_run_paper_latency_sweep.sh
+cd /root/hft3/repo
+cmake --build build --target rithmic_latency_probe --config Release
+RITHMIC_ENDPOINT_PROFILE=paper_chicago \
+RITHMIC_CONFIG_PATH=/root/hft3/repo/packages/data_system/config/rithmic_api_paper.yaml \
+RITHMIC_PROBE_ENV_LABEL=paper \
+RITHMIC_PROBE_SYMBOL=ESM6 \
+RITHMIC_PROBE_EXCHANGE=CME \
+RITHMIC_PROBE_ORDER_COUNT=30 \
+RITHMIC_PROBE_CANCEL_AFTER_ACK=1 \
+RITHMIC_PROBE_SKIP_MD=0 \
+RITHMIC_PROBE_CPU=-1 \
+RITHMIC_PROBE_RT_PRIORITY=0 \
+RITHMIC_PROBE_MLOCK=1 \
+RITHMIC_PROBE_PREFAULT_BYTES=16777216 \
+./build/rithmic_gateway/rithmic_latency_probe
 ```
 
-**Known gap (2026-06-02, RAPI+ handoff §3):** the R|API+ order callbacks (`orderSubmit` / `orderAck`) are not yet wired into the SPSC queue the daemon polls. Until that wiring lands, `paired_submit_ack_count` stays at 0 and the orchestrator times out. Use `PAPER_LATENCY_SKIP_ORDERS_BURST=1` to verify everything else.
+The current CHI404 latency baseline uses no CPU affinity and no realtime
+priority, while keeping memory lock and 16 MiB prefault enabled. That profile is
+the fastest observed usable native C++ Rithmic Paper baseline and is stored in
+`reports/latency_baselines/current_baseline.json`.
+
+`scripts/chi404_run_paper_latency_sweep.sh` is now a compatibility blocker that prints the native C++ command shape and exits non-zero.
 
 Do **not** use deprecated host-side sweep scripts under `scripts/deprecated/`.
 
 Artifacts:
 
 ```
-runtime/paper_latency/raw/<run_id>/records.ndjson   # monotonic audit
-reports/rithmic_trial/<date>/latency_waterfall.json
+data/latency_baselines/YYYY-MM-DD/<run_id>.jsonl
+reports/latency_baselines/<run_id>_summary.json
 reports/rithmic_trial/<date>/paper_order_summary.json
 runtime/latency_reports/latency_summary.json        # order_ack_p99_ms when promoted
 ```
@@ -187,7 +215,7 @@ CHI404 CPU/network baseline: `infrastructure/03_latency_report.sh` → `latency_
 [`data_system/config/rithmic_trial.yaml`](../data_system/config/rithmic_trial.yaml) — symbols, paths, connector selection. Override via env:
 
 - `RITHMIC_TRIAL_ENABLED=1`
-- `RITHMIC_TRIAL_CONNECTOR=fixture|rithmic_api` (only `rithmic_api` is the live path on CHI404; `rtrader` is defensive legacy)
+- `RITHMIC_TRIAL_CONNECTOR=fixture|rithmic_api` (only `rithmic_api` is the live market-data capture path on CHI404; order placement uses the native C++ probe)
 - `RITHMIC_TRIAL_CONFIG` — config YAML
 - `HFT3_RITHMIC_GATEWAY_SO` — path to `librithmic_gateway_shared.so` (no silent fallback)
 - `RITHMIC_SYMBOL`, `RITHMIC_EXCHANGE`

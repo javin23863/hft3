@@ -170,35 +170,28 @@ int hft_rithmic_adapter_send_order_with_user_msg(void* handle, const char* symbo
     AdapterEntry* e = as_entry(handle);
     if (!e || !e->adapter) { return 1; }
     if (!symbol) { set_error(e, "symbol is null"); return 4; }
-    try {
-        std::string sym(symbol);
-        std::string msg = user_msg ? std::string(user_msg) : std::string();
-        if (!e->adapter->send_order(sym, side, qty, price, msg)) {
-            set_error(e, "send_order() failed for " + sym);
-            return 2;
-        }
-    } catch (...) {
-        set_error(e, "exception during send_order()");
-        return 3;
-    }
-    return 0;
+    (void)side;
+    (void)qty;
+    (void)price;
+    (void)user_msg;
+    set_error(
+        e,
+        "C_API_ORDER_SEND_DISABLED_USE_NATIVE_CPP_PROBE: "
+        "order entry must use rithmic_latency_probe or another direct C++ executable"
+    );
+    return 2;
 }
 
 int hft_rithmic_adapter_cancel_order(void* handle, const char* order_id) {
     AdapterEntry* e = as_entry(handle);
     if (!e || !e->adapter) { return 1; }
     if (!order_id) { set_error(e, "order_id is null"); return 4; }
-    try {
-        std::string oid(order_id);
-        if (!e->adapter->cancel_order(oid)) {
-            set_error(e, "cancel_order() failed for " + oid);
-            return 2;
-        }
-    } catch (...) {
-        set_error(e, "exception during cancel_order()");
-        return 3;
-    }
-    return 0;
+    set_error(
+        e,
+        "C_API_CANCEL_DISABLED_USE_NATIVE_CPP_PROBE: "
+        "cancel entry must use rithmic_latency_probe or another direct C++ executable"
+    );
+    return 2;
 }
 
 int hft_rithmic_adapter_try_pop_event(void* handle, MarketDataEvent* out_event) {

@@ -1,39 +1,18 @@
 #!/usr/bin/env bash
-# One-time Rithmic paper trial setup on CHI404 (colo only — do not run on a workstation).
+# Deprecated compatibility entrypoint.
+# CHI404 no longer uses R|Trader/Wine as a trade or latency path.
 set -euo pipefail
 
-REPO="${HFT3_REPO_DIR:-/root/hft3/repo}"
-cd "$REPO"
+cat >&2 <<'EOF'
+FAIL: RTRADER_SETUP_REMOVED_FOR_CHI404
 
-ENV_FILE="${HFT3_ENV_FILE:-/root/hft3/.env}"
-if [[ -f "$ENV_FILE" ]]; then
-  set -a
-  # shellcheck disable=SC1090
-  source "$ENV_FILE"
-  set +a
-fi
+Use the R|API+ native C++ path:
 
-export RITHMIC_TRIAL_ENABLED="${RITHMIC_TRIAL_ENABLED:-1}"
-export RITHMIC_TRIAL_CONNECTOR="${RITHMIC_TRIAL_CONNECTOR:-rtrader}"
-export RITHMIC_TRIAL_CONFIG="${RITHMIC_TRIAL_CONFIG:-data_system/config/rithmic_trial.yaml}"
-export RITHMIC_ENVIRONMENT="${RITHMIC_ENVIRONMENT:-Rithmic Paper Trading}"
-export RITHMIC_GATEWAY="${RITHMIC_GATEWAY:-Chicago}"
+  cmake --build build --target rithmic_latency_probe --config Release
+  ./build/rithmic_gateway/rithmic_latency_probe
 
-echo "=== CHI404 Rithmic trial setup ==="
-echo "Repo: $REPO"
-echo "Config: $RITHMIC_TRIAL_CONFIG"
+Set runtime secrets in /root/hft3/.env only. Do not use R|Trader/Wine for
+hot-path placement-speed evidence.
+EOF
 
-bash infrastructure/chi404/08_rtrader_wine_setup.sh
-
-DISCOVERY="/root/hft3/logs/rtrader/rtrader_discovery.json"
-if [[ -f "$DISCOVERY" ]]; then
-  echo "Discovery written: $DISCOVERY"
-  echo "Copy watch_dirs into data_system/config/rithmic_trial.yaml before live capture."
-fi
-
-echo ""
-echo "Next steps (on CHI404):"
-echo "  1. First login: bash /root/hft3/logs/rtrader/launch_rtrader.sh  (Paper / Chicago)"
-echo "  2. Update rithmic_trial.yaml rtrader.watch_dirs from discovery JSON"
-echo "  3. Set enabled: true in yaml OR export RITHMIC_TRIAL_ENABLED=1"
-echo "  4. python -m data_system.rithmic_trial.pipeline run-unattended --config $RITHMIC_TRIAL_CONFIG"
+exit 2

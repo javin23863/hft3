@@ -5,12 +5,9 @@ from __future__ import annotations
 import argparse
 from datetime import UTC, datetime
 import json
-import os
 from pathlib import Path
-import sys
-import time
 
-from .recorder import LatencyRecorder, dated_jsonl_path
+from .recorder import dated_jsonl_path
 from .summary import build_summary, write_summary_reports
 from .synthetic import SyntheticConfig, run_synthetic
 
@@ -20,8 +17,13 @@ def default_run_id() -> str:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Measure placement speed separately from ack latency.")
-    parser.add_argument("--mode", choices=["broker", "synthetic"], default="broker")
+    parser = argparse.ArgumentParser(
+        description=(
+            "Measure placement speed separately from ack latency. "
+            "Python is synthetic/reporting only; real broker probes are native C++."
+        )
+    )
+    parser.add_argument("--mode", choices=["broker", "synthetic"], default="synthetic")
     parser.add_argument("--repo-root", default=".", help="Repository root for data/ and reports/ outputs.")
     parser.add_argument("--run-id", default="", help="Stable run id. Defaults to timestamped latbase-*.")
     parser.add_argument("--env", default="paper", dest="environment")
@@ -33,7 +35,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--strategy", default="latency_probe", dest="strategy_id")
     parser.add_argument("--model-id", default="")
     parser.add_argument("--trade-manager-id", default="")
-    parser.add_argument("--samples", type=int, default=None, help="Sample count override. Applies to synthetic and broker modes.")
+    parser.add_argument(
+        "--samples",
+        type=int,
+        default=None,
+        help="Sample count override for synthetic mode. Real broker sample counts are set on the native C++ probe.",
+    )
     parser.add_argument(
         "--interaction-mode",
         default="offensive_only",
@@ -70,6 +77,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--ack-timeout-sec", type=float, default=20.0)
     parser.add_argument("--cancel-after-ack", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument(
+        "--poll-interval-us",
+        type=int,
+        default=0,
+        help="Broker event polling sleep in microseconds. Default 0 busy-spins for hot latency baselines.",
+    )
+    parser.add_argument(
         "--update-current-baseline",
         action="store_true",
         help="Write this run summary to reports/latency_baselines/current_baseline.json.",
@@ -85,44 +98,10 @@ def main(argv: list[str] | None = None) -> int:
     baseline_path = reports_root / "current_baseline.json"
     venue = args.venue or args.exchange or args.broker
 
-    if args.mode != "synthetic":
-        try:
-            sample_path, records, broker_artifacts = _run_broker_baseline(
-                repo_root=repo_root,
-                run_id=run_id,
-                venue=venue,
-                args=args,
-            )
-        except Exception as exc:
-            _write_broker_mode_blocker(repo_root=repo_root, run_id=run_id, args=args, exc=exc)
-            print(f"BROKER_LATENCY_BASELINE_FAILED: {exc}", file=sys.stderr)
-            return 2
-        summary = build_summary(
-            records,
-            run_id=run_id,
-            sample_path=sample_path,
-            baseline_path=baseline_path,
-        )
-        _attach_capability_inputs(summary, args)
-        summary["broker_artifacts"] = broker_artifacts
-        summary["broker_mode"] = {
-            "status": "observed" if records else "missing",
-            "broker": args.broker,
-            "environment": args.environment,
-            "requested_symbol": args.symbol,
-            "resolved_symbol": broker_artifacts.get("resolved_symbol", args.symbol),
-            "venue": venue,
-            "order_action": "new",
-            "cancel_after_ack": bool(args.cancel_after_ack),
-            "note": "placement speed uses local monotonic probes; acknowledgment latency is reported separately",
-        }
-        json_path, md_path, current_path = write_summary_reports(
-            summary,
-            reports_root=reports_root,
-            update_current_baseline=args.update_current_baseline,
-        )
-        print(json.dumps({"run_id": run_id, "sample_path": str(sample_path), "summary_json": str(json_path), "summary_md": str(md_path), "current_baseline": str(current_path) if current_path else "", "broker_artifacts": broker_artifacts}, indent=2))
-        return 0
+    if args.mode == "broker":
+        blocker = _write_broker_mode_blocker(repo_root=repo_root, run_id=run_id, args=args)
+        print(json.dumps(blocker, indent=2))
+        return 2
 
     sample_path, records = run_synthetic(
         SyntheticConfig(
@@ -174,293 +153,13 @@ def _attach_capability_inputs(summary: dict[str, object], args: argparse.Namespa
     }
 
 
-def _run_broker_baseline(
-    *,
-    repo_root: Path,
-    run_id: str,
-    venue: str,
-    args: argparse.Namespace,
-) -> tuple[Path, list[dict], dict[str, str]]:
-    if args.broker.lower() != "rithmic":
-        raise ValueError("broker mode currently supports --broker rithmic")
-
-    packages_path = repo_root / "packages"
-    if str(packages_path) not in sys.path:
-        sys.path.insert(0, str(packages_path))
-
-    from data_system.rithmic_trial.config import load_config
-    from data_system.rithmic_trial.connector import build_connector
-
-    os.environ.setdefault("RITHMIC_TRIAL_ENABLED", "1")
-    if args.environment.lower() == "paper":
-        os.environ.setdefault("RITHMIC_ENDPOINT_PROFILE", "paper_chicago")
-        os.environ.setdefault(
-            "RITHMIC_API_CONFIG",
-            "packages/data_system/config/rithmic_api_paper.yaml",
-        )
-        os.environ.setdefault("RITHMIC_CAPTURE_ENVIRONMENT", "rithmic_paper")
-
-    cfg = load_config("packages/data_system/config/rithmic_trial.yaml")
-    connector = build_connector(cfg)
-    symbol = _resolve_probe_symbol(args.symbol)
-    exchange = args.exchange or cfg.exchange or venue
-    raw_dir = repo_root / "runtime" / "latency_baselines" / run_id
-    raw_dir.mkdir(parents=True, exist_ok=True)
-    raw_events_path = raw_dir / "rithmic_events.ndjson"
-    recorder = LatencyRecorder(
-        repo_root=repo_root,
-        run_id=run_id,
-        environment=args.environment,
-        broker=args.broker,
-        venue=venue,
-        symbol=symbol,
-        strategy_id=args.strategy_id,
-        model_id=args.model_id,
-        trade_manager_id=args.trade_manager_id,
-    )
-    events: list[dict] = []
-
-    def record_events(batch: list[dict]) -> None:
-        if not batch:
-            return
-        for ev in batch:
-            rec = dict(ev)
-            rec.setdefault("run_id", run_id)
-            rec.setdefault("symbol", symbol)
-            rec.setdefault("exchange", exchange)
-            events.append(rec)
-
-    try:
-        connector.connect()
-        connector.subscribe_mbo(symbol, exchange)
-        target_samples = max(1, int(args.samples or 1))
-        records: list[dict] = []
-        client_order_ids: list[str] = []
-        derived_prices: list[str] = []
-        stop_reason = ""
-        run_deadline = time.monotonic() + max(float(args.duration), 1.0)
-        for _sample_idx in range(target_samples):
-            if time.monotonic() >= run_deadline:
-                if not records:
-                    raise TimeoutError("duration expired before any broker latency sample completed")
-                break
-            market_event = _wait_for_market_event(
-                connector=connector,
-                record_events=record_events,
-                deadline=min(run_deadline, time.monotonic() + min(max(float(args.duration), 1.0), 30.0)),
-            )
-            market_event_received_ts = int(market_event["local_monotonic_receive_ns"])
-            features_ready_ts = time.perf_counter_ns()
-            price = args.limit_price
-            if price is None:
-                price = _derive_probe_price(market_event, side=args.side)
-            derived_prices.append(str(price))
-            decision_ready_ts = time.perf_counter_ns()
-            risk_check_ready_ts = time.perf_counter_ns()
-            order_ready_ts = time.perf_counter_ns()
-            client_order_id = connector.send_order(symbol, args.side, args.qty, price)
-            client_order_ids.append(client_order_id)
-            ack_event = _wait_for_order_response(
-                connector=connector,
-                client_order_id=client_order_id,
-                record_events=record_events,
-                deadline=min(run_deadline, time.monotonic() + float(args.ack_timeout_sec)),
-            )
-            submit_event = _find_order_submit(events, client_order_id)
-            order_send_ts = int(
-                (submit_event or {}).get("ts_emit_ns")
-                or (submit_event or {}).get("local_monotonic_receive_ns")
-                or order_ready_ts
-            )
-            ack_received_ts = int(ack_event["local_monotonic_receive_ns"]) if ack_event else None
-            success = bool(ack_event and ack_event.get("event_type") == "order_ack")
-            reject_reason = "" if success else str((ack_event or {}).get("event_type") or "ack_timeout")
-            order_timestamps = {
-                "market_event_received_ts": market_event_received_ts,
-                "features_ready_ts": features_ready_ts,
-                "decision_ready_ts": decision_ready_ts,
-                "risk_check_ready_ts": risk_check_ready_ts,
-                "order_ready_ts": order_ready_ts,
-                "order_send_ts": order_send_ts,
-                "ack_received_ts": ack_received_ts,
-            }
-            records.append(
-                recorder.write_sample(
-                    order_action="new",
-                    side=args.side,
-                    order_type="limit",
-                    quantity=args.qty,
-                    timestamps=order_timestamps,
-                    success=success,
-                    reject_reason=reject_reason,
-                )
-            )
-            if not success:
-                stop_reason = reject_reason
-                break
-
-            if args.cancel_after_ack:
-                broker_order_id = str(ack_event.get("broker_order_id") or "")
-                if not broker_order_id:
-                    stop_reason = "broker_order_id_missing"
-                    break
-                cancel_decision_ts = time.perf_counter_ns()
-                cancel_send_ts = time.perf_counter_ns()
-                try:
-                    connector.cancel_order(broker_order_id)
-                    cancel_ack = _wait_for_cancel_ack(
-                        connector=connector,
-                        client_order_id=client_order_id,
-                        broker_order_id=broker_order_id,
-                        record_events=record_events,
-                        deadline=min(run_deadline, time.monotonic() + float(args.ack_timeout_sec)),
-                    )
-                    cancel_success = bool(cancel_ack)
-                    cancel_reject = "" if cancel_success else "cancel_ack_timeout"
-                except Exception as exc:
-                    cancel_ack = None
-                    cancel_success = False
-                    cancel_reject = f"cancel_submit_failed:{exc}"
-                cancel_record = recorder.write_sample(
-                    order_action="cancel",
-                    side=args.side,
-                    order_type="limit",
-                    quantity=args.qty,
-                    timestamps={
-                        "decision_ready_ts": cancel_decision_ts,
-                        "cancel_send_ts": cancel_send_ts,
-                        "cancel_ack_received_ts": int(cancel_ack["local_monotonic_receive_ns"]) if cancel_ack else None,
-                    },
-                    success=cancel_success,
-                    reject_reason=cancel_reject,
-                )
-                records.append(cancel_record)
-                if not cancel_success:
-                    stop_reason = cancel_reject
-                    break
-    finally:
-        connector.close()
-        _flush_events(raw_events_path, events)
-
-    artifacts = {
-        "raw_events_path": str(raw_events_path),
-        "resolved_symbol": symbol,
-        "requested_symbol": args.symbol,
-        "event_count": str(len(events)),
-        "client_order_id": ",".join(client_order_ids) if "client_order_ids" in locals() else "",
-        "derived_limit_price": ",".join(derived_prices) if "derived_prices" in locals() else "",
-        "target_samples": str(target_samples) if "target_samples" in locals() else "1",
-        "records_written": str(len(records)) if "records" in locals() else "0",
-        "stop_reason": stop_reason if "stop_reason" in locals() else "",
-    }
-    return recorder.sample_path(), records, artifacts
-
-
-def _wait_for_market_event(*, connector, record_events, deadline: float) -> dict:
-    while time.monotonic() < deadline:
-        batch = connector.poll_events()
-        record_events(batch)
-        market_events = [
-            ev for ev in batch if ev.get("event_type") in {"quote", "trade"} and ev.get("local_monotonic_receive_ns")
-        ]
-        if market_events:
-            return market_events[-1]
-        time.sleep(0.005)
-    raise TimeoutError("no market data event observed before order placement")
-
-
-def _wait_for_order_response(*, connector, client_order_id: str, record_events, deadline: float) -> dict | None:
-    while time.monotonic() < deadline:
-        batch = connector.poll_events()
-        record_events(batch)
-        for ev in batch:
-            if _matches_client_order(ev, client_order_id) and ev.get("event_type") in {
-                "order_ack",
-                "reject",
-                "order_failure",
-            }:
-                return ev
-        time.sleep(0.005)
-    return None
-
-
-def _wait_for_cancel_ack(
-    *,
-    connector,
-    client_order_id: str,
-    broker_order_id: str,
-    record_events,
-    deadline: float,
-) -> dict | None:
-    while time.monotonic() < deadline:
-        batch = connector.poll_events()
-        record_events(batch)
-        for ev in batch:
-            if ev.get("event_type") == "cancel" and (
-                _matches_client_order(ev, client_order_id)
-                or str(ev.get("broker_order_id") or "") == broker_order_id
-            ):
-                return ev
-        time.sleep(0.005)
-    return None
-
-
-def _matches_client_order(ev: dict, client_order_id: str) -> bool:
-    return any(
-        str(ev.get(field) or "") == client_order_id
-        for field in ("client_order_id", "order_id", "user_msg", "tag")
-    )
-
-
-def _find_order_submit(events: list[dict], client_order_id: str) -> dict | None:
-    for ev in events:
-        if ev.get("event_type") == "order_submit" and _matches_client_order(ev, client_order_id):
-            return ev
-    return None
-
-
-def _flush_events(path: Path, events: list[dict]) -> None:
-    if not events:
-        return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as fh:
-        for ev in events:
-            fh.write(json.dumps(ev, sort_keys=True, allow_nan=False) + "\n")
-
-
-def _derive_probe_price(event: dict, *, side: str) -> float:
-    price = event.get("bid_price") or event.get("ask_price") or event.get("price")
-    if price is None:
-        raise ValueError("cannot derive probe limit price from market event")
-    price = float(price)
-    # Keep the latency probe passive in paper by moving away from the touch.
-    return price - 1000.0 if side == "BUY" else price + 1000.0
-
-
-def _resolve_probe_symbol(symbol: str) -> str:
-    upper = symbol.upper()
-    if any(ch.isdigit() for ch in upper):
-        return upper
-    quarterly_roots = {"ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K"}
-    if upper not in quarterly_roots:
-        return upper
-    now = datetime.now(UTC)
-    quarters = [(3, "H"), (6, "M"), (9, "U"), (12, "Z")]
-    month_code = "Z"
-    for month, code in quarters:
-        if now.month <= month:
-            month_code = code
-            break
-    return f"{upper}{month_code}{now.year % 10}"
-
-
 def _write_broker_mode_blocker(
     *,
     repo_root: Path,
     run_id: str,
     args: argparse.Namespace,
     exc: Exception | None = None,
-) -> None:
+) -> dict[str, object]:
     reports_root = repo_root / "reports" / "latency_baselines"
     reports_root.mkdir(parents=True, exist_ok=True)
     sample_path = dated_jsonl_path(repo_root, run_id)
@@ -469,20 +168,33 @@ def _write_broker_mode_blocker(
         "run_id": run_id,
         "mode": "broker",
         "status": "blocked",
-        "blocker": "BROKER_MODE_REQUIRES_EXECUTION_ADAPTER",
-        "reason": "Broker mode must be wired at the real execution boundaries before it can produce placement-speed evidence.",
+        "blocker": "BROKER_MODE_REPLACED_BY_NATIVE_CPP_PROBE",
+        "reason": (
+            "Python broker mode is not a hot path. Real Rithmic placement-speed evidence "
+            "must come from rithmic_gateway/tools/rithmic_latency_probe.cpp."
+        ),
         "requested_environment": args.environment,
         "requested_broker": args.broker,
         "requested_venue": args.venue or args.exchange or args.broker,
         "requested_symbol": args.symbol,
         "sample_path": str(sample_path),
-        "principle": "do_not_treat_ack_latency_as_placement_speed",
+        "principle": "hot_paths_are_native_cpp_no_python_wrappers",
+        "authority": {
+            "hot_path_language": "c++",
+            "wrapper": "none",
+            "target": "rithmic_latency_probe",
+        },
+        "command_hint": (
+            "cmake --build build --target rithmic_latency_probe --config Release; "
+            "run ./build/rithmic_gateway/rithmic_latency_probe with RITHMIC_PROBE_* env"
+        ),
         "error": str(exc) if exc else "",
     }
     (reports_root / f"{run_id}_broker_blocker.json").write_text(
         json.dumps(blocker, indent=2, sort_keys=True, allow_nan=False) + "\n",
         encoding="utf-8",
     )
+    return blocker
 
 
 if __name__ == "__main__":

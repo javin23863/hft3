@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from workbench.src.run.evidence_snapshot import (
     _crypto_after_action,
     _crypto_pipeline_coverage,
@@ -14,6 +16,7 @@ from workbench.src.run.evidence_snapshot import (
     _crypto_self_learning_loop,
     _feature_fabric_snapshot,
     _lane_registry_snapshot,
+    _latest_latency_baseline_summary,
     _latest_rithmic_trial_bundle,
     _crypto_validation_reports,
     _positive_proxy_pnl_count,
@@ -92,6 +95,183 @@ def test_cme_rithmic_snapshot_surfaces_paper_endpoint_readiness() -> None:
     assert "password" not in endpoint
     assert snapshot.latency["rithmic_order_ack"]["scope"] == "cme_rithmic_submit_to_ack"
     assert snapshot.decision["action"] == "QUARANTINE"
+
+
+def test_latest_latency_baseline_summary_prefers_newest_observed_broker_run(tmp_path: Path) -> None:
+    reports = tmp_path / "reports" / "latency_baselines"
+    reports.mkdir(parents=True)
+    (reports / "synthetic_summary.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "latency_baseline_summary_v1",
+                "run_id": "synthetic",
+                "generated_at_utc": "2026-06-04T00:00:00Z",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (reports / "old_summary.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "latency_baseline_summary_v1",
+                "run_id": "old",
+                "generated_at_utc": "2026-06-04T00:01:00Z",
+                "sample_path": str(tmp_path / "old.jsonl"),
+                "broker_mode": {"status": "observed", "broker": "rithmic", "environment": "paper"},
+                "metrics": {"send_to_ack_us": {"count": 1, "p50_us": 250000.0}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (reports / "new_summary.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "latency_baseline_summary_v1",
+                "run_id": "new",
+                "generated_at_utc": "2026-06-04T00:02:00Z",
+                "sample_path": str(tmp_path / "new.jsonl"),
+                "broker_mode": {"status": "observed", "broker": "rithmic", "environment": "paper"},
+                "metrics": {"send_to_ack_us": {"count": 2, "p50_us": 125000.0}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    summary = _latest_latency_baseline_summary(tmp_path, broker="rithmic", environment="paper")
+
+    assert summary["run_id"] == "new"
+    assert summary["_path"].endswith("new_summary.json")
+    assert summary["_sample_path"].endswith("new.jsonl")
+
+
+def test_latest_latency_baseline_summary_prefers_current_baseline(tmp_path: Path) -> None:
+    reports = tmp_path / "reports" / "latency_baselines"
+    reports.mkdir(parents=True)
+    (reports / "current_baseline.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "latency_baseline_summary_v1",
+                "baseline_role": "current_baseline",
+                "run_id": "accepted",
+                "generated_at_utc": "2026-06-04T00:01:00Z",
+                "sample_path": str(tmp_path / "accepted.jsonl"),
+                "broker_mode": {"status": "observed", "broker": "rithmic", "environment": "paper"},
+                "metrics": {"send_to_ack_us": {"count": 1, "p50_us": 3000.0}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (reports / "newer_summary.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "latency_baseline_summary_v1",
+                "run_id": "newer-but-not-accepted",
+                "generated_at_utc": "2026-06-04T00:03:00Z",
+                "sample_path": str(tmp_path / "newer.jsonl"),
+                "broker_mode": {"status": "observed", "broker": "rithmic", "environment": "paper"},
+                "metrics": {"send_to_ack_us": {"count": 1, "p50_us": 2000.0}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    summary = _latest_latency_baseline_summary(tmp_path, broker="rithmic", environment="paper")
+
+    assert summary["run_id"] == "accepted"
+    assert summary["_baseline_role"] == "current_baseline"
+    assert summary["_path"].endswith("current_baseline.json")
+
+
+def test_cme_rithmic_snapshot_uses_latency_baseline_as_ack_evidence(tmp_path: Path, monkeypatch) -> None:
+    reports = tmp_path / "reports" / "latency_baselines"
+    reports.mkdir(parents=True)
+    (reports / "paper_summary.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "latency_baseline_summary_v1",
+                "run_id": "paper-hot",
+                "generated_at_utc": "2026-06-04T00:02:00Z",
+                "sample_path": str(tmp_path / "paper-hot.jsonl"),
+                "broker_mode": {
+                    "status": "observed",
+                    "broker": "rithmic",
+                    "environment": "paper",
+                    "venue": "CME",
+                },
+                "broker_artifacts": {"stop_reason": "cancel_ack_timeout", "poll_interval_us": "0"},
+                "metrics": {
+                    "tick_to_send_us": {"count": 1, "p50_us": 26.8, "p99_us": 26.8},
+                    "send_to_ack_us": {"count": 1, "p50_us": 220715.9, "p99_us": 220715.9},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("RITHMIC_ENDPOINT_PROFILE", "paper_chicago")
+    snapshot = load_run_evidence(tmp_path, "cme_rithmic")
+
+    assert snapshot.latency["latency_baseline"]["run_id"] == "paper-hot"
+    assert snapshot.latency["rithmic_order_ack"]["order_ack_measured"] is True
+    assert snapshot.latency["rithmic_order_ack"]["paired_count"] == 1
+    assert snapshot.latency["rithmic_order_ack"]["source"] == "latency_baseline"
+
+
+def test_latency_baseline_backfills_trigger_metrics_from_cpp_jsonl(tmp_path: Path) -> None:
+    sample_dir = tmp_path / "data" / "latency_baselines" / "2026-06-04"
+    sample_dir.mkdir(parents=True)
+    sample_path = sample_dir / "cpp.jsonl"
+    sample_path.write_text(
+        json.dumps(
+            {
+                "run_id": "cpp",
+                "order_action": "new",
+                "success": True,
+                "raw_timestamps": {
+                    "market_event_received_ts": 1_000_000,
+                    "decision_ready_ts": 1_001_000,
+                    "order_api_call_start_ts": 1_003_000,
+                    "order_send_ts": 1_043_000,
+                    "ack_received_ts": 2_043_000,
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    reports = tmp_path / "reports" / "latency_baselines"
+    reports.mkdir(parents=True)
+    (reports / "cpp_summary.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "latency_baseline_summary_v1",
+                "run_id": "cpp",
+                "generated_at_utc": "2026-06-04T00:02:00Z",
+                # CHI404 summaries can carry remote absolute paths; the loader
+                # must resolve the repo-relative data/latency_baselines suffix.
+                "sample_path": f"/root/hft3/repo/{sample_path.relative_to(tmp_path).as_posix()}",
+                "broker_mode": {
+                    "status": "observed",
+                    "broker": "rithmic",
+                    "environment": "paper",
+                    "venue": "CME",
+                },
+                "broker_artifacts": {"hot_path_language": "c++", "wrapper": "none"},
+                "metrics": {
+                    "tick_to_send_us": {"count": 1, "p50_us": 43.0},
+                    "send_to_ack_us": {"count": 1, "p50_us": 1000.0},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    summary = _latest_latency_baseline_summary(tmp_path, broker="rithmic", environment="paper")
+
+    assert summary["placement_trigger_kpi"] == "tick_to_send_trigger_us"
+    assert summary["metrics"]["decision_to_send_trigger_us"]["p50_us"] == pytest.approx(2.0)
+    assert summary["metrics"]["tick_to_send_trigger_us"]["p50_us"] == pytest.approx(3.0)
+    assert summary["_sample_path"] == str(sample_path)
 
 
 def test_latest_rithmic_trial_bundle_reads_observed_reports(tmp_path: Path) -> None:
