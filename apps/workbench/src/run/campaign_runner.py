@@ -194,6 +194,24 @@ def record_sim_shadow(repo_root: Path, campaign_id: str, status: str) -> Path:
     return artifact_dir / "sim_shadow.json"
 
 
+def _run_institutional_model_metrics(repo_root: Path, artifact_dir: Path) -> Dict[str, Any]:
+    out_dir = artifact_dir / "model_metrics"
+    try:
+        from hft3.validation.model_metrics import generate_bundle_for_run_dir
+
+        return generate_bundle_for_run_dir(artifact_dir, root=repo_root, output_dir=out_dir, force=True)
+    except Exception as exc:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "status": "ERROR",
+            "reason": str(exc),
+            "blocking_gate": "institutional_model_metrics",
+            "run_dir": str(artifact_dir),
+        }
+        (out_dir / "model_metric_calculation_logs.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        return payload
+
+
 def _run_options_campaign(
     repo_root: Path,
     model_id: str,
@@ -289,6 +307,12 @@ def _run_options_campaign(
         "promote_candidate": status == "PASS" and sim_status == "PASS",
         "promote_note": "Options lane quarantined; sim shadow on CHI404 required for MBO promotion path",
     }
+    (artifact_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    metrics_status = _run_institutional_model_metrics(repo_root, artifact_dir)
+    summary["institutional_metrics"] = metrics_status
+    if metrics_status.get("status") != "ok":
+        summary["promote_candidate"] = False
+        summary["blocking_gates"] = list(summary.get("blocking_gates") or []) + ["institutional_model_metrics"]
     (artifact_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     (artifact_dir / "diagnostics.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     return CampaignResult(
@@ -766,6 +790,12 @@ def run_campaign(
         "trial_mode": trial_mode,
         "events_ran": events_ran,
     }
+    (artifact_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    metrics_status = _run_institutional_model_metrics(repo_root, artifact_dir)
+    summary["institutional_metrics"] = metrics_status
+    if metrics_status.get("status") != "ok":
+        summary["promote_candidate"] = False
+        summary["blocking_gates"] = list(summary.get("blocking_gates") or []) + ["institutional_model_metrics"]
     (artifact_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     (artifact_dir / "diagnostics.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     _write_status(job_dir, {"state": status.lower(), "campaign_id": campaign_id})

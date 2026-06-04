@@ -440,6 +440,28 @@ class AutonomousRunner:
             _atomic_write_text(path, str(payload))
         return path
 
+    def _write_institutional_model_metrics(self) -> dict[str, Any]:
+        out_dir = self.run_dir / "model_metrics"
+        try:
+            from hft3.validation.model_metrics import generate_bundle_for_run_dir
+
+            bundle = generate_bundle_for_run_dir(self.run_dir, root=self.root, output_dir=out_dir, force=True)
+            paths = bundle.get("paths") or {}
+            scorecard_path = paths.get("model_scorecard") or paths.get("model_metric_values")
+            if scorecard_path:
+                self.state.artifacts["model_metrics"] = str(scorecard_path)
+            return bundle
+        except Exception as exc:
+            payload = {
+                "status": "ERROR",
+                "reason": str(exc),
+                "blocking_gate": "institutional_model_metrics",
+                "run_dir": str(self.run_dir),
+            }
+            path = self._write_artifact("model_metrics/model_metric_calculation_logs.json", payload)
+            self.state.artifacts["model_metrics"] = str(path)
+            return payload
+
     def _load_data_resolution_gate(self, path: Path) -> None:
         from hft3.data_class import DataResolutionTag, to_gate_result
 
@@ -1118,6 +1140,26 @@ class AutonomousRunner:
             "candidate_rankings_path": str(rankings_path) if rankings_path.is_file() else "",
             "selected_candidate": best,
         }
+        path = self._write_artifact("scoring_summary.json", scoring_summary)
+        metrics_status = self._write_institutional_model_metrics()
+        scoring_summary["institutional_metrics"] = metrics_status
+        envelope = metrics_status.get("envelope") if isinstance(metrics_status, dict) else {}
+        metrics_gate_failed = metrics_status.get("status") != "ok" or not bool((envelope or {}).get("active"))
+        if decision == "PROMOTE" and metrics_gate_failed:
+            decision = "QUARANTINE"
+            reason = "Institutional model scorecard/envelope is not active for live promotion."
+            gate_failures = list(gate_failures) + [
+                {
+                    "gate_name": "institutional_model_metrics",
+                    "metric_name": "model_behavior_envelope_active",
+                    "pass_fail": False,
+                    "severity": "BLOCKING",
+                    "reason_code": "MODEL_ENVELOPE_NOT_ACTIVE",
+                    "artifact_reference": "model_metrics/model_behavior_envelope.json",
+                }
+            ]
+            scoring_summary["decision"] = decision
+            scoring_summary["reason"] = reason
         path = self._write_artifact("scoring_summary.json", scoring_summary)
         pd_path = self._write_artifact("promotion_decision.json", {
             "decision": decision, "reason": reason, "blocking_gates": gate_failures

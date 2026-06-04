@@ -497,6 +497,28 @@ def _write_crypto_relationship_review(
     return summary
 
 
+def _run_institutional_model_metrics(repo: Path, run_dir: Path) -> dict[str, Any]:
+    """Write generic institutional model metrics artifacts for this run."""
+
+    try:
+        from hft3.validation.model_metrics import generate_bundle_for_run_dir
+
+        return generate_bundle_for_run_dir(run_dir, root=repo, force=True)
+    except Exception as exc:
+        payload = {
+            "status": "ERROR",
+            "reason": str(exc),
+            "run_dir": str(run_dir),
+            "blocking_gate": {
+                "gate": "institutional_model_metrics",
+                "status": "FAIL",
+                "reason": str(exc),
+            },
+        }
+        _write_json(run_dir / "model_metrics" / "model_metric_calculation_logs.json", payload)
+        return payload
+
+
 def _rank_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
     def rank_key(candidate: dict[str, Any]) -> tuple[float, float, float, int]:
         return (
@@ -1814,6 +1836,25 @@ def run_crypto_smoke(repo: Path, *, candidate_id: str | None = None) -> dict[str
         status["stages"][6]["status"] = "blocked" if decision_action == "QUARANTINE" else "done"
         status["stages"][6]["finished_at"] = _utc_now()
         status["state"] = "blocked" if decision_action == "QUARANTINE" else "completed"
+        _write_status(run_dir, latest, status)
+        institutional_metrics = _run_institutional_model_metrics(repo, run_dir)
+        status["institutional_metrics"] = institutional_metrics
+        if institutional_metrics.get("status") != "ok":
+            gates = list((status.get("decision") or {}).get("blocking_gates") or [])
+            gates.append(
+                institutional_metrics.get("blocking_gate")
+                or {
+                    "gate": "institutional_model_metrics",
+                    "status": "FAIL",
+                    "reason": institutional_metrics.get("reason", "model metrics bundle failed"),
+                }
+            )
+            status["decision"] = {
+                **(status.get("decision") or {}),
+                "live_registry_ready": False,
+                "blocking_gates": gates,
+            }
+            status["state"] = "blocked"
 
         status["current_stage"] = "after_action"
         status["stages"][7]["status"] = "running"

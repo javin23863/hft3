@@ -57,6 +57,13 @@ from trade_manager.session import (
     write_session_report,
 )
 from trade_manager.signals import ModelSignal, SignalSource, StaticSignalSource
+from trade_manager.model_behavior import (
+    ModelBehaviorEnvelope,
+    ModelBehaviorRuleEngine,
+    ModelLiveObservation,
+    ModelStateDecision,
+    classify_model_state,
+)
 
 __all__ = [
     "ActiveModel",
@@ -104,4 +111,9 @@ __all__ = [
     "ModelSignal",
     "SignalSource",
     "StaticSignalSource",
+    "ModelBehaviorEnvelope",
+    "ModelBehaviorRuleEngine",
+    "ModelLiveObservation",
+    "ModelStateDecision",
+    "classify_model_state",
 ]

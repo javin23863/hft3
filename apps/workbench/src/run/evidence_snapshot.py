@@ -157,6 +157,31 @@ def _crypto_vectorbt_summary(run_dir: Path | None = None) -> dict[str, Any]:
     return read_json(run_dir / "vectorbt_summary.json")
 
 
+def _model_metrics_artifacts(run_dir: Path | None) -> dict[str, Any]:
+    if run_dir is None or not run_dir.is_dir():
+        return {}
+    root = run_dir / "model_metrics"
+    scorecard = read_json(root / "model_scorecard.json")
+    envelope = read_json(root / "model_behavior_envelope.json")
+    metric_values = read_json(root / "model_metric_values.json")
+    logs = read_json(root / "model_metric_calculation_logs.json")
+    paths = {
+        "model_metric_values": root / "model_metric_values.json",
+        "model_scorecard": root / "model_scorecard.json",
+        "model_behavior_envelope": root / "model_behavior_envelope.json",
+        "model_metric_calculation_logs": root / "model_metric_calculation_logs.json",
+    }
+    present_paths = {name: str(path) for name, path in paths.items() if path.is_file()}
+    return {
+        "status": "observed" if scorecard and envelope else ("error" if logs.get("status") == "ERROR" else "missing"),
+        "scorecard": scorecard,
+        "envelope": envelope,
+        "metric_values": metric_values,
+        "calculation_logs": logs,
+        "paths": present_paths,
+    }
+
+
 def _provider_status(repo: Path) -> dict[str, Any]:
     try:
         from data_layer.llm import openai_compatible_client as llm_client
@@ -1034,6 +1059,7 @@ def _crypto_snapshot(repo: Path) -> RunEvidenceSnapshot:
     robustness_explanation = _crypto_robustness_explanation(robustness_summary, candidate_rows)
     self_learning_loop = _crypto_self_learning_loop(status, after_action, relationships, robustness_explanation)
     provider_status = _provider_status(repo)
+    institutional_metrics = _model_metrics_artifacts(selected_run_dir)
     return RunEvidenceSnapshot(
         source="crypto_lane",
         run_id=str(status.get("run_id", "crypto_lane")),
@@ -1056,6 +1082,8 @@ def _crypto_snapshot(repo: Path) -> RunEvidenceSnapshot:
             "kg_slice": str(run_dir / "kg_slice.json") if (run_dir / "kg_slice.json").is_file() else "",
             "relationship_candidates": str(run_dir / "relationship_candidates.json") if (run_dir / "relationship_candidates.json").is_file() else "",
             "relationship_summary": str(run_dir / "relationship_summary.json") if (run_dir / "relationship_summary.json").is_file() else "",
+            "model_scorecard": (institutional_metrics.get("paths") or {}).get("model_scorecard", ""),
+            "model_behavior_envelope": (institutional_metrics.get("paths") or {}).get("model_behavior_envelope", ""),
         },
         registry={
             "hypotheses": [h.get("hypothesis_id", "") for h in load_hypotheses()],
@@ -1140,6 +1168,7 @@ def _crypto_snapshot(repo: Path) -> RunEvidenceSnapshot:
             "live_registry_ready": bool(decision.get("live_registry_ready")) and bool(edge_packets.get("observed")),
             "bitcoin_edge_packet_status": edge_packets.get("status"),
             "blocking_gates": blocking_gates,
+            "institutional_metrics": institutional_metrics,
         },
         reports={
             "smoke_reports": [r.get("_path", "") for r in reports],
@@ -1153,6 +1182,8 @@ def _crypto_snapshot(repo: Path) -> RunEvidenceSnapshot:
             "kg_slice": (after_action.get("paths") or {}).get("kg_slice", ""),
             "relationship_candidates": (relationships.get("paths") or {}).get("relationship_candidates", ""),
             "relationship_summary": (relationships.get("paths") or {}).get("relationship_summary", ""),
+            "model_scorecard": (institutional_metrics.get("paths") or {}).get("model_scorecard", ""),
+            "model_behavior_envelope": (institutional_metrics.get("paths") or {}).get("model_behavior_envelope", ""),
         },
         after_action=after_action,
         relationships=relationships,
@@ -1164,6 +1195,7 @@ def _crypto_snapshot(repo: Path) -> RunEvidenceSnapshot:
             "bitcoin_edge_packets": edge_packets,
             "pipeline_coverage": pipeline_coverage,
             "llm_providers": provider_status,
+            "institutional_metrics": institutional_metrics,
         },
     )
 
@@ -1185,6 +1217,7 @@ def _workbench_snapshot(repo: Path, campaign_id: str = "") -> RunEvidenceSnapsho
             break
     event_diag = read_json(latest_event_dir / "diagnostics.json") if latest_event_dir else {}
     wfc = read_json(run_dir / "wfc" / "wfc_summary.json") or summary.get("wfc", {})
+    institutional_metrics = _model_metrics_artifacts(run_dir)
     return RunEvidenceSnapshot(
         source="workbench_campaign",
         run_id=run_dir.name,
@@ -1201,6 +1234,8 @@ def _workbench_snapshot(repo: Path, campaign_id: str = "") -> RunEvidenceSnapsho
             "campaign": str(run_dir / "campaign.json"),
             "summary": str(run_dir / "summary.json"),
             "latest_event": str(latest_event_dir or ""),
+            "model_scorecard": (institutional_metrics.get("paths") or {}).get("model_scorecard", ""),
+            "model_behavior_envelope": (institutional_metrics.get("paths") or {}).get("model_behavior_envelope", ""),
         },
         registry={"model_id": summary.get("model_id") or campaign.get("model_id"), "composition": summary.get("composition") or campaign.get("composition")},
         data={"symbol": summary.get("symbol") or campaign.get("symbol"), "periods": periods},
@@ -1219,13 +1254,16 @@ def _workbench_snapshot(repo: Path, campaign_id: str = "") -> RunEvidenceSnapsho
             "reason": summary.get("promote_note", ""),
             "live_registry_ready": bool(summary.get("promote_candidate")),
             "ranking": event_rows,
+            "institutional_metrics": institutional_metrics,
         },
         reports={
             "summary": str(run_dir / "summary.json"),
             "latest_report": str(latest_event_dir / "report.md") if latest_event_dir else "",
             "after_action_report": str(latest_event_dir / "after_action_report.md") if latest_event_dir else "",
+            "model_scorecard": (institutional_metrics.get("paths") or {}).get("model_scorecard", ""),
+            "model_behavior_envelope": (institutional_metrics.get("paths") or {}).get("model_behavior_envelope", ""),
         },
-        system={"summary": summary, "status": status, "campaign": campaign},
+        system={"summary": summary, "status": status, "campaign": campaign, "institutional_metrics": institutional_metrics},
     )
 
 
@@ -1253,6 +1291,7 @@ def _autonomous_snapshot(repo: Path) -> RunEvidenceSnapshot:
     wfc = read_json(run_dir / "walk_forward_correlation.json")
     scoring = read_json(run_dir / "scoring_summary.json")
     decision = read_json(run_dir / "promotion_decision.json")
+    institutional_metrics = _model_metrics_artifacts(run_dir)
     return RunEvidenceSnapshot(
         source="autonomous",
         run_id=run_id,
@@ -1261,19 +1300,28 @@ def _autonomous_snapshot(repo: Path) -> RunEvidenceSnapshot:
         started_at=str(manifest.get("started_at", "")),
         root=str(run_dir),
         stages=stages,
-        artifacts={k: str(run_dir / Path(v).name) for k, v in (manifest.get("artifacts") or {}).items()},
+        artifacts={
+            **{k: str(run_dir / Path(v).name) for k, v in (manifest.get("artifacts") or {}).items()},
+            "model_scorecard": (institutional_metrics.get("paths") or {}).get("model_scorecard", ""),
+            "model_behavior_envelope": (institutional_metrics.get("paths") or {}).get("model_behavior_envelope", ""),
+        },
         registry={"model_combination": model_combo, "experiment_spec": experiment_spec},
         data={"data_resolution": data_resolution, "data_lineage": data_lineage},
         backtest=backtest,
         latency={"feature_lineage": feature_lineage, "latency_profile": feature_lineage.get("latency_profile", {})},
         diagnostics={"feature_lineage": feature_lineage, "model_combination": model_combo},
         robustness={"gates": gates, "walk_forward": wf, "wfc": wfc},
-        decision={**decision, "scoring_summary": scoring},
-        reports={"report_md": str(run_dir / "report.md")},
+        decision={**decision, "scoring_summary": scoring, "institutional_metrics": institutional_metrics},
+        reports={
+            "report_md": str(run_dir / "report.md"),
+            "model_scorecard": (institutional_metrics.get("paths") or {}).get("model_scorecard", ""),
+            "model_behavior_envelope": (institutional_metrics.get("paths") or {}).get("model_behavior_envelope", ""),
+        },
         system={
             "manifest": manifest,
             "artifact_bundle_validation": read_json(run_dir / "artifact_bundle_validation.json"),
             "registry_update": read_json(run_dir / "registry_update.json"),
+            "institutional_metrics": institutional_metrics,
         },
     )
 

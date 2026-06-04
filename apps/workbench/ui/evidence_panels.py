@@ -809,6 +809,39 @@ def render_decision_registry(snapshot: RunEvidenceSnapshot) -> None:
     c2.metric("Smoke passes", int(_num(decision.get("smoke_pass_count"))))
     c3.metric("Positive P&L diagnostics", int(_num(decision.get("economic_diagnostic_pass_count"))))
     c4.metric("Live-ready registry", bool(decision.get("live_registry_ready")))
+    institutional_metrics = decision.get("institutional_metrics") or (snapshot.system or {}).get("institutional_metrics") or {}
+    scorecard = institutional_metrics.get("scorecard") or {}
+    envelope = institutional_metrics.get("envelope") or {}
+    if institutional_metrics:
+        st.subheader("Institutional Model Scorecard")
+        if institutional_metrics.get("status") == "observed" and scorecard:
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Grade", scorecard.get("grade", "UNKNOWN"))
+            m2.metric("Weighted score", f"{_num(scorecard.get('weighted_score')):.3f}")
+            m3.metric("Metric count", len(scorecard.get("metrics") or []))
+            m4.metric("Envelope active", bool(envelope.get("active")))
+            categories = scorecard.get("category_scores") or []
+            if categories:
+                _df(
+                    [
+                        {
+                            "category": row.get("category"),
+                            "weight": row.get("weight"),
+                            "score": row.get("normalized_score"),
+                            "status": row.get("status"),
+                            "explanation": row.get("explanation"),
+                        }
+                        for row in categories
+                    ]
+                )
+            if envelope:
+                st.caption(
+                    "Behavior envelope monitors live/paper/shadow behavior against expected P&L, drawdown, slippage, fill, latency, regime, and feature bounds."
+                )
+                _json_expander("Behavior envelope", envelope)
+        else:
+            st.warning("Institutional model metrics are missing or failed for this selected run.")
+            _json_expander("Metric calculation status", institutional_metrics)
     smoke_triage_order = decision.get("smoke_triage_order") or []
     if smoke_triage_order:
         st.subheader("Smoke triage order")

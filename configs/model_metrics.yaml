@@ -1,0 +1,45 @@
+global:
+  minimum_sharpe: 1.0
+  minimum_sortino: 1.0
+  minimum_calmar: 0.5
+  maximum_drawdown: 1000.0
+  maximum_drawdown_velocity: 250.0
+  maximum_time_under_water: 20.0
+  minimum_profit_factor: 1.1
+  minimum_expectancy: 0.0
+  maximum_slippage_bps: 10.0
+  maximum_spread_bps: 25.0
+  minimum_fill_rate: 0.8
+  maximum_latency_ms: 100.0
+  maximum_correlation_to_book: 0.75
+  minimum_walk_forward_efficiency: 0.5
+  maximum_fold_dispersion: 1.0
+  maximum_pbo: 0.2
+  minimum_deflated_sharpe: 0.0
+  minimum_sample_size: 30
+  yellow_multiplier: 0.8
+  red_multiplier: 1.0
+  kill_drawdown_multiplier: 1.5
+  warning_drawdown_multiplier: 1.0
+  data_freshness_max_ns: 5000000
+asset_class_overrides:
+  CRYPTO:
+    maximum_slippage_bps: 25.0
+    maximum_latency_ms: 250.0
+  FUTURES:
+    maximum_slippage_bps: 8.0
+    maximum_latency_ms: 50.0
+  OPTIONS:
+    maximum_slippage_bps: 50.0
+    maximum_latency_ms: 250.0
+symbol_overrides: {}
+strategy_family_overrides: {}
+regime_overrides: {}
+venue_overrides: {}
+mode_overrides:
+  live:
+    minimum_fill_rate: 0.9
+  paper:
+    minimum_fill_rate: 0.8
+  shadow:
+    minimum_fill_rate: 0.0
