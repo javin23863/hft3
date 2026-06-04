@@ -34,6 +34,7 @@ from workbench.ui.evidence_panels import (  # noqa: E402
     render_backtest_evidence,
     render_decision_registry,
     render_latency_evidence,
+    render_live_monitor,
     render_registry_data,
     render_reports_analyst,
     render_robustness,
@@ -135,16 +136,19 @@ with tabs[6]:
     render_decision_registry(snapshot)
 
 with tabs[7]:
+    render_live_monitor(snapshot)
+
+with tabs[8]:
     render_reports_analyst(snapshot)
     st.divider()
     analyst_panel(REPO, selected_campaign, period_choice, event_choice)
 
-with tabs[8]:
+with tabs[9]:
     render_wallet_panel()
 
-with tabs[9]:
+with tabs[10]:
     render_system(snapshot, REPO)
 
-with tabs[10]:
+with tabs[11]:
     st.header("Personal Runs")
     personal_runs_panel(REPO, selected_model, selected_symbol)

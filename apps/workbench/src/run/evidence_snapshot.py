@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -76,6 +77,7 @@ class RunEvidenceSnapshot:
     after_action: dict[str, Any] = field(default_factory=dict)
     relationships: dict[str, Any] = field(default_factory=dict)
     self_learning_loop: dict[str, Any] = field(default_factory=dict)
+    trade_manager: dict[str, Any] = field(default_factory=dict)
     system: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -98,6 +100,380 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     if not path.is_file():
         return {}
     return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+
+
+_SESSION_JSON_OBJECT_ARTIFACTS = (
+    "session_manifest.json",
+    "active_models.json",
+    "registry_references.json",
+    "risk_limits.json",
+    "latency_metrics.json",
+    "slippage_metrics.json",
+    "session_metrics.json",
+)
+
+_SESSION_JSONL_ARTIFACTS = (
+    "order_intents.jsonl",
+    "order_state_transitions.jsonl",
+    "risk_rejections.jsonl",
+    "fills.jsonl",
+    "positions.jsonl",
+    "pnl_timeseries.jsonl",
+    "incident_log.jsonl",
+    "kill_switch_events.jsonl",
+)
+
+_SESSION_ARTIFACTS = _SESSION_JSON_OBJECT_ARTIFACTS + _SESSION_JSONL_ARTIFACTS + ("session_report.md",)
+
+
+def _latest_session_dir(repo: Path) -> Path | None:
+    candidates: list[Path] = []
+    for root in (
+        repo / "artifacts" / "sessions",
+        repo / "runtime" / "trade_manager" / "sessions",
+        repo / "runtime" / "sessions",
+    ):
+        if not root.is_dir():
+            continue
+        for path in root.iterdir():
+            if path.is_dir() and any((path / name).is_file() for name in _SESSION_ARTIFACTS):
+                candidates.append(path)
+    return max(candidates, key=_mtime) if candidates else None
+
+
+def _active_models_from_payload(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    raw = payload.get("active_models", payload.get("models", []))
+    if isinstance(raw, dict):
+        raw = list(raw.values())
+    return [row for row in raw if isinstance(row, dict)] if isinstance(raw, list) else []
+
+
+def _latest_by_key(rows: list[dict[str, Any]], keys: tuple[str, ...]) -> list[dict[str, Any]]:
+    latest: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        identifier = next((str(row.get(key)) for key in keys if row.get(key)), "")
+        if not identifier:
+            continue
+        prev = latest.get(identifier)
+        if prev is None or _timestamp_ns(row) >= _timestamp_ns(prev):
+            latest[identifier] = row
+    return [latest[key] for key in sorted(latest)]
+
+
+def _timestamp_ns(row: dict[str, Any]) -> int:
+    value = row.get("timestamp_ns", -1)
+    if isinstance(value, bool):
+        return -1
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    return -1
+
+
+def _numeric_field(value: Any, field: str) -> float | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        raise ValueError(f"{field}: NUMERIC_REQUIRED")
+    if isinstance(value, (int, float)):
+        number = float(value)
+    elif isinstance(value, str):
+        try:
+            number = float(value)
+        except ValueError as exc:
+            raise ValueError(f"{field}: NUMERIC_REQUIRED") from exc
+    else:
+        raise ValueError(f"{field}: NUMERIC_REQUIRED")
+    if not math.isfinite(number):
+        raise ValueError(f"{field}: NON_FINITE_NUMBER")
+    return number
+
+
+def _position_has_exposure(row: dict[str, Any]) -> bool:
+    values: list[float] = []
+    for key in ("quantity", "net_position"):
+        if key in row:
+            number = _numeric_field(row.get(key), key)
+            if number is not None:
+                values.append(number)
+    positions = row.get("positions")
+    if isinstance(positions, dict):
+        for symbol, quantity in positions.items():
+            number = _numeric_field(quantity, f"positions.{symbol}")
+            if number is not None:
+                values.append(number)
+    elif positions is not None:
+        raise ValueError("positions: JSON_OBJECT_REQUIRED")
+    return any(abs(value) > 0.0 for value in values)
+
+
+def _run_ids_from_payload(value: Any) -> set[str]:
+    found: set[str] = set()
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key in {"run_id", "source_run_id", "workbench_run_id", "candidate_run_id"} and child:
+                found.add(str(child))
+            else:
+                found.update(_run_ids_from_payload(child))
+    elif isinstance(value, list):
+        for child in value:
+            found.update(_run_ids_from_payload(child))
+    return found
+
+
+def _path_is_within(path: Path, root: Path | None) -> bool:
+    if root is None:
+        return False
+    try:
+        resolved_path = path.resolve()
+        resolved_root = root.resolve()
+    except OSError:
+        return False
+    return resolved_path == resolved_root or resolved_root in resolved_path.parents
+
+
+def _selected_run_link(
+    *,
+    selected_run_id: str,
+    selected_root: Path | None,
+    session_dir: Path,
+    session_run_ids: set[str],
+) -> tuple[str, str]:
+    if _path_is_within(session_dir, selected_root):
+        return "MATCHED", "Trade Manager session artifacts live under the selected run root."
+    if not selected_run_id:
+        return "NOT_SELECTED", "No selected run id was supplied for session linkage."
+    if selected_run_id in session_run_ids:
+        return "MATCHED", "Trade Manager session run id matches the selected Workbench run."
+    if session_run_ids:
+        return (
+            "UNLINKED",
+            "Latest Trade Manager session references a different run id than the selected Workbench run.",
+        )
+    return (
+        "UNDECLARED",
+        "Latest Trade Manager session does not declare a run id, so it cannot be attached to the selected Workbench run.",
+    )
+
+
+def _trade_manager_artifact_error(
+    *,
+    repo: Path,
+    session_dir: Path,
+    promoted_models: list[dict[str, Any]],
+    activation_errors: list[dict[str, Any]],
+    reason: str,
+) -> dict[str, Any]:
+    activation_errors = [*activation_errors, {"stage": "session_artifact_load", "reason": reason}]
+    return {
+        "status": "artifact_error",
+        "reason": f"Trade Manager session artifact load failed: {reason}",
+        "sessions_root": str(session_dir.parent if session_dir else repo / "artifacts" / "sessions"),
+        "session_id": session_dir.name if session_dir else "",
+        "session_path": str(session_dir) if session_dir else "",
+        "promoted_model_count": len(promoted_models),
+        "promoted_models": promoted_models,
+        "active_models": [],
+        "open_positions": [],
+        "open_orders": [],
+        "latest_order_states": [],
+        "order_intents": [],
+        "risk_rejections": [],
+        "fills": [],
+        "pnl_latest": {},
+        "pnl_timeseries": [],
+        "latency": {},
+        "slippage": {},
+        "kill_switch": {"status": "ARTIFACT_ERROR", "active": None},
+        "incidents": [],
+        "session_metrics": {},
+        "risk_limits": {},
+        "registry_references": {},
+        "artifact_counts": {name: 0 for name in _SESSION_JSONL_ARTIFACTS},
+        "unavailable_artifacts": [],
+        "activation_errors": activation_errors,
+        "selected_run_link_status": "ERROR",
+        "selected_run_link_reason": "Session artifacts could not be loaded safely.",
+        "session_run_ids": [],
+        "live_routing_status": "NOT_WIRED",
+        "live_routing_reason": "Live routing stays blocked because Trade Manager session evidence is malformed.",
+    }
+
+
+def _trade_manager_snapshot(
+    repo: Path,
+    *,
+    selected_run_id: str = "",
+    selected_root: str | Path | None = None,
+) -> dict[str, Any]:
+    sessions_root = repo / "artifacts" / "sessions"
+    session_dir = _latest_session_dir(repo)
+    selected_root_path = Path(selected_root) if selected_root else None
+    promoted_models: list[dict[str, Any]] = []
+    activation_errors: list[dict[str, Any]] = []
+    try:
+        from hft3.validation.certification_registry import list_promotion_models, load_latest_promotion
+
+        for model_id in list_promotion_models(repo):
+            record = load_latest_promotion(model_id, repo)
+            if record is not None:
+                row = record.to_dict()
+                if row.get("promotion_status") == "PROMOTED":
+                    promoted_models.append(row)
+    except Exception as exc:
+        activation_errors.append({"stage": "promotion_registry", "reason": str(exc)})
+
+    if session_dir is None:
+        return {
+            "status": "not_observed",
+            "reason": "No Trade Manager session artifacts were found.",
+            "sessions_root": str(sessions_root),
+            "session_id": "",
+            "session_path": "",
+            "promoted_model_count": len(promoted_models),
+            "promoted_models": promoted_models,
+            "active_models": [],
+            "open_positions": [],
+            "open_orders": [],
+            "latest_order_states": [],
+            "risk_rejections": [],
+            "fills": [],
+            "pnl_latest": {},
+            "pnl_timeseries": [],
+            "latency": {},
+            "slippage": {},
+            "kill_switch": {"status": "NOT_OBSERVED", "active": None},
+            "incidents": [],
+            "session_metrics": {},
+            "artifact_counts": {name: 0 for name in _SESSION_JSONL_ARTIFACTS},
+            "unavailable_artifacts": list(_SESSION_ARTIFACTS),
+            "activation_errors": activation_errors,
+            "selected_run_id": selected_run_id,
+            "selected_run_link_status": "NO_SESSION",
+            "selected_run_link_reason": "No Trade Manager session artifacts were found.",
+            "session_run_ids": [],
+            "live_routing_status": "NOT_WIRED",
+            "live_routing_reason": "Trade Manager artifacts are present as inert/session evidence; no live execution orchestration is wired.",
+        }
+
+    try:
+        from observer.read_model import ArtifactLoadError, load_observer_view
+        from observer.read_model import _read_json_object as _strict_json_object
+        from observer.read_model import _read_jsonl_objects as _strict_jsonl_objects
+        from trade_manager.order_state import ORDER_STATE_VALUES, TERMINAL_ORDER_STATES
+    except Exception as exc:
+        return _trade_manager_artifact_error(
+            repo=repo,
+            session_dir=session_dir,
+            promoted_models=promoted_models,
+            activation_errors=activation_errors,
+            reason=f"STRICT_LOADER_UNAVAILABLE: {exc}",
+        )
+
+    try:
+        observer_view = load_observer_view(session_dir.parent, session_dir.name)
+        objects = {
+            name: _strict_json_object(session_dir / name) if (session_dir / name).is_file() else {}
+            for name in _SESSION_JSON_OBJECT_ARTIFACTS
+        }
+        records = {
+            name: list(_strict_jsonl_objects(session_dir / name)) if (session_dir / name).is_file() else []
+            for name in _SESSION_JSONL_ARTIFACTS
+        }
+        terminal_states = {str(getattr(state, "value", state)).upper() for state in TERMINAL_ORDER_STATES}
+        valid_states = {str(state).upper() for state in ORDER_STATE_VALUES}
+    except ArtifactLoadError as exc:
+        return _trade_manager_artifact_error(
+            repo=repo,
+            session_dir=session_dir,
+            promoted_models=promoted_models,
+            activation_errors=activation_errors,
+            reason=str(exc),
+        )
+
+    try:
+        active_models = _active_models_from_payload(objects.get("active_models.json", {}))
+        positions = records["positions.jsonl"]
+        order_states = _latest_by_key(records["order_state_transitions.jsonl"], ("order_intent_id", "order_id"))
+        invalid_states = [
+            str(row.get("state") or "")
+            for row in order_states
+            if str(row.get("state") or "").upper() not in valid_states
+        ]
+        if invalid_states:
+            raise ValueError(f"order_state_transitions.jsonl: UNKNOWN_ORDER_STATE: {', '.join(invalid_states)}")
+        open_orders = [
+            row
+            for row in order_states
+            if str(row.get("state") or "").upper() not in terminal_states
+        ]
+        open_positions = [row for row in positions if _position_has_exposure(row)]
+    except ValueError as exc:
+        return _trade_manager_artifact_error(
+            repo=repo,
+            session_dir=session_dir,
+            promoted_models=promoted_models,
+            activation_errors=activation_errors,
+            reason=str(exc),
+        )
+
+    pnl_rows = records["pnl_timeseries.jsonl"]
+    kill_rows = records["kill_switch_events.jsonl"]
+    incident_rows = records["incident_log.jsonl"]
+    unavailable = [name for name in _SESSION_ARTIFACTS if not (session_dir / name).is_file()]
+    session_run_ids = (
+        _run_ids_from_payload(objects.get("session_manifest.json"))
+        | _run_ids_from_payload(active_models)
+        | _run_ids_from_payload(records["order_intents.jsonl"])
+    )
+    link_status, link_reason = _selected_run_link(
+        selected_run_id=selected_run_id,
+        selected_root=selected_root_path,
+        session_dir=session_dir,
+        session_run_ids=session_run_ids,
+    )
+    status = "observed" if link_status in {"MATCHED", "NOT_SELECTED"} else "observed_unlinked"
+    reason = (
+        "Trade Manager session artifacts observed."
+        if status == "observed"
+        else f"Trade Manager session artifacts observed but not linked to the selected run. {link_reason}"
+    )
+    return {
+        "status": status,
+        "reason": reason,
+        "sessions_root": str(session_dir.parent),
+        "session_id": session_dir.name,
+        "session_path": str(session_dir),
+        "promoted_model_count": len(promoted_models),
+        "promoted_models": promoted_models,
+        "active_models": active_models,
+        "open_positions": open_positions,
+        "open_orders": open_orders,
+        "latest_order_states": order_states,
+        "observer_symbols": list(observer_view.symbols),
+        "order_intents": records["order_intents.jsonl"][-50:],
+        "risk_rejections": records["risk_rejections.jsonl"][-50:],
+        "fills": records["fills.jsonl"][-50:],
+        "pnl_latest": pnl_rows[-1] if pnl_rows else {},
+        "pnl_timeseries": pnl_rows[-250:],
+        "latency": objects.get("latency_metrics.json", {}),
+        "slippage": objects.get("slippage_metrics.json", {}),
+        "kill_switch": kill_rows[-1] if kill_rows else {"status": "NOT_OBSERVED", "active": None},
+        "incidents": incident_rows[-50:],
+        "session_metrics": objects.get("session_metrics.json", {}),
+        "risk_limits": objects.get("risk_limits.json", {}),
+        "registry_references": objects.get("registry_references.json", {}),
+        "artifact_counts": {name: len(records[name]) for name in _SESSION_JSONL_ARTIFACTS},
+        "unavailable_artifacts": unavailable,
+        "activation_errors": activation_errors,
+        "selected_run_id": selected_run_id,
+        "selected_run_link_status": link_status,
+        "selected_run_link_reason": link_reason,
+        "session_run_ids": sorted(session_run_ids),
+        "live_routing_status": "NOT_WIRED",
+        "live_routing_reason": "Trade Manager Phase 14-23 artifacts are observable; broker/live routing remains blocked until execution orchestration is implemented.",
+    }
 
 
 def _crypto_reports(repo: Path, run_dir: Path | None = None) -> list[dict[str, Any]]:
@@ -1328,10 +1704,18 @@ def _autonomous_snapshot(repo: Path) -> RunEvidenceSnapshot:
 
 def load_run_evidence(repo: Path, source: str, *, campaign_id: str = "") -> RunEvidenceSnapshot:
     if source == "workbench_campaign":
-        return _workbench_snapshot(repo, campaign_id)
-    if source == "autonomous":
-        return _autonomous_snapshot(repo)
-    return _crypto_snapshot(repo)
+        snapshot = _workbench_snapshot(repo, campaign_id)
+    elif source == "autonomous":
+        snapshot = _autonomous_snapshot(repo)
+    else:
+        snapshot = _crypto_snapshot(repo)
+    snapshot.trade_manager = _trade_manager_snapshot(
+        repo,
+        selected_run_id=snapshot.run_id,
+        selected_root=snapshot.root,
+    )
+    snapshot.system = {**(snapshot.system or {}), "trade_manager": snapshot.trade_manager}
+    return snapshot
 
 
 def default_source(repo: Path) -> str:

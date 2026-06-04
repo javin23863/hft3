@@ -8,6 +8,7 @@ WORKFLOW_TABS = [
     "Signal Diagnostics",
     "Walk-Forward & Robustness",
     "Decision & Registry",
+    "Live Monitor",
     "Reports & Analyst",
     "Wallet",
     "System",

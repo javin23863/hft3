@@ -113,6 +113,8 @@ def test_tabs_are_pipeline_monitor_surface() -> None:
         "Latency Evidence",
     ]
     assert "Decision & Registry" in WORKFLOW_TABS
+    assert WORKFLOW_TABS.index("Live Monitor") > WORKFLOW_TABS.index("Decision & Registry")
+    assert WORKFLOW_TABS.index("Live Monitor") < WORKFLOW_TABS.index("Reports & Analyst")
     assert "Model Selector" not in WORKFLOW_TABS
 
 

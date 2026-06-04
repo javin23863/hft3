@@ -13,6 +13,7 @@ from workbench.src.run.evidence_snapshot import (
     _crypto_self_learning_loop,
     _crypto_validation_reports,
     _positive_proxy_pnl_count,
+    _trade_manager_snapshot,
     load_run_evidence,
 )
 
@@ -45,6 +46,8 @@ def test_crypto_snapshot_surfaces_bitcoin_edge_packet_gate() -> None:
     assert "smoke_pass_count" in snapshot.decision
     assert "research_pass_count" not in snapshot.decision
     assert "economic_diagnostic_pass_count" in snapshot.decision
+    assert "trade_manager" in snapshot.system
+    assert snapshot.trade_manager["live_routing_status"] in {"NOT_WIRED", "not_observed"}
 
 
 def test_crypto_pipeline_coverage_does_not_overclaim_unwired_replay(tmp_path: Path) -> None:
@@ -102,6 +105,157 @@ def test_crypto_pipeline_coverage_does_not_overclaim_unwired_replay(tmp_path: Pa
     assert by_stage["execution_realism"]["status"] == "BLOCKING"
     assert by_stage["full_backtest_readiness"]["status"] == "BLOCKING"
     assert "validation_report.json" in by_stage["hftbacktest_replay"]["artifact_contract"]
+
+
+def test_trade_manager_snapshot_empty_state_is_explicit(tmp_path: Path) -> None:
+    snapshot = _trade_manager_snapshot(tmp_path)
+
+    assert snapshot["status"] == "not_observed"
+    assert snapshot["active_models"] == []
+    assert snapshot["open_positions"] == []
+    assert snapshot["open_orders"] == []
+    assert snapshot["live_routing_status"] == "NOT_WIRED"
+    assert "session_manifest.json" in snapshot["unavailable_artifacts"]
+
+
+def test_trade_manager_snapshot_loads_phase23_session_artifacts(tmp_path: Path) -> None:
+    session = tmp_path / "artifacts" / "sessions" / "SESSION-1"
+    session.mkdir(parents=True)
+    (session / "session_manifest.json").write_text('{"session_id":"SESSION-1"}', encoding="utf-8")
+    (session / "active_models.json").write_text(
+        '{"active_models":[{"model_id":"MODEL_A","status":"ACTIVE","allowed_symbols":["ES"]}]}',
+        encoding="utf-8",
+    )
+    (session / "registry_references.json").write_text("{}", encoding="utf-8")
+    (session / "risk_limits.json").write_text('{"max_position_size":3}', encoding="utf-8")
+    (session / "latency_metrics.json").write_text('{"p99_ns":1000,"status":"OK"}', encoding="utf-8")
+    (session / "slippage_metrics.json").write_text('{"avg_ticks":0.25,"status":"OK"}', encoding="utf-8")
+    (session / "session_metrics.json").write_text('{"orders":1,"fills":1,"status":"RUNNING"}', encoding="utf-8")
+    (session / "order_intents.jsonl").write_text(
+        '{"order_intent_id":"OI1","model_id":"MODEL_A","symbol":"ES"}\n',
+        encoding="utf-8",
+    )
+    (session / "order_state_transitions.jsonl").write_text(
+        '{"order_intent_id":"OI1","model_id":"MODEL_A","symbol":"ES","state":"RISK_APPROVED","timestamp_ns":10}\n',
+        encoding="utf-8",
+    )
+    (session / "risk_rejections.jsonl").write_text(
+        '{"order_intent_id":"OI2","model_id":"MODEL_A","symbol":"ES","reason":"MAX_SIZE","timestamp_ns":11}\n',
+        encoding="utf-8",
+    )
+    (session / "fills.jsonl").write_text(
+        '{"order_id":"O1","model_id":"MODEL_A","symbol":"ES","quantity":1,"price":5000,"timestamp_ns":12}\n',
+        encoding="utf-8",
+    )
+    (session / "positions.jsonl").write_text(
+        '{"symbol":"ES","quantity":1,"status":"OK","timestamp_ns":13}\n',
+        encoding="utf-8",
+    )
+    (session / "pnl_timeseries.jsonl").write_text(
+        '{"timestamp_ns":14,"total_pnl":12.5,"realized_pnl":10,"unrealized_pnl":2.5,"drawdown":-1}\n',
+        encoding="utf-8",
+    )
+    (session / "incident_log.jsonl").write_text(
+        '{"timestamp_ns":15,"severity":"INFO","message":"unit"}\n',
+        encoding="utf-8",
+    )
+    (session / "kill_switch_events.jsonl").write_text(
+        '{"timestamp_ns":16,"active":false,"status":"CLEAR"}\n',
+        encoding="utf-8",
+    )
+    (session / "session_report.md").write_text("# Session Report", encoding="utf-8")
+
+    snapshot = _trade_manager_snapshot(tmp_path)
+
+    assert snapshot["status"] == "observed"
+    assert snapshot["session_id"] == "SESSION-1"
+    assert snapshot["active_models"][0]["model_id"] == "MODEL_A"
+    assert snapshot["open_positions"][0]["symbol"] == "ES"
+    assert snapshot["open_orders"][0]["order_intent_id"] == "OI1"
+    assert snapshot["pnl_latest"]["total_pnl"] == 12.5
+    assert snapshot["latency"]["status"] == "OK"
+    assert snapshot["kill_switch"]["status"] == "CLEAR"
+    assert snapshot["artifact_counts"]["fills.jsonl"] == 1
+
+
+def test_trade_manager_snapshot_uses_terminal_order_state_source_of_truth(tmp_path: Path) -> None:
+    session = tmp_path / "artifacts" / "sessions" / "SESSION-TERMINAL"
+    session.mkdir(parents=True)
+    (session / "session_manifest.json").write_text('{"session_id":"SESSION-TERMINAL"}', encoding="utf-8")
+    (session / "active_models.json").write_text('{"active_models":[]}', encoding="utf-8")
+    (session / "order_state_transitions.jsonl").write_text(
+        '{"order_intent_id":"OI1","state":"BROKER_REJECTED","timestamp_ns":10}\n'
+        '{"order_intent_id":"OI2","state":"KILLED","timestamp_ns":11}\n'
+        '{"order_intent_id":"OI3","state":"ACKNOWLEDGED","timestamp_ns":12}\n',
+        encoding="utf-8",
+    )
+
+    snapshot = _trade_manager_snapshot(tmp_path)
+
+    assert snapshot["status"] == "observed"
+    assert [row["order_intent_id"] for row in snapshot["open_orders"]] == ["OI3"]
+
+
+def test_trade_manager_snapshot_loads_native_position_snapshot_dict(tmp_path: Path) -> None:
+    session = tmp_path / "artifacts" / "sessions" / "SESSION-POSITIONS"
+    session.mkdir(parents=True)
+    (session / "session_manifest.json").write_text('{"session_id":"SESSION-POSITIONS"}', encoding="utf-8")
+    (session / "active_models.json").write_text('{"active_models":[]}', encoding="utf-8")
+    (session / "positions.jsonl").write_text(
+        '{"timestamp_ns":20,"source":"unit","positions":{"ES":2.0,"NQ":0.0},"account_state":{"cash":1000.0}}\n',
+        encoding="utf-8",
+    )
+
+    snapshot = _trade_manager_snapshot(tmp_path)
+
+    assert snapshot["status"] == "observed"
+    assert snapshot["open_positions"][0]["positions"]["ES"] == 2.0
+
+
+def test_trade_manager_snapshot_surfaces_malformed_artifacts(tmp_path: Path) -> None:
+    session = tmp_path / "artifacts" / "sessions" / "SESSION-BAD"
+    session.mkdir(parents=True)
+    (session / "session_manifest.json").write_text('{"session_id":', encoding="utf-8")
+
+    snapshot = _trade_manager_snapshot(tmp_path)
+
+    assert snapshot["status"] == "artifact_error"
+    assert "MALFORMED_JSON" in snapshot["reason"]
+    assert snapshot["active_models"] == []
+
+
+def test_trade_manager_snapshot_surfaces_bad_position_quantities(tmp_path: Path) -> None:
+    session = tmp_path / "artifacts" / "sessions" / "SESSION-BAD-POS"
+    session.mkdir(parents=True)
+    (session / "session_manifest.json").write_text('{"session_id":"SESSION-BAD-POS"}', encoding="utf-8")
+    (session / "positions.jsonl").write_text(
+        '{"timestamp_ns":20,"positions":{"ES":"bad"}}\n',
+        encoding="utf-8",
+    )
+
+    snapshot = _trade_manager_snapshot(tmp_path)
+
+    assert snapshot["status"] == "artifact_error"
+    assert "positions.ES: NUMERIC_REQUIRED" in snapshot["reason"]
+
+
+def test_trade_manager_snapshot_does_not_attach_unlinked_session_to_selected_run(tmp_path: Path) -> None:
+    session = tmp_path / "artifacts" / "sessions" / "SESSION-RUN-A"
+    session.mkdir(parents=True)
+    (session / "session_manifest.json").write_text('{"session_id":"SESSION-RUN-A"}', encoding="utf-8")
+    (session / "active_models.json").write_text(
+        '{"active_models":[{"model_id":"MODEL_A","run_id":"RUN-A","status":"ACTIVE"}]}',
+        encoding="utf-8",
+    )
+
+    unlinked = _trade_manager_snapshot(tmp_path, selected_run_id="RUN-B")
+    linked = _trade_manager_snapshot(tmp_path, selected_run_id="RUN-A")
+
+    assert unlinked["status"] == "observed_unlinked"
+    assert unlinked["selected_run_link_status"] == "UNLINKED"
+    assert unlinked["active_models"][0]["run_id"] == "RUN-A"
+    assert linked["status"] == "observed"
+    assert linked["selected_run_link_status"] == "MATCHED"
 
 
 def test_positive_proxy_pnl_count_is_defensive() -> None:

@@ -861,6 +861,224 @@ def render_decision_registry(snapshot: RunEvidenceSnapshot) -> None:
         st.caption(f"Bitcoin state packet gate: {decision['bitcoin_edge_packet_status']}")
 
 
+def _live_stage_rows(snapshot: RunEvidenceSnapshot) -> list[dict[str, Any]]:
+    tm = snapshot.trade_manager or {}
+    decision = snapshot.decision or {}
+    backtest = snapshot.backtest or {}
+    robustness = snapshot.robustness or {}
+    has_backtest = bool(backtest.get("rows") or backtest.get("reports") or backtest.get("campaigns") or backtest.get("observed"))
+    robustness_failed = bool(robustness.get("failed") or (robustness.get("explanation") or {}).get("failed_required_checks"))
+    robustness_observed = bool(robustness.get("rows") or robustness.get("gates") or robustness.get("crypto_robustness_summary"))
+    live_ready = bool(decision.get("live_registry_ready"))
+    promoted_count = int(_num(tm.get("promoted_model_count")))
+    active_models = tm.get("active_models") or []
+    order_intents = tm.get("order_intents") or []
+    order_states = tm.get("latest_order_states") or []
+    fills = tm.get("fills") or []
+    positions = tm.get("open_positions") or []
+    kill_switch = tm.get("kill_switch") or {}
+    link_status = str(tm.get("selected_run_link_status") or "").upper()
+    linked_to_selected = link_status in {"MATCHED", "NOT_SELECTED"}
+
+    def session_status(has_rows: bool) -> str:
+        if not has_rows:
+            return "NOT_OBSERVED"
+        return "OBSERVED" if linked_to_selected else "UNLINKED"
+
+    return [
+        {
+            "phase": "1. Candidate discovery",
+            "status": "OBSERVED" if snapshot.registry else "NOT_OBSERVED",
+            "operator_state": snapshot.run_id or "no selected run",
+        },
+        {
+            "phase": "2. Backtest evidence",
+            "status": "OBSERVED" if has_backtest else "NOT_OBSERVED",
+            "operator_state": f"{len(backtest.get('rows') or [])} rows",
+        },
+        {
+            "phase": "3. Robustness / walk-forward",
+            "status": "BLOCKED" if robustness_failed else ("OBSERVED" if robustness_observed else "NOT_OBSERVED"),
+            "operator_state": (robustness.get("explanation") or {}).get("aggregate_status") or snapshot.state,
+        },
+        {
+            "phase": "4. Decision gate",
+            "status": str(decision.get("action") or decision.get("decision") or "UNKNOWN").upper(),
+            "operator_state": decision.get("reason", ""),
+        },
+        {
+            "phase": "5. Registry promotion",
+            "status": "READY" if live_ready else ("PROMOTED_RECORDS" if promoted_count else "BLOCKED"),
+            "operator_state": f"{promoted_count} promoted model records",
+        },
+        {
+            "phase": "6. Trade Manager active model",
+            "status": session_status(bool(active_models)),
+            "operator_state": f"{len(active_models)} active models; {tm.get('selected_run_link_reason', '')}",
+        },
+        {
+            "phase": "7. Signal / order intent",
+            "status": session_status(bool(order_intents)),
+            "operator_state": f"{len(order_intents)} order intents",
+        },
+        {
+            "phase": "8. Risk and order state",
+            "status": session_status(bool(order_states)),
+            "operator_state": f"{len(order_states)} latest order states",
+        },
+        {
+            "phase": "9. Fills / positions / P&L",
+            "status": session_status(bool(fills or positions or tm.get("pnl_latest"))),
+            "operator_state": f"{len(fills)} fills, {len(positions)} open positions",
+        },
+        {
+            "phase": "10. Kill switch",
+            "status": str(kill_switch.get("status") or "NOT_OBSERVED").upper(),
+            "operator_state": "active" if kill_switch.get("active") else "clear/not observed",
+        },
+        {
+            "phase": "11. Live routing",
+            "status": str(tm.get("live_routing_status") or "NOT_WIRED"),
+            "operator_state": tm.get("live_routing_reason", ""),
+        },
+    ]
+
+
+def render_live_monitor(snapshot: RunEvidenceSnapshot) -> None:
+    st.header("Live Monitor")
+    render_run_header(snapshot)
+    tm = snapshot.trade_manager or {}
+    status = str(tm.get("status") or "not_observed")
+    session_id = tm.get("session_id") or "none"
+    kill_switch = tm.get("kill_switch") or {}
+    pnl_latest = tm.get("pnl_latest") or {}
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
+    c1.metric("Session", session_id)
+    c2.metric("Active models", len(tm.get("active_models") or []))
+    c3.metric("Open positions", len(tm.get("open_positions") or []))
+    c4.metric("Open orders", len(tm.get("open_orders") or []))
+    c5.metric("Kill switch", str(kill_switch.get("status") or "NOT_OBSERVED"))
+    c6.metric("Run link", str(tm.get("selected_run_link_status") or "NO_SESSION"))
+    if status == "artifact_error":
+        st.error(tm.get("reason") or "Trade Manager session artifacts could not be loaded safely.")
+    elif status != "observed":
+        st.warning(tm.get("reason") or "No Trade Manager session artifacts observed.")
+    elif kill_switch.get("active"):
+        st.error("Kill switch active.")
+    else:
+        st.success("Trade Manager session artifacts observed.")
+    if tm.get("selected_run_link_reason"):
+        st.caption(str(tm["selected_run_link_reason"]))
+
+    st.subheader("Pipeline To Live Trading")
+    _df(_live_stage_rows(snapshot))
+
+    st.subheader("Active Models")
+    _display_df(
+        tm.get("active_models") or [],
+        {
+            "model_id": "model",
+            "status": "status",
+            "activation_status": "activation",
+            "symbols": "symbols",
+            "allowed_symbols": "allowed symbols",
+            "run_id": "run",
+            "registry_id": "registry",
+        },
+    )
+
+    st.subheader("Positions And Orders")
+    p1, p2 = st.columns(2)
+    with p1:
+        st.caption("Open positions")
+        _display_df(
+            tm.get("open_positions") or [],
+            {
+                "timestamp_ns": "timestamp_ns",
+                "symbol": "symbol",
+                "quantity": "qty",
+                "net_position": "net",
+                "positions": "positions",
+                "status": "status",
+            },
+        )
+    with p2:
+        st.caption("Open orders")
+        _display_df(
+            tm.get("open_orders") or [],
+            {
+                "order_intent_id": "intent",
+                "order_id": "order",
+                "model_id": "model",
+                "symbol": "symbol",
+                "state": "state",
+                "timestamp_ns": "timestamp_ns",
+                "risk_reason": "risk",
+            },
+        )
+
+    st.subheader("P&L, Fills, And Rejections")
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Total P&L", _num(pnl_latest.get("total_pnl")))
+    m2.metric("Realized", _num(pnl_latest.get("realized_pnl")))
+    m3.metric("Unrealized", _num(pnl_latest.get("unrealized_pnl")))
+    m4.metric("Drawdown", _num(pnl_latest.get("drawdown")))
+    pnl_rows = tm.get("pnl_timeseries") or []
+    if pnl_rows:
+        frame = pd.DataFrame(pnl_rows)
+        if "timestamp_ns" in frame.columns and any(col in frame.columns for col in ("total_pnl", "realized_pnl", "unrealized_pnl")):
+            plot_cols = [col for col in ("total_pnl", "realized_pnl", "unrealized_pnl") if col in frame.columns]
+            melted = frame[["timestamp_ns", *plot_cols]].melt("timestamp_ns", var_name="series", value_name="pnl")
+            _altair_chart(alt.Chart(melted).mark_line(point=True).encode(x="timestamp_ns:O", y="pnl:Q", color="series:N"))
+    f1, f2 = st.columns(2)
+    with f1:
+        st.caption("Recent fills")
+        _display_df(
+            tm.get("fills") or [],
+            {
+                "timestamp_ns": "timestamp_ns",
+                "order_id": "order",
+                "symbol": "symbol",
+                "quantity": "qty",
+                "price": "price",
+                "model_id": "model",
+            },
+        )
+    with f2:
+        st.caption("Risk rejections")
+        _display_df(
+            tm.get("risk_rejections") or [],
+            {
+                "timestamp_ns": "timestamp_ns",
+                "order_intent_id": "intent",
+                "model_id": "model",
+                "symbol": "symbol",
+                "reason": "reason",
+                "risk_reason": "risk",
+                "status": "status",
+            },
+        )
+
+    st.subheader("Execution Health")
+    h1, h2, h3 = st.columns(3)
+    latency = tm.get("latency") or {}
+    slippage = tm.get("slippage") or {}
+    h1.metric("Latency p99 ns", _num(latency.get("p99_ns")))
+    h2.metric("Latency status", str(latency.get("status") or "NOT_OBSERVED"))
+    h3.metric("Slippage status", str(slippage.get("status") or "NOT_OBSERVED"))
+    _display_df(
+        tm.get("incidents") or [],
+        {
+            "timestamp_ns": "timestamp_ns",
+            "severity": "severity",
+            "incident_id": "incident",
+            "message": "message",
+            "reason": "reason",
+        },
+    )
+    _json_expander("Trade Manager Session Snapshot", tm)
+
+
 def render_reports_analyst(snapshot: RunEvidenceSnapshot) -> None:
     st.header("Reports & Analyst")
     render_run_header(snapshot)
