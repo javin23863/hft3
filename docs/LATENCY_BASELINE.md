@@ -96,7 +96,11 @@ python -m tools.latency_baseline.run `
   --strategy latency_probe
 ```
 
-Broker mode currently fails loudly with `BROKER_MODE_REQUIRES_EXECUTION_ADAPTER` unless a real execution adapter calls `LatencyRecorder` at the actual market-data, decision, risk, order-build, send, and acknowledgment boundaries. This prevents the report from pretending that TCP checks or broker acknowledgment timing are placement speed.
+For `--broker rithmic --env paper`, broker mode uses the configured Rithmic Paper/Chicago endpoint and sends a tagged passive limit-order probe. If `--symbol ES` is supplied, the runner resolves it to the current front-month contract before subscribing and sending. The default `latency_probe` derives a passive limit price from the first live quote/trade so the command can run without an explicit price.
+
+Broker mode fails loudly with `BROKER_LATENCY_BASELINE_FAILED` when the endpoint, credentials, market data, or order acknowledgment path is unavailable. It does not fall back to synthetic samples.
+
+The runner buffers raw Rithmic events in memory while measuring placement speed and flushes them after the send/ack path. This keeps JSONL persistence and report writing outside the measured hot path.
 
 ## Reading The Report
 
