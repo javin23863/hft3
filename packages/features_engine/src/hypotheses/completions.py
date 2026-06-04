@@ -126,7 +126,7 @@ class SpreadRegimeChangeComplete(BaseHypothesis):
 
 
 def get_all_hypotheses() -> list:
-    """Returns all 44 active hypotheses: completions replace stubs, originals otherwise.
+    """Returns all active hypotheses: completions replace stubs, originals otherwise.
 
     Instances are cached by hyp_id so stateful completions (like SpreadRegimeChangeComplete
     which tracks cooldown counters) persist across evaluate calls.

@@ -1,4 +1,4 @@
-"""Load unified 55-model registry from YAML + hypothesis registry."""
+"""Load unified model registry from YAML + hypothesis registry."""
 
 from __future__ import annotations
 
@@ -72,7 +72,7 @@ def _config_override(overrides: dict, slug: str) -> dict:
 
 
 def build_models_config() -> Dict[str, ModelConfig]:
-    """Build all 55 model configs (44 HYP + 11 PDF)."""
+    """Build all model configs."""
     configs: Dict[str, ModelConfig] = {}
 
     yaml_overrides: Dict[str, dict] = {}

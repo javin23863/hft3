@@ -17,7 +17,7 @@ from hft3_bootstrap import features_engine_root, setup_repo_paths, workbench_roo
 
 setup_repo_paths()
 
-from features_engine.src.model_registry import get_slug_for_hyp_id, legacy_to_slug
+from features_engine.src.model_registry import get_slug_for_hyp_id, legacy_to_slug, load_model_registry
 
 MODULES = features_engine_root() / "src" / "hypotheses" / "modules.py"
 OUT = workbench_root() / "config" / "model_event_binding.yaml"
@@ -75,7 +75,12 @@ def _extract_hyp_bindings() -> dict[str, dict]:
                 bindings[slug] = {"default_macro_contexts": list(DEFAULT_MACRO)}
             current_hyp = None
 
-    for hid in range(1, 45):
+    hyp_ids = sorted(
+        int(entry["hyp_id"])
+        for entry in load_model_registry().get("models", {}).values()
+        if entry.get("kind") == "hypothesis" and entry.get("hyp_id") is not None
+    )
+    for hid in hyp_ids:
         slug = get_slug_for_hyp_id(hid)
         bindings.setdefault(slug, {"default_macro_contexts": list(DEFAULT_MACRO)})
 

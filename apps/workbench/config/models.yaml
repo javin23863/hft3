@@ -68,3 +68,23 @@ overrides:
       signal_threshold:
       - 0.05
       - 0.3
+  GHOST_ROUTE:
+    name: Ghost Route MBO queue-decay
+    latency_lane: microsecond
+    execution_assumptions: fak_limit_replay
+    required_datasets:
+    - cme_mdp3_mbo
+    - macro_micro_pair_calibration
+    parameter_bounds:
+      tau_decay_norm:
+      - 0.25
+      - 0.80
+      tau_ofi_norm:
+      - 0.05
+      - 0.40
+      tau_z:
+      - 0.75
+      - 3.00
+      min_expected_edge_ticks:
+      - 0.10
+      - 1.50

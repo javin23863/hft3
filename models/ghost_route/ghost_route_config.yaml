@@ -1,0 +1,56 @@
+ghost_route:
+  model_id: GHOST_ROUTE
+  research_only: true
+  live_routing_authorized: false
+  latency_wire_to_wire_us: 23
+  compute_latency_us: measured_from_benchmark
+  delta_t_us: 250
+  min_depth_contracts: 1
+  max_spread_ticks: 1.0
+  tau_decay_norm: 0.40
+  tau_remaining: 0.70
+  epsilon_trade: 1.0
+  tau_cancel_trade_ratio: 3.0
+  tau_ofi_norm: 0.15
+  tau_z: 1.0
+  min_expected_edge_ticks: 0.25
+  toxicity_enter_threshold: 2.0
+  toxicity_exit_threshold: 1.0
+  toxicity_min_hold_us: 250
+  order_qty: 1
+  fees_ticks: 0.05
+  estimated_slippage_ticks: 0.05
+  adverse_selection_penalty_ticks: 0.05
+  miss_penalty_ticks: 0.05
+  crossing_cost_ticks: 0.5
+contract_pairs:
+  ES: MES
+  NQ: MNQ
+  YM: MYM
+pair_calibration:
+  ES_MES:
+    alpha: 0.0
+    beta: 1.0
+    mu_spread: 0.0
+    sigma_spread: 1.0
+    tau_hat_us: 50
+  NQ_MNQ:
+    alpha: 0.0
+    beta: 1.0
+    mu_spread: 0.0
+    sigma_spread: 1.0
+    tau_hat_us: 50
+  YM_MYM:
+    alpha: 0.0
+    beta: 1.0
+    mu_spread: 0.0
+    sigma_spread: 1.0
+    tau_hat_us: 50
+acceptance:
+  required_latency_wire_to_wire_us: 23
+  require_measured_compute_latency: true
+  require_fees: true
+  require_partial_fill_simulation: true
+  require_missed_fill_simulation: true
+  require_adverse_selection_markouts: true
+  require_purged_walk_forward: true

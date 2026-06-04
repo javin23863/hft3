@@ -122,3 +122,10 @@ SPREAD_BLOWOUT_RECOMPRESSION:
   display_name: Spread blowout / recompression
   description: Detects spread expansion and mean-reversion after liquidity shock.
     Fades overextended moves when book refills.
+GHOST_ROUTE:
+  display_name: Ghost Route MBO queue-decay
+  description: Macro ES/NQ/YM Level 3 MBO shadow-decay signal testing whether micro
+    MES/MNQ/MYM quotes remain stale after realistic FAK latency and costs.
+  role: alpha
+  default_phase: during
+  budget_us: 50

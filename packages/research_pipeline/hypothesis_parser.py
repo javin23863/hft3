@@ -138,7 +138,7 @@ def parse_hypothesis(
         parsed.llm_status = str(data.get("llm_status") or "unavailable")
         return parsed
     slugs = _hypothesis_slugs()
-    user = f"Thesis:\n{thesis}\n\nAllowed primary_model_id values:\n" + ", ".join(slugs[:44])
+    user = f"Thesis:\n{thesis}\n\nAllowed primary_model_id values:\n" + ", ".join(slugs)
     data, err = generate_json(_PARSE_SYSTEM, user)
     if data is None:
         parsed = _heuristic_parse(thesis)

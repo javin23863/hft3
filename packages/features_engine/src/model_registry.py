@@ -1,4 +1,4 @@
-"""Unified model slug registry — 44 HYP + 11 PDF = 55 total."""
+"""Unified model slug registry — 45 HYP + 11 PDF = 56 total."""
 
 from __future__ import annotations
 

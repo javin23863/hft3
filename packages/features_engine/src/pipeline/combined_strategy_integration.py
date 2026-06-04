@@ -1,4 +1,4 @@
-"""Combined hypothesis strategy — evaluates all 44 HYP + 11 PDF models on each step,
+"""Combined hypothesis strategy — evaluates all HYP + 11 PDF models on each step,
 aggregates signals via weighted voting, and produces OrderIntents.
 
 Per AGENTS.md constraint: structural model outputs stay in slots 50-63, never merged
@@ -35,7 +35,7 @@ class AggregatedSignal:
 
 
 class CombinedHypothesisStrategy:
-    """Unified strategy evaluating all 44 HYP models on each ReplayStepContext,
+    """Unified strategy evaluating all active HYP models on each ReplayStepContext,
     aggregating signals, and producing OrderIntents.
 
     The 11 PDF structural models are evaluated separately via StructuralModelIntegrator

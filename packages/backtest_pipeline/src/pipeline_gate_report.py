@@ -1,4 +1,4 @@
-"""Catalog gate rollup: 55-model manifest + master report."""
+"""Catalog gate rollup: 56-model manifest + master report."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from backtest_pipeline.src.pipeline_model_router import all_model_ids, route
 
 RUNTIME_BUDGET_NOTES = {
     "smoke": "~10–20 min (hybrid optional + one MBO pass + HYP_1/HYP_5 fan-out)",
-    "catalog": "~2–4 hr (full hybrid + 44 HYP fan-out + PDF structural/diagnostics/options)",
+    "catalog": "~2–4 hr (full hybrid + all HYP fan-out + PDF structural/diagnostics/options)",
 }
 
 
@@ -72,7 +72,7 @@ def write_catalog_artifacts(
         ),
         "validation_scope_note": (
             "PASS means smoke plumbing only (PDF_MODEL_4 + HYP_1/HYP_5 executed); "
-            "55 rows include NOT_RUN_SMOKE placeholders — not a full-catalog backtest claim."
+            f"{len(models)} rows include NOT_RUN_SMOKE placeholders — not a full-catalog backtest claim."
             if tier == "smoke"
             else "PASS means all model routes executed for this event/symbol tier."
         ),

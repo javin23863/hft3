@@ -10,7 +10,7 @@ from .modules import (
     CancelStormBeforeMove, QueueDepletionTrigger, OpeningCandleChase, VWAPDefenseBreak, StopLossCascadeContinuation,
     EndOfDayForcedFlatten, CutoffPanicExits, NoOvernightInventorySqueeze, DailyLossLimitDefense, TrailingDrawdownPressure,
     ProfitLockBehavior, PropResetReopenWindow, FridayWeekendDerisking, EconomicEventRestrictionFlattening,
-    QuotePullBeforeVolatility, RequoteRaceAfterShock
+    QuotePullBeforeVolatility, RequoteRaceAfterShock, GhostRoute
 )
 
 CROSS_ASSET_HYP_IDS = frozenset({16, 17, 18, 19, 20})
@@ -61,7 +61,8 @@ def get_active_hypotheses() -> List[BaseHypothesis]:
         FridayWeekendDerisking(),
         EconomicEventRestrictionFlattening(),
         QuotePullBeforeVolatility(),
-        RequoteRaceAfterShock()
+        RequoteRaceAfterShock(),
+        GhostRoute()
     ]
     if os.environ.get("HFT3_CROSS_ASSET", "").lower() not in ("1", "true", "yes"):
         hyps = [h for h in hyps if h.hyp_id not in CROSS_ASSET_HYP_IDS]
@@ -69,11 +70,11 @@ def get_active_hypotheses() -> List[BaseHypothesis]:
 
 class HypothesisRegistry:
     """
-    Registry for all 44 hypothesis families specified in the A+ Developer Handoff.
+    Registry for all 45 hypothesis families specified in the A+ Developer Handoff.
     Each hypothesis module returns a 'research card'.
 
-    PDF structural models (PDF_MODEL_1..7) are registered separately via
-    features_engine.src.structural_models.get_structural_models() — 51 total inventory.
+    PDF structural models (PDF_MODEL_1..11) are registered separately via
+    features_engine.src.structural_models.get_structural_models() — 56 total inventory.
     """
     def __init__(self):
         self.families = {
@@ -120,7 +121,8 @@ class HypothesisRegistry:
             41: "Thin-book continuation",
             42: "Passive trap fill",
             43: "Rebate trap avoidance",
-            44: "Spread regime change"
+            44: "Spread regime change",
+            45: "Ghost Route MBO queue-decay"
         }
         
     def get_hypothesis_name(self, id: int) -> str:

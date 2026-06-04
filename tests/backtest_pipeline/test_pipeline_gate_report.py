@@ -37,9 +37,9 @@ def test_finalize_smoke_fills_not_run_rows() -> None:
         },
     ]
     models = finalize_catalog_models(executed, "smoke")
-    assert len(models) == 55
+    assert len(models) == 56
     not_run = [m for m in models if m["status"] == "NOT_RUN_SMOKE"]
-    assert len(not_run) == 53
+    assert len(not_run) == 54
     assert models[0]["model_id"]  # sorted by all_model_ids order
 
 

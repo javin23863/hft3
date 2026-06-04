@@ -1,4 +1,4 @@
-# Unified 55-model registry: 44 HYP + 11 PDF structural models.
+# Unified model registry: 45 HYP + 11 PDF structural models.
 # Canonical id = slug; legacy_id (HYP_N / PDF_MODEL_N) deprecated.
 
 models:
@@ -309,6 +309,13 @@ models:
     legacy_id: HYP_44
     display_name: Spread regime change
     class: SpreadRegimeChange
+
+  GHOST_ROUTE:
+    kind: hypothesis
+    hyp_id: 45
+    legacy_id: HYP_45
+    display_name: Ghost Route MBO queue-decay
+    class: GhostRoute
 
   BOOK_PRESSURE:
     kind: pdf_structural

@@ -467,7 +467,7 @@ def run_llm_on_hypothesis_request(
     schema_text = _load_schema_text(_HYPOTHESIS_OUTPUT_SCHEMA)
     system = (
         "Convert the thesis into JSON matching PipelineHypothesisResponse schema.\n"
-        f"primary_model_id must be one of: {', '.join(allowed_model_ids[:44])}\n\n"
+        f"primary_model_id must be one of: {', '.join(allowed_model_ids)}\n\n"
         f"Output JSON Schema:\n{schema_text}"
     )
     user = json.dumps({"pipeline_request": request, "thesis": thesis}, indent=2)

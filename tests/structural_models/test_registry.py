@@ -1,4 +1,4 @@
-"""Registry inventory: 11 PDF models + 44 HYP unchanged."""
+"""Registry inventory: 11 PDF models + 45 HYP."""
 
 from features_engine.src.hypotheses.registry import HypothesisRegistry, get_active_hypotheses
 from features_engine.src.structural_models.registry import (
@@ -27,9 +27,9 @@ def test_dependency_map():
     assert MODEL_DEPENDENCY_MAP["BOOK_PRESSURE"] == []
 
 
-def test_hypothesis_count_unchanged():
+def test_hypothesis_count():
     reg = HypothesisRegistry()
-    assert len(reg.families) == 44
+    assert len(reg.families) == 45
 
 
 def test_active_hypotheses_not_including_pdf():

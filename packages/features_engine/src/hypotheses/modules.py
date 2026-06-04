@@ -699,3 +699,23 @@ class RequoteRaceAfterShock(BaseHypothesis):
             slope_change = state.f('book_slope_change', 0.0)
             return float(np.tanh(slope_change * 3.0))
         return 0.0
+
+class GhostRoute(BaseHypothesis):
+    """
+    Hypothesis 45: Ghost Route MBO queue-decay
+
+    Research-only macro-to-micro futures lead/lag signal. The full event-time
+    implementation lives in models/ghost_route; this lightweight hypothesis
+    class lets the unified Workbench registry route the model honestly.
+    """
+    def __init__(self):
+        super().__init__(45, "Ghost Route MBO queue-decay")
+
+    def evaluate(self, state: MarketState) -> float:
+        shadow_decay = state.f('macro_shadow_decay', 0.0)
+        stale_quote = state.f('micro_stale_quote_zscore', 0.0)
+        ofi = state.f('macro_nofi', 0.0)
+        edge = state.f('expected_edge_ticks', 0.0)
+        if edge <= 0:
+            return 0.0
+        return float(np.clip(np.tanh(shadow_decay) * np.tanh(stale_quote) * np.sign(ofi), -1.0, 1.0))
