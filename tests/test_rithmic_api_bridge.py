@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -237,11 +238,12 @@ def test_connector_poll_events_returns_empty_when_no_bridge() -> None:
     connector = RithmicApiConnector(config_path=cfg_path)
     assert connector.poll_events() == []
     types = connector.detected_event_types()
-    assert "order_submit" in types
-    assert "order_ack" in types
-    assert "fill" in types
+    assert types == set()
     lim = connector.limitations()
     assert lim["connector"] == "rithmic_api"
+    assert "order_submit" in lim["supported_event_types"]
+    assert "order_ack" in lim["supported_event_types"]
+    assert "fill" in lim["supported_event_types"]
     connector.close()
 
 
@@ -446,7 +448,7 @@ def test_connector_poll_events_returns_market_and_order_events() -> None:
     connector.close()
 
 
-def test_connector_detected_event_types_includes_order_events() -> None:
+def test_connector_supported_event_types_include_order_events() -> None:
     cfg_path = (
         Path(__file__).resolve().parents[1]
         / "packages"
@@ -455,7 +457,7 @@ def test_connector_detected_event_types_includes_order_events() -> None:
         / "rithmic_api_test.yaml"
     )
     connector = RithmicApiConnector(config_path=cfg_path)
-    types = connector.detected_event_types()
+    types = set(connector.limitations()["supported_event_types"])
     assert "order_submit" in types
     assert "order_ack" in types
     assert "fill" in types
@@ -463,6 +465,37 @@ def test_connector_detected_event_types_includes_order_events() -> None:
     assert "order_replace" in types
     assert "reject" in types
     assert "order_failure" in types
+
+
+def test_connector_detected_event_types_are_observed_events() -> None:
+    cfg_path = (
+        Path(__file__).resolve().parents[1]
+        / "packages"
+        / "data_system"
+        / "config"
+        / "rithmic_api_test.yaml"
+    )
+    connector = RithmicApiConnector(config_path=cfg_path)
+    connector._connected = True
+    connector._last_symbol = "MES"
+    connector._last_exchange = "CME"
+    connector._bridge = _FakeBridge(
+        market_events=[
+            MarketDataEvent(
+                timestamp_ns=11,
+                order_id=0,
+                action="T",
+                side="",
+                price=5000.0,
+                size=1,
+            )
+        ],
+    )
+
+    assert connector.detected_event_types() == set()
+    assert [ev["event_type"] for ev in connector.poll_events()] == ["trade"]
+    assert connector.detected_event_types() == {"trade"}
+    connector.close()
 
 
 def test_connector_repository_connect_point_from_repository_login_block() -> None:
@@ -483,6 +516,87 @@ def test_connector_repository_connect_point_from_repository_login_block() -> Non
     assert cfg.rep_connect_point != "login_agent_pnlc"
     assert cfg.md_connect_point == "login_agent_tpc"
     assert cfg.ts_connect_point == "login_agent_opc"
+
+
+def test_paper_chicago_profile_has_runtime_only_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg_path = (
+        Path(__file__).resolve().parents[1]
+        / "packages"
+        / "data_system"
+        / "config"
+        / "rithmic_api_paper.yaml"
+    )
+    monkeypatch.delenv("RITHMIC_USERNAME", raising=False)
+    monkeypatch.delenv("RITHMIC_PASSWORD", raising=False)
+    connector = RithmicApiConnector(config_path=cfg_path)
+
+    status = connector.endpoint_status()
+
+    assert status["status"] == "CONFIGURED_NOT_AUTHENTICATED"
+    assert status["reason_code"] == "RITHMIC_CREDENTIALS_MISSING"
+    assert status["profile"] == "paper_chicago"
+    assert status["system"] == "Rithmic Paper Trading"
+    assert status["gateway"] == "Chicago Area"
+    assert status["missing_endpoint_params"] == []
+    assert status["credentials"] == {
+        "username_set": False,
+        "password_set": False,
+        "redacted": True,
+    }
+    serialized = json.dumps(status)
+    assert "unit_user" not in serialized
+    assert "unit_password" not in serialized
+
+    with pytest.raises(EnvironmentError, match="RITHMIC_USERNAME and RITHMIC_PASSWORD"):
+        connector.connect()
+
+
+def test_paper_chicago_connection_config_uses_paper_connect_points(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg_path = (
+        Path(__file__).resolve().parents[1]
+        / "packages"
+        / "data_system"
+        / "config"
+        / "rithmic_api_paper.yaml"
+    )
+    monkeypatch.setenv("RITHMIC_USERNAME", "unit_user")
+    monkeypatch.setenv("RITHMIC_PASSWORD", "unit_password")
+    connector = RithmicApiConnector(config_path=cfg_path)
+
+    cfg = connector._build_connection_config()
+    env_vars = "\n".join(cfg.env_vars)
+
+    assert cfg.environment == "Rithmic Paper Trading"
+    assert cfg.md_connect_point == "login_agent_tp_agg_paperc"
+    assert cfg.ts_connect_point == "login_agent_op_paperc"
+    assert cfg.rep_connect_point == "login_agent_repositoryc"
+    assert cfg.ih_connect_point == "login_agent_history_paperc"
+    assert cfg.pnl_connect_point == "login_agent_pnl_paperc"
+    assert "MML_DOMAIN_NAME=rithmic_paper_prod_domain" in env_vars
+    assert "MML_DMN_SRVR_ADDR=ritpz01004.01.rithmic.com:65000" in env_vars
+    assert "rituz00100" not in env_vars
+    assert "rithmic_uat" not in env_vars
+
+
+def test_load_config_selects_nested_api_config_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    from data_system.rithmic_trial.config import load_config
+
+    trial_cfg = (
+        Path(__file__).resolve().parents[1]
+        / "packages"
+        / "data_system"
+        / "config"
+        / "rithmic_trial.yaml"
+    )
+    monkeypatch.setenv("RITHMIC_ENDPOINT_PROFILE", "paper_chicago")
+    monkeypatch.delenv("RITHMIC_API_CONFIG", raising=False)
+
+    cfg = load_config(trial_cfg)
+
+    assert cfg.rithmic["endpoint_profile"] == "paper_chicago"
+    assert cfg.rithmic_api_config.endswith("packages/data_system/config/rithmic_api_paper.yaml")
 
 
 class _FakeBridge:

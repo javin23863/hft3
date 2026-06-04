@@ -22,7 +22,7 @@ from data_system.rithmic_trial.config import load_config
 from data_system.rithmic_trial.connector.fixture_connector import FixtureConnector
 from data_system.rithmic_trial.convert.hftbacktest_converter import convert_to_npz
 from data_system.rithmic_trial.normalize.mapper import normalize_file
-from data_system.rithmic_trial.pipeline import cmd_order_latency_burst, cmd_process
+from data_system.rithmic_trial.pipeline import cmd_capture, cmd_order_latency_burst, cmd_process
 from data_system.rithmic_trial.reports.emit_reports import build_latency_profile, emit_all_reports
 from data_system.rithmic_trial.validate.book_reconstruction import reconstruct_book
 from data_system.rithmic_trial.validate.quality_checks import validate_events
@@ -101,10 +101,94 @@ def test_process_cli(trial_cfg, tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert cmd_process(args) == 0
     expected_npz = trial_cfg.replay_dir(date) / f"{trial_cfg.symbol}_{date}_trial.npz"
     assert expected_npz.exists()
-    conversion_report = trial_cfg.reports_dir(date) / "hftbacktest_conversion_report.json"
+    conversion_report = trial_cfg.reports_dir(date) / trial_cfg.symbol / "hftbacktest_conversion_report.json"
     assert conversion_report.exists()
     report = json.loads(conversion_report.read_text(encoding="utf-8"))
     assert report.get("status") == "pass"
+
+
+def test_capture_subscribes_before_polling(trial_cfg, monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _FakeMarketDataConnector()
+    monkeypatch.setattr("data_system.rithmic_trial.pipeline.build_connector", lambda cfg: fake)
+    args = type(
+        "Args",
+        (),
+        {
+            "config": str(trial_cfg.repo_root / "rithmic_trial.yaml"),
+            "date": "2026-06-04",
+            "symbol": "ESM6",
+            "exchange": "CME",
+            "duration_sec": 0.02,
+            "poll_interval_sec": 0.01,
+            "force": True,
+            "event_id": None,
+        },
+    )()
+
+    assert cmd_capture(args) == 0
+    assert fake.subscribed == [("ESM6", "CME")]
+
+
+def test_force_capture_resets_existing_raw_file(trial_cfg, monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _FakeMarketDataConnector()
+    monkeypatch.setattr("data_system.rithmic_trial.pipeline.build_connector", lambda cfg: fake)
+    out_dir = trial_cfg.raw_dir("2026-06-04", "ESM6")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "events.ndjson").write_text('{"event_type":"stale"}\n', encoding="utf-8")
+    (out_dir / "manifest.json").write_text('{"row_count":999}', encoding="utf-8")
+    normalized_dir = trial_cfg.normalized_dir("2026-06-04", "ESM6")
+    normalized_dir.mkdir(parents=True, exist_ok=True)
+    (normalized_dir / "events.ndjson").write_text('{"event_type":"stale"}\n', encoding="utf-8")
+    replay_dir = trial_cfg.replay_dir("2026-06-04", "ESM6")
+    replay_dir.mkdir(parents=True, exist_ok=True)
+    (replay_dir / "ESM6_2026-06-04_trial.npz").write_bytes(b"stale")
+    reports_dir = trial_cfg.reports_dir("2026-06-04") / "ESM6"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    (reports_dir / "data_quality_report.json").write_text('{"status":"stale"}', encoding="utf-8")
+    args = type(
+        "Args",
+        (),
+        {
+            "config": str(trial_cfg.repo_root / "rithmic_trial.yaml"),
+            "date": "2026-06-04",
+            "symbol": "ESM6",
+            "exchange": "CME",
+            "duration_sec": 0.02,
+            "poll_interval_sec": 0.01,
+            "force": True,
+            "event_id": None,
+        },
+    )()
+
+    assert cmd_capture(args) == 0
+    lines = (out_dir / "events.ndjson").read_text(encoding="utf-8").splitlines()
+    manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+
+    assert len(lines) == 1
+    assert "stale" not in lines[0]
+    assert manifest["row_count"] == 1
+    assert manifest["detected_event_types"] == ["quote"]
+    assert not (normalized_dir / "events.ndjson").exists()
+    assert not (replay_dir / "ESM6_2026-06-04_trial.npz").exists()
+    assert not (reports_dir / "data_quality_report.json").exists()
+
+
+def test_paper_profile_sets_capture_environment_metadata(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg_src = _REPO / "packages" / "data_system" / "config" / "rithmic_trial.yaml"
+    cfg_path = tmp_path / "rithmic_trial.yaml"
+    cfg_path.write_text(
+        cfg_src.read_text(encoding="utf-8").replace("repo_root: .", f"repo_root: {tmp_path}"),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("RITHMIC_ENDPOINT_PROFILE", "paper_chicago")
+    monkeypatch.delenv("RITHMIC_CAPTURE_ENVIRONMENT", raising=False)
+
+    cfg = load_config(cfg_path)
+
+    assert cfg.capture_environment == "rithmic_paper"
 
 
 def test_replay_sample_smoke(trial_cfg, tmp_path: Path) -> None:
@@ -182,6 +266,47 @@ def test_order_latency_burst_writes_rithmic_test_summary(
     assert "paper" not in summary_path.name
 
 
+def test_order_latency_burst_uses_paper_label_for_paper_profile(
+    trial_cfg,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = _FakeOrderLatencyConnector()
+    monkeypatch.setattr("data_system.rithmic_trial.pipeline.build_connector", lambda cfg: fake)
+    trial_cfg.rithmic["endpoint_profile"] = "paper_chicago"
+    trial_cfg.rithmic["environment"] = "Rithmic Paper Trading"
+    cfg_path = trial_cfg.repo_root / "rithmic_trial.yaml"
+    cfg_data = cfg_path.read_text(encoding="utf-8")
+    cfg_path.write_text(
+        cfg_data.replace('environment: "Rithmic Test"', 'environment: "Rithmic Paper Trading"')
+        .replace('gateway: "Orangeburg"', 'gateway: "Chicago"'),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("RITHMIC_ENDPOINT_PROFILE", "paper_chicago")
+    args = type(
+        "Args",
+        (),
+        {
+            "config": str(cfg_path),
+            "symbol": "MES",
+            "exchange": "CME",
+            "side": "BUY",
+            "qty": 1,
+            "price": 5000.0,
+            "count": 1,
+            "ack_timeout_sec": 1.0,
+            "interval_ms": 0.0,
+            "run_id": "paper-unit-run",
+            "subscribe_md": False,
+            "cancel_after_ack": False,
+        },
+    )()
+
+    assert cmd_order_latency_burst(args) == 0
+    date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    summary_path = trial_cfg.reports_dir(date) / "rithmic_paper_order_summary_paper-unit-run.json"
+    assert summary_path.exists()
+
+
 class _FakeOrderLatencyConnector:
     def __init__(self) -> None:
         self._events: list[dict[str, object]] = []
@@ -246,6 +371,42 @@ class _FakeOrderLatencyConnector:
                 "local_receive_timestamp_ns": time.time_ns(),
             }
         )
+
+    def close(self) -> None:
+        return None
+
+
+class _FakeMarketDataConnector:
+    def __init__(self) -> None:
+        self.subscribed: list[tuple[str, str]] = []
+        self._events: list[dict[str, object]] = []
+
+    def connect(self) -> None:
+        return None
+
+    def subscribe_mbo(self, symbol: str, exchange: str) -> None:
+        self.subscribed.append((symbol, exchange))
+        self._events.append(
+            {
+                "event_type": "quote",
+                "symbol": symbol,
+                "exchange": exchange,
+                "exchange_timestamp_ns": 1,
+                "local_receive_timestamp_ns": 2,
+                "bid_price": 5000.0,
+                "bid_size": 1,
+            }
+        )
+
+    def poll_events(self) -> list[dict[str, object]]:
+        events, self._events = self._events, []
+        return events
+
+    def limitations(self) -> dict[str, object]:
+        return {"connector": "fake_market_data"}
+
+    def detected_event_types(self) -> set[str]:
+        return {"quote"}
 
     def close(self) -> None:
         return None

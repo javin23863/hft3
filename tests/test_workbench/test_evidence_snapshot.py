@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from workbench.src.run.evidence_snapshot import (
@@ -11,10 +12,14 @@ from workbench.src.run.evidence_snapshot import (
     _crypto_relationships,
     _crypto_robustness_explanation,
     _crypto_self_learning_loop,
+    _feature_fabric_snapshot,
+    _lane_registry_snapshot,
+    _latest_rithmic_trial_bundle,
     _crypto_validation_reports,
     _positive_proxy_pnl_count,
     _trade_manager_snapshot,
     load_run_evidence,
+    workbench_run_sources,
 )
 
 
@@ -48,6 +53,304 @@ def test_crypto_snapshot_surfaces_bitcoin_edge_packet_gate() -> None:
     assert "economic_diagnostic_pass_count" in snapshot.decision
     assert "trade_manager" in snapshot.system
     assert snapshot.trade_manager["live_routing_status"] in {"NOT_WIRED", "not_observed"}
+    assert {row["lane"] for row in snapshot.registry["lanes"]} >= {
+        "cme_futures",
+        "crypto",
+        "equities",
+        "options",
+    }
+    assert snapshot.diagnostics["feature_fabric"]["policy"] == "cross_lane_features_allowed_only_when_point_in_time_safe"
+    assert snapshot.system["rithmic_endpoint"]["secret_exposed"] is False
+
+
+def test_workbench_run_sources_cover_registered_model_lanes() -> None:
+    sources = workbench_run_sources()
+
+    assert "crypto_lane" in sources
+    assert "cme_rithmic" in sources
+    assert "equities" in sources
+    assert "options" in sources
+    assert "autonomous" in sources
+
+
+def test_cme_rithmic_snapshot_surfaces_paper_endpoint_readiness() -> None:
+    snapshot = load_run_evidence(REPO, "cme_rithmic")
+
+    endpoint = snapshot.system["rithmic_endpoint"]
+    assert snapshot.source == "cme_rithmic"
+    assert endpoint["profile"] == "paper_chicago"
+    assert endpoint["system"] == "Rithmic Paper Trading"
+    assert endpoint["gateway"] == "Chicago Area"
+    assert endpoint["missing_endpoint_params"] == []
+    assert endpoint["reason_code"] in {
+        "RITHMIC_CREDENTIALS_MISSING",
+        "GATEWAY_LIBRARY_NOT_FOUND",
+        "",
+    }
+    assert endpoint["credentials"]["redacted"] is True
+    assert "username" not in endpoint
+    assert "password" not in endpoint
+    assert snapshot.latency["rithmic_order_ack"]["scope"] == "cme_rithmic_submit_to_ack"
+    assert snapshot.decision["action"] == "QUARANTINE"
+
+
+def test_latest_rithmic_trial_bundle_reads_observed_reports(tmp_path: Path) -> None:
+    raw_dir = tmp_path / "data" / "raw" / "rithmic_trial_live_capture" / "2026-06-04" / "ESM6"
+    raw_dir.mkdir(parents=True)
+    (raw_dir / "events.ndjson").write_text('{"event_type":"trade"}\n', encoding="utf-8")
+    raw_file = raw_dir / "events.ndjson"
+    raw_checksum = "unit-checksum"
+    (raw_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "symbol": "ESM6",
+                "exchange": "CME",
+                "capture_environment": "rithmic_paper",
+                "capture_start_time": "2026-06-04T10:00:00Z",
+                "capture_end_time": "2026-06-04T10:00:15Z",
+                "row_count": 103,
+                "checksum_sha256": raw_checksum,
+                "raw_file": str(raw_file),
+            }
+        ),
+        encoding="utf-8",
+    )
+    reports = tmp_path / "reports" / "rithmic_trial" / "2026-06-04" / "ESM6"
+    reports.mkdir(parents=True)
+    normalized = tmp_path / "data" / "normalized" / "rithmic_trial_live_capture" / "2026-06-04" / "ESM6"
+    normalized.mkdir(parents=True)
+    normalized_file = normalized / "events.ndjson"
+    normalized_file.write_text('{"event_type":"trade"}\n', encoding="utf-8")
+    replay = tmp_path / "data" / "replay" / "hftbacktest" / "rithmic_trial" / "2026-06-04" / "ESM6"
+    replay.mkdir(parents=True)
+    replay_file = replay / "ESM6_2026-06-04_trial.npz"
+    replay_file.write_bytes(b"npz")
+    (reports / "data_capture_report.json").write_text(
+        json.dumps(
+            {
+                "status": "pass",
+                "manifest": {
+                    "raw_file": str(raw_file),
+                    "row_count": 103,
+                    "checksum_sha256": raw_checksum,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (reports / "schema_mapping_report.json").write_text(
+        json.dumps(
+            {
+                "status": "pass",
+                "raw_file": str(raw_file),
+                "normalized_file": str(normalized_file),
+            }
+        ),
+        encoding="utf-8",
+    )
+    (reports / "data_quality_report.json").write_text(
+        json.dumps(
+            {
+                "status": "pass",
+                "input_files": [str(normalized_file)],
+                "event_count": 103,
+                "event_type_counts": {"trade": 43, "quote": 60},
+                "checks": {"bad_prices": 0},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (reports / "hftbacktest_conversion_report.json").write_text(
+        json.dumps({"status": "pass", "mode": "trade_only", "output_file": str(replay_file)}),
+        encoding="utf-8",
+    )
+    (reports / "latency_profile.json").write_text(
+        json.dumps(
+            {
+                "status": "pass",
+                "input_files": [str(normalized_file)],
+                "paired_count": 0,
+                "feed_latency_us": {"count": 103},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (reports / "paper_order_summary.json").write_text('{"paired_count":0}', encoding="utf-8")
+
+    bundle = _latest_rithmic_trial_bundle(tmp_path)
+
+    assert bundle["run_id"] == "rithmic_paper_2026-06-04_ESM6"
+    assert bundle["row_count"] == 103
+    assert bundle["trade_count"] == 43
+    assert bundle["quote_count"] == 60
+    assert bundle["paired_count"] == 0
+    assert bundle["npz_exists"] is True
+    assert bundle["normalized_exists"] is True
+    assert bundle["report_binding_status"] == "PASS"
+    assert bundle["report_binding_issues"] == []
+
+
+def test_latest_rithmic_trial_bundle_blocks_stale_reports(tmp_path: Path) -> None:
+    raw_dir = tmp_path / "data" / "raw" / "rithmic_trial_live_capture" / "2026-06-04" / "ESM6"
+    raw_dir.mkdir(parents=True)
+    raw_file = raw_dir / "events.ndjson"
+    raw_file.write_text('{"event_type":"trade"}\n', encoding="utf-8")
+    (raw_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "symbol": "ESM6",
+                "exchange": "CME",
+                "capture_environment": "rithmic_paper",
+                "row_count": 236,
+                "checksum_sha256": "fresh-checksum",
+                "raw_file": str(raw_file),
+            }
+        ),
+        encoding="utf-8",
+    )
+    reports = tmp_path / "reports" / "rithmic_trial" / "2026-06-04" / "ESM6"
+    reports.mkdir(parents=True)
+    stale_normalized = tmp_path / "data" / "normalized" / "rithmic_trial_live_capture" / "2026-06-04" / "MES"
+    stale_normalized.mkdir(parents=True)
+    stale_norm_file = stale_normalized / "events.ndjson"
+    stale_norm_file.write_text('{"event_type":"trade"}\n', encoding="utf-8")
+    (reports / "data_capture_report.json").write_text(
+        json.dumps(
+            {
+                "status": "pass",
+                "manifest": {
+                    "raw_file": str(raw_file),
+                    "row_count": 103,
+                    "checksum_sha256": "stale-checksum",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (reports / "schema_mapping_report.json").write_text(
+        json.dumps({"status": "pass", "raw_file": str(raw_file), "normalized_file": str(stale_norm_file)}),
+        encoding="utf-8",
+    )
+    (reports / "data_quality_report.json").write_text(
+        json.dumps(
+            {
+                "status": "pass",
+                "input_files": [str(stale_norm_file)],
+                "event_count": 103,
+                "event_type_counts": {"trade": 43},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (reports / "latency_profile.json").write_text(
+        json.dumps({"status": "pass", "input_files": [str(stale_norm_file)], "paired_count": 0}),
+        encoding="utf-8",
+    )
+    (reports / "paper_order_summary.json").write_text('{"paired_count":0}', encoding="utf-8")
+    (reports / "hftbacktest_conversion_report.json").write_text(
+        json.dumps({"status": "pass", "mode": "trade_only", "output_file": "stale.npz"}),
+        encoding="utf-8",
+    )
+
+    bundle = _latest_rithmic_trial_bundle(tmp_path)
+
+    assert bundle["report_binding_status"] == "BLOCKING"
+    issues = {issue["issue"] for issue in bundle["report_binding_issues"]}
+    assert "checksum_mismatch" in issues
+    assert "event_count_mismatch" in issues
+    assert "normalized_input_mismatch" in issues
+    assert "replay_output_mismatch" in issues
+
+
+def test_equities_and_options_sources_are_lane_registry_backed() -> None:
+    equities = load_run_evidence(REPO, "equities")
+    options = load_run_evidence(REPO, "options")
+
+    assert equities.registry["selected_lane"] == "equities"
+    assert options.registry["selected_lane"] == "options"
+    assert equities.diagnostics["feature_fabric"]["consumer_lane"] == "equities"
+    assert options.diagnostics["feature_fabric"]["consumer_lane"] == "options"
+
+
+def test_feature_fabric_blocks_when_artifacts_are_missing(tmp_path: Path) -> None:
+    snapshot = _feature_fabric_snapshot(REPO, selected_root=tmp_path, consumer_lane="equities")
+
+    assert snapshot["status"] == "BLOCKING"
+    assert snapshot["gate_status"] == "BLOCKING"
+    assert snapshot["evidence_gate_passed"] is False
+    assert snapshot["pit_validation_status"] == "MISSING"
+    assert any(gate["gate"] == "feature_fabric_artifacts" for gate in snapshot["blocking_gates"])
+    assert any(gate["gate"] == "feature_fabric_lineage" for gate in snapshot["blocking_gates"])
+
+
+def test_feature_fabric_passes_with_observed_pit_safe_rows(tmp_path: Path) -> None:
+    (tmp_path / "feature_fabric_manifest.json").write_text('{"run_id":"unit"}', encoding="utf-8")
+    (tmp_path / "feature_lineage.json").write_text(
+        '{"features":[{"feature":"btc_mempool_pressure","source_lane":"crypto",'
+        '"asset":"BTC","source_available_timestamp":"2026-06-04T00:00:00Z",'
+        '"decision_timestamp":"2026-06-04T00:00:01Z","pit_status":"PASS"}]}',
+        encoding="utf-8",
+    )
+    (tmp_path / "feature_pit_audit.json").write_text('{"rows":[]}', encoding="utf-8")
+    (tmp_path / "rejected_features.json").write_text('{"rows":[]}', encoding="utf-8")
+
+    snapshot = _feature_fabric_snapshot(REPO, selected_root=tmp_path, consumer_lane="cme_futures")
+
+    assert snapshot["status"] == "OBSERVED"
+    assert snapshot["gate_status"] == "PASS"
+    assert snapshot["evidence_gate_passed"] is True
+    assert snapshot["pit_validation_status"] == "PASS"
+    assert snapshot["blocking_gates"] == []
+
+
+def test_feature_fabric_blocks_pit_leakage_rows(tmp_path: Path) -> None:
+    (tmp_path / "feature_fabric_manifest.json").write_text('{"run_id":"unit"}', encoding="utf-8")
+    (tmp_path / "feature_lineage.json").write_text(
+        '{"features":[{"feature":"late_equity_signal","source_lane":"equities",'
+        '"source_available_timestamp":"2026-06-04T00:00:02Z",'
+        '"decision_timestamp":"2026-06-04T00:00:01Z","pit_status":"PASS"}]}',
+        encoding="utf-8",
+    )
+    (tmp_path / "feature_pit_audit.json").write_text('{"rows":[]}', encoding="utf-8")
+    (tmp_path / "rejected_features.json").write_text('{"rows":[]}', encoding="utf-8")
+
+    snapshot = _feature_fabric_snapshot(REPO, selected_root=tmp_path, consumer_lane="options")
+
+    assert snapshot["status"] == "BLOCKING"
+    assert snapshot["pit_validation_status"] == "FAIL"
+    assert any(gate["gate"] == "feature_pit_audit" for gate in snapshot["blocking_gates"])
+    assert snapshot["pit_issues"][0]["issue"] == "source_available_after_decision_timestamp"
+
+
+def test_lane_registry_errors_are_workbench_blockers(monkeypatch) -> None:
+    from hft3.validation.lanes.lane import Lane
+    from hft3.validation.lanes.lane_registry import LaneRegistration, LaneRegistry
+
+    registry = LaneRegistry.instance()
+
+    def bad_loader() -> object:
+        raise RuntimeError("unit lane config broke")
+
+    monkeypatch.setattr(
+        registry,
+        "all_registrations",
+        lambda: [
+            LaneRegistration(
+                lane=Lane.EQUITIES,
+                adapter_factory=lambda: object(),
+                config_loader=bad_loader,
+                validator=lambda: object(),
+                test_paths=["tests/unit_lane.py"],
+            )
+        ],
+    )
+
+    snapshot = _lane_registry_snapshot(REPO)
+
+    assert snapshot["status"] == "BLOCKING"
+    assert snapshot["rows"][0]["load_status"] == "error"
+    assert snapshot["errors"][0]["lane"] == "equities"
+    assert snapshot["blocking_gates"][0]["gate"] == "lane_registry"
 
 
 def test_crypto_pipeline_coverage_does_not_overclaim_unwired_replay(tmp_path: Path) -> None:

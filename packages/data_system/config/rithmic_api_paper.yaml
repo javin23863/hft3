@@ -1,0 +1,72 @@
+# Rithmic R|API Plus - Paper Trading / Chicago profile.
+# Credentials are supplied at runtime with RITHMIC_USERNAME / RITHMIC_PASSWORD.
+# DO NOT copy secrets into this file.
+#
+# Paper/Chicago parameters observed from local Rithmic Trader Pro logs
+# under C:\Users\MSI\Documents\Rithmic on 2026-06-04. Credentials remain
+# runtime-only via RITHMIC_USERNAME / RITHMIC_PASSWORD.
+
+api_version: "13.7.0.0"
+endpoint_profile: "paper_chicago"
+system: "Rithmic Paper Trading"
+gateway: "Chicago Area"
+endpoint_params_status: "CONFIGURED_FROM_RTRADER_LOG"
+
+engine_params:
+  app_name: "HFT3"
+  app_version: "1.0"
+
+required_environment_params:
+  - MML_DMN_SRVR_ADDR
+  - MML_DOMAIN_NAME
+  - MML_LIC_SRVR_ADDR
+  - MML_LOC_BROK_ADDR
+  - MML_LOGGER_ADDR
+
+required_repository_params:
+  - sCnnctPt
+
+required_login_params:
+  - sMdCnnctPt
+  - sTsCnnctPt
+  - sIhCnnctPt
+  - sPnlCnnctPt
+
+environment:
+  MML_DMN_SRVR_ADDR: "ritpz01004.01.rithmic.com:65000~ritpz04063.04.rithmic.com:65000~ritpz01004.01.rithmic.net:65000~ritpz04063.04.rithmic.net:65000~ritpz01004.01.theomne.net:65000~ritpz04063.04.theomne.net:65000~ritpz01004.01.theomne.com:65000~ritpz04063.04.theomne.com:65000"
+  MML_DOMAIN_NAME: "rithmic_paper_prod_domain"
+  MML_LIC_SRVR_ADDR: "ritpz04063.04.rithmic.com:56000~ritpz01004.01.rithmic.com:56000~ritpz04063.04.rithmic.net:56000~ritpz04063.04.theomne.net:56000~ritpz04063.04.theomne.com:56000~ritpz01000.01.rithmic.com:56000~ritpz01001.01.rithmic.com:56000~ritpz01000.01.rithmic.net:56000~ritpz01001.01.rithmic.net:56000~ritpz01000.01.theomne.net:56000~ritpz01001.01.theomne.net:56000~ritpz01000.01.theomne.com:56000~ritpz01001.01.theomne.com:56000~ritpz24050.rithmic.com:56000~ritpz24050.rithmic.net:56000~ritpz24050.theomne.net:56000~ritpz24050.theomne.com:56000~ritpz23010.rithmic.com:56000~ritpz23010.rithmic.net:56000~ritpz23010.theomne.net:56000~ritpz23010.theomne.com:56000~ritpz23011.rithmic.com:56000~ritpz23011.rithmic.net:56000~ritpz23011.theomne.net:56000~ritpz23011.theomne.com:56000~ritpz24013.rithmic.com:56000~ritpz24013.rithmic.net:56000~ritpz24013.theomne.net:56000~ritpz24013.theomne.com:56000"
+  MML_LOC_BROK_ADDR: "ritpz04063.04.rithmic.com:64100"
+  MML_LOGGER_ADDR: "ritpz04063.04.rithmic.com:45454~ritpz01004.01.rithmic.com:45454~ritpz04063.04.rithmic.net:45454~ritpz01004.01.rithmic.net:45454~ritpz04063.04.theomne.net:45454~ritpz01004.01.theomne.net:45454~ritpz04063.04.theomne.com:45454~ritpz01004.01.theomne.com:45454"
+  MML_LOG_TYPE: "log_net"
+
+repository_login:
+  sCnnctPt: "login_agent_repositoryc"
+
+login_params:
+  # RTrader current login advertises login_agent_tp_agg_paperc first.
+  # Alternate non-aggregated price agent observed in the same log:
+  # sMdCnnctPt: "login_agent_tp_paperc"
+  sMdCnnctPt: "login_agent_tp_agg_paperc"
+  sTsCnnctPt: "login_agent_op_paperc"
+  sIhCnnctPt: "login_agent_history_paperc"
+  sPnlCnnctPt: "login_agent_pnl_paperc"
+
+ssl:
+  cert_file: "rithmic_ssl_cert_auth_params"
+
+# R|Protocol websocket market-data smoke config. Rithmic has not supplied the
+# Paper/Chicago websocket URL in the SDK package; set RITHMIC_PROTOCOL_URL at
+# runtime once the actual endpoint is provided.
+protocol:
+  url: ""
+  system_name: "Rithmic Paper Trading"
+  gateway: "Chicago Area"
+  app_name: "HFT3"
+  app_version: "1.0"
+  mode: "headless_market_data_only"
+
+sdk_paths:
+  linux_x86_64: "rithmic_gateway/RApiPlus/13.7.0.0/linux-gnu-4.18-x86_64/lib"
+  win10: "rithmic_gateway/RApiPlus/13.7.0.0/win10/lib"
+  include: "rithmic_gateway/RApiPlus/13.7.0.0/include/RApiPlus.h"

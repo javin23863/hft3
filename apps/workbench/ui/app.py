@@ -28,7 +28,7 @@ from workbench.ui.campaign_panel import (  # noqa: E402
 from workbench.ui.workflow_tabs import WORKFLOW_TABS  # noqa: E402
 from workbench.ui.wallet_panel import render_wallet_panel  # noqa: E402
 from workbench.ui.flow_state import campaign_progress_panel, resolve_period_event  # noqa: E402
-from workbench.src.run.evidence_snapshot import default_source, load_run_evidence  # noqa: E402
+from workbench.src.run.evidence_snapshot import default_source, load_run_evidence, workbench_run_sources  # noqa: E402
 from workbench.ui.evidence_panels import (  # noqa: E402
     render_autonomous_run,
     render_backtest_evidence,
@@ -46,7 +46,7 @@ init_session(REPO)
 
 with st.sidebar:
     personal_lock_sidebar(REPO)
-    run_sources = ["crypto_lane", "workbench_campaign", "autonomous"]
+    run_sources = workbench_run_sources()
     query_source = str(st.query_params.get("source", ""))
     if query_source in run_sources:
         st.session_state.wb_run_source = query_source
@@ -63,7 +63,8 @@ with st.sidebar:
 
 st.title("Microstructure Backtesting Workbench")
 
-_active = st.session_state.get("wb_active_campaign", "")
+run_source = st.session_state.get("wb_run_source", "")
+_active = st.session_state.get("wb_active_campaign", "") if run_source == "workbench_campaign" else ""
 if _active:
     campaign_progress_panel(REPO, _active)
 
@@ -81,37 +82,40 @@ selected_symbol = st.session_state.get("wb_symbol", "MES.v.0")
 selected_campaign = st.session_state.get("wb_active_campaign", "")
 
 with tabs[0]:
-    if st.session_state.wb_run_source == "crypto_lane":
+    if run_source == "crypto_lane":
         render_crypto_run_controls(REPO)
         st.divider()
 
 with tabs[1]:
-    st.subheader("Workbench Campaign Controls")
-    selected_model, selected_symbol, selected_campaign = model_selector_panel(REPO)
-    with st.expander("Recent campaign artifacts"):
-        legacy_run = st.selectbox("Load campaign", [""] + run_labels, key="wb__legacy_run")
-        if legacy_run and not selected_campaign:
-            selected_campaign = legacy_run
-            st.session_state.wb_active_campaign = legacy_run
-            st.session_state.wb__period_sel = ""
-            st.session_state.wb__event_sel = ""
-            st.session_state.wb_auto_period = ""
-            st.session_state.wb_auto_event = ""
-    if selected_campaign:
-        periods = campaign_periods(REPO, selected_campaign)
-        with st.expander("Drill-down period / event"):
-            if periods:
-                st.selectbox("Campaign period", [""] + periods, key="wb__period_sel")
-                pc = st.session_state.get("wb__period_sel") or st.session_state.get("wb_auto_period", "")
-                if pc:
-                    events = campaign_events(REPO, selected_campaign, pc)
-                    st.selectbox("Event in period", [""] + events, key="wb__event_sel")
+    if run_source == "workbench_campaign":
+        st.subheader("Workbench Campaign Controls")
+        selected_model, selected_symbol, selected_campaign = model_selector_panel(REPO)
+        with st.expander("Recent campaign artifacts"):
+            legacy_run = st.selectbox("Load campaign", [""] + run_labels, key="wb__legacy_run")
+            if legacy_run and not selected_campaign:
+                selected_campaign = legacy_run
+                st.session_state.wb_active_campaign = legacy_run
+                st.session_state.wb__period_sel = ""
+                st.session_state.wb__event_sel = ""
+                st.session_state.wb_auto_period = ""
+                st.session_state.wb_auto_event = ""
+        if selected_campaign:
+            periods = campaign_periods(REPO, selected_campaign)
+            with st.expander("Drill-down period / event"):
+                if periods:
+                    st.selectbox("Campaign period", [""] + periods, key="wb__period_sel")
+                    pc = st.session_state.get("wb__period_sel") or st.session_state.get("wb_auto_period", "")
+                    if pc:
+                        events = campaign_events(REPO, selected_campaign, pc)
+                        st.selectbox("Event in period", [""] + events, key="wb__event_sel")
 
-if not selected_campaign:
+if run_source != "workbench_campaign":
+    selected_campaign = ""
+elif not selected_campaign:
     selected_campaign = st.session_state.get("wb_active_campaign", "")
 
 period_choice, event_choice = resolve_period_event(REPO, selected_campaign)
-snapshot = load_run_evidence(REPO, st.session_state.wb_run_source, campaign_id=selected_campaign)
+snapshot = load_run_evidence(REPO, run_source, campaign_id=selected_campaign)
 
 with tabs[0]:
     render_autonomous_run(snapshot)
@@ -140,8 +144,9 @@ with tabs[7]:
 
 with tabs[8]:
     render_reports_analyst(snapshot)
-    st.divider()
-    analyst_panel(REPO, selected_campaign, period_choice, event_choice)
+    if run_source == "workbench_campaign":
+        st.divider()
+        analyst_panel(REPO, selected_campaign, period_choice, event_choice)
 
 with tabs[9]:
     render_wallet_panel()

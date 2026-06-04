@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import inspect
 from pathlib import Path
 
@@ -116,6 +117,46 @@ def test_tabs_are_pipeline_monitor_surface() -> None:
     assert WORKFLOW_TABS.index("Live Monitor") > WORKFLOW_TABS.index("Decision & Registry")
     assert WORKFLOW_TABS.index("Live Monitor") < WORKFLOW_TABS.index("Reports & Analyst")
     assert "Model Selector" not in WORKFLOW_TABS
+
+
+def test_campaign_controls_only_render_for_workbench_campaign_source() -> None:
+    app_src = (Path(__file__).resolve().parents[2] / "apps" / "workbench" / "ui" / "app.py").read_text(
+        encoding="utf-8"
+    )
+    tree = ast.parse(app_src)
+    for parent in ast.walk(tree):
+        for child in ast.iter_child_nodes(parent):
+            child.parent = parent  # type: ignore[attr-defined]
+
+    def guarded_by_campaign_source(node: ast.AST) -> bool:
+        parent = getattr(node, "parent", None)
+        while parent is not None:
+            if isinstance(parent, ast.If):
+                test = ast.unparse(parent.test)
+                if test == "run_source == 'workbench_campaign'" or test == 'run_source == "workbench_campaign"':
+                    return True
+            parent = getattr(parent, "parent", None)
+        return False
+
+    campaign_control_calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and (
+            (isinstance(node.func, ast.Name) and node.func.id == "model_selector_panel")
+            or (
+                isinstance(node.func, ast.Attribute)
+                and node.func.attr == "subheader"
+                and node.args
+                and isinstance(node.args[0], ast.Constant)
+                and node.args[0].value == "Workbench Campaign Controls"
+            )
+        )
+    ]
+
+    assert campaign_control_calls
+    assert all(guarded_by_campaign_source(node) for node in campaign_control_calls)
+    assert 'if run_source != "workbench_campaign":\n    selected_campaign = ""' in app_src
 
 
 def test_model_selector_uses_backend_catalog_not_hardcoded_starters() -> None:
@@ -236,6 +277,7 @@ def test_app_tabs_use_shared_run_evidence_snapshot() -> None:
 
     src = inspect.getsource(app)
     assert "load_run_evidence" in src
+    assert "workbench_run_sources()" in src
     assert 'st.query_params.get("source"' in src
     assert src.index("render_crypto_run_controls(REPO)") < src.index("snapshot = load_run_evidence")
     assert "render_backtest_evidence(snapshot)" in src
@@ -279,6 +321,10 @@ def test_app_tabs_use_shared_run_evidence_snapshot() -> None:
     assert "Failed Required Checks" in panel_src
     assert "Smoke pass is only a prerequisite" not in panel_src
     assert "Provider Status" in panel_src
+    assert "Rithmic Endpoint Status" in panel_src
+    assert "Cross-Lane Feature Fabric" in panel_src
+    assert "Registered model lanes" in panel_src
+    assert "Paper/Chicago API parameters are missing" in panel_src
     assert "Google/Gemini" not in panel_src
     assert "Evidence candidate" in panel_src
     assert "Smoke triage order" in panel_src

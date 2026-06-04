@@ -7,6 +7,8 @@ from typing import Any
 
 import yaml
 
+from data_system.rithmic_trial.endpoint_status import PAPER_ENDPOINT_PROFILE
+
 
 @dataclass
 class TrialConfig:
@@ -91,10 +93,19 @@ def load_config(path: str | Path) -> TrialConfig:
 
     unattended = dict(data.get("unattended", {}))
     rithmic = dict(data.get("rithmic", {}))
+    endpoint_profile = os.environ.get("RITHMIC_ENDPOINT_PROFILE", "").strip()
+    if endpoint_profile:
+        rithmic["endpoint_profile"] = endpoint_profile
     if os.environ.get("RITHMIC_ENVIRONMENT"):
         rithmic["environment"] = os.environ["RITHMIC_ENVIRONMENT"]
     if os.environ.get("RITHMIC_GATEWAY"):
         rithmic["gateway"] = os.environ["RITHMIC_GATEWAY"]
+    rithmic_api_config = os.environ.get("RITHMIC_API_CONFIG", "").strip()
+    if not rithmic_api_config:
+        if endpoint_profile == PAPER_ENDPOINT_PROFILE:
+            rithmic_api_config = "packages/data_system/config/rithmic_api_paper.yaml"
+        else:
+            rithmic_api_config = data.get("rithmic_api_config", "")
 
     raw_root = _p("raw_root")
     normalized_root = _p("normalized_root")
@@ -108,13 +119,24 @@ def load_config(path: str | Path) -> TrialConfig:
     ):
         _assert_quarantine(p, repo_root, label)
 
+    capture_environment = os.environ.get(
+        "RITHMIC_CAPTURE_ENVIRONMENT",
+        data.get("capture_environment", "rithmic_test"),
+    )
+    if endpoint_profile == PAPER_ENDPOINT_PROFILE and capture_environment in {
+        "rithmic_test",
+        "test",
+        "rithmic_trial",
+    }:
+        capture_environment = "rithmic_paper"
+
     return TrialConfig(
         enabled=enabled,
         connector=connector,
         symbol=symbol,
         exchange=exchange,
         contract=data.get("contract", ""),
-        capture_environment=data.get("capture_environment", "rithmic_test"),
+        capture_environment=capture_environment,
         source=data.get("source", "rithmic_trial"),
         schema_version=data.get("schema_version", "normalized_v1"),
         repo_root=repo_root,
@@ -125,5 +147,5 @@ def load_config(path: str | Path) -> TrialConfig:
         rtrader=rtrader,
         unattended=unattended,
         rithmic=rithmic,
-        rithmic_api_config=data.get("rithmic_api_config", ""),
+        rithmic_api_config=rithmic_api_config,
     )

@@ -7,6 +7,12 @@ from typing import Any
 
 import yaml
 
+from data_system.rithmic_trial.endpoint_status import (
+    PAPER_ENDPOINT_MISSING_CODE,
+    endpoint_status_from_config,
+    write_endpoint_status,
+)
+
 
 def _now_ns() -> int:
     return time.perf_counter_ns()
@@ -47,6 +53,19 @@ _BRIDGE_TO_DAEMON_EVENT = {
     "X": "order_failure",
 }
 
+RITHMIC_API_SUPPORTED_EVENT_TYPES = {
+    "trade",
+    "quote",
+    "depth",
+    "order_submit",
+    "order_ack",
+    "fill",
+    "cancel",
+    "order_replace",
+    "reject",
+    "order_failure",
+}
+
 
 class RithmicApiConnector(ConnectorInterface):
     """Direct R|API Plus connector for the Rithmic test environment.
@@ -68,6 +87,7 @@ class RithmicApiConnector(ConnectorInterface):
         self._inflight_submits: list[dict[str, Any]] = []
         self._last_symbol = ""
         self._last_exchange = ""
+        self._detected: set[str] = set()
         self._load_config()
 
     def _load_config(self) -> None:
@@ -143,25 +163,52 @@ class RithmicApiConnector(ConnectorInterface):
             env_vars=env_vars,
         )
 
+    def endpoint_status(self) -> dict[str, Any]:
+        return endpoint_status_from_config(self._config_path, repo_root=self._find_repo_root())
+
+    def _write_endpoint_status(self, status: dict[str, Any]) -> None:
+        try:
+            write_endpoint_status(self._find_repo_root(), status)
+        except OSError:
+            return
+
     def connect(self) -> None:
         if self._connected:
             return
+        status = self.endpoint_status()
+        if status.get("reason_code") == PAPER_ENDPOINT_MISSING_CODE:
+            self._write_endpoint_status(status)
+            missing = ", ".join(status.get("missing_endpoint_params") or [])
+            raise EnvironmentError(
+                f"{PAPER_ENDPOINT_MISSING_CODE}: Rithmic Paper/Chicago API parameters "
+                f"are missing: {missing}"
+            )
         username = os.environ.get("RITHMIC_USERNAME")
         password = os.environ.get("RITHMIC_PASSWORD")
         if not username or not password:
+            self._write_endpoint_status(status)
             raise EnvironmentError(
                 "RITHMIC_USERNAME and RITHMIC_PASSWORD must be set in the environment"
             )
         if self._ssl_cert_path and not self._ssl_cert_path.exists():
+            self._write_endpoint_status(status)
             raise FileNotFoundError(
                 f"SSL cert file not found: {self._ssl_cert_path}. "
                 "Download the RApiPlus SDK and place it under rithmic_gateway/."
             )
-        bridge = RithmicApiBridge.load()
-        cfg = self._build_connection_config()
-        bridge.create(cfg).initialize().connect()
+        try:
+            bridge = RithmicApiBridge.load()
+            cfg = self._build_connection_config()
+            bridge.create(cfg).initialize().connect()
+        except Exception:
+            self._write_endpoint_status(status)
+            raise
         self._bridge = bridge
         self._connected = True
+        connected_status = self.endpoint_status()
+        connected_status["status"] = "CONNECTED"
+        connected_status["reason_code"] = ""
+        self._write_endpoint_status(connected_status)
 
     def disconnect(self) -> None:
         self._connected = False
@@ -223,7 +270,9 @@ class RithmicApiConnector(ConnectorInterface):
             ev = self._bridge.try_pop_event()
             if ev is None:
                 break
-            out.append(self._adapt_market_event(ev))
+            adapted = self._adapt_market_event(ev)
+            self._detected.add(str(adapted.get("event_type", "unknown")))
+            out.append(adapted)
         if len(out) < 1000:
             out.extend(self.poll_order_events(limit=1000 - len(out)))
         return out
@@ -249,6 +298,7 @@ class RithmicApiConnector(ConnectorInterface):
                 "local_monotonic_receive_ns": submit["local_monotonic_receive_ns"],
                 "local_receive_timestamp_ns": submit["local_receive_timestamp_ns"],
             }
+            self._detected.add("order_submit")
             out.append(submit_record)
             self._pending_submits.pop(0)
 
@@ -256,7 +306,9 @@ class RithmicApiConnector(ConnectorInterface):
             ev = self._bridge.try_pop_order_event()
             if ev is None:
                 break
-            out.append(self._adapt_order_event(ev))
+            adapted = self._adapt_order_event(ev)
+            self._detected.add(str(adapted.get("event_type", "unknown")))
+            out.append(adapted)
         return out
 
     def _adapt_market_event(self, ev: MarketDataEvent) -> dict[str, Any]:
@@ -340,15 +392,17 @@ class RithmicApiConnector(ConnectorInterface):
         ]
 
     def detected_event_types(self) -> set[str]:
-        return {"order_submit", "order_ack", "fill", "cancel",
-                "order_replace", "reject", "order_failure"}
+        return set(self._detected)
 
     def limitations(self) -> dict[str, Any]:
         return {
             "connector": "rithmic_api",
             "status": "ctypes_bridge" if self._connected else "skeleton",
             "note": "Bridges to librithmic_gateway_shared.so via ctypes; "
-                    "event-type detection left to downstream normalization",
+                    "detected_event_types are observed events only",
+            "supported_event_types": sorted(RITHMIC_API_SUPPORTED_EVENT_TYPES),
+            "detected_event_types": sorted(self.detected_event_types()),
+            "endpoint_status": self.endpoint_status(),
         }
 
     def close(self) -> None:

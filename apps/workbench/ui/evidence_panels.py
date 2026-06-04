@@ -216,6 +216,52 @@ def render_registry_data(snapshot: RunEvidenceSnapshot) -> None:
     c2.metric("Data files", len(data.get("data_files", [])))
     c3.metric("Missing data", len(data.get("missing", [])))
     c4.metric("BTC state packets", edge_packets.get("status", "unknown"))
+    rithmic_trial = data.get("rithmic_trial") or {}
+    if rithmic_trial.get("observed"):
+        st.subheader("Rithmic Paper Data")
+        event_counts = rithmic_trial.get("event_type_counts") or {}
+        c1, c2, c3, c4, c5 = st.columns(5)
+        c1.metric("Symbol", rithmic_trial.get("symbol", ""))
+        c2.metric("Exchange", rithmic_trial.get("exchange", ""))
+        c3.metric("Rows", int(_num(rithmic_trial.get("row_count"))))
+        c4.metric("Trades", int(_num(event_counts.get("trade"))))
+        c5.metric("Quotes", int(_num(event_counts.get("quote"))))
+        st.caption("This is observed Paper/Chicago market-data evidence. It is not a promoted model and it is not order latency.")
+        if rithmic_trial.get("report_binding_status") and rithmic_trial.get("report_binding_status") != "PASS":
+            st.error("Report binding is blocked. These reports are not trusted until they match the raw capture checksum, normalized file, and replay artifact.")
+            _display_df(
+                rithmic_trial.get("report_binding_issues") or [],
+                {
+                    "artifact": "Artifact",
+                    "issue": "Issue",
+                    "expected": "Expected",
+                    "actual": "Actual",
+                },
+            )
+        if event_counts:
+            event_frame = pd.DataFrame(
+                [{"event_type": key, "count": value} for key, value in event_counts.items()]
+            )
+            event_frame["count"] = pd.to_numeric(event_frame["count"], errors="coerce")
+            chart = (
+                alt.Chart(event_frame)
+                .mark_bar()
+                .encode(
+                    x=alt.X("event_type:N", title="Event type"),
+                    y=alt.Y("count:Q", title="Count"),
+                    tooltip=[
+                        alt.Tooltip("event_type:N", title="Event"),
+                        alt.Tooltip("count:Q", title="Rows", format=","),
+                    ],
+                )
+            )
+            _altair_chart(chart)
+        checks = rithmic_trial.get("quality_checks") or {}
+        if checks:
+            _display_df(
+                [{"check": key, "value": value} for key, value in checks.items()],
+                {"check": "Quality check", "value": "Value"},
+            )
     feature_rows = (snapshot.diagnostics or {}).get("feature_rows") or []
     if feature_rows:
         st.subheader("Candidate registry")
@@ -240,6 +286,47 @@ def render_registry_data(snapshot: RunEvidenceSnapshot) -> None:
     if data.get("missing"):
         st.subheader("Data blockers")
         _df(data["missing"])
+    lane_registry = registry.get("lane_registry") or {}
+    if lane_registry.get("status") == "BLOCKING":
+        st.subheader("Lane Registry Blocker")
+        st.error("Lane registry did not load cleanly. Candidate discovery and monitoring are blocked until this is fixed.")
+        if lane_registry.get("errors"):
+            _display_df(
+                lane_registry["errors"],
+                {
+                    "lane": "Lane",
+                    "stage": "Stage",
+                    "status": "Status",
+                    "error": "Error",
+                },
+            )
+        if lane_registry.get("blocking_gates"):
+            _display_df(
+                lane_registry["blocking_gates"],
+                {
+                    "gate": "Gate",
+                    "status": "Status",
+                    "lane": "Lane",
+                    "reason": "Reason",
+                },
+            )
+    lanes = registry.get("lanes") or []
+    if lanes:
+        st.subheader("Registered model lanes")
+        _display_df(
+            lanes,
+            {
+                "lane": "Lane",
+                "source": "Workbench source",
+                "symbols": "Symbols",
+                "event_types": "Event types",
+                "capability": "Capability",
+                "is_hft": "HFT",
+                "dma": "DMA",
+                "node_direct": "Node direct",
+                "load_status": "Config",
+            },
+        )
     _json_expander("Symbol / universe", data.get("universe") or data.get("periods"))
     _json_expander("Bitcoin node / mempool evidence", data.get("btc_node"))
     _json_expander("Bitcoin state packet transport", edge_packets)
@@ -257,6 +344,75 @@ def render_backtest_evidence(snapshot: RunEvidenceSnapshot) -> None:
     vectorbt_summary = snapshot.backtest.get("vectorbt_summary") or {}
     coverage_rows = (snapshot.system or {}).get("pipeline_coverage") or []
     coverage_by_stage = {str(row.get("stage")): row for row in coverage_rows if isinstance(row, dict)}
+    rithmic_trial = snapshot.backtest.get("rithmic_trial") or {}
+
+    if rithmic_trial:
+        summary = snapshot.backtest.get("summary") or {}
+        event_counts = summary.get("event_type_counts") or {}
+        st.subheader("CME Rithmic Replay")
+        c1, c2, c3, c4, c5 = st.columns(5)
+        binding_status = str(summary.get("report_binding_status") or "missing").upper()
+        c1.metric("Binding", binding_status)
+        c2.metric("Replay", str(summary.get("hftbacktest_conversion_status") or "missing").upper())
+        c3.metric("Mode", str(summary.get("mode") or "unknown"))
+        c4.metric("Events", int(_num(summary.get("event_count"))))
+        c5.metric("Order ack pairs", int(_num((snapshot.latency.get("rithmic_order_ack") or {}).get("paired_count"))))
+        if binding_status != "PASS":
+            st.error("Replay evidence is blocked because the reports do not bind to the selected raw capture.")
+            _display_df(
+                summary.get("report_binding_issues") or [],
+                {
+                    "artifact": "Artifact",
+                    "issue": "Issue",
+                    "expected": "Expected",
+                    "actual": "Actual",
+                },
+            )
+        st.caption(f"Data quality: {str(summary.get('data_quality_status') or 'missing').upper()}")
+        st.caption(
+            "This tab is showing the data/replay lane. P&L appears after a model run emits strategy trades; "
+            "this capture only proves Paper/Chicago data and trade-only replay are working."
+        )
+        if event_counts:
+            event_frame = pd.DataFrame(
+                [{"event_type": key, "count": value} for key, value in event_counts.items()]
+            )
+            event_frame["count"] = pd.to_numeric(event_frame["count"], errors="coerce")
+            chart = (
+                alt.Chart(event_frame)
+                .mark_bar()
+                .encode(
+                    x=alt.X("event_type:N", title="Event type"),
+                    y=alt.Y("count:Q", title="Rows"),
+                    color=alt.Color("event_type:N", legend=None),
+                    tooltip=[
+                        alt.Tooltip("event_type:N", title="Event"),
+                        alt.Tooltip("count:Q", title="Rows", format=","),
+                    ],
+                )
+            )
+            _altair_chart(chart)
+        limitations = summary.get("limitations") or []
+        if limitations:
+            _display_df(
+                [{"limitation": item} for item in limitations],
+                {"limitation": "Replay limitation"},
+            )
+        if rows:
+            _display_df(
+                rows,
+                {
+                    "candidate_id": "Run",
+                    "target": "Target",
+                    "pass_fail": "Gate",
+                    "rows": "Rows",
+                    "proxy_trades": "Trades",
+                    "quotes": "Quotes",
+                    "depth_events": "Depth",
+                    "mode": "Replay mode",
+                    "npz_path": "Replay NPZ",
+                },
+            )
 
     if leaderboard:
         lb = _leaderboard_frame(leaderboard)
@@ -387,25 +543,26 @@ def render_backtest_evidence(snapshot: RunEvidenceSnapshot) -> None:
                 },
             )
 
-    st.subheader("Smoke OOS diagnostic rows")
-    st.caption("These rows come from smoke-layer purged OOS diagnostics. Full execution replay appears below only after VectorBT promotes a registry candidate.")
-    _display_df(
-        rows,
-        {
-            "candidate_id": "Candidate",
-            "hypothesis_id": "Hypothesis",
-            "target": "Target",
-            "pass_fail": "Smoke gate",
-            "oos_ic": "OOS IC",
-            "rows": "OOS rows",
-            "folds": "Folds",
-            "holdout": "Holdout",
-            "proxy_net_pnl_bps": "Proxy net bps",
-            "proxy_trades": "Proxy trades",
-            "proxy_max_drawdown_bps": "Proxy drawdown bps",
-            "proxy_sharpe": "Sharpe proxy",
-        },
-    )
+    if not rithmic_trial:
+        st.subheader("Smoke OOS diagnostic rows")
+        st.caption("These rows come from smoke-layer purged OOS diagnostics. Full execution replay appears below only after VectorBT promotes a registry candidate.")
+        _display_df(
+            rows,
+            {
+                "candidate_id": "Candidate",
+                "hypothesis_id": "Hypothesis",
+                "target": "Target",
+                "pass_fail": "Smoke gate",
+                "oos_ic": "OOS IC",
+                "rows": "OOS rows",
+                "folds": "Folds",
+                "holdout": "Holdout",
+                "proxy_net_pnl_bps": "Proxy net bps",
+                "proxy_trades": "Proxy trades",
+                "proxy_max_drawdown_bps": "Proxy drawdown bps",
+                "proxy_sharpe": "Sharpe proxy",
+            },
+        )
     if snapshot.source == "crypto_lane":
         st.subheader("VectorBT Filter")
         if vectorbt_summary:
@@ -539,6 +696,67 @@ def render_latency_evidence(snapshot: RunEvidenceSnapshot) -> None:
     st.header("Execution & Latency Evidence")
     render_run_header(snapshot)
     latency = snapshot.latency or {}
+    rithmic_endpoint = latency.get("rithmic_endpoint") or {}
+    if rithmic_endpoint:
+        st.subheader("Rithmic Endpoint")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Profile", rithmic_endpoint.get("profile", "unknown"))
+        c2.metric("System", rithmic_endpoint.get("system", ""))
+        c3.metric("Gateway", rithmic_endpoint.get("gateway", ""))
+        c4.metric("Status", rithmic_endpoint.get("status", "UNKNOWN"))
+        missing = rithmic_endpoint.get("missing_endpoint_params") or []
+        if rithmic_endpoint.get("reason_code") == "PAPER_ENDPOINT_PARAMS_MISSING":
+            st.error("Paper/Chicago API parameters are missing; credentials alone are not an endpoint.")
+        elif rithmic_endpoint.get("reason_code") == "RITHMIC_CREDENTIALS_MISSING":
+            if (latency.get("rithmic_capture_endpoint") or {}).get("status"):
+                st.warning("Current Workbench server credentials are not loaded. The selected capture has separate last-connection evidence below.")
+            else:
+                st.error("Paper/Chicago endpoint parameters are present, but runtime credentials are not loaded.")
+        elif rithmic_endpoint.get("reason_code") == "GATEWAY_LIBRARY_NOT_FOUND":
+            st.error("Paper/Chicago endpoint parameters are present, but the C++ Rithmic gateway library is not available.")
+        elif rithmic_endpoint.get("reason_code"):
+            st.warning(str(rithmic_endpoint.get("reason_code")))
+        if missing:
+            _df([{"missing_parameter": item} for item in missing])
+        rithmic_order_ack = latency.get("rithmic_order_ack") or {}
+        if rithmic_order_ack:
+            _display_df(
+                [rithmic_order_ack],
+                {
+                    "scope": "Scope",
+                    "status": "Ack status",
+                    "reason_code": "Reason",
+                    "order_ack_measured": "Measured",
+                    "endpoint_profile": "Endpoint",
+                    "paired_count": "Pairs",
+                },
+            )
+        capture_endpoint = latency.get("rithmic_capture_endpoint") or {}
+        if capture_endpoint:
+            st.subheader("Last Capture Endpoint Evidence")
+            _display_df(
+                [capture_endpoint],
+                {
+                    "profile": "Profile",
+                    "system": "System",
+                    "gateway": "Gateway",
+                    "status": "Capture status",
+                    "reason_code": "Reason",
+                    "secret_exposed": "Secret exposed",
+                },
+            )
+    feed_latency = latency.get("feed_latency_us") or {}
+    if feed_latency:
+        st.subheader("Rithmic Feed Timing")
+        c1, c2, c3, c4, c5 = st.columns(5)
+        c1.metric("Feed rows", int(_num(feed_latency.get("count"))))
+        c2.metric("p50 us", f"{_num(feed_latency.get('p50_us')):,.1f}")
+        c3.metric("p90 us", f"{_num(feed_latency.get('p90_us')):,.1f}")
+        c4.metric("p99 us", f"{_num(feed_latency.get('p99_us')):,.1f}")
+        c5.metric("Max us", f"{_num(feed_latency.get('max_us')):,.1f}")
+        st.caption(
+            "Feed timing is server/local timestamp evidence. Submit-to-ack latency is separate and requires paired tagged order events."
+        )
     rows = latency.get("execution_ack_rows") or []
     if rows:
         measured = sum(1 for row in rows if row.get("measured"))
@@ -681,6 +899,70 @@ def render_signal_diagnostics(snapshot: RunEvidenceSnapshot) -> None:
                 "ablation": "Ablation",
             },
         )
+    feature_fabric = diagnostics.get("feature_fabric") or {}
+    if feature_fabric:
+        st.subheader("Cross-Lane Feature Fabric")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Fabric status", feature_fabric.get("status", "UNKNOWN"))
+        c2.metric("PIT gate", feature_fabric.get("pit_validation_status", "UNKNOWN"))
+        c3.metric("Consumer lane", feature_fabric.get("consumer_lane", ""))
+        c4.metric("Allowed source lanes", len(feature_fabric.get("allowed_source_lanes") or []))
+        st.caption("Cross-lane features are usable only after observed lineage artifacts pass the point-in-time gate.")
+        if feature_fabric.get("gate_status") == "BLOCKING":
+            st.error("Cross-lane feature fabric is blocked. The Workbench will not treat this policy as evidence until artifacts and PIT validation pass.")
+            if feature_fabric.get("blocking_gates"):
+                _display_df(
+                    feature_fabric["blocking_gates"],
+                    {
+                        "gate": "Gate",
+                        "status": "Status",
+                        "reason": "Reason",
+                        "issue_count": "Issues",
+                        "missing_artifacts": "Missing artifacts",
+                    },
+                )
+            if feature_fabric.get("pit_issues"):
+                st.subheader("PIT validation issues")
+                _display_df(
+                    feature_fabric["pit_issues"],
+                    {
+                        "feature": "Feature",
+                        "issue": "Issue",
+                        "value": "Value",
+                        "available_timestamp": "Available time",
+                        "decision_timestamp": "Decision time",
+                        "pit_status": "PIT status",
+                    },
+                )
+        if feature_fabric.get("rows"):
+            _display_df(
+                feature_fabric["rows"],
+                {
+                    "feature": "Feature",
+                    "feature_name": "Feature",
+                    "source_lane": "Source lane",
+                    "asset": "Asset",
+                    "source_timestamp": "Source time",
+                    "available_timestamp": "Available time",
+                    "decision_timestamp": "Decision time",
+                    "pit_status": "PIT status",
+                    "consumer_model": "Consumer model",
+                },
+            )
+        else:
+            _df(
+                [
+                    {
+                        "policy": feature_fabric.get("policy"),
+                        "pit_rule": feature_fabric.get("pit_rule"),
+                        "artifact_root": feature_fabric.get("artifact_root"),
+                    }
+                ]
+            )
+        links = feature_fabric.get("artifact_paths") or feature_fabric.get("expected_artifacts") or {}
+        if links:
+            with st.expander("Feature fabric artifacts"):
+                _df([{"artifact": k, "path": v} for k, v in links.items()])
     _json_expander("Feature lineage", diagnostics.get("feature_lineage"))
     _json_expander("Model combinations", diagnostics.get("model_combination"))
     _json_expander("Composition", diagnostics.get("composition"))
@@ -1178,6 +1460,61 @@ def render_reports_analyst(snapshot: RunEvidenceSnapshot) -> None:
 def render_system(snapshot: RunEvidenceSnapshot, repo: Path) -> None:
     st.header("System")
     render_run_header(snapshot)
+    rithmic_endpoint = (snapshot.system or {}).get("rithmic_endpoint") or {}
+    if rithmic_endpoint:
+        st.subheader("Rithmic Endpoint Status")
+        endpoint_rows = [
+            {
+                "profile": rithmic_endpoint.get("profile"),
+                "system": rithmic_endpoint.get("system"),
+                "gateway": rithmic_endpoint.get("gateway"),
+                "status": rithmic_endpoint.get("status"),
+                "reason": rithmic_endpoint.get("reason_code"),
+                "username_set": (rithmic_endpoint.get("credentials") or {}).get("username_set"),
+                "password_set": (rithmic_endpoint.get("credentials") or {}).get("password_set"),
+                "secret_exposed": rithmic_endpoint.get("secret_exposed", False),
+                "config_path": rithmic_endpoint.get("config_path"),
+            }
+        ]
+        _df(endpoint_rows)
+    lane_rows = ((snapshot.system or {}).get("lane_registry") or {}).get("rows") or []
+    lane_registry = (snapshot.system or {}).get("lane_registry") or {}
+    if lane_registry.get("status") == "BLOCKING":
+        st.subheader("Lane Registry Blocker")
+        st.error("Lane registry failure is a Workbench blocker, not an empty-state condition.")
+        if lane_registry.get("errors"):
+            _display_df(
+                lane_registry["errors"],
+                {
+                    "lane": "Lane",
+                    "stage": "Stage",
+                    "status": "Status",
+                    "error": "Error",
+                },
+            )
+        if lane_registry.get("blocking_gates"):
+            _display_df(
+                lane_registry["blocking_gates"],
+                {
+                    "gate": "Gate",
+                    "status": "Status",
+                    "lane": "Lane",
+                    "reason": "Reason",
+                },
+            )
+    if lane_rows:
+        st.subheader("Lane Registry")
+        _display_df(
+            lane_rows,
+            {
+                "lane": "Lane",
+                "source": "Source",
+                "capability": "Capability",
+                "symbols": "Symbols",
+                "test_paths": "Tests",
+                "load_status": "Status",
+            },
+        )
     providers = (snapshot.system or {}).get("llm_providers") or {}
     if providers:
         st.subheader("Provider Status")

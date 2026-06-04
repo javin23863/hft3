@@ -38,10 +38,26 @@ def cmd_capture(args: argparse.Namespace) -> int:
         return 1
     connector = build_connector(cfg)
     connector.connect()
+    symbol = args.symbol or cfg.symbol
+    exchange = getattr(args, "exchange", None) or cfg.exchange
+    if hasattr(connector, "subscribe_mbo"):
+        connector.subscribe_mbo(symbol, exchange)
+    capture_date = args.date or _utc_date()
+    if args.force:
+        cleanup_paths = [
+            cfg.raw_dir(capture_date, symbol) / "events.ndjson",
+            cfg.raw_dir(capture_date, symbol) / "manifest.json",
+            cfg.normalized_dir(capture_date, symbol) / "events.ndjson",
+            cfg.replay_dir(capture_date, symbol) / f"{symbol}_{capture_date}_trial.npz",
+        ]
+        cleanup_paths.extend((cfg.reports_dir(capture_date) / symbol).glob("*.json"))
+        for path in cleanup_paths:
+            if path.is_file():
+                path.unlink()
     capture = LiveCapture(
         cfg,
-        date=args.date,
-        symbol=args.symbol,
+        date=capture_date,
+        symbol=symbol,
         event_id=getattr(args, "event_id", None),
     )
     deadline = time.time() + args.duration_sec
@@ -68,6 +84,14 @@ def _utc_run_id() -> str:
 
 def _utc_date() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def _endpoint_artifact_label(cfg) -> str:
+    profile = str((cfg.rithmic or {}).get("endpoint_profile") or os.environ.get("RITHMIC_ENDPOINT_PROFILE") or "")
+    system = str((cfg.rithmic or {}).get("environment") or "")
+    if profile == "paper_chicago" or "paper" in system.lower():
+        return "rithmic_paper"
+    return "rithmic_test"
 
 
 def _matches_client_order(ev: dict[str, object], client_order_id: str) -> bool:
@@ -100,12 +124,13 @@ def cmd_order_latency_burst(args: argparse.Namespace) -> int:
     symbol = args.symbol or cfg.symbol
     exchange = args.exchange or cfg.exchange
     run_id = args.run_id or _utc_run_id()
-    raw_dir = cfg.repo_root / "runtime" / "rithmic_test_latency" / "raw" / run_id
+    endpoint_label = _endpoint_artifact_label(cfg)
+    raw_dir = cfg.repo_root / "runtime" / f"{endpoint_label}_latency" / "raw" / run_id
     raw_dir.mkdir(parents=True, exist_ok=True)
     events_path = raw_dir / "events.ndjson"
     reports_dir = cfg.reports_dir(_utc_date())
     reports_dir.mkdir(parents=True, exist_ok=True)
-    summary_path = reports_dir / f"rithmic_test_order_summary_{run_id}.json"
+    summary_path = reports_dir / f"{endpoint_label}_order_summary_{run_id}.json"
 
     connector = build_connector(cfg)
     all_events: list[dict[str, object]] = []
@@ -247,7 +272,7 @@ def cmd_process(args: argparse.Namespace) -> int:
         "mapping_warnings": map_warnings,
         "field_map": "raw event_type -> normalized_v1 event_type (1:1 with extensions)",
     }
-    reports_dir = cfg.reports_dir(date)
+    reports_dir = cfg.reports_dir(date) / symbol
     waterfall_path: Path | None = None
     run_id = os.environ.get("PAPER_LATENCY_RUN_ID")
     if run_id:
@@ -360,6 +385,7 @@ def main() -> int:
     _add_config(p_cap)
     p_cap.add_argument("--date", default=None)
     p_cap.add_argument("--symbol", default=None)
+    p_cap.add_argument("--exchange", default=None)
     p_cap.add_argument("--duration-sec", type=int, default=30)
     p_cap.add_argument("--poll-interval-sec", type=float, default=1.0)
     p_cap.add_argument("--force", action="store_true")

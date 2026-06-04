@@ -6,6 +6,7 @@ import json
 import math
 import os
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
@@ -53,6 +54,616 @@ def read_text(path: Path) -> str:
     if not path.is_file():
         return ""
     return path.read_text(encoding="utf-8")
+
+
+LANE_RUN_SOURCES = {
+    "cme_rithmic": "cme_futures",
+    "equities": "equities",
+    "options": "options",
+}
+
+
+def _source_lane(source: str) -> str:
+    if source == "crypto_lane":
+        return "crypto"
+    return LANE_RUN_SOURCES.get(source, source)
+
+
+def workbench_run_sources() -> list[str]:
+    return ["crypto_lane", "cme_rithmic", "equities", "options", "workbench_campaign", "autonomous"]
+
+
+def _lane_registry_snapshot(repo: Path) -> dict[str, Any]:
+    try:
+        from hft3.validation.lanes.lane_registry import LaneRegistry
+        from hft3.validation.lanes.registration import register_all_lanes
+
+        register_all_lanes()
+        rows: list[dict[str, Any]] = []
+        by_lane: dict[str, dict[str, Any]] = {}
+        errors: list[dict[str, Any]] = []
+        for registration in LaneRegistry.instance().all_registrations():
+            lane_value = registration.lane.value
+            try:
+                config = registration.config_loader()
+                config_payload = config.to_dict() if hasattr(config, "to_dict") else {}
+                load_status = "loaded"
+                load_error = ""
+            except Exception as exc:
+                config_payload = {}
+                load_status = "error"
+                load_error = str(exc)
+                errors.append(
+                    {
+                        "lane": lane_value,
+                        "stage": "config_loader",
+                        "status": "BLOCKING",
+                        "error": load_error,
+                    }
+                )
+            capability = config_payload.get("capability_profile") or {}
+            row = {
+                "lane": lane_value,
+                "source": "cme_rithmic" if lane_value == "cme_futures" else lane_value,
+                "symbols": ", ".join(map(str, config_payload.get("symbols") or [])),
+                "event_types": ", ".join(map(str, config_payload.get("event_types") or [])),
+                "test_paths": ", ".join(map(str, registration.test_paths)),
+                "capability": capability.get("name", ""),
+                "is_hft": capability.get("is_hft"),
+                "dma": capability.get("dma"),
+                "node_direct": capability.get("node_direct"),
+                "load_status": load_status,
+                "load_error": load_error,
+                "config": config_payload,
+            }
+            rows.append(row)
+            by_lane[lane_value] = row
+        if not rows:
+            errors.append(
+                {
+                    "lane": "",
+                    "stage": "registration",
+                    "status": "BLOCKING",
+                    "error": "Lane registry returned no registered lanes.",
+                }
+            )
+        blocking_gates = [
+            {
+                "gate": "lane_registry",
+                "status": error["status"],
+                "lane": error.get("lane", ""),
+                "reason": error.get("error", ""),
+            }
+            for error in errors
+        ]
+        return {
+            "status": "BLOCKING" if errors else "PASS",
+            "rows": rows,
+            "by_lane": by_lane,
+            "errors": errors,
+            "blocking_gates": blocking_gates,
+            "repo": str(repo),
+        }
+    except Exception as exc:
+        error = {
+            "lane": "",
+            "stage": "registration",
+            "status": "BLOCKING",
+            "error": str(exc),
+        }
+        return {
+            "status": "BLOCKING",
+            "rows": [],
+            "by_lane": {},
+            "errors": [error],
+            "blocking_gates": [
+                {
+                    "gate": "lane_registry",
+                    "status": "BLOCKING",
+                    "lane": "",
+                    "reason": str(exc),
+                }
+            ],
+            "repo": str(repo),
+        }
+
+
+def _json_rows(payload: dict[str, Any], *keys: str) -> list[dict[str, Any]]:
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, list):
+            return [row for row in value if isinstance(row, dict)]
+    return []
+
+
+def _first_value(row: dict[str, Any], keys: tuple[str, ...]) -> Any:
+    for key in keys:
+        if key in row and row.get(key) not in (None, ""):
+            return row.get(key)
+    return None
+
+
+def _timestamp_seconds(value: Any) -> float | None:
+    if isinstance(value, bool) or value in (None, ""):
+        return None
+    if isinstance(value, (int, float)):
+        numeric = float(value)
+        return numeric / 1_000_000_000.0 if numeric > 1_000_000_000_000 else numeric
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            numeric = float(text)
+            return numeric / 1_000_000_000.0 if numeric > 1_000_000_000_000 else numeric
+        except ValueError:
+            pass
+        try:
+            return datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            return None
+    return None
+
+
+def _pit_issues(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    issues: list[dict[str, Any]] = []
+    availability_keys = (
+        "source_available_timestamp",
+        "available_timestamp",
+        "availability_timestamp",
+        "available_at",
+        "data_available_timestamp",
+    )
+    decision_keys = (
+        "decision_timestamp",
+        "prediction_cutoff_timestamp",
+        "cutoff_timestamp",
+        "consumer_decision_timestamp",
+        "decision_time",
+    )
+    unsafe_statuses = {"FAIL", "FAILED", "BLOCKING", "UNSAFE", "LEAKAGE", "LEAKY", "VIOLATION"}
+    for index, row in enumerate(rows):
+        feature = str(
+            row.get("feature")
+            or row.get("feature_name")
+            or row.get("name")
+            or row.get("id")
+            or f"row_{index}"
+        )
+        available_raw = _first_value(row, availability_keys)
+        decision_raw = _first_value(row, decision_keys)
+        available = _timestamp_seconds(available_raw)
+        decision = _timestamp_seconds(decision_raw)
+        if available is None:
+            issues.append(
+                {
+                    "feature": feature,
+                    "issue": "missing_or_invalid_source_available_timestamp",
+                    "value": available_raw,
+                }
+            )
+        if decision is None:
+            issues.append(
+                {
+                    "feature": feature,
+                    "issue": "missing_or_invalid_decision_timestamp",
+                    "value": decision_raw,
+                }
+            )
+        if available is not None and decision is not None and available > decision:
+            issues.append(
+                {
+                    "feature": feature,
+                    "issue": "source_available_after_decision_timestamp",
+                    "available_timestamp": available_raw,
+                    "decision_timestamp": decision_raw,
+                }
+            )
+        explicit_status = str(row.get("pit_status") or row.get("leakage_audit_status") or "").upper()
+        if explicit_status in unsafe_statuses:
+            issues.append(
+                {
+                    "feature": feature,
+                    "issue": "explicit_pit_status_failed",
+                    "pit_status": explicit_status,
+                }
+            )
+        for flag in ("pit_safe", "is_pit_safe", "leakage_safe"):
+            if flag in row and row.get(flag) is False:
+                issues.append(
+                    {
+                        "feature": feature,
+                        "issue": f"{flag}_false",
+                        "pit_status": "FAIL",
+                    }
+                )
+    return issues
+
+
+def _feature_fabric_snapshot(
+    repo: Path,
+    *,
+    selected_root: str | Path | None = None,
+    consumer_lane: str = "",
+) -> dict[str, Any]:
+    root = Path(selected_root) if selected_root else repo / "runtime" / "workbench" / "feature_fabric"
+    artifact_names = (
+        "feature_fabric_manifest.json",
+        "feature_lineage.json",
+        "feature_pit_audit.json",
+        "rejected_features.json",
+    )
+    paths = {name: root / name for name in artifact_names}
+    observed_paths = {name: str(path) for name, path in paths.items() if path.is_file()}
+    manifest = read_json(paths["feature_fabric_manifest.json"])
+    lineage = read_json(paths["feature_lineage.json"])
+    pit_audit = read_json(paths["feature_pit_audit.json"])
+    rejected = read_json(paths["rejected_features.json"])
+    lane_registry = _lane_registry_snapshot(repo)
+    lane_values = [row["lane"] for row in lane_registry.get("rows", []) if row.get("lane")]
+    lineage_rows = (
+        _json_rows(lineage, "features", "rows", "feature_lineage")
+        or _json_rows(pit_audit, "features", "rows", "audits")
+    )
+    missing_artifacts = [name for name, path in paths.items() if not path.is_file()]
+    issues = _pit_issues(lineage_rows)
+    blocking_gates: list[dict[str, Any]] = []
+    if missing_artifacts:
+        blocking_gates.append(
+            {
+                "gate": "feature_fabric_artifacts",
+                "status": "MISSING",
+                "reason": "Cross-lane feature fabric evidence artifacts are missing.",
+                "missing_artifacts": missing_artifacts,
+            }
+        )
+    if not lineage_rows:
+        blocking_gates.append(
+            {
+                "gate": "feature_fabric_lineage",
+                "status": "MISSING",
+                "reason": "No feature lineage rows were observed for PIT validation.",
+            }
+        )
+    if issues:
+        blocking_gates.append(
+            {
+                "gate": "feature_pit_audit",
+                "status": "FAIL",
+                "reason": "One or more cross-lane features failed point-in-time validation.",
+                "issue_count": len(issues),
+            }
+        )
+    pit_validation_status = "PASS" if lineage_rows and not issues else ("FAIL" if issues else "MISSING")
+    status = "OBSERVED" if not blocking_gates else "BLOCKING"
+    return {
+        "status": status,
+        "gate_status": "PASS" if not blocking_gates else "BLOCKING",
+        "evidence_gate_passed": not blocking_gates,
+        "policy": "cross_lane_features_allowed_only_when_point_in_time_safe",
+        "consumer_lane": consumer_lane,
+        "allowed_source_lanes": lane_values,
+        "pit_rule": "source_available_timestamp <= decision_timestamp",
+        "pit_validation_status": pit_validation_status,
+        "artifact_root": str(root),
+        "artifact_paths": observed_paths,
+        "expected_artifacts": {name: str(path) for name, path in paths.items()},
+        "required_artifacts": list(artifact_names),
+        "missing_artifacts": missing_artifacts,
+        "manifest": manifest,
+        "lineage": lineage,
+        "pit_audit": pit_audit,
+        "pit_issues": issues,
+        "blocking_gates": blocking_gates,
+        "rejected_features": rejected,
+        "rows": lineage_rows,
+        "secret_exposed": False,
+    }
+
+
+def _shared_blocking_gates(lane_registry: dict[str, Any], feature_fabric: dict[str, Any]) -> list[dict[str, Any]]:
+    gates: list[dict[str, Any]] = []
+    for gate in (lane_registry.get("blocking_gates") or []):
+        gates.append(dict(gate))
+    for gate in (feature_fabric.get("blocking_gates") or []):
+        gates.append(dict(gate))
+    return gates
+
+
+def _append_decision_blocking_gates(snapshot: RunEvidenceSnapshot, gates: list[dict[str, Any]]) -> None:
+    if not gates:
+        return
+    decision = dict(snapshot.decision or {})
+    existing = list(decision.get("blocking_gates") or [])
+    seen = {(gate.get("gate"), gate.get("lane"), gate.get("status")) for gate in existing}
+    for gate in gates:
+        key = (gate.get("gate"), gate.get("lane"), gate.get("status"))
+        if key not in seen:
+            existing.append(gate)
+            seen.add(key)
+    decision["blocking_gates"] = existing
+    decision["live_registry_ready"] = False
+    if str(decision.get("action") or "").upper() == "PROMOTE":
+        gate_names = ", ".join(str(gate.get("gate", "")) for gate in gates if gate.get("gate"))
+        decision["action"] = "QUARANTINE"
+        decision["reason"] = f"Shared Workbench evidence gates are blocking: {gate_names}."
+    snapshot.decision = decision
+
+
+def _rithmic_endpoint_status(repo: Path, *, force_paper: bool = False) -> dict[str, Any]:
+    from data_system.rithmic_trial.endpoint_status import (
+        PAPER_ENDPOINT_PROFILE,
+        default_api_config_for_profile,
+        endpoint_status_from_config,
+    )
+
+    env_config = os.environ.get("RITHMIC_API_CONFIG", "").strip()
+    profile = os.environ.get("RITHMIC_ENDPOINT_PROFILE", "").strip()
+    if force_paper:
+        profile = PAPER_ENDPOINT_PROFILE
+    if env_config and not force_paper:
+        config_path = Path(env_config)
+        if not config_path.is_absolute():
+            config_path = repo / config_path
+    else:
+        config_path = default_api_config_for_profile(
+            repo,
+            PAPER_ENDPOINT_PROFILE if profile == PAPER_ENDPOINT_PROFILE or force_paper else "test_orangeburg",
+        )
+    return endpoint_status_from_config(config_path, repo_root=repo)
+
+
+def _same_path(left: str | Path | None, right: str | Path | None) -> bool:
+    if not left or not right:
+        return False
+    try:
+        return str(Path(left).resolve()).lower() == str(Path(right).resolve()).lower()
+    except OSError:
+        return str(left).lower() == str(right).lower()
+
+
+def _input_files_include(payload: dict[str, Any], expected: Path) -> bool:
+    return any(_same_path(item, expected) for item in (payload.get("input_files") or []))
+
+
+def _rithmic_report_binding(
+    *,
+    manifest: dict[str, Any],
+    reports: dict[str, dict[str, Any]],
+    raw_file: Path,
+    normalized_file: Path,
+    replay_file: Path,
+) -> dict[str, Any]:
+    issues: list[dict[str, Any]] = []
+    expected_row_count = manifest.get("row_count")
+    expected_checksum = manifest.get("checksum_sha256")
+
+    capture = reports.get("data_capture") or {}
+    capture_manifest = capture.get("manifest") or {}
+    if not capture:
+        issues.append({"artifact": "data_capture_report.json", "issue": "missing"})
+    else:
+        if not _same_path(capture_manifest.get("raw_file"), raw_file):
+            issues.append(
+                {
+                    "artifact": "data_capture_report.json",
+                    "issue": "raw_file_mismatch",
+                    "expected": str(raw_file),
+                    "actual": capture_manifest.get("raw_file"),
+                }
+            )
+        if expected_checksum and capture_manifest.get("checksum_sha256") != expected_checksum:
+            issues.append(
+                {
+                    "artifact": "data_capture_report.json",
+                    "issue": "checksum_mismatch",
+                    "expected": expected_checksum,
+                    "actual": capture_manifest.get("checksum_sha256"),
+                }
+            )
+        if expected_row_count is not None and capture_manifest.get("row_count") != expected_row_count:
+            issues.append(
+                {
+                    "artifact": "data_capture_report.json",
+                    "issue": "row_count_mismatch",
+                    "expected": expected_row_count,
+                    "actual": capture_manifest.get("row_count"),
+                }
+            )
+
+    schema = reports.get("schema_mapping") or {}
+    if not schema:
+        issues.append({"artifact": "schema_mapping_report.json", "issue": "missing"})
+    else:
+        if not _same_path(schema.get("raw_file"), raw_file):
+            issues.append(
+                {
+                    "artifact": "schema_mapping_report.json",
+                    "issue": "raw_file_mismatch",
+                    "expected": str(raw_file),
+                    "actual": schema.get("raw_file"),
+                }
+            )
+        if not _same_path(schema.get("normalized_file"), normalized_file):
+            issues.append(
+                {
+                    "artifact": "schema_mapping_report.json",
+                    "issue": "normalized_file_mismatch",
+                    "expected": str(normalized_file),
+                    "actual": schema.get("normalized_file"),
+                }
+            )
+
+    quality = reports.get("data_quality") or {}
+    if not quality:
+        issues.append({"artifact": "data_quality_report.json", "issue": "missing"})
+    else:
+        if not _input_files_include(quality, normalized_file):
+            issues.append(
+                {
+                    "artifact": "data_quality_report.json",
+                    "issue": "normalized_input_mismatch",
+                    "expected": str(normalized_file),
+                    "actual": quality.get("input_files"),
+                }
+            )
+        if expected_row_count is not None and quality.get("event_count") != expected_row_count:
+            issues.append(
+                {
+                    "artifact": "data_quality_report.json",
+                    "issue": "event_count_mismatch",
+                    "expected": expected_row_count,
+                    "actual": quality.get("event_count"),
+                }
+            )
+
+    latency = reports.get("latency_profile") or {}
+    if not latency:
+        issues.append({"artifact": "latency_profile.json", "issue": "missing"})
+    elif not _input_files_include(latency, normalized_file):
+        issues.append(
+            {
+                "artifact": "latency_profile.json",
+                "issue": "normalized_input_mismatch",
+                "expected": str(normalized_file),
+                "actual": latency.get("input_files"),
+            }
+        )
+
+    conversion = reports.get("hftbacktest_conversion") or {}
+    if not conversion:
+        issues.append({"artifact": "hftbacktest_conversion_report.json", "issue": "missing"})
+    else:
+        if not _same_path(conversion.get("output_file"), replay_file):
+            issues.append(
+                {
+                    "artifact": "hftbacktest_conversion_report.json",
+                    "issue": "replay_output_mismatch",
+                    "expected": str(replay_file),
+                    "actual": conversion.get("output_file"),
+                }
+            )
+        if not replay_file.is_file():
+            issues.append(
+                {
+                    "artifact": "hftbacktest_conversion_report.json",
+                    "issue": "replay_npz_missing",
+                    "expected": str(replay_file),
+                }
+            )
+
+    if not (reports.get("paper_order_summary") or reports.get("rithmic_test_order_summary")):
+        issues.append({"artifact": "paper_order_summary.json", "issue": "missing"})
+
+    return {
+        "status": "PASS" if not issues else "BLOCKING",
+        "issues": issues,
+        "bound_manifest_checksum": expected_checksum,
+        "bound_raw_file": str(raw_file),
+        "bound_normalized_file": str(normalized_file),
+        "bound_replay_file": str(replay_file),
+    }
+
+
+def _latest_rithmic_trial_bundle(repo: Path) -> dict[str, Any]:
+    capture_root = repo / "data" / "raw" / "rithmic_trial_live_capture"
+    manifests = [path for path in capture_root.glob("*/*/manifest.json") if path.is_file()]
+    if not manifests:
+        return {}
+    manifest_path = max(manifests, key=_mtime)
+    symbol_dir = manifest_path.parent
+    date_dir = symbol_dir.parent
+    capture_date = date_dir.name
+    symbol = symbol_dir.name
+    symbol_reports_dir = repo / "reports" / "rithmic_trial" / capture_date / symbol
+    legacy_reports_dir = repo / "reports" / "rithmic_trial" / capture_date
+    reports_dir = symbol_reports_dir if symbol_reports_dir.is_dir() else legacy_reports_dir
+    normalized_file = repo / "data" / "normalized" / "rithmic_trial_live_capture" / capture_date / symbol / "events.ndjson"
+    replay_file = (
+        repo
+        / "data"
+        / "replay"
+        / "hftbacktest"
+        / "rithmic_trial"
+        / capture_date
+        / symbol
+        / f"{symbol}_{capture_date}_trial.npz"
+    )
+    reports = {
+        "data_capture": read_json(reports_dir / "data_capture_report.json"),
+        "schema_mapping": read_json(reports_dir / "schema_mapping_report.json"),
+        "data_quality": read_json(reports_dir / "data_quality_report.json"),
+        "book_reconstruction": read_json(reports_dir / "book_reconstruction_report.json"),
+        "latency_profile": read_json(reports_dir / "latency_profile.json"),
+        "paper_order_summary": read_json(reports_dir / "paper_order_summary.json"),
+        "rithmic_test_order_summary": read_json(reports_dir / "rithmic_test_order_summary.json"),
+        "hftbacktest_conversion": read_json(reports_dir / "hftbacktest_conversion_report.json"),
+    }
+    paths = {
+        "manifest": str(manifest_path),
+        "raw_events": str(symbol_dir / "events.ndjson"),
+        "normalized_events": str(normalized_file),
+        "npz": str(replay_file),
+        "reports_dir": str(reports_dir),
+        "data_capture_report": str(reports_dir / "data_capture_report.json"),
+        "schema_mapping_report": str(reports_dir / "schema_mapping_report.json"),
+        "data_quality_report": str(reports_dir / "data_quality_report.json"),
+        "book_reconstruction_report": str(reports_dir / "book_reconstruction_report.json"),
+        "latency_profile": str(reports_dir / "latency_profile.json"),
+        "paper_order_summary": str(reports_dir / "paper_order_summary.json"),
+        "hftbacktest_conversion_report": str(reports_dir / "hftbacktest_conversion_report.json"),
+    }
+    manifest = read_json(manifest_path)
+    report_binding = _rithmic_report_binding(
+        manifest=manifest,
+        reports=reports,
+        raw_file=symbol_dir / "events.ndjson",
+        normalized_file=normalized_file,
+        replay_file=replay_file,
+    )
+    quality = reports["data_quality"]
+    conversion = reports["hftbacktest_conversion"]
+    latency = reports["latency_profile"]
+    paper_summary = reports["paper_order_summary"] or reports["rithmic_test_order_summary"]
+    event_type_counts = quality.get("event_type_counts") or {}
+    row_count = quality.get("event_count") or manifest.get("row_count") or 0
+    trade_count = event_type_counts.get("trade", 0)
+    quote_count = event_type_counts.get("quote", 0)
+    depth_count = event_type_counts.get("depth", 0)
+    paired_count = paper_summary.get("paired_count", latency.get("paired_count", 0))
+    quality_status = str(quality.get("status") or "missing")
+    conversion_status = str(conversion.get("status") or "missing")
+    latency_status = str(latency.get("status") or "missing")
+    return {
+        "run_id": f"rithmic_paper_{capture_date}_{symbol}",
+        "root": str(symbol_dir),
+        "capture_date": capture_date,
+        "symbol": manifest.get("symbol") or symbol,
+        "exchange": manifest.get("exchange") or "",
+        "capture_environment": manifest.get("capture_environment") or "",
+        "started_at": manifest.get("capture_start_time", ""),
+        "finished_at": manifest.get("capture_end_time", ""),
+        "manifest": manifest,
+        "reports": reports,
+        "capture_endpoint": ((manifest.get("known_limitations") or {}).get("endpoint_status") or {}),
+        "reports_dir": str(reports_dir),
+        "report_binding": report_binding,
+        "report_binding_status": report_binding["status"],
+        "report_binding_issues": report_binding["issues"],
+        "legacy_report_layout": reports_dir == legacy_reports_dir,
+        "paths": paths,
+        "event_type_counts": event_type_counts,
+        "row_count": row_count,
+        "trade_count": trade_count,
+        "quote_count": quote_count,
+        "depth_count": depth_count,
+        "paired_count": paired_count,
+        "quality_status": quality_status,
+        "conversion_status": conversion_status,
+        "latency_status": latency_status,
+        "npz_exists": replay_file.is_file(),
+        "normalized_exists": normalized_file.is_file(),
+    }
 
 
 @dataclass
@@ -1643,6 +2254,329 @@ def _workbench_snapshot(repo: Path, campaign_id: str = "") -> RunEvidenceSnapsho
     )
 
 
+def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
+    lane = _source_lane(source)
+    lane_registry = _lane_registry_snapshot(repo)
+    lane_row = (lane_registry.get("by_lane") or {}).get(lane, {})
+    config = lane_row.get("config") or {}
+    is_cme = lane == "cme_futures"
+    rithmic_endpoint = _rithmic_endpoint_status(repo, force_paper=is_cme) if is_cme else {}
+    rithmic_trial = _latest_rithmic_trial_bundle(repo) if is_cme else {}
+    endpoint_status = str(rithmic_endpoint.get("status") or "").upper()
+    endpoint_ready = (not is_cme) or endpoint_status in {"READY_TO_CONNECT", "CONNECTED"}
+    endpoint_blocked = is_cme and not endpoint_ready
+    feature_fabric = _feature_fabric_snapshot(repo, consumer_lane=lane)
+    lane_registry_blocked = str(lane_registry.get("status") or "") == "BLOCKING" or not lane_row
+    feature_fabric_blocked = str(feature_fabric.get("gate_status") or "") == "BLOCKING"
+    has_rithmic_trial = bool(rithmic_trial)
+    reports_bound = str(rithmic_trial.get("report_binding_status") or "") == "PASS"
+    report_binding_blocked = has_rithmic_trial and not reports_bound
+    order_ack_measured = bool(rithmic_trial.get("paired_count", 0)) and reports_bound if has_rithmic_trial else False
+    state = (
+        "observed_blocked"
+        if has_rithmic_trial
+        and (
+            endpoint_blocked
+            or lane_registry_blocked
+            or feature_fabric_blocked
+            or report_binding_blocked
+            or not order_ack_measured
+        )
+        else "blocked"
+        if endpoint_blocked or lane_registry_blocked or feature_fabric_blocked
+        else "catalogued"
+    )
+    if report_binding_blocked:
+        current_stage = "paper_report_binding_blocked"
+        reason = (
+            "Rithmic Paper capture is present, but its reports are not bound to the same raw checksum, "
+            "normalized file, and replay artifact."
+        )
+    elif has_rithmic_trial and not order_ack_measured:
+        current_stage = "paper_market_data_observed_order_ack_missing"
+        reason = (
+            "Rithmic Paper market data capture and trade-only replay are observed, "
+            "but no tagged submit-to-ack order pairs have been captured yet."
+        )
+    elif endpoint_blocked:
+        current_stage = "endpoint_not_ready"
+        reason_code = str(rithmic_endpoint.get("reason_code") or endpoint_status or "RITHMIC_ENDPOINT_NOT_READY")
+        if reason_code == "PAPER_ENDPOINT_PARAMS_MISSING":
+            reason = "Rithmic Paper/Chicago endpoint parameters are missing."
+        elif reason_code == "RITHMIC_CREDENTIALS_MISSING":
+            reason = "Rithmic Paper credentials are not loaded into the runtime environment."
+        elif reason_code == "GATEWAY_LIBRARY_NOT_FOUND":
+            reason = "Rithmic C++ gateway library is not built or not pointed to by HFT3_RITHMIC_GATEWAY_SO."
+        else:
+            reason = f"Rithmic endpoint is not ready: {reason_code}."
+    elif lane_registry_blocked:
+        current_stage = "lane_registry_blocked"
+        reason = "Lane registry failed to load cleanly."
+    elif feature_fabric_blocked:
+        current_stage = "feature_fabric_blocked"
+        reason = "Cross-lane feature fabric evidence is missing or not point-in-time safe."
+    else:
+        current_stage = "lane_catalogued"
+        reason = "Lane is registered; no active selected run has emitted execution evidence."
+    blocking_gates = [
+        {
+            "gate": "rithmic_paper_endpoint"
+            if endpoint_blocked
+            else "rithmic_report_binding"
+            if report_binding_blocked
+            else "rithmic_order_ack"
+            if has_rithmic_trial and not order_ack_measured
+            else "observed_lane_run",
+            "status": rithmic_endpoint.get("status", "PENDING")
+            if endpoint_blocked
+            else "BLOCKING"
+            if report_binding_blocked
+            else "INSUFFICIENT_ORDER_ACK_EVIDENCE"
+            if has_rithmic_trial and not order_ack_measured
+            else "PENDING",
+            "reason": rithmic_endpoint.get("reason_code", reason) if endpoint_blocked else reason,
+        }
+    ]
+    blocking_gates.extend(_shared_blocking_gates(lane_registry, feature_fabric))
+    rithmic_reports = rithmic_trial.get("reports") or {}
+    data_quality = rithmic_reports.get("data_quality") or {}
+    conversion = rithmic_reports.get("hftbacktest_conversion") or {}
+    book = rithmic_reports.get("book_reconstruction") or {}
+    latency_profile = rithmic_reports.get("latency_profile") or {}
+    paper_order_summary = rithmic_reports.get("paper_order_summary") or {}
+    rithmic_paths = rithmic_trial.get("paths") or {}
+    event_counts = rithmic_trial.get("event_type_counts") or {}
+    data_files = []
+    if has_rithmic_trial:
+        data_files = [
+            {
+                "artifact": "raw_events",
+                "status": "observed",
+                "path": rithmic_paths.get("raw_events", ""),
+            },
+            {
+                "artifact": "normalized_events",
+                "status": "observed" if rithmic_trial.get("normalized_exists") else "missing",
+                "path": rithmic_paths.get("normalized_events", ""),
+            },
+            {
+                "artifact": "hftbacktest_npz",
+                "status": "observed" if rithmic_trial.get("npz_exists") else "missing",
+                "path": rithmic_paths.get("npz", ""),
+            },
+        ]
+    backtest_rows = []
+    if has_rithmic_trial:
+        backtest_rows.append(
+            {
+                "candidate_id": rithmic_trial.get("run_id"),
+                "target": "CME paper market-data replay",
+                "pass_fail": "PASS"
+                if reports_bound and data_quality.get("status") == "pass" and conversion.get("status") == "pass"
+                else "BLOCKING",
+                "rows": rithmic_trial.get("row_count", 0),
+                "proxy_trades": rithmic_trial.get("trade_count", 0),
+                "quotes": rithmic_trial.get("quote_count", 0),
+                "depth_events": rithmic_trial.get("depth_count", 0),
+                "mode": conversion.get("mode", ""),
+                "npz_path": conversion.get("output_file", rithmic_paths.get("npz", "")),
+            }
+        )
+    trial_artifacts = {
+        "rithmic_trial_manifest": rithmic_paths.get("manifest", ""),
+        "rithmic_raw_events": rithmic_paths.get("raw_events", ""),
+        "rithmic_normalized_events": rithmic_paths.get("normalized_events", ""),
+        "rithmic_hftbacktest_npz": rithmic_paths.get("npz", ""),
+        "rithmic_data_quality_report": rithmic_paths.get("data_quality_report", ""),
+        "rithmic_hftbacktest_conversion_report": rithmic_paths.get("hftbacktest_conversion_report", ""),
+        "rithmic_latency_profile": rithmic_paths.get("latency_profile", ""),
+        "rithmic_paper_order_summary": rithmic_paths.get("paper_order_summary", ""),
+    }
+    if not has_rithmic_trial:
+        trial_artifacts = {}
+    order_ack_status = (
+        "MEASURED"
+        if order_ack_measured
+        else "REPORT_BINDING_BLOCKED"
+        if report_binding_blocked
+        else "INSUFFICIENT_ORDER_ACK_EVIDENCE"
+        if has_rithmic_trial
+        else rithmic_endpoint.get("status", "not_applicable")
+    )
+    return RunEvidenceSnapshot(
+        source=source,
+        run_id=str(rithmic_trial.get("run_id") or f"{lane}_lane"),
+        state=state,
+        current_stage=current_stage,
+        started_at=str(rithmic_trial.get("started_at") or ""),
+        finished_at=str(rithmic_trial.get("finished_at") or ""),
+        root=str(rithmic_trial.get("root") or repo),
+        stages=[
+            {
+                "name": "lane_registry",
+                "status": "BLOCKING" if lane_registry_blocked else lane_row.get("load_status", "missing"),
+            },
+            {
+                "name": "cross_lane_feature_fabric",
+                "status": feature_fabric.get("status", "BLOCKING"),
+            },
+            {
+                "name": "rithmic_paper_endpoint",
+                "status": rithmic_endpoint.get("status", "not_applicable") if is_cme else "not_applicable",
+            },
+            {
+                "name": "paper_market_data_capture",
+                "status": "observed" if has_rithmic_trial else "missing",
+            },
+            {
+                "name": "rithmic_report_binding",
+                "status": rithmic_trial.get("report_binding_status", "missing") if has_rithmic_trial else "missing",
+            },
+            {
+                "name": "data_quality",
+                "status": rithmic_trial.get("quality_status", "not_applicable") if has_rithmic_trial else "missing",
+            },
+            {
+                "name": "hftbacktest_trade_only_replay",
+                "status": rithmic_trial.get("conversion_status", "not_applicable") if has_rithmic_trial else "missing",
+            },
+            {
+                "name": "submit_to_ack_latency",
+                "status": order_ack_status,
+            },
+            {"name": "trade_manager_session", "status": "loaded_by_live_monitor"},
+        ],
+        artifacts={
+            "feature_fabric_manifest": feature_fabric.get("expected_artifacts", {}).get("feature_fabric_manifest.json", ""),
+            "feature_lineage": feature_fabric.get("expected_artifacts", {}).get("feature_lineage.json", ""),
+            "feature_pit_audit": feature_fabric.get("expected_artifacts", {}).get("feature_pit_audit.json", ""),
+            "rejected_features": feature_fabric.get("expected_artifacts", {}).get("rejected_features.json", ""),
+            "rithmic_api_config": rithmic_endpoint.get("config_path", "") if is_cme else "",
+            "rithmic_endpoint_status": rithmic_endpoint.get("runtime_status_path", "") if is_cme else "",
+            **trial_artifacts,
+        },
+        registry={
+            "selected_lane": lane,
+            "lane_config": config,
+            "lanes": lane_registry.get("rows", []),
+            "lane_registry": lane_registry,
+        },
+        data={
+            "symbols": config.get("symbols", []),
+            "event_types": config.get("event_types", []),
+            "test_paths": config.get("test_paths", []),
+            "capability_profile": config.get("capability_profile", {}),
+            "data_files": data_files,
+            "rithmic_trial": {
+                "observed": has_rithmic_trial,
+                "capture_date": rithmic_trial.get("capture_date", ""),
+                "symbol": rithmic_trial.get("symbol", ""),
+                "exchange": rithmic_trial.get("exchange", ""),
+                "capture_environment": rithmic_trial.get("capture_environment", ""),
+                "row_count": rithmic_trial.get("row_count", 0),
+                "event_type_counts": event_counts,
+                "quality_checks": data_quality.get("checks", {}),
+                "book_reconstruction": book,
+                "report_binding_status": rithmic_trial.get("report_binding_status", "missing"),
+                "report_binding_issues": rithmic_trial.get("report_binding_issues", []),
+            },
+        },
+        backtest={
+            "rows": backtest_rows,
+            "summary": {
+                "status": (
+                    "observed_trade_only_replay"
+                    if has_rithmic_trial and reports_bound
+                    else "report_binding_blocked"
+                    if report_binding_blocked
+                    else "not_observed"
+                ),
+                "reason": (
+                    "Rithmic Paper market data was normalized and converted into a trade-only HFT replay artifact."
+                    if has_rithmic_trial and reports_bound
+                    else "Rithmic Paper capture is present, but report binding failed; replay evidence is blocked until process regenerates matching artifacts."
+                    if report_binding_blocked
+                    else "No active lane run artifact has emitted backtest rows for this source."
+                ),
+                "report_binding_status": rithmic_trial.get("report_binding_status", "missing"),
+                "report_binding_issues": rithmic_trial.get("report_binding_issues", []),
+                "data_quality_status": data_quality.get("status"),
+                "hftbacktest_conversion_status": conversion.get("status"),
+                "mode": conversion.get("mode"),
+                "event_count": data_quality.get("event_count"),
+                "event_type_counts": event_counts,
+                "limitations": list((book.get("limitations") or [])) + list((conversion.get("limitations") or [])),
+            },
+            "rithmic_trial": rithmic_trial,
+        },
+        latency={
+            "rithmic_order_ack": {
+                "status": order_ack_status if is_cme else "not_applicable",
+                "scope": "cme_rithmic_submit_to_ack" if is_cme else "not_applicable",
+                "reason_code": (
+                    ""
+                    if order_ack_measured
+                    else "RITHMIC_REPORT_BINDING_BLOCKED"
+                    if report_binding_blocked
+                    else "NO_PAIRED_SUBMIT_ACK_ROWS"
+                    if has_rithmic_trial
+                    else rithmic_endpoint.get("reason_code", "")
+                )
+                if is_cme
+                else "",
+                "order_ack_measured": order_ack_measured,
+                "endpoint_profile": rithmic_endpoint.get("profile", "") if is_cme else "",
+                "paired_count": rithmic_trial.get("paired_count", 0),
+                "summary": paper_order_summary,
+            },
+            "rithmic_endpoint": rithmic_endpoint,
+            "rithmic_capture_endpoint": rithmic_trial.get("capture_endpoint", {}),
+            "latency_profile": latency_profile,
+            "feed_latency_us": latency_profile.get("feed_latency_us", {}),
+            "paper_order_summary": paper_order_summary,
+        },
+        diagnostics={
+            "feature_fabric": feature_fabric,
+            "feature_lineage": feature_fabric.get("lineage", {}),
+        },
+        robustness={
+            "pending": ["strategy_robustness", "walk_forward", "submit_to_ack_latency"],
+            "failed": [],
+            "explanation": {
+                "aggregate_status": "PENDING",
+                "operator_explanation": (
+                    "CME Paper data capture is observed. Model robustness is still pending because this selected "
+                    "evidence is a data/replay lane artifact, not a promoted candidate robustness run."
+                ),
+            },
+        },
+        decision={
+            "action": "QUARANTINE",
+            "reason": reason,
+            "live_registry_ready": False,
+            "blocking_gates": blocking_gates,
+        },
+        reports={
+            "rithmic_trial_manifest": rithmic_paths.get("manifest", ""),
+            "data_quality_report": rithmic_paths.get("data_quality_report", ""),
+            "book_reconstruction_report": rithmic_paths.get("book_reconstruction_report", ""),
+            "latency_profile": rithmic_paths.get("latency_profile", ""),
+            "paper_order_summary": rithmic_paths.get("paper_order_summary", ""),
+            "hftbacktest_conversion_report": rithmic_paths.get("hftbacktest_conversion_report", ""),
+            "hftbacktest_npz": rithmic_paths.get("npz", ""),
+        }
+        if has_rithmic_trial
+        else {},
+        system={
+            "lane_registry": lane_registry,
+            "rithmic_endpoint": rithmic_endpoint,
+            "rithmic_trial": rithmic_trial,
+            "rithmic_report_binding": rithmic_trial.get("report_binding", {}),
+            "feature_fabric": feature_fabric,
+        },
+    )
+
+
 def _autonomous_snapshot(repo: Path) -> RunEvidenceSnapshot:
     artifacts_root = repo / "artifacts" / "runs"
     state_root = repo / "runtime" / "research"
@@ -1707,14 +2641,57 @@ def load_run_evidence(repo: Path, source: str, *, campaign_id: str = "") -> RunE
         snapshot = _workbench_snapshot(repo, campaign_id)
     elif source == "autonomous":
         snapshot = _autonomous_snapshot(repo)
+    elif source in LANE_RUN_SOURCES:
+        snapshot = _lane_source_snapshot(repo, source)
     else:
         snapshot = _crypto_snapshot(repo)
+    lane = _source_lane(snapshot.source)
+    lane_registry = _lane_registry_snapshot(repo)
+    feature_fabric = (snapshot.diagnostics or {}).get("feature_fabric") or _feature_fabric_snapshot(
+        repo,
+        selected_root=snapshot.root if snapshot.root and Path(snapshot.root).is_dir() else None,
+        consumer_lane=lane,
+    )
+    rithmic_endpoint = (snapshot.system or {}).get("rithmic_endpoint") or _rithmic_endpoint_status(
+        repo,
+        force_paper=lane == "cme_futures",
+    )
+    snapshot.registry = {
+        **(snapshot.registry or {}),
+        "lanes": lane_registry.get("rows", []),
+        "lane_registry": lane_registry,
+    }
+    snapshot.diagnostics = {
+        **(snapshot.diagnostics or {}),
+        "feature_fabric": feature_fabric,
+    }
+    snapshot.latency = {
+        **(snapshot.latency or {}),
+        "rithmic_endpoint": rithmic_endpoint,
+        "rithmic_order_ack": (snapshot.latency or {}).get(
+            "rithmic_order_ack",
+            {
+                "status": "CONFIGURED_NOT_OBSERVED",
+                "scope": "cme_rithmic_submit_to_ack",
+                "reason_code": rithmic_endpoint.get("reason_code", ""),
+                "order_ack_measured": False,
+                "endpoint_profile": rithmic_endpoint.get("profile", ""),
+            },
+        ),
+    }
     snapshot.trade_manager = _trade_manager_snapshot(
         repo,
         selected_run_id=snapshot.run_id,
         selected_root=snapshot.root,
     )
-    snapshot.system = {**(snapshot.system or {}), "trade_manager": snapshot.trade_manager}
+    snapshot.system = {
+        **(snapshot.system or {}),
+        "lane_registry": lane_registry,
+        "feature_fabric": feature_fabric,
+        "rithmic_endpoint": rithmic_endpoint,
+        "trade_manager": snapshot.trade_manager,
+    }
+    _append_decision_blocking_gates(snapshot, _shared_blocking_gates(lane_registry, feature_fabric))
     return snapshot
 
 

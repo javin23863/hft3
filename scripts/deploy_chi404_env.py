@@ -39,6 +39,9 @@ KEYS = (
     "RITHMIC_TRIAL_ENABLED",
     "RITHMIC_TRIAL_CONNECTOR",
     "RITHMIC_TRIAL_CONFIG",
+    "RITHMIC_API_CONFIG",
+    "RITHMIC_ENDPOINT_PROFILE",
+    "RITHMIC_PROTOCOL_URL",
 )
 
 
@@ -73,6 +76,9 @@ def _render_env(values: dict[str, str]) -> str:
         "RITHMIC_TRIAL_ENABLED": "1",
         "RITHMIC_TRIAL_CONNECTOR": "rithmic_api",
         "RITHMIC_TRIAL_CONFIG": "packages/data_system/config/rithmic_trial.yaml",
+        "RITHMIC_ENDPOINT_PROFILE": "paper_chicago",
+        "RITHMIC_API_CONFIG": "packages/data_system/config/rithmic_api_paper.yaml",
+        "RITHMIC_PROTOCOL_URL": "",
     }
     merged = {**defaults, **{k: values[k] for k in KEYS if k in values and values[k]}}
     lines = ["# HFT3 CHI404 — generated; chmod 600", ""]
