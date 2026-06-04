@@ -519,6 +519,29 @@ def _run_institutional_model_metrics(repo: Path, run_dir: Path) -> dict[str, Any
         return payload
 
 
+def _institutional_metrics_gate(metrics_status: Any) -> tuple[bool, dict[str, Any] | None]:
+    if not isinstance(metrics_status, dict):
+        return False, {
+            "gate": "institutional_model_metrics",
+            "status": "MISSING",
+            "reason": "model scorecard and behavior envelope were not generated",
+        }
+    if metrics_status.get("status") != "ok":
+        return False, metrics_status.get("blocking_gate") or {
+            "gate": "institutional_model_metrics",
+            "status": "FAIL",
+            "reason": str(metrics_status.get("reason") or "model metrics bundle failed"),
+        }
+    envelope = metrics_status.get("envelope") if isinstance(metrics_status.get("envelope"), dict) else {}
+    if not bool(envelope.get("active")):
+        return False, {
+            "gate": "model_behavior_envelope",
+            "status": "INACTIVE",
+            "reason": "model behavior envelope is not active; grade/evidence is not eligible for promotion",
+        }
+    return True, None
+
+
 def _rank_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
     def rank_key(candidate: dict[str, Any]) -> tuple[float, float, float, int]:
         return (
@@ -1839,16 +1862,13 @@ def run_crypto_smoke(repo: Path, *, candidate_id: str | None = None) -> dict[str
         _write_status(run_dir, latest, status)
         institutional_metrics = _run_institutional_model_metrics(repo, run_dir)
         status["institutional_metrics"] = institutional_metrics
-        if institutional_metrics.get("status") != "ok":
+        metrics_ok, metrics_gate = _institutional_metrics_gate(institutional_metrics)
+        if not metrics_ok:
             gates = list((status.get("decision") or {}).get("blocking_gates") or [])
-            gates.append(
-                institutional_metrics.get("blocking_gate")
-                or {
-                    "gate": "institutional_model_metrics",
-                    "status": "FAIL",
-                    "reason": institutional_metrics.get("reason", "model metrics bundle failed"),
-                }
-            )
+            if metrics_gate:
+                gate_name = metrics_gate.get("gate") or metrics_gate.get("gate_name")
+                if not gate_name or not any((row.get("gate") or row.get("gate_name")) == gate_name for row in gates if isinstance(row, dict)):
+                    gates.append(metrics_gate)
             status["decision"] = {
                 **(status.get("decision") or {}),
                 "live_registry_ready": False,

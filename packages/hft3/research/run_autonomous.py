@@ -1145,19 +1145,23 @@ class AutonomousRunner:
         scoring_summary["institutional_metrics"] = metrics_status
         envelope = metrics_status.get("envelope") if isinstance(metrics_status, dict) else {}
         metrics_gate_failed = metrics_status.get("status") != "ok" or not bool((envelope or {}).get("active"))
+        if metrics_gate_failed:
+            metrics_gate = {
+                "gate_name": "institutional_model_metrics",
+                "metric_name": "model_behavior_envelope_active",
+                "pass_fail": False,
+                "severity": "BLOCKING",
+                "reason_code": "MODEL_ENVELOPE_NOT_ACTIVE"
+                if metrics_status.get("status") == "ok"
+                else "MODEL_METRICS_MISSING_OR_FAILED",
+                "artifact_reference": "model_metrics/model_behavior_envelope.json",
+            }
+            existing_gate_names = {gate.get("gate_name") for gate in gate_failures if isinstance(gate, dict)}
+            if metrics_gate["gate_name"] not in existing_gate_names:
+                gate_failures = list(gate_failures) + [metrics_gate]
         if decision == "PROMOTE" and metrics_gate_failed:
             decision = "QUARANTINE"
             reason = "Institutional model scorecard/envelope is not active for live promotion."
-            gate_failures = list(gate_failures) + [
-                {
-                    "gate_name": "institutional_model_metrics",
-                    "metric_name": "model_behavior_envelope_active",
-                    "pass_fail": False,
-                    "severity": "BLOCKING",
-                    "reason_code": "MODEL_ENVELOPE_NOT_ACTIVE",
-                    "artifact_reference": "model_metrics/model_behavior_envelope.json",
-                }
-            ]
             scoring_summary["decision"] = decision
             scoring_summary["reason"] = reason
         path = self._write_artifact("scoring_summary.json", scoring_summary)

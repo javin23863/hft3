@@ -172,6 +172,39 @@ def _sim_shadow_status(artifact_dir: Path) -> str:
     return "pending_CHI404"
 
 
+def _append_blocking_gate(summary: Dict[str, Any], gate: Dict[str, Any]) -> None:
+    gates = list(summary.get("blocking_gates") or [])
+    gate_name = gate.get("gate") or gate.get("gate_name")
+    if gate_name and any((row.get("gate") or row.get("gate_name")) == gate_name for row in gates if isinstance(row, dict)):
+        summary["blocking_gates"] = gates
+        return
+    gates.append(gate)
+    summary["blocking_gates"] = gates
+
+
+def _institutional_metrics_gate(metrics_status: Any) -> tuple[bool, Dict[str, Any] | None]:
+    if not isinstance(metrics_status, dict):
+        return False, {
+            "gate": "institutional_model_metrics",
+            "status": "MISSING",
+            "reason": "model scorecard and behavior envelope were not generated",
+        }
+    if metrics_status.get("status") != "ok":
+        return False, {
+            "gate": "institutional_model_metrics",
+            "status": "FAIL",
+            "reason": str(metrics_status.get("reason") or "model metric bundle failed"),
+        }
+    envelope = metrics_status.get("envelope") if isinstance(metrics_status.get("envelope"), dict) else {}
+    if not bool(envelope.get("active")):
+        return False, {
+            "gate": "model_behavior_envelope",
+            "status": "INACTIVE",
+            "reason": "model behavior envelope is not active; grade/evidence is not eligible for promotion",
+        }
+    return True, None
+
+
 def record_sim_shadow(repo_root: Path, campaign_id: str, status: str) -> Path:
     artifact_dir = campaign_dir_for(repo_root, campaign_id)
     artifact_dir.mkdir(parents=True, exist_ok=True)
@@ -189,7 +222,20 @@ def record_sim_shadow(repo_root: Path, campaign_id: str, status: str) -> Path:
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
         summary["sim_shadow_status"] = status
         wfc_ok = summary.get("wfc_status") == "PASS"
-        summary["promote_candidate"] = summary.get("status") == "PASS" and status == "PASS" and wfc_ok
+        robustness_ok = summary.get("robustness_passed") is True
+        stamp = summary.get("certification_stamp") if isinstance(summary.get("certification_stamp"), dict) else {}
+        cert_ok = bool(stamp.get("promotion_eligible", False))
+        metrics_ok, metrics_gate = _institutional_metrics_gate(summary.get("institutional_metrics"))
+        if metrics_gate:
+            _append_blocking_gate(summary, metrics_gate)
+        summary["promote_candidate"] = (
+            summary.get("status") == "PASS"
+            and status == "PASS"
+            and robustness_ok
+            and wfc_ok
+            and cert_ok
+            and metrics_ok
+        )
         summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     return artifact_dir / "sim_shadow.json"
 
@@ -310,9 +356,11 @@ def _run_options_campaign(
     (artifact_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     metrics_status = _run_institutional_model_metrics(repo_root, artifact_dir)
     summary["institutional_metrics"] = metrics_status
-    if metrics_status.get("status") != "ok":
+    metrics_ok, metrics_gate = _institutional_metrics_gate(metrics_status)
+    if not metrics_ok:
         summary["promote_candidate"] = False
-        summary["blocking_gates"] = list(summary.get("blocking_gates") or []) + ["institutional_model_metrics"]
+        if metrics_gate:
+            _append_blocking_gate(summary, metrics_gate)
     (artifact_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     (artifact_dir / "diagnostics.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     return CampaignResult(
@@ -793,9 +841,11 @@ def run_campaign(
     (artifact_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     metrics_status = _run_institutional_model_metrics(repo_root, artifact_dir)
     summary["institutional_metrics"] = metrics_status
-    if metrics_status.get("status") != "ok":
+    metrics_ok, metrics_gate = _institutional_metrics_gate(metrics_status)
+    if not metrics_ok:
         summary["promote_candidate"] = False
-        summary["blocking_gates"] = list(summary.get("blocking_gates") or []) + ["institutional_model_metrics"]
+        if metrics_gate:
+            _append_blocking_gate(summary, metrics_gate)
     (artifact_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     (artifact_dir / "diagnostics.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     _write_status(job_dir, {"state": status.lower(), "campaign_id": campaign_id})

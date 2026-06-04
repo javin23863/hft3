@@ -89,6 +89,7 @@ def _trades_from_campaign_periods(summary: dict[str, Any]) -> list[dict[str, Any
     for period in summary.get("periods") or []:
         if not isinstance(period, dict):
             continue
+        before_period = len(trades)
         events = period.get("event_results") or []
         for event in events if isinstance(events, list) else []:
             if not isinstance(event, dict):
@@ -117,7 +118,7 @@ def _trades_from_campaign_periods(summary: dict[str, Any]) -> list[dict[str, Any
                         "holding_period_min": event.get("holding_period_min"),
                     }
                 )
-        if not trades and period.get("net_pnl") is not None:
+        if len(trades) == before_period and period.get("net_pnl") is not None:
             trades.append(
                 {
                     "realized_pnl": period.get("net_pnl"),
@@ -172,6 +173,84 @@ def _first_spec(experiment_spec: Any) -> dict[str, Any]:
             if isinstance(row, dict):
                 return row
     return experiment_spec if isinstance(experiment_spec, dict) else {}
+
+
+def _normalize_asset_class(value: Any) -> str:
+    raw = str(value or "").strip().upper()
+    if not raw:
+        return ""
+    aliases = {
+        "CRYPTO_AUTONOMOUS_SMOKE": "CRYPTO",
+        "CRYPTO_LANE": "CRYPTO",
+        "DIGITAL_ASSET": "CRYPTO",
+        "DIGITAL_ASSETS": "CRYPTO",
+        "EQUITY": "EQUITIES",
+        "STOCK": "EQUITIES",
+        "STOCKS": "EQUITIES",
+        "CME_FUTURES": "FUTURES",
+        "RATES": "FUTURES",
+        "RATE_FUTURES": "FUTURES",
+        "INDEX_FUTURES": "FUTURES",
+        "OPTION": "OPTIONS",
+        "OPTIONS_LANE": "OPTIONS",
+        "PREDICTION_MARKET": "PREDICTION_MARKETS",
+        "PREDICTION": "PREDICTION_MARKETS",
+    }
+    return aliases.get(raw, raw)
+
+
+def _infer_asset_class(*, explicit: Any = "", symbol: Any = "", first_spec: dict[str, Any] | None = None) -> str:
+    spec = first_spec or {}
+    binding = spec.get("model_binding") if isinstance(spec.get("model_binding"), dict) else {}
+    for value in (
+        explicit,
+        spec.get("asset_class"),
+        spec.get("lane"),
+        binding.get("asset_class"),
+        binding.get("lane"),
+        binding.get("campaign_mode"),
+    ):
+        normalized = _normalize_asset_class(value)
+        if normalized:
+            return normalized
+    sym = str(symbol or "").upper().replace(".V.0", "").replace(".C.0", "")
+    if not sym:
+        return ""
+    if "/" in sym or sym.endswith(("USDT", "USD", "PERP")) and any(token in sym for token in ("BTC", "ETH", "SOL")):
+        return "CRYPTO"
+    futures_roots = {
+        "ES",
+        "MES",
+        "NQ",
+        "MNQ",
+        "RTY",
+        "M2K",
+        "YM",
+        "MYM",
+        "ZT",
+        "ZF",
+        "ZN",
+        "ZB",
+        "UB",
+        "SR3",
+        "ZQ",
+        "CL",
+        "GC",
+        "SI",
+        "HG",
+        "6E",
+        "6J",
+        "6B",
+        "VX",
+    }
+    root = sym.split(".")[0]
+    if root in futures_roots:
+        return "FUTURES"
+    if sym.endswith(("_CALL", "_PUT")):
+        return "OPTIONS"
+    if sym.isalpha() and 1 <= len(sym) <= 5:
+        return "EQUITIES"
+    return ""
 
 
 def run_inputs_from_run_dir(run_dir: Path) -> dict[str, Any]:
@@ -255,14 +334,27 @@ def run_inputs_from_run_dir(run_dir: Path) -> dict[str, Any]:
         "capacity_sensitivity_score": _pass_score({"robustness_pack": robustness_pack}, "capacity_sensitivity"),
     }
     data_cfg = config_snapshot.get("data") or {}
+    symbol = str(config.get("symbol", status.get("symbol", campaign_meta.get("symbol", first_spec.get("symbol", "")))))
+    asset_class = _infer_asset_class(
+        explicit=(
+            status.get("asset_class")
+            or status.get("scenario")
+            or config.get("asset_class")
+            or data_cfg.get("asset_class")
+            or campaign_meta.get("asset_class")
+            or best_candidate.get("asset_class")
+        ),
+        symbol=symbol,
+        first_spec=first_spec,
+    )
     return {
         "context": {
             "model_id": str(evidence_candidate),
             "model_version": str(status.get("model_version", campaign_meta.get("param_hash", ""))),
             "run_id": str(status.get("run_id", run_dir.name)),
             "campaign_id": str(status.get("campaign_id", campaign_meta.get("campaign_id", scoring.get("campaign_id", "")))),
-            "asset_class": str(status.get("asset_class", status.get("scenario", config.get("asset_class", data_cfg.get("asset_class", ""))))).upper(),
-            "symbol": str(config.get("symbol", status.get("symbol", campaign_meta.get("symbol", first_spec.get("symbol", ""))))),
+            "asset_class": asset_class,
+            "symbol": symbol,
             "timeframe": str(config.get("timeframe", status.get("timeframe", ""))),
             "regime_id": str(config.get("regime_id", status.get("regime_id", ""))),
             "robustness_run_id": str(robustness.get("run_id", status.get("run_id", run_dir.name))),

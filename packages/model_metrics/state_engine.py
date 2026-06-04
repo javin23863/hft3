@@ -32,6 +32,10 @@ def _below(value: float | None, threshold: float | None) -> bool:
     return value is not None and threshold is not None and value < threshold
 
 
+def _loss_magnitude_above(value: float | None, threshold: float | None) -> bool:
+    return value is not None and threshold is not None and abs(value) > abs(threshold)
+
+
 def classify_model_state(
     envelope: ModelBehaviorEnvelope | dict[str, Any],
     observation: ModelLiveObservation | dict[str, Any],
@@ -49,11 +53,11 @@ def classify_model_state(
     if env.approved_regime_ids and obs.regime_id and obs.regime_id not in env.approved_regime_ids:
         triggers.append(_trigger("unapproved_regime", "YELLOW", obs.regime_id, env.approved_regime_ids, "regime is not explicitly approved"))
 
-    if _above(obs.drawdown, env.kill_drawdown_threshold):
+    if _loss_magnitude_above(obs.drawdown, env.kill_drawdown_threshold):
         triggers.append(_trigger("drawdown_kill_threshold", "RED", obs.drawdown, env.kill_drawdown_threshold, "drawdown breached kill threshold"))
-    elif _above(obs.drawdown, env.warning_drawdown_threshold):
+    elif _loss_magnitude_above(obs.drawdown, env.warning_drawdown_threshold):
         triggers.append(_trigger("drawdown_warning_threshold", "YELLOW", obs.drawdown, env.warning_drawdown_threshold, "drawdown breached warning threshold"))
-    if _above(obs.drawdown_velocity, env.max_allowed_drawdown_velocity):
+    if _loss_magnitude_above(obs.drawdown_velocity, env.max_allowed_drawdown_velocity):
         triggers.append(_trigger("drawdown_velocity", "RED", obs.drawdown_velocity, env.max_allowed_drawdown_velocity, "drawdown velocity is outside allowed bounds"))
     if _above(obs.slippage_bps, env.max_allowed_slippage):
         triggers.append(_trigger("slippage", "RED", obs.slippage_bps, env.max_allowed_slippage, "slippage exceeded max allowed slippage"))

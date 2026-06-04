@@ -11,6 +11,7 @@ from model_metrics.envelope import generate_behavior_envelope
 from model_metrics.registry import calculate_metric_values
 from model_metrics.schemas import ModelLiveObservation, strict_json_dumps
 from trade_manager.model_behavior import ModelBehaviorRuleEngine
+from workbench.src.run.campaign_runner import record_sim_shadow
 
 
 def _inputs() -> dict:
@@ -101,7 +102,8 @@ def test_model_behavior_engine_green_yellow_red() -> None:
         {
             "model_id": "FUTURES_MODEL_A",
             "regime_id": "HALT",
-            "drawdown": 10_000.0,
+            "drawdown": -10_000.0,
+            "drawdown_velocity": -500.0,
             "slippage_bps": 100.0,
             "fill_rate": 0.1,
             "latency_order_to_ack": 50.0,
@@ -114,6 +116,8 @@ def test_model_behavior_engine_green_yellow_red() -> None:
     assert red.state == "RED"
     assert {trigger["name"] for trigger in red.triggers} >= {
         "blocked_regime",
+        "drawdown_kill_threshold",
+        "drawdown_velocity",
         "slippage",
         "feature_training_domain",
     }
@@ -188,6 +192,7 @@ def test_workbench_campaign_summary_generates_non_crypto_scorecard(tmp_path: Pat
                         ],
                     },
                     {"name": "WF2", "net_pnl": 3.0, "event_results": [{"net_pnl": 3.0, "slippage_bps": 0.5}]},
+                    {"name": "WF3", "net_pnl": 1.25, "event_results": []},
                 ],
             }
         ),
@@ -199,7 +204,8 @@ def test_workbench_campaign_summary_generates_non_crypto_scorecard(tmp_path: Pat
 
     assert inputs["context"]["asset_class"] == "EQUITIES"
     assert inputs["context"]["model_id"] == "EQUITY_MODEL_A"
-    assert len(inputs["trades"]) == 3
+    assert len(inputs["trades"]) == 4
+    assert inputs["returns"][-1] == pytest.approx(1.25)
     assert bundle["scorecard"]["asset_class"] == "EQUITIES"
     assert bundle["scorecard"]["symbol"] == "AAPL"
 
@@ -207,21 +213,18 @@ def test_workbench_campaign_summary_generates_non_crypto_scorecard(tmp_path: Pat
 def test_autonomous_artifacts_runs_are_discovered_for_all_models(tmp_path: Path) -> None:
     run_dir = tmp_path / "artifacts" / "runs" / "AUTO_OPTIONS_A"
     run_dir.mkdir(parents=True)
-    (run_dir / "config_snapshot.yaml").write_text(
-        "data:\n  asset_class: OPTIONS\n  symbol_universe:\n    - SPY\n",
-        encoding="utf-8",
-    )
+    (run_dir / "config_snapshot.yaml").write_text("data:\n  symbol_universe:\n    - MES.v.0\n", encoding="utf-8")
     (run_dir / "experiment_spec.json").write_text(
-        json.dumps([{"alpha_id": "OPTIONS_MODEL_A", "symbol": "SPY"}]),
+        json.dumps([{"alpha_id": "FUTURES_MODEL_AUTO", "symbol": "MES.v.0"}]),
         encoding="utf-8",
     )
     (run_dir / "candidate_rankings.json").write_text(
         json.dumps(
             [
                 {
-                    "model_id": "OPTIONS_MODEL_A",
-                    "symbol": "SPY",
-                    "campaign_id": "AUTO_OPTIONS_A_SPY",
+                    "model_id": "FUTURES_MODEL_AUTO",
+                    "symbol": "MES.v.0",
+                    "campaign_id": "AUTO_FUTURES_A_MES",
                     "summary": {
                         "periods": [
                             {"name": "WF1", "net_pnl": 4.0, "event_results": [{"net_pnl": 4.0, "slippage_bps": 0.3}]},
@@ -239,7 +242,7 @@ def test_autonomous_artifacts_runs_are_discovered_for_all_models(tmp_path: Path)
                 "run_id": "AUTO_OPTIONS_A",
                 "campaign_id": "AUTO_OPTIONS",
                 "decision": "QUARANTINE",
-                "selected_candidate": {"model_id": "OPTIONS_MODEL_A", "symbol": "SPY"},
+                "selected_candidate": {"model_id": "FUTURES_MODEL_AUTO", "symbol": "MES.v.0"},
             }
         ),
         encoding="utf-8",
@@ -250,6 +253,41 @@ def test_autonomous_artifacts_runs_are_discovered_for_all_models(tmp_path: Path)
     scorecard = json.loads((run_dir / "model_metrics" / "model_scorecard.json").read_text(encoding="utf-8"))
 
     assert summary["models_processed"] == 1
-    assert scorecard["model_id"] == "OPTIONS_MODEL_A"
-    assert scorecard["asset_class"] == "OPTIONS"
-    assert scorecard["symbol"] == "SPY"
+    assert scorecard["model_id"] == "FUTURES_MODEL_AUTO"
+    assert scorecard["asset_class"] == "FUTURES"
+    assert scorecard["symbol"] == "MES.v.0"
+
+
+def test_sim_shadow_cannot_reopen_promotion_when_behavior_envelope_inactive(tmp_path: Path) -> None:
+    campaign_id = "CAMP_INACTIVE_ENVELOPE"
+    config_dir = tmp_path / "workbench" / "config"
+    config_dir.mkdir(parents=True)
+    (config_dir / "walk_forward.yaml").write_text(
+        "sim_shadow:\n  anchor_date: '2026-01-01'\n  cme_days: 60\n  host: CHI404\n  lane: test\n",
+        encoding="utf-8",
+    )
+    campaign_dir = tmp_path / "research_cards" / "workbench_runs" / campaign_id
+    campaign_dir.mkdir(parents=True)
+    (campaign_dir / "summary.json").write_text(
+        json.dumps(
+            {
+                "campaign_id": campaign_id,
+                "status": "PASS",
+                "robustness_passed": True,
+                "wfc_status": "PASS",
+                "certification_stamp": {"promotion_eligible": True},
+                "institutional_metrics": {
+                    "status": "ok",
+                    "envelope": {"active": False},
+                },
+                "promote_candidate": True,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    record_sim_shadow(tmp_path, campaign_id, "PASS")
+
+    summary = json.loads((campaign_dir / "summary.json").read_text(encoding="utf-8"))
+    assert summary["promote_candidate"] is False
+    assert any(gate.get("gate") == "model_behavior_envelope" for gate in summary["blocking_gates"])
