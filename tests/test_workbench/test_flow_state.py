@@ -73,7 +73,7 @@ def test_start_campaign_clears_drill_down_keys(tmp_path: Path, monkeypatch) -> N
         wb__event_sel="stale_event",
         wb_chat_messages=[{"role": "user", "content": "hi"}],
         wb_chat_context_key="old:ctx",
-        wb_ui_tab="Model Selector",
+        wb_ui_tab="Registry & Data",
     )
     monkeypatch.setattr(flow_state.st, "session_state", state)
     monkeypatch.setattr(
@@ -95,14 +95,15 @@ def test_start_campaign_clears_drill_down_keys(tmp_path: Path, monkeypatch) -> N
     assert state.get("wb_auto_period") == ""
     assert state.get("wb_auto_event") == ""
     assert state.get("wb_chat_messages") == []
-    assert state.get("wb_ui_tab") == "Backtest Results"
+    assert state.get("wb_ui_tab") == "Backtest Evidence"
 
 
 def test_workflow_tabs_order() -> None:
     from workbench.ui.workflow_tabs import WORKFLOW_TABS
 
-    assert WORKFLOW_TABS[0] == "Model Selector"
-    assert WORKFLOW_TABS[1] == "Backtest Results"
+    assert WORKFLOW_TABS[0] == "Autonomous Run"
+    assert WORKFLOW_TABS[1] == "Registry & Data"
+    assert WORKFLOW_TABS[2] == "Backtest Evidence"
     assert WORKFLOW_TABS.index("Personal Runs") == len(WORKFLOW_TABS) - 1
 
 
@@ -116,13 +117,13 @@ def test_navigate_to_tab(monkeypatch) -> None:
         def __setattr__(self, name: str, value) -> None:
             self[name] = value
 
-    state = FakeSessionState(wb_ui_tab="Model Selector", wb_nav_hint="")
+    state = FakeSessionState(wb_ui_tab="Registry & Data", wb_nav_hint="")
     monkeypatch.setattr(flow_state.st, "session_state", state)
-    flow_state.navigate_to_tab("Robustness")
-    assert state["wb_ui_tab"] == "Robustness"
-    assert "Robustness" in state["wb_nav_hint"]
+    flow_state.navigate_to_tab("Walk-Forward & Robustness")
+    assert state["wb_ui_tab"] == "Walk-Forward & Robustness"
+    assert "Walk-Forward & Robustness" in state["wb_nav_hint"]
     flow_state.navigate_to_tab("invalid")
-    assert state["wb_ui_tab"] == "Robustness"
+    assert state["wb_ui_tab"] == "Walk-Forward & Robustness"
 
 
 def test_resolve_period_event_ignores_manual_while_running(tmp_path: Path, monkeypatch) -> None:

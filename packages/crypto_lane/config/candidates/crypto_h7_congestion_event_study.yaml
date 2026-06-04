@@ -1,0 +1,69 @@
+candidate_id: crypto_h7_congestion_event_study
+hypothesis_id: CRYPTO_H7
+target: event_window_return
+horizons:
+- -300s
+- '0'
+- +300s
+- +1h
+- +4h
+features:
+- btc_fee_spike_event
+- btc_congestion_shock_event
+- event_severity
+required_data:
+- spot_perp_ticks
+optional_data:
+- deribit_surface
+- mempool_snapshots
+btc_node_required: true
+model_family: tabular_ml
+baseline:
+- basis_only
+- naive_previous_value
+- logistic_regression
+- volatility_only
+- funding_only
+challengers:
+- lightgbm
+- xgboost
+- elastic_net
+- ridge
+validation:
+  validation_tier: production
+  walk_forward: true
+  purged_cv: true
+  embargo: true
+  holdout_blocked: true
+  leakage_checks: true
+  min_folds: 3
+  fixture_observation_seconds: 512
+  min_oos_days: null
+backtest:
+  engine: crypto_lane
+  include_fees: true
+  include_spread: true
+  include_slippage: true
+  include_latency: true
+ablation:
+  run_without_btc_node_features: true
+  run_with_btc_node_features: true
+  report_incremental_ic: true
+  report_incremental_pnl: true
+negative_controls:
+  shuffled_labels: true
+  shifted_features_forward: true
+  randomized_event_times: true
+trader_diagnostics:
+  enabled: true
+  return_proxy_label: event_window_return
+  position_rule: prediction_sign
+  trade_threshold_quantile: 0.6
+  min_trades_for_sharpe: 20
+  promotion_gate: false
+promotion:
+  require_positive_oos_ic: true
+  require_positive_after_cost_pnl: true
+  require_regime_stability: true
+  require_capacity_estimate: true
+  reject_single_regime_dependency: true

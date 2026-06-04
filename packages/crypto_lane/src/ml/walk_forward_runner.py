@@ -23,7 +23,11 @@ from crypto_lane.src.ml.walk_forward import purged_expanding_folds
 from crypto_lane.src.types import repo_root_from_lane
 
 
-CHI404_ORDER_ACK_STATUS = "INSUFFICIENT (12/1000+ pairs; see HANDOFF_2026_06_02.md known-gaps)"
+CRYPTO_EXECUTION_ACK_SCOPE = "crypto_venue_submit_ack"
+CRYPTO_EXECUTION_ACK_STATUS = (
+    "INSUFFICIENT (crypto venue submit->ack pairs not measured; "
+    "Bitcoin node evidence covers mempool/on-chain feature timing, not exchange order acknowledgement)"
+)
 
 
 def deflated_sharpe_cdf(observed_sharpe: float, n_trials: int, n_obs: int, skew: float = 0.0, kurt: float = 3.0) -> float:
@@ -283,6 +287,155 @@ def _evaluate_purged_cv(
     }
 
 
+def _research_pnl_proxy(
+    df: pl.DataFrame,
+    target: str,
+    feat_cols: list[str],
+    baseline_name: str,
+    validation: dict,
+    *,
+    backtest: dict | None = None,
+    label_horizon_steps: int = 1,
+    trader_diagnostics: dict | None = None,
+) -> dict[str, Any]:
+    """Build a trader-readable, non-authoritative OOS return proxy.
+
+    The proxy is diagnostic only. It trains on each purged walk-forward train
+    fold, computes the trade threshold from train predictions only, and records
+    PnL proxy rows only on the corresponding OOS test fold.
+    """
+    cfg = trader_diagnostics or {}
+    if cfg and cfg.get("enabled") is False:
+        return {"status": "DISABLED", "promotion_gate": False, "equity_curve": [], "summary": {}}
+    return_label = str(cfg.get("return_proxy_label") or "event_window_return")
+    if return_label not in df.columns:
+        return {
+            "status": "NO_RETURN_PROXY_LABEL",
+            "reason": f"{return_label!r} missing from labeled frame",
+            "promotion_gate": False,
+            "equity_curve": [],
+            "summary": {},
+        }
+
+    X_all, y_all, clean = _prepare_xy(df, target, feat_cols)
+    returns_all = clean[return_label].to_numpy()
+    n = len(y_all)
+    embargo = resolve_embargo_steps(backtest, validation, clean, label_horizon_steps=label_horizon_steps, n=n)
+    min_folds = int(validation.get("min_folds", 3))
+    min_train, test_size = _fixture_fold_sizes(n, backtest)
+    folds = purged_expanding_folds(
+        n,
+        min_train=min_train,
+        test_size=test_size,
+        embargo=embargo,
+        label_horizon=label_horizon_steps,
+        min_folds=min_folds,
+    )
+
+    cost = (backtest or {}).get("cost_assumptions") or {}
+    fee_bps = float(cost.get("fee_bps", 2.0))
+    spread_bps = float(cost.get("spread_bps", 1.0))
+    cost_bps = float(cfg.get("round_trip_cost_bps", fee_bps + spread_bps))
+    threshold_q = float(cfg.get("trade_threshold_quantile", 0.60))
+    threshold_q = min(max(threshold_q, 0.0), 0.99)
+    min_trades_for_sharpe = int(cfg.get("min_trades_for_sharpe", 20))
+
+    rows: list[dict[str, Any]] = []
+    equity_bps = 0.0
+    step = 0
+    for fold_idx, fold in enumerate(folds):
+        X_tr, y_tr = X_all[fold.train_idx], y_all[fold.train_idx]
+        X_te, y_te = X_all[fold.test_idx], y_all[fold.test_idx]
+        ret_te = returns_all[fold.test_idx]
+        if X_te.size == 0:
+            continue
+        bm, kind, idx = train_baseline(baseline_name, X_tr, y_tr, feat_cols)
+        pred_train = predict_baseline(bm, kind, idx, X_tr)
+        pred_test = predict_baseline(bm, kind, idx, X_te)
+        finite_train = np.abs(pred_train[np.isfinite(pred_train)])
+        threshold = float(np.quantile(finite_train, threshold_q)) if finite_train.size else 0.0
+        finite_mask = np.isfinite(pred_test) & np.isfinite(ret_te) & np.isfinite(y_te)
+        for local_idx in np.where(finite_mask)[0]:
+            pred = float(pred_test[local_idx])
+            ret = float(ret_te[local_idx])
+            position = float(np.sign(pred)) if abs(pred) >= threshold else 0.0
+            gross_bps = position * ret * 10_000.0
+            net_bps = gross_bps - abs(position) * cost_bps
+            equity_bps += net_bps
+            step += 1
+            ts = None
+            if "exchange_timestamp" in clean.columns:
+                ts = int(clean["exchange_timestamp"][int(fold.test_idx.start or 0) + int(local_idx)])
+            rows.append(
+                {
+                    "step": step,
+                    "fold_id": f"WF{fold_idx + 1}",
+                    "exchange_timestamp": ts,
+                    "prediction": pred,
+                    "target": float(y_te[local_idx]),
+                    "return_proxy_bps": ret * 10_000.0,
+                    "position": position,
+                    "gross_pnl_bps": gross_bps,
+                    "cost_bps": abs(position) * cost_bps,
+                    "net_pnl_bps": net_bps,
+                    "equity_bps": equity_bps,
+                }
+            )
+
+    trade_rows = [r for r in rows if abs(float(r["position"])) > 0.0]
+    trade_pnls = np.array([float(r["net_pnl_bps"]) for r in trade_rows], dtype=float)
+    if rows:
+        equity = np.array([float(r["equity_bps"]) for r in rows], dtype=float)
+        peak = np.maximum.accumulate(equity)
+        drawdown = equity - peak
+        max_drawdown = float(np.min(drawdown)) if drawdown.size else 0.0
+    else:
+        max_drawdown = 0.0
+    wins = trade_pnls[trade_pnls > 0]
+    losses = trade_pnls[trade_pnls < 0]
+    gross_profit = float(wins.sum()) if wins.size else 0.0
+    gross_loss = float(abs(losses.sum())) if losses.size else 0.0
+    profit_factor = gross_profit / gross_loss if gross_loss > 0 else None
+    sharpe_proxy = (
+        float(trade_pnls.mean() / trade_pnls.std(ddof=1) * math.sqrt(len(trade_pnls)))
+        if len(trade_pnls) >= min_trades_for_sharpe and trade_pnls.std(ddof=1) > 1e-12
+        else None
+    )
+    summary = {
+        "scope": "purged_walk_forward_oos_diagnostic",
+        "promotion_gate": False,
+        "return_proxy_label": return_label,
+        "position_source": "oos_model_prediction",
+        "threshold_source": "train_fold_prediction_quantile",
+        "trade_threshold_quantile": threshold_q,
+        "round_trip_cost_bps": cost_bps,
+        "num_oos_rows": len(rows),
+        "num_trades": len(trade_rows),
+        "net_pnl_bps": float(trade_pnls.sum()) if trade_pnls.size else 0.0,
+        "avg_trade_bps": float(trade_pnls.mean()) if trade_pnls.size else 0.0,
+        "hit_rate": float((trade_pnls > 0).mean()) if trade_pnls.size else 0.0,
+        "profit_factor": profit_factor,
+        "max_drawdown_bps": max_drawdown,
+        "sharpe_proxy": sharpe_proxy,
+        "min_trades_for_sharpe": min_trades_for_sharpe,
+        "sharpe_status": "OBSERVED" if sharpe_proxy is not None else "INSUFFICIENT_TRADES",
+    }
+    return {
+        "status": "OBSERVED" if rows else "NO_OOS_ROWS",
+        "scope": "purged_walk_forward_oos_diagnostic",
+        "promotion_gate": False,
+        "leakage_controls": {
+            "train_rows_only_for_fit": True,
+            "train_predictions_only_for_threshold": True,
+            "test_rows_only_for_reported_pnl": True,
+            "purged_walk_forward": True,
+            "embargo_steps": embargo,
+        },
+        "summary": summary,
+        "equity_curve": rows,
+    }
+
+
 def _negative_controls(
     df: pl.DataFrame,
     target: str,
@@ -530,6 +683,16 @@ def run_smoke(candidate_id: str, output_dir: str | Path | None = None) -> dict[s
         horizon_ms=horizon_ms,
         hypothesis_id=hypothesis_id,
     )
+    trade_proxy = _research_pnl_proxy(
+        df_labeled,
+        target,
+        feats0,
+        (cand.get("baseline") or ["ridge"])[0],
+        validation_eff,
+        backtest=backtest,
+        label_horizon_steps=label_h0,
+        trader_diagnostics=cand.get("trader_diagnostics") or {},
+    )
 
     primary = runs.get("with_btc_node") or runs.get("without_btc_node") or {}
     min_folds = int(validation_eff.get("min_folds", 3))
@@ -575,6 +738,7 @@ def run_smoke(candidate_id: str, output_dir: str | Path | None = None) -> dict[s
         "ablation_ic_delta": ablation_delta,
         "holdout_gate": holdout,
         "negative_controls": neg,
+        "research_pnl_proxy": trade_proxy,
         "walk_forward": True,
         "smoke_mode": backtest.get("validation_mode") == "fixture",
         "purged_cv_implemented": primary.get("n_splits", 0) >= (
@@ -593,7 +757,10 @@ def run_smoke(candidate_id: str, output_dir: str | Path | None = None) -> dict[s
         # Use 1 - value for a one-sided p-value.
         "deflated_sharpe_ratio": dsr,
         "bh_rejected": bh_rejected,
-        "chi404_order_ack_status": CHI404_ORDER_ACK_STATUS,
+        "execution_ack_scope": CRYPTO_EXECUTION_ACK_SCOPE,
+        "execution_ack_status": CRYPTO_EXECUTION_ACK_STATUS,
+        "execution_ack_measured": False,
+        "btc_node_evidence_scope": "mempool/blockspace point-in-time features",
     }
 
     out = Path(output_dir or repo_root_from_lane() / "research_cards" / "crypto" / candidate_id)

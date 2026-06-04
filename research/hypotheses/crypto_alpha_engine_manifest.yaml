@@ -1,6 +1,6 @@
 source_repo_url: https://github.com/javin23863/crypto-alpha-engine
 ideas_only: false
-source_commit_sha: e8e4c988df536eedc7aa3910fda3c82264fcd428
+source_commit_sha: 6f5d8510e306bf2df0832cee7794fd0c871e8fd3
 extracted_hypotheses:
 - CRYPTO_H1
 - CRYPTO_H2
@@ -42,4 +42,5 @@ no_runtime_dependency: true
 integration_points:
 - packages/crypto_lane/pipeline.py
 blocked_items:
-- CHI404 hot path
+- crypto venue submit-to-ack evidence
+- Bitcoin edge packet observation

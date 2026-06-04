@@ -47,8 +47,7 @@ def validate_backtest_config(doc: dict[str, Any]) -> list[str]:
 
 
 def candidate_by_id(candidate_id: str) -> dict[str, Any]:
-    root = repo_root_from_lane() / "models" / "candidates"
-    path = root / f"{candidate_id}.yaml"
-    if not path.exists():
-        raise FileNotFoundError(candidate_id)
-    return load_candidate(path)
+    for path in list_candidate_paths():
+        if path.stem == candidate_id:
+            return load_candidate(path)
+    raise FileNotFoundError(candidate_id)

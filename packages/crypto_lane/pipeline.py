@@ -5,6 +5,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from dataclasses import asdict
 
 _LANE = Path(__file__).resolve().parent
 _REPO = _LANE.parents[1]
@@ -24,6 +25,30 @@ from crypto_lane.src.ingest.mempool_pull import pull_live_mempool, pull_mempool_
 from crypto_lane.src.ingest.normalize import normalize_all
 from crypto_lane.src.ml.candidate_registry import discover_candidates, discover_backtest_configs
 from crypto_lane.src.ml.walk_forward_runner import run_all_smokes, run_smoke
+
+
+def _candidate_model_from_yaml(doc: dict) -> "CandidateModel":
+    from research_pipeline.types import CandidateModel
+
+    return CandidateModel(
+        candidate_id=str(doc.get("candidate_id", "")),
+        model_id=str(doc.get("hypothesis_id") or doc.get("candidate_id", "CRYPTO_CANDIDATE")),
+        strategy_params={
+            "target": doc.get("target"),
+            "horizons": doc.get("horizons") or [],
+            "features": doc.get("features") or [],
+            "validation": doc.get("validation") or {},
+            "backtest": doc.get("backtest") or {},
+        },
+        thesis=str(doc.get("candidate_id") or doc.get("hypothesis_id") or "crypto candidate"),
+        metadata={
+            "asset_class": "CRYPTO",
+            "symbol": str((doc.get("metadata") or {}).get("symbol") or "BTCUSDT"),
+            "hypothesis_id": doc.get("hypothesis_id"),
+            "target": doc.get("target"),
+            "btc_node_required": doc.get("btc_node_required"),
+        },
+    )
 
 
 def cmd_discover(_: argparse.Namespace) -> int:
@@ -148,12 +173,20 @@ def cmd_validate_crypto(args: argparse.Namespace) -> int:
         print(f"Candidate not found: {args.candidate_id}", file=sys.stderr)
         return 1
     from crypto_lane.src.types import repo_root_from_lane
-    catalog = repo_root_from_lane() / "data" / "crypto"
-    report = validate_crypto_candidate(target[0], catalog)
+    catalog = repo_root_from_lane()
+    candidate = _candidate_model_from_yaml(target[0])
+    report = validate_crypto_candidate(candidate, catalog)
     classification = report.result.execution_classification if report.result.error == "" else "NO_EXECUTION"
     report.result.execution_classification = classification
     set_execution_classification(args.candidate_id, classification)
-    print(json.dumps(report, indent=2, default=str))
+    payload = asdict(report)
+    out_dir = repo_root_from_lane() / "research_cards" / "crypto" / args.candidate_id
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "validation_report.json").write_text(
+        json.dumps(payload, indent=2, default=str),
+        encoding="utf-8",
+    )
+    print(json.dumps(payload, indent=2, default=str))
     return 0
 
 

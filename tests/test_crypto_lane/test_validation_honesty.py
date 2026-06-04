@@ -4,7 +4,7 @@ from __future__ import annotations
 import pytest
 
 from crypto_lane.src.ml.walk_forward_runner import (
-    CHI404_ORDER_ACK_STATUS,
+    CRYPTO_EXECUTION_ACK_STATUS,
     benjamini_hochberg,
     deflated_sharpe_cdf,
     deflated_sharpe_ratio,  # backward-compat alias
@@ -62,11 +62,13 @@ def test_benjamini_hochberg_all_above_threshold():
     assert benjamini_hochberg([0.06, 0.06, 0.06]) == [False, False, False]
 
 
-def test_chi404_status_constant_mentions_gap():
-    assert "INSUFFICIENT" in CHI404_ORDER_ACK_STATUS or "12/1000+" in CHI404_ORDER_ACK_STATUS
+def test_crypto_execution_ack_status_constant_mentions_gap():
+    assert "INSUFFICIENT" in CRYPTO_EXECUTION_ACK_STATUS
+    assert "crypto venue" in CRYPTO_EXECUTION_ACK_STATUS
+    assert "Bitcoin node" in CRYPTO_EXECUTION_ACK_STATUS
 
 
-def test_smoke_report_includes_n_trials_and_chi404_status():
+def test_smoke_report_includes_n_trials_and_crypto_execution_status():
     reports = run_all_smokes()
     assert reports, "expected at least one candidate report"
     for report in reports:
@@ -76,7 +78,19 @@ def test_smoke_report_includes_n_trials_and_chi404_status():
         assert "deflated_sharpe_ratio" in report
         assert isinstance(report["deflated_sharpe_ratio"], float)
         assert 0.0 <= report["deflated_sharpe_ratio"] <= 1.0
-        assert "chi404_order_ack_status" in report
-        assert report["chi404_order_ack_status"] == CHI404_ORDER_ACK_STATUS
+        assert "execution_ack_status" in report
+        assert report["execution_ack_status"] == CRYPTO_EXECUTION_ACK_STATUS
+        assert report["execution_ack_scope"] == "crypto_venue_submit_ack"
+        assert report["execution_ack_measured"] is False
+        proxy = report["research_pnl_proxy"]
+        assert proxy["promotion_gate"] is False
+        assert proxy["scope"] == "purged_walk_forward_oos_diagnostic"
+        assert proxy["leakage_controls"]["train_rows_only_for_fit"] is True
+        assert proxy["leakage_controls"]["train_predictions_only_for_threshold"] is True
+        assert proxy["leakage_controls"]["test_rows_only_for_reported_pnl"] is True
+        assert proxy["summary"]["return_proxy_label"] == "event_window_return"
+        assert proxy["summary"]["min_trades_for_sharpe"] == 20
+        assert proxy["summary"]["sharpe_status"] in {"OBSERVED", "INSUFFICIENT_TRADES"}
+        assert "chi404_order_ack_status" not in report
         assert "bh_rejected" in report
         assert isinstance(report["bh_rejected"], bool)

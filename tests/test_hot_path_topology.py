@@ -38,6 +38,19 @@ def test_cmake_lists_hot_path_targets() -> None:
     assert "rithmic_gateway/src/rithmic_adapter.cpp" in root_text or "src/rithmic_adapter.cpp" in gw_text
 
 
+def test_capi_latency_probe_requires_paired_order_ack_evidence() -> None:
+    src = (_REPO / "rithmic_gateway" / "tools" / "rithmic_capi_latency_probe.cpp").read_text(
+        encoding="utf-8"
+    )
+    assert "hft_rithmic_adapter_send_order_with_user_msg" in src
+    assert "steady_now_ns()" in src
+    assert "order_event_matches" in src
+    assert "capi_order_latency_" in src
+    assert "RITHMIC_PROBE_MEASURED_MIN_ACKS" in src
+    assert "order_ack_measured" in src
+    assert "ack_count >= measured_min_acks" in src
+
+
 def test_stack_verify_skips_without_binary(tmp_path: Path) -> None:
     harness = CppStackVerifyHarness(repo_root=tmp_path)
     assert harness.binary_exists() is False

@@ -124,9 +124,11 @@ def _write_passing_robustness_gates(
 
 def test_config_loads_yaml() -> None:
     cfg = _config()
-    assert cfg.campaign_id == "cpi-2024-uat-tight"
+    assert cfg.campaign_id == "autonomous-hft3-catalog-driven"
     assert cfg.data.get("dataset_id") == "databento_es_mbo_v1"
-    assert "ES" in cfg.data.get("symbol_universe", [])
+    assert "MES.v.0" in cfg.data.get("symbol_universe", [])
+    assert cfg.data.get("event_catalog_path") == "packages/data_system/config/events.csv"
+    assert cfg.models.get("catalog_path") == "apps/workbench/config/model_catalog.yaml"
     assert cfg.latency_profile.get("decision_to_send_us") == 80
 
 

@@ -149,6 +149,14 @@ def main() -> None:
                 "shifted_features_forward": True,
                 "randomized_event_times": hid == "CRYPTO_H7",
             },
+            "trader_diagnostics": {
+                "enabled": True,
+                "return_proxy_label": "event_window_return",
+                "position_rule": "prediction_sign",
+                "trade_threshold_quantile": 0.6,
+                "min_trades_for_sharpe": 20,
+                "promotion_gate": False,
+            },
             "promotion": {
                 "require_positive_oos_ic": True,
                 "require_positive_after_cost_pnl": True,
@@ -157,7 +165,7 @@ def main() -> None:
                 "reject_single_regime_dependency": True,
             },
         }
-        cand_dir = ROOT / "models/candidates"
+        cand_dir = ROOT / "packages/crypto_lane/config/candidates"
         cand_dir.mkdir(parents=True, exist_ok=True)
         (cand_dir / f"{cid}.yaml").write_text(yaml.dump(cand, sort_keys=False), encoding="utf-8")
 
@@ -210,7 +218,10 @@ def main() -> None:
         "tests": ["tests/test_crypto_lane/"],
         "no_runtime_dependency": True,
         "integration_points": ["packages/crypto_lane/pipeline.py"],
-        "blocked_items": ["CHI404 hot path"],
+        "blocked_items": [
+            "crypto venue submit-to-ack evidence",
+            "Bitcoin edge packet observation",
+        ],
     }
     (ROOT / "research/hypotheses/crypto_alpha_engine_manifest.yaml").write_text(
         yaml.dump(manifest, sort_keys=False), encoding="utf-8"

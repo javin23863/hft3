@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
@@ -13,29 +11,52 @@ setup_repo_paths()
 
 import streamlit as st
 
-from workbench.src.artifacts.paths import runtime_validation_dir, workbench_runs_dir, artifact_root
+from workbench.src.artifacts.paths import workbench_runs_dir
 
 st.set_page_config(page_title="HFT3 Workbench", layout="wide")
 
 from workbench.ui.analyst_panel import analyst_panel  # noqa: E402
+from workbench.ui.autonomous_panel import render_crypto_run_controls  # noqa: E402
 from workbench.ui.campaign_panel import (  # noqa: E402
     campaign_events,
     campaign_periods,
     init_session,
-    load_campaign_diagnostics,
     model_selector_panel,
     personal_lock_sidebar,
     personal_runs_panel,
 )
 from workbench.ui.workflow_tabs import WORKFLOW_TABS  # noqa: E402
-from workbench.ui.flow_state import campaign_progress_panel, navigate_to_tab, resolve_period_event  # noqa: E402
+from workbench.ui.flow_state import campaign_progress_panel, resolve_period_event  # noqa: E402
+from workbench.src.run.evidence_snapshot import default_source, load_run_evidence  # noqa: E402
+from workbench.ui.evidence_panels import (  # noqa: E402
+    render_autonomous_run,
+    render_backtest_evidence,
+    render_decision_registry,
+    render_latency_evidence,
+    render_registry_data,
+    render_reports_analyst,
+    render_robustness,
+    render_signal_diagnostics,
+    render_system,
+)
 
 init_session(REPO)
 
 with st.sidebar:
     personal_lock_sidebar(REPO)
-    st.caption("Grader checklist: `docs/workbench/GRADER_CHECKLIST.md`")
-    st.caption("Trial CLI: `python scripts/workbench_pipeline_trial.py`")
+    run_sources = ["crypto_lane", "workbench_campaign", "autonomous"]
+    query_source = str(st.query_params.get("source", ""))
+    if query_source in run_sources:
+        st.session_state.wb_run_source = query_source
+    if "wb_run_source" not in st.session_state:
+        st.session_state.wb_run_source = default_source(REPO)
+    st.selectbox(
+        "Run source",
+        run_sources,
+        key="wb_run_source",
+    )
+    st.caption("Campaign CLI: `python -m workbench campaign`")
+    st.caption("Crypto CLI: `python -m workbench crypto-smoke`")
     st.caption("Verify: `powershell -File scripts/verify_workbench.ps1`")
 
 st.title("Microstructure Backtesting Workbench")
@@ -56,12 +77,21 @@ run_labels = [d.name for d in run_dirs]
 selected_model = st.session_state.get("wb_selected_model", "")
 selected_symbol = st.session_state.get("wb_symbol", "MES.v.0")
 selected_campaign = st.session_state.get("wb_active_campaign", "")
+snapshot = load_run_evidence(REPO, st.session_state.wb_run_source, campaign_id=selected_campaign)
 
 with tabs[0]:
-    st.header("Model Selector")
+    if st.session_state.wb_run_source == "crypto_lane":
+        render_crypto_run_controls(REPO)
+        st.divider()
+    render_autonomous_run(snapshot)
+
+with tabs[1]:
+    render_registry_data(snapshot)
+    st.divider()
+    st.subheader("Workbench Campaign Controls")
     selected_model, selected_symbol, selected_campaign = model_selector_panel(REPO)
-    with st.expander("Advanced — legacy single run"):
-        legacy_run = st.selectbox("Legacy single run", [""] + run_labels, key="wb__legacy_run")
+    with st.expander("Recent campaign artifacts"):
+        legacy_run = st.selectbox("Load campaign", [""] + run_labels, key="wb__legacy_run")
         if legacy_run and not selected_campaign:
             selected_campaign = legacy_run
             st.session_state.wb_active_campaign = legacy_run
@@ -83,160 +113,29 @@ if not selected_campaign:
     selected_campaign = st.session_state.get("wb_active_campaign", "")
 
 period_choice, event_choice = resolve_period_event(REPO, selected_campaign)
-campaign_summary_path = runs_dir / selected_campaign / "summary.json" if selected_campaign else None
-
-diag_data = load_campaign_diagnostics(REPO, selected_campaign, period_choice, event_choice)
-if diag_data is None and selected_campaign:
-    diag_data = load_campaign_diagnostics(REPO, selected_campaign, period_choice)
-if diag_data is None and selected_campaign:
-    diag_data = load_campaign_diagnostics(REPO, selected_campaign)
-
-with tabs[1]:
-    st.header("Backtest Results")
-    if not selected_model:
-        st.info("Choose a model on **Model Selector**, then **Set primary** or **Run campaign**.")
-    elif diag_data:
-        rep = diag_data if "net_pnl" in diag_data else {}
-        if "event_results" in diag_data:
-            st.dataframe(pd.DataFrame(diag_data["event_results"]), use_container_width=True)
-        if rep:
-            st.metric("Net PnL", rep.get("net_pnl", 0))
-            st.metric("Trades", rep.get("num_trades", 0))
-            pnl_lat = rep.get("pnl_by_latency", {})
-            if pnl_lat:
-                st.line_chart(pd.Series(pnl_lat))
-    elif selected_campaign:
-        st.info("Campaign running — open this tab as events complete (~5 min per event on Windows).")
-    else:
-        st.info("Click **Run campaign** on Model Selector (trial mode: available NPZ only).")
 
 with tabs[2]:
-    st.header("Latency Viability")
-    if diag_data and "breakeven_us" in diag_data:
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Break-even (µs)", f"{diag_data.get('breakeven_us', 0):.0f}")
-        c2.metric("C++ p99 (µs)", f"{diag_data.get('measured_production_p99_us', 0):.0f}")
-        c3.metric("Buffer (µs)", f"{diag_data.get('latency_profitability_buffer_us', 0):.0f}")
-        st.caption(f"Survives C++ delay: {diag_data.get('survives_cpp_execution_delay')}")
-    elif diag_data:
-        st.write(f"Period gate pass: **{diag_data.get('gate_pass')}** | survives_cpp: **{diag_data.get('survives_cpp')}**")
-    elif selected_campaign:
-        st.info("Latency metrics appear when the first event completes.")
-    else:
-        st.info("Run a campaign from Model Selector.")
+    render_backtest_evidence(snapshot)
 
 with tabs[3]:
-    st.header("Signal Diagnostics")
-    if diag_data and diag_data.get("composition"):
-        st.subheader("Campaign composition")
-        st.json(diag_data.get("composition"))
-    if selected_campaign and period_choice and event_choice:
-        trace_path = (
-            runs_dir
-            / selected_campaign
-            / "periods"
-            / period_choice.replace(" ", "_")
-            / "events"
-            / event_choice
-            / "composition_trace.json"
-        )
-        if trace_path.is_file():
-            st.subheader("Composition trace (event)")
-            st.json(json.loads(trace_path.read_text(encoding="utf-8")))
-    st.caption("PDF OFI/VPIN and HYP signal histograms from run artifacts")
+    render_latency_evidence(snapshot)
 
 with tabs[4]:
-    st.header("Robustness")
-    wfc_summary_path = runs_dir / selected_campaign / "wfc" / "wfc_summary.json" if selected_campaign else None
-    wfc_data = {}
-    if wfc_summary_path and wfc_summary_path.is_file():
-        wfc_data = json.loads(wfc_summary_path.read_text(encoding="utf-8"))
-    elif campaign_summary_path and campaign_summary_path.is_file():
-        wfc_data = json.loads(campaign_summary_path.read_text(encoding="utf-8")).get("wfc", {})
-
-    if wfc_data:
-        st.subheader("Walk Forward Correlation (WFC)")
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("WFC status", wfc_data.get("wfc_status", "—"))
-        c2.metric("Pearson", f"{wfc_data.get('pearson', 0):.3f}")
-        c3.metric("Spearman", f"{wfc_data.get('spearman', 0):.3f}")
-        c4.metric("Fold consistency", f"{wfc_data.get('positive_fold_ratio', 0):.0%}")
-        if wfc_data.get("fold_correlations"):
-            with st.expander("Per-fold correlations"):
-                st.json(wfc_data["fold_correlations"])
-        if wfc_data.get("rejection_reasons"):
-            st.warning("WFC rejection: " + "; ".join(wfc_data["rejection_reasons"]))
-        scatter = runs_dir / selected_campaign / "wfc" / "is_vs_oos_scatter.png"
-        if scatter.is_file():
-            st.image(str(scatter), caption="IS vs OOS parameter matrix")
-    if diag_data:
-        st.write(f"Robustness passed: **{diag_data.get('robustness_passed', 'n/a')}**")
-    elif not selected_campaign:
-        st.info("Run a campaign from Model Selector.")
+    render_signal_diagnostics(snapshot)
 
 with tabs[5]:
-    st.header("Optimisation")
-    promote = False
-    if campaign_summary_path and campaign_summary_path.is_file():
-        promote = bool(json.loads(campaign_summary_path.read_text(encoding="utf-8")).get("promote_candidate"))
-    elif diag_data:
-        promote = bool(diag_data.get("promote_candidate"))
-    st.button("Promote Candidate", disabled=not promote, key="wb__promote_candidate")
+    render_robustness(snapshot)
 
 with tabs[6]:
-    st.header("Report")
-
-    def _artifact_base() -> Path | None:
-        if not selected_campaign:
-            return None
-        if period_choice and event_choice:
-            return (
-                runs_dir
-                / selected_campaign
-                / "periods"
-                / period_choice.replace(" ", "_")
-                / "events"
-                / event_choice
-            )
-        legacy = runs_dir / selected_campaign
-        if legacy.is_dir() and (legacy / "diagnostics.json").is_file():
-            return legacy
-        return None
-
-    art = _artifact_base()
-    if art:
-        md_path = art / "report.md"
-        if md_path.is_file():
-            st.markdown(md_path.read_text(encoding="utf-8"))
-    elif selected_campaign:
-        st.info("Campaign in progress — reports appear per event.")
-    else:
-        st.info("Run a campaign from Model Selector.")
+    render_decision_registry(snapshot)
 
 with tabs[7]:
-    st.header("Analyst")
+    render_reports_analyst(snapshot)
+    st.divider()
     analyst_panel(REPO, selected_campaign, period_choice, event_choice)
 
 with tabs[8]:
-    st.header("System — certification & runtime")
-    vdir = runtime_validation_dir()
-    if vdir.is_dir():
-        for name in (
-            "certification_registry.json",
-            "fast_gate_report.json",
-            "backtester_certification_scorecard.json",
-            "champion_promotion_gate_report.json",
-        ):
-            fp = vdir / name
-            if fp.is_file():
-                with st.expander(name):
-                    st.json(json.loads(fp.read_text(encoding="utf-8")))
-    else:
-        st.info("No runtime/validation artifacts yet.")
-    legacy_hyp = artifact_root() / "all_hypotheses.json"
-    if legacy_hyp.is_file():
-        with st.expander("Legacy — all_hypotheses.json"):
-            st.json(json.loads(legacy_hyp.read_text(encoding="utf-8")))
+    render_system(snapshot, REPO)
 
 with tabs[9]:
     st.header("Personal Runs")

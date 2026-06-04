@@ -17,10 +17,10 @@
 # Usage:
 #   python hft3-research.py --config configs/research/autonomous_hft3.yaml
 
-campaign_id: "cpi-2024-uat-tight"
+campaign_id: "autonomous-hft3-catalog-driven"
 
 # Optional: a Phase 3 intake bundle under research_inputs/{id}/
-# research_input: "research_inputs/cpi-mean-reversion"
+# research_input: "research_inputs/catalog-driven-example"
 
 data:
   dataset_id: "databento_es_mbo_v1"
@@ -33,11 +33,9 @@ data:
   # AGGREGATED_BARS, SYNTHETIC_OR_DEGRADED.
   requested: "L3_MBO"
   resolved: "L3_MBO"
-  symbol_universe: ["ES", "MES"]
-  event_windows:
-    - event_id: "CPI_2024_09_11_TIGHT"
-      start_ns: 1725600000000000000
-      end_ns:   1725772800000000000
+  symbol_universe: ["MES.v.0", "MNQ.v.0", "ES.v.0", "NQ.v.0", "ZN.v.0", "ZB.v.0", "RTY.v.0"]
+  event_catalog_path: "packages/data_system/config/events.csv"
+  event_windows: []
 
 latency_profile:
   decision_to_send_us: 80
@@ -52,9 +50,9 @@ features:
   feature_set_id: "core_64_v1"
 
 models:
-  alpha: ["HYP_1", "HYP_5"]
-  defensives: ["VPIN_TOXICITY", "QUANTUM_SPREAD_DEFENSE"]
-  structurals: ["DEALER_HEDGING"]
+  catalog_path: "apps/workbench/config/model_catalog.yaml"
+  select:
+    roles: ["alpha", "defensive", "hybrid"]
 
 robustness:
   monte_carlo:
@@ -67,6 +65,16 @@ robustness:
 scoring:
   min_sharpe: 0.5
   max_drawdown: -0.10
+
+workbench:
+  # Disabled in the example config so scaffold/honesty tests stay lightweight.
+  # Production autonomous runs must enable this and let the configured
+  # model/symbol universe drive Workbench campaigns.
+  enabled: false
+  audit_grade: true
+  allow_partial: false
+  trial_mode: false
+  chi404_summary: "runtime/latency_reports/latency_summary.json"
 
 registry:
   promote_on: "PROMOTE"   # only PROMOTE writes to the certification registry

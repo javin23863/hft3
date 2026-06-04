@@ -8,6 +8,7 @@ import json
 import os
 import sys
 import time
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
@@ -263,6 +264,14 @@ def main() -> int:
         action="store_true",
         help="Apply VectorBT cheap filter before per-model campaign",
     )
+    parser.add_argument(
+        "--out-dir",
+        default=None,
+        help=(
+            "Directory for model_symbol_sweep.json. Defaults to runtime/reports "
+            "for real runs and a temp directory for dry-runs."
+        ),
+    )
     args = parser.parse_args()
 
     if not args.backfill and not args.sweep:
@@ -278,7 +287,14 @@ def main() -> int:
     )
     trial_mode = not args.full_wfc
 
-    out_dir = _REPO / "runtime" / "reports"
+    if args.out_dir:
+        out_dir = Path(args.out_dir)
+        if not out_dir.is_absolute():
+            out_dir = _REPO / out_dir
+    elif args.dry_run:
+        out_dir = Path(tempfile.gettempdir()) / "hft3" / "model_symbol_sweep"
+    else:
+        out_dir = _REPO / "runtime" / "reports"
     out_dir.mkdir(parents=True, exist_ok=True)
     payload: Dict[str, Any] = {
         "symbols": symbols,

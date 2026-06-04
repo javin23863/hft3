@@ -87,7 +87,7 @@ def analyst_panel(
     art = event_artifact_dir(repo, campaign_id, period, event_id)
 
     if not campaign_id:
-        st.info("Select a model in **Model Selector** to start a walk-forward campaign.")
+        st.info("Select a model in **Registry & Data** to start a walk-forward campaign.")
         return
     if not art:
         st.info(

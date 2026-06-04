@@ -9,6 +9,8 @@ from typing import Any, Dict, List, Optional
 from research_pipeline.types import CandidateModel
 
 from backtest_pipeline.src.asset_class_routing import (
+    CRYPTO_PERP_TO_KRAKEN_SPOT,
+    CRYPTO_PERP_TO_L2,
     ExecutionCapability,
     ValidationPath,
     _crypto_l2_npz_path,
@@ -18,8 +20,6 @@ from backtest_pipeline.src.asset_class_routing import (
 from backtest_pipeline.src.crypto_hft_builder import (
     build_binance_hftbacktest,
     build_kraken_hftbacktest,
-    CRYPTO_PERP_TO_L2,
-    CRYPTO_PERP_TO_KRAKEN_SPOT,
 )
 
 from crypto_lane.src.validation.crypto_execution_validator import (

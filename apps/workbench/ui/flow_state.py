@@ -161,6 +161,7 @@ def start_campaign_for_selection(
     st.session_state.wb_proc = proc
     st.session_state.wb_active_campaign = cid
     st.session_state.wb_selected_model = model_id
+    st.session_state.wb_selection_explicit = True
     st.session_state.wb_symbol = symbol
     st.session_state.wb_campaign_state = "running"
     st.session_state.wb_auto_period = ""
@@ -172,7 +173,7 @@ def start_campaign_for_selection(
     st.session_state.wb_chat_messages = []
     st.session_state.wb_chat_context_key = ""
     set_control(repo, cid, "run")
-    navigate_to_tab("Backtest Results")
+    navigate_to_tab("Backtest Evidence")
     return cid
 
 

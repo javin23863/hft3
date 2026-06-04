@@ -82,6 +82,9 @@ def main(argv: list[str] | None = None) -> int:
     status_p = sub.add_parser("status", help="Current state snapshot — campaigns, data, certification")
     status_p.add_argument("--json", action="store_true")
 
+    crypto_p = sub.add_parser("crypto-smoke", help="Run observable crypto candidate smoke loop")
+    crypto_p.add_argument("--candidate", default=None, help="Optional candidate_id filter")
+
     args = parser.parse_args(argv)
 
     if args.command == "list":
@@ -127,30 +130,16 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if result["all_ok"] else 1
 
     if args.command == "download":
-        from workbench.src.json_output import emit_json
-
         from apps.workbench.scripts.backfill_catalog import main as backfill_main
 
-        repo = _REPO
-        model = args.model
-        symbol = args.symbol
-        dry_run = args.dry_run
-        max_cost = args.max_cost_usd
-
-        class FakeArgs:
-            pass
-
-        fa = FakeArgs()
-        fa.model = model
-        fa.symbol = symbol
-        fa.dry_run = dry_run
-        fa.download_missing = not dry_run
-        fa.max_cost_usd = max_cost
-
-        result = backfill_main(fa)
+        argv = ["--model", args.model, "--symbol", args.symbol, "--max-cost-usd", str(args.max_cost_usd)]
+        if args.dry_run:
+            argv.append("--dry-run")
+        else:
+            argv.append("--download-missing")
         if getattr(args, "json", False):
-            emit_json({"model": model, "symbol": symbol, "dry_run": dry_run, "result": str(result)})
-        return 0
+            argv.append("--json")
+        return backfill_main(argv)
 
     if args.command == "status":
         from workbench.src.json_output import emit_json
@@ -175,6 +164,13 @@ def main(argv: list[str] | None = None) -> int:
             for k, v in result.items():
                 print(f"{k}: {v}")
         return 0
+
+    if args.command == "crypto-smoke":
+        from workbench.src.run.crypto_smoke_runner import run_crypto_smoke
+
+        result = run_crypto_smoke(_REPO, candidate_id=args.candidate)
+        print(json.dumps(result, indent=2, default=str))
+        return 0 if result.get("state") in {"completed", "blocked"} else 1
 
     if args.command == "campaign":
         from workbench.src.run.campaign_runner import record_sim_shadow, run_campaign

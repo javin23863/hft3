@@ -201,6 +201,122 @@ static const char* last_error(void* handle) {
     return err ? err : "";
 }
 
+struct LatencyRow {
+    int index;
+    std::string status;
+    std::string user_msg;
+    uint64_t send_ns;
+    uint64_t ack_ns;
+    double latency_us;
+    uint64_t broker_order_id;
+    char event_type;
+};
+
+static std::string csv_escape(const std::string& s) {
+    bool quote = false;
+    for (char c : s) {
+        if (c == ',' || c == '"' || c == '\n' || c == '\r') {
+            quote = true;
+            break;
+        }
+    }
+    if (!quote) return s;
+    std::string out = "\"";
+    for (char c : s) {
+        if (c == '"') out += "\"\"";
+        else out += c;
+    }
+    out += "\"";
+    return out;
+}
+
+static std::string json_escape(const std::string& s) {
+    std::string out;
+    out.reserve(s.size() + 8);
+    for (char c : s) {
+        switch (c) {
+            case '\\': out += "\\\\"; break;
+            case '"': out += "\\\""; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            default: out += c; break;
+        }
+    }
+    return out;
+}
+
+static void write_latency_rows(const std::string& path,
+                               const std::string& run_id,
+                               const char* symbol,
+                               const char* exchange,
+                               const std::vector<LatencyRow>& rows) {
+    std::ofstream f(path);
+    if (!f.is_open()) return;
+    f << "run_id,index,symbol,exchange,status,user_msg,send_monotonic_ns,"
+         "ack_monotonic_ns,latency_us,broker_order_id,event_type\n";
+    for (const LatencyRow& row : rows) {
+        f << csv_escape(run_id) << ','
+          << row.index << ','
+          << csv_escape(symbol ? symbol : "") << ','
+          << csv_escape(exchange ? exchange : "") << ','
+          << csv_escape(row.status) << ','
+          << csv_escape(row.user_msg) << ','
+          << row.send_ns << ','
+          << row.ack_ns << ','
+          << row.latency_us << ','
+          << row.broker_order_id << ','
+          << row.event_type << '\n';
+    }
+}
+
+static void write_latency_summary(const std::string& path,
+                                  const std::string& run_id,
+                                  const char* symbol,
+                                  const char* exchange,
+                                  int ack_count,
+                                  int reject_count,
+                                  int failure_count,
+                                  int timeout_count,
+                                  int cancel_submit_count,
+                                  int measured_min_acks,
+                                  const std::vector<double>& sorted_us,
+                                  const std::string& rows_path) {
+    std::ofstream f(path);
+    if (!f.is_open()) return;
+    double sum = 0.0;
+    for (double v : sorted_us) sum += v;
+    bool has_samples = !sorted_us.empty();
+    bool measured = ack_count >= measured_min_acks;
+    f << "{\n";
+    f << "  \"run_id\": \"" << json_escape(run_id) << "\",\n";
+    f << "  \"source\": \"capi_gateway_probe\",\n";
+    f << "  \"symbol\": \"" << json_escape(symbol ? symbol : "") << "\",\n";
+    f << "  \"exchange\": \"" << json_escape(exchange ? exchange : "") << "\",\n";
+    f << "  \"rows_path\": \"" << json_escape(rows_path) << "\",\n";
+    f << "  \"paired_count\": " << ack_count << ",\n";
+    f << "  \"measured_min_acks\": " << measured_min_acks << ",\n";
+    f << "  \"order_ack_measured\": " << (measured ? "true" : "false") << ",\n";
+    f << "  \"ack\": " << ack_count << ",\n";
+    f << "  \"reject\": " << reject_count << ",\n";
+    f << "  \"failure\": " << failure_count << ",\n";
+    f << "  \"timeout\": " << timeout_count << ",\n";
+    f << "  \"cancel_submit\": " << cancel_submit_count << ",\n";
+    if (has_samples) {
+        f << "  \"order_submit_to_ack_us\": {\n";
+        f << "    \"min_us\": " << sorted_us.front() << ",\n";
+        f << "    \"avg_us\": " << (sum / static_cast<double>(sorted_us.size())) << ",\n";
+        f << "    \"p50_us\": " << pct_us(sorted_us, 50.0) << ",\n";
+        f << "    \"p90_us\": " << pct_us(sorted_us, 90.0) << ",\n";
+        f << "    \"p99_us\": " << pct_us(sorted_us, 99.0) << ",\n";
+        f << "    \"max_us\": " << sorted_us.back() << "\n";
+        f << "  }\n";
+    } else {
+        f << "  \"order_submit_to_ack_us\": null\n";
+    }
+    f << "}\n";
+}
+
 int main() {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     std::setvbuf(stderr, nullptr, _IONBF, 0);
@@ -305,6 +421,7 @@ int main() {
     const int qty = get_env_int_or("RITHMIC_PROBE_ORDER_QTY", 1);
     const int timeout_ms = get_env_int_or("RITHMIC_PROBE_ORDER_TIMEOUT_MS", 10000);
     const int interval_us = get_env_int_or("RITHMIC_PROBE_ORDER_INTERVAL_US", 0);
+    const int measured_min_acks = get_env_int_or("RITHMIC_PROBE_MEASURED_MIN_ACKS", 1000);
     const bool cancel_after_ack = get_env_bool_or("RITHMIC_PROBE_CANCEL_AFTER_ACK", true);
     const bool debug_events = get_env_bool_or("RITHMIC_PROBE_DEBUG_EVENTS", false);
     const bool skip_external_warm = get_env_bool_or("RITHMIC_PROBE_SKIP_EXTERNAL_WARM", false);
@@ -334,6 +451,8 @@ int main() {
 
     std::vector<double> latencies_us;
     latencies_us.reserve(static_cast<size_t>(count));
+    std::vector<LatencyRow> latency_rows;
+    latency_rows.reserve(static_cast<size_t>(count));
     int ack_count = 0;
     int reject_count = 0;
     int failure_count = 0;
@@ -350,6 +469,9 @@ int main() {
         rc = hft_rithmic_adapter_send_order_with_user_msg(handle, symbol, side, qty, price, user_msg.c_str());
         if (rc != 0) {
             ++failure_count;
+            latency_rows.push_back({
+                i + 1, "send_failed", user_msg, send_ns, 0, 0.0, 0, 'X'
+            });
             std::printf("ORDER_RESULT index=%d status=send_failed rc=%d error=%s\n",
                         i + 1, rc, last_error(handle));
             continue;
@@ -392,6 +514,9 @@ int main() {
             if (ev.event_type == 'A') {
                 ++ack_count;
                 latencies_us.push_back(latency_us);
+                latency_rows.push_back({
+                    i + 1, "ack", user_msg, send_ns, ack_ns, latency_us, ev.order_id, ev.event_type
+                });
                 if (cancel_after_ack && ev.order_id != 0) {
                     std::string oid = std::to_string(ev.order_id);
                     if (hft_rithmic_adapter_cancel_order(handle, oid.c_str()) == 0) {
@@ -403,11 +528,17 @@ int main() {
                             static_cast<unsigned long long>(ev.order_id));
             } else if (ev.event_type == 'R') {
                 ++reject_count;
+                latency_rows.push_back({
+                    i + 1, "reject", user_msg, send_ns, ack_ns, latency_us, ev.order_id, ev.event_type
+                });
                 std::printf("ORDER_RESULT index=%d status=reject latency_us=%.3f broker_order_id=%llu\n",
                             i + 1, latency_us,
                             static_cast<unsigned long long>(ev.order_id));
             } else if (ev.event_type == 'X') {
                 ++failure_count;
+                latency_rows.push_back({
+                    i + 1, "failure", user_msg, send_ns, ack_ns, latency_us, ev.order_id, ev.event_type
+                });
                 std::printf("ORDER_RESULT index=%d status=failure latency_us=%.3f broker_order_id=%llu\n",
                             i + 1, latency_us,
                             static_cast<unsigned long long>(ev.order_id));
@@ -419,6 +550,9 @@ int main() {
         }
         if (!finished) {
             ++timeout_count;
+            latency_rows.push_back({
+                i + 1, "timeout", user_msg, send_ns, 0, 0.0, 0, ' '
+            });
             std::printf("ORDER_RESULT index=%d status=timeout\n", i + 1);
         }
         if (i + 1 < count && interval_us > 0) {
@@ -428,6 +562,23 @@ int main() {
     }
 
     std::sort(latencies_us.begin(), latencies_us.end());
+    const std::string rows_path = repo + "/runtime/latency_reports/capi_order_latency_" + run_id + ".csv";
+    const std::string summary_path = repo + "/runtime/latency_reports/capi_order_latency_" + run_id + ".json";
+    write_latency_rows(rows_path, run_id, symbol, exchange, latency_rows);
+    write_latency_summary(
+        summary_path,
+        run_id,
+        symbol,
+        exchange,
+        ack_count,
+        reject_count,
+        failure_count,
+        timeout_count,
+        cancel_submit_count,
+        measured_min_acks,
+        latencies_us,
+        rows_path
+    );
     if (!latencies_us.empty()) {
         double sum = 0.0;
         for (double v : latencies_us) sum += v;
@@ -439,11 +590,16 @@ int main() {
                     latencies_us.front(), sum / static_cast<double>(latencies_us.size()),
                     pct_us(latencies_us, 50.0), pct_us(latencies_us, 90.0),
                     pct_us(latencies_us, 99.0), latencies_us.back());
+        std::printf("CPP_CAPI_ORDER_LATENCY_FILES rows=%s summary=%s order_ack_measured=%s\n",
+                    rows_path.c_str(), summary_path.c_str(),
+                    ack_count >= measured_min_acks ? "true" : "false");
     } else {
         std::printf("CPP_CAPI_ORDER_LATENCY_SUMMARY run_id=%s count=0 ack=%d reject=%d"
                     " failure=%d timeout=%d cancel_submit=%d\n",
                     run_id.c_str(), ack_count, reject_count, failure_count,
                     timeout_count, cancel_submit_count);
+        std::printf("CPP_CAPI_ORDER_LATENCY_FILES rows=%s summary=%s order_ack_measured=false\n",
+                    rows_path.c_str(), summary_path.c_str());
     }
 
     hft_rithmic_adapter_disconnect(handle);

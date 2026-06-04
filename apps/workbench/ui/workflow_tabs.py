@@ -1,14 +1,14 @@
 """Workflow tab order (no heavy imports — safe for Streamlit load)."""
 
 WORKFLOW_TABS = [
-    "Model Selector",
-    "Backtest Results",
-    "Latency Viability",
+    "Autonomous Run",
+    "Registry & Data",
+    "Backtest Evidence",
+    "Latency Evidence",
     "Signal Diagnostics",
-    "Robustness",
-    "Optimisation",
-    "Report",
-    "Analyst",
+    "Walk-Forward & Robustness",
+    "Decision & Registry",
+    "Reports & Analyst",
     "System",
     "Personal Runs",
 ]

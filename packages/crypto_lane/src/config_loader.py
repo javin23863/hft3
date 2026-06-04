@@ -33,8 +33,14 @@ def load_manifest(path: str | Path | None = None) -> dict[str, Any]:
 
 
 def list_candidate_paths(candidates_dir: Path | None = None) -> list[Path]:
-    root = candidates_dir or (repo_root_from_lane() / "models" / "candidates")
-    return sorted(root.glob("crypto_h*.yaml"))
+    if candidates_dir is not None:
+        return sorted(candidates_dir.glob("crypto_h*.yaml"))
+    root = repo_root_from_lane() / "packages" / "crypto_lane" / "config" / "candidates"
+    paths = sorted(root.glob("crypto_h*.yaml"))
+    if paths:
+        return paths
+    legacy = repo_root_from_lane() / "models" / "candidates"
+    return sorted(legacy.glob("crypto_h*.yaml"))
 
 
 def list_backtest_config_paths(configs_dir: Path | None = None) -> list[Path]:

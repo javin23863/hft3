@@ -174,15 +174,13 @@ class CampaignConfig:
     Schema (see `configs/research/autonomous_hft3.yaml` for an example):
 
     ```yaml
-    campaign_id: "cpi-2024-tight"
+    campaign_id: "autonomous-research-run"
     research_input: null  # or path to a research_inputs/{id}/ bundle
     data:
       dataset_id: "databento_es_mbo_v1"
-      symbol_universe: ["ES", "MES"]
-      event_windows:
-        - event_id: "CPI_2024_09_11_TIGHT"
-          start_ns: 1725600000000000000
-          end_ns:   1725772800000000000
+      symbol_universe: ["SYMBOL_FROM_CONFIG"]
+      event_catalog_path: "packages/data_system/config/events.csv"
+      event_windows: []  # optional explicit override
     latency_profile:
       decision_to_send_us: 80
       send_to_ack_us: 200
@@ -190,15 +188,19 @@ class CampaignConfig:
     features:
       feature_set_id: "core_64_v1"
     models:
-      alpha: ["HYP_1", "HYP_5"]
-      defensives: ["VPIN_TOXICITY", "QUANTUM_SPREAD_DEFENSE"]
-      structurals: ["DEALER_HEDGING"]
+      catalog_path: "apps/workbench/config/model_catalog.yaml"
+      select:
+        roles: ["alpha", "defensive", "hybrid"]
     robustness:
       monte_carlo: {trials: 1000, sharpe_min: 0.5}
       walk_forward: {folds: 5, embargo_ns: 3600000000000}
     scoring:
       min_sharpe: 0.5
       max_drawdown: -0.10
+    workbench:
+      enabled: false
+      allow_partial: false
+      trial_mode: false
     registry:
       promote_on: "PROMOTE"   # REJECT | QUARANTINE | PROMOTE
     output:
@@ -213,6 +215,7 @@ class CampaignConfig:
     models: Dict[str, Any] = field(default_factory=dict)
     robustness: Dict[str, Any] = field(default_factory=dict)
     scoring: Dict[str, Any] = field(default_factory=dict)
+    workbench: Dict[str, Any] = field(default_factory=dict)
     registry: Dict[str, Any] = field(default_factory=dict)
     output: Dict[str, Any] = field(default_factory=dict)
     research_input: Optional[str] = None
@@ -232,6 +235,7 @@ class CampaignConfig:
             models=dict(raw.get("models", {})),
             robustness=dict(raw.get("robustness", {})),
             scoring=dict(raw.get("scoring", {})),
+            workbench=dict(raw.get("workbench", {})),
             registry=dict(raw.get("registry", {})),
             output=dict(raw.get("output", {})),
             research_input=raw.get("research_input"),
@@ -246,10 +250,10 @@ class CampaignConfig:
             errors.append("data.dataset_id is required")
         if not self.data.get("symbol_universe"):
             errors.append("data.symbol_universe must be non-empty")
-        if not self.data.get("event_windows"):
-            errors.append("data.event_windows must contain at least one event")
-        if not self.models.get("alpha"):
-            errors.append("models.alpha must contain at least one model id")
+        if not self.data.get("event_windows") and not self.data.get("event_catalog_path"):
+            errors.append("data.event_windows or data.event_catalog_path must provide events")
+        if not self.models.get("alpha") and not self.models.get("catalog_path"):
+            errors.append("models.alpha or models.catalog_path must provide candidate models")
         return errors
 
 
@@ -451,6 +455,141 @@ class AutonomousRunner:
         self._data_resolution_tag = tag
         self._data_eligibility_gate = to_gate_result(tag)
 
+    def _repo_relative_path(self, raw: Any) -> Optional[Path]:
+        if raw is None or str(raw).strip() == "":
+            return None
+        path = Path(str(raw))
+        if path.is_absolute():
+            return path
+        local = self.root / path
+        if local.is_file():
+            return local
+        canonical = repo_root() / path
+        return canonical if canonical.is_file() else local
+
+    def _catalog_entries(self) -> list[Any]:
+        if not self.config.models.get("catalog_path"):
+            return []
+        try:
+            from apps.workbench.src.registry.model_catalog import load_catalog
+
+            return list(load_catalog(self.root).values())
+        except Exception:
+            path = self._repo_relative_path(self.config.models.get("catalog_path"))
+            if path is None or not path.is_file():
+                return []
+            raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            entries = []
+            for model_id, cfg in raw.items():
+                if model_id == "defaults" or not isinstance(cfg, dict):
+                    continue
+                entries.append({
+                    "model_id": model_id,
+                    "role": cfg.get("role", "alpha"),
+                    "blocks_trade": bool(cfg.get("blocks_trade", False)),
+                })
+            return entries
+
+    def _selected_model_ids(self, explicit_key: str, role_name: str) -> list[str]:
+        explicit = self.config.models.get(explicit_key) or []
+        if explicit:
+            return [str(model_id) for model_id in explicit]
+
+        select = self.config.models.get("select") or {}
+        roles = set(str(role) for role in select.get("roles", []))
+        if roles and role_name not in roles:
+            return []
+
+        entries = self._catalog_entries()
+        selected: list[str] = []
+        for entry in entries:
+            if isinstance(entry, dict):
+                model_id = str(entry.get("model_id", ""))
+                role = str(entry.get("role", ""))
+                blocks_trade = bool(entry.get("blocks_trade", False))
+            else:
+                model_id = str(getattr(entry, "model_id", ""))
+                role = str(getattr(entry, "role", ""))
+                blocks_trade = bool(getattr(entry, "blocks_trade", False))
+            if not model_id or role != role_name:
+                continue
+            if role_name == "alpha" and blocks_trade:
+                continue
+            selected.append(model_id)
+
+        max_key = f"max_{explicit_key}"
+        max_count = int(select.get(max_key, select.get("max_candidates", 0)) or 0)
+        selected = sorted(dict.fromkeys(selected))
+        if max_count > 0:
+            selected = selected[:max_count]
+        return selected
+
+    def _alpha_ids(self) -> list[str]:
+        return self._selected_model_ids("alpha", "alpha")
+
+    def _defensive_ids(self) -> list[str]:
+        return self._selected_model_ids("defensives", "defensive")
+
+    def _structural_ids(self) -> list[str]:
+        return self._selected_model_ids("structurals", "hybrid")
+
+    @staticmethod
+    def _epoch_ns(value: Any) -> Optional[int]:
+        if value is None:
+            return None
+        if isinstance(value, (int, float)):
+            return int(value)
+        if hasattr(value, "timestamp"):
+            return int(value.timestamp() * 1_000_000_000)
+        try:
+            parsed = datetime.fromisoformat(str(value))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return int(parsed.timestamp() * 1_000_000_000)
+        except ValueError:
+            return None
+
+    def _resolved_event_windows(self) -> list[dict[str, Any]]:
+        explicit = list(self.config.data.get("event_windows") or [])
+        if explicit:
+            return explicit
+
+        catalog_path = self._repo_relative_path(
+            self.config.data.get("event_catalog_path") or self.config.data.get("events_csv")
+        )
+        if catalog_path is None or not catalog_path.is_file():
+            return []
+
+        from data_system.src.events_parser import load_and_parse_events
+
+        df = load_and_parse_events(str(catalog_path))
+        symbol_filter = set(str(s) for s in self.config.data.get("symbol_universe", []))
+        windows: list[dict[str, Any]] = []
+        for _, row in df.iterrows():
+            parsed_symbols = tuple(str(s) for s in row.get("parsed_symbols", []))
+            if symbol_filter and not symbol_filter.intersection(parsed_symbols):
+                continue
+            start_ns = self._epoch_ns(row.get("start_utc"))
+            end_ns = self._epoch_ns(row.get("end_utc"))
+            if start_ns is None or end_ns is None:
+                continue
+            windows.append({
+                "event_id": str(row.get("event_id", "")),
+                "event_type": str(row.get("event_type", "")),
+                "window_name": str(row.get("window_name", "")),
+                "release_date": str(row.get("release_date", "")),
+                "start_ns": start_ns,
+                "end_ns": end_ns,
+                "symbols": list(parsed_symbols),
+                "source": str(row.get("source", "")),
+                "catalog_path": str(catalog_path),
+            })
+
+        max_count = int(self.config.data.get("max_event_windows", 0) or 0)
+        if max_count > 0:
+            windows = windows[:max_count]
+        return windows
+
     # --- per-stage runners ---
 
     def stage_load_config(self) -> Path:
@@ -475,6 +614,7 @@ class AutonomousRunner:
                     "models": self.config.models,
                     "robustness": self.config.robustness,
                     "scoring": self.config.scoring,
+                    "workbench": self.config.workbench,
                     "registry": self.config.registry,
                     "output": self.config.output,
                     "research_input": self.config.research_input,
@@ -514,8 +654,9 @@ class AutonomousRunner:
         requested = data_cfg.get("requested") or data_cfg.get("resolution", "L3_MBO")
         resolved = data_cfg.get("resolved") or data_cfg.get("resolution", "L3_MBO")
 
+        event_windows = self._resolved_event_windows()
         time_windows: list[tuple[int, int]] = []
-        for w in data_cfg.get("event_windows", []):
+        for w in event_windows:
             s = w.get("start_ns")
             e = w.get("end_ns")
             if s is not None and e is not None:
@@ -536,7 +677,9 @@ class AutonomousRunner:
         lineage = {
             "dataset_id": data_cfg.get("dataset_id"),
             "symbol_universe": data_cfg.get("symbol_universe", []),
-            "event_windows": data_cfg.get("event_windows", []),
+            "event_windows": event_windows,
+            "event_catalog_path": data_cfg.get("event_catalog_path"),
+            "event_window_source": "config" if data_cfg.get("event_windows") else "catalog",
             "data_source": data_cfg.get("source", "databento"),
             "data_resolution": resolved,
             "requested_data_class": requested,
@@ -584,9 +727,9 @@ class AutonomousRunner:
         # Build combinations data-driven
         from apps.workbench.src.core.defensive import MODEL_COMBINATIONS
 
-        alpha_ids = self.config.models.get("alpha", [])
-        defensive_ids = self.config.models.get("defensives", [])
-        structural_ids = self.config.models.get("structurals", [])
+        alpha_ids = self._alpha_ids()
+        defensive_ids = self._defensive_ids()
+        structural_ids = self._structural_ids()
         combinations: list[dict[str, Any]] = []
         for combo in MODEL_COMBINATIONS:
             combo_defensives = [d for d in defensive_ids if d in combo["defensives"]]
@@ -616,7 +759,7 @@ class AutonomousRunner:
         else:
             ref = {
                 "source": "auto",
-                "alpha_ids": self.config.models.get("alpha", []),
+                "alpha_ids": self._alpha_ids(),
                 "campaign_id": self.config.campaign_id,
             }
         path = self._write_artifact("research_input_reference.json", ref)
@@ -628,39 +771,120 @@ class AutonomousRunner:
         if self._stage_done("experiment_specs"):
             return Path(self.state.artifacts["experiment_specs"])
         self._stage_start("experiment_specs")
-        alpha_ids = self.config.models.get("alpha", [])
+        alpha_ids = self._alpha_ids()
+        symbol_universe = list(self.config.data.get("symbol_universe", []))
+        configured_windows = self._resolved_event_windows()
         specs: list[dict[str, Any]] = []
         for alpha_id in alpha_ids:
-            for event in self.config.data.get("event_windows", []):
+            binding: dict[str, Any] = {}
+            try:
+                from apps.workbench.src.data.event_catalog import load_model_binding
+
+                binding = load_model_binding(self.root, alpha_id)
+            except Exception as exc:
+                binding = {"resolution_status": "UNRESOLVED", "reason": str(exc)}
+            for symbol in symbol_universe:
                 specs.append({
                     "alpha_id": alpha_id,
-                    "event_id": event.get("event_id"),
+                    "symbol": symbol,
+                    "configured_event_windows": configured_windows,
                     "feature_set_id": self.config.features.get("feature_set_id"),
                     "latency_profile": self.config.latency_profile,
-                    "symbol_universe": self.config.data.get("symbol_universe", []),
+                    "model_binding": binding,
+                    "candidate_source": "config+registry+catalog",
                 })
         path = self._write_artifact("experiment_spec.json", specs)
         self._stage_end("experiment_specs", path)
         return path
 
     def stage_backtest(self) -> Path:
-        """Stage 7: run backtests. Stub: the runner does not invoke the
-        full WorkbenchEngine here (that requires Databento NPZ data on
-        CHI404). Instead it records a metrics payload that downstream
-        consumers can replace. The artifact is `backtest_metrics.json`
-        with the 33-point schema from Phase 5."""
+        """Stage 7: run Workbench campaigns when explicitly enabled.
+
+        Disabled or unobserved Workbench evidence remains blocking; it does not
+        silently promote. Enabled runs are data-driven from the experiment specs
+        and use Workbench's model binding/catalog logic for event selection.
+        """
         if self._stage_done("backtest"):
             return Path(self.state.artifacts["backtest"])
         self._stage_start("backtest")
         specs = json.loads(
             (self.run_dir / "experiment_spec.json").read_text(encoding="utf-8")
         )
+        wb_cfg = dict(self.config.workbench or {})
+        enabled = bool(wb_cfg.get("enabled", False))
+        campaigns: list[dict[str, Any]] = []
+        if enabled:
+            from apps.workbench.src.run.campaign_runner import run_campaign
+
+            chi404_raw = wb_cfg.get("chi404_summary", "runtime/latency_reports/latency_summary.json")
+            chi404_summary = Path(str(chi404_raw))
+            if not chi404_summary.is_absolute():
+                chi404_summary = self.root / chi404_summary
+            if not chi404_summary.is_file():
+                chi404_summary = None
+
+            seen: set[tuple[str, str]] = set()
+            for spec in specs:
+                model_id = str(spec.get("alpha_id", ""))
+                symbol = str(spec.get("symbol", ""))
+                if not model_id or not symbol or (model_id, symbol) in seen:
+                    continue
+                seen.add((model_id, symbol))
+                campaign_id = _safe_id(f"{self.run_id}_{model_id}_{symbol}")
+                try:
+                    result = run_campaign(
+                        self.root,
+                        model_id,
+                        symbol,
+                        chi404_summary=chi404_summary,
+                        seed=int(wb_cfg.get("seed", 42)),
+                        audit_grade=bool(wb_cfg.get("audit_grade", True)),
+                        dry_run=bool(wb_cfg.get("dry_run", False)),
+                        download_missing=bool(wb_cfg.get("download_missing", False)),
+                        allow_partial=bool(wb_cfg.get("allow_partial", False)),
+                        trial_mode=bool(wb_cfg.get("trial_mode", False)),
+                        campaign_id=campaign_id,
+                    )
+                    artifact_dir = Path(result.artifact_dir)
+                    summary_path = artifact_dir / "summary.json"
+                    summary = (
+                        json.loads(summary_path.read_text(encoding="utf-8"))
+                        if summary_path.is_file()
+                        else {}
+                    )
+                    campaigns.append({
+                        "model_id": result.model_id,
+                        "symbol": result.symbol,
+                        "campaign_id": result.campaign_id,
+                        "status": result.status,
+                        "artifact_dir": result.artifact_dir,
+                        "summary_path": str(summary_path),
+                        "summary": summary,
+                        "observed": bool(summary),
+                    })
+                except Exception as exc:
+                    campaigns.append({
+                        "model_id": model_id,
+                        "symbol": symbol,
+                        "campaign_id": campaign_id,
+                        "status": "ERROR",
+                        "error": str(exc),
+                        "observed": False,
+                    })
+        observed_campaigns = [c for c in campaigns if c.get("observed")]
         metrics = {
             "specs": specs,
-            "idealized": True,  # WorkbenchEngine integration provides real metrics
+            "workbench_enabled": enabled,
+            "observed": bool(observed_campaigns),
+            "observation_count": len(observed_campaigns),
+            "campaigns": campaigns,
+            "idealized": not bool(observed_campaigns),
+            "reason": "" if observed_campaigns else (
+                "WORKBENCH_EVIDENCE_NOT_ENABLED" if not enabled else "WORKBENCH_EVIDENCE_NOT_OBSERVED"
+            ),
             "timestamp_utc": datetime.now(timezone.utc).isoformat(),
             "git_sha": self.state.git_sha,
-            "metrics": {},  # populated when WorkbenchEngine integration lands
+            "metrics": {},
         }
         path = self._write_artifact("backtest_metrics.json", metrics)
         self._stage_end("backtest", path)
@@ -704,6 +928,47 @@ class AutonomousRunner:
                 reason_code="DATA_RESOLUTION_MISSING",
                 artifact_reference="data_resolution.json",
             ))
+        backtest_metrics_path = self.run_dir / "backtest_metrics.json"
+        backtest_metrics = {}
+        if backtest_metrics_path.is_file():
+            try:
+                backtest_metrics = json.loads(backtest_metrics_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                backtest_metrics = {}
+        if backtest_metrics.get("observed") is True:
+            rankings = _rank_workbench_campaigns(backtest_metrics.get("campaigns", []))
+            self._write_artifact("candidate_rankings.json", rankings)
+            best = rankings[0] if rankings else {}
+            gates.extend(_promotion_gates_from_workbench(best, self.config.scoring))
+            rg_path = self.run_dir / "robustness_gates.json"
+            write_robustness_gates_json(
+                rg_path,
+                gates,
+                tier="T3",
+                run_id=self.run_id,
+                git_sha=self.state.git_sha,
+                thresholds_source="workbench_campaign_summary",
+                timestamp_utc=datetime.now(timezone.utc).isoformat(),
+            )
+            summary = best.get("summary") if isinstance(best.get("summary"), dict) else {}
+            self._write_artifact("walk_forward_results.json", {
+                "tier": "T3",
+                "source": "workbench_campaign_summary",
+                "status": (summary.get("walk_forward") or {}).get("status", ""),
+                "walk_forward": summary.get("walk_forward", {}),
+                "periods": summary.get("periods", []),
+            })
+            wfc = summary.get("wfc", {}) if isinstance(summary.get("wfc"), dict) else {}
+            self._write_artifact("walk_forward_correlation.json", {
+                "tier": "T3",
+                "source": "workbench_campaign_summary",
+                "pass_fail": str(summary.get("wfc_status", "")).upper() == "PASS",
+                "wfc": wfc,
+                "correlation_score": wfc.get("spearman"),
+                "minimum_required_score": 0.20,
+            })
+            self._stage_end("robustness_and_wf", rg_path)
+            return rg_path
         # Real pipeline replaces these with observed values when
         # WorkbenchEngine integration lands. Until then, every gate
         # has observed_value=None and pass_fail=False (BLOCKING).
@@ -813,16 +1078,34 @@ class AutonomousRunner:
         if self._stage_done("score_and_decide"):
             return Path(self.state.artifacts["score_and_decide"])
         self._stage_start("score_and_decide")
-        # The decision is a code-generated, artifact-preserved value.
-        # The default decision is QUARANTINE — the runner is in
-        # scaffolding mode until WorkbenchEngine integration lands.
-        decision = "QUARANTINE"
-        reason = (
-            "Autonomous runner scaffolding: WorkbenchEngine integration is "
-            "not yet wired. Candidate is quarantined pending real backtest + "
-            "robustness + walk-forward output. Re-run after WorkbenchEngine "
-            "integration lands."
+        rankings_path = self.run_dir / "candidate_rankings.json"
+        rankings: list[dict[str, Any]] = []
+        if rankings_path.is_file():
+            try:
+                raw_rankings = json.loads(rankings_path.read_text(encoding="utf-8"))
+                if isinstance(raw_rankings, list):
+                    rankings = [r for r in raw_rankings if isinstance(r, dict)]
+            except json.JSONDecodeError:
+                rankings = []
+        persisted_gates = self._load_robustness_gate_dicts()
+        gate_failures = _blocking_gate_dicts(persisted_gates)
+        best = rankings[0] if rankings else {}
+        gates_by_name = {g.get("gate_name"): g for g in persisted_gates}
+        evidence_complete = (
+            bool(rankings)
+            and not gate_failures
+            and PROMOTION_EVIDENCE_GATE_NAMES.issubset(gates_by_name)
+            and all(self._promotion_evidence_gate_valid(gates_by_name[name]) for name in PROMOTION_EVIDENCE_GATE_NAMES)
         )
+        decision = "QUARANTINE"
+        reason = "Candidate quarantined pending complete observed autonomous evidence."
+        if evidence_complete and best.get("promote_candidate") is True:
+            decision = "PROMOTE"
+            reason = "All autonomous evidence gates passed and Workbench marked the candidate promotable."
+        elif evidence_complete:
+            reason = "Evidence gates passed, but Workbench promotion remains blocked by downstream requirements."
+        elif gate_failures:
+            reason = "Blocking autonomous evidence gates remain open."
         scoring_summary = {
             "decision": decision,
             "reason": reason,
@@ -832,13 +1115,12 @@ class AutonomousRunner:
             "timestamp_utc": datetime.now(timezone.utc).isoformat(),
             "min_sharpe_threshold": self.config.scoring.get("min_sharpe", 0.5),
             "max_drawdown_threshold": self.config.scoring.get("max_drawdown", -0.10),
+            "candidate_rankings_path": str(rankings_path) if rankings_path.is_file() else "",
+            "selected_candidate": best,
         }
         path = self._write_artifact("scoring_summary.json", scoring_summary)
-        persisted_gates = self._load_robustness_gate_dicts()
         pd_path = self._write_artifact("promotion_decision.json", {
-            "decision": decision,
-            "reason": reason,
-            "blocking_gates": _blocking_gate_dicts(persisted_gates),
+            "decision": decision, "reason": reason, "blocking_gates": gate_failures
         })
         self._stage_end("score_and_decide", path)
         return path
@@ -1206,6 +1488,233 @@ class AutonomousRunner:
 # ---------- helpers ----------
 
 
+def _safe_id(value: str) -> str:
+    cleaned = []
+    for ch in value:
+        cleaned.append(ch if ch.isalnum() or ch in ("-", "_") else "_")
+    out = "".join(cleaned).strip("_")
+    return out or "autonomous_campaign"
+
+
+def _finite_float(value: Any, default: float = 0.0) -> float:
+    if isinstance(value, bool):
+        return default
+    try:
+        out = float(value)
+    except (TypeError, ValueError):
+        return default
+    return out if math.isfinite(out) else default
+
+
+def _summary_check(summary: dict[str, Any], name: str) -> dict[str, Any] | None:
+    checks = summary.get("robustness_checks", [])
+    if not isinstance(checks, list):
+        return None
+    for check in checks:
+        if isinstance(check, dict) and check.get("name") == name:
+            return check
+    return None
+
+
+def _candidate_score(summary: dict[str, Any]) -> float:
+    periods = summary.get("periods", [])
+    expectancy = 0.0
+    events_ran = _finite_float(summary.get("events_ran"))
+    if isinstance(periods, list):
+        for period in periods:
+            if isinstance(period, dict):
+                expectancy += _finite_float(period.get("expectancy"))
+                events_ran += _finite_float(period.get("events_run"))
+    score = expectancy + events_ran * 0.001
+    if summary.get("status") == "PASS":
+        score += 10.0
+    if summary.get("robustness_passed") is True:
+        score += 5.0
+    if summary.get("wfc_status") == "PASS":
+        score += 5.0
+    if summary.get("promote_candidate") is True:
+        score += 100.0
+    return score
+
+
+def _rank_workbench_campaigns(campaigns: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rankings: list[dict[str, Any]] = []
+    for campaign in campaigns:
+        if not isinstance(campaign, dict):
+            continue
+        summary = campaign.get("summary") if isinstance(campaign.get("summary"), dict) else {}
+        score = _candidate_score(summary)
+        rankings.append({
+            "candidate_id": _safe_id(
+                f"{campaign.get('model_id', '')}_{campaign.get('symbol', '')}_{campaign.get('campaign_id', '')}"
+            ),
+            "model_id": campaign.get("model_id", ""),
+            "symbol": campaign.get("symbol", ""),
+            "campaign_id": campaign.get("campaign_id", ""),
+            "status": campaign.get("status", ""),
+            "artifact_dir": campaign.get("artifact_dir", ""),
+            "summary_path": campaign.get("summary_path", ""),
+            "score": score,
+            "promote_candidate": bool(summary.get("promote_candidate", False)),
+            "summary": summary,
+        })
+    rankings.sort(key=lambda item: float(item.get("score", 0.0)), reverse=True)
+    return rankings
+
+
+def _pending_gate(name: str, category: GateCategory, metric: str, reason: str, *, threshold: float | None = None) -> GateResult:
+    return GateResult(
+        gate_name=name,
+        gate_category=category,
+        metric_name=metric,
+        threshold=threshold,
+        observed_value=None,
+        comparison_operator=">=" if threshold is not None else "==",
+        pass_fail=False,
+        severity=Severity.BLOCKING,
+        reason_code=reason,
+    )
+
+
+def _numeric_gate(
+    name: str,
+    category: GateCategory,
+    metric: str,
+    observed: Any,
+    threshold: Any,
+    op: str,
+    *,
+    reason_prefix: str,
+) -> GateResult:
+    if observed is None or threshold is None:
+        return _pending_gate(name, category, metric, f"{reason_prefix}_MISSING")
+    obs = _finite_float(observed, default=float("nan"))
+    thr = _finite_float(threshold, default=float("nan"))
+    if not math.isfinite(obs) or not math.isfinite(thr):
+        return _pending_gate(name, category, metric, f"{reason_prefix}_MALFORMED")
+    if op == ">=":
+        passed = obs >= thr
+    elif op == "==":
+        passed = obs == thr
+    elif op == ">":
+        passed = obs > thr
+    else:
+        passed = False
+    return GateResult(
+        gate_name=name,
+        gate_category=category,
+        metric_name=metric,
+        threshold=thr,
+        observed_value=obs,
+        comparison_operator=op,
+        pass_fail=passed,
+        severity=Severity.BLOCKING,
+        reason_code="PASS" if passed else f"{reason_prefix}_FAILED",
+    )
+
+
+def _artifact_completeness_gate(best: dict[str, Any]) -> GateResult:
+    artifact_dir = Path(str(best.get("artifact_dir", "")))
+    required = ("summary.json", "diagnostics.json", "campaign.json")
+    present = sum(1 for name in required if artifact_dir.joinpath(name).is_file())
+    return GateResult(
+        gate_name="artifact_completeness",
+        gate_category=GateCategory.ARTIFACT_COMPLETENESS,
+        metric_name="expected_files_present",
+        threshold=float(len(required)),
+        observed_value=float(present),
+        comparison_operator="==",
+        pass_fail=present == len(required),
+        severity=Severity.BLOCKING,
+        reason_code="PASS" if present == len(required) else "ARTIFACTS_MISSING",
+        artifact_reference=str(artifact_dir),
+    )
+
+
+def _promotion_gates_from_workbench(best: dict[str, Any], scoring: dict[str, Any]) -> list[GateResult]:
+    if not best:
+        return [
+            _pending_gate("monte_carlo_sharpe_p05", GateCategory.ROBUSTNESS, "sharpe_p05", "WORKBENCH_SUMMARY_MISSING"),
+            _pending_gate("oos_max_drawdown", GateCategory.DRAWDOWN_TAIL_RISK, "max_drawdown", "WORKBENCH_SUMMARY_MISSING"),
+            _pending_gate("walk_forward_pass", GateCategory.WALK_FORWARD, "wf_passed", "WORKBENCH_SUMMARY_MISSING"),
+            _pending_gate("artifact_completeness", GateCategory.ARTIFACT_COMPLETENESS, "expected_files_present", "WORKBENCH_SUMMARY_MISSING"),
+            _pending_gate("double_wf_correlation", GateCategory.WALK_FORWARD_CORRELATION, "spearman", "WORKBENCH_SUMMARY_MISSING", threshold=0.20),
+        ]
+    summary = best.get("summary") if isinstance(best.get("summary"), dict) else {}
+    mc = _summary_check(summary, "monte_carlo_sharpe") or {}
+    dd = _summary_check(summary, "drawdown_limit") or {}
+    wf_status = str((summary.get("walk_forward") or {}).get("status", "")).upper()
+    wfc = summary.get("wfc", {}) if isinstance(summary.get("wfc"), dict) else {}
+    wfc_status = str(summary.get("wfc_status", "")).upper()
+    gates = [
+        _numeric_gate(
+            "monte_carlo_sharpe_p05",
+            GateCategory.ROBUSTNESS,
+            "sharpe_p05",
+            mc.get("observed_value"),
+            mc.get("threshold"),
+            ">=",
+            reason_prefix="MONTE_CARLO_SHARPE",
+        ),
+        _numeric_gate(
+            "oos_max_drawdown",
+            GateCategory.DRAWDOWN_TAIL_RISK,
+            "max_drawdown",
+            dd.get("observed_value"),
+            dd.get("threshold", scoring.get("max_drawdown", -0.10)),
+            ">=",
+            reason_prefix="OOS_DRAWDOWN",
+        ),
+        GateResult(
+            gate_name="walk_forward_pass",
+            gate_category=GateCategory.WALK_FORWARD,
+            metric_name="wf_passed",
+            threshold=1.0,
+            observed_value=1.0 if wf_status == "PASS" else 0.0,
+            comparison_operator="==",
+            pass_fail=wf_status == "PASS",
+            severity=Severity.BLOCKING,
+            reason_code="PASS" if wf_status == "PASS" else (wf_status or "WALK_FORWARD_MISSING"),
+        ),
+        _artifact_completeness_gate(best),
+    ]
+    if wfc_status in ("", "SKIPPED"):
+        gates.append(_pending_gate(
+            "double_wf_correlation",
+            GateCategory.WALK_FORWARD_CORRELATION,
+            "spearman",
+            "DOUBLE_WF_NOT_OBSERVED",
+            threshold=0.20,
+        ))
+    else:
+        gates.append(_numeric_gate(
+            "double_wf_correlation",
+            GateCategory.WALK_FORWARD_CORRELATION,
+            "spearman",
+            wfc.get("spearman"),
+            0.20,
+            ">=",
+            reason_prefix="DOUBLE_WF",
+        ))
+    return gates
+
+
+def _read_json_object(path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _read_json_list(path: Path) -> list[dict[str, Any]]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    return [item for item in payload if isinstance(item, dict)] if isinstance(payload, list) else []
+
+
 def _hash_file(path: Path) -> str:
     import hashlib
     return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -1276,6 +1785,10 @@ def _build_report(
     artifacts: Dict[str, str],
 ) -> str:
     """Generate a markdown report with the 22 spec sections."""
+    alpha_ids = config.models.get("alpha") or []
+    model_source = "models.alpha" if alpha_ids else config.models.get("catalog_path", "model catalog")
+    event_count = len(config.data.get("event_windows") or [])
+    event_source = "data.event_windows" if event_count else config.data.get("event_catalog_path", "event catalog")
     lines: list[str] = [
         f"# Autonomous Run Report — {campaign_id}",
         "",
@@ -1292,11 +1805,10 @@ def _build_report(
         f"- Source: `{config.research_input or 'auto (scaffolded)'}`",
         "",
         "## 3. Hypothesis",
-        f"Auto-generated from `models.alpha`: {config.models.get('alpha', [])}",
+        f"Auto-generated from `{model_source}`.",
         "",
         "## 4. Experiment specification",
-        f"Experiments: {len(config.data.get('event_windows', []))} events × "
-        f"{len(config.models.get('alpha', []))} alphas.",
+        f"Experiments are expanded from `{event_source}` and `{model_source}`.",
         "",
         "## 5. Data used",
         f"- Dataset: `{config.data.get('dataset_id')}`",
@@ -1311,9 +1823,8 @@ def _build_report(
         f"- Feature set: `{config.features.get('feature_set_id', 'core_64_v1')}`",
         "",
         "## 8. Model combination used",
-        f"- Alpha: {config.models.get('alpha', [])}",
-        f"- Defensives: {config.models.get('defensives', [])}",
-        f"- Structurals: {config.models.get('structurals', [])}",
+        f"- Model source: `{model_source}`",
+        f"- Selection rules: {config.models.get('select', {})}",
         "",
         "## 9. Backtest assumptions",
         f"Latency profile: {config.latency_profile}",

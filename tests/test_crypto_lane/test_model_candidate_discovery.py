@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from crypto_lane.src.ml.candidate_registry import discover_candidates, validate_candidate
+from crypto_lane.src.config_loader import list_candidate_paths
 
 
 def test_discovers_seven_candidates():
@@ -10,6 +11,13 @@ def test_discovers_seven_candidates():
     ids = {c["candidate_id"] for c in cands}
     assert "crypto_h1_basis_compression" in ids
     assert "crypto_h7_congestion_event_study" in ids
+
+
+def test_candidate_registry_is_tracked_crypto_config_path():
+    paths = list_candidate_paths()
+    assert len(paths) == 7
+    assert all("packages" in p.parts and "crypto_lane" in p.parts and "config" in p.parts for p in paths)
+    assert all("models" not in p.parts for p in paths)
 
 
 def test_candidates_validate():

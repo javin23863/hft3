@@ -4,9 +4,12 @@ Chicago-side receiver for Bitcoin edge daemon packets.
 Receives Protocol Buffer packets from the edge daemon via TCP,
 deserializes them, and integrates with the crypto_lane feature matrix.
 """
+import json
 import socket
 import struct
 import logging
+import os
+import time
 from dataclasses import dataclass
 from typing import Optional, Generator
 from pathlib import Path
@@ -14,6 +17,29 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 _EDGE_FEATURE_PACKET_MESSAGE_CLASS = None
+DEFAULT_STATUS_DIR = Path("runtime") / "crypto_edge"
+LATEST_PACKET_FILE = "latest_packet.json"
+RECEIVER_STATUS_FILE = "receiver_status.json"
+METRICS_SNAPSHOT_FILE = "metrics_snapshot.json"
+PACKET_HISTORY_FILE = "packet_history.jsonl"
+
+
+def _status_dir(path: str | Path | None = None) -> Path:
+    raw = path or os.environ.get("BTC_EDGE_STATUS_DIR") or DEFAULT_STATUS_DIR
+    return Path(raw)
+
+
+def _atomic_write_json(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    tmp.replace(path)
+
+
+def _append_jsonl(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(payload, sort_keys=True) + "\n")
 
 
 def _build_edge_feature_packet_message_class():
@@ -169,7 +195,11 @@ class EdgeReceiver:
         self.port = port
         self.server_socket: Optional[socket.socket] = None
         self.client_socket: Optional[socket.socket] = None
+        self.client_addr: Optional[tuple[str, int]] = None
         self.last_sequence = -1
+        self.last_sequence_gap = 0
+        self.sequence_gap_count = 0
+        self.last_packet_wire_bytes = 0
         
     def start(self):
         """Start listening for connections."""
@@ -182,6 +212,7 @@ class EdgeReceiver:
         logger.info("Waiting for edge daemon connection...")
         
         self.client_socket, addr = self.server_socket.accept()
+        self.client_addr = (str(addr[0]), int(addr[1]))
         logger.info(f"Edge daemon connected from {addr}")
         
     def stop(self):
@@ -212,6 +243,7 @@ class EdgeReceiver:
                     break
                 
                 length = struct.unpack('>I', length_data)[0]
+                self.last_packet_wire_bytes = length + 4
                 
                 # Read packet data
                 packet_data = self._recv_exact(length)
@@ -226,6 +258,8 @@ class EdgeReceiver:
                     if packet.sequence_number != self.last_sequence + 1:
                         if self.last_sequence >= 0:
                             gap = packet.sequence_number - self.last_sequence - 1
+                            self.last_sequence_gap = gap
+                            self.sequence_gap_count += max(0, gap)
                             logger.warning(f"Sequence gap detected: {gap} packets lost")
                     self.last_sequence = packet.sequence_number
                     
@@ -294,21 +328,114 @@ class EdgeReceiver:
             return None
 
 
-def run_receiver(host: str = '127.0.0.1', port: int = 9876):
+def run_receiver(host: str = '127.0.0.1', port: int = 9876, status_dir: str | Path | None = None):
     """
     Run the edge receiver as a standalone service.
-    
-    Prints received packets to stdout for debugging.
+
+    Prints received packets to stdout for debugging and writes durable
+    status artifacts from real packets so the Workbench can observe the
+    Bitcoin-node-to-Chicago current-state stream.
     """
     receiver = EdgeReceiver(host, port)
+    status_root = _status_dir(status_dir)
+    write_every = max(1, int(os.environ.get("BTC_EDGE_STATUS_EVERY", "1")))
+    started_at_ns = time.time_ns()
+    packets_received = 0
+    bytes_received = 0
+
+    _atomic_write_json(
+        status_root / RECEIVER_STATUS_FILE,
+        {
+            "status": "LISTENING",
+            "receiver_host": host,
+            "receiver_port": port,
+            "started_at_ns": started_at_ns,
+            "packets_received_total": 0,
+            "bytes_received_total": 0,
+            "transport": "length_prefixed_protobuf_tcp",
+        },
+    )
     
     try:
         receiver.start()
+        _atomic_write_json(
+            status_root / RECEIVER_STATUS_FILE,
+            {
+                "status": "CONNECTED",
+                "receiver_host": host,
+                "receiver_port": port,
+                "peer": receiver.client_addr,
+                "started_at_ns": started_at_ns,
+                "connected_at_ns": time.time_ns(),
+                "packets_received_total": 0,
+                "bytes_received_total": 0,
+                "transport": "length_prefixed_protobuf_tcp",
+            },
+        )
         
         print("Receiving packets from edge daemon...")
         print("-" * 80)
         
         for packet in receiver.receive_packets():
+            packets_received += 1
+            bytes_received += receiver.last_packet_wire_bytes
+            packet_payload = {
+                "status": "OBSERVED",
+                "received_at_ns": time.time_ns(),
+                "receiver_host": host,
+                "receiver_port": port,
+                "peer": receiver.client_addr,
+                "wire_bytes": receiver.last_packet_wire_bytes,
+                "transport": "length_prefixed_protobuf_tcp",
+                "packet": packet.to_dict(),
+                "deltas_preview": list(packet.deltas or [])[:5],
+            }
+            status_payload = {
+                "status": "OBSERVED",
+                "receiver_host": host,
+                "receiver_port": port,
+                "peer": receiver.client_addr,
+                "started_at_ns": started_at_ns,
+                "last_observed_at_ns": packet_payload["received_at_ns"],
+                "last_sequence_number": packet.sequence_number,
+                "last_packet_wire_bytes": receiver.last_packet_wire_bytes,
+                "packets_received_total": packets_received,
+                "bytes_received_total": bytes_received,
+                "sequence_gap_count": receiver.sequence_gap_count,
+                "last_sequence_gap": receiver.last_sequence_gap,
+                "transport": "length_prefixed_protobuf_tcp",
+            }
+            if packets_received % write_every == 0:
+                _atomic_write_json(status_root / LATEST_PACKET_FILE, packet_payload)
+                _atomic_write_json(status_root / RECEIVER_STATUS_FILE, status_payload)
+                _atomic_write_json(
+                    status_root / METRICS_SNAPSHOT_FILE,
+                    {
+                        "packets_received_total": packets_received,
+                        "bytes_received_total": bytes_received,
+                        "last_packet_wire_bytes": receiver.last_packet_wire_bytes,
+                        "sequence_gap_count": receiver.sequence_gap_count,
+                        "last_sequence_number": packet.sequence_number,
+                        "last_observed_at_ns": packet_payload["received_at_ns"],
+                    },
+                )
+                _append_jsonl(
+                    status_root / PACKET_HISTORY_FILE,
+                    {
+                        "received_at_ns": packet_payload["received_at_ns"],
+                        "sequence_number": packet.sequence_number,
+                        "wire_bytes": receiver.last_packet_wire_bytes,
+                        "mempool_tx_count": packet.mempool_tx_count,
+                        "mempool_bytes": packet.mempool_bytes,
+                        "fee_mean_sat_vb": packet.fee_mean_sat_vb,
+                        "fee_stddev_sat_vb": packet.fee_stddev_sat_vb,
+                        "fee_zscore_latest": packet.fee_zscore_latest,
+                        "blockspace_stress_score": packet.blockspace_stress_score,
+                        "delta_count": packet.delta_count,
+                        "filtered_tx_count": packet.filtered_tx_count,
+                        "sequence_gap_count": receiver.sequence_gap_count,
+                    },
+                )
             print(f"[{packet.sequence_number}] "
                   f"fee_mean={packet.fee_mean_sat_vb:.2f} sat/vB, "
                   f"zscore={packet.fee_zscore_latest:.2f}, "

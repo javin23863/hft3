@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 import streamlit as st
 
+from hft3_bootstrap import pythonpath_entries
 from workbench.src.core.composition import DefensiveStub, ModelComposition
 from workbench.src.data.event_catalog import campaign_preview, list_personal_events, load_model_binding
 from workbench.src.data.personal_lock import is_locked, set_unlocked
@@ -26,6 +29,13 @@ from workbench.src.run.job_manager import (
     get_job_status,
     list_active_campaigns,
     set_control,
+)
+from workbench.src.artifacts.paths import (
+    artifact_root,
+    campaign_dir,
+    campaign_dir_for,
+    campaign_event_dir,
+    workbench_runs_dir_for,
 )
 from workbench.ui.flow_state import (
     init_flow_session,
@@ -43,6 +53,8 @@ def init_session(repo: Path) -> None:
         st.session_state.wb_repo = repo
     if "wb_selected_model" not in st.session_state:
         st.session_state.wb_selected_model = ""
+    if "wb_selection_explicit" not in st.session_state:
+        st.session_state.wb_selection_explicit = False
     if "wb_active_campaign" not in st.session_state:
         st.session_state.wb_active_campaign = ""
     if "wb_symbol" not in st.session_state:
@@ -56,18 +68,114 @@ def init_session(repo: Path) -> None:
     init_flow_session()
 
 
-_RECOMMENDED_STARTERS = [
-    ("HYP_5", "Spread blowout / recompression — recommended first run"),
-    ("HYP_1", "Second-wave continuation after CPI/NFP impulse"),
-    ("PDF_MODEL_1", "Book pressure OFI / MLOFI"),
-]
-
-
 def _runnable_primary_ids(catalog: dict) -> List[str]:
     return sorted(
         [mid for mid, entry in catalog.items() if entry.role in ("alpha", "hybrid")],
         key=lambda mid: catalog[mid].display_name.lower(),
     )
+
+
+def _catalog_symbols(repo: Path) -> list[str]:
+    path = repo / "packages" / "data_system" / "config" / "events.csv"
+    if not path.is_file():
+        return []
+    symbols: set[str] = set()
+    try:
+        for chunk in pd.read_csv(path, usecols=["symbols"], chunksize=1000):
+            for raw in chunk["symbols"].dropna():
+                symbols.update(s.strip() for s in str(raw).split(",") if s.strip())
+    except Exception:
+        return []
+    preferred = ["MES.v.0", "ES.v.0", "MNQ.v.0", "NQ.v.0", "ZN.v.0", "ZB.v.0", "RTY.v.0"]
+    ordered = [s for s in preferred if s in symbols]
+    ordered.extend(s for s in sorted(symbols) if s not in ordered)
+    return ordered
+
+
+def _event_catalog_status(repo: Path) -> dict[str, Any]:
+    path = repo / "packages" / "data_system" / "config" / "events.csv"
+    if not path.is_file():
+        return {"path": path, "exists": False, "rows": 0, "types": {}, "symbols": []}
+    try:
+        df = pd.read_csv(path, usecols=["event_type", "symbols"])
+    except Exception as exc:
+        return {"path": path, "exists": True, "rows": 0, "types": {}, "symbols": [], "error": str(exc)}
+    symbols: set[str] = set()
+    for raw in df["symbols"].dropna():
+        symbols.update(s.strip() for s in str(raw).split(",") if s.strip())
+    return {
+        "path": path,
+        "exists": True,
+        "rows": int(len(df)),
+        "types": Counter(str(x) for x in df["event_type"].dropna()),
+        "symbols": sorted(symbols),
+    }
+
+
+def _latency_status(repo: Path) -> dict[str, Any]:
+    path = repo / "runtime" / "latency_reports" / "latency_summary.json"
+    if not path.is_file():
+        return {"path": path, "exists": False}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return {"path": path, "exists": True, "error": str(exc)}
+    paper = data.get("paper_order_latency") if isinstance(data.get("paper_order_latency"), dict) else {}
+    return {
+        "path": path,
+        "exists": True,
+        "order_ack_measured": bool(data.get("order_ack_measured") or paper.get("measured")),
+        "paired_count": paper.get("paired_count"),
+        "order_ack_p99_ms": data.get("order_ack_p99_ms"),
+        "network_pass": data.get("network_pass"),
+        "dominant_bottleneck": data.get("dominant_bottleneck"),
+    }
+
+
+def _render_backend_status(repo: Path, catalog: dict, configs: dict, runnable: list[str]) -> None:
+    role_counts = Counter(str(entry.role) for entry in catalog.values())
+    event_status = _event_catalog_status(repo)
+    latency = _latency_status(repo)
+    runs_root = workbench_runs_dir_for(repo)
+    run_count = sum(1 for p in runs_root.iterdir() if p.is_dir()) if runs_root.is_dir() else 0
+
+    with st.container(border=True):
+        st.subheader("Backend status")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Registry models", len(configs))
+        c2.metric("Catalog entries", len(catalog))
+        c3.metric("Runnable primaries", len(runnable))
+        c4.metric("Campaign artifacts", run_count)
+        st.caption(f"Models: `apps/workbench/config/model_catalog.yaml` · events: `{event_status['path']}`")
+        st.caption(f"Artifact root: `{artifact_root()}`")
+        if event_status.get("error"):
+            st.error(f"Event catalog unreadable: {event_status['error']}")
+        elif event_status.get("exists"):
+            st.caption(
+                f"Event catalog rows: {event_status['rows']} · symbols: {len(event_status['symbols'])}"
+            )
+        else:
+            st.error("Event catalog missing; campaigns cannot resolve walk-forward windows.")
+        if latency.get("exists") and latency.get("order_ack_measured"):
+            st.success(
+                f"Latency summary measured order ack p99: {latency.get('order_ack_p99_ms')} ms "
+                f"({latency.get('paired_count')} paired samples)"
+            )
+        elif latency.get("exists"):
+            st.warning(
+                "Latency summary loaded, but authoritative paired order ack is still blocked. "
+                f"Dominant bottleneck: {latency.get('dominant_bottleneck', 'unknown')}"
+            )
+        else:
+            st.warning("Latency summary missing; latency viability will use blocked defaults.")
+        with st.expander("Role mix"):
+            st.dataframe(
+                pd.DataFrame(
+                    [{"role": role, "count": count} for role, count in sorted(role_counts.items())]
+                ),
+                width="stretch",
+                hide_index=True,
+            )
 
 
 def _render_dataset_panel(repo: Path, model_id: str, symbol: str, cfg) -> None:
@@ -86,12 +194,13 @@ def _render_dataset_panel(repo: Path, model_id: str, symbol: str, cfg) -> None:
     c4.metric("History years", f"{preview.get('catalog_years', 0)}/{cfg.min_history_years}")
 
     if "mbo_npz" in datasets:
-        st.caption(f"NPZ path pattern: `{npz_root}/{symbol}_{{event_id}}_mbo.npz` · ")
+        st.caption(
+            f"NPZ resolver starts at `{npz_root}/{symbol}_{{event_id}}_mbo.npz` "
+            "and reports any catalog/listing fallback symbol below."
+        )
     else:
         st.caption(f"Required datasets: {', '.join(datasets)} (see model_event_binding.yaml)")
-    st.caption(
-        f"Contexts: {', '.join(sorted(binding['allowed_contexts']))}"
-    )
+    st.caption(f"Event contexts configured: {len(binding['allowed_contexts'])} (see model_event_binding.yaml)")
 
     summary_rows = []
     total_events = 0
@@ -109,10 +218,20 @@ def _render_dataset_panel(repo: Path, model_id: str, symbol: str, cfg) -> None:
                 "events": total,
                 "npz_ready": ready,
                 "npz_missing": total - ready,
+                "npz_symbols": ", ".join(
+                    sorted(
+                        {
+                            str(e.get("npz_symbol_used"))
+                            for e in events
+                            if e.get("npz_symbol_used")
+                        }
+                    )
+                )
+                or "none",
             }
         )
     if summary_rows:
-        st.dataframe(pd.DataFrame(summary_rows), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(summary_rows), width="stretch", hide_index=True)
         if ready_events == 0:
             st.error("No NPZ files on disk for this model/symbol — use **Download missing** or backfill catalog.")
         elif ready_events < total_events:
@@ -132,11 +251,12 @@ def _render_dataset_panel(repo: Path, model_id: str, symbol: str, cfg) -> None:
                     "release": ev.get("release_date"),
                     "context": ev.get("event_context"),
                     "npz": "ready" if ev.get("npz_present") else "missing",
+                    "npz_symbol": ev.get("npz_symbol_used") or symbol,
                 }
             )
     if detail_rows:
         with st.expander("Event-level catalog", expanded=ready_events < total_events):
-            st.dataframe(pd.DataFrame(detail_rows), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(detail_rows), width="stretch", hide_index=True)
 
 
 def _render_data_preview(repo: Path, model_id: str, symbol: str) -> None:
@@ -210,7 +330,8 @@ def _render_catalog_rows(
                     key=_catalog_widget_key(prefix, "set", str(row_idx), entry.model_id),
                 ):
                     st.session_state.wb_selected_model = entry.model_id
-                    navigate_to_tab("Backtest Results")
+                    st.session_state.wb_selection_explicit = True
+                    navigate_to_tab("Backtest Evidence")
                     st.rerun()
                 if st.button(
                     "Run campaign",
@@ -218,6 +339,7 @@ def _render_catalog_rows(
                     type="primary",
                 ):
                     st.session_state.wb_selected_model = entry.model_id
+                    st.session_state.wb_selection_explicit = True
                     composition = get_session_composition(entry.model_id)
                     cid = start_campaign_for_selection(
                         repo,
@@ -304,19 +426,12 @@ def stack_builder_panel(repo: Path, primary: str) -> ModelComposition:
                 for p in _PHASES
             ]
         ),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
     )
     st.caption(
         f"Decision path ≈ {decision_path/1000:.2f} ms (before + during stubs + C++ p99 {cpp_p99:.0f}µs)"
     )
-    if st.button("Load preset: VPIN + Quantum + Hawkes", key="wb__load_preset"):
-        st.session_state.wb_defensive_stubs = [
-            {"model_id": "PDF_MODEL_3", "phase": "continuous", "budget_us": 2500, "enabled": True},
-            {"model_id": "PDF_MODEL_9", "phase": "before", "budget_us": 50, "enabled": True},
-            {"model_id": "PDF_MODEL_11", "phase": "during", "budget_us": 2500, "enabled": True},
-        ]
-        st.rerun()
     return composition
 
 
@@ -338,58 +453,63 @@ def model_selector_panel(repo: Path) -> Tuple[str, str, str]:
     catalog = load_catalog(repo)
     runnable = _runnable_primary_ids(catalog)
 
+    _render_backend_status(repo, catalog, configs, runnable)
+
     st.caption(
-        "Trial mode: runs available NPZ events only (skips WFC matrix). "
-        "Latency lane and datasets come from each model's registry binding."
+        "Campaign mode uses the current model catalog, event catalog, registry bindings, "
+        "artifact root, and latency summary."
     )
 
-    symbol = st.selectbox("Symbol", ["MES.v.0", "ES.v.0", "MNQ.v.0", "NQ.v.0"], key="wb__sym_pick")
+    symbol_options = _catalog_symbols(repo)
+    if symbol_options:
+        current_symbol = st.session_state.get("wb_symbol", symbol_options[0])
+        if current_symbol not in symbol_options:
+            current_symbol = symbol_options[0]
+        symbol = st.selectbox(
+            "Symbol",
+            symbol_options,
+            index=symbol_options.index(current_symbol),
+            key="wb__sym_pick",
+        )
+    else:
+        st.error("No symbols could be loaded from the event catalog.")
+        symbol = st.text_input("Symbol", value=st.session_state.get("wb_symbol", ""), key="wb__sym_input").strip()
     st.session_state.wb_symbol = symbol
+    if not symbol:
+        st.error("Enter a symbol before running a campaign.")
+        return "", symbol, st.session_state.wb_active_campaign or ""
 
-    st.subheader("Quick start")
-    starter_cols = st.columns(len(_RECOMMENDED_STARTERS))
-    for col, (mid, blurb) in zip(starter_cols, _RECOMMENDED_STARTERS):
-        if mid not in catalog:
-            continue
-        entry = catalog[mid]
-        with col:
-            st.markdown(f"**{entry.display_name}**")
-            st.caption(blurb)
-            st.caption(f"`{mid}` · lane {configs[mid].latency_lane}")
-            if st.button("Start with this model", key=f"wb__starter__{mid}", type="primary"):
-                st.session_state.wb_selected_model = mid
-                composition = get_session_composition(mid)
-                cid = start_campaign_for_selection(
-                    repo,
-                    model_id=mid,
-                    symbol=st.session_state.wb_symbol,
-                    composition=composition,
-                    audit_grade=st.session_state.wb_audit_grade,
-                )
-                st.toast(f"Campaign started: {cid}")
-                st.rerun()
+    st.subheader("Model universe")
 
     if not runnable:
         st.error("No runnable alpha/hybrid models in catalog.")
         return "", symbol, st.session_state.wb_active_campaign or ""
 
-    default_model = st.session_state.wb_selected_model
-    if default_model not in runnable:
-        default_model = "HYP_5" if "HYP_5" in runnable else runnable[0]
-        st.session_state.wb_selected_model = default_model
+    current_model = st.session_state.wb_selected_model
+    if not st.session_state.get("wb_selection_explicit") or current_model not in runnable:
+        current_model = ""
+        st.session_state.wb_selected_model = ""
+        st.session_state.wb_selection_explicit = False
+
+    model_options = [""] + runnable
 
     picked = st.selectbox(
         "Primary model",
-        runnable,
-        index=runnable.index(st.session_state.wb_selected_model),
-        format_func=lambda mid: f"{catalog[mid].display_name} ({mid})",
+        model_options,
+        index=model_options.index(current_model),
+        format_func=lambda mid: "Select a primary model" if not mid else f"{catalog[mid].display_name} ({mid})",
         key="wb__primary_model",
     )
     st.session_state.wb_selected_model = picked
+    st.session_state.wb_selection_explicit = bool(picked)
     model = picked
 
     camp = st.session_state.wb_active_campaign or ""
     workflow_status_strip(repo, model, symbol, camp)
+
+    if not model:
+        st.info("Select a primary model from the catalog to inspect dataset bindings or run a campaign.")
+        return "", symbol, camp
 
     preview = campaign_preview(model, symbol, repo)
     runnable = sum(
@@ -410,12 +530,13 @@ def model_selector_panel(repo: Path) -> Tuple[str, str, str]:
 
     c_primary, c_run, c_pause, c_stop = st.columns(4)
     with c_primary:
-        if st.button("Set primary", key="wb__set_primary", use_container_width=True):
+        if st.button("Set primary", key="wb__set_primary", width="stretch"):
             st.session_state.wb_selected_model = model
-            navigate_to_tab("Backtest Results")
+            st.session_state.wb_selection_explicit = True
+            navigate_to_tab("Backtest Evidence")
             st.rerun()
     with c_run:
-        if st.button("Run campaign", key="wb__start_campaign", type="primary", use_container_width=True):
+        if st.button("Run campaign", key="wb__start_campaign", type="primary", width="stretch"):
             cid = start_campaign_for_selection(
                 repo,
                 model_id=model,
@@ -426,28 +547,30 @@ def model_selector_panel(repo: Path) -> Tuple[str, str, str]:
             st.toast(f"Campaign started: {cid}")
             st.rerun()
     with c_pause:
-        if st.button("Pause", key="wb__pause", use_container_width=True) and st.session_state.wb_active_campaign:
+        if st.button("Pause", key="wb__pause", width="stretch") and st.session_state.wb_active_campaign:
             set_control(repo, st.session_state.wb_active_campaign, "pause")
     with c_stop:
-        if st.button("Stop", key="wb__stop", use_container_width=True) and st.session_state.wb_active_campaign:
+        if st.button("Stop", key="wb__stop", width="stretch") and st.session_state.wb_active_campaign:
             set_control(repo, st.session_state.wb_active_campaign, "stop")
 
     if st.button("Download missing NPZ", key="wb__download_missing"):
         cmd = [
             sys.executable,
-            str(repo / "workbench" / "scripts" / "backfill_catalog.py"),
+            "-m",
+            "workbench",
+            "download",
             "--model",
             model,
             "--symbol",
             symbol,
-            "--download-missing",
             "--max-cost-usd",
             "25",
         ]
-        subprocess.Popen(cmd, cwd=str(repo))
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(pythonpath_entries(repo))
+        subprocess.Popen(cmd, cwd=str(repo), env=env)
         st.info(
-            "Backfill started (max $25). Uses DATABENTO_API_KEY from `.env`; "
-            "ES fallback for pre-2019 MES windows per handoff PDF §8."
+            "Backfill started (max $25). Uses DATABENTO_API_KEY from `.env`."
         )
 
     with st.expander("Advanced — audit grade & full model grid"):
@@ -507,11 +630,8 @@ def personal_runs_panel(repo: Path, model: str, symbol: str) -> None:
                 for e in events
             ]
         ),
-        use_container_width=True,
+        width="stretch",
     )
-
-
-from workbench.src.artifacts.paths import artifact_root, campaign_dir, campaign_dir_for, campaign_event_dir
 
 
 def load_campaign_diagnostics(repo: Path, campaign_id: str, period: str = "", event_id: str = "") -> Optional[Dict[str, Any]]:

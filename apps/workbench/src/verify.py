@@ -4,7 +4,7 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 _REPO = Path(__file__).resolve().parents[3]
 
@@ -30,6 +30,9 @@ def _check_file(path: Path, label: str) -> Dict[str, Any]:
 
 def verify(repo: Optional[Path] = None) -> Dict[str, Any]:
     repo = repo or _REPO
+    events_catalog = repo / "packages" / "data_system" / "config" / "events.csv"
+    if not events_catalog.is_file():
+        events_catalog = repo / "data_system" / "config" / "events.csv"
 
     tests = _run_pytest(repo, [
         "tests/test_workbench/test_ui_imports.py",
@@ -40,7 +43,7 @@ def verify(repo: Optional[Path] = None) -> Dict[str, Any]:
         _check_file(repo / "runtime" / "latency_reports" / "latency_summary.json", "CHI404 latency summary"),
         _check_file(repo / "apps" / "workbench" / "ui" / "app.py", "Streamlit app"),
         _check_file(repo / "apps" / "workbench" / "requirements.txt", "Workbench requirements"),
-        _check_file(repo / "data_system" / "config" / "events.csv", "Events catalog"),
+        _check_file(events_catalog, "Events catalog"),
     ]
 
     files_ok = all(c["exists"] for c in checks)
