@@ -142,6 +142,7 @@ def test_runtime_contract_is_tab_source_of_truth() -> None:
         expected_robustness_states,
         expected_run_states,
         expected_sim_shadow_states,
+        expected_status_response_contract,
         expected_verify_response_contract,
         expected_workbench_cli_request_args,
         load_runtime_contract,
@@ -259,6 +260,8 @@ def test_runtime_contract_is_tab_source_of_truth() -> None:
             assert endpoint["response_contract"] == expected_download_response_contract()
         if command == "verify":
             assert endpoint["response_contract"] == expected_verify_response_contract()
+        if command == "status":
+            assert endpoint["response_contract"] == expected_status_response_contract()
     for utility in contract["utility_cli_commands"]:
         command = utility["cli"].replace("python -m workbench ", "")
         assert utility["request_args"] == expected_request_args[command]
@@ -299,6 +302,46 @@ def test_verify_response_contract_matches_producer_and_dispatcher(
     payload = json.loads(capsys.readouterr().out)
     assert required <= set(payload)
     assert payload["all_ok"] is False
+
+
+def test_status_response_contract_matches_producer_and_dispatcher(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from workbench import __main__ as workbench_main
+    from workbench.src import status as status_mod
+
+    monkeypatch.setattr(status_mod, "scan_npz", lambda _repo: {"npz_count": 3, "npz_total_size_mb": 12.5})
+    monkeypatch.setattr(status_mod, "check_graphify", lambda _repo: {"graph_present": True})
+    monkeypatch.setattr(status_mod, "list_models", lambda: ["HYP_1", "HYP_2"])
+    promo_dir = tmp_path / "research_cards" / "promotion"
+    promo_dir.mkdir(parents=True)
+    (promo_dir / "one.json").write_text("{}", encoding="utf-8")
+    (promo_dir / "two.json").write_text("{}", encoding="utf-8")
+
+    required = set(status_mod.STATUS_RESPONSE_CONTRACT["required"])
+    result = status_mod.build_status_snapshot(tmp_path)
+    assert required <= set(result)
+    assert result == {
+        "models_registered": 2,
+        "npz_files": 3,
+        "npz_total_mb": 12.5,
+        "graph_ready": True,
+        "promoted_candidates": 2,
+    }
+
+    dispatcher_result = {
+        "models_registered": 4,
+        "npz_files": 5,
+        "npz_total_mb": 6.5,
+        "graph_ready": False,
+        "promoted_candidates": 1,
+    }
+    monkeypatch.setattr(status_mod, "build_status_snapshot", lambda _repo: dispatcher_result)
+
+    assert workbench_main.main(["status", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert required <= set(payload)
+    assert payload == dispatcher_result
 
 
 def test_runtime_contract_rejects_schema_and_policy_drift() -> None:
@@ -353,6 +396,20 @@ def test_runtime_contract_rejects_schema_and_policy_drift() -> None:
                 endpoint for endpoint in payload["backend_endpoints"] if endpoint["id"] == "workbench.verify"
             )["response_contract"].update({"success_field": "files_ok"}),
             "response_contract must match Workbench verify response contract",
+        ),
+        (
+            "status_response_contract_drift",
+            lambda payload: next(
+                endpoint for endpoint in payload["backend_endpoints"] if endpoint["id"] == "workbench.status"
+            )["response_contract"]["required"].remove("graph_ready"),
+            "response_contract must match Workbench status response contract",
+        ),
+        (
+            "status_response_contract_property_drift",
+            lambda payload: next(
+                endpoint for endpoint in payload["backend_endpoints"] if endpoint["id"] == "workbench.status"
+            )["response_contract"]["properties"].update({"graph_ready": "string"}),
+            "response_contract must match Workbench status response contract",
         ),
         (
             "missing_tab_field",

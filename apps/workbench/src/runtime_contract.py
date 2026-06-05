@@ -724,6 +724,12 @@ def expected_verify_response_contract() -> dict[str, Any]:
     return _copy_response_contract(VERIFY_RESPONSE_CONTRACT)
 
 
+def expected_status_response_contract() -> dict[str, Any]:
+    from workbench.src.status import STATUS_RESPONSE_CONTRACT
+
+    return _copy_response_contract(STATUS_RESPONSE_CONTRACT)
+
+
 def _validate_cli_request_args(
     errors: list[str],
     *,
@@ -760,6 +766,16 @@ def _validate_verify_response_contract(errors: list[str], index: int, endpoint: 
     if actual != expected:
         errors.append(
             f"backend_endpoints[{index}].response_contract must match Workbench verify response contract: "
+            f"expected {expected!r}, got {actual!r}"
+        )
+
+
+def _validate_status_response_contract(errors: list[str], index: int, endpoint: dict[str, Any]) -> None:
+    actual = endpoint.get("response_contract")
+    expected = expected_status_response_contract()
+    if actual != expected:
+        errors.append(
+            f"backend_endpoints[{index}].response_contract must match Workbench status response contract: "
             f"expected {expected!r}, got {actual!r}"
         )
 
@@ -987,6 +1003,8 @@ def validate_runtime_contract(contract: dict[str, Any] | None = None) -> list[st
                     _validate_download_response_contract(errors, index, endpoint)
                 if command == "verify":
                     _validate_verify_response_contract(errors, index, endpoint)
+                if command == "status":
+                    _validate_status_response_contract(errors, index, endpoint)
     utilities = payload.get("utility_cli_commands")
     utility_commands: set[str] = set()
     if not isinstance(utilities, list) or not utilities:

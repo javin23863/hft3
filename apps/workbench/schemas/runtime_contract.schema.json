@@ -371,7 +371,14 @@
           "minItems": 1,
           "uniqueItems": true
         },
-        "failure_exit_code": {"type": "integer"}
+        "failure_exit_code": {"type": "integer"},
+        "properties": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "enum": ["object", "array", "string", "boolean", "integer", "number", "null"]
+          }
+        }
       },
       "additionalProperties": false
     }

@@ -183,21 +183,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "status":
         from workbench.src.json_output import emit_json
-        from workbench.src.setup import scan_npz, check_graphify
-        from workbench.src.registry.unified_registry import list_models
+        from workbench.src.status import build_status_snapshot
 
-        npz = scan_npz(_REPO)
-        graph = check_graphify(_REPO)
-        models = list_models()
-        promo_dir = _REPO / "research_cards" / "promotion"
-        promoted = list(promo_dir.glob("*.json")) if promo_dir.is_dir() else []
-        result = {
-            "models_registered": len(models),
-            "npz_files": npz["npz_count"],
-            "npz_total_mb": npz["npz_total_size_mb"],
-            "graph_ready": graph["graph_present"],
-            "promoted_candidates": len(promoted),
-        }
+        result = build_status_snapshot(_REPO)
         if getattr(args, "json", False):
             emit_json(result)
         else:
