@@ -43,22 +43,6 @@ AUTHORITY_REFS = [
     "AGENTS.md options quarantine",
 ]
 
-PASS_STATUS = "PASS"
-BLOCKING_STATUS = "BLOCKING"
-
-
-def _blocking_row(gate: str, reason: str, *, status: str = BLOCKING_STATUS) -> dict:
-    return {"gate": gate, "status": status, "reason": reason}
-
-
-def _with_contract_fields(payload: dict, *, status: str = PASS_STATUS, blocking: list[dict] | None = None, error: str = "") -> dict:
-    return {
-        "status": status,
-        "blocking": blocking or [],
-        "error": error,
-        **payload,
-    }
-
 
 def _options_discover_manifest() -> dict:
     proc = subprocess.run(
@@ -131,39 +115,16 @@ def run_backfill(args: argparse.Namespace) -> dict:
             payload = _event_payload(period_name, event)
             periods.setdefault(period_name, {"name": period_name, "events": []})["events"].append(payload)
         return {
-            **_with_contract_fields(
-                {
-                    "mode": "dry_run",
-                    "scope": scope,
-                    "model_id": args.model,
-                    "symbol": args.symbol,
-                    "summary": summary,
-                    "periods": list(periods.values()),
-                }
-            ),
+            "mode": "dry_run",
+            "scope": scope,
+            "model_id": args.model,
+            "symbol": args.symbol,
+            "summary": summary,
+            "periods": list(periods.values()),
         }
 
     missing = missing_for_campaign(_REPO, args.model, args.symbol, universe_scope=scope)
     est_cost = estimate_download_cost_usd(missing)
-    if args.max_cost_usd is not None and missing and est_cost > args.max_cost_usd:
-        reason = f"Estimated cost ${est_cost:.2f} exceeds max ${args.max_cost_usd:.2f}"
-        return _with_contract_fields(
-            {
-                "mode": "download" if args.download_missing else "manifest",
-                "scope": scope,
-                "model_id": args.model,
-                "symbol": args.symbol,
-                "summary": summary,
-                "missing_count": len(missing),
-                "estimated_cost_usd": est_cost,
-                "max_cost_usd": args.max_cost_usd,
-                "download_requested": False,
-                "download_requested_for": [],
-            },
-            status=BLOCKING_STATUS,
-            blocking=[_blocking_row("download_cost_cap", reason)],
-            error=reason,
-        )
     manifest = {
         "model_id": args.model,
         "symbol": args.symbol,
@@ -189,72 +150,23 @@ def run_backfill(args: argparse.Namespace) -> dict:
 
     download_ids = []
     if args.download_missing and missing:
-        try:
-            download_ids = download_events(_REPO, missing, max_cost_usd=args.max_cost_usd)
-        except Exception as exc:
-            reason = str(exc)
-            return _with_contract_fields(
-                {
-                    "mode": "download",
-                    "scope": scope,
-                    "model_id": args.model,
-                    "symbol": args.symbol,
-                    "manifest_path": str(out),
-                    "summary": summary,
-                    "missing_count": len(missing),
-                    "estimated_cost_usd": est_cost,
-                    "max_cost_usd": args.max_cost_usd,
-                    "download_requested": False,
-                    "download_requested_for": [],
-                },
-                status=BLOCKING_STATUS,
-                blocking=[_blocking_row("download_events", reason)],
-                error=reason,
-            )
-        if len(download_ids) < len(missing):
-            failed_count = len(missing) - len(download_ids)
-            reason = f"{failed_count} of {len(missing)} missing event window download(s) failed"
-            return _with_contract_fields(
-                {
-                    "mode": "download",
-                    "scope": scope,
-                    "model_id": args.model,
-                    "symbol": args.symbol,
-                    "manifest_path": str(out),
-                    "summary": summary,
-                    "missing_count": len(missing),
-                    "estimated_cost_usd": est_cost,
-                    "max_cost_usd": args.max_cost_usd,
-                    "download_requested": bool(download_ids),
-                    "download_requested_for": download_ids,
-                },
-                status=BLOCKING_STATUS,
-                blocking=[_blocking_row("download_missing_events", reason)],
-                error=reason,
-            )
-    return _with_contract_fields(
-        {
-            "mode": "download" if args.download_missing else "manifest",
-            "scope": scope,
-            "model_id": args.model,
-            "symbol": args.symbol,
-            "manifest_path": str(out),
-            "summary": summary,
-            "missing_count": len(missing),
-            "estimated_cost_usd": est_cost,
-            "max_cost_usd": args.max_cost_usd,
-            "download_requested": bool(download_ids),
-            "download_requested_for": download_ids,
-        }
-    )
+        download_ids = download_events(_REPO, missing, max_cost_usd=args.max_cost_usd)
+    return {
+        "mode": "download" if args.download_missing else "manifest",
+        "scope": scope,
+        "model_id": args.model,
+        "symbol": args.symbol,
+        "manifest_path": str(out),
+        "summary": summary,
+        "missing_count": len(missing),
+        "estimated_cost_usd": est_cost,
+        "max_cost_usd": args.max_cost_usd,
+        "download_requested": bool(download_ids),
+        "download_requested_for": download_ids,
+    }
 
 
 def _print_human_result(result: dict) -> None:
-    if result.get("blocking"):
-        print(f"Status: {result.get('status')}")
-        for row in result.get("blocking") or []:
-            print(f"  {row.get('gate')}: {row.get('reason')}")
-        return
     if result.get("mode") == "dry_run":
         print(f"Scope: {result.get('scope')}")
         summary = result.get("summary") or {}
@@ -294,7 +206,7 @@ def main(argv: list[str] | None = None) -> int:
             _print_human_result(result)
     except BrokenPipeError:
         return 0
-    return 0 if result.get("status") == PASS_STATUS else 1
+    return 0
 
 
 if __name__ == "__main__":

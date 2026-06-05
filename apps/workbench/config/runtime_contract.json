@@ -249,11 +249,6 @@
         "optional": ["symbol", "max_cost_usd", "scope"],
         "flags": ["dry_run", "json"]
       },
-      "response_contract": {
-        "required": ["status", "blocking", "error"],
-        "status_values": ["PASS", "BLOCKING"],
-        "blocking_item_required": ["gate", "status", "reason"]
-      },
       "response_schema": "download/backfill plan or started backfill status",
       "error_response": "nonzero exit or JSON status with missing key/cost/data blocker"
     },

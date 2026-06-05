@@ -134,7 +134,6 @@ def test_runtime_contract_is_tab_source_of_truth() -> None:
         expected_campaign_states,
         expected_data_coverage_states,
         expected_data_states,
-        expected_download_response_contract,
         expected_event_row_states,
         expected_model_states,
         expected_rithmic_endpoint_states,
@@ -154,7 +153,6 @@ def test_runtime_contract_is_tab_source_of_truth() -> None:
     assert schema["properties"]["schema_version"]["const"] == contract["schema_version"]
     assert "tab_contract" in schema["$defs"]
     assert "request_args" in schema["$defs"]
-    assert "response_contract" in schema["$defs"]
     assert "utility_cli_command" in schema["$defs"]
     for definition in ("backend_endpoint", "utility_cli_command"):
         assert "request_args" in schema["$defs"][definition]["required"]
@@ -253,8 +251,6 @@ def test_runtime_contract_is_tab_source_of_truth() -> None:
     for endpoint in contract["backend_endpoints"]:
         command = endpoint["cli"].replace("python -m workbench ", "")
         assert endpoint["request_args"] == expected_request_args[command]
-        if command == "download":
-            assert endpoint["response_contract"] == expected_download_response_contract()
     for utility in contract["utility_cli_commands"]:
         command = utility["cli"].replace("python -m workbench ", "")
         assert utility["request_args"] == expected_request_args[command]
@@ -291,13 +287,6 @@ def test_runtime_contract_rejects_schema_and_policy_drift() -> None:
             "endpoint_request_args_drift",
             lambda payload: payload["backend_endpoints"][0]["request_args"]["required"].remove("model"),
             "backend_endpoints[0].request_args must match Workbench CLI argparse for 'run'",
-        ),
-        (
-            "download_response_contract_drift",
-            lambda payload: next(
-                endpoint for endpoint in payload["backend_endpoints"] if endpoint["id"] == "workbench.download"
-            )["response_contract"]["required"].remove("status"),
-            "response_contract must match Workbench download response contract",
         ),
         (
             "missing_tab_field",
