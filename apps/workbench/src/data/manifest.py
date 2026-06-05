@@ -55,6 +55,13 @@ class DatasetManifest:
 
     def gate_error(self) -> Optional[str]:
         if not self.data_sufficient:
+            coverage = self.extra.get("coverage_summary") if isinstance(self.extra, dict) else None
+            if isinstance(coverage, dict) and coverage.get("coverage_status") == "BELOW_MINIMUM":
+                return (
+                    "DATA_INSUFFICIENT: need "
+                    f"{coverage.get('minimum_required_days', 250)} valid trading days, "
+                    f"have {coverage.get('valid_trading_days', 0)}"
+                )
             return (
                 f"DATA_INSUFFICIENT: need {self.min_history_years_required}y history, "
                 f"have {self.history_years_available}y"

@@ -11,6 +11,7 @@ import yaml
 from backtest.adapters.rithmic_replay_loader import resolve_event_npz
 from backtest_pipeline.src.signal_backtester import BacktestResult
 from workbench.src.core.trade_audit import audit_records_to_dataframe, summarize_phase5_timestamp_schema
+from workbench.src.data.coverage_check import compute_model_coverage
 from workbench.src.data.l3_loader import L3Loader
 from workbench.src.data.manifest import DatasetManifest
 from workbench.src.latency.viability import analyze_latency_viability, sweep_injection_pnl
@@ -73,6 +74,7 @@ class WorkbenchEngine:
         composition: Optional[ModelComposition] = None,
         strategy_params: Optional[Dict[str, Any]] = None,
         wfc_status: Optional[str] = None,
+        coverage_summary: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         effective = composition or CompositionOrchestrator.default_composition(model_id)
         primary_id = resolve_model_id(effective.primary_model_id)
@@ -98,6 +100,10 @@ class WorkbenchEngine:
             policy = LatencyPolicy.from_cpp_profile(cpp_profile)
             measured_ms = cpp_profile.measured_production_p99_ms
 
+        if coverage_summary is None:
+            coverage_symbol = symbol or "MES.v.0"
+            coverage_summary = compute_model_coverage(self.repo_root, primary_id, coverage_symbol).to_dict()
+
         manifest = DatasetManifest.from_loader(
             resolved_npz,
             event_id,
@@ -106,6 +112,10 @@ class WorkbenchEngine:
             history_years_available=history_years_available,
             chi404_summary=json.loads(chi404.read_text(encoding="utf-8")) if chi404.is_file() else None,
         )
+        manifest.extra["coverage_summary"] = coverage_summary
+        coverage_status = str(coverage_summary.get("coverage_status") or "")
+        if coverage_status:
+            manifest.data_sufficient = coverage_status != "BELOW_MINIMUM"
         if skip_history_gate:
             manifest.data_sufficient = True
 
@@ -121,6 +131,7 @@ class WorkbenchEngine:
             measured_p99_ms=measured_ms,
         )
         ctx.metadata["data_sufficient"] = manifest.data_sufficient
+        ctx.metadata["coverage_summary"] = coverage_summary
         if strategy_params:
             ctx.metadata["strategy_params"] = dict(strategy_params)
         if effective.defensive_stubs:
@@ -322,6 +333,7 @@ class WorkbenchEngine:
             "latency_operating_envelope": latency_envelope_compact,
             "latency_operating_envelope_checks": latency_envelope.get("checks", {}),
             "latency_operating_envelope_blockers": latency_envelope.get("promotion_blockers", []),
+            "coverage_summary": coverage_summary,
         }
         if comp_trace is not None:
             report["composition"] = effective.to_dict()
@@ -348,6 +360,7 @@ class WorkbenchEngine:
                     "latency_authority": "cpp_measured",
                     "cpp_latency_profile": cpp_profile.to_report_dict(),
                     "composition": effective.to_dict() if effective.defensive_stubs else None,
+                    "coverage_summary": coverage_summary,
                 }
             ),
             encoding="utf-8",

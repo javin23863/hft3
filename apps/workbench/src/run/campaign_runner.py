@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -22,6 +22,12 @@ from workbench.src.data.event_catalog import (
     load_sim_shadow_config,
     load_walk_forward_config,
     write_campaign_manifest,
+)
+from workbench.src.data.coverage_check import (
+    compute_model_coverage,
+    format_coverage_summary,
+    missing_event_specs_for_model,
+    write_coverage_summary,
 )
 from workbench.src.registry.model_catalog import phase_budget_summary
 from workbench.src.registry.unified_registry import build_models_config, get_model_config, get_model_by_id
@@ -425,9 +431,53 @@ def run_campaign(
     artifact_dir = campaign_dir_for(repo_root, campaign_id)
     job_dir = job_dir or artifact_dir
     param_hash = _param_hash(primary_id, DEFAULT_STRATEGY_PARAMS)
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    coverage = compute_model_coverage(repo_root, primary_id, symbol)
+    if coverage.coverage_status == "BELOW_MINIMUM" and download_missing and audit_grade and not dry_run:
+        try:
+            from workbench.src.data.catalog_backfill import download_events
+
+            downloaded = download_events(repo_root, missing_event_specs_for_model(repo_root, primary_id, symbol))
+            coverage = compute_model_coverage(repo_root, primary_id, symbol)
+            coverage = replace(
+                coverage,
+                action_taken=(
+                    f"attempted data gap fill; downloaded {len(downloaded)} event windows; "
+                    f"recheck status {coverage.coverage_status}"
+                ),
+            )
+        except Exception as exc:
+            coverage = replace(coverage, action_taken=f"data gap fill failed: {exc}")
+    write_coverage_summary(artifact_dir / "coverage_summary.json", coverage)
 
     if binding.get("campaign_mode") == "options_lane":
-        artifact_dir.mkdir(parents=True, exist_ok=True)
+        if audit_grade and coverage.coverage_status == "BELOW_MINIMUM" and not allow_partial and not dry_run:
+            write_campaign_manifest(
+                artifact_dir / "campaign.json",
+                {
+                    "campaign_id": campaign_id,
+                    "model_id": primary_id,
+                    "symbol": symbol,
+                    "param_hash": param_hash,
+                    "audit_grade": audit_grade,
+                    "coverage_summary": coverage.to_dict(),
+                    "blocking_gates": [
+                        {
+                            "gate": "valid_trading_day_coverage",
+                            "status": coverage.coverage_status,
+                            "reason": coverage.action_taken,
+                        }
+                    ],
+                },
+            )
+            return CampaignResult(
+                campaign_id=campaign_id,
+                model_id=model_id,
+                symbol=symbol,
+                status="DATA_INSUFFICIENT",
+                param_hash=param_hash,
+                artifact_dir=str(artifact_dir),
+            )
         return _run_options_campaign(
             repo_root,
             model_id,
@@ -439,7 +489,7 @@ def run_campaign(
 
     _write_control(job_dir, "run")
     years_avail = catalog_years_available(primary_id, symbol, repo_root)
-    history_gate = audit_grade and years_avail < cfg.min_history_years
+    history_gate = audit_grade and coverage.coverage_status == "BELOW_MINIMUM"
 
     campaign_meta = {
         "campaign_id": campaign_id,
@@ -455,20 +505,10 @@ def run_campaign(
         ],
         "catalog_years_available": years_avail,
         "min_history_years_required": cfg.min_history_years,
+        "coverage_summary": coverage.to_dict(),
         "trial_mode": trial_mode,
     }
-    artifact_dir.mkdir(parents=True, exist_ok=True)
     write_campaign_manifest(artifact_dir / "campaign.json", campaign_meta)
-
-    if history_gate and not allow_partial:
-        return CampaignResult(
-            campaign_id=campaign_id,
-            model_id=model_id,
-            symbol=symbol,
-            status="DATA_INSUFFICIENT",
-            param_hash=param_hash,
-            artifact_dir=str(artifact_dir),
-        )
 
     if dry_run:
         from workbench.src.data.event_catalog import campaign_preview
@@ -476,6 +516,7 @@ def run_campaign(
         preview = campaign_preview(model_id, symbol, repo_root)
         preview.setdefault("diagnostics", {})
         preview["diagnostics"]["hot_memory_telemetry"] = _hot_memory_telemetry(repo_root)
+        preview["coverage_summary"] = coverage.to_dict()
         write_campaign_manifest(artifact_dir / "dry_run_preview.json", preview)
         return CampaignResult(
             campaign_id=campaign_id,
@@ -486,10 +527,40 @@ def run_campaign(
             artifact_dir=str(artifact_dir),
         )
 
+    if history_gate and not allow_partial:
+        print(format_coverage_summary(coverage))
+        write_campaign_manifest(
+            artifact_dir / "summary.json",
+            {
+                "campaign_id": campaign_id,
+                "status": "DATA_INSUFFICIENT",
+                "model_id": primary_id,
+                "symbol": symbol,
+                "coverage_summary": coverage.to_dict(),
+                "blocking_gates": [
+                    {
+                        "gate": "valid_trading_day_coverage",
+                        "status": coverage.coverage_status,
+                        "reason": coverage.action_taken,
+                    }
+                ],
+                "promote_candidate": False,
+            },
+        )
+        return CampaignResult(
+            campaign_id=campaign_id,
+            model_id=model_id,
+            symbol=symbol,
+            status="DATA_INSUFFICIENT",
+            param_hash=param_hash,
+            artifact_dir=str(artifact_dir),
+        )
+
     engine = WorkbenchEngine(repo_root)
     period_results: List[PeriodResult] = []
     status = "PASS"
     campaign_latency_event_envelopes: List[Dict[str, Any]] = []
+    print(format_coverage_summary(coverage))
 
     wfc_cfg = load_wfc_config(repo_root)
     wfc_result: Optional[WfcResult] = None
@@ -682,6 +753,7 @@ def run_campaign(
                     chi404_summary=chi404_summary,
                     seed=seed,
                     history_years_available=float(years_avail),
+                    coverage_summary=coverage.to_dict(),
                     skip_history_gate=not audit_grade,
                     fast_sweep=not audit_grade,
                     composition=effective,

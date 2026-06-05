@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from workbench.src.data.coverage_check import CoverageSummary
 from workbench.src.run.campaign_runner import run_campaign
 
 REPO = Path(__file__).resolve().parents[2]
@@ -101,3 +102,67 @@ def test_sequential_gate_stops_after_discovery_fail(mock_list, MockEngine, mock_
 def test_hyp_29_dry_run_no_cpi_events():
     result = run_campaign(REPO, "HYP_29", "MES.v.0", dry_run=True, allow_partial=True)
     assert result.status == "DRY_RUN"
+
+
+@patch("workbench.src.run.engine.WorkbenchEngine")
+@patch("workbench.src.run.campaign_runner.compute_model_coverage")
+def test_audit_grade_blocks_before_robustness_when_coverage_under_250(mock_coverage, MockEngine):
+    mock_coverage.return_value = CoverageSummary(
+        model_name="HYP_5",
+        data_type="CME MBO Level 3",
+        required_symbols=["MES"],
+        available_start_date="",
+        available_end_date="",
+        valid_trading_days=249,
+        minimum_required_days=250,
+        target_days=750,
+        coverage_status="BELOW_MINIMUM",
+        missing_date_ranges=["2023-01-03..2023-12-29"],
+        action_taken="fill missing data before robustness",
+    )
+
+    result = run_campaign(
+        REPO,
+        "HYP_5",
+        "MES.v.0",
+        audit_grade=True,
+        allow_partial=False,
+        campaign_id="pytest_coverage_blocks",
+    )
+
+    assert result.status == "DATA_INSUFFICIENT"
+    MockEngine.assert_not_called()
+
+
+@patch("workbench.src.run.campaign_runner.list_campaign_events")
+@patch("workbench.src.run.campaign_runner.load_wfc_config")
+@patch("workbench.src.run.campaign_runner.catalog_years_available")
+@patch("workbench.src.run.campaign_runner.compute_model_coverage")
+def test_valid_day_coverage_replaces_old_year_gate(mock_coverage, mock_years, mock_wfc, mock_events):
+    mock_coverage.return_value = CoverageSummary(
+        model_name="HYP_5",
+        data_type="CME MBO Level 3",
+        required_symbols=["MES"],
+        available_start_date="2023-01-03",
+        available_end_date="2023-12-29",
+        valid_trading_days=250,
+        minimum_required_days=250,
+        target_days=750,
+        coverage_status="MINIMUM_ONLY",
+        missing_date_ranges=["none"],
+        action_taken="proceed to robustness (minimum coverage only)",
+    )
+    mock_years.return_value = 0
+    mock_wfc.return_value = {"enabled": False}
+    mock_events.return_value = []
+
+    result = run_campaign(
+        REPO,
+        "HYP_5",
+        "MES.v.0",
+        audit_grade=True,
+        allow_partial=False,
+        campaign_id="pytest_coverage_replaces_year_gate",
+    )
+
+    assert result.status != "DATA_INSUFFICIENT"
