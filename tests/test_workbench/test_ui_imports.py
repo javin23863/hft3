@@ -184,6 +184,35 @@ def test_runtime_contract_rejects_schema_and_policy_drift() -> None:
             lambda payload: payload["backend_endpoints"][1].update({"id": payload["backend_endpoints"][0]["id"]}),
             "backend endpoint ids must be unique",
         ),
+        (
+            "bad_frontend_component",
+            lambda payload: payload["tabs"][0].update(
+                {"frontend_component": "workbench.ui.evidence_panels.no_such_renderer"}
+            ),
+            "Autonomous Run.frontend_component 'workbench.ui.evidence_panels.no_such_renderer' missing attribute "
+            "'no_such_renderer' on 'workbench.ui.evidence_panels'",
+        ),
+        (
+            "module_only_frontend_component",
+            lambda payload: payload["tabs"][0].update({"frontend_component": "workbench.ui.evidence_panels"}),
+            "Autonomous Run.frontend_component 'workbench.ui.evidence_panels' must name a module attribute",
+        ),
+        (
+            "bad_action_component",
+            lambda payload: payload["tabs"][1].update(
+                {"action_components": ["workbench.ui.campaign_panel.no_such_action"]}
+            ),
+            "Registry & Data.action_components[0] 'workbench.ui.campaign_panel.no_such_action' missing attribute "
+            "'no_such_action' on 'workbench.ui.campaign_panel'",
+        ),
+        (
+            "bad_backend_service",
+            lambda payload: payload["tabs"][0].update(
+                {"backend_service": "workbench.src.run.evidence_snapshot.no_such_service"}
+            ),
+            "Autonomous Run.backend_service 'workbench.src.run.evidence_snapshot.no_such_service' missing attribute "
+            "'no_such_service' on 'workbench.src.run.evidence_snapshot'",
+        ),
     ]
 
     for label, mutate, expected in cases:
@@ -198,11 +227,10 @@ def test_runtime_contract_rejects_schema_and_policy_drift() -> None:
 
 
 def test_runtime_contract_components_are_real_and_complete() -> None:
+    from workbench.src.runtime_contract import validate_runtime_contract
+
     contract_path = Path(__file__).resolve().parents[2] / "apps" / "workbench" / "config" / "runtime_contract.json"
     contract = json.loads(contract_path.read_text(encoding="utf-8"))
-    app_src = (Path(__file__).resolve().parents[2] / "apps" / "workbench" / "ui" / "app.py").read_text(
-        encoding="utf-8"
-    )
     main_src = (Path(__file__).resolve().parents[2] / "apps" / "workbench" / "__main__.py").read_text(
         encoding="utf-8"
     )
@@ -222,12 +250,9 @@ def test_runtime_contract_components_are_real_and_complete() -> None:
         "error_behavior",
         "allowed_actions",
     }
+    assert validate_runtime_contract(contract) == []
     for tab in contract["tabs"]:
         assert required_fields <= set(tab), tab["name"]
-        components = [tab["frontend_component"]] + list(tab["action_components"])
-        for component in components:
-            renderer = component.rsplit(".", 1)[-1]
-            assert renderer in app_src, tab["name"]
         if tab["allowed_actions"]:
             assert tab["action_components"], tab["name"]
         assert tab["backend_service"].startswith(("workbench.src.", "workbench.ui."))
