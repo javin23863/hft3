@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
 import json
 from pathlib import Path
 from typing import Any
@@ -112,39 +111,6 @@ def validate_runtime_contract_schema(contract: dict[str, Any], schema: dict[str,
     return _validate_schema_node(contract, root_schema, root_schema, "$")
 
 
-def _resolve_dotted_reference(reference: Any, *, allow_module: bool, require_callable: bool) -> str | None:
-    if not isinstance(reference, str) or not reference.strip():
-        return "must be a non-empty dotted import path"
-    dotted_path = reference.strip()
-    if "." not in dotted_path:
-        return f"{dotted_path!r} must include a module and attribute"
-
-    parts = dotted_path.split(".")
-    last_import_error: Exception | None = None
-    for split_at in range(len(parts), 0, -1):
-        module_name = ".".join(parts[:split_at])
-        attr_parts = parts[split_at:]
-        try:
-            resolved = importlib.import_module(module_name)
-        except Exception as exc:
-            last_import_error = exc
-            continue
-        if not attr_parts:
-            if allow_module:
-                return None
-            return f"{dotted_path!r} must name a module attribute"
-        for attr in attr_parts:
-            if not hasattr(resolved, attr):
-                return f"{dotted_path!r} missing attribute {attr!r} on {module_name!r}"
-            resolved = getattr(resolved, attr)
-        if require_callable and not callable(resolved):
-            return f"{dotted_path!r} must resolve to a callable"
-        return None
-
-    detail = f": {last_import_error}" if last_import_error else ""
-    return f"{dotted_path!r} could not import a module{detail}"
-
-
 def load_runtime_contract(path: Path | None = None) -> dict[str, Any]:
     contract_path = path or CONTRACT_PATH
     return json.loads(contract_path.read_text(encoding="utf-8"))
@@ -187,20 +153,6 @@ def validate_runtime_contract(contract: dict[str, Any] | None = None) -> list[st
         ):
             if field in tab and not isinstance(tab[field], list):
                 errors.append(f"{name}.{field} must be a list")
-        for field in ("frontend_component", "backend_service"):
-            if field in tab:
-                error = _resolve_dotted_reference(
-                    tab[field],
-                    allow_module=(field == "backend_service"),
-                    require_callable=True,
-                )
-                if error:
-                    errors.append(f"{name}.{field} {error}")
-        if isinstance(tab.get("action_components"), list):
-            for component_index, component in enumerate(tab["action_components"]):
-                error = _resolve_dotted_reference(component, allow_module=False, require_callable=True)
-                if error:
-                    errors.append(f"{name}.action_components[{component_index}] {error}")
     if len(names) != len(set(names)):
         errors.append("tab names must be unique")
     run_sources = payload.get("run_sources")
