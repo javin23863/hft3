@@ -1,0 +1,125 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AGENT_INTERPRETATION",
+  "type": "object",
+  "required": ["agent_interpretation"],
+  "properties": {
+    "agent_interpretation": {
+      "type": "object",
+      "required": [
+        "packet_id",
+        "instrument",
+        "timestamp",
+        "observed_state",
+        "mechanism_assessment",
+        "execution_assessment",
+        "research_action",
+        "prohibited_claim_check"
+      ],
+      "properties": {
+        "packet_id": { "$ref": "#/definitions/non_empty_string" },
+        "instrument": { "$ref": "#/definitions/non_empty_string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "observed_state": {
+          "type": "object",
+          "required": ["dominant_behavior", "evidence_features", "source_tier"],
+          "properties": {
+            "dominant_behavior": {
+              "enum": [
+                "durable_liquidity",
+                "fleeting_liquidity",
+                "absorption",
+                "liquidity_vacuum",
+                "queue_breach",
+                "toxic_flow",
+                "neutral"
+              ]
+            },
+            "evidence_features": { "$ref": "#/definitions/string_array" },
+            "source_tier": { "$ref": "#/definitions/source_tier" }
+          },
+          "additionalProperties": false
+        },
+        "mechanism_assessment": {
+          "type": "object",
+          "required": ["likely_mechanism", "confidence", "alternative_explanations"],
+          "properties": {
+            "likely_mechanism": { "$ref": "#/definitions/non_empty_string" },
+            "confidence": { "$ref": "#/definitions/probability" },
+            "alternative_explanations": { "$ref": "#/definitions/string_array" }
+          },
+          "additionalProperties": false
+        },
+        "execution_assessment": {
+          "type": "object",
+          "required": [
+            "signal_half_life_estimate",
+            "latency_survival",
+            "fill_quality",
+            "adverse_selection_risk"
+          ],
+          "properties": {
+            "signal_half_life_estimate": { "$ref": "#/definitions/non_empty_string" },
+            "latency_survival": { "enum": ["pass", "fail", "unknown"] },
+            "fill_quality": { "enum": ["favorable", "neutral", "adverse", "unknown"] },
+            "adverse_selection_risk": { "enum": ["low", "medium", "high", "unknown"] }
+          },
+          "additionalProperties": false
+        },
+        "research_action": {
+          "type": "object",
+          "required": ["recommended_action", "reason"],
+          "properties": {
+            "recommended_action": {
+              "enum": [
+                "ignore",
+                "log_only",
+                "create_hypothesis_card",
+                "update_existing_hypothesis",
+                "send_to_existing_robustness_pipeline"
+              ]
+            },
+            "reason": { "$ref": "#/definitions/non_empty_string" }
+          },
+          "additionalProperties": false
+        },
+        "prohibited_claim_check": {
+          "type": "object",
+          "required": [
+            "used_future_data",
+            "invented_source",
+            "narrative_only",
+            "unsupported_causality"
+          ],
+          "properties": {
+            "used_future_data": { "type": "boolean" },
+            "invented_source": { "type": "boolean" },
+            "narrative_only": { "type": "boolean", "const": false },
+            "unsupported_causality": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "non_empty_string": { "type": "string", "minLength": 1 },
+    "string_array": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/non_empty_string" },
+      "minItems": 1
+    },
+    "probability": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+    "source_tier": {
+      "enum": [
+        "tier_0_reality",
+        "tier_1_primary",
+        "tier_2_vendor_normalized",
+        "tier_3_interpretive",
+        "tier_4_untrusted_context"
+      ]
+    }
+  }
+}

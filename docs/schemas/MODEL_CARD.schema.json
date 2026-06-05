@@ -1,0 +1,113 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MODEL_CARD",
+  "type": "object",
+  "required": ["model_card"],
+  "properties": {
+    "model_card": {
+      "type": "object",
+      "required": [
+        "model_id",
+        "model_type",
+        "hypothesis_ids",
+        "feature_ids",
+        "label_id",
+        "asset_scope",
+        "regime_scope",
+        "training_window",
+        "validation_window",
+        "holdout_window",
+        "robustness_tests",
+        "baseline_comparison",
+        "performance_metrics",
+        "microstructure_metrics",
+        "known_failure_modes",
+        "rejection_conditions",
+        "promotion_status",
+        "explanation_packet"
+      ],
+      "properties": {
+        "model_id": { "$ref": "#/definitions/non_empty_string" },
+        "model_type": { "$ref": "#/definitions/non_empty_string" },
+        "hypothesis_ids": { "$ref": "#/definitions/string_array" },
+        "feature_ids": { "$ref": "#/definitions/string_array" },
+        "label_id": { "$ref": "#/definitions/non_empty_string" },
+        "asset_scope": { "$ref": "#/definitions/string_array" },
+        "regime_scope": { "$ref": "#/definitions/string_array" },
+        "training_window": { "$ref": "#/definitions/non_empty_string" },
+        "validation_window": { "$ref": "#/definitions/non_empty_string" },
+        "holdout_window": { "$ref": "#/definitions/non_empty_string" },
+        "robustness_tests": { "$ref": "#/definitions/string_array" },
+        "baseline_comparison": {
+          "type": "object",
+          "required": ["baseline_model", "uplift_metric", "uplift_value"],
+          "properties": {
+            "baseline_model": { "$ref": "#/definitions/non_empty_string" },
+            "uplift_metric": { "$ref": "#/definitions/non_empty_string" },
+            "uplift_value": { "type": "number" }
+          },
+          "additionalProperties": false
+        },
+        "performance_metrics": { "$ref": "#/definitions/performance_metrics" },
+        "microstructure_metrics": { "$ref": "#/definitions/microstructure_metrics" },
+        "known_failure_modes": { "$ref": "#/definitions/string_array" },
+        "rejection_conditions": { "$ref": "#/definitions/string_array" },
+        "promotion_status": {
+          "enum": ["rejected", "research_only", "candidate", "robustness_passed", "production_eligible"]
+        },
+        "explanation_packet": { "$ref": "#/definitions/non_empty_string" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "non_empty_string": { "type": "string", "minLength": 1 },
+    "string_array": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/non_empty_string" },
+      "minItems": 1
+    },
+    "nullable_number": { "type": ["number", "null"] },
+    "performance_metrics": {
+      "type": "object",
+      "required": [
+        "sharpe",
+        "sortino",
+        "max_drawdown",
+        "hit_rate",
+        "profit_factor",
+        "expectancy",
+        "turnover",
+        "capacity_proxy"
+      ],
+      "properties": {
+        "sharpe": { "$ref": "#/definitions/nullable_number" },
+        "sortino": { "$ref": "#/definitions/nullable_number" },
+        "max_drawdown": { "$ref": "#/definitions/nullable_number" },
+        "hit_rate": { "$ref": "#/definitions/nullable_number" },
+        "profit_factor": { "$ref": "#/definitions/nullable_number" },
+        "expectancy": { "$ref": "#/definitions/nullable_number" },
+        "turnover": { "$ref": "#/definitions/nullable_number" },
+        "capacity_proxy": { "$ref": "#/definitions/nullable_number" }
+      },
+      "additionalProperties": false
+    },
+    "microstructure_metrics": {
+      "type": "object",
+      "required": [
+        "fill_probability",
+        "adverse_selection_probability",
+        "latency_adjusted_edge_bps",
+        "queue_survival_score"
+      ],
+      "properties": {
+        "fill_probability": { "$ref": "#/definitions/nullable_number" },
+        "adverse_selection_probability": { "$ref": "#/definitions/nullable_number" },
+        "latency_adjusted_edge_bps": { "$ref": "#/definitions/nullable_number" },
+        "queue_survival_score": { "$ref": "#/definitions/nullable_number" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

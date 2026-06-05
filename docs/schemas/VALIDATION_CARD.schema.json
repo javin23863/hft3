@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "VALIDATION_CARD",
+  "type": "object",
+  "required": ["validation_card"],
+  "properties": {
+    "validation_card": {
+      "type": "object",
+      "required": [
+        "validation_id",
+        "object_type",
+        "object_id",
+        "point_in_time_safe",
+        "leakage_tests_passed",
+        "survivorship_bias_checked",
+        "timestamp_alignment_checked",
+        "deterministic_replay_passed",
+        "baseline_comparison_passed",
+        "robustness_tests_passed",
+        "execution_friction_checked",
+        "latency_haircut_checked",
+        "regime_coverage_checked",
+        "cross_symbol_checked",
+        "failure_reasons",
+        "required_remediation"
+      ],
+      "properties": {
+        "validation_id": { "$ref": "#/definitions/non_empty_string" },
+        "object_type": { "enum": ["feature", "hypothesis", "model"] },
+        "object_id": { "$ref": "#/definitions/non_empty_string" },
+        "point_in_time_safe": { "type": "boolean" },
+        "leakage_tests_passed": { "type": "boolean" },
+        "survivorship_bias_checked": { "type": "boolean" },
+        "timestamp_alignment_checked": { "type": "boolean" },
+        "deterministic_replay_passed": { "type": "boolean" },
+        "baseline_comparison_passed": { "type": "boolean" },
+        "robustness_tests_passed": { "type": "boolean" },
+        "execution_friction_checked": { "type": "boolean" },
+        "latency_haircut_checked": { "type": "boolean" },
+        "regime_coverage_checked": { "type": "boolean" },
+        "cross_symbol_checked": { "type": "boolean" },
+        "failure_reasons": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "required_remediation": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "non_empty_string": { "type": "string", "minLength": 1 }
+  }
+}

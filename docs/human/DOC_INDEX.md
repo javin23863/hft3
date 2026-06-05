@@ -13,6 +13,7 @@ Chronological onboarding for human developers. AI agents: [../ai/ONBOARDING.md](
 | 5a | [../vault/ECONOMIC_EVENT_UNIVERSE.md](../vault/ECONOMIC_EVENT_UNIVERSE.md) | Macro calendar catalog, timezones, snapshots |
 | 5b | [../vault/BACKTESTER_CERTIFICATION.md](../vault/BACKTESTER_CERTIFICATION.md) | T0–T4 certification tiers |
 | 5c | [../research/MBO_FEATURE_PACKET_SOURCE_OF_TRUTH.md](../research/MBO_FEATURE_PACKET_SOURCE_OF_TRUTH.md) | Canonical MBO feature packet math and machine contract |
+| 5d | [../agents/MBO_AGENT_ONTOLOGY_HARDENING_SOURCE_OF_TRUTH.md](../agents/MBO_AGENT_ONTOLOGY_HARDENING_SOURCE_OF_TRUTH.md) | Source-of-truth doctrine for LLM agent ontology and schema hardening |
 | 6 | [../workbench/README.md](../workbench/README.md) | Workbench campaigns, latency, after-action |
 | 7 | [../rithmic_trial/README.md](../rithmic_trial/README.md) | Quarantined live capture (CHI404 only) |
 | 7a | [../chi404/HARDWARE_BASELINE.md](../chi404/HARDWARE_BASELINE.md) | CHI404 CPU/memory/NIC baseline + verify gates |

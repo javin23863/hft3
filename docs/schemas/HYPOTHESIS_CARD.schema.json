@@ -1,0 +1,85 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "HYPOTHESIS_CARD",
+  "type": "object",
+  "required": ["hypothesis_card"],
+  "properties": {
+    "hypothesis_card": {
+      "type": "object",
+      "required": [
+        "hypothesis_id",
+        "title",
+        "ontology_tags",
+        "mechanism",
+        "participant_behavior_assumption",
+        "measurable_footprint",
+        "required_data",
+        "required_features",
+        "target_label",
+        "prediction_horizon",
+        "expected_direction",
+        "falsification_tests",
+        "leakage_risks",
+        "execution_dependencies",
+        "regime_scope",
+        "asset_scope",
+        "minimum_evidence_threshold",
+        "rejection_conditions"
+      ],
+      "properties": {
+        "hypothesis_id": { "$ref": "#/definitions/non_empty_string" },
+        "title": { "$ref": "#/definitions/non_empty_string" },
+        "ontology_tags": { "$ref": "#/definitions/string_array" },
+        "mechanism": { "$ref": "#/definitions/non_empty_string" },
+        "participant_behavior_assumption": { "$ref": "#/definitions/non_empty_string" },
+        "measurable_footprint": { "$ref": "#/definitions/non_empty_string" },
+        "required_data": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/required_data_ref" },
+          "minItems": 1
+        },
+        "required_features": { "$ref": "#/definitions/string_array" },
+        "target_label": { "$ref": "#/definitions/non_empty_string" },
+        "prediction_horizon": { "$ref": "#/definitions/non_empty_string" },
+        "expected_direction": {
+          "enum": ["up", "down", "volatility", "liquidity", "fill_quality", "adverse_selection"]
+        },
+        "falsification_tests": { "$ref": "#/definitions/string_array" },
+        "leakage_risks": { "$ref": "#/definitions/string_array" },
+        "execution_dependencies": { "$ref": "#/definitions/string_array" },
+        "regime_scope": { "$ref": "#/definitions/string_array" },
+        "asset_scope": { "$ref": "#/definitions/string_array" },
+        "minimum_evidence_threshold": { "$ref": "#/definitions/non_empty_string" },
+        "rejection_conditions": { "$ref": "#/definitions/string_array" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "non_empty_string": { "type": "string", "minLength": 1 },
+    "string_array": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/non_empty_string" },
+      "minItems": 1
+    },
+    "required_data_ref": {
+      "type": "object",
+      "required": ["dataset_id", "source_tier", "required_fields"],
+      "properties": {
+        "dataset_id": { "$ref": "#/definitions/non_empty_string" },
+        "source_tier": {
+          "enum": [
+            "tier_0_reality",
+            "tier_1_primary",
+            "tier_2_vendor_normalized",
+            "tier_3_interpretive",
+            "tier_4_untrusted_context"
+          ]
+        },
+        "required_fields": { "$ref": "#/definitions/string_array" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

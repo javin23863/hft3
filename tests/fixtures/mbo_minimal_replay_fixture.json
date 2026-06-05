@@ -1,0 +1,243 @@
+{
+  "fixture_id": "mbo_minimal_replay_v1",
+  "schema_version": "1.0.0",
+  "instrument": {
+    "symbol": "ESM6",
+    "asset_class": "future",
+    "venue": "CME",
+    "tick_size": 0.25
+  },
+  "events": [
+    {
+      "event_id": "evt_001",
+      "sequence_number": 1,
+      "exchange_timestamp": "2026-06-05T14:30:00.000000Z",
+      "receive_timestamp": "2026-06-05T14:30:00.000100Z",
+      "action": "add",
+      "side": "bid",
+      "order_id": "bid_1",
+      "price": 5300.0,
+      "size": 10
+    },
+    {
+      "event_id": "evt_002",
+      "sequence_number": 2,
+      "exchange_timestamp": "2026-06-05T14:30:00.000001Z",
+      "receive_timestamp": "2026-06-05T14:30:00.000101Z",
+      "action": "add",
+      "side": "ask",
+      "order_id": "ask_1",
+      "price": 5300.25,
+      "size": 8
+    },
+    {
+      "event_id": "evt_003",
+      "sequence_number": 3,
+      "exchange_timestamp": "2026-06-05T14:30:00.000002Z",
+      "receive_timestamp": "2026-06-05T14:30:00.000102Z",
+      "action": "add",
+      "side": "ask",
+      "order_id": "ask_2",
+      "price": 5300.25,
+      "size": 6
+    },
+    {
+      "event_id": "evt_004",
+      "sequence_number": 4,
+      "exchange_timestamp": "2026-06-05T14:30:00.000003Z",
+      "receive_timestamp": "2026-06-05T14:30:00.000103Z",
+      "action": "cancel",
+      "side": "ask",
+      "order_id": "ask_2",
+      "price": 5300.25,
+      "size": 2
+    },
+    {
+      "event_id": "evt_005",
+      "sequence_number": 5,
+      "exchange_timestamp": "2026-06-05T14:30:00.000004Z",
+      "receive_timestamp": "2026-06-05T14:30:00.000104Z",
+      "action": "partial_fill",
+      "side": "ask",
+      "order_id": "ask_1",
+      "price": 5300.25,
+      "size": 4
+    },
+    {
+      "event_id": "evt_006",
+      "sequence_number": 6,
+      "exchange_timestamp": "2026-06-05T14:30:00.000005Z",
+      "receive_timestamp": "2026-06-05T14:30:00.000105Z",
+      "action": "full_fill",
+      "side": "ask",
+      "order_id": "ask_1",
+      "price": 5300.25,
+      "size": 4
+    },
+    {
+      "event_id": "evt_007",
+      "sequence_number": 7,
+      "exchange_timestamp": "2026-06-05T14:30:00.000006Z",
+      "receive_timestamp": "2026-06-05T14:30:00.000106Z",
+      "action": "add",
+      "side": "ask",
+      "order_id": "ask_3",
+      "price": 5300.25,
+      "size": 7,
+      "behavior": "same_level_replenishment"
+    },
+    {
+      "event_id": "evt_008",
+      "sequence_number": 8,
+      "exchange_timestamp": "2026-06-05T14:30:00.000007Z",
+      "receive_timestamp": "2026-06-05T14:30:00.000107Z",
+      "action": "full_fill",
+      "side": "ask",
+      "order_id": "ask_3",
+      "price": 5300.25,
+      "size": 7,
+      "behavior": "ask_depletion"
+    },
+    {
+      "event_id": "evt_009",
+      "sequence_number": 9,
+      "exchange_timestamp": "2026-06-05T14:30:00.000008Z",
+      "receive_timestamp": "2026-06-05T14:30:00.000108Z",
+      "action": "full_fill",
+      "side": "bid",
+      "order_id": "bid_1",
+      "price": 5300.0,
+      "size": 10,
+      "behavior": "bid_depletion"
+    }
+  ],
+  "expected_assertions": {
+    "best_bid_before_bid_depletion": 5300.0,
+    "best_ask_before_ask_depletion": 5300.25,
+    "ask_order_count_after_evt_003": 2,
+    "cancel_events": 1,
+    "partial_fill_events": 1,
+    "full_fill_events": 3,
+    "same_level_replenishment_events": 1,
+    "contains_ask_depletion": true,
+    "contains_bid_depletion": true
+  },
+  "expected_packet": {
+    "packet_type": "MBO_FEATURE_PACKET",
+    "schema_version": "1.0.0",
+    "instrument": {
+      "symbol": "ESM6",
+      "asset_class": "future",
+      "venue": "CME",
+      "tick_size": 0.25
+    },
+    "timestamps": {
+      "exchange_timestamp": "2026-06-05T14:30:00.000008Z",
+      "receive_timestamp": "2026-06-05T14:30:00.000108Z",
+      "decision_timestamp": "2026-06-05T14:30:00.000108Z",
+      "replay_mode": true
+    },
+    "source_lineage": {
+      "dataset_id": "mbo_minimal_replay_v1",
+      "vendor": "fixture",
+      "source_tier": "tier_0_reality",
+      "raw_file_ref": "tests/fixtures/mbo_minimal_replay_fixture.json",
+      "reconstruction_version": "fixture_replay_v1"
+    },
+    "market_state": {
+      "mid_price": 5300.125,
+      "best_bid": 5300.0,
+      "best_ask": 5300.25,
+      "spread_ticks": 1.0,
+      "event_rate_10ms": 9.0,
+      "event_rate_100ms": 9.0,
+      "event_rate_1s": 9.0
+    },
+    "depth": {
+      "imbalance_1": 0.11,
+      "imbalance_5": 0.07,
+      "imbalance_10": 0.04,
+      "weighted_imbalance_10": 0.06,
+      "order_count_imbalance_10": -0.1,
+      "age_weighted_imbalance_10": 0.03,
+      "bid_entropy_10": 0.4,
+      "ask_entropy_10": 0.7,
+      "book_shape_distance": 0.2
+    },
+    "flow": {
+      "ofi_10ms": 3.0,
+      "ofi_100ms": 3.0,
+      "ofi_1s": 3.0,
+      "normalized_ofi_10": 0.2,
+      "mlofi_vector": [3.0, 1.0, 0.0],
+      "trade_imbalance": 0.25,
+      "cancel_imbalance": -0.2,
+      "add_imbalance": 0.1,
+      "imbalance_velocity": 0.05,
+      "imbalance_acceleration": 0.01
+    },
+    "queue": {
+      "bid_depletion_probability": 0.55,
+      "ask_depletion_probability": 0.72,
+      "queue_front_imbalance": -0.15,
+      "expected_fill_time_bid_ms": 18.0,
+      "expected_fill_time_ask_ms": 12.0,
+      "passive_fill_probability_bid": 0.45,
+      "passive_fill_probability_ask": 0.38,
+      "adverse_selection_probability_bid": 0.34,
+      "adverse_selection_probability_ask": 0.41
+    },
+    "liquidity_quality": {
+      "bid_absorption_score": 0.2,
+      "ask_absorption_score": 0.8,
+      "iceberg_score_bid": 0.1,
+      "iceberg_score_ask": 0.3,
+      "fleeting_liquidity_bid": 0.12,
+      "fleeting_liquidity_ask": 0.28,
+      "vacuum_score_bid": 0.4,
+      "vacuum_score_ask": 0.6,
+      "fragile_wall_score_bid": 0.25,
+      "fragile_wall_score_ask": 0.52
+    },
+    "event_intensity": {
+      "hawkes_buy_trade_intensity": 1.2,
+      "hawkes_sell_trade_intensity": 0.9,
+      "hawkes_cancel_bid_intensity": 0.4,
+      "hawkes_cancel_ask_intensity": 0.8,
+      "queue_reactive_up_probability": 0.62,
+      "queue_reactive_down_probability": 0.38
+    },
+    "cross_asset": {
+      "leading_ofi_es": null,
+      "leading_ofi_nq": null,
+      "leading_ofi_spy": null,
+      "cross_impact_score": null,
+      "lead_lag_confidence": null,
+      "options_delta_pressure": null,
+      "options_gamma_pressure": null
+    },
+    "execution_context": {
+      "latency_budget_us": 750.0,
+      "stale_probability": 0.05,
+      "raw_edge_bps": null,
+      "latency_adjusted_edge_bps": null,
+      "post_ev": null,
+      "take_ev": null,
+      "cancel_ev": null
+    },
+    "risk_flags": {
+      "possible_leakage": false,
+      "stale_book_risk": false,
+      "abnormal_spread": false,
+      "high_fleeting_liquidity": false,
+      "toxic_flow_detected": false,
+      "low_confidence_reconstruction": false
+    },
+    "validation_metadata": {
+      "point_in_time_safe": true,
+      "deterministic_replay_safe": true,
+      "feature_version": "fixture_v1",
+      "generated_by": "tests/fixtures/mbo_minimal_replay_fixture.json"
+    }
+  }
+}
