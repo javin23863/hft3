@@ -43,7 +43,12 @@ def _runnable_event_count(model_id: str, symbol: str, repo_root: Path) -> int:
     total = 0
     for period in load_periods(repo_root):
         for ev in list_campaign_events(model_id, period, symbol, repo_root):
-            if ev.npz_present:
+            if (
+                ev.npz_present
+                and ev.npz_symbol_used == symbol
+                and ev.npz_path.name.endswith("_mbo.npz")
+                and ev.npz_path.parent == repo_root / "data" / "npz"
+            ):
                 total += 1
     return total
 

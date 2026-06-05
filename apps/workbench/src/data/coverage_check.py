@@ -19,8 +19,8 @@ OPTIONS_MIN_VALID_DAYS = 150
 OPTIONS_TARGET_VALID_DAYS = 500
 
 _DATE_PATTERNS = (
-    re.compile(r"\b(20\d{2})[-_](\d{2})[-_](\d{2})\b"),
-    re.compile(r"\b(20\d{2})(\d{2})(\d{2})\b"),
+    re.compile(r"(?<!\d)(20\d{2})[-_](\d{2})[-_](\d{2})(?!\d)"),
+    re.compile(r"(?<!\d)(20\d{2})(\d{2})(\d{2})(?!\d)"),
 )
 _FUTURES_MONTH_CODES = set("FGHJKMNQUVXZ")
 
@@ -32,6 +32,9 @@ class SymbolCoverage:
     available_start_date: str
     available_end_date: str
     coverage_status: str
+    runnable_npz_days: int = 0
+    raw_download_days: int = 0
+    missing_conversion_days: int = 0
 
 
 @dataclass(frozen=True)
@@ -53,6 +56,10 @@ class CoverageSummary:
     option_valid_trading_days: int | None = None
     option_minimum_required_days: int | None = None
     option_target_days: int | None = None
+    runnable_npz_days: int = 0
+    raw_download_days: int = 0
+    missing_conversion_days: int = 0
+    official_coverage_status: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -82,10 +89,11 @@ def required_symbols_for_model(model_id: str, symbol: str, binding: dict[str, An
     slug = resolve_model_id(model_id)
     binding = binding or {}
     required_datasets = {str(v) for v in (binding.get("required_datasets") or [])}
+    if slug == "ES_MES_LEAD_LAG" or slug == "GHOST_ROUTE":
+        return ["ES", "MES"]
+    if slug == "NQ_MNQ_LEAD_LAG":
+        return ["NQ", "MNQ"]
     if "macro_micro_pair_calibration" in required_datasets or slug in {
-        "GHOST_ROUTE",
-        "ES_MES_LEAD_LAG",
-        "NQ_MNQ_LEAD_LAG",
         "MICRO_CONTRACT_RETAIL_LAG",
         "MAX_CONTRACT_CROWDING_IN_MICROS",
     }:
@@ -173,16 +181,14 @@ def _path_matches_symbol(path: Path, symbol: str) -> bool:
     return False
 
 
-def _dated_files_for_symbol(repo_root: Path, symbol: str) -> set[date]:
-    data_root = repo_root / "data"
-    if not data_root.is_dir():
+def _runnable_npz_dates_for_symbol(repo_root: Path, symbol: str) -> set[date]:
+    """Official CME robustness coverage: converted MBO NPZ files only."""
+    npz_root = repo_root / "data" / "npz"
+    if not npz_root.is_dir():
         return set()
     dates: set[date] = set()
-    skip_parts = {"latency_baselines"}
-    for path in data_root.rglob("*"):
+    for path in npz_root.glob("*_mbo.npz"):
         if not path.is_file():
-            continue
-        if any(part in skip_parts for part in path.parts):
             continue
         if not _path_matches_symbol(path, symbol):
             continue
@@ -192,17 +198,54 @@ def _dated_files_for_symbol(repo_root: Path, symbol: str) -> set[date]:
     return dates
 
 
+def _raw_backlog_dates_for_symbol(repo_root: Path, symbol: str) -> set[date]:
+    """Downloaded/backlog dates that are not official runnable robustness coverage."""
+    data_root = repo_root / "data"
+    if not data_root.is_dir():
+        return set()
+    roots = (
+        data_root,
+        data_root / "raw",
+        data_root / "replay" / "mbp10",
+    )
+    dates: set[date] = set()
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for path in root.rglob("*.dbn.zst"):
+            if not path.is_file() or not _path_matches_symbol(path, symbol):
+                continue
+            found = _date_from_path(path)
+            if found is not None:
+                dates.add(found)
+    return dates
+
+
 def _catalog_dates_for_symbol(repo_root: Path, model_id: str, symbol: str) -> tuple[set[date], list[EventSpec]]:
     present: set[date] = set()
     missing: list[EventSpec] = []
     for period in load_periods(repo_root):
         for event in list_campaign_events(model_id, period, symbol, repo_root):
             event_date = _parse_date(event.release_date)
-            if event.npz_present and event_date is not None:
+            if _event_has_own_official_npz(repo_root, event, symbol) and event_date is not None:
                 present.add(event_date)
-            elif not event.npz_present:
+            elif not _event_has_own_official_npz(repo_root, event, symbol):
                 missing.append(event)
     return present, missing
+
+
+def _event_has_own_official_npz(repo_root: Path, event: EventSpec, requested_symbol: str) -> bool:
+    npz_root = (repo_root / "data" / "npz").resolve()
+    try:
+        parent = event.npz_path.resolve().parent
+    except OSError:
+        parent = event.npz_path.parent
+    return (
+        bool(event.npz_present)
+        and event.npz_symbol_used == requested_symbol
+        and event.npz_path.name.endswith("_mbo.npz")
+        and parent == npz_root
+    )
 
 
 def _option_dates(repo_root: Path) -> set[date]:
@@ -262,11 +305,15 @@ def build_coverage_summary_from_dates(
     minimum_required_days: int = MIN_VALID_TRADING_DAYS,
     target_days: int = TARGET_VALID_TRADING_DAYS,
     option_dates: set[date] | None = None,
+    raw_backlog_dates: dict[str, set[date]] | None = None,
 ) -> CoverageSummary:
     normalized_symbols = [_base_symbol(symbol) for symbol in required_symbols]
+    raw_backlog_dates = raw_backlog_dates or {}
     per_symbol: list[SymbolCoverage] = []
     for symbol in normalized_symbols:
         dates = sorted(symbol_dates.get(symbol, set()))
+        raw_dates = raw_backlog_dates.get(symbol, set())
+        missing_conversion = raw_dates - set(dates)
         per_symbol.append(
             SymbolCoverage(
                 symbol=symbol,
@@ -274,6 +321,9 @@ def build_coverage_summary_from_dates(
                 available_start_date=_format_date(min(dates) if dates else None),
                 available_end_date=_format_date(max(dates) if dates else None),
                 coverage_status=_coverage_status(len(dates), minimum_required_days, target_days),
+                runnable_npz_days=len(dates),
+                raw_download_days=len(raw_dates),
+                missing_conversion_days=len(missing_conversion),
             )
         )
 
@@ -306,6 +356,10 @@ def build_coverage_summary_from_dates(
     if valid_dates:
         gaps.update(_weekday_gaps(valid_dates))
     missing_ranges = _compress_dates(gaps)
+    raw_sets = [raw_backlog_dates.get(symbol, set()) for symbol in normalized_symbols]
+    raw_overlap = set.intersection(*raw_sets) if len(raw_sets) > 1 and all(raw_sets) else set()
+    raw_dates_for_summary = raw_overlap if overlap_required else (raw_sets[0] if raw_sets else set())
+    missing_conversion_dates = raw_dates_for_summary - set(valid_dates)
     return CoverageSummary(
         model_name=resolve_model_id(model_name),
         data_type=data_type,
@@ -324,6 +378,10 @@ def build_coverage_summary_from_dates(
         option_valid_trading_days=option_valid_days,
         option_minimum_required_days=option_min,
         option_target_days=option_target,
+        runnable_npz_days=len(valid_dates),
+        raw_download_days=len(raw_dates_for_summary),
+        missing_conversion_days=len(missing_conversion_dates),
+        official_coverage_status=status,
     )
 
 
@@ -341,12 +399,14 @@ def compute_model_coverage(repo_root: Path, model_id: str, symbol: str) -> Cover
     data_type = data_type_for_model(slug, binding)
     required_symbols = required_symbols_for_model(slug, symbol, binding)
     symbol_dates: dict[str, set[date]] = {}
+    raw_backlog_dates: dict[str, set[date]] = {}
     missing_dates: set[date] = set()
     for required_symbol in required_symbols:
         base = _base_symbol(required_symbol)
-        file_dates = _dated_files_for_symbol(repo_root, base)
+        file_dates = _runnable_npz_dates_for_symbol(repo_root, base)
         catalog_dates, missing_events = _catalog_dates_for_symbol(repo_root, slug, f"{base}.v.0")
         symbol_dates[base] = file_dates | catalog_dates
+        raw_backlog_dates[base] = _raw_backlog_dates_for_symbol(repo_root, base)
         for event in missing_events:
             event_date = _parse_date(event.release_date)
             if event_date is not None:
@@ -359,6 +419,7 @@ def compute_model_coverage(repo_root: Path, model_id: str, symbol: str) -> Cover
         symbol_dates=symbol_dates,
         missing_dates=missing_dates,
         option_dates=option_dates,
+        raw_backlog_dates=raw_backlog_dates,
     )
 
 

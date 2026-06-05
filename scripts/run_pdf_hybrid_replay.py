@@ -10,8 +10,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 _REPO = Path(__file__).resolve().parents[1]
-if str(_REPO) not in sys.path:
-    sys.path.insert(0, str(_REPO))
+for path in (_REPO, _REPO / "packages", _REPO / "apps"):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
 
 from backtest.adapters.rithmic_replay_loader import resolve_event_npz
 from backtest_pipeline.src.chi404_latency import (
@@ -143,7 +144,7 @@ def write_research_card(out_dir: Path, payload: dict, event_meta: dict) -> None:
 
 def main() -> int:
     p = argparse.ArgumentParser(description="PDF_MODEL_4 hybrid hftbacktest trial (real NPZ only)")
-    p.add_argument("--event-id", default="CPI_2024_09_11_TIGHT")
+    p.add_argument("--event-id", required=True, help="Explicit catalog event id from events.csv")
     p.add_argument("--events-csv", type=Path, default=DEFAULT_EVENTS_CSV)
     p.add_argument("--npz", type=Path, default=None, help="Explicit NPZ path (must exist)")
     p.add_argument(

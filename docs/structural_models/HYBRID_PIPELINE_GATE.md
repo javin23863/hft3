@@ -18,18 +18,18 @@ One **PDF_MODEL_4** hybrid model fully backtested on a single macro event window
 ## Run (workstation)
 
 ```bash
-python scripts/run_hybrid_pipeline_gate.py
+python scripts/run_hybrid_pipeline_gate.py --event-id <EVENT_ID>
 ```
 
 Options:
 
 ```bash
 python scripts/run_hybrid_pipeline_gate.py --event-id CPI_2024_09_11_TIGHT --symbol MES.v.0
-python scripts/run_hybrid_pipeline_gate.py --latency-ms 1.0
-python scripts/run_hybrid_pipeline_gate.py --skip-unit-tests
-python scripts/run_hybrid_pipeline_gate.py --skip-ablation          # ~5 min vs ~25 min
-python scripts/run_hybrid_pipeline_gate.py --skip-after-action      # no GPT-5.5 endpoint
-python scripts/run_hybrid_pipeline_gate.py --min-trades 0           # replay-only check
+python scripts/run_hybrid_pipeline_gate.py --event-id <EVENT_ID> --latency-ms 1.0
+python scripts/run_hybrid_pipeline_gate.py --event-id <EVENT_ID> --skip-unit-tests
+python scripts/run_hybrid_pipeline_gate.py --event-id <EVENT_ID> --skip-ablation          # ~5 min vs ~25 min
+python scripts/run_hybrid_pipeline_gate.py --event-id <EVENT_ID> --skip-after-action      # no GPT-5.5 endpoint
+python scripts/run_hybrid_pipeline_gate.py --event-id <EVENT_ID> --min-trades 0           # replay-only check
 ```
 
 ## Steps

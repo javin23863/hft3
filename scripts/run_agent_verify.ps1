@@ -1,4 +1,4 @@
-# Bounded agent verification: T0 + registry + workbench (excludes slow CPI e2e).
+# Bounded agent verification: T0 + registry + workbench (excludes slow catalog-event e2e).
 # Not a substitute for T2 replay certification — see docs/vault/BACKTESTER_CERTIFICATION.md
 # Policy: docs/ai/SHELL_EXECUTION.md
 $ErrorActionPreference = 'Stop'
@@ -15,7 +15,7 @@ $PyArgs = @(
     'tests/test_model_registry_slugs.py',
     'tests/test_workbench/',
     'tests/test_economic_event_universe/',
-    '--ignore=tests/test_workbench/test_cpi_e2e.py',
+    '--ignore=tests/test_workbench/test_catalog_event_e2e.py',
     '-q', '--tb=no'
 )
 

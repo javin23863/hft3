@@ -9,6 +9,19 @@ import yaml
 
 REPO = Path(__file__).resolve().parents[2]
 BINDING = REPO / "apps" / "workbench" / "config" / "model_event_binding.yaml"
+SCRIPT_PATHS = [
+    REPO / "scripts" / "run_pipeline.py",
+    REPO / "scripts" / "run_full_pipeline_gate.py",
+    REPO / "scripts" / "run_hybrid_pipeline_gate.py",
+    REPO / "scripts" / "run_pdf_hybrid_replay.py",
+    REPO / "scripts" / "run_pdf_hybrid_ablation.py",
+    REPO / "scripts" / "run_offline_pipeline.py",
+    REPO / "scripts" / "run_single_hyp_backtest.py",
+    REPO / "scripts" / "workbench_pipeline_trial.py",
+    REPO / "scripts" / "run_l3_cross_asset_event_replay.sh",
+    REPO / "scripts" / "run_l3_cross_asset_event_ablation.sh",
+    REPO / "scripts" / "run_replay_execution_parity_proof.sh",
+]
 
 
 def test_binding_file_exists():
@@ -27,6 +40,19 @@ def test_no_model_uses_default_macro_contexts():
     for section in ("hypothesis", "pdf"):
         for model_id, cfg in raw[section].items():
             assert "default_macro_contexts" not in cfg, model_id
+
+
+def test_operator_scripts_do_not_default_to_one_macro_event():
+    forbidden = (
+        'default="CPI_2024_09_11_TIGHT"',
+        'DEFAULT_EVENT = "CPI_2024_09_11_TIGHT"',
+        'DEFAULT_EVENT_ID = "CPI_2024_09_11_TIGHT"',
+        ":-CPI_2024_09_11_TIGHT",
+    )
+    for path in SCRIPT_PATHS:
+        text = path.read_text(encoding="utf-8")
+        for needle in forbidden:
+            assert needle not in text, f"{path.relative_to(REPO)} still has {needle}"
 
 
 def test_hyp_5_uses_catalog_context_policy():

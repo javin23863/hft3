@@ -30,10 +30,10 @@
 | Workload | Expected | Hard stop | Notes |
 |----------|----------|-----------|-------|
 | T0 fast gate | ≤30s | **90s** | `tests/backtester_validation/fast` |
-| Registry + workbench (excl. CPI e2e) | ≤90s | **180s** | `scripts/run_agent_verify.ps1` |
+| Registry + workbench (excl. catalog-event e2e) | ≤90s | **180s** | `scripts/run_agent_verify.ps1` |
 | Single test file | ≤30s | **120s** | Add `--timeout=120` for integration |
 | Full `pytest tests/` | ≤5min | **600s** | Run only when requested; exclude known slow tests |
-| `test_cpi_e2e` / full replay | minutes | **900s** | Explicit user approval |
+| `test_catalog_event_e2e` / full replay | minutes | **900s** | Explicit user approval |
 | Graphify wiki index | ≤10s | **60s** | `python tools/graphify/build_wiki_index.py` |
 | Graphify AST rebuild | ≤3min | **300s** | `scripts/graphify_rebuild.ps1` |
 | SSH one-shot (grep, tail, status) | ≤5s | **60s** | Always `-o ConnectTimeout=15` |

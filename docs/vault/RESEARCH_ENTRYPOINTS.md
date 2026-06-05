@@ -71,7 +71,7 @@ python scripts/run_full_pipeline_gate.py --tier smoke --event-id CPI_2024_09_11_
 python scripts/run_full_pipeline_gate.py --tier catalog --event-id CPI_2024_09_11_TIGHT --symbol MES.v.0
 ```
 
-Or via hybrid wrapper: `python scripts/run_hybrid_pipeline_gate.py --tier smoke`. See [docs/structural_models/FULL_PIPELINE_GATE.md](../structural_models/FULL_PIPELINE_GATE.md).
+Or via hybrid wrapper: `python scripts/run_hybrid_pipeline_gate.py --tier smoke --event-id CPI_2024_09_11_TIGHT`. See [docs/structural_models/FULL_PIPELINE_GATE.md](../structural_models/FULL_PIPELINE_GATE.md).
 
 **Verify (scope-green):**
 

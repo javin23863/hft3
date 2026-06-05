@@ -21,7 +21,7 @@ python scripts/run_full_pipeline_gate.py --tier smoke --event-id CPI_2024_09_11_
 python scripts/run_full_pipeline_gate.py --tier catalog --event-id CPI_2024_09_11_TIGHT --symbol MES.v.0 --run-id FULL_CATALOG_20260605T000000Z
 
 # Skip slow hybrid block (MBO fan-out only)
-python scripts/run_full_pipeline_gate.py --tier smoke --skip-hybrid --skip-unit-tests
+python scripts/run_full_pipeline_gate.py --tier smoke --event-id <EVENT_ID> --skip-hybrid --skip-unit-tests
 ```
 
 ## Outputs

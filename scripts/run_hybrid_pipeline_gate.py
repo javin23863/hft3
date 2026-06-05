@@ -27,10 +27,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 _REPO = Path(__file__).resolve().parents[1]
-if str(_REPO) not in sys.path:
-    sys.path.insert(0, str(_REPO))
+for path in (_REPO, _REPO / "packages", _REPO / "apps"):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
 
-DEFAULT_EVENT = "CPI_2024_09_11_TIGHT"
 DEFAULT_SYMBOL = "MES.v.0"
 GATE_REPORT = _REPO / "runtime" / "reports" / "hybrid_pipeline_gate.json"
 CARD_DIR = _REPO / "research_cards" / "PDF_MODEL_4_hybrid_replay"
@@ -279,7 +279,7 @@ def validate_card(min_trades: int = 0, *, card_dir: Path | None = None) -> Tuple
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="PDF_MODEL_4 hybrid pipeline PASS gate")
-    parser.add_argument("--event-id", default=DEFAULT_EVENT)
+    parser.add_argument("--event-id", required=True, help="Explicit catalog event id from events.csv")
     parser.add_argument("--symbol", default=DEFAULT_SYMBOL)
     parser.add_argument(
         "--latency-ms",

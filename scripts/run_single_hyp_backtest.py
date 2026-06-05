@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Single-hypothesis CPI backtest on Databento NPZ; latency from CHI404 probe."""
+"""Single-hypothesis event backtest on Databento NPZ; latency from CHI404 probe."""
 from __future__ import annotations
 
 import argparse
@@ -10,16 +10,17 @@ from pathlib import Path
 from typing import Any
 
 _REPO = Path(__file__).resolve().parents[1]
-if str(_REPO) not in sys.path:
-    sys.path.insert(0, str(_REPO))
+for path in (_REPO, _REPO / "packages", _REPO / "apps"):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
 
 from backtest_pipeline.src.signal_backtester import SignalBacktester
 from backtest.adapters.rithmic_replay_loader import resolve_event_npz
+from data_system.src.events_parser import load_and_parse_events
 from features_engine.src.features.npz_feed import load_npz_events
 from features_engine.src.hypotheses.modules import SpreadBlowoutRecompression
 
-DEFAULT_EVENT_ID = "CPI_2024_09_11_TIGHT"
-DEFAULT_OUT = _REPO / "research_cards" / "single_run_CPI_HYP5"
+DEFAULT_OUT = _REPO / "research_cards" / "single_run_hyp_backtest"
 DEFAULT_CHI404_SUMMARY = _REPO / "runtime" / "latency_reports" / "latency_summary.json"
 
 
@@ -65,9 +66,23 @@ def load_chi404_speed(summary_path: Path) -> dict[str, Any]:
     }
 
 
+def _event_metadata(event_id: str) -> dict[str, str]:
+    events = load_and_parse_events(str(_REPO / "data_system" / "config" / "events.csv"))
+    row = events[events["event_id"] == event_id]
+    if row.empty:
+        raise ValueError(f"event_id not in events.csv: {event_id}")
+    record = row.iloc[0]
+    return {
+        "event_type": str(record["event_type"]),
+        "release_date": str(record["release_date"]),
+        "release_time_et": str(record["release_time"]),
+        "window_utc": f"{record['start_utc']} to {record['end_utc']}",
+    }
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description="Single HYP backtest with CHI404-measured latency (SignalBacktester)")
-    p.add_argument("--event-id", default=DEFAULT_EVENT_ID, help="Macro event from events.csv")
+    p.add_argument("--event-id", required=True, help="Explicit catalog event id from events.csv")
     p.add_argument("--npz", type=Path, default=None, help="Override NPZ; default from --event-id")
     p.add_argument("--out", type=Path, default=DEFAULT_OUT)
     p.add_argument(
@@ -79,6 +94,7 @@ def main() -> int:
     args = p.parse_args()
 
     npz_path = args.npz.resolve() if args.npz else resolve_event_npz(args.event_id, _REPO)
+    event_meta = _event_metadata(args.event_id)
     chi404 = load_chi404_speed(args.chi404_summary.resolve())
     latency_ms = chi404["backtest_latency_ms"]
 
@@ -100,12 +116,13 @@ def main() -> int:
         df.to_csv(fills_path, index=False)
 
     payload = {
-        "scenario": "CPI_2024_09_11_TIGHT single hypothesis backtest",
+        "scenario": f"{args.event_id} single hypothesis backtest",
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "event_id": args.event_id,
-        "release_date": "2024-09-11",
-        "release_time_et": "08:30:00",
-        "window_utc": "2024-09-11T12:29:30Z to 2024-09-11T12:35:00Z",
+        "event_type": event_meta["event_type"],
+        "release_date": event_meta["release_date"],
+        "release_time_et": event_meta["release_time_et"],
+        "window_utc": event_meta["window_utc"],
         "symbol": "MES.v.0",
         "npz_path": _relative_npz(npz_path),
         "events": int(len(raw)),

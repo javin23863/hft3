@@ -3,7 +3,11 @@
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
-EVENT_ID="${1:-CPI_2024_09_11_TIGHT}"
+if [[ $# -lt 1 ]]; then
+  echo "usage: $0 EVENT_ID" >&2
+  exit 2
+fi
+EVENT_ID="$1"
 python -c "
 from pathlib import Path
 from hfc3.ablation.run_ablation import write_ablation_report

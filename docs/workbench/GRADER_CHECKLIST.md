@@ -65,7 +65,7 @@ Campaign: `research_cards/workbench_runs/<campaign_id>/periods/<Stage>/events/<e
 
 ```bash
 pytest tests/test_workbench/ tests/structural_models/ tests/test_data_layer/ -q
-pytest tests/test_workbench/test_cpi_e2e.py -q   # requires CPI NPZ locally
+pytest tests/test_workbench/test_catalog_event_e2e.py -q   # requires a catalog MBO NPZ locally
 ```
 
 Or on Windows:

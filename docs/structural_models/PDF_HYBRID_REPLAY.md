@@ -38,8 +38,8 @@ Toggle OFI and VPIN inputs without changing `HybridExecutionModel`:
 Single run:
 
 ```bash
-python scripts/run_pdf_hybrid_replay.py --no-ofi --no-vpin   # AS baseline
-python scripts/run_pdf_hybrid_replay.py --no-vpin            # OFI only
+python scripts/run_pdf_hybrid_replay.py --event-id <EVENT_ID> --no-ofi --no-vpin   # AS baseline
+python scripts/run_pdf_hybrid_replay.py --event-id <EVENT_ID> --no-vpin            # OFI only
 ```
 
 Four-way matrix (real NPZ; ~4x replay runtime):

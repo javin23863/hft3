@@ -12,10 +12,6 @@ AUDIT_DIR="$REPO/runtime/replay_audits"
 REPORT="$REPO/runtime/reports/replay_execution_parity_proof.md"
 mkdir -p "$REPO/runtime/reports" "$AUDIT_DIR"
 
-if [[ -z "$NPZ" ]]; then
-  NPZ="$REPO/data/npz/MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz"
-fi
-
 if [[ ! -f "$NPZ" ]]; then
   echo "Building minimal fixture NPZ..."
   python3 - <<PY

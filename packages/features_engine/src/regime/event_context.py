@@ -19,7 +19,24 @@ from economic_event_universe.registry import context_priority
 from hft3_bootstrap import data_system_root
 
 
+def _as_utc(value: datetime) -> datetime:
+    if getattr(value, "tzinfo", None) is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _effective_date_value(effective_date: object) -> date | None:
+    if effective_date is None or (isinstance(effective_date, float) and pd.isna(effective_date)):
+        return None
+    raw = str(effective_date).strip()[:10]
+    if not raw:
+        return None
+    return date.fromisoformat(raw)
+
+
 def _effective_date_active(effective_date: object, ts_utc: datetime) -> bool:
+    if isinstance(effective_date, date):
+        return effective_date <= ts_utc.date()
     if effective_date is None or (isinstance(effective_date, float) and pd.isna(effective_date)):
         return True
     raw = str(effective_date).strip()[:10]
@@ -49,6 +66,17 @@ class EventContextEngine:
             if df.empty:
                 raise ValueError(f"event_type not in events.csv: {event_type}")
         self.events_df = df.reset_index(drop=True)
+        self._windows = []
+        for row in self.events_df.to_dict("records"):
+            self._windows.append(
+                (
+                    _effective_date_value(row.get("effective_date")),
+                    _as_utc(row["start_utc"]),
+                    _as_utc(row["end_utc"]),
+                    str(row["event_type"]).strip(),
+                    str(row["window_name"]),
+                )
+            )
 
     def resolve(self, ts_utc: datetime) -> str:
         if ts_utc.tzinfo is None:
@@ -57,24 +85,17 @@ class EventContextEngine:
             ts_utc = ts_utc.astimezone(timezone.utc)
 
         candidates = []
-        for _, row in self.events_df.iterrows():
-            if not _effective_date_active(row.get("effective_date"), ts_utc):
+        for effective_date, start, end, event_type, window_name in self._windows:
+            if not _effective_date_active(effective_date, ts_utc):
                 continue
-            start = row["start_utc"]
-            end = row["end_utc"]
-            if getattr(start, "tzinfo", None) is None:
-                start = start.replace(tzinfo=timezone.utc)
-            if getattr(end, "tzinfo", None) is None:
-                end = end.replace(tzinfo=timezone.utc)
             if start <= ts_utc <= end:
-                et = str(row["event_type"]).strip()
-                if not et or et.lower() == "nan":
+                if not event_type or event_type.lower() == "nan":
                     raise ValueError("events.csv row has empty event_type inside active window")
                 candidates.append(
                     (
-                        context_priority(et),
-                        et,
-                        str(row["window_name"]),
+                        context_priority(event_type),
+                        event_type,
+                        window_name,
                     )
                 )
 

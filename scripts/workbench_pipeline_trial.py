@@ -11,8 +11,6 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 os.environ.setdefault("HFT3_CPP_STACK_VERIFY", "off")
-NPZ = REPO / "data" / "npz" / "MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz"
-EVENT = "CPI_2024_09_11_TIGHT"
 LATENCY = REPO / "runtime" / "latency_reports" / "latency_summary.json"
 
 
@@ -21,17 +19,30 @@ def _fail(msg: str) -> int:
     return 1
 
 
+def _available_catalog_event():
+    from workbench.src.data.event_catalog import list_campaign_events, load_periods
+
+    candidates = []
+    for period in load_periods(REPO):
+        for event in list_campaign_events("SPREAD_BLOWOUT_RECOMPRESSION", period, "MES.v.0", REPO):
+            if event.npz_present and event.npz_symbol_used == "MES.v.0" and event.npz_path.is_file():
+                candidates.append(event)
+    if not candidates:
+        raise FileNotFoundError("no MES catalog MBO NPZ present locally")
+    return min(candidates, key=lambda event: event.npz_path.stat().st_size)
+
+
 def trial_single_event() -> tuple[bool, str]:
     from workbench.src.run.engine import WorkbenchEngine
 
-    if not NPZ.is_file():
-        return False, f"Missing NPZ: {NPZ}"
-
+    event = _available_catalog_event()
     t0 = time.time()
     engine = WorkbenchEngine(REPO)
     out = engine.run(
-        "HYP_5",
-        EVENT,
+        "SPREAD_BLOWOUT_RECOMPRESSION",
+        event.event_id,
+        symbol="MES.v.0",
+        npz_path=event.npz_path,
         chi404_summary=LATENCY if LATENCY.is_file() else None,
         seed=42,
         skip_history_gate=True,
@@ -43,14 +54,14 @@ def trial_single_event() -> tuple[bool, str]:
         if not (art / name).is_file():
             return False, f"Missing artifact {name} under {art}"
     rep = out.get("report", {})
-    return True, f"single-event OK in {elapsed:.1f}s — trades={rep.get('num_trades')} pnl={rep.get('net_pnl')}"
+    return True, (
+        f"single-event OK in {elapsed:.1f}s — event={event.event_id} "
+        f"trades={rep.get('num_trades')} pnl={rep.get('net_pnl')}"
+    )
 
 
 def trial_campaign() -> tuple[bool, str]:
     from workbench.src.run.campaign_runner import run_campaign
-
-    if not NPZ.is_file():
-        return False, f"Missing NPZ: {NPZ}"
 
     t0 = time.time()
     result = run_campaign(
@@ -69,16 +80,6 @@ def trial_campaign() -> tuple[bool, str]:
     events_ran = int(summary.get("events_ran", 0))
     if events_ran < 1:
         return False, f"No events ran (status={result.status})"
-    diag = (
-        Path(result.artifact_dir)
-        / "periods"
-        / "Holdout"
-        / "events"
-        / EVENT
-        / "diagnostics.json"
-    )
-    if not diag.is_file():
-        return False, f"Missing event diagnostics: {diag}"
     return True, (
         f"trial-campaign OK in {elapsed:.1f}s — status={result.status} events_ran={events_ran} "
         f"wfc={summary.get('wfc_status')}"
@@ -87,7 +88,7 @@ def trial_campaign() -> tuple[bool, str]:
 
 def main() -> int:
     sys.path.insert(0, str(REPO))
-    print("Phase 1/2: single-event backtest (HYP_5 / CPI NPZ)...", flush=True)
+    print("Phase 1/2: single-event backtest (catalog MBO NPZ)...", flush=True)
     ok1, msg1 = trial_single_event()
     print(msg1, flush=True)
     if not ok1:

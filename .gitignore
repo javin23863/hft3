@@ -93,6 +93,10 @@ data/replay/parity/**
 !data/replay/parity/.gitkeep
 data/replay/equities/**
 !data/replay/equities/.gitkeep
+data/crypto/.gitkeep
+data/crypto/gold/**
+data/crypto/normalize.log
+data/crypto/latency/node_profile.json
 research_cards/parity/**
 !research_cards/parity/.gitkeep
 research_cards/equities/**
@@ -140,6 +144,10 @@ rithmic_gateway/RApiPlus/
 
 # Runtime audit outputs (replay_audits, latency_reports, etc.) - not source
 packages/runtime/
+runtime/data_audits/paid_data_inventory.json
+runtime/data_audits/paid_data_inventory.md
+runtime/data_audits/model_coverage_after_paid_sync.json
+runtime/data_audits/model_coverage_after_paid_sync.md
 
 # R|API+ SDK downloads (per-user from Rithmic portal; not source)
 rithmic_gateway/RApiPlus.cpp.13.7.0.0.zip

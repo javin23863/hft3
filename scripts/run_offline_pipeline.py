@@ -30,8 +30,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--event-id",
-        default="CPI_2024_09_11_TIGHT",
-        help="Macro event for canonical replay (events.csv)",
+        default=None,
+        help="Explicit catalog event for canonical replay (events.csv)",
     )
     parser.add_argument(
         "--full-hft",
@@ -139,6 +139,9 @@ def main() -> None:
 
     if npz_path:
         if not args.skip_event_replay:
+            if not args.event_id:
+                print("ERROR: --event-id is required for canonical event replay.")
+                sys.exit(1)
             print("=== Canonical event replay (SignalBacktester primary) ===")
             replay_cmd = [
                 sys.executable,

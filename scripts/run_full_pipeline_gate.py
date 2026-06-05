@@ -12,8 +12,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 _REPO = Path(__file__).resolve().parents[1]
-if str(_REPO) not in sys.path:
-    sys.path.insert(0, str(_REPO))
+for path in (_REPO, _REPO / "packages", _REPO / "apps"):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
 
 from backtest.adapters.rithmic_replay_loader import resolve_event_npz
 from backtest_pipeline.src.pipeline_gate_report import finalize_catalog_models, write_catalog_artifacts
@@ -29,7 +30,6 @@ from backtest_pipeline.src.pipeline_model_router import (
 )
 from features_engine.src.features.npz_feed import load_npz_events
 
-DEFAULT_EVENT = "CPI_2024_09_11_TIGHT"
 DEFAULT_SYMBOL = "MES.v.0"
 PIPELINE_RUNS = _REPO / "research_cards" / "pipeline_runs"
 
@@ -345,7 +345,7 @@ def main() -> int:
     global PIPELINE_RUNS
     parser = argparse.ArgumentParser(description="Full 55-model catalog pipeline gate")
     parser.add_argument("--tier", choices=("smoke", "catalog"), default="smoke")
-    parser.add_argument("--event-id", default=DEFAULT_EVENT)
+    parser.add_argument("--event-id", required=True, help="Explicit catalog event id from events.csv")
     parser.add_argument("--symbol", default=DEFAULT_SYMBOL)
     parser.add_argument("--run-id", default=None, help="Run-id scoped artifact folder/report id")
     parser.add_argument("--latency-ms", type=float, default=None)

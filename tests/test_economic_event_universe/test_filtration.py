@@ -88,3 +88,19 @@ def test_empty_event_type_raises(tmp_path):
 
     with pytest.raises(ValueError, match="empty event_type"):
         engine.resolve(ts)
+
+
+def test_resolve_ns_does_not_reuse_context_past_window_end_same_second(tmp_path):
+    csv = tmp_path / "events.csv"
+    csv.write_text(
+        _HEADER
+        + "CPI_2024_09_11_TIGHT,CPI,2024-09-11,08:30:00,America/New_York,TIGHT,-1,0,"
+        "MES.v.0,10,BLS,https://bls.gov,2018-01-01,c\n",
+        encoding="utf-8",
+    )
+    engine = EventContextEngine(str(csv))
+    inside = datetime(2024, 9, 11, 12, 30, 0, 0, tzinfo=timezone.utc)
+    outside_same_second = datetime(2024, 9, 11, 12, 30, 0, 500_000, tzinfo=timezone.utc)
+
+    assert engine.resolve_ns(int(inside.timestamp() * 1_000_000_000)) == "CPI_TIGHT"
+    assert engine.resolve_ns(int(outside_same_second.timestamp() * 1_000_000_000)) == "NORMAL"
