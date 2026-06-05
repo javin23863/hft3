@@ -41,34 +41,9 @@ from workbench.src.latency.operating_envelope import (
 )
 from workbench.src.robustness.wfc import evaluate_wfc_gate, write_wfc_artifacts
 from workbench.src.robustness.wfc.config import load_wfc_config
-from workbench.src.robustness.wfc.gate import WFC_STATUSES, WfcResult
+from workbench.src.robustness.wfc.gate import WfcResult
 from hft3.validation.research_stamp import build_certification_stamp, format_stamp_footer
 from workbench.src.artifacts.paths import artifact_root, campaign_dir_for, workbench_runs_dir_for
-
-
-CAMPAIGN_RESULT_STATUSES = (
-    "DRY_RUN",
-    "DATA_INSUFFICIENT",
-    "PASS",
-    "FAIL",
-    "BLOCKED",
-    "CANCELLED",
-    "CONDITIONAL",
-)
-CAMPAIGN_RUN_STATES = tuple(status.lower() for status in CAMPAIGN_RESULT_STATUSES)
-CAMPAIGN_WFC_STATUSES = (*WFC_STATUSES, "SKIPPED")
-ROBUSTNESS_INPUT_STATUSES = ("PASS", "PENDING_PHASE9_METRICS", "FAILED_PHASE9_CHECKS")
-SIM_SHADOW_STATUSES = ("PASS", "FAIL", "pending_CHI404")
-
-
-def _validate_campaign_status(status: str) -> str:
-    if status not in CAMPAIGN_RESULT_STATUSES:
-        raise ValueError(f"unknown campaign status: {status}")
-    return status
-
-
-def campaign_run_state(status: str) -> str:
-    return _validate_campaign_status(status).lower()
 
 
 @dataclass
@@ -95,9 +70,6 @@ class CampaignResult:
     param_hash: str
     periods: List[PeriodResult] = field(default_factory=list)
     artifact_dir: str = ""
-
-    def __post_init__(self) -> None:
-        self.status = _validate_campaign_status(self.status)
 
 
 def _hot_memory_telemetry(repo_root: Path) -> Dict[str, Any]:
@@ -971,7 +943,6 @@ def run_campaign(
             status = "BLOCKED"
     if wfc_status == "CONDITIONAL" and status == "PASS":
         status = "CONDITIONAL"
-    status = _validate_campaign_status(status)
     wfc_required = bool(wfc_cfg.get("enabled")) and bool(bounds) and wfc_status != "SKIPPED"
     cert_stamp = build_certification_stamp(
         event_id=primary_id,
@@ -1045,7 +1016,7 @@ def run_campaign(
             _append_blocking_gate(summary, metrics_gate)
     (artifact_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     (artifact_dir / "diagnostics.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
-    _write_status(job_dir, {"state": campaign_run_state(status), "campaign_id": campaign_id})
+    _write_status(job_dir, {"state": status.lower(), "campaign_id": campaign_id})
 
     return CampaignResult(
         campaign_id=campaign_id,

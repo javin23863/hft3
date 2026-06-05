@@ -12,9 +12,6 @@ from scipy import stats
 from workbench.src.robustness.wfc.metrics import metric_value
 
 
-WFC_STATUSES = ("PASS", "CONDITIONAL", "FAIL", "ERROR")
-
-
 @dataclass
 class WfcResult:
     run_id: str = ""
