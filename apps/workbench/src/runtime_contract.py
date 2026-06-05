@@ -54,11 +54,6 @@ RUNTIME_STATE_NESTED_REFS = {
     "ui.session_state.wb_wallet_send_preview",
     "ui.session_state.wb_wallet_snapshot",
 }
-UTILITY_CLI_COMMAND_SCOPES = {
-    "ibkr-endpoint": "non_cme_endpoint_diagnostic",
-    "list": "registry_read",
-    "setup": "environment_setup",
-}
 
 
 def allowed_runtime_state_refs() -> set[str]:
@@ -387,12 +382,11 @@ def validate_runtime_contract(contract: dict[str, Any] | None = None) -> list[st
                 f"expected {expected_sources!r}, got {run_sources!r}"
             )
     endpoints = payload.get("backend_endpoints")
-    workbench_commands = _workbench_cli_subcommands()
-    dispatched_commands = _workbench_cli_dispatch_commands()
-    endpoint_commands: set[str] = set()
     if not isinstance(endpoints, list) or not endpoints:
         errors.append("backend_endpoints must be a non-empty list")
     else:
+        workbench_commands = _workbench_cli_subcommands()
+        dispatched_commands = _workbench_cli_dispatch_commands()
         endpoint_ids = [
             str(endpoint.get("id") or "")
             for endpoint in endpoints
@@ -417,56 +411,4 @@ def validate_runtime_contract(contract: dict[str, Any] | None = None) -> list[st
                 errors.append(
                     f"backend_endpoints[{index}].cli references undispatched Workbench CLI subcommand: {command!r}"
                 )
-            elif command in UTILITY_CLI_COMMAND_SCOPES:
-                errors.append(
-                    f"backend_endpoints[{index}].cli references utility-only Workbench CLI subcommand: {command!r}"
-                )
-            else:
-                endpoint_commands.add(command)
-    utilities = payload.get("utility_cli_commands")
-    utility_commands: set[str] = set()
-    if not isinstance(utilities, list) or not utilities:
-        errors.append("utility_cli_commands must be a non-empty list")
-    else:
-        utility_ids = [
-            str(utility.get("id") or "")
-            for utility in utilities
-            if isinstance(utility, dict) and utility.get("id")
-        ]
-        if len(utility_ids) != len(set(utility_ids)):
-            errors.append("utility CLI command ids must be unique")
-        for index, utility in enumerate(utilities):
-            if not isinstance(utility, dict):
-                continue
-            cli = utility.get("cli")
-            command = _workbench_cli_command(cli)
-            if command is None:
-                errors.append(
-                    f"utility_cli_commands[{index}].cli must be 'python -m workbench <subcommand>', got {cli!r}"
-                )
-            elif command in endpoint_commands:
-                errors.append(
-                    f"utility_cli_commands[{index}].cli duplicates backend endpoint subcommand: {command!r}"
-                )
-            elif command not in workbench_commands:
-                errors.append(
-                    f"utility_cli_commands[{index}].cli references unknown Workbench CLI subcommand: {command!r}"
-                )
-            elif command not in dispatched_commands:
-                errors.append(
-                    f"utility_cli_commands[{index}].cli references undispatched Workbench CLI subcommand: {command!r}"
-                )
-            elif utility.get("utility_scope") != UTILITY_CLI_COMMAND_SCOPES.get(command):
-                errors.append(
-                    "utility_cli_commands[{index}].utility_scope must be {expected!r} for {command!r}".format(
-                        index=index,
-                        expected=UTILITY_CLI_COMMAND_SCOPES.get(command),
-                        command=command,
-                    )
-                )
-            else:
-                utility_commands.add(command)
-    uncovered_commands = sorted((workbench_commands | dispatched_commands) - endpoint_commands - utility_commands)
-    if uncovered_commands:
-        errors.append(f"Workbench CLI subcommands missing runtime contract coverage: {uncovered_commands!r}")
     return errors

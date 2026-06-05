@@ -13,7 +13,6 @@
     "robustness_states",
     "cme_lane_states",
     "backend_endpoints",
-    "utility_cli_commands",
     "tabs",
     "blocker_policy"
   ],
@@ -64,11 +63,6 @@
     "backend_endpoints": {
       "type": "array",
       "items": {"$ref": "#/$defs/backend_endpoint"},
-      "minItems": 1
-    },
-    "utility_cli_commands": {
-      "type": "array",
-      "items": {"$ref": "#/$defs/utility_cli_command"},
       "minItems": 1
     },
     "tabs": {
@@ -222,33 +216,6 @@
           "type": "array",
           "items": {"type": "string", "minLength": 1}
         }
-      },
-      "additionalProperties": false
-    },
-    "utility_cli_command": {
-      "type": "object",
-      "required": [
-        "id",
-        "cli",
-        "utility_scope",
-        "request_schema",
-        "response_schema",
-        "error_response"
-      ],
-      "properties": {
-        "id": {"type": "string", "minLength": 1},
-        "cli": {"type": "string", "minLength": 1},
-        "utility_scope": {
-          "type": "string",
-          "enum": [
-            "environment_setup",
-            "registry_read",
-            "non_cme_endpoint_diagnostic"
-          ]
-        },
-        "request_schema": {"type": "string", "minLength": 1},
-        "response_schema": {"type": "string", "minLength": 1},
-        "error_response": {"type": "string", "minLength": 1}
       },
       "additionalProperties": false
     }
