@@ -1,8 +1,5 @@
 ﻿node_modules/
 .pytest_cache/
-artifacts/
-build-msvc/
-vendor/
 __pycache__/
 data/raw/
 data/normalized/
