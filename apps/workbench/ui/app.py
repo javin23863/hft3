@@ -24,7 +24,7 @@ from workbench.ui.campaign_panel import (  # noqa: E402
     personal_lock_sidebar,
     personal_runs_panel,
 )
-from workbench.ui.workflow_tabs import WORKFLOW_TABS  # noqa: E402
+from workbench.ui.workflow_tabs import WORKFLOW_TAB_CONTRACTS, WORKFLOW_TABS  # noqa: E402
 from workbench.ui.wallet_panel import render_wallet_panel  # noqa: E402
 from workbench.ui.flow_state import campaign_progress_panel, resolve_period_event  # noqa: E402
 from workbench.src.run.evidence_snapshot import default_source, load_run_evidence, workbench_run_sources  # noqa: E402
@@ -71,6 +71,7 @@ if st.session_state.get("wb_nav_hint"):
     st.info(st.session_state.wb_nav_hint)
 
 tabs = st.tabs(WORKFLOW_TABS)
+tab_views = dict(zip(WORKFLOW_TABS, tabs, strict=True))
 
 runs_dir = workbench_runs_dir()
 run_dirs = sorted(runs_dir.glob("*"), reverse=True) if runs_dir.is_dir() else []
@@ -80,10 +81,7 @@ selected_model = st.session_state.get("wb_selected_model", "")
 selected_symbol = st.session_state.get("wb_symbol", "MES.v.0")
 selected_campaign = st.session_state.get("wb_active_campaign", "")
 
-with tabs[0]:
-    pass
-
-with tabs[1]:
+with tab_views["Registry & Data"]:
     if run_source == "workbench_campaign":
         st.subheader("Workbench Campaign Controls")
         selected_model, selected_symbol, selected_campaign = model_selector_panel(REPO)
@@ -114,45 +112,58 @@ elif not selected_campaign:
 period_choice, event_choice = resolve_period_event(REPO, selected_campaign)
 snapshot = load_run_evidence(REPO, run_source, campaign_id=selected_campaign)
 
-with tabs[0]:
-    render_autonomous_run(snapshot)
+contract_renderers = {
+    "workbench.ui.evidence_panels.render_autonomous_run": lambda: render_autonomous_run(snapshot),
+    "workbench.ui.evidence_panels.render_registry_data": lambda: render_registry_data(snapshot),
+    "workbench.ui.evidence_panels.render_backtest_evidence": lambda: render_backtest_evidence(snapshot),
+    "workbench.ui.evidence_panels.render_latency_evidence": lambda: render_latency_evidence(snapshot),
+    "workbench.ui.evidence_panels.render_signal_diagnostics": lambda: render_signal_diagnostics(snapshot),
+    "workbench.ui.evidence_panels.render_robustness": lambda: render_robustness(snapshot),
+    "workbench.ui.evidence_panels.render_decision_registry": lambda: render_decision_registry(snapshot),
+    "workbench.ui.evidence_panels.render_live_monitor": lambda: render_live_monitor(snapshot),
+    "workbench.ui.evidence_panels.render_reports_analyst": lambda: render_reports_analyst(snapshot),
+    "workbench.ui.wallet_panel.render_wallet_panel": render_wallet_panel,
+    "workbench.ui.evidence_panels.render_system": lambda: render_system(snapshot, REPO),
+    "workbench.ui.campaign_panel.personal_runs_panel": lambda: personal_runs_panel(REPO, selected_model, selected_symbol),
+}
+contract_action_renderers = {
+    ("Registry & Data", "workbench.ui.campaign_panel.model_selector_panel"): "pre-evidence controls",
+    ("Reports & Analyst", "workbench.ui.analyst_panel.workbench_llm_console"): "advisory console",
+    ("Reports & Analyst", "workbench.ui.analyst_panel.analyst_panel"): "campaign drill-down",
+    ("Wallet", "workbench.ui.wallet_panel.render_wallet_panel"): "primary renderer",
+    ("Personal Runs", "workbench.ui.campaign_panel.personal_runs_panel"): "primary renderer",
+}
 
-with tabs[1]:
-    st.divider()
-    render_registry_data(snapshot)
+missing_renderers = [
+    tab_contract["frontend_component"]
+    for tab_contract in WORKFLOW_TAB_CONTRACTS
+    if tab_contract["frontend_component"] not in contract_renderers
+]
+if missing_renderers:
+    raise RuntimeError(f"Workbench tab contract has no app renderer for: {missing_renderers}")
+missing_action_renderers = sorted(
+    {
+        (str(tab_contract["name"]), action_component)
+        for tab_contract in WORKFLOW_TAB_CONTRACTS
+        for action_component in tab_contract["action_components"]
+        if (str(tab_contract["name"]), action_component) not in contract_action_renderers
+    }
+)
+if missing_action_renderers:
+    raise RuntimeError(f"Workbench tab contract has no app action renderer for: {missing_action_renderers}")
 
-with tabs[2]:
-    render_backtest_evidence(snapshot)
-
-with tabs[3]:
-    render_latency_evidence(snapshot)
-
-with tabs[4]:
-    render_signal_diagnostics(snapshot)
-
-with tabs[5]:
-    render_robustness(snapshot)
-
-with tabs[6]:
-    render_decision_registry(snapshot)
-
-with tabs[7]:
-    render_live_monitor(snapshot)
-
-with tabs[8]:
-    render_reports_analyst(snapshot)
-    st.divider()
-    workbench_llm_console(snapshot)
-    if run_source == "workbench_campaign":
-        st.divider()
-        analyst_panel(REPO, selected_campaign, period_choice, event_choice)
-
-with tabs[9]:
-    render_wallet_panel()
-
-with tabs[10]:
-    render_system(snapshot, REPO)
-
-with tabs[11]:
-    st.header("Personal Runs")
-    personal_runs_panel(REPO, selected_model, selected_symbol)
+for tab_contract in WORKFLOW_TAB_CONTRACTS:
+    tab_name = str(tab_contract["name"])
+    component = str(tab_contract["frontend_component"])
+    with tab_views[tab_name]:
+        if tab_name == "Registry & Data":
+            st.divider()
+        if tab_name == "Personal Runs":
+            st.header("Personal Runs")
+        contract_renderers[component]()
+        if tab_name == "Reports & Analyst":
+            st.divider()
+            workbench_llm_console(snapshot)
+            if run_source == "workbench_campaign":
+                st.divider()
+                analyst_panel(REPO, selected_campaign, period_choice, event_choice)

@@ -130,7 +130,7 @@ def test_runtime_contract_is_tab_source_of_truth() -> None:
         load_runtime_contract,
         validate_runtime_contract,
     )
-    from workbench.ui.workflow_tabs import WORKFLOW_TABS
+    from workbench.ui.workflow_tabs import WORKFLOW_TAB_CONTRACTS, WORKFLOW_TABS
 
     contract = load_runtime_contract()
     schema_path = Path(__file__).resolve().parents[2] / "apps" / "workbench" / "schemas" / "runtime_contract.schema.json"
@@ -142,6 +142,7 @@ def test_runtime_contract_is_tab_source_of_truth() -> None:
     assert runtime_state_items["pattern"] == RUNTIME_STATE_REF_PATTERN
     assert set(runtime_state_items["enum"]) == allowed_runtime_state_refs()
     assert validate_runtime_contract(contract) == []
+    assert WORKFLOW_TAB_CONTRACTS == contract["tabs"]
     assert [tab["name"] for tab in contract["tabs"]] == WORKFLOW_TABS
     registry_tab = next(tab for tab in contract["tabs"] if tab["name"] == "Registry & Data")
     assert "ui.session_state.wb_audit_grade" in registry_tab["runtime_state"]
@@ -664,6 +665,56 @@ def test_campaign_controls_only_render_for_workbench_campaign_source() -> None:
     assert campaign_control_calls
     assert all(guarded_by_campaign_source(node) for node in campaign_control_calls)
     assert 'if run_source != "workbench_campaign":\n    selected_campaign = ""' in app_src
+
+
+def test_workbench_app_binds_tab_bodies_by_contract_not_position() -> None:
+    from workbench.src.runtime_contract import load_runtime_contract
+
+    app_src = (Path(__file__).resolve().parents[2] / "apps" / "workbench" / "ui" / "app.py").read_text(
+        encoding="utf-8"
+    )
+    tree = ast.parse(app_src)
+    contract = load_runtime_contract()
+
+    positional_tab_reads = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Subscript)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "tabs"
+    ]
+
+    assert positional_tab_reads == []
+    assert "WORKFLOW_TAB_CONTRACTS" in app_src
+    assert "tab_views = dict(zip(WORKFLOW_TABS, tabs, strict=True))" in app_src
+    assert "contract_renderers[component]()" in app_src
+
+    dict_assignments = {
+        node.targets[0].id: node.value
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and len(node.targets) == 1
+        and isinstance(node.targets[0], ast.Name)
+        and node.targets[0].id in {"contract_renderers", "contract_action_renderers"}
+        and isinstance(node.value, ast.Dict)
+    }
+    renderer_keys = {
+        key.value
+        for key in dict_assignments["contract_renderers"].keys
+        if isinstance(key, ast.Constant) and isinstance(key.value, str)
+    }
+    action_keys = {
+        tuple(element.value for element in key.elts)
+        for key in dict_assignments["contract_action_renderers"].keys
+        if isinstance(key, ast.Tuple)
+        and all(isinstance(element, ast.Constant) and isinstance(element.value, str) for element in key.elts)
+    }
+    assert renderer_keys == {tab["frontend_component"] for tab in contract["tabs"]}
+    assert action_keys == {
+        (tab["name"], action_component)
+        for tab in contract["tabs"]
+        for action_component in tab["action_components"]
+    }
 
 
 def test_workbench_llm_console_is_not_campaign_gated() -> None:
