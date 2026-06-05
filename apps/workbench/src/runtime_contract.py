@@ -1,0 +1,181 @@
+"""Machine-readable Workbench runtime contract."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+CONTRACT_PATH = Path(__file__).resolve().parents[1] / "config" / "runtime_contract.json"
+SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schemas" / "runtime_contract.schema.json"
+REQUIRED_TAB_FIELDS = {
+    "name",
+    "purpose",
+    "frontend_component",
+    "action_components",
+    "backend_service",
+    "runtime_state",
+    "required_config",
+    "required_artifacts",
+    "required_schema",
+    "pipeline_dependency",
+    "expected_output",
+    "error_behavior",
+    "allowed_actions",
+}
+
+
+def _resolve_ref(schema: dict[str, Any], ref: str) -> dict[str, Any]:
+    prefix = "#/$defs/"
+    if not ref.startswith(prefix):
+        raise ValueError(f"unsupported schema ref: {ref}")
+    return schema["$defs"][ref.removeprefix(prefix)]
+
+
+def _json_type_name(value: Any) -> str:
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, dict):
+        return "object"
+    if isinstance(value, list):
+        return "array"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, int | float):
+        return "number"
+    if value is None:
+        return "null"
+    return type(value).__name__
+
+
+def _validate_schema_node(value: Any, node: dict[str, Any], root_schema: dict[str, Any], path: str) -> list[str]:
+    if "$ref" in node:
+        return _validate_schema_node(value, _resolve_ref(root_schema, str(node["$ref"])), root_schema, path)
+
+    errors: list[str] = []
+    if "const" in node and value != node["const"]:
+        errors.append(f"{path} must be {node['const']!r}")
+
+    expected_type = node.get("type")
+    if expected_type:
+        type_matches = {
+            "object": isinstance(value, dict),
+            "array": isinstance(value, list),
+            "string": isinstance(value, str),
+            "boolean": isinstance(value, bool),
+        }.get(str(expected_type), True)
+        if not type_matches:
+            errors.append(f"{path} must be {expected_type}, got {_json_type_name(value)}")
+            return errors
+
+    if isinstance(value, str) and int(node.get("minLength", 0)) > len(value):
+        errors.append(f"{path} must not be empty")
+
+    if isinstance(value, list):
+        min_items = node.get("minItems")
+        if isinstance(min_items, int) and len(value) < min_items:
+            errors.append(f"{path} must contain at least {min_items} item(s)")
+        if node.get("uniqueItems"):
+            seen = set()
+            for item in value:
+                marker = json.dumps(item, sort_keys=True)
+                if marker in seen:
+                    errors.append(f"{path} items must be unique")
+                    break
+                seen.add(marker)
+        item_schema = node.get("items")
+        if isinstance(item_schema, dict):
+            for index, item in enumerate(value):
+                errors.extend(_validate_schema_node(item, item_schema, root_schema, f"{path}[{index}]"))
+
+    if isinstance(value, dict):
+        properties = node.get("properties") or {}
+        required = node.get("required") or []
+        for field in required:
+            if field not in value:
+                errors.append(f"{path} missing required field: {field}")
+        if node.get("additionalProperties") is False:
+            extra = sorted(set(value) - set(properties))
+            for field in extra:
+                errors.append(f"{path} has unexpected field: {field}")
+        for field, child_schema in properties.items():
+            if field in value and isinstance(child_schema, dict):
+                child_path = field if path == "$" else f"{path}.{field}"
+                errors.extend(_validate_schema_node(value[field], child_schema, root_schema, child_path))
+
+    return errors
+
+
+def validate_runtime_contract_schema(contract: dict[str, Any], schema: dict[str, Any] | None = None) -> list[str]:
+    root_schema = schema or json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    return _validate_schema_node(contract, root_schema, root_schema, "$")
+
+
+def load_runtime_contract(path: Path | None = None) -> dict[str, Any]:
+    contract_path = path or CONTRACT_PATH
+    return json.loads(contract_path.read_text(encoding="utf-8"))
+
+
+def contract_tabs(contract: dict[str, Any] | None = None) -> list[str]:
+    payload = contract or load_runtime_contract()
+    return [str(tab["name"]) for tab in payload.get("tabs", [])]
+
+
+def validate_runtime_contract(contract: dict[str, Any] | None = None) -> list[str]:
+    payload = contract or load_runtime_contract()
+    errors: list[str] = validate_runtime_contract_schema(payload)
+    if payload.get("schema_version") != "workbench_runtime_contract_v1":
+        errors.append("schema_version must be workbench_runtime_contract_v1")
+    tabs = payload.get("tabs")
+    if not isinstance(tabs, list) or not tabs:
+        errors.append("tabs must be a non-empty list")
+        tabs = []
+    names: list[str] = []
+    for index, tab in enumerate(tabs):
+        if not isinstance(tab, dict):
+            errors.append(f"tabs[{index}] must be an object")
+            continue
+        missing = sorted(REQUIRED_TAB_FIELDS - set(tab))
+        if missing:
+            errors.append(f"{tab.get('name', f'tabs[{index}]')} missing fields: {', '.join(missing)}")
+        name = str(tab.get("name") or "")
+        if not name:
+            errors.append(f"tabs[{index}] missing name")
+        names.append(name)
+        for field in (
+            "runtime_state",
+            "required_config",
+            "required_artifacts",
+            "required_schema",
+            "pipeline_dependency",
+            "action_components",
+            "allowed_actions",
+        ):
+            if field in tab and not isinstance(tab[field], list):
+                errors.append(f"{name}.{field} must be a list")
+    if len(names) != len(set(names)):
+        errors.append("tab names must be unique")
+    run_sources = payload.get("run_sources")
+    if not isinstance(run_sources, list) or not run_sources:
+        errors.append("run_sources must be a non-empty list")
+    else:
+        from workbench.src.run.evidence_snapshot import workbench_run_sources
+
+        expected_sources = workbench_run_sources()
+        if run_sources != expected_sources:
+            errors.append(
+                "run_sources must match workbench_run_sources(): "
+                f"expected {expected_sources!r}, got {run_sources!r}"
+            )
+    endpoints = payload.get("backend_endpoints")
+    if not isinstance(endpoints, list) or not endpoints:
+        errors.append("backend_endpoints must be a non-empty list")
+    else:
+        endpoint_ids = [
+            str(endpoint.get("id") or "")
+            for endpoint in endpoints
+            if isinstance(endpoint, dict) and endpoint.get("id")
+        ]
+        if len(endpoint_ids) != len(set(endpoint_ids)):
+            errors.append("backend endpoint ids must be unique")
+    return errors

@@ -1,0 +1,309 @@
+{
+  "schema_version": "workbench_runtime_contract_v1",
+  "contract_scope": "workbench_cme_microstructure_runtime",
+  "run_sources": [
+    "all_lanes",
+    "cme_rithmic",
+    "equities",
+    "options",
+    "workbench_campaign",
+    "autonomous"
+  ],
+  "model_states": [
+    "idle",
+    "running",
+    "blocked",
+    "failed",
+    "passed",
+    "promoted",
+    "stale_blocked"
+  ],
+  "artifact_states": [
+    "missing",
+    "observed",
+    "present_not_wired",
+    "stale",
+    "blocked",
+    "pass",
+    "fail"
+  ],
+  "data_states": [
+    "MISSING",
+    "BLOCKING",
+    "PASS",
+    "SOURCED",
+    "SEED",
+    "CONFIGURED_NOT_OBSERVED"
+  ],
+  "robustness_states": [
+    "PENDING",
+    "PASS",
+    "CONDITIONAL",
+    "FAIL",
+    "ERROR"
+  ],
+  "cme_lane_states": [
+    "READY_TO_CONNECT",
+    "CONNECTED",
+    "MISSING_PROFILE",
+    "MISSING_CREDENTIALS",
+    "CONFIGURED_NOT_OBSERVED",
+    "BLOCKING",
+    "PASS",
+    "FAIL"
+  ],
+  "backend_endpoints": [
+    {
+      "id": "workbench.run",
+      "cli": "python -m workbench run",
+      "request_schema": "RunContext plus model, event-id, symbol, latency summary, seed",
+      "response_schema": "BacktestResult artifacts and run manifest",
+      "error_response": "nonzero exit and explicit stage/blocking reason"
+    },
+    {
+      "id": "workbench.campaign",
+      "cli": "python -m workbench campaign",
+      "request_schema": "campaign model, symbol, composition, audit grade, sweep flags",
+      "response_schema": "campaign directory with status.json, campaign.json, period/event artifacts",
+      "error_response": "status.json terminal state with blocking gate or failed stage"
+    },
+    {
+      "id": "workbench.verify",
+      "cli": "python -m workbench verify",
+      "request_schema": "optional json flag",
+      "response_schema": "preflight file checks and import/test status",
+      "error_response": "all_ok false or nonzero exit; not a production-readiness claim"
+    },
+    {
+      "id": "workbench.status",
+      "cli": "python -m workbench status",
+      "request_schema": "optional json flag",
+      "response_schema": "model count, NPZ inventory, graph presence, promoted candidate count",
+      "error_response": "nonzero exit with explicit exception"
+    },
+    {
+      "id": "workbench.download",
+      "cli": "python -m workbench download",
+      "request_schema": "model, symbol, max-cost-usd, scope, dry-run flag",
+      "response_schema": "download/backfill plan or started backfill status",
+      "error_response": "nonzero exit or JSON status with missing key/cost/data blocker"
+    },
+    {
+      "id": "workbench.feature_fabric",
+      "cli": "python -m workbench feature-fabric",
+      "request_schema": "source and optional output root",
+      "response_schema": "feature fabric artifact root and PIT validation status",
+      "error_response": "BLOCKING gate with unsafe source, missing identity, or PIT leakage"
+    },
+    {
+      "id": "workbench.fresh_start",
+      "cli": "python -m workbench fresh-start",
+      "request_schema": "scope, optional run id, explicit hard-delete confirmation",
+      "response_schema": "active all-lane run boundary",
+      "error_response": "nonzero exit or FAIL status when run boundary cannot be created"
+    },
+    {
+      "id": "workbench.all_lanes",
+      "cli": "python -m workbench all-lanes",
+      "request_schema": "run-id plus execute flag",
+      "response_schema": "active run plan with terminal state per model",
+      "error_response": "FAIL/BLOCKING when leakage, lane registry, or executor gates block"
+    },
+    {
+      "id": "workbench.leakage_detect",
+      "cli": "python -m workbench leakage-detect",
+      "request_schema": "optional active run id",
+      "response_schema": "leakage detection report and blocking gates",
+      "error_response": "FAIL/BLOCKING with reason and source artifact"
+    }
+  ],
+  "tabs": [
+    {
+      "name": "Autonomous Run",
+      "purpose": "Show selected-run orchestration state, self-learning loop evidence, and artifact coverage without granting LLM promotion authority.",
+      "frontend_component": "workbench.ui.evidence_panels.render_autonomous_run",
+      "action_components": [],
+      "backend_service": "workbench.src.run.evidence_snapshot.load_run_evidence",
+      "runtime_state": ["RunEvidenceSnapshot.source", "RunEvidenceSnapshot.state", "RunEvidenceSnapshot.current_stage", "RunEvidenceSnapshot.stages"],
+      "required_config": ["runtime/workbench/active_run.json when active all-lane boundary exists"],
+      "required_artifacts": ["selected run status and artifact paths when present"],
+      "required_schema": ["RunEvidenceSnapshot"],
+      "pipeline_dependency": ["all-lanes", "autonomous", "workbench_campaign"],
+      "expected_output": "Run header, self-learning stages, pipeline evidence coverage, and artifact links.",
+      "error_behavior": "Missing artifacts render as explicit empty state; stale sources are blocked when an active run boundary exists.",
+      "allowed_actions": []
+    },
+    {
+      "name": "Registry & Data",
+      "purpose": "Expose model registry, event universe, data coverage, campaign controls, and CME/Rithmic paper data evidence.",
+      "frontend_component": "workbench.ui.evidence_panels.render_registry_data",
+      "action_components": ["workbench.ui.campaign_panel.model_selector_panel"],
+      "backend_service": "workbench.src.run.evidence_snapshot.load_run_evidence",
+      "runtime_state": ["registry.lane_registry", "registry.event_universe", "data.event_universe", "data.rithmic_trial"],
+      "required_config": ["apps/workbench/config/model_catalog.yaml", "packages/economic_event_universe/config/event_universe.yaml", "packages/data_system/config/events.csv"],
+      "required_artifacts": ["data/npz/*.npz", "runtime/latency_reports/latency_summary.json", "data/raw/rithmic_trial_live_capture when observed"],
+      "required_schema": ["model catalog", "event universe", "RunEvidenceSnapshot.registry", "RunEvidenceSnapshot.data"],
+      "pipeline_dependency": ["workbench campaign", "event catalog", "coverage check", "rithmic trial report binding"],
+      "expected_output": "Registry counts, event universe rows, data coverage, Rithmic paper data status, and campaign controls only for workbench_campaign source.",
+      "error_behavior": "Event universe and report-binding failures render as BLOCKING, not as empty tables.",
+      "allowed_actions": ["set_primary", "run_campaign", "pause_campaign", "stop_campaign", "download_missing_npz", "load_campaign", "select_period_event"]
+    },
+    {
+      "name": "Backtest Evidence",
+      "purpose": "Display backtest metrics, fills, trades, and replay evidence for the selected run.",
+      "frontend_component": "workbench.ui.evidence_panels.render_backtest_evidence",
+      "action_components": [],
+      "backend_service": "workbench.src.run.evidence_snapshot.load_run_evidence",
+      "runtime_state": ["RunEvidenceSnapshot.backtest", "RunEvidenceSnapshot.artifacts"],
+      "required_config": ["apps/workbench/config/models.yaml", "runtime/latency_reports/latency_summary.json"],
+      "required_artifacts": ["trades.parquet", "diagnostics.json", "manifest.json"],
+      "required_schema": ["BacktestResult", "RunEvidenceSnapshot.backtest"],
+      "pipeline_dependency": ["python -m workbench run", "python -m workbench campaign"],
+      "expected_output": "Backtest status, trade/fill tables, PnL and artifact previews.",
+      "error_behavior": "Missing trades or diagnostics stay explicit and do not imply a pass.",
+      "allowed_actions": []
+    },
+    {
+      "name": "Latency Evidence",
+      "purpose": "Display C++/CHI404 latency authority, latency operating envelope, and CME Rithmic order-ack readiness.",
+      "frontend_component": "workbench.ui.evidence_panels.render_latency_evidence",
+      "action_components": [],
+      "backend_service": "workbench.src.run.evidence_snapshot.load_run_evidence",
+      "runtime_state": ["RunEvidenceSnapshot.latency", "snapshot.latency/rithmic_endpoint", "latency.rithmic_order_ack"],
+      "required_config": ["runtime/latency_reports/latency_summary.json", "data_system/config/rithmic_trial.yaml"],
+      "required_artifacts": ["reports/latency_baselines/*.json", "reports/latency_audit/current_low_latency_status.json"],
+      "required_schema": ["latency_summary", "current_low_latency_status_v1", "rithmic_endpoint_status"],
+      "pipeline_dependency": ["CHI404 latency summary", "execution_path_audit", "latency_operating_envelope"],
+      "expected_output": "Latency metrics, endpoint readiness, order-ack status, and promotion blockers.",
+      "error_behavior": "CONFIGURED_NOT_OBSERVED and missing ack evidence block production readiness.",
+      "allowed_actions": []
+    },
+    {
+      "name": "Signal Diagnostics",
+      "purpose": "Render diagnostics, feature fabric, PIT safety, signal distributions, and source-of-truth blockers.",
+      "frontend_component": "workbench.ui.evidence_panels.render_signal_diagnostics",
+      "action_components": [],
+      "backend_service": "workbench.src.run.evidence_snapshot.load_run_evidence",
+      "runtime_state": ["RunEvidenceSnapshot.diagnostics", "diagnostics.feature_fabric"],
+      "required_config": ["apps/workbench/config/model_catalog.yaml"],
+      "required_artifacts": ["feature fabric artifacts", "diagnostics.json"],
+      "required_schema": ["feature_fabric status", "diagnostics payload"],
+      "pipeline_dependency": ["python -m workbench feature-fabric", "PIT validation"],
+      "expected_output": "Diagnostics tables and feature-fabric gate state.",
+      "error_behavior": "PIT leakage or missing active run identity is BLOCKING.",
+      "allowed_actions": []
+    },
+    {
+      "name": "Walk-Forward & Robustness",
+      "purpose": "Display walk-forward, plateau, Monte Carlo, purged CV, and robustness pack gates.",
+      "frontend_component": "workbench.ui.evidence_panels.render_robustness",
+      "action_components": [],
+      "backend_service": "workbench.src.run.evidence_snapshot.load_run_evidence",
+      "runtime_state": ["RunEvidenceSnapshot.robustness"],
+      "required_config": ["apps/workbench/config/walk_forward.yaml", "apps/workbench/config/wfc_gate.yaml"],
+      "required_artifacts": ["wfc artifacts", "robustness pack artifacts", "matrix runner outputs"],
+      "required_schema": ["WFC gate", "robustness pack phase9"],
+      "pipeline_dependency": ["walk-forward campaign", "matrix runner", "robustness pack"],
+      "expected_output": "Robustness status, WFC pass/fail/conditional states, and blocker rows.",
+      "error_behavior": "Missing or malformed evidence is PENDING/BLOCKING and cannot promote.",
+      "allowed_actions": []
+    },
+    {
+      "name": "Decision & Registry",
+      "purpose": "Show final decision state, promotion blockers, lane registry evidence, and production-readiness gates.",
+      "frontend_component": "workbench.ui.evidence_panels.render_decision_registry",
+      "action_components": [],
+      "backend_service": "workbench.src.run.evidence_snapshot.load_run_evidence",
+      "runtime_state": ["RunEvidenceSnapshot.decision", "system.lane_registry", "system.feature_fabric"],
+      "required_config": ["lane registry registrations", "runtime/workbench/active_run.json"],
+      "required_artifacts": ["decision gate artifacts", "promotion gate report when present"],
+      "required_schema": ["decision gate", "lane registry", "feature fabric gate"],
+      "pipeline_dependency": ["all-lanes", "leakage-detect", "promotion gate"],
+      "expected_output": "Decision action, blockers, readiness gates, and registry state.",
+      "error_behavior": "Any shared blocking gate appends to decision blockers.",
+      "allowed_actions": []
+    },
+    {
+      "name": "Live Monitor",
+      "purpose": "Display observed trade-manager, order, position, latency, slippage, and incident state without creating live routes.",
+      "frontend_component": "workbench.ui.evidence_panels.render_live_monitor",
+      "action_components": [],
+      "backend_service": "workbench.src.run.evidence_snapshot.load_run_evidence",
+      "runtime_state": ["RunEvidenceSnapshot.trade_manager"],
+      "required_config": ["trade manager session artifacts when linked to selected run"],
+      "required_artifacts": ["order state", "position snapshot", "fills", "risk rejections", "latency/slippage artifacts"],
+      "required_schema": ["phase5 trade audit", "trade manager session snapshot"],
+      "pipeline_dependency": ["trade manager session", "execution path audit"],
+      "expected_output": "Order/fill/position tables, PnL, risk rejections, and execution health.",
+      "error_behavior": "Unlinked or malformed session artifacts are explicit blockers, not silently attached.",
+      "allowed_actions": []
+    },
+    {
+      "name": "Reports & Analyst",
+      "purpose": "Display after-action packets, KG relationship review, LLM advisory console, and reports while preventing LLM promotion authority.",
+      "frontend_component": "workbench.ui.evidence_panels.render_reports_analyst",
+      "action_components": ["workbench.ui.analyst_panel.workbench_llm_console", "workbench.ui.analyst_panel.analyst_panel"],
+      "backend_service": "workbench.src.run.evidence_snapshot.load_run_evidence",
+      "runtime_state": ["RunEvidenceSnapshot.after_action", "RunEvidenceSnapshot.relationships", "system.llm_providers"],
+      "required_config": [".env OpenAI-compatible runtime when chat is used"],
+      "required_artifacts": ["after_action_packet.json", "after_action_response.json", "kg_slice.json", "relationship review artifacts"],
+      "required_schema": ["after-action packet", "after-action response", "KG slice"],
+      "pipeline_dependency": ["after-action review", "symbolic gate", "KG relationship review"],
+      "expected_output": "AAR status, narrative/report, KG counts, relationship candidates, and advisory chat.",
+      "error_behavior": "LLM unavailable or skipped is visible; LLM cannot tune, promote, deploy, or override gates.",
+      "allowed_actions": ["ask_llm_advisory_question"]
+    },
+    {
+      "name": "Wallet",
+      "purpose": "Guarded operator surface for wallet status and Bitcoin Core operations; not part of CME production readiness.",
+      "frontend_component": "workbench.ui.wallet_panel.render_wallet_panel",
+      "action_components": ["workbench.ui.wallet_panel.render_wallet_panel"],
+      "backend_service": "workbench.src.run.wallet_ops",
+      "runtime_state": ["wallet operator session state"],
+      "required_config": ["local Bitcoin Core wallet config when used"],
+      "required_artifacts": ["wallet activity/status when present"],
+      "required_schema": ["wallet operation result"],
+      "pipeline_dependency": ["operator-guarded wallet ops"],
+      "expected_output": "Wallet status, receive address form, PSBT preview, and guarded broadcast controls.",
+      "error_behavior": "Unavailable wallet/runtime is explicit and does not affect CME readiness.",
+      "allowed_actions": ["refresh_wallet", "create_receive_address", "preview_transaction", "broadcast_btc"]
+    },
+    {
+      "name": "System",
+      "purpose": "Show endpoint status, lane registry, provider status, validation artifacts, and system payload.",
+      "frontend_component": "workbench.ui.evidence_panels.render_system",
+      "action_components": [],
+      "backend_service": "workbench.src.run.evidence_snapshot.load_run_evidence",
+      "runtime_state": ["RunEvidenceSnapshot.system"],
+      "required_config": ["data_system/config/rithmic_trial.yaml", "runtime validation artifacts", "lane registry"],
+      "required_artifacts": ["runtime/validation/*.json", "reports/latency_audit/current_low_latency_status.json"],
+      "required_schema": ["lane registry", "provider status", "validation reports"],
+      "pipeline_dependency": ["lane registry", "provider status", "validation scorecards"],
+      "expected_output": "Endpoint rows, lane registry rows, provider status, validation artifact inventory.",
+      "error_behavior": "Lane registry errors render as Workbench blockers.",
+      "allowed_actions": []
+    },
+    {
+      "name": "Personal Runs",
+      "purpose": "Expose local personal sandbox runs while keeping locked 2026 sandbox dates excluded from promotion.",
+      "frontend_component": "workbench.ui.campaign_panel.personal_runs_panel",
+      "action_components": ["workbench.ui.campaign_panel.personal_runs_panel"],
+      "backend_service": "workbench.ui.campaign_panel.personal_runs_panel",
+      "runtime_state": ["personal sandbox lock", "selected model", "selected symbol"],
+      "required_config": ["apps/workbench/config/personal_lock.yaml"],
+      "required_artifacts": ["research_cards/workbench_personal when present"],
+      "required_schema": ["personal lock config"],
+      "pipeline_dependency": ["personal sandbox lock"],
+      "expected_output": "Personal run controls and local artifact listing only when unlocked.",
+      "error_behavior": "Locked state hides sandbox dates from promotion and remains explicit.",
+      "allowed_actions": ["unlock_personal_sandbox_local_only"]
+    }
+  ],
+  "blocker_policy": {
+    "silent_blockers_allowed": false,
+    "fake_pass_allowed": false,
+    "llm_authority": "advisory_only",
+    "untested_idea_selection_allowed": false,
+    "cme_live_route_authority": "CHI404_only"
+  }
+}

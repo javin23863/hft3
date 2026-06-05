@@ -30,6 +30,51 @@ function Test-CommandOnPath {
     $null -ne (Get-Command $Name -ErrorAction SilentlyContinue)
 }
 
+function Stop-ExistingWorkbenchOnPort {
+    param([int]$Port)
+
+    $listeners = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
+    if ($listeners.Count -eq 0) {
+        return
+    }
+
+    $appPath = (Join-Path $RepoRoot 'apps\workbench\ui\app.py').Replace('\', '/')
+    $listenerInfos = @()
+    foreach ($conn in $listeners) {
+        $proc = Get-CimInstance Win32_Process -Filter "ProcessId=$($conn.OwningProcess)" -ErrorAction SilentlyContinue
+        $cmd = if ($proc) { [string]$proc.CommandLine } else { '' }
+        $normalized = $cmd.Replace('\', '/')
+        $isCurrentRepoWorkbench = ($normalized -like "*streamlit run*") -and ($normalized -like "*$appPath*")
+        $listenerInfos += [pscustomobject]@{
+            Pid = $conn.OwningProcess
+            CommandLine = $cmd
+            IsCurrentRepoWorkbench = $isCurrentRepoWorkbench
+        }
+
+        if (-not $isCurrentRepoWorkbench) {
+            Exit-Launcher -Message "ERROR: port $Port is already in use by PID $($conn.OwningProcess): $cmd"
+        }
+    }
+
+    $workbenchPids = @($listenerInfos | Select-Object -ExpandProperty Pid | Sort-Object -Unique)
+    foreach ($workbenchPid in $workbenchPids) {
+        Write-Host "Stopping existing HFT3 Workbench process on port $Port (PID $workbenchPid)..." -ForegroundColor Yellow
+        Stop-Process -Id $workbenchPid -Force -ErrorAction SilentlyContinue
+    }
+
+    $deadline = (Get-Date).AddSeconds(15)
+    do {
+        Start-Sleep -Milliseconds 250
+        $stillListening = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
+        if ($stillListening.Count -eq 0) {
+            break
+        }
+    } while ((Get-Date) -lt $deadline)
+    if (@(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue).Count -ne 0) {
+        Exit-Launcher -Message "ERROR: existing HFT3 Workbench process on port $Port did not stop."
+    }
+}
+
 if (-not (Test-CommandOnPath 'python')) {
     Exit-Launcher -Message 'ERROR: python not on PATH. Install Python 3.12+ and retry.'
 }
@@ -99,6 +144,8 @@ if ($PreflightOnly) {
     exit 0
 }
 
+Stop-ExistingWorkbenchOnPort -Port $Port
+
 $latencySummary = Join-Path $RepoRoot 'runtime/latency_reports/latency_summary.json'
 if (-not (Test-Path $latencySummary)) {
     Write-Host "WARN: missing $latencySummary — backtests need CHI404 latency summary for C++ authority." -ForegroundColor Yellow
@@ -116,7 +163,8 @@ if (-not $SkipBrowser) {
     Start-Process $url
 }
 
-& python -m streamlit run apps/workbench/ui/app.py --server.headless true --server.port $Port
+$AppPath = Join-Path $RepoRoot 'apps\workbench\ui\app.py'
+& python -m streamlit run $AppPath --server.headless true --server.port $Port
 $exitCode = $LASTEXITCODE
 if ($exitCode -ne 0) {
     Exit-Launcher -Code $exitCode -Message "Streamlit exited with code $exitCode"

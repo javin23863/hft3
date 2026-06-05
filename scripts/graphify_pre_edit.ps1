@@ -36,7 +36,11 @@ if (-not (Test-Path $Stamp)) {
 
 try {
     $stampJson = Get-Content $Stamp -Raw | ConvertFrom-Json
-    $stampUtc = [datetime]::Parse($stampJson.timestamp_utc).ToUniversalTime()
+    $stampUtc = [datetimeoffset]::Parse(
+        [string]$stampJson.timestamp_utc,
+        [Globalization.CultureInfo]::InvariantCulture,
+        [Globalization.DateTimeStyles]::AssumeUniversal
+    ).UtcDateTime
     $ageMin = ((Get-Date).ToUniversalTime() - $stampUtc).TotalMinutes
     $excerpt = [string]$stampJson.output_excerpt
     if ($excerpt.Length -lt 40) {

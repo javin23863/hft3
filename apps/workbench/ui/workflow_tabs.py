@@ -1,16 +1,5 @@
-"""Workflow tab order (no heavy imports — safe for Streamlit load)."""
+"""Workflow tab order from the runtime contract."""
 
-WORKFLOW_TABS = [
-    "Autonomous Run",
-    "Registry & Data",
-    "Backtest Evidence",
-    "Latency Evidence",
-    "Signal Diagnostics",
-    "Walk-Forward & Robustness",
-    "Decision & Registry",
-    "Live Monitor",
-    "Reports & Analyst",
-    "Wallet",
-    "System",
-    "Personal Runs",
-]
+from workbench.src.runtime_contract import contract_tabs
+
+WORKFLOW_TABS = contract_tabs()

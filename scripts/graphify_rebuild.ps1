@@ -6,8 +6,11 @@ Set-Location $RepoRoot
 $LogDir = Join-Path $RepoRoot 'logs\graphify'
 $LogFile = Join-Path $LogDir 'rebuild.log'
 $TimeoutWrapper = Join-Path $RepoRoot 'tools\shell\run_with_timeout.ps1'
-$UpdateTimeoutSec = 300
-$ClusterTimeoutSec = 120
+$GraphOut = Join-Path $RepoRoot 'graphify-out'
+$GraphStateNames = @('graph.json', 'manifest.json', '.graphify_labels.json', 'GRAPH_REPORT.md')
+$GraphBackupDir = Join-Path ([IO.Path]::GetTempPath()) ("hft3-graphify-backup-{0}" -f ([guid]::NewGuid()))
+$UpdateTimeoutSec = 420
+$ClusterTimeoutSec = 420
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 
 function Write-LogLine {
@@ -16,6 +19,38 @@ function Write-LogLine {
     $line = "[$ts] $Message"
     $line | Tee-Object -FilePath $LogFile -Append
     return $line
+}
+
+function Backup-GraphState {
+    New-Item -ItemType Directory -Force -Path $GraphBackupDir | Out-Null
+    foreach ($name in $GraphStateNames) {
+        $source = Join-Path $GraphOut $name
+        if (Test-Path $source) {
+            Copy-Item -LiteralPath $source -Destination (Join-Path $GraphBackupDir $name) -Force
+        }
+    }
+}
+
+function Clear-GraphState {
+    foreach ($name in $GraphStateNames) {
+        $path = Join-Path $GraphOut $name
+        if (Test-Path $path) {
+            Remove-Item -LiteralPath $path -Force
+        }
+    }
+}
+
+function Restore-GraphState {
+    if (-not (Test-Path $GraphBackupDir)) {
+        return
+    }
+    New-Item -ItemType Directory -Force -Path $GraphOut | Out-Null
+    foreach ($name in $GraphStateNames) {
+        $backup = Join-Path $GraphBackupDir $name
+        if (Test-Path $backup) {
+            Copy-Item -LiteralPath $backup -Destination (Join-Path $GraphOut $name) -Force
+        }
+    }
 }
 
 Write-LogLine 'graphify rebuild start' | Out-Null
@@ -31,35 +66,35 @@ if (-not (Test-Path $TimeoutWrapper)) {
     exit 1
 }
 
-$updated = $false
 $updateExit = 0
+$clusterExit = 0
 try {
-    Write-LogLine "graphify update start (timeout ${UpdateTimeoutSec}s)" | Out-Null
-    & $TimeoutWrapper -TimeoutSec $UpdateTimeoutSec -Label 'graphify-update' -- graphify update . 2>&1 |
+    Backup-GraphState
+    Clear-GraphState
+    Write-LogLine "graphify update start (timeout ${UpdateTimeoutSec}s, force, no-cluster)" | Out-Null
+    & $TimeoutWrapper -TimeoutSec $UpdateTimeoutSec -Label 'graphify-update' -- python -m graphify update . --force --no-cluster 2>&1 |
         Tee-Object -FilePath $LogFile -Append
     $updateExit = $LASTEXITCODE
-    if ($updateExit -eq 0) {
-        $updated = $true
-    } else {
-        throw "graphify update . exited $updateExit"
+    if ($updateExit -ne 0) {
+        throw "graphify update . --force --no-cluster exited $updateExit"
     }
+
+    Write-LogLine "graphify cluster-only start (timeout ${ClusterTimeoutSec}s, no-viz)" | Out-Null
+    & $TimeoutWrapper -TimeoutSec $ClusterTimeoutSec -Label 'graphify-cluster' -- python -m graphify cluster-only . --no-viz 2>&1 |
+        Tee-Object -FilePath $LogFile -Append
+    $clusterExit = $LASTEXITCODE
+    if ($clusterExit -ne 0) {
+        throw "graphify cluster-only . --no-viz exited $clusterExit"
+    }
+
+    Write-LogLine 'graphify rebuild done (update --force --no-cluster; cluster-only --no-viz)' | Out-Null
+    Remove-Item -LiteralPath $GraphBackupDir -Recurse -Force -ErrorAction SilentlyContinue
+    exit 0
 } catch {
     $updateMessage = $_.Exception.Message
-    if ($updateExit -eq 0) { $updateExit = 1 }
-    Write-LogLine "diagnostic fallback: graphify cluster-only . --no-viz ($updateMessage)" | Out-Null
-    & $TimeoutWrapper -TimeoutSec $ClusterTimeoutSec -Label 'graphify-cluster-only' -- graphify cluster-only . --no-viz 2>&1 |
-        Tee-Object -FilePath $LogFile -Append
-    if ($LASTEXITCODE -ne 0) {
-        Write-LogLine "graphify rebuild failed (exit $LASTEXITCODE)" | Out-Null
-        exit $LASTEXITCODE
-    }
-    Write-LogLine "graphify update failed before diagnostic fallback (exit $updateExit): $updateMessage" | Out-Null
-    exit $updateExit
+    $exitCode = if ($clusterExit -ne 0) { $clusterExit } elseif ($updateExit -ne 0) { $updateExit } else { 1 }
+    Restore-GraphState
+    Remove-Item -LiteralPath $GraphBackupDir -Recurse -Force -ErrorAction SilentlyContinue
+    Write-LogLine "graphify rebuild failed (exit $exitCode): $updateMessage" | Out-Null
+    exit $exitCode
 }
-
-if ($updated) {
-    Write-LogLine 'graphify rebuild done (update)' | Out-Null
-} else {
-    Write-LogLine 'graphify rebuild done (cluster-only)' | Out-Null
-}
-exit 0

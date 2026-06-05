@@ -67,13 +67,23 @@ def main() -> int:
         _assert_catalog_keys_namespaced(repo)
         from workbench.src.core.composition import CatalogEntry, DefensiveStub, ModelComposition
         from workbench.src.registry.model_catalog import load_catalog
+        from workbench.src.runtime_contract import validate_runtime_contract
+        from workbench.ui.analyst_panel import workbench_llm_console
         from workbench.ui.campaign_panel import get_session_composition
+        from workbench.ui.workflow_tabs import WORKFLOW_TABS
 
         catalog = load_catalog(repo)
         if not catalog:
             raise RuntimeError(f"load_catalog() returned empty catalog (repo={repo})")
+        contract_errors = validate_runtime_contract()
+        if contract_errors:
+            raise RuntimeError("workbench runtime contract invalid: " + "; ".join(contract_errors))
+        if "Model Selector" in WORKFLOW_TABS:
+            raise RuntimeError("workbench tabs are stale: WORKFLOW_TABS still contains 'Model Selector'")
+        if "Registry & Data" not in WORKFLOW_TABS:
+            raise RuntimeError("workbench tabs are stale: WORKFLOW_TABS missing 'Registry & Data'")
 
-        _ = CatalogEntry, DefensiveStub, ModelComposition, get_session_composition
+        _ = CatalogEntry, DefensiveStub, ModelComposition, get_session_composition, workbench_llm_console
     except Exception:
         print(f"workbench preflight failed (repo={repo})", file=sys.stderr)
         traceback.print_exc()
