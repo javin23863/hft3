@@ -315,6 +315,7 @@
         },
         "request_schema": {"type": "string", "minLength": 1},
         "request_args": {"$ref": "#/$defs/request_args"},
+        "response_contract": {"$ref": "#/$defs/response_contract"},
         "response_schema": {"type": "string", "minLength": 1},
         "error_response": {"type": "string", "minLength": 1}
       },

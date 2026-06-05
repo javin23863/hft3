@@ -141,6 +141,7 @@ def test_runtime_contract_is_tab_source_of_truth() -> None:
         expected_rithmic_order_ack_states,
         expected_robustness_states,
         expected_run_states,
+        expected_setup_response_contract,
         expected_sim_shadow_states,
         expected_status_response_contract,
         expected_verify_response_contract,
@@ -265,6 +266,8 @@ def test_runtime_contract_is_tab_source_of_truth() -> None:
     for utility in contract["utility_cli_commands"]:
         command = utility["cli"].replace("python -m workbench ", "")
         assert utility["request_args"] == expected_request_args[command]
+        if command == "setup":
+            assert utility["response_contract"] == expected_setup_response_contract()
 
 
 def test_verify_response_contract_matches_producer_and_dispatcher(
@@ -344,6 +347,84 @@ def test_status_response_contract_matches_producer_and_dispatcher(
     assert payload == dispatcher_result
 
 
+def test_setup_response_contract_matches_producer_and_dispatcher(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from workbench import __main__ as workbench_main
+    from workbench.src import setup as setup_mod
+
+    monkeypatch.setattr(setup_mod, "check_python", lambda _repo: {"python": "3.12.0", "python_ok": True})
+    monkeypatch.setattr(
+        setup_mod,
+        "check_dependencies",
+        lambda _repo: {"dependencies": {}, "all_present": True, "missing": [], "requirements_path": "requirements.txt"},
+    )
+    monkeypatch.setattr(
+        setup_mod,
+        "check_env",
+        lambda _repo: {"env_file_exists": True, "env_file_path": ".env", "databento_key_set": False, "env_ok": True},
+    )
+    monkeypatch.setattr(
+        setup_mod,
+        "scan_npz",
+        lambda _repo: {
+            "npz_dir": "data/npz",
+            "npz_dir_exists": True,
+            "npz_count": 1,
+            "npz_total_size_mb": 2.5,
+            "npz_files": ["sample.npz"],
+        },
+    )
+    monkeypatch.setattr(
+        setup_mod,
+        "check_graphify",
+        lambda _repo: {"graph_present": True, "graph_json_path": "graphify-out/graph.json", "rebuild_command": None},
+    )
+
+    required = set(setup_mod.SETUP_RESPONSE_CONTRACT["required"])
+    result = setup_mod.setup(tmp_path)
+    assert required <= set(result)
+    assert result["core_ok"] is True
+    assert result["data_ready"] is True
+    assert result["graph_ready"] is True
+    assert result["all_ok"] is True
+
+    graph_states = iter(
+        [
+            {"graph_present": False, "graph_json_path": "graphify-out/graph.json", "rebuild_command": "graphify update ."},
+            {"graph_present": True, "graph_json_path": "graphify-out/graph.json", "rebuild_command": None},
+        ]
+    )
+    monkeypatch.setattr(setup_mod, "check_graphify", lambda _repo: next(graph_states))
+    monkeypatch.setattr(setup_mod, "rebuild_graph", lambda _repo: {"rebuilt": True, "exit_code": 0, "stderr": ""})
+
+    assert workbench_main.main(["setup", "--json", "--rebuild-graph"]) == 0
+    rebuild_payload = json.loads(capsys.readouterr().out)
+    assert required <= set(rebuild_payload)
+    assert "graph_rebuild" in rebuild_payload
+    assert rebuild_payload["graph_ready"] is True
+    assert rebuild_payload["all_ok"] is True
+
+    blocking_result = {
+        "repo": str(tmp_path),
+        "python": {"python_ok": True},
+        "dependencies": {"all_present": False},
+        "env": {"env_ok": True},
+        "npz": {},
+        "graphify": {},
+        "core_ok": False,
+        "data_ready": True,
+        "graph_ready": True,
+        "all_ok": False,
+    }
+    monkeypatch.setattr(setup_mod, "setup", lambda _repo, *, rebuild_graph_flag=False: blocking_result)
+
+    assert workbench_main.main(["setup", "--json"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert required <= set(payload)
+    assert payload["all_ok"] is False
+
+
 def test_runtime_contract_rejects_schema_and_policy_drift() -> None:
     from workbench.src.runtime_contract import load_runtime_contract, validate_runtime_contract
 
@@ -410,6 +491,20 @@ def test_runtime_contract_rejects_schema_and_policy_drift() -> None:
                 endpoint for endpoint in payload["backend_endpoints"] if endpoint["id"] == "workbench.status"
             )["response_contract"]["properties"].update({"graph_ready": "string"}),
             "response_contract must match Workbench status response contract",
+        ),
+        (
+            "setup_response_contract_required_drift",
+            lambda payload: next(
+                utility for utility in payload["utility_cli_commands"] if utility["id"] == "workbench.utility.setup"
+            )["response_contract"]["required"].remove("all_ok"),
+            "response_contract must match Workbench setup response contract",
+        ),
+        (
+            "setup_response_contract_success_field_drift",
+            lambda payload: next(
+                utility for utility in payload["utility_cli_commands"] if utility["id"] == "workbench.utility.setup"
+            )["response_contract"].update({"success_field": "env_ok"}),
+            "response_contract must match Workbench setup response contract",
         ),
         (
             "missing_tab_field",
@@ -771,6 +866,7 @@ def main(args, parser):
 def test_runtime_contract_rejects_parsed_but_undispatched_cli(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from workbench.src import runtime_contract
     from workbench.src.runtime_contract import (
+        expected_setup_response_contract,
         expected_workbench_cli_request_args,
         expected_verify_response_contract,
         load_runtime_contract,
@@ -814,6 +910,7 @@ def main(args):
     contract["utility_cli_commands"][0]["cli"] = "python -m workbench setup"
     contract["utility_cli_commands"][0]["utility_scope"] = "environment_setup"
     contract["utility_cli_commands"][0]["request_args"] = request_args["setup"]
+    contract["utility_cli_commands"][0]["response_contract"] = expected_setup_response_contract()
     errors = validate_runtime_contract(contract)
 
     assert "backend_endpoints[1].cli references unknown Workbench CLI subcommand: 'missing-handler'" in errors
@@ -850,6 +947,7 @@ def main(args):
 def test_runtime_contract_rejects_dispatched_but_uncovered_cli(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from workbench.src import runtime_contract
     from workbench.src.runtime_contract import (
+        expected_setup_response_contract,
         expected_workbench_cli_request_args,
         load_runtime_contract,
         validate_runtime_contract,
@@ -884,6 +982,7 @@ def main(args):
     contract["utility_cli_commands"][0]["cli"] = "python -m workbench setup"
     contract["utility_cli_commands"][0]["utility_scope"] = "environment_setup"
     contract["utility_cli_commands"][0]["request_args"] = request_args["setup"]
+    contract["utility_cli_commands"][0]["response_contract"] = expected_setup_response_contract()
 
     errors = validate_runtime_contract(contract)
 

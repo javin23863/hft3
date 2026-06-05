@@ -9,6 +9,37 @@ from typing import Any, Dict, List, Optional
 
 _REPO = Path(__file__).resolve().parents[3]
 
+SETUP_RESPONSE_CONTRACT = {
+    "required": [
+        "repo",
+        "python",
+        "dependencies",
+        "env",
+        "npz",
+        "graphify",
+        "core_ok",
+        "data_ready",
+        "graph_ready",
+        "all_ok",
+    ],
+    "success_field": "all_ok",
+    "success_values": [True],
+    "failure_exit_code": 1,
+    "properties": {
+        "repo": "string",
+        "python": "object",
+        "dependencies": "object",
+        "env": "object",
+        "npz": "object",
+        "graphify": "object",
+        "graph_rebuild": "object",
+        "core_ok": "boolean",
+        "data_ready": "boolean",
+        "graph_ready": "boolean",
+        "all_ok": "boolean",
+    },
+}
+
 
 def _reqs_path(repo: Path) -> Path:
     return repo / "apps" / "workbench" / "requirements.txt"
@@ -112,13 +143,20 @@ def setup(repo: Optional[Path] = None, *, rebuild_graph_flag: bool = False) -> D
         "env": check_env(repo),
         "npz": scan_npz(repo),
         "graphify": check_graphify(repo),
+        "core_ok": False,
+        "data_ready": False,
+        "graph_ready": False,
         "all_ok": True,
     }
     if rebuild_graph_flag and not result["graphify"]["graph_present"]:
         result["graph_rebuild"] = rebuild_graph(repo)
-    result["all_ok"] = all((
+        result["graphify"] = check_graphify(repo)
+    result["core_ok"] = all((
         result["python"]["python_ok"],
         result["dependencies"]["all_present"],
         result["env"]["env_ok"],
     ))
+    result["data_ready"] = result["npz"]["npz_count"] > 0
+    result["graph_ready"] = result["graphify"]["graph_present"]
+    result["all_ok"] = all((result["core_ok"], result["data_ready"], result["graph_ready"]))
     return result
