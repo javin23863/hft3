@@ -49,6 +49,8 @@ REQUIRED_ROBUSTNESS_CHECKS = (
     "bonferroni_penalty",
     "holdout_tuning_veto",
 )
+ROBUSTNESS_CHECK_STATUSES = ("PENDING", "PASS", "FAIL")
+ROBUSTNESS_WALK_FORWARD_STATUSES = ("EMPTY", "INCOMPLETE", "single_window")
 
 
 @dataclass(frozen=True)

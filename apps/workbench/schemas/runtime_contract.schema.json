@@ -8,10 +8,19 @@
     "contract_scope",
     "run_sources",
     "model_states",
+    "run_states",
+    "campaign_states",
+    "all_lanes_terminal_states",
     "artifact_states",
+    "artifact_coverage_states",
+    "artifact_stage_states",
     "data_states",
+    "event_row_states",
+    "data_coverage_states",
     "robustness_states",
+    "sim_shadow_states",
     "cme_lane_states",
+    "rithmic_order_ack_states",
     "backend_endpoints",
     "utility_cli_commands",
     "tabs",
@@ -37,7 +46,37 @@
       "minItems": 1,
       "uniqueItems": true
     },
+    "run_states": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "campaign_states": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "all_lanes_terminal_states": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "minItems": 1,
+      "uniqueItems": true
+    },
     "artifact_states": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "artifact_coverage_states": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "artifact_stage_states": {
       "type": "array",
       "items": {"type": "string", "minLength": 1},
       "minItems": 1,
@@ -49,13 +88,37 @@
       "minItems": 1,
       "uniqueItems": true
     },
+    "event_row_states": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "data_coverage_states": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "minItems": 1,
+      "uniqueItems": true
+    },
     "robustness_states": {
       "type": "array",
       "items": {"type": "string", "minLength": 1},
       "minItems": 1,
       "uniqueItems": true
     },
+    "sim_shadow_states": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "minItems": 1,
+      "uniqueItems": true
+    },
     "cme_lane_states": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "rithmic_order_ack_states": {
       "type": "array",
       "items": {"type": "string", "minLength": 1},
       "minItems": 1,

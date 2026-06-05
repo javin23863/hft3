@@ -127,6 +127,20 @@ def test_runtime_contract_is_tab_source_of_truth() -> None:
         RUNTIME_STATE_REF_PATTERN,
         UTILITY_CLI_COMMAND_SCOPES,
         allowed_runtime_state_refs,
+        expected_all_lanes_terminal_states,
+        expected_artifact_coverage_states,
+        expected_artifact_stage_states,
+        expected_artifact_states,
+        expected_campaign_states,
+        expected_data_coverage_states,
+        expected_data_states,
+        expected_event_row_states,
+        expected_model_states,
+        expected_rithmic_endpoint_states,
+        expected_rithmic_order_ack_states,
+        expected_robustness_states,
+        expected_run_states,
+        expected_sim_shadow_states,
         load_runtime_contract,
         validate_runtime_contract,
     )
@@ -138,10 +152,53 @@ def test_runtime_contract_is_tab_source_of_truth() -> None:
     assert schema["properties"]["schema_version"]["const"] == contract["schema_version"]
     assert "tab_contract" in schema["$defs"]
     assert "utility_cli_command" in schema["$defs"]
+    for vocabulary in (
+        "model_states",
+        "run_states",
+        "campaign_states",
+        "all_lanes_terminal_states",
+        "artifact_states",
+        "artifact_coverage_states",
+        "artifact_stage_states",
+        "data_states",
+        "event_row_states",
+        "data_coverage_states",
+        "robustness_states",
+        "sim_shadow_states",
+        "cme_lane_states",
+        "rithmic_order_ack_states",
+    ):
+        assert vocabulary in schema["required"]
+        assert vocabulary in schema["properties"]
     runtime_state_items = schema["$defs"]["tab_contract"]["properties"]["runtime_state"]["items"]
     assert runtime_state_items["pattern"] == RUNTIME_STATE_REF_PATTERN
     assert set(runtime_state_items["enum"]) == allowed_runtime_state_refs()
     assert validate_runtime_contract(contract) == []
+    assert contract["model_states"] == expected_model_states()
+    assert contract["run_states"] == expected_run_states()
+    assert contract["campaign_states"] == expected_campaign_states()
+    assert contract["all_lanes_terminal_states"] == expected_all_lanes_terminal_states()
+    assert contract["artifact_states"] == expected_artifact_states()
+    assert contract["artifact_coverage_states"] == expected_artifact_coverage_states()
+    assert contract["artifact_stage_states"] == expected_artifact_stage_states()
+    assert contract["data_states"] == expected_data_states()
+    assert contract["event_row_states"] == expected_event_row_states()
+    assert contract["data_coverage_states"] == expected_data_coverage_states()
+    assert contract["robustness_states"] == expected_robustness_states()
+    assert contract["sim_shadow_states"] == expected_sim_shadow_states()
+    assert contract["cme_lane_states"] == expected_rithmic_endpoint_states()
+    assert contract["rithmic_order_ack_states"] == expected_rithmic_order_ack_states()
+    from workbench.src.run.campaign_runner import CampaignResult, campaign_run_state
+
+    assert campaign_run_state("CONDITIONAL") == "conditional"
+    with pytest.raises(ValueError, match="unknown campaign status"):
+        CampaignResult(
+            campaign_id="bad",
+            model_id="HYP_1",
+            symbol="ES",
+            status="MAYBE",
+            param_hash="bad",
+        )
     assert WORKFLOW_TAB_CONTRACTS == contract["tabs"]
     assert [tab["name"] for tab in contract["tabs"]] == WORKFLOW_TABS
     registry_tab = next(tab for tab in contract["tabs"] if tab["name"] == "Registry & Data")
@@ -331,6 +388,84 @@ def test_runtime_contract_rejects_schema_and_policy_drift() -> None:
         mutate(drifted)
         errors = validate_runtime_contract(drifted)
         assert expected in errors, label
+
+    vocabulary_cases = [
+        (
+            "model_state_drift",
+            lambda payload: payload["model_states"].append("idle"),
+            "model_states must match all_lanes.TERMINAL_STATES",
+        ),
+        (
+            "run_state_drift",
+            lambda payload: payload["run_states"].append("ghost"),
+            "run_states must match Workbench snapshot/flow states",
+        ),
+        (
+            "campaign_state_drift",
+            lambda payload: payload["campaign_states"].remove("PASS"),
+            "campaign_states must match campaign_runner statuses",
+        ),
+        (
+            "all_lanes_terminal_state_drift",
+            lambda payload: payload["all_lanes_terminal_states"].append("BLOCKED_GHOST"),
+            "all_lanes_terminal_states must match all_lanes.TERMINAL_STATES",
+        ),
+        (
+            "artifact_state_drift",
+            lambda payload: payload["artifact_states"].append("observed"),
+            "artifact_states must match evidence_snapshot artifact statuses",
+        ),
+        (
+            "artifact_coverage_state_drift",
+            lambda payload: payload["artifact_coverage_states"].append("observed"),
+            "artifact_coverage_states must match evidence_snapshot artifact coverage statuses",
+        ),
+        (
+            "artifact_stage_state_drift",
+            lambda payload: payload["artifact_stage_states"].remove("stale_blocked"),
+            "artifact_stage_states must match evidence_snapshot artifact stage statuses",
+        ),
+        (
+            "data_state_drift",
+            lambda payload: payload["data_states"].remove("SEED"),
+            "data_states must match event row and data coverage statuses",
+        ),
+        (
+            "event_row_state_drift",
+            lambda payload: payload["event_row_states"].append("UNKNOWN"),
+            "event_row_states must match economic_event_universe VALID_ROW_STATUSES",
+        ),
+        (
+            "data_coverage_state_drift",
+            lambda payload: payload["data_coverage_states"].append("MISSING"),
+            "data_coverage_states must match coverage_check._coverage_status",
+        ),
+        (
+            "robustness_state_drift",
+            lambda payload: payload["robustness_states"].remove("SKIPPED"),
+            "robustness_states must match campaign_runner/WFC/robustness emitted statuses",
+        ),
+        (
+            "sim_shadow_state_drift",
+            lambda payload: payload["sim_shadow_states"].append("WAITING"),
+            "sim_shadow_states must match campaign_runner SIM_SHADOW_STATUSES",
+        ),
+        (
+            "rithmic_endpoint_state_drift",
+            lambda payload: payload["cme_lane_states"].append("MISSING_PROFILE"),
+            "cme_lane_states must match Rithmic endpoint statuses",
+        ),
+        (
+            "rithmic_order_ack_state_drift",
+            lambda payload: payload["rithmic_order_ack_states"].append("ACKED"),
+            "rithmic_order_ack_states must match Rithmic order-ack statuses",
+        ),
+    ]
+    for label, mutate, expected in vocabulary_cases:
+        drifted = copy.deepcopy(contract)
+        mutate(drifted)
+        errors = validate_runtime_contract(drifted)
+        assert any(expected in error for error in errors), label
 
     stale_sources = copy.deepcopy(contract)
     stale_sources["run_sources"] = list(reversed(stale_sources["run_sources"]))

@@ -10,7 +10,18 @@ from typing import Any, Dict, Optional, Tuple
 import streamlit as st
 
 _TERMINAL_STATES = frozenset(
-    {"pass", "fail", "blocked", "cancelled", "dry_run", "unknown", "complete", "completed"}
+    {
+        "pass",
+        "fail",
+        "blocked",
+        "cancelled",
+        "conditional",
+        "data_insufficient",
+        "dry_run",
+        "unknown",
+        "complete",
+        "completed",
+    }
 )
 _AAR_MARKERS = (
     "after_action_response.json",

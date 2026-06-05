@@ -33,7 +33,7 @@ CoverageStatus = Literal[
     "NOT_CONFIGURED",
 ]
 
-_VALID_COVERAGE_STATUSES = {
+ARTIFACT_COVERAGE_STATUSES = (
     "OBSERVED",
     "OBSERVED_DIAGNOSTIC_ONLY",
     "PRESENT_NOT_WIRED",
@@ -42,7 +42,46 @@ _VALID_COVERAGE_STATUSES = {
     "STALE",
     "CONFIGURED_NOT_OBSERVED",
     "NOT_CONFIGURED",
-}
+)
+ARTIFACT_STAGE_STATUSES = (
+    "observed",
+    "observed_unlinked",
+    "missing",
+    "done",
+    "blocked",
+    "pending",
+    "stale_blocked",
+    "loaded_by_live_monitor",
+    "not_applicable",
+    "UNKNOWN",
+    "unknown",
+    "error",
+    "ERROR",
+    "artifact_error",
+    "ARTIFACT_ERROR",
+    "not_observed",
+    "NOT_OBSERVED",
+    "observed_trade_only_replay",
+    "report_binding_blocked",
+    "PENDING",
+    "INSUFFICIENT_ORDER_ACK_EVIDENCE",
+    "BLOCKING",
+    "PASS",
+    "FAIL",
+    "MISSING",
+    "STALE",
+    "DISABLED",
+    "SKIPPED",
+    "CONFIGURED_NOT_OBSERVED",
+)
+ARTIFACT_STATES = tuple(dict.fromkeys((*ARTIFACT_COVERAGE_STATUSES, *ARTIFACT_STAGE_STATUSES)))
+_VALID_COVERAGE_STATUSES = set(ARTIFACT_COVERAGE_STATUSES)
+RITHMIC_ORDER_ACK_STATUSES = (
+    "MEASURED",
+    "REPORT_BINDING_BLOCKED",
+    "INSUFFICIENT_ORDER_ACK_EVIDENCE",
+    "not_applicable",
+)
 
 _HFT_REPLAY_CLASSES = {"FULL_EXECUTION", "L3_VALIDATED"}
 _EXECUTION_REALISM_CLASSES = {"FULL_EXECUTION", "L3_VALIDATED"}
