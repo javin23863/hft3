@@ -141,7 +141,6 @@ def test_runtime_contract_is_tab_source_of_truth() -> None:
         expected_robustness_states,
         expected_run_states,
         expected_sim_shadow_states,
-        expected_workbench_cli_request_args,
         load_runtime_contract,
         validate_runtime_contract,
     )
@@ -152,11 +151,7 @@ def test_runtime_contract_is_tab_source_of_truth() -> None:
     schema = json.loads(schema_path.read_text(encoding="utf-8"))
     assert schema["properties"]["schema_version"]["const"] == contract["schema_version"]
     assert "tab_contract" in schema["$defs"]
-    assert "request_args" in schema["$defs"]
     assert "utility_cli_command" in schema["$defs"]
-    for definition in ("backend_endpoint", "utility_cli_command"):
-        assert "request_args" in schema["$defs"][definition]["required"]
-        assert "request_args" in schema["$defs"][definition]["properties"]
     for vocabulary in (
         "model_states",
         "run_states",
@@ -247,13 +242,6 @@ def test_runtime_contract_is_tab_source_of_truth() -> None:
         "python -m workbench list": "registry_read",
         "python -m workbench setup": "environment_setup",
     }
-    expected_request_args = expected_workbench_cli_request_args()
-    for endpoint in contract["backend_endpoints"]:
-        command = endpoint["cli"].replace("python -m workbench ", "")
-        assert endpoint["request_args"] == expected_request_args[command]
-    for utility in contract["utility_cli_commands"]:
-        command = utility["cli"].replace("python -m workbench ", "")
-        assert utility["request_args"] == expected_request_args[command]
 
 
 def test_runtime_contract_rejects_schema_and_policy_drift() -> None:
@@ -269,24 +257,9 @@ def test_runtime_contract_rejects_schema_and_policy_drift() -> None:
             "backend_endpoints[0] missing required field: request_schema",
         ),
         (
-            "missing_endpoint_request_args",
-            lambda payload: payload["backend_endpoints"][0].pop("request_args"),
-            "backend_endpoints[0] missing required field: request_args",
-        ),
-        (
             "endpoint_extra",
             lambda payload: payload["backend_endpoints"][0].update({"operator_override": True}),
             "backend_endpoints[0] has unexpected field: operator_override",
-        ),
-        (
-            "endpoint_request_args_extra",
-            lambda payload: payload["backend_endpoints"][0]["request_args"].update({"narrative": "nope"}),
-            "backend_endpoints[0].request_args has unexpected field: narrative",
-        ),
-        (
-            "endpoint_request_args_drift",
-            lambda payload: payload["backend_endpoints"][0]["request_args"]["required"].remove("model"),
-            "backend_endpoints[0].request_args must match Workbench CLI argparse for 'run'",
         ),
         (
             "missing_tab_field",
@@ -336,19 +309,9 @@ def test_runtime_contract_rejects_schema_and_policy_drift() -> None:
             "utility_cli_commands[0] missing required field: utility_scope",
         ),
         (
-            "missing_utility_request_args",
-            lambda payload: payload["utility_cli_commands"][0].pop("request_args"),
-            "utility_cli_commands[0] missing required field: request_args",
-        ),
-        (
             "utility_extra",
             lambda payload: payload["utility_cli_commands"][0].update({"operator_only": True}),
             "utility_cli_commands[0] has unexpected field: operator_only",
-        ),
-        (
-            "utility_request_args_drift",
-            lambda payload: payload["utility_cli_commands"][2]["request_args"]["flags"].remove("connect"),
-            "utility_cli_commands[2].request_args must match Workbench CLI argparse for 'ibkr-endpoint'",
         ),
         (
             "duplicate_utility_id",
@@ -424,7 +387,7 @@ def test_runtime_contract_rejects_schema_and_policy_drift() -> None:
         drifted = copy.deepcopy(contract)
         mutate(drifted)
         errors = validate_runtime_contract(drifted)
-        assert any(expected in error for error in errors), label
+        assert expected in errors, label
 
     vocabulary_cases = [
         (
@@ -647,11 +610,7 @@ def main(args, parser):
 
 def test_runtime_contract_rejects_parsed_but_undispatched_cli(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from workbench.src import runtime_contract
-    from workbench.src.runtime_contract import (
-        expected_workbench_cli_request_args,
-        load_runtime_contract,
-        validate_runtime_contract,
-    )
+    from workbench.src.runtime_contract import load_runtime_contract, validate_runtime_contract
 
     cli_src = tmp_path / "__main__.py"
     cli_src.write_text(
@@ -671,7 +630,6 @@ def main(args):
         encoding="utf-8",
     )
     monkeypatch.setattr(runtime_contract, "WORKBENCH_MAIN_PATH", cli_src)
-    request_args = expected_workbench_cli_request_args()
 
     contract = copy.deepcopy(load_runtime_contract())
     contract["backend_endpoints"] = copy.deepcopy(contract["backend_endpoints"][:3])
@@ -681,20 +639,15 @@ def main(args):
     contract["backend_endpoints"][0]["cli"] = "python -m workbench verify"
     contract["backend_endpoints"][1]["cli"] = "python -m workbench missing-handler"
     contract["backend_endpoints"][2]["cli"] = "python -m workbench verify"
-    contract["backend_endpoints"][0]["request_args"] = request_args["verify"]
-    contract["backend_endpoints"][1]["request_args"] = {"required": [], "optional": [], "flags": []}
-    contract["backend_endpoints"][2]["request_args"] = request_args["verify"]
     contract["utility_cli_commands"] = copy.deepcopy(contract["utility_cli_commands"][:1])
     contract["utility_cli_commands"][0]["id"] = "workbench.utility.setup"
     contract["utility_cli_commands"][0]["cli"] = "python -m workbench setup"
     contract["utility_cli_commands"][0]["utility_scope"] = "environment_setup"
-    contract["utility_cli_commands"][0]["request_args"] = request_args["setup"]
     errors = validate_runtime_contract(contract)
 
     assert "backend_endpoints[1].cli references unknown Workbench CLI subcommand: 'missing-handler'" in errors
 
     contract["backend_endpoints"][1]["cli"] = "python -m workbench run"
-    contract["backend_endpoints"][1]["request_args"] = request_args["run"]
     contract["backend_endpoints"][2]["cli"] = "python -m workbench verify"
     assert validate_runtime_contract(contract) == []
 
@@ -715,20 +668,14 @@ def main(args):
 """,
         encoding="utf-8",
     )
-    request_args = expected_workbench_cli_request_args()
     contract["backend_endpoints"][2]["cli"] = "python -m workbench status"
-    contract["backend_endpoints"][2]["request_args"] = request_args["status"]
     errors = validate_runtime_contract(contract)
     assert "backend_endpoints[2].cli references undispatched Workbench CLI subcommand: 'status'" in errors
 
 
 def test_runtime_contract_rejects_dispatched_but_uncovered_cli(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from workbench.src import runtime_contract
-    from workbench.src.runtime_contract import (
-        expected_workbench_cli_request_args,
-        load_runtime_contract,
-        validate_runtime_contract,
-    )
+    from workbench.src.runtime_contract import load_runtime_contract, validate_runtime_contract
 
     cli_src = tmp_path / "__main__.py"
     cli_src.write_text(
@@ -747,18 +694,15 @@ def main(args):
         encoding="utf-8",
     )
     monkeypatch.setattr(runtime_contract, "WORKBENCH_MAIN_PATH", cli_src)
-    request_args = expected_workbench_cli_request_args()
 
     contract = copy.deepcopy(load_runtime_contract())
     contract["backend_endpoints"] = copy.deepcopy(contract["backend_endpoints"][:1])
     contract["backend_endpoints"][0]["id"] = "workbench.run"
     contract["backend_endpoints"][0]["cli"] = "python -m workbench run"
-    contract["backend_endpoints"][0]["request_args"] = request_args["run"]
     contract["utility_cli_commands"] = copy.deepcopy(contract["utility_cli_commands"][:1])
     contract["utility_cli_commands"][0]["id"] = "workbench.utility.setup"
     contract["utility_cli_commands"][0]["cli"] = "python -m workbench setup"
     contract["utility_cli_commands"][0]["utility_scope"] = "environment_setup"
-    contract["utility_cli_commands"][0]["request_args"] = request_args["setup"]
 
     errors = validate_runtime_contract(contract)
 

@@ -166,7 +166,6 @@
         "id",
         "cli",
         "request_schema",
-        "request_args",
         "response_schema",
         "error_response"
       ],
@@ -174,7 +173,6 @@
         "id": {"type": "string", "minLength": 1},
         "cli": {"type": "string", "minLength": 1},
         "request_schema": {"type": "string", "minLength": 1},
-        "request_args": {"$ref": "#/$defs/request_args"},
         "response_schema": {"type": "string", "minLength": 1},
         "error_response": {"type": "string", "minLength": 1}
       },
@@ -297,7 +295,6 @@
         "cli",
         "utility_scope",
         "request_schema",
-        "request_args",
         "response_schema",
         "error_response"
       ],
@@ -313,31 +310,8 @@
           ]
         },
         "request_schema": {"type": "string", "minLength": 1},
-        "request_args": {"$ref": "#/$defs/request_args"},
         "response_schema": {"type": "string", "minLength": 1},
         "error_response": {"type": "string", "minLength": 1}
-      },
-      "additionalProperties": false
-    },
-    "request_args": {
-      "type": "object",
-      "required": ["required", "optional", "flags"],
-      "properties": {
-        "required": {
-          "type": "array",
-          "items": {"type": "string", "minLength": 1},
-          "uniqueItems": true
-        },
-        "optional": {
-          "type": "array",
-          "items": {"type": "string", "minLength": 1},
-          "uniqueItems": true
-        },
-        "flags": {
-          "type": "array",
-          "items": {"type": "string", "minLength": 1},
-          "uniqueItems": true
-        }
       },
       "additionalProperties": false
     }

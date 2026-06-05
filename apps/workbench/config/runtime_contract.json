@@ -196,11 +196,6 @@
       "id": "workbench.run",
       "cli": "python -m workbench run",
       "request_schema": "RunContext plus model, event-id, symbol, latency summary, seed",
-      "request_args": {
-        "required": ["model", "event_id"],
-        "optional": ["symbol", "chi404_summary", "seed", "history_years", "composition", "defensive"],
-        "flags": ["enforce_history_gate", "full_sweep"]
-      },
       "response_schema": "BacktestResult artifacts and run manifest",
       "error_response": "nonzero exit and explicit stage/blocking reason"
     },
@@ -208,11 +203,6 @@
       "id": "workbench.campaign",
       "cli": "python -m workbench campaign",
       "request_schema": "campaign model, symbol, composition, audit grade, sweep flags",
-      "request_args": {
-        "required": ["model"],
-        "optional": ["symbol", "chi404_summary", "campaign_id", "seed", "record_sim_shadow", "composition", "defensive"],
-        "flags": ["enforce_history_gate", "full_sweep", "dry_run", "download_missing", "allow_partial", "trial"]
-      },
       "response_schema": "campaign directory with status.json, campaign.json, period/event artifacts",
       "error_response": "status.json terminal state with blocking gate or failed stage"
     },
@@ -220,11 +210,6 @@
       "id": "workbench.verify",
       "cli": "python -m workbench verify",
       "request_schema": "optional json flag",
-      "request_args": {
-        "required": [],
-        "optional": [],
-        "flags": ["json"]
-      },
       "response_schema": "preflight file checks and import/test status",
       "error_response": "all_ok false or nonzero exit; not a production-readiness claim"
     },
@@ -232,11 +217,6 @@
       "id": "workbench.status",
       "cli": "python -m workbench status",
       "request_schema": "optional json flag",
-      "request_args": {
-        "required": [],
-        "optional": [],
-        "flags": ["json"]
-      },
       "response_schema": "model count, NPZ inventory, graph presence, promoted candidate count",
       "error_response": "nonzero exit with explicit exception"
     },
@@ -244,11 +224,6 @@
       "id": "workbench.download",
       "cli": "python -m workbench download",
       "request_schema": "model, symbol, max-cost-usd, scope, dry-run flag",
-      "request_args": {
-        "required": ["model"],
-        "optional": ["symbol", "max_cost_usd", "scope"],
-        "flags": ["dry_run", "json"]
-      },
       "response_schema": "download/backfill plan or started backfill status",
       "error_response": "nonzero exit or JSON status with missing key/cost/data blocker"
     },
@@ -256,11 +231,6 @@
       "id": "workbench.feature_fabric",
       "cli": "python -m workbench feature-fabric",
       "request_schema": "source and optional output root",
-      "request_args": {
-        "required": [],
-        "optional": ["source", "output_root"],
-        "flags": ["json"]
-      },
       "response_schema": "feature fabric artifact root and PIT validation status",
       "error_response": "BLOCKING gate with unsafe source, missing identity, or PIT leakage"
     },
@@ -268,11 +238,6 @@
       "id": "workbench.fresh_start",
       "cli": "python -m workbench fresh-start",
       "request_schema": "scope, optional run id, explicit hard-delete confirmation",
-      "request_args": {
-        "required": [],
-        "optional": ["scope", "run_id"],
-        "flags": ["confirm_hard_delete", "json"]
-      },
       "response_schema": "active all-lane run boundary",
       "error_response": "nonzero exit or FAIL status when run boundary cannot be created"
     },
@@ -280,11 +245,6 @@
       "id": "workbench.all_lanes",
       "cli": "python -m workbench all-lanes",
       "request_schema": "run-id plus execute flag",
-      "request_args": {
-        "required": ["run_id"],
-        "optional": [],
-        "flags": ["execute", "json"]
-      },
       "response_schema": "active run plan with terminal state per model",
       "error_response": "FAIL/BLOCKING when leakage, lane registry, or executor gates block"
     },
@@ -292,11 +252,6 @@
       "id": "workbench.leakage_detect",
       "cli": "python -m workbench leakage-detect",
       "request_schema": "optional active run id",
-      "request_args": {
-        "required": [],
-        "optional": ["run_id"],
-        "flags": ["json"]
-      },
       "response_schema": "leakage detection report and blocking gates",
       "error_response": "FAIL/BLOCKING with reason and source artifact"
     }
@@ -307,11 +262,6 @@
       "cli": "python -m workbench list",
       "utility_scope": "registry_read",
       "request_schema": "no arguments",
-      "request_args": {
-        "required": [],
-        "optional": [],
-        "flags": []
-      },
       "response_schema": "registered model identifiers, one per line",
       "error_response": "nonzero exit with registry import or catalog error"
     },
@@ -320,11 +270,6 @@
       "cli": "python -m workbench setup",
       "utility_scope": "environment_setup",
       "request_schema": "optional json and rebuild-graph flags",
-      "request_args": {
-        "required": [],
-        "optional": [],
-        "flags": ["json", "rebuild_graph"]
-      },
       "response_schema": "environment dependency, NPZ inventory, and graph presence report",
       "error_response": "nonzero exit or JSON status with missing dependency/environment blocker"
     },
@@ -333,11 +278,6 @@
       "cli": "python -m workbench ibkr-endpoint",
       "utility_scope": "non_cme_endpoint_diagnostic",
       "request_schema": "optional IBKR endpoint config and handshake flags",
-      "request_args": {
-        "required": [],
-        "optional": ["config", "startup_timeout_sec", "timeout_sec"],
-        "flags": ["connect", "start_gateway", "json"]
-      },
       "response_schema": "IBKR socket/API endpoint diagnostic status; not a CME production-readiness route",
       "error_response": "nonzero exit or JSON status with endpoint blocker"
     }

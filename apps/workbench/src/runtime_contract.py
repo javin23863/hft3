@@ -587,127 +587,6 @@ def _workbench_cli_command(cli: Any) -> str | None:
     return None
 
 
-def _call_keyword_value(call: ast.Call, name: str) -> Any:
-    for keyword in call.keywords:
-        if keyword.arg == name and isinstance(keyword.value, ast.Constant):
-            return keyword.value.value
-    return None
-
-
-def _add_parser_command(call: ast.Call) -> str | None:
-    if not isinstance(call.func, ast.Attribute) or call.func.attr != "add_parser":
-        return None
-    if not isinstance(call.func.value, ast.Name) or call.func.value.id != "sub":
-        return None
-    if call.args and isinstance(call.args[0], ast.Constant) and isinstance(call.args[0].value, str):
-        return call.args[0].value
-    return None
-
-
-def _argument_dest(call: ast.Call) -> str | None:
-    explicit_dest = _call_keyword_value(call, "dest")
-    if isinstance(explicit_dest, str) and explicit_dest:
-        return explicit_dest.replace("-", "_")
-    arg_names = [
-        arg.value
-        for arg in call.args
-        if isinstance(arg, ast.Constant) and isinstance(arg.value, str)
-    ]
-    if not arg_names:
-        return None
-    options = [name for name in arg_names if name.startswith("-")]
-    if options:
-        long_options = [name for name in options if name.startswith("--")]
-        selected = long_options[0] if long_options else options[0]
-        return selected.lstrip("-").replace("-", "_")
-    return arg_names[0].replace("-", "_")
-
-
-def _argument_bucket(call: ast.Call) -> str:
-    action = _call_keyword_value(call, "action")
-    if action in {"store_true", "store_false"}:
-        return "flags"
-    arg_names = [
-        arg.value
-        for arg in call.args
-        if isinstance(arg, ast.Constant) and isinstance(arg.value, str)
-    ]
-    positional = bool(arg_names) and not any(name.startswith("-") for name in arg_names)
-    if positional or _call_keyword_value(call, "required") is True:
-        return "required"
-    return "optional"
-
-
-def _append_unique(values: list[str], value: str) -> None:
-    if value not in values:
-        values.append(value)
-
-
-def _workbench_cli_request_args(path: Path | None = None) -> dict[str, dict[str, list[str]]]:
-    cli_path = path or WORKBENCH_MAIN_PATH
-    tree = ast.parse(cli_path.read_text(encoding="utf-8"), filename=str(cli_path))
-    parser_vars: dict[str, str] = {}
-    commands: dict[str, dict[str, list[str]]] = {}
-
-    for node in ast.walk(tree):
-        call: ast.Call | None = None
-        target_name = ""
-        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
-            call = node.value
-            if len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
-                target_name = node.targets[0].id
-        elif isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
-            call = node.value
-        if call is None:
-            continue
-        command = _add_parser_command(call)
-        if command is None:
-            continue
-        commands.setdefault(command, {"required": [], "optional": [], "flags": []})
-        if target_name:
-            parser_vars[target_name] = command
-
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        if not isinstance(node.func, ast.Attribute) or node.func.attr != "add_argument":
-            continue
-        if not isinstance(node.func.value, ast.Name):
-            continue
-        command = parser_vars.get(node.func.value.id)
-        if command is None:
-            continue
-        dest = _argument_dest(node)
-        if dest is None:
-            continue
-        _append_unique(commands[command][_argument_bucket(node)], dest)
-    return commands
-
-
-def expected_workbench_cli_request_args() -> dict[str, dict[str, list[str]]]:
-    return _workbench_cli_request_args()
-
-
-def _validate_cli_request_args(
-    errors: list[str],
-    *,
-    collection_name: str,
-    index: int,
-    entry: dict[str, Any],
-    command: str,
-    expected_by_command: dict[str, dict[str, list[str]]],
-) -> None:
-    expected = expected_by_command.get(command)
-    if expected is None:
-        return
-    actual = entry.get("request_args")
-    if actual != expected:
-        errors.append(
-            f"{collection_name}[{index}].request_args must match Workbench CLI argparse for {command!r}: "
-            f"expected {expected!r}, got {actual!r}"
-        )
-
-
 def load_runtime_contract(path: Path | None = None) -> dict[str, Any]:
     contract_path = path or CONTRACT_PATH
     return json.loads(contract_path.read_text(encoding="utf-8"))
@@ -884,7 +763,6 @@ def validate_runtime_contract(contract: dict[str, Any] | None = None) -> list[st
     endpoints = payload.get("backend_endpoints")
     workbench_commands = _workbench_cli_subcommands()
     dispatched_commands = _workbench_cli_dispatch_commands()
-    expected_cli_args = _workbench_cli_request_args()
     endpoint_commands: set[str] = set()
     if not isinstance(endpoints, list) or not endpoints:
         errors.append("backend_endpoints must be a non-empty list")
@@ -919,14 +797,6 @@ def validate_runtime_contract(contract: dict[str, Any] | None = None) -> list[st
                 )
             else:
                 endpoint_commands.add(command)
-                _validate_cli_request_args(
-                    errors,
-                    collection_name="backend_endpoints",
-                    index=index,
-                    entry=endpoint,
-                    command=command,
-                    expected_by_command=expected_cli_args,
-                )
     utilities = payload.get("utility_cli_commands")
     utility_commands: set[str] = set()
     if not isinstance(utilities, list) or not utilities:
@@ -970,14 +840,6 @@ def validate_runtime_contract(contract: dict[str, Any] | None = None) -> list[st
                 )
             else:
                 utility_commands.add(command)
-                _validate_cli_request_args(
-                    errors,
-                    collection_name="utility_cli_commands",
-                    index=index,
-                    entry=utility,
-                    command=command,
-                    expected_by_command=expected_cli_args,
-                )
     uncovered_commands = sorted((workbench_commands | dispatched_commands) - endpoint_commands - utility_commands)
     if uncovered_commands:
         errors.append(f"Workbench CLI subcommands missing runtime contract coverage: {uncovered_commands!r}")
