@@ -344,7 +344,7 @@
     },
     "response_contract": {
       "type": "object",
-      "required": ["required"],
+      "required": ["required", "status_values", "blocking_item_required"],
       "properties": {
         "required": {
           "type": "array",
@@ -363,15 +363,7 @@
           "items": {"type": "string", "minLength": 1},
           "minItems": 1,
           "uniqueItems": true
-        },
-        "success_field": {"type": "string", "minLength": 1},
-        "success_values": {
-          "type": "array",
-          "items": {"type": ["string", "boolean", "number"]},
-          "minItems": 1,
-          "uniqueItems": true
-        },
-        "failure_exit_code": {"type": "integer"}
+        }
       },
       "additionalProperties": false
     }

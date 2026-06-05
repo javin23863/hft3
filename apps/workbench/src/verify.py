@@ -7,12 +7,6 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 _REPO = Path(__file__).resolve().parents[3]
-VERIFY_RESPONSE_CONTRACT = {
-    "required": ["tests", "files", "files_ok", "all_ok"],
-    "success_field": "all_ok",
-    "success_values": [True],
-    "failure_exit_code": 1,
-}
 
 
 def _run_pytest(repo: Path, test_paths: list[str]) -> Dict[str, Any]:

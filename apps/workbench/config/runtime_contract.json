@@ -225,12 +225,6 @@
         "optional": [],
         "flags": ["json"]
       },
-      "response_contract": {
-        "required": ["tests", "files", "files_ok", "all_ok"],
-        "success_field": "all_ok",
-        "success_values": [true],
-        "failure_exit_code": 1
-      },
       "response_schema": "preflight file checks and import/test status",
       "error_response": "all_ok false or nonzero exit; not a production-readiness claim"
     },
