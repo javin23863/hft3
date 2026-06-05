@@ -125,6 +125,7 @@ def test_runtime_contract_is_tab_source_of_truth() -> None:
     from workbench.src.run.evidence_snapshot import workbench_run_sources
     from workbench.src.runtime_contract import (
         RUNTIME_STATE_REF_PATTERN,
+        UTILITY_CLI_COMMAND_SCOPES,
         allowed_runtime_state_refs,
         load_runtime_contract,
         validate_runtime_contract,
@@ -136,6 +137,7 @@ def test_runtime_contract_is_tab_source_of_truth() -> None:
     schema = json.loads(schema_path.read_text(encoding="utf-8"))
     assert schema["properties"]["schema_version"]["const"] == contract["schema_version"]
     assert "tab_contract" in schema["$defs"]
+    assert "utility_cli_command" in schema["$defs"]
     runtime_state_items = schema["$defs"]["tab_contract"]["properties"]["runtime_state"]["items"]
     assert runtime_state_items["pattern"] == RUNTIME_STATE_REF_PATTERN
     assert set(runtime_state_items["enum"]) == allowed_runtime_state_refs()
@@ -172,6 +174,16 @@ def test_runtime_contract_is_tab_source_of_truth() -> None:
     assert contract["blocker_policy"]["silent_blockers_allowed"] is False
     assert contract["blocker_policy"]["fake_pass_allowed"] is False
     assert contract["blocker_policy"]["llm_authority"] == "advisory_only"
+    utility_scopes = {utility["cli"]: utility["utility_scope"] for utility in contract["utility_cli_commands"]}
+    assert {
+        utility["cli"].replace("python -m workbench ", ""): utility["utility_scope"]
+        for utility in contract["utility_cli_commands"]
+    } == UTILITY_CLI_COMMAND_SCOPES
+    assert utility_scopes == {
+        "python -m workbench ibkr-endpoint": "non_cme_endpoint_diagnostic",
+        "python -m workbench list": "registry_read",
+        "python -m workbench setup": "environment_setup",
+    }
 
 
 def test_runtime_contract_rejects_schema_and_policy_drift() -> None:
@@ -232,6 +244,55 @@ def test_runtime_contract_rejects_schema_and_policy_drift() -> None:
             lambda payload: payload["backend_endpoints"][0].update({"cli": "python -m workbench run --extra"}),
             "backend_endpoints[0].cli must be 'python -m workbench <subcommand>', got "
             "'python -m workbench run --extra'",
+        ),
+        (
+            "missing_utility_field",
+            lambda payload: payload["utility_cli_commands"][0].pop("utility_scope"),
+            "utility_cli_commands[0] missing required field: utility_scope",
+        ),
+        (
+            "utility_extra",
+            lambda payload: payload["utility_cli_commands"][0].update({"operator_only": True}),
+            "utility_cli_commands[0] has unexpected field: operator_only",
+        ),
+        (
+            "duplicate_utility_id",
+            lambda payload: payload["utility_cli_commands"][1].update(
+                {"id": payload["utility_cli_commands"][0]["id"]}
+            ),
+            "utility CLI command ids must be unique",
+        ),
+        (
+            "stale_utility_cli",
+            lambda payload: payload["utility_cli_commands"][0].update(
+                {"cli": "python -m workbench stale-utility"}
+            ),
+            "utility_cli_commands[0].cli references unknown Workbench CLI subcommand: 'stale-utility'",
+        ),
+        (
+            "utility_duplicates_endpoint",
+            lambda payload: payload["utility_cli_commands"][0].update(
+                {"cli": payload["backend_endpoints"][0]["cli"]}
+            ),
+            "utility_cli_commands[0].cli duplicates backend endpoint subcommand: 'run'",
+        ),
+        (
+            "utility_command_moved_to_backend_endpoint",
+            lambda payload: (
+                payload["backend_endpoints"][0].update({"cli": "python -m workbench list"}),
+                payload.update({"utility_cli_commands": payload["utility_cli_commands"][1:]}),
+            ),
+            "backend_endpoints[0].cli references utility-only Workbench CLI subcommand: 'list'",
+        ),
+        (
+            "misclassified_utility_scope",
+            lambda payload: payload["utility_cli_commands"][0].update({"utility_scope": "environment_setup"}),
+            "utility_cli_commands[0].utility_scope must be 'registry_read' for 'list'",
+        ),
+        (
+            "uncovered_cli_command",
+            lambda payload: payload.update({"utility_cli_commands": payload["utility_cli_commands"][1:]}),
+            "Workbench CLI subcommands missing runtime contract coverage: ['list']",
         ),
         (
             "bad_frontend_component",
@@ -321,6 +382,7 @@ def test_runtime_contract_rejects_bad_runtime_state_refs() -> None:
 
 def test_runtime_contract_components_are_real_and_complete() -> None:
     from workbench.src.runtime_contract import (
+        _workbench_cli_command,
         _workbench_cli_dispatch_commands,
         _workbench_cli_subcommands,
         validate_runtime_contract,
@@ -355,13 +417,27 @@ def test_runtime_contract_components_are_real_and_complete() -> None:
         assert tab["expected_output"]
         assert tab["error_behavior"]
 
+    endpoint_commands = set()
     for endpoint in contract["backend_endpoints"]:
-        command = endpoint["cli"].replace("python -m workbench ", "")
+        command = _workbench_cli_command(endpoint["cli"])
         assert command in workbench_commands
         assert command in dispatched_commands
+        endpoint_commands.add(command)
         assert endpoint["request_schema"]
         assert endpoint["response_schema"]
         assert endpoint["error_response"]
+    utility_commands = set()
+    for utility in contract["utility_cli_commands"]:
+        command = _workbench_cli_command(utility["cli"])
+        assert command in workbench_commands
+        assert command in dispatched_commands
+        utility_commands.add(command)
+        assert utility["utility_scope"] in {"environment_setup", "registry_read", "non_cme_endpoint_diagnostic"}
+        assert utility["request_schema"]
+        assert utility["response_schema"]
+        assert utility["error_response"]
+    assert endpoint_commands.isdisjoint(utility_commands)
+    assert endpoint_commands | utility_commands == workbench_commands == dispatched_commands
 
 
 def test_runtime_contract_cli_dispatch_parser_detects_final_run_path(tmp_path: Path) -> None:
@@ -406,6 +482,9 @@ def test_runtime_contract_rejects_parsed_but_undispatched_cli(tmp_path: Path, mo
 def main(args):
     sub.add_parser("run")
     sub.add_parser("verify")
+    sub.add_parser("setup")
+    if args.command == "setup":
+        return 0
     if args.command == "verify":
         return 0
     if args.command != "run":
@@ -424,6 +503,10 @@ def main(args):
     contract["backend_endpoints"][0]["cli"] = "python -m workbench verify"
     contract["backend_endpoints"][1]["cli"] = "python -m workbench missing-handler"
     contract["backend_endpoints"][2]["cli"] = "python -m workbench verify"
+    contract["utility_cli_commands"] = copy.deepcopy(contract["utility_cli_commands"][:1])
+    contract["utility_cli_commands"][0]["id"] = "workbench.utility.setup"
+    contract["utility_cli_commands"][0]["cli"] = "python -m workbench setup"
+    contract["utility_cli_commands"][0]["utility_scope"] = "environment_setup"
     errors = validate_runtime_contract(contract)
 
     assert "backend_endpoints[1].cli references unknown Workbench CLI subcommand: 'missing-handler'" in errors
@@ -438,6 +521,9 @@ def main(args):
     sub.add_parser("run")
     sub.add_parser("verify")
     sub.add_parser("status")
+    sub.add_parser("setup")
+    if args.command == "setup":
+        return 0
     if args.command == "verify":
         return 0
     if args.command != "run":
@@ -449,6 +535,42 @@ def main(args):
     contract["backend_endpoints"][2]["cli"] = "python -m workbench status"
     errors = validate_runtime_contract(contract)
     assert "backend_endpoints[2].cli references undispatched Workbench CLI subcommand: 'status'" in errors
+
+
+def test_runtime_contract_rejects_dispatched_but_uncovered_cli(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from workbench.src import runtime_contract
+    from workbench.src.runtime_contract import load_runtime_contract, validate_runtime_contract
+
+    cli_src = tmp_path / "__main__.py"
+    cli_src.write_text(
+        """
+def main(args):
+    sub.add_parser("run")
+    sub.add_parser("setup")
+    if args.command == "setup":
+        return 0
+    if args.command == "hidden-dispatch":
+        return 0
+    if args.command != "run":
+        return 1
+    return 0
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(runtime_contract, "WORKBENCH_MAIN_PATH", cli_src)
+
+    contract = copy.deepcopy(load_runtime_contract())
+    contract["backend_endpoints"] = copy.deepcopy(contract["backend_endpoints"][:1])
+    contract["backend_endpoints"][0]["id"] = "workbench.run"
+    contract["backend_endpoints"][0]["cli"] = "python -m workbench run"
+    contract["utility_cli_commands"] = copy.deepcopy(contract["utility_cli_commands"][:1])
+    contract["utility_cli_commands"][0]["id"] = "workbench.utility.setup"
+    contract["utility_cli_commands"][0]["cli"] = "python -m workbench setup"
+    contract["utility_cli_commands"][0]["utility_scope"] = "environment_setup"
+
+    errors = validate_runtime_contract(contract)
+
+    assert "Workbench CLI subcommands missing runtime contract coverage: ['hidden-dispatch']" in errors
 
 
 def test_browser_smoke_tracks_backend_tabs_without_destructive_clicks() -> None:

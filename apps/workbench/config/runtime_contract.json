@@ -117,6 +117,32 @@
       "error_response": "FAIL/BLOCKING with reason and source artifact"
     }
   ],
+  "utility_cli_commands": [
+    {
+      "id": "workbench.utility.list",
+      "cli": "python -m workbench list",
+      "utility_scope": "registry_read",
+      "request_schema": "no arguments",
+      "response_schema": "registered model identifiers, one per line",
+      "error_response": "nonzero exit with registry import or catalog error"
+    },
+    {
+      "id": "workbench.utility.setup",
+      "cli": "python -m workbench setup",
+      "utility_scope": "environment_setup",
+      "request_schema": "optional json and rebuild-graph flags",
+      "response_schema": "environment dependency, NPZ inventory, and graph presence report",
+      "error_response": "nonzero exit or JSON status with missing dependency/environment blocker"
+    },
+    {
+      "id": "workbench.utility.ibkr_endpoint",
+      "cli": "python -m workbench ibkr-endpoint",
+      "utility_scope": "non_cme_endpoint_diagnostic",
+      "request_schema": "optional IBKR endpoint config and handshake flags",
+      "response_schema": "IBKR socket/API endpoint diagnostic status; not a CME production-readiness route",
+      "error_response": "nonzero exit or JSON status with endpoint blocker"
+    }
+  ],
   "tabs": [
     {
       "name": "Autonomous Run",
