@@ -142,6 +142,7 @@ def test_runtime_contract_is_tab_source_of_truth() -> None:
         expected_robustness_states,
         expected_run_states,
         expected_sim_shadow_states,
+        expected_verify_response_contract,
         expected_workbench_cli_request_args,
         load_runtime_contract,
         validate_runtime_contract,
@@ -156,6 +157,7 @@ def test_runtime_contract_is_tab_source_of_truth() -> None:
     assert "request_args" in schema["$defs"]
     assert "response_contract" in schema["$defs"]
     assert "utility_cli_command" in schema["$defs"]
+    assert schema["$defs"]["response_contract"]["required"] == ["required"]
     for definition in ("backend_endpoint", "utility_cli_command"):
         assert "request_args" in schema["$defs"][definition]["required"]
         assert "request_args" in schema["$defs"][definition]["properties"]
@@ -255,9 +257,48 @@ def test_runtime_contract_is_tab_source_of_truth() -> None:
         assert endpoint["request_args"] == expected_request_args[command]
         if command == "download":
             assert endpoint["response_contract"] == expected_download_response_contract()
+        if command == "verify":
+            assert endpoint["response_contract"] == expected_verify_response_contract()
     for utility in contract["utility_cli_commands"]:
         command = utility["cli"].replace("python -m workbench ", "")
         assert utility["request_args"] == expected_request_args[command]
+
+
+def test_verify_response_contract_matches_producer_and_dispatcher(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from workbench import __main__ as workbench_main
+    from workbench.src import verify as verify_mod
+
+    for relative in (
+        "runtime/latency_reports/latency_summary.json",
+        "apps/workbench/ui/app.py",
+        "apps/workbench/requirements.txt",
+        "packages/economic_event_universe/config/event_universe.yaml",
+        "packages/data_system/config/events.csv",
+    ):
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("ok\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        verify_mod,
+        "_run_pytest",
+        lambda _repo, _test_paths: {"passed": True, "exit_code": 0, "stdout_tail": []},
+    )
+
+    required = set(verify_mod.VERIFY_RESPONSE_CONTRACT["required"])
+    result = verify_mod.verify(tmp_path)
+    assert required <= set(result)
+    assert result["all_ok"] is True
+
+    blocking_result = {"tests": {"passed": False}, "files": [], "files_ok": True, "all_ok": False}
+    monkeypatch.setattr(verify_mod, "verify", lambda _repo: blocking_result)
+
+    assert workbench_main.main(["verify", "--json"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert required <= set(payload)
+    assert payload["all_ok"] is False
 
 
 def test_runtime_contract_rejects_schema_and_policy_drift() -> None:
@@ -298,6 +339,20 @@ def test_runtime_contract_rejects_schema_and_policy_drift() -> None:
                 endpoint for endpoint in payload["backend_endpoints"] if endpoint["id"] == "workbench.download"
             )["response_contract"]["required"].remove("status"),
             "response_contract must match Workbench download response contract",
+        ),
+        (
+            "verify_response_contract_required_drift",
+            lambda payload: next(
+                endpoint for endpoint in payload["backend_endpoints"] if endpoint["id"] == "workbench.verify"
+            )["response_contract"]["required"].remove("all_ok"),
+            "response_contract must match Workbench verify response contract",
+        ),
+        (
+            "verify_response_contract_success_field_drift",
+            lambda payload: next(
+                endpoint for endpoint in payload["backend_endpoints"] if endpoint["id"] == "workbench.verify"
+            )["response_contract"].update({"success_field": "files_ok"}),
+            "response_contract must match Workbench verify response contract",
         ),
         (
             "missing_tab_field",
@@ -660,6 +715,7 @@ def test_runtime_contract_rejects_parsed_but_undispatched_cli(tmp_path: Path, mo
     from workbench.src import runtime_contract
     from workbench.src.runtime_contract import (
         expected_workbench_cli_request_args,
+        expected_verify_response_contract,
         load_runtime_contract,
         validate_runtime_contract,
     )
@@ -693,6 +749,7 @@ def main(args):
     contract["backend_endpoints"][1]["cli"] = "python -m workbench missing-handler"
     contract["backend_endpoints"][2]["cli"] = "python -m workbench verify"
     contract["backend_endpoints"][0]["request_args"] = request_args["verify"]
+    contract["backend_endpoints"][0]["response_contract"] = expected_verify_response_contract()
     contract["backend_endpoints"][1]["request_args"] = {"required": [], "optional": [], "flags": []}
     contract["backend_endpoints"][2]["request_args"] = request_args["verify"]
     contract["utility_cli_commands"] = copy.deepcopy(contract["utility_cli_commands"][:1])

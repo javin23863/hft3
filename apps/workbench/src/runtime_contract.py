@@ -367,6 +367,29 @@ def _json_type_name(value: Any) -> str:
     return type(value).__name__
 
 
+def _matches_json_type(value: Any, expected_type: Any) -> bool:
+    def matches(kind: str) -> bool:
+        return {
+            "object": isinstance(value, dict),
+            "array": isinstance(value, list),
+            "string": isinstance(value, str),
+            "boolean": isinstance(value, bool),
+            "integer": isinstance(value, int) and not isinstance(value, bool),
+            "number": isinstance(value, int | float) and not isinstance(value, bool),
+            "null": value is None,
+        }.get(kind, True)
+
+    if isinstance(expected_type, list):
+        return any(matches(str(kind)) for kind in expected_type)
+    return matches(str(expected_type))
+
+
+def _json_type_label(expected_type: Any) -> str:
+    if isinstance(expected_type, list):
+        return " or ".join(str(kind) for kind in expected_type)
+    return str(expected_type)
+
+
 def _validate_schema_node(value: Any, node: dict[str, Any], root_schema: dict[str, Any], path: str) -> list[str]:
     if "$ref" in node:
         return _validate_schema_node(value, _resolve_ref(root_schema, str(node["$ref"])), root_schema, path)
@@ -380,14 +403,8 @@ def _validate_schema_node(value: Any, node: dict[str, Any], root_schema: dict[st
 
     expected_type = node.get("type")
     if expected_type:
-        type_matches = {
-            "object": isinstance(value, dict),
-            "array": isinstance(value, list),
-            "string": isinstance(value, str),
-            "boolean": isinstance(value, bool),
-        }.get(str(expected_type), True)
-        if not type_matches:
-            errors.append(f"{path} must be {expected_type}, got {_json_type_name(value)}")
+        if not _matches_json_type(value, expected_type):
+            errors.append(f"{path} must be {_json_type_label(expected_type)}, got {_json_type_name(value)}")
             return errors
 
     if isinstance(value, str) and int(node.get("minLength", 0)) > len(value):
@@ -693,8 +710,18 @@ def expected_workbench_cli_request_args() -> dict[str, dict[str, list[str]]]:
     return _workbench_cli_request_args()
 
 
-def expected_download_response_contract() -> dict[str, list[str]]:
-    return {key: list(value) for key, value in DOWNLOAD_RESPONSE_CONTRACT.items()}
+def _copy_response_contract(contract: dict[str, Any]) -> dict[str, Any]:
+    return {key: list(value) if isinstance(value, list) else value for key, value in contract.items()}
+
+
+def expected_download_response_contract() -> dict[str, Any]:
+    return _copy_response_contract(DOWNLOAD_RESPONSE_CONTRACT)
+
+
+def expected_verify_response_contract() -> dict[str, Any]:
+    from workbench.src.verify import VERIFY_RESPONSE_CONTRACT
+
+    return _copy_response_contract(VERIFY_RESPONSE_CONTRACT)
 
 
 def _validate_cli_request_args(
@@ -723,6 +750,16 @@ def _validate_download_response_contract(errors: list[str], index: int, endpoint
     if actual != expected:
         errors.append(
             f"backend_endpoints[{index}].response_contract must match Workbench download response contract: "
+            f"expected {expected!r}, got {actual!r}"
+        )
+
+
+def _validate_verify_response_contract(errors: list[str], index: int, endpoint: dict[str, Any]) -> None:
+    actual = endpoint.get("response_contract")
+    expected = expected_verify_response_contract()
+    if actual != expected:
+        errors.append(
+            f"backend_endpoints[{index}].response_contract must match Workbench verify response contract: "
             f"expected {expected!r}, got {actual!r}"
         )
 
@@ -948,6 +985,8 @@ def validate_runtime_contract(contract: dict[str, Any] | None = None) -> list[st
                 )
                 if command == "download":
                     _validate_download_response_contract(errors, index, endpoint)
+                if command == "verify":
+                    _validate_verify_response_contract(errors, index, endpoint)
     utilities = payload.get("utility_cli_commands")
     utility_commands: set[str] = set()
     if not isinstance(utilities, list) or not utilities:
