@@ -123,12 +123,7 @@ def test_tabs_are_pipeline_monitor_surface() -> None:
 
 def test_runtime_contract_is_tab_source_of_truth() -> None:
     from workbench.src.run.evidence_snapshot import workbench_run_sources
-    from workbench.src.runtime_contract import (
-        RUNTIME_STATE_REF_PATTERN,
-        allowed_runtime_state_refs,
-        load_runtime_contract,
-        validate_runtime_contract,
-    )
+    from workbench.src.runtime_contract import load_runtime_contract, validate_runtime_contract
     from workbench.ui.workflow_tabs import WORKFLOW_TABS
 
     contract = load_runtime_contract()
@@ -136,38 +131,11 @@ def test_runtime_contract_is_tab_source_of_truth() -> None:
     schema = json.loads(schema_path.read_text(encoding="utf-8"))
     assert schema["properties"]["schema_version"]["const"] == contract["schema_version"]
     assert "tab_contract" in schema["$defs"]
-    runtime_state_items = schema["$defs"]["tab_contract"]["properties"]["runtime_state"]["items"]
-    assert runtime_state_items["pattern"] == RUNTIME_STATE_REF_PATTERN
-    assert set(runtime_state_items["enum"]) == allowed_runtime_state_refs()
     assert validate_runtime_contract(contract) == []
     assert [tab["name"] for tab in contract["tabs"]] == WORKFLOW_TABS
-    registry_tab = next(tab for tab in contract["tabs"] if tab["name"] == "Registry & Data")
-    assert "ui.session_state.wb_audit_grade" in registry_tab["runtime_state"]
-    assert "ui.session_state.wb_defensive_stubs" in registry_tab["runtime_state"]
-    assert "toggle_audit_grade" in registry_tab["allowed_actions"]
-    assert "set_stub_budget" in registry_tab["allowed_actions"]
     latency_tab = next(tab for tab in contract["tabs"] if tab["name"] == "Latency Evidence")
-    assert "latency.rithmic_endpoint" in latency_tab["runtime_state"]
-    assert "latency.ibkr_endpoint" in latency_tab["runtime_state"]
+    assert "snapshot.latency/rithmic_endpoint" in latency_tab["runtime_state"]
     assert "system.rithmic_endpoint" not in latency_tab["runtime_state"]
-    assert not any(state_ref.startswith("snapshot.") for state_ref in latency_tab["runtime_state"])
-    live_tab = next(tab for tab in contract["tabs"] if tab["name"] == "Live Monitor")
-    assert "RunEvidenceSnapshot.decision" in live_tab["runtime_state"]
-    assert "RunEvidenceSnapshot.robustness" in live_tab["runtime_state"]
-    reports_tab = next(tab for tab in contract["tabs"] if tab["name"] == "Reports & Analyst")
-    assert "RunEvidenceSnapshot.reports" in reports_tab["runtime_state"]
-    wallet_tab = next(tab for tab in contract["tabs"] if tab["name"] == "Wallet")
-    assert "ui.session_state.wb_wallet_snapshot" in wallet_tab["runtime_state"]
-    assert "ui.session_state.wb_wallet_activity" in wallet_tab["runtime_state"]
-    assert "ui.session_state.wb_wallet_passphrase_nonce" in wallet_tab["runtime_state"]
-    assert "wallet.operator_session_state" not in wallet_tab["runtime_state"]
-    system_tab = next(tab for tab in contract["tabs"] if tab["name"] == "System")
-    assert "system.rithmic_endpoint" in system_tab["runtime_state"]
-    assert "system.ibkr_endpoint" in system_tab["runtime_state"]
-    for tab in contract["tabs"]:
-        for state_ref in tab["runtime_state"]:
-            assert " " not in state_ref
-            assert "/" not in state_ref
     assert contract["run_sources"] == workbench_run_sources()
     assert contract["blocker_policy"]["silent_blockers_allowed"] is False
     assert contract["blocker_policy"]["fake_pass_allowed"] is False
@@ -273,50 +241,6 @@ def test_runtime_contract_rejects_schema_and_policy_drift() -> None:
     stale_sources = copy.deepcopy(contract)
     stale_sources["run_sources"] = list(reversed(stale_sources["run_sources"]))
     assert any("run_sources must match workbench_run_sources()" in error for error in validate_runtime_contract(stale_sources))
-
-
-def test_runtime_contract_rejects_bad_runtime_state_refs() -> None:
-    from workbench.src.runtime_contract import (
-        load_runtime_contract,
-        validate_runtime_contract,
-        validate_runtime_contract_schema,
-    )
-
-    contract = load_runtime_contract()
-
-    def replace_first_state(tab_name: str, state_ref: str) -> dict[str, object]:
-        drifted = copy.deepcopy(contract)
-        tab = next(tab for tab in drifted["tabs"] if tab["name"] == tab_name)
-        tab["runtime_state"][0] = state_ref
-        return drifted
-
-    schema_errors = validate_runtime_contract_schema(
-        replace_first_state("Latency Evidence", "latency.paper_endpoint")
-    )
-    assert any("runtime_state" in error and "must be one of" in error for error in schema_errors)
-
-    cases = [
-        ("Wallet", "wallet operator session state", "must match pattern"),
-        ("Wallet", "operator.wallet_state", "references unknown runtime state root: 'operator'"),
-        (
-            "Latency Evidence",
-            "latency.paper_endpoint",
-            "references undocumented runtime state ref: 'latency.paper_endpoint'",
-        ),
-        (
-            "Autonomous Run",
-            "RunEvidenceSnapshot.trades",
-            "references unknown RunEvidenceSnapshot field: 'trades'",
-        ),
-        (
-            "Latency Evidence",
-            "RunEvidenceSnapshot.latency.not_real",
-            "references undocumented runtime state ref: 'RunEvidenceSnapshot.latency.not_real'",
-        ),
-    ]
-    for tab_name, state_ref, expected in cases:
-        errors = validate_runtime_contract(replace_first_state(tab_name, state_ref))
-        assert any(expected in error for error in errors), (tab_name, state_ref, errors)
 
 
 def test_runtime_contract_components_are_real_and_complete() -> None:

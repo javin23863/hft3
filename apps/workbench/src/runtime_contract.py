@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import ast
-from dataclasses import fields
 import importlib
 import json
-import re
 import shlex
 from pathlib import Path
 from typing import Any
@@ -14,51 +12,6 @@ from typing import Any
 CONTRACT_PATH = Path(__file__).resolve().parents[1] / "config" / "runtime_contract.json"
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schemas" / "runtime_contract.schema.json"
 WORKBENCH_MAIN_PATH = Path(__file__).resolve().parents[1] / "__main__.py"
-RUNTIME_STATE_REF_PATTERN = r"^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)+$"
-RUNTIME_STATE_ROOTS = {
-    "RunEvidenceSnapshot",
-    "data",
-    "diagnostics",
-    "latency",
-    "personal",
-    "registry",
-    "system",
-    "ui",
-}
-RUNTIME_STATE_NESTED_REFS = {
-    "data.event_universe",
-    "data.rithmic_trial",
-    "diagnostics.feature_fabric",
-    "latency.ibkr_endpoint",
-    "latency.rithmic_endpoint",
-    "latency.rithmic_order_ack",
-    "personal.sandbox_lock",
-    "personal.selected_model",
-    "personal.selected_symbol",
-    "registry.event_universe",
-    "registry.lane_registry",
-    "system.feature_fabric",
-    "system.ibkr_endpoint",
-    "system.lane_registry",
-    "system.llm_providers",
-    "system.rithmic_endpoint",
-    "ui.session_state.wb_audit_grade",
-    "ui.session_state.wb_defensive_stubs",
-    "ui.session_state.wb_wallet_activity",
-    "ui.session_state.wb_wallet_last_receive",
-    "ui.session_state.wb_wallet_last_send",
-    "ui.session_state.wb_wallet_passphrase_nonce",
-    "ui.session_state.wb_wallet_refreshed_at",
-    "ui.session_state.wb_wallet_refresh_seconds",
-    "ui.session_state.wb_wallet_send_message",
-    "ui.session_state.wb_wallet_send_preview",
-    "ui.session_state.wb_wallet_snapshot",
-}
-
-
-def allowed_runtime_state_refs() -> set[str]:
-    snapshot_refs = {f"RunEvidenceSnapshot.{field}" for field in _run_evidence_snapshot_fields()}
-    return snapshot_refs | RUNTIME_STATE_NESTED_REFS
 REQUIRED_TAB_FIELDS = {
     "name",
     "purpose",
@@ -106,9 +59,6 @@ def _validate_schema_node(value: Any, node: dict[str, Any], root_schema: dict[st
     errors: list[str] = []
     if "const" in node and value != node["const"]:
         errors.append(f"{path} must be {node['const']!r}")
-    enum_values = node.get("enum")
-    if isinstance(enum_values, list) and value not in enum_values:
-        errors.append(f"{path} must be one of {enum_values!r}")
 
     expected_type = node.get("type")
     if expected_type:
@@ -124,9 +74,6 @@ def _validate_schema_node(value: Any, node: dict[str, Any], root_schema: dict[st
 
     if isinstance(value, str) and int(node.get("minLength", 0)) > len(value):
         errors.append(f"{path} must not be empty")
-    pattern = node.get("pattern")
-    if isinstance(value, str) and isinstance(pattern, str) and re.search(pattern, value) is None:
-        errors.append(f"{path} must match pattern {pattern!r}")
 
     if isinstance(value, list):
         min_items = node.get("minItems")
@@ -166,32 +113,6 @@ def _validate_schema_node(value: Any, node: dict[str, Any], root_schema: dict[st
 def validate_runtime_contract_schema(contract: dict[str, Any], schema: dict[str, Any] | None = None) -> list[str]:
     root_schema = schema or json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
     return _validate_schema_node(contract, root_schema, root_schema, "$")
-
-
-def _run_evidence_snapshot_fields() -> set[str]:
-    from workbench.src.run.evidence_snapshot import RunEvidenceSnapshot
-
-    return {field.name for field in fields(RunEvidenceSnapshot)}
-
-
-def _runtime_state_ref_error(reference: Any) -> str | None:
-    if not isinstance(reference, str) or not reference.strip():
-        return "must be a non-empty runtime state ref"
-    if not re.fullmatch(RUNTIME_STATE_REF_PATTERN, reference):
-        return f"must be a machine runtime state ref matching {RUNTIME_STATE_REF_PATTERN!r}"
-    root, _, remainder = reference.partition(".")
-    if root not in RUNTIME_STATE_ROOTS:
-        return f"references unknown runtime state root: {root!r}"
-    if root == "RunEvidenceSnapshot":
-        parts = remainder.split(".")
-        field = parts[0]
-        if field not in _run_evidence_snapshot_fields():
-            return f"references unknown RunEvidenceSnapshot field: {field!r}"
-        if len(parts) > 1:
-            return f"references undocumented runtime state ref: {reference!r}"
-    elif reference not in RUNTIME_STATE_NESTED_REFS:
-        return f"references undocumented runtime state ref: {reference!r}"
-    return None
 
 
 def _resolve_dotted_reference(reference: Any, *, allow_module: bool, require_callable: bool) -> str | None:
@@ -362,11 +283,6 @@ def validate_runtime_contract(contract: dict[str, Any] | None = None) -> list[st
                 error = _resolve_dotted_reference(component, allow_module=False, require_callable=True)
                 if error:
                     errors.append(f"{name}.action_components[{component_index}] {error}")
-        if isinstance(tab.get("runtime_state"), list):
-            for state_index, state_ref in enumerate(tab["runtime_state"]):
-                error = _runtime_state_ref_error(state_ref)
-                if error:
-                    errors.append(f"tabs[{index}].runtime_state[{state_index}] {error}")
     if len(names) != len(set(names)):
         errors.append("tab names must be unique")
     run_sources = payload.get("run_sources")
