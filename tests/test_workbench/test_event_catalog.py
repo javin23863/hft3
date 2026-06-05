@@ -9,6 +9,7 @@ import pytest
 from decision_engine.python.src.walk_forward import ValidationPeriod
 from workbench.src.data.event_catalog import (
     list_campaign_events,
+    list_universe_events,
     load_model_binding,
     row_to_event_context,
 )
@@ -52,6 +53,25 @@ def test_period_year_filter_excludes_wrong_years():
     for e in events:
         year = int(e.release_date.split("-")[0])
         assert 2018 <= year <= 2020
+
+
+def test_full_universe_view_is_not_limited_to_generated_campaign_csv():
+    period = ValidationPeriod("Discovery", 2018, 2020)
+    events = list_universe_events("HYP_5", period, "MES.v.0", REPO)
+    types = {e.event_type for e in events}
+    statuses = {e.row_status for e in events}
+
+    assert {"SEED", "SOURCED"}.issubset(statuses)
+    assert {
+        "FOMC_STATEMENT",
+        "PCE",
+        "PPI",
+        "GDP_ADVANCE",
+        "TREASURY_AUCTION",
+        "UNEMPLOYMENT_CLAIMS",
+    }.issubset(types)
+    assert {"CPI", "NFP"}.issubset(types)
+    assert len(types) > 20
 
 
 def test_pdf_model_5_options_lane():

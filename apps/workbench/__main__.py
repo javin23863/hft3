@@ -76,6 +76,12 @@ def main(argv: list[str] | None = None) -> int:
     download_p.add_argument("--model", required=True)
     download_p.add_argument("--symbol", default="MES.v.0")
     download_p.add_argument("--max-cost-usd", type=float, default=30.0)
+    download_p.add_argument(
+        "--scope",
+        choices=("full_universe", "sourced_runnable", "promotion_campaign"),
+        default="full_universe",
+        help="Event scope for data planning/backfill.",
+    )
     download_p.add_argument("--dry-run", action="store_true")
     download_p.add_argument("--json", action="store_true")
 
@@ -157,7 +163,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "download":
         from apps.workbench.scripts.backfill_catalog import main as backfill_main
 
-        argv = ["--model", args.model, "--symbol", args.symbol, "--max-cost-usd", str(args.max_cost_usd)]
+        argv = [
+            "--model",
+            args.model,
+            "--symbol",
+            args.symbol,
+            "--max-cost-usd",
+            str(args.max_cost_usd),
+            "--scope",
+            args.scope,
+        ]
         if args.dry_run:
             argv.append("--dry-run")
         else:

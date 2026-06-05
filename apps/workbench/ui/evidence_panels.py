@@ -264,7 +264,7 @@ def render_registry_data(snapshot: RunEvidenceSnapshot) -> None:
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Universe defined", int(_num(event_universe.get("event_type_count"))))
         c2.metric("Calendar rows", int(_num(event_universe.get("calendar_row_count"))))
-        c3.metric("Runnable events", int(_num(event_universe.get("runnable_event_count"))))
+        c3.metric("Sourced runnable", int(_num(event_universe.get("runnable_event_count"))))
         c4.metric("Snapshot artifacts", int(_num(event_universe.get("snapshot_artifact_count"))))
         status_counts = event_universe.get("row_status_counts") or {}
         if status_counts:
@@ -287,7 +287,24 @@ def render_registry_data(snapshot: RunEvidenceSnapshot) -> None:
                     "last_release_date": "Last",
                 },
             )
-        with st.expander("Runnable sourced campaign events"):
+        calendar_rows = event_universe.get("calendar_rows") or []
+        if calendar_rows:
+            st.caption(
+                "Full canonical calendar universe. SEED rows are visible for planning and data-cost coverage; "
+                "SOURCED rows are the generated campaign-ready subset."
+            )
+            _display_df(
+                calendar_rows,
+                {
+                    "event_type": "Type",
+                    "release_date": "Date",
+                    "row_status": "Row status",
+                    "runnable_eligible": "Runnable",
+                    "event_context": "Context",
+                    "source_file": "Source file",
+                },
+            )
+        with st.expander("Generated sourced campaign rows", expanded=True):
             _display_df(
                 event_universe.get("runnable_events") or [],
                 {
@@ -296,18 +313,6 @@ def render_registry_data(snapshot: RunEvidenceSnapshot) -> None:
                     "release_date": "Date",
                     "event_context": "Context",
                     "row_status": "Row status",
-                    "source_file": "Source file",
-                },
-            )
-        with st.expander("Seed and sourced calendar rows"):
-            _display_df(
-                event_universe.get("calendar_rows") or [],
-                {
-                    "event_type": "Type",
-                    "release_date": "Date",
-                    "row_status": "Row status",
-                    "runnable_eligible": "Runnable",
-                    "event_context": "Context",
                     "source_file": "Source file",
                 },
             )

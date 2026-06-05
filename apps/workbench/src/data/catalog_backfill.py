@@ -8,7 +8,32 @@ from typing import Iterable, List, Optional, Tuple
 
 from data_system.src.npz_resolver import candidate_npz_symbols
 from workbench.src.data.event_catalog import EventSpec
+
 logger = logging.getLogger(__name__)
+
+FULL_UNIVERSE_SCOPE = "full_universe"
+SOURCED_RUNNABLE_SCOPE = "sourced_runnable"
+PROMOTION_CAMPAIGN_SCOPE = "promotion_campaign"
+
+_SCOPE_ALIASES = {
+    "full": FULL_UNIVERSE_SCOPE,
+    "universe": FULL_UNIVERSE_SCOPE,
+    "full_universe": FULL_UNIVERSE_SCOPE,
+    "sourced": SOURCED_RUNNABLE_SCOPE,
+    "runnable": SOURCED_RUNNABLE_SCOPE,
+    "sourced_runnable": SOURCED_RUNNABLE_SCOPE,
+    "campaign": PROMOTION_CAMPAIGN_SCOPE,
+    "promotion": PROMOTION_CAMPAIGN_SCOPE,
+    "promotion_campaign": PROMOTION_CAMPAIGN_SCOPE,
+}
+
+
+def normalize_universe_scope(scope: str | None) -> str:
+    normalized = str(scope or FULL_UNIVERSE_SCOPE).strip().lower().replace("-", "_")
+    if normalized not in _SCOPE_ALIASES:
+        allowed = ", ".join(sorted({FULL_UNIVERSE_SCOPE, SOURCED_RUNNABLE_SCOPE, PROMOTION_CAMPAIGN_SCOPE}))
+        raise ValueError(f"unknown universe scope {scope!r}; expected one of {allowed}")
+    return _SCOPE_ALIASES[normalized]
 
 
 def _candidate_download_symbols(requested_symbol: str, parsed_symbols: tuple[str, ...]) -> List[str]:
@@ -136,16 +161,85 @@ def download_events(
     return done
 
 
+def events_for_scope(
+    repo_root: Path,
+    model_id: str,
+    symbol: str,
+    *,
+    universe_scope: str = FULL_UNIVERSE_SCOPE,
+) -> list[tuple[str, EventSpec]]:
+    from workbench.src.data.event_catalog import list_campaign_events, list_universe_events, load_periods
+
+    scope = normalize_universe_scope(universe_scope)
+    rows: list[tuple[str, EventSpec]] = []
+    for period in load_periods(repo_root):
+        if scope == PROMOTION_CAMPAIGN_SCOPE:
+            events = list_campaign_events(model_id, period, symbol, repo_root)
+        elif scope == SOURCED_RUNNABLE_SCOPE:
+            events = list_universe_events(
+                model_id,
+                period,
+                symbol,
+                repo_root,
+                include_seed=False,
+                statuses={"SOURCED"},
+            )
+        elif scope == FULL_UNIVERSE_SCOPE:
+            events = list_universe_events(model_id, period, symbol, repo_root, include_seed=True)
+        else:
+            raise AssertionError(f"unhandled universe scope {scope!r}")
+        for ev in events:
+            rows.append((period.name, ev))
+    return rows
+
+
 def missing_for_campaign(
     repo_root: Path,
     model_id: str,
     symbol: str,
+    *,
+    universe_scope: str = FULL_UNIVERSE_SCOPE,
 ) -> List[EventSpec]:
-    from workbench.src.data.event_catalog import list_campaign_events, load_periods
+    return [
+        ev
+        for _, ev in events_for_scope(
+            repo_root,
+            model_id,
+            symbol,
+            universe_scope=universe_scope,
+        )
+        if not ev.npz_present
+    ]
 
-    missing: List[EventSpec] = []
-    for period in load_periods(repo_root):
-        for ev in list_campaign_events(model_id, period, symbol, repo_root):
-            if not ev.npz_present:
-                missing.append(ev)
-    return missing
+
+def summarize_event_specs(period_events: Iterable[tuple[str, EventSpec]]) -> dict:
+    rows = list(period_events)
+    by_status: dict[str, int] = {}
+    by_type: dict[str, int] = {}
+    missing_by_status: dict[str, int] = {}
+    missing_by_type: dict[str, int] = {}
+    model_ineligible = 0
+    runnable_eligible = 0
+    for _, ev in rows:
+        status = ev.row_status or "UNKNOWN"
+        by_status[status] = by_status.get(status, 0) + 1
+        by_type[ev.event_type] = by_type.get(ev.event_type, 0) + 1
+        if not ev.model_eligible:
+            model_ineligible += 1
+        if ev.runnable_eligible:
+            runnable_eligible += 1
+        if not ev.npz_present:
+            missing_by_status[status] = missing_by_status.get(status, 0) + 1
+            missing_by_type[ev.event_type] = missing_by_type.get(ev.event_type, 0) + 1
+    return {
+        "visible_events": len(rows),
+        "visible_event_types": len(by_type),
+        "npz_present": sum(1 for _, ev in rows if ev.npz_present),
+        "missing_count": sum(1 for _, ev in rows if not ev.npz_present),
+        "runnable_eligible_count": runnable_eligible,
+        "model_ineligible_count": model_ineligible,
+        "row_status_counts": dict(sorted(by_status.items())),
+        "event_type_counts": dict(sorted(by_type.items())),
+        "missing_by_row_status": dict(sorted(missing_by_status.items())),
+        "missing_by_event_type": dict(sorted(missing_by_type.items())),
+    }

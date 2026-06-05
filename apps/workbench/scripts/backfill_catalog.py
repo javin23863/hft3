@@ -24,11 +24,16 @@ except ImportError:
     pass
 
 from workbench.src.data.catalog_backfill import (
+    FULL_UNIVERSE_SCOPE,
+    PROMOTION_CAMPAIGN_SCOPE,
+    SOURCED_RUNNABLE_SCOPE,
     download_events,
+    events_for_scope,
     estimate_download_cost_usd,
     missing_for_campaign,
+    normalize_universe_scope,
+    summarize_event_specs,
 )
-from workbench.src.data.event_catalog import campaign_preview
 from workbench.src.artifacts.paths import artifact_root
 
 AUTHORITY_REFS = [
@@ -59,6 +64,15 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--download-missing", action="store_true", help="Download via Databento event window")
     parser.add_argument("--max-cost-usd", type=float, default=None, help="Abort if estimated cost exceeds cap")
     parser.add_argument(
+        "--scope",
+        choices=(FULL_UNIVERSE_SCOPE, SOURCED_RUNNABLE_SCOPE, PROMOTION_CAMPAIGN_SCOPE),
+        default=FULL_UNIVERSE_SCOPE,
+        help=(
+            "Event universe scope. full_universe shows all canonical calendar rows; "
+            "sourced_runnable shows sourced rows; promotion_campaign uses generated events.csv."
+        ),
+    )
+    parser.add_argument(
         "--out-dir",
         type=Path,
         default=None,
@@ -68,49 +82,61 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _event_payload(period_name: str, event) -> dict:
+    return {
+        "period": period_name,
+        "event_id": event.event_id,
+        "event_type": event.event_type,
+        "event_context": event.event_context,
+        "release_date": event.release_date,
+        "symbol": event.symbol,
+        "row_status": event.row_status,
+        "runnable_eligible": event.runnable_eligible,
+        "model_eligible": event.model_eligible,
+        "symbol_eligible": event.symbol_eligible,
+        "npz_present": bool(event.npz_present),
+        "npz_symbol_used": event.npz_symbol_used,
+        "npz_path": str(event.npz_path),
+        "start_utc": str(event.start_utc),
+        "end_utc": str(event.end_utc),
+        "source": event.source,
+        "source_url": event.source_url,
+        "source_file": event.source_file,
+    }
+
+
 def run_backfill(args: argparse.Namespace) -> dict:
+    scope = normalize_universe_scope(args.scope)
+    period_events = events_for_scope(_REPO, args.model, args.symbol, universe_scope=scope)
+    summary = summarize_event_specs(period_events)
     if args.dry_run:
-        preview = campaign_preview(args.model, args.symbol, _REPO)
+        periods: dict[str, dict] = {}
+        for period_name, event in period_events:
+            payload = _event_payload(period_name, event)
+            periods.setdefault(period_name, {"name": period_name, "events": []})["events"].append(payload)
         return {
             "mode": "dry_run",
+            "scope": scope,
             "model_id": args.model,
             "symbol": args.symbol,
-            "catalog_years": preview["catalog_years"],
-            "personal_locked": preview["personal_locked"],
-            "periods": [
-                {
-                    "name": pname,
-                    "start_year": pdata["start_year"],
-                    "end_year": pdata["end_year"],
-                    "events": [
-                        {
-                            "event_id": ev["event_id"],
-                            "release_date": ev["release_date"],
-                            "npz_present": bool(ev["npz_present"]),
-                            "npz_symbol_used": ev.get("npz_symbol_used"),
-                        }
-                        for ev in pdata["events"]
-                    ],
-                }
-                for pname, pdata in preview["periods"].items()
-            ],
+            "summary": summary,
+            "periods": list(periods.values()),
         }
 
-    missing = missing_for_campaign(_REPO, args.model, args.symbol)
+    missing = missing_for_campaign(_REPO, args.model, args.symbol, universe_scope=scope)
     est_cost = estimate_download_cost_usd(missing)
     manifest = {
         "model_id": args.model,
         "symbol": args.symbol,
+        "scope": scope,
         "authority_refs": AUTHORITY_REFS,
+        "summary": summary,
         "missing_count": len(missing),
         "estimated_cost_usd": est_cost,
         "max_cost_usd": args.max_cost_usd,
         "events": [
             {
-                "event_id": e.event_id,
-                "npz_path": str(e.npz_path),
-                "start_utc": str(e.start_utc),
-                "end_utc": str(e.end_utc),
+                **_event_payload("", e),
                 "release_year": int(e.release_date[:4]),
             }
             for e in missing
@@ -127,9 +153,11 @@ def run_backfill(args: argparse.Namespace) -> dict:
         download_ids = download_events(_REPO, missing, max_cost_usd=args.max_cost_usd)
     return {
         "mode": "download" if args.download_missing else "manifest",
+        "scope": scope,
         "model_id": args.model,
         "symbol": args.symbol,
         "manifest_path": str(out),
+        "summary": summary,
         "missing_count": len(missing),
         "estimated_cost_usd": est_cost,
         "max_cost_usd": args.max_cost_usd,
@@ -140,17 +168,28 @@ def run_backfill(args: argparse.Namespace) -> dict:
 
 def _print_human_result(result: dict) -> None:
     if result.get("mode") == "dry_run":
+        print(f"Scope: {result.get('scope')}")
+        summary = result.get("summary") or {}
+        print(
+            "Visible events: "
+            f"{summary.get('visible_events', 0)} "
+            f"({summary.get('visible_event_types', 0)} event types), "
+            f"missing NPZ: {summary.get('missing_count', 0)}"
+        )
+        if summary.get("row_status_counts"):
+            print(f"Row statuses: {summary['row_status_counts']}")
         for period in result["periods"]:
-            print(f"=== {period['name']} ({period['start_year']}-{period['end_year']}) ===")
+            print(f"=== {period['name']} ===")
             for ev in period["events"]:
                 flag = "OK" if ev["npz_present"] else "MISSING"
-                print(f"  [{flag}] {ev['event_id']} {ev['release_date']}")
-        print(f"Catalog years with NPZ: {result['catalog_years']}")
-        print(f"Personal locked: {result['personal_locked']}")
+                status = ev.get("row_status") or "UNKNOWN"
+                runnable = "runnable" if ev.get("runnable_eligible") else "visible"
+                print(f"  [{flag}] [{status}/{runnable}] {ev['event_id']} {ev['release_date']}")
         return
     print(
         f"Wrote manifest: {result['manifest_path']} "
-        f"({result['missing_count']} missing, est ${result['estimated_cost_usd']:.2f})"
+        f"({result['missing_count']} missing, est ${result['estimated_cost_usd']:.2f}, "
+        f"scope {result.get('scope')})"
     )
     if result.get("download_requested"):
         print(f"Download requested for: {result['download_requested_for']}")
@@ -160,10 +199,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
     result = run_backfill(args)
-    if args.json:
-        print(json.dumps(result, indent=2))
-    else:
-        _print_human_result(result)
+    try:
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            _print_human_result(result)
+    except BrokenPipeError:
+        return 0
     return 0
 
 

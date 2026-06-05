@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
+from zoneinfo import ZoneInfo
 
 import yaml
 
@@ -30,6 +31,12 @@ class EventSpec:
     source_url: str = ""
     parsed_symbols: tuple[str, ...] = ()
     npz_symbol_used: str = ""
+    row_status: str = ""
+    universe_scope: str = "runnable"
+    runnable_eligible: bool = True
+    model_eligible: bool = True
+    symbol_eligible: bool = True
+    source_file: str = ""
 
 
 def _repo_paths(repo_root: Path) -> dict[str, Path]:
@@ -162,9 +169,115 @@ def list_campaign_events(
                 source_url=str(row.get("source_url", "")),
                 parsed_symbols=parsed,
                 npz_symbol_used=sym_used if present else "",
+                row_status=str(row.get("row_status", "SOURCED")),
+                universe_scope="promotion_campaign",
+                runnable_eligible=True,
+                model_eligible=True,
+                symbol_eligible=True,
+                source_file=str(csv_path),
             )
         )
     specs.sort(key=lambda s: s.release_date)
+    return specs
+
+
+def _anchor_utc(release_date: str, release_time: str, timezone_name: str) -> datetime:
+    local = datetime.fromisoformat(f"{release_date}T{release_time}").replace(tzinfo=ZoneInfo(timezone_name))
+    return local.astimezone(ZoneInfo("UTC"))
+
+
+def _event_id(event_type: str, release_date: str, window_name: str) -> str:
+    y, m, d = release_date.split("-")
+    return f"{event_type}_{y}_{m}_{d}_{window_name}"
+
+
+def list_universe_events(
+    model_id: str,
+    period: ValidationPeriod,
+    symbol: str,
+    repo_root: Path,
+    *,
+    include_seed: bool = True,
+    statuses: Optional[Set[str]] = None,
+    mode: str = "promotion",
+    filter_by_model_binding: bool = False,
+    filter_by_symbol: bool = True,
+) -> List[EventSpec]:
+    """List canonical economic-event universe rows, including seed rows when requested.
+
+    This is the data-planning/catalog view. `list_campaign_events()` remains the
+    sourced runnable campaign view used by promotion-grade backtests.
+    """
+    from economic_event_universe.service import list_calendar_rows
+    from economic_event_universe.windows import download_window, window_name_for
+    from economic_event_universe.registry import get_event_def
+
+    binding = load_model_binding(repo_root, model_id)
+    allowed: Set[str] = binding["allowed_contexts"]
+    allowed_statuses = {s.upper() for s in statuses} if statuses else None
+    specs: List[EventSpec] = []
+
+    for row in list_calendar_rows(repo_root, include_seed=include_seed, statuses=allowed_statuses):
+        release_date = str(row["release_date"])
+        if mode == "promotion" and is_personal_sandbox_date(release_date, repo_root):
+            continue
+        if mode == "personal":
+            if not is_personal_sandbox_date(release_date, repo_root):
+                continue
+            if is_locked(repo_root):
+                continue
+        year = _release_year(release_date)
+        if year < period.start_year or year > period.end_year:
+            continue
+
+        event_type = str(row["event_type"])
+        try:
+            cfg = get_event_def(event_type)
+        except Exception:
+            continue
+        parsed = tuple(s.strip() for s in str(cfg.get("symbol_universe", "")).split(",") if s.strip())
+        symbol_eligible = symbol in parsed
+        if filter_by_symbol and not symbol_eligible:
+            continue
+
+        window_name = window_name_for(event_type)
+        ctx = row_to_event_context(event_type, window_name)
+        model_eligible = not allowed or ctx in allowed
+        if filter_by_model_binding and not model_eligible:
+            continue
+
+        release_time = str(row.get("release_time") or cfg.get("anchor_time", "08:30:00"))
+        timezone_name = str(row.get("timezone") or cfg.get("timezone", "America/New_York"))
+        start_offset, end_offset = download_window(event_type)
+        anchor = _anchor_utc(release_date, release_time, timezone_name)
+        start_utc = anchor + timedelta(seconds=int(start_offset))
+        end_utc = anchor + timedelta(seconds=int(end_offset))
+        eid = _event_id(event_type, release_date, window_name)
+        npz, present, sym_used = resolve_npz_for_event(repo_root, eid, symbol, parsed)
+        specs.append(
+            EventSpec(
+                event_id=eid,
+                event_type=event_type,
+                release_date=release_date,
+                event_context=ctx,
+                symbol=symbol,
+                npz_path=npz,
+                npz_present=present,
+                start_utc=start_utc,
+                end_utc=end_utc,
+                source=str(row.get("source", "")),
+                source_url=str(row.get("source_url", "")),
+                parsed_symbols=parsed,
+                npz_symbol_used=sym_used if present else "",
+                row_status=str(row.get("row_status", "")),
+                universe_scope="full_universe" if include_seed else "sourced_universe",
+                runnable_eligible=bool(row.get("runnable_eligible", False)),
+                model_eligible=model_eligible,
+                symbol_eligible=symbol_eligible,
+                source_file=str(row.get("source_file", "")),
+            )
+        )
+    specs.sort(key=lambda s: (s.release_date, s.event_type, s.event_id))
     return specs
 
 
