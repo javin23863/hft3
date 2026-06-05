@@ -346,25 +346,6 @@
         "optional": [],
         "flags": ["json", "rebuild_graph"]
       },
-      "response_contract": {
-        "required": ["repo", "python", "dependencies", "env", "npz", "graphify", "core_ok", "data_ready", "graph_ready", "all_ok"],
-        "success_field": "all_ok",
-        "success_values": [true],
-        "failure_exit_code": 1,
-        "properties": {
-          "repo": "string",
-          "python": "object",
-          "dependencies": "object",
-          "env": "object",
-          "npz": "object",
-          "graphify": "object",
-          "graph_rebuild": "object",
-          "core_ok": "boolean",
-          "data_ready": "boolean",
-          "graph_ready": "boolean",
-          "all_ok": "boolean"
-        }
-      },
       "response_schema": "environment dependency, NPZ inventory, and graph presence report",
       "error_response": "nonzero exit or JSON status with missing dependency/environment blocker"
     },

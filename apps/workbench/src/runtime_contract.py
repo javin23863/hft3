@@ -711,10 +711,7 @@ def expected_workbench_cli_request_args() -> dict[str, dict[str, list[str]]]:
 
 
 def _copy_response_contract(contract: dict[str, Any]) -> dict[str, Any]:
-    return {
-        key: list(value) if isinstance(value, list) else dict(value) if isinstance(value, dict) else value
-        for key, value in contract.items()
-    }
+    return {key: list(value) if isinstance(value, list) else value for key, value in contract.items()}
 
 
 def expected_download_response_contract() -> dict[str, Any]:
@@ -731,12 +728,6 @@ def expected_status_response_contract() -> dict[str, Any]:
     from workbench.src.status import STATUS_RESPONSE_CONTRACT
 
     return _copy_response_contract(STATUS_RESPONSE_CONTRACT)
-
-
-def expected_setup_response_contract() -> dict[str, Any]:
-    from workbench.src.setup import SETUP_RESPONSE_CONTRACT
-
-    return _copy_response_contract(SETUP_RESPONSE_CONTRACT)
 
 
 def _validate_cli_request_args(
@@ -785,16 +776,6 @@ def _validate_status_response_contract(errors: list[str], index: int, endpoint: 
     if actual != expected:
         errors.append(
             f"backend_endpoints[{index}].response_contract must match Workbench status response contract: "
-            f"expected {expected!r}, got {actual!r}"
-        )
-
-
-def _validate_setup_response_contract(errors: list[str], index: int, utility: dict[str, Any]) -> None:
-    actual = utility.get("response_contract")
-    expected = expected_setup_response_contract()
-    if actual != expected:
-        errors.append(
-            f"utility_cli_commands[{index}].response_contract must match Workbench setup response contract: "
             f"expected {expected!r}, got {actual!r}"
         )
 
@@ -1075,8 +1056,6 @@ def validate_runtime_contract(contract: dict[str, Any] | None = None) -> list[st
                     command=command,
                     expected_by_command=expected_cli_args,
                 )
-                if command == "setup":
-                    _validate_setup_response_contract(errors, index, utility)
     uncovered_commands = sorted((workbench_commands | dispatched_commands) - endpoint_commands - utility_commands)
     if uncovered_commands:
         errors.append(f"Workbench CLI subcommands missing runtime contract coverage: {uncovered_commands!r}")
