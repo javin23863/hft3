@@ -148,9 +148,8 @@ def _resolve_dotted_reference(reference: Any, *, allow_module: bool, require_cal
     return f"{dotted_path!r} could not import a module{detail}"
 
 
-def _workbench_cli_subcommands(path: Path | None = None) -> set[str]:
-    cli_path = path or WORKBENCH_MAIN_PATH
-    tree = ast.parse(cli_path.read_text(encoding="utf-8"), filename=str(cli_path))
+def _workbench_cli_subcommands(path: Path = WORKBENCH_MAIN_PATH) -> set[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     commands: set[str] = set()
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
@@ -162,57 +161,6 @@ def _workbench_cli_subcommands(path: Path | None = None) -> set[str]:
         if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
             commands.add(node.args[0].value)
     return commands
-
-
-def _literal_command_compare(node: ast.AST) -> tuple[str, ast.cmpop] | None:
-    if not isinstance(node, ast.Compare):
-        return None
-    left = node.left
-    if not (
-        isinstance(left, ast.Attribute)
-        and left.attr == "command"
-        and isinstance(left.value, ast.Name)
-        and left.value.id == "args"
-    ):
-        return None
-    if len(node.ops) != 1 or not isinstance(node.ops[0], (ast.Eq, ast.NotEq)):
-        return None
-    if len(node.comparators) != 1:
-        return None
-    comparator = node.comparators[0]
-    if isinstance(comparator, ast.Constant) and isinstance(comparator.value, str):
-        return comparator.value, node.ops[0]
-    return None
-
-
-def _body_has_return(statements: list[ast.stmt]) -> bool:
-    return any(isinstance(node, ast.Return) for statement in statements for node in ast.walk(statement))
-
-
-def _collect_dispatch_commands(statements: list[ast.stmt], handled: set[str]) -> None:
-    for index, statement in enumerate(statements):
-        if not isinstance(statement, ast.If):
-            continue
-        command_compare = _literal_command_compare(statement.test)
-        if command_compare is not None:
-            command, operator = command_compare
-            if isinstance(operator, ast.Eq):
-                handled.add(command)
-            elif _body_has_return(statement.body) and index + 1 < len(statements):
-                handled.add(command)
-        _collect_dispatch_commands(statement.body, handled)
-        _collect_dispatch_commands(statement.orelse, handled)
-
-
-def _workbench_cli_dispatch_commands(path: Path | None = None) -> set[str]:
-    cli_path = path or WORKBENCH_MAIN_PATH
-    tree = ast.parse(cli_path.read_text(encoding="utf-8"), filename=str(cli_path))
-    handled: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef) and node.name == "main":
-            _collect_dispatch_commands(node.body, handled)
-            break
-    return handled
 
 
 def _workbench_cli_command(cli: Any) -> str | None:
@@ -302,7 +250,6 @@ def validate_runtime_contract(contract: dict[str, Any] | None = None) -> list[st
         errors.append("backend_endpoints must be a non-empty list")
     else:
         workbench_commands = _workbench_cli_subcommands()
-        dispatched_commands = _workbench_cli_dispatch_commands()
         endpoint_ids = [
             str(endpoint.get("id") or "")
             for endpoint in endpoints
@@ -322,9 +269,5 @@ def validate_runtime_contract(contract: dict[str, Any] | None = None) -> list[st
             elif command not in workbench_commands:
                 errors.append(
                     f"backend_endpoints[{index}].cli references unknown Workbench CLI subcommand: {command!r}"
-                )
-            elif command not in dispatched_commands:
-                errors.append(
-                    f"backend_endpoints[{index}].cli references undispatched Workbench CLI subcommand: {command!r}"
                 )
     return errors

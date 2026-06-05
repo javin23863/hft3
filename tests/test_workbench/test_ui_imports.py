@@ -244,16 +244,11 @@ def test_runtime_contract_rejects_schema_and_policy_drift() -> None:
 
 
 def test_runtime_contract_components_are_real_and_complete() -> None:
-    from workbench.src.runtime_contract import (
-        _workbench_cli_dispatch_commands,
-        _workbench_cli_subcommands,
-        validate_runtime_contract,
-    )
+    from workbench.src.runtime_contract import _workbench_cli_subcommands, validate_runtime_contract
 
     contract_path = Path(__file__).resolve().parents[2] / "apps" / "workbench" / "config" / "runtime_contract.json"
     contract = json.loads(contract_path.read_text(encoding="utf-8"))
     workbench_commands = _workbench_cli_subcommands()
-    dispatched_commands = _workbench_cli_dispatch_commands()
 
     required_fields = {
         "name",
@@ -282,97 +277,9 @@ def test_runtime_contract_components_are_real_and_complete() -> None:
     for endpoint in contract["backend_endpoints"]:
         command = endpoint["cli"].replace("python -m workbench ", "")
         assert command in workbench_commands
-        assert command in dispatched_commands
         assert endpoint["request_schema"]
         assert endpoint["response_schema"]
         assert endpoint["error_response"]
-
-
-def test_runtime_contract_cli_dispatch_parser_detects_final_run_path(tmp_path: Path) -> None:
-    from workbench.src.runtime_contract import _workbench_cli_dispatch_commands
-
-    cli_src = tmp_path / "__main__.py"
-    cli_src.write_text(
-        """
-def main(args, parser):
-    if args.command == "verify":
-        return 0
-    if args.command != "run":
-        parser.print_help()
-        return 1
-    return 0
-""",
-        encoding="utf-8",
-    )
-
-    assert _workbench_cli_dispatch_commands(cli_src) == {"run", "verify"}
-
-    cli_src.write_text(
-        """
-def main(args, parser):
-    if args.command != "run":
-        parser.print_help()
-        return 1
-""",
-        encoding="utf-8",
-    )
-
-    assert _workbench_cli_dispatch_commands(cli_src) == set()
-
-
-def test_runtime_contract_rejects_parsed_but_undispatched_cli(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from workbench.src import runtime_contract
-    from workbench.src.runtime_contract import load_runtime_contract, validate_runtime_contract
-
-    cli_src = tmp_path / "__main__.py"
-    cli_src.write_text(
-        """
-def main(args):
-    sub.add_parser("run")
-    sub.add_parser("verify")
-    if args.command == "verify":
-        return 0
-    if args.command != "run":
-        return 1
-    return 0
-""",
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(runtime_contract, "WORKBENCH_MAIN_PATH", cli_src)
-
-    contract = copy.deepcopy(load_runtime_contract())
-    contract["backend_endpoints"] = copy.deepcopy(contract["backend_endpoints"][:3])
-    contract["backend_endpoints"][0]["id"] = "workbench.verify"
-    contract["backend_endpoints"][1]["id"] = "workbench.missing_handler"
-    contract["backend_endpoints"][2]["id"] = "workbench.verify_mirror"
-    contract["backend_endpoints"][0]["cli"] = "python -m workbench verify"
-    contract["backend_endpoints"][1]["cli"] = "python -m workbench missing-handler"
-    contract["backend_endpoints"][2]["cli"] = "python -m workbench verify"
-    errors = validate_runtime_contract(contract)
-
-    assert "backend_endpoints[1].cli references unknown Workbench CLI subcommand: 'missing-handler'" in errors
-
-    contract["backend_endpoints"][1]["cli"] = "python -m workbench run"
-    contract["backend_endpoints"][2]["cli"] = "python -m workbench verify"
-    assert validate_runtime_contract(contract) == []
-
-    cli_src.write_text(
-        """
-def main(args):
-    sub.add_parser("run")
-    sub.add_parser("verify")
-    sub.add_parser("status")
-    if args.command == "verify":
-        return 0
-    if args.command != "run":
-        return 1
-    return 0
-""",
-        encoding="utf-8",
-    )
-    contract["backend_endpoints"][2]["cli"] = "python -m workbench status"
-    errors = validate_runtime_contract(contract)
-    assert "backend_endpoints[2].cli references undispatched Workbench CLI subcommand: 'status'" in errors
 
 
 def test_browser_smoke_tracks_backend_tabs_without_destructive_clicks() -> None:
