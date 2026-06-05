@@ -6,7 +6,11 @@ data/normalized/
 data/replay/
 data/npz/
 graphify-out/cache/
+graphify-out/
 graphify-out/manifest.json
+logs/
+runtime/data_downloads/
 *.npz
+*.pdf
 chi404_infra.tgz
 .env

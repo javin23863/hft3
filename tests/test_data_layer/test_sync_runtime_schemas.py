@@ -17,6 +17,7 @@ NAMES = (
     "schema_pipeline_hypothesis_response_v1.json",
     "schema_pipeline_idea_set_v1.json",
     "schema_research_decision_packet_v1.json",
+    "schema_mbo_feature_packet_v1.json",
 )
 
 

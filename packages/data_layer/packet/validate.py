@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import math
 from functools import lru_cache
+from numbers import Real
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -72,6 +74,110 @@ def validate_pipeline_idea_set(response: Dict[str, Any]) -> List[str]:
 
 def validate_pipeline_response(response: Dict[str, Any]) -> List[str]:
     return validate_json("schema_pipeline_response_v1.json", response)
+
+
+MBO_SOURCE_DOC_ID = "docs/research/MBO_FEATURE_PACKET_SOURCE_OF_TRUTH.md"
+REQUIRED_MBO_FEATURE_FAMILY_CODES = (
+    "static_depth",
+    "microprice",
+    "dynamic_ofi",
+    "queue_position",
+    "age_survival",
+    "cancellation",
+    "replenishment",
+    "iceberg",
+    "fleeting_liquidity",
+    "entropy",
+    "book_shape_geometry",
+    "hawkes_intensity",
+    "queue_reactive",
+    "cross_asset_ofi",
+    "adverse_selection",
+    "latency_haircut",
+)
+
+
+def validate_mbo_feature_packet(packet: Dict[str, Any]) -> List[str]:
+    errors = validate_json("schema_mbo_feature_packet_v1.json", packet)
+    errors.extend(_mbo_feature_packet_invariants(packet))
+    return errors
+
+
+def _mbo_feature_packet_invariants(packet: Dict[str, Any]) -> List[str]:
+    if not isinstance(packet, dict):
+        return []
+
+    errors: List[str] = []
+    _append_non_finite_number_errors(errors, packet, "")
+
+    timestamp_ns = packet.get("timestamp_ns")
+    receive_timestamp_ns = packet.get("receive_timestamp_ns")
+    if _is_int(timestamp_ns) and _is_int(receive_timestamp_ns):
+        if receive_timestamp_ns < timestamp_ns:
+            errors.append("receive_timestamp_ns must be >= timestamp_ns")
+        else:
+            latency_budget_us = packet.get("latency_budget_us")
+            if _is_finite_real(latency_budget_us):
+                observed_latency_us = (receive_timestamp_ns - timestamp_ns) / 1000.0
+                if observed_latency_us > float(latency_budget_us):
+                    errors.append(
+                        "receive_timestamp_ns - timestamp_ns exceeds latency_budget_us"
+                    )
+
+    flow = _dict_value(packet, "flow")
+    mlofi_vector = flow.get("mlofi_vector")
+    mlofi_level_count = flow.get("mlofi_level_count")
+    if isinstance(mlofi_vector, list) and _is_int(mlofi_level_count):
+        if len(mlofi_vector) != mlofi_level_count:
+            errors.append("flow.mlofi_level_count must equal len(flow.mlofi_vector)")
+
+    audit = _dict_value(packet, "audit")
+    source_doc_ids = audit.get("source_doc_ids")
+    if isinstance(source_doc_ids, list) and MBO_SOURCE_DOC_ID not in source_doc_ids:
+        errors.append(f"audit.source_doc_ids must include {MBO_SOURCE_DOC_ID}")
+
+    feature_family_codes = audit.get("feature_family_codes")
+    if isinstance(feature_family_codes, list):
+        present = {code for code in feature_family_codes if isinstance(code, str)}
+        missing = sorted(set(REQUIRED_MBO_FEATURE_FAMILY_CODES).difference(present))
+        if missing:
+            errors.append(
+                "audit.feature_family_codes missing required MBO families: "
+                + ", ".join(missing)
+            )
+
+    return errors
+
+
+def _append_non_finite_number_errors(errors: List[str], value: Any, path: str) -> None:
+    if isinstance(value, dict):
+        for key, child in value.items():
+            child_path = f"{path}.{key}" if path else str(key)
+            _append_non_finite_number_errors(errors, child, child_path)
+        return
+    if isinstance(value, list):
+        for idx, child in enumerate(value):
+            child_path = f"{path}[{idx}]" if path else f"[{idx}]"
+            _append_non_finite_number_errors(errors, child, child_path)
+        return
+    if _is_real(value) and not _is_finite_real(value):
+        errors.append(f"{path}: must be finite")
+
+
+def _is_real(value: Any) -> bool:
+    return isinstance(value, Real) and not isinstance(value, bool)
+
+
+def _is_finite_real(value: Any) -> bool:
+    if not _is_real(value):
+        return False
+    if isinstance(value, int):
+        return True
+    return math.isfinite(float(value))
+
+
+def _is_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
 
 
 REQUIRED_RESEARCH_FORBIDDEN_ACTIONS = (

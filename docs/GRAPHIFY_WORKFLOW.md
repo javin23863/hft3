@@ -67,7 +67,7 @@ Override model: `$env:GRAPHIFY_OLLAMA_MODEL = 'your-ollama-tag'`
 
 Do **not** use `graphify .` / Gemini unless you explicitly want cloud API (`GEMINI_API_KEY`).
 
-On failure the rebuild script falls back to `graphify cluster-only .`. Logs: `logs/graphify/rebuild.log`.
+On failure the rebuild script runs bounded `cluster-only --no-viz` as a diagnostic fallback, but still exits nonzero because stale graph output is not a valid GraphPost. Logs: `logs/graphify/rebuild.log`.
 
 ## Windows PowerShell notes
 
