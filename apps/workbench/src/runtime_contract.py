@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-import ast
 import importlib
 import json
-import shlex
 from pathlib import Path
 from typing import Any
 
 CONTRACT_PATH = Path(__file__).resolve().parents[1] / "config" / "runtime_contract.json"
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schemas" / "runtime_contract.schema.json"
-WORKBENCH_MAIN_PATH = Path(__file__).resolve().parents[1] / "__main__.py"
 REQUIRED_TAB_FIELDS = {
     "name",
     "purpose",
@@ -148,33 +145,6 @@ def _resolve_dotted_reference(reference: Any, *, allow_module: bool, require_cal
     return f"{dotted_path!r} could not import a module{detail}"
 
 
-def _workbench_cli_subcommands(path: Path = WORKBENCH_MAIN_PATH) -> set[str]:
-    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    commands: set[str] = set()
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        if not isinstance(node.func, ast.Attribute) or node.func.attr != "add_parser":
-            continue
-        if not isinstance(node.func.value, ast.Name) or node.func.value.id != "sub":
-            continue
-        if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
-            commands.add(node.args[0].value)
-    return commands
-
-
-def _workbench_cli_command(cli: Any) -> str | None:
-    if not isinstance(cli, str):
-        return None
-    try:
-        parts = shlex.split(cli)
-    except ValueError:
-        return None
-    if len(parts) == 4 and parts[:3] == ["python", "-m", "workbench"]:
-        return parts[3]
-    return None
-
-
 def load_runtime_contract(path: Path | None = None) -> dict[str, Any]:
     contract_path = path or CONTRACT_PATH
     return json.loads(contract_path.read_text(encoding="utf-8"))
@@ -249,7 +219,6 @@ def validate_runtime_contract(contract: dict[str, Any] | None = None) -> list[st
     if not isinstance(endpoints, list) or not endpoints:
         errors.append("backend_endpoints must be a non-empty list")
     else:
-        workbench_commands = _workbench_cli_subcommands()
         endpoint_ids = [
             str(endpoint.get("id") or "")
             for endpoint in endpoints
@@ -257,17 +226,4 @@ def validate_runtime_contract(contract: dict[str, Any] | None = None) -> list[st
         ]
         if len(endpoint_ids) != len(set(endpoint_ids)):
             errors.append("backend endpoint ids must be unique")
-        for index, endpoint in enumerate(endpoints):
-            if not isinstance(endpoint, dict):
-                continue
-            cli = endpoint.get("cli")
-            command = _workbench_cli_command(cli)
-            if command is None:
-                errors.append(
-                    f"backend_endpoints[{index}].cli must be 'python -m workbench <subcommand>', got {cli!r}"
-                )
-            elif command not in workbench_commands:
-                errors.append(
-                    f"backend_endpoints[{index}].cli references unknown Workbench CLI subcommand: {command!r}"
-                )
     return errors

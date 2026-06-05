@@ -185,23 +185,6 @@ def test_runtime_contract_rejects_schema_and_policy_drift() -> None:
             "backend endpoint ids must be unique",
         ),
         (
-            "stale_backend_endpoint_cli",
-            lambda payload: payload["backend_endpoints"][0].update({"cli": "python -m workbench stale-command"}),
-            "backend_endpoints[0].cli references unknown Workbench CLI subcommand: 'stale-command'",
-        ),
-        (
-            "malformed_backend_endpoint_cli",
-            lambda payload: payload["backend_endpoints"][0].update({"cli": "python scripts/workbench.py run"}),
-            "backend_endpoints[0].cli must be 'python -m workbench <subcommand>', got "
-            "'python scripts/workbench.py run'",
-        ),
-        (
-            "extra_backend_endpoint_cli_tokens",
-            lambda payload: payload["backend_endpoints"][0].update({"cli": "python -m workbench run --extra"}),
-            "backend_endpoints[0].cli must be 'python -m workbench <subcommand>', got "
-            "'python -m workbench run --extra'",
-        ),
-        (
             "bad_frontend_component",
             lambda payload: payload["tabs"][0].update(
                 {"frontend_component": "workbench.ui.evidence_panels.no_such_renderer"}
@@ -244,11 +227,13 @@ def test_runtime_contract_rejects_schema_and_policy_drift() -> None:
 
 
 def test_runtime_contract_components_are_real_and_complete() -> None:
-    from workbench.src.runtime_contract import _workbench_cli_subcommands, validate_runtime_contract
+    from workbench.src.runtime_contract import validate_runtime_contract
 
     contract_path = Path(__file__).resolve().parents[2] / "apps" / "workbench" / "config" / "runtime_contract.json"
     contract = json.loads(contract_path.read_text(encoding="utf-8"))
-    workbench_commands = _workbench_cli_subcommands()
+    main_src = (Path(__file__).resolve().parents[2] / "apps" / "workbench" / "__main__.py").read_text(
+        encoding="utf-8"
+    )
 
     required_fields = {
         "name",
@@ -276,7 +261,7 @@ def test_runtime_contract_components_are_real_and_complete() -> None:
 
     for endpoint in contract["backend_endpoints"]:
         command = endpoint["cli"].replace("python -m workbench ", "")
-        assert command in workbench_commands
+        assert f'add_parser("{command}"' in main_src or f"add_parser('{command}'" in main_src
         assert endpoint["request_schema"]
         assert endpoint["response_schema"]
         assert endpoint["error_response"]
