@@ -18,6 +18,8 @@
         "validation_window",
         "holdout_window",
         "robustness_tests",
+        "validation_card_id",
+        "validation_status",
         "baseline_comparison",
         "performance_metrics",
         "microstructure_metrics",
@@ -38,6 +40,8 @@
         "validation_window": { "$ref": "#/definitions/non_empty_string" },
         "holdout_window": { "$ref": "#/definitions/non_empty_string" },
         "robustness_tests": { "$ref": "#/definitions/string_array" },
+        "validation_card_id": { "$ref": "#/definitions/non_empty_string" },
+        "validation_status": { "$ref": "#/definitions/validation_status" },
         "baseline_comparison": {
           "type": "object",
           "required": ["baseline_model", "uplift_metric", "uplift_value"],
@@ -57,7 +61,32 @@
         },
         "explanation_packet": { "$ref": "#/definitions/non_empty_string" }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "promotion_status": {
+                "enum": ["robustness_passed", "production_eligible"]
+              }
+            },
+            "required": ["promotion_status"]
+          },
+          "then": {
+            "properties": {
+              "validation_status": {
+                "properties": {
+                  "point_in_time_safe": { "const": true },
+                  "leakage_tests_passed": { "const": true },
+                  "robustness_tests_passed": { "const": true },
+                  "execution_friction_checked": { "const": true },
+                  "latency_haircut_checked": { "const": true }
+                }
+              }
+            }
+          }
+        }
+      ]
     }
   },
   "additionalProperties": false,
@@ -69,6 +98,24 @@
       "minItems": 1
     },
     "nullable_number": { "type": ["number", "null"] },
+    "validation_status": {
+      "type": "object",
+      "required": [
+        "point_in_time_safe",
+        "leakage_tests_passed",
+        "robustness_tests_passed",
+        "execution_friction_checked",
+        "latency_haircut_checked"
+      ],
+      "properties": {
+        "point_in_time_safe": { "type": "boolean" },
+        "leakage_tests_passed": { "type": "boolean" },
+        "robustness_tests_passed": { "type": "boolean" },
+        "execution_friction_checked": { "type": "boolean" },
+        "latency_haircut_checked": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
     "performance_metrics": {
       "type": "object",
       "required": [

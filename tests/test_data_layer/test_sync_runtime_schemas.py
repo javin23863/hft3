@@ -8,6 +8,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 SRC = REPO / "packages" / "data_layer" / "packet"
 DEST = REPO / "runtime" / "schemas"
+DOC_SCHEMAS = REPO / "docs" / "schemas"
 
 NAMES = (
     "schema_v1.json",
@@ -32,3 +33,9 @@ def test_runtime_schemas_match_packet_dir():
         assert dest_path.is_file(), f"missing runtime mirror: {name}"
         dest_text = dest_path.read_text(encoding="utf-8")
         assert json.loads(src_text) == json.loads(dest_text), name
+
+
+def test_docs_mbo_feature_packet_schema_mirrors_runtime_source():
+    src_text = (SRC / "schema_mbo_feature_packet_v1.json").read_text(encoding="utf-8")
+    docs_text = (DOC_SCHEMAS / "MBO_FEATURE_PACKET.schema.json").read_text(encoding="utf-8")
+    assert json.loads(src_text) == json.loads(docs_text)

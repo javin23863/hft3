@@ -10,8 +10,12 @@ import pytest
 
 jsonschema = pytest.importorskip("jsonschema")
 
+from data_layer.packet.agent_contracts import validate_agent_contract  # noqa: E402
+from data_layer.packet.validate import validate_mbo_feature_packet  # noqa: E402
+
 REPO = Path(__file__).resolve().parents[1]
 SCHEMA_DIR = REPO / "docs" / "schemas"
+RUNTIME_SCHEMA = REPO / "packages" / "data_layer" / "packet" / "schema_mbo_feature_packet_v1.json"
 FIXTURE_PATH = REPO / "tests" / "fixtures" / "mbo_minimal_replay_fixture.json"
 
 SCHEMA_NAMES = [
@@ -29,18 +33,20 @@ def _load_schema(name: str) -> dict:
 
 
 def _validator(name: str) -> jsonschema.Draft7Validator:
-    return jsonschema.Draft7Validator(_load_schema(name))
+    return jsonschema.Draft7Validator(
+        _load_schema(name),
+        format_checker=jsonschema.FormatChecker(),
+    )
 
 
 def _assert_valid(name: str, payload: dict) -> None:
-    errors = sorted(_validator(name).iter_errors(payload), key=lambda err: list(err.path))
+    errors = validate_agent_contract(name, payload)
     assert errors == []
 
 
 def _assert_invalid(name: str, payload: dict, expected: str) -> None:
-    errors = sorted(_validator(name).iter_errors(payload), key=lambda err: list(err.path))
-    messages = [err.message for err in errors]
-    assert any(expected in message for message in messages), messages
+    errors = validate_agent_contract(name, payload)
+    assert any(expected in message for message in errors), errors
 
 
 @pytest.fixture()
@@ -58,45 +64,57 @@ def test_required_agent_schema_files_exist_and_parse():
 
 def test_mbo_feature_packet_fixture_is_valid(mbo_packet: dict):
     _assert_valid("MBO_FEATURE_PACKET.schema.json", mbo_packet)
+    assert validate_mbo_feature_packet(mbo_packet) == []
+
+
+def test_docs_mbo_feature_packet_schema_mirrors_runtime_schema():
+    docs_schema = _load_schema("MBO_FEATURE_PACKET.schema.json")
+    runtime_schema = json.loads(RUNTIME_SCHEMA.read_text(encoding="utf-8"))
+    assert docs_schema == runtime_schema
 
 
 def test_mbo_feature_packet_required_contract_fields_exist():
     schema = _load_schema("MBO_FEATURE_PACKET.schema.json")
     for field in [
+        "packet_schema_version",
+        "packet_id",
         "instrument",
-        "timestamps",
-        "source_lineage",
-        "market_state",
+        "timestamp_ns",
+        "receive_timestamp_ns",
+        "latency_budget_us",
+        "spread_ticks",
+        "event_rate_10ms",
+        "event_rate_100ms",
+        "event_rate_1s",
         "depth",
+        "microprice",
         "flow",
         "queue",
         "liquidity_quality",
-        "event_intensity",
+        "event_model",
         "cross_asset",
-        "execution_context",
-        "risk_flags",
-        "validation_metadata",
+        "execution",
+        "audit",
     ]:
         assert field in schema["required"]
 
 
 def test_packet_requires_source_lineage_and_timestamp_policy(mbo_packet: dict):
-    assert mbo_packet["source_lineage"]["dataset_id"]
-    assert mbo_packet["source_lineage"]["source_tier"] == "tier_0_reality"
-    assert mbo_packet["timestamps"]["exchange_timestamp"]
-    assert mbo_packet["timestamps"]["receive_timestamp"]
-    assert mbo_packet["timestamps"]["decision_timestamp"]
-    assert mbo_packet["validation_metadata"]["point_in_time_safe"] is True
+    assert mbo_packet["instrument"]["source"]
+    assert mbo_packet["timestamp_ns"] <= mbo_packet["receive_timestamp_ns"]
+    assert mbo_packet["audit"]["point_in_time_safe"] is True
+    assert mbo_packet["audit"]["no_execution_authority"] is True
+    assert "docs/research/MBO_FEATURE_PACKET_SOURCE_OF_TRUTH.md" in mbo_packet["audit"]["source_doc_ids"]
 
 
 @pytest.mark.parametrize(
     ("section", "field"),
     [
         ("queue", "ask_depletion_probability"),
-        ("queue", "passive_fill_probability_bid"),
+        ("queue", "passive_fill_probability"),
         ("liquidity_quality", "fleeting_liquidity_ask"),
-        ("event_intensity", "queue_reactive_up_probability"),
-        ("execution_context", "stale_probability"),
+        ("event_model", "queue_reactive_up_probability"),
+        ("execution", "confidence"),
     ],
 )
 def test_probability_fields_are_bounded(mbo_packet: dict, section: str, field: str):
@@ -109,8 +127,8 @@ def test_probability_fields_are_bounded(mbo_packet: dict, section: str, field: s
     ("section", "field"),
     [
         ("depth", "imbalance_1"),
-        ("depth", "weighted_imbalance_10"),
-        ("flow", "normalized_ofi_10"),
+        ("depth", "exp_decay_imbalance"),
+        ("flow", "normalized_ofi_10ms"),
         ("flow", "cancel_imbalance"),
         ("queue", "queue_front_imbalance"),
     ],
@@ -122,14 +140,27 @@ def test_imbalance_fields_are_bounded(mbo_packet: dict, section: str, field: str
 
 
 def test_null_fields_are_allowed_only_where_schema_permits(mbo_packet: dict):
-    nullable = copy.deepcopy(mbo_packet)
-    nullable["cross_asset"]["leading_ofi_es"] = None
-    nullable["execution_context"]["raw_edge_bps"] = None
-    _assert_valid("MBO_FEATURE_PACKET.schema.json", nullable)
+    bad = copy.deepcopy(mbo_packet)
+    bad["spread_ticks"] = None
+    _assert_invalid("MBO_FEATURE_PACKET.schema.json", bad, "None is not of type")
+
+    model = _sample_model_card()
+    model["model_card"]["performance_metrics"]["sharpe"] = None
+    _assert_valid("MODEL_CARD.schema.json", model)
+
+
+def test_mbo_feature_packet_rejects_non_finite_and_unsafe_flags(mbo_packet: dict):
+    bad = copy.deepcopy(mbo_packet)
+    bad["queue"]["ask_depletion_probability"] = float("nan")
+    _assert_invalid("MBO_FEATURE_PACKET.schema.json", bad, "must be finite")
 
     bad = copy.deepcopy(mbo_packet)
-    bad["market_state"]["mid_price"] = None
-    _assert_invalid("MBO_FEATURE_PACKET.schema.json", bad, "None is not of type")
+    bad["audit"]["point_in_time_safe"] = False
+    _assert_invalid("MBO_FEATURE_PACKET.schema.json", bad, "True was expected")
+
+    bad = copy.deepcopy(mbo_packet)
+    bad["receive_timestamp_ns"] = bad["timestamp_ns"] - 1
+    assert "receive_timestamp_ns must be >= timestamp_ns" in validate_mbo_feature_packet(bad)
 
 
 def test_minimal_replay_fixture_covers_required_event_shapes():
@@ -200,49 +231,7 @@ def test_feature_model_and_validation_cards_parse_valid_samples():
             }
         },
     )
-    _assert_valid(
-        "MODEL_CARD.schema.json",
-        {
-            "model_card": {
-                "model_id": "mbo_queue_breach_model_001",
-                "model_type": "existing_hft3_candidate",
-                "hypothesis_ids": ["mbo_queue_breach_001"],
-                "feature_ids": ["normalized_ofi_10"],
-                "label_id": "future_mid_move_100ms",
-                "asset_scope": ["future"],
-                "regime_scope": ["directional"],
-                "training_window": "2024-01-01/2024-12-31",
-                "validation_window": "2025-01-01/2025-06-30",
-                "holdout_window": "2025-07-01/2025-12-31",
-                "robustness_tests": ["walk_forward", "latency_haircut"],
-                "baseline_comparison": {
-                    "baseline_model": "depth_imbalance_baseline",
-                    "uplift_metric": "auc",
-                    "uplift_value": 0.02,
-                },
-                "performance_metrics": {
-                    "sharpe": None,
-                    "sortino": None,
-                    "max_drawdown": None,
-                    "hit_rate": None,
-                    "profit_factor": None,
-                    "expectancy": None,
-                    "turnover": None,
-                    "capacity_proxy": None,
-                },
-                "microstructure_metrics": {
-                    "fill_probability": None,
-                    "adverse_selection_probability": None,
-                    "latency_adjusted_edge_bps": None,
-                    "queue_survival_score": None,
-                },
-                "known_failure_modes": ["fragile regime overfit"],
-                "rejection_conditions": ["fails latency haircut"],
-                "promotion_status": "research_only",
-                "explanation_packet": "validation_card:mbo_validation_001",
-            }
-        },
-    )
+    _assert_valid("MODEL_CARD.schema.json", _sample_model_card())
     _assert_valid(
         "VALIDATION_CARD.schema.json",
         {
@@ -307,6 +296,41 @@ def test_agent_interpretation_requires_structured_sections():
     narrative_only = {"summary": "Looks bullish because the book feels weak."}
     _assert_invalid("AGENT_INTERPRETATION.schema.json", narrative_only, "agent_interpretation")
 
+    bad = copy.deepcopy(payload)
+    bad["agent_interpretation"]["timestamp"] = "not-a-date"
+    _assert_invalid("AGENT_INTERPRETATION.schema.json", bad, "must be date-time")
+
+    for flag in ("used_future_data", "invented_source", "unsupported_causality"):
+        bad = copy.deepcopy(payload)
+        bad["agent_interpretation"]["prohibited_claim_check"][flag] = True
+        _assert_invalid("AGENT_INTERPRETATION.schema.json", bad, "False was expected")
+
+    bad = copy.deepcopy(payload)
+    bad["agent_interpretation"]["mechanism_assessment"]["confidence"] = float("nan")
+    _assert_invalid("AGENT_INTERPRETATION.schema.json", bad, "must be finite")
+
+
+def test_model_card_promotion_requires_passing_validation_status():
+    model = _sample_model_card()
+    model["model_card"]["promotion_status"] = "production_eligible"
+    model["model_card"]["validation_status"]["robustness_tests_passed"] = False
+    _assert_invalid("MODEL_CARD.schema.json", model, "True was expected")
+
+    model = _sample_model_card()
+    model["model_card"]["baseline_comparison"]["uplift_value"] = float("inf")
+    _assert_invalid("MODEL_CARD.schema.json", model, "must be finite")
+
+    model = _sample_model_card()
+    model["model_card"]["promotion_status"] = "robustness_passed"
+    model["model_card"]["validation_status"] = {
+        "point_in_time_safe": True,
+        "leakage_tests_passed": True,
+        "robustness_tests_passed": True,
+        "execution_friction_checked": True,
+        "latency_haircut_checked": True,
+    }
+    _assert_valid("MODEL_CARD.schema.json", model)
+
 
 def test_llm_facing_markdown_files_have_required_front_matter():
     docs = [
@@ -330,3 +354,54 @@ def test_llm_facing_markdown_files_have_required_front_matter():
             "last_updated:",
         ]:
             assert key in text, path
+
+
+def _sample_model_card() -> dict:
+    return {
+        "model_card": {
+            "model_id": "mbo_queue_breach_model_001",
+            "model_type": "existing_hft3_candidate",
+            "hypothesis_ids": ["mbo_queue_breach_001"],
+            "feature_ids": ["normalized_ofi_10"],
+            "label_id": "future_mid_move_100ms",
+            "asset_scope": ["future"],
+            "regime_scope": ["directional"],
+            "training_window": "2024-01-01/2024-12-31",
+            "validation_window": "2025-01-01/2025-06-30",
+            "holdout_window": "2025-07-01/2025-12-31",
+            "robustness_tests": ["walk_forward", "latency_haircut"],
+            "validation_card_id": "mbo_validation_001",
+            "validation_status": {
+                "point_in_time_safe": True,
+                "leakage_tests_passed": True,
+                "robustness_tests_passed": False,
+                "execution_friction_checked": True,
+                "latency_haircut_checked": True,
+            },
+            "baseline_comparison": {
+                "baseline_model": "depth_imbalance_baseline",
+                "uplift_metric": "auc",
+                "uplift_value": 0.02,
+            },
+            "performance_metrics": {
+                "sharpe": None,
+                "sortino": None,
+                "max_drawdown": None,
+                "hit_rate": None,
+                "profit_factor": None,
+                "expectancy": None,
+                "turnover": None,
+                "capacity_proxy": None,
+            },
+            "microstructure_metrics": {
+                "fill_probability": None,
+                "adverse_selection_probability": None,
+                "latency_adjusted_edge_bps": None,
+                "queue_survival_score": None,
+            },
+            "known_failure_modes": ["fragile regime overfit"],
+            "rejection_conditions": ["fails latency haircut"],
+            "promotion_status": "research_only",
+            "explanation_packet": "validation_card:mbo_validation_001",
+        }
+    }

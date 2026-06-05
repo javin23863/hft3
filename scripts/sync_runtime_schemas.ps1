@@ -5,7 +5,9 @@ param(
 
 $src = Join-Path $RepoRoot "packages\data_layer\packet"
 $dest = Join-Path $RepoRoot "runtime\schemas"
+$docsDest = Join-Path $RepoRoot "docs\schemas"
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
+New-Item -ItemType Directory -Force -Path $docsDest | Out-Null
 
 $files = @(
     "schema_v1.json",
@@ -29,5 +31,10 @@ foreach ($name in $files) {
     Copy-Item -Force $from $to
     Write-Host "Synced $name -> runtime/schemas/"
 }
+
+$mboFrom = Join-Path $src "schema_mbo_feature_packet_v1.json"
+$mboDocsTo = Join-Path $docsDest "MBO_FEATURE_PACKET.schema.json"
+Copy-Item -Force $mboFrom $mboDocsTo
+Write-Host "Synced schema_mbo_feature_packet_v1.json -> docs/schemas/MBO_FEATURE_PACKET.schema.json"
 
 Write-Host "Schema sync complete."

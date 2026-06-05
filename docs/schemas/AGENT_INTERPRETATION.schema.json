@@ -92,10 +92,10 @@
             "unsupported_causality"
           ],
           "properties": {
-            "used_future_data": { "type": "boolean" },
-            "invented_source": { "type": "boolean" },
+            "used_future_data": { "type": "boolean", "const": false },
+            "invented_source": { "type": "boolean", "const": false },
             "narrative_only": { "type": "boolean", "const": false },
-            "unsupported_causality": { "type": "boolean" }
+            "unsupported_causality": { "type": "boolean", "const": false }
           },
           "additionalProperties": false
         }

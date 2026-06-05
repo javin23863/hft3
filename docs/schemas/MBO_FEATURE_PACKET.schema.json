@@ -1,117 +1,112 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "MBO_FEATURE_PACKET",
+  "title": "MboFeaturePacket",
   "type": "object",
   "required": [
-    "packet_type",
     "schema_version",
+    "packet_schema_version",
+    "packet_id",
     "instrument",
-    "timestamps",
-    "source_lineage",
-    "market_state",
+    "timestamp_ns",
+    "receive_timestamp_ns",
+    "latency_budget_us",
+    "spread_ticks",
+    "event_rate_10ms",
+    "event_rate_100ms",
+    "event_rate_1s",
     "depth",
+    "microprice",
     "flow",
     "queue",
     "liquidity_quality",
-    "event_intensity",
+    "event_model",
     "cross_asset",
-    "execution_context",
-    "risk_flags",
-    "validation_metadata"
+    "execution",
+    "audit"
   ],
   "properties": {
-    "packet_type": { "const": "MBO_FEATURE_PACKET" },
-    "schema_version": { "const": "1.0.0" },
+    "schema_version": { "type": "string", "const": "1" },
+    "packet_schema_version": {
+      "type": "string",
+      "const": "mbo_feature_packet_v1"
+    },
+    "packet_id": { "$ref": "#/definitions/non_empty_string" },
     "instrument": {
       "type": "object",
-      "required": ["symbol", "asset_class", "venue", "tick_size"],
+      "required": [
+        "instrument_id",
+        "symbol",
+        "venue",
+        "data_class",
+        "source"
+      ],
       "properties": {
+        "instrument_id": { "$ref": "#/definitions/non_empty_string" },
         "symbol": { "$ref": "#/definitions/non_empty_string" },
-        "asset_class": { "enum": ["equity", "future", "option", "etf"] },
         "venue": { "$ref": "#/definitions/non_empty_string" },
-        "tick_size": { "$ref": "#/definitions/positive_number" }
+        "data_class": { "type": "string", "const": "L3_MBO" },
+        "source": { "$ref": "#/definitions/non_empty_string" }
       },
       "additionalProperties": false
     },
-    "timestamps": {
-      "type": "object",
-      "required": [
-        "exchange_timestamp",
-        "receive_timestamp",
-        "decision_timestamp",
-        "replay_mode"
-      ],
-      "properties": {
-        "exchange_timestamp": { "type": "string", "format": "date-time" },
-        "receive_timestamp": { "type": "string", "format": "date-time" },
-        "decision_timestamp": { "type": "string", "format": "date-time" },
-        "replay_mode": { "type": "boolean" }
-      },
-      "additionalProperties": false
-    },
-    "source_lineage": {
-      "type": "object",
-      "required": [
-        "dataset_id",
-        "vendor",
-        "source_tier",
-        "raw_file_ref",
-        "reconstruction_version"
-      ],
-      "properties": {
-        "dataset_id": { "$ref": "#/definitions/non_empty_string" },
-        "vendor": { "$ref": "#/definitions/non_empty_string" },
-        "source_tier": { "$ref": "#/definitions/source_tier" },
-        "raw_file_ref": { "$ref": "#/definitions/non_empty_string" },
-        "reconstruction_version": { "$ref": "#/definitions/non_empty_string" }
-      },
-      "additionalProperties": false
-    },
-    "market_state": {
-      "type": "object",
-      "required": [
-        "mid_price",
-        "best_bid",
-        "best_ask",
-        "spread_ticks",
-        "event_rate_10ms",
-        "event_rate_100ms",
-        "event_rate_1s"
-      ],
-      "properties": {
-        "mid_price": { "$ref": "#/definitions/positive_number" },
-        "best_bid": { "$ref": "#/definitions/positive_number" },
-        "best_ask": { "$ref": "#/definitions/positive_number" },
-        "spread_ticks": { "$ref": "#/definitions/non_negative_number" },
-        "event_rate_10ms": { "$ref": "#/definitions/non_negative_number" },
-        "event_rate_100ms": { "$ref": "#/definitions/non_negative_number" },
-        "event_rate_1s": { "$ref": "#/definitions/non_negative_number" }
-      },
-      "additionalProperties": false
-    },
+    "timestamp_ns": { "type": "integer", "minimum": 0 },
+    "receive_timestamp_ns": { "type": "integer", "minimum": 0 },
+    "latency_budget_us": { "$ref": "#/definitions/non_negative_number" },
+    "spread_ticks": { "$ref": "#/definitions/non_negative_number" },
+    "event_rate_10ms": { "$ref": "#/definitions/non_negative_number" },
+    "event_rate_100ms": { "$ref": "#/definitions/non_negative_number" },
+    "event_rate_1s": { "$ref": "#/definitions/non_negative_number" },
     "depth": {
       "type": "object",
       "required": [
         "imbalance_1",
         "imbalance_5",
         "imbalance_10",
-        "weighted_imbalance_10",
+        "exp_decay_imbalance",
         "order_count_imbalance_10",
         "age_weighted_imbalance_10",
-        "bid_entropy_10",
-        "ask_entropy_10",
-        "book_shape_distance"
+        "entropy_bid_10",
+        "entropy_ask_10",
+        "order_concentration_score",
+        "wall_quality_score_bid",
+        "wall_quality_score_ask",
+        "cumulative_depth_slope",
+        "depth_curvature",
+        "depth_convexity",
+        "book_shape_distance",
+        "wasserstein_regime_distance"
       ],
       "properties": {
-        "imbalance_1": { "$ref": "#/definitions/imbalance" },
-        "imbalance_5": { "$ref": "#/definitions/imbalance" },
-        "imbalance_10": { "$ref": "#/definitions/imbalance" },
-        "weighted_imbalance_10": { "$ref": "#/definitions/imbalance" },
-        "order_count_imbalance_10": { "$ref": "#/definitions/imbalance" },
-        "age_weighted_imbalance_10": { "$ref": "#/definitions/imbalance" },
-        "bid_entropy_10": { "$ref": "#/definitions/non_negative_number" },
-        "ask_entropy_10": { "$ref": "#/definitions/non_negative_number" },
-        "book_shape_distance": { "$ref": "#/definitions/non_negative_number" }
+        "imbalance_1": { "$ref": "#/definitions/normalized_ratio" },
+        "imbalance_5": { "$ref": "#/definitions/normalized_ratio" },
+        "imbalance_10": { "$ref": "#/definitions/normalized_ratio" },
+        "exp_decay_imbalance": { "$ref": "#/definitions/normalized_ratio" },
+        "order_count_imbalance_10": { "$ref": "#/definitions/normalized_ratio" },
+        "age_weighted_imbalance_10": { "$ref": "#/definitions/normalized_ratio" },
+        "entropy_bid_10": { "$ref": "#/definitions/non_negative_number" },
+        "entropy_ask_10": { "$ref": "#/definitions/non_negative_number" },
+        "order_concentration_score": { "$ref": "#/definitions/probability" },
+        "wall_quality_score_bid": { "$ref": "#/definitions/probability" },
+        "wall_quality_score_ask": { "$ref": "#/definitions/probability" },
+        "cumulative_depth_slope": { "$ref": "#/definitions/number" },
+        "depth_curvature": { "$ref": "#/definitions/number" },
+        "depth_convexity": { "$ref": "#/definitions/number" },
+        "book_shape_distance": { "$ref": "#/definitions/non_negative_number" },
+        "wasserstein_regime_distance": { "$ref": "#/definitions/non_negative_number" }
+      },
+      "additionalProperties": false
+    },
+    "microprice": {
+      "type": "object",
+      "required": [
+        "level_1_ticks",
+        "multi_level_ticks",
+        "drift_vs_mid_ticks"
+      ],
+      "properties": {
+        "level_1_ticks": { "$ref": "#/definitions/number" },
+        "multi_level_ticks": { "$ref": "#/definitions/number" },
+        "drift_vs_mid_ticks": { "$ref": "#/definitions/number" }
       },
       "additionalProperties": false
     },
@@ -121,30 +116,40 @@
         "ofi_10ms",
         "ofi_100ms",
         "ofi_1s",
-        "normalized_ofi_10",
+        "normalized_ofi_10ms",
+        "normalized_ofi_100ms",
+        "normalized_ofi_1s",
+        "mlofi_level_count",
+        "mlofi_unit",
+        "mlofi_side_convention",
         "mlofi_vector",
-        "trade_imbalance",
         "cancel_imbalance",
+        "trade_imbalance",
         "add_imbalance",
         "imbalance_velocity",
-        "imbalance_acceleration"
+        "imbalance_acceleration",
+        "cancel_acceleration"
       ],
       "properties": {
         "ofi_10ms": { "$ref": "#/definitions/number" },
         "ofi_100ms": { "$ref": "#/definitions/number" },
         "ofi_1s": { "$ref": "#/definitions/number" },
-        "normalized_ofi_10": { "$ref": "#/definitions/imbalance" },
-        "mlofi_vector": {
-          "type": "array",
-          "items": { "$ref": "#/definitions/number" },
-          "minItems": 1,
-          "maxItems": 32
+        "normalized_ofi_10ms": { "$ref": "#/definitions/normalized_ratio" },
+        "normalized_ofi_100ms": { "$ref": "#/definitions/normalized_ratio" },
+        "normalized_ofi_1s": { "$ref": "#/definitions/normalized_ratio" },
+        "mlofi_level_count": { "$ref": "#/definitions/positive_integer" },
+        "mlofi_unit": { "type": "string", "const": "contracts" },
+        "mlofi_side_convention": {
+          "type": "string",
+          "const": "bid_add_or_sell_cancel_positive"
         },
-        "trade_imbalance": { "$ref": "#/definitions/imbalance" },
-        "cancel_imbalance": { "$ref": "#/definitions/imbalance" },
-        "add_imbalance": { "$ref": "#/definitions/imbalance" },
+        "mlofi_vector": { "$ref": "#/definitions/number_vector" },
+        "cancel_imbalance": { "$ref": "#/definitions/normalized_ratio" },
+        "trade_imbalance": { "$ref": "#/definitions/normalized_ratio" },
+        "add_imbalance": { "$ref": "#/definitions/normalized_ratio" },
         "imbalance_velocity": { "$ref": "#/definitions/number" },
-        "imbalance_acceleration": { "$ref": "#/definitions/number" }
+        "imbalance_acceleration": { "$ref": "#/definitions/number" },
+        "cancel_acceleration": { "$ref": "#/definitions/number" }
       },
       "additionalProperties": false
     },
@@ -153,24 +158,32 @@
       "required": [
         "bid_depletion_probability",
         "ask_depletion_probability",
+        "volume_ahead_bid",
+        "volume_ahead_ask",
+        "volume_behind_bid",
+        "volume_behind_ask",
+        "queue_rank_bid",
+        "queue_rank_ask",
         "queue_front_imbalance",
-        "expected_fill_time_bid_ms",
-        "expected_fill_time_ask_ms",
-        "passive_fill_probability_bid",
-        "passive_fill_probability_ask",
-        "adverse_selection_probability_bid",
-        "adverse_selection_probability_ask"
+        "expected_fill_time_bid",
+        "expected_fill_time_ask",
+        "passive_fill_probability",
+        "adverse_selection_probability"
       ],
       "properties": {
         "bid_depletion_probability": { "$ref": "#/definitions/probability" },
         "ask_depletion_probability": { "$ref": "#/definitions/probability" },
-        "queue_front_imbalance": { "$ref": "#/definitions/imbalance" },
-        "expected_fill_time_bid_ms": { "$ref": "#/definitions/non_negative_number" },
-        "expected_fill_time_ask_ms": { "$ref": "#/definitions/non_negative_number" },
-        "passive_fill_probability_bid": { "$ref": "#/definitions/probability" },
-        "passive_fill_probability_ask": { "$ref": "#/definitions/probability" },
-        "adverse_selection_probability_bid": { "$ref": "#/definitions/probability" },
-        "adverse_selection_probability_ask": { "$ref": "#/definitions/probability" }
+        "volume_ahead_bid": { "$ref": "#/definitions/non_negative_number" },
+        "volume_ahead_ask": { "$ref": "#/definitions/non_negative_number" },
+        "volume_behind_bid": { "$ref": "#/definitions/non_negative_number" },
+        "volume_behind_ask": { "$ref": "#/definitions/non_negative_number" },
+        "queue_rank_bid": { "$ref": "#/definitions/non_negative_integer" },
+        "queue_rank_ask": { "$ref": "#/definitions/non_negative_integer" },
+        "queue_front_imbalance": { "$ref": "#/definitions/normalized_ratio" },
+        "expected_fill_time_bid": { "$ref": "#/definitions/non_negative_number" },
+        "expected_fill_time_ask": { "$ref": "#/definitions/non_negative_number" },
+        "passive_fill_probability": { "$ref": "#/definitions/probability" },
+        "adverse_selection_probability": { "$ref": "#/definitions/probability" }
       },
       "additionalProperties": false
     },
@@ -181,28 +194,36 @@
         "ask_absorption_score",
         "iceberg_score_bid",
         "iceberg_score_ask",
+        "replenishment_score_bid",
+        "replenishment_score_ask",
+        "displayed_depth_resistance_bid",
+        "displayed_depth_resistance_ask",
         "fleeting_liquidity_bid",
         "fleeting_liquidity_ask",
-        "vacuum_score_bid",
-        "vacuum_score_ask",
         "fragile_wall_score_bid",
-        "fragile_wall_score_ask"
+        "fragile_wall_score_ask",
+        "vacuum_score_bid",
+        "vacuum_score_ask"
       ],
       "properties": {
         "bid_absorption_score": { "$ref": "#/definitions/number" },
         "ask_absorption_score": { "$ref": "#/definitions/number" },
         "iceberg_score_bid": { "$ref": "#/definitions/number" },
         "iceberg_score_ask": { "$ref": "#/definitions/number" },
+        "replenishment_score_bid": { "$ref": "#/definitions/number" },
+        "replenishment_score_ask": { "$ref": "#/definitions/number" },
+        "displayed_depth_resistance_bid": { "$ref": "#/definitions/probability" },
+        "displayed_depth_resistance_ask": { "$ref": "#/definitions/probability" },
         "fleeting_liquidity_bid": { "$ref": "#/definitions/probability" },
         "fleeting_liquidity_ask": { "$ref": "#/definitions/probability" },
-        "vacuum_score_bid": { "$ref": "#/definitions/non_negative_number" },
-        "vacuum_score_ask": { "$ref": "#/definitions/non_negative_number" },
         "fragile_wall_score_bid": { "$ref": "#/definitions/probability" },
-        "fragile_wall_score_ask": { "$ref": "#/definitions/probability" }
+        "fragile_wall_score_ask": { "$ref": "#/definitions/probability" },
+        "vacuum_score_bid": { "$ref": "#/definitions/non_negative_number" },
+        "vacuum_score_ask": { "$ref": "#/definitions/non_negative_number" }
       },
       "additionalProperties": false
     },
-    "event_intensity": {
+    "event_model": {
       "type": "object",
       "required": [
         "hawkes_buy_trade_intensity",
@@ -225,102 +246,161 @@
     "cross_asset": {
       "type": "object",
       "required": [
-        "leading_ofi_es",
-        "leading_ofi_nq",
-        "leading_ofi_spy",
+        "leading_ofi_refs",
         "cross_impact_score",
-        "lead_lag_confidence",
-        "options_delta_pressure",
-        "options_gamma_pressure"
+        "lead_lag_confidence"
       ],
       "properties": {
-        "leading_ofi_es": { "$ref": "#/definitions/nullable_number" },
-        "leading_ofi_nq": { "$ref": "#/definitions/nullable_number" },
-        "leading_ofi_spy": { "$ref": "#/definitions/nullable_number" },
-        "cross_impact_score": { "$ref": "#/definitions/nullable_number" },
-        "lead_lag_confidence": { "$ref": "#/definitions/nullable_probability" },
-        "options_delta_pressure": { "$ref": "#/definitions/nullable_number" },
-        "options_gamma_pressure": { "$ref": "#/definitions/nullable_number" }
+        "leading_ofi_refs": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/cross_asset_ofi_ref" },
+          "maxItems": 16
+        },
+        "cross_impact_score": { "$ref": "#/definitions/number" },
+        "lead_lag_confidence": { "$ref": "#/definitions/probability" }
       },
       "additionalProperties": false
     },
-    "execution_context": {
+    "execution": {
       "type": "object",
       "required": [
-        "latency_budget_us",
-        "stale_probability",
         "raw_edge_bps",
         "latency_adjusted_edge_bps",
         "post_ev",
         "take_ev",
-        "cancel_ev"
+        "cancel_ev",
+        "authority",
+        "advisory_signal",
+        "confidence"
       ],
       "properties": {
-        "latency_budget_us": { "$ref": "#/definitions/non_negative_number" },
-        "stale_probability": { "$ref": "#/definitions/probability" },
-        "raw_edge_bps": { "$ref": "#/definitions/nullable_number" },
-        "latency_adjusted_edge_bps": { "$ref": "#/definitions/nullable_number" },
-        "post_ev": { "$ref": "#/definitions/nullable_number" },
-        "take_ev": { "$ref": "#/definitions/nullable_number" },
-        "cancel_ev": { "$ref": "#/definitions/nullable_number" }
+        "raw_edge_bps": { "$ref": "#/definitions/number" },
+        "latency_adjusted_edge_bps": { "$ref": "#/definitions/number" },
+        "post_ev": { "$ref": "#/definitions/number" },
+        "take_ev": { "$ref": "#/definitions/number" },
+        "cancel_ev": { "$ref": "#/definitions/number" },
+        "authority": {
+          "type": "string",
+          "const": "advisory_only"
+        },
+        "advisory_signal": {
+          "type": "string",
+          "enum": [
+            "none",
+            "hold",
+            "observe_only",
+            "reduce_risk"
+          ]
+        },
+        "confidence": { "$ref": "#/definitions/probability" }
       },
       "additionalProperties": false
     },
-    "risk_flags": {
-      "type": "object",
-      "required": [
-        "possible_leakage",
-        "stale_book_risk",
-        "abnormal_spread",
-        "high_fleeting_liquidity",
-        "toxic_flow_detected",
-        "low_confidence_reconstruction"
-      ],
-      "properties": {
-        "possible_leakage": { "type": "boolean" },
-        "stale_book_risk": { "type": "boolean" },
-        "abnormal_spread": { "type": "boolean" },
-        "high_fleeting_liquidity": { "type": "boolean" },
-        "toxic_flow_detected": { "type": "boolean" },
-        "low_confidence_reconstruction": { "type": "boolean" }
-      },
-      "additionalProperties": false
-    },
-    "validation_metadata": {
+    "audit": {
       "type": "object",
       "required": [
         "point_in_time_safe",
-        "deterministic_replay_safe",
-        "feature_version",
-        "generated_by"
+        "no_execution_authority",
+        "source_doc_ids",
+        "feature_family_codes"
       ],
       "properties": {
-        "point_in_time_safe": { "type": "boolean" },
-        "deterministic_replay_safe": { "type": "boolean" },
-        "feature_version": { "$ref": "#/definitions/non_empty_string" },
-        "generated_by": { "$ref": "#/definitions/non_empty_string" }
+        "point_in_time_safe": { "type": "boolean", "const": true },
+        "no_execution_authority": { "type": "boolean", "const": true },
+        "source_doc_ids": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/non_empty_string" },
+          "minItems": 1,
+          "uniqueItems": true,
+          "contains": {
+            "const": "docs/research/MBO_FEATURE_PACKET_SOURCE_OF_TRUTH.md"
+          }
+        },
+        "feature_family_codes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "static_depth",
+              "microprice",
+              "dynamic_ofi",
+              "queue_position",
+              "age_survival",
+              "cancellation",
+              "replenishment",
+              "iceberg",
+              "fleeting_liquidity",
+              "entropy",
+              "book_shape_geometry",
+              "hawkes_intensity",
+              "queue_reactive",
+              "cross_asset_ofi",
+              "adverse_selection",
+              "latency_haircut",
+              "regime_filter",
+              "extreme_events",
+              "path_signatures"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        }
       },
       "additionalProperties": false
     }
   },
   "additionalProperties": false,
   "definitions": {
-    "number": { "type": "number" },
-    "nullable_number": { "type": ["number", "null"] },
-    "non_negative_number": { "type": "number", "minimum": 0.0 },
-    "positive_number": { "type": "number", "exclusiveMinimum": 0.0 },
-    "probability": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
-    "nullable_probability": { "type": ["number", "null"], "minimum": 0.0, "maximum": 1.0 },
-    "imbalance": { "type": "number", "minimum": -1.0, "maximum": 1.0 },
-    "non_empty_string": { "type": "string", "minLength": 1 },
-    "source_tier": {
-      "enum": [
-        "tier_0_reality",
-        "tier_1_primary",
-        "tier_2_vendor_normalized",
-        "tier_3_interpretive",
-        "tier_4_untrusted_context"
-      ]
+    "non_empty_string": {
+      "type": "string",
+      "minLength": 1
+    },
+    "number": {
+      "type": "number"
+    },
+    "non_negative_integer": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "positive_integer": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "non_negative_number": {
+      "type": "number",
+      "minimum": 0
+    },
+    "normalized_ratio": {
+      "type": "number",
+      "minimum": -1,
+      "maximum": 1
+    },
+    "probability": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "number_vector": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/number" },
+      "minItems": 1,
+      "maxItems": 32
+    },
+    "cross_asset_ofi_ref": {
+      "type": "object",
+      "required": [
+        "instrument_id",
+        "lag_ms",
+        "ofi",
+        "confidence"
+      ],
+      "properties": {
+        "instrument_id": { "$ref": "#/definitions/non_empty_string" },
+        "lag_ms": { "type": "integer" },
+        "ofi": { "$ref": "#/definitions/number" },
+        "confidence": { "$ref": "#/definitions/probability" }
+      },
+      "additionalProperties": false
     }
   }
 }

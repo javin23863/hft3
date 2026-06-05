@@ -71,7 +71,7 @@ invent evidence.
 - `docs/agents/MBO_MODEL_DEVELOPMENT_AGENT_SPEC.md`
 - `docs/ontology/MBO_MARKET_ONTOLOGY.md`
 - `docs/ontology/SOURCE_OF_TRUTH_POLICY.md`
-- `docs/schemas/MBO_FEATURE_PACKET.schema.json`
+- `docs/schemas/MBO_FEATURE_PACKET.schema.json` as a synced mirror of `packages/data_layer/packet/schema_mbo_feature_packet_v1.json`
 - `docs/schemas/HYPOTHESIS_CARD.schema.json`
 - `docs/schemas/FEATURE_CARD.schema.json`
 - `docs/schemas/MODEL_CARD.schema.json`
@@ -82,9 +82,12 @@ invent evidence.
 
 ## Boundary
 
-The schemas under `docs/schemas/` are LLM-facing research contracts. They do
-not replace the existing runtime packet validators under `packages/` and do not
-add execution routing, model-promotion gates, or a parallel robustness pipeline.
+The canonical MBO feature packet schema is
+`packages/data_layer/packet/schema_mbo_feature_packet_v1.json`. The
+LLM-facing `docs/schemas/MBO_FEATURE_PACKET.schema.json` file is a synced
+mirror of that runtime contract, not an alternate packet shape. Other schemas
+under `docs/schemas/` are LLM-facing research contracts. They do not add
+execution routing, model-promotion gates, or a parallel robustness pipeline.
 Existing HFT3 validation and robustness infrastructure remains the authority
 for candidate promotion or rejection.
 
@@ -95,6 +98,7 @@ acceptance_criteria:
   - "All required docs exist."
   - "All schemas exist."
   - "All schemas validate."
+  - "docs/schemas/MBO_FEATURE_PACKET.schema.json mirrors the runtime MBO packet schema exactly."
   - "Minimal MBO replay fixture exists."
   - "Tests pass."
   - "The LLM-facing doctrine uses structured ontology, not loose metaphor."
@@ -103,7 +107,7 @@ acceptance_criteria:
   - "Every hypothesis requires source lineage."
   - "Every feature requires point-in-time policy."
   - "Every feature requires dataset_id and source_tier lineage."
-  - "Every model requires validation card output."
+  - "Every model requires validation_card_id and validation_status output."
   - "Narrative-only LLM outputs are treated as invalid."
   - "No new robustness gates are added."
   - "No execution routing changes are added."

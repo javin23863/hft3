@@ -123,121 +123,155 @@
     "contains_bid_depletion": true
   },
   "expected_packet": {
-    "packet_type": "MBO_FEATURE_PACKET",
-    "schema_version": "1.0.0",
+    "schema_version": "1",
+    "packet_schema_version": "mbo_feature_packet_v1",
+    "packet_id": "mbo_pkt_001",
     "instrument": {
+      "instrument_id": "CME_ES_FRONT",
       "symbol": "ESM6",
-      "asset_class": "future",
       "venue": "CME",
-      "tick_size": 0.25
+      "data_class": "L3_MBO",
+      "source": "databento_glbx_mdp3"
     },
-    "timestamps": {
-      "exchange_timestamp": "2026-06-05T14:30:00.000008Z",
-      "receive_timestamp": "2026-06-05T14:30:00.000108Z",
-      "decision_timestamp": "2026-06-05T14:30:00.000108Z",
-      "replay_mode": true
-    },
-    "source_lineage": {
-      "dataset_id": "mbo_minimal_replay_v1",
-      "vendor": "fixture",
-      "source_tier": "tier_0_reality",
-      "raw_file_ref": "tests/fixtures/mbo_minimal_replay_fixture.json",
-      "reconstruction_version": "fixture_replay_v1"
-    },
-    "market_state": {
-      "mid_price": 5300.125,
-      "best_bid": 5300.0,
-      "best_ask": 5300.25,
-      "spread_ticks": 1.0,
-      "event_rate_10ms": 9.0,
-      "event_rate_100ms": 9.0,
-      "event_rate_1s": 9.0
-    },
+    "timestamp_ns": 1800000000000000000,
+    "receive_timestamp_ns": 1800000000000001000,
+    "latency_budget_us": 750.0,
+    "spread_ticks": 1.0,
+    "event_rate_10ms": 12.0,
+    "event_rate_100ms": 95.0,
+    "event_rate_1s": 640.0,
     "depth": {
-      "imbalance_1": 0.11,
-      "imbalance_5": 0.07,
-      "imbalance_10": 0.04,
-      "weighted_imbalance_10": 0.06,
-      "order_count_imbalance_10": -0.1,
-      "age_weighted_imbalance_10": 0.03,
-      "bid_entropy_10": 0.4,
-      "ask_entropy_10": 0.7,
-      "book_shape_distance": 0.2
+      "imbalance_1": 0.1,
+      "imbalance_5": 0.2,
+      "imbalance_10": 0.3,
+      "exp_decay_imbalance": 0.18,
+      "order_count_imbalance_10": 0.05,
+      "age_weighted_imbalance_10": 0.08,
+      "entropy_bid_10": 1.2,
+      "entropy_ask_10": 1.1,
+      "order_concentration_score": 0.42,
+      "wall_quality_score_bid": 0.7,
+      "wall_quality_score_ask": 0.55,
+      "cumulative_depth_slope": -0.02,
+      "depth_curvature": 0.01,
+      "depth_convexity": -0.01,
+      "book_shape_distance": 0.4,
+      "wasserstein_regime_distance": 0.22
+    },
+    "microprice": {
+      "level_1_ticks": 0.12,
+      "multi_level_ticks": 0.08,
+      "drift_vs_mid_ticks": 0.03
     },
     "flow": {
-      "ofi_10ms": 3.0,
-      "ofi_100ms": 3.0,
-      "ofi_1s": 3.0,
-      "normalized_ofi_10": 0.2,
-      "mlofi_vector": [3.0, 1.0, 0.0],
-      "trade_imbalance": 0.25,
+      "ofi_10ms": 4.0,
+      "ofi_100ms": 18.0,
+      "ofi_1s": 45.0,
+      "normalized_ofi_10ms": 0.2,
+      "normalized_ofi_100ms": 0.18,
+      "normalized_ofi_1s": 0.12,
+      "mlofi_level_count": 5,
+      "mlofi_unit": "contracts",
+      "mlofi_side_convention": "bid_add_or_sell_cancel_positive",
+      "mlofi_vector": [
+        4.0,
+        8.0,
+        9.0,
+        10.0,
+        14.0
+      ],
       "cancel_imbalance": -0.2,
-      "add_imbalance": 0.1,
-      "imbalance_velocity": 0.05,
-      "imbalance_acceleration": 0.01
+      "trade_imbalance": 0.15,
+      "add_imbalance": 0.05,
+      "imbalance_velocity": 0.7,
+      "imbalance_acceleration": 0.2,
+      "cancel_acceleration": -0.1
     },
     "queue": {
-      "bid_depletion_probability": 0.55,
-      "ask_depletion_probability": 0.72,
-      "queue_front_imbalance": -0.15,
-      "expected_fill_time_bid_ms": 18.0,
-      "expected_fill_time_ask_ms": 12.0,
-      "passive_fill_probability_bid": 0.45,
-      "passive_fill_probability_ask": 0.38,
-      "adverse_selection_probability_bid": 0.34,
-      "adverse_selection_probability_ask": 0.41
+      "bid_depletion_probability": 0.2,
+      "ask_depletion_probability": 0.35,
+      "volume_ahead_bid": 42.0,
+      "volume_ahead_ask": 31.0,
+      "volume_behind_bid": 18.0,
+      "volume_behind_ask": 14.0,
+      "queue_rank_bid": 3,
+      "queue_rank_ask": 4,
+      "queue_front_imbalance": 0.1,
+      "expected_fill_time_bid": 0.04,
+      "expected_fill_time_ask": 0.05,
+      "passive_fill_probability": 0.3,
+      "adverse_selection_probability": 0.25
     },
     "liquidity_quality": {
-      "bid_absorption_score": 0.2,
-      "ask_absorption_score": 0.8,
-      "iceberg_score_bid": 0.1,
-      "iceberg_score_ask": 0.3,
-      "fleeting_liquidity_bid": 0.12,
-      "fleeting_liquidity_ask": 0.28,
-      "vacuum_score_bid": 0.4,
-      "vacuum_score_ask": 0.6,
+      "bid_absorption_score": 1.4,
+      "ask_absorption_score": 0.7,
+      "iceberg_score_bid": 0.3,
+      "iceberg_score_ask": 0.1,
+      "replenishment_score_bid": 0.6,
+      "replenishment_score_ask": 0.45,
+      "displayed_depth_resistance_bid": 0.52,
+      "displayed_depth_resistance_ask": 0.41,
+      "fleeting_liquidity_bid": 0.2,
+      "fleeting_liquidity_ask": 0.4,
       "fragile_wall_score_bid": 0.25,
-      "fragile_wall_score_ask": 0.52
+      "fragile_wall_score_ask": 0.35,
+      "vacuum_score_bid": 0.1,
+      "vacuum_score_ask": 0.2
     },
-    "event_intensity": {
-      "hawkes_buy_trade_intensity": 1.2,
-      "hawkes_sell_trade_intensity": 0.9,
-      "hawkes_cancel_bid_intensity": 0.4,
-      "hawkes_cancel_ask_intensity": 0.8,
-      "queue_reactive_up_probability": 0.62,
-      "queue_reactive_down_probability": 0.38
+    "event_model": {
+      "hawkes_buy_trade_intensity": 5.0,
+      "hawkes_sell_trade_intensity": 4.0,
+      "hawkes_cancel_bid_intensity": 7.0,
+      "hawkes_cancel_ask_intensity": 9.0,
+      "queue_reactive_up_probability": 0.55,
+      "queue_reactive_down_probability": 0.45
     },
     "cross_asset": {
-      "leading_ofi_es": null,
-      "leading_ofi_nq": null,
-      "leading_ofi_spy": null,
-      "cross_impact_score": null,
-      "lead_lag_confidence": null,
-      "options_delta_pressure": null,
-      "options_gamma_pressure": null
+      "leading_ofi_refs": [
+        {
+          "instrument_id": "CME_NQ_FRONT",
+          "lag_ms": -12,
+          "ofi": 0.5,
+          "confidence": 0.7
+        }
+      ],
+      "cross_impact_score": 0.3,
+      "lead_lag_confidence": 0.6
     },
-    "execution_context": {
-      "latency_budget_us": 750.0,
-      "stale_probability": 0.05,
-      "raw_edge_bps": null,
-      "latency_adjusted_edge_bps": null,
-      "post_ev": null,
-      "take_ev": null,
-      "cancel_ev": null
+    "execution": {
+      "raw_edge_bps": 0.7,
+      "latency_adjusted_edge_bps": 0.4,
+      "post_ev": 0.2,
+      "take_ev": -0.1,
+      "cancel_ev": 0.0,
+      "authority": "advisory_only",
+      "advisory_signal": "hold",
+      "confidence": 0.62
     },
-    "risk_flags": {
-      "possible_leakage": false,
-      "stale_book_risk": false,
-      "abnormal_spread": false,
-      "high_fleeting_liquidity": false,
-      "toxic_flow_detected": false,
-      "low_confidence_reconstruction": false
-    },
-    "validation_metadata": {
+    "audit": {
       "point_in_time_safe": true,
-      "deterministic_replay_safe": true,
-      "feature_version": "fixture_v1",
-      "generated_by": "tests/fixtures/mbo_minimal_replay_fixture.json"
+      "no_execution_authority": true,
+      "source_doc_ids": [
+        "docs/research/MBO_FEATURE_PACKET_SOURCE_OF_TRUTH.md"
+      ],
+      "feature_family_codes": [
+        "static_depth",
+        "microprice",
+        "dynamic_ofi",
+        "queue_position",
+        "age_survival",
+        "cancellation",
+        "replenishment",
+        "iceberg",
+        "fleeting_liquidity",
+        "entropy",
+        "book_shape_geometry",
+        "hawkes_intensity",
+        "queue_reactive",
+        "cross_asset_ofi",
+        "adverse_selection",
+        "latency_haircut"
+      ]
     }
   }
 }
