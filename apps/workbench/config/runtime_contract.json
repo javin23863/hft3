@@ -243,16 +243,6 @@
         "optional": [],
         "flags": ["json"]
       },
-      "response_contract": {
-        "required": ["models_registered", "npz_files", "npz_total_mb", "graph_ready", "promoted_candidates"],
-        "properties": {
-          "models_registered": "integer",
-          "npz_files": "integer",
-          "npz_total_mb": "number",
-          "graph_ready": "boolean",
-          "promoted_candidates": "integer"
-        }
-      },
       "response_schema": "model count, NPZ inventory, graph presence, promoted candidate count",
       "error_response": "nonzero exit with explicit exception"
     },
