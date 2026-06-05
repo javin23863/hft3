@@ -1,6 +1,6 @@
 # hft3 Code Graph — AI Entry Point
 
-> **Freshness:** Built `2026-06-05T15:37:21.238354+00:00` | Graph commit `bf307ccd5bef655de411ac6a1fd4ae51c4fb9bea` | AST nodes `27233`
+> **Freshness:** Built `2026-06-05T16:08:56.343611+00:00` | Graph commit `6f517f4164da978524c7dda983aaf801efc0b97d` | AST nodes `27239`
 
 Read this file **before** prose docs. Then use `graphify query`, `graphify path`, or `graphify explain`.
 
