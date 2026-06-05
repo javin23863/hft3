@@ -16,6 +16,7 @@ from equities_lane.src.ingest.databento_equities import (
     download_decadal_session,
     session_window_utc,
 )
+from equities_lane.src.ingest.daily_bars_io import daily_coverage_calendar_days, load_daily_parquet
 from equities_lane.src.ingest.normalize import normalize_dbn
 from equities_lane.src.ingest.manifest_v2 import (
     load_manifest_v2,

@@ -178,6 +178,11 @@ RITHMIC_ORDER_ACK_STATE_ORDER = (
     "CONFIGURED_NOT_OBSERVED",
     "not_applicable",
 )
+DOWNLOAD_RESPONSE_CONTRACT = {
+    "required": ["status", "blocking", "error"],
+    "status_values": ["PASS", "BLOCKING"],
+    "blocking_item_required": ["gate", "status", "reason"],
+}
 
 
 def allowed_runtime_state_refs() -> set[str]:
@@ -688,6 +693,10 @@ def expected_workbench_cli_request_args() -> dict[str, dict[str, list[str]]]:
     return _workbench_cli_request_args()
 
 
+def expected_download_response_contract() -> dict[str, list[str]]:
+    return {key: list(value) for key, value in DOWNLOAD_RESPONSE_CONTRACT.items()}
+
+
 def _validate_cli_request_args(
     errors: list[str],
     *,
@@ -704,6 +713,16 @@ def _validate_cli_request_args(
     if actual != expected:
         errors.append(
             f"{collection_name}[{index}].request_args must match Workbench CLI argparse for {command!r}: "
+            f"expected {expected!r}, got {actual!r}"
+        )
+
+
+def _validate_download_response_contract(errors: list[str], index: int, endpoint: dict[str, Any]) -> None:
+    actual = endpoint.get("response_contract")
+    expected = expected_download_response_contract()
+    if actual != expected:
+        errors.append(
+            f"backend_endpoints[{index}].response_contract must match Workbench download response contract: "
             f"expected {expected!r}, got {actual!r}"
         )
 
@@ -927,6 +946,8 @@ def validate_runtime_contract(contract: dict[str, Any] | None = None) -> list[st
                     command=command,
                     expected_by_command=expected_cli_args,
                 )
+                if command == "download":
+                    _validate_download_response_contract(errors, index, endpoint)
     utilities = payload.get("utility_cli_commands")
     utility_commands: set[str] = set()
     if not isinstance(utilities, list) or not utilities:
