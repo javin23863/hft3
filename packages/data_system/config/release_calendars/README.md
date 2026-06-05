@@ -1,22 +1,27 @@
-# Release calendars (sourced dates)
+# Release calendars moved
 
-Each CSV row is one official macro release anchor. **Do not invent dates in Python** — maintain these files from the cited `source_url`.
+This directory is a compatibility pointer only. Calendar ownership now lives in:
 
-Columns: `release_date`, `event_type`, `source`, `source_url`, `timezone`, `release_time`, `row_status`
+- `packages/economic_event_universe/config/calendars/sourced/`
+- `packages/economic_event_universe/config/calendars/seed/`
 
-- `SOURCED` — official agency date (eligible for default `events.csv` build)
-- `SEED` — scaffolding only; skipped unless builder `--include-seed`
+Each CSV row must carry explicit `row_status`:
 
-Build into `events.csv` via:
+- `SOURCED` — official agency date eligible for generated `events.csv`
+- `SEED` — visible in the universe inventory but not runnable
+- `DISABLED` / `RETIRED` — retained metadata, not runnable
+
+Generated runnable view:
 
 ```bash
-python packages/data_system/scripts/build_events_from_calendar.py
+python -m economic_event_universe.cli build-events --dry-run
+python -m economic_event_universe.cli build-events
 ```
 
-Regenerate C++ E_t label table after YAML edits:
+Legacy wrapper retained for old commands:
 
 ```bash
-python tools/economic_event_universe/generate_event_context_labels.py
+python packages/data_system/scripts/build_events_from_calendar.py --dry-run
 ```
 
 Window offsets (TIGHT: -30s / +300s) are applied from templates in the builder, not stored here.

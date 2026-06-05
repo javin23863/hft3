@@ -24,7 +24,7 @@ def write_proposal(agency: str, rows: list[dict[str, Any]], *, repo: Path | None
     payload = {
         "agency": agency,
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
-        "policy": "propose_only; merge manually into release_calendars/",
+        "policy": "propose_only; merge manually into packages/economic_event_universe/config/calendars/sourced/",
         "rows": rows,
     }
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")

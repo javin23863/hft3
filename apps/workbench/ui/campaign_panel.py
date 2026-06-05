@@ -14,6 +14,7 @@ import pandas as pd
 import streamlit as st
 
 from hft3_bootstrap import pythonpath_entries
+from economic_event_universe.service import inventory as event_universe_inventory
 from workbench.src.core.composition import DefensiveStub, ModelComposition
 from workbench.src.data.event_catalog import campaign_preview, list_personal_events, load_model_binding
 from workbench.src.data.personal_lock import is_locked, set_unlocked
@@ -94,12 +95,16 @@ def _catalog_symbols(repo: Path) -> list[str]:
 
 def _event_catalog_status(repo: Path) -> dict[str, Any]:
     path = repo / "packages" / "data_system" / "config" / "events.csv"
+    try:
+        universe = event_universe_inventory(repo)
+    except Exception as exc:
+        universe = {"status": "BLOCKING", "error": str(exc)}
     if not path.is_file():
-        return {"path": path, "exists": False, "rows": 0, "types": {}, "symbols": []}
+        return {"path": path, "exists": False, "rows": 0, "types": {}, "symbols": [], "universe": universe}
     try:
         df = pd.read_csv(path, usecols=["event_type", "symbols"])
     except Exception as exc:
-        return {"path": path, "exists": True, "rows": 0, "types": {}, "symbols": [], "error": str(exc)}
+        return {"path": path, "exists": True, "rows": 0, "types": {}, "symbols": [], "error": str(exc), "universe": universe}
     symbols: set[str] = set()
     for raw in df["symbols"].dropna():
         symbols.update(s.strip() for s in str(raw).split(",") if s.strip())
@@ -109,6 +114,7 @@ def _event_catalog_status(repo: Path) -> dict[str, Any]:
         "rows": int(len(df)),
         "types": Counter(str(x) for x in df["event_type"].dropna()),
         "symbols": sorted(symbols),
+        "universe": universe,
     }
 
 
@@ -146,13 +152,20 @@ def _render_backend_status(repo: Path, catalog: dict, configs: dict, runnable: l
         c2.metric("Catalog entries", len(catalog))
         c3.metric("Runnable primaries", len(runnable))
         c4.metric("Campaign artifacts", run_count)
-        st.caption(f"Models: `apps/workbench/config/model_catalog.yaml` · events: `{event_status['path']}`")
+        universe = event_status.get("universe") or {}
+        st.caption(
+            "Models: `apps/workbench/config/model_catalog.yaml` · "
+            f"runnable events: `{event_status['path']}` · "
+            f"event universe: `{universe.get('canonical_config_root', '')}`"
+        )
         st.caption(f"Artifact root: `{artifact_root()}`")
         if event_status.get("error"):
             st.error(f"Event catalog unreadable: {event_status['error']}")
         elif event_status.get("exists"):
             st.caption(
-                f"Event catalog rows: {event_status['rows']} · symbols: {len(event_status['symbols'])}"
+                f"Runnable event rows: {event_status['rows']} · "
+                f"universe event types: {universe.get('event_type_count', 0)} · "
+                f"symbols: {len(event_status['symbols'])}"
             )
         else:
             st.error("Event catalog missing; campaigns cannot resolve walk-forward windows.")

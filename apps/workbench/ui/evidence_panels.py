@@ -256,6 +256,61 @@ def render_registry_data(snapshot: RunEvidenceSnapshot) -> None:
     c2.metric("Data files", len(data.get("data_files", [])))
     c3.metric("Missing data", len(data.get("missing", [])))
     c4.metric("BTC state packets", edge_packets.get("status", "unknown"))
+    event_universe = registry.get("event_universe") or data.get("event_universe") or {}
+    if event_universe:
+        st.subheader("Economic Event Universe")
+        if event_universe.get("status") == "BLOCKING":
+            st.error(f"Event universe did not load cleanly: {event_universe.get('error', '')}")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Universe defined", int(_num(event_universe.get("event_type_count"))))
+        c2.metric("Calendar rows", int(_num(event_universe.get("calendar_row_count"))))
+        c3.metric("Runnable events", int(_num(event_universe.get("runnable_event_count"))))
+        c4.metric("Snapshot artifacts", int(_num(event_universe.get("snapshot_artifact_count"))))
+        status_counts = event_universe.get("row_status_counts") or {}
+        if status_counts:
+            _display_df(
+                [{"row_status": key, "count": value} for key, value in sorted(status_counts.items())],
+                {"row_status": "Row status", "count": "Rows"},
+            )
+        types = event_universe.get("event_types") or []
+        if types:
+            _display_df(
+                types,
+                {
+                    "event_type": "Event type",
+                    "status": "Universe status",
+                    "agency": "Agency",
+                    "event_context": "Context",
+                    "calendar_row_count": "Calendar rows",
+                    "runnable_row_count": "Runnable rows",
+                    "first_release_date": "First",
+                    "last_release_date": "Last",
+                },
+            )
+        with st.expander("Runnable sourced campaign events"):
+            _display_df(
+                event_universe.get("runnable_events") or [],
+                {
+                    "event_id": "Event ID",
+                    "event_type": "Type",
+                    "release_date": "Date",
+                    "event_context": "Context",
+                    "row_status": "Row status",
+                    "source_file": "Source file",
+                },
+            )
+        with st.expander("Seed and sourced calendar rows"):
+            _display_df(
+                event_universe.get("calendar_rows") or [],
+                {
+                    "event_type": "Type",
+                    "release_date": "Date",
+                    "row_status": "Row status",
+                    "runnable_eligible": "Runnable",
+                    "event_context": "Context",
+                    "source_file": "Source file",
+                },
+            )
     rithmic_trial = data.get("rithmic_trial") or {}
     if rithmic_trial.get("observed"):
         st.subheader("Rithmic Paper Data")

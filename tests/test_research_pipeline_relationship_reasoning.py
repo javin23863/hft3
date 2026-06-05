@@ -323,7 +323,7 @@ def test_release_calendar_requires_sourced_row_ref():
             RelationshipEvidence(
                 "calendar row without sourced status",
                 RelationshipDataSource.SOURCED_RELEASE_CALENDAR,
-                "packages/data_system/config/release_calendars/bls_nfp.csv:NFP_2024_09_06",
+                "packages/economic_event_universe/config/calendars/sourced/bls_nfp.csv:NFP_2024_09_06",
             ),
         ),
         proof_trace=("human proof",),
@@ -345,7 +345,7 @@ def test_release_calendar_fake_sourced_marker_fails_validation():
             RelationshipEvidence(
                 "fake sourced marker",
                 RelationshipDataSource.SOURCED_RELEASE_CALENDAR,
-                "packages/data_system/config/release_calendars/bls_nfp.csv:"
+                "packages/economic_event_universe/config/calendars/sourced/bls_nfp.csv:"
                 "row_status=SOURCED_FAKE:NFP_2024_09_06",
             ),
         ),

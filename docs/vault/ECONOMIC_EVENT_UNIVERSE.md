@@ -1,6 +1,6 @@
 # Economic Event Universe
 
-Authoritative macro release catalog for offline research. Extends (does not replace) `packages/data_system/config/events.csv` and `release_calendars/`.
+Authoritative macro, monetary, session, prop, energy, housing, labor, Treasury, and snapshot event universe for offline research. `packages/data_system/config/events.csv` is a generated runnable view, not the full universe authority.
 
 ## Package
 
@@ -20,7 +20,10 @@ Location: `packages/economic_event_universe/`
 | Module | Role |
 |--------|------|
 | `config/event_universe.yaml` | Full A+ catalog: anchors, windows, symbols, sources |
-| `calendar.py` | Query upcoming rows from parsed `events.csv` |
+| `config/calendars/sourced/` | Official `SOURCED` release rows eligible for generated runnable campaigns |
+| `config/calendars/seed/` | `SEED` scaffolds visible in inventory, never runnable |
+| `service.py` | Unified event types, calendar rows, runnable rows, inventory, snapshot lookup |
+| `calendar.py` | Query upcoming rows from generated runnable `events.csv` |
 | `timezone.py` | UTC anchors + user IANA display (default doc example: `Asia/Phnom_Penh`) |
 | `windows.py` | Download windows + L3 snapshot offset presets |
 | `holidays.py` | US federal holidays; claims Thu→Wed shift |
@@ -30,9 +33,9 @@ Location: `packages/economic_event_universe/`
 
 ## Policy
 
-- **`RESEARCH_READY`** types (CPI, NFP, Topstep today) must have `SOURCED` rows in `release_calendars/` and appear in canonical `events.csv`.
-- **`CATALOG`** types are defined in YAML for metadata/labels; SEED scaffolds live under `artifacts/calendar_proposals/seed_scaffold/` until merged as `SOURCED`.
-- **Dates are never invented in fetchers.** Fetchers emit JSON proposals; humans merge into `release_calendars/*.csv`.
+- **`RESEARCH_READY`** types must have `SOURCED` rows and appear in generated `events.csv`.
+- **`CATALOG`** types are defined in YAML for metadata/labels; `SEED` scaffolds live under `config/calendars/seed/` until moved or rewritten as `SOURCED`.
+- **Dates are never invented in fetchers.** Fetchers emit JSON proposals; humans merge into `config/calendars/sourced/*.csv`.
 - **Live CHI404 hot path unchanged** (BLUEPRINT §4). Snapshot builder is offline research only.
 - **C++ E_t labels** — generated from the same YAML via `tools/economic_event_universe/generate_event_context_labels.py` → `event_context_labels.generated.hpp` + compiled golden test `hft_event_context_golden`.
 
@@ -47,8 +50,14 @@ PYTHONPATH=packages python -m economic_event_universe.cli validate
 ### Rebuild events.csv from sourced calendars
 
 ```bash
-python packages/data_system/scripts/build_events_from_calendar.py --dry-run
-python packages/data_system/scripts/build_events_from_calendar.py
+python -m economic_event_universe.cli build-events --dry-run
+python -m economic_event_universe.cli build-events
+```
+
+### Inventory full universe
+
+```bash
+python -m economic_event_universe.cli inventory
 ```
 
 ### Query upcoming (local timezone)
@@ -76,8 +85,8 @@ PYTHONPATH=packages python -m economic_event_universe.fetchers.run_all --write
 ## Adding a release
 
 1. Add metadata to `config/event_universe.yaml` (`official_source_url`, `event_context_label`, windows).
-2. Add sourced rows to `packages/data_system/config/release_calendars/<agency>.csv`.
-3. Run builder → `events.csv`.
+2. Add sourced rows to `packages/economic_event_universe/config/calendars/sourced/<agency>.csv`.
+3. Run `python -m economic_event_universe.cli build-events` → generated `events.csv`.
 4. Run `validate` and `pytest tests/test_economic_event_universe/`.
 
 ## Snapshot offsets

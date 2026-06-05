@@ -12,7 +12,7 @@ def main() -> int:
     setup_repo_paths()
     parser = argparse.ArgumentParser(prog="economic_event_universe.fetchers.run_all")
     parser.add_argument("--dry-run", action="store_true", default=True)
-    parser.add_argument("--write", action="store_true", help="Write proposal JSON (still not release_calendars/)")
+    parser.add_argument("--write", action="store_true", help="Write proposal JSON (still not sourced calendars)")
     args = parser.parse_args()
     dry = not args.write
     total = 0

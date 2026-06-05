@@ -1,1 +1,1 @@
-"""Propose-only calendar fetchers (never auto-write release_calendars/)."""
+"""Propose-only calendar fetchers (never auto-write sourced calendars)."""

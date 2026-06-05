@@ -1,0 +1,4 @@
+release_date,event_type,source,source_url,timezone,release_time,row_status
+2023-09-15,PROP_FLATTEN_TOPSTEP,TOPSTEP,https://www.topstep.com/,America/Chicago,15:10:00,SOURCED
+2024-09-18,PROP_FLATTEN_TOPSTEP,TOPSTEP,https://www.topstep.com/,America/Chicago,15:10:00,SOURCED
+2025-06-20,PROP_FLATTEN_TOPSTEP,TOPSTEP,https://www.topstep.com/,America/Chicago,15:10:00,SOURCED

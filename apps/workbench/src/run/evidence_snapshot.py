@@ -18,6 +18,8 @@ from workbench.src.run.feature_fabric import (
     ensure_catalog_feature_fabric,
     source_to_lane,
 )
+from economic_event_universe.service import inventory as event_universe_inventory
+from economic_event_universe.service import list_calendar_rows, list_runnable_events
 
 
 CoverageStatus = Literal[
@@ -1034,6 +1036,43 @@ def _latency_metric_count(summary: dict[str, Any], metric: str) -> int:
         return int(((summary.get("metrics") or {}).get(metric) or {}).get("count") or 0)
     except (TypeError, ValueError):
         return 0
+
+
+def _event_universe_snapshot(repo: Path) -> dict[str, Any]:
+    try:
+        inv = event_universe_inventory(repo)
+        calendar_rows = list_calendar_rows(repo, include_seed=True)
+        runnable_rows = list_runnable_events(repo)
+        snapshot_dir = repo / "runtime" / "event_snapshots"
+        snapshot_files = list(snapshot_dir.glob("*")) if snapshot_dir.is_dir() else []
+        return {
+            "status": "PASS",
+            "canonical_config_root": inv.get("canonical_config_root", ""),
+            "generated_events_csv": inv.get("generated_events_csv", ""),
+            "event_type_count": inv.get("event_type_count", 0),
+            "calendar_row_count": inv.get("calendar_row_count", 0),
+            "runnable_event_count": inv.get("runnable_event_count", 0),
+            "row_status_counts": inv.get("row_status_counts", {}),
+            "event_types": inv.get("event_types", []),
+            "calendar_rows": calendar_rows,
+            "runnable_events": runnable_rows,
+            "snapshot_artifact_count": len([p for p in snapshot_files if p.is_file()]),
+            "snapshot_artifact_dir": str(snapshot_dir),
+            "universe_defined_label": "Universe defined",
+            "runnable_label": "Runnable data available",
+        }
+    except Exception as exc:
+        return {
+            "status": "BLOCKING",
+            "error": str(exc),
+            "blocking_gates": [
+                {
+                    "gate": "event_universe",
+                    "status": "BLOCKING",
+                    "reason": str(exc),
+                }
+            ],
+        }
 
 
 @dataclass
@@ -3412,10 +3451,16 @@ def load_run_evidence(repo: Path, source: str, *, campaign_id: str = "") -> RunE
     )
     if is_ibkr_lane:
         ibkr_endpoint = _decorate_ibkr_endpoint_for_pipeline(ibkr_endpoint)
+    event_universe = _event_universe_snapshot(repo)
     snapshot.registry = {
         **(snapshot.registry or {}),
         "lanes": lane_registry.get("rows", []),
         "lane_registry": lane_registry,
+        "event_universe": event_universe,
+    }
+    snapshot.data = {
+        **(snapshot.data or {}),
+        "event_universe": event_universe,
     }
     snapshot.diagnostics = {
         **(snapshot.diagnostics or {}),
@@ -3449,13 +3494,18 @@ def load_run_evidence(repo: Path, source: str, *, campaign_id: str = "") -> RunE
         "lane_registry": lane_registry,
         "feature_fabric": feature_fabric,
         "trade_manager": snapshot.trade_manager,
+        "event_universe": event_universe,
     }
     if is_cme_lane:
         system_payload["rithmic_endpoint"] = rithmic_endpoint
     if is_ibkr_lane:
         system_payload["ibkr_endpoint"] = ibkr_endpoint
     snapshot.system = system_payload
-    _append_decision_blocking_gates(snapshot, _shared_blocking_gates(lane_registry, feature_fabric))
+    _append_decision_blocking_gates(
+        snapshot,
+        _shared_blocking_gates(lane_registry, feature_fabric)
+        + list(event_universe.get("blocking_gates") or []),
+    )
     return snapshot
 
 

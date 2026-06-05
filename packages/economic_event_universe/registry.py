@@ -10,9 +10,6 @@ import yaml
 
 _CONFIG = Path(__file__).resolve().parent / "config" / "event_universe.yaml"
 
-# Types with SOURCED calendar rows in events.csv today.
-_SOURCED_CALENDAR_FILES = frozenset({"bls_cpi.csv", "bls_nfp.csv", "prop_flatten.csv"})
-
 
 @lru_cache(maxsize=1)
 def load_event_universe() -> dict[str, Any]:

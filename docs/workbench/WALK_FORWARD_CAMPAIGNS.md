@@ -23,7 +23,7 @@ Config: [`workbench/config/walk_forward.yaml`](../../workbench/config/walk_forwa
 Each model binds to event contexts from [`features_engine/src/hypotheses/modules.py`](../../features_engine/src/hypotheses/modules.py) via [`workbench/config/model_event_binding.yaml`](../../workbench/config/model_event_binding.yaml).
 
 - HYP_29 → prop flatten windows (not CPI)
-- HYP_5 (no gate) → macro `CPI_TIGHT` / `NFP_TIGHT` windows (NFP calendar in `release_calendars/bls_nfp.csv`)
+- HYP_5 (no gate) → macro `CPI_TIGHT` / `NFP_TIGHT` windows (NFP calendar in `packages/economic_event_universe/config/calendars/sourced/bls_nfp.csv`)
 - PDF_MODEL_5 → `options_lane` fixture MVP (quarantined under `research_cards/parity/`)
 
 Regenerate binding:
@@ -34,7 +34,7 @@ python workbench/scripts/generate_model_event_binding.py
 
 ## Point-in-time data (not 10-year continuous MBO)
 
-- Release dates: [`data_system/config/release_calendars/`](../../data_system/config/release_calendars/) (sourced `source_url`)
+- Release dates: [`packages/economic_event_universe/config/calendars/sourced/`](../../packages/economic_event_universe/config/calendars/sourced/) (sourced `source_url`)
 - Build `events.csv`: `python data_system/scripts/build_events_from_calendar.py`
 - Campaign backfill: `python workbench/scripts/backfill_catalog.py --model HYP_5 --dry-run`
 - Download missing: `python workbench/scripts/backfill_catalog.py --model HYP_5 --download-missing --max-cost-usd 25`

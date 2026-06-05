@@ -98,10 +98,10 @@ Defined source registry:
 | `micro` | `DATABENTO_CME_MBO_NPZ` | `data/npz/<symbol>_<event_id>_mbo.npz` | Valid offline observation source |
 | `micro` | `MICROSTRUCTURE_PDF_MANIFEST` | `docs/references/MANIFEST.md` | Valid concept/citation source |
 | `macro` | `ECONOMIC_EVENT_UNIVERSE` | `packages/economic_event_universe/config/event_universe.yaml` | Valid macro metadata source |
-| `macro` | `SOURCED_RELEASE_CALENDAR` | `packages/data_system/config/release_calendars/*.csv` | Valid only for `SOURCED` rows |
+| `macro` | `SOURCED_RELEASE_CALENDAR` | `packages/economic_event_universe/config/calendars/sourced/*.csv` | Valid only for `SOURCED` rows |
 | `macro` | `DATA_SYSTEM_EVENTS_CSV` | `packages/data_system/config/events.csv` | Valid replay event/window source |
 | `regime` | `ECONOMIC_EVENT_UNIVERSE` | `packages/economic_event_universe/config/event_universe.yaml:<event>` | Definition metadata only |
-| `regime` | `SOURCED_RELEASE_CALENDAR` | `packages/data_system/config/release_calendars/<file>.csv:row_status=SOURCED:<row>` | Valid empirical event anchor |
+| `regime` | `SOURCED_RELEASE_CALENDAR` | `packages/economic_event_universe/config/calendars/sourced/<file>.csv:row_status=SOURCED:<row>` | Valid empirical event anchor |
 | `regime` | `DATA_SYSTEM_EVENTS_CSV` | `packages/data_system/config/events.csv:<event_id>` | Valid empirical replay event/window source |
 | `regime` | `FEATURES_ENGINE_REGIME_FILTER` | `packages/features_engine/src/regime/regime_filter.py:<label-or-function>` | Definition-only posterior logic |
 | `regime` | `EVENT_CONTEXT_REGIME_MAP` | `packages/features_engine/config/event_context_regime.json:<key>` | Definition-only configured boost map |

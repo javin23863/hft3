@@ -129,7 +129,7 @@ SOURCE_DEFINITIONS = {
     RelationshipDataSource.SOURCED_RELEASE_CALENDAR: RelationshipSourceDefinition(
         source_type=RelationshipDataSource.SOURCED_RELEASE_CALENDAR,
         contexts=(RelationshipContext.MACRO, RelationshipContext.REGIME),
-        path="packages/data_system/config/release_calendars/*.csv",
+        path="packages/economic_event_universe/config/calendars/sourced/*.csv",
         authority="Official macro release rows only when row_status is SOURCED.",
         notes="Dates are maintained from cited source_url values; Python must not invent them.",
         empirical=True,
@@ -355,13 +355,14 @@ def _source_ref_errors(
         return []
     if source_type == RelationshipDataSource.SOURCED_RELEASE_CALENDAR:
         if not re.fullmatch(
-            r"packages/data_system/config/release_calendars/[A-Za-z0-9_.-]+\.csv:"
+            r"packages/economic_event_universe/config/calendars/sourced/[A-Za-z0-9_.-]+\.csv:"
             r"row_status=SOURCED:[A-Z0-9_]+",
             source_ref,
         ):
             return [
-                f"evidence[{index}].source_ref must identify a release_calendars/*.csv "
-                "row with row_status=SOURCED"
+                f"evidence[{index}].source_ref must identify a "
+                "packages/economic_event_universe/config/calendars/sourced/*.csv row with "
+                "row_status=SOURCED"
             ]
         return []
     if source_type == RelationshipDataSource.DATA_SYSTEM_EVENTS_CSV:

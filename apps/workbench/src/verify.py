@@ -43,6 +43,7 @@ def verify(repo: Optional[Path] = None) -> Dict[str, Any]:
         _check_file(repo / "runtime" / "latency_reports" / "latency_summary.json", "CHI404 latency summary"),
         _check_file(repo / "apps" / "workbench" / "ui" / "app.py", "Streamlit app"),
         _check_file(repo / "apps" / "workbench" / "requirements.txt", "Workbench requirements"),
+        _check_file(repo / "packages" / "economic_event_universe" / "config" / "event_universe.yaml", "Economic event universe"),
         _check_file(events_catalog, "Events catalog"),
     ]
 

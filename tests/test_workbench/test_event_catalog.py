@@ -12,6 +12,7 @@ from workbench.src.data.event_catalog import (
     load_model_binding,
     row_to_event_context,
 )
+from workbench.src.run.evidence_snapshot import load_run_evidence
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -57,3 +58,14 @@ def test_pdf_model_5_options_lane():
     binding = load_model_binding(REPO, "PDF_MODEL_5")
     assert binding["campaign_mode"] == "options_lane"
     assert "options_chain" in binding["required_datasets"]
+
+
+def test_workbench_snapshot_exposes_full_event_universe():
+    snapshot = load_run_evidence(REPO, "all_lanes")
+    universe = snapshot.registry.get("event_universe") or {}
+    assert universe["event_type_count"] == 45
+    types = {row["event_type"] for row in universe["event_types"]}
+    assert {"FOMC_STATEMENT", "PCE", "PPI", "GDP_ADVANCE", "TREASURY_AUCTION"}.issubset(types)
+    runnable_types = {row["event_type"] for row in universe["runnable_events"]}
+    assert {"CPI", "NFP", "PROP_FLATTEN_TOPSTEP"}.issubset(runnable_types)
+    assert "FOMC_STATEMENT" not in runnable_types
