@@ -44,4 +44,4 @@ alwaysApply: true
 4. **MBO cost / coverage** → backtest default above; full catalog via `--scope full_catalog`
 5. **Human/agent banner** → `python packages/data_system/src/macro_event_cli.py`
 
-Workbench campaigns still filter through `events.csv` + `model_event_binding.yaml` until calendars and bindings are expanded.
+Workbench campaigns use `events.csv` + per-model `required_event_contexts` in `model_event_binding.yaml` only when the hypothesis code declares them; otherwise all sourced events in the period apply.

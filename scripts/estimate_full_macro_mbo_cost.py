@@ -357,7 +357,7 @@ def main() -> int:
         default="macro_releases",
         help=(
             "macro_releases (default) = all sourced Fed/macro in events.csv minus FED_SPEAKER; "
-            "campaign = CPI/NFP only; backtest = all SOURCED calendars; full_catalog = entire catalog"
+            "campaign = same as macro_releases (workbench backfill); backtest = all SOURCED calendars; full_catalog = entire catalog"
         ),
     )
     parser.add_argument(
@@ -433,7 +433,7 @@ def main() -> int:
             "primary_scope_for_downloads": "macro_releases",
             "note": (
                 "Use macro_releases for sourced Fed/BLS macro backtest data. "
-                "campaign is CPI/NFP only (workbench default). "
+                "campaign mirrors macro_releases for workbench backfill. "
                 "full_catalog includes SEED scaffolds for all catalog types."
             ),
             "scopes": summary_reports,

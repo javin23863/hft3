@@ -20,10 +20,6 @@ periods:
     start_year: 2025
     end_year: 2025
 
-default_macro_contexts:
-  - CPI_TIGHT
-  - NFP_TIGHT
-
 sim_shadow:
   anchor_date: 2026-03-01
   cme_days: 60

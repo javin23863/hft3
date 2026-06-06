@@ -130,34 +130,16 @@ def iter_backtest_scope_windows(
     return [w for w in windows if w.row_status == "SOURCED"]
 
 
-def campaign_event_contexts(repo_root: Path) -> set[str]:
-    """E_t labels from walk_forward.yaml default_macro_contexts (backtest engine default)."""
-    import yaml
-
-    wf_path = repo_root / "apps" / "workbench" / "config" / "walk_forward.yaml"
-    if not wf_path.is_file():
-        wf_path = repo_root / "workbench" / "config" / "walk_forward.yaml"
-    raw = yaml.safe_load(wf_path.read_text(encoding="utf-8")) or {}
-    return {str(c) for c in (raw.get("default_macro_contexts") or [])}
-
-
 def iter_campaign_scope_windows(
     repo_root: Path,
     *,
     start_year: int | None = None,
     end_year: int | None = None,
 ) -> list[CatalogWindow]:
-    """SOURCED windows whose E_t label is in walk_forward default_macro_contexts (CPI/NFP)."""
-    from economic_event_universe.labels import row_to_event_context
-
-    allowed = campaign_event_contexts(repo_root)
-    return [
-        w
-        for w in iter_backtest_scope_windows(
-            repo_root, start_year=start_year, end_year=end_year
-        )
-        if row_to_event_context(w.event_type, w.window_name) in allowed
-    ]
+    """Workbench campaign download scope — same as macro_releases (all sourced macro, no CPI/NFP filter)."""
+    return iter_macro_releases_scope_windows(
+        repo_root, start_year=start_year, end_year=end_year
+    )
 
 
 def iter_macro_releases_scope_windows(

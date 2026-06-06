@@ -38,7 +38,7 @@ def main() -> int:
         "--scope",
         choices=("campaign", "macro_releases", "backtest", "full_catalog"),
         default="macro_releases",
-        help="macro_releases (default)=all sourced Fed/macro minus speakers; campaign=CPI/NFP only",
+        help="macro_releases (default)=all sourced Fed/macro minus speakers; campaign=same (workbench backfill)",
     )
     parser.add_argument("--import-only", metavar="DBN", help="Import existing raw DBN into MBO lane")
     parser.add_argument("--release-id", default=None, help="Release id for --import-only")

@@ -21,9 +21,6 @@ from features_engine.src.model_registry import get_slug_for_hyp_id, legacy_to_sl
 
 MODULES = features_engine_root() / "src" / "hypotheses" / "modules.py"
 OUT = workbench_root() / "config" / "model_event_binding.yaml"
-WF = workbench_root() / "config" / "walk_forward.yaml"
-
-DEFAULT_MACRO = ["CPI_TIGHT", "NFP_TIGHT"]
 
 _L2S = legacy_to_slug()
 PDF_OVERRIDES = {
@@ -72,30 +69,24 @@ def _extract_hyp_bindings() -> dict[str, dict]:
             if contexts:
                 bindings[slug] = {"required_event_contexts": sorted(contexts)}
             else:
-                bindings[slug] = {"default_macro_contexts": list(DEFAULT_MACRO)}
+                bindings[slug] = {}
             current_hyp = None
 
     for hid in range(1, 45):
         slug = get_slug_for_hyp_id(hid)
-        bindings.setdefault(slug, {"default_macro_contexts": list(DEFAULT_MACRO)})
+        bindings.setdefault(slug, {})
 
     return dict(sorted(bindings.items()))
 
 
 def main() -> int:
-    wf = yaml.safe_load(WF.read_text(encoding="utf-8")) or {}
-    default_macro = wf.get("default_macro_contexts", DEFAULT_MACRO)
-
     hyp = _extract_hyp_bindings()
-    for slug, cfg in hyp.items():
-        if "default_macro_contexts" in cfg:
-            cfg["default_macro_contexts"] = list(default_macro)
 
     pdf = {}
     for i in range(1, 12):
         legacy = f"PDF_MODEL_{i}"
         slug = _L2S[legacy]
-        pdf[slug] = dict(PDF_OVERRIDES.get(slug, {"default_macro_contexts": list(default_macro)}))
+        pdf[slug] = dict(PDF_OVERRIDES.get(slug, {}))
 
     doc = {
         "authority": [

@@ -24,16 +24,13 @@ def test_row_to_event_context_topstep():
     assert row_to_event_context("PROP_FLATTEN_TOPSTEP", "MAIN") == "PROP_FLATTEN_TOPSTEP"
 
 
-def test_hyp_5_discovery_lists_cpi_events():
+def test_hyp_5_includes_sourced_macro_events():
     period = ValidationPeriod("Discovery", 2018, 2020)
     events = list_campaign_events("HYP_5", period, "MES.v.0", REPO)
     ids = [e.event_id for e in events]
     assert "CPI_2018_01_11_TIGHT" in ids
-    for e in events:
-        if e.event_id.startswith("CPI_"):
-            assert e.event_context == "CPI_TIGHT"
-        elif e.event_id.startswith("NFP_"):
-            assert e.event_context == "NFP_TIGHT"
+    assert any(e.event_id.startswith("FED_BEIGE_BOOK_") for e in events)
+    assert any(e.event_id.startswith("NFP_") for e in events)
 
 
 def test_hyp_29_does_not_list_cpi():

@@ -22,10 +22,11 @@ def test_hyp_29_requires_flatten_contexts():
     assert "CPI_TIGHT" not in ctx
 
 
-def test_hyp_5_uses_macro_defaults():
+def test_hyp_5_has_no_hardcoded_context_filter():
     raw = yaml.safe_load(BINDING.read_text(encoding="utf-8"))
-    ctx = raw["hypothesis"]["SPREAD_BLOWOUT_RECOMPRESSION"]["default_macro_contexts"]
-    assert "CPI_TIGHT" in ctx
+    cfg = raw["hypothesis"]["SPREAD_BLOWOUT_RECOMPRESSION"]
+    assert "default_macro_contexts" not in cfg
+    assert "required_event_contexts" not in cfg
 
 
 def test_pdf_model_5_options_lane():

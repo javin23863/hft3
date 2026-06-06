@@ -4,38 +4,17 @@ authority:
 - features_engine/src/hypotheses/modules.py
 - features_engine/src/regime/event_context.py
 hypothesis:
-  ABSORPTION_FADE:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  AGGRESSOR_DECELERATION_FADE:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  BOOK_SLOPE_COLLAPSE:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  CANCEL_STORM_BEFORE_MOVE:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
+  ABSORPTION_FADE: {}
+  AGGRESSOR_DECELERATION_FADE: {}
+  BOOK_SLOPE_COLLAPSE: {}
+  CANCEL_STORM_BEFORE_MOVE: {}
   CUTOFF_PANIC_EXITS:
     required_event_contexts:
     - APEX_FLATTEN
     - TPT_FLATTEN
-  DAILY_LOSS_LIMIT_DEFENSE:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  DEPTH_REFILL_IMBALANCE:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  DOM_ILLUSION_TRAP:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
+  DAILY_LOSS_LIMIT_DEFENSE: {}
+  DEPTH_REFILL_IMBALANCE: {}
+  DOM_ILLUSION_TRAP: {}
   ECONOMIC_EVENT_RESTRICTION_FLATTENING:
     required_event_contexts:
     - NEWS_RESTRICTION
@@ -44,75 +23,30 @@ hypothesis:
     - FRIDAY_CLOSE
     - PROP_FLATTEN_TOPSTEP
     - TPT_FLATTEN
-  ES_MES_LEAD_LAG:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  ES_NQ_DIVERGENCE_SNAPBACK:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  FALSE_BREAKOUT_TRAP:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  FORCED_LIQUIDATION_CASCADE:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
+  ES_MES_LEAD_LAG: {}
+  ES_NQ_DIVERGENCE_SNAPBACK: {}
+  FALSE_BREAKOUT_TRAP: {}
+  FORCED_LIQUIDATION_CASCADE: {}
   FRIDAY_WEEKEND_DERISKING:
     required_event_contexts:
     - FRIDAY_CLOSE
-  ICEBERG_RELOAD_DETECTION:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  LATE_CANDLE_ENTRY_FADE:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  LIQUIDITY_DEFENSE_BREAK:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  LIQUIDITY_VACUUM_CONTINUATION:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  MAX_CONTRACT_CROWDING_IN_MICROS:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  MICRO_CONTRACT_RETAIL_LAG:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
+  ICEBERG_RELOAD_DETECTION: {}
+  LATE_CANDLE_ENTRY_FADE: {}
+  LIQUIDITY_DEFENSE_BREAK: {}
+  LIQUIDITY_VACUUM_CONTINUATION: {}
+  MAX_CONTRACT_CROWDING_IN_MICROS: {}
+  MICRO_CONTRACT_RETAIL_LAG: {}
   NO_OVERNIGHT_INVENTORY_SQUEEZE:
     required_event_contexts:
     - FRIDAY_CLOSE
-  NQ_MNQ_LEAD_LAG:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  ONE_SIDED_ADD_CANCEL_IMBALANCE:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
+  NQ_MNQ_LEAD_LAG: {}
+  ONE_SIDED_ADD_CANCEL_IMBALANCE: {}
   OPENING_CANDLE_CHASE:
     required_event_contexts:
     - CASH_EQUITY_OPEN
-  PANIC_MARKET_ORDER_SPREAD_TAX:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  PASSIVE_TRAP_FILL:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  PRIOR_HIGH_LOW_BREAKOUT_TRAP:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
+  PANIC_MARKET_ORDER_SPREAD_TAX: {}
+  PASSIVE_TRAP_FILL: {}
+  PRIOR_HIGH_LOW_BREAKOUT_TRAP: {}
   PROFIT_LOCK_BEHAVIOR:
     required_event_contexts:
     - PROP_FLATTEN_TOPSTEP
@@ -120,104 +54,35 @@ hypothesis:
   PROP_RESET_REOPEN_WINDOW:
     required_event_contexts:
     - PROP_REOPEN
-  QUEUE_DEPLETION_TRIGGER:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
+  QUEUE_DEPLETION_TRIGGER: {}
   QUOTE_PULL_BEFORE_VOLATILITY:
     required_event_contexts:
     - CPI_TIGHT
-  REBATE_TRAP_AVOIDANCE:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  REQUOTE_RACE_AFTER_SHOCK:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  ROUND_NUMBER_STOP_SWEEP:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  SECOND_WAVE_CONTINUATION:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  SPREAD_BLOWOUT_RECOMPRESSION:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  SPREAD_REGIME_CHANGE:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  STOP_LOSS_CASCADE_CONTINUATION:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  STOP_RUN_EXHAUSTION_FADE:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  THIN_BOOK_CONTINUATION:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  TRAILING_DRAWDOWN_PRESSURE:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  VWAP_DEFENSE_BREAK:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  ZN_ZB_ES_NQ_MACRO_IMPULSE:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
+  REBATE_TRAP_AVOIDANCE: {}
+  REQUOTE_RACE_AFTER_SHOCK: {}
+  ROUND_NUMBER_STOP_SWEEP: {}
+  SECOND_WAVE_CONTINUATION: {}
+  SPREAD_BLOWOUT_RECOMPRESSION: {}
+  SPREAD_REGIME_CHANGE: {}
+  STOP_LOSS_CASCADE_CONTINUATION: {}
+  STOP_RUN_EXHAUSTION_FADE: {}
+  THIN_BOOK_CONTINUATION: {}
+  TRAILING_DRAWDOWN_PRESSURE: {}
+  VWAP_DEFENSE_BREAK: {}
+  ZN_ZB_ES_NQ_MACRO_IMPULSE: {}
 pdf:
-  BOOK_PRESSURE:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  CROSS_ASSET_LEAD_LAG:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  VPIN_TOXICITY:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  HYBRID_EXECUTION:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
+  BOOK_PRESSURE: {}
+  CROSS_ASSET_LEAD_LAG: {}
+  VPIN_TOXICITY: {}
+  HYBRID_EXECUTION: {}
   DEALER_HEDGING:
     required_datasets:
     - options_chain
     latency_lane: 10_250ms
     campaign_mode: options_lane
-  DOW_YM_INDEX:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  TREASURY_CTD:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  TRANSFER_ENTROPY:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  QUANTUM_SPREAD_DEFENSE:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  STOCHASTIC_THERMO:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
-  HAWKES_TOXIC_FLOW:
-    default_macro_contexts:
-    - CPI_TIGHT
-    - NFP_TIGHT
+  DOW_YM_INDEX: {}
+  TREASURY_CTD: {}
+  TRANSFER_ENTROPY: {}
+  QUANTUM_SPREAD_DEFENSE: {}
+  STOCHASTIC_THERMO: {}
+  HAWKES_TOXIC_FLOW: {}

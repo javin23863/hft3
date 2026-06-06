@@ -87,11 +87,9 @@ def load_model_binding(repo_root: Path, model_id: str) -> dict[str, Any]:
     if cfg.get("campaign_blocked_reason"):
         raise RuntimeError(cfg["campaign_blocked_reason"])
     required = set(cfg.get("required_event_contexts") or [])
-    default_macro = set(cfg.get("default_macro_contexts") or [])
     return {
         "required_event_contexts": required,
-        "default_macro_contexts": default_macro,
-        "allowed_contexts": required if required else default_macro,
+        "allowed_contexts": required,
         "campaign_mode": cfg.get("campaign_mode", "mbo"),
         "required_datasets": cfg.get("required_datasets", []),
     }
@@ -140,7 +138,7 @@ def list_campaign_events(
         if symbol not in syms:
             continue
         ctx = row_to_event_context(str(row["event_type"]), str(row["window_name"]))
-        if ctx not in allowed:
+        if allowed and ctx not in allowed:
             continue
         eid = str(row["event_id"])
         parsed = tuple(str(s) for s in syms)
