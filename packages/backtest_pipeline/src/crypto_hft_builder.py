@@ -92,6 +92,26 @@ KRAKEN_SYMBOL_CONFIGS = {
     "SOL/USD": {"tick_size": 0.01, "lot_size": 0.1},
 }
 
+BITFINEX_SYMBOL_CONFIGS = {
+    "BTC_USD": {"tick_size": 1.0, "lot_size": 0.00000001},
+    "ETH_USD": {"tick_size": 0.01, "lot_size": 0.00000001},
+    "SOL_USD": {"tick_size": 0.001, "lot_size": 0.01},
+}
+
+BITFINEX_SPOT_FEES: Dict[str, Tuple[float, float]] = {
+    "default": (0.0010, 0.0020),
+}
+
+COINBASE_SYMBOL_CONFIGS = {
+    "BTC-USD": {"tick_size": 0.01, "lot_size": 0.00000001},
+    "ETH-USD": {"tick_size": 0.01, "lot_size": 0.00000001},
+    "SOL-USD": {"tick_size": 0.001, "lot_size": 0.01},
+}
+
+COINBASE_SPOT_FEES: Dict[str, Tuple[float, float]] = {
+    "default": (0.0040, 0.0060),
+}
+
 
 def build_kraken_hftbacktest(
     data_path: str,
@@ -104,6 +124,52 @@ def build_kraken_hftbacktest(
     if cfg is None:
         raise ValueError(f"Unsupported Kraken symbol: {symbol}. Supported: {list(KRAKEN_SYMBOL_CONFIGS.keys())}")
     fees = KRAKEN_SPOT_FEES.get(fee_tier, KRAKEN_SPOT_FEES["default"])
+    return _build(
+        data_path=data_path,
+        lat_ns=int(latency_ms * 1_000_000),
+        queue_model_type="L3FifoQueueModel",
+        tick_size=cfg["tick_size"],
+        lot_size=cfg["lot_size"],
+        maker_fee=fees[0],
+        taker_fee=fees[1],
+        partial_fill=False,
+    )
+
+
+def build_bitfinex_hftbacktest(
+    data_path: str,
+    *,
+    symbol: str = "BTC_USD",
+    latency_ms: float = 50.0,
+    fee_tier: str = "default",
+) -> HashMapMarketDepthBacktest:
+    cfg = BITFINEX_SYMBOL_CONFIGS.get(symbol)
+    if cfg is None:
+        raise ValueError(f"Unsupported Bitfinex symbol: {symbol}. Supported: {list(BITFINEX_SYMBOL_CONFIGS.keys())}")
+    fees = BITFINEX_SPOT_FEES.get(fee_tier, BITFINEX_SPOT_FEES["default"])
+    return _build(
+        data_path=data_path,
+        lat_ns=int(latency_ms * 1_000_000),
+        queue_model_type="L3FifoQueueModel",
+        tick_size=cfg["tick_size"],
+        lot_size=cfg["lot_size"],
+        maker_fee=fees[0],
+        taker_fee=fees[1],
+        partial_fill=False,
+    )
+
+
+def build_coinbase_hftbacktest(
+    data_path: str,
+    *,
+    symbol: str = "BTC-USD",
+    latency_ms: float = 50.0,
+    fee_tier: str = "default",
+) -> HashMapMarketDepthBacktest:
+    cfg = COINBASE_SYMBOL_CONFIGS.get(symbol)
+    if cfg is None:
+        raise ValueError(f"Unsupported Coinbase symbol: {symbol}. Supported: {list(COINBASE_SYMBOL_CONFIGS.keys())}")
+    fees = COINBASE_SPOT_FEES.get(fee_tier, COINBASE_SPOT_FEES["default"])
     return _build(
         data_path=data_path,
         lat_ns=int(latency_ms * 1_000_000),

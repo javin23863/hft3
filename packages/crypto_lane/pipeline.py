@@ -162,6 +162,26 @@ def cmd_convert_binance_l2(args: argparse.Namespace) -> int:
     return cmd_convert_binance_l2(args)
 
 
+def cmd_record_bitfinex_mbo(args: argparse.Namespace) -> int:
+    from crypto_lane.src.data_io.bitfinex_mbo_recorder import cmd_record_bitfinex_mbo
+    return cmd_record_bitfinex_mbo(args)
+
+
+def cmd_convert_bitfinex_mbo(args: argparse.Namespace) -> int:
+    from crypto_lane.src.data_io.bitfinex_mbo_converter import cmd_convert_bitfinex_mbo
+    return cmd_convert_bitfinex_mbo(args)
+
+
+def cmd_record_coinbase_mbo(args: argparse.Namespace) -> int:
+    from crypto_lane.src.data_io.coinbase_mbo_recorder import cmd_record_coinbase_mbo
+    return cmd_record_coinbase_mbo(args)
+
+
+def cmd_convert_coinbase_mbo(args: argparse.Namespace) -> int:
+    from crypto_lane.src.data_io.coinbase_mbo_converter import cmd_convert_coinbase_mbo
+    return cmd_convert_coinbase_mbo(args)
+
+
 def cmd_validate_crypto(args: argparse.Namespace) -> int:
     ensure_crypto_env()
     from crypto_lane.src.validation.crypto_validation_workflow import validate_crypto_candidate
@@ -282,6 +302,42 @@ def main(argv: list[str] | None = None) -> int:
     p_conv.add_argument("--start-time-ns", type=int, default=1_000_000_000)
     p_conv.add_argument("--step-ns", type=int, default=1_000_000)
     p_conv.set_defaults(func=cmd_convert_kraken_l3)
+
+    p_mbo_rec = sub.add_parser(
+        "record-mbo",
+        help="Record Bitfinex R0 raw book (true order-level MBO, public — no API key)",
+    )
+    p_mbo_rec.add_argument("--symbols", default=None, help="Comma-separated (tBTCUSD or BTCUSDT, default: BTC/ETH/SOL USD)")
+    p_mbo_rec.add_argument("--output-dir", default=None)
+    p_mbo_rec.add_argument("--duration", type=float, default=120.0, help="Recording duration in seconds")
+    p_mbo_rec.add_argument("--book-len", type=int, default=100, help="Bitfinex R0 book depth len")
+    p_mbo_rec.set_defaults(func=cmd_record_bitfinex_mbo)
+
+    p_cb_rec = sub.add_parser(
+        "record-coinbase-mbo",
+        help="Record Coinbase Exchange full channel (true MBO; Exchange API auth required)",
+    )
+    p_cb_rec.add_argument("--products", default=None, help="Comma-separated product IDs (default: BTC-USD,ETH-USD,SOL-USD)")
+    p_cb_rec.add_argument("--output-dir", default=None)
+    p_cb_rec.add_argument("--duration", type=float, default=120.0)
+    p_cb_rec.set_defaults(func=cmd_record_coinbase_mbo)
+
+    p_mbo_conv = sub.add_parser("convert-mbo", help="Convert Bitfinex MBO NDJSON to NPZ (L3_MBO)")
+    p_mbo_conv.add_argument("ndjson", type=str, nargs="?", default=None)
+    p_mbo_conv.add_argument("--output", default=None)
+    p_mbo_conv.add_argument("--routing-symbol", default=None, help="Routing key e.g. BTC_USD")
+    p_mbo_conv.add_argument("--bitfinex-symbol", default=None, help="Bitfinex symbol e.g. tBTCUSD (for --merge-all)")
+    p_mbo_conv.add_argument("--raw-dir", default=None, help="Raw NDJSON dir for --merge-all")
+    p_mbo_conv.add_argument("--merge-all", action="store_true", help="Merge all sessions for symbol into one NPZ")
+    p_mbo_conv.add_argument("--start-time-ns", type=int, default=1_000_000_000)
+    p_mbo_conv.set_defaults(func=cmd_convert_bitfinex_mbo)
+
+    p_cb_conv = sub.add_parser("convert-coinbase-mbo", help="Convert Coinbase full-channel NDJSON to NPZ (L3_MBO)")
+    p_cb_conv.add_argument("ndjson", type=str)
+    p_cb_conv.add_argument("--output", default=None)
+    p_cb_conv.add_argument("--routing-symbol", default=None, help="Routing key e.g. BTC_USD")
+    p_cb_conv.add_argument("--start-time-ns", type=int, default=1_000_000_000)
+    p_cb_conv.set_defaults(func=cmd_convert_coinbase_mbo)
 
     p_val = sub.add_parser("validate", help="Run crypto execution validation for a candidate")
     p_val.add_argument("candidate_id", type=str, help="Candidate model ID")

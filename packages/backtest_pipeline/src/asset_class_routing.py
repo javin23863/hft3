@@ -65,12 +65,30 @@ CRYPTO_PERP_TO_L2 = {
     "SOLUSDT": "SOLUSDT",
 }
 
-# Mapping from perp symbol to Kraken spot symbol for L3 validation
+# Mapping from perp symbol to Kraken spot symbol for L2 depth replay
 CRYPTO_PERP_TO_KRAKEN_SPOT = {
     "BTCUSDT": "BTC/USD",
     "ETHUSDT": "ETH/USD",
     "SOLUSDT": "SOL/USD",
 }
+
+# Mapping from perp symbol to Bitfinex symbol for true MBO (R0 raw book, public)
+CRYPTO_PERP_TO_BITFINEX = {
+    "BTCUSDT": "tBTCUSD",
+    "ETHUSDT": "tETHUSD",
+    "SOLUSDT": "tSOLUSD",
+}
+
+BITFINEX_MBO_SYMBOLS = set(CRYPTO_PERP_TO_BITFINEX.values())
+
+# Mapping from perp symbol to Coinbase Exchange product id (requires WS auth since 2024)
+CRYPTO_PERP_TO_COINBASE = {
+    "BTCUSDT": "BTC-USD",
+    "ETHUSDT": "ETH-USD",
+    "SOLUSDT": "SOL-USD",
+}
+
+COINBASE_MBO_SYMBOLS = set(CRYPTO_PERP_TO_COINBASE.values())
 
 EQUITIES_LANE_MODEL_PREFIXES = ("EQUITY_", "LOW_FLOAT_")
 OPTIONS_LANE_MODEL_PREFIXES = ("OPTIONS_", "PARITY_")
@@ -104,6 +122,51 @@ def _crypto_kraken_depth_npz_path(data_catalog_root: Path, symbol: str) -> Path:
     return data_catalog_root / "data" / "replay" / "hftbacktest" / "crypto" / "kraken" / symbol.replace("/", "_")
 
 
+def _crypto_bitfinex_mbo_npz_path(data_catalog_root: Path, routing_symbol: str) -> Path:
+    safe = routing_symbol.replace("-", "_").replace("/", "_")
+    return data_catalog_root / "data" / "replay" / "hftbacktest" / "crypto" / "bitfinex" / safe
+
+
+def _crypto_coinbase_mbo_npz_path(data_catalog_root: Path, product_id: str) -> Path:
+    safe = product_id.replace("-", "_")
+    return data_catalog_root / "data" / "replay" / "hftbacktest" / "crypto" / "coinbase" / safe
+
+
+def _read_replay_meta_data_class(npz_path: Path) -> str | None:
+    meta_path = npz_path.with_name(npz_path.stem + ".meta.json")
+    if not meta_path.is_file():
+        return None
+    try:
+        import json
+
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        return str(meta.get("data_class") or "")
+    except (OSError, ValueError, TypeError):
+        return None
+
+
+def _crypto_l3_mbo_npz_exists(data_catalog_root: Optional[Path], routing_symbol: str) -> bool:
+    if not data_catalog_root:
+        return False
+    npz_dir = _crypto_bitfinex_mbo_npz_path(data_catalog_root, routing_symbol)
+    for npz in npz_dir.glob("*.npz"):
+        data_class = _read_replay_meta_data_class(npz)
+        if data_class == "L3_MBO" or npz.name.endswith("_mbo.npz"):
+            return True
+    return False
+
+
+def _crypto_mbo_npz_exists(data_catalog_root: Optional[Path], product_id: str) -> bool:
+    if not data_catalog_root:
+        return False
+    npz_dir = _crypto_coinbase_mbo_npz_path(data_catalog_root, product_id)
+    for npz in npz_dir.glob("*.npz"):
+        data_class = _read_replay_meta_data_class(npz)
+        if data_class == "L3_MBO" or npz.name.endswith("_mbo.npz"):
+            return True
+    return False
+
+
 _crypto_l3_npz_path = _crypto_kraken_depth_npz_path  # deprecated alias
 
 
@@ -122,6 +185,14 @@ def _crypto_kraken_depth_npz_exists(data_catalog_root: Optional[Path], symbol: s
 
 
 _crypto_l3_npz_exists = _crypto_kraken_depth_npz_exists  # deprecated alias
+
+
+# Bitfinex routing dir uses BTC_USD style keys
+CRYPTO_PERP_TO_BITFINEX_ROUTING = {
+    "BTCUSDT": "BTC_USD",
+    "ETHUSDT": "ETH_USD",
+    "SOLUSDT": "SOL_USD",
+}
 
 
 def resolve_validation_path(
@@ -151,9 +222,28 @@ def resolve_validation_path(
         has_tick = False
         perp_symbol = symbol.upper()
         l2_sym = CRYPTO_PERP_TO_L2.get(perp_symbol)
+        bitfinex_sym = CRYPTO_PERP_TO_BITFINEX.get(perp_symbol)
+        bitfinex_route = CRYPTO_PERP_TO_BITFINEX_ROUTING.get(perp_symbol)
         kraken_sym = CRYPTO_PERP_TO_KRAKEN_SPOT.get(perp_symbol)
+        coinbase_sym = CRYPTO_PERP_TO_COINBASE.get(perp_symbol)
 
-        if kraken_sym and _crypto_kraken_depth_npz_exists(data_catalog_root, kraken_sym):
+        if bitfinex_route and _crypto_l3_mbo_npz_exists(data_catalog_root, bitfinex_route):
+            has_order_book = True
+            has_tick = True
+            exec_cap = ExecutionCapability.L3_VALIDATED
+            notes.append(
+                f"Bitfinex R0 MBO NPZ found for {bitfinex_route}; "
+                f"{EXEC_CLASS_L3_VALIDATED} (order-level, native order IDs)"
+            )
+        elif coinbase_sym and _crypto_mbo_npz_exists(data_catalog_root, coinbase_sym):
+            has_order_book = True
+            has_tick = True
+            exec_cap = ExecutionCapability.L3_VALIDATED
+            notes.append(
+                f"Coinbase Exchange MBO NPZ found for {coinbase_sym}; "
+                f"{EXEC_CLASS_L3_VALIDATED} (order-level full channel)"
+            )
+        elif kraken_sym and _crypto_kraken_depth_npz_exists(data_catalog_root, kraken_sym):
             has_order_book = True
             has_tick = True
             exec_cap = ExecutionCapability.L2_DEPTH_VALIDATION
