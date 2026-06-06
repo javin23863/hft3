@@ -1,16 +1,16 @@
-# Graph Report - hft3  (2026-06-03)
+# Graph Report - hft3  (2026-06-06)
 
 ## Corpus Check
-- 5037 files · ~1,480,784 words
+- 5783 files · ~1,660,356 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 143715 nodes · 153611 edges · 18194 communities (17546 shown, 648 thin omitted)
-- Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 4702 edges (avg confidence: 0.56)
+- 145170 nodes · 155541 edges · 18342 communities (17691 shown, 651 thin omitted)
+- Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 4905 edges (avg confidence: 0.57)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `68602288`
+- Built from commit: `15e1cc0b`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -15993,6 +15993,7 @@
 - [[_COMMUNITY_Community 16048|Community 16048]]
 - [[_COMMUNITY_Community 16049|Community 16049]]
 - [[_COMMUNITY_Community 16050|Community 16050]]
+- [[_COMMUNITY_Community 16051|Community 16051]]
 - [[_COMMUNITY_Community 16054|Community 16054]]
 - [[_COMMUNITY_Community 16055|Community 16055]]
 - [[_COMMUNITY_Community 16056|Community 16056]]
@@ -18103,6 +18104,154 @@
 - [[_COMMUNITY_Community 18191|Community 18191]]
 - [[_COMMUNITY_Community 18192|Community 18192]]
 - [[_COMMUNITY_Community 18193|Community 18193]]
+- [[_COMMUNITY_Community 18194|Community 18194]]
+- [[_COMMUNITY_Community 18195|Community 18195]]
+- [[_COMMUNITY_Community 18196|Community 18196]]
+- [[_COMMUNITY_Community 18197|Community 18197]]
+- [[_COMMUNITY_Community 18198|Community 18198]]
+- [[_COMMUNITY_Community 18199|Community 18199]]
+- [[_COMMUNITY_Community 18200|Community 18200]]
+- [[_COMMUNITY_Community 18201|Community 18201]]
+- [[_COMMUNITY_Community 18202|Community 18202]]
+- [[_COMMUNITY_Community 18203|Community 18203]]
+- [[_COMMUNITY_Community 18204|Community 18204]]
+- [[_COMMUNITY_Community 18205|Community 18205]]
+- [[_COMMUNITY_Community 18206|Community 18206]]
+- [[_COMMUNITY_Community 18207|Community 18207]]
+- [[_COMMUNITY_Community 18208|Community 18208]]
+- [[_COMMUNITY_Community 18209|Community 18209]]
+- [[_COMMUNITY_Community 18210|Community 18210]]
+- [[_COMMUNITY_Community 18211|Community 18211]]
+- [[_COMMUNITY_Community 18212|Community 18212]]
+- [[_COMMUNITY_Community 18213|Community 18213]]
+- [[_COMMUNITY_Community 18214|Community 18214]]
+- [[_COMMUNITY_Community 18215|Community 18215]]
+- [[_COMMUNITY_Community 18216|Community 18216]]
+- [[_COMMUNITY_Community 18217|Community 18217]]
+- [[_COMMUNITY_Community 18218|Community 18218]]
+- [[_COMMUNITY_Community 18219|Community 18219]]
+- [[_COMMUNITY_Community 18220|Community 18220]]
+- [[_COMMUNITY_Community 18221|Community 18221]]
+- [[_COMMUNITY_Community 18222|Community 18222]]
+- [[_COMMUNITY_Community 18223|Community 18223]]
+- [[_COMMUNITY_Community 18224|Community 18224]]
+- [[_COMMUNITY_Community 18225|Community 18225]]
+- [[_COMMUNITY_Community 18226|Community 18226]]
+- [[_COMMUNITY_Community 18227|Community 18227]]
+- [[_COMMUNITY_Community 18228|Community 18228]]
+- [[_COMMUNITY_Community 18229|Community 18229]]
+- [[_COMMUNITY_Community 18230|Community 18230]]
+- [[_COMMUNITY_Community 18231|Community 18231]]
+- [[_COMMUNITY_Community 18232|Community 18232]]
+- [[_COMMUNITY_Community 18233|Community 18233]]
+- [[_COMMUNITY_Community 18234|Community 18234]]
+- [[_COMMUNITY_Community 18235|Community 18235]]
+- [[_COMMUNITY_Community 18236|Community 18236]]
+- [[_COMMUNITY_Community 18237|Community 18237]]
+- [[_COMMUNITY_Community 18238|Community 18238]]
+- [[_COMMUNITY_Community 18239|Community 18239]]
+- [[_COMMUNITY_Community 18240|Community 18240]]
+- [[_COMMUNITY_Community 18241|Community 18241]]
+- [[_COMMUNITY_Community 18242|Community 18242]]
+- [[_COMMUNITY_Community 18243|Community 18243]]
+- [[_COMMUNITY_Community 18244|Community 18244]]
+- [[_COMMUNITY_Community 18245|Community 18245]]
+- [[_COMMUNITY_Community 18246|Community 18246]]
+- [[_COMMUNITY_Community 18247|Community 18247]]
+- [[_COMMUNITY_Community 18248|Community 18248]]
+- [[_COMMUNITY_Community 18249|Community 18249]]
+- [[_COMMUNITY_Community 18250|Community 18250]]
+- [[_COMMUNITY_Community 18251|Community 18251]]
+- [[_COMMUNITY_Community 18252|Community 18252]]
+- [[_COMMUNITY_Community 18253|Community 18253]]
+- [[_COMMUNITY_Community 18254|Community 18254]]
+- [[_COMMUNITY_Community 18255|Community 18255]]
+- [[_COMMUNITY_Community 18256|Community 18256]]
+- [[_COMMUNITY_Community 18257|Community 18257]]
+- [[_COMMUNITY_Community 18258|Community 18258]]
+- [[_COMMUNITY_Community 18259|Community 18259]]
+- [[_COMMUNITY_Community 18260|Community 18260]]
+- [[_COMMUNITY_Community 18261|Community 18261]]
+- [[_COMMUNITY_Community 18262|Community 18262]]
+- [[_COMMUNITY_Community 18263|Community 18263]]
+- [[_COMMUNITY_Community 18264|Community 18264]]
+- [[_COMMUNITY_Community 18265|Community 18265]]
+- [[_COMMUNITY_Community 18266|Community 18266]]
+- [[_COMMUNITY_Community 18267|Community 18267]]
+- [[_COMMUNITY_Community 18268|Community 18268]]
+- [[_COMMUNITY_Community 18269|Community 18269]]
+- [[_COMMUNITY_Community 18270|Community 18270]]
+- [[_COMMUNITY_Community 18271|Community 18271]]
+- [[_COMMUNITY_Community 18272|Community 18272]]
+- [[_COMMUNITY_Community 18273|Community 18273]]
+- [[_COMMUNITY_Community 18274|Community 18274]]
+- [[_COMMUNITY_Community 18275|Community 18275]]
+- [[_COMMUNITY_Community 18276|Community 18276]]
+- [[_COMMUNITY_Community 18277|Community 18277]]
+- [[_COMMUNITY_Community 18278|Community 18278]]
+- [[_COMMUNITY_Community 18279|Community 18279]]
+- [[_COMMUNITY_Community 18280|Community 18280]]
+- [[_COMMUNITY_Community 18281|Community 18281]]
+- [[_COMMUNITY_Community 18282|Community 18282]]
+- [[_COMMUNITY_Community 18283|Community 18283]]
+- [[_COMMUNITY_Community 18284|Community 18284]]
+- [[_COMMUNITY_Community 18285|Community 18285]]
+- [[_COMMUNITY_Community 18286|Community 18286]]
+- [[_COMMUNITY_Community 18287|Community 18287]]
+- [[_COMMUNITY_Community 18288|Community 18288]]
+- [[_COMMUNITY_Community 18289|Community 18289]]
+- [[_COMMUNITY_Community 18290|Community 18290]]
+- [[_COMMUNITY_Community 18291|Community 18291]]
+- [[_COMMUNITY_Community 18292|Community 18292]]
+- [[_COMMUNITY_Community 18293|Community 18293]]
+- [[_COMMUNITY_Community 18294|Community 18294]]
+- [[_COMMUNITY_Community 18295|Community 18295]]
+- [[_COMMUNITY_Community 18296|Community 18296]]
+- [[_COMMUNITY_Community 18297|Community 18297]]
+- [[_COMMUNITY_Community 18298|Community 18298]]
+- [[_COMMUNITY_Community 18299|Community 18299]]
+- [[_COMMUNITY_Community 18300|Community 18300]]
+- [[_COMMUNITY_Community 18301|Community 18301]]
+- [[_COMMUNITY_Community 18302|Community 18302]]
+- [[_COMMUNITY_Community 18303|Community 18303]]
+- [[_COMMUNITY_Community 18304|Community 18304]]
+- [[_COMMUNITY_Community 18305|Community 18305]]
+- [[_COMMUNITY_Community 18306|Community 18306]]
+- [[_COMMUNITY_Community 18307|Community 18307]]
+- [[_COMMUNITY_Community 18308|Community 18308]]
+- [[_COMMUNITY_Community 18309|Community 18309]]
+- [[_COMMUNITY_Community 18310|Community 18310]]
+- [[_COMMUNITY_Community 18311|Community 18311]]
+- [[_COMMUNITY_Community 18312|Community 18312]]
+- [[_COMMUNITY_Community 18313|Community 18313]]
+- [[_COMMUNITY_Community 18314|Community 18314]]
+- [[_COMMUNITY_Community 18315|Community 18315]]
+- [[_COMMUNITY_Community 18316|Community 18316]]
+- [[_COMMUNITY_Community 18317|Community 18317]]
+- [[_COMMUNITY_Community 18318|Community 18318]]
+- [[_COMMUNITY_Community 18319|Community 18319]]
+- [[_COMMUNITY_Community 18320|Community 18320]]
+- [[_COMMUNITY_Community 18321|Community 18321]]
+- [[_COMMUNITY_Community 18322|Community 18322]]
+- [[_COMMUNITY_Community 18323|Community 18323]]
+- [[_COMMUNITY_Community 18324|Community 18324]]
+- [[_COMMUNITY_Community 18325|Community 18325]]
+- [[_COMMUNITY_Community 18326|Community 18326]]
+- [[_COMMUNITY_Community 18327|Community 18327]]
+- [[_COMMUNITY_Community 18328|Community 18328]]
+- [[_COMMUNITY_Community 18329|Community 18329]]
+- [[_COMMUNITY_Community 18330|Community 18330]]
+- [[_COMMUNITY_Community 18331|Community 18331]]
+- [[_COMMUNITY_Community 18332|Community 18332]]
+- [[_COMMUNITY_Community 18333|Community 18333]]
+- [[_COMMUNITY_Community 18334|Community 18334]]
+- [[_COMMUNITY_Community 18335|Community 18335]]
+- [[_COMMUNITY_Community 18336|Community 18336]]
+- [[_COMMUNITY_Community 18337|Community 18337]]
+- [[_COMMUNITY_Community 18338|Community 18338]]
+- [[_COMMUNITY_Community 18339|Community 18339]]
+- [[_COMMUNITY_Community 18340|Community 18340]]
+- [[_COMMUNITY_Community 18341|Community 18341]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `Attributes` - 485 edges
@@ -18113,22 +18262,22 @@
 6. `Point` - 114 edges
 7. `MarketState` - 100 edges
 8. `MarketStatePipeline` - 88 edges
-9. `BaseStructuralModel` - 85 edges
-10. `ModelOutput` - 83 edges
+9. `DatabentoResearchClient` - 85 edges
+10. `BaseStructuralModel` - 85 edges
 
 ## Surprising Connections (you probably didn't know these)
+- `test_parse_fomc_html_statement_press_minutes()` --calls--> `parse_fomc_html()`  [INFERRED]
+  tests/test_economic_event_universe/test_fed_fetchers.py → packages/economic_event_universe/fetchers/fed.py
+- `test_parse_beige_html()` --calls--> `parse_beige_html()`  [INFERRED]
+  tests/test_economic_event_universe/test_fed_fetchers.py → packages/economic_event_universe/fetchers/fed_beige.py
+- `test_rejects_mbp_like_stream()` --calls--> `classify_normalized_events()`  [INFERRED]
+  tests/test_mbo_release_lane/test_classification.py → packages/mbo_release_lane/classification.py
 - `test_basis_features_columns()` --calls--> `build_basis_features()`  [INFERRED]
   tests/test_crypto_lane/test_feature_builders.py → packages/crypto_lane/src/features/crypto/basis_features.py
-- `test_after_action_skips_llm_on_pending_vendor_lock()` --calls--> `run_after_action_report()`  [INFERRED]
-  tests/test_data_layer/test_after_action.py → packages/data_layer/pipeline/after_action.py
-- `test_ollama_live_gemma_fixture()` --calls--> `run_after_action_report()`  [INFERRED]
-  tests/test_data_layer/test_after_action.py → packages/data_layer/pipeline/after_action.py
-- `int` --uses--> `PaperLatencyRecordV1`  [INFERRED]
-  scripts/chi404_latency_sweep_report.py → packages/data_system/rithmic_trial/schema/paper_latency_record_v1.py
-- `Path` --uses--> `PaperLatencyRecordV1`  [INFERRED]
-  scripts/chi404_latency_sweep_report.py → packages/data_system/rithmic_trial/schema/paper_latency_record_v1.py
+- `bool` --uses--> `datetime`  [INFERRED]
+  scripts/build_imbalance_inventory.py → packages/economic_event_universe/timezone.py
 
-## Communities (18194 total, 648 thin omitted)
+## Communities (18342 total, 651 thin omitted)
 
 ### Community 0 - "Community 0"
 Cohesion: 0.08
@@ -18147,8 +18296,8 @@ Cohesion: 0.06
 Nodes (34): Capacity, MarketDataEvent, action, order_id, price, side, size, timestamp_ns (+26 more)
 
 ### Community 4 - "Community 4"
-Cohesion: 0.24
-Nodes (23): _base_aar_response(), _clamp_promote_recommendation(), _connector_gate(), _ensure_aar_response(), _hypothesis_error_response(), _load_schema_text(), _parse_json_object(), _pipeline_error_response() (+15 more)
+Cohesion: 0.11
+Nodes (44): _base_aar_response(), _clamp_promote_recommendation(), _connector_gate(), _ensure_aar_response(), _hypothesis_error_response(), _load_schema_text(), _parse_json_object(), _pipeline_error_response() (+36 more)
 
 ### Community 5 - "Community 5"
 Cohesion: 0.07
@@ -18167,8 +18316,8 @@ Cohesion: 0.07
 Nodes (28): detected_event_types, input_files, connector, missing_event_types, note, limitations, connector, missing_event_types (+20 more)
 
 ### Community 9 - "Community 9"
-Cohesion: 0.06
-Nodes (55): Any, bool, datetime, int, Path, str, Any, bool (+47 more)
+Cohesion: 0.08
+Nodes (48): Any, bool, datetime, int, Path, str, Any, bool (+40 more)
 
 ### Community 10 - "Community 10"
 Cohesion: 0.05
@@ -18192,7 +18341,7 @@ Nodes (21): checks, bad_prices, bad_sizes, crossed_books, duplicates, local_time
 
 ### Community 15 - "Community 15"
 Cohesion: 0.02
-Nodes (181): HftBacktestSimulatedExchangeAdapter, HftBacktest-backed simulated exchange adapter., Wraps HftBacktest order API; synthesizes lifecycle events from position/state de, _TrackedOrder, LiveBrokerAdapter, Live broker adapter stub (explicit LIVE mode only; not wired to gateway hot path, PaperBrokerAdapter, Paper broker adapter (R|Trader trial lane protocol; no live routing). (+173 more)
+Nodes (162): HftBacktestSimulatedExchangeAdapter, HftBacktest-backed simulated exchange adapter., Wraps HftBacktest order API; synthesizes lifecycle events from position/state de, _TrackedOrder, LiveBrokerAdapter, Live broker adapter stub (explicit LIVE mode only; not wired to gateway hot path, PaperBrokerAdapter, Paper broker adapter (R|Trader trial lane protocol; no live routing). (+154 more)
 
 ### Community 16 - "Community 16"
 Cohesion: 0.33
@@ -18204,7 +18353,7 @@ Nodes (43): additionalProperties, items, maxItems, minItems, type, items, type, 
 
 ### Community 18 - "Community 18"
 Cohesion: 0.03
-Nodes (109): AbsorptionFade, AggressorDecelerationFade, BaseHypothesis, BookSlopeCollapse, CancelStormBeforeMove, CutoffPanicExits, DailyLossLimitDefense, DepthRefillImbalance (+101 more)
+Nodes (105): AbsorptionFade, AggressorDecelerationFade, BaseHypothesis, BookSlopeCollapse, CancelStormBeforeMove, CutoffPanicExits, DailyLossLimitDefense, DepthRefillImbalance (+97 more)
 
 ### Community 19 - "Community 19"
 Cohesion: 0.04
@@ -18444,7 +18593,7 @@ Nodes (40): accepted_count, cancel_count, certification_footer, certification_st
 
 ### Community 79 - "Community 79"
 Cohesion: 0.13
-Nodes (15): classifications, colo_on_box, local_workstation, bottleneck, dominant_rtt_ms, recommendation, recommended_latency_bands_ms, tier_ms (+7 more)
+Nodes (15): classifications, local_workstation, order_path, bottleneck, dominant_rtt_ms, recommendation, recommended_latency_bands_ms, tier_ms (+7 more)
 
 ### Community 80 - "Community 80"
 Cohesion: 0.12
@@ -18503,7 +18652,7 @@ Cohesion: 0.22
 Nodes (9): array, deque, BookLevelCpp, orders, total_qty, array, map, string (+1 more)
 
 ### Community 94 - "Community 94"
-Cohesion: 0.02
+Cohesion: 0.03
 Nodes (164): ABC, HypothesisAdapter, Adapter: BaseHypothesis -> WorkbenchModel., OptionsLaneAdapter, Adapter: options_lane fixture backtest for PDF_MODEL_5 (B7 quarantine)., Runs options_lane.pipeline fixture-backtest; artifacts under research_cards/pari, Adapter: BaseStructuralModel -> WorkbenchModel., StructuralModelAdapter (+156 more)
 
 ### Community 95 - "Community 95"
@@ -18527,8 +18676,8 @@ Cohesion: 0.13
 Nodes (14): backtest_latency_ms, backtest_latency_note, event_id, events, live_orders_sent, npz_path, npz_source, primary_research_engine (+6 more)
 
 ### Community 100 - "Community 100"
-Cohesion: 0.07
-Nodes (66): CertificationRecord, Any, Path, str, backtester_version(), Any, bool, float (+58 more)
+Cohesion: 0.08
+Nodes (59): OrderIntent, Execution simulation: latency, slippage, fees, halts., simulate_fill(), LowFloatBacktester, _mid(), Session backtester for low-float runner lane., _tail_loss(), generate_folds() (+51 more)
 
 ### Community 101 - "Community 101"
 Cohesion: 0.29
@@ -18555,8 +18704,8 @@ Cohesion: 0.15
 Nodes (17): cyclictest_p99_us, cyclictest_p99_us, jitter_pass, pass, pass_fail, run_id, tuning_dir, 11 (+9 more)
 
 ### Community 108 - "Community 108"
-Cohesion: 0.07
-Nodes (57): ChainRules, _cbbo_quote_ts_ns(), _count_ndjson_lines(), estimate_options_cost(), _fixed_price(), normalize_options_dbn(), options_paths(), parse_opra_symbol() (+49 more)
+Cohesion: 0.05
+Nodes (84): Path, str, Any, bool, ModelComposition, Path, str, Any (+76 more)
 
 ### Community 109 - "Community 109"
 Cohesion: 0.18
@@ -18575,24 +18724,24 @@ Cohesion: 0.22
 Nodes (9): research_operating_tier, bottleneck, dominant_rtt_ms, recommendation, recommended_latency_bands_ms, source, status, tier_ms (+1 more)
 
 ### Community 114 - "Community 114"
-Cohesion: 0.19
-Nodes (26): Expr, _assign_validation_periods(), _build_deribit_from_dvol(), build_deribit_surface(), build_mempool_snapshots(), build_spot_perp_ticks(), _empty_deribit(), _empty_mempool() (+18 more)
+Cohesion: 0.12
+Nodes (44): Expr, _date_range(), _parse_date(), pull_bronze(), Pull bronze parquet from B2 into data/crypto/bronze cache., _symbol_map(), BronzeReadError, deribit_options_key() (+36 more)
 
 ### Community 116 - "Community 116"
 Cohesion: 0.13
 Nodes (15): avg_us, count, max_us, min_us, p99_us, rithmic_trial_profile, connector, data_capture_report (+7 more)
 
 ### Community 117 - "Community 117"
-Cohesion: 0.03
-Nodes (142): Path, str, Any, str, bool, DefensiveStub, float, int (+134 more)
+Cohesion: 0.09
+Nodes (32): Any, str, Any, float, int, str, canonical_params_json(), param_hash_from_dict() (+24 more)
 
 ### Community 118 - "Community 118"
 Cohesion: 0.29
 Nodes (6): setup_rithmic_chi404.sh script, RITHMIC_ENVIRONMENT, RITHMIC_GATEWAY, RITHMIC_TRIAL_CONFIG, RITHMIC_TRIAL_CONNECTOR, RITHMIC_TRIAL_ENABLED
 
 ### Community 119 - "Community 119"
-Cohesion: 0.08
-Nodes (41): LiveCapture, FixtureConnector, Synthetic trial events for CI and offline pipeline tests., build_connector(), convert_to_npz(), _has_mbo(), MonkeyPatch, Any (+33 more)
+Cohesion: 0.06
+Nodes (65): percentile_us(), Percentile helpers for paper order latency reports., stats_by_key(), stats_us(), main(), render_markdown(), load_records(), main() (+57 more)
 
 ### Community 121 - "Community 121"
 Cohesion: 0.11
@@ -18623,8 +18772,8 @@ Cohesion: 0.33
 Nodes (5): detected_event_types, events_captured, status, uptime_sec, watch_dirs
 
 ### Community 143 - "Community 143"
-Cohesion: 0.11
-Nodes (23): T0: fee model unit checks., test_fee_per_contract_es_member(), test_fee_per_contract_mes_non_member(), test_trade_cost_includes_slippage_for_market(), test_trade_cost_limit_no_slippage(), bool, float, int (+15 more)
+Cohesion: 0.08
+Nodes (41): T0: fee model unit checks., test_fee_per_contract_es_member(), test_fee_per_contract_mes_non_member(), test_trade_cost_includes_slippage_for_market(), test_trade_cost_limit_no_slippage(), FeeModel, HashMapMarketDepthBacktest, bool (+33 more)
 
 ### Community 144 - "Community 144"
 Cohesion: 0.06
@@ -18640,7 +18789,7 @@ Nodes (34): engines, pdf_hybrid, event_id, backtest_latency_note, chi404_measure
 
 ### Community 147 - "Community 147"
 Cohesion: 0.09
-Nodes (48): compute_rtt_ms(), compute_theta_ms(), exchange_offset_from_ws_rtt(), local_true_time_ns(), node_offset_from_handshake(), one_way_latency_ms(), Clock drift estimation via 4-timestamp handshake and WebSocket RTT., RTT = (T4 - T1) - (T3 - T2) in milliseconds. (+40 more)
+Nodes (49): compute_rtt_ms(), compute_theta_ms(), exchange_offset_from_ws_rtt(), local_true_time_ns(), node_offset_from_handshake(), one_way_latency_ms(), Clock drift estimation via 4-timestamp handshake and WebSocket RTT., RTT = (T4 - T1) - (T3 - T2) in milliseconds. (+41 more)
 
 ### Community 148 - "Community 148"
 Cohesion: 0.09
@@ -18895,8 +19044,8 @@ Cohesion: 0.29
 Nodes (5): CHI404 measured speed, Engine 1: hftbacktest_loop (queue-realistic), Engine 2: event_accurate_mbo (research path), Event replay: CPI_2024_09_11_TIGHT, Limits
 
 ### Community 242 - "Community 242"
-Cohesion: 0.23
-Nodes (23): _date_range(), _parse_date(), pull_bronze(), Pull bronze parquet from B2 into data/crypto/bronze cache., _symbol_map(), bronze_key(), BronzeReadError, deribit_options_key() (+15 more)
+Cohesion: 0.05
+Nodes (86): DataFrame, ImportResult, collect_download_specs(), daily_window_utc(), download_decadal_session(), download_session(), download_session_legacy(), ET session windows and per-session Databento download. (+78 more)
 
 ### Community 243 - "Community 243"
 Cohesion: 0.07
@@ -18943,8 +19092,8 @@ Cohesion: 0.33
 Nodes (5): code:block1 (PDF_MODEL_1 (BookPressure)), Directed dependencies (runtime reads), Explicit non-combinations, PDF model dependency map, Registry separation
 
 ### Community 255 - "Community 255"
-Cohesion: 0.10
-Nodes (39): ang_of(), HalfLine, head_from(), Point, random_rfss(), Random rotate-flip-scale-shift a point cloud., Sketch the construction aline., Sketch the angle mirror. (+31 more)
+Cohesion: 0.07
+Nodes (34): ang_of(), assert_close_enough(), head_from(), _perpendicular_bisector(), Point, random_rfss(), Random rotate-flip-scale-shift a point cloud., Sketch the angle mirror. (+26 more)
 
 ### Community 256 - "Community 256"
 Cohesion: 0.05
@@ -19052,7 +19201,7 @@ Nodes (43): all_angles(), all_ratios(), Angle, Circle, Direction, get_circles_th
 
 ### Community 283 - "Community 283"
 Cohesion: 0.02
-Nodes (243): MBOEvent, ndarray, str, bool, int, MBOEvent, ndarray, str (+235 more)
+Nodes (191): MBOEvent, ndarray, str, bool, int, MBOEvent, ndarray, str (+183 more)
 
 ### Community 284 - "Community 284"
 Cohesion: 0.50
@@ -19083,8 +19232,8 @@ Cohesion: 0.07
 Nodes (29): breakeven_ms, breakeven_us, cpp_hot_path_runtime_us, cpp_replay_available, cpp_stack_checks, cpp_stack_verified, cpp_stack_verify_reason, data_period (+21 more)
 
 ### Community 291 - "Community 291"
-Cohesion: 0.08
-Nodes (49): information_coefficient(), feature_subset(), predict_baseline(), Economically named baseline models., train_baseline(), Discovery / Confirmation / Holdout stage gate (BLUEPRINT B4)., Tune on Discovery; evaluate Confirmation and Holdout with frozen Discovery model, run_holdout_gate() (+41 more)
+Cohesion: 0.07
+Nodes (61): attach_event_study_labels(), _positive_horizon_ms(), randomized_event_control_ic(), Event-study labels for H7 congestion shock hypothesis., Label event_window_return only on shock events: cumulative log return     from, Permute event flags, recompute labels, retrain, compare OOS IC., information_coefficient(), feature_subset() (+53 more)
 
 ### Community 293 - "Community 293"
 Cohesion: 0.07
@@ -19851,8 +20000,8 @@ Cohesion: 0.07
 Nodes (29): breakeven_ms, breakeven_us, cpp_hot_path_runtime_us, cpp_replay_available, cpp_stack_checks, cpp_stack_verified, cpp_stack_verify_reason, data_period (+21 more)
 
 ### Community 491 - "Community 491"
-Cohesion: 0.10
-Nodes (24): assert_close_enough(), check(), _draw(), draw_angle(), _draw_circle(), _draw_line(), draw_point(), get_theme() (+16 more)
+Cohesion: 0.17
+Nodes (21): check(), _draw(), draw_angle(), _draw_circle(), _draw_line(), draw_point(), get_theme(), highlight() (+13 more)
 
 ### Community 492 - "Community 492"
 Cohesion: 0.07
@@ -19956,7 +20105,7 @@ Nodes (29): breakeven_ms, breakeven_us, cpp_hot_path_runtime_us, cpp_replay_avai
 
 ### Community 517 - "Community 517"
 Cohesion: 0.04
-Nodes (118): ArbFill, MultiLegParityBacktester, ParityBacktestResult, _PendingArb, Multi-leg parity arb backtest with latency deferral., write_research_card(), OptionsFeeModel, Config-driven options fee model for parity arb. (+110 more)
+Nodes (131): ArbFill, MultiLegParityBacktester, ParityBacktestResult, _PendingArb, Multi-leg parity arb backtest with latency deferral., write_research_card(), OptionsFeeModel, Config-driven options fee model for parity arb. (+123 more)
 
 ### Community 518 - "Community 518"
 Cohesion: 0.04
@@ -19987,8 +20136,8 @@ Cohesion: 0.07
 Nodes (29): breakeven_ms, breakeven_us, cpp_hot_path_runtime_us, cpp_replay_available, cpp_stack_checks, cpp_stack_verified, cpp_stack_verify_reason, data_period (+21 more)
 
 ### Community 525 - "Community 525"
-Cohesion: 0.11
-Nodes (24): Circle, circle_circle_intersection(), HoleCircle, InvalidQuadSolveError, line_circle_intersection(), Reduce intersecting objects into one point of intersections., Sketch tangents to two circles., Sample a point within the boundary of points. (+16 more)
+Cohesion: 0.08
+Nodes (45): _check_between(), check_sameside(), check_too_far(), Circle, circle_circle_intersection(), circle_segment_intersect(), HalfLine, HoleCircle (+37 more)
 
 ### Community 526 - "Community 526"
 Cohesion: 0.13
@@ -20084,7 +20233,7 @@ Nodes (12): Computes attention over a sequence of inputs.      Args:       xs: i
 
 ### Community 549 - "Community 549"
 Cohesion: 0.09
-Nodes (36): candidate_by_id(), discover_backtest_configs(), discover_candidates(), load_candidate(), Discover and load crypto model candidate YAML specs., validate_backtest_config(), validate_candidate(), Any (+28 more)
+Nodes (35): candidate_by_id(), discover_backtest_configs(), discover_candidates(), load_candidate(), Discover and load crypto model candidate YAML specs., validate_backtest_config(), validate_candidate(), Any (+27 more)
 
 ### Community 550 - "Community 550"
 Cohesion: 0.31
@@ -20103,8 +20252,8 @@ Cohesion: 0.27
 Nodes (13): _gcd(), map_symbol(), map_symbol_inv(), pretty(), pretty2a(), pretty2r(), pretty_angle(), pretty_nl() (+5 more)
 
 ### Community 555 - "Community 555"
-Cohesion: 0.07
-Nodes (49): ActionResponse, fhirGet(), fhirGetRaw(), graphql(), GraphQLResponse, restGet(), RestItemResponse, RestListResponse (+41 more)
+Cohesion: 0.10
+Nodes (32): ActionResponse, graphql(), GraphQLResponse, restGet(), RestItemResponse, RestListResponse, restPost(), restRaw() (+24 more)
 
 ### Community 556 - "Community 556"
 Cohesion: 0.18
@@ -20187,8 +20336,8 @@ Cohesion: 0.25
 Nodes (6): DecoderStackGenerate, Stack of transformer decoder layers., Return initial state for autoregressive generation., DStackDecoderState, Array, int
 
 ### Community 577 - "Community 577"
-Cohesion: 0.07
-Nodes (41): CelClient, CelEvaluatorClient, CircuitBreaker, CircuitState, defaultProtoPath(), ProtoBatchEvalRequest, ProtoBatchEvalResponse, ProtoBatchEvalResult (+33 more)
+Cohesion: 0.08
+Nodes (37): CelEvaluatorClient, CircuitState, defaultProtoPath(), ProtoBatchEvalRequest, ProtoBatchEvalResponse, ProtoBatchEvalResult, ProtoEvalRequest, ProtoEvalResponse (+29 more)
 
 ### Community 578 - "Community 578"
 Cohesion: 0.07
@@ -20359,8 +20508,8 @@ Cohesion: 0.10
 Nodes (5): ConsentService, EventCause, LinkManager, ObjectManager, withSpan()
 
 ### Community 635 - "Community 635"
-Cohesion: 0.16
-Nodes (25): aggregateObjects(), tableName(), composeFragments(), fieldPredicateToSql(), filterToSql(), isFieldPredicate(), isLogicalPredicate(), logicalPredicateToSql() (+17 more)
+Cohesion: 0.14
+Nodes (27): enforceReferentialIntegrity(), aggregateObjects(), tableName(), composeFragments(), fieldPredicateToSql(), filterToSql(), isFieldPredicate(), isLogicalPredicate() (+19 more)
 
 ### Community 636 - "Community 636"
 Cohesion: 0.10
@@ -20388,7 +20537,7 @@ Nodes (14): EventBus, InMemoryEventBus, ChangeSet, EngineEventEmitter, generateE
 
 ### Community 642 - "Community 642"
 Cohesion: 0.15
-Nodes (25): ageQuery(), createLink(), deleteLink(), enforceCardinality(), enforceReferentialIntegrity(), genId(), getLink(), getLinks() (+17 more)
+Nodes (25): ageQuery(), createLink(), deleteLink(), enforceCardinality(), genId(), getLink(), getLinks(), linkTableName() (+17 more)
 
 ### Community 643 - "Community 643"
 Cohesion: 0.06
@@ -20396,7 +20545,7 @@ Nodes (30): actionFiles, combinedSource, computed, config, connPath, constraint,
 
 ### Community 644 - "Community 644"
 Cohesion: 0.08
-Nodes (15): AuditQueryFilter, PostgresAuditStore, ConsentStoreInterface, PostgresConsentStore, fn, PostgresStorageConfig, isTransientPgError(), RetryOptions (+7 more)
+Nodes (16): AuditQueryFilter, PostgresAuditStore, ConsentStoreInterface, PostgresConsentStore, DDLGenerationOptions, GeneratedDDL, PostgresStorageConfig, isTransientPgError() (+8 more)
 
 ### Community 645 - "Community 645"
 Cohesion: 0.18
@@ -20416,7 +20565,7 @@ Nodes (29): actionFiles, combinedSource, computed, config, connPath, constraint,
 
 ### Community 649 - "Community 649"
 Cohesion: 0.03
-Nodes (147): int, str, Any, int, Path, str, Any, bool (+139 more)
+Nodes (152): int, str, Any, int, Path, str, Any, bool (+144 more)
 
 ### Community 650 - "Community 650"
 Cohesion: 0.06
@@ -20463,16 +20612,16 @@ Cohesion: 0.14
 Nodes (14): ConflictEventData, ConflictEventHandler, ConflictResolutionResult, ConflictResolver, ConflictResolverConfig, ConflictStrategy, ExistingValue, FieldResolution (+6 more)
 
 ### Community 661 - "Community 661"
-Cohesion: 0.07
-Nodes (27): 5.1.1 Action Versioning, 5.1 Action Manifest, 5.2.1 CEL Environment, 5.2.2 Null Propagation, 5.2.3 Type System, 5.2.4 CEL Runtime Strategy, 5.2 Expression Language, 5.3 Execution Pipeline (+19 more)
+Cohesion: 0.10
+Nodes (20): 5.1.1 Action Versioning, 5.1 Action Manifest, 5.3 Execution Pipeline, 5.4 Action API, 5.5 Bulk Action Execution, 5.6.1 Reversibility Declaration, 5.6.2 Undo Semantics, 5.6 Action Undo (+12 more)
 
 ### Community 662 - "Community 662"
 Cohesion: 0.07
 Nodes (29): breakeven_ms, breakeven_us, cpp_hot_path_runtime_us, cpp_replay_available, cpp_stack_checks, cpp_stack_verified, cpp_stack_verify_reason, data_period (+21 more)
 
 ### Community 663 - "Community 663"
-Cohesion: 0.09
-Nodes (41): main(), render_markdown(), load_records(), main(), promote_from_records(), Promote paper_latency daemon NDJSON into trial latency reports., Synthetic event list for latency_profile dimensional stats., records_to_events() (+33 more)
+Cohesion: 0.12
+Nodes (23): DowYMIndexOutput, Any, float, ModelOutput, str, str, PDF structural models package., component_weights() (+15 more)
 
 ### Community 664 - "Community 664"
 Cohesion: 0.08
@@ -20495,8 +20644,8 @@ Cohesion: 0.21
 Nodes (23): ageQuery(), createAgeVertex(), createObject(), deleteAgeVertex(), genId(), getObject(), hardDeleteObject(), historyTableName() (+15 more)
 
 ### Community 670 - "Community 670"
-Cohesion: 0.11
-Nodes (23): generateAuditDDL(), generateConsentDDL(), generateAllGraphDDL(), generateEdgeLabelDDL(), generateGraphSetupDDL(), generateNodeLabelDDL(), generateLineageDDL(), generateLinkTableDDL() (+15 more)
+Cohesion: 0.13
+Nodes (20): generateAuditDDL(), generateConsentDDL(), generateAllGraphDDL(), generateEdgeLabelDDL(), generateGraphSetupDDL(), generateNodeLabelDDL(), generateLineageDDL(), generateDDL() (+12 more)
 
 ### Community 671 - "Community 671"
 Cohesion: 0.08
@@ -20524,7 +20673,7 @@ Nodes (22): getBedTypesForSpecialty(), resetIds(), DISCHARGE_NOTES, FIRST_NAMES,
 
 ### Community 677 - "Community 677"
 Cohesion: 0.09
-Nodes (9): PgSpiTransaction, createMockClient(), createMockPool(), error, mockClient, mockPool, q, PgTransaction (+1 more)
+Nodes (8): PgSpiTransaction, createMockClient(), createMockPool(), error, mockClient, mockPool, q, PgTransaction
 
 ### Community 678 - "Community 678"
 Cohesion: 0.08
@@ -20540,7 +20689,7 @@ Nodes (22): dependencies, @openfoundry/actions, @openfoundry/api, @openfoundry/o
 
 ### Community 681 - "Community 681"
 Cohesion: 0.05
-Nodes (89): Any, int, bool, EventSpec, Exception, float, Path, str (+81 more)
+Nodes (103): ChainRules, _cbbo_quote_ts_ns(), _count_ndjson_lines(), estimate_options_cost(), _fixed_price(), normalize_options_dbn(), options_paths(), parse_opra_symbol() (+95 more)
 
 ### Community 682 - "Community 682"
 Cohesion: 0.19
@@ -20811,8 +20960,8 @@ Cohesion: 0.25
 Nodes (7): compilerOptions, noUnusedLocals, noUnusedParameters, outDir, rootDir, extends, include
 
 ### Community 749 - "Community 749"
-Cohesion: 0.08
-Nodes (46): mbo_predictive_r2(), ols_r2(), Predictive metrics for cross-asset MBO ablation (exploratory, not alpha)., R² for y ~ const + x columns; requires n > number of regressors., OLS R² of forward returns on MBO snapshot predictors at anchor offset.     One r, build_cross_asset_l3_features(), _first_equity_imbalance_ordinal(), _first_row() (+38 more)
+Cohesion: 0.06
+Nodes (55): mbo_predictive_r2(), ols_r2(), Predictive metrics for cross-asset MBO ablation (exploratory, not alpha)., R² for y ~ const + x columns; requires n > number of regressors., OLS R² of forward returns on MBO snapshot predictors at anchor offset.     One r, AblationResult, Phase 8 — cross-asset MBO ablation harness (tests groups; does not assume alpha), run_ablation_for_event() (+47 more)
 
 ### Community 750 - "Community 750"
 Cohesion: 0.57
@@ -21231,8 +21380,8 @@ Cohesion: 0.07
 Nodes (29): breakeven_ms, breakeven_us, cpp_hot_path_runtime_us, cpp_replay_available, cpp_stack_checks, cpp_stack_verified, cpp_stack_verify_reason, data_period (+21 more)
 
 ### Community 877 - "Community 877"
-Cohesion: 0.05
-Nodes (110): DailyBar, compute_l3_features(), L3FeatureSnapshot, L3-only feature stubs (no-op in degraded mode)., FilterConfig, FilterResult, FloatRecord, bars_before() (+102 more)
+Cohesion: 0.03
+Nodes (149): entry_signal(), exit_signal(), Confluence signal engine — thresholds from config only., assert_no_float_lookahead(), Verify float lookup uses as_of_date <= session_date only., ConsolidationLabel, DailyBar, compute_features() (+141 more)
 
 ### Community 878 - "Community 878"
 Cohesion: 0.07
@@ -21267,8 +21416,8 @@ Cohesion: 0.07
 Nodes (29): breakeven_ms, breakeven_us, cpp_hot_path_runtime_us, cpp_replay_available, cpp_stack_checks, cpp_stack_verified, cpp_stack_verify_reason, data_period (+21 more)
 
 ### Community 886 - "Community 886"
-Cohesion: 0.14
-Nodes (28): apply_pit_alignment(), backward_join_node_to_exchange(), compute_t_avail(), compute_t_exch_true(), _ensure_latency_columns(), pit_config_from_dict(), Point-in-time availability boundary for BTC node ↔ exchange joins., Raised when node data would be available after exchange decision time. (+20 more)
+Cohesion: 0.12
+Nodes (30): apply_pit_alignment(), backward_join_node_to_exchange(), compute_t_avail(), compute_t_exch_true(), _ensure_latency_columns(), pit_config_from_dict(), Point-in-time availability boundary for BTC node ↔ exchange joins., Raised when node data would be available after exchange decision time. (+22 more)
 
 ### Community 887 - "Community 887"
 Cohesion: 0.07
@@ -21647,8 +21796,8 @@ Cohesion: 0.07
 Nodes (29): breakeven_ms, breakeven_us, cpp_hot_path_runtime_us, cpp_replay_available, cpp_stack_checks, cpp_stack_verified, cpp_stack_verify_reason, data_period (+21 more)
 
 ### Community 984 - "Community 984"
-Cohesion: 0.21
-Nodes (21): build_kg_slice(), ingest_run(), _load_net_pnl(), Ingest a workbench run into the file-backed KG., write_kg_slice(), Any, float, int (+13 more)
+Cohesion: 0.07
+Nodes (56): build_macro_catalog_summary(), events_csv_summary(), MacroCatalogSummary, Single source of truth: 44 macro event types vs runnable events.csv / MBO covera, catalog_event_type_count(), catalog_event_types(), All macro event types (44) — authority: event_universe.yaml., _anchor_and_window() (+48 more)
 
 ### Community 985 - "Community 985"
 Cohesion: 0.07
@@ -22687,8 +22836,8 @@ Cohesion: 0.07
 Nodes (26): artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, cost_adjusted_pearson, cost_adjusted_spearman, drawdown_pass, fold_correlations, kendall (+18 more)
 
 ### Community 1245 - "Community 1245"
-Cohesion: 0.05
-Nodes (76): DataFrame, assert_live_config(), assert_paper_safe(), assert_replay_safe(), counter_snapshot(), execution_mode(), Execution mode safety counters and guards., NodeEnvError (+68 more)
+Cohesion: 0.04
+Nodes (66): Any, int, Path, str, Any, bool, float, int (+58 more)
 
 ### Community 1246 - "Community 1246"
 Cohesion: 0.07
@@ -23695,16 +23844,16 @@ Cohesion: 0.09
 Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
 
 ### Community 1497 - "Community 1497"
-Cohesion: 0.09
-Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
+Cohesion: 0.14
+Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
 
 ### Community 1498 - "Community 1498"
 Cohesion: 0.09
 Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
 
 ### Community 1499 - "Community 1499"
-Cohesion: 0.09
-Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
+Cohesion: 0.14
+Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
 
 ### Community 1500 - "Community 1500"
 Cohesion: 0.09
@@ -23727,12 +23876,12 @@ Cohesion: 0.09
 Nodes (21): allowed_contexts, catalog_years, end_year, events, start_year, end_year, events, start_year (+13 more)
 
 ### Community 1505 - "Community 1505"
-Cohesion: 0.09
-Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
+Cohesion: 0.14
+Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
 
 ### Community 1506 - "Community 1506"
-Cohesion: 0.09
-Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
+Cohesion: 0.14
+Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
 
 ### Community 1507 - "Community 1507"
 Cohesion: 0.09
@@ -23747,32 +23896,32 @@ Cohesion: 0.09
 Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
 
 ### Community 1510 - "Community 1510"
-Cohesion: 0.09
-Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
-
-### Community 1511 - "Community 1511"
-Cohesion: 0.09
-Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
-
-### Community 1512 - "Community 1512"
 Cohesion: 0.14
 Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
+
+### Community 1511 - "Community 1511"
+Cohesion: 0.14
+Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
+
+### Community 1512 - "Community 1512"
+Cohesion: 0.09
+Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
 
 ### Community 1513 - "Community 1513"
 Cohesion: 0.09
 Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
 
 ### Community 1514 - "Community 1514"
-Cohesion: 0.14
-Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
-
-### Community 1515 - "Community 1515"
-Cohesion: 0.14
-Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
-
-### Community 1516 - "Community 1516"
 Cohesion: 0.09
 Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
+
+### Community 1515 - "Community 1515"
+Cohesion: 0.09
+Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
+
+### Community 1516 - "Community 1516"
+Cohesion: 0.14
+Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
 
 ### Community 1517 - "Community 1517"
 Cohesion: 0.09
@@ -23795,8 +23944,8 @@ Cohesion: 0.10
 Nodes (20): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+12 more)
 
 ### Community 1522 - "Community 1522"
-Cohesion: 0.06
-Nodes (61): Any, str, Any, float, int, str, str, canonical_params_json() (+53 more)
+Cohesion: 0.11
+Nodes (32): _event_meta(), _mbo_sequence(), Unit tests for HybridExecutionStrategy (in-memory MBO steps, no NPZ file)., When internal MBO book has BBO, VPIN mid must not follow divergent hbt.depth., TRADE before book BBO: VPIN uses hbt.depth mid fallback., test_cancel_quote_flag_cancels_resting_orders(), test_event_window_end_ns_parses_iso(), test_event_window_start_ns_parses_iso() (+24 more)
 
 ### Community 1523 - "Community 1523"
 Cohesion: 0.10
@@ -24139,8 +24288,8 @@ Cohesion: 0.11
 Nodes (17): campaign_id, model_id, overfit_risk, param_hash, periods, promote_candidate, promote_note, robustness_passed (+9 more)
 
 ### Community 1608 - "Community 1608"
-Cohesion: 0.09
-Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
+Cohesion: 0.14
+Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
 
 ### Community 1609 - "Community 1609"
 Cohesion: 0.12
@@ -24772,11 +24921,11 @@ Nodes (23): 10 es mes only assumptions, 11 cpi nfp only assumptions, 12 multi sy
 
 ### Community 1766 - "Community 1766"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, KE, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, CL, KE, M2K, MGC, RB, feed_status (+8 more)
 
 ### Community 1767 - "Community 1767"
-Cohesion: 0.13
-Nodes (14): bool, datetime, float, int, bool, datetime, float, str (+6 more)
+Cohesion: 0.06
+Nodes (75): Any, int, bool, EventSpec, Exception, float, Path, str (+67 more)
 
 ### Community 1768 - "Community 1768"
 Cohesion: 0.12
@@ -24784,15 +24933,15 @@ Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_updat
 
 ### Community 1769 - "Community 1769"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MES (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, KE, MGC (+8 more)
 
 ### Community 1770 - "Community 1770"
 Cohesion: 0.05
 Nodes (40): accepted_count, cancel_count, certification_footer, certification_stamp, backtester_version, certification_commit, certification_run_id, changed_core_files (+32 more)
 
 ### Community 1771 - "Community 1771"
-Cohesion: 0.02
-Nodes (154): int, str, Any, int, str, Path, build_inventory(), _classify_mbo_status() (+146 more)
+Cohesion: 0.03
+Nodes (97): Any, int, str, CalendarRow, iter_calendar_rows(), parse_row_status(), Release calendar CSV parsing — no hardcoded event-type or filename lists., Infer row_status from CSV. Explicit column wins; never use filename allowlists. (+89 more)
 
 ### Community 1772 - "Community 1772"
 Cohesion: 0.07
@@ -24868,15 +25017,15 @@ Nodes (40): accepted_count, cancel_count, certification_footer, certification_st
 
 ### Community 1791 - "Community 1791"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, CL, KE, MGC, RB, ZL, feed_status (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, CL, KE, M2K, MGC, RB, feed_status (+8 more)
 
 ### Community 1792 - "Community 1792"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MES (+8 more)
 
 ### Community 1793 - "Community 1793"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, CL, KE, MGC, RB, ZL, feed_status (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, 6A, KE, M2K, NG, SR3, feed_status (+8 more)
 
 ### Community 1794 - "Community 1794"
 Cohesion: 0.07
@@ -24884,11 +25033,11 @@ Nodes (27): wfc, artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, c
 
 ### Community 1795 - "Community 1795"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, KE, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, 6A, HO, MGC, SR3, ZF, data_delay_status (+8 more)
 
 ### Community 1796 - "Community 1796"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, 6A, KE, MNQ, SR3, ZF, feed_status (+8 more)
 
 ### Community 1797 - "Community 1797"
 Cohesion: 0.13
@@ -24896,7 +25045,7 @@ Nodes (14): ablation_ic_delta, candidate_id, embargo, embargo_steps, hypothesis_
 
 ### Community 1798 - "Community 1798"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, KE, MGC (+8 more)
 
 ### Community 1799 - "Community 1799"
 Cohesion: 0.08
@@ -24904,7 +25053,7 @@ Nodes (24): artifact_dir, candidates_tested, document_summary, event_id, generat
 
 ### Community 1800 - "Community 1800"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MES (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, KE, MGC (+8 more)
 
 ### Community 1801 - "Community 1801"
 Cohesion: 0.12
@@ -24912,7 +25061,7 @@ Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_updat
 
 ### Community 1802 - "Community 1802"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, 6A, KE, M2K, NG, SR3, feed_status (+8 more)
 
 ### Community 1803 - "Community 1803"
 Cohesion: 0.12
@@ -24920,31 +25069,31 @@ Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_updat
 
 ### Community 1804 - "Community 1804"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, KE, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MES (+8 more)
 
 ### Community 1805 - "Community 1805"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, KE, MGC (+8 more)
 
 ### Community 1806 - "Community 1806"
 Cohesion: 0.12
 Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
 
 ### Community 1807 - "Community 1807"
-Cohesion: 0.21
-Nodes (6): Placeholder for future direct R|API connector., RithmicApiConnector, ConnectorInterface, Any, str, TrialConfig
+Cohesion: 0.15
+Nodes (16): NodeEnv, NodeEnvError, Load btc-node tunnel endpoints from .btc-node.env., BtcRpc, BtcRpcError, ChainInfo, MempoolInfo, NetworkInfo (+8 more)
 
 ### Community 1808 - "Community 1808"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, CL, KE, MGC, RB, ZL, feed_status (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MES (+8 more)
 
 ### Community 1809 - "Community 1809"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, CL, KE, M2K, MGC, RB, feed_status (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, 6A, HO, MGC, SR3, ZC, data_delay_status (+8 more)
 
 ### Community 1810 - "Community 1810"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MES (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
 
 ### Community 1811 - "Community 1811"
 Cohesion: 0.13
@@ -26387,8 +26536,8 @@ Cohesion: 0.13
 Nodes (15): pnl_by_latency, 0.0, 0.05, 0.1, 0.25, 0.5, 1000.0, 100.0 (+7 more)
 
 ### Community 2176 - "Community 2176"
-Cohesion: 0.09
-Nodes (32): Path, str, bool, Path, str, Resolve built C++ binaries under repo build/., Find hft_* executable under build/ (Release/Debug or flat)., resolve_cpp_binary() (+24 more)
+Cohesion: 0.08
+Nodes (36): Path, str, bool, Path, str, Resolve built C++ binaries under repo build/., Find hft_* executable under build/ (Release/Debug or flat)., resolve_cpp_binary() (+28 more)
 
 ### Community 2177 - "Community 2177"
 Cohesion: 0.13
@@ -26699,8 +26848,8 @@ Cohesion: 0.13
 Nodes (15): pnl_by_latency, 0.0, 0.05, 0.1, 0.25, 0.5, 1000.0, 100.0 (+7 more)
 
 ### Community 2254 - "Community 2254"
-Cohesion: 0.19
-Nodes (21): Any, str, _aar_packet_invariants(), _load_schema(), JSON Schema validation for data_layer packets., Return human-readable validation errors (empty if valid)., Cross-field rules formerly in validate_packet_schema., validate_aar_packet_in() (+13 more)
+Cohesion: 0.04
+Nodes (46): windows_by_event_type, ADP_EMPLOYMENT, BAKER_HUGHES_RIG, BUILDING_PERMITS, CASH_EQUITY_OPEN, CONSTRUCTION_SPENDING, CORE_CPI, CORE_PCE (+38 more)
 
 ### Community 2255 - "Community 2255"
 Cohesion: 0.13
@@ -26987,8 +27136,8 @@ Cohesion: 0.13
 Nodes (15): pnl_by_latency, 0.0, 0.05, 0.1, 0.25, 0.5, 1000.0, 100.0 (+7 more)
 
 ### Community 2328 - "Community 2328"
-Cohesion: 0.14
-Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
+Cohesion: 0.09
+Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
 
 ### Community 2329 - "Community 2329"
 Cohesion: 0.13
@@ -31643,28 +31792,28 @@ Cohesion: 0.09
 Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
 
 ### Community 3501 - "Community 3501"
-Cohesion: 0.14
-Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
+Cohesion: 0.09
+Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
 
 ### Community 3502 - "Community 3502"
-Cohesion: 0.14
-Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
+Cohesion: 0.09
+Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
 
 ### Community 3503 - "Community 3503"
-Cohesion: 0.14
-Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
+Cohesion: 0.09
+Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
 
 ### Community 3504 - "Community 3504"
 Cohesion: 0.09
 Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
 
 ### Community 3505 - "Community 3505"
-Cohesion: 0.09
-Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
+Cohesion: 0.14
+Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
 
 ### Community 3506 - "Community 3506"
-Cohesion: 0.09
-Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
+Cohesion: 0.14
+Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
 
 ### Community 3507 - "Community 3507"
 Cohesion: 0.09
@@ -36203,8 +36352,8 @@ Cohesion: 0.17
 Nodes (11): Certification (runtime), code:block1 (artifacts/workbench_runs/{campaign_id}/), code:block2 (artifacts/event_replays/{event_id}/), code:block3 (runtime/validation/), Event replay, JSON schemas, Launch modes, Roots (+3 more)
 
 ### Community 4641 - "Community 4641"
-Cohesion: 0.06
-Nodes (51): entry_signal(), exit_signal(), Confluence signal engine — thresholds from config only., ConsolidationLabel, compute_features(), FeatureSnapshot, Map lane ticks to structural model outputs., ORBLabel (+43 more)
+Cohesion: 0.11
+Nodes (24): Any, float, int, ModelOutput, _betainc_cf(), bvc_buy_volume(), compute_vpin(), Add trade/bar volume; flush bucket when target reached. (+16 more)
 
 ### Community 4642 - "Community 4642"
 Cohesion: 0.18
@@ -37323,8 +37472,8 @@ Cohesion: 0.10
 Nodes (20): campaign_id, certification_footer, events_ran, model_id, overfit_risk, param_hash, periods, promote_candidate (+12 more)
 
 ### Community 4921 - "Community 4921"
-Cohesion: 0.14
-Nodes (32): _apply_aliases(), ensure_crypto_env(), env_status(), _load_plain_env(), Discover and load crypto lane credentials from standard env file paths., Load env files once; return paths that were found., redacted_env_report(), repo_env_paths() (+24 more)
+Cohesion: 0.13
+Nodes (26): _apply_aliases(), ensure_crypto_env(), env_status(), _load_plain_env(), Discover and load crypto lane credentials from standard env file paths., Load env files once; return paths that were found., redacted_env_report(), repo_env_paths() (+18 more)
 
 ### Community 4922 - "Community 4922"
 Cohesion: 0.07
@@ -37363,8 +37512,8 @@ Cohesion: 0.07
 Nodes (26): artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, cost_adjusted_pearson, cost_adjusted_spearman, drawdown_pass, fold_correlations, kendall (+18 more)
 
 ### Community 4931 - "Community 4931"
-Cohesion: 0.17
-Nodes (27): Any, bool, float, int, Path, Series, str, _audit_complete() (+19 more)
+Cohesion: 0.04
+Nodes (91): build_kg_slice(), ingest_run(), _load_net_pnl(), Ingest a workbench run into the file-backed KG., write_kg_slice(), GenerateResult, build_aar_system_prompt(), build_aar_user_envelope() (+83 more)
 
 ### Community 4932 - "Community 4932"
 Cohesion: 0.33
@@ -37579,8 +37728,8 @@ Cohesion: 0.17
 Nodes (11): Agent checklist (before editing CHI404 scripts), CHI404 canonical entrypoints (agents: read before any CHI404 / R|Trader work), code:bash (cd /root/hft3/repo), code:bash (bash scripts/chi404_run_trial_live.sh          # live gate →), code:bash (# 1. VM session healthy (cur.txt growing, live gate PASS)), code:bash (python3 scripts/latency_probe/summarize_latency.py --run-id ), Deprecated / forbidden paths, Live capture (real market + order logs) (+3 more)
 
 ### Community 4985 - "Community 4985"
-Cohesion: 0.36
-Nodes (8): normalize_event(), normalize_file(), _parse_exchange_ts(), Any, int, Path, str, TrialConfig
+Cohesion: 0.16
+Nodes (19): _events_csv_path(), list_upcoming(), Query upcoming macro releases from events.csv with holiday-aware metadata., List releases from events.csv (anchors already holiday-adjusted by builder)., resolve_release_datetime(), UpcomingEvent, anchor_utc(), format_release_for_user() (+11 more)
 
 ### Community 4986 - "Community 4986"
 Cohesion: 0.18
@@ -38303,8 +38452,8 @@ Cohesion: 0.33
 Nodes (5): C++ latency profile (µs), Latency viability, Robustness, Runtime (do not conflate), Workbench Run Report: SECOND_WAVE_CONTINUATION
 
 ### Community 5166 - "Community 5166"
-Cohesion: 0.07
-Nodes (36): proposals_dir(), Write propose-only calendar diff artifacts., write_proposal(), parse_bea_html(), propose(), BEA release schedule proposal fetcher., parse_bls_html(), propose() (+28 more)
+Cohesion: 0.08
+Nodes (30): proposals_dir(), Write propose-only calendar diff artifacts., write_proposal(), parse_bea_html(), propose(), BEA release schedule proposal fetcher., parse_bls_html(), propose() (+22 more)
 
 ### Community 5167 - "Community 5167"
 Cohesion: 0.33
@@ -39736,7 +39885,7 @@ Nodes (5): C++ latency profile (µs), Latency viability, Robustness, Runtime (do
 
 ### Community 5527 - "Community 5527"
 Cohesion: 0.02
-Nodes (170): Resolve replay NPZ paths for Rithmic trial vs Databento event windows., Return Databento MBO NPZ path for a macro event_id from events.csv., Return quarantined Rithmic trial replay NPZ for a capture session date., resolve_event_npz(), resolve_trial_npz(), _event_meta(), _events(), Tests for defensive-layer toggles on PDF hybrid strategy. (+162 more)
+Nodes (152): Resolve replay NPZ paths for Rithmic trial vs Databento event windows., Return Databento MBO NPZ path for a macro event_id from events.csv., Return quarantined Rithmic trial replay NPZ for a capture session date., resolve_event_npz(), resolve_trial_npz(), _event_meta(), _events(), Tests for defensive-layer toggles on PDF hybrid strategy. (+144 more)
 
 ### Community 5528 - "Community 5528"
 Cohesion: 0.33
@@ -60955,12 +61104,12 @@ Cohesion: 0.67
 Nodes (3): KE, data_delay_status, last_update_age_ms
 
 ### Community 10854 - "Community 10854"
-Cohesion: 0.11
-Nodes (28): _parse_comma_log_line(), _parse_csv_row(), _parse_export_timestamp(), _parse_log_line(), R|Trader export: timestamp,Trade,MES,5000.00,1, Watch R|Trader Pro export/log files (Wine on CHI404 only)., Parse R|Trader export prefix: 2026-05-30 01:00:00.000000, RTraderBridgeConnector (+20 more)
+Cohesion: 0.09
+Nodes (45): append_edges(), _append_jsonl(), append_nodes(), _edge_key(), _existing_ids(), kg_dir(), Append-only JSONL knowledge graph under research_cards/kg/., _read_jsonl() (+37 more)
 
 ### Community 10855 - "Community 10855"
-Cohesion: 0.16
-Nodes (24): percentile_us(), Percentile helpers for paper order latency reports., stats_by_key(), stats_us(), Any, float, int, str (+16 more)
+Cohesion: 0.05
+Nodes (43): ADP_EMPLOYMENT, BAKER_HUGHES_RIG, BUILDING_PERMITS, CASH_EQUITY_OPEN, CONSTRUCTION_SPENDING, CORE_CPI, CORE_PCE, CORE_PPI (+35 more)
 
 ### Community 10856 - "Community 10856"
 Cohesion: 0.12
@@ -60968,7 +61117,7 @@ Nodes (16): 0. Implementation status, 1. Clock drift estimation (PTP/NTP), 2. Av
 
 ### Community 10857 - "Community 10857"
 Cohesion: 0.08
-Nodes (24): Any, float, str, _chain_tolerance_us(), check_latency_invariants(), Deterministic latency invariant checks (AlphaGeometry neuro-symbolic pattern)., After-action data_layer tests., test_after_action_skipped_on_fast_sweep() (+16 more)
+Nodes (51): Any, Path, str, build_inventory(), _classify_mbo_status(), _events_symbols(), _load_hot_universe(), _load_pilot_basket_manifest() (+43 more)
 
 ### Community 10858 - "Community 10858"
 Cohesion: 0.52
@@ -61088,7 +61237,7 @@ Nodes (3): data_delay_status, last_update_age_ms, 6J
 
 ### Community 10892 - "Community 10892"
 Cohesion: 0.09
-Nodes (22): type, type, type, type, type, type, enum, type (+14 more)
+Nodes (22): type, type, type, type, type, type, type, properties (+14 more)
 
 ### Community 10893 - "Community 10893"
 Cohesion: 0.67
@@ -61551,8 +61700,8 @@ Cohesion: 0.67
 Nodes (3): ZB, data_delay_status, last_update_age_ms
 
 ### Community 11008 - "Community 11008"
-Cohesion: 0.03
-Nodes (145): AblationResult, Phase 8 — cross-asset MBO ablation harness (tests groups; does not assume alpha), run_ablation_for_event(), _verdict(), write_ablation_report(), _sha256(), _utc_date(), _events_csv_path() (+137 more)
+Cohesion: 0.07
+Nodes (66): CertificationRecord, Any, Path, str, backtester_version(), Any, bool, float (+58 more)
 
 ### Community 11010 - "Community 11010"
 Cohesion: 0.67
@@ -68475,8 +68624,8 @@ Cohesion: 0.11
 Nodes (19): certification_stamp, backtester_version, certification_commit, certification_run_id, changed_core_files, current_commit, event_id, execution_adapter_mode (+11 more)
 
 ### Community 12825 - "Community 12825"
-Cohesion: 0.05
-Nodes (48): Any, int, Path, str, Any, bool, float, int (+40 more)
+Cohesion: 0.17
+Nodes (24): import_release_window(), Import pipeline: classify → parse → validate → store release_event_path., Full MBO-only import for one release × symbol., build_release_event_path(), copy_raw_dbn(), events_jsonl_path(), hashes_path(), load_release_event_path() (+16 more)
 
 ### Community 12826 - "Community 12826"
 Cohesion: 0.07
@@ -68491,8 +68640,8 @@ Cohesion: 0.67
 Nodes (3): ZN, data_delay_status, last_update_age_ms
 
 ### Community 12829 - "Community 12829"
-Cohesion: 0.10
-Nodes (48): bytes, B2Client, B2ClientError, Backblaze B2 download client for crypto lane bronze., _date_range(), _http_json(), _klines_df(), _parse_date() (+40 more)
+Cohesion: 0.05
+Nodes (40): CPI, NFP, cme_symbols, cost_estimate, by_event_type, by_event_type_full, estimate_method, estimated_cost_usd (+32 more)
 
 ### Community 12830 - "Community 12830"
 Cohesion: 0.67
@@ -68535,8 +68684,8 @@ Cohesion: 0.67
 Nodes (3): HG, data_delay_status, last_update_age_ms
 
 ### Community 12840 - "Community 12840"
-Cohesion: 0.21
-Nodes (14): _fetch_tags(), generate(), GenerateResult, ollama_available(), Ollama HTTP client for packet-strict LLM calls (Gemma AAR / GLM pipeline)., resolve_model(), bool, float (+6 more)
+Cohesion: 0.18
+Nodes (14): _fetch_tags(), generate(), ollama_available(), Ollama HTTP client for packet-strict LLM calls (Gemma AAR / GLM pipeline)., resolve_model(), bool, float, int (+6 more)
 
 ### Community 12841 - "Community 12841"
 Cohesion: 0.11
@@ -68703,8 +68852,8 @@ Cohesion: 0.67
 Nodes (3): NQ, data_delay_status, last_update_age_ms
 
 ### Community 12882 - "Community 12882"
-Cohesion: 0.35
-Nodes (13): assert_connector_valid(), default_connector_path(), default_vendor_lock_path(), load_connector(), Load OpenFoundry connector YAML and vendor pins., Fail closed before LLM or KG persist when vendor/connector is incomplete., read_vendor_lock(), validate_connector() (+5 more)
+Cohesion: 0.15
+Nodes (24): assert_connector_valid(), default_connector_path(), default_vendor_lock_path(), load_connector(), Load OpenFoundry connector YAML and vendor pins., Fail closed before LLM or KG persist when vendor/connector is incomplete., read_vendor_lock(), validate_connector() (+16 more)
 
 ### Community 12883 - "Community 12883"
 Cohesion: 0.67
@@ -68743,16 +68892,16 @@ Cohesion: 0.67
 Nodes (3): YM, data_delay_status, last_update_age_ms
 
 ### Community 12892 - "Community 12892"
-Cohesion: 0.20
-Nodes (13): bool, DataFrame, float, int, ndarray, str, build_forward_returns(), build_labels_frame() (+5 more)
+Cohesion: 0.05
+Nodes (40): 6A.v.0, 6B.v.0, 6C.v.0, 6E.v.0, 6J.v.0, CL.v.0, GC.v.0, HG.v.0 (+32 more)
 
 ### Community 12893 - "Community 12893"
 Cohesion: 0.05
 Nodes (40): accepted_count, cancel_count, certification_footer, certification_stamp, backtester_version, certification_commit, certification_run_id, changed_core_files (+32 more)
 
 ### Community 12894 - "Community 12894"
-Cohesion: 0.50
-Nodes (4): _golden_exe(), Compiled C++ map_label parity (skips if binary not built)., test_cpp_map_label_golden(), Path
+Cohesion: 0.25
+Nodes (7): allowed_contexts, catalog_years, diagnostics, model_id, personal_locked, personal_range, symbol
 
 ### Community 12895 - "Community 12895"
 Cohesion: 0.67
@@ -68827,8 +68976,8 @@ Cohesion: 0.06
 Nodes (35): adverse_selection, alpha_family_or_discovered_behavior, approval_status, certification_stamp, backtester_version, certification_commit, certification_run_id, changed_core_files (+27 more)
 
 ### Community 12913 - "Community 12913"
-Cohesion: 0.02
-Nodes (175): CrossAssetLeadLagOutput, DowYMIndexOutput, HawkesToxicOutput, HybridExecutionOutput, Any, DefensiveConfig, MBOEvent, str (+167 more)
+Cohesion: 0.15
+Nodes (27): BookPressureOutput, Any, bool, float, int, ModelOutput, ndarray, OrderBook (+19 more)
 
 ### Community 12914 - "Community 12914"
 Cohesion: 0.67
@@ -69016,15 +69165,15 @@ Nodes (16): doc, market_state_align, spsc_queue, config, research_ready_in_event
 
 ### Community 12960 - "Community 12960"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, 6A, KE, M2K, NG, SR3, feed_status (+8 more)
 
 ### Community 12961 - "Community 12961"
 Cohesion: 0.12
 Nodes (16): doc, market_state_align, spsc_queue, config, research_ready_in_events_csv, config, core_protected_symbols, doc (+8 more)
 
 ### Community 12962 - "Community 12962"
-Cohesion: 0.24
-Nodes (14): build_aar_system_prompt(), build_aar_user_envelope(), build_packet_summary(), build_symbolic_narrative(), build_user_prompt(), parse_annotations(), After-action LLM prompts — packet-strict Gemma constraints., Deprecated — delegates to full envelope. (+6 more)
+Cohesion: 0.06
+Nodes (34): CPI, NFP, by_event_type_full, estimated_cost_usd, npz_slots_missing, output_path, scoped_event_types, scoped_window_count (+26 more)
 
 ### Community 12963 - "Community 12963"
 Cohesion: 0.67
@@ -69859,8 +70008,8 @@ Cohesion: 0.67
 Nodes (3): KE, data_delay_status, last_update_age_ms
 
 ### Community 13171 - "Community 13171"
-Cohesion: 0.11
-Nodes (18): 0. Macro event catalog (not CPI-only), 10. Related files, 1. Topology — which machine owns what, 2.1 Workbench slugs × equities OPRA (decadal sessions), 2. Three research lanes (do not conflate), 3.1 Macro (55 events) — generally OK, 3.2 Low-float equities (16 sessions in YAML), 3.3 Crypto — not loaded by imbalance / macro download (+10 more)
+Cohesion: 0.10
+Nodes (20): 0. Macro event catalog (not CPI-only), 10. Related files, 1. Topology — which machine owns what, 2.1 Workbench slugs × equities OPRA (decadal sessions), 2. Three research lanes (do not conflate), 3.1 Macro (55 events) — generally OK, 3.2 Low-float equities (16 sessions in YAML), 3.3 Crypto — not loaded by imbalance / macro download (+12 more)
 
 ### Community 13172 - "Community 13172"
 Cohesion: 0.12
@@ -69999,12 +70148,12 @@ Cohesion: 0.67
 Nodes (3): MCL, data_delay_status, last_update_age_ms
 
 ### Community 13206 - "Community 13206"
-Cohesion: 0.18
-Nodes (12): items, type, items, type, type, properties, type, indicators (+4 more)
+Cohesion: 0.14
+Nodes (15): items, type, items, type, type, properties, required, type (+7 more)
 
 ### Community 13207 - "Community 13207"
-Cohesion: 0.45
-Nodes (12): append_edges(), _append_jsonl(), append_nodes(), _edge_key(), _existing_ids(), kg_dir(), Append-only JSONL knowledge graph under research_cards/kg/., _read_jsonl() (+4 more)
+Cohesion: 0.14
+Nodes (23): HybridExecutionOutput, DefensiveConfig, MBOEvent, Any, float, ModelOutput, PDF_MODEL_3 — VPIN, BVC with Student-t, volume-time buckets., as_optimal_spread() (+15 more)
 
 ### Community 13208 - "Community 13208"
 Cohesion: 0.67
@@ -70211,8 +70360,8 @@ Cohesion: 0.07
 Nodes (27): wfc, artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, cost_adjusted_pearson, cost_adjusted_spearman, drawdown_pass, fold_correlations (+19 more)
 
 ### Community 13259 - "Community 13259"
-Cohesion: 0.67
-Nodes (3): data_delay_status, last_update_age_ms, CL
+Cohesion: 0.12
+Nodes (16): data_delay_status, last_update_age_ms, CL, M2K, MES, RB, SR3, feed_status (+8 more)
 
 ### Community 13260 - "Community 13260"
 Cohesion: 0.15
@@ -70292,7 +70441,7 @@ Nodes (3): MYM, data_delay_status, last_update_age_ms
 
 ### Community 13280 - "Community 13280"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, 6A, HO, NG, ZB, ZF, data_delay_status (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
 
 ### Community 13281 - "Community 13281"
 Cohesion: 0.67
@@ -70403,8 +70552,8 @@ Cohesion: 0.67
 Nodes (3): HG, data_delay_status, last_update_age_ms
 
 ### Community 13308 - "Community 13308"
-Cohesion: 0.09
-Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
+Cohesion: 0.14
+Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
 
 ### Community 13309 - "Community 13309"
 Cohesion: 0.09
@@ -70539,8 +70688,8 @@ Cohesion: 0.67
 Nodes (3): data_delay_status, last_update_age_ms, 6J
 
 ### Community 13342 - "Community 13342"
-Cohesion: 0.14
-Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
+Cohesion: 0.09
+Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
 
 ### Community 13343 - "Community 13343"
 Cohesion: 0.67
@@ -70568,7 +70717,7 @@ Nodes (3): MCL, data_delay_status, last_update_age_ms
 
 ### Community 13349 - "Community 13349"
 Cohesion: 0.05
-Nodes (47): data_provenance_source(), Resolve fixture vs production data paths for crypto lane., resolve_lane_data_dir(), attach_provenance(), build_basis_features(), _dt_hours(), Basis feature builder., Compute causal basis features from spot_mid, perp_mid (filtration-safe through t (+39 more)
+Nodes (55): data_provenance_source(), Resolve fixture vs production data paths for crypto lane., resolve_lane_data_dir(), attach_provenance(), build_basis_features(), _dt_hours(), Basis feature builder., Compute causal basis features from spot_mid, perp_mid (filtration-safe through t (+47 more)
 
 ### Community 13350 - "Community 13350"
 Cohesion: 0.67
@@ -70579,8 +70728,8 @@ Cohesion: 0.67
 Nodes (3): MYM, data_delay_status, last_update_age_ms
 
 ### Community 13352 - "Community 13352"
-Cohesion: 0.10
-Nodes (23): ConnectorInterface, Path, str, Any, str, bool, Any, bool (+15 more)
+Cohesion: 0.22
+Nodes (9): assert_live_config(), assert_paper_safe(), assert_replay_safe(), counter_snapshot(), execution_mode(), Execution mode safety counters and guards., ExecutionAdapter, int (+1 more)
 
 ### Community 13353 - "Community 13353"
 Cohesion: 0.67
@@ -70627,8 +70776,8 @@ Cohesion: 0.67
 Nodes (3): ZB, data_delay_status, last_update_age_ms
 
 ### Community 13364 - "Community 13364"
-Cohesion: 0.08
-Nodes (46): BtcRpc, NodeEnv, BtcRpc, BtcRpcError, ChainInfo, MempoolInfo, NetworkInfo, Bitcoin Core JSON-RPC client (stdlib only). (+38 more)
+Cohesion: 0.12
+Nodes (32): BtcRpc, cmd_pull_mempool(), float, backfill_blockspace_from_node(), _fee_sat_per_vbyte(), _height_at_time(), load_mempool_bronze(), load_mempool_gold() (+24 more)
 
 ### Community 13365 - "Community 13365"
 Cohesion: 0.15
@@ -70647,8 +70796,8 @@ Cohesion: 0.10
 Nodes (20): campaign_id, certification_footer, events_ran, model_id, overfit_risk, param_hash, periods, promote_candidate (+12 more)
 
 ### Community 13369 - "Community 13369"
-Cohesion: 0.04
-Nodes (118): OrderIntent, Execution simulation: latency, slippage, fees, halts., simulate_fill(), LowFloatBacktester, _mid(), Session backtester for low-float runner lane., _tail_loss(), assert_no_float_lookahead() (+110 more)
+Cohesion: 0.16
+Nodes (18): CrossAssetLeadLagOutput, Any, float, int, ModelOutput, ndarray, CrossAssetLeadLagModel, fit_ridge_cross_impact() (+10 more)
 
 ### Community 13370 - "Community 13370"
 Cohesion: 0.67
@@ -70768,7 +70917,7 @@ Nodes (27): wfc, artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, c
 
 ### Community 13399 - "Community 13399"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, KE, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, CL, KE, M2K, MGC, RB, feed_status (+8 more)
 
 ### Community 13400 - "Community 13400"
 Cohesion: 0.67
@@ -70853,6 +71002,10 @@ Nodes (3): MYM, data_delay_status, last_update_age_ms
 ### Community 13420 - "Community 13420"
 Cohesion: 0.67
 Nodes (3): NQ, data_delay_status, last_update_age_ms
+
+### Community 13421 - "Community 13421"
+Cohesion: 0.25
+Nodes (7): allowed_contexts, catalog_years, diagnostics, model_id, personal_locked, personal_range, symbol
 
 ### Community 13422 - "Community 13422"
 Cohesion: 0.67
@@ -71395,8 +71548,8 @@ Cohesion: 0.67
 Nodes (3): HG, data_delay_status, last_update_age_ms
 
 ### Community 13557 - "Community 13557"
-Cohesion: 0.09
-Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
+Cohesion: 0.14
+Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
 
 ### Community 13558 - "Community 13558"
 Cohesion: 0.67
@@ -71408,7 +71561,7 @@ Nodes (12): chi404_run_id, data_sufficient, duplicate_order_ids, event_count, ev
 
 ### Community 13560 - "Community 13560"
 Cohesion: 0.12
-Nodes (16): M2K, MNQ, NG, RB, SR3, feed_status, data_delay_status, last_update_age_ms (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MES (+8 more)
 
 ### Community 13561 - "Community 13561"
 Cohesion: 0.67
@@ -71431,8 +71584,8 @@ Cohesion: 0.67
 Nodes (3): SI, data_delay_status, last_update_age_ms
 
 ### Community 13566 - "Community 13566"
-Cohesion: 0.14
-Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
+Cohesion: 0.09
+Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
 
 ### Community 13567 - "Community 13567"
 Cohesion: 0.67
@@ -71563,8 +71716,8 @@ Cohesion: 0.67
 Nodes (3): MCL, data_delay_status, last_update_age_ms
 
 ### Community 13599 - "Community 13599"
-Cohesion: 0.08
-Nodes (26): check_perp(), InvalidLineIntersectError, Line, line_line_intersection(), line_segment_intersection(), _perpendicular_bisector(), Sketch a circle touching two lines and another circle., Sketch the def eqangle2. (+18 more)
+Cohesion: 0.13
+Nodes (19): check_perp(), Line, line_line_intersection(), line_segment_intersection(), Sketch a circle touching two lines and another circle., Sketch the def eqangle2., sketch_2l1c(), sketch_3peq() (+11 more)
 
 ### Community 13600 - "Community 13600"
 Cohesion: 0.67
@@ -71691,8 +71844,8 @@ Cohesion: 0.67
 Nodes (3): HG, data_delay_status, last_update_age_ms
 
 ### Community 13631 - "Community 13631"
-Cohesion: 0.14
-Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
+Cohesion: 0.09
+Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
 
 ### Community 13632 - "Community 13632"
 Cohesion: 0.67
@@ -71703,8 +71856,8 @@ Cohesion: 0.12
 Nodes (17): end_year, events, start_year, end_year, events, start_year, end_year, events (+9 more)
 
 ### Community 13634 - "Community 13634"
-Cohesion: 0.09
-Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
+Cohesion: 0.14
+Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
 
 ### Community 13635 - "Community 13635"
 Cohesion: 0.07
@@ -71867,8 +72020,8 @@ Cohesion: 0.67
 Nodes (3): SI, data_delay_status, last_update_age_ms
 
 ### Community 13675 - "Community 13675"
-Cohesion: 0.14
-Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
+Cohesion: 0.09
+Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
 
 ### Community 13676 - "Community 13676"
 Cohesion: 0.67
@@ -71907,8 +72060,8 @@ Cohesion: 0.10
 Nodes (18): diff(), diffEnums(), diffFields(), diffLinkTypes(), diffNamedTypes(), diffScalars(), directiveArraysEqual(), fieldTypeRefsEqual() (+10 more)
 
 ### Community 13685 - "Community 13685"
-Cohesion: 0.18
-Nodes (17): _assert_chi404_only(), _handle_signal(), main(), PaperLatencyDaemon, CHI404 paper order latency daemon — monotonic waterfall audit (colo only)., Lightweight colo shadow timing slices (synthetic; not order-causal)., _read_manifest(), _run_id() (+9 more)
+Cohesion: 0.25
+Nodes (7): allowed_contexts, catalog_years, diagnostics, model_id, personal_locked, personal_range, symbol
 
 ### Community 13686 - "Community 13686"
 Cohesion: 0.67
@@ -72019,8 +72172,8 @@ Cohesion: 0.67
 Nodes (3): SI, data_delay_status, last_update_age_ms
 
 ### Community 13713 - "Community 13713"
-Cohesion: 0.09
-Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
+Cohesion: 0.14
+Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
 
 ### Community 13714 - "Community 13714"
 Cohesion: 0.67
@@ -72179,8 +72332,8 @@ Cohesion: 0.33
 Nodes (5): artifact_root, campaign_mode, fixture, model_id, symbol
 
 ### Community 13754 - "Community 13754"
-Cohesion: 0.15
-Nodes (13): without_btc_node, embargo_steps, label_horizon_steps, min_folds_met, min_folds_required, n_features, n_folds, n_rows (+5 more)
+Cohesion: 0.14
+Nodes (14): runs, without_btc_node, embargo_steps, label_horizon_steps, min_folds_met, min_folds_required, n_features, n_folds (+6 more)
 
 ### Community 13755 - "Community 13755"
 Cohesion: 0.40
@@ -72243,8 +72396,8 @@ Cohesion: 0.67
 Nodes (3): HG, data_delay_status, last_update_age_ms
 
 ### Community 13770 - "Community 13770"
-Cohesion: 0.09
-Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
+Cohesion: 0.14
+Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
 
 ### Community 13771 - "Community 13771"
 Cohesion: 0.40
@@ -72324,11 +72477,11 @@ Nodes (3): ZB, data_delay_status, last_update_age_ms
 
 ### Community 13791 - "Community 13791"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, 6A, KE, NG, ZC, ZL, feed_status (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, MES, ZL (+8 more)
 
 ### Community 13792 - "Community 13792"
-Cohesion: 0.14
-Nodes (14): runs, with_btc_node, embargo_steps, label_horizon_steps, min_folds_met, min_folds_required, n_features, n_folds (+6 more)
+Cohesion: 0.15
+Nodes (13): with_btc_node, embargo_steps, label_horizon_steps, min_folds_met, min_folds_required, n_features, n_folds, n_rows (+5 more)
 
 ### Community 13793 - "Community 13793"
 Cohesion: 0.67
@@ -72391,8 +72544,8 @@ Cohesion: 0.67
 Nodes (3): HG, data_delay_status, last_update_age_ms
 
 ### Community 13808 - "Community 13808"
-Cohesion: 0.14
-Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
+Cohesion: 0.09
+Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
 
 ### Community 13809 - "Community 13809"
 Cohesion: 0.40
@@ -72699,16 +72852,16 @@ Cohesion: 0.67
 Nodes (3): MYM, data_delay_status, last_update_age_ms
 
 ### Community 13888 - "Community 13888"
-Cohesion: 0.14
-Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
+Cohesion: 0.09
+Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
 
 ### Community 13889 - "Community 13889"
 Cohesion: 0.67
 Nodes (3): NQ, data_delay_status, last_update_age_ms
 
 ### Community 13890 - "Community 13890"
-Cohesion: 0.14
-Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
+Cohesion: 0.09
+Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
 
 ### Community 13891 - "Community 13891"
 Cohesion: 0.67
@@ -72999,8 +73152,8 @@ Cohesion: 0.67
 Nodes (3): SI, data_delay_status, last_update_age_ms
 
 ### Community 13966 - "Community 13966"
-Cohesion: 0.09
-Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
+Cohesion: 0.14
+Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
 
 ### Community 13967 - "Community 13967"
 Cohesion: 0.67
@@ -73136,7 +73289,7 @@ Nodes (20): campaign_id, certification_footer, events_ran, model_id, overfit_ris
 
 ### Community 14247 - "Community 14247"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MES (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
 
 ### Community 14248 - "Community 14248"
 Cohesion: 0.12
@@ -73299,12 +73452,12 @@ Cohesion: 0.22
 Nodes (8): code:bash (git submodule update --init vendor/openfoundry vendor/alphag), code:bash (ollama run gemma4:31b-cloud    # after-action), KG authority, LLM lanes (workstation, post-run / NL only), Quant X, Vendor repos vs LLM runtime (do not conflate), Vendored codebases (inside this repo), What is NOT a vendored repo
 
 ### Community 14288 - "Community 14288"
-Cohesion: 0.22
-Nodes (9): EventTimeWindowBuffer, ms_to_ns(), MultiWindowAggregator, Event-time rolling windows for imbalance features (no bar aggregation)., Ring buffer of (ts_ns, value) with event-time expiry., TimedSample, float, int (+1 more)
+Cohesion: 0.25
+Nodes (7): allowed_contexts, catalog_years, diagnostics, model_id, personal_locked, personal_range, symbol
 
 ### Community 14289 - "Community 14289"
-Cohesion: 0.09
-Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
+Cohesion: 0.14
+Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
 
 ### Community 14290 - "Community 14290"
 Cohesion: 0.15
@@ -73480,7 +73633,7 @@ Nodes (3): NG, data_delay_status, last_update_age_ms
 
 ### Community 14337 - "Community 14337"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, KE, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, 6A, KE, M2K, NG, SR3, feed_status (+8 more)
 
 ### Community 14338 - "Community 14338"
 Cohesion: 0.25
@@ -73532,7 +73685,7 @@ Nodes (19): campaign_id, certification_footer, events_ran, model_id, overfit_ris
 
 ### Community 14351 - "Community 14351"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, KE, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MES (+8 more)
 
 ### Community 14352 - "Community 14352"
 Cohesion: 0.67
@@ -73724,7 +73877,7 @@ Nodes (6): hardware, memory, dimm_count, dimms, total_available_gib, total_insta
 
 ### Community 14400 - "Community 14400"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, 6A, KE, NG, ZC, ZL, feed_status (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, KE, MGC (+8 more)
 
 ### Community 14401 - "Community 14401"
 Cohesion: 0.67
@@ -74584,19 +74737,19 @@ Nodes (3): RB, data_delay_status, last_update_age_ms
 
 ### Community 14624 - "Community 14624"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, 6A, KE, M2K, NG, ZL, feed_status (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, KE, MGC (+8 more)
 
 ### Community 14625 - "Community 14625"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, KE, MGC (+8 more)
 
 ### Community 14626 - "Community 14626"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, MES, ZN (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
 
 ### Community 14627 - "Community 14627"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, 6A, KE, M2K, NG, ZL, feed_status (+8 more)
 
 ### Community 14628 - "Community 14628"
 Cohesion: 0.07
@@ -74608,15 +74761,15 @@ Nodes (15): error, evaluate_only, event_results, events_missing, events_run, exp
 
 ### Community 14630 - "Community 14630"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, 6A, KE, MNQ, SR3, ZF, feed_status (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
 
 ### Community 14631 - "Community 14631"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, 6A, KE, NG, ZC, ZL, feed_status (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, KE, MGC (+8 more)
 
 ### Community 14632 - "Community 14632"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, KE, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, 6A, KE, NG, ZC, ZL, feed_status (+8 more)
 
 ### Community 14633 - "Community 14633"
 Cohesion: 0.07
@@ -74624,11 +74777,11 @@ Nodes (27): wfc, artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, c
 
 ### Community 14634 - "Community 14634"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MES (+8 more)
 
 ### Community 14635 - "Community 14635"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, CL, HO, MGC, RB, ZC, data_delay_status (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
 
 ### Community 14636 - "Community 14636"
 Cohesion: 0.12
@@ -74636,7 +74789,7 @@ Nodes (15): error, evaluate_only, event_results, events_missing, events_run, exp
 
 ### Community 14637 - "Community 14637"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, CL, KE, M2K, MGC, RB, feed_status (+8 more)
 
 ### Community 14638 - "Community 14638"
 Cohesion: 0.12
@@ -74644,11 +74797,11 @@ Nodes (15): error, evaluate_only, event_results, events_missing, events_run, exp
 
 ### Community 14639 - "Community 14639"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, CL, HO, MES, RB, ZS, data_delay_status (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
 
 ### Community 14640 - "Community 14640"
-Cohesion: 0.67
-Nodes (3): data_delay_status, last_update_age_ms, 6A
+Cohesion: 0.12
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
 
 ### Community 14641 - "Community 14641"
 Cohesion: 0.67
@@ -74656,11 +74809,11 @@ Nodes (3): MES, data_delay_status, last_update_age_ms
 
 ### Community 14642 - "Community 14642"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, 6A, KE, M2K, NG, SR3, feed_status (+8 more)
 
 ### Community 14643 - "Community 14643"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, CL, KE, MGC, RB, ZF, feed_status (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
 
 ### Community 14644 - "Community 14644"
 Cohesion: 0.67
@@ -74668,11 +74821,11 @@ Nodes (3): MES, data_delay_status, last_update_age_ms
 
 ### Community 14645 - "Community 14645"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MES (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, KE, MGC (+8 more)
 
 ### Community 14646 - "Community 14646"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MES (+8 more)
 
 ### Community 14647 - "Community 14647"
 Cohesion: 0.67
@@ -74684,11 +74837,11 @@ Nodes (15): error, evaluate_only, event_results, events_missing, events_run, exp
 
 ### Community 14649 - "Community 14649"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, CL, KE, M2K, MGC, RB, feed_status (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, KE, MGC (+8 more)
 
 ### Community 14650 - "Community 14650"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, CL, KE, M2K, MGC, RB, feed_status (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
 
 ### Community 14651 - "Community 14651"
 Cohesion: 0.13
@@ -74735,24 +74888,24 @@ Cohesion: 0.09
 Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
 
 ### Community 14662 - "Community 14662"
-Cohesion: 0.09
-Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
+Cohesion: 0.14
+Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
 
 ### Community 14663 - "Community 14663"
-Cohesion: 0.09
-Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
+Cohesion: 0.14
+Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
 
 ### Community 14664 - "Community 14664"
 Cohesion: 0.09
 Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
 
 ### Community 14665 - "Community 14665"
-Cohesion: 0.14
-Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
+Cohesion: 0.09
+Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
 
 ### Community 14666 - "Community 14666"
-Cohesion: 0.14
-Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
+Cohesion: 0.09
+Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
 
 ### Community 14667 - "Community 14667"
 Cohesion: 0.09
@@ -74964,7 +75117,7 @@ Nodes (3): ZC, data_delay_status, last_update_age_ms
 
 ### Community 14719 - "Community 14719"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, KE, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
 
 ### Community 14720 - "Community 14720"
 Cohesion: 0.07
@@ -75000,7 +75153,7 @@ Nodes (27): wfc, artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, c
 
 ### Community 14728 - "Community 14728"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, 6A, KE, M2K, NG, ZL, feed_status (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
 
 ### Community 14729 - "Community 14729"
 Cohesion: 0.07
@@ -75356,7 +75509,7 @@ Nodes (27): wfc, artifact_paths, bottom_decile_oos_median, cost_adjusted_pass, c
 
 ### Community 14843 - "Community 14843"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MES (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, KE, MGC (+8 more)
 
 ### Community 14844 - "Community 14844"
 Cohesion: 0.67
@@ -75548,7 +75701,7 @@ Nodes (3): ZL, data_delay_status, last_update_age_ms
 
 ### Community 14891 - "Community 14891"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, KE, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
 
 ### Community 14892 - "Community 14892"
 Cohesion: 0.67
@@ -75711,8 +75864,8 @@ Cohesion: 0.67
 Nodes (3): NQ, data_delay_status, last_update_age_ms
 
 ### Community 14932 - "Community 14932"
-Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, 6A, KE, NG, ZC, ZL, feed_status (+8 more)
+Cohesion: 0.67
+Nodes (3): data_delay_status, last_update_age_ms, 6A
 
 ### Community 14933 - "Community 14933"
 Cohesion: 0.67
@@ -75923,7 +76076,7 @@ Cohesion: 0.67
 Nodes (3): ZW, data_delay_status, last_update_age_ms
 
 ### Community 14985 - "Community 14985"
-Cohesion: 0.40
+Cohesion: 0.50
 Nodes (4): CORE_CPI, context_priority, label, main_label
 
 ### Community 14986 - "Community 14986"
@@ -76047,8 +76200,8 @@ Cohesion: 0.67
 Nodes (3): ZQ, data_delay_status, last_update_age_ms
 
 ### Community 15016 - "Community 15016"
-Cohesion: 0.14
-Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
+Cohesion: 0.09
+Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
 
 ### Community 15017 - "Community 15017"
 Cohesion: 0.67
@@ -76195,8 +76348,8 @@ Cohesion: 0.67
 Nodes (3): ZW, data_delay_status, last_update_age_ms
 
 ### Community 15053 - "Community 15053"
-Cohesion: 0.14
-Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
+Cohesion: 0.09
+Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
 
 ### Community 15054 - "Community 15054"
 Cohesion: 0.50
@@ -76219,8 +76372,8 @@ Cohesion: 0.50
 Nodes (4): CONSTRUCTION_SPENDING, context_priority, label, main_label
 
 ### Community 15059 - "Community 15059"
-Cohesion: 0.14
-Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
+Cohesion: 0.09
+Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
 
 ### Community 15060 - "Community 15060"
 Cohesion: 0.67
@@ -76235,8 +76388,8 @@ Cohesion: 0.40
 Nodes (5): ic, mode, n_rows, status, Holdout
 
 ### Community 15063 - "Community 15063"
-Cohesion: 0.09
-Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
+Cohesion: 0.14
+Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
 
 ### Community 15064 - "Community 15064"
 Cohesion: 0.15
@@ -76271,8 +76424,8 @@ Cohesion: 0.50
 Nodes (4): DURABLE_GOODS_ADVANCE, context_priority, label, main_label
 
 ### Community 15072 - "Community 15072"
-Cohesion: 0.06
-Nodes (79): _check_cmdline_tokens(), _check_cpupower_idle(), _check_cyclictest_p99(), _check_irq_net(), _check_jitter_gate(), _check_manifest(), _check_nic_rings(), _cmdline_idle_effectively_disabled() (+71 more)
+Cohesion: 0.13
+Nodes (39): build_summary(), _build_trial_order_ack_appendix(), _classify_lane(), _collect_clock_discipline(), _collect_cyclictest(), _dominant_bottleneck(), _lane_from_order_ack_ms(), _load_json() (+31 more)
 
 ### Community 15073 - "Community 15073"
 Cohesion: 0.67
@@ -76292,7 +76445,7 @@ Nodes (4): ECI, context_priority, label, main_label
 
 ### Community 15077 - "Community 15077"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, 6A, KE, M2K, NG, SR3, feed_status (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
 
 ### Community 15078 - "Community 15078"
 Cohesion: 0.50
@@ -76355,15 +76508,15 @@ Cohesion: 0.15
 Nodes (12): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+4 more)
 
 ### Community 15093 - "Community 15093"
-Cohesion: 0.39
-Nodes (11): int, Path, str, catalog_help_text(), events_by_type(), list_event_ids(), load_events_df(), main() (+3 more)
+Cohesion: 0.25
+Nodes (7): allowed_contexts, catalog_years, diagnostics, model_id, personal_locked, personal_range, symbol
 
 ### Community 15094 - "Community 15094"
 Cohesion: 0.40
 Nodes (5): ic, mode, n_rows, status, Holdout
 
 ### Community 15095 - "Community 15095"
-Cohesion: 0.50
+Cohesion: 0.40
 Nodes (4): EXISTING_HOME_SALES, context_priority, label, main_label
 
 ### Community 15096 - "Community 15096"
@@ -76431,8 +76584,8 @@ Cohesion: 0.50
 Nodes (4): FOMC_PRESS, context_priority, label, main_label
 
 ### Community 15112 - "Community 15112"
-Cohesion: 0.14
-Nodes (23): attach_event_study_labels(), _positive_horizon_ms(), randomized_event_control_ic(), Event-study labels for H7 congestion shock hypothesis., Label event_window_return only on shock events: cumulative log return     from, Permute event flags, recompute labels, retrain, compare OOS IC., horizon_steps_from_ms(), _median_dt_ms() (+15 more)
+Cohesion: 0.19
+Nodes (17): assert_true_mbo(), classification_to_blockers(), classify_databento_store(), classify_normalized_events(), DatasetClassification, _load_dbn_store(), _normalize_action(), Classify vendor files as true MBO before import — reject MBP/L2/snapshots. (+9 more)
 
 ### Community 15113 - "Community 15113"
 Cohesion: 0.40
@@ -76495,8 +76648,8 @@ Cohesion: 0.67
 Nodes (3): MCL, data_delay_status, last_update_age_ms
 
 ### Community 15128 - "Community 15128"
-Cohesion: 0.17
-Nodes (21): BookPressureOutput, float, int, ModelOutput, OrderBook, compute_level1_ofi_event(), compute_mlofi_vector(), _level_ofi_delta() (+13 more)
+Cohesion: 0.07
+Nodes (58): _sha256(), _utc_date(), GateThresholds, build(), _git_sha(), _node_count(), _top_communities(), Any (+50 more)
 
 ### Community 15129 - "Community 15129"
 Cohesion: 0.50
@@ -76592,7 +76745,7 @@ Nodes (3): ZW, data_delay_status, last_update_age_ms
 
 ### Community 15152 - "Community 15152"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, KE, MGC (+8 more)
 
 ### Community 15153 - "Community 15153"
 Cohesion: 0.67
@@ -76843,8 +76996,8 @@ Cohesion: 0.67
 Nodes (3): ZN, data_delay_status, last_update_age_ms
 
 ### Community 15216 - "Community 15216"
-Cohesion: 0.09
-Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
+Cohesion: 0.14
+Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
 
 ### Community 15217 - "Community 15217"
 Cohesion: 0.10
@@ -76936,7 +77089,7 @@ Nodes (3): NQ, data_delay_status, last_update_age_ms
 
 ### Community 15239 - "Community 15239"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, CL, KE, MGC, RB, ZL, feed_status (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, 6A, HO, NG, ZC, ZL, data_delay_status (+8 more)
 
 ### Community 15240 - "Community 15240"
 Cohesion: 0.67
@@ -76983,8 +77136,8 @@ Cohesion: 0.67
 Nodes (3): MNQ, data_delay_status, last_update_age_ms
 
 ### Community 15251 - "Community 15251"
-Cohesion: 0.05
-Nodes (77): Any, Path, str, EventContextEngine, build_l3_event_tensor(), _capture_row(), _default_snapshot_offsets_from_yaml(), L3SnapshotRow (+69 more)
+Cohesion: 0.03
+Nodes (104): LiveCapture, ConnectorInterface, FixtureConnector, Synthetic trial events for CI and offline pipeline tests., build_connector(), Placeholder for future direct R|API connector., RithmicApiConnector, _parse_comma_log_line() (+96 more)
 
 ### Community 15252 - "Community 15252"
 Cohesion: 0.67
@@ -77075,8 +77228,8 @@ Cohesion: 0.67
 Nodes (3): MCL, data_delay_status, last_update_age_ms
 
 ### Community 15274 - "Community 15274"
-Cohesion: 0.28
-Nodes (6): check_too_close(), check_too_far(), Try to sketch an intersection between two objects., sketch(), try_to_sketch_intersect(), int
+Cohesion: 0.20
+Nodes (4): check_too_close(), Circle, int, Line
 
 ### Community 15275 - "Community 15275"
 Cohesion: 0.67
@@ -77788,7 +77941,7 @@ Nodes (3): schema_version, const, type
 
 ### Community 15455 - "Community 15455"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, KE, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
 
 ### Community 15456 - "Community 15456"
 Cohesion: 0.67
@@ -78208,7 +78361,7 @@ Nodes (3): composition, defensive_stubs, primary_model_id
 
 ### Community 15564 - "Community 15564"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, KE, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MES (+8 more)
 
 ### Community 15565 - "Community 15565"
 Cohesion: 0.67
@@ -78276,7 +78429,7 @@ Nodes (3): ZS, data_delay_status, last_update_age_ms
 
 ### Community 15581 - "Community 15581"
 Cohesion: 0.26
-Nodes (20): _deribit_rpc(), _http_json(), _klines_df(), pull_deribit_index_b2(), pull_funding_from_b2(), pull_mempool_blockchain_chart(), pull_mempool_synthetic_from_spot(), pull_perp_from_binance() (+12 more)
+Nodes (21): bronze_key(), _deribit_rpc(), _http_json(), _klines_df(), pull_deribit_index_b2(), pull_funding_from_b2(), pull_mempool_blockchain_chart(), pull_mempool_synthetic_from_spot() (+13 more)
 
 ### Community 15583 - "Community 15583"
 Cohesion: 0.67
@@ -78876,7 +79029,7 @@ Nodes (3): ZN, data_delay_status, last_update_age_ms
 
 ### Community 15732 - "Community 15732"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, 6A, KE, M2K, NG, SR3, feed_status (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, KE, MGC (+8 more)
 
 ### Community 15733 - "Community 15733"
 Cohesion: 0.67
@@ -78932,7 +79085,7 @@ Nodes (3): MCL, data_delay_status, last_update_age_ms
 
 ### Community 15746 - "Community 15746"
 Cohesion: 0.12
-Nodes (16): KE, M2K, NG, RB, ZL, feed_status, data_delay_status, last_update_age_ms (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, KE, MGC (+8 more)
 
 ### Community 15747 - "Community 15747"
 Cohesion: 0.11
@@ -79283,8 +79436,8 @@ Cohesion: 0.67
 Nodes (3): ZC, data_delay_status, last_update_age_ms
 
 ### Community 15834 - "Community 15834"
-Cohesion: 0.12
-Nodes (14): Any, str, ImbalanceQualityReport, QualityCheckResult, Data-quality checks for imbalance features., build_quality_report_from_snapshots(), Build imbalance quality report from replay snapshots., run_quality_checks() (+6 more)
+Cohesion: 0.02
+Nodes (113): AblationRunResult, Any, bool, int, Path, str, AblationRunResult, Any (+105 more)
 
 ### Community 15835 - "Community 15835"
 Cohesion: 0.40
@@ -79452,7 +79605,7 @@ Nodes (3): ZN, data_delay_status, last_update_age_ms
 
 ### Community 15878 - "Community 15878"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MES (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, 6A, KE, MNQ, ZB, ZF, feed_status (+8 more)
 
 ### Community 15879 - "Community 15879"
 Cohesion: 0.11
@@ -79568,7 +79721,7 @@ Nodes (3): ZB, data_delay_status, last_update_age_ms
 
 ### Community 15907 - "Community 15907"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, CL, KE, MGC, RB, ZL, feed_status (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, KE, MGC (+8 more)
 
 ### Community 15908 - "Community 15908"
 Cohesion: 0.67
@@ -79632,7 +79785,7 @@ Nodes (3): HG, data_delay_status, last_update_age_ms
 
 ### Community 15923 - "Community 15923"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, CL, HO, MGC, RB, ZC, data_delay_status (+8 more)
 
 ### Community 15924 - "Community 15924"
 Cohesion: 0.67
@@ -79901,6 +80054,10 @@ Nodes (3): composition, defensive_stubs, primary_model_id
 ### Community 15993 - "Community 15993"
 Cohesion: 0.67
 Nodes (3): composition, defensive_stubs, primary_model_id
+
+### Community 16051 - "Community 16051"
+Cohesion: 0.07
+Nodes (55): CatalogWindow, campaign_event_contexts(), catalog_window_to_events_csv_row(), events_csv_path(), is_manual_events_csv_row(), iter_backtest_scope_windows(), iter_campaign_scope_windows(), iter_events_csv_rows() (+47 more)
 
 ### Community 16054 - "Community 16054"
 Cohesion: 0.67
@@ -80272,7 +80429,7 @@ Nodes (3): ZF, data_delay_status, last_update_age_ms
 
 ### Community 16148 - "Community 16148"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, KE, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
 
 ### Community 16149 - "Community 16149"
 Cohesion: 0.67
@@ -80280,7 +80437,7 @@ Nodes (3): ZC, data_delay_status, last_update_age_ms
 
 ### Community 16150 - "Community 16150"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MES (+8 more)
 
 ### Community 16151 - "Community 16151"
 Cohesion: 0.67
@@ -80300,7 +80457,7 @@ Nodes (7): allowed_contexts, catalog_years, diagnostics, model_id, personal_lock
 
 ### Community 16155 - "Community 16155"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, KE, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, CL, M2K, MES, RB, SR3, feed_status (+8 more)
 
 ### Community 16156 - "Community 16156"
 Cohesion: 0.11
@@ -80332,7 +80489,7 @@ Nodes (3): ZL, data_delay_status, last_update_age_ms
 
 ### Community 16163 - "Community 16163"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, KE, MGC (+8 more)
 
 ### Community 16164 - "Community 16164"
 Cohesion: 0.67
@@ -80340,11 +80497,11 @@ Nodes (3): MES, data_delay_status, last_update_age_ms
 
 ### Community 16165 - "Community 16165"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, CL, KE, MGC, RB, ZF, feed_status (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MES (+8 more)
 
 ### Community 16166 - "Community 16166"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MES (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, MGC, ZN (+8 more)
 
 ### Community 16167 - "Community 16167"
 Cohesion: 0.67
@@ -80427,8 +80584,8 @@ Cohesion: 0.67
 Nodes (3): ZS, data_delay_status, last_update_age_ms
 
 ### Community 16187 - "Community 16187"
-Cohesion: 0.12
-Nodes (16): KE, M2K, NG, RB, ZQ, feed_status, data_delay_status, last_update_age_ms (+8 more)
+Cohesion: 0.67
+Nodes (3): NG, data_delay_status, last_update_age_ms
 
 ### Community 16188 - "Community 16188"
 Cohesion: 0.67
@@ -80440,7 +80597,7 @@ Nodes (3): MNQ, data_delay_status, last_update_age_ms
 
 ### Community 16190 - "Community 16190"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, 6A, HO, MGC, SR3, ZC, data_delay_status (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
 
 ### Community 16191 - "Community 16191"
 Cohesion: 0.67
@@ -80464,11 +80621,11 @@ Nodes (3): ZQ, data_delay_status, last_update_age_ms
 
 ### Community 16196 - "Community 16196"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, 6A, KE, M2K, NG, SR3, feed_status (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MES (+8 more)
 
 ### Community 16197 - "Community 16197"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, 6A, KE, M2K, NG, SR3, feed_status (+8 more)
 
 ### Community 16198 - "Community 16198"
 Cohesion: 0.13
@@ -80531,8 +80688,8 @@ Cohesion: 0.67
 Nodes (3): MCL, data_delay_status, last_update_age_ms
 
 ### Community 16214 - "Community 16214"
-Cohesion: 0.09
-Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
+Cohesion: 0.14
+Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
 
 ### Community 16215 - "Community 16215"
 Cohesion: 0.67
@@ -80588,7 +80745,7 @@ Nodes (3): YM, data_delay_status, last_update_age_ms
 
 ### Community 16228 - "Community 16228"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, CL, M2K, MES, RB, SR3, feed_status (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
 
 ### Community 16229 - "Community 16229"
 Cohesion: 0.09
@@ -80599,8 +80756,8 @@ Cohesion: 0.67
 Nodes (3): ZS, data_delay_status, last_update_age_ms
 
 ### Community 16231 - "Community 16231"
-Cohesion: 0.09
-Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
+Cohesion: 0.14
+Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
 
 ### Community 16232 - "Community 16232"
 Cohesion: 0.67
@@ -80809,6 +80966,10 @@ Nodes (3): GC, data_delay_status, last_update_age_ms
 ### Community 16283 - "Community 16283"
 Cohesion: 0.67
 Nodes (3): HG, data_delay_status, last_update_age_ms
+
+### Community 16284 - "Community 16284"
+Cohesion: 0.10
+Nodes (21): by_event_type_full, estimated_cost_usd, npz_slots_missing, output_path, scoped_event_types, scoped_window_count, FED_SPEAKER, FOMC_STATEMENT (+13 more)
 
 ### Community 16285 - "Community 16285"
 Cohesion: 0.67
@@ -81292,7 +81453,7 @@ Nodes (3): ZL, data_delay_status, last_update_age_ms
 
 ### Community 16435 - "Community 16435"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, 6A, KE, M2K, NG, SR3, feed_status (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, KE, MGC (+8 more)
 
 ### Community 16436 - "Community 16436"
 Cohesion: 0.67
@@ -81392,7 +81553,7 @@ Nodes (3): YM, data_delay_status, last_update_age_ms
 
 ### Community 16464 - "Community 16464"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, CL, KE, M2K, MGC, RB, feed_status (+8 more)
+Nodes (16): KE, M2K, NG, RB, ZQ, feed_status, data_delay_status, last_update_age_ms (+8 more)
 
 ### Community 16465 - "Community 16465"
 Cohesion: 0.67
@@ -81524,7 +81685,7 @@ Nodes (3): ZF, data_delay_status, last_update_age_ms
 
 ### Community 16499 - "Community 16499"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, KE, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
 
 ### Community 16501 - "Community 16501"
 Cohesion: 0.67
@@ -81548,7 +81709,7 @@ Nodes (3): HO, data_delay_status, last_update_age_ms
 
 ### Community 16506 - "Community 16506"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, KE, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, 6A, KE, M2K, NG, SR3, feed_status (+8 more)
 
 ### Community 16507 - "Community 16507"
 Cohesion: 0.67
@@ -81564,7 +81725,7 @@ Nodes (3): ZS, data_delay_status, last_update_age_ms
 
 ### Community 16527 - "Community 16527"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, 6A, KE, M2K, NG, SR3, feed_status (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MES (+8 more)
 
 ### Community 16528 - "Community 16528"
 Cohesion: 0.12
@@ -81584,7 +81745,7 @@ Nodes (3): VX1, data_delay_status, last_update_age_ms
 
 ### Community 16534 - "Community 16534"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, KE, MGC (+8 more)
 
 ### Community 16535 - "Community 16535"
 Cohesion: 0.67
@@ -81612,7 +81773,7 @@ Nodes (3): RB, data_delay_status, last_update_age_ms
 
 ### Community 16541 - "Community 16541"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, 6A, HO, MNQ, YM, ZC, data_delay_status (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, 6A, M2K, MGC, SR3, ZF, feed_status (+8 more)
 
 ### Community 16542 - "Community 16542"
 Cohesion: 0.67
@@ -81684,7 +81845,7 @@ Nodes (3): ZF, data_delay_status, last_update_age_ms
 
 ### Community 16560 - "Community 16560"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, 6A, HO, MGC, ZC, ZQ, data_delay_status (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, CL, KE, MGC, RB, ZL, feed_status (+8 more)
 
 ### Community 16561 - "Community 16561"
 Cohesion: 0.67
@@ -81696,7 +81857,7 @@ Nodes (3): ZQ, data_delay_status, last_update_age_ms
 
 ### Community 16563 - "Community 16563"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MES (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, KE, MGC (+8 more)
 
 ### Community 16564 - "Community 16564"
 Cohesion: 0.12
@@ -81720,7 +81881,7 @@ Nodes (3): ZQ, data_delay_status, last_update_age_ms
 
 ### Community 16569 - "Community 16569"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, 6A, KE, NG, SR3, ZF, feed_status (+8 more)
 
 ### Community 16570 - "Community 16570"
 Cohesion: 0.67
@@ -81752,7 +81913,7 @@ Nodes (3): MNQ, data_delay_status, last_update_age_ms
 
 ### Community 16577 - "Community 16577"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, MGC, ZQ (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, 6A, HO, NG, ZB, ZF, data_delay_status (+8 more)
 
 ### Community 16578 - "Community 16578"
 Cohesion: 0.67
@@ -81760,7 +81921,7 @@ Nodes (3): ZF, data_delay_status, last_update_age_ms
 
 ### Community 16579 - "Community 16579"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MES (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
 
 ### Community 16580 - "Community 16580"
 Cohesion: 0.67
@@ -81784,11 +81945,11 @@ Nodes (3): M2K, data_delay_status, last_update_age_ms
 
 ### Community 16586 - "Community 16586"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MGC (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, CL, KE, MGC, RB, ZL, feed_status (+8 more)
 
 ### Community 16587 - "Community 16587"
 Cohesion: 0.12
-Nodes (16): data_delay_status, last_update_age_ms, CL, KE, MGC, RB, ZL, feed_status (+8 more)
+Nodes (16): data_delay_status, last_update_age_ms, data_delay_status, last_update_age_ms, 6A, CL, HO, MES (+8 more)
 
 ### Community 16588 - "Community 16588"
 Cohesion: 0.67
@@ -81835,8 +81996,8 @@ Cohesion: 0.13
 Nodes (14): audit_grade, authority_refs, campaign_id, catalog_years_available, composition, defensive_stubs, primary_model_id, min_history_years_required (+6 more)
 
 ### Community 16599 - "Community 16599"
-Cohesion: 0.27
-Nodes (14): Any, DiGraph, int, Path, str, get_exposures(), get_related_events(), _kg_paths() (+6 more)
+Cohesion: 0.18
+Nodes (5): CelClient, CircuitBreaker, CelResult, TypeEnv, fn
 
 ### Community 16600 - "Community 16600"
 Cohesion: 0.67
@@ -81847,24 +82008,24 @@ Cohesion: 0.67
 Nodes (3): ZS, data_delay_status, last_update_age_ms
 
 ### Community 16602 - "Community 16602"
-Cohesion: 0.14
-Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
+Cohesion: 0.09
+Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
 
 ### Community 16604 - "Community 16604"
-Cohesion: 0.14
-Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
+Cohesion: 0.09
+Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
 
 ### Community 16605 - "Community 16605"
-Cohesion: 0.14
-Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
+Cohesion: 0.09
+Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
 
 ### Community 16606 - "Community 16606"
 Cohesion: 0.67
 Nodes (3): SR3, data_delay_status, last_update_age_ms
 
 ### Community 16607 - "Community 16607"
-Cohesion: 0.14
-Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
+Cohesion: 0.09
+Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
 
 ### Community 16608 - "Community 16608"
 Cohesion: 0.14
@@ -81883,12 +82044,12 @@ Cohesion: 0.67
 Nodes (3): RB, data_delay_status, last_update_age_ms
 
 ### Community 16612 - "Community 16612"
-Cohesion: 0.14
-Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
+Cohesion: 0.09
+Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
 
 ### Community 16613 - "Community 16613"
-Cohesion: 0.14
-Nodes (14): load_pressure_demotions_available, missing_vix_family, hot_memory_telemetry, cold, core_protected_symbols, degradation_flags, hot_executable, hot_sensor (+6 more)
+Cohesion: 0.09
+Nodes (21): allowed_contexts, catalog_years, load_pressure_demotions_available, missing_vix_family, diagnostics, hot_memory_telemetry, cold, core_protected_symbols (+13 more)
 
 ### Community 16614 - "Community 16614"
 Cohesion: 0.14
@@ -81979,8 +82140,8 @@ Cohesion: 0.67
 Nodes (3): SR3, data_delay_status, last_update_age_ms
 
 ### Community 16636 - "Community 16636"
-Cohesion: 0.40
-Nodes (10): audit_report(), _equities_gaps(), has_imbalance_gaps(), _imbalance_macro_gaps(), main(), _manifest_by_id(), Any, bool (+2 more)
+Cohesion: 0.05
+Nodes (49): int, str, Path, date, _esc(), main(), build_events(), _ev() (+41 more)
 
 ### Community 16638 - "Community 16638"
 Cohesion: 0.40
@@ -82827,8 +82988,8 @@ Cohesion: 0.67
 Nodes (3): SR3, data_delay_status, last_update_age_ms
 
 ### Community 16869 - "Community 16869"
-Cohesion: 0.27
-Nodes (10): attach_forward_labels(), _has(), _horizon_steps(), Forward-only label builders (never mixed into feature columns)., Add forward labels using only future rows (shift negative).     Rows without fu, bool, DataFrame, float (+2 more)
+Cohesion: 0.25
+Nodes (7): allowed_contexts, catalog_years, diagnostics, model_id, personal_locked, personal_range, symbol
 
 ### Community 16870 - "Community 16870"
 Cohesion: 0.36
@@ -83155,8 +83316,8 @@ Cohesion: 0.67
 Nodes (3): HO, data_delay_status, last_update_age_ms
 
 ### Community 16951 - "Community 16951"
-Cohesion: 0.25
-Nodes (7): allowed_contexts, catalog_years, diagnostics, model_id, personal_locked, personal_range, symbol
+Cohesion: 0.19
+Nodes (14): Blocker, BlockerCode, BlockerReport, Explicit blockers for MBO import/replay — no silent bypass., _book_reconstruction_smoke(), _empty_validation(), Validate normalized MBO event streams — fail closed on blockers., Minimal order-book smoke test using Decimal prices. (+6 more)
 
 ### Community 16952 - "Community 16952"
 Cohesion: 0.67
@@ -83347,36 +83508,36 @@ Cohesion: 0.67
 Nodes (3): SR3, data_delay_status, last_update_age_ms
 
 ### Community 16999 - "Community 16999"
-Cohesion: 0.25
-Nodes (7): allowed_contexts, catalog_years, diagnostics, model_id, personal_locked, personal_range, symbol
+Cohesion: 0.29
+Nodes (7): 5.2.1 CEL Environment, 5.2.2 Null Propagation, 5.2.3 Type System, 5.2.4 CEL Runtime Strategy, 5.2 Expression Language, code:yaml (# Correct: use duration() to create a Duration value), code:yaml (# WRONG — will error if currentWard is null)
 
 ### Community 17000 - "Community 17000"
-Cohesion: 0.25
-Nodes (7): allowed_contexts, catalog_years, diagnostics, model_id, personal_locked, personal_range, symbol
+Cohesion: 0.29
+Nodes (7): balance, fee, num_trades, position, steps, trading_volume, 1.0ms
 
 ### Community 17001 - "Community 17001"
 Cohesion: 0.67
 Nodes (3): SR3, data_delay_status, last_update_age_ms
 
 ### Community 17002 - "Community 17002"
-Cohesion: 0.25
-Nodes (7): allowed_contexts, catalog_years, diagnostics, model_id, personal_locked, personal_range, symbol
+Cohesion: 0.29
+Nodes (7): colo_on_box, bottleneck, dominant_rtt_ms, recommendation, recommended_latency_bands_ms, tier_ms, tier_name
 
 ### Community 17003 - "Community 17003"
 Cohesion: 0.67
 Nodes (3): MNQ, data_delay_status, last_update_age_ms
 
 ### Community 17004 - "Community 17004"
-Cohesion: 0.25
-Nodes (7): allowed_contexts, catalog_years, diagnostics, model_id, personal_locked, personal_range, symbol
+Cohesion: 0.67
+Nodes (3): data_delay_status, last_update_age_ms, 6A
 
 ### Community 17005 - "Community 17005"
 Cohesion: 0.67
 Nodes (3): ZF, data_delay_status, last_update_age_ms
 
 ### Community 17006 - "Community 17006"
-Cohesion: 0.25
-Nodes (7): allowed_contexts, catalog_years, diagnostics, model_id, personal_locked, personal_range, symbol
+Cohesion: 0.67
+Nodes (3): SR3, data_delay_status, last_update_age_ms
 
 ### Community 17007 - "Community 17007"
 Cohesion: 0.67
@@ -83419,8 +83580,8 @@ Cohesion: 0.25
 Nodes (7): allowed_contexts, catalog_years, diagnostics, model_id, personal_locked, personal_range, symbol
 
 ### Community 17017 - "Community 17017"
-Cohesion: 0.25
-Nodes (7): allowed_contexts, catalog_years, diagnostics, model_id, personal_locked, personal_range, symbol
+Cohesion: 0.67
+Nodes (3): SR3, data_delay_status, last_update_age_ms
 
 ### Community 17018 - "Community 17018"
 Cohesion: 0.67
@@ -83459,8 +83620,8 @@ Cohesion: 0.67
 Nodes (3): M2K, data_delay_status, last_update_age_ms
 
 ### Community 17027 - "Community 17027"
-Cohesion: 0.25
-Nodes (7): allowed_contexts, catalog_years, diagnostics, model_id, personal_locked, personal_range, symbol
+Cohesion: 0.67
+Nodes (3): HO, data_delay_status, last_update_age_ms
 
 ### Community 17028 - "Community 17028"
 Cohesion: 0.67
@@ -83471,8 +83632,8 @@ Cohesion: 0.25
 Nodes (7): allowed_contexts, catalog_years, diagnostics, model_id, personal_locked, personal_range, symbol
 
 ### Community 17030 - "Community 17030"
-Cohesion: 0.25
-Nodes (5): config, defaultEngine, dischargedRecord, error, record
+Cohesion: 0.67
+Nodes (3): MES, data_delay_status, last_update_age_ms
 
 ### Community 17031 - "Community 17031"
 Cohesion: 0.67
@@ -83547,8 +83708,8 @@ Cohesion: 0.67
 Nodes (3): RB, data_delay_status, last_update_age_ms
 
 ### Community 17049 - "Community 17049"
-Cohesion: 0.29
-Nodes (7): balance, fee, num_trades, position, steps, trading_volume, 10.0ms
+Cohesion: 0.67
+Nodes (3): data_delay_status, last_update_age_ms, CL
 
 ### Community 17050 - "Community 17050"
 Cohesion: 0.67
@@ -83583,8 +83744,8 @@ Cohesion: 0.67
 Nodes (3): MES, data_delay_status, last_update_age_ms
 
 ### Community 17058 - "Community 17058"
-Cohesion: 0.29
-Nodes (7): order_path, bottleneck, dominant_rtt_ms, recommendation, recommended_latency_bands_ms, tier_ms, tier_name
+Cohesion: 0.67
+Nodes (3): HO, data_delay_status, last_update_age_ms
 
 ### Community 17059 - "Community 17059"
 Cohesion: 0.67
@@ -83659,8 +83820,8 @@ Cohesion: 0.67
 Nodes (3): ZS, data_delay_status, last_update_age_ms
 
 ### Community 17077 - "Community 17077"
-Cohesion: 0.40
-Nodes (4): _check_between(), check_sameside(), circle_segment_intersect(), Whether a is between b & c.
+Cohesion: 0.67
+Nodes (3): MGC, data_delay_status, last_update_age_ms
 
 ### Community 17078 - "Community 17078"
 Cohesion: 0.67
@@ -84928,35 +85089,35 @@ Nodes (3): walk_forward, periods, status
 
 ### Community 17425 - "Community 17425"
 Cohesion: 0.67
-Nodes (3): M2K, data_delay_status, last_update_age_ms
+Nodes (3): data_delay_status, last_update_age_ms, CL
 
 ### Community 17426 - "Community 17426"
 Cohesion: 0.67
-Nodes (3): RB, data_delay_status, last_update_age_ms
+Nodes (3): MGC, data_delay_status, last_update_age_ms
 
 ### Community 17427 - "Community 17427"
 Cohesion: 0.67
-Nodes (3): ZF, data_delay_status, last_update_age_ms
+Nodes (3): KE, data_delay_status, last_update_age_ms
 
 ### Community 17428 - "Community 17428"
 Cohesion: 0.67
-Nodes (3): KE, data_delay_status, last_update_age_ms
+Nodes (3): NG, data_delay_status, last_update_age_ms
 
 ### Community 17429 - "Community 17429"
 Cohesion: 0.67
-Nodes (3): MGC, data_delay_status, last_update_age_ms
+Nodes (3): ZC, data_delay_status, last_update_age_ms
 
 ### Community 17430 - "Community 17430"
 Cohesion: 0.67
-Nodes (3): KE, data_delay_status, last_update_age_ms
+Nodes (3): ZL, data_delay_status, last_update_age_ms
 
 ### Community 17431 - "Community 17431"
 Cohesion: 0.67
-Nodes (3): M2K, data_delay_status, last_update_age_ms
+Nodes (3): ZC, data_delay_status, last_update_age_ms
 
 ### Community 17432 - "Community 17432"
 Cohesion: 0.67
-Nodes (3): NG, data_delay_status, last_update_age_ms
+Nodes (3): KE, data_delay_status, last_update_age_ms
 
 ### Community 17433 - "Community 17433"
 Cohesion: 0.67
@@ -84968,35 +85129,35 @@ Nodes (3): NG, data_delay_status, last_update_age_ms
 
 ### Community 17435 - "Community 17435"
 Cohesion: 0.67
-Nodes (3): M2K, data_delay_status, last_update_age_ms
+Nodes (3): ZL, data_delay_status, last_update_age_ms
 
 ### Community 17436 - "Community 17436"
 Cohesion: 0.67
-Nodes (3): MES, data_delay_status, last_update_age_ms
+Nodes (3): NG, data_delay_status, last_update_age_ms
 
 ### Community 17437 - "Community 17437"
 Cohesion: 0.67
-Nodes (3): RB, data_delay_status, last_update_age_ms
+Nodes (3): ZC, data_delay_status, last_update_age_ms
 
 ### Community 17438 - "Community 17438"
 Cohesion: 0.67
-Nodes (3): SR3, data_delay_status, last_update_age_ms
+Nodes (3): ZL, data_delay_status, last_update_age_ms
 
 ### Community 17439 - "Community 17439"
 Cohesion: 0.67
-Nodes (3): ZQ, data_delay_status, last_update_age_ms
+Nodes (3): M2K, data_delay_status, last_update_age_ms
 
 ### Community 17440 - "Community 17440"
 Cohesion: 0.67
-Nodes (3): data_delay_status, last_update_age_ms, CL
+Nodes (3): NG, data_delay_status, last_update_age_ms
 
 ### Community 17441 - "Community 17441"
 Cohesion: 0.67
-Nodes (3): HO, data_delay_status, last_update_age_ms
+Nodes (3): ZL, data_delay_status, last_update_age_ms
 
 ### Community 17442 - "Community 17442"
 Cohesion: 0.67
-Nodes (3): MGC, data_delay_status, last_update_age_ms
+Nodes (3): HO, data_delay_status, last_update_age_ms
 
 ### Community 17443 - "Community 17443"
 Cohesion: 0.67
@@ -85004,27 +85165,27 @@ Nodes (3): ZF, data_delay_status, last_update_age_ms
 
 ### Community 17444 - "Community 17444"
 Cohesion: 0.67
-Nodes (3): data_delay_status, last_update_age_ms, CL
+Nodes (3): MES, data_delay_status, last_update_age_ms
 
 ### Community 17445 - "Community 17445"
 Cohesion: 0.67
-Nodes (3): MGC, data_delay_status, last_update_age_ms
+Nodes (3): ZN, data_delay_status, last_update_age_ms
 
 ### Community 17446 - "Community 17446"
 Cohesion: 0.67
-Nodes (3): SR3, data_delay_status, last_update_age_ms
+Nodes (3): ZQ, data_delay_status, last_update_age_ms
 
 ### Community 17447 - "Community 17447"
 Cohesion: 0.67
-Nodes (3): data_delay_status, last_update_age_ms, CL
+Nodes (3): KE, data_delay_status, last_update_age_ms
 
 ### Community 17448 - "Community 17448"
 Cohesion: 0.67
-Nodes (3): MGC, data_delay_status, last_update_age_ms
+Nodes (3): NG, data_delay_status, last_update_age_ms
 
 ### Community 17449 - "Community 17449"
 Cohesion: 0.67
-Nodes (3): SR3, data_delay_status, last_update_age_ms
+Nodes (3): ZC, data_delay_status, last_update_age_ms
 
 ### Community 17450 - "Community 17450"
 Cohesion: 0.67
@@ -85036,51 +85197,51 @@ Nodes (3): SR3, data_delay_status, last_update_age_ms
 
 ### Community 17452 - "Community 17452"
 Cohesion: 0.67
-Nodes (3): HO, data_delay_status, last_update_age_ms
+Nodes (3): KE, data_delay_status, last_update_age_ms
 
 ### Community 17453 - "Community 17453"
 Cohesion: 0.67
-Nodes (3): MGC, data_delay_status, last_update_age_ms
+Nodes (3): SR3, data_delay_status, last_update_age_ms
 
 ### Community 17454 - "Community 17454"
 Cohesion: 0.67
-Nodes (3): ZF, data_delay_status, last_update_age_ms
+Nodes (3): MGC, data_delay_status, last_update_age_ms
 
 ### Community 17455 - "Community 17455"
 Cohesion: 0.67
-Nodes (3): data_delay_status, last_update_age_ms, CL
+Nodes (3): ZS, data_delay_status, last_update_age_ms
 
 ### Community 17456 - "Community 17456"
 Cohesion: 0.67
-Nodes (3): MES, data_delay_status, last_update_age_ms
+Nodes (3): KE, data_delay_status, last_update_age_ms
 
 ### Community 17457 - "Community 17457"
 Cohesion: 0.67
-Nodes (3): ZQ, data_delay_status, last_update_age_ms
+Nodes (3): data_delay_status, last_update_age_ms, CL
 
 ### Community 17458 - "Community 17458"
 Cohesion: 0.67
-Nodes (3): HO, data_delay_status, last_update_age_ms
+Nodes (3): MGC, data_delay_status, last_update_age_ms
 
 ### Community 17459 - "Community 17459"
 Cohesion: 0.67
-Nodes (3): ZS, data_delay_status, last_update_age_ms
+Nodes (3): KE, data_delay_status, last_update_age_ms
 
 ### Community 17460 - "Community 17460"
 Cohesion: 0.67
-Nodes (3): HO, data_delay_status, last_update_age_ms
+Nodes (3): M2K, data_delay_status, last_update_age_ms
 
 ### Community 17461 - "Community 17461"
 Cohesion: 0.67
-Nodes (3): ZQ, data_delay_status, last_update_age_ms
+Nodes (3): NG, data_delay_status, last_update_age_ms
 
 ### Community 17462 - "Community 17462"
 Cohesion: 0.67
-Nodes (3): MES, data_delay_status, last_update_age_ms
+Nodes (3): enum, type, llm_status
 
 ### Community 17463 - "Community 17463"
-Cohesion: 0.67
-Nodes (3): ZQ, data_delay_status, last_update_age_ms
+Cohesion: 0.12
+Nodes (16): cme_symbols, events_csv_row_count, events_csv_type_count, generated_at_utc, include_rule_based, include_seed_calendars, macro_event_type_count, note (+8 more)
 
 ### Community 17464 - "Community 17464"
 Cohesion: 0.67
@@ -85112,7 +85273,7 @@ Nodes (3): HG, data_delay_status, last_update_age_ms
 
 ### Community 17471 - "Community 17471"
 Cohesion: 0.67
-Nodes (3): HO, data_delay_status, last_update_age_ms
+Nodes (3): KE, data_delay_status, last_update_age_ms
 
 ### Community 17472 - "Community 17472"
 Cohesion: 0.67
@@ -85372,7 +85533,7 @@ Nodes (3): data_delay_status, last_update_age_ms, 6J
 
 ### Community 17536 - "Community 17536"
 Cohesion: 0.67
-Nodes (3): data_delay_status, last_update_age_ms, CL
+Nodes (3): SR3, data_delay_status, last_update_age_ms
 
 ### Community 17537 - "Community 17537"
 Cohesion: 0.67
@@ -85388,7 +85549,7 @@ Nodes (3): HG, data_delay_status, last_update_age_ms
 
 ### Community 17540 - "Community 17540"
 Cohesion: 0.67
-Nodes (3): HO, data_delay_status, last_update_age_ms
+Nodes (3): data_delay_status, last_update_age_ms, CL
 
 ### Community 17541 - "Community 17541"
 Cohesion: 0.67
@@ -85396,7 +85557,7 @@ Nodes (3): MCL, data_delay_status, last_update_age_ms
 
 ### Community 17542 - "Community 17542"
 Cohesion: 0.67
-Nodes (3): MES, data_delay_status, last_update_age_ms
+Nodes (3): KE, data_delay_status, last_update_age_ms
 
 ### Community 17543 - "Community 17543"
 Cohesion: 0.67
@@ -85492,135 +85653,135 @@ Nodes (3): ZW, data_delay_status, last_update_age_ms
 
 ### Community 17566 - "Community 17566"
 Cohesion: 0.67
-Nodes (3): required, type, parsed
+Nodes (3): MGC, data_delay_status, last_update_age_ms
 
 ### Community 17567 - "Community 17567"
 Cohesion: 0.67
-Nodes (3): schema_version, const, type
+Nodes (3): RB, data_delay_status, last_update_age_ms
 
 ### Community 17568 - "Community 17568"
 Cohesion: 0.67
-Nodes (3): data_delay_status, last_update_age_ms, CL
+Nodes (3): ZL, data_delay_status, last_update_age_ms
 
 ### Community 17569 - "Community 17569"
 Cohesion: 0.67
-Nodes (3): HO, data_delay_status, last_update_age_ms
+Nodes (3): MGC, data_delay_status, last_update_age_ms
 
 ### Community 17570 - "Community 17570"
 Cohesion: 0.67
-Nodes (3): MGC, data_delay_status, last_update_age_ms
+Nodes (3): data_delay_status, last_update_age_ms, CL
 
 ### Community 17571 - "Community 17571"
 Cohesion: 0.67
-Nodes (3): ZF, data_delay_status, last_update_age_ms
+Nodes (3): MGC, data_delay_status, last_update_age_ms
 
 ### Community 17572 - "Community 17572"
 Cohesion: 0.67
-Nodes (3): data_delay_status, last_update_age_ms, 6A
+Nodes (3): RB, data_delay_status, last_update_age_ms
 
 ### Community 17573 - "Community 17573"
 Cohesion: 0.67
-Nodes (3): HO, data_delay_status, last_update_age_ms
+Nodes (3): ZL, data_delay_status, last_update_age_ms
 
 ### Community 17574 - "Community 17574"
 Cohesion: 0.67
-Nodes (3): NG, data_delay_status, last_update_age_ms
+Nodes (3): data_delay_status, last_update_age_ms, 6A
 
 ### Community 17575 - "Community 17575"
 Cohesion: 0.67
-Nodes (3): ZC, data_delay_status, last_update_age_ms
+Nodes (3): SR3, data_delay_status, last_update_age_ms
 
 ### Community 17576 - "Community 17576"
 Cohesion: 0.67
-Nodes (3): M2K, data_delay_status, last_update_age_ms
+Nodes (3): data_delay_status, last_update_age_ms, CL
 
 ### Community 17577 - "Community 17577"
 Cohesion: 0.67
-Nodes (3): MES, data_delay_status, last_update_age_ms
+Nodes (3): KE, data_delay_status, last_update_age_ms
 
 ### Community 17578 - "Community 17578"
 Cohesion: 0.67
-Nodes (3): data_delay_status, last_update_age_ms, 6A
+Nodes (3): data_delay_status, last_update_age_ms, CL
 
 ### Community 17579 - "Community 17579"
 Cohesion: 0.67
-Nodes (3): M2K, data_delay_status, last_update_age_ms
+Nodes (3): HO, data_delay_status, last_update_age_ms
 
 ### Community 17580 - "Community 17580"
 Cohesion: 0.67
-Nodes (3): NG, data_delay_status, last_update_age_ms
+Nodes (3): MGC, data_delay_status, last_update_age_ms
 
 ### Community 17581 - "Community 17581"
 Cohesion: 0.67
-Nodes (3): SR3, data_delay_status, last_update_age_ms
+Nodes (3): ZQ, data_delay_status, last_update_age_ms
 
 ### Community 17582 - "Community 17582"
 Cohesion: 0.67
-Nodes (3): M2K, data_delay_status, last_update_age_ms
+Nodes (3): KE, data_delay_status, last_update_age_ms
 
 ### Community 17583 - "Community 17583"
 Cohesion: 0.67
-Nodes (3): RB, data_delay_status, last_update_age_ms
+Nodes (3): MGC, data_delay_status, last_update_age_ms
 
 ### Community 17584 - "Community 17584"
 Cohesion: 0.67
-Nodes (3): HO, data_delay_status, last_update_age_ms
+Nodes (3): SR3, data_delay_status, last_update_age_ms
 
 ### Community 17585 - "Community 17585"
 Cohesion: 0.67
-Nodes (3): ZF, data_delay_status, last_update_age_ms
+Nodes (3): HO, data_delay_status, last_update_age_ms
 
 ### Community 17586 - "Community 17586"
 Cohesion: 0.67
-Nodes (3): KE, data_delay_status, last_update_age_ms
+Nodes (3): ZS, data_delay_status, last_update_age_ms
 
 ### Community 17587 - "Community 17587"
 Cohesion: 0.67
-Nodes (3): MNQ, data_delay_status, last_update_age_ms
+Nodes (3): M2K, data_delay_status, last_update_age_ms
 
 ### Community 17588 - "Community 17588"
 Cohesion: 0.67
-Nodes (3): SR3, data_delay_status, last_update_age_ms
+Nodes (3): MNQ, data_delay_status, last_update_age_ms
 
 ### Community 17589 - "Community 17589"
 Cohesion: 0.67
-Nodes (3): ZF, data_delay_status, last_update_age_ms
+Nodes (3): NG, data_delay_status, last_update_age_ms
 
 ### Community 17590 - "Community 17590"
 Cohesion: 0.67
-Nodes (3): HO, data_delay_status, last_update_age_ms
+Nodes (3): RB, data_delay_status, last_update_age_ms
 
 ### Community 17591 - "Community 17591"
 Cohesion: 0.67
-Nodes (3): MES, data_delay_status, last_update_age_ms
+Nodes (3): HO, data_delay_status, last_update_age_ms
 
 ### Community 17592 - "Community 17592"
 Cohesion: 0.67
-Nodes (3): ZS, data_delay_status, last_update_age_ms
+Nodes (3): MES, data_delay_status, last_update_age_ms
 
 ### Community 17593 - "Community 17593"
 Cohesion: 0.67
-Nodes (3): KE, data_delay_status, last_update_age_ms
+Nodes (3): ZQ, data_delay_status, last_update_age_ms
 
 ### Community 17594 - "Community 17594"
 Cohesion: 0.67
-Nodes (3): SR3, data_delay_status, last_update_age_ms
+Nodes (3): ZF, data_delay_status, last_update_age_ms
 
 ### Community 17595 - "Community 17595"
 Cohesion: 0.67
-Nodes (3): data_delay_status, last_update_age_ms, 6A
+Nodes (3): data_delay_status, last_update_age_ms, CL
 
 ### Community 17596 - "Community 17596"
 Cohesion: 0.67
-Nodes (3): data_delay_status, last_update_age_ms, CL
+Nodes (3): HO, data_delay_status, last_update_age_ms
 
 ### Community 17597 - "Community 17597"
 Cohesion: 0.67
-Nodes (3): HO, data_delay_status, last_update_age_ms
+Nodes (3): MGC, data_delay_status, last_update_age_ms
 
 ### Community 17598 - "Community 17598"
 Cohesion: 0.67
-Nodes (3): MES, data_delay_status, last_update_age_ms
+Nodes (3): ZF, data_delay_status, last_update_age_ms
 
 ### Community 17599 - "Community 17599"
 Cohesion: 0.67
@@ -85636,135 +85797,135 @@ Nodes (3): SR3, data_delay_status, last_update_age_ms
 
 ### Community 17602 - "Community 17602"
 Cohesion: 0.67
-Nodes (3): ZS, data_delay_status, last_update_age_ms
+Nodes (3): HO, data_delay_status, last_update_age_ms
 
 ### Community 17603 - "Community 17603"
 Cohesion: 0.67
-Nodes (3): KE, data_delay_status, last_update_age_ms
+Nodes (3): ZF, data_delay_status, last_update_age_ms
 
 ### Community 17604 - "Community 17604"
 Cohesion: 0.67
-Nodes (3): M2K, data_delay_status, last_update_age_ms
+Nodes (3): ZQ, data_delay_status, last_update_age_ms
 
 ### Community 17605 - "Community 17605"
-Cohesion: 0.67
-Nodes (3): NG, data_delay_status, last_update_age_ms
+Cohesion: 0.12
+Nodes (16): cme_symbols, events_csv_row_count, events_csv_type_count, generated_at_utc, include_rule_based, include_seed_calendars, macro_event_type_count, note (+8 more)
 
 ### Community 17606 - "Community 17606"
-Cohesion: 0.67
-Nodes (3): SR3, data_delay_status, last_update_age_ms
+Cohesion: 0.12
+Nodes (16): cme_symbols, events_csv_row_count, events_csv_type_count, generated_at_utc, include_rule_based, include_seed_calendars, macro_event_type_count, note (+8 more)
 
 ### Community 17607 - "Community 17607"
 Cohesion: 0.67
-Nodes (3): HO, data_delay_status, last_update_age_ms
+Nodes (3): KE, data_delay_status, last_update_age_ms
 
 ### Community 17608 - "Community 17608"
 Cohesion: 0.67
-Nodes (3): MES, data_delay_status, last_update_age_ms
+Nodes (3): MGC, data_delay_status, last_update_age_ms
 
 ### Community 17609 - "Community 17609"
 Cohesion: 0.67
-Nodes (3): ZQ, data_delay_status, last_update_age_ms
+Nodes (3): RB, data_delay_status, last_update_age_ms
 
 ### Community 17610 - "Community 17610"
 Cohesion: 0.67
-Nodes (3): KE, data_delay_status, last_update_age_ms
+Nodes (3): ZL, data_delay_status, last_update_age_ms
 
 ### Community 17611 - "Community 17611"
 Cohesion: 0.67
-Nodes (3): SR3, data_delay_status, last_update_age_ms
+Nodes (3): data_delay_status, last_update_age_ms, CL
 
 ### Community 17612 - "Community 17612"
 Cohesion: 0.67
-Nodes (3): ZF, data_delay_status, last_update_age_ms
+Nodes (3): KE, data_delay_status, last_update_age_ms
 
 ### Community 17613 - "Community 17613"
 Cohesion: 0.67
-Nodes (3): HO, data_delay_status, last_update_age_ms
+Nodes (3): M2K, data_delay_status, last_update_age_ms
 
 ### Community 17614 - "Community 17614"
 Cohesion: 0.67
-Nodes (3): ZF, data_delay_status, last_update_age_ms
+Nodes (3): RB, data_delay_status, last_update_age_ms
 
 ### Community 17615 - "Community 17615"
 Cohesion: 0.67
-Nodes (3): data_delay_status, last_update_age_ms, 6A
+Nodes (3): MES, data_delay_status, last_update_age_ms
 
 ### Community 17616 - "Community 17616"
 Cohesion: 0.67
-Nodes (3): HO, data_delay_status, last_update_age_ms
+Nodes (3): KE, data_delay_status, last_update_age_ms
 
 ### Community 17617 - "Community 17617"
 Cohesion: 0.67
-Nodes (3): MES, data_delay_status, last_update_age_ms
+Nodes (3): MGC, data_delay_status, last_update_age_ms
 
 ### Community 17618 - "Community 17618"
 Cohesion: 0.67
-Nodes (3): ZQ, data_delay_status, last_update_age_ms
+Nodes (3): SR3, data_delay_status, last_update_age_ms
 
 ### Community 17619 - "Community 17619"
 Cohesion: 0.67
-Nodes (3): data_delay_status, last_update_age_ms, 6A
+Nodes (3): NG, data_delay_status, last_update_age_ms
 
 ### Community 17620 - "Community 17620"
 Cohesion: 0.67
-Nodes (3): HO, data_delay_status, last_update_age_ms
+Nodes (3): ZB, data_delay_status, last_update_age_ms
 
 ### Community 17621 - "Community 17621"
 Cohesion: 0.67
-Nodes (3): SR3, data_delay_status, last_update_age_ms
+Nodes (3): M2K, data_delay_status, last_update_age_ms
 
 ### Community 17622 - "Community 17622"
 Cohesion: 0.67
-Nodes (3): ZC, data_delay_status, last_update_age_ms
+Nodes (3): NG, data_delay_status, last_update_age_ms
 
 ### Community 17623 - "Community 17623"
 Cohesion: 0.67
-Nodes (3): MGC, data_delay_status, last_update_age_ms
+Nodes (3): data_delay_status, last_update_age_ms, 6A
 
 ### Community 17624 - "Community 17624"
 Cohesion: 0.67
-Nodes (3): HO, data_delay_status, last_update_age_ms
+Nodes (3): ZS, data_delay_status, last_update_age_ms
 
 ### Community 17625 - "Community 17625"
 Cohesion: 0.67
-Nodes (3): MES, data_delay_status, last_update_age_ms
+Nodes (3): data_delay_status, last_update_age_ms, CL
 
 ### Community 17626 - "Community 17626"
 Cohesion: 0.67
-Nodes (3): ZQ, data_delay_status, last_update_age_ms
+Nodes (3): HO, data_delay_status, last_update_age_ms
 
 ### Community 17627 - "Community 17627"
 Cohesion: 0.67
-Nodes (3): data_delay_status, last_update_age_ms, CL
+Nodes (3): MGC, data_delay_status, last_update_age_ms
 
 ### Community 17628 - "Community 17628"
 Cohesion: 0.67
-Nodes (3): MGC, data_delay_status, last_update_age_ms
+Nodes (3): SR3, data_delay_status, last_update_age_ms
 
 ### Community 17629 - "Community 17629"
 Cohesion: 0.67
-Nodes (3): data_delay_status, last_update_age_ms, CL
+Nodes (3): HO, data_delay_status, last_update_age_ms
 
 ### Community 17630 - "Community 17630"
 Cohesion: 0.67
-Nodes (3): MGC, data_delay_status, last_update_age_ms
+Nodes (3): ZS, data_delay_status, last_update_age_ms
 
 ### Community 17631 - "Community 17631"
 Cohesion: 0.67
-Nodes (3): RB, data_delay_status, last_update_age_ms
+Nodes (3): KE, data_delay_status, last_update_age_ms
 
 ### Community 17632 - "Community 17632"
 Cohesion: 0.67
-Nodes (3): ZC, data_delay_status, last_update_age_ms
+Nodes (3): MNQ, data_delay_status, last_update_age_ms
 
 ### Community 17633 - "Community 17633"
 Cohesion: 0.67
-Nodes (3): KE, data_delay_status, last_update_age_ms
+Nodes (3): SR3, data_delay_status, last_update_age_ms
 
 ### Community 17634 - "Community 17634"
 Cohesion: 0.67
-Nodes (3): M2K, data_delay_status, last_update_age_ms
+Nodes (3): ZF, data_delay_status, last_update_age_ms
 
 ### Community 17635 - "Community 17635"
 Cohesion: 0.67
@@ -85772,35 +85933,35 @@ Nodes (3): NG, data_delay_status, last_update_age_ms
 
 ### Community 17636 - "Community 17636"
 Cohesion: 0.67
-Nodes (3): ZL, data_delay_status, last_update_age_ms
+Nodes (3): ZC, data_delay_status, last_update_age_ms
 
 ### Community 17637 - "Community 17637"
 Cohesion: 0.67
-Nodes (3): KE, data_delay_status, last_update_age_ms
+Nodes (3): ZL, data_delay_status, last_update_age_ms
 
 ### Community 17638 - "Community 17638"
 Cohesion: 0.67
-Nodes (3): SR3, data_delay_status, last_update_age_ms
+Nodes (3): data_delay_status, last_update_age_ms, CL
 
 ### Community 17639 - "Community 17639"
 Cohesion: 0.67
-Nodes (3): data_delay_status, last_update_age_ms, CL
+Nodes (3): MGC, data_delay_status, last_update_age_ms
 
 ### Community 17640 - "Community 17640"
 Cohesion: 0.67
-Nodes (3): HO, data_delay_status, last_update_age_ms
+Nodes (3): SR3, data_delay_status, last_update_age_ms
 
 ### Community 17641 - "Community 17641"
 Cohesion: 0.67
-Nodes (3): MGC, data_delay_status, last_update_age_ms
+Nodes (3): M2K, data_delay_status, last_update_age_ms
 
 ### Community 17642 - "Community 17642"
 Cohesion: 0.67
-Nodes (3): ZQ, data_delay_status, last_update_age_ms
+Nodes (3): MES, data_delay_status, last_update_age_ms
 
 ### Community 17643 - "Community 17643"
 Cohesion: 0.67
-Nodes (3): data_delay_status, last_update_age_ms, CL
+Nodes (3): RB, data_delay_status, last_update_age_ms
 
 ### Community 17644 - "Community 17644"
 Cohesion: 0.67
@@ -85808,19 +85969,19 @@ Nodes (3): MGC, data_delay_status, last_update_age_ms
 
 ### Community 17645 - "Community 17645"
 Cohesion: 0.67
-Nodes (3): SR3, data_delay_status, last_update_age_ms
+Nodes (3): ZS, data_delay_status, last_update_age_ms
 
 ### Community 17646 - "Community 17646"
 Cohesion: 0.67
-Nodes (3): NG, data_delay_status, last_update_age_ms
+Nodes (3): RB, data_delay_status, last_update_age_ms
 
 ### Community 17647 - "Community 17647"
 Cohesion: 0.67
-Nodes (3): ZC, data_delay_status, last_update_age_ms
+Nodes (3): KE, data_delay_status, last_update_age_ms
 
 ### Community 17648 - "Community 17648"
 Cohesion: 0.67
-Nodes (3): ZL, data_delay_status, last_update_age_ms
+Nodes (3): SR3, data_delay_status, last_update_age_ms
 
 ### Community 17649 - "Community 17649"
 Cohesion: 0.67
@@ -85832,67 +85993,67 @@ Nodes (3): HO, data_delay_status, last_update_age_ms
 
 ### Community 17651 - "Community 17651"
 Cohesion: 0.67
-Nodes (3): MGC, data_delay_status, last_update_age_ms
+Nodes (3): ZF, data_delay_status, last_update_age_ms
 
 ### Community 17652 - "Community 17652"
 Cohesion: 0.67
-Nodes (3): MES, data_delay_status, last_update_age_ms
+Nodes (3): ZF, data_delay_status, last_update_age_ms
 
 ### Community 17653 - "Community 17653"
 Cohesion: 0.67
-Nodes (3): SR3, data_delay_status, last_update_age_ms
+Nodes (3): MES, data_delay_status, last_update_age_ms
 
 ### Community 17654 - "Community 17654"
 Cohesion: 0.67
-Nodes (3): data_delay_status, last_update_age_ms, 6A
+Nodes (3): RB, data_delay_status, last_update_age_ms
 
 ### Community 17655 - "Community 17655"
 Cohesion: 0.67
-Nodes (3): HO, data_delay_status, last_update_age_ms
+Nodes (3): ZS, data_delay_status, last_update_age_ms
 
 ### Community 17656 - "Community 17656"
 Cohesion: 0.67
-Nodes (3): ZC, data_delay_status, last_update_age_ms
+Nodes (3): KE, data_delay_status, last_update_age_ms
 
 ### Community 17657 - "Community 17657"
 Cohesion: 0.67
-Nodes (3): KE, data_delay_status, last_update_age_ms
+Nodes (3): M2K, data_delay_status, last_update_age_ms
 
 ### Community 17658 - "Community 17658"
 Cohesion: 0.67
-Nodes (3): M2K, data_delay_status, last_update_age_ms
+Nodes (3): RB, data_delay_status, last_update_age_ms
 
 ### Community 17659 - "Community 17659"
 Cohesion: 0.67
-Nodes (3): RB, data_delay_status, last_update_age_ms
+Nodes (3): ZQ, data_delay_status, last_update_age_ms
 
 ### Community 17660 - "Community 17660"
 Cohesion: 0.67
-Nodes (3): ZS, data_delay_status, last_update_age_ms
+Nodes (3): M2K, data_delay_status, last_update_age_ms
 
 ### Community 17661 - "Community 17661"
 Cohesion: 0.67
-Nodes (3): data_delay_status, last_update_age_ms, 6A
+Nodes (3): NG, data_delay_status, last_update_age_ms
 
 ### Community 17662 - "Community 17662"
 Cohesion: 0.67
-Nodes (3): MGC, data_delay_status, last_update_age_ms
+Nodes (3): data_delay_status, last_update_age_ms, CL
 
 ### Community 17663 - "Community 17663"
 Cohesion: 0.67
-Nodes (3): ZF, data_delay_status, last_update_age_ms
+Nodes (3): HO, data_delay_status, last_update_age_ms
 
 ### Community 17664 - "Community 17664"
 Cohesion: 0.67
-Nodes (3): data_delay_status, last_update_age_ms, CL
+Nodes (3): MGC, data_delay_status, last_update_age_ms
 
 ### Community 17665 - "Community 17665"
 Cohesion: 0.67
-Nodes (3): HO, data_delay_status, last_update_age_ms
+Nodes (3): KE, data_delay_status, last_update_age_ms
 
 ### Community 17666 - "Community 17666"
 Cohesion: 0.67
-Nodes (3): MGC, data_delay_status, last_update_age_ms
+Nodes (3): RB, data_delay_status, last_update_age_ms
 
 ### Community 17667 - "Community 17667"
 Cohesion: 0.67
@@ -85900,39 +86061,39 @@ Nodes (3): ZF, data_delay_status, last_update_age_ms
 
 ### Community 17668 - "Community 17668"
 Cohesion: 0.67
-Nodes (3): data_delay_status, last_update_age_ms, CL
+Nodes (3): M2K, data_delay_status, last_update_age_ms
 
 ### Community 17669 - "Community 17669"
 Cohesion: 0.67
-Nodes (3): MGC, data_delay_status, last_update_age_ms
+Nodes (3): NG, data_delay_status, last_update_age_ms
 
 ### Community 17670 - "Community 17670"
 Cohesion: 0.67
-Nodes (3): KE, data_delay_status, last_update_age_ms
+Nodes (3): RB, data_delay_status, last_update_age_ms
 
 ### Community 17671 - "Community 17671"
 Cohesion: 0.67
-Nodes (3): M2K, data_delay_status, last_update_age_ms
+Nodes (3): ZL, data_delay_status, last_update_age_ms
 
 ### Community 17672 - "Community 17672"
 Cohesion: 0.67
-Nodes (3): NG, data_delay_status, last_update_age_ms
+Nodes (3): HO, data_delay_status, last_update_age_ms
 
 ### Community 17673 - "Community 17673"
 Cohesion: 0.67
-Nodes (3): data_delay_status, last_update_age_ms, 6A
+Nodes (3): MES, data_delay_status, last_update_age_ms
 
 ### Community 17674 - "Community 17674"
 Cohesion: 0.67
-Nodes (3): HO, data_delay_status, last_update_age_ms
+Nodes (3): ZS, data_delay_status, last_update_age_ms
 
 ### Community 17675 - "Community 17675"
 Cohesion: 0.67
-Nodes (3): ZS, data_delay_status, last_update_age_ms
+Nodes (3): MGC, data_delay_status, last_update_age_ms
 
 ### Community 17676 - "Community 17676"
 Cohesion: 0.67
-Nodes (3): data_delay_status, last_update_age_ms, 6A
+Nodes (3): ZF, data_delay_status, last_update_age_ms
 
 ### Community 17677 - "Community 17677"
 Cohesion: 0.67
@@ -85940,31 +86101,31 @@ Nodes (3): data_delay_status, last_update_age_ms, CL
 
 ### Community 17678 - "Community 17678"
 Cohesion: 0.67
-Nodes (3): MGC, data_delay_status, last_update_age_ms
+Nodes (3): HO, data_delay_status, last_update_age_ms
 
 ### Community 17679 - "Community 17679"
 Cohesion: 0.67
-Nodes (3): SR3, data_delay_status, last_update_age_ms
+Nodes (3): MES, data_delay_status, last_update_age_ms
 
 ### Community 17680 - "Community 17680"
 Cohesion: 0.67
-Nodes (3): KE, data_delay_status, last_update_age_ms
+Nodes (3): SR3, data_delay_status, last_update_age_ms
 
 ### Community 17681 - "Community 17681"
 Cohesion: 0.67
-Nodes (3): MGC, data_delay_status, last_update_age_ms
+Nodes (3): RB, data_delay_status, last_update_age_ms
 
 ### Community 17682 - "Community 17682"
 Cohesion: 0.67
-Nodes (3): SR3, data_delay_status, last_update_age_ms
+Nodes (3): ZL, data_delay_status, last_update_age_ms
 
 ### Community 17683 - "Community 17683"
 Cohesion: 0.67
-Nodes (3): MES, data_delay_status, last_update_age_ms
+Nodes (3): M2K, data_delay_status, last_update_age_ms
 
 ### Community 17684 - "Community 17684"
 Cohesion: 0.67
-Nodes (3): SR3, data_delay_status, last_update_age_ms
+Nodes (3): RB, data_delay_status, last_update_age_ms
 
 ### Community 17685 - "Community 17685"
 Cohesion: 0.67
@@ -85972,103 +86133,103 @@ Nodes (3): KE, data_delay_status, last_update_age_ms
 
 ### Community 17686 - "Community 17686"
 Cohesion: 0.67
-Nodes (3): MNQ, data_delay_status, last_update_age_ms
+Nodes (3): M2K, data_delay_status, last_update_age_ms
 
 ### Community 17687 - "Community 17687"
 Cohesion: 0.67
-Nodes (3): ZB, data_delay_status, last_update_age_ms
+Nodes (3): RB, data_delay_status, last_update_age_ms
 
 ### Community 17688 - "Community 17688"
 Cohesion: 0.67
-Nodes (3): ZF, data_delay_status, last_update_age_ms
+Nodes (3): data_delay_status, last_update_age_ms, CL
 
 ### Community 17689 - "Community 17689"
 Cohesion: 0.67
-Nodes (3): data_delay_status, last_update_age_ms, 6A
+Nodes (3): MGC, data_delay_status, last_update_age_ms
 
 ### Community 17690 - "Community 17690"
 Cohesion: 0.67
-Nodes (3): SR3, data_delay_status, last_update_age_ms
+Nodes (3): MES, data_delay_status, last_update_age_ms
 
 ### Community 17691 - "Community 17691"
 Cohesion: 0.67
-Nodes (3): data_delay_status, last_update_age_ms, 6A
+Nodes (3): SR3, data_delay_status, last_update_age_ms
 
 ### Community 17692 - "Community 17692"
 Cohesion: 0.67
-Nodes (3): SR3, data_delay_status, last_update_age_ms
+Nodes (3): ZQ, data_delay_status, last_update_age_ms
 
 ### Community 17693 - "Community 17693"
 Cohesion: 0.67
-Nodes (3): data_delay_status, last_update_age_ms, 6A
+Nodes (3): HO, data_delay_status, last_update_age_ms
 
 ### Community 17694 - "Community 17694"
 Cohesion: 0.67
-Nodes (3): HO, data_delay_status, last_update_age_ms
+Nodes (3): MES, data_delay_status, last_update_age_ms
 
 ### Community 17695 - "Community 17695"
 Cohesion: 0.67
-Nodes (3): ZF, data_delay_status, last_update_age_ms
+Nodes (3): ZS, data_delay_status, last_update_age_ms
 
 ### Community 17696 - "Community 17696"
 Cohesion: 0.67
-Nodes (3): NG, data_delay_status, last_update_age_ms
+Nodes (3): KE, data_delay_status, last_update_age_ms
 
 ### Community 17697 - "Community 17697"
 Cohesion: 0.67
-Nodes (3): ZQ, data_delay_status, last_update_age_ms
+Nodes (3): SR3, data_delay_status, last_update_age_ms
 
 ### Community 17698 - "Community 17698"
 Cohesion: 0.67
-Nodes (3): MGC, data_delay_status, last_update_age_ms
+Nodes (3): data_delay_status, last_update_age_ms, 6A
 
 ### Community 17699 - "Community 17699"
 Cohesion: 0.67
-Nodes (3): ZF, data_delay_status, last_update_age_ms
+Nodes (3): KE, data_delay_status, last_update_age_ms
 
 ### Community 17700 - "Community 17700"
 Cohesion: 0.67
-Nodes (3): ZC, data_delay_status, last_update_age_ms
+Nodes (3): MGC, data_delay_status, last_update_age_ms
 
 ### Community 17701 - "Community 17701"
 Cohesion: 0.67
-Nodes (3): KE, data_delay_status, last_update_age_ms
+Nodes (3): ZQ, data_delay_status, last_update_age_ms
 
 ### Community 17702 - "Community 17702"
 Cohesion: 0.67
-Nodes (3): MGC, data_delay_status, last_update_age_ms
+Nodes (3): HO, data_delay_status, last_update_age_ms
 
 ### Community 17703 - "Community 17703"
 Cohesion: 0.67
-Nodes (3): SR3, data_delay_status, last_update_age_ms
+Nodes (3): ZQ, data_delay_status, last_update_age_ms
 
 ### Community 17704 - "Community 17704"
 Cohesion: 0.67
-Nodes (3): HO, data_delay_status, last_update_age_ms
+Nodes (3): KE, data_delay_status, last_update_age_ms
 
 ### Community 17705 - "Community 17705"
 Cohesion: 0.67
-Nodes (3): ZF, data_delay_status, last_update_age_ms
+Nodes (3): MGC, data_delay_status, last_update_age_ms
 
 ### Community 17706 - "Community 17706"
 Cohesion: 0.67
-Nodes (3): M2K, data_delay_status, last_update_age_ms
+Nodes (3): RB, data_delay_status, last_update_age_ms
 
 ### Community 17707 - "Community 17707"
 Cohesion: 0.67
-Nodes (3): MES, data_delay_status, last_update_age_ms
+Nodes (3): ZF, data_delay_status, last_update_age_ms
 
 ### Community 17708 - "Community 17708"
 Cohesion: 0.67
-Nodes (3): RB, data_delay_status, last_update_age_ms
+Nodes (3): HO, data_delay_status, last_update_age_ms
 
 ### Community 17709 - "Community 17709"
 Cohesion: 0.67
-Nodes (3): SR3, data_delay_status, last_update_age_ms
+Nodes (3): MES, data_delay_status, last_update_age_ms
 
 ### Community 17710 - "Community 17710"
 Cohesion: 0.67
-Nodes (3): KE, data_delay_status, last_update_age_ms
+Nodes (3): ZS, data_delay_status, last_update_age_ms
 
 ### Community 17711 - "Community 17711"
 Cohesion: 0.67
@@ -86076,35 +86237,35 @@ Nodes (3): SR3, data_delay_status, last_update_age_ms
 
 ### Community 17712 - "Community 17712"
 Cohesion: 0.67
-Nodes (3): data_delay_status, last_update_age_ms, 6A
+Nodes (3): ZC, data_delay_status, last_update_age_ms
 
 ### Community 17713 - "Community 17713"
 Cohesion: 0.67
-Nodes (3): HO, data_delay_status, last_update_age_ms
+Nodes (3): KE, data_delay_status, last_update_age_ms
 
 ### Community 17714 - "Community 17714"
 Cohesion: 0.67
-Nodes (3): MES, data_delay_status, last_update_age_ms
+Nodes (3): M2K, data_delay_status, last_update_age_ms
 
 ### Community 17715 - "Community 17715"
 Cohesion: 0.67
-Nodes (3): SR3, data_delay_status, last_update_age_ms
+Nodes (3): NG, data_delay_status, last_update_age_ms
 
 ### Community 17716 - "Community 17716"
 Cohesion: 0.67
-Nodes (3): MGC, data_delay_status, last_update_age_ms
+Nodes (3): data_delay_status, last_update_age_ms, CL
 
 ### Community 17717 - "Community 17717"
 Cohesion: 0.67
-Nodes (3): ZN, data_delay_status, last_update_age_ms
+Nodes (3): HO, data_delay_status, last_update_age_ms
 
 ### Community 17718 - "Community 17718"
 Cohesion: 0.67
-Nodes (3): ZQ, data_delay_status, last_update_age_ms
+Nodes (3): MGC, data_delay_status, last_update_age_ms
 
 ### Community 17719 - "Community 17719"
 Cohesion: 0.67
-Nodes (3): data_delay_status, last_update_age_ms, CL
+Nodes (3): ZS, data_delay_status, last_update_age_ms
 
 ### Community 17720 - "Community 17720"
 Cohesion: 0.67
@@ -86112,31 +86273,31 @@ Nodes (3): ZF, data_delay_status, last_update_age_ms
 
 ### Community 17721 - "Community 17721"
 Cohesion: 0.67
-Nodes (3): data_delay_status, last_update_age_ms, CL
+Nodes (3): HO, data_delay_status, last_update_age_ms
 
 ### Community 17722 - "Community 17722"
 Cohesion: 0.67
-Nodes (3): HO, data_delay_status, last_update_age_ms
+Nodes (3): ZF, data_delay_status, last_update_age_ms
 
 ### Community 17723 - "Community 17723"
 Cohesion: 0.67
-Nodes (3): MES, data_delay_status, last_update_age_ms
+Nodes (3): HO, data_delay_status, last_update_age_ms
 
 ### Community 17724 - "Community 17724"
 Cohesion: 0.67
-Nodes (3): KE, data_delay_status, last_update_age_ms
+Nodes (3): MNQ, data_delay_status, last_update_age_ms
 
 ### Community 17725 - "Community 17725"
 Cohesion: 0.67
-Nodes (3): M2K, data_delay_status, last_update_age_ms
+Nodes (3): YM, data_delay_status, last_update_age_ms
 
 ### Community 17726 - "Community 17726"
 Cohesion: 0.67
-Nodes (3): NG, data_delay_status, last_update_age_ms
+Nodes (3): ZC, data_delay_status, last_update_age_ms
 
 ### Community 17727 - "Community 17727"
 Cohesion: 0.67
-Nodes (3): SR3, data_delay_status, last_update_age_ms
+Nodes (3): data_delay_status, last_update_age_ms, 6A
 
 ### Community 17728 - "Community 17728"
 Cohesion: 0.67
@@ -86211,8 +86372,8 @@ Cohesion: 0.67
 Nodes (3): SI, data_delay_status, last_update_age_ms
 
 ### Community 17746 - "Community 17746"
-Cohesion: 0.67
-Nodes (3): SR3, data_delay_status, last_update_age_ms
+Cohesion: 0.15
+Nodes (13): JOLTS, cost_estimate, by_event_type_full, estimate_method, estimated_cost_usd, pending_slots, unpriced, cache_status (+5 more)
 
 ### Community 17747 - "Community 17747"
 Cohesion: 0.67
@@ -86304,7 +86465,7 @@ Nodes (3): HG, data_delay_status, last_update_age_ms
 
 ### Community 17769 - "Community 17769"
 Cohesion: 0.67
-Nodes (3): KE, data_delay_status, last_update_age_ms
+Nodes (3): ZC, data_delay_status, last_update_age_ms
 
 ### Community 17770 - "Community 17770"
 Cohesion: 0.67
@@ -86348,7 +86509,7 @@ Nodes (3): SI, data_delay_status, last_update_age_ms
 
 ### Community 17780 - "Community 17780"
 Cohesion: 0.67
-Nodes (3): SR3, data_delay_status, last_update_age_ms
+Nodes (3): ZQ, data_delay_status, last_update_age_ms
 
 ### Community 17781 - "Community 17781"
 Cohesion: 0.67
@@ -86448,7 +86609,7 @@ Nodes (3): KE, data_delay_status, last_update_age_ms
 
 ### Community 17805 - "Community 17805"
 Cohesion: 0.67
-Nodes (3): M2K, data_delay_status, last_update_age_ms
+Nodes (3): HO, data_delay_status, last_update_age_ms
 
 ### Community 17806 - "Community 17806"
 Cohesion: 0.67
@@ -86460,7 +86621,7 @@ Nodes (3): MES, data_delay_status, last_update_age_ms
 
 ### Community 17808 - "Community 17808"
 Cohesion: 0.67
-Nodes (3): MGC, data_delay_status, last_update_age_ms
+Nodes (3): MES, data_delay_status, last_update_age_ms
 
 ### Community 17809 - "Community 17809"
 Cohesion: 0.67
@@ -86488,7 +86649,7 @@ Nodes (3): SI, data_delay_status, last_update_age_ms
 
 ### Community 17815 - "Community 17815"
 Cohesion: 0.67
-Nodes (3): SR3, data_delay_status, last_update_age_ms
+Nodes (3): ZF, data_delay_status, last_update_age_ms
 
 ### Community 17816 - "Community 17816"
 Cohesion: 0.67
@@ -86516,7 +86677,7 @@ Nodes (3): ZB, data_delay_status, last_update_age_ms
 
 ### Community 17822 - "Community 17822"
 Cohesion: 0.67
-Nodes (3): ZF, data_delay_status, last_update_age_ms
+Nodes (3): data_delay_status, last_update_age_ms, CL
 
 ### Community 17823 - "Community 17823"
 Cohesion: 0.67
@@ -86580,7 +86741,7 @@ Nodes (3): data_delay_status, last_update_age_ms, 6J
 
 ### Community 17838 - "Community 17838"
 Cohesion: 0.67
-Nodes (3): data_delay_status, last_update_age_ms, CL
+Nodes (3): HO, data_delay_status, last_update_age_ms
 
 ### Community 17839 - "Community 17839"
 Cohesion: 0.67
@@ -86595,8 +86756,8 @@ Cohesion: 0.67
 Nodes (3): HG, data_delay_status, last_update_age_ms
 
 ### Community 17842 - "Community 17842"
-Cohesion: 0.67
-Nodes (3): KE, data_delay_status, last_update_age_ms
+Cohesion: 0.15
+Nodes (12): estimate, by_symbol, error, estimated_cost_usd, pending_slots, unpriced, generated_at_utc, mode (+4 more)
 
 ### Community 17843 - "Community 17843"
 Cohesion: 0.67
@@ -86608,7 +86769,7 @@ Nodes (3): MCL, data_delay_status, last_update_age_ms
 
 ### Community 17845 - "Community 17845"
 Cohesion: 0.67
-Nodes (3): MES, data_delay_status, last_update_age_ms
+Nodes (3): MGC, data_delay_status, last_update_age_ms
 
 ### Community 17846 - "Community 17846"
 Cohesion: 0.67
@@ -86628,7 +86789,7 @@ Nodes (3): NQ, data_delay_status, last_update_age_ms
 
 ### Community 17850 - "Community 17850"
 Cohesion: 0.67
-Nodes (3): RB, data_delay_status, last_update_age_ms
+Nodes (3): ZC, data_delay_status, last_update_age_ms
 
 ### Community 17851 - "Community 17851"
 Cohesion: 0.67
@@ -86672,11 +86833,11 @@ Nodes (3): ZB, data_delay_status, last_update_age_ms
 
 ### Community 17861 - "Community 17861"
 Cohesion: 0.67
-Nodes (3): ZF, data_delay_status, last_update_age_ms
+Nodes (3): data_delay_status, last_update_age_ms, CL
 
 ### Community 17862 - "Community 17862"
-Cohesion: 0.67
-Nodes (3): ZL, data_delay_status, last_update_age_ms
+Cohesion: 0.19
+Nodes (11): Discovery / Confirmation / Holdout stage gate (BLUEPRINT B4)., Tune on Discovery; evaluate Confirmation and Holdout with frozen Discovery model, run_holdout_gate(), _stage_mask(), Any, DataFrame, float, ndarray (+3 more)
 
 ### Community 17863 - "Community 17863"
 Cohesion: 0.67
@@ -86752,7 +86913,7 @@ Nodes (3): HG, data_delay_status, last_update_age_ms
 
 ### Community 17881 - "Community 17881"
 Cohesion: 0.67
-Nodes (3): KE, data_delay_status, last_update_age_ms
+Nodes (3): MGC, data_delay_status, last_update_age_ms
 
 ### Community 17882 - "Community 17882"
 Cohesion: 0.67
@@ -86764,7 +86925,7 @@ Nodes (3): MCL, data_delay_status, last_update_age_ms
 
 ### Community 17884 - "Community 17884"
 Cohesion: 0.67
-Nodes (3): MGC, data_delay_status, last_update_age_ms
+Nodes (3): ZQ, data_delay_status, last_update_age_ms
 
 ### Community 17885 - "Community 17885"
 Cohesion: 0.67
@@ -86964,7 +87125,7 @@ Nodes (3): ZB, data_delay_status, last_update_age_ms
 
 ### Community 17934 - "Community 17934"
 Cohesion: 0.67
-Nodes (3): ZC, data_delay_status, last_update_age_ms
+Nodes (3): ZS, data_delay_status, last_update_age_ms
 
 ### Community 17935 - "Community 17935"
 Cohesion: 0.67
@@ -87024,7 +87185,7 @@ Nodes (3): HG, data_delay_status, last_update_age_ms
 
 ### Community 17949 - "Community 17949"
 Cohesion: 0.67
-Nodes (3): KE, data_delay_status, last_update_age_ms
+Nodes (3): MES, data_delay_status, last_update_age_ms
 
 ### Community 17950 - "Community 17950"
 Cohesion: 0.67
@@ -87048,7 +87209,7 @@ Nodes (3): MYM, data_delay_status, last_update_age_ms
 
 ### Community 17955 - "Community 17955"
 Cohesion: 0.67
-Nodes (3): NG, data_delay_status, last_update_age_ms
+Nodes (3): ZQ, data_delay_status, last_update_age_ms
 
 ### Community 17956 - "Community 17956"
 Cohesion: 0.67
@@ -87068,7 +87229,7 @@ Nodes (3): SI, data_delay_status, last_update_age_ms
 
 ### Community 17960 - "Community 17960"
 Cohesion: 0.67
-Nodes (3): SR3, data_delay_status, last_update_age_ms
+Nodes (3): data_delay_status, last_update_age_ms, 6A
 
 ### Community 17961 - "Community 17961"
 Cohesion: 0.67
@@ -87100,7 +87261,7 @@ Nodes (3): ZB, data_delay_status, last_update_age_ms
 
 ### Community 17968 - "Community 17968"
 Cohesion: 0.67
-Nodes (3): ZF, data_delay_status, last_update_age_ms
+Nodes (3): HO, data_delay_status, last_update_age_ms
 
 ### Community 17969 - "Community 17969"
 Cohesion: 0.67
@@ -87176,7 +87337,7 @@ Nodes (3): HG, data_delay_status, last_update_age_ms
 
 ### Community 17987 - "Community 17987"
 Cohesion: 0.67
-Nodes (3): HO, data_delay_status, last_update_age_ms
+Nodes (3): ZC, data_delay_status, last_update_age_ms
 
 ### Community 17988 - "Community 17988"
 Cohesion: 0.67
@@ -87204,7 +87365,7 @@ Nodes (3): MYM, data_delay_status, last_update_age_ms
 
 ### Community 17994 - "Community 17994"
 Cohesion: 0.67
-Nodes (3): NG, data_delay_status, last_update_age_ms
+Nodes (3): KE, data_delay_status, last_update_age_ms
 
 ### Community 17995 - "Community 17995"
 Cohesion: 0.67
@@ -87252,7 +87413,7 @@ Nodes (3): YM, data_delay_status, last_update_age_ms
 
 ### Community 18006 - "Community 18006"
 Cohesion: 0.67
-Nodes (3): ZB, data_delay_status, last_update_age_ms
+Nodes (3): MGC, data_delay_status, last_update_age_ms
 
 ### Community 18007 - "Community 18007"
 Cohesion: 0.67
@@ -87260,7 +87421,7 @@ Nodes (3): ZC, data_delay_status, last_update_age_ms
 
 ### Community 18008 - "Community 18008"
 Cohesion: 0.67
-Nodes (3): ZF, data_delay_status, last_update_age_ms
+Nodes (3): RB, data_delay_status, last_update_age_ms
 
 ### Community 18009 - "Community 18009"
 Cohesion: 0.67
@@ -87348,7 +87509,7 @@ Nodes (3): MCL, data_delay_status, last_update_age_ms
 
 ### Community 18030 - "Community 18030"
 Cohesion: 0.67
-Nodes (3): MGC, data_delay_status, last_update_age_ms
+Nodes (3): ZL, data_delay_status, last_update_age_ms
 
 ### Community 18031 - "Community 18031"
 Cohesion: 0.67
@@ -87377,10 +87538,6 @@ Nodes (3): RTY, data_delay_status, last_update_age_ms
 ### Community 18037 - "Community 18037"
 Cohesion: 0.67
 Nodes (3): SI, data_delay_status, last_update_age_ms
-
-### Community 18038 - "Community 18038"
-Cohesion: 0.67
-Nodes (3): SR3, data_delay_status, last_update_age_ms
 
 ### Community 18039 - "Community 18039"
 Cohesion: 0.67
@@ -87471,8 +87628,8 @@ Cohesion: 0.67
 Nodes (3): HG, data_delay_status, last_update_age_ms
 
 ### Community 18061 - "Community 18061"
-Cohesion: 0.67
-Nodes (3): KE, data_delay_status, last_update_age_ms
+Cohesion: 0.09
+Nodes (21): feature_family_for_data_class(), assert_no_true_ofi_when_insufficient(), OrderFlowSnapshot, OrderFlowState, Order-flow imbalance: true OFI, proxy, or trade-pressure-only., EventTimeWindowBuffer, ms_to_ns(), MultiWindowAggregator (+13 more)
 
 ### Community 18062 - "Community 18062"
 Cohesion: 0.67
@@ -87503,8 +87660,8 @@ Cohesion: 0.67
 Nodes (3): NQ, data_delay_status, last_update_age_ms
 
 ### Community 18069 - "Community 18069"
-Cohesion: 0.67
-Nodes (3): RB, data_delay_status, last_update_age_ms
+Cohesion: 0.24
+Nodes (8): Any, float, int, Path, str, LoaderReport, L3 NPZ loader with gap detection and book reset events., LoaderReport
 
 ### Community 18070 - "Community 18070"
 Cohesion: 0.67
@@ -87551,8 +87708,8 @@ Cohesion: 0.67
 Nodes (3): ZF, data_delay_status, last_update_age_ms
 
 ### Community 18081 - "Community 18081"
-Cohesion: 0.67
-Nodes (3): ZL, data_delay_status, last_update_age_ms
+Cohesion: 0.11
+Nodes (30): Any, bool, ParsedHypothesis, Path, str, CandidateModel, float, int (+22 more)
 
 ### Community 18082 - "Community 18082"
 Cohesion: 0.67
@@ -87579,8 +87736,8 @@ Cohesion: 0.67
 Nodes (3): ZW, data_delay_status, last_update_age_ms
 
 ### Community 18088 - "Community 18088"
-Cohesion: 0.67
-Nodes (3): data_delay_status, last_update_age_ms, 6A
+Cohesion: 0.11
+Nodes (49): bytes, cmd_ingest(), B2Client, B2ClientError, Backblaze B2 download client for crypto lane bronze., _date_range(), _http_json(), _klines_df() (+41 more)
 
 ### Community 18089 - "Community 18089"
 Cohesion: 0.67
@@ -87611,8 +87768,8 @@ Cohesion: 0.67
 Nodes (3): HG, data_delay_status, last_update_age_ms
 
 ### Community 18096 - "Community 18096"
-Cohesion: 0.67
-Nodes (3): HO, data_delay_status, last_update_age_ms
+Cohesion: 0.29
+Nodes (9): COMPOSE_FILE, __dirname, dockerComposeUp(), EXEC_OPTS, isDockerAvailable(), isStackHealthy(), waitForEndpoint(), seedTestData() (+1 more)
 
 ### Community 18097 - "Community 18097"
 Cohesion: 0.67
@@ -87623,8 +87780,8 @@ Cohesion: 0.67
 Nodes (3): MCL, data_delay_status, last_update_age_ms
 
 ### Community 18099 - "Community 18099"
-Cohesion: 0.67
-Nodes (3): MES, data_delay_status, last_update_age_ms
+Cohesion: 0.15
+Nodes (19): _assert_chi404_only(), _handle_signal(), main(), PaperLatencyDaemon, CHI404 paper order latency daemon — monotonic waterfall audit (colo only)., Lightweight colo shadow timing slices (synthetic; not order-causal)., _read_manifest(), _run_id() (+11 more)
 
 ### Community 18100 - "Community 18100"
 Cohesion: 0.67
@@ -87651,8 +87808,8 @@ Cohesion: 0.67
 Nodes (3): SI, data_delay_status, last_update_age_ms
 
 ### Community 18106 - "Community 18106"
-Cohesion: 0.67
-Nodes (3): SR3, data_delay_status, last_update_age_ms
+Cohesion: 0.18
+Nodes (11): windows_by_event_type, CPI, FED_BEIGE_BOOK, FED_H41, FED_SPEAKER, FOMC_MINUTES, FOMC_PRESS, FOMC_STATEMENT (+3 more)
 
 ### Community 18107 - "Community 18107"
 Cohesion: 0.67
@@ -87890,19 +88047,595 @@ Nodes (3): composition, defensive_stubs, primary_model_id
 Cohesion: 0.67
 Nodes (3): composition, defensive_stubs, primary_model_id
 
+### Community 18193 - "Community 18193"
+Cohesion: 0.08
+Nodes (41): HawkesToxicOutput, Any, float, ModelOutput, str, Any, float, ModelOutput (+33 more)
+
+### Community 18194 - "Community 18194"
+Cohesion: 0.14
+Nodes (21): Any, float, int, ModelOutput, QuantumSpreadOutput, bessel_i0(), collapse_risk(), QuantumSpreadDefenseModel (+13 more)
+
+### Community 18195 - "Community 18195"
+Cohesion: 0.13
+Nodes (25): Any, T, Any, float, int, ModelOutput, str, BaseStructuralModel (+17 more)
+
+### Community 18196 - "Community 18196"
+Cohesion: 0.17
+Nodes (21): build_report_card(), _fmt_ms_from_us(), _fmt_us(), _gate_status(), _md_table(), Fixed report card schema and renderers for CHI404 latency probes., Render latency summary as a fixed-section markdown report., Fixed-width console report (same sections every run). (+13 more)
+
+### Community 18197 - "Community 18197"
+Cohesion: 0.17
+Nodes (19): Any, float, ModelOutput, ndarray, StochasticThermoOutput, free_energy(), gibbs_probabilities(), partition_function() (+11 more)
+
+### Community 18198 - "Community 18198"
+Cohesion: 0.20
+Nodes (10): windows_by_event_type, CPI, FED_BEIGE_BOOK, FED_H41, FOMC_MINUTES, FOMC_PRESS, FOMC_STATEMENT, INDUSTRIAL_PRODUCTION (+2 more)
+
+### Community 18199 - "Community 18199"
+Cohesion: 0.31
+Nodes (19): _check_cmdline_tokens(), _check_cpupower_idle(), _check_cyclictest_p99(), _check_irq_net(), _check_jitter_gate(), _check_manifest(), _check_nic_rings(), _cmdline_idle_effectively_disabled() (+11 more)
+
+### Community 18200 - "Community 18200"
+Cohesion: 0.38
+Nodes (9): fetch_fomc_rows(), _iso(), parse_fomc_html(), propose(), Federal Reserve FOMC calendar fetcher., Any, bool, int (+1 more)
+
+### Community 18201 - "Community 18201"
+Cohesion: 0.22
+Nodes (8): fhirGet(), fhirGetRaw(), bundle, contentType, FhirBundle, nhsId, patient, FhirPatient
+
+### Community 18202 - "Community 18202"
+Cohesion: 0.23
+Nodes (15): derive_snapshots_from_events(), DerivedSnapshot, _mbo_event_from_normalized(), _parse_offset_entry(), Post-replay feature snapshot derivation from normalized MBO events., Replay MBO events and capture snapshots at configured offsets., snapshots_to_dicts(), _state_from_extractor() (+7 more)
+
+### Community 18203 - "Community 18203"
+Cohesion: 0.36
+Nodes (7): ensure_macro_env(), fred_api_key(), _load_plain_env(), Load macro API keys from hft3 .env and desk keyring (Desktop/keys.env)., Load repo .env, then optional MACRO_KEYS_ENV / Desktop keys.env., Path, str
+
+### Community 18204 - "Community 18204"
+Cohesion: 0.32
+Nodes (12): build_audit(), _code_path_assumptions(), _events_csv_audit(), _hot_universe(), Phase 1 — generate runtime/audits/hfc3_l3_cross_asset_repo_audit.{md,json}., _scan_npz(), write_audit(), main() (+4 more)
+
+### Community 18205 - "Community 18205"
+Cohesion: 0.22
+Nodes (12): build_hashes(), Content hashing for deterministic MBO lane artifacts., sha256_file(), sha256_json_payload(), Any, int, Path, str (+4 more)
+
+### Community 18206 - "Community 18206"
+Cohesion: 0.45
+Nodes (13): build_imbalance_inventory(), _dataset_id(), _equities_rows(), _futures_rows(), _npz_index(), _options_rows(), Any, bool (+5 more)
+
+### Community 18207 - "Community 18207"
+Cohesion: 0.41
+Nodes (11): int, Path, str, catalog_help_text(), events_by_type(), list_event_ids(), load_events_df(), main() (+3 more)
+
+### Community 18208 - "Community 18208"
+Cohesion: 0.36
+Nodes (7): fetch_beige_rows(), parse_beige_html(), Federal Reserve Beige Book release calendar., Scrape per-year beigebook{YYYY}.htm pages (historical archive on Fed.gov)., Any, int, str
+
+### Community 18209 - "Community 18209"
+Cohesion: 0.35
+Nodes (6): Any, str, _closure(), Topological execution of PDF model dependencies with cached instances., Run only requested models plus dependency closure in topo order., _topo_sort()
+
+### Community 18210 - "Community 18210"
+Cohesion: 0.35
+Nodes (10): daily_coverage_calendar_days(), load_daily_bars(), _load_daily_csv(), load_daily_parquet(), Load daily OHLCV from CSV fixture or per-symbol parquet under data/equities/dail, Calendar span from earliest daily bar to session_date (exclusive)., DailyBar, int (+2 more)
+
+### Community 18211 - "Community 18211"
+Cohesion: 0.47
+Nodes (10): _decimal_str(), iter_databento_mbo_events(), _normalize_action(), _normalize_side(), parse_databento_mbo_file(), Parse Databento MBO DBN into canonical normalized events., _record_to_event(), Any (+2 more)
+
+### Community 18213 - "Community 18213"
+Cohesion: 0.25
+Nodes (5): config, defaultEngine, dischargedRecord, error, record
+
+### Community 18214 - "Community 18214"
+Cohesion: 0.54
+Nodes (7): fetch_fred_fed_rows(), fetch_h41_rows(), fetch_indpro_rows(), FRED-backed Fed release calendars (G.17 INDPRO, H.4.1)., Any, int, str
+
+### Community 18215 - "Community 18215"
+Cohesion: 0.05
+Nodes (57): bool, CppLatencyProfile, float, int, str, TradeAuditRecord, float, int (+49 more)
+
+### Community 18218 - "Community 18218"
+Cohesion: 0.36
+Nodes (7): derive_npz_from_release(), is_release_valid(), Derive HftBacktest NPZ from validated MBO release paths — downstream only., Convert validated raw DBN to HftBacktest NPZ. Returns None if not valid., bool, Path, str
+
+### Community 18219 - "Community 18219"
+Cohesion: 0.32
+Nodes (6): MBO lane classification tests., _sample_events(), test_rejects_mbp_like_stream(), test_rejects_missing_order_id(), test_true_mbo_classification(), int
+
+### Community 18220 - "Community 18220"
+Cohesion: 0.29
+Nodes (7): FED_H41, FED_SPEAKER, FOMC_MINUTES, FOMC_PRESS, FOMC_STATEMENT, INDUSTRIAL_PRODUCTION, by_event_type
+
+### Community 18221 - "Community 18221"
+Cohesion: 0.29
+Nodes (7): CPI, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18222 - "Community 18222"
+Cohesion: 0.29
+Nodes (7): FED_BEIGE_BOOK, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18223 - "Community 18223"
+Cohesion: 0.29
+Nodes (7): FED_H41, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18224 - "Community 18224"
+Cohesion: 0.29
+Nodes (7): FED_SPEAKER, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18225 - "Community 18225"
+Cohesion: 0.29
+Nodes (7): FOMC_MINUTES, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18226 - "Community 18226"
+Cohesion: 0.29
+Nodes (7): FOMC_PRESS, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18227 - "Community 18227"
+Cohesion: 0.29
+Nodes (7): FOMC_STATEMENT, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18228 - "Community 18228"
+Cohesion: 0.29
+Nodes (7): INDUSTRIAL_PRODUCTION, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18229 - "Community 18229"
+Cohesion: 0.29
+Nodes (7): NFP, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18230 - "Community 18230"
+Cohesion: 0.29
+Nodes (7): PROP_FLATTEN_TOPSTEP, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18231 - "Community 18231"
+Cohesion: 0.29
+Nodes (7): cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows, ADP_EMPLOYMENT
+
+### Community 18232 - "Community 18232"
+Cohesion: 0.29
+Nodes (7): cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows, BAKER_HUGHES_RIG
+
+### Community 18233 - "Community 18233"
+Cohesion: 0.29
+Nodes (7): cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows, BUILDING_PERMITS
+
+### Community 18234 - "Community 18234"
+Cohesion: 0.29
+Nodes (7): CASH_EQUITY_OPEN, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18235 - "Community 18235"
+Cohesion: 0.29
+Nodes (7): CONSTRUCTION_SPENDING, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18236 - "Community 18236"
+Cohesion: 0.29
+Nodes (7): CORE_CPI, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18237 - "Community 18237"
+Cohesion: 0.29
+Nodes (7): CORE_PCE, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18238 - "Community 18238"
+Cohesion: 0.29
+Nodes (7): CORE_PPI, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18239 - "Community 18239"
+Cohesion: 0.29
+Nodes (7): CPI, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18240 - "Community 18240"
+Cohesion: 0.29
+Nodes (7): DURABLE_GOODS_ADVANCE, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18241 - "Community 18241"
+Cohesion: 0.29
+Nodes (7): DURABLE_GOODS_FULL, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18242 - "Community 18242"
+Cohesion: 0.29
+Nodes (7): ECI, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18243 - "Community 18243"
+Cohesion: 0.29
+Nodes (7): EIA_CRUDE, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18244 - "Community 18244"
+Cohesion: 0.29
+Nodes (7): EIA_NATGAS, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18245 - "Community 18245"
+Cohesion: 0.29
+Nodes (7): EXISTING_HOME_SALES, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18246 - "Community 18246"
+Cohesion: 0.29
+Nodes (7): EXPORT_PRICES, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18247 - "Community 18247"
+Cohesion: 0.29
+Nodes (7): FACTORY_ORDERS, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18248 - "Community 18248"
+Cohesion: 0.29
+Nodes (7): FED_BEIGE_BOOK, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18249 - "Community 18249"
+Cohesion: 0.29
+Nodes (7): FED_H41, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18250 - "Community 18250"
+Cohesion: 0.29
+Nodes (7): FED_SPEAKER, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18251 - "Community 18251"
+Cohesion: 0.29
+Nodes (7): FOMC_MINUTES, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18252 - "Community 18252"
+Cohesion: 0.29
+Nodes (7): FOMC_PRESS, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18253 - "Community 18253"
+Cohesion: 0.29
+Nodes (7): FOMC_STATEMENT, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18254 - "Community 18254"
+Cohesion: 0.29
+Nodes (7): FRIDAY_CLOSE, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18255 - "Community 18255"
+Cohesion: 0.29
+Nodes (7): GDP_ADVANCE, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18256 - "Community 18256"
+Cohesion: 0.29
+Nodes (7): GDP_FINAL, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18257 - "Community 18257"
+Cohesion: 0.29
+Nodes (7): GDP_SECOND, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18258 - "Community 18258"
+Cohesion: 0.29
+Nodes (7): HOUSING_STARTS, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18259 - "Community 18259"
+Cohesion: 0.29
+Nodes (7): IMPORT_PRICES, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18260 - "Community 18260"
+Cohesion: 0.29
+Nodes (7): INDUSTRIAL_PRODUCTION, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18261 - "Community 18261"
+Cohesion: 0.29
+Nodes (7): ISM_MANUFACTURING, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18262 - "Community 18262"
+Cohesion: 0.29
+Nodes (7): ISM_SERVICES, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18263 - "Community 18263"
+Cohesion: 0.29
+Nodes (7): NEW_HOME_SALES, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18264 - "Community 18264"
+Cohesion: 0.29
+Nodes (7): NFP, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18265 - "Community 18265"
+Cohesion: 0.29
+Nodes (7): PCE, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18266 - "Community 18266"
+Cohesion: 0.29
+Nodes (7): PPI, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18267 - "Community 18267"
+Cohesion: 0.29
+Nodes (7): PRODUCTIVITY, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18268 - "Community 18268"
+Cohesion: 0.29
+Nodes (7): PROP_FLATTEN_TOPSTEP, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18269 - "Community 18269"
+Cohesion: 0.29
+Nodes (7): PROP_REOPEN, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18270 - "Community 18270"
+Cohesion: 0.29
+Nodes (7): RETAIL_SALES, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18271 - "Community 18271"
+Cohesion: 0.29
+Nodes (7): TRADE_BALANCE, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18272 - "Community 18272"
+Cohesion: 0.29
+Nodes (7): TREASURY_AUCTION, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18273 - "Community 18273"
+Cohesion: 0.29
+Nodes (7): TREASURY_REFUNDING, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18274 - "Community 18274"
+Cohesion: 0.29
+Nodes (7): UNEMPLOYMENT_CLAIMS, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18275 - "Community 18275"
+Cohesion: 0.29
+Nodes (7): FED_BEIGE_BOOK, FED_H41, FOMC_MINUTES, FOMC_PRESS, FOMC_STATEMENT, INDUSTRIAL_PRODUCTION, by_event_type
+
+### Community 18276 - "Community 18276"
+Cohesion: 0.29
+Nodes (7): CPI, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18277 - "Community 18277"
+Cohesion: 0.29
+Nodes (7): FED_BEIGE_BOOK, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18278 - "Community 18278"
+Cohesion: 0.29
+Nodes (7): FED_H41, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18279 - "Community 18279"
+Cohesion: 0.29
+Nodes (7): FOMC_MINUTES, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18280 - "Community 18280"
+Cohesion: 0.29
+Nodes (7): FOMC_PRESS, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18281 - "Community 18281"
+Cohesion: 0.29
+Nodes (7): FOMC_STATEMENT, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18282 - "Community 18282"
+Cohesion: 0.29
+Nodes (7): INDUSTRIAL_PRODUCTION, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18283 - "Community 18283"
+Cohesion: 0.29
+Nodes (7): NFP, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18284 - "Community 18284"
+Cohesion: 0.29
+Nodes (7): PROP_FLATTEN_TOPSTEP, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18285 - "Community 18285"
+Cohesion: 0.29
+Nodes (7): cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows, ADP_EMPLOYMENT
+
+### Community 18286 - "Community 18286"
+Cohesion: 0.29
+Nodes (7): cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows, BAKER_HUGHES_RIG
+
+### Community 18287 - "Community 18287"
+Cohesion: 0.29
+Nodes (7): cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows, BUILDING_PERMITS
+
+### Community 18288 - "Community 18288"
+Cohesion: 0.29
+Nodes (7): CASH_EQUITY_OPEN, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18289 - "Community 18289"
+Cohesion: 0.29
+Nodes (7): CONSTRUCTION_SPENDING, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18290 - "Community 18290"
+Cohesion: 0.29
+Nodes (7): CORE_CPI, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18291 - "Community 18291"
+Cohesion: 0.29
+Nodes (7): CORE_PCE, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18292 - "Community 18292"
+Cohesion: 0.29
+Nodes (7): CORE_PPI, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18293 - "Community 18293"
+Cohesion: 0.29
+Nodes (7): DURABLE_GOODS_ADVANCE, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18294 - "Community 18294"
+Cohesion: 0.29
+Nodes (7): DURABLE_GOODS_FULL, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18295 - "Community 18295"
+Cohesion: 0.29
+Nodes (7): ECI, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18296 - "Community 18296"
+Cohesion: 0.29
+Nodes (7): EIA_CRUDE, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18297 - "Community 18297"
+Cohesion: 0.29
+Nodes (7): EIA_NATGAS, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18298 - "Community 18298"
+Cohesion: 0.29
+Nodes (7): EXISTING_HOME_SALES, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18299 - "Community 18299"
+Cohesion: 0.29
+Nodes (7): EXPORT_PRICES, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18300 - "Community 18300"
+Cohesion: 0.29
+Nodes (7): FACTORY_ORDERS, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18301 - "Community 18301"
+Cohesion: 0.29
+Nodes (7): FED_BEIGE_BOOK, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18302 - "Community 18302"
+Cohesion: 0.29
+Nodes (7): FED_H41, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18303 - "Community 18303"
+Cohesion: 0.29
+Nodes (7): FOMC_MINUTES, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18304 - "Community 18304"
+Cohesion: 0.29
+Nodes (7): FOMC_PRESS, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18305 - "Community 18305"
+Cohesion: 0.29
+Nodes (7): FRIDAY_CLOSE, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18306 - "Community 18306"
+Cohesion: 0.29
+Nodes (7): GDP_ADVANCE, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18307 - "Community 18307"
+Cohesion: 0.29
+Nodes (7): GDP_FINAL, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18308 - "Community 18308"
+Cohesion: 0.29
+Nodes (7): GDP_SECOND, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18309 - "Community 18309"
+Cohesion: 0.29
+Nodes (7): HOUSING_STARTS, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18310 - "Community 18310"
+Cohesion: 0.29
+Nodes (7): IMPORT_PRICES, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18311 - "Community 18311"
+Cohesion: 0.29
+Nodes (7): INDUSTRIAL_PRODUCTION, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18312 - "Community 18312"
+Cohesion: 0.29
+Nodes (7): ISM_MANUFACTURING, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18313 - "Community 18313"
+Cohesion: 0.29
+Nodes (7): ISM_SERVICES, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18314 - "Community 18314"
+Cohesion: 0.29
+Nodes (7): JOLTS, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18315 - "Community 18315"
+Cohesion: 0.29
+Nodes (7): NEW_HOME_SALES, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18316 - "Community 18316"
+Cohesion: 0.29
+Nodes (7): PCE, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18317 - "Community 18317"
+Cohesion: 0.29
+Nodes (7): PPI, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18318 - "Community 18318"
+Cohesion: 0.29
+Nodes (7): PRODUCTIVITY, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18319 - "Community 18319"
+Cohesion: 0.29
+Nodes (7): PROP_FLATTEN_TOPSTEP, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18320 - "Community 18320"
+Cohesion: 0.29
+Nodes (7): PROP_REOPEN, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18321 - "Community 18321"
+Cohesion: 0.29
+Nodes (7): RETAIL_SALES, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18322 - "Community 18322"
+Cohesion: 0.29
+Nodes (7): TRADE_BALANCE, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18323 - "Community 18323"
+Cohesion: 0.29
+Nodes (7): TREASURY_AUCTION, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18324 - "Community 18324"
+Cohesion: 0.29
+Nodes (7): TREASURY_REFUNDING, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18325 - "Community 18325"
+Cohesion: 0.29
+Nodes (7): UNEMPLOYMENT_CLAIMS, cache_status, estimated_cost_usd, npz_slots_missing, npz_slots_present, npz_slots_total, windows
+
+### Community 18326 - "Community 18326"
+Cohesion: 0.29
+Nodes (7): by_event_type_full, estimated_cost_usd, npz_slots_missing, output_path, scoped_event_types, scoped_window_count, full_catalog
+
+### Community 18327 - "Community 18327"
+Cohesion: 0.43
+Nodes (6): fetch_speaker_rows(), parse_speeches_html(), Federal Reserve speaker events from newsevents HTML., Any, int, str
+
+### Community 18328 - "Community 18328"
+Cohesion: 0.43
+Nodes (6): _get(), FRED API client for macro release calendar dates., Return YYYY-MM-DD release dates for a FRED release_id., release_dates(), int, str
+
+### Community 18329 - "Community 18329"
+Cohesion: 0.33
+Nodes (6): cost_estimate, by_event_type_full, estimate_method, estimated_cost_usd, pending_slots, unpriced
+
+### Community 18330 - "Community 18330"
+Cohesion: 0.33
+Nodes (6): cost_estimate, by_event_type_full, estimate_method, estimated_cost_usd, pending_slots, unpriced
+
+### Community 18331 - "Community 18331"
+Cohesion: 0.47
+Nodes (5): fetch_json(), fetch_text(), Minimal HTTP helpers for calendar fetchers., float, str
+
+### Community 18332 - "Community 18332"
+Cohesion: 0.33
+Nodes (3): Tests for Fed/FRED calendar fetchers (fixtures only — no live network in CI)., test_parse_beige_html(), test_parse_fomc_html_statement_press_minutes()
+
+### Community 18333 - "Community 18333"
+Cohesion: 0.53
+Nodes (5): MBO lane validation and blocker tests., test_missing_order_id_blocks(), test_sequence_gap_blocks(), test_valid_stream_passes(), _valid_stream()
+
+### Community 18334 - "Community 18334"
+Cohesion: 0.40
+Nodes (4): calendar_row(), Calendar row helpers shared by Fed fetchers., Any, str
+
+### Community 18336 - "Community 18336"
+Cohesion: 0.67
+Nodes (3): HO, data_delay_status, last_update_age_ms
+
+### Community 18337 - "Community 18337"
+Cohesion: 0.67
+Nodes (3): ZF, data_delay_status, last_update_age_ms
+
+### Community 18338 - "Community 18338"
+Cohesion: 0.67
+Nodes (3): HO, data_delay_status, last_update_age_ms
+
+### Community 18339 - "Community 18339"
+Cohesion: 0.67
+Nodes (3): MES, data_delay_status, last_update_age_ms
+
+### Community 18340 - "Community 18340"
+Cohesion: 0.67
+Nodes (3): ZF, data_delay_status, last_update_age_ms
+
 ## Knowledge Gaps
-- **111208 isolated node(s):** `$schema`, `title`, `type`, `required`, `type` (+111203 more)
+- **112174 isolated node(s):** `Path`, `bool`, `int`, `bool`, `int` (+112169 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **648 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **651 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `datetime` connect `Community 11008` to `Community 9`, `Community 649`, `Community 15`, `Community 15251`, `Community 5527`, `Community 12829`, `Community 13352`, `Community 681`, `Community 5166`, `Community 4275`, `Community 13369`, `Community 984`, `Community 1245`, `Community 221`, `Community 94`, `Community 15581`, `Community 15072`, `Community 100`, `Community 10854`, `Community 1767`, `Community 1771`, `Community 108`, `Community 112`, `Community 12913`, `Community 13685`, `Community 119`?**
+- **Why does `datetime` connect `Community 15128` to `Community 11008`, `Community 9`, `Community 649`, `Community 15`, `Community 15251`, `Community 13207`, `Community 5527`, `Community 283`, `Community 18204`, `Community 18206`, `Community 18081`, `Community 18215`, `Community 18088`, `Community 681`, `Community 5166`, `Community 18099`, `Community 4275`, `Community 4931`, `Community 221`, `Community 94`, `Community 15581`, `Community 15072`, `Community 100`, `Community 1767`, `Community 10857`, `Community 1771`, `Community 749`, `Community 112`, `Community 1522`, `Community 242`, `Community 4985`?**
   _High betweenness centrality (0.001) - this node is a cross-community bridge._
-- **Why does `Exception` connect `Community 681` to `Community 282`, `Community 525`, `Community 182`, `Community 13599`?**
+- **Why does `Exception` connect `Community 1767` to `Community 282`, `Community 242`, `Community 525`, `Community 182`?**
   _High betweenness centrality (0.000) - this node is a cross-community bridge._
-- **Why does `DatabentoResearchClient` connect `Community 681` to `Community 11008`, `Community 108`, `Community 1245`, `Community 1767`?**
+- **Why does `InfQuotientError` connect `Community 182` to `Community 1767`?**
   _High betweenness centrality (0.000) - this node is a cross-community bridge._
 - **Are the 263 inferred relationships involving `datetime` (e.g. with `AblationResult` and `Any`) actually correct?**
   _`datetime` has 263 INFERRED edges - model-reasoned connections that need verification._
@@ -87910,5 +88643,5 @@ _Questions this graph is uniquely positioned to answer:_
   _`Graph` has 12 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 68 inferred relationships involving `BaseHypothesis` (e.g. with `HypothesisAdapter` and `Any`) actually correct?**
   _`BaseHypothesis` has 68 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `Bootstrap sys.path for apps/ and packages/ layout.`, `Microstructure backtesting and visualization workbench.`, `CLI entrypoint: python -m workbench run|campaign|list ...` to the rest of the system?**
-  _112218 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **What connects `Path`, `bool`, `int` to the rest of the system?**
+  _113250 weakly-connected nodes found - possible documentation gaps or missing edges._
