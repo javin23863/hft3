@@ -134,6 +134,14 @@ Operational checklist for turning the Developer Work Order into production-ready
 - [ ] CME production readiness is blocked until runtime gates, acceptance criteria, and scope verification are green.
 - [ ] Broader workbench production readiness remains blocked until all runtime gates have fail-closed evidence and blocked states prevent production claims.
 - [ ] Frontend/backend runtime contracts are missing or too loose for production readiness.
+- [ ] Research LLM is partially wired but not production-ready.
+  - Audit evidence: non-idea research can still artifact-deploy best failing candidates; hypothesis `feature_list` is not registry-validated and can expand model families; analyst chat remains direct/free-form LLM instead of packet/schema strict.
+  - Audit evidence: live GPT-5.5 production smoke is present but has no discoverably green current result; `packages/research_pipeline/requirements.txt` lacks `jsonschema` while docs suggest standalone CLI install; compacted prior AAR review memory is not revalidated at read time; heuristic fallback remains active when the LLM is unavailable or schema-rejected.
+  - Unblock condition: block non-idea failing artifact deployment or mark it research-only with no deploy semantics; force canonical registered `feature_id`s through all LLM feature boundaries; make analyst chat non-contract/advisory or packet/schema strict; decide production policy for heuristic fallback.
+- [ ] Model Development LLM is partially wired but not production-ready.
+  - Audit evidence: generated model card artifacts may still contain generic placeholders such as `baseline_model: "not_observed"` and `uplift_metric: "not_observed"`; registry aliases mean canonical-only `feature_id` enforcement is not universal; hypothesis `feature_list` remains string-array only and not feature-registry validated.
+  - Audit evidence: campaign card writing may persist `model_card.json` before full `validate_agent_contract` / schema / registry validation; promotion provenance requires card paths and IDs but may not fully revalidate `MODEL_CARD` schema and feature-registry/model-kind eligibility; feature fabric catalog eligibility does not prove observed model feature usage.
+  - Unblock condition: reject generic placeholders where production eligibility is claimed; validate emitted model and validation cards against schema plus registry before persistence and promotion; distinguish accepted feature from model-consumed feature.
 - [ ] Workbench has not produced production-ready CME models with validated alpha/edge.
   - Audit evidence: all-lanes runtime summaries are `state="planned"` and `decision_action="BLOCKED"`.
   - Audit evidence: latest parsed all-lanes runs have `EXECUTED=0`, `PROMOTED=0`, and blocker `model_execution: No model backtest/replay evidence has been emitted for this active run`.
@@ -224,6 +232,10 @@ Operational checklist for turning the Developer Work Order into production-ready
 - [ ] Record prompts, model outputs, and human review where LLM-generated decisions affect docs or checklist state.
 - [ ] Prevent LLM output from overriding acceptance gates, source-of-truth data, or validation failures.
 - [ ] Define review requirements for LLM-authored operational docs and runbooks.
+- [ ] Treat Research LLM and Model Development LLM as advisory only; no LLM lane may promote, deploy, route live orders, or override deterministic gates.
+- [ ] Require packet/schema strict I/O for any LLM output used as contract evidence; otherwise label the surface explicitly non-contract/advisory, including analyst chat.
+- [ ] Require bounded green LLM/packet verification before readiness claims, including live GPT-5.5 smoke only when the environment explicitly enables it.
+- [ ] Decide whether heuristic fallback on unavailable or schema-rejected LLM output is acceptable for production-adjacent workflows.
 
 ## Deterministic/Probabilistic Boundary
 
@@ -240,6 +252,10 @@ Operational checklist for turning the Developer Work Order into production-ready
 - [ ] Reject or block runs when artifact provenance is missing, stale, or mismatched.
 - [ ] Document how source-of-truth changes are reviewed and versioned.
 - [ ] Add checks that prevent ad hoc local files from masquerading as canonical evidence.
+- [ ] Force `feature_list` and all LLM-emitted model feature references through canonical registered `feature_id`s before persistence, card writing, or promotion provenance.
+- [ ] Validate emitted `model_card.json` and `validation_card.json` against schema plus feature registry before persistence and before any production promotion claim.
+- [ ] Distinguish feature fabric catalog eligibility from observed model feature usage; accepted feature does not prove model-consumed feature.
+- [ ] Revalidate compacted AAR/review memory at read time, or keep it explicitly advisory and non-authoritative.
 
 ## Mathematical And Financial Integrity
 
@@ -312,6 +328,8 @@ final_report:
     - incomplete full-MBO Rithmic trial conversion
     - insufficient cross-artifact source-lineage validation beyond card linkage
     - tab readiness and allowed-action contract still incomplete
+    - Research LLM partially wired but not production-ready; advisory only and no promotion authority
+    - Model Development LLM partially wired but not production-ready; advisory only and no promotion authority
   blockers_fixed:
     - deterministic replay future-event buffering fail-closed tests
     - Workbench history/data gate fail-closed behavior
@@ -335,10 +353,17 @@ final_report:
     - prove alpha/edge after WFC/robustness/latency/slippage/acceptance gates
     - produce current canonical replay_execution_adapter evidence for CMEBacktester
     - complete CME acceptance runbook and operator evidence bundle
+    - block non-idea failing artifact deployment or mark it research-only with no deploy semantics
+    - force canonical registered feature_ids through all LLM hypothesis/model boundaries
+    - make analyst chat packet/schema strict or explicitly non-contract/advisory
+    - reject model-card placeholders and validate cards/schema/registry before persistence and promotion provenance
+    - produce bounded green LLM/packet verification, including live GPT-5.5 smoke only when explicitly enabled
   tests_run:
     - "python -m pytest tests/backtester_validation/fast tests/test_workbench tests/test_hft3_validation tests/test_data_layer tests/test_mbo_agent_schemas.py tests/test_gate_schema.py -q --tb=short --ignore=tests/test_workbench/test_catalog_event_e2e.py"
   tests_passed: "566 passed, 1 skipped, 77 warnings in 122.16s"
   docs_updated:
+    - docs/agents/MBO_AGENT_ONTOLOGY_HARDENING_SOURCE_OF_TRUTH.md
+    - docs/research/PACKET_LLM_CONTRACT.md
     - docs/workbench/PRODUCTION_READINESS_CHECKLIST.md
   schemas_updated: []
   known_risks:
@@ -346,5 +371,7 @@ final_report:
     - two out-of-scope crypto files remain untracked
     - current audit is from a dirty worktree, not a clean-main acceptance run
     - no CHI404 remote validation was run
+    - heuristic LLM fallback remains active until production policy decides whether it is acceptable
+    - compacted prior AAR review memory is not revalidated at read time
   production_readiness_verdict: incomplete
 ```

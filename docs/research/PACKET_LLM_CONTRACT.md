@@ -2,6 +2,55 @@
 
 Authoritative I/O for workstation LLM lanes. All boundaries are validated with `jsonschema` draft-07 plus explicit hft3 fail-closed checks.
 
+## Research And Model-Development LLM Readiness Map
+
+Provenance note:
+
+- Audit date: 2026-06-06
+- Branch: `codex/workbench-runtime-sync`
+- HEAD: `1c854d0abf25`
+- Scope: additive source-of-truth readiness map; no runtime behavior change; no graph commands.
+
+This readiness map is source-of-truth material for LLM discoverability. It describes current wiring status only; it does not grant any LLM lane production authority.
+
+### Current Verdicts
+
+- Research LLM verdict: partially wired, not production-ready.
+- Model Development LLM verdict: partially wired, not production-ready.
+- Both lanes are advisory only. No LLM lane has promotion authority, deploy authority, live-routing authority, or permission to override deterministic replay, schema, registry, validation, workbench, VectorBT, CHI404, Rithmic, or promotion gates.
+
+### Production Blockers
+
+- Research blocker: the non-idea research path in `scripts/run_pipeline.py` / `packages/research_pipeline/` can still artifact-deploy best failing candidates; until this is fail-closed, those artifacts must be treated as research-only and must carry no deploy semantics.
+- Research blocker: hypothesis parse `feature_list` is only a string-array schema field in `packages/data_layer/packet/schema_pipeline_hypothesis_response_v1.json` and is not universally validated against `packages/features_engine/src/features/registry.py`; unvalidated values can expand model families.
+- Research blocker: analyst chat in `apps/workbench/ui/analyst_panel.py` remains direct/free-form LLM, not packet/schema strict.
+- Research blocker: live GPT-5.5 production smoke wiring is present, but there is no discoverably green current result tied to this contract.
+- Research blocker: `packages/research_pipeline/requirements.txt` lacks `jsonschema` while docs suggest standalone CLI install.
+- Research blocker: prior AAR artifacts compacted into `review_memory[]` are advisory and are not revalidated at read time.
+- Research blocker: heuristic fallback remains active when the LLM is unavailable or schema-rejected; production policy must decide whether that is acceptable.
+- Model-development blocker: generated model card artifacts from `apps/workbench/src/run/campaign_runner.py` may still contain generic placeholders such as `baseline_model: "not_observed"` and `uplift_metric: "not_observed"`.
+- Model-development blocker: `packages/features_engine/src/features/registry.py` accepts aliases, so canonical-only `feature_id` enforcement is not universal.
+- Model-development blocker: the campaign card writer may persist `model_card.json` before full `validate_agent_contract` / schema / registry validation.
+- Model-development blocker: promotion provenance checks in `packages/hft3/validation/certification_registry.py` require card paths and IDs, but may not fully revalidate `MODEL_CARD` schema and feature-registry/model-kind eligibility.
+- Model-development blocker: feature fabric manifests in `apps/workbench/src/run/feature_fabric.py` distinguish catalog eligibility from observed model usage; accepted feature does not prove model consumed the feature.
+- Model-development blocker: hypothesis parse `feature_list` remains string-array only and not feature-registry validated.
+
+### Unblock Conditions
+
+- Block non-idea failing artifact deployment, or mark it research-only with no deploy semantics.
+- Force hypothesis and model features through canonical registered `feature_id`s at all LLM boundaries, including hypothesis parse, idea set, model card, validation card, and promotion provenance boundaries.
+- Make analyst chat explicitly non-contract/advisory or convert it to packet/schema strict I/O.
+- Reject generic placeholders in model-card and promotion provenance gates where production eligibility is claimed.
+- Validate emitted model and validation cards against `docs/schemas/MODEL_CARD.schema.json`, `docs/schemas/VALIDATION_CARD.schema.json`, and the feature registry before persistence and before promotion.
+- Produce bounded green LLM/packet verification, including live GPT-5.5 smoke only when the environment explicitly enables it, with command, exit code, output tail, and artifact paths recorded.
+
+### Discovery Notes
+
+- Research pipeline LLM entrypoints are documented below under Research Pipeline Lane, Machine Idea-Set Lane, and Research Decision Packet Lane.
+- Model-development hypothesis parse enters through `data_layer.llm.packet_runner.run_llm_on_hypothesis_request` and validates the packet shape through `validate_pipeline_hypothesis_response`; that does not by itself prove canonical feature eligibility.
+- Agent contract validation lives in `packages/data_layer/packet/agent_contracts.py`; production readiness requires schema validation plus registry validation at persistence and promotion time, not only at later review time.
+- Workbench cards and feature fabric material are emitted through `apps/workbench/src/run/campaign_runner.py`, `apps/workbench/src/run/feature_fabric.py`, and surfaced through `apps/workbench/src/run/evidence_snapshot.py`.
+
 ## After-Action Lane
 
 Runtime entry: `data_layer.llm.packet_runner.run_llm_on_aar_packet`.

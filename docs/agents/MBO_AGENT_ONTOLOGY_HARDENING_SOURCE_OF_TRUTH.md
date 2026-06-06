@@ -16,7 +16,7 @@ prohibited_domains:
   - "kalshi"
   - "polymarket"
   - "unrelated_quantx_forks"
-last_updated: "2026-06-05"
+last_updated: "2026-06-06"
 ---
 
 # MBO Agent Ontology Hardening Source Of Truth
@@ -80,6 +80,15 @@ invent evidence.
 - `tests/fixtures/mbo_minimal_replay_fixture.json`
 - `tests/test_mbo_agent_schemas.py`
 
+## Required Discovery Sources
+
+The following docs are required discovery sources for this source-of-truth. They
+are not additional deliverables, execution gates, promotion gates, or robustness
+gates.
+
+- `docs/research/PACKET_LLM_CONTRACT.md`
+- `docs/workbench/PRODUCTION_READINESS_CHECKLIST.md`
+
 ## Boundary
 
 The canonical MBO feature packet schema is
@@ -90,6 +99,9 @@ under `docs/schemas/` are LLM-facing research contracts. They do not add
 execution routing, model-promotion gates, or a parallel robustness pipeline.
 Existing HFT3 validation and robustness infrastructure remains the authority
 for candidate promotion or rejection.
+
+The packet/readiness discovery sources add source-of-truth visibility only; they
+do not create new execution authority, promotion authority, or robustness gates.
 
 ## Acceptance Criteria
 
