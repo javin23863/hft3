@@ -3,9 +3,18 @@
 from __future__ import annotations
 
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+_REPO_FOR_BOOTSTRAP = Path(__file__).resolve().parents[3]
+if str(_REPO_FOR_BOOTSTRAP) not in sys.path:
+    sys.path.insert(0, str(_REPO_FOR_BOOTSTRAP))
+for sub in ("packages", "apps"):
+    p = str(_REPO_FOR_BOOTSTRAP / sub)
+    if p not in sys.path:
+        sys.path.insert(0, p)
 
 import pandas as pd
 import yaml
@@ -35,6 +44,43 @@ MBO_STATUS_VALUES = (
     "DISABLED",
 )
 
+PILOT_BASKET_SYMBOLS = (
+    "MES.v.0",
+    "MNQ.v.0",
+    "ES.v.0",
+    "NQ.v.0",
+    "ZN.v.0",
+    "ZB.v.0",
+    "RTY.v.0",
+)
+
+MANIFEST_REL = Path("packages") / "data_system" / "config" / "mbo_pilot_basket_20260605_manifest.json"
+
+
+def _load_pilot_basket_manifest(repo: Path) -> dict[str, Any] | None:
+    for candidate in (
+        repo / MANIFEST_REL,
+        repo / "data_system" / "config" / "mbo_pilot_basket_20260605_manifest.json",
+    ):
+        if candidate.is_file():
+            return json.loads(candidate.read_text(encoding="utf-8"))
+    return None
+
+
+def _pilot_basket_gap_summary(manifest: dict[str, Any] | None) -> dict[str, Any]:
+    if not manifest:
+        return {}
+    coverage = manifest.get("coverage") or {}
+    return {
+        "run_id": manifest.get("run_id"),
+        "status": manifest.get("status"),
+        "pilot_symbols": list(PILOT_BASKET_SYMBOLS),
+        "partial_windows": manifest.get("partial_windows") or [],
+        "no_market_windows": manifest.get("no_market_windows") or [],
+        "missing_or_unavailable_slots": coverage.get("missing_or_unavailable_slots"),
+        "present_runnable_npz_slots": coverage.get("present_runnable_npz_slots"),
+    }
+
 
 def _load_hot_universe(repo: Path) -> List[Dict[str, Any]]:
     path = workbench_root(repo) / "config" / "hot_memory_universe.yaml"
@@ -43,18 +89,28 @@ def _load_hot_universe(repo: Path) -> List[Dict[str, Any]]:
 
 
 def _npz_index(repo: Path) -> Dict[str, List[str]]:
-    npz_dir = repo / "data" / "npz"
+    from data_system.src.data_roots import npz_search_dirs
+
     index: Dict[str, List[str]] = {}
-    if not npz_dir.is_dir():
-        return index
-    for p in npz_dir.glob("*_mbo.npz"):
-        sym = p.name.split("_")[0]
-        index.setdefault(sym, []).append(str(p.relative_to(repo)))
+    seen_files: set[str] = set()
+    for npz_dir in npz_search_dirs(repo):
+        if not npz_dir.is_dir():
+            continue
+        for p in npz_dir.glob("*_mbo.npz"):
+            key = p.name.lower()
+            if key in seen_files:
+                continue
+            seen_files.add(key)
+            sym = p.name.split("_")[0]
+            rel = str(p.relative_to(repo)) if str(p).startswith(str(repo)) else str(p.resolve())
+            index.setdefault(sym, []).append(rel)
     return index
 
 
 def _events_symbols(repo: Path) -> Dict[str, List[str]]:
-    csv_path = repo / "data_system" / "config" / "events.csv"
+    csv_path = data_system_root(repo) / "config" / "events.csv"
+    if not csv_path.is_file():
+        csv_path = repo / "packages" / "data_system" / "config" / "events.csv"
     df = pd.read_csv(csv_path)
     out: Dict[str, set[str]] = {}
     for _, row in df.iterrows():
@@ -89,9 +145,15 @@ def _priority_rank(canonical: str) -> int:
 
 def build_inventory(repo: Path | None = None) -> Dict[str, Any]:
     repo = repo or REPO
+    from data_system.src.data_roots import paid_data_root, npz_search_dirs
+
     instruments = _load_hot_universe(repo)
     npz_index = _npz_index(repo)
     event_syms = _events_symbols(repo)
+    paid_root = paid_data_root(repo)
+    search_dirs = [str(d) for d in npz_search_dirs(repo)]
+    pilot_manifest = _load_pilot_basket_manifest(repo)
+    pilot_gaps = _pilot_basket_gap_summary(pilot_manifest)
 
     rows: List[Dict[str, Any]] = []
     for inst in instruments:
@@ -103,6 +165,7 @@ def build_inventory(repo: Path | None = None) -> Dict[str, Any]:
             {
                 "canonical_symbol": canonical,
                 "research_symbol": research_sym,
+                "pilot_basket_symbol": research_sym in PILOT_BASKET_SYMBOLS,
                 "data_vendor_symbol": inst.get("data_vendor_symbol"),
                 "databento_dataset": inst.get("venue", "GLBX") + ".MDP3" if inst.get("venue") == "GLBX" else inst.get("venue"),
                 "expected_schema": "mbo" if mbo_status not in ("SENSOR_ONLY", "DISABLED") else None,
@@ -171,6 +234,13 @@ def build_inventory(repo: Path | None = None) -> Dict[str, Any]:
     return {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "repo_root": str(repo),
+        "paid_data_root": str(paid_root),
+        "npz_search_dirs": search_dirs,
+        "pilot_basket_note": (
+            "MBO pilot basket (7 symbols × 720 windows) may live under paid_data_root; "
+            "see docs/research/MBO_PILOT_BASKET_20260605.md"
+        ),
+        "pilot_basket_gaps": pilot_gaps,
         "instrument_count": len(rows),
         "mbo_historical_count": sum(1 for r in rows if r["mbo_status"] == "MBO_HISTORICAL"),
         "mbo_missing_count": sum(1 for r in rows if r["mbo_status"] == "MBO_MISSING"),

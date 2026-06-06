@@ -1,0 +1,44 @@
+---
+description: Macro event catalog — always 44 types, never conflate with events.csv
+globs:
+  - "**/events.csv"
+  - "**/event_universe.yaml"
+  - "**/macro_event_cli.py"
+  - "**/audit_all_research_data.py"
+  - "**/model_event_binding.yaml"
+  - "**/catalog_report.py"
+  - "**/window_catalog.py"
+  - "**/mbo_release_lane/**"
+  - "**/download_mbo_release_data.py"
+alwaysApply: true
+---
+
+# Macro event catalog (use `catalog_event_type_count()` — never hardcode)
+
+**Authority:** `packages/economic_event_universe/config/event_universe.yaml`
+
+| Artifact | What it is |
+|----------|------------|
+| `event_universe.yaml` | Full catalog (metadata + windows) |
+| `events.csv` | Runnable subset with sourced dates (~55 rows, **3 types** today) |
+| `research_ready_types()` | Types allowed in `events.csv` (**3**) |
+| `data/mbo_release/` | **MBO-only lane** — canonical raw + normalized events + validation |
+
+## MBO-only lane rules
+
+1. **MBO only.** Raw event stream. No MBP/L2/snapshots in macro download lane.
+2. **Download window:** T-60s to T+10s for **all** event types (`default_download_window()`).
+3. **Snapshots are derived** post-replay — never downloaded as primary data.
+4. **No order_id → not MBO.** Reject from lane; no silent bypass.
+5. **Full catalog downloads:** `python scripts/download_mbo_release_data.py --download`
+6. **Never treat `events.csv` row count as catalog size.**
+
+## Rules for agents
+
+1. **Never say "macro catalog = CPI/NFP/PROP" or "55 events = full universe".**
+2. **`events.csv` is the runnable backtest subset**, not the catalog.
+3. **Count types** → `from economic_event_universe.registry import catalog_event_type_count`
+4. **MBO cost / coverage** → `python scripts/estimate_full_macro_mbo_cost.py --estimate`
+5. **Human/agent banner** → `python packages/data_system/src/macro_event_cli.py`
+
+Workbench campaigns still filter through `events.csv` + `model_event_binding.yaml` until calendars and bindings are expanded.

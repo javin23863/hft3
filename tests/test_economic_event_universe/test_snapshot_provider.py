@@ -12,7 +12,7 @@ def test_snapshot_provider_collect_offset(tmp_path):
     (ds / "events.csv").write_text(
         "event_id,event_type,release_date,release_time,timezone,window_name,"
         "start_offset_seconds,end_offset_seconds,symbols,priority,source,source_url,effective_date,notes\n"
-        "CPI_2024_09_11_TIGHT,CPI,2024-09-11,08:30:00,America/New_York,TIGHT,-30,300,"
+        "CPI_2024_09_11_TIGHT,CPI,2024-09-11,08:30:00,America/New_York,TIGHT,-60,10,"
         "MES.v.0,1,BLS,https://bls.gov,2018-01-01,test\n",
         encoding="utf-8",
     )

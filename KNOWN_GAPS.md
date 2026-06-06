@@ -1,6 +1,6 @@
 # KNOWN GAPS — read this before claiming “done”
 
-**Last updated:** 2026-06-02  
+**Last updated:** 2026-06-06  
 **Audience:** Next human or agent developer on hft3.
 
 This file is the **single billboard** for what is missing, broken, misleading, or on the wrong machine. Lane-specific addenda still apply ([crypto](packages/crypto_lane/docs/VALIDATION_HONESTY.md), [validation charter](docs/VALIDATION_HONESTY.md)); this doc ties them together.
@@ -18,7 +18,7 @@ This file is the **single billboard** for what is missing, broken, misleading, o
 
 ## 0. Macro event catalog (not CPI-only)
 
-**Authoritative list:** [`packages/data_system/config/events.csv`](packages/data_system/config/events.csv)
+**Full catalog (45 types):** [`packages/economic_event_universe/config/event_universe.yaml`](packages/economic_event_universe/config/event_universe.yaml). **Runnable subset:** [`packages/data_system/config/events.csv`](packages/data_system/config/events.csv) (55 rows, 3 types).
 
 | `event_type` | Count | Example `event_id` |
 |--------------|-------|------------------|
@@ -102,6 +102,23 @@ python scripts/audit_all_research_data.py
 
 Download: `python scripts/download_imbalance_research_data.py --all` or [`scripts/download_all_research_data.ps1`](scripts/download_all_research_data.ps1).
 
+**CME MBO pilot basket (separate, larger store):** ~4,829 runnable NPZ + raw DBN for **7 symbols** (MES, MNQ, ES, NQ, ZN, ZB, RTY) × **720 windows** — not the full 39-instrument HOT universe. Canonical paid store: `C:\Users\MSI\Documents\New project\data` (gitignored). Wire clones via `HFT3_PAID_DATA_ROOT` in `.env` or sync:
+
+```powershell
+python -m workbench verify-data --event-id NFP_2024_01_05_TIGHT --symbol NQ.v.0
+python scripts/paid_data_inventory.py --dry-run
+python scripts/paid_data_inventory.py --sync
+# or: .\scripts\ensure_paid_data.ps1
+```
+
+Manifest: [`docs/research/MBO_PILOT_BASKET_20260605.md`](docs/research/MBO_PILOT_BASKET_20260605.md). **211** documented gaps — **203 are permanent `no_market` holidays**; do not re-download. **30 HOT symbols** still `MBO_MISSING`; backfill via `scripts/mbo_hot_universe_backfill.py` (~$177 live estimate for 28 symbols, 2026-06-06).
+
+```powershell
+python scripts/mbo_pilot_gap_triage.py --write-manifest
+python scripts/mbo_hot_universe_backfill.py --from-inventory --estimate
+python scripts/mbo_hot_universe_backfill.py --batch 1 --download --max-cost-usd 104
+```
+
 ### 3.2 Low-float equities (16 sessions in YAML)
 
 | Session IDs | Ticker | Date | Equity MBO / daily / normalized | OPRA chain |
@@ -147,7 +164,7 @@ Entry: [docs/vault/RESEARCH_ENTRYPOINTS.md](docs/vault/RESEARCH_ENTRYPOINTS.md) 
 | I-01 | **P0** | Macro auction uses **test fixture** when no real file | [`packages/features_engine/src/imbalance/auction_events.py`](packages/features_engine/src/imbalance/auction_events.py) → `tests/fixtures/imbalance_auction_sample.ndjson` |
 | I-02 | **P0** | Ablation = wrapper boost on hypothesis score, **not** toggling real feature slots 34–37 | [`packages/features_engine/src/imbalance/apply.py`](packages/features_engine/src/imbalance/apply.py) `wrap_hypothesis_for_ablation` |
 | I-03 | **P0** | Example macro replay (`SPREAD_BLOWOUT_RECOMPRESSION` on a CPI event): **0 PnL**, **0 delta** across ablation modes | Replay + hypothesis path |
-| I-04 | P1 | MBP-10 on disk but **not wired** into main replay/workbench | [`mbp_replay.py`](packages/features_engine/src/imbalance/mbp_replay.py) only |
+| I-04 | — | MBP-10 **intentionally excluded** from MBO-only macro lane | Use `scripts/download_mbo_release_data.py`; MBP not routed into replay |
 | I-05 | P1 | C++ hot path **no** imbalance v1 slots | [docs/hft3_imbalance_runbook.md](docs/hft3_imbalance_runbook.md) |
 | C-01 | ~~P1~~ | ~~CLI default CPI for `imbalance-ablation`~~ **Fixed:** `--event-id` required | [`apps/workbench/__main__.py`](apps/workbench/__main__.py) |
 | C-02 | P1 | Most slugs bound to **CPI_TIGHT / NFP_TIGHT** context families only (not equities/crypto) | [`apps/workbench/config/model_event_binding.yaml`](apps/workbench/config/model_event_binding.yaml) |
@@ -211,6 +228,8 @@ Crypto hypotheses (lane-local ids, not workbench slugs): `CRYPTO_H1` … `CRYPTO
 | **List workbench model slugs** | `python -m workbench list` |
 | **List macro event ids** | `python packages/data_system/src/macro_event_cli.py` |
 | Full data gap audit | `python scripts/audit_all_research_data.py` |
+| Paid CME pilot NPZ preflight | `python -m workbench verify-data --event-id <id> --symbol <sym>` |
+| Sync paid data into clone | `python scripts/paid_data_inventory.py --sync` or `.\scripts\ensure_paid_data.ps1` |
 | Imbalance-only gaps | `python scripts/audit_imbalance_data_gaps.py` |
 | Download macro + equities enrich | `.\scripts\download_all_research_data.ps1` then `-ConfirmPull` after estimate |
 | Equities full lane | `python -m equities_lane.pipeline pull-decadal --resume --pull-options` |

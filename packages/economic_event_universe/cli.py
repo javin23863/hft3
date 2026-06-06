@@ -11,6 +11,7 @@ from pathlib import Path
 import yaml
 
 from economic_event_universe.registry import (
+    default_download_window,
     event_definitions,
     research_ready_types,
 )
@@ -57,9 +58,23 @@ def validate() -> list[str]:
             errors.append(f"{et}: missing official_source_url")
 
     errors.extend(_validate_events_csv())
+    errors.extend(_validate_download_windows())
     errors.extend(_validate_cpp_label_artifact())
     errors.extend(_validate_registry_sync(defs))
     return errors
+
+
+def _validate_download_windows() -> list[str]:
+    """All catalog types must use the HFT MBO release window (-60s, +10s)."""
+    expected = default_download_window()
+    errs: list[str] = []
+    for et, cfg in event_definitions().items():
+        win = cfg.get("download_window") or {}
+        start = int(win.get("start_offset_seconds", expected[0]))
+        end = int(win.get("end_offset_seconds", expected[1]))
+        if (start, end) != expected:
+            errs.append(f"{et}: download_window ({start}, {end}) != HFT release {expected}")
+    return errs
 
 
 def _validate_events_csv() -> list[str]:
@@ -133,7 +148,7 @@ def _validate_registry_sync(defs: dict) -> list[str]:
 def main(argv: list[str] | None = None) -> int:
     setup_repo_paths()
     parser = argparse.ArgumentParser(prog="economic_event_universe.cli")
-    parser.add_argument("command", choices=["validate"], nargs="?", default="validate")
+    parser.add_argument("command", choices=["validate", "status"], nargs="?", default="validate")
     args = parser.parse_args(argv)
     if args.command == "validate":
         errs = validate()
@@ -142,7 +157,21 @@ def main(argv: list[str] | None = None) -> int:
                 print(e, file=sys.stderr)
             print(f"validate: FAIL ({len(errs)} issues)", file=sys.stderr)
             return 1
-        print(f"validate: OK ({len(event_definitions())} catalog types, {len(research_ready_types())} research-ready)")
+        print(
+            f"validate: OK ({len(event_definitions())} catalog types, "
+            f"{len(research_ready_types())} research-ready in events.csv)"
+        )
+        return 0
+    if args.command == "status":
+        from economic_event_universe.catalog_report import format_catalog_banner, build_macro_catalog_summary
+        from hft3_bootstrap import repo_root
+
+        print(format_catalog_banner())
+        summary = build_macro_catalog_summary(repo_root())
+        print(
+            f"\nWindows (seed calendars, 2018-2025): {summary.catalog_window_count} | "
+            f"NPZ missing slots: {summary.npz_slots_missing}"
+        )
         return 0
     return 2
 

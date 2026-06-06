@@ -1,14 +1,13 @@
 """
-Download imbalance-lane enrichments (not a single default event).
+Download imbalance-lane enrichments (MBO-only macro lane by default).
 
 Covers:
-  1. Every macro event in packages/data_system/config/events.csv → MBO NPZ + MBP-10 DBN
+  1. Every macro event in packages/data_system/config/events.csv → MBO NPZ (no MBP/L2)
   2. Every pullable equities decadal session → MBO raw + auction imbalance NDJSON (if missing)
   3. Campaign NPZ backfill for selected workbench models
 
-OPRA options, normalized session NDJSON, and daily OHLCV use the equities lane:
-  python scripts/download_all_research_data.py
-  or: python -m equities_lane.pipeline pull-decadal --resume --pull-options
+For full 44-type catalog MBO downloads use:
+  python scripts/download_mbo_release_data.py --download
 
 Requires DATABENTO_API_KEY in .env.
 """
@@ -346,7 +345,7 @@ def main() -> int:
     p.add_argument("--equities-only", action="store_true")
     p.add_argument("--event-id", default=None, help="Single event (optional)")
     p.add_argument("--symbol", default="MES.v.0")
-    p.add_argument("--with-mbp10", action="store_true")
+    p.add_argument("--with-mbp10", action="store_true", help="Opt-in MBP-10 (excluded from MBO-only lane)")
     p.add_argument("--max-cost-usd", type=float, default=150.0, help="Per-event or total cap where enforced")
     p.add_argument(
         "--campaign-models",
@@ -368,7 +367,7 @@ def main() -> int:
         parsed = tuple(str(s) for s in row["parsed_symbols"])
         sym = args.symbol or (parsed[0] if parsed else "MES.v.0")
         ensure_macro_mbo(args.event_id, sym, parsed, row, max_cost=args.max_cost_usd)
-        if args.with_mbp10 or args.all:
+        if args.with_mbp10:
             ensure_macro_mbp10(args.event_id, sym, parsed, row, max_cost=args.max_cost_usd)
         return 0
 
@@ -377,7 +376,7 @@ def main() -> int:
         summary["campaign_downloaded"] = download_campaign_missing(models, args.symbol, args.max_cost_usd)
         summary["macro"] = download_all_macro(
             max_cost_per_event=args.max_cost_usd,
-            mbo_only=False,
+            mbo_only=True,
             mbp_only=False,
         )
 

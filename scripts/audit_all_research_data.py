@@ -123,7 +123,15 @@ def audit_report() -> dict[str, Any]:
     macro = _imbalance_macro_gaps()
     eq = _equities_gaps()
     report = {**macro, **eq}
-    # options_failed = Databento symbology limits; does not block "ready" if file on disk
+
+    try:
+        from economic_event_universe.catalog_report import build_macro_catalog_summary
+
+        report["macro_catalog"] = build_macro_catalog_summary(_REPO).to_dict()
+    except Exception as exc:
+        report["macro_catalog"] = {"error": str(exc)}
+
+    # events.csv lane ready (narrow); full 44-type catalog reported separately in macro_catalog
     report["ready"] = (
         not macro["mbo_npz_missing"]
         and not macro["mbp10_missing"]

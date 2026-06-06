@@ -1,8 +1,10 @@
-"""Macro event CLI helpers — catalog from events.csv, no hardcoded CPI default."""
+"""Macro event CLI — full 44-type catalog truth + events.csv runnable subset."""
 
 from __future__ import annotations
 
+import json
 import os
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -33,16 +35,26 @@ def events_by_type(csv_path: Optional[Path] = None) -> dict[str, list[str]]:
     return out
 
 
-def catalog_help_text() -> str:
+def catalog_help_text(repo_root: Optional[Path] = None) -> str:
+    root = repo_root or _REPO_ROOT
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+    for sub in ("packages", "apps"):
+        p = str(root / sub)
+        if p not in sys.path:
+            sys.path.insert(0, p)
+
+    from economic_event_universe.catalog_report import format_catalog_banner
+
+    lines = [format_catalog_banner(), ""]
     ids = list_event_ids()
-    lines = [
-        f"Macro catalog: {len(ids)} events in packages/data_system/config/events.csv",
-    ]
+    lines.append(f"events.csv runnable rows: {len(ids)}")
     for etype in sorted(events_by_type()):
         sample = events_by_type()[etype][:2]
         lines.append(f"  {etype}: {len(events_by_type()[etype])} — e.g. {', '.join(sample)}")
-    lines.append("Pass --event-id <id> on all replay/workbench/gate scripts.")
-    lines.append("Optional env: HFT3_DEFAULT_EVENT_ID=<id> (automation only; not a repo default).")
+    lines.append("")
+    lines.append("Pass --event-id <id> on replay/workbench/gate scripts (from events.csv today).")
+    lines.append("Optional env: HFT3_DEFAULT_EVENT_ID=<id> (automation only).")
     return "\n".join(lines)
 
 
@@ -58,16 +70,25 @@ def resolve_event_id(event_id: Optional[str]) -> str:
 def main() -> int:
     import argparse
 
-    p = argparse.ArgumentParser(description="List macro events from events.csv")
-    p.add_argument("--type", default=None, help="Filter by event_type (CPI, NFP, PROP_FLATTEN_TOPSTEP, ...)")
+    p = argparse.ArgumentParser(description="Macro event catalog (44 types; events.csv = runnable subset)")
+    p.add_argument("--type", default=None, help="Filter events.csv by event_type")
+    p.add_argument("--json", action="store_true", help="Emit catalog coverage JSON")
     args = p.parse_args()
+
+    if args.json:
+        from economic_event_universe.catalog_report import build_macro_catalog_summary
+
+        print(json.dumps(build_macro_catalog_summary(_REPO_ROOT).to_dict(), indent=2))
+        return 0
+
     if args.type:
         for eid in events_by_type().get(args.type, []):
             print(eid)
-    else:
-        print(catalog_help_text())
-        for eid in list_event_ids():
-            print(eid)
+        return 0
+
+    print(catalog_help_text())
+    for eid in list_event_ids():
+        print(eid)
     return 0
 
 

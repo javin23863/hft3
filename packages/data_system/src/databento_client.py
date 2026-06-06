@@ -71,7 +71,11 @@ class DatabentoResearchClient:
         override_hard_limit: bool = False,
         override_operating_cap: bool = False,
     ) -> str:
-        """Download MBP-10 aggregated depth (not order-level MBO)."""
+        """Download MBP-10 aggregated depth (not order-level MBO).
+
+        Out of macro MBO-only lane — do not call from download_mbo_release_data.py
+        or default macro scripts.
+        """
         return self.download_event_window(
             event_id,
             symbols,

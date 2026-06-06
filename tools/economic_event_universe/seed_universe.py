@@ -20,12 +20,13 @@ setup_repo_paths()
 OUT_YAML = _REPO / "packages" / "economic_event_universe" / "config" / "event_universe.yaml"
 CAL_DIR = data_system_root() / "config" / "release_calendars"
 
-DEFAULT_OFFSETS = [-300, -60, -30, -10, 0, 1, 5, 10, 60, 300, 1800]
+DEFAULT_OFFSETS = [-10, -5, -1, 0, 1, 2, 5, 10]
+HFT_RELEASE_WINDOW = {"start_offset_seconds": -60, "end_offset_seconds": 10}
 SYM = "MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0"
-TIGHT = {"start_offset_seconds": -30, "end_offset_seconds": 300}
-FOMC_WIN = {"start_offset_seconds": -60, "end_offset_seconds": 600}
-CLAIMS_WIN = {"start_offset_seconds": -15, "end_offset_seconds": 120}
-MAIN_PROP = {"start_offset_seconds": -1500, "end_offset_seconds": 600}
+TIGHT = HFT_RELEASE_WINDOW
+FOMC_WIN = HFT_RELEASE_WINDOW
+CLAIMS_WIN = HFT_RELEASE_WINDOW
+MAIN_PROP = HFT_RELEASE_WINDOW
 
 
 def _ev(

@@ -70,6 +70,14 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("list", help="List registered models")
 
+    verify_data_p = sub.add_parser(
+        "verify-data",
+        help="Fail-closed MBO NPZ preflight for a single event/symbol",
+    )
+    verify_data_p.add_argument("--event-id", required=True)
+    verify_data_p.add_argument("--symbol", required=True, help="Research symbol e.g. NQ.v.0")
+    verify_data_p.add_argument("--json", action="store_true", help="Machine-readable output")
+
     abl_p = sub.add_parser(
         "imbalance-ablation",
         help="Replay-backed imbalance ablation matrix (requires NPZ)",
@@ -98,6 +106,27 @@ def main(argv: list[str] | None = None) -> int:
         for mid in list_models():
             print(mid)
         return 0
+
+    if args.command == "verify-data":
+        from workbench.src.verify_data import verify_data as run_verify_data
+
+        result = run_verify_data(_REPO, event_id=args.event_id, symbol=args.symbol)
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            status = "PASS" if result.get("ok") else "FAIL"
+            print(f"verify-data: {status}")
+            print(f"  event_id: {result.get('event_id')}")
+            print(f"  symbol: {result.get('symbol')}")
+            if result.get("symbol_used"):
+                print(f"  symbol_used: {result.get('symbol_used')}")
+            if result.get("npz_path"):
+                print(f"  npz_path: {result.get('npz_path')}")
+            if not result.get("ok"):
+                print(f"  error: {result.get('error', 'NPZ missing')}")
+                if result.get("sync_command"):
+                    print(f"  sync: {result.get('sync_command')}")
+        return 0 if result.get("ok") else 1
 
     if args.command == "imbalance-ablation":
         from workbench.src.imbalance.ablation_runner import run_imbalance_ablation_matrix
