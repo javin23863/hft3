@@ -1,0 +1,243 @@
+{
+  "schema_version": 1,
+  "run_id": "mbo_pilot_basket_20260605",
+  "status": "completed_with_gaps",
+  "created_utc": "2026-06-05T13:45:08Z",
+  "purpose": "Local MBO event-window data locator for backtesting agents. Paid DBN/NPZ data is local-only and intentionally not committed.",
+  "repository_root": "C:\\Users\\MSI\\Documents\\New project",
+  "local_paths": {
+    "runtime_report": "runtime/data_downloads/mbo_pilot_basket_20260605.json",
+    "raw_dbn_dir": "data/raw/databento_mbo/mbo_pilot_basket_20260605/",
+    "runnable_npz_dir": "data/npz/"
+  },
+  "databento_request": {
+    "dataset": "GLBX.MDP3",
+    "schema": "mbo",
+    "stype_in": "continuous",
+    "range_start_utc": "2023-06-05T00:00:00+00:00",
+    "range_end_utc": "2026-06-05T08:30:00+00:00",
+    "planned_total_cost_usd": 145.73635103254003
+  },
+  "coverage": {
+    "raw_windows": 720,
+    "raw_bytes": 8058506157,
+    "expected_event_symbol_slots": 5040,
+    "present_runnable_npz_slots": 4829,
+    "missing_or_unavailable_slots": 211,
+    "invalid_npz_slots": 0,
+    "loader_processed_tasks": 444,
+    "loader_task_count": 444,
+    "loader_conversion_status_counts": {
+      "converted": 413,
+      "no_market_data": 29,
+      "partial": 2
+    }
+  },
+  "windows_by_event_type": {
+    "CPI": 14,
+    "EIA_CRUDE": 157,
+    "EIA_NATGAS": 157,
+    "FED_BEIGE_BOOK": 24,
+    "FED_H41": 157,
+    "FOMC_PRESS": 24,
+    "NFP": 15,
+    "PROP_FLATTEN_TOPSTEP": 3,
+    "TREASURY_AUCTION": 12,
+    "UNEMPLOYMENT_CLAIMS": 157
+  },
+  "present_npz_slots_by_event_type": {
+    "CPI": 98,
+    "EIA_CRUDE": 1085,
+    "EIA_NATGAS": 1085,
+    "FED_BEIGE_BOOK": 98,
+    "FED_H41": 1070,
+    "FOMC_PRESS": 126,
+    "NFP": 105,
+    "PROP_FLATTEN_TOPSTEP": 21,
+    "TREASURY_AUCTION": 42,
+    "UNEMPLOYMENT_CLAIMS": 1099
+  },
+  "missing_npz_slots_by_event_type": {
+    "EIA_CRUDE": 14,
+    "EIA_NATGAS": 14,
+    "FED_BEIGE_BOOK": 70,
+    "FED_H41": 29,
+    "FOMC_PRESS": 42,
+    "TREASURY_AUCTION": 42
+  },
+  "partial_windows": [
+    {
+      "event_type": "FED_H41",
+      "event_id": "FED_H41_2024_06_19_TIGHT",
+      "release_date": "2024-06-19",
+      "missing_symbols": [
+        "ES.v.0",
+        "ZB.v.0",
+        "RTY.v.0"
+      ],
+      "reason": "symbol_absent_in_raw_after_redownload"
+    },
+    {
+      "event_type": "FED_H41",
+      "event_id": "FED_H41_2024_07_03_TIGHT",
+      "release_date": "2024-07-03",
+      "missing_symbols": [
+        "MES.v.0",
+        "MNQ.v.0",
+        "ES.v.0",
+        "NQ.v.0",
+        "RTY.v.0"
+      ],
+      "reason": "symbol_absent_in_raw_after_redownload"
+    }
+  ],
+  "no_market_windows": [
+    "EIA_CRUDE_2024_12_25_TIGHT",
+    "EIA_CRUDE_2025_01_01_TIGHT",
+    "EIA_NATGAS_2024_12_25_TIGHT",
+    "EIA_NATGAS_2025_01_01_TIGHT",
+    "FED_BEIGE_BOOK_2023_10_07_TIGHT",
+    "FED_BEIGE_BOOK_2024_01_07_TIGHT",
+    "FED_BEIGE_BOOK_2024_04_07_TIGHT",
+    "FED_BEIGE_BOOK_2024_07_07_TIGHT",
+    "FED_BEIGE_BOOK_2024_09_07_TIGHT",
+    "FED_BEIGE_BOOK_2024_12_07_TIGHT",
+    "FED_BEIGE_BOOK_2025_06_07_TIGHT",
+    "FED_BEIGE_BOOK_2025_09_07_TIGHT",
+    "FED_BEIGE_BOOK_2025_12_07_TIGHT",
+    "FED_BEIGE_BOOK_2026_03_07_TIGHT",
+    "FED_H41_2024_12_25_TIGHT",
+    "FED_H41_2025_01_01_TIGHT",
+    "FED_H41_2025_12_24_TIGHT",
+    "FOMC_PRESS_2023_07_15_TIGHT",
+    "FOMC_PRESS_2024_09_15_TIGHT",
+    "FOMC_PRESS_2024_12_15_TIGHT",
+    "FOMC_PRESS_2025_03_15_TIGHT",
+    "FOMC_PRESS_2025_11_15_TIGHT",
+    "FOMC_PRESS_2026_03_15_TIGHT",
+    "TREASURY_AUCTION_2024_01_13_TIGHT",
+    "TREASURY_AUCTION_2024_04_13_TIGHT",
+    "TREASURY_AUCTION_2024_07_13_TIGHT",
+    "TREASURY_AUCTION_2024_10_13_TIGHT",
+    "TREASURY_AUCTION_2025_04_13_TIGHT",
+    "TREASURY_AUCTION_2025_07_13_TIGHT"
+  ],
+  "agent_instructions": [
+    "Use this tracked manifest to locate local paid data.",
+    "Do not require paid DBN/NPZ files to be present in git.",
+    "Treat no_market_windows and partial_windows as explicit gaps, not successful runnable coverage.",
+    "Use runtime_report for full per-window evidence when running on the MSI workstation.",
+    "no_market_windows are permanent holiday/weekend gaps \u2014 do not queue for paid download.",
+    "partial_windows may be retried via local reconvert only unless raw DBN contains the symbol."
+  ],
+  "gap_triage_utc": "2026-06-06T06:41:43.412118+00:00",
+  "gap_triage_status": "documented_permanent_gaps",
+  "gap_triage": {
+    "total_missing_slots": 211,
+    "no_market_windows": 29,
+    "no_market_slots_estimate": 203,
+    "partial_windows": 2,
+    "partial_symbol_slots": 8,
+    "fillable_by_redownload_estimate": 8,
+    "recommendation": "Do not spend on no_market windows; optional local reconvert for partial windows only.",
+    "no_market_event_ids": [
+      "EIA_CRUDE_2024_12_25_TIGHT",
+      "EIA_CRUDE_2025_01_01_TIGHT",
+      "EIA_NATGAS_2024_12_25_TIGHT",
+      "EIA_NATGAS_2025_01_01_TIGHT",
+      "FED_BEIGE_BOOK_2023_10_07_TIGHT",
+      "FED_BEIGE_BOOK_2024_01_07_TIGHT",
+      "FED_BEIGE_BOOK_2024_04_07_TIGHT",
+      "FED_BEIGE_BOOK_2024_07_07_TIGHT",
+      "FED_BEIGE_BOOK_2024_09_07_TIGHT",
+      "FED_BEIGE_BOOK_2024_12_07_TIGHT",
+      "FED_BEIGE_BOOK_2025_06_07_TIGHT",
+      "FED_BEIGE_BOOK_2025_09_07_TIGHT",
+      "FED_BEIGE_BOOK_2025_12_07_TIGHT",
+      "FED_BEIGE_BOOK_2026_03_07_TIGHT",
+      "FED_H41_2024_12_25_TIGHT",
+      "FED_H41_2025_01_01_TIGHT",
+      "FED_H41_2025_12_24_TIGHT",
+      "FOMC_PRESS_2023_07_15_TIGHT",
+      "FOMC_PRESS_2024_09_15_TIGHT",
+      "FOMC_PRESS_2024_12_15_TIGHT",
+      "FOMC_PRESS_2025_03_15_TIGHT",
+      "FOMC_PRESS_2025_11_15_TIGHT",
+      "FOMC_PRESS_2026_03_15_TIGHT",
+      "TREASURY_AUCTION_2024_01_13_TIGHT",
+      "TREASURY_AUCTION_2024_04_13_TIGHT",
+      "TREASURY_AUCTION_2024_07_13_TIGHT",
+      "TREASURY_AUCTION_2024_10_13_TIGHT",
+      "TREASURY_AUCTION_2025_04_13_TIGHT",
+      "TREASURY_AUCTION_2025_07_13_TIGHT"
+    ],
+    "partial_window_rows": [
+      {
+        "event_type": "FED_H41",
+        "event_id": "FED_H41_2024_06_19_TIGHT",
+        "release_date": "2024-06-19",
+        "missing_symbols": [
+          "ES.v.0",
+          "ZB.v.0",
+          "RTY.v.0"
+        ],
+        "reason": "symbol_absent_in_raw_after_redownload"
+      },
+      {
+        "event_type": "FED_H41",
+        "event_id": "FED_H41_2024_07_03_TIGHT",
+        "release_date": "2024-07-03",
+        "missing_symbols": [
+          "MES.v.0",
+          "MNQ.v.0",
+          "ES.v.0",
+          "NQ.v.0",
+          "RTY.v.0"
+        ],
+        "reason": "symbol_absent_in_raw_after_redownload"
+      }
+    ],
+    "reconvert_actions": [
+      {
+        "event_id": "FED_H41_2024_06_19_TIGHT",
+        "symbol": "ES.v.0",
+        "action": "reconverted"
+      },
+      {
+        "event_id": "FED_H41_2024_06_19_TIGHT",
+        "symbol": "ZB.v.0",
+        "action": "reconverted"
+      },
+      {
+        "event_id": "FED_H41_2024_06_19_TIGHT",
+        "symbol": "RTY.v.0",
+        "action": "reconverted"
+      },
+      {
+        "event_id": "FED_H41_2024_07_03_TIGHT",
+        "symbol": "MES.v.0",
+        "action": "reconverted"
+      },
+      {
+        "event_id": "FED_H41_2024_07_03_TIGHT",
+        "symbol": "MNQ.v.0",
+        "action": "reconverted"
+      },
+      {
+        "event_id": "FED_H41_2024_07_03_TIGHT",
+        "symbol": "ES.v.0",
+        "action": "reconverted"
+      },
+      {
+        "event_id": "FED_H41_2024_07_03_TIGHT",
+        "symbol": "NQ.v.0",
+        "action": "reconverted"
+      },
+      {
+        "event_id": "FED_H41_2024_07_03_TIGHT",
+        "symbol": "RTY.v.0",
+        "action": "reconverted"
+      }
+    ]
+  }
+}
