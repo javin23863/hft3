@@ -1,14 +1,14 @@
 # HFC3 MBO cross-asset inventory
 
-Generated: 2026-05-30T15:51:25.937135+00:00
+Generated: 2026-06-06T06:57:05.040475+00:00
 
 | Metric | Value |
 |--------|-------|
 | Instruments | 39 |
-| MBO historical (NPZ on disk) | 2 |
-| MBO missing | 35 |
+| MBO historical (NPZ on disk) | 8 |
+| MBO missing | 29 |
 | Sensor only | 2 |
-| Total NPZ files | 52 |
+| Total NPZ files | 4956 |
 
 **Success criterion:** MBO availability or explicit `MBO_MISSING` / `SENSOR_ONLY` — not L1/L2.
 
@@ -16,18 +16,18 @@ Generated: 2026-05-30T15:51:25.937135+00:00
 
 | Symbol | research_symbol | tier | mbo_status | npz_events | replay_ready |
 |--------|-----------------|------|------------|------------|--------------|
-| ES | ES.v.0 | HOT_EXECUTABLE | MBO_HISTORICAL | 8 | True |
-| MES | MES.v.0 | HOT_EXECUTABLE | MBO_HISTORICAL | 44 | True |
-| NQ | NQ.v.0 | HOT_EXECUTABLE | MBO_MISSING | 0 | False |
-| MNQ | MNQ.v.0 | HOT_EXECUTABLE | MBO_MISSING | 0 | False |
-| RTY | RTY.v.0 | HOT_EXECUTABLE | MBO_MISSING | 0 | False |
-| M2K | M2K.v.0 | HOT_EXECUTABLE | MBO_MISSING | 0 | False |
+| ES | ES.v.0 | HOT_EXECUTABLE | MBO_HISTORICAL | 714 | True |
+| MES | MES.v.0 | HOT_EXECUTABLE | MBO_HISTORICAL | 707 | True |
+| NQ | NQ.v.0 | HOT_EXECUTABLE | MBO_HISTORICAL | 691 | True |
+| MNQ | MNQ.v.0 | HOT_EXECUTABLE | MBO_HISTORICAL | 691 | True |
+| RTY | RTY.v.0 | HOT_EXECUTABLE | MBO_HISTORICAL | 691 | True |
+| M2K | M2K.v.0 | HOT_EXECUTABLE | MBO_HISTORICAL | 80 | True |
 | YM | YM.v.0 | HOT_EXECUTABLE | MBO_MISSING | 0 | False |
 | MYM | MYM.v.0 | HOT_EXECUTABLE | MBO_MISSING | 0 | False |
 | ZT | ZT.v.0 | HOT_EXECUTABLE | MBO_MISSING | 0 | False |
 | ZF | ZF.v.0 | HOT_EXECUTABLE | MBO_MISSING | 0 | False |
-| ZN | ZN.v.0 | HOT_EXECUTABLE | MBO_MISSING | 0 | False |
-| ZB | ZB.v.0 | HOT_EXECUTABLE | MBO_MISSING | 0 | False |
+| ZN | ZN.v.0 | HOT_EXECUTABLE | MBO_HISTORICAL | 691 | True |
+| ZB | ZB.v.0 | HOT_EXECUTABLE | MBO_HISTORICAL | 691 | True |
 | UB | UB.v.0 | HOT_EXECUTABLE | MBO_MISSING | 0 | False |
 | SR3 | SR3.v.0 | HOT_EXECUTABLE | MBO_MISSING | 0 | False |
 | ZQ | ZQ.v.0 | HOT_EXECUTABLE | MBO_MISSING | 0 | False |

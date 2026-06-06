@@ -1,19 +1,15 @@
 # HFC3 missing MBO data jobs
 
-Generated: 2026-05-30T15:51:25.937135+00:00
+Generated: 2026-06-06T06:57:05.040475+00:00
 
 Priority order: equity index → rates → metals → energy → FX → vol sensors → warm → cold.
 
 | Priority | Symbol | schema | blocks HOT | proposed command |
 |----------|--------|--------|------------|------------------|
-| 0 | NQ | mbo | True | `python workbench/scripts/backfill_catalog.py --model HYP_5 --symbol NQ.v.0 --download-missing --max-cost-usd 25` |
-| 0 | RTY | mbo | True | `python workbench/scripts/backfill_catalog.py --model HYP_5 --symbol RTY.v.0 --download-missing --max-cost-usd 25` |
 | 0 | YM | mbo | True | `python workbench/scripts/backfill_catalog.py --model HYP_5 --symbol YM.v.0 --download-missing --max-cost-usd 25` |
 | 1 | SR3 | mbo | True | `python workbench/scripts/backfill_catalog.py --model HYP_5 --symbol SR3.v.0 --download-missing --max-cost-usd 25` |
 | 1 | UB | mbo | True | `python workbench/scripts/backfill_catalog.py --model HYP_5 --symbol UB.v.0 --download-missing --max-cost-usd 25` |
-| 1 | ZB | mbo | True | `python workbench/scripts/backfill_catalog.py --model HYP_5 --symbol ZB.v.0 --download-missing --max-cost-usd 25` |
 | 1 | ZF | mbo | True | `python workbench/scripts/backfill_catalog.py --model HYP_5 --symbol ZF.v.0 --download-missing --max-cost-usd 25` |
-| 1 | ZN | mbo | True | `python workbench/scripts/backfill_catalog.py --model HYP_5 --symbol ZN.v.0 --download-missing --max-cost-usd 25` |
 | 1 | ZQ | mbo | True | `python workbench/scripts/backfill_catalog.py --model HYP_5 --symbol ZQ.v.0 --download-missing --max-cost-usd 25` |
 | 1 | ZT | mbo | True | `python workbench/scripts/backfill_catalog.py --model HYP_5 --symbol ZT.v.0 --download-missing --max-cost-usd 25` |
 | 2 | GC | mbo | True | `python workbench/scripts/backfill_catalog.py --model HYP_5 --symbol GC.v.0 --download-missing --max-cost-usd 25` |
@@ -36,8 +32,6 @@ Priority order: equity index → rates → metals → energy → FX → vol sens
 | 7 | ZM | mbo | False | `python workbench/scripts/backfill_catalog.py --model HYP_5 --symbol ZM.v.0 --download-missing --max-cost-usd 25` |
 | 7 | ZS | mbo | False | `python workbench/scripts/backfill_catalog.py --model HYP_5 --symbol ZS.v.0 --download-missing --max-cost-usd 25` |
 | 7 | ZW | mbo | False | `python workbench/scripts/backfill_catalog.py --model HYP_5 --symbol ZW.v.0 --download-missing --max-cost-usd 25` |
-| 9 | M2K | mbo | True | `python workbench/scripts/backfill_catalog.py --model HYP_5 --symbol M2K.v.0 --download-missing --max-cost-usd 25` |
 | 9 | MCL | mbo | True | `python workbench/scripts/backfill_catalog.py --model HYP_5 --symbol MCL.v.0 --download-missing --max-cost-usd 25` |
 | 9 | MGC | mbo | True | `python workbench/scripts/backfill_catalog.py --model HYP_5 --symbol MGC.v.0 --download-missing --max-cost-usd 25` |
-| 9 | MNQ | mbo | True | `python workbench/scripts/backfill_catalog.py --model HYP_5 --symbol MNQ.v.0 --download-missing --max-cost-usd 25` |
 | 9 | MYM | mbo | True | `python workbench/scripts/backfill_catalog.py --model HYP_5 --symbol MYM.v.0 --download-missing --max-cost-usd 25` |
