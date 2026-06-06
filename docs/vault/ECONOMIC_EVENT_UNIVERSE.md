@@ -32,7 +32,8 @@ Location: `packages/economic_event_universe/`
 
 - **`RESEARCH_READY`** types (CPI, NFP, Topstep today) must have `SOURCED` rows in `release_calendars/` and appear in canonical `events.csv`.
 - **`CATALOG`** types are defined in YAML for metadata/labels; SEED scaffolds live under `artifacts/calendar_proposals/seed_scaffold/` until merged as `SOURCED`.
-- **Dates are never invented in fetchers.** Fetchers emit JSON proposals; humans merge into `release_calendars/*.csv`.
+- **Full universe sync:** `python tools/economic_event_universe/sync_all_calendars.py --rebuild-events` writes all agency calendars (FRED bootstrap + live HTML) and rebuilds `events.csv` with all 45 types including rule-based session windows.
+- **Dates are never invented in propose-only fetchers.** Sync scripts merge FRED + agency sources; schedule fallbacks (ISM, ADP) apply only when both are empty.
 - **Live CHI404 hot path unchanged** (BLUEPRINT §4). Snapshot builder is offline research only.
 - **C++ E_t labels** — generated from the same YAML via `tools/economic_event_universe/generate_event_context_labels.py` → `event_context_labels.generated.hpp` + compiled golden test `hft_event_context_golden`.
 
@@ -42,6 +43,12 @@ Location: `packages/economic_event_universe/`
 
 ```bash
 PYTHONPATH=packages python -m economic_event_universe.cli validate
+```
+
+### Sync all release calendars (45 types)
+
+```bash
+python tools/economic_event_universe/sync_all_calendars.py --rebuild-events
 ```
 
 ### Rebuild events.csv from sourced calendars

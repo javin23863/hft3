@@ -22,6 +22,7 @@ alwaysApply: true
 | `event_universe.yaml` | Full catalog (metadata + windows) |
 | `events.csv` | Runnable backtest subset with SOURCED release calendars (see `macro_event_cli.py`) |
 | `sourced_event_types_in_dir()` | Types with agency calendars in `release_calendars/` |
+| **All calendars + events.csv** | `python tools/economic_event_universe/sync_all_calendars.py --rebuild-events` |
 | **All scopes + cost breakdown** | `python scripts/estimate_full_macro_mbo_cost.py --all-scopes --estimate` |
 | Backtest MBO cost (sourced only) | `python scripts/estimate_full_macro_mbo_cost.py --scope macro_releases --estimate` |
 | Full catalog MBO cost (incl. SEED) | `python scripts/estimate_full_macro_mbo_cost.py --scope full_catalog --estimate` |

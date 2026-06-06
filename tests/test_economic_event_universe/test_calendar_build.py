@@ -158,7 +158,7 @@ def test_partial_year_override(tmp_path, monkeypatch):
     import economic_event_universe.walk_forward_years as wf
 
     monkeypatch.setattr(wf, "backtest_year_range", lambda _root: (2018, 2025))
-    rows = iter_events_csv_rows(repo, start_year=2024, end_year=None)
+    rows = iter_events_csv_rows(repo, include_rule_based=False, start_year=2024, end_year=None)
     assert len(rows) == 1
     assert rows[0]["release_date"] == "2024-09-11"
 

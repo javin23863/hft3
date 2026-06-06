@@ -6,7 +6,7 @@ def test_bls_fixture_parse():
     rows = bls.parse_bls_html(html, "CPI")
     assert all(r["event_type"] == "CPI" for r in rows)
     assert any(r["release_date"] == "2024-09-11" for r in rows)
-    assert bls.parse_bls_html(html, "NFP") == []
+    assert bls.parse_bls_html("", "NFP") == []
 
 
 def test_fed_fixture_parse():

@@ -112,11 +112,12 @@ def format_catalog_banner(repo_root: Path | None = None) -> str:
         f"Macro event catalog: {MACRO_EVENT_TYPE_COUNT} event types "
         f"(authority: packages/economic_event_universe/config/event_universe.yaml)",
         f"  SOURCED release calendars ({len(sourced)} types): {', '.join(sourced) or '(none)'}",
+        f"  events.csv mirrors SOURCED + rule-based types in walk-forward years",
         f"  CME default symbols ({len(default_cme_symbols())}): {', '.join(default_cme_symbols())}",
         "",
-        "events.csv is NOT the full catalog — it mirrors SOURCED calendars in walk-forward years.",
-        "Backtest MBO cost: python scripts/estimate_full_macro_mbo_cost.py --estimate",
-        "Full catalog cost: python scripts/estimate_full_macro_mbo_cost.py --scope full_catalog --estimate",
+        "events.csv mirrors SOURCED calendars + rule-based session types in walk-forward years.",
+        "Sync all calendars: python tools/economic_event_universe/sync_all_calendars.py --rebuild-events",
+        "All-scopes MBO cost: python scripts/estimate_full_macro_mbo_cost.py --all-scopes --estimate",
         "Coverage audit: python scripts/audit_all_research_data.py",
     ]
     return "\n".join(lines)

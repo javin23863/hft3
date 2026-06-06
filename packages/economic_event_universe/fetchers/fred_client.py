@@ -9,10 +9,40 @@ from economic_event_universe.fetchers.http_util import fetch_json
 
 FRED_BASE = "https://api.stlouisfed.org/fred"
 
-# release_id from FRED /releases catalog
+# release_id from FRED /releases catalog — bootstrap historical dates
 FRED_RELEASE_IDS: dict[str, int] = {
-    "INDUSTRIAL_PRODUCTION": 13,  # G.17 Industrial Production and Capacity Utilization
-    "FED_H41": 20,  # H.4.1 Factors Affecting Reserve Balances
+    # Fed (existing)
+    "INDUSTRIAL_PRODUCTION": 13,
+    "FED_H41": 20,
+    # BLS
+    "CPI": 10,
+    "CORE_CPI": 10,
+    "NFP": 50,
+    "PPI": 46,
+    "CORE_PPI": 46,
+    "JOLTS": 193,
+    "PRODUCTIVITY": 52,
+    "ECI": 11,
+    "IMPORT_PRICES": 51,
+    "EXPORT_PRICES": 51,
+    "UNEMPLOYMENT_CLAIMS": 180,
+    # BEA
+    "PCE": 54,
+    "CORE_PCE": 54,
+    "GDP_ADVANCE": 53,
+    "GDP_SECOND": 53,
+    "GDP_FINAL": 53,
+    # Census (FRED mirrors)
+    "RETAIL_SALES": 9,
+    "DURABLE_GOODS_ADVANCE": 59,
+    "DURABLE_GOODS_FULL": 59,
+    "HOUSING_STARTS": 27,
+    "BUILDING_PERMITS": 27,
+    "NEW_HOME_SALES": 27,
+    "CONSTRUCTION_SPENDING": 148,
+    "TRADE_BALANCE": 26,
+    "FACTORY_ORDERS": 86,
+    "EXISTING_HOME_SALES": 95,
 }
 
 

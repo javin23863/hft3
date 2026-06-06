@@ -42,7 +42,11 @@ def catalog_window_to_events_csv_row(window: CatalogWindow) -> dict[str, Any]:
     notes = (
         "SEED_PLACEHOLDER: replace with sourced agency date before research use"
         if window.row_status == "SEED"
-        else f"{window.event_type} from release calendar"
+        else (
+            f"{window.event_type} rule-based session window"
+            if window.row_status == "RULE_BASED"
+            else f"{window.event_type} from release calendar"
+        )
     )
     return {
         "event_id": window.event_id,
@@ -66,16 +70,19 @@ def iter_events_csv_rows(
     repo_root: Path,
     *,
     include_seed: bool = False,
+    include_rule_based: bool = True,
     start_year: int | None = None,
     end_year: int | None = None,
 ) -> list[dict[str, Any]]:
-    """Catalog windows → events.csv rows for any type with a calendar (SOURCED ± SEED)."""
+    """Catalog windows → events.csv rows for any type with a calendar (SOURCED ± SEED ± rule-based)."""
     start_year, end_year = _resolve_year_range(repo_root, start_year, end_year)
-    allowed_status = {"SOURCED", "SEED"} if include_seed else {"SOURCED"}
+    allowed_status = {"SOURCED", "SEED", "RULE_BASED"} if include_rule_based else {"SOURCED", "SEED"}
+    if not include_seed:
+        allowed_status.discard("SEED")
     windows = iter_catalog_windows(
         repo_root,
         include_seed=include_seed,
-        include_rule_based=False,
+        include_rule_based=include_rule_based,
         start_year=start_year,
         end_year=end_year,
     )
@@ -95,6 +102,7 @@ def iter_sourced_events_csv_rows(
     return iter_events_csv_rows(
         repo_root,
         include_seed=False,
+        include_rule_based=False,
         start_year=start_year,
         end_year=end_year,
     )

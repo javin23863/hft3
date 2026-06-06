@@ -54,6 +54,7 @@ def _load_existing(events_csv: Path) -> dict[str, dict]:
 def build_merged_rows(
     *,
     include_seed: bool = False,
+    include_rule_based: bool = True,
     start_year: int | None = None,
     end_year: int | None = None,
 ) -> dict[str, dict]:
@@ -64,6 +65,7 @@ def build_merged_rows(
     calendar_rows = iter_events_csv_rows(
         repo_root(),
         include_seed=include_seed,
+        include_rule_based=include_rule_based,
         start_year=start_year,
         end_year=end_year,
     )
@@ -84,14 +86,22 @@ def main() -> int:
         action="store_true",
         help="Include SEED placeholder calendar rows (not for production research)",
     )
+    parser.add_argument(
+        "--no-rule-based",
+        action="store_true",
+        help="Exclude PROP_REOPEN, CASH_EQUITY_OPEN, FRIDAY_CLOSE from events.csv",
+    )
     parser.add_argument("--start-year", type=int, default=None, help="Override walk-forward start year")
     parser.add_argument("--end-year", type=int, default=None, help="Override walk-forward end year")
     args = parser.parse_args()
+
+    include_rule_based = not args.no_rule_based
 
     events_csv = data_system_root() / "config" / "events.csv"
     existing = _load_existing(events_csv)
     merged = build_merged_rows(
         include_seed=args.include_seed,
+        include_rule_based=include_rule_based,
         start_year=args.start_year,
         end_year=args.end_year,
     )
@@ -104,7 +114,7 @@ def main() -> int:
     if args.dry_run:
         start, end = _resolve_year_range(repo_root(), args.start_year, args.end_year)
         print(f"dry-run: {len(rows)} total rows ({added} added, {updated} updated)")
-        print(f"  year_range: {start}-{end} | include_seed={args.include_seed}")
+        print(f"  year_range: {start}-{end} | include_seed={args.include_seed} | rule_based={include_rule_based}")
         for et, n in sorted(counts.items()):
             print(f"  {et}: {n}")
         return 0

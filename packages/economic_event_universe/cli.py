@@ -86,7 +86,9 @@ def _validate_events_csv() -> list[str]:
             if et not in defs:
                 bad.append(f"events.csv unknown event type: {et}")
             elif et not in sourced_types:
-                bad.append(f"events.csv row for type without SOURCED calendar: {et}")
+                cfg = defs.get(et, {})
+                if cfg.get("schedule") != "rule_based" and "rule-based session" not in notes.lower():
+                    bad.append(f"events.csv row for type without SOURCED calendar: {et}")
     return bad
 
 
