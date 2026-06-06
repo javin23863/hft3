@@ -173,6 +173,8 @@ class PromotionRecord:
     # Artifacts
     report_path: str = ""
     artifact_path: str = ""
+    model_card_path: str = ""
+    validation_card_path: str = ""
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> PromotionRecord:
@@ -211,6 +213,8 @@ class PromotionRecord:
             kill_switch_reference=str(raw.get("kill_switch_reference", "")),
             report_path=str(raw.get("report_path", "")),
             artifact_path=str(raw.get("artifact_path", "")),
+            model_card_path=str(raw.get("model_card_path", "")),
+            validation_card_path=str(raw.get("validation_card_path", "")),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -239,6 +243,94 @@ class PromotionRecord:
 def validate_promotion_record(record: dict[str, Any]) -> None:
     """Validate a raw dict representing a promotion record."""
     PromotionRecord.from_dict(record).validate()
+
+
+def _resolve_card_path(root: Path, raw_path: str, field_name: str) -> Path:
+    if not raw_path.strip():
+        raise RegistrySchemaError(
+            f"PROMOTED promotion requires non-empty {field_name}",
+            error_code="promotion_card_missing",
+        )
+    path = Path(raw_path.strip())
+    candidate = path.resolve() if path.is_absolute() else (root / path).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError as exc:
+        raise RegistrySchemaError(
+            f"{field_name} must resolve inside registry root {root}, got {raw_path!r}",
+            error_code="promotion_card_outside_root",
+        ) from exc
+    if not candidate.is_file():
+        raise RegistrySchemaError(
+            f"{field_name} does not exist: {raw_path!r}",
+            error_code="promotion_card_missing_file",
+        )
+    return candidate
+
+
+def _load_card_json(path: Path, field_name: str) -> dict[str, Any]:
+    try:
+        payload = _json_loads_strict(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        raise RegistrySchemaError(
+            f"{field_name} must be a valid JSON file: {exc}",
+            error_code="promotion_card_invalid_json",
+        ) from exc
+    if not isinstance(payload, dict):
+        raise RegistrySchemaError(
+            f"{field_name} must contain a JSON object",
+            error_code="promotion_card_invalid_json",
+        )
+    return payload
+
+
+def _card_body(payload: dict[str, Any], wrapper_name: str, field_name: str) -> dict[str, Any]:
+    body = payload.get(wrapper_name)
+    if not isinstance(body, dict):
+        raise RegistrySchemaError(
+            f"{field_name} must contain a {wrapper_name!r} JSON object",
+            error_code="promotion_card_invalid_schema",
+        )
+    return body
+
+
+def _validate_promoted_card_provenance(
+    record: PromotionRecord, root: Path | None = None
+) -> None:
+    if record.promotion_status != "PROMOTED":
+        return
+
+    registry_root = (root or repo_root()).resolve()
+    model_card_path = _resolve_card_path(
+        registry_root, record.model_card_path, "model_card_path"
+    )
+    validation_card_path = _resolve_card_path(
+        registry_root, record.validation_card_path, "validation_card_path"
+    )
+    model_card = _load_card_json(model_card_path, "model_card_path")
+    validation_card = _load_card_json(validation_card_path, "validation_card_path")
+    model_card_body = _card_body(model_card, "model_card", "model_card_path")
+    validation_card_body = _card_body(
+        validation_card, "validation_card", "validation_card_path"
+    )
+
+    model_validation_id = model_card_body.get("validation_card_id")
+    validation_id = validation_card_body.get("validation_id")
+    if not isinstance(model_validation_id, str) or not model_validation_id.strip():
+        raise RegistrySchemaError(
+            "model_card.validation_card_id must be a non-empty string",
+            error_code="promotion_card_missing_validation_id",
+        )
+    if not isinstance(validation_id, str) or not validation_id.strip():
+        raise RegistrySchemaError(
+            "validation_card.validation_id must be a non-empty string",
+            error_code="promotion_card_missing_validation_id",
+        )
+    if model_validation_id != validation_id:
+        raise RegistrySchemaError(
+            "model_card.validation_card_id must equal validation_card.validation_id",
+            error_code="promotion_card_id_mismatch",
+        )
 
 
 def repo_root() -> Path:
@@ -676,6 +768,7 @@ def save_promotion(record: PromotionRecord, root: Path | None = None) -> dict[st
     record_dict = record.to_dict()
     record_dict["record_type"] = "promotion"
     validate_promotion_record(record_dict)
+    _validate_promoted_card_provenance(record, root)
 
     audit = audit_log_path(root)
     with _RegistryLock(lock_path(root)):

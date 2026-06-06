@@ -11,8 +11,7 @@ The scorecard aggregates per-lane coverage and pass/fail. Status
 decisions:
 
 - T0 fast gate fails → RED
-- T2 full suite fails (>2 tests) → RED
-- T2 full suite fails (≤2 tests) → YELLOW
+- T2 full suite fails → RED
 - Any non-CME lane pytest fails → YELLOW (recorded as warning)
 - All pass → GREEN
 """
@@ -199,7 +198,7 @@ def run_full_certification(
         blocking.append("T0 fast gate failed")
 
     # Step 2: T2 full suite (CME core, adversarial)
-    full_ok, full_out, full_count, full_failed, _full_duration = _run_pytest(
+    full_ok, full_out, full_count, _full_failed, _full_duration = _run_pytest(
         "tests/backtester_validation/full", root
     )
     if not full_ok:
@@ -245,12 +244,9 @@ def run_full_certification(
             warnings.append(f"lane-aware certification raised {type(exc).__name__}: {exc}")
             lane_card = None
 
-    # Status decision
+    # Status decision is fail-closed: blockers are production blockers.
     if blocking:
-        if t0_ok and not full_ok:
-            status = "YELLOW" if full_failed <= 2 else "RED"
-        else:
-            status = "RED"
+        status = "RED"
     elif lane_failures:
         status = "YELLOW"
     else:

@@ -74,18 +74,32 @@ def build_lane_scorecard(
         lane = lane_reg.lane
         try:
             cfg = lane_reg.config_loader()
-        except Exception:
-            cfg = None
-        if cfg is None:
-            coverage = LaneCoverage(test_paths=list(lane_reg.test_paths))
-        else:
+        except Exception as exc:
+            error_type = type(exc).__name__
+            error_message = str(exc)
             coverage = LaneCoverage(
-                symbols=list(getattr(cfg, "symbols", [])),
-                event_types=list(getattr(cfg, "event_types", [])),
-                latency_bands_ms=list(getattr(cfg, "latency_bands_ms", [])),
-                test_paths=list(getattr(cfg, "test_paths", list(lane_reg.test_paths))),
-                extra=getattr(cfg, "to_dict", lambda: {})(),
+                test_paths=list(lane_reg.test_paths),
+                extra={
+                    "coverage_status": "CONFIG_LOAD_FAILED",
+                    "blocking": True,
+                    "failure_reasons": [f"{error_type}: {error_message}"],
+                    "config_loader_error": {
+                        "type": error_type,
+                        "message": error_message,
+                    },
+                },
             )
+        else:
+            if cfg is None:
+                coverage = LaneCoverage(test_paths=list(lane_reg.test_paths))
+            else:
+                coverage = LaneCoverage(
+                    symbols=list(getattr(cfg, "symbols", [])),
+                    event_types=list(getattr(cfg, "event_types", [])),
+                    latency_bands_ms=list(getattr(cfg, "latency_bands_ms", [])),
+                    test_paths=list(getattr(cfg, "test_paths", list(lane_reg.test_paths))),
+                    extra=getattr(cfg, "to_dict", lambda: {})(),
+                )
         # Drop nested config keys from the extra so the scorecard stays clean
         for key in (
             "lane",

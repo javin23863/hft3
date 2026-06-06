@@ -281,8 +281,29 @@ def test_wfc_skipped_when_no_bounds(mock_list, MockEngine, mock_bounds, mock_wfc
     )
     summary_path = Path(result.artifact_dir) / "summary.json"
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
-    assert summary["wfc_status"] == "SKIPPED"
-    assert result.status != "FAIL" or summary.get("periods") is not None
+    assert summary["wfc_status"] == "SKIPPED_MISSING_PARAMETER_BOUNDS"
+    assert summary["wfc_required"] is True
+    assert summary["wfc_missing_required_bounds"] is True
+    assert summary["promote_candidate"] is False
+    assert any(
+        gate.get("gate") == "walk_forward_correlation"
+        and gate.get("status") == "SKIPPED_MISSING_PARAMETER_BOUNDS"
+        and "parameter_bounds" in gate.get("reason", "")
+        for gate in summary.get("blocking_gates", [])
+    )
+    model_card_path = Path(result.artifact_dir) / "model_card.json"
+    validation_card_path = Path(result.artifact_dir) / "validation_card.json"
+    assert summary["model_card_path"] == "model_card.json"
+    assert summary["validation_card_path"] == "validation_card.json"
+    assert model_card_path.is_file()
+    assert validation_card_path.is_file()
+    model_card = json.loads(model_card_path.read_text(encoding="utf-8"))["model_card"]
+    validation_card = json.loads(validation_card_path.read_text(encoding="utf-8"))["validation_card"]
+    assert model_card["model_id"] == summary["model_id"] == "BOOK_PRESSURE"
+    assert model_card["validation_card_id"] == validation_card["validation_id"]
+    assert model_card["promotion_status"] == "research_only"
+    assert model_card["validation_status"]["robustness_tests_passed"] is False
+    assert any("walk_forward_correlation" in reason for reason in validation_card["failure_reasons"])
 
 
 @patch("workbench.src.robustness.pack.run_robustness_pack")

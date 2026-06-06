@@ -70,9 +70,36 @@ def _full_record(**overrides) -> PromotionRecord:
         kill_switch_reference="configs/risk/kill_switch.yaml",
         report_path="artifacts/runs/RUN-1/report.md",
         artifact_path="artifacts/runs/RUN-1/manifest.json",
+        model_card_path="",
+        validation_card_path="",
     )
     base.update(overrides)
     return PromotionRecord(**base)
+
+
+def _card_paths(
+    root: Path,
+    *,
+    validation_id: str = "VALIDATION-1",
+    model_validation_card_id: str | None = None,
+) -> dict[str, str]:
+    cards = root / "cards"
+    cards.mkdir(parents=True, exist_ok=True)
+    model_path = cards / "model_card.json"
+    validation_path = cards / "validation_card.json"
+    model_validation_card_id = model_validation_card_id or validation_id
+    model_path.write_text(
+        json.dumps({"model_card": {"validation_card_id": model_validation_card_id}}),
+        encoding="utf-8",
+    )
+    validation_path.write_text(
+        json.dumps({"validation_card": {"validation_id": validation_id}}),
+        encoding="utf-8",
+    )
+    return {
+        "model_card_path": str(model_path.relative_to(root)),
+        "validation_card_path": str(validation_path.relative_to(root)),
+    }
 
 
 # ---------- schema round-trip ----------
@@ -110,6 +137,8 @@ def test_promotion_record_round_trip() -> None:
     assert rec2.model_id == rec.model_id
     assert rec2.backtest_metrics == rec.backtest_metrics
     assert rec2.passed_gates == rec.passed_gates
+    assert rec2.model_card_path == rec.model_card_path
+    assert rec2.validation_card_path == rec.validation_card_path
 
 
 def test_promotion_record_validation_rejects_bad_status() -> None:
@@ -138,7 +167,7 @@ def test_promotion_status_enum() -> None:
 
 
 def test_save_promotion_appends_to_audit_log(tmp_path: Path) -> None:
-    rec = _full_record()
+    rec = _full_record(**_card_paths(tmp_path))
     persisted = save_promotion(rec, tmp_path)
     assert persisted["record_type"] == "promotion"
     assert persisted["record_seq"] == 1
@@ -162,7 +191,7 @@ def test_save_promotion_chains_with_certification(tmp_path: Path) -> None:
         CertificationRecord(latest_certification_status="GREEN"),
         tmp_path,
     )
-    save_promotion(_full_record(), tmp_path)
+    save_promotion(_full_record(**_card_paths(tmp_path)), tmp_path)
     records = load_audit_log(tmp_path)
     assert len(records) == 2
     # Chain: cert (seq=1, no record_type) -> promotion (seq=2)
@@ -172,7 +201,7 @@ def test_save_promotion_chains_with_certification(tmp_path: Path) -> None:
 
 
 def test_load_latest_promotion_for_model(tmp_path: Path) -> None:
-    save_promotion(_full_record(model_id="HYP_5"), tmp_path)
+    save_promotion(_full_record(model_id="HYP_5", **_card_paths(tmp_path)), tmp_path)
     save_promotion(
         _full_record(model_id="HYP_1", promotion_status="REJECTED"),
         tmp_path,
@@ -196,9 +225,10 @@ def test_load_latest_promotion_for_model(tmp_path: Path) -> None:
 
 
 def test_list_promotion_models(tmp_path: Path) -> None:
-    save_promotion(_full_record(model_id="HYP_5"), tmp_path)
-    save_promotion(_full_record(model_id="HYP_1"), tmp_path)
-    save_promotion(_full_record(model_id="HYP_5"), tmp_path)  # dup
+    cards = _card_paths(tmp_path)
+    save_promotion(_full_record(model_id="HYP_5", **cards), tmp_path)
+    save_promotion(_full_record(model_id="HYP_1", **cards), tmp_path)
+    save_promotion(_full_record(model_id="HYP_5", **cards), tmp_path)  # dup
     assert list_promotion_models(tmp_path) == ["HYP_1", "HYP_5"]
 
 
@@ -209,18 +239,88 @@ def test_promotion_does_not_touch_legacy_json(tmp_path: Path) -> None:
         DEFAULT_REGISTRY_REL,
         registry_path,
     )
-    save_promotion(_full_record(), tmp_path)
+    save_promotion(_full_record(**_card_paths(tmp_path)), tmp_path)
     assert not registry_path(tmp_path).is_file()
 
 
 def test_save_promotion_validation_failure_no_partial_write(tmp_path: Path) -> None:
-    save_promotion(_full_record(model_id="HYP_5"), tmp_path)
+    save_promotion(_full_record(model_id="HYP_5", **_card_paths(tmp_path)), tmp_path)
     pre = audit_log_path(tmp_path).read_text(encoding="utf-8")
     bad = _full_record(model_id="HYP_5", promotion_status="PURPLE")
     with pytest.raises(RegistrySchemaError):
         save_promotion(bad, tmp_path)
     post = audit_log_path(tmp_path).read_text(encoding="utf-8")
     assert pre == post
+
+
+def test_save_promoted_missing_model_card_path_fails_without_partial_write(
+    tmp_path: Path,
+) -> None:
+    cards = _card_paths(tmp_path)
+    cards["model_card_path"] = ""
+    with pytest.raises(RegistrySchemaError):
+        save_promotion(_full_record(**cards), tmp_path)
+    assert not audit_log_path(tmp_path).exists()
+
+
+def test_save_promoted_missing_validation_card_path_fails(tmp_path: Path) -> None:
+    cards = _card_paths(tmp_path)
+    cards["validation_card_path"] = ""
+    with pytest.raises(RegistrySchemaError):
+        save_promotion(_full_record(**cards), tmp_path)
+    assert not audit_log_path(tmp_path).exists()
+
+
+def test_save_promoted_missing_card_file_fails(tmp_path: Path) -> None:
+    cards = _card_paths(tmp_path)
+    (tmp_path / cards["model_card_path"]).unlink()
+    with pytest.raises(RegistrySchemaError):
+        save_promotion(_full_record(**cards), tmp_path)
+    assert not audit_log_path(tmp_path).exists()
+
+
+def test_save_promoted_mismatched_card_ids_fail(tmp_path: Path) -> None:
+    cards = _card_paths(
+        tmp_path,
+        validation_id="VALIDATION-1",
+        model_validation_card_id="VALIDATION-2",
+    )
+    with pytest.raises(RegistrySchemaError):
+        save_promotion(_full_record(**cards), tmp_path)
+    assert not audit_log_path(tmp_path).exists()
+
+
+def test_save_promoted_missing_card_wrapper_fails(tmp_path: Path) -> None:
+    cards = _card_paths(tmp_path)
+    (tmp_path / cards["model_card_path"]).write_text(
+        json.dumps({"validation_card_id": "VALIDATION-1"}),
+        encoding="utf-8",
+    )
+    with pytest.raises(RegistrySchemaError):
+        save_promotion(_full_record(**cards), tmp_path)
+    assert not audit_log_path(tmp_path).exists()
+
+
+def test_save_promoted_missing_wrapped_validation_ids_fail(tmp_path: Path) -> None:
+    cards = _card_paths(tmp_path)
+    (tmp_path / cards["model_card_path"]).write_text(
+        json.dumps({"model_card": {}}),
+        encoding="utf-8",
+    )
+    (tmp_path / cards["validation_card_path"]).write_text(
+        json.dumps({"validation_card": {}}),
+        encoding="utf-8",
+    )
+    with pytest.raises(RegistrySchemaError):
+        save_promotion(_full_record(**cards), tmp_path)
+    assert not audit_log_path(tmp_path).exists()
+
+
+def test_save_rejected_and_quarantined_without_cards(tmp_path: Path) -> None:
+    save_promotion(_full_record(promotion_status="REJECTED"), tmp_path)
+    save_promotion(_full_record(promotion_status="QUARANTINED"), tmp_path)
+    records = load_audit_log(tmp_path)
+    assert [r["promotion_status"] for r in records] == ["REJECTED", "QUARANTINED"]
 
 
 # ---------- helpers ----------

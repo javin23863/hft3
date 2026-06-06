@@ -62,6 +62,56 @@ def _fake_ibkr_endpoint_status(status: str = "CONNECTED", api_status: str = "CON
     }
 
 
+def _fake_cme_endpoint_status(status: str = "READY_TO_CONNECT", reason_code: str = "") -> dict[str, object]:
+    return {
+        "schema_version": "rithmic_endpoint_status_v1",
+        "status": status,
+        "reason_code": reason_code,
+        "profile": "paper_chicago",
+        "system": "Rithmic Paper Trading",
+        "gateway": "Chicago Area",
+        "config_path": str(REPO / "packages" / "data_system" / "config" / "rithmic_api_paper.yaml"),
+        "config_exists": True,
+        "credentials": {"username_set": True, "password_set": True, "redacted": True},
+        "gateway_library": {"path": "unit.dll", "exists": True},
+        "missing_endpoint_params": [],
+        "last_connection_attempt": "",
+        "runtime_status_path": "",
+        "secret_exposed": False,
+        "blocking_gates": [],
+    }
+
+
+def _stub_cme_runtime_dependencies(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(
+        evidence_snapshot,
+        "_lane_registry_snapshot",
+        lambda _repo: {
+            "status": "PASS",
+            "rows": [{"lane": "cme_futures", "source": "cme_rithmic", "load_status": "loaded", "config": {}}],
+            "by_lane": {"cme_futures": {"lane": "cme_futures", "load_status": "loaded", "config": {}}},
+            "errors": [],
+            "blocking_gates": [],
+        },
+    )
+    monkeypatch.setattr(evidence_snapshot, "_ensure_catalog_feature_fabric", lambda _repo, **_kwargs: tmp_path)
+    monkeypatch.setattr(
+        evidence_snapshot,
+        "_feature_fabric_snapshot",
+        lambda _repo, **_kwargs: {
+            "status": "OBSERVED",
+            "gate_status": "PASS",
+            "lineage": {},
+            "blocking_gates": [],
+            "expected_artifacts": {},
+        },
+    )
+    monkeypatch.setattr(evidence_snapshot, "_event_universe_snapshot", lambda _repo: {"blocking_gates": []})
+    monkeypatch.setattr(evidence_snapshot, "_trade_manager_snapshot", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(evidence_snapshot, "_latest_rithmic_trial_bundle", lambda _repo: {})
+    monkeypatch.setattr(evidence_snapshot, "_latest_latency_baseline_summary", lambda *_args, **_kwargs: {})
+
+
 def test_crypto_lane_source_is_blocked_inside_active_all_lane_boundary() -> None:
     snapshot = load_run_evidence(REPO, "crypto_lane")
 
@@ -136,10 +186,48 @@ def test_all_lanes_snapshot_requires_active_run_and_terminal_states(tmp_path: Pa
     assert not snapshot.decision["blocking_gates"]
 
 
+def test_all_lanes_summary_blockers_force_live_registry_not_ready(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        evidence_snapshot,
+        "_lane_registry_snapshot",
+        lambda _repo: {"status": "PASS", "rows": [], "by_lane": {}, "errors": [], "blocking_gates": []},
+    )
+    active = tmp_path / "runtime" / "workbench" / "active_run.json"
+    active.parent.mkdir(parents=True, exist_ok=True)
+    active.write_text('{"run_id":"fresh_all_lanes_1","scope":"all_lanes"}', encoding="utf-8")
+    run_dir = tmp_path / "runtime" / "workbench" / "all_lanes" / "fresh_all_lanes_1"
+    run_dir.mkdir(parents=True)
+    (run_dir / "plan.json").write_text(
+        json.dumps({"run_id": "fresh_all_lanes_1", "models": [{"model_id": "A", "terminal_state": "EXECUTED"}]}),
+        encoding="utf-8",
+    )
+    (run_dir / "summary.json").write_text(
+        json.dumps(
+            {
+                "run_id": "fresh_all_lanes_1",
+                "live_registry_ready": True,
+                "decision_action": "PROMOTE",
+                "blocking_gates": [{"gate": "submit_to_ack_latency", "status": "BLOCKING"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    snapshot = evidence_snapshot._all_lanes_snapshot(tmp_path)
+
+    assert snapshot.decision["live_registry_ready"] is False
+    assert snapshot.decision["action"] == "BLOCKED"
+    assert any(gate["gate"] == "submit_to_ack_latency" for gate in snapshot.decision["blocking_gates"])
+
+
 def test_cme_rithmic_snapshot_surfaces_paper_endpoint_readiness() -> None:
     snapshot = load_run_evidence(REPO, "cme_rithmic")
 
     endpoint = snapshot.system["rithmic_endpoint"]
+    readiness = snapshot.decision["runtime_readiness"]
     assert snapshot.source == "cme_rithmic"
     assert endpoint["profile"] == "paper_chicago"
     assert endpoint["system"] == "Rithmic Paper Trading"
@@ -154,7 +242,50 @@ def test_cme_rithmic_snapshot_surfaces_paper_endpoint_readiness() -> None:
     assert "username" not in endpoint
     assert "password" not in endpoint
     assert snapshot.latency["rithmic_order_ack"]["scope"] == "cme_rithmic_submit_to_ack"
+    assert readiness["schema_version"] == "workbench_cme_runtime_readiness_v1"
+    assert readiness["lane"] == "cme_futures"
+    assert readiness["fail_closed"] is True
+    assert readiness == snapshot.system["runtime_readiness"]
     assert snapshot.decision["action"] == "QUARANTINE"
+
+
+def test_cme_runtime_readiness_blocks_ready_endpoint_without_submit_ack(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_cme_runtime_dependencies(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        evidence_snapshot,
+        "_rithmic_endpoint_status",
+        lambda _repo, force_paper=False: _fake_cme_endpoint_status("READY_TO_CONNECT"),
+    )
+
+    snapshot = load_run_evidence(tmp_path, "cme_rithmic")
+
+    readiness = snapshot.decision["runtime_readiness"]
+    blocking_gates = {gate["gate"] for gate in readiness["blocking_gates"]}
+    assert readiness["status"] == "BLOCKING"
+    assert readiness["live_registry_ready"] is False
+    assert snapshot.decision["live_registry_ready"] is False
+    assert snapshot.system["runtime_readiness"] == readiness
+    assert "submit_to_ack_latency" in blocking_gates
+    assert "rithmic_paper_endpoint" not in blocking_gates
+
+
+def test_rithmic_endpoint_status_exception_fails_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import data_system.rithmic_trial.endpoint_status as endpoint_status
+
+    def broken_status(*_args, **_kwargs):
+        raise RuntimeError("unit endpoint loader failed")
+
+    monkeypatch.setattr(endpoint_status, "endpoint_status_from_config", broken_status)
+
+    status = evidence_snapshot._rithmic_endpoint_status(tmp_path, force_paper=True)
+
+    assert status["status"] == "BLOCKING"
+    assert status["reason_code"] == "RITHMIC_ENDPOINT_STATUS_ERROR"
+    assert status["secret_exposed"] is False
+    assert status["blocking_gates"][0]["gate"] == "rithmic_endpoint_status"
 
 
 def test_latest_latency_baseline_summary_prefers_newest_observed_broker_run(tmp_path: Path) -> None:
@@ -781,6 +912,18 @@ def test_no_active_run_does_not_load_latest_campaign_or_autonomous(tmp_path: Pat
     assert autonomous.current_stage == "active_run_required"
     assert crypto.current_stage == "legacy_source_disabled"
     assert campaign.decision["action"] == autonomous.decision["action"] == crypto.decision["action"] == "BLOCKED"
+
+
+def test_selected_missing_workbench_campaign_is_blocked(tmp_path: Path) -> None:
+    snapshot = load_run_evidence(tmp_path, "workbench_campaign", campaign_id="missing_campaign")
+    expected_root = evidence_snapshot.workbench_runs_dir_for(tmp_path) / "missing_campaign"
+
+    assert snapshot.state == "blocked"
+    assert snapshot.current_stage == "campaign_artifact_missing"
+    assert snapshot.run_id == "missing_campaign"
+    assert snapshot.root == str(expected_root)
+    assert snapshot.decision["action"] == "BLOCKED"
+    assert any(gate["gate"] == "campaign_artifact_missing" for gate in snapshot.decision["blocking_gates"])
 
 
 def test_lane_registry_errors_are_workbench_blockers(monkeypatch) -> None:

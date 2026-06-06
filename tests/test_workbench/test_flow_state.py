@@ -95,7 +95,9 @@ def test_start_campaign_clears_drill_down_keys(tmp_path: Path, monkeypatch) -> N
     assert state.get("wb_auto_period") == ""
     assert state.get("wb_auto_event") == ""
     assert state.get("wb_chat_messages") == []
-    assert state.get("wb_ui_tab") == "Backtest Evidence"
+    assert state.get("wb_requested_tab") == "Backtest Evidence"
+    assert state.get("wb_nav_hint") == "Review the **Backtest Evidence** tab when ready."
+    assert state.get("wb_ui_tab") == "Registry & Data"
 
 
 def test_workflow_tabs_order() -> None:
@@ -117,13 +119,18 @@ def test_navigate_to_tab(monkeypatch) -> None:
         def __setattr__(self, name: str, value) -> None:
             self[name] = value
 
-    state = FakeSessionState(wb_ui_tab="Registry & Data", wb_nav_hint="")
+    state = FakeSessionState(wb_nav_hint="")
     monkeypatch.setattr(flow_state.st, "session_state", state)
-    flow_state.navigate_to_tab("Walk-Forward & Robustness")
-    assert state["wb_ui_tab"] == "Walk-Forward & Robustness"
-    assert "Walk-Forward & Robustness" in state["wb_nav_hint"]
+    flow_state.navigate_to_tab("Backtest Evidence")
+    assert state["wb_requested_tab"] == "Backtest Evidence"
+    assert state["wb_nav_hint"] == "Review the **Backtest Evidence** tab when ready."
+    assert "wb_ui_tab" not in state
+    assert "Next: open" not in state["wb_nav_hint"]
+    assert "manual" not in state["wb_nav_hint"].lower()
+    assert "switch" not in state["wb_nav_hint"].lower()
     flow_state.navigate_to_tab("invalid")
-    assert state["wb_ui_tab"] == "Walk-Forward & Robustness"
+    assert state["wb_requested_tab"] == "Backtest Evidence"
+    assert "wb_ui_tab" not in state
 
 
 def test_resolve_period_event_ignores_manual_while_running(tmp_path: Path, monkeypatch) -> None:

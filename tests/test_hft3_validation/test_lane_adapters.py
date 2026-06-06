@@ -1,6 +1,7 @@
 """Tests for per-lane adapters and LaneConfig Protocol."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,7 @@ from hft3.validation.lanes import (
 )
 from hft3.validation.lanes.adapters.cme_adapter import (
     CMEBacktester,
+    CMEConfigError,
     CMEConfig,
     load_cme_config,
 )
@@ -64,14 +66,148 @@ def test_cme_config_loads_from_events_csv():
     assert cfg.windows.end_offset_seconds == 300
 
 
+def test_cme_config_raises_for_missing_events_csv(tmp_path):
+    with pytest.raises(CMEConfigError):
+        load_cme_config(tmp_path / "missing.csv")
+
+
+def test_cme_config_raises_for_empty_events_csv(tmp_path):
+    csv_path = tmp_path / "events.csv"
+    csv_path.write_text("", encoding="utf-8")
+
+    with pytest.raises(CMEConfigError):
+        load_cme_config(csv_path)
+
+
+def test_cme_config_raises_for_missing_offset_columns(tmp_path):
+    csv_path = tmp_path / "events.csv"
+    csv_path.write_text("event_id,start_offset_seconds\nCPI_TEST,-30\n", encoding="utf-8")
+
+    with pytest.raises(CMEConfigError):
+        load_cme_config(csv_path)
+
+
+def test_cme_config_raises_for_nonnumeric_offsets(tmp_path):
+    csv_path = tmp_path / "events.csv"
+    csv_path.write_text(
+        "event_id,start_offset_seconds,end_offset_seconds\n"
+        "CPI_TEST,soon,300\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(CMEConfigError):
+        load_cme_config(csv_path)
+
+
+def test_cme_config_loads_valid_temp_events_csv(tmp_path):
+    csv_path = tmp_path / "events.csv"
+    csv_path.write_text(
+        "event_id,start_offset_seconds,end_offset_seconds\n"
+        "CPI_TEST,-45,240\n",
+        encoding="utf-8",
+    )
+
+    cfg = load_cme_config(csv_path)
+
+    assert cfg.windows.start_offset_seconds == -45.0
+    assert cfg.windows.end_offset_seconds == 240.0
+
+
 def test_cme_backtester_satisfies_protocol():
     bt = CMEBacktester(load_cme_config())
     assert isinstance(bt, Backtester)
     errors = bt.validate_config()
     assert errors == []
-    result = bt.run(target="CPI_2024_09_11_TIGHT")
+    result = bt.run(target="CPI_MISSING_EVIDENCE_TEST")
+    assert result.lane == Lane.CME_FUTURES
+    assert result.degraded is True
+    assert result.extra["execution_evidence_status"] == "MISSING_REPLAY_ARTIFACT"
+    required = result.extra["execution_evidence_required_artifact"]
+    assert "CPI_MISSING_EVIDENCE_TEST_replay*" in required
+    assert "result.json" in required
+
+
+def test_cme_backtester_uses_artifact_root_for_replay_metrics(tmp_path, monkeypatch):
+    artifacts_root = tmp_path / "artifacts" / "research_cards"
+    artifact = artifacts_root / "CPI_TEST_replay_001" / "result.json"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text(
+        json.dumps(
+            {
+                "engines": {
+                    "replay_execution_adapter": {
+                        "result": {
+                            "balance": 1250.5,
+                            "num_trades": 17,
+                            "trading_volume": 42.25,
+                        }
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("HFT3_ARTIFACTS_ROOT", str(artifacts_root))
+    monkeypatch.chdir(tmp_path)
+
+    result = CMEBacktester(CMEConfig()).run(target="CPI_TEST")
+
+    assert result.degraded is False
+    assert Path(result.extra["execution_evidence_artifact"]) == artifact.resolve()
+    assert str(artifacts_root.resolve()) in result.extra["execution_evidence_source"]
+
+
+def test_cme_backtester_loads_replay_execution_metrics(tmp_path, monkeypatch):
+    artifact = tmp_path / "research_cards" / "CPI_TEST_replay_001" / "result.json"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text(
+        json.dumps(
+            {
+                "engines": {
+                    "replay_execution_adapter": {
+                        "result": {
+                            "balance": 1250.5,
+                            "num_trades": 17,
+                            "trading_volume": 42.25,
+                        }
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("HFT3_ARTIFACTS_ROOT", str(tmp_path / "research_cards"))
+    monkeypatch.chdir(tmp_path)
+
+    result = CMEBacktester(CMEConfig()).run(target="CPI_TEST")
+
     assert result.lane == Lane.CME_FUTURES
     assert result.degraded is False
+    assert result.net_pnl == 1250.5
+    assert result.num_trades == 17
+    assert result.turnover == 42.25
+    assert result.max_drawdown == 0.0
+    assert result.extra["max_drawdown_evidence_status"] == "MISSING"
+    assert result.extra["execution_evidence_status"] == "FOUND"
+    artifact_path = Path(result.extra["execution_evidence_artifact"])
+    assert artifact_path.parts[-3:] == ("research_cards", "CPI_TEST_replay_001", "result.json")
+
+
+def test_cme_backtester_degrades_for_invalid_replay_artifact(tmp_path, monkeypatch):
+    artifact = tmp_path / "research_cards" / "CPI_TEST_replay_001" / "result.json"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text(
+        json.dumps({"engines": {"replay_execution_adapter": {"result": {"skipped": True}}}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("HFT3_ARTIFACTS_ROOT", str(tmp_path / "research_cards"))
+    monkeypatch.chdir(tmp_path)
+
+    result = CMEBacktester(CMEConfig()).run(target="CPI_TEST")
+
+    assert result.degraded is True
+    assert result.extra["execution_evidence_status"] == "INVALID_REPLAY_ARTIFACT"
+    assert result.failure_notes == ["Replay execution result was skipped"]
 
 
 # --- Crypto adapter ---

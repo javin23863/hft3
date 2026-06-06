@@ -81,6 +81,15 @@ ALL_LANES_TERMINAL_STATES = {
     "PROMOTED",
 }
 
+CME_RUNTIME_READINESS_SCHEMA = "workbench_cme_runtime_readiness_v1"
+CME_RUNTIME_REQUIRED_GATES = (
+    "lane_registry",
+    "cross_lane_feature_fabric",
+    "rithmic_paper_endpoint",
+    "submit_to_ack_latency",
+    "event_universe",
+)
+
 
 def _source_lane(source: str) -> str:
     return source_to_lane(source)
@@ -513,26 +522,93 @@ def _append_decision_blocking_gates(snapshot: RunEvidenceSnapshot, gates: list[d
 
 
 def _rithmic_endpoint_status(repo: Path, *, force_paper: bool = False) -> dict[str, Any]:
-    from data_system.rithmic_trial.endpoint_status import (
-        PAPER_ENDPOINT_PROFILE,
-        default_api_config_for_profile,
-        endpoint_status_from_config,
-    )
-
-    env_config = os.environ.get("RITHMIC_API_CONFIG", "").strip()
-    profile = os.environ.get("RITHMIC_ENDPOINT_PROFILE", "").strip()
-    if force_paper:
-        profile = PAPER_ENDPOINT_PROFILE
-    if env_config and not force_paper:
-        config_path = Path(env_config)
-        if not config_path.is_absolute():
-            config_path = repo / config_path
-    else:
-        config_path = default_api_config_for_profile(
-            repo,
-            PAPER_ENDPOINT_PROFILE if profile == PAPER_ENDPOINT_PROFILE or force_paper else "test_orangeburg",
+    try:
+        from data_system.rithmic_trial.endpoint_status import (
+            PAPER_ENDPOINT_PROFILE,
+            default_api_config_for_profile,
+            endpoint_status_from_config,
         )
-    return endpoint_status_from_config(config_path, repo_root=repo)
+
+        env_config = os.environ.get("RITHMIC_API_CONFIG", "").strip()
+        profile = os.environ.get("RITHMIC_ENDPOINT_PROFILE", "").strip()
+        if force_paper:
+            profile = PAPER_ENDPOINT_PROFILE
+        if env_config and not force_paper:
+            config_path = Path(env_config)
+            if not config_path.is_absolute():
+                config_path = repo / config_path
+        else:
+            config_path = default_api_config_for_profile(
+                repo,
+                PAPER_ENDPOINT_PROFILE if profile == PAPER_ENDPOINT_PROFILE or force_paper else "test_orangeburg",
+            )
+        return endpoint_status_from_config(config_path, repo_root=repo)
+    except Exception as exc:
+        runtime_status = repo / "runtime" / "rithmic_trial" / "rithmic_endpoint_status.json"
+        return {
+            "schema_version": "rithmic_endpoint_status_v1",
+            "generated_at_utc": datetime.now().astimezone().isoformat(),
+            "status": "BLOCKING",
+            "reason_code": "RITHMIC_ENDPOINT_STATUS_ERROR",
+            "profile": "paper_chicago" if force_paper else os.environ.get("RITHMIC_ENDPOINT_PROFILE", ""),
+            "system": "Rithmic Paper Trading" if force_paper else "",
+            "gateway": "Chicago Area" if force_paper else "",
+            "config_path": "",
+            "config_exists": False,
+            "credentials": {"username_set": False, "password_set": False, "redacted": True},
+            "gateway_library": {"path": "", "exists": False},
+            "missing_endpoint_params": [],
+            "last_connection_attempt": "",
+            "runtime_status_path": str(runtime_status),
+            "secret_exposed": False,
+            "blocking_gates": [
+                {
+                    "gate": "rithmic_endpoint_status",
+                    "status": "BLOCKING",
+                    "reason": str(exc),
+                }
+            ],
+        }
+
+
+def _has_gate(gates: list[dict[str, Any]], gate_name: str) -> bool:
+    return any(gate.get("gate") == gate_name for gate in gates)
+
+
+def _cme_runtime_readiness(
+    *,
+    rithmic_endpoint: dict[str, Any],
+    rithmic_order_ack: dict[str, Any],
+    blocking_gates: list[dict[str, Any]],
+) -> dict[str, Any]:
+    readiness_blocking = [dict(gate) for gate in blocking_gates if isinstance(gate, dict)]
+    endpoint_status = str(rithmic_endpoint.get("status") or "").upper()
+    if endpoint_status not in {"READY_TO_CONNECT", "CONNECTED"} and not _has_gate(readiness_blocking, "rithmic_paper_endpoint"):
+        readiness_blocking.append(
+            {
+                "gate": "rithmic_paper_endpoint",
+                "status": rithmic_endpoint.get("status", "BLOCKING"),
+                "reason": rithmic_endpoint.get("reason_code") or "RITHMIC_ENDPOINT_NOT_READY",
+            }
+        )
+    if not bool(rithmic_order_ack.get("order_ack_measured")) and not _has_gate(readiness_blocking, "submit_to_ack_latency"):
+        readiness_blocking.append(
+            {
+                "gate": "submit_to_ack_latency",
+                "status": rithmic_order_ack.get("status", "BLOCKING"),
+                "reason": rithmic_order_ack.get("reason_code") or "NO_PAIRED_SUBMIT_ACK_ROWS",
+            }
+        )
+    status = "BLOCKING" if readiness_blocking else "PASS"
+    return {
+        "schema_version": CME_RUNTIME_READINESS_SCHEMA,
+        "lane": "cme_futures",
+        "status": status,
+        "fail_closed": True,
+        "live_registry_ready": status == "PASS",
+        "required_gates": list(CME_RUNTIME_REQUIRED_GATES),
+        "blocking_gates": readiness_blocking,
+    }
 
 
 def _ibkr_endpoint_status(repo: Path, *, connect: bool = True) -> dict[str, Any]:
@@ -2619,7 +2695,25 @@ def _workbench_snapshot(repo: Path, campaign_id: str = "") -> RunEvidenceSnapsho
         )
     run_dir = root / campaign_id
     if run_dir is None or not run_dir.is_dir():
-        return RunEvidenceSnapshot(source="workbench_campaign", state="idle")
+        return RunEvidenceSnapshot(
+            source="workbench_campaign",
+            run_id=campaign_id,
+            state="blocked",
+            current_stage="campaign_artifact_missing",
+            root=str(run_dir),
+            decision={
+                "action": "BLOCKED",
+                "reason": "Selected Workbench campaign artifacts are missing.",
+                "live_registry_ready": False,
+                "blocking_gates": [
+                    {
+                        "gate": "campaign_artifact_missing",
+                        "status": "MISSING",
+                        "reason": "The selected campaign id does not resolve to an existing Workbench run directory.",
+                    }
+                ],
+            },
+        )
     summary = read_json(run_dir / "summary.json")
     status = read_json(run_dir / "status.json")
     campaign = read_json(run_dir / "campaign.json")
@@ -2916,6 +3010,53 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
         if has_rithmic_trial
         else rithmic_endpoint.get("status", "not_applicable")
     )
+    rithmic_order_ack = {
+        "status": order_ack_status if is_cme else "not_applicable",
+        "scope": "cme_rithmic_submit_to_ack" if is_cme else "not_applicable",
+        "reason_code": (
+            ""
+            if order_ack_measured
+            else "RITHMIC_REPORT_BINDING_BLOCKED"
+            if report_binding_blocked
+            else "NO_PAIRED_SUBMIT_ACK_ROWS"
+            if has_rithmic_trial
+            else rithmic_endpoint.get("reason_code", "")
+        )
+        if is_cme
+        else "",
+        "order_ack_measured": order_ack_measured,
+        "endpoint_profile": rithmic_endpoint.get("profile", "") if is_cme else "",
+        "paired_count": baseline_order_ack_count or rithmic_trial.get("paired_count", 0),
+        "summary": latency_baseline or paper_order_summary,
+        "source": "latency_baseline" if baseline_order_ack_measured else "rithmic_trial_capture",
+    }
+    runtime_readiness = (
+        _cme_runtime_readiness(
+            rithmic_endpoint=rithmic_endpoint,
+            rithmic_order_ack=rithmic_order_ack,
+            blocking_gates=blocking_gates,
+        )
+        if is_cme
+        else {}
+    )
+    decision = {
+        "action": "QUARANTINE",
+        "reason": reason,
+        "live_registry_ready": bool(runtime_readiness.get("live_registry_ready")) if is_cme else False,
+        "blocking_gates": blocking_gates,
+    }
+    system = {
+        "lane_registry": lane_registry,
+        "rithmic_endpoint": rithmic_endpoint,
+        "ibkr_endpoint": ibkr_endpoint,
+        "rithmic_trial": rithmic_trial,
+        "latency_baseline": latency_baseline,
+        "rithmic_report_binding": rithmic_trial.get("report_binding", {}),
+        "feature_fabric": feature_fabric,
+    }
+    if is_cme:
+        decision["runtime_readiness"] = runtime_readiness
+        system["runtime_readiness"] = runtime_readiness
     return RunEvidenceSnapshot(
         source=source,
         run_id=str(rithmic_trial.get("run_id") or f"{lane}_lane"),
@@ -3033,26 +3174,7 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
             "rithmic_trial": rithmic_trial,
         },
         latency={
-            "rithmic_order_ack": {
-                "status": order_ack_status if is_cme else "not_applicable",
-                "scope": "cme_rithmic_submit_to_ack" if is_cme else "not_applicable",
-                "reason_code": (
-                    ""
-                    if order_ack_measured
-                    else "RITHMIC_REPORT_BINDING_BLOCKED"
-                    if report_binding_blocked
-                    else "NO_PAIRED_SUBMIT_ACK_ROWS"
-                    if has_rithmic_trial
-                    else rithmic_endpoint.get("reason_code", "")
-                )
-                if is_cme
-                else "",
-                "order_ack_measured": order_ack_measured,
-                "endpoint_profile": rithmic_endpoint.get("profile", "") if is_cme else "",
-                "paired_count": baseline_order_ack_count or rithmic_trial.get("paired_count", 0),
-                "summary": latency_baseline or paper_order_summary,
-                "source": "latency_baseline" if baseline_order_ack_measured else "rithmic_trial_capture",
-            },
+            "rithmic_order_ack": rithmic_order_ack,
             "rithmic_endpoint": rithmic_endpoint,
             "rithmic_capture_endpoint": rithmic_trial.get("capture_endpoint", {}),
             "ibkr_endpoint": ibkr_endpoint,
@@ -3076,12 +3198,7 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
                 ),
             },
         },
-        decision={
-            "action": "QUARANTINE",
-            "reason": reason,
-            "live_registry_ready": False,
-            "blocking_gates": blocking_gates,
-        },
+        decision=decision,
         reports={
             "rithmic_trial_manifest": rithmic_paths.get("manifest", ""),
             "data_quality_report": rithmic_paths.get("data_quality_report", ""),
@@ -3093,15 +3210,7 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
         }
         if has_rithmic_trial
         else {},
-        system={
-            "lane_registry": lane_registry,
-            "rithmic_endpoint": rithmic_endpoint,
-            "ibkr_endpoint": ibkr_endpoint,
-            "rithmic_trial": rithmic_trial,
-            "latency_baseline": latency_baseline,
-            "rithmic_report_binding": rithmic_trial.get("report_binding", {}),
-            "feature_fabric": feature_fabric,
-        },
+        system=system,
     )
 
 
@@ -3311,6 +3420,16 @@ def _all_lanes_snapshot(repo: Path) -> RunEvidenceSnapshot:
             )
 
     state = str(summary.get("state") or active.get("state") or ("blocked" if blocking_gates else "planned"))
+    summary_blocking_gates = list(summary.get("blocking_gates") or [])
+    decision_blocking_gates = blocking_gates + summary_blocking_gates
+    live_registry_ready = bool(summary.get("live_registry_ready", False)) and not decision_blocking_gates
+    decision_action = "BLOCKED" if decision_blocking_gates else summary.get("decision_action") or "QUARANTINE"
+    decision_reason = (
+        "All-lane summary has blocking gates; production promotion is blocked."
+        if decision_blocking_gates
+        else summary.get("decision_reason")
+        or "All-lane model plan is present; promotion remains gated by observed evidence."
+    )
     planned = len(model_rows)
     executed = terminal_counts["EXECUTED"] + terminal_counts["PROMOTED"] + terminal_counts["QUARANTINED"]
     blocked = sum(
@@ -3383,14 +3502,10 @@ def _all_lanes_snapshot(repo: Path) -> RunEvidenceSnapshot:
             "failed": summary.get("robustness_failed_checks", []),
         },
         decision={
-            "action": summary.get("decision_action") or ("BLOCKED" if blocking_gates else "QUARANTINE"),
-            "reason": summary.get("decision_reason") or (
-                "Active all-lane run is waiting for model evidence."
-                if blocking_gates
-                else "All-lane model plan is present; promotion remains gated by observed evidence."
-            ),
-            "live_registry_ready": bool(summary.get("live_registry_ready", False)),
-            "blocking_gates": blocking_gates + list(summary.get("blocking_gates") or []),
+            "action": decision_action,
+            "reason": decision_reason,
+            "live_registry_ready": live_registry_ready,
+            "blocking_gates": decision_blocking_gates,
             "terminal_counts": terminal_counts,
         },
         reports={
@@ -3506,6 +3621,20 @@ def load_run_evidence(repo: Path, source: str, *, campaign_id: str = "") -> RunE
         _shared_blocking_gates(lane_registry, feature_fabric)
         + list(event_universe.get("blocking_gates") or []),
     )
+    if is_cme_lane:
+        readiness = _cme_runtime_readiness(
+            rithmic_endpoint=rithmic_endpoint,
+            rithmic_order_ack=(snapshot.latency or {}).get("rithmic_order_ack", {}),
+            blocking_gates=(snapshot.decision or {}).get("blocking_gates") or [],
+        )
+        decision = dict(snapshot.decision or {})
+        decision["runtime_readiness"] = readiness
+        decision["live_registry_ready"] = readiness["live_registry_ready"]
+        snapshot.decision = decision
+        snapshot.system = {
+            **(snapshot.system or {}),
+            "runtime_readiness": readiness,
+        }
     return snapshot
 
 

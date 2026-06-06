@@ -31,3 +31,25 @@ def test_loader_gap_requires_snapshot():
     raw[2]["local_ts"] = raw[1]["local_ts"] + 1_000_000_000
     with pytest.raises(ValueError, match="Gap"):
         loader._scan(raw)
+
+
+def test_loader_detects_decreasing_local_ts():
+    loader = L3Loader(gap_threshold_ns=10_000_000_000, require_snapshot_on_gap=False)
+    raw = _synthetic_npz(5)
+    raw[3]["local_ts"] = raw[2]["local_ts"] - 1
+
+    loader._scan(raw)
+
+    assert loader.report.monotonic_violations == 1
+    assert loader.report.duplicate_order_ids == 0
+
+
+def test_loader_detects_duplicate_add_order_id():
+    loader = L3Loader(gap_threshold_ns=10_000_000_000, require_snapshot_on_gap=False)
+    raw = _synthetic_npz(5)
+    raw[3]["order_id"] = raw[1]["order_id"]
+
+    loader._scan(raw)
+
+    assert loader.report.duplicate_order_ids == 1
+    assert loader.report.monotonic_violations == 0

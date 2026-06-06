@@ -24,6 +24,7 @@ class HistoricalReplayMarketDataAdapter:
         self._current_time_ns = 0
         self._last_state: Optional[MarketState] = None
         self._finished = False
+        self._pending_event: Optional[MBOEvent] = None
 
     @classmethod
     def from_npz(cls, path: str = "", events: Optional[np.ndarray] = None, **kwargs) -> HistoricalReplayMarketDataAdapter:
@@ -34,11 +35,15 @@ class HistoricalReplayMarketDataAdapter:
     def next_event(self) -> Optional[MBOEvent]:
         if self._finished:
             return None
-        try:
-            ev = next(self._iter)
-        except StopIteration:
-            self._finished = True
-            return None
+        if self._pending_event is not None:
+            ev = self._pending_event
+            self._pending_event = None
+        else:
+            try:
+                ev = next(self._iter)
+            except StopIteration:
+                self._finished = True
+                return None
         if ev.timestamp_ns > self._current_time_ns:
             self._current_time_ns = ev.timestamp_ns
         if ev.timestamp_ns <= self._current_time_ns:
@@ -58,9 +63,21 @@ class HistoricalReplayMarketDataAdapter:
     def sync_to_timestamp(self, timestamp_ns: int) -> Optional[MarketState]:
         """Feed all MBO events with ts <= timestamp_ns (filtration-safe)."""
         while True:
-            ev = self.next_event()
-            if ev is None:
-                break
+            if self._pending_event is not None:
+                ev = self._pending_event
+                if ev.timestamp_ns > timestamp_ns:
+                    break
+                self._pending_event = None
+            else:
+                try:
+                    ev = next(self._iter)
+                except StopIteration:
+                    self._finished = True
+                    break
             if ev.timestamp_ns > timestamp_ns:
+                self._pending_event = ev
                 return self._last_state
+            if ev.timestamp_ns > self._current_time_ns:
+                self._current_time_ns = ev.timestamp_ns
+            self._last_state = self._pipeline.process_event(ev)
         return self._last_state

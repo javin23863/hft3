@@ -9,6 +9,30 @@ from pathlib import Path
 import pytest
 
 
+class _HeaderMetricColumn:
+    def metric(self, *_args, **_kwargs) -> None:
+        return None
+
+
+class _HeaderStreamlit:
+    def __init__(self) -> None:
+        self.errors: list[str] = []
+        self.warnings: list[str] = []
+        self.captions: list[str] = []
+
+    def columns(self, count: int) -> list[_HeaderMetricColumn]:
+        return [_HeaderMetricColumn() for _ in range(count)]
+
+    def caption(self, message: str) -> None:
+        self.captions.append(message)
+
+    def error(self, message: str) -> None:
+        self.errors.append(message)
+
+    def warning(self, message: str) -> None:
+        self.warnings.append(message)
+
+
 def test_campaign_panel_imports_defensive_stub() -> None:
     from workbench.src.core.composition import DefensiveStub, ModelComposition
     from workbench.ui import campaign_panel
@@ -53,6 +77,57 @@ def test_app_module_imports() -> None:
 
     assert hasattr(app, "REPO")
     assert app.REPO.is_dir()
+
+
+def test_render_run_header_surfaces_backend_blocking_gates(monkeypatch) -> None:
+    from workbench.src.run.evidence_snapshot import RunEvidenceSnapshot
+    from workbench.ui import evidence_panels
+
+    fake_st = _HeaderStreamlit()
+    monkeypatch.setattr(evidence_panels, "st", fake_st)
+    snapshot = RunEvidenceSnapshot(
+        source="all_lanes",
+        run_id="run-1",
+        state="blocked",
+        current_stage="decision",
+        decision={
+            "action": "BLOCKED",
+            "live_registry_ready": False,
+            "blocking_gates": [
+                {
+                    "gate": "active_run_manifest",
+                    "status": "MISSING",
+                    "reason": "runtime/workbench/active_run.json is missing.",
+                }
+            ],
+        },
+    )
+
+    evidence_panels.render_run_header(snapshot)
+
+    assert fake_st.errors == [
+        "Backend readiness blocked: runtime/workbench/active_run.json is missing."
+    ]
+
+
+def test_render_run_header_ready_snapshot_has_no_blocker_banner(monkeypatch) -> None:
+    from workbench.src.run.evidence_snapshot import RunEvidenceSnapshot
+    from workbench.ui import evidence_panels
+
+    fake_st = _HeaderStreamlit()
+    monkeypatch.setattr(evidence_panels, "st", fake_st)
+    snapshot = RunEvidenceSnapshot(
+        source="all_lanes",
+        run_id="run-1",
+        state="completed",
+        current_stage="decision",
+        decision={"action": "PROMOTE", "live_registry_ready": True, "blocking_gates": []},
+    )
+
+    evidence_panels.render_run_header(snapshot)
+
+    assert fake_st.errors == []
+    assert fake_st.warnings == []
 
 
 def test_render_catalog_rows_rejects_empty_key_prefix() -> None:
@@ -117,6 +192,34 @@ def test_tabs_are_pipeline_monitor_surface() -> None:
     assert WORKFLOW_TABS.index("Live Monitor") > WORKFLOW_TABS.index("Decision & Registry")
     assert WORKFLOW_TABS.index("Live Monitor") < WORKFLOW_TABS.index("Reports & Analyst")
     assert "Model Selector" not in WORKFLOW_TABS
+
+
+def test_app_tabs_use_streamlit_133_compatible_call() -> None:
+    app_src = (Path(__file__).resolve().parents[2] / "apps" / "workbench" / "ui" / "app.py").read_text(
+        encoding="utf-8"
+    )
+    tree = ast.parse(app_src)
+
+    tabs_calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "st"
+        and node.func.attr == "tabs"
+    ]
+
+    assert len(tabs_calls) == 1
+    tabs_call = tabs_calls[0]
+    assert len(tabs_call.args) == 1
+    assert isinstance(tabs_call.args[0], ast.Name)
+    assert tabs_call.args[0].id == "WORKFLOW_TABS"
+    assert tabs_call.keywords == []
+    assert "st.tabs(WORKFLOW_TABS)" in app_src
+    assert "wb_ui_tab" not in app_src
+    for unsupported_kwarg in ("key=", "default=", "on_change="):
+        assert unsupported_kwarg not in ast.get_source_segment(app_src, tabs_call)
 
 
 def test_campaign_controls_only_render_for_workbench_campaign_source() -> None:

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from hft3.validation.lanes import Lane
+from hft3.validation.lanes.lane_registry import LaneRegistration, LaneRegistry
 from hft3.validation.lanes.scorecard import (
     build_lane_scorecard,
     legacy_cme_scorecard_fields,
@@ -68,6 +69,54 @@ def test_scorecard_to_dict_round_trip():
     assert d["timestamp_utc"] == "2026-06-03T00:00:00Z"
     assert d["schema_version"] == 1
     assert len(d["covered_lanes"]) == 4
+
+
+def _build_scorecard_with_fake_cme_loader(config_loader):
+    LaneRegistry.reset()
+    LaneRegistry.instance().register(
+        LaneRegistration(
+            lane=Lane.CME_FUTURES,
+            adapter_factory=lambda: object(),
+            config_loader=config_loader,
+            validator=lambda: object(),
+            test_paths=["tests/test_fake_cme_lane"],
+        )
+    )
+    try:
+        return build_lane_scorecard(auto_register=False)
+    finally:
+        LaneRegistry.reset()
+
+
+def test_scorecard_marks_config_loader_exception_blocking():
+    def _raise_config_error():
+        raise RuntimeError("config exploded")
+
+    card = _build_scorecard_with_fake_cme_loader(_raise_config_error)
+
+    cme = card.lane_coverage["cme_futures"]
+    assert cme["test_paths"] == ["tests/test_fake_cme_lane"]
+    assert cme["coverage_status"] == "CONFIG_LOAD_FAILED"
+    assert cme["blocking"] is True
+    assert "RuntimeError: config exploded" in cme["failure_reasons"]
+    assert cme["config_loader_error"] == {
+        "type": "RuntimeError",
+        "message": "config exploded",
+    }
+
+
+def test_scorecard_none_config_loader_keeps_empty_non_error_coverage():
+    card = _build_scorecard_with_fake_cme_loader(lambda: None)
+
+    cme = card.lane_coverage["cme_futures"]
+    assert cme["symbols"] == []
+    assert cme["event_types"] == []
+    assert cme["latency_bands_ms"] == []
+    assert cme["test_paths"] == ["tests/test_fake_cme_lane"]
+    assert "coverage_status" not in cme
+    assert "blocking" not in cme
+    assert "failure_reasons" not in cme
+    assert "config_loader_error" not in cme
 
 
 def test_legacy_cme_fields_extracted():

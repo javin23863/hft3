@@ -124,7 +124,13 @@ def run_backfill(args: argparse.Namespace) -> dict:
         }
 
     missing = missing_for_campaign(_REPO, args.model, args.symbol, universe_scope=scope)
-    est_cost = estimate_download_cost_usd(missing)
+    cost_estimate_requested = args.download_missing or args.max_cost_usd is not None
+    if cost_estimate_requested:
+        est_cost = estimate_download_cost_usd(missing)
+        cost_estimate_status = "estimated"
+    else:
+        est_cost = 0.0
+        cost_estimate_status = "not_requested_manifest_only"
     manifest = {
         "model_id": args.model,
         "symbol": args.symbol,
@@ -133,6 +139,7 @@ def run_backfill(args: argparse.Namespace) -> dict:
         "summary": summary,
         "missing_count": len(missing),
         "estimated_cost_usd": est_cost,
+        "cost_estimate_status": cost_estimate_status,
         "max_cost_usd": args.max_cost_usd,
         "events": [
             {
@@ -160,6 +167,7 @@ def run_backfill(args: argparse.Namespace) -> dict:
         "summary": summary,
         "missing_count": len(missing),
         "estimated_cost_usd": est_cost,
+        "cost_estimate_status": cost_estimate_status,
         "max_cost_usd": args.max_cost_usd,
         "download_requested": bool(download_ids),
         "download_requested_for": download_ids,

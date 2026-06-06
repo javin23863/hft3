@@ -27,15 +27,18 @@ def test_resolve_event_npz_missing_raises():
 
 def test_load_event_row_from_run_event_replay():
     import importlib.util
+    from hft3_bootstrap import data_system_root
 
     script = _REPO / "scripts" / "run_event_replay.py"
     spec = importlib.util.spec_from_file_location("run_event_replay", script)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
 
+    assert mod.DEFAULT_EVENTS_CSV == data_system_root(_REPO) / "config" / "events.csv"
+
     row = mod.load_event_row(
         "CPI_2024_09_11_TIGHT",
-        _REPO / "packages" / "data_system" / "config" / "events.csv",
+        mod.DEFAULT_EVENTS_CSV,
     )
     assert row["release_date"] == "2024-09-11"
     assert row["primary_symbol"] == "MES.v.0"

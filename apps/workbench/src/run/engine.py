@@ -114,10 +114,12 @@ class WorkbenchEngine:
         )
         manifest.extra["coverage_summary"] = coverage_summary
         coverage_status = str(coverage_summary.get("coverage_status") or "")
+        coverage_sufficient = manifest.data_sufficient
         if coverage_status:
-            manifest.data_sufficient = coverage_status != "BELOW_MINIMUM"
-        if skip_history_gate:
-            manifest.data_sufficient = True
+            coverage_sufficient = coverage_status != "BELOW_MINIMUM"
+        quality_sufficient = manifest.monotonic_violations == 0 and manifest.duplicate_order_ids == 0
+        manifest.data_sufficient = coverage_sufficient and quality_sufficient
+        data_gate_error = manifest.gate_error()
 
         ctx = RunContext.build(
             self.repo_root,
@@ -131,6 +133,8 @@ class WorkbenchEngine:
             measured_p99_ms=measured_ms,
         )
         ctx.metadata["data_sufficient"] = manifest.data_sufficient
+        ctx.metadata["history_gate_skipped"] = skip_history_gate
+        ctx.metadata["data_gate_error"] = data_gate_error
         ctx.metadata["coverage_summary"] = coverage_summary
         if strategy_params:
             ctx.metadata["strategy_params"] = dict(strategy_params)
@@ -139,8 +143,8 @@ class WorkbenchEngine:
         ctx.write_reproducibility_files()
         manifest.write_json(ctx.artifact_dir / "manifest.json")
 
-        if manifest.gate_error() and not skip_history_gate:
-            raise RuntimeError(manifest.gate_error())
+        if data_gate_error and not skip_history_gate:
+            raise RuntimeError(data_gate_error)
 
         model = get_model_by_id(primary_id)
         val_errs = model.validate_inputs(ctx)
@@ -192,7 +196,9 @@ class WorkbenchEngine:
                 latency_policy=sub_policy,
                 chi404_summary=chi404 if chi404.is_file() else None,
             )
-            sub.metadata["data_sufficient"] = True
+            sub.metadata["data_sufficient"] = manifest.data_sufficient
+            sub.metadata["history_gate_skipped"] = skip_history_gate
+            sub.metadata["data_gate_error"] = data_gate_error
             r = m.run_backtest(sub)
             if isinstance(r, BacktestResult):
                 return {"net_pnl": r.net_pnl, "expectancy": r.expectancy, "num_trades": r.num_trades}
@@ -278,6 +284,7 @@ class WorkbenchEngine:
             and robustness.passed
             and phase5_audit_passes
             and latency_envelope_passes
+            and manifest.data_sufficient
             and (wfc_status is None or wfc_status in ("PASS", "SKIPPED"))
         )
 
@@ -318,6 +325,9 @@ class WorkbenchEngine:
             "net_pnl": net_pnl,
             "num_trades": num_trades,
             "promote_candidate": promote,
+            "data_sufficient": manifest.data_sufficient,
+            "history_gate_skipped": skip_history_gate,
+            "data_gate_error": data_gate_error,
             "wfc_status": wfc_status,
             "certification_stamp": cert_stamp,
             "certification_footer": format_stamp_footer(cert_stamp),

@@ -24,8 +24,8 @@ from workbench.ui.workflow_tabs import WORKFLOW_TABS
 
 def navigate_to_tab(tab_name: str) -> None:
     if tab_name in WORKFLOW_TABS:
-        st.session_state.wb_ui_tab = tab_name
-        st.session_state.wb_nav_hint = f"Next: open the **{tab_name}** tab to continue."
+        st.session_state.wb_requested_tab = tab_name
+        st.session_state.wb_nav_hint = f"Review the **{tab_name}** tab when ready."
 
 
 from workbench.src.core.composition import ModelComposition
@@ -33,8 +33,8 @@ from workbench.src.run.job_manager import get_job_status, set_control, start_cam
 
 
 def init_flow_session() -> None:
-    if "wb_ui_tab" not in st.session_state:
-        st.session_state.wb_ui_tab = WORKFLOW_TABS[0]
+    if "wb_requested_tab" not in st.session_state:
+        st.session_state.wb_requested_tab = ""
     if "wb_nav_hint" not in st.session_state:
         st.session_state.wb_nav_hint = ""
     if "wb_campaign_state" not in st.session_state:

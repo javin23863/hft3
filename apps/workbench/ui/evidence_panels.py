@@ -182,6 +182,35 @@ def _altair_chart(chart: alt.Chart) -> None:
     )
 
 
+def _first_blocker_reason(blockers: list[Any]) -> str:
+    for blocker in blockers:
+        if isinstance(blocker, dict):
+            reason = blocker.get("reason") or blocker.get("error") or blocker.get("message")
+            if reason:
+                return str(reason)
+            gate = blocker.get("gate")
+            status = blocker.get("status")
+            if gate or status:
+                return " / ".join(str(part) for part in (gate, status) if part)
+        elif blocker:
+            return str(blocker)
+    return ""
+
+
+def _run_header_blocker_message(snapshot: RunEvidenceSnapshot) -> str:
+    decision = snapshot.decision or {}
+    blockers = decision.get("blocking_gates") or []
+    if blockers:
+        reason = _first_blocker_reason(blockers) or decision.get("reason") or snapshot.current_stage
+        return f"Backend readiness blocked: {reason}"
+
+    action = str(decision.get("action") or decision.get("status") or "").upper()
+    reason = str(decision.get("reason") or decision.get("current_stage") or snapshot.current_stage or "").strip()
+    if action == "BLOCKED" and not decision.get("live_registry_ready") and reason:
+        return f"Backend readiness blocked: {action}: {reason}"
+    return ""
+
+
 def render_run_header(snapshot: RunEvidenceSnapshot) -> None:
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Source", snapshot.source)
@@ -190,6 +219,9 @@ def render_run_header(snapshot: RunEvidenceSnapshot) -> None:
     c4.metric("Stage", snapshot.current_stage or "—")
     if snapshot.root:
         st.caption(f"Artifact root: `{snapshot.root}`")
+    blocker_message = _run_header_blocker_message(snapshot)
+    if blocker_message:
+        st.error(blocker_message)
 
 
 def render_autonomous_run(snapshot: RunEvidenceSnapshot) -> None:

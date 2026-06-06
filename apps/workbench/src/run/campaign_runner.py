@@ -216,6 +216,209 @@ def _institutional_metrics_gate(metrics_status: Any) -> tuple[bool, Dict[str, An
     return True, None
 
 
+def _robustness_check_passed(summary: Dict[str, Any], name: str) -> bool:
+    checks = summary.get("robustness_checks") or []
+    for check in checks:
+        if isinstance(check, dict) and check.get("name") == name:
+            return check.get("status") == "PASS" and check.get("passed") is True
+    return False
+
+
+def _metric_from_scorecard(metrics_status: Any, name: str) -> float | None:
+    if not isinstance(metrics_status, dict):
+        return None
+    scorecard = metrics_status.get("scorecard")
+    if not isinstance(scorecard, dict):
+        return None
+    for metric in scorecard.get("metrics") or []:
+        if isinstance(metric, dict) and metric.get("metric_name") == name:
+            value = metric.get("metric_value")
+            return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+    return None
+
+
+def _campaign_period_window(summary: Dict[str, Any], period_name: str) -> str:
+    for period in summary.get("periods") or []:
+        if not isinstance(period, dict) or period.get("name") != period_name:
+            continue
+        dates = sorted(
+            str(event.get("release_date"))
+            for event in period.get("event_results") or []
+            if isinstance(event, dict) and event.get("release_date")
+        )
+        if dates:
+            return f"{dates[0]}/{dates[-1]}"
+        return period_name
+    return "not_evaluated"
+
+
+def _campaign_failure_reasons(summary: Dict[str, Any]) -> List[str]:
+    reasons: List[str] = []
+    status = str(summary.get("status") or "")
+    if status and status != "PASS":
+        reasons.append(f"campaign_status:{status}")
+    for gate in summary.get("blocking_gates") or []:
+        if not isinstance(gate, dict):
+            continue
+        gate_name = gate.get("gate") or gate.get("gate_name") or "gate"
+        gate_status = gate.get("status") or "BLOCKED"
+        reason = gate.get("reason") or gate.get("message") or ""
+        reasons.append(f"{gate_name}:{gate_status}" + (f" - {reason}" if reason else ""))
+    if summary.get("sim_shadow_required") and summary.get("sim_shadow_status") != "PASS":
+        reasons.append(f"sim_shadow:{summary.get('sim_shadow_status', 'MISSING')}")
+    stamp = summary.get("certification_stamp") if isinstance(summary.get("certification_stamp"), dict) else {}
+    if not bool(stamp.get("promotion_eligible", False)):
+        reasons.append("certification_stamp:promotion_ineligible")
+    if summary.get("wfc_required") and summary.get("wfc_status") != "PASS":
+        reasons.append(f"walk_forward_correlation:{summary.get('wfc_status', 'MISSING')}")
+    if summary.get("latency_operating_envelope_status") != "PASS":
+        reasons.append(
+            f"campaign_latency_operating_envelope:{summary.get('latency_operating_envelope_status', 'MISSING')}"
+        )
+    for name in summary.get("robustness_failed_checks") or []:
+        reasons.append(f"robustness_failed:{name}")
+    for name in summary.get("robustness_pending_checks") or []:
+        reasons.append(f"robustness_pending:{name}")
+    if isinstance(summary.get("institutional_metrics"), dict) and summary["institutional_metrics"].get("status") != "ok":
+        reasons.append(f"institutional_model_metrics:{summary['institutional_metrics'].get('status', 'MISSING')}")
+    return sorted(set(str(reason) for reason in reasons if reason))
+
+
+def _write_campaign_cards(artifact_dir: Path, summary: Dict[str, Any]) -> None:
+    validation_id = f"{summary.get('campaign_id')}:validation_card"
+    periods = [p for p in (summary.get("periods") or []) if isinstance(p, dict)]
+    events = [
+        event
+        for period in periods
+        for event in (period.get("event_results") or [])
+        if isinstance(event, dict)
+    ]
+    event_context = sorted(
+        {
+            str(event.get("event_context") or event.get("event_id"))
+            for event in events
+            if event.get("event_context") or event.get("event_id")
+        }
+    ) or [str(summary.get("status") or "not_evaluated")]
+
+    leakage_passed = all(
+        _robustness_check_passed(summary, name)
+        for name in ("feature_leakage", "label_leakage", "timestamp_leakage", "future_data_leakage")
+    )
+    execution_friction_checked = all(
+        _robustness_check_passed(summary, name)
+        for name in ("transaction_cost_sensitivity", "slippage_sensitivity", "latency_sensitivity")
+    )
+    latency_haircut_checked = summary.get("latency_operating_envelope_status") == "PASS" and all(
+        _robustness_check_passed(summary, name)
+        for name in (
+            "operating_envelope_generated",
+            "low_latency_execution_path_audit",
+            "placement_speed_sensitivity",
+            "async_ack_state_risk",
+            "pending_exposure_guardrails",
+            "composition_latency_feasibility",
+            "competitor_speed_sensitivity",
+        )
+    )
+    point_in_time_safe = bool(
+        isinstance(summary.get("certification_stamp"), dict)
+        and summary["certification_stamp"].get("promotion_eligible") is True
+    )
+    robustness_passed = bool(summary.get("robustness_passed") is True)
+    validation_status = {
+        "point_in_time_safe": point_in_time_safe,
+        "leakage_tests_passed": leakage_passed,
+        "robustness_tests_passed": robustness_passed,
+        "execution_friction_checked": execution_friction_checked,
+        "latency_haircut_checked": latency_haircut_checked,
+    }
+    failure_reasons = _campaign_failure_reasons(summary)
+    promotion_status = (
+        "production_eligible"
+        if summary.get("promote_candidate") is True and all(validation_status.values()) and not failure_reasons
+        else ("candidate" if summary.get("status") == "PASS" and not failure_reasons else "research_only")
+    )
+    if summary.get("status") in ("FAIL", "BLOCKED", "DATA_INSUFFICIENT", "CANCELLED"):
+        promotion_status = "rejected"
+
+    metrics_status = summary.get("institutional_metrics")
+    performance_metrics = {
+        "sharpe": _metric_from_scorecard(metrics_status, "sharpe"),
+        "sortino": _metric_from_scorecard(metrics_status, "sortino"),
+        "max_drawdown": _metric_from_scorecard(metrics_status, "max_drawdown"),
+        "hit_rate": _metric_from_scorecard(metrics_status, "hit_rate"),
+        "profit_factor": _metric_from_scorecard(metrics_status, "profit_factor"),
+        "expectancy": _metric_from_scorecard(metrics_status, "expectancy_per_trade"),
+        "turnover": _metric_from_scorecard(metrics_status, "turnover"),
+        "capacity_proxy": _metric_from_scorecard(metrics_status, "capacity_estimate"),
+    }
+    microstructure_metrics = {
+        "fill_probability": _metric_from_scorecard(metrics_status, "fill_rate"),
+        "adverse_selection_probability": _metric_from_scorecard(metrics_status, "adverse_selection_rate"),
+        "latency_adjusted_edge_bps": None,
+        "queue_survival_score": _metric_from_scorecard(metrics_status, "queue_position_decay"),
+    }
+    blockers = failure_reasons or ["no active blockers recorded"]
+    remediation = failure_reasons or ["no remediation required by current campaign gates"]
+
+    validation_card = {
+        "validation_card": {
+            "validation_id": validation_id,
+            "object_type": "model",
+            "object_id": str(summary.get("model_id")),
+            "point_in_time_safe": point_in_time_safe,
+            "leakage_tests_passed": leakage_passed,
+            "survivorship_bias_checked": False,
+            "timestamp_alignment_checked": _robustness_check_passed(summary, "timestamp_leakage"),
+            "deterministic_replay_passed": False,
+            "baseline_comparison_passed": False,
+            "robustness_tests_passed": robustness_passed,
+            "execution_friction_checked": execution_friction_checked,
+            "latency_haircut_checked": latency_haircut_checked,
+            "regime_coverage_checked": _robustness_check_passed(summary, "regime_stability"),
+            "cross_symbol_checked": False,
+            "failure_reasons": failure_reasons,
+            "required_remediation": remediation,
+        }
+    }
+    model_card = {
+        "model_card": {
+            "model_id": str(summary.get("model_id")),
+            "model_type": "workbench_campaign",
+            "hypothesis_ids": [str(summary.get("model_id"))],
+            "feature_ids": [str(summary.get("model_id"))],
+            "label_id": f"campaign:{summary.get('symbol')}",
+            "asset_scope": [str(summary.get("symbol"))],
+            "regime_scope": event_context,
+            "training_window": _campaign_period_window(summary, "Discovery"),
+            "validation_window": _campaign_period_window(summary, "Confirmation"),
+            "holdout_window": _campaign_period_window(summary, "Holdout"),
+            "robustness_tests": sorted(
+                set(["walk_forward_correlation", *[str(name) for name in summary.get("robustness_failed_checks") or []]])
+            ),
+            "validation_card_id": validation_id,
+            "validation_status": validation_status,
+            "baseline_comparison": {
+                "baseline_model": "not_observed",
+                "uplift_metric": "not_observed",
+                "uplift_value": 0.0,
+            },
+            "performance_metrics": performance_metrics,
+            "microstructure_metrics": microstructure_metrics,
+            "known_failure_modes": blockers,
+            "rejection_conditions": blockers,
+            "promotion_status": promotion_status,
+            "explanation_packet": (
+                f"campaign:{summary.get('campaign_id')}; summary:summary.json; "
+                f"validation_card:{validation_id}"
+            ),
+        }
+    }
+    (artifact_dir / "validation_card.json").write_text(json.dumps(validation_card, indent=2), encoding="utf-8")
+    (artifact_dir / "model_card.json").write_text(json.dumps(model_card, indent=2), encoding="utf-8")
+
+
 def record_sim_shadow(repo_root: Path, campaign_id: str, status: str) -> Path:
     artifact_dir = campaign_dir_for(repo_root, campaign_id)
     artifact_dir.mkdir(parents=True, exist_ok=True)
@@ -383,6 +586,9 @@ def _run_options_campaign(
         summary["promote_candidate"] = False
         if metrics_gate:
             _append_blocking_gate(summary, metrics_gate)
+    summary["model_card_path"] = "model_card.json"
+    summary["validation_card_path"] = "validation_card.json"
+    _write_campaign_cards(artifact_dir, summary)
     (artifact_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     (artifact_dir / "diagnostics.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     return CampaignResult(
@@ -569,9 +775,14 @@ def run_campaign(
     matrix_rows: List[Dict[str, Any]] = []
     strategy_params: Dict[str, Any] = dict(DEFAULT_STRATEGY_PARAMS)
     bounds = load_parameter_bounds(primary_id)
+    wfc_enabled = bool(wfc_cfg.get("enabled"))
+    wfc_requires_bounds = bool(wfc_cfg.get("require_bounds", True))
+    wfc_missing_required_bounds = (
+        wfc_enabled and not trial_mode and wfc_requires_bounds and not bool(bounds)
+    )
     wfc_status_for_events = "SKIPPED"
 
-    if not trial_mode and wfc_cfg.get("enabled") and bounds:
+    if not trial_mode and wfc_enabled and bounds:
         try:
             matrix_rows = run_full_matrix_oos(
                 repo_root,
@@ -662,19 +873,30 @@ def run_campaign(
                     wfc_result.rejection_reasons.append("No robust plateau after WFC PASS")
                     status = "FAIL"
                     skip_periods = True
-    elif wfc_cfg.get("enabled"):
-        skip_reason = "Trial mode skips WFC" if trial_mode else "No parameter_bounds configured for model"
+    elif wfc_enabled:
+        if trial_mode:
+            skip_reason = "Trial mode skips WFC"
+            skipped_status = "SKIPPED"
+        elif wfc_missing_required_bounds:
+            skip_reason = (
+                "wfc_missing_required_bounds: parameter_bounds are required for enabled "
+                "WFC but none are configured for model"
+            )
+            skipped_status = "SKIPPED_MISSING_PARAMETER_BOUNDS"
+        else:
+            skip_reason = "No parameter_bounds configured for model"
+            skipped_status = "SKIPPED"
         wfc_result = WfcResult(
             run_id=campaign_id,
             model_id=primary_id,
-            wfc_status="SKIPPED",
+            wfc_status=skipped_status,
             rejection_reasons=[skip_reason],
         )
         wfc_dir.mkdir(parents=True, exist_ok=True)
         (wfc_dir / "wfc_summary.json").write_text(
             json.dumps(wfc_result.to_dict(), indent=2), encoding="utf-8"
         )
-        wfc_status_for_events = "SKIPPED"
+        wfc_status_for_events = skipped_status
 
     if not skip_periods:
         for period in periods:
@@ -840,6 +1062,7 @@ def run_campaign(
                 event_outcomes.append(
                     {
                         "event_id": ev.event_id,
+                        "event_context": ev.event_context,
                         "release_date": ev.release_date,
                         "net_pnl": pnl,
                         "num_trades": ntr,
@@ -943,7 +1166,7 @@ def run_campaign(
             status = "BLOCKED"
     if wfc_status == "CONDITIONAL" and status == "PASS":
         status = "CONDITIONAL"
-    wfc_required = bool(wfc_cfg.get("enabled")) and bool(bounds) and wfc_status != "SKIPPED"
+    wfc_required = wfc_enabled and not trial_mode
     cert_stamp = build_certification_stamp(
         event_id=primary_id,
         model_id=primary_id,
@@ -979,6 +1202,8 @@ def run_campaign(
         "overfit_risk": robustness.overfit_risk,
         "walk_forward": robustness.walk_forward,
         "wfc_status": wfc_status,
+        "wfc_required": wfc_required,
+        "wfc_missing_required_bounds": wfc_missing_required_bounds,
         "wfc": wfc_result.to_dict() if wfc_result else {},
         "sim_shadow_anchor": str(sim_cfg.get("anchor_date")),
         "sim_shadow_cme_days": sim_cfg.get("cme_days"),
@@ -997,6 +1222,18 @@ def run_campaign(
         "trial_mode": trial_mode,
         "events_ran": events_ran,
     }
+    if wfc_missing_required_bounds:
+        _append_blocking_gate(
+            summary,
+            {
+                "gate": "walk_forward_correlation",
+                "status": "SKIPPED_MISSING_PARAMETER_BOUNDS",
+                "reason": (
+                    "parameter_bounds are required when WFC is enabled outside trial mode; "
+                    "configure bounds before promotion"
+                ),
+            },
+        )
     if not campaign_latency_ok:
         _append_blocking_gate(
             summary,
@@ -1014,6 +1251,9 @@ def run_campaign(
         summary["promote_candidate"] = False
         if metrics_gate:
             _append_blocking_gate(summary, metrics_gate)
+    summary["model_card_path"] = "model_card.json"
+    summary["validation_card_path"] = "validation_card.json"
+    _write_campaign_cards(artifact_dir, summary)
     (artifact_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     (artifact_dir / "diagnostics.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     _write_status(job_dir, {"state": status.lower(), "campaign_id": campaign_id})

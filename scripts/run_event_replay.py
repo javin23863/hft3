@@ -20,10 +20,11 @@ _REPO = Path(__file__).resolve().parents[1]
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
-from hft3_bootstrap import setup_repo_paths
+from hft3_bootstrap import data_system_root, setup_repo_paths
 
 setup_repo_paths()
 
+from apps.workbench.src.artifacts.paths import artifact_root
 from backtest.adapters.rithmic_replay_loader import resolve_event_npz
 from backtest_pipeline.src.chi404_latency import DEFAULT_CHI404_SUMMARY, load_chi404_speed, resolve_replay_latency_ms
 from backtest_pipeline.src.event_meta import load_event_row
@@ -34,7 +35,7 @@ from backtest_pipeline.src.signal_backtester import BacktestResult
 from features_engine.src.features.npz_feed import load_npz_events
 from features_engine.src.hypotheses.registry import get_active_hypotheses
 
-DEFAULT_EVENTS_CSV = _REPO / "data_system" / "config" / "events.csv"
+DEFAULT_EVENTS_CSV = data_system_root(_REPO) / "config" / "events.csv"
 
 
 def _relative_repo_path(path: Path) -> str:
@@ -273,7 +274,7 @@ def main() -> int:
         if "error" in payload["result"]:
             print(json.dumps(payload["result"], indent=2), flush=True)
             return 1
-        out_dir = args.out or (_REPO / "research_cards" / "PDF_MODEL_4_hybrid_replay")
+        out_dir = args.out or (artifact_root() / "PDF_MODEL_4_hybrid_replay")
         _pdf_mod.write_research_card(out_dir, payload, event_meta)
         print(json.dumps(payload["result"], indent=2), flush=True)
         print(f"Wrote {out_dir / 'result.json'}", flush=True)
@@ -299,7 +300,9 @@ def main() -> int:
     if chi404_meta is not None:
         chi404 = chi404_meta
 
-    out_dir = args.out or (_REPO / "research_cards" / f"{args.event_id}_replay_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')}")
+    out_dir = args.out or (
+        artifact_root() / f"{args.event_id}_replay_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')}"
+    )
 
     print(f"event_id={args.event_id} release_date={event['release_date']}", flush=True)
     print(f"NPZ={npz_path} events={len(raw)}", flush=True)

@@ -111,6 +111,36 @@ def test_fast_gate_report_writer(tmp_path: Path) -> None:
     assert loaded["test_count"] == 10
 
 
+def test_full_suite_single_failure_is_red_blocker(tmp_path: Path, monkeypatch) -> None:
+    from hft3.validation import certification_runner as cr
+
+    def fake_run_pytest(target: str, root: Path) -> tuple[bool, str, int, int, float]:
+        if target == "tests/backtester_validation/fast":
+            return True, "1 passed", 1, 0, 0.1
+        if target == "tests/backtester_validation/full":
+            return False, "FAILED tests/backtester_validation/full/test_cert.py::test_case\n1 failed", 1, 1, 0.1
+        raise AssertionError(f"unexpected pytest target: {target}")
+
+    monkeypatch.setattr(cr, "_run_pytest", fake_run_pytest)
+    monkeypatch.setattr(cr, "git_sha", lambda root: "abc123")
+    monkeypatch.setattr(cr, "backtester_version", lambda root: "v-test")
+    monkeypatch.setattr(cr, "new_certification_run_id", lambda: "CERT-test-full-fail")
+
+    result = cr.run_full_certification(tmp_path, skip_lane_pytest=True)
+
+    assert result.status == "RED"
+    assert result.blocking_failures == ["T2 full certification suite failed"]
+
+    payload = json.loads(Path(result.scorecard_json).read_text(encoding="utf-8"))
+    assert payload["status"] == "RED"
+    assert payload["full_passed"] is False
+    assert payload["blocking_failures"] == ["T2 full certification suite failed"]
+
+    registry = load_registry(tmp_path)
+    assert registry.latest_certification_status == "RED"
+    assert registry.blocking_failures == ["T2 full certification suite failed"]
+
+
 def test_certification_runner_main_exit_code(monkeypatch) -> None:
     from hft3.validation import certification_runner as cr
 

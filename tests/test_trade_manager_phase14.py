@@ -27,8 +27,25 @@ def _write_manifest(root: Path, run_id: str = "RUN-1") -> Path:
     return path
 
 
+def _write_promotion_cards(root: Path) -> tuple[str, str]:
+    cards_dir = root / "cards"
+    cards_dir.mkdir(parents=True, exist_ok=True)
+    model_card_path = cards_dir / "model_card.json"
+    validation_card_path = cards_dir / "validation_card.json"
+    model_card_path.write_text(
+        json.dumps({"model_card": {"validation_card_id": "VALIDATION-1"}}),
+        encoding="utf-8",
+    )
+    validation_card_path.write_text(
+        json.dumps({"validation_card": {"validation_id": "VALIDATION-1"}}),
+        encoding="utf-8",
+    )
+    return "cards/model_card.json", "cards/validation_card.json"
+
+
 def _promotion(root: Path, **overrides) -> PromotionRecord:
     run_id = str(overrides.get("run_id", "RUN-1"))
+    model_card_path, validation_card_path = _write_promotion_cards(root)
     base = dict(
         registry_id="reg-phase14",
         model_id="HYP_5",
@@ -62,6 +79,8 @@ def _promotion(root: Path, **overrides) -> PromotionRecord:
         risk_limits_reference="configs/risk/limits.yaml",
         capital_allocation_reference="configs/risk/capital.yaml",
         kill_switch_reference="configs/risk/kill_switch.yaml",
+        model_card_path=model_card_path,
+        validation_card_path=validation_card_path,
         report_path=f"artifacts/runs/{run_id}/report.md",
         artifact_path=f"artifacts/runs/{run_id}/manifest.json",
     )

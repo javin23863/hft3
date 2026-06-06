@@ -54,6 +54,10 @@ class DatasetManifest:
         )
 
     def gate_error(self) -> Optional[str]:
+        if self.monotonic_violations:
+            return f"DATA_QUALITY_MONOTONIC_VIOLATIONS: {self.monotonic_violations}"
+        if self.duplicate_order_ids:
+            return f"DATA_QUALITY_DUPLICATE_ADD_ORDER_IDS: {self.duplicate_order_ids}"
         if not self.data_sufficient:
             coverage = self.extra.get("coverage_summary") if isinstance(self.extra, dict) else None
             if isinstance(coverage, dict) and coverage.get("coverage_status") == "BELOW_MINIMUM":
