@@ -18,6 +18,7 @@ from crypto_lane.src.align.latency_profile import (
 )
 from crypto_lane.src.config.env_loader import ensure_crypto_env, redacted_env_report
 from crypto_lane.src.config_loader import load_hypotheses, load_manifest
+from crypto_lane.src.ingest.coinstats_pull import fill_bookticker_gaps_from_coinstats, missing_bookticker_days
 from crypto_lane.src.ingest.gold_pull import pull_gold, supplement_dvol_from_deribit, supplement_perp_from_binance
 from crypto_lane.src.ingest.mempool_pull import (
     backfill_blockspace_from_node,
@@ -117,6 +118,34 @@ def cmd_calibrate_ws_rtt(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_fill_l3_gaps(args: argparse.Namespace) -> int:
+    ensure_crypto_env()
+    if args.audit_only:
+        days = missing_bookticker_days(start=args.start, end=args.end)
+        print(
+            json.dumps(
+                {
+                    "granularity": "futures_um_bookticker_tick",
+                    "symbol": "BTCUSDT",
+                    "missing_days": len(days),
+                    "dates": [d.isoformat() for d in days[:50]],
+                    "truncated": len(days) > 50,
+                },
+                indent=2,
+            )
+        )
+        return 0
+    report = fill_bookticker_gaps_from_coinstats(
+        start=args.start,
+        end=args.end,
+        sleep_s=args.sleep_s,
+        max_days=args.max_days,
+        prefer_klines=args.prefer_klines,
+    )
+    print(json.dumps(report, indent=2))
+    return 0 if not report.get("errors") else 1
+
+
 def cmd_ingest(args: argparse.Namespace) -> int:
     ensure_crypto_env()
     sources = [s.strip() for s in args.sources.split(",")] if args.sources else None
@@ -174,6 +203,22 @@ def main(argv: list[str] | None = None) -> int:
     p_bf.add_argument("--end", required=True)
     p_bf.add_argument("--step-hours", type=int, default=1)
     p_bf.set_defaults(func=cmd_backfill_blockspace)
+
+    p_l3 = sub.add_parser(
+        "fill-l3-gaps",
+        help="Backfill missing BTC futures_um_bookticker_tick via CoinStats (requires COINSTATS_API_KEY)",
+    )
+    p_l3.add_argument("--start", required=True)
+    p_l3.add_argument("--end", required=True)
+    p_l3.add_argument("--audit-only", action="store_true")
+    p_l3.add_argument("--sleep-s", type=float, default=0.25)
+    p_l3.add_argument("--max-days", type=int, default=None)
+    p_l3.add_argument(
+        "--prefer-klines",
+        action="store_true",
+        help="Skip CoinStats; synthesize bookticker from local perp_klines_1h",
+    )
+    p_l3.set_defaults(func=cmd_fill_l3_gaps)
 
     p_norm = sub.add_parser("normalize")
     p_norm.add_argument("--start", required=True)

@@ -122,6 +122,7 @@ def redacted_env_report() -> dict[str, object]:
         "BTC_RPC_URL",
         "BTC_RPC_USER",
         "BTC_RPC_PASS",
+        "COINSTATS_API_KEY",
         "CRYPTOCOMPARE_API_KEY",
         "ETHERSCAN_API_KEY",
         "FRED_API_KEY",
