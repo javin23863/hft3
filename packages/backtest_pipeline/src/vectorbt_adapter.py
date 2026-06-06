@@ -157,6 +157,7 @@ def _compute_metrics_for_params(
     exit_signal: np.ndarray,
     stop_loss_pct: Optional[float],
     take_profit_pct: Optional[float],
+    holding_period_bars: Optional[int] = None,
     price_col: int = 3,
     start_index: int = 1,
     end_index: Optional[int] = None,
@@ -179,28 +180,33 @@ def _compute_metrics_for_params(
     cum_return = 0.0
     peak = 0.0
     max_dd = 0.0
+    entry_index = 0
 
     for i in range(1, start):
         if position != 0:
             ret = (close[i] - entry_price) / entry_price
             hit_stop = stop_loss_pct is not None and ret < -stop_loss_pct / 100.0
             hit_target = take_profit_pct is not None and ret > take_profit_pct / 100.0
-            if hit_stop or hit_target or (position > 0 and exit_signal[i] < 0):
+            hit_holding_period = holding_period_bars is not None and i - entry_index >= holding_period_bars
+            if hit_stop or hit_target or hit_holding_period or (position > 0 and exit_signal[i] < 0):
                 entry_price = 0.0
                 position = 0.0
                 continue
         if position == 0 and entry_signal[i] > 0:
             entry_price = close[i]
+            entry_index = i
             position = 1.0
 
     if position != 0:
         entry_price = close[start - 1]
+        entry_index = min(entry_index, start - 1)
 
     for i in range(start, end):
         if position != 0:
             ret = (close[i] - entry_price) / entry_price
             hit_stop = stop_loss_pct is not None and ret < -stop_loss_pct / 100.0
             hit_target = take_profit_pct is not None and ret > take_profit_pct / 100.0
+            hit_holding_period = holding_period_bars is not None and i - entry_index >= holding_period_bars
             if hit_stop:
                 exit_return = -stop_loss_pct / 100.0
             elif hit_target:
@@ -226,8 +232,9 @@ def _compute_metrics_for_params(
 
         if position == 0 and entry_signal[i] > 0:
             entry_price = close[i]
+            entry_index = i
             position = 1.0
-        elif position > 0 and exit_signal[i] < 0:
+        elif position > 0 and (exit_signal[i] < 0 or hit_holding_period):
             trade_return = (close[i] - entry_price) / entry_price
             trades.append(trade_return)
             cum_return += trade_return
@@ -256,6 +263,9 @@ def _simulate_walk_forward(
     ohlcv: np.ndarray,
     entry_signal: np.ndarray,
     exit_signal: np.ndarray,
+    stop_loss_pct: Optional[float] = None,
+    take_profit_pct: Optional[float] = None,
+    holding_period_bars: Optional[int] = None,
     n_windows: int = 4,
     train_ratio: float = 0.6,
 ) -> Dict[str, Any]:
@@ -275,8 +285,9 @@ def _simulate_walk_forward(
             ohlcv,
             entry_signal,
             exit_signal,
-            None,
-            None,
+            stop_loss_pct,
+            take_profit_pct,
+            holding_period_bars=holding_period_bars,
             start_index=int(start),
             end_index=int(end),
         )
@@ -321,8 +332,9 @@ def _default_signal_computer(
             sig = hypothesis_cls.evaluate(state)
             signal[i] = sig
 
-    entry_signal = np.where(signal > 0, 1.0, 0.0)
-    exit_signal = np.where(signal < 0, -1.0, 0.0)
+    threshold = abs(float(cand.strategy_params.get("signal_threshold", 0.0)))
+    entry_signal = np.where(signal > threshold, 1.0, 0.0)
+    exit_signal = np.where(signal < -threshold, -1.0, 0.0)
     return entry_signal, exit_signal
 
 
@@ -372,21 +384,6 @@ def _run_vectorbt_simulation(
     )
 
     for cand in candidates:
-        try:
-            entry_signal, exit_signal = signal_computer(cand, ohlcv, parsed, repo_root)
-        except Exception as exc:
-            print(f"Warning: signal computer failed for {cand.candidate_id}: {exc}", file=sys.stderr)
-            result.rejected.append(RejectedCandidate(
-                candidate_id=cand.candidate_id,
-                hypothesis_id=cand.model_id,
-                reject_reason="unresolvable_model_id",
-                metric_values={
-                    "error": str(exc),
-                    "error_type": type(exc).__name__,
-                },
-            )) 
-            continue
-
         for params in _grid_iter(grid):
             merged = dict(cand.strategy_params)
             merged.update(params)
@@ -396,6 +393,26 @@ def _run_vectorbt_simulation(
             take_profit = merged.get("take_profit_pct")
             stop_loss_f = float(stop_loss) if stop_loss is not None else None
             take_profit_f = float(take_profit) if take_profit is not None else None
+            grid_candidate = copy.copy(cand)
+            grid_candidate.strategy_params = merged
+
+            try:
+                raw_entry_signal, raw_exit_signal = signal_computer(grid_candidate, ohlcv, parsed, repo_root)
+            except Exception as exc:
+                print(f"Warning: signal computer failed for {cand.candidate_id}: {exc}", file=sys.stderr)
+                result.rejected.append(RejectedCandidate(
+                    candidate_id=cand.candidate_id,
+                    hypothesis_id=cand.model_id,
+                    reject_reason="unresolvable_model_id",
+                    metric_values={
+                        "error": str(exc),
+                        "error_type": type(exc).__name__,
+                    },
+                ))
+                break
+
+            entry_signal = np.where(np.asarray(raw_entry_signal, dtype=float) > signal_thresh, 1.0, 0.0)
+            exit_signal = np.where(np.asarray(raw_exit_signal, dtype=float) < -signal_thresh, -1.0, 0.0)
 
             vbt_stats = {}
             if vbt is not None:
@@ -418,12 +435,26 @@ def _run_vectorbt_simulation(
                 }
 
             metrics = _compute_metrics_for_params(
-                ohlcv, entry_signal, exit_signal, stop_loss_f, take_profit_f,
+                ohlcv,
+                entry_signal,
+                exit_signal,
+                stop_loss_f,
+                take_profit_f,
+                holding_period_bars=holding_period,
             )
-            wf = _simulate_walk_forward(ohlcv, entry_signal, exit_signal)
+            wf = _simulate_walk_forward(
+                ohlcv,
+                entry_signal,
+                exit_signal,
+                stop_loss_pct=stop_loss_f,
+                take_profit_pct=take_profit_f,
+                holding_period_bars=holding_period,
+            )
 
             cand_id = _candidate_id(cand, merged)
             vectorbt_results = {
+                "evidence_scope": "vectorbt_parameter_prefilter",
+                "promotion_next_step": "hft_backtester_required",
                 "signal_threshold": signal_thresh,
                 "holding_period_bars": holding_period,
                 "stop_loss_pct": stop_loss_f,
@@ -432,8 +463,6 @@ def _run_vectorbt_simulation(
                 "filter_backend": result.backend,
                 **metrics,
                 **wf,
-                "param_stability_score": 1.0,
-                "slippage_sensitivity": 0.0,
             }
 
             candidate_path = resolve_validation_path(cand)
@@ -531,7 +560,7 @@ def filter_candidates(
 
         gate_pass = gates.evaluate(prom)
         if gate_pass:
-            prom.pass_reason = "all_gates_passed"
+            prom.pass_reason = "vectorbt_prefilter_passed"
             prom.in_sample_results["gate_pass"] = True
             if persist_promotions:
                 serialize_promoted(prom, repo_root / "research_cards" / "promotion")

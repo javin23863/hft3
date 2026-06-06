@@ -41,6 +41,7 @@ from workbench.src.latency.operating_envelope import (
 )
 from workbench.src.robustness.wfc import evaluate_wfc_gate, write_wfc_artifacts
 from workbench.src.robustness.wfc.config import load_wfc_config
+from workbench.src.robustness.wfc.double_wf import DoubleWfResult, evaluate_double_wf
 from workbench.src.robustness.wfc.gate import WfcResult
 from hft3.validation.research_stamp import build_certification_stamp, format_stamp_footer
 from workbench.src.artifacts.paths import artifact_root, campaign_dir_for, workbench_runs_dir_for
@@ -154,13 +155,65 @@ def _plateau_matrix_rows(
     return [r for r in rows if str(r.get("fold_id", "")) not in exclude]
 
 
+def _double_wf_enabled(wfc_cfg: Dict[str, Any]) -> bool:
+    cfg = wfc_cfg.get("double_wf")
+    return isinstance(cfg, dict) and bool(cfg.get("enabled", False))
+
+
+def _evaluate_campaign_double_wf(
+    matrix_rows: List[Dict[str, Any]],
+    wfc_cfg: Dict[str, Any],
+    wfc_dir: Path,
+    artifact_dir: Path,
+) -> DoubleWfResult:
+    cfg = dict(wfc_cfg.get("double_wf") or {})
+    wf1_ids = {str(v) for v in (cfg.get("wf1_fold_ids") or [])}
+    wf2_ids = {str(v) for v in (cfg.get("wf2_fold_ids") or [])}
+    wf1_rows = [r for r in matrix_rows if str(r.get("fold_id", "")) in wf1_ids]
+    wf2_rows = [r for r in matrix_rows if str(r.get("fold_id", "")) in wf2_ids]
+
+    wfc_dir.mkdir(parents=True, exist_ok=True)
+    wf1_path = wfc_dir / "wf1_matrix.json"
+    wf2_path = wfc_dir / "wf2_matrix.json"
+    wf1_path.write_text(json.dumps(wf1_rows, indent=2), encoding="utf-8")
+    wf2_path.write_text(json.dumps(wf2_rows, indent=2), encoding="utf-8")
+
+    result = evaluate_double_wf(
+        wf1_rows,
+        wf2_rows,
+        list(cfg.get("join_keys") or ["parameter_hash"]),
+        method=str(cfg.get("method", "spearman")),
+        min_score=float(cfg.get("minimum_required_score", cfg.get("min_score", 0.20))),
+        primary_metric=str(cfg.get("primary_metric", wfc_cfg.get("primary_metric", "sharpe"))),
+        wf1_path=str(wf1_path),
+        wf2_path=str(wf2_path),
+    )
+    payload = result.to_dict()
+    payload.update(
+        {
+            "status": "PASS" if result.pass_fail else "FAIL",
+            "observed": True,
+            "wf1_fold_ids": sorted(wf1_ids),
+            "wf2_fold_ids": sorted(wf2_ids),
+            "reason": "Double walk-forward correlation passed."
+            if result.pass_fail
+            else "; ".join(result.rejection_reasons or ["Double walk-forward correlation failed."]),
+        }
+    )
+    (artifact_dir / "walk_forward_correlation.json").write_text(
+        json.dumps(payload, indent=2), encoding="utf-8"
+    )
+    return result
+
+
 def _holdout_used_for_tuning(
     artifact_dir: Path,
     period_results: List[PeriodResult],
     wf_cfg: dict[str, Any],
+    expected_params: Optional[Dict[str, Any]] = None,
 ) -> bool:
     holdout_names = set(wf_cfg.get("holdout_evaluate_only") or [])
-    default = dict(DEFAULT_STRATEGY_PARAMS)
+    expected = dict(expected_params or DEFAULT_STRATEGY_PARAMS)
     for p in period_results:
         if p.name not in holdout_names:
             continue
@@ -168,12 +221,12 @@ def _holdout_used_for_tuning(
         if not summary_path.is_file():
             continue
         try:
-            used = json.loads(summary_path.read_text(encoding="utf-8")).get("params_used", default)
+            used = json.loads(summary_path.read_text(encoding="utf-8")).get("params_used", expected)
         except json.JSONDecodeError:
             continue
         if not isinstance(used, dict):
             continue
-        if dict(used) != default:
+        if dict(used) != expected:
             return True
     return False
 
@@ -280,6 +333,8 @@ def _campaign_failure_reasons(summary: Dict[str, Any]) -> List[str]:
         reasons.append("certification_stamp:promotion_ineligible")
     if summary.get("wfc_required") and summary.get("wfc_status") != "PASS":
         reasons.append(f"walk_forward_correlation:{summary.get('wfc_status', 'MISSING')}")
+    if summary.get("double_wf_required") and summary.get("double_wf_status") != "PASS":
+        reasons.append(f"double_walk_forward_correlation:{summary.get('double_wf_status', 'MISSING')}")
     if summary.get("latency_operating_envelope_status") != "PASS":
         reasons.append(
             f"campaign_latency_operating_envelope:{summary.get('latency_operating_envelope_status', 'MISSING')}"
@@ -445,6 +500,7 @@ def record_sim_shadow(repo_root: Path, campaign_id: str, status: str) -> Path:
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
         summary["sim_shadow_status"] = status
         wfc_ok = summary.get("wfc_status") == "PASS"
+        double_wf_ok = (not summary.get("double_wf_required")) or summary.get("double_wf_status") == "PASS"
         robustness_ok = summary.get("robustness_passed") is True
         stamp = summary.get("certification_stamp") if isinstance(summary.get("certification_stamp"), dict) else {}
         cert_ok = bool(stamp.get("promotion_eligible", False))
@@ -466,6 +522,7 @@ def record_sim_shadow(repo_root: Path, campaign_id: str, status: str) -> Path:
             and status == "PASS"
             and robustness_ok
             and wfc_ok
+            and double_wf_ok
             and cert_ok
             and metrics_ok
             and latency_ok
@@ -790,6 +847,11 @@ def run_campaign(
         wfc_enabled and not trial_mode and wfc_requires_bounds and not bool(bounds)
     )
     wfc_status_for_events = "SKIPPED"
+    double_wf_configured = _double_wf_enabled(wfc_cfg) and not trial_mode
+    double_wf_required = False
+    double_wf_result: Optional[DoubleWfResult] = None
+    double_wf_status = "SKIPPED"
+    frozen_wfc_params: Optional[Dict[str, Any]] = None
 
     if not trial_mode and wfc_enabled and bounds:
         try:
@@ -838,50 +900,70 @@ def run_campaign(
                 status = "FAIL"
                 skip_periods = True
             elif wfc_result.wfc_status == "PASS":
-                plateau = select_robust_plateau(
-                    _plateau_matrix_rows(matrix_rows, wfc_cfg),
-                    primary_metric=str(wfc_cfg.get("primary_metric", "sharpe")),
-                )
-                if plateau:
-                    plateau_hash = str(plateau.pop("__plateau_hash__", ""))
-                    strategy_params = dict(plateau)
-                    plateau_oos_metric = str(wfc_cfg.get("primary_metric", "sharpe"))
-                    plateau_oos_pass = True
-                    if plateau_hash:
-                        ph_rows = [
-                            r
-                            for r in matrix_rows
-                            if str(r.get("parameter_hash", "")) == plateau_hash
-                        ]
-                        if ph_rows:
-                            oos_primaries = [
-                                float(r.get("oos_metrics", {}).get(plateau_oos_metric, 0))
-                                for r in ph_rows
-                            ]
-                            oos_nets = [
-                                float(r.get("oos_metrics", {}).get("net_return", 0))
-                                for r in ph_rows
-                            ]
-                            if oos_primaries and oos_nets:
-                                mean_oos_primary = sum(oos_primaries) / len(oos_primaries)
-                                mean_oos_net = sum(oos_nets) / len(oos_nets)
-                                if mean_oos_primary <= 0 or mean_oos_net <= 0:
-                                    wfc_result.rejection_reasons.append(
-                                        f"Selected plateau OOS {plateau_oos_metric}={mean_oos_primary:.3f} net_return={mean_oos_net:.3f}"
-                                    )
-                                    plateau_oos_pass = False
-                    if plateau_oos_pass:
-                        param_hash = _param_hash(primary_id, strategy_params)
-                        campaign_meta["param_hash"] = param_hash
-                        campaign_meta["strategy_params"] = strategy_params
-                        write_campaign_manifest(artifact_dir / "campaign.json", campaign_meta)
-                    else:
+                if double_wf_configured:
+                    double_wf_result = _evaluate_campaign_double_wf(
+                        matrix_rows,
+                        wfc_cfg,
+                        wfc_dir,
+                        artifact_dir,
+                    )
+                    double_wf_status = "PASS" if double_wf_result.pass_fail else "FAIL"
+                    if not double_wf_result.pass_fail:
                         status = "FAIL"
                         skip_periods = True
+                if skip_periods:
+                    if double_wf_result and wfc_result:
+                        wfc_result.rejection_reasons.extend(
+                            double_wf_result.rejection_reasons
+                            or ["Double walk-forward correlation failed"]
+                        )
                 else:
-                    wfc_result.rejection_reasons.append("No robust plateau after WFC PASS")
-                    status = "FAIL"
-                    skip_periods = True
+                    plateau = select_robust_plateau(
+                        _plateau_matrix_rows(matrix_rows, wfc_cfg),
+                        primary_metric=str(wfc_cfg.get("primary_metric", "sharpe")),
+                    )
+                    if plateau:
+                        plateau_hash = str(plateau.pop("__plateau_hash__", ""))
+                        strategy_params = dict(plateau)
+                        plateau_oos_metric = str(wfc_cfg.get("primary_metric", "sharpe"))
+                        plateau_oos_pass = True
+                        if plateau_hash:
+                            ph_rows = [
+                                r
+                                for r in matrix_rows
+                                if str(r.get("parameter_hash", "")) == plateau_hash
+                            ]
+                            if ph_rows:
+                                oos_primaries = [
+                                    float(r.get("oos_metrics", {}).get(plateau_oos_metric, 0))
+                                    for r in ph_rows
+                                ]
+                                oos_nets = [
+                                    float(r.get("oos_metrics", {}).get("net_return", 0))
+                                    for r in ph_rows
+                                ]
+                                if oos_primaries and oos_nets:
+                                    mean_oos_primary = sum(oos_primaries) / len(oos_primaries)
+                                    mean_oos_net = sum(oos_nets) / len(oos_nets)
+                                    if mean_oos_primary <= 0 or mean_oos_net <= 0:
+                                        wfc_result.rejection_reasons.append(
+                                            f"Selected plateau OOS {plateau_oos_metric}={mean_oos_primary:.3f} net_return={mean_oos_net:.3f}"
+                                        )
+                                        plateau_oos_pass = False
+                        if plateau_oos_pass:
+                            param_hash = _param_hash(primary_id, strategy_params)
+                            frozen_wfc_params = dict(strategy_params)
+                            campaign_meta["param_hash"] = param_hash
+                            campaign_meta["strategy_params"] = strategy_params
+                            campaign_meta["frozen_wfc_params"] = frozen_wfc_params
+                            write_campaign_manifest(artifact_dir / "campaign.json", campaign_meta)
+                        else:
+                            status = "FAIL"
+                            skip_periods = True
+                    else:
+                        wfc_result.rejection_reasons.append("No robust plateau after WFC PASS")
+                        status = "FAIL"
+                        skip_periods = True
     elif wfc_enabled:
         if trial_mode:
             skip_reason = "Trial mode skips WFC"
@@ -915,11 +997,12 @@ def run_campaign(
 
             evaluate_only = _period_evaluate_only(wf_cfg, period.name)
             tune_allowed = _period_tune_allowed(wf_cfg, period.name)
-            period_params = (
-                strategy_params
-                if tune_allowed and not evaluate_only
-                else dict(DEFAULT_STRATEGY_PARAMS)
-            )
+            if frozen_wfc_params is not None:
+                period_params = dict(frozen_wfc_params)
+            elif tune_allowed and not evaluate_only:
+                period_params = dict(strategy_params)
+            else:
+                period_params = dict(DEFAULT_STRATEGY_PARAMS)
             events = list_campaign_events(primary_id, period, symbol, repo_root)
             missing = [e for e in events if not e.npz_present]
             if download_missing and missing:
@@ -1130,7 +1213,13 @@ def run_campaign(
         return campaign_latency_envelope.get("status") == "PASS" and name not in campaign_latency_blocker_gates
 
     trade_pnls = [float(e.get("net_pnl", 0.0)) for p in period_results for e in p.event_results]
-    holdout_used_for_tuning = _holdout_used_for_tuning(artifact_dir, period_results, wf_cfg)
+    expected_holdout_params = frozen_wfc_params or dict(DEFAULT_STRATEGY_PARAMS)
+    holdout_used_for_tuning = _holdout_used_for_tuning(
+        artifact_dir,
+        period_results,
+        wf_cfg,
+        expected_params=expected_holdout_params,
+    )
     sweep_count = len({r["parameter_hash"] for r in matrix_rows}) if matrix_rows else 1
     robustness = run_robustness_pack(
         lambda: {
@@ -1176,6 +1265,8 @@ def run_campaign(
     if wfc_status == "CONDITIONAL" and status == "PASS":
         status = "CONDITIONAL"
     wfc_required = wfc_enabled and not trial_mode
+    double_wf_required = double_wf_configured and wfc_status == "PASS"
+    double_wf_ok = (not double_wf_required) or double_wf_status == "PASS"
     cert_stamp = build_certification_stamp(
         event_id=primary_id,
         model_id=primary_id,
@@ -1188,6 +1279,7 @@ def run_campaign(
         and sim_status == "PASS"
         and robustness.passed
         and (not wfc_required or wfc_status == "PASS")
+        and double_wf_ok
         and cert_stamp.get("promotion_eligible", False)
     )
     write_campaign_latency_operating_envelope(artifact_dir, campaign_latency_envelope)
@@ -1214,6 +1306,23 @@ def run_campaign(
         "wfc_required": wfc_required,
         "wfc_missing_required_bounds": wfc_missing_required_bounds,
         "wfc": wfc_result.to_dict() if wfc_result else {},
+        "wfc_frozen_params": frozen_wfc_params or {},
+        "wfc_frozen_param_hash": _param_hash(primary_id, frozen_wfc_params) if frozen_wfc_params else "",
+        "double_wf_status": double_wf_status,
+        "double_wf_required": double_wf_required,
+        "double_walk_forward": {
+            "status": double_wf_status,
+            "observed": double_wf_result is not None,
+            "artifact": "walk_forward_correlation.json" if double_wf_result else "",
+            "reason": "Double walk-forward correlation passed."
+            if double_wf_status == "PASS"
+            else (
+                "; ".join(double_wf_result.rejection_reasons)
+                if double_wf_result and double_wf_result.rejection_reasons
+                else "Double walk-forward correlation was not configured or not run."
+            ),
+            "result": double_wf_result.to_dict() if double_wf_result else {},
+        },
         "sim_shadow_anchor": str(sim_cfg.get("anchor_date")),
         "sim_shadow_cme_days": sim_cfg.get("cme_days"),
         "sim_shadow_status": sim_status,
@@ -1227,7 +1336,7 @@ def run_campaign(
         },
         "latency_operating_envelope_blockers": campaign_latency_envelope.get("promotion_blockers", []),
         "promote_candidate": promote_ok,
-        "promote_note": "WFC PASS + sim shadow (60 CME days on CHI404) + backtester certification stamp required before promotion — BLUEPRINT §8",
+        "promote_note": "WFC PASS + double-WF PASS + sim shadow (60 CME days on CHI404) + backtester certification stamp required before promotion — BLUEPRINT §8",
         "trial_mode": trial_mode,
         "events_ran": events_ran,
     }
@@ -1241,6 +1350,15 @@ def run_campaign(
                     "parameter_bounds are required when WFC is enabled outside trial mode; "
                     "configure bounds before promotion"
                 ),
+            },
+        )
+    if double_wf_required and double_wf_status != "PASS":
+        _append_blocking_gate(
+            summary,
+            {
+                "gate": "double_walk_forward_correlation",
+                "status": double_wf_status,
+                "reason": summary["double_walk_forward"]["reason"],
             },
         )
     if not campaign_latency_ok:

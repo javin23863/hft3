@@ -26,6 +26,19 @@ permutation_samples: 500
 min_oos_trade_count:
   default: 30
 
+double_wf:
+  enabled: true
+  method: spearman
+  minimum_required_score: 0.20
+  primary_metric: sharpe
+  join_keys:
+    - parameter_hash
+  wf1_fold_ids:
+    - D1
+    - D2
+  wf2_fold_ids:
+    - D3
+
 folds:
   - id: D1
     name: Discovery_2018_to_2019

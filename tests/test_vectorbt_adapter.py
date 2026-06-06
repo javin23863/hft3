@@ -74,7 +74,7 @@ class TestPromotionArtifact:
             param_values={"signal_threshold": 0.15},
             vectorbt_run_id="vbt_test",
             vectorbt_results={"oos_expectancy": 1.5, "num_trades": 100},
-            pass_reason="all_gates_passed",
+            pass_reason="vectorbt_prefilter_passed",
             in_sample_results={"expectancy": 2.0},
             out_of_sample_results={"expectancy": 1.5},
         )
@@ -84,7 +84,7 @@ class TestPromotionArtifact:
             loaded = load_promoted(path)
         assert loaded.candidate_id == prom.candidate_id
         assert loaded.vectorbt_results["oos_expectancy"] == 1.5
-        assert loaded.pass_reason == "all_gates_passed"
+        assert loaded.pass_reason == "vectorbt_prefilter_passed"
 
     def test_rejected_serialization(self):
         r = RejectedCandidate(
@@ -133,6 +133,28 @@ class TestPromotionArtifact:
             pass_reason="testing",
         )
         assert gate.evaluate(strong)
+
+    def test_promotion_gate_allows_unobserved_optional_prefilter_metrics(self):
+        gate = PromotionGate(min_oos_expectancy=0.0, max_drawdown_pct=-30.0)
+        prefilter = PromotedCandidate(
+            candidate_id="prefilter",
+            hypothesis_id="HYP_5",
+            strategy_family="GoodStrat",
+            asset_class="CME_FUTURES",
+            symbol="ES",
+            timeframe="1m",
+            param_values={},
+            vectorbt_run_id="vbt_test",
+            vectorbt_results={
+                "evidence_scope": "vectorbt_parameter_prefilter",
+                "oos_expectancy": 2.0,
+                "wf_consistency": 0.8,
+                "max_drawdown_pct": -15.0,
+                "num_trades": 200,
+            },
+            pass_reason="testing",
+        )
+        assert gate.evaluate(prefilter)
 
 
 class TestGridSize:
@@ -290,7 +312,53 @@ class TestFilterCandidates:
         assert result.backend == "numpy_fallback"
         assert len(result.promoted) == 1
         assert result.promoted[0].vectorbt_results["filter_backend"] == "numpy_fallback"
-        assert result.promoted[0].pass_reason == "all_gates_passed"
+        assert result.promoted[0].vectorbt_results["evidence_scope"] == "vectorbt_parameter_prefilter"
+        assert "param_stability_score" not in result.promoted[0].vectorbt_results
+        assert "slippage_sensitivity" not in result.promoted[0].vectorbt_results
+        assert result.promoted[0].pass_reason == "vectorbt_prefilter_passed"
+
+    def test_vectorbt_grid_params_change_measured_prefilter_outputs(self, monkeypatch, tmp_path):
+        from backtest_pipeline.src import vectorbt_adapter
+
+        monkeypatch.setattr(vectorbt_adapter, "_has_vectorbt", False)
+        cands = [_mock_candidate("HYP_5", 0.15)]
+        close = 100.0 + np.arange(160, dtype=float) * 0.1
+        ohlcv = np.column_stack([close, close, close, close, np.ones_like(close)])
+
+        def signal_computer(cand, bars, parsed, repo_root):
+            entry = np.zeros(len(bars))
+            exit_ = np.zeros(len(bars))
+            entry[1::20] = 0.5
+            exit_[10::20] = -0.5
+            return entry, exit_
+
+        result = filter_candidates(
+            candidates=cands,
+            parsed=None,
+            event_id="SYNTHETIC",
+            repo_root=tmp_path,
+            gates=PromotionGate(
+                min_oos_expectancy=-1.0,
+                min_walk_forward_consistency=0.0,
+                min_trades=0,
+            ),
+            param_grid={
+                "signal_threshold": [0.1, 0.8],
+                "holding_period_bars": [5],
+                "stop_loss_pct": [None],
+                "take_profit_pct": [None],
+            },
+            data_loader=lambda *_: ohlcv,
+            signal_computer=signal_computer,
+        )
+
+        assert len(result.promoted) == 2
+        by_threshold = {
+            prom.vectorbt_results["signal_threshold"]: prom.vectorbt_results
+            for prom in result.promoted
+        }
+        assert by_threshold[0.1]["num_trades"] > by_threshold[0.8]["num_trades"]
+        assert by_threshold[0.1]["net_return_pct"] != by_threshold[0.8]["net_return_pct"]
 
     def test_filter_without_vectorbt_rejects_missing_signal_binding(self, monkeypatch):
         from backtest_pipeline.src import vectorbt_adapter

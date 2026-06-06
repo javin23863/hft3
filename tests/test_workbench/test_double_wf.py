@@ -92,7 +92,7 @@ def test_double_wf_matrix_join() -> None:
     wf2 = [_row("p2", 0.4), _row("p3", 0.5), _row("p4", 0.6), _row("p5", 0.8)]
     result = evaluate_double_wf(
         wf1, wf2, ["parameter_hash"],
-        method="pearson", min_score=0.0,
+        method="pearson", min_score=0.20,
     )
     assert result.stability_summary["n_shared"] == 3  # p2, p3, p4
 
@@ -163,7 +163,7 @@ def test_double_wf_rejects_invalid_min_score_and_gate_still_blocks() -> None:
         _row("p4", 0.8), _row("p5", 0.3),
     ]
 
-    result = evaluate_double_wf(wf1, wf2, ["parameter_hash"], min_score=-2.0)
+    result = evaluate_double_wf(wf1, wf2, ["parameter_hash"], min_score=0.0)
     gate = to_gate_result(result)
 
     assert result.pass_fail is False

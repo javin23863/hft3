@@ -317,7 +317,7 @@ def test_wfc_skipped_when_no_bounds(mock_list, MockEngine, mock_bounds, mock_wfc
 @patch("workbench.src.run.campaign_runner.load_parameter_bounds")
 @patch("workbench.src.run.engine.WorkbenchEngine")
 @patch("workbench.src.run.campaign_runner.list_campaign_events")
-def test_confirmation_uses_default_params_when_tune_disallowed(
+def test_confirmation_and_holdout_use_frozen_wfc_params(
     mock_list,
     MockEngine,
     mock_bounds,
@@ -408,8 +408,95 @@ def test_confirmation_uses_default_params_when_tune_disallowed(
     )
 
     assert params_by_period["Discovery"] == tuned
-    assert params_by_period["Confirmation"] == dict(DEFAULT_STRATEGY_PARAMS)
-    assert params_by_period["Holdout"] == dict(DEFAULT_STRATEGY_PARAMS)
+    assert params_by_period["Confirmation"] == tuned
+    assert params_by_period["Holdout"] == tuned
+
+
+@patch("workbench.src.run.campaign_runner.evaluate_wfc_gate")
+@patch("workbench.src.robustness.wfc.write_wfc_artifacts")
+@patch("workbench.src.run.campaign_runner.save_matrix_rows")
+@patch("workbench.src.run.campaign_runner.run_full_matrix_oos")
+@patch("workbench.src.run.campaign_runner.load_wfc_config")
+@patch("workbench.src.run.campaign_runner.load_parameter_bounds")
+@patch("workbench.src.run.engine.WorkbenchEngine")
+@patch("workbench.src.run.campaign_runner.list_campaign_events")
+def test_double_wf_fail_blocks_promotion(
+    mock_list,
+    MockEngine,
+    mock_bounds,
+    mock_wfc,
+    mock_matrix,
+    _save_rows,
+    _wfc_art,
+    mock_eval,
+):
+    mock_wfc.return_value = {
+        "enabled": True,
+        "primary_metric": "sharpe",
+        "min_parameter_combinations": 4,
+        "min_walk_forward_folds": 3,
+        "double_wf": {
+            "enabled": True,
+            "method": "spearman",
+            "minimum_required_score": 0.20,
+            "primary_metric": "sharpe",
+            "join_keys": ["parameter_hash"],
+            "wf1_fold_ids": ["D1", "D2"],
+            "wf2_fold_ids": ["D3"],
+        },
+    }
+    mock_bounds.return_value = {"signal_threshold": [0.05, 0.15]}
+    rows = []
+    for fold in ("D1", "D2"):
+        for ph, value in (("p1", 0.9), ("p2", 0.6), ("p3", 0.3), ("p4", 0.1)):
+            rows.append(
+                {
+                    "parameter_hash": ph,
+                    "fold_id": fold,
+                    "oos_metrics": {"sharpe": value, "net_return": value, "trade_count": 10},
+                }
+            )
+    for ph, value in (("p1", 0.1), ("p2", 0.3), ("p3", 0.6), ("p4", 0.9)):
+        rows.append(
+            {
+                "parameter_hash": ph,
+                "fold_id": "D3",
+                "oos_metrics": {"sharpe": value, "net_return": value, "trade_count": 10},
+            }
+        )
+    mock_matrix.return_value = rows
+    mock_eval.return_value = WfcResult(
+        run_id="c",
+        model_id="HYP_5",
+        wfc_status="PASS",
+        n_parameter_combinations=4,
+        n_folds=3,
+    )
+    mock_list.return_value = []
+
+    result = run_campaign(
+        REPO,
+        "HYP_5",
+        "MES.v.0",
+        dry_run=False,
+        allow_partial=True,
+        audit_grade=False,
+    )
+
+    assert result.status == "FAIL"
+    summary_path = Path(result.artifact_dir) / "summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary["promote_candidate"] is False
+    assert summary["wfc_status"] == "PASS"
+    assert summary["double_wf_status"] == "FAIL"
+    assert summary["double_walk_forward"]["observed"] is True
+    assert (Path(result.artifact_dir) / "walk_forward_correlation.json").is_file()
+    assert any(
+        gate.get("gate") == "double_walk_forward_correlation"
+        and gate.get("status") == "FAIL"
+        for gate in summary.get("blocking_gates", [])
+    )
+    _cleanup_artifact(result)
 
 
 def test_holdout_used_for_tuning_false_when_defaults_on_holdout(tmp_path):
@@ -434,3 +521,28 @@ def test_holdout_used_for_tuning_false_when_defaults_on_holdout(tmp_path):
         )
     ]
     assert _holdout_used_for_tuning(tmp_path, periods, wf_cfg) is False
+
+
+def test_holdout_used_for_tuning_false_when_frozen_wfc_params_on_holdout(tmp_path):
+    wf_cfg = {"holdout_evaluate_only": ["Holdout"]}
+    frozen = {"signal_threshold": 0.05}
+    period_dir = tmp_path / "periods" / "Holdout"
+    period_dir.mkdir(parents=True)
+    (period_dir / "period_summary.json").write_text(
+        json.dumps({"params_used": dict(frozen)}),
+        encoding="utf-8",
+    )
+    periods = [
+        PeriodResult(
+            name="Holdout",
+            gate_pass=True,
+            evaluate_only=True,
+            net_pnl=1.0,
+            num_trades=1,
+            expectancy=1.0,
+            events_run=1,
+            events_missing=0,
+            survives_cpp=True,
+        )
+    ]
+    assert _holdout_used_for_tuning(tmp_path, periods, wf_cfg, expected_params=frozen) is False

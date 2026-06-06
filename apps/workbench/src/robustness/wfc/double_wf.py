@@ -175,14 +175,14 @@ def evaluate_double_wf(
             correlation_method=method,
             rejection_reasons=["Malformed minimum_required_score"],
         )
-    if not math.isfinite(min_score) or not -1.0 <= min_score <= 1.0:
+    if not math.isfinite(min_score) or not 0.0 < min_score <= 1.0:
         return DoubleWfResult(
             wf1_matrix_path=wf1_path,
             wf2_matrix_path=wf2_path,
             matrix_join_keys=join_keys,
             correlation_method=method,
             minimum_required_score=min_score,
-            rejection_reasons=["minimum_required_score must be finite and within [-1.0, 1.0]"],
+            rejection_reasons=["minimum_required_score must be finite and within (0.0, 1.0]"],
         )
     if wf1_matrix is wf2_matrix or _same_nonempty_path(wf1_path, wf2_path):
         return DoubleWfResult(
@@ -314,7 +314,7 @@ def to_gate_result(result: DoubleWfResult) -> Any:
     except (TypeError, ValueError):
         threshold = 1.0
         malformed = True
-    if not math.isfinite(threshold) or not -1.0 <= threshold <= 1.0:
+    if not math.isfinite(threshold) or not 0.0 < threshold <= 1.0:
         threshold = 1.0
         malformed = True
     try:

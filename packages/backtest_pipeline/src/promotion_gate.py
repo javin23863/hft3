@@ -105,13 +105,22 @@ class PromotionGate:
             return False
         if abs(candidate.vectorbt_results.get("max_drawdown_pct", 0.0)) > abs(self.max_drawdown_pct):
             return False
-        if candidate.vectorbt_results.get("turnover_mean_pct", 0.0) > self.max_turnover_pct:
+        if (
+            "turnover_mean_pct" in candidate.vectorbt_results
+            and candidate.vectorbt_results.get("turnover_mean_pct", 0.0) > self.max_turnover_pct
+        ):
             return False
         if candidate.vectorbt_results.get("num_trades", 0) < self.min_trades:
             return False
-        if candidate.vectorbt_results.get("param_stability_score", 0.0) < (1.0 - self.param_stability_rtol):
+        if (
+            "param_stability_score" in candidate.vectorbt_results
+            and candidate.vectorbt_results.get("param_stability_score", 0.0) < (1.0 - self.param_stability_rtol)
+        ):
             return False
-        if candidate.vectorbt_results.get("slippage_sensitivity", 0.0) > self.max_slippage_sensitivity:
+        if (
+            "slippage_sensitivity" in candidate.vectorbt_results
+            and candidate.vectorbt_results.get("slippage_sensitivity", 0.0) > self.max_slippage_sensitivity
+        ):
             return False
         return True
 
