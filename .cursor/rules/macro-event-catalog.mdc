@@ -20,8 +20,11 @@ alwaysApply: true
 | Artifact | What it is |
 |----------|------------|
 | `event_universe.yaml` | Full catalog (metadata + windows) |
-| `events.csv` | Runnable subset with sourced dates (~55 rows, **3 types** today) |
-| `research_ready_types()` | Types allowed in `events.csv` (**3**) |
+| `events.csv` | Runnable backtest subset with SOURCED release calendars (see `macro_event_cli.py`) |
+| `sourced_event_types_in_dir()` | Types with agency calendars in `release_calendars/` |
+| **All scopes + cost breakdown** | `python scripts/estimate_full_macro_mbo_cost.py --all-scopes --estimate` |
+| Backtest MBO cost (sourced only) | `python scripts/estimate_full_macro_mbo_cost.py --scope macro_releases --estimate` |
+| Full catalog MBO cost (incl. SEED) | `python scripts/estimate_full_macro_mbo_cost.py --scope full_catalog --estimate` |
 | `data/mbo_release/` | **MBO-only lane** — canonical raw + normalized events + validation |
 
 ## MBO-only lane rules
@@ -38,7 +41,7 @@ alwaysApply: true
 1. **Never say "macro catalog = CPI/NFP/PROP" or "55 events = full universe".**
 2. **`events.csv` is the runnable backtest subset**, not the catalog.
 3. **Count types** → `from economic_event_universe.registry import catalog_event_type_count`
-4. **MBO cost / coverage** → `python scripts/estimate_full_macro_mbo_cost.py --estimate`
+4. **MBO cost / coverage** → backtest default above; full catalog via `--scope full_catalog`
 5. **Human/agent banner** → `python packages/data_system/src/macro_event_cli.py`
 
 Workbench campaigns still filter through `events.csv` + `model_event_binding.yaml` until calendars and bindings are expanded.

@@ -1,0 +1,64 @@
+{
+  "generated_at_utc": "2026-06-06T09:33:50.705106+00:00",
+  "scope": "campaign",
+  "macro_event_type_count": 45,
+  "scoped_event_types": [
+    "CPI",
+    "NFP"
+  ],
+  "scoped_window_count": 52,
+  "windows_by_event_type": {
+    "CPI": 19,
+    "NFP": 33
+  },
+  "cme_symbols": [
+    "MES.v.0",
+    "MNQ.v.0",
+    "ES.v.0",
+    "NQ.v.0",
+    "ZN.v.0",
+    "ZB.v.0",
+    "RTY.v.0"
+  ],
+  "total_npz_slots": 364,
+  "npz_slots_present": 364,
+  "npz_slots_missing": 0,
+  "year_range": [
+    2018,
+    2025
+  ],
+  "walk_forward_year_range": [
+    2018,
+    2025
+  ],
+  "include_seed_calendars": false,
+  "include_rule_based": false,
+  "events_csv_row_count": 1217,
+  "events_csv_type_count": 10,
+  "note": "npz_slots_missing counts local cache gaps for this scope only; pass --estimate for Databento pricing.",
+  "cost_estimate": {
+    "pending_slots": 0,
+    "estimated_cost_usd": 0.0,
+    "unpriced": 0,
+    "estimate_method": "none",
+    "by_event_type": {},
+    "by_event_type_full": {
+      "CPI": {
+        "windows": 19,
+        "npz_slots_total": 133,
+        "npz_slots_missing": 0,
+        "npz_slots_present": 133,
+        "estimated_cost_usd": 0.0,
+        "cache_status": "complete"
+      },
+      "NFP": {
+        "windows": 33,
+        "npz_slots_total": 231,
+        "npz_slots_missing": 0,
+        "npz_slots_present": 231,
+        "estimated_cost_usd": 0.0,
+        "cache_status": "complete"
+      }
+    }
+  }
+}

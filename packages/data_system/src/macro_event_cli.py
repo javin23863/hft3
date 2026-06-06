@@ -46,7 +46,7 @@ def catalog_help_text(repo_root: Optional[Path] = None) -> str:
 
     from economic_event_universe.catalog_report import format_catalog_banner
 
-    lines = [format_catalog_banner(), ""]
+    lines = [format_catalog_banner(root), ""]
     ids = list_event_ids()
     lines.append(f"events.csv runnable rows: {len(ids)}")
     for etype in sorted(events_by_type()):

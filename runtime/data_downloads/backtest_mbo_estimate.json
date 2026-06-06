@@ -1,0 +1,151 @@
+{
+  "generated_at_utc": "2026-06-06T09:28:24.509005+00:00",
+  "scope": "backtest",
+  "macro_event_type_count": 45,
+  "scoped_event_types": [
+    "CPI",
+    "FED_BEIGE_BOOK",
+    "FED_H41",
+    "FED_SPEAKER",
+    "FOMC_MINUTES",
+    "FOMC_PRESS",
+    "FOMC_STATEMENT",
+    "INDUSTRIAL_PRODUCTION",
+    "NFP",
+    "PROP_FLATTEN_TOPSTEP"
+  ],
+  "scoped_window_count": 1217,
+  "windows_by_event_type": {
+    "CPI": 19,
+    "FED_BEIGE_BOOK": 64,
+    "FED_H41": 416,
+    "FED_SPEAKER": 479,
+    "FOMC_MINUTES": 40,
+    "FOMC_PRESS": 21,
+    "FOMC_STATEMENT": 40,
+    "INDUSTRIAL_PRODUCTION": 102,
+    "NFP": 33,
+    "PROP_FLATTEN_TOPSTEP": 3
+  },
+  "cme_symbols": [
+    "MES.v.0",
+    "MNQ.v.0",
+    "ES.v.0",
+    "NQ.v.0",
+    "ZN.v.0",
+    "ZB.v.0",
+    "RTY.v.0"
+  ],
+  "total_npz_slots": 8519,
+  "npz_slots_present": 385,
+  "npz_slots_missing": 8134,
+  "year_range": [
+    2018,
+    2025
+  ],
+  "walk_forward_year_range": [
+    2018,
+    2025
+  ],
+  "include_seed_calendars": false,
+  "include_rule_based": false,
+  "events_csv_row_count": 1217,
+  "events_csv_type_count": 10,
+  "note": "npz_slots_missing counts local cache gaps for this scope only; pass --estimate for Databento pricing.",
+  "cost_estimate": {
+    "pending_slots": 8134,
+    "estimated_cost_usd": 59.1383,
+    "unpriced": 448,
+    "estimate_method": "sample_per_event_type",
+    "by_event_type": {
+      "FED_H41": 2.7591,
+      "FED_SPEAKER": 29.8267,
+      "FOMC_MINUTES": 7.5648,
+      "FOMC_PRESS": 9.5971,
+      "FOMC_STATEMENT": 7.5648,
+      "INDUSTRIAL_PRODUCTION": 1.8258
+    },
+    "by_event_type_full": {
+      "CPI": {
+        "windows": 19,
+        "npz_slots_total": 133,
+        "npz_slots_missing": 0,
+        "npz_slots_present": 133,
+        "estimated_cost_usd": 0.0,
+        "cache_status": "complete"
+      },
+      "FED_BEIGE_BOOK": {
+        "windows": 64,
+        "npz_slots_total": 448,
+        "npz_slots_missing": 448,
+        "npz_slots_present": 0,
+        "estimated_cost_usd": 0.0,
+        "cache_status": "needs_download"
+      },
+      "FED_H41": {
+        "windows": 416,
+        "npz_slots_total": 2912,
+        "npz_slots_missing": 2912,
+        "npz_slots_present": 0,
+        "estimated_cost_usd": 2.7591,
+        "cache_status": "needs_download"
+      },
+      "FED_SPEAKER": {
+        "windows": 479,
+        "npz_slots_total": 3353,
+        "npz_slots_missing": 3353,
+        "npz_slots_present": 0,
+        "estimated_cost_usd": 29.8267,
+        "cache_status": "needs_download"
+      },
+      "FOMC_MINUTES": {
+        "windows": 40,
+        "npz_slots_total": 280,
+        "npz_slots_missing": 280,
+        "npz_slots_present": 0,
+        "estimated_cost_usd": 7.5648,
+        "cache_status": "needs_download"
+      },
+      "FOMC_PRESS": {
+        "windows": 21,
+        "npz_slots_total": 147,
+        "npz_slots_missing": 147,
+        "npz_slots_present": 0,
+        "estimated_cost_usd": 9.5971,
+        "cache_status": "needs_download"
+      },
+      "FOMC_STATEMENT": {
+        "windows": 40,
+        "npz_slots_total": 280,
+        "npz_slots_missing": 280,
+        "npz_slots_present": 0,
+        "estimated_cost_usd": 7.5648,
+        "cache_status": "needs_download"
+      },
+      "INDUSTRIAL_PRODUCTION": {
+        "windows": 102,
+        "npz_slots_total": 714,
+        "npz_slots_missing": 714,
+        "npz_slots_present": 0,
+        "estimated_cost_usd": 1.8258,
+        "cache_status": "needs_download"
+      },
+      "NFP": {
+        "windows": 33,
+        "npz_slots_total": 231,
+        "npz_slots_missing": 0,
+        "npz_slots_present": 231,
+        "estimated_cost_usd": 0.0,
+        "cache_status": "complete"
+      },
+      "PROP_FLATTEN_TOPSTEP": {
+        "windows": 3,
+        "npz_slots_total": 21,
+        "npz_slots_missing": 0,
+        "npz_slots_present": 21,
+        "estimated_cost_usd": 0.0,
+        "cache_status": "complete"
+      }
+    }
+  }
+}

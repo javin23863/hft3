@@ -6,22 +6,21 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from economic_event_universe.calendar_io import sourced_event_types_in_dir
 from economic_event_universe.registry import (
     catalog_event_type_count,
     catalog_event_types,
     default_cme_symbols,
     event_definitions,
-    research_ready_types,
 )
 
-# Plain label for docs, audits, and agent rules — always use this count.
 MACRO_EVENT_TYPE_COUNT = catalog_event_type_count()
 
 
 @dataclass(frozen=True)
 class MacroCatalogSummary:
     catalog_event_types: int
-    research_ready_types: int
+    sourced_calendar_types: int
     events_csv_rows: int
     events_csv_types: int
     catalog_window_count: int
@@ -34,8 +33,7 @@ class MacroCatalogSummary:
         return {
             "macro_event_type_count": self.catalog_event_types,
             "authority": "packages/economic_event_universe/config/event_universe.yaml",
-            "research_ready_type_count": self.research_ready_types,
-            "research_ready_types": research_ready_types(),
+            "sourced_calendar_type_count": self.sourced_calendar_types,
             "events_csv_row_count": self.events_csv_rows,
             "events_csv_type_count": self.events_csv_types,
             "catalog_window_count": self.catalog_window_count,
@@ -45,8 +43,8 @@ class MacroCatalogSummary:
             "types_missing_from_events_csv": self.types_missing_from_events_csv,
             "note": (
                 f"There are {self.catalog_event_types} macro event types in the catalog. "
-                f"events.csv ({self.events_csv_rows} rows, {self.events_csv_types} types) is only the "
-                "research-ready runnable subset — not the full universe."
+                f"events.csv ({self.events_csv_rows} rows, {self.events_csv_types} types) holds "
+                "SOURCED release-calendar rows in walk-forward years — not the full catalog."
             ),
         }
 
@@ -67,6 +65,7 @@ def build_macro_catalog_summary(
     *,
     include_seed_calendars: bool = True,
     include_rule_based: bool = True,
+    windows: list | None = None,
 ) -> MacroCatalogSummary:
     from economic_event_universe.window_catalog import (
         count_windows_by_type,
@@ -74,12 +73,15 @@ def build_macro_catalog_summary(
         npz_slot_coverage,
     )
 
+    cal_dir = repo_root / "packages" / "data_system" / "config" / "release_calendars"
+    sourced_types = sourced_event_types_in_dir(cal_dir)
     csv_rows, csv_types_count, csv_types = events_csv_summary(repo_root)
-    windows = iter_catalog_windows(
-        repo_root,
-        include_seed=include_seed_calendars,
-        include_rule_based=include_rule_based,
-    )
+    if windows is None:
+        windows = iter_catalog_windows(
+            repo_root,
+            include_seed=include_seed_calendars,
+            include_rule_based=include_rule_based,
+        )
     by_type = count_windows_by_type(windows)
     all_types = set(catalog_event_types())
     zero_windows = sorted(et for et in all_types if by_type.get(et, 0) == 0)
@@ -88,7 +90,7 @@ def build_macro_catalog_summary(
 
     return MacroCatalogSummary(
         catalog_event_types=MACRO_EVENT_TYPE_COUNT,
-        research_ready_types=len(research_ready_types()),
+        sourced_calendar_types=len(sourced_types),
         events_csv_rows=csv_rows,
         events_csv_types=csv_types_count,
         catalog_window_count=len(windows),
@@ -99,17 +101,22 @@ def build_macro_catalog_summary(
     )
 
 
-def format_catalog_banner() -> str:
+def format_catalog_banner(repo_root: Path | None = None) -> str:
     """One-screen truth for humans and agents."""
-    ready = research_ready_types()
+    from hft3_bootstrap import repo_root as default_root
+
+    root = repo_root or default_root()
+    cal_dir = root / "packages" / "data_system" / "config" / "release_calendars"
+    sourced = sorted(sourced_event_types_in_dir(cal_dir))
     lines = [
         f"Macro event catalog: {MACRO_EVENT_TYPE_COUNT} event types "
         f"(authority: packages/economic_event_universe/config/event_universe.yaml)",
-        f"  Research-ready (may appear in events.csv): {len(ready)} — {', '.join(ready)}",
+        f"  SOURCED release calendars ({len(sourced)} types): {', '.join(sourced) or '(none)'}",
         f"  CME default symbols ({len(default_cme_symbols())}): {', '.join(default_cme_symbols())}",
         "",
-        "events.csv is NOT the full catalog — it holds sourced, runnable rows only.",
-        "Cost / MBO coverage: python scripts/estimate_full_macro_mbo_cost.py --estimate",
+        "events.csv is NOT the full catalog — it mirrors SOURCED calendars in walk-forward years.",
+        "Backtest MBO cost: python scripts/estimate_full_macro_mbo_cost.py --estimate",
+        "Full catalog cost: python scripts/estimate_full_macro_mbo_cost.py --scope full_catalog --estimate",
         "Coverage audit: python scripts/audit_all_research_data.py",
     ]
     return "\n".join(lines)

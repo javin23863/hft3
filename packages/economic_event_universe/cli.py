@@ -10,14 +10,14 @@ from pathlib import Path
 
 import yaml
 
+from economic_event_universe.calendar_io import sourced_event_types_in_dir
+from economic_event_universe.events_csv_builder import is_manual_events_csv_row
 from economic_event_universe.registry import (
     default_download_window,
     event_definitions,
     research_ready_types,
 )
 from hft3_bootstrap import data_system_root, repo_root, setup_repo_paths
-
-_SOURCED_CALENDAR_FILES = frozenset({"bls_cpi.csv", "bls_nfp.csv", "prop_flatten.csv"})
 
 
 def _registry_path() -> Path:
@@ -29,17 +29,7 @@ def validate() -> list[str]:
     defs = event_definitions()
     ready = set(research_ready_types())
     cal_dir = data_system_root() / "config" / "release_calendars"
-    cal_types_sourced: set[str] = set()
-    if cal_dir.is_dir():
-        for path in cal_dir.glob("*.csv"):
-            with path.open(newline="", encoding="utf-8") as f:
-                for row in csv.DictReader(f):
-                    status = str(row.get("row_status", "") or "").upper()
-                    if status and status != "SOURCED":
-                        continue
-                    if not status and path.name not in _SOURCED_CALENDAR_FILES:
-                        continue
-                    cal_types_sourced.add(str(row.get("event_type", "")))
+    cal_types_sourced = sourced_event_types_in_dir(cal_dir)
 
     for et in ready:
         if et not in defs:
@@ -81,16 +71,22 @@ def _validate_events_csv() -> list[str]:
     path = data_system_root() / "config" / "events.csv"
     if not path.is_file():
         return ["missing events.csv"]
-    ready = set(research_ready_types())
+    cal_dir = data_system_root() / "config" / "release_calendars"
+    sourced_types = sourced_event_types_in_dir(cal_dir)
+    defs = event_definitions()
     bad: list[str] = []
     with path.open(newline="", encoding="utf-8") as f:
         for row in csv.DictReader(f):
             notes = str(row.get("notes", ""))
             if "SEED_PLACEHOLDER" in notes:
                 bad.append(f"events.csv contains SEED row: {row.get('event_id')}")
+            if is_manual_events_csv_row(row):
+                continue
             et = str(row.get("event_type", ""))
-            if et not in ready:
-                bad.append(f"events.csv row for non-RESEARCH_READY type: {et}")
+            if et not in defs:
+                bad.append(f"events.csv unknown event type: {et}")
+            elif et not in sourced_types:
+                bad.append(f"events.csv row for type without SOURCED calendar: {et}")
     return bad
 
 
@@ -159,17 +155,18 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print(
             f"validate: OK ({len(event_definitions())} catalog types, "
-            f"{len(research_ready_types())} research-ready in events.csv)"
+            f"{len(sourced_event_types_in_dir(data_system_root() / 'config' / 'release_calendars'))} "
+            f"sourced calendar types in events.csv scope)"
         )
         return 0
     if args.command == "status":
-        from economic_event_universe.catalog_report import format_catalog_banner, build_macro_catalog_summary
+        from economic_event_universe.catalog_report import build_macro_catalog_summary, format_catalog_banner
         from hft3_bootstrap import repo_root
 
-        print(format_catalog_banner())
+        print(format_catalog_banner(repo_root()))
         summary = build_macro_catalog_summary(repo_root())
         print(
-            f"\nWindows (seed calendars, 2018-2025): {summary.catalog_window_count} | "
+            f"\nSourced calendar windows (2018-2025): {summary.catalog_window_count} | "
             f"NPZ missing slots: {summary.npz_slots_missing}"
         )
         return 0

@@ -160,10 +160,17 @@ class DatabentoResearchClient:
         
     def _record_manifest(self, record: dict):
         df_new = pd.DataFrame([record])
+        df_existing = pd.DataFrame()
         if os.path.exists(self.manifest_path):
-            df_existing = pd.read_parquet(self.manifest_path)
+            try:
+                df_existing = pd.read_parquet(self.manifest_path)
+            except Exception:
+                backup = f"{self.manifest_path}.corrupt.bak"
+                if not os.path.exists(backup):
+                    os.replace(self.manifest_path, backup)
+        if not df_existing.empty:
             df_combined = pd.concat([df_existing, df_new], ignore_index=True)
             df_combined.to_parquet(self.manifest_path)
         else:
-            os.makedirs(os.path.dirname(self.manifest_path), exist_ok=True)
+            os.makedirs(os.path.dirname(self.manifest_path) or ".", exist_ok=True)
             df_new.to_parquet(self.manifest_path)

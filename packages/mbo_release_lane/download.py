@@ -87,10 +87,27 @@ def download_catalog_slot(
     *,
     max_cost_usd: float | None = None,
     skip_if_valid: bool = True,
+    skip_if_npz: bool = True,
 ) -> ImportResult | None:
     """Download one release window for one symbol through MBO-only lane."""
     from workbench.src.data.catalog_backfill import resolve_download_symbol
     from data_system.src.databento_client import DatabentoResearchClient
+    from data_system.src.npz_resolver import resolve_npz_for_event
+    from economic_event_universe.registry import default_cme_symbols
+
+    if skip_if_npz:
+        syms = default_cme_symbols()
+        _, present, _ = resolve_npz_for_event(repo_root, window.event_id, symbol, syms)
+        if present:
+            return ImportResult(
+                release_id=window.event_id,
+                symbol=symbol,
+                slot_dir=release_slot_dir(repo_root, window.event_id, symbol),
+                validation_status="valid",
+                event_count=0,
+                blockers=[],
+                paths_written=[],
+            )
 
     slot = release_slot_dir(repo_root, window.event_id, symbol)
     manifest = slot / "release_event_path.json"
@@ -167,21 +184,25 @@ def run_catalog_download(
     include_rule_based: bool = False,
     start_year: int = 2018,
     end_year: int = 2025,
+    scope: str = "macro_releases",
+    windows: list | None = None,
     symbols: tuple[str, ...] | None = None,
     max_cost_usd: float | None = None,
     limit: int | None = None,
 ) -> DownloadReport:
+    from economic_event_universe.events_csv_builder import resolve_download_scope_windows
     from economic_event_universe.registry import default_cme_symbols
-    from economic_event_universe.window_catalog import iter_catalog_windows
 
     syms = symbols or default_cme_symbols()
-    windows = iter_catalog_windows(
-        repo_root,
-        include_seed=include_seed,
-        include_rule_based=include_rule_based,
-        start_year=start_year,
-        end_year=end_year,
-    )
+    if windows is None:
+        windows = resolve_download_scope_windows(
+            repo_root,
+            scope,
+            start_year=start_year,
+            end_year=end_year,
+            include_seed=include_seed,
+            include_rule_based=include_rule_based,
+        )
 
     report = DownloadReport(symbol_count=len(syms), products=list(syms))
     slot_count = 0

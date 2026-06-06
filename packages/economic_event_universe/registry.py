@@ -10,9 +10,6 @@ import yaml
 
 _CONFIG = Path(__file__).resolve().parent / "config" / "event_universe.yaml"
 
-# Types with SOURCED calendar rows in events.csv today.
-_SOURCED_CALENDAR_FILES = frozenset({"bls_cpi.csv", "bls_nfp.csv", "prop_flatten.csv"})
-
 
 @lru_cache(maxsize=1)
 def load_event_universe() -> dict[str, Any]:
@@ -48,7 +45,7 @@ def default_download_window() -> tuple[int, int]:
 
 
 def research_ready_types() -> list[str]:
-    """Types that must have SOURCED calendars and may appear in canonical events.csv."""
+    """YAML status RESEARCH_READY/REQUIRED — metadata only, not an events.csv allowlist."""
     return sorted(
         et
         for et, cfg in event_definitions().items()

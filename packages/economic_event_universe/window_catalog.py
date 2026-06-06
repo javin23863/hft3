@@ -11,6 +11,7 @@ from typing import Any, Iterable, Iterator
 import pytz
 
 from economic_event_universe.holidays import apply_holiday_adjustment
+from economic_event_universe.calendar_io import iter_calendar_rows
 from economic_event_universe.registry import (
     catalog_event_types,
     default_cme_symbols,
@@ -18,8 +19,6 @@ from economic_event_universe.registry import (
     get_event_def,
 )
 from economic_event_universe.windows import download_window, window_name_for
-
-_SOURCED_CALENDAR_FILES = frozenset({"bls_cpi.csv", "bls_nfp.csv", "prop_flatten.csv"})
 
 
 @dataclass(frozen=True)
@@ -32,6 +31,10 @@ class CatalogWindow:
     end_utc: datetime
     row_status: str  # SOURCED | SEED | RULE_BASED
     duration_seconds: int
+    release_time: str = ""
+    timezone: str = ""
+    source: str = ""
+    source_url: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -43,6 +46,10 @@ class CatalogWindow:
             "end_utc": self.end_utc.isoformat(),
             "row_status": self.row_status,
             "duration_seconds": self.duration_seconds,
+            "release_time": self.release_time,
+            "timezone": self.timezone,
+            "source": self.source,
+            "source_url": self.source_url,
         }
 
 
@@ -73,6 +80,9 @@ def _row_to_window(
     release_time: str,
     timezone: str,
     row_status: str,
+    *,
+    source: str = "",
+    source_url: str = "",
 ) -> CatalogWindow | None:
     if event_type not in event_definitions():
         return None
@@ -91,6 +101,10 @@ def _row_to_window(
         end_utc=end_utc,
         row_status=row_status,
         duration_seconds=dur,
+        release_time=rt,
+        timezone=tz,
+        source=source or str(cfg.get("agency", "")),
+        source_url=source_url or str(cfg.get("official_source_url", "")),
     )
 
 
@@ -98,23 +112,9 @@ def _iter_csv_calendar_rows(
     path: Path,
     *,
     accept_seed: bool,
-) -> Iterator[tuple[str, str, str, str, str]]:
-    with path.open(newline="", encoding="utf-8") as f:
-        for row in csv.DictReader(f):
-            et = str(row.get("event_type", "")).strip()
-            if not et or et not in event_definitions():
-                continue
-            status = str(row.get("row_status", "") or "").upper()
-            if not status:
-                status = "SOURCED" if path.name in _SOURCED_CALENDAR_FILES else "SEED"
-            if status == "SEED" and not accept_seed:
-                continue
-            if status not in ("SOURCED", "SEED", "RULE_BASED"):
-                continue
-            rd = str(row["release_date"])
-            rt = str(row.get("release_time") or "")
-            tz = str(row.get("timezone") or "")
-            yield et, rd, rt, tz, status
+    from_seed_dir: bool,
+) -> Iterator[tuple[str, str, str, str, str, str, str]]:
+    yield from iter_calendar_rows(path, from_seed_dir=from_seed_dir, accept_seed=accept_seed)
 
 
 def _iter_rule_based_windows(
@@ -200,8 +200,10 @@ def iter_catalog_windows(
             continue
         for path in sorted(cal_dir.glob("*.csv")):
             accept_seed = include_seed if is_seed_dir else True
-            for et, rd, rt, tz, status in _iter_csv_calendar_rows(path, accept_seed=accept_seed):
-                w = _row_to_window(et, rd, rt, tz, status)
+            for et, rd, rt, tz, status, source, source_url in _iter_csv_calendar_rows(
+                path, accept_seed=accept_seed, from_seed_dir=is_seed_dir
+            ):
+                w = _row_to_window(et, rd, rt, tz, status, source=source, source_url=source_url)
                 if not w:
                     continue
                 yr = int(w.release_date[:4])

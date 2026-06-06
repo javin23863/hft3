@@ -23,9 +23,13 @@ class BudgetManager:
         
     def _calculate_total_used(self) -> float:
         if os.path.exists(self.manifest_path):
-            df = pd.read_parquet(self.manifest_path)
-            if 'cost' in df.columns:
-                return df['cost'].sum()
+            try:
+                df = pd.read_parquet(self.manifest_path)
+                if "cost" in df.columns:
+                    return float(df["cost"].sum())
+            except Exception:
+                # Corrupt or legacy manifest — treat as zero spend so downloads can proceed.
+                pass
         return 0.0
             
     def get_remaining_credit(self) -> float:

@@ -1,0 +1,646 @@
+{
+  "generated_at_utc": "2026-06-06T09:33:50.706107+00:00",
+  "macro_event_type_count": 45,
+  "walk_forward_year_range": [
+    2018,
+    2025
+  ],
+  "primary_scope_for_downloads": "macro_releases",
+  "note": "Use macro_releases for sourced Fed/BLS macro backtest data. campaign is CPI/NFP only (workbench default). full_catalog includes SEED scaffolds for all catalog types.",
+  "scopes": {
+    "macro_releases": {
+      "output_path": "runtime/data_downloads/macro_releases_mbo_estimate.json",
+      "scoped_event_types": [
+        "CPI",
+        "FED_BEIGE_BOOK",
+        "FED_H41",
+        "FOMC_MINUTES",
+        "FOMC_PRESS",
+        "FOMC_STATEMENT",
+        "INDUSTRIAL_PRODUCTION",
+        "NFP",
+        "PROP_FLATTEN_TOPSTEP"
+      ],
+      "scoped_window_count": 738,
+      "npz_slots_missing": 4781,
+      "estimated_cost_usd": 34.2019,
+      "by_event_type_full": {
+        "CPI": {
+          "windows": 19,
+          "npz_slots_total": 133,
+          "npz_slots_missing": 0,
+          "npz_slots_present": 133,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "complete"
+        },
+        "FED_BEIGE_BOOK": {
+          "windows": 64,
+          "npz_slots_total": 448,
+          "npz_slots_missing": 448,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 4.8904,
+          "cache_status": "needs_download"
+        },
+        "FED_H41": {
+          "windows": 416,
+          "npz_slots_total": 2912,
+          "npz_slots_missing": 2912,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 2.7591,
+          "cache_status": "needs_download"
+        },
+        "FOMC_MINUTES": {
+          "windows": 40,
+          "npz_slots_total": 280,
+          "npz_slots_missing": 280,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 7.5648,
+          "cache_status": "needs_download"
+        },
+        "FOMC_PRESS": {
+          "windows": 21,
+          "npz_slots_total": 147,
+          "npz_slots_missing": 147,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 9.5971,
+          "cache_status": "needs_download"
+        },
+        "FOMC_STATEMENT": {
+          "windows": 40,
+          "npz_slots_total": 280,
+          "npz_slots_missing": 280,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 7.5648,
+          "cache_status": "needs_download"
+        },
+        "INDUSTRIAL_PRODUCTION": {
+          "windows": 102,
+          "npz_slots_total": 714,
+          "npz_slots_missing": 714,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 1.8258,
+          "cache_status": "needs_download"
+        },
+        "NFP": {
+          "windows": 33,
+          "npz_slots_total": 231,
+          "npz_slots_missing": 0,
+          "npz_slots_present": 231,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "complete"
+        },
+        "PROP_FLATTEN_TOPSTEP": {
+          "windows": 3,
+          "npz_slots_total": 21,
+          "npz_slots_missing": 0,
+          "npz_slots_present": 21,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "complete"
+        }
+      }
+    },
+    "backtest": {
+      "output_path": "runtime/data_downloads/backtest_mbo_estimate.json",
+      "scoped_event_types": [
+        "CPI",
+        "FED_BEIGE_BOOK",
+        "FED_H41",
+        "FED_SPEAKER",
+        "FOMC_MINUTES",
+        "FOMC_PRESS",
+        "FOMC_STATEMENT",
+        "INDUSTRIAL_PRODUCTION",
+        "NFP",
+        "PROP_FLATTEN_TOPSTEP"
+      ],
+      "scoped_window_count": 1217,
+      "npz_slots_missing": 8134,
+      "estimated_cost_usd": 59.1383,
+      "by_event_type_full": {
+        "CPI": {
+          "windows": 19,
+          "npz_slots_total": 133,
+          "npz_slots_missing": 0,
+          "npz_slots_present": 133,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "complete"
+        },
+        "FED_BEIGE_BOOK": {
+          "windows": 64,
+          "npz_slots_total": 448,
+          "npz_slots_missing": 448,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "needs_download"
+        },
+        "FED_H41": {
+          "windows": 416,
+          "npz_slots_total": 2912,
+          "npz_slots_missing": 2912,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 2.7591,
+          "cache_status": "needs_download"
+        },
+        "FED_SPEAKER": {
+          "windows": 479,
+          "npz_slots_total": 3353,
+          "npz_slots_missing": 3353,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 29.8267,
+          "cache_status": "needs_download"
+        },
+        "FOMC_MINUTES": {
+          "windows": 40,
+          "npz_slots_total": 280,
+          "npz_slots_missing": 280,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 7.5648,
+          "cache_status": "needs_download"
+        },
+        "FOMC_PRESS": {
+          "windows": 21,
+          "npz_slots_total": 147,
+          "npz_slots_missing": 147,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 9.5971,
+          "cache_status": "needs_download"
+        },
+        "FOMC_STATEMENT": {
+          "windows": 40,
+          "npz_slots_total": 280,
+          "npz_slots_missing": 280,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 7.5648,
+          "cache_status": "needs_download"
+        },
+        "INDUSTRIAL_PRODUCTION": {
+          "windows": 102,
+          "npz_slots_total": 714,
+          "npz_slots_missing": 714,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 1.8258,
+          "cache_status": "needs_download"
+        },
+        "NFP": {
+          "windows": 33,
+          "npz_slots_total": 231,
+          "npz_slots_missing": 0,
+          "npz_slots_present": 231,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "complete"
+        },
+        "PROP_FLATTEN_TOPSTEP": {
+          "windows": 3,
+          "npz_slots_total": 21,
+          "npz_slots_missing": 0,
+          "npz_slots_present": 21,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "complete"
+        }
+      }
+    },
+    "full_catalog": {
+      "output_path": "runtime/data_downloads/full_macro_catalog_mbo_estimate.json",
+      "scoped_event_types": [
+        "ADP_EMPLOYMENT",
+        "BAKER_HUGHES_RIG",
+        "BUILDING_PERMITS",
+        "CASH_EQUITY_OPEN",
+        "CONSTRUCTION_SPENDING",
+        "CORE_CPI",
+        "CORE_PCE",
+        "CORE_PPI",
+        "CPI",
+        "DURABLE_GOODS_ADVANCE",
+        "DURABLE_GOODS_FULL",
+        "ECI",
+        "EIA_CRUDE",
+        "EIA_NATGAS",
+        "EXISTING_HOME_SALES",
+        "EXPORT_PRICES",
+        "FACTORY_ORDERS",
+        "FED_BEIGE_BOOK",
+        "FED_H41",
+        "FED_SPEAKER",
+        "FOMC_MINUTES",
+        "FOMC_PRESS",
+        "FOMC_STATEMENT",
+        "FRIDAY_CLOSE",
+        "GDP_ADVANCE",
+        "GDP_FINAL",
+        "GDP_SECOND",
+        "HOUSING_STARTS",
+        "IMPORT_PRICES",
+        "INDUSTRIAL_PRODUCTION",
+        "ISM_MANUFACTURING",
+        "ISM_SERVICES",
+        "JOLTS",
+        "NEW_HOME_SALES",
+        "NFP",
+        "PCE",
+        "PPI",
+        "PRODUCTIVITY",
+        "PROP_FLATTEN_TOPSTEP",
+        "PROP_REOPEN",
+        "RETAIL_SALES",
+        "TRADE_BALANCE",
+        "TREASURY_AUCTION",
+        "TREASURY_REFUNDING",
+        "UNEMPLOYMENT_CLAIMS"
+      ],
+      "scoped_window_count": 9495,
+      "npz_slots_missing": 62125,
+      "estimated_cost_usd": 222.7137,
+      "by_event_type_full": {
+        "ADP_EMPLOYMENT": {
+          "windows": 32,
+          "npz_slots_total": 224,
+          "npz_slots_missing": 224,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "needs_download"
+        },
+        "BAKER_HUGHES_RIG": {
+          "windows": 418,
+          "npz_slots_total": 2926,
+          "npz_slots_missing": 2926,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 22.8436,
+          "cache_status": "needs_download"
+        },
+        "BUILDING_PERMITS": {
+          "windows": 48,
+          "npz_slots_total": 336,
+          "npz_slots_missing": 336,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "needs_download"
+        },
+        "CASH_EQUITY_OPEN": {
+          "windows": 2088,
+          "npz_slots_total": 14616,
+          "npz_slots_missing": 14616,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "needs_download"
+        },
+        "CONSTRUCTION_SPENDING": {
+          "windows": 48,
+          "npz_slots_total": 336,
+          "npz_slots_missing": 336,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "needs_download"
+        },
+        "CORE_CPI": {
+          "windows": 48,
+          "npz_slots_total": 336,
+          "npz_slots_missing": 336,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "needs_download"
+        },
+        "CORE_PCE": {
+          "windows": 48,
+          "npz_slots_total": 336,
+          "npz_slots_missing": 336,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "needs_download"
+        },
+        "CORE_PPI": {
+          "windows": 48,
+          "npz_slots_total": 336,
+          "npz_slots_missing": 336,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "needs_download"
+        },
+        "CPI": {
+          "windows": 19,
+          "npz_slots_total": 133,
+          "npz_slots_missing": 0,
+          "npz_slots_present": 133,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "complete"
+        },
+        "DURABLE_GOODS_ADVANCE": {
+          "windows": 48,
+          "npz_slots_total": 336,
+          "npz_slots_missing": 336,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "needs_download"
+        },
+        "DURABLE_GOODS_FULL": {
+          "windows": 48,
+          "npz_slots_total": 336,
+          "npz_slots_missing": 336,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "needs_download"
+        },
+        "ECI": {
+          "windows": 48,
+          "npz_slots_total": 336,
+          "npz_slots_missing": 336,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "needs_download"
+        },
+        "EIA_CRUDE": {
+          "windows": 418,
+          "npz_slots_total": 2926,
+          "npz_slots_missing": 1995,
+          "npz_slots_present": 931,
+          "estimated_cost_usd": 24.7632,
+          "cache_status": "needs_download"
+        },
+        "EIA_NATGAS": {
+          "windows": 418,
+          "npz_slots_total": 2926,
+          "npz_slots_missing": 1995,
+          "npz_slots_present": 931,
+          "estimated_cost_usd": 24.7632,
+          "cache_status": "needs_download"
+        },
+        "EXISTING_HOME_SALES": {
+          "windows": 48,
+          "npz_slots_total": 336,
+          "npz_slots_missing": 336,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "needs_download"
+        },
+        "EXPORT_PRICES": {
+          "windows": 48,
+          "npz_slots_total": 336,
+          "npz_slots_missing": 336,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "needs_download"
+        },
+        "FACTORY_ORDERS": {
+          "windows": 48,
+          "npz_slots_total": 336,
+          "npz_slots_missing": 336,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "needs_download"
+        },
+        "FED_BEIGE_BOOK": {
+          "windows": 126,
+          "npz_slots_total": 882,
+          "npz_slots_missing": 798,
+          "npz_slots_present": 84,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "needs_download"
+        },
+        "FED_H41": {
+          "windows": 834,
+          "npz_slots_total": 5838,
+          "npz_slots_missing": 4914,
+          "npz_slots_present": 924,
+          "estimated_cost_usd": 4.8143,
+          "cache_status": "needs_download"
+        },
+        "FED_SPEAKER": {
+          "windows": 479,
+          "npz_slots_total": 3353,
+          "npz_slots_missing": 3353,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 29.8267,
+          "cache_status": "needs_download"
+        },
+        "FOMC_MINUTES": {
+          "windows": 103,
+          "npz_slots_total": 721,
+          "npz_slots_missing": 721,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 22.3534,
+          "cache_status": "needs_download"
+        },
+        "FOMC_PRESS": {
+          "windows": 85,
+          "npz_slots_total": 595,
+          "npz_slots_missing": 483,
+          "npz_slots_present": 112,
+          "estimated_cost_usd": 0.002,
+          "cache_status": "needs_download"
+        },
+        "FOMC_STATEMENT": {
+          "windows": 102,
+          "npz_slots_total": 714,
+          "npz_slots_missing": 714,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 0.0048,
+          "cache_status": "needs_download"
+        },
+        "FRIDAY_CLOSE": {
+          "windows": 417,
+          "npz_slots_total": 2919,
+          "npz_slots_missing": 2919,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 61.3296,
+          "cache_status": "needs_download"
+        },
+        "GDP_ADVANCE": {
+          "windows": 48,
+          "npz_slots_total": 336,
+          "npz_slots_missing": 336,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "needs_download"
+        },
+        "GDP_FINAL": {
+          "windows": 48,
+          "npz_slots_total": 336,
+          "npz_slots_missing": 336,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "needs_download"
+        },
+        "GDP_SECOND": {
+          "windows": 48,
+          "npz_slots_total": 336,
+          "npz_slots_missing": 336,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "needs_download"
+        },
+        "HOUSING_STARTS": {
+          "windows": 48,
+          "npz_slots_total": 336,
+          "npz_slots_missing": 336,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "needs_download"
+        },
+        "IMPORT_PRICES": {
+          "windows": 48,
+          "npz_slots_total": 336,
+          "npz_slots_missing": 336,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "needs_download"
+        },
+        "INDUSTRIAL_PRODUCTION": {
+          "windows": 150,
+          "npz_slots_total": 1050,
+          "npz_slots_missing": 1050,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "needs_download"
+        },
+        "ISM_MANUFACTURING": {
+          "windows": 48,
+          "npz_slots_total": 336,
+          "npz_slots_missing": 336,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "needs_download"
+        },
+        "ISM_SERVICES": {
+          "windows": 48,
+          "npz_slots_total": 336,
+          "npz_slots_missing": 336,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "needs_download"
+        },
+        "JOLTS": {
+          "windows": 48,
+          "npz_slots_total": 336,
+          "npz_slots_missing": 336,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "needs_download"
+        },
+        "NEW_HOME_SALES": {
+          "windows": 48,
+          "npz_slots_total": 336,
+          "npz_slots_missing": 336,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "needs_download"
+        },
+        "NFP": {
+          "windows": 33,
+          "npz_slots_total": 231,
+          "npz_slots_missing": 0,
+          "npz_slots_present": 231,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "complete"
+        },
+        "PCE": {
+          "windows": 48,
+          "npz_slots_total": 336,
+          "npz_slots_missing": 336,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "needs_download"
+        },
+        "PPI": {
+          "windows": 48,
+          "npz_slots_total": 336,
+          "npz_slots_missing": 336,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "needs_download"
+        },
+        "PRODUCTIVITY": {
+          "windows": 48,
+          "npz_slots_total": 336,
+          "npz_slots_missing": 336,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "needs_download"
+        },
+        "PROP_FLATTEN_TOPSTEP": {
+          "windows": 3,
+          "npz_slots_total": 21,
+          "npz_slots_missing": 0,
+          "npz_slots_present": 21,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "complete"
+        },
+        "PROP_REOPEN": {
+          "windows": 2088,
+          "npz_slots_total": 14616,
+          "npz_slots_missing": 14616,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 25.7422,
+          "cache_status": "needs_download"
+        },
+        "RETAIL_SALES": {
+          "windows": 48,
+          "npz_slots_total": 336,
+          "npz_slots_missing": 336,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "needs_download"
+        },
+        "TRADE_BALANCE": {
+          "windows": 48,
+          "npz_slots_total": 336,
+          "npz_slots_missing": 336,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "needs_download"
+        },
+        "TREASURY_AUCTION": {
+          "windows": 32,
+          "npz_slots_total": 224,
+          "npz_slots_missing": 196,
+          "npz_slots_present": 28,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "needs_download"
+        },
+        "TREASURY_REFUNDING": {
+          "windows": 32,
+          "npz_slots_total": 224,
+          "npz_slots_missing": 224,
+          "npz_slots_present": 0,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "needs_download"
+        },
+        "UNEMPLOYMENT_CLAIMS": {
+          "windows": 418,
+          "npz_slots_total": 2926,
+          "npz_slots_missing": 1981,
+          "npz_slots_present": 945,
+          "estimated_cost_usd": 6.2706,
+          "cache_status": "needs_download"
+        }
+      }
+    },
+    "campaign": {
+      "output_path": "runtime/data_downloads/campaign_mbo_estimate.json",
+      "scoped_event_types": [
+        "CPI",
+        "NFP"
+      ],
+      "scoped_window_count": 52,
+      "npz_slots_missing": 0,
+      "estimated_cost_usd": 0.0,
+      "by_event_type_full": {
+        "CPI": {
+          "windows": 19,
+          "npz_slots_total": 133,
+          "npz_slots_missing": 0,
+          "npz_slots_present": 133,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "complete"
+        },
+        "NFP": {
+          "windows": 33,
+          "npz_slots_total": 231,
+          "npz_slots_missing": 0,
+          "npz_slots_present": 231,
+          "estimated_cost_usd": 0.0,
+          "cache_status": "complete"
+        }
+      }
+    }
+  }
+}

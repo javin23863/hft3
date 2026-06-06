@@ -10,8 +10,10 @@ def test_bls_fixture_parse():
 
 
 def test_fed_fixture_parse():
-    rows = fed.parse_fed_html("Meeting 2024-09-18")
+    html = '<a href="/monetarypolicy/files/monetary20240918a1.pdf">stmt</a>'
+    rows = fed.parse_fomc_html(html)
     assert any(r["event_type"] == "FOMC_STATEMENT" for r in rows)
+    assert any(r["release_date"] == "2024-09-18" for r in rows)
 
 
 def test_ism_fixture_parse():

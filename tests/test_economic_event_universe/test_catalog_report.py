@@ -24,8 +24,9 @@ def test_catalog_banner_distinguishes_csv_from_full_catalog():
     from economic_event_universe.catalog_report import format_catalog_banner
     from economic_event_universe.registry import catalog_event_type_count
 
-    text = format_catalog_banner()
+    text = format_catalog_banner(REPO)
     assert f"{catalog_event_type_count()} event types" in text
+    assert "SOURCED release calendars" in text
     assert "events.csv is NOT the full catalog" in text
 
 
@@ -35,7 +36,7 @@ def test_events_csv_is_subset_of_full_catalog():
 
     rows, type_count, csv_types = events_csv_summary(REPO)
     assert rows >= 55
-    assert type_count == 3
+    assert type_count >= 9
     assert csv_types.issubset(set(catalog_event_types()))
     assert len(catalog_event_types()) > type_count
 

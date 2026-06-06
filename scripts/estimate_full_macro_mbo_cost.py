@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Estimate Databento MBO cost for all macro catalog event types (point-in-time windows × 7 CME symbols)."""
+"""Estimate Databento MBO cost for macro event windows (point-in-time × CME symbols)."""
 
 from __future__ import annotations
 
@@ -42,7 +42,13 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-OUT_PATH = _REPO / "runtime" / "data_downloads" / "full_macro_catalog_mbo_estimate.json"
+OUT_BACKTEST = _REPO / "runtime" / "data_downloads" / "backtest_mbo_estimate.json"
+OUT_CAMPAIGN = _REPO / "runtime" / "data_downloads" / "campaign_mbo_estimate.json"
+OUT_MACRO = _REPO / "runtime" / "data_downloads" / "macro_releases_mbo_estimate.json"
+OUT_FULL_CATALOG = _REPO / "runtime" / "data_downloads" / "full_macro_catalog_mbo_estimate.json"
+OUT_SUMMARY = _REPO / "runtime" / "data_downloads" / "mbo_cost_summary.json"
+
+ALL_SCOPES = ("macro_releases", "backtest", "full_catalog", "campaign")
 
 
 @dataclass(frozen=True)
@@ -107,7 +113,7 @@ def estimate_missing_slots(
             "estimated_cost_usd": 0.0,
             "unpriced": len(slots),
             "error": str(exc),
-            "estimate_method": "no_api_key",
+            "estimate_method": "client_init_failed",
             "by_event_type": {},
         }
 
@@ -154,34 +160,97 @@ def estimate_missing_slots(
     }
 
 
-def main() -> int:
+def _type_slot_breakdown(
+    windows_by_type: dict[str, int],
+    missing_slots: list[CostSlot],
+    cost_by_type: dict[str, float],
+    *,
+    symbol_count: int,
+) -> dict[str, dict[str, Any]]:
+    """Per-type windows, NPZ gaps, and cost — includes cached types at $0."""
+    missing_by_type: dict[str, int] = {}
+    for s in missing_slots:
+        missing_by_type[s.event_type] = missing_by_type.get(s.event_type, 0) + 1
+    out: dict[str, dict[str, Any]] = {}
+    for et in sorted(windows_by_type.keys()):
+        if windows_by_type[et] <= 0:
+            continue
+        windows = windows_by_type[et]
+        slots_total = windows * symbol_count
+        slots_missing = missing_by_type.get(et, 0)
+        out[et] = {
+            "windows": windows,
+            "npz_slots_total": slots_total,
+            "npz_slots_missing": slots_missing,
+            "npz_slots_present": slots_total - slots_missing,
+            "estimated_cost_usd": round(cost_by_type.get(et, 0.0), 4),
+            "cache_status": "complete" if slots_missing == 0 else "needs_download",
+        }
+    return out
+
+
+def _print_type_breakdown(breakdown: dict[str, dict[str, Any]], total_cost: float) -> None:
+    print("\nCost by event type (full scoped universe):")
+    print(f"{'TYPE':<28} {'WINS':>5} {'NPZ miss':>9} {'COST $':>10} {'STATUS':<14}")
+    print("-" * 70)
+    for et, row in breakdown.items():
+        print(
+            f"{et:<28} {row['windows']:>5} {row['npz_slots_missing']:>9} "
+            f"{row['estimated_cost_usd']:>10.2f} {row['cache_status']:<14}"
+        )
+    print("-" * 70)
+    print(f"{'TOTAL':<28} {'':>5} {'':>9} {total_cost:>10.2f}")
+
+
+def _scope_params(
+    scope: str,
+    *,
+    wf_start: int,
+    wf_end: int,
+    start_year: int | None,
+    end_year: int | None,
+    no_seed: bool,
+    no_rule_based: bool,
+) -> tuple[int, int, bool, bool]:
+    if scope == "full_catalog":
+        sy = start_year if start_year is not None else 2018
+        ey = end_year if end_year is not None else 2025
+        return sy, ey, not no_seed, not no_rule_based
+    sy = start_year if start_year is not None else wf_start
+    ey = end_year if end_year is not None else wf_end
+    return sy, ey, False, False
+
+
+def build_scope_report(
+    scope: str,
+    *,
+    start_year: int,
+    end_year: int,
+    include_seed: bool,
+    include_rule_based: bool,
+    wf_start: int,
+    wf_end: int,
+    do_estimate: bool,
+    sample_per_type: bool,
+) -> dict[str, Any]:
     from economic_event_universe.catalog_report import build_macro_catalog_summary
+    from economic_event_universe.events_csv_builder import resolve_download_scope_windows
     from economic_event_universe.registry import catalog_event_type_count, default_cme_symbols
     from economic_event_universe.window_catalog import (
         count_windows_by_type,
-        iter_catalog_windows,
         iter_missing_npz_slots,
+        npz_slot_coverage,
     )
 
-    parser = argparse.ArgumentParser(
-        description="Estimate MBO download cost for all macro catalog event types"
-    )
-    parser.add_argument("--estimate", action="store_true", help="Call Databento get_cost for missing slots")
-    parser.add_argument("--no-seed", action="store_true", help="Exclude SEED calendar scaffolds")
-    parser.add_argument("--no-rule-based", action="store_true", help="Exclude FRIDAY/CASH_OPEN/PROP_REOPEN generators")
-    parser.add_argument("--start-year", type=int, default=2018)
-    parser.add_argument("--end-year", type=int, default=2025)
-    parser.add_argument("--sample-per-type", action="store_true", help="Price one window per type×symbol group")
-    parser.add_argument("--output", type=Path, default=OUT_PATH)
-    args = parser.parse_args()
-
-    windows = iter_catalog_windows(
+    windows = resolve_download_scope_windows(
         _REPO,
-        include_seed=not args.no_seed,
-        include_rule_based=not args.no_rule_based,
-        start_year=args.start_year,
-        end_year=args.end_year,
+        scope,
+        start_year=start_year,
+        end_year=end_year,
+        include_seed=include_seed,
+        include_rule_based=include_rule_based,
     )
+
     missing = iter_missing_npz_slots(_REPO, windows)
     slots = [
         CostSlot(
@@ -195,47 +264,184 @@ def main() -> int:
         for w, sym in missing
     ]
 
+    npz_present, npz_missing = npz_slot_coverage(_REPO, windows)
     summary = build_macro_catalog_summary(
         _REPO,
-        include_seed_calendars=not args.no_seed,
-        include_rule_based=not args.no_rule_based,
+        include_seed_calendars=include_seed,
+        include_rule_based=include_rule_based,
+        windows=windows,
     )
     windows_by_type = count_windows_by_type(windows)
+    scoped_types = sorted(et for et, n in windows_by_type.items() if n > 0)
 
     report: dict[str, Any] = {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "scope": scope,
         "macro_event_type_count": catalog_event_type_count(),
-        "catalog_window_count": len(windows),
-        "windows_by_event_type": windows_by_type,
+        "scoped_event_types": scoped_types,
+        "scoped_window_count": len(windows),
+        "windows_by_event_type": {k: v for k, v in windows_by_type.items() if v > 0},
         "cme_symbols": list(default_cme_symbols()),
         "total_npz_slots": len(windows) * len(default_cme_symbols()),
-        "npz_slots_present": summary.npz_slots_present,
-        "npz_slots_missing": summary.npz_slots_missing,
-        "types_with_zero_windows": summary.types_with_zero_windows,
-        "year_range": [args.start_year, args.end_year],
-        "include_seed_calendars": not args.no_seed,
-        "include_rule_based": not args.no_rule_based,
-        "catalog_summary": summary.to_dict(),
+        "npz_slots_present": npz_present,
+        "npz_slots_missing": npz_missing,
+        "year_range": [start_year, end_year],
+        "walk_forward_year_range": [wf_start, wf_end],
+        "include_seed_calendars": include_seed,
+        "include_rule_based": include_rule_based,
+        "events_csv_row_count": summary.events_csv_rows,
+        "events_csv_type_count": summary.events_csv_types,
+        "note": (
+            "npz_slots_missing counts local cache gaps for this scope only; "
+            "pass --estimate for Databento pricing."
+        ),
     }
 
-    if args.estimate:
-        report["cost_estimate"] = estimate_missing_slots(slots, sample_per_type=args.sample_per_type)
+    if do_estimate:
+        sample = sample_per_type or len(slots) > 400
+        report["cost_estimate"] = estimate_missing_slots(slots, sample_per_type=sample)
+        cost_by_type = report["cost_estimate"].get("by_event_type") or {}
+        report["cost_estimate"]["by_event_type_full"] = _type_slot_breakdown(
+            {k: v for k, v in windows_by_type.items() if v > 0},
+            slots,
+            cost_by_type,
+            symbol_count=len(default_cme_symbols()),
+        )
     else:
         report["cost_estimate"] = {
             "pending_slots": len(slots),
             "note": "Pass --estimate to call Databento get_cost",
         }
+    return report
 
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(report, indent=2), encoding="utf-8")
 
+def _print_scope_report(report: dict[str, Any], *, do_estimate: bool) -> None:
+    scope = report["scope"]
+    start_year, end_year = report["year_range"]
+    scoped_types = report["scoped_event_types"]
+    windows = report["scoped_window_count"]
     est = report.get("cost_estimate", {})
-    print(f"Macro catalog: {catalog_event_type_count()} event types")
-    print(f"Windows: {len(windows)} | NPZ slots missing: {len(slots)} / {len(windows) * len(default_cme_symbols())}")
-    if args.estimate and "estimated_cost_usd" in est:
+    slots_pending = est.get("pending_slots", report["npz_slots_missing"])
+
+    print(f"\n=== Scope: {scope} | Years: {start_year}-{end_year} ===")
+    print(
+        f"Macro catalog: {report['macro_event_type_count']} event types | "
+        f"Scoped: {len(scoped_types)} types, {windows} windows"
+    )
+    print(f"Event types: {', '.join(scoped_types)}")
+    print(
+        f"NPZ slots missing (local cache): {slots_pending} / {report['total_npz_slots']}"
+    )
+    if do_estimate and "estimated_cost_usd" in est:
         print(f"Estimated download cost (missing slots): ${est['estimated_cost_usd']:.2f}")
         print(f"Method: {est.get('estimate_method')}")
-    print(f"Wrote: {args.output}")
+        full = est.get("by_event_type_full")
+        if full:
+            _print_type_breakdown(full, float(est["estimated_cost_usd"]))
+    elif not do_estimate:
+        print("Pass --estimate to call Databento get_cost for missing slots")
+
+
+def main() -> int:
+    from economic_event_universe.registry import catalog_event_type_count
+    from economic_event_universe.walk_forward_years import backtest_year_range
+
+    wf_start, wf_end = backtest_year_range(_REPO)
+
+    parser = argparse.ArgumentParser(
+        description="Estimate MBO download cost for macro event windows"
+    )
+    parser.add_argument(
+        "--scope",
+        choices=("campaign", "macro_releases", "backtest", "full_catalog"),
+        default="macro_releases",
+        help=(
+            "macro_releases (default) = all sourced Fed/macro in events.csv minus FED_SPEAKER; "
+            "campaign = CPI/NFP only; backtest = all SOURCED calendars; full_catalog = entire catalog"
+        ),
+    )
+    parser.add_argument(
+        "--all-scopes",
+        action="store_true",
+        help="Run macro_releases, backtest, full_catalog, and campaign; write mbo_cost_summary.json",
+    )
+    parser.add_argument("--estimate", action="store_true", help="Call Databento get_cost for missing slots")
+    parser.add_argument("--no-seed", action="store_true", help="Exclude SEED calendar scaffolds (full_catalog only)")
+    parser.add_argument(
+        "--no-rule-based",
+        action="store_true",
+        help="Exclude FRIDAY/CASH_OPEN/PROP_REOPEN generators (full_catalog only)",
+    )
+    parser.add_argument("--start-year", type=int, default=None)
+    parser.add_argument("--end-year", type=int, default=None)
+    parser.add_argument("--sample-per-type", action="store_true", help="Price one window per type×symbol group")
+    parser.add_argument("--output", type=Path, default=None)
+    args = parser.parse_args()
+
+    scope_outputs = {
+        "campaign": OUT_CAMPAIGN,
+        "macro_releases": OUT_MACRO,
+        "backtest": OUT_BACKTEST,
+        "full_catalog": OUT_FULL_CATALOG,
+    }
+
+    scopes = list(ALL_SCOPES) if args.all_scopes else [args.scope]
+    summary_reports: dict[str, Any] = {}
+
+    for scope in scopes:
+        start_year, end_year, include_seed, include_rule_based = _scope_params(
+            scope,
+            wf_start=wf_start,
+            wf_end=wf_end,
+            start_year=args.start_year,
+            end_year=args.end_year,
+            no_seed=args.no_seed,
+            no_rule_based=args.no_rule_based,
+        )
+        report = build_scope_report(
+            scope,
+            start_year=start_year,
+            end_year=end_year,
+            include_seed=include_seed,
+            include_rule_based=include_rule_based,
+            wf_start=wf_start,
+            wf_end=wf_end,
+            do_estimate=args.estimate,
+            sample_per_type=args.sample_per_type,
+        )
+        out_path = scope_outputs[scope]
+        if not args.all_scopes and args.output:
+            out_path = args.output
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        summary_reports[scope] = {
+            "output_path": str(out_path.relative_to(_REPO)).replace("\\", "/"),
+            "scoped_event_types": report["scoped_event_types"],
+            "scoped_window_count": report["scoped_window_count"],
+            "npz_slots_missing": report["npz_slots_missing"],
+            "estimated_cost_usd": report.get("cost_estimate", {}).get("estimated_cost_usd"),
+            "by_event_type_full": report.get("cost_estimate", {}).get("by_event_type_full"),
+        }
+        _print_scope_report(report, do_estimate=args.estimate)
+        print(f"Wrote: {out_path}")
+
+    if args.all_scopes:
+        master = {
+            "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+            "macro_event_type_count": catalog_event_type_count(),
+            "walk_forward_year_range": [wf_start, wf_end],
+            "primary_scope_for_downloads": "macro_releases",
+            "note": (
+                "Use macro_releases for sourced Fed/BLS macro backtest data. "
+                "campaign is CPI/NFP only (workbench default). "
+                "full_catalog includes SEED scaffolds for all catalog types."
+            ),
+            "scopes": summary_reports,
+        }
+        OUT_SUMMARY.parent.mkdir(parents=True, exist_ok=True)
+        OUT_SUMMARY.write_text(json.dumps(master, indent=2), encoding="utf-8")
+        print(f"\nMaster summary: {OUT_SUMMARY}")
+
     return 0
 
 

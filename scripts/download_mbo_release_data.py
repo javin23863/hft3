@@ -30,8 +30,16 @@ OUT_REPORT = _REPO / "runtime" / "data_downloads" / "mbo_download_report.json"
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Download MBO-only release windows for full macro catalog")
+    parser = argparse.ArgumentParser(
+        description="Download MBO release windows (T-60s to T+10s) → validated DBN → optional NPZ"
+    )
     parser.add_argument("--download", action="store_true", help="Execute Databento MBO downloads")
+    parser.add_argument(
+        "--scope",
+        choices=("campaign", "macro_releases", "backtest", "full_catalog"),
+        default="macro_releases",
+        help="macro_releases (default)=all sourced Fed/macro minus speakers; campaign=CPI/NFP only",
+    )
     parser.add_argument("--import-only", metavar="DBN", help="Import existing raw DBN into MBO lane")
     parser.add_argument("--release-id", default=None, help="Release id for --import-only")
     parser.add_argument("--symbol", default="MES.v.0", help="Symbol for --import-only")
@@ -77,6 +85,7 @@ def main() -> int:
     )
 
     report_body: dict = {
+        "scope": args.scope,
         "macro_event_type_count": catalog_event_type_count(),
         "catalog_summary": summary.to_dict(),
         "window_offsets_seconds": {"start": start_off, "end": end_off},
@@ -85,6 +94,7 @@ def main() -> int:
     if args.download:
         dl_report = run_catalog_download(
             _REPO,
+            scope=args.scope,
             include_seed=not args.no_seed,
             include_rule_based=args.rule_based,
             start_year=args.start_year,
@@ -112,7 +122,7 @@ def main() -> int:
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report_body, indent=2), encoding="utf-8")
-    print(f"Catalog: {catalog_event_type_count()} event types | window {start_off}s to {end_off}s")
+    print(f"Scope: {args.scope} | Catalog: {catalog_event_type_count()} event types | window {start_off}s to {end_off}s")
     if args.download:
         rep = report_body.get("mbo_download_report", {})
         print(f"Valid paths: {len(rep.get('valid_release_paths', []))}")

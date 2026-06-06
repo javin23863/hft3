@@ -158,10 +158,12 @@ def _monthly_2nd_week(start: date, end: date) -> list[date]:
 
 def seed_calendars(events: dict) -> None:
     """SEED scaffolds go to artifacts/; release_calendars/ keeps SOURCED files only."""
+    from economic_event_universe.calendar_io import sourced_calendar_filenames
+
     CAL_DIR.mkdir(parents=True, exist_ok=True)
     PROPOSALS_DIR = _REPO / "artifacts" / "calendar_proposals" / "seed_scaffold"
     PROPOSALS_DIR.mkdir(parents=True, exist_ok=True)
-    preserve = {"bls_cpi.csv", "bls_nfp.csv", "prop_flatten.csv"}
+    preserve = sourced_calendar_filenames(CAL_DIR)
     for path in CAL_DIR.glob("*.csv"):
         if path.name not in preserve:
             path.unlink()
