@@ -446,7 +446,7 @@ def _latency_authority(profile: CppLatencyProfile, chi404_observed: bool) -> dic
     ]
     authoritative = bool(chi404_observed and ack_measured and measured_components)
     if not chi404_observed:
-        reason = "CHI404 latency summary is missing; YAML defaults are not promotion authority"
+        reason = "CHI404 latency summary is missing; no default latency substitute is allowed"
     elif not ack_measured:
         reason = "CHI404 latency summary reports order_ack_blocked; submit-to-ack evidence is not measured"
     elif not measured_components:

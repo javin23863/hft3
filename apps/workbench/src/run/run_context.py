@@ -73,7 +73,14 @@ class RunContext:
     ) -> "RunContext":
         ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         run_id = f"{model_id}_{event_id}_{ts}"
-        policy = latency_policy or LatencyPolicy.fixed(measured_p99_ms or 1.0)
+        if latency_policy is None:
+            if not (chi404_summary and chi404_summary.is_file()):
+                raise FileNotFoundError(
+                    "RunContext requires a CHI404 latency summary or explicit C++ latency policy; "
+                    "no fixed/default latency is allowed"
+                )
+            latency_policy = LatencyPolicy.from_chi404_summary(chi404_summary, seed=seed)
+        policy = latency_policy
         cpp_prof = policy.cpp_profile
         if cpp_prof is None and chi404_summary and chi404_summary.is_file():
             cpp_prof = CppLatencyProfile.from_chi404_summary(chi404_summary)

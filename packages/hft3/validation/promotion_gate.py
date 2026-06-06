@@ -92,7 +92,7 @@ def _scorecard_covers(
     if event_id:
         prefix = event_id.split("_")[0].lower()
         covered = [e.lower() for e in registry.covered_event_types]
-        if covered and prefix not in covered and "macro" not in covered and "synthetic" not in covered:
+        if covered and prefix not in covered and "macro" not in covered:
             return False, f"event_type for {event_id} not covered"
     if latency_ms and registry.covered_latency_bands:
         bands = [float(x) for x in registry.covered_latency_bands]

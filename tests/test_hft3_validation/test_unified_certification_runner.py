@@ -1,11 +1,14 @@
 """Tests for the unified certification runner and unified staleness paths."""
 from __future__ import annotations
 
+from pathlib import Path
+
 from hft3.validation.lanes.lane import Lane
 from hft3.validation.lanes.lane_registry import LaneRegistry
 from hft3.validation.lanes.registration import register_all_lanes
 from hft3.validation.lanes.unified_certification_runner import (
     LaneRunResult,
+    _run_pytest_for_lane,
     run_unified_certification,
     write_unified_certification_report,
 )
@@ -23,8 +26,9 @@ def test_unified_certification_runs_all_lanes():
         assert lane_value in card.lane_coverage
         run_result = card.lane_coverage[lane_value].get("run_result")
         assert run_result is not None
-        assert run_result["passed"] is True
-        assert run_result["returncode"] == 0
+        assert run_result["passed"] is False
+        assert run_result["returncode"] != 0
+        assert run_result["status"] == "PYTEST_SKIPPED"
 
 
 def test_unified_certification_runs_subset_of_lanes():
@@ -37,6 +41,13 @@ def test_unified_certification_runs_subset_of_lanes():
     assert card.lane_coverage["equities"].get("run_result") is not None
     assert "run_result" not in card.lane_coverage["cme_futures"]
     assert "run_result" not in card.lane_coverage["options"]
+
+
+def test_unified_certification_main_skip_pytest_is_not_success(tmp_path, monkeypatch):
+    from hft3.validation.lanes import unified_certification_runner as runner
+
+    monkeypatch.chdir(tmp_path)
+    assert runner.main(["--skip-pytest"]) == 1
 
 
 def test_write_unified_certification_report(tmp_path):
@@ -53,6 +64,37 @@ def test_lane_run_result_to_dict():
     d = r.to_dict()
     assert d["lane"] == "crypto"
     assert d["passed"] is True
+    assert d["status"] == "PASSED"
+
+
+def test_pytest_lane_with_no_test_paths_fails_closed(tmp_path: Path):
+    result = _run_pytest_for_lane([], tmp_path)
+    assert result.passed is False
+    assert result.returncode != 0
+    assert result.status == "CONFIG_MISSING"
+    assert any("CONFIG_MISSING" in note for note in result.failure_notes)
+
+
+def test_pytest_lane_with_missing_test_path_fails_closed(tmp_path: Path):
+    result = _run_pytest_for_lane(["tests/not_present"], tmp_path)
+    assert result.passed is False
+    assert result.returncode != 0
+    assert result.status == "TEST_PATH_MISSING"
+    assert result.test_paths == ["tests/not_present"]
+    assert any("TEST_PATH_MISSING" in note for note in result.failure_notes)
+
+
+def test_pytest_lane_with_missing_and_passing_path_keeps_nonzero_returncode(tmp_path: Path):
+    test_dir = tmp_path / "tests"
+    test_dir.mkdir()
+    passing = test_dir / "test_ok.py"
+    passing.write_text("def test_ok():\n    assert True\n", encoding="utf-8")
+
+    result = _run_pytest_for_lane(["tests/not_present", "tests/test_ok.py"], tmp_path)
+
+    assert result.passed is False
+    assert result.returncode != 0
+    assert result.status == "TEST_PATH_MISSING"
 
 
 def test_staleness_paths_cover_all_lanes():

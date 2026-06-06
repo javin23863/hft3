@@ -141,6 +141,38 @@ def test_full_suite_single_failure_is_red_blocker(tmp_path: Path, monkeypatch) -
     assert registry.blocking_failures == ["T2 full certification suite failed"]
 
 
+def test_missing_lane_run_results_prevent_green(tmp_path: Path, monkeypatch) -> None:
+    from hft3.validation import certification_runner as cr
+    from hft3.validation.lanes.scorecard import LaneScorecard
+
+    def fake_run_pytest(target: str, root: Path) -> tuple[bool, str, int, int, float]:
+        return True, f"{target}: 1 passed", 1, 0, 0.1
+
+    lane_card = LaneScorecard(
+        covered_lanes=["crypto", "equities", "options"],
+        lane_coverage={"crypto": {}, "equities": {}, "options": {}},
+    )
+
+    monkeypatch.setattr(cr, "_run_pytest", fake_run_pytest)
+    monkeypatch.setattr(cr, "run_unified_certification", lambda **kwargs: lane_card)
+    monkeypatch.setattr(cr, "git_sha", lambda root: "abc123")
+    monkeypatch.setattr(cr, "backtester_version", lambda root: "v-test")
+    monkeypatch.setattr(cr, "new_certification_run_id", lambda: "CERT-test-missing-lanes")
+
+    result = cr.run_full_certification(tmp_path)
+
+    assert result.status == "YELLOW"
+    assert set(result.lane_failures) == {"crypto", "equities", "options"}
+    assert any("certification evidence missing" in warning for warning in result.warnings)
+
+    payload = json.loads(Path(result.scorecard_json).read_text(encoding="utf-8"))
+    assert payload["status"] == "YELLOW"
+    assert set(payload["lane_failures"]) == {"crypto", "equities", "options"}
+
+    registry = load_registry(tmp_path)
+    assert registry.latest_certification_status == "YELLOW"
+
+
 def test_certification_runner_main_exit_code(monkeypatch) -> None:
     from hft3.validation import certification_runner as cr
 

@@ -90,15 +90,16 @@ class WorkbenchEngine:
         raw = loader.load(str(resolved_npz))
 
         chi404 = chi404_summary or (self.repo_root / "runtime/latency_reports/latency_summary.json")
-        chi404_observed = chi404.is_file()
-        if chi404_observed:
-            cpp_profile = CppLatencyProfile.from_chi404_summary(chi404)
-            policy = LatencyPolicy.from_cpp_profile(cpp_profile)
-            measured_ms = cpp_profile.measured_production_p99_ms
-        else:
-            cpp_profile = CppLatencyProfile.from_yaml_defaults()
-            policy = LatencyPolicy.from_cpp_profile(cpp_profile)
-            measured_ms = cpp_profile.measured_production_p99_ms
+        if not chi404.is_file():
+            raise FileNotFoundError(
+                f"CHI404 latency summary missing: {chi404}. "
+                "Workbench runs require runtime/latency_reports/latency_summary.json; "
+                "no YAML/default latency substitute is allowed."
+            )
+        cpp_profile = CppLatencyProfile.from_chi404_summary(chi404)
+        policy = LatencyPolicy.from_cpp_profile(cpp_profile)
+        measured_ms = cpp_profile.measured_production_p99_ms
+        chi404_observed = True
 
         if coverage_summary is None:
             coverage_symbol = symbol or "MES.v.0"
@@ -285,7 +286,7 @@ class WorkbenchEngine:
             and phase5_audit_passes
             and latency_envelope_passes
             and manifest.data_sufficient
-            and (wfc_status is None or wfc_status in ("PASS", "SKIPPED"))
+            and (wfc_status is None or wfc_status == "PASS")
         )
 
         cert_stamp = build_certification_stamp(
@@ -299,13 +300,23 @@ class WorkbenchEngine:
         )
         if cert_stamp.get("promotion_eligible") is False:
             promote = False
+        latency_authority = dict(latency_envelope.get("source_authority_detail") or {})
+        latency_authority.update(
+            {
+                "authority": "chi404_cpp_latency_summary",
+                "summary_path": str(chi404),
+                "python_research_runtime_authoritative": False,
+                "lane_pass": bool(viability.lane_pass),
+                "promote_candidate": bool(promote),
+            }
+        )
 
         report = {
             "model_id": primary_id,
             "event_id": event_id,
             "data_period": event_id,
             "robustness_window": cfg.robustness_window,
-            "latency_authority": "cpp_measured",
+            "latency_authority": latency_authority,
             "python_research_runtime_us": python_runtime_us,
             "cpp_hot_path_runtime_us": viability.cpp_hot_path_runtime_us,
             "measured_production_p99_us": viability.measured_production_p99_us,
@@ -367,7 +378,7 @@ class WorkbenchEngine:
                     "model_id": primary_id,
                     "event_id": event_id,
                     "seed": seed,
-                    "latency_authority": "cpp_measured",
+                    "latency_authority": latency_authority,
                     "cpp_latency_profile": cpp_profile.to_report_dict(),
                     "composition": effective.to_dict() if effective.defensive_stubs else None,
                     "coverage_summary": coverage_summary,

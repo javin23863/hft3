@@ -1,11 +1,11 @@
 {
   "tier": "T0",
   "passed": true,
-  "timestamp_utc": "2026-06-03T14:20:41.155436+00:00",
-  "git_sha": "80a61840568ca69349587ca881135890fff4a739",
-  "duration_sec": 5.606,
+  "timestamp_utc": "2026-06-06T05:57:57.271440+00:00",
+  "git_sha": "f053cfc2b50db32c6700efe81709e3804255f4ae",
+  "duration_sec": 9.741,
   "test_count": 19,
   "failed_count": 0,
   "command": "python -m pytest tests/backtester_validation/fast -q",
-  "pytest_output_tail": "...................                                                      [100%]\n19 passed in 4.40s\n"
+  "pytest_output_tail": "...................                                                      [100%]\n19 passed in 8.06s\n"
 }

@@ -1,9 +1,9 @@
 """Low-latency execution-path audit for Workbench runs.
 
 The audit measures internal placement speed and external acknowledgment latency
-as separate facts. Synthetic and replay modes validate the harness without
-broker connectivity; paper-live mode must be wired to real execution boundary
-events before it can emit observed placement evidence.
+as separate facts. Replay mode consumes captured execution boundary spans;
+paper-live mode must be wired to real execution boundary events before it can
+emit observed placement evidence.
 """
 
 from __future__ import annotations
@@ -97,6 +97,7 @@ class AuditConfig:
     trade_manager_id: str
     duration_seconds: float
     samples: int | None = None
+    spans_jsonl: Path | None = None
     require_low_latency_mode: bool = False
     allow_python_critical_path: bool = False
 
@@ -267,51 +268,28 @@ def load_spans(path: Path) -> list[dict[str, Any]]:
 
 def run_audit(config: AuditConfig) -> dict[str, Any]:
     runtime_env = collect_runtime_env(config)
-    if config.mode in {"synthetic", "replay"}:
-        spans = generate_synthetic_spans(config)
+    if config.mode == "replay":
+        if config.spans_jsonl is None or not config.spans_jsonl.is_file():
+            return write_blocked_audit(
+                config,
+                runtime_env=runtime_env,
+                blocked_reason="REPLAY_SPANS_JSONL_REQUIRED",
+            )
+        spans = load_spans(config.spans_jsonl)
+        if not spans:
+            return write_blocked_audit(
+                config,
+                runtime_env=runtime_env,
+                blocked_reason="REPLAY_SPANS_JSONL_EMPTY",
+            )
         return write_audit_outputs(config, spans, runtime_env=runtime_env)
     if config.mode == "paper-live":
-        return write_blocked_paper_live(config, runtime_env=runtime_env)
-    raise ValueError(f"unsupported mode: {config.mode}")
-
-
-def generate_synthetic_spans(config: AuditConfig) -> list[dict[str, Any]]:
-    count = config.samples if config.samples is not None else max(1, int(float(config.duration_seconds) * 10.0))
-    count = max(1, int(count))
-    spans: list[dict[str, Any]] = []
-    base_ns = 1_000_000_000
-    spacing_ns = 1_000_000
-    for idx in range(count):
-        action = ("new", "cancel", "replace")[idx % 3]
-        start_ns = base_ns + idx * spacing_ns
-        spans.append(
-            build_span(
-                run_id=config.run_id,
-                mode=config.mode,
-                environment=config.environment,
-                broker=config.broker,
-                venue=config.venue,
-                exchange=config.exchange,
-                symbol=config.symbol,
-                strategy_id=config.strategy_id,
-                model_id=config.model_id,
-                trade_manager_id=config.trade_manager_id,
-                order_action=action,
-                side="buy" if idx % 2 == 0 else "sell",
-                order_type="limit",
-                quantity=1,
-                timestamps=_synthetic_timestamps(action, start_ns, idx),
-                success=True,
-                critical_path_language="python",
-                ffi_boundary_count=0,
-                ipc_boundary_count=0,
-                allocation_count_before_send=2 + (idx % 3),
-                pre_send_blocking_io_count=0,
-                serialization_bytes=96 + idx,
-                timestamp_utc="2026-06-04T00:00:00Z",
-            )
+        return write_blocked_audit(
+            config,
+            runtime_env=runtime_env,
+            blocked_reason="PAPER_LIVE_REPLACED_BY_NATIVE_CPP_PROBE",
         )
-    return spans
+    raise ValueError(f"unsupported mode: {config.mode}")
 
 
 def write_audit_outputs(config: AuditConfig, spans: Sequence[Mapping[str, Any]], *, runtime_env: Mapping[str, Any]) -> dict[str, Any]:
@@ -337,7 +315,7 @@ def write_audit_outputs(config: AuditConfig, spans: Sequence[Mapping[str, Any]],
     return summary
 
 
-def write_blocked_paper_live(config: AuditConfig, *, runtime_env: Mapping[str, Any]) -> dict[str, Any]:
+def write_blocked_audit(config: AuditConfig, *, runtime_env: Mapping[str, Any], blocked_reason: str) -> dict[str, Any]:
     run_dir = dated_run_dir(config.repo_root, config.run_id)
     run_dir.mkdir(parents=True, exist_ok=True)
     spans_path = run_dir / "spans.jsonl"
@@ -351,7 +329,7 @@ def write_blocked_paper_live(config: AuditConfig, *, runtime_env: Mapping[str, A
         runtime_env_path=runtime_path,
         runtime_env=runtime_env,
         current_status=_load_json(report_paths(config.repo_root, config.run_id)[2]),
-        blocked_reason="PAPER_LIVE_REPLACED_BY_NATIVE_CPP_PROBE",
+        blocked_reason=blocked_reason,
     )
     write_summary_reports(summary, config.repo_root, config.run_id)
     return summary
@@ -767,7 +745,7 @@ def collect_runtime_env(config: AuditConfig) -> dict[str, Any]:
         },
         "numa": {
             "status": "unknown",
-            "reason": "NUMA locality requires OS/NIC evidence outside the Python synthetic harness",
+            "reason": "NUMA locality requires OS/NIC evidence outside this Python audit",
         },
         "nic": {
             "interface": os.environ.get("HFT3_NIC_INTERFACE", ""),
@@ -794,9 +772,10 @@ def collect_runtime_env(config: AuditConfig) -> dict[str, Any]:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Audit execution-path placement speed separately from acknowledgment latency.")
-    parser.add_argument("--mode", choices=["synthetic", "replay", "paper-live"], default="synthetic")
+    parser.add_argument("--mode", choices=["replay", "paper-live"], default="replay")
     parser.add_argument("--repo-root", default=".")
     parser.add_argument("--run-id", default="")
+    parser.add_argument("--spans-jsonl", default="", help="Captured execution boundary spans JSONL for replay mode.")
     parser.add_argument("--env", default="paper", dest="environment")
     parser.add_argument("--broker", default="rithmic")
     parser.add_argument("--venue", default="")
@@ -831,6 +810,7 @@ def main(argv: list[str] | None = None) -> int:
         trade_manager_id=args.trade_manager_id or f"{args.mode}_trade_manager",
         duration_seconds=args.duration,
         samples=args.samples,
+        spans_jsonl=Path(args.spans_jsonl).resolve() if args.spans_jsonl else None,
         require_low_latency_mode=args.require_low_latency_mode,
         allow_python_critical_path=args.allow_python_critical_path,
     )
@@ -852,74 +832,6 @@ def main(argv: list[str] | None = None) -> int:
         )
     )
     return 2 if summary.get("status") == "blocked" else 0
-
-
-def _synthetic_timestamps(action: str, start_ns: int, idx: int) -> dict[str, int | None]:
-    decode_us = 4 + idx % 4
-    feature_us = 10 + idx % 5
-    decision_us = 18 + idx % 7
-    arbitration_us = 3 + idx % 3
-    risk_us = 8 + idx % 4
-    build_us = 6 + idx % 5
-    serialization_us = 2 + idx % 3
-    send_call_us = 5 + idx % 6
-    ack_us = 900 + idx % 50
-    market = start_ns
-    decode = market + decode_us * 1000
-    features = decode + feature_us * 1000
-    decision = features + decision_us * 1000
-    arbitration = decision + arbitration_us * 1000
-    risk = arbitration + risk_us * 1000
-    order_ready = risk + build_us * 1000
-    send_call = order_ready + serialization_us * 1000
-    order_send = send_call + send_call_us * 1000
-    send_return = order_send + 1000
-    base: dict[str, int | None] = {
-        "market_event_received_ts": market,
-        "decode_ready_ts": decode,
-        "features_ready_ts": features,
-        "decision_ready_ts": decision,
-        "arbitration_ready_ts": arbitration,
-        "risk_check_ready_ts": risk,
-        "order_ready_ts": None,
-        "order_send_call_ts": None,
-        "order_send_ts": None,
-        "order_send_return_ts": None,
-        "ack_received_ts": None,
-        "cancel_decision_ready_ts": None,
-        "cancel_send_ts": None,
-        "cancel_ack_received_ts": None,
-        "replace_decision_ready_ts": None,
-        "replace_send_ts": None,
-        "replace_ack_received_ts": None,
-    }
-    if action == "new":
-        base["order_ready_ts"] = order_ready
-        base["order_send_call_ts"] = send_call
-        base["order_send_ts"] = order_send
-        base["order_send_return_ts"] = send_return
-        base["ack_received_ts"] = order_send + ack_us * 1000
-    elif action == "cancel":
-        cancel_decision = decision + 2_000
-        cancel_send = cancel_decision + (14 + idx % 5) * 1000
-        base.update(
-            {
-                "cancel_decision_ready_ts": cancel_decision,
-                "cancel_send_ts": cancel_send,
-                "cancel_ack_received_ts": cancel_send + (700 + idx % 40) * 1000,
-            }
-        )
-    else:
-        replace_decision = decision + 2_000
-        replace_send = replace_decision + (17 + idx % 6) * 1000
-        base.update(
-            {
-                "replace_decision_ready_ts": replace_decision,
-                "replace_send_ts": replace_send,
-                "replace_ack_received_ts": replace_send + (800 + idx % 45) * 1000,
-            }
-        )
-    return base
 
 
 def _coerce_timestamps(raw: Mapping[str, Any]) -> dict[str, int | None]:

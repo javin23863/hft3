@@ -24,11 +24,6 @@ def test_from_chi404_summary():
     assert "gateway_ack_p99_us" in d
     if prof.order_ack_blocked:
         assert prof.gateway_ack.p99_us == 0
+        assert prof.gateway_ack.source == "order_ack_unmeasured_blocked"
     else:
         assert prof.measured_production_p99_us > prof.cpp_decision_compute.p99_us
-
-
-def test_yaml_defaults_blocked_ack():
-    prof = CppLatencyProfile.from_yaml_defaults()
-    assert prof.order_ack_blocked is True
-    assert prof.gateway_ack.p99_us == 0

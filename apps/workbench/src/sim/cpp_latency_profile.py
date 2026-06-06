@@ -7,10 +7,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import yaml
-
-_CONFIG = Path(__file__).resolve().parents[2] / "config" / "cpp_latency_profile.yaml"
-
 LATENCY_INJECTION_SWEEP_US = [
     0, 50, 100, 250, 500, 1000, 2000, 5000, 10000, 25000, 50000, 100000, 250000, 1000000,
 ]
@@ -93,12 +89,16 @@ class CppLatencyProfile:
             notes.append("gateway_ack from measured R|Trader paper submit→ack")
             return send, ack, False, notes
 
-        yaml_cfg = cls.from_yaml_defaults()
         notes.append(
             "order_ack_blocked: paper submit→ack not measured; "
             "TCP connect is network health only — not used for gateway_ack"
         )
-        return yaml_cfg.order_send, yaml_cfg.gateway_ack, True, notes
+        return (
+            LatencyPercentilesUs(0.0, 0.0, 0.0, "order_ack_unmeasured_blocked"),
+            LatencyPercentilesUs(0.0, 0.0, 0.0, "order_ack_unmeasured_blocked"),
+            True,
+            notes,
+        )
 
     @classmethod
     def from_chi404_summary(cls, summary_path: Path) -> "CppLatencyProfile":
@@ -125,49 +125,15 @@ class CppLatencyProfile:
 
         send, ack, ack_blocked, notes = cls._ack_from_summary(data)
 
-        sweep = list(LATENCY_INJECTION_SWEEP_US)
-        yaml_cfg = cls.from_yaml_defaults()
-        if yaml_cfg.injection_sweep_us:
-            sweep = yaml_cfg.injection_sweep_us
-
         return cls(
             cpp_decision_compute=compute,
             order_send=send,
             gateway_ack=ack,
             feed_delay=feed,
-            injection_sweep_us=sweep,
+            injection_sweep_us=list(LATENCY_INJECTION_SWEEP_US),
             order_ack_blocked=ack_blocked,
             notes=notes,
         )
-
-    @classmethod
-    def from_yaml_defaults(cls) -> "CppLatencyProfile":
-        if not _CONFIG.is_file():
-            return cls._fallback()
-        raw = yaml.safe_load(_CONFIG.read_text(encoding="utf-8")) or {}
-
-        def _block(name: str) -> LatencyPercentilesUs:
-            b = raw.get(name, {})
-            return LatencyPercentilesUs(
-                float(b.get("p50_us", 0)),
-                float(b.get("p95_us", 0)),
-                float(b.get("p99_us", 0)),
-                str(b.get("source", "yaml")),
-            )
-
-        return cls(
-            cpp_decision_compute=_block("cpp_decision_compute"),
-            order_send=_block("order_send"),
-            gateway_ack=_block("gateway_ack"),
-            feed_delay=_block("feed_delay"),
-            injection_sweep_us=[int(x) for x in raw.get("injection_sweep_us", LATENCY_INJECTION_SWEEP_US)],
-            order_ack_blocked=True,
-            notes=["yaml defaults; paper order ack not measured"],
-        )
-
-    @classmethod
-    def _fallback(cls) -> "CppLatencyProfile":
-        return cls.from_yaml_defaults()
 
     def to_report_dict(self) -> Dict[str, Any]:
         return {

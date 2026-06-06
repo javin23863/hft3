@@ -12,6 +12,7 @@ decisions:
 
 - T0 fast gate fails → RED
 - T2 full suite fails → RED
+- Lane evidence missing/skipped/unavailable → YELLOW (recorded as warning)
 - Any non-CME lane pytest fails → YELLOW (recorded as warning)
 - All pass → GREEN
 """
@@ -50,6 +51,12 @@ except ImportError:
 
 SCORECARD_JSON_REL = Path("runtime/validation/backtester_certification_scorecard.json")
 SCORECARD_MD_REL = Path("runtime/validation/backtester_certification_scorecard.md")
+LANE_EVIDENCE_UNAVAILABLE_STATUSES = {
+    "CONFIG_MISSING",
+    "TEST_PATH_MISSING",
+    "PYTEST_SKIPPED",
+    "PYTEST_UNAVAILABLE",
+}
 
 
 @dataclass
@@ -183,6 +190,12 @@ def run_full_certification(
     warnings: list[str] = []
     lane_results: dict[str, dict[str, Any]] = {}
     lane_failures: list[str] = []
+    expected_lane_values = [Lane.CRYPTO.value, Lane.EQUITIES.value, Lane.OPTIONS.value]
+
+    def record_lane_issue(lane_value: str, message: str) -> None:
+        if lane_value not in lane_failures:
+            lane_failures.append(lane_value)
+        warnings.append(message)
 
     # Step 1: T0 fast gate (CME core)
     t0_ok, t0_out, t0_count, t0_failed, t0_duration = _run_pytest("tests/backtester_validation/fast", root)
@@ -216,16 +229,29 @@ def run_full_certification(
                 skip_pytest=False,
                 pytest_timeout=300.0,
             )
-            for lane_value, cov in lane_card.lane_coverage.items():
-                if lane_value == Lane.CME_FUTURES.value:
-                    continue
+            for lane_value in expected_lane_values:
+                cov = lane_card.lane_coverage.get(lane_value, {})
                 rr = cov.get("run_result", {})
+                if not rr:
+                    record_lane_issue(
+                        lane_value,
+                        f"lane '{lane_value}' certification evidence missing: no run_result",
+                    )
+                    continue
                 lane_results[lane_value] = rr
-                if rr and not rr.get("passed", True):
-                    lane_failures.append(lane_value)
-                    warnings.append(
+                rr_status = rr.get("status")
+                rr_notes = "; ".join(rr.get("failure_notes") or [])
+                if rr_status in LANE_EVIDENCE_UNAVAILABLE_STATUSES or rr.get("passed") is None:
+                    detail = rr_notes or rr_status or "lane result did not include pass/fail evidence"
+                    record_lane_issue(
+                        lane_value,
+                        f"lane '{lane_value}' certification evidence unavailable ({rr_status}): {detail}",
+                    )
+                elif not rr.get("passed", True):
+                    record_lane_issue(
+                        lane_value,
                         f"lane '{lane_value}' pytest failed (rc={rr.get('returncode')}): "
-                        f"{'; '.join(rr.get('failure_notes', []))}"
+                        f"{rr_notes}"
                     )
             # CME core is covered by T0 fast gate + T2 full suite; record
             # that explicitly so the scorecard reflects the full lane set.
@@ -242,7 +268,18 @@ def run_full_certification(
             }
         except Exception as exc:  # noqa: BLE001
             warnings.append(f"lane-aware certification raised {type(exc).__name__}: {exc}")
+            for lane_value in expected_lane_values:
+                record_lane_issue(
+                    lane_value,
+                    f"lane '{lane_value}' certification evidence unavailable: lane runner raised",
+                )
             lane_card = None
+    else:
+        for lane_value in expected_lane_values:
+            record_lane_issue(
+                lane_value,
+                f"lane '{lane_value}' certification evidence skipped by skip_lane_pytest=True",
+            )
 
     # Status decision is fail-closed: blockers are production blockers.
     if blocking:
@@ -259,7 +296,7 @@ def run_full_certification(
         agg = {
             "covered_modules": ["backtest_pipeline", "execution", "replay", "features_engine", "workbench"],
             "covered_symbols": ["ES", "MES"],
-            "covered_event_types": ["macro", "synthetic"],
+            "covered_event_types": ["macro"],
             "covered_latency_bands": [float(x) for x in LATENCY_BANDS_MS if float(x) >= 0.5],
         }
     legacy_cme_bands = [float(x) for x in LATENCY_BANDS_MS if float(x) >= 0.5]

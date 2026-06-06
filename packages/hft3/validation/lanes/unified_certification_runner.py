@@ -31,6 +31,7 @@ class LaneRunResult:
     lane: str
     passed: bool
     returncode: int
+    status: str = "PASSED"
     output_tail: str = ""
     test_paths: list[str] = field(default_factory=list)
     failure_notes: list[str] = field(default_factory=list)
@@ -40,6 +41,7 @@ class LaneRunResult:
             "lane": self.lane,
             "passed": self.passed,
             "returncode": self.returncode,
+            "status": self.status,
             "output_tail": self.output_tail,
             "test_paths": list(self.test_paths),
             "failure_notes": list(self.failure_notes),
@@ -53,17 +55,25 @@ def _run_pytest_for_lane(
     if not test_paths:
         return LaneRunResult(
             lane="unknown",
-            passed=True,
-            returncode=0,
-            output_tail="(no test paths configured)",
+            passed=False,
+            returncode=2,
+            status="CONFIG_MISSING",
+            output_tail="CONFIG_MISSING: no test paths configured",
+            failure_notes=["CONFIG_MISSING: no test paths configured"],
         )
     combined_output = ""
     overall_pass = True
     last_returncode = 0
+    status = "PASSED"
+    failure_notes: list[str] = []
+    missing_paths: list[str] = []
     for tp in test_paths:
         path = root / tp
         if not path.exists():
-            combined_output += f"[skip] {tp} (not present)\n"
+            combined_output += f"[missing] {tp} (not present)\n"
+            missing_paths.append(tp)
+            overall_pass = False
+            last_returncode = 2
             continue
         try:
             proc = subprocess.run(
@@ -77,23 +87,42 @@ def _run_pytest_for_lane(
             combined_output += f"[timeout] {tp}\n"
             overall_pass = False
             last_returncode = 124
+            if status == "PASSED":
+                status = "PYTEST_TIMEOUT"
             continue
         except FileNotFoundError:
-            combined_output += f"[skip] {tp} (pytest not available)\n"
+            combined_output += f"[error] {tp} (pytest not available)\n"
+            overall_pass = False
+            last_returncode = 127
+            if status == "PASSED":
+                status = "PYTEST_UNAVAILABLE"
             continue
         last_returncode = proc.returncode
         if proc.returncode != 0:
             overall_pass = False
+            if status == "PASSED":
+                status = "PYTEST_FAILED"
         combined_output += f"=== {tp} (rc={proc.returncode}) ===\n"
         combined_output += (proc.stdout or "")[-500:]
         combined_output += (proc.stderr or "")[-500:]
+    if missing_paths:
+        status = "TEST_PATH_MISSING"
+        last_returncode = 2
+        failure_notes.append(f"TEST_PATH_MISSING: {', '.join(missing_paths)}")
+    elif status == "PYTEST_TIMEOUT":
+        failure_notes.append(f"PYTEST_TIMEOUT: pytest timed out for {test_paths}")
+    elif status == "PYTEST_UNAVAILABLE":
+        failure_notes.append("PYTEST_UNAVAILABLE: pytest executable was not available")
+    elif status == "PYTEST_FAILED":
+        failure_notes.append(f"PYTEST_FAILED: pytest failed for {test_paths}")
     return LaneRunResult(
         lane="unknown",
         passed=overall_pass,
         returncode=last_returncode,
+        status=status,
         output_tail=combined_output[-2000:],
         test_paths=list(test_paths),
-        failure_notes=[] if overall_pass else [f"pytest failed for {test_paths}"],
+        failure_notes=failure_notes,
     )
 
 
@@ -126,14 +155,24 @@ def run_unified_certification(
     for lane in target_lanes:
         lane_reg = reg.get(lane)
         if lane_reg is None:
+            run_results[lane.value] = LaneRunResult(
+                lane=lane.value,
+                passed=False,
+                returncode=2,
+                status="CONFIG_MISSING",
+                output_tail="CONFIG_MISSING: lane registration missing",
+                failure_notes=[f"CONFIG_MISSING: lane '{lane.value}' is not registered"],
+            )
             continue
         if skip_pytest:
             run_results[lane.value] = LaneRunResult(
                 lane=lane.value,
-                passed=True,
-                returncode=0,
+                passed=False,
+                returncode=2,
+                status="PYTEST_SKIPPED",
                 output_tail="(pytest skipped)",
                 test_paths=list(lane_reg.test_paths),
+                failure_notes=["PYTEST_SKIPPED: lane pytest evidence was explicitly skipped"],
             )
             continue
         result = _run_pytest_for_lane(

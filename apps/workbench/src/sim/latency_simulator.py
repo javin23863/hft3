@@ -26,12 +26,11 @@ class LatencyPolicy:
         if self.cpp_profile:
             total = self.cpp_profile.measured_production_p99_us + self.injection_us
             return total / 1000.0
-        return 1.0
+        raise ValueError("LatencyPolicy requires a CHI404/C++ latency profile; no default latency is allowed")
 
     @classmethod
     def fixed(cls, latency_ms: float) -> "LatencyPolicy":
-        prof = CppLatencyProfile.from_yaml_defaults()
-        return cls(mode="cpp_measured", cpp_profile=prof, injection_us=max(0, latency_ms * 1000 - prof.measured_production_p99_us))
+        raise ValueError("Fixed/default latency policy is not allowed; use from_chi404_summary or from_cpp_profile")
 
     @classmethod
     def from_chi404_summary(cls, summary_path: Path, seed: int = 42) -> "LatencyPolicy":
@@ -48,7 +47,7 @@ class LatencyPolicy:
     def total_ms_for_backtest(self, rng: Optional[random.Random] = None) -> float:
         rng = rng or random.Random(self.seed)
         if not self.cpp_profile:
-            return 1.0
+            raise ValueError("LatencyPolicy requires a CHI404/C++ latency profile; no default latency is allowed")
         from workbench.src.sim.latency_injector import InjectedDecisionLatency
 
         inj = InjectedDecisionLatency.from_profile(

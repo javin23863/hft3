@@ -1,21 +1,24 @@
 {
   "tier": "T2",
-  "status": "GREEN",
-  "run_id": "CERT-20260603T142035Z-4fd9a16b",
-  "git_sha": "80a61840568ca69349587ca881135890fff4a739",
-  "timestamp_utc": "2026-06-03T14:21:14.917354+00:00",
+  "status": "YELLOW",
+  "run_id": "CERT-20260606T055747Z-cb850fd9",
+  "git_sha": "f053cfc2b50db32c6700efe81709e3804255f4ae",
+  "timestamp_utc": "2026-06-06T05:58:49.197198+00:00",
   "t0_passed": true,
   "full_passed": true,
   "t0_test_count": 19,
   "full_test_count": 9,
   "blocking_failures": [],
-  "warnings": [],
+  "warnings": [
+    "lane 'options' certification evidence unavailable (TEST_PATH_MISSING): TEST_PATH_MISSING: tests/test_options_lane"
+  ],
   "lane_results": {
     "crypto": {
       "lane": "crypto",
       "passed": true,
       "returncode": 0,
-      "output_tail": "=== tests/test_crypto_lane (rc=0) ===\nst_normalize_correctness.py::test_l2_data_quality_flag_default_zero\n  C:\\Users\\MSI\\Documents\\opencode\\hft3\\packages\\crypto_lane\\src\\ingest\\normalize.py:116: DeprecationWarning: use of `how='outer_coalesce'` should be replaced with `how='full', coalesce=True`.\n  (Deprecated in version 0.20.29)\n    out = spot.join(perp, on=\"exchange_timestamp\", how=\"outer_coalesce\").sort(\"exchange_timestamp\")\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n137 passed, 3 warnings in 20.31s\n",
+      "status": "PASSED",
+      "output_tail": "=== tests/test_crypto_lane (rc=0) ===\ntest_normalize_correctness.py::test_l2_data_quality_flag_default_zero\n  C:\\Users\\MSI\\Documents\\New project\\packages\\crypto_lane\\src\\ingest\\normalize.py:116: DeprecationWarning: use of `how='outer_coalesce'` should be replaced with `how='full', coalesce=True`.\n  (Deprecated in version 0.20.29)\n    out = spot.join(perp, on=\"exchange_timestamp\", how=\"outer_coalesce\").sort(\"exchange_timestamp\")\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n143 passed, 3 warnings in 29.00s\n",
       "test_paths": [
         "tests/test_crypto_lane"
       ],
@@ -25,7 +28,8 @@
       "lane": "equities",
       "passed": true,
       "returncode": 0,
-      "output_tail": "=== tests/test_equities_lane (rc=0) ===\n...........................................                              [100%]\n43 passed in 5.43s\n",
+      "status": "PASSED",
+      "output_tail": "=== tests/test_equities_lane (rc=0) ===\n..............................................................s......... [ 82%]\n...............                                                          [100%]\n86 passed, 1 skipped in 13.84s\n",
       "test_paths": [
         "tests/test_equities_lane"
       ],
@@ -33,13 +37,16 @@
     },
     "options": {
       "lane": "options",
-      "passed": true,
-      "returncode": 0,
-      "output_tail": "[skip] tests/test_options_lane (not present)\n",
+      "passed": false,
+      "returncode": 2,
+      "status": "TEST_PATH_MISSING",
+      "output_tail": "[missing] tests/test_options_lane (not present)\n",
       "test_paths": [
         "tests/test_options_lane"
       ],
-      "failure_notes": []
+      "failure_notes": [
+        "TEST_PATH_MISSING: tests/test_options_lane"
+      ]
     },
     "cme_futures": {
       "lane": "cme_futures",
@@ -53,8 +60,10 @@
       "covered_by": "T0 fast gate + T2 full suite (CME core)"
     }
   },
-  "lane_failures": [],
-  "backtester_version": "80a6184-dirty",
+  "lane_failures": [
+    "options"
+  ],
+  "backtester_version": "f053cfc2-dirty",
   "covered_modules": [
     "backtest_pipeline",
     "crypto_lane",
@@ -66,12 +75,8 @@
     "workbench"
   ],
   "covered_symbols": [
-    "BTC/USD",
-    "BTCUSDT",
     "CL",
     "ES",
-    "ETH/USD",
-    "ETHUSDT",
     "GC",
     "HG",
     "MES",
@@ -80,7 +85,6 @@
     "RTY",
     "RUNNER",
     "SI",
-    "SOLUSDT",
     "YM",
     "ZB",
     "ZN"
@@ -92,8 +96,7 @@
     "equities_low_float",
     "equities_runner_event",
     "macro",
-    "options_parity",
-    "synthetic"
+    "options_parity"
   ],
   "covered_latency_bands": [
     0.5,
@@ -128,8 +131,7 @@
         "RTY"
       ],
       "event_types": [
-        "macro",
-        "synthetic"
+        "macro"
       ],
       "latency_bands_ms": [
         0.5,
@@ -145,16 +147,20 @@
       "queue_models": [
         "LogProbQueueModel2",
         "SquareProbQueueModel"
-      ]
+      ],
+      "capability_profile": {
+        "name": "true_hft_dma",
+        "is_hft": true,
+        "dma": true,
+        "node_direct": false,
+        "speed_advantage": true,
+        "research_only": false,
+        "hft_proof_required": true,
+        "description": "CME futures lane: true HFT with direct market access requirements."
+      }
     },
     "crypto": {
-      "symbols": [
-        "BTCUSDT",
-        "ETHUSDT",
-        "SOLUSDT",
-        "BTC/USD",
-        "ETH/USD"
-      ],
+      "symbols": [],
       "event_types": [
         "crypto_l2",
         "crypto_l3",
@@ -176,11 +182,26 @@
       ],
       "candidate_id": "",
       "hypothesis_id": "",
+      "data_environment": "",
+      "instrument_coverage": "candidate_config",
+      "environment_validated": false,
+      "environment_source_ref": "",
+      "capability_profile": {
+        "name": "node_direct_hft",
+        "is_hft": true,
+        "dma": false,
+        "node_direct": true,
+        "speed_advantage": true,
+        "research_only": false,
+        "hft_proof_required": true,
+        "description": "Crypto lane: node-direct HFT for instruments covered by validated crypto data environment."
+      },
       "run_result": {
         "lane": "crypto",
         "passed": true,
         "returncode": 0,
-        "output_tail": "=== tests/test_crypto_lane (rc=0) ===\nst_normalize_correctness.py::test_l2_data_quality_flag_default_zero\n  C:\\Users\\MSI\\Documents\\opencode\\hft3\\packages\\crypto_lane\\src\\ingest\\normalize.py:116: DeprecationWarning: use of `how='outer_coalesce'` should be replaced with `how='full', coalesce=True`.\n  (Deprecated in version 0.20.29)\n    out = spot.join(perp, on=\"exchange_timestamp\", how=\"outer_coalesce\").sort(\"exchange_timestamp\")\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n137 passed, 3 warnings in 20.31s\n",
+        "status": "PASSED",
+        "output_tail": "=== tests/test_crypto_lane (rc=0) ===\ntest_normalize_correctness.py::test_l2_data_quality_flag_default_zero\n  C:\\Users\\MSI\\Documents\\New project\\packages\\crypto_lane\\src\\ingest\\normalize.py:116: DeprecationWarning: use of `how='outer_coalesce'` should be replaced with `how='full', coalesce=True`.\n  (Deprecated in version 0.20.29)\n    out = spot.join(perp, on=\"exchange_timestamp\", how=\"outer_coalesce\").sort(\"exchange_timestamp\")\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n143 passed, 3 warnings in 29.00s\n",
         "test_paths": [
           "tests/test_crypto_lane"
         ],
@@ -207,11 +228,22 @@
         "test_days": 20,
         "step_days": 20
       },
+      "capability_profile": {
+        "name": "speed_advantage_non_dma",
+        "is_hft": false,
+        "dma": false,
+        "node_direct": false,
+        "speed_advantage": true,
+        "research_only": false,
+        "hft_proof_required": false,
+        "description": "Equities lane: speed-advantage research/execution without true DMA HFT requirement."
+      },
       "run_result": {
         "lane": "equities",
         "passed": true,
         "returncode": 0,
-        "output_tail": "=== tests/test_equities_lane (rc=0) ===\n...........................................                              [100%]\n43 passed in 5.43s\n",
+        "status": "PASSED",
+        "output_tail": "=== tests/test_equities_lane (rc=0) ===\n..............................................................s......... [ 82%]\n...............                                                          [100%]\n86 passed, 1 skipped in 13.84s\n",
         "test_paths": [
           "tests/test_equities_lane"
         ],
@@ -230,15 +262,28 @@
         "tests/test_options_lane"
       ],
       "latency_ms": 1.0,
+      "capability_profile": {
+        "name": "research_non_hft",
+        "is_hft": false,
+        "dma": false,
+        "node_direct": false,
+        "speed_advantage": false,
+        "research_only": true,
+        "hft_proof_required": false,
+        "description": "Options lane: research/non-HFT unless separately proven."
+      },
       "run_result": {
         "lane": "options",
-        "passed": true,
-        "returncode": 0,
-        "output_tail": "[skip] tests/test_options_lane (not present)\n",
+        "passed": false,
+        "returncode": 2,
+        "status": "TEST_PATH_MISSING",
+        "output_tail": "[missing] tests/test_options_lane (not present)\n",
         "test_paths": [
           "tests/test_options_lane"
         ],
-        "failure_notes": []
+        "failure_notes": [
+          "TEST_PATH_MISSING: tests/test_options_lane"
+        ]
       }
     }
   },
@@ -265,8 +310,7 @@
       "RTY"
     ],
     "covered_event_types": [
-      "macro",
-      "synthetic"
+      "macro"
     ],
     "covered_latency_bands": [
       0.5,

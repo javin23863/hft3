@@ -56,7 +56,7 @@ def test_scorecard_equities_symbols():
 def test_scorecard_event_types_per_lane():
     card = build_lane_scorecard()
     assert "macro" in card.lane_coverage["cme_futures"]["event_types"]
-    assert "synthetic" in card.lane_coverage["cme_futures"]["event_types"]
+    assert "synthetic" not in card.lane_coverage["cme_futures"]["event_types"]
     assert "crypto_l2" in card.lane_coverage["crypto"]["event_types"]
     assert "equities_low_float" in card.lane_coverage["equities"]["event_types"]
     assert "options_parity" in card.lane_coverage["options"]["event_types"]

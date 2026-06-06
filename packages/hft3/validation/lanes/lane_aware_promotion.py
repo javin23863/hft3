@@ -147,11 +147,10 @@ def _event_type_matches(event_id: str, coverage_event_types: list[str]) -> bool:
     eid_lower_full = eid_lower
     for et in coverage_event_types:
         et_lower = et.lower()
-        if et_lower in ("macro", "synthetic"):
+        if et_lower == "macro":
             if prefix in ("cpi", "nfp", "ppi", "fomc", "gdp", "ism") or "macro" in eid_lower_full:
                 return True
-            if et_lower == "macro":
-                continue
+            continue
         if prefix == et_lower:
             return True
         if eid_lower_full.startswith(et_lower):

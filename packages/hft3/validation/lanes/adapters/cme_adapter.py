@@ -28,7 +28,7 @@ from ..lane import (
 CME_SYMBOLS = ["ES", "MES", "NQ", "MNQ", "ZN", "ZB", "YM", "CL", "GC", "SI", "HG", "RTY"]
 CME_LATENCY_BANDS_MS = [0.5, 1.0, 2.0, 5.0, 10.0]
 CME_QUEUE_MODELS = ["LogProbQueueModel2", "SquareProbQueueModel"]
-CME_EVENT_TYPES = ["macro", "synthetic"]
+CME_EVENT_TYPES = ["macro"]
 
 
 class CMEConfigError(ValueError):

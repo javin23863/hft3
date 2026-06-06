@@ -1,9 +1,9 @@
 {
-  "latest_certification_run_id": "CERT-20260603T142035Z-4fd9a16b",
-  "latest_certification_commit": "80a61840568ca69349587ca881135890fff4a739",
-  "latest_certification_timestamp": "2026-06-03T14:21:14.917354+00:00",
-  "latest_certification_status": "GREEN",
-  "backtester_version": "80a6184-dirty",
+  "latest_certification_run_id": "CERT-20260606T055747Z-cb850fd9",
+  "latest_certification_commit": "f053cfc2b50db32c6700efe81709e3804255f4ae",
+  "latest_certification_timestamp": "2026-06-06T05:58:49.197198+00:00",
+  "latest_certification_status": "YELLOW",
+  "backtester_version": "f053cfc2-dirty",
   "covered_modules": [
     "backtest_pipeline",
     "crypto_lane",
@@ -15,12 +15,8 @@
     "workbench"
   ],
   "covered_symbols": [
-    "BTC/USD",
-    "BTCUSDT",
     "CL",
     "ES",
-    "ETH/USD",
-    "ETHUSDT",
     "GC",
     "HG",
     "MES",
@@ -29,7 +25,6 @@
     "RTY",
     "RUNNER",
     "SI",
-    "SOLUSDT",
     "YM",
     "ZB",
     "ZN"
@@ -41,8 +36,7 @@
     "equities_low_float",
     "equities_runner_event",
     "macro",
-    "options_parity",
-    "synthetic"
+    "options_parity"
   ],
   "covered_latency_bands": [
     0.5,
@@ -62,5 +56,7 @@
   ],
   "scorecard_path": "runtime/validation/backtester_certification_scorecard.json",
   "blocking_failures": [],
-  "warnings": []
+  "warnings": [
+    "lane 'options' certification evidence unavailable (TEST_PATH_MISSING): TEST_PATH_MISSING: tests/test_options_lane"
+  ]
 }

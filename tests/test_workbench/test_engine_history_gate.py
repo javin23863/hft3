@@ -88,6 +88,9 @@ def _patch_engine(
         injection_sweep_us=[0, 1000],
         to_report_dict=lambda: {"measured_production_p99_us": 1000.0},
     )
+    latency_summary = tmp_path / "runtime" / "latency_reports" / "latency_summary.json"
+    latency_summary.parent.mkdir(parents=True, exist_ok=True)
+    latency_summary.write_text('{"run_id": "test_chi404_latency"}\n', encoding="utf-8")
     viability = SimpleNamespace(
         survives_cpp_execution_delay=True,
         simulated_latency_adjusted_pnl=100.0,
@@ -119,7 +122,7 @@ def _patch_engine(
     monkeypatch.setattr(engine_mod.CompositionOrchestrator, "default_composition", lambda model_id: composition)
     monkeypatch.setattr(engine_mod, "get_model_config", lambda model_id: cfg)
     monkeypatch.setattr(engine_mod, "L3Loader", loader_cls)
-    monkeypatch.setattr(engine_mod.CppLatencyProfile, "from_yaml_defaults", lambda: profile)
+    monkeypatch.setattr(engine_mod.CppLatencyProfile, "from_chi404_summary", lambda path: profile)
     monkeypatch.setattr(engine_mod.LatencyPolicy, "from_cpp_profile", lambda cpp_profile: SimpleNamespace())
     monkeypatch.setattr(engine_mod.RunContext, "build", lambda *args, **kwargs: ctx)
     monkeypatch.setattr(engine_mod, "get_cached_stack_verify", lambda repo: SimpleNamespace(
@@ -262,6 +265,81 @@ def test_skip_history_gate_allows_run_but_blocks_l3_quality_promotion(tmp_path, 
     assert manifest["data_sufficient"] is False
     assert manifest["duplicate_order_ids"] == 2
     assert manifest["monotonic_violations"] == 1
+
+
+@pytest.mark.parametrize("wfc_status", ["SKIPPED", "PENDING", "FAIL"])
+def test_non_pass_wfc_status_blocks_promotion(tmp_path, monkeypatch, wfc_status):
+    from workbench.src.run.engine import WorkbenchEngine
+
+    _patch_engine(monkeypatch, tmp_path)
+    npz_path = tmp_path / "event.npz"
+    npz_path.write_bytes(b"npz")
+
+    out = WorkbenchEngine(tmp_path).run(
+        "TEST_MODEL",
+        "TEST_EVENT",
+        npz_path=npz_path,
+        wfc_status=wfc_status,
+        coverage_summary={
+            "coverage_status": "PASS",
+            "minimum_required_days": 250,
+            "valid_trading_days": 250,
+        },
+    )
+
+    assert out["promote_candidate"] is False
+    assert out["report"]["promote_candidate"] is False
+    assert out["report"]["wfc_status"] == wfc_status
+
+
+def test_missing_chi404_latency_summary_blocks_run(tmp_path, monkeypatch):
+    from workbench.src.run.engine import WorkbenchEngine
+
+    _patch_engine(monkeypatch, tmp_path)
+    latency_summary = tmp_path / "runtime" / "latency_reports" / "latency_summary.json"
+    latency_summary.unlink()
+    npz_path = tmp_path / "event.npz"
+    npz_path.write_bytes(b"npz")
+
+    with pytest.raises(FileNotFoundError, match="CHI404 latency summary missing"):
+        WorkbenchEngine(tmp_path).run(
+            "TEST_MODEL",
+            "TEST_EVENT",
+            npz_path=npz_path,
+            coverage_summary={
+                "coverage_status": "PASS",
+                "minimum_required_days": 250,
+                "valid_trading_days": 250,
+            },
+        )
+
+
+def test_wfc_pass_preserves_promotion_when_other_gates_pass(tmp_path, monkeypatch):
+    from workbench.src.run.engine import WorkbenchEngine
+
+    _patch_engine(monkeypatch, tmp_path)
+    npz_path = tmp_path / "event.npz"
+    npz_path.write_bytes(b"npz")
+
+    out = WorkbenchEngine(tmp_path).run(
+        "TEST_MODEL",
+        "TEST_EVENT",
+        npz_path=npz_path,
+        wfc_status="PASS",
+        coverage_summary={
+            "coverage_status": "PASS",
+            "minimum_required_days": 250,
+            "valid_trading_days": 250,
+        },
+    )
+
+    assert out["promote_candidate"] is True
+    assert out["report"]["promote_candidate"] is True
+    assert out["report"]["wfc_status"] == "PASS"
+    assert out["report"]["latency_authority"]["authority"] == "chi404_cpp_latency_summary"
+    assert out["report"]["latency_authority"]["python_research_runtime_authoritative"] is False
+    summary_path = Path(out["report"]["latency_authority"]["summary_path"])
+    assert summary_path.parts[-3:] == ("runtime", "latency_reports", "latency_summary.json")
 
 
 def test_history_gate_raises_when_not_skipped(tmp_path, monkeypatch):

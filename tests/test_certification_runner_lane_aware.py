@@ -60,11 +60,9 @@ def test_equities_lane_ran_pytest(certification_result):
 
 def test_options_lane_handled(certification_result):
     options = certification_result.lane_results["options"]
-    assert options.get("passed") in {True, None}
-    if options.get("passed") is None and options.get("test_paths") is None:
-        pass
-    else:
-        assert options.get("test_paths") == ["tests/test_options_lane"]
+    assert options.get("passed") is False
+    assert options.get("status") == "TEST_PATH_MISSING"
+    assert options.get("test_paths") == ["tests/test_options_lane"]
 
 
 def test_scorecard_json_persisted(certification_result):
@@ -109,8 +107,21 @@ def test_coverage_union_across_lanes(certification_result):
     assert data["lane_coverage"]["crypto"]["environment_validated"] is False
 
 
-def test_lane_aware_payload_omitted_when_skip_lane_pytest(tmp_path):
-    """With skip_lane_pytest=True, lane_results is empty and CME is not auto-marked."""
-    result = run_full_certification(Path("."), skip_lane_pytest=True)
+def test_lane_aware_payload_skipped_is_not_green(tmp_path, monkeypatch):
+    """With skip_lane_pytest=True, lane_results is empty and readiness is not green."""
+    from hft3.validation import certification_runner as cr
+
+    def fake_run_pytest(target: str, root: Path) -> tuple[bool, str, int, int, float]:
+        return True, f"{target}: 1 passed", 1, 0, 0.1
+
+    monkeypatch.setattr(cr, "_run_pytest", fake_run_pytest)
+    monkeypatch.setattr(cr, "git_sha", lambda root: "abc123")
+    monkeypatch.setattr(cr, "backtester_version", lambda root: "v-test")
+    monkeypatch.setattr(cr, "new_certification_run_id", lambda: "CERT-test-skip-lanes")
+
+    result = cr.run_full_certification(tmp_path, skip_lane_pytest=True)
+
+    assert result.status == "YELLOW"
     assert result.lane_results == {}
-    assert result.lane_failures == []
+    assert set(result.lane_failures) == {"crypto", "equities", "options"}
+    assert any("skip_lane_pytest=True" in warning for warning in result.warnings)
