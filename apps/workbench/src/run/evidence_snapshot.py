@@ -46,6 +46,7 @@ _VALID_COVERAGE_STATUSES = {
 
 _HFT_REPLAY_CLASSES = {"FULL_EXECUTION", "L3_VALIDATED"}
 _EXECUTION_REALISM_CLASSES = {"FULL_EXECUTION", "L3_VALIDATED"}
+NATIVE_CPP_ORDER_ACK_MIN_SAMPLES = 1_000
 
 
 def read_json(path: Path) -> dict[str, Any]:
@@ -1087,6 +1088,22 @@ def _latest_latency_baseline_summary(
         if broker and str(broker_mode.get("broker") or "").lower() != broker.lower():
             return False
         if environment and str(broker_mode.get("environment") or "").lower() != environment.lower():
+            return False
+        broker_artifacts = payload.get("broker_artifacts") or {}
+        operating_profile = payload.get("operating_profile") or {}
+        if not isinstance(operating_profile, dict):
+            return False
+        metrics = payload.get("metrics") or {}
+        send_to_ack = metrics.get("send_to_ack_us") or {}
+        if str(operating_profile.get("host") or "") != "CHI404":
+            return False
+        if str(broker_artifacts.get("hot_path_language") or "").lower() != "c++":
+            return False
+        if str(broker_artifacts.get("wrapper") or "").lower() != "none":
+            return False
+        if str(broker_artifacts.get("probe") or "") != "rithmic_latency_probe":
+            return False
+        if int(send_to_ack.get("count") or 0) < NATIVE_CPP_ORDER_ACK_MIN_SAMPLES:
             return False
         return True
 
@@ -2965,11 +2982,8 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
     reports_bound = str(rithmic_trial.get("report_binding_status") or "") == "PASS"
     report_binding_blocked = has_rithmic_trial and not reports_bound
     baseline_order_ack_count = _latency_metric_count(latency_baseline, "send_to_ack_us")
-    baseline_order_ack_measured = baseline_order_ack_count > 0
-    order_ack_measured = (
-        (bool(rithmic_trial.get("paired_count", 0)) and reports_bound if has_rithmic_trial else False)
-        or baseline_order_ack_measured
-    )
+    baseline_order_ack_measured = baseline_order_ack_count >= NATIVE_CPP_ORDER_ACK_MIN_SAMPLES
+    order_ack_measured = baseline_order_ack_measured
     state = (
         "observed_blocked"
         if has_rithmic_trial
@@ -3151,9 +3165,10 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
         else "",
         "order_ack_measured": order_ack_measured,
         "endpoint_profile": rithmic_endpoint.get("profile", "") if is_cme else "",
-        "paired_count": baseline_order_ack_count or rithmic_trial.get("paired_count", 0),
+        "paired_count": baseline_order_ack_count,
+        "trial_capture_paired_count": rithmic_trial.get("paired_count", 0),
         "summary": latency_baseline or paper_order_summary,
-        "source": "latency_baseline" if baseline_order_ack_measured else "rithmic_trial_capture",
+        "source": "latency_baseline" if baseline_order_ack_measured else "missing_native_cpp_latency_baseline",
     }
     runtime_readiness = (
         _cme_runtime_readiness(

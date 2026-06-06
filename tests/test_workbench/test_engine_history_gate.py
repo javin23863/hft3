@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import numpy as np
 
 from backtest_pipeline.src.signal_backtester import BacktestResult
 from workbench.src.core.composition import ModelComposition
@@ -162,6 +163,43 @@ def _patch_engine(
     return ctx
 
 
+def _write_native_latency_baseline(repo: Path) -> None:
+    reports = repo / "reports" / "latency_baselines"
+    reports.mkdir(parents=True, exist_ok=True)
+    metric = {
+        "count": 1000,
+        "p50_us": 1000.0,
+        "p95_us": 1500.0,
+        "p99_us": 2000.0,
+        "p99_9_us": 2500.0,
+    }
+    (reports / "native-prod_summary.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "latency_baseline_summary_v1",
+                "run_id": "native-prod",
+                "sample_count": 1000,
+                "sample_path": "data/latency_baselines/2026-06-06/native-prod.jsonl",
+                "operating_profile": {"host": "CHI404"},
+                "broker_mode": {"status": "observed", "broker": "rithmic", "environment": "paper"},
+                "broker_artifacts": {
+                    "hot_path_language": "c++",
+                    "wrapper": "none",
+                    "probe": "rithmic_latency_probe",
+                    "records_written": 1000,
+                    "ack_count": 1000,
+                },
+                "metrics": {
+                    "tick_to_send_trigger_us": dict(metric),
+                    "tick_to_send_us": dict(metric),
+                    "send_to_ack_us": dict(metric),
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 def test_manifest_gate_error_prioritizes_l3_quality_before_history_and_coverage():
     coverage_summary = {
         "coverage_status": "BELOW_MINIMUM",
@@ -196,6 +234,26 @@ def test_manifest_gate_error_prioritizes_l3_quality_before_history_and_coverage(
 
     assert monotonic_manifest.gate_error() == "DATA_QUALITY_MONOTONIC_VIOLATIONS: 1"
     assert duplicate_manifest.gate_error() == "DATA_QUALITY_DUPLICATE_ADD_ORDER_IDS: 2"
+
+
+def test_run_context_exposes_real_npz_path_to_adapter_metadata(tmp_path):
+    from workbench.src.run.run_context import RunContext
+    from workbench.src.sim.latency_simulator import LatencyPolicy
+
+    npz_path = tmp_path / "event.npz"
+    np.savez_compressed(npz_path, data=np.array([1], dtype=np.int64))
+
+    ctx = RunContext.build(
+        tmp_path,
+        "TEST_MODEL",
+        "TEST_EVENT",
+        npz_path,
+        np.array([1], dtype=np.int64),
+        latency_policy=LatencyPolicy(),
+    )
+
+    assert ctx.npz_path == npz_path
+    assert ctx.metadata["npz_path"] == str(npz_path)
 
 
 def test_skip_history_gate_does_not_force_data_sufficient(tmp_path, monkeypatch):
@@ -312,6 +370,33 @@ def test_missing_chi404_latency_summary_blocks_run(tmp_path, monkeypatch):
                 "valid_trading_days": 250,
             },
         )
+
+
+def test_valid_native_baseline_promotes_before_missing_runtime_summary_blocks(tmp_path, monkeypatch):
+    from workbench.src.run.engine import WorkbenchEngine
+
+    _patch_engine(monkeypatch, tmp_path)
+    latency_summary = tmp_path / "runtime" / "latency_reports" / "latency_summary.json"
+    latency_summary.unlink()
+    _write_native_latency_baseline(tmp_path)
+    npz_path = tmp_path / "event.npz"
+    npz_path.write_bytes(b"npz")
+
+    out = WorkbenchEngine(tmp_path).run(
+        "TEST_MODEL",
+        "TEST_EVENT",
+        npz_path=npz_path,
+        coverage_summary={
+            "coverage_status": "PASS",
+            "minimum_required_days": 250,
+            "valid_trading_days": 250,
+        },
+    )
+
+    assert out["run_id"] == "TEST_RUN"
+    promoted = json.loads(latency_summary.read_text(encoding="utf-8"))
+    assert promoted["order_ack_measured"] is True
+    assert promoted["native_cpp_order_ack"]["send_to_ack_us"]["count"] == 1000
 
 
 def test_wfc_pass_preserves_promotion_when_other_gates_pass(tmp_path, monkeypatch):

@@ -103,6 +103,7 @@ class RunContext:
             cpp_profile=cpp_prof,
             cpp_injector=injector,
             measured_p99_ms=measured_p99_ms,
+            metadata={"npz_path": str(npz_path)},
         )
 
     @property

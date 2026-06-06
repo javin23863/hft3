@@ -29,7 +29,7 @@ def test_full_universe_download_scope_lists_seed_catalog_rows():
     campaign_types = {ev.event_type for _, ev in campaign_rows}
 
     assert {"FOMC_STATEMENT", "PCE", "PPI", "GDP_ADVANCE", "TREASURY_AUCTION"}.issubset(full_types)
-    assert campaign_types <= {"CPI", "NFP", "PROP_FLATTEN_TOPSTEP"}
+    assert campaign_types <= {"CPI", "NFP"}
     assert len(full_types) > len(campaign_types)
     assert any(ev.row_status == "SEED" for _, ev in full_rows)
     assert all(ev.row_status == "SOURCED" for _, ev in campaign_rows)

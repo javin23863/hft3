@@ -137,6 +137,38 @@ def _normalize_injection_sweep(diagnostics: Dict[str, Any]) -> Dict[str, float]:
     return out
 
 
+def _latency_authority_packet(diagnostics: Dict[str, Any]) -> Dict[str, Any]:
+    raw = diagnostics.get("latency_authority", "cpp_measured")
+    structured = raw if isinstance(raw, dict) else {}
+
+    def _field(name: str, default: Any = None) -> Any:
+        if name in diagnostics:
+            return diagnostics.get(name)
+        if name in structured:
+            return structured.get(name)
+        return default
+
+    authority = structured.get("authority") if structured else raw
+    if not isinstance(authority, str) or not authority:
+        authority = "cpp_measured"
+    return {
+        "authority": authority,
+        "measured_production_p99_us": _field("measured_production_p99_us"),
+        "breakeven_us": _field("breakeven_us"),
+        "latency_profitability_buffer_us": _field("latency_profitability_buffer_us"),
+        "lane_required": _field("lane_required"),
+        "lane_measured": _field("lane_measured"),
+        "lane_pass": _field("lane_pass"),
+        "survives_cpp_execution_delay": _field("survives_cpp_execution_delay"),
+        "promote_candidate": _field("promote_candidate"),
+        "wfc_status": _field("wfc_status"),
+        "robustness_passed": _field("robustness_passed"),
+        "cpp_hot_path_runtime_us": _field("cpp_hot_path_runtime_us"),
+        "python_research_runtime_us": _field("python_research_runtime_us"),
+        "python_research_runtime_authoritative": False,
+    }
+
+
 def _row_to_audit(row: pd.Series) -> Dict[str, Any]:
     d: Dict[str, Any] = {}
     col_map = {
@@ -301,22 +333,7 @@ def build_microstructure_aar_packet(
             "catalog_years": manifest.get("history_years_available"),
             "symbol": config.get("symbol"),
         },
-        "latency_authority": {
-            "authority": diagnostics.get("latency_authority", "cpp_measured"),
-            "measured_production_p99_us": diagnostics.get("measured_production_p99_us"),
-            "breakeven_us": diagnostics.get("breakeven_us"),
-            "latency_profitability_buffer_us": diagnostics.get("latency_profitability_buffer_us"),
-            "lane_required": diagnostics.get("lane_required"),
-            "lane_measured": diagnostics.get("lane_measured"),
-            "lane_pass": diagnostics.get("lane_pass"),
-            "survives_cpp_execution_delay": diagnostics.get("survives_cpp_execution_delay"),
-            "promote_candidate": diagnostics.get("promote_candidate"),
-            "wfc_status": diagnostics.get("wfc_status"),
-            "robustness_passed": diagnostics.get("robustness_passed"),
-            "cpp_hot_path_runtime_us": diagnostics.get("cpp_hot_path_runtime_us"),
-            "python_research_runtime_us": diagnostics.get("python_research_runtime_us"),
-            "python_research_runtime_authoritative": False,
-        },
+        "latency_authority": _latency_authority_packet(diagnostics),
         "injection_sweep": injection_sweep,
         "per_trade_audit": per_trade_audit,
         "simulation_fidelity": {

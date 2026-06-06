@@ -88,6 +88,14 @@ def test_sweep_orchestrator_no_virsh_fallback() -> None:
     assert "python3 -m data_system.rithmic_trial.pipeline paper-latency-daemon" not in sh
 
 
+def test_chi404_sync_pulls_execution_evidence() -> None:
+    sh = (SCRIPTS / "chi404_sync_trial_data.sh").read_text(encoding="utf-8")
+    assert "runtime/latency_reports/latency_summary.json" in sh
+    assert "reports/latency_audit" in sh
+    assert "reports/latency_baselines" in sh
+    assert "data/latency_baselines" in sh
+
+
 def test_no_windows_only_doc_asserts_chi404() -> None:
     """Docs must not assert 'Windows runs the trade path' anywhere."""
     forbidden_substrings = [

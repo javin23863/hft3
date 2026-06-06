@@ -87,6 +87,43 @@ def test_packet_simulation_fidelity_link_only(tmp_path: Path):
     assert validate_packet_schema(packet) == []
 
 
+def test_packet_accepts_structured_workbench_latency_authority(tmp_path: Path):
+    from data_layer.packet.microstructure_aar_packet import (
+        build_microstructure_aar_packet,
+        validate_packet_schema,
+    )
+
+    art = tmp_path / "run_structured_latency"
+    art.mkdir()
+    (art / "diagnostics.json").write_text(
+        json.dumps(
+            {
+                "event_id": "NFP_2025_10_03_TIGHT",
+                "num_trades": 0,
+                "latency_authority": {
+                    "authority": "chi404_cpp_latency_summary",
+                    "python_research_runtime_authoritative": False,
+                    "lane_pass": True,
+                    "promote_candidate": False,
+                },
+                "breakeven_us": 2000000.0,
+                "pnl_by_injection_us": {"0": 0.0},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (art / "manifest.json").write_text(json.dumps({"data_sufficient": True}), encoding="utf-8")
+    (art / "config.yaml").write_text("model_id: HYP_5\nevent_id: NFP_2025_10_03_TIGHT\n", encoding="utf-8")
+
+    packet, _ = build_microstructure_aar_packet(art, REPO)
+
+    assert packet["latency_authority"]["authority"] == "chi404_cpp_latency_summary"
+    assert packet["latency_authority"]["python_research_runtime_authoritative"] is False
+    assert packet["latency_authority"]["lane_pass"] is True
+    assert packet["latency_authority"]["promote_candidate"] is False
+    assert validate_packet_schema(packet) == []
+
+
 def test_packet_stack_verified_requires_all_checks(tmp_path: Path):
     from data_layer.packet.microstructure_aar_packet import build_microstructure_aar_packet
 
@@ -260,7 +297,7 @@ def test_no_quant_x_imports():
 
 def test_after_action_skipped_on_fast_sweep():
     engine_src = (REPO / "apps" / "workbench" / "src" / "run" / "engine.py").read_text(encoding="utf-8")
-    assert "if not fast_sweep and _after_action_allowed():" in engine_src
+    assert "should_run_after_action = (run_after_action or not fast_sweep) and _after_action_allowed()" in engine_src
     assert "run_after_action_report" in engine_src
 
     calls: list = []
@@ -270,19 +307,28 @@ def test_after_action_skipped_on_fast_sweep():
 
     with patch("data_layer.pipeline.after_action.run_after_action_report", side_effect=_track):
         fast_sweep = True
+        run_after_action = False
         allowed = True
-        if not fast_sweep and allowed:
+        if (run_after_action or not fast_sweep) and allowed:
             from data_layer.pipeline.after_action import run_after_action_report
 
             run_after_action_report(FIXTURE, REPO)
         assert calls == []
 
         fast_sweep = False
-        if not fast_sweep and allowed:
+        if (run_after_action or not fast_sweep) and allowed:
             from data_layer.pipeline.after_action import run_after_action_report
 
             run_after_action_report(FIXTURE, REPO)
         assert len(calls) == 1
+
+        fast_sweep = True
+        run_after_action = True
+        if (run_after_action or not fast_sweep) and allowed:
+            from data_layer.pipeline.after_action import run_after_action_report
+
+            run_after_action_report(FIXTURE, REPO)
+        assert len(calls) == 2
 
 
 def test_openai_compatible_mocked_pipeline(tmp_path, monkeypatch):

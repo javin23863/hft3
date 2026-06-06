@@ -60,7 +60,14 @@ def _passing_execution_audit() -> dict:
     return {
         "run_id": "lataudit-pass",
         "status": "pass",
-        "mode": "synthetic",
+        "mode": "paper_live",
+        "expected_host": "CHI404",
+        "source_host": "CHI404",
+        "host_role": "colo_execution",
+        "hot_path_language": "c++",
+        "wrapper": "none",
+        "probe": "rithmic_latency_probe",
+        "submit_to_ack_sample_count": 1000,
         "primary_kpi": "tick_to_send_us",
         "tick_to_send_p50_us": 45.0,
         "tick_to_send_p99_us": 50.0,
@@ -89,8 +96,16 @@ def test_operating_envelope_separates_placement_from_ack_latency() -> None:
     assert compact["placement_speed_p99_us"] == 35.0
     assert compact["send_to_ack_p99_us"] == 100_000.0
     assert compact["offensive_operating_band"] == "microsecond_loop"
+    assert compact["execution_topology_status"] == "ready"
+    assert compact["execution_host_required"] == "CHI404"
+    assert compact["current_host_role"] == "dev_workstation_research"
+    assert compact["dev_workstation_in_trade_path"] is False
     assert envelope["external_confirmation"]["modeled_as_async_state_confirmation"] is True
     assert envelope["external_confirmation"]["blocks_on_ack"] is False
+    assert envelope["execution_topology"]["status"] == "ready"
+    assert envelope["execution_topology"]["execution_host_required"] == "CHI404"
+    assert envelope["execution_topology"]["current_host_role"] == "dev_workstation_research"
+    assert envelope["execution_topology"]["dev_workstation_in_trade_path"] is False
 
 
 def test_operating_envelope_blocks_when_execution_path_audit_is_missing() -> None:
@@ -107,6 +122,11 @@ def test_operating_envelope_blocks_when_execution_path_audit_is_missing() -> Non
 
     assert envelope["status"] == "FAIL"
     assert envelope["execution_path_audit"]["status"] == "missing"
+    assert envelope["execution_path_audit"]["expected_host"] == "CHI404"
+    assert "CHI404 execution-host audit missing" in envelope["execution_path_audit"]["reason"]
+    assert envelope["execution_topology"]["status"] == "blocked"
+    assert envelope["execution_topology"]["execution_host_required"] == "CHI404"
+    assert envelope["execution_topology"]["dev_workstation_in_trade_path"] is False
     assert any(gate["gate"] == "low_latency_execution_path_audit" for gate in envelope["promotion_blockers"])
 
 
@@ -124,6 +144,8 @@ def test_operating_envelope_blocks_without_chi404_authority() -> None:
     )
 
     assert envelope["status"] == "FAIL"
+    assert envelope["execution_topology"]["status"] == "blocked"
+    assert "dev workstation replay cannot substitute" in envelope["execution_topology"]["reason"]
     assert any(gate["gate"] == "operating_envelope_generated" for gate in envelope["promotion_blockers"])
 
 
@@ -142,6 +164,8 @@ def test_operating_envelope_blocks_when_order_ack_is_not_measured() -> None:
 
     assert envelope["status"] == "FAIL"
     assert envelope["source_authority_detail"]["order_ack_blocked"] is True
+    assert envelope["execution_topology"]["status"] == "blocked"
+    assert "execution computer is not measured" in envelope["execution_topology"]["reason"]
     assert any(gate["gate"] == "async_ack_state_risk" for gate in envelope["promotion_blockers"])
 
 
@@ -169,6 +193,55 @@ def test_operating_envelope_blocks_when_execution_path_audit_failed() -> None:
     assert compact["execution_path_audit_status"] == "fail"
     assert compact["execution_path_audit_run_id"] == "lataudit-bad"
     assert any(gate["gate"] == "low_latency_execution_path_audit" for gate in envelope["promotion_blockers"])
+
+
+def test_operating_envelope_blocks_legacy_current_audit_without_native_cpp_authority() -> None:
+    envelope = build_latency_operating_envelope(
+        run_id="RUN_LEGACY_AUDIT",
+        model_id="HYP_5",
+        event_id="EV_A",
+        viability=_viability(),
+        cpp_profile=_profile(),
+        phase5_timestamp_schema={"complete": True, "monotonic_non_decreasing": True},
+        audit_records=[],
+        chi404_observed=True,
+        execution_path_audit_status={
+            "run_id": "legacy-audit",
+            "status": "pass",
+            "mode": "replay",
+            "primary_kpi": "tick_to_send_us",
+            "failures": [],
+        },
+    )
+
+    assert envelope["status"] == "FAIL"
+    assert envelope["execution_path_audit"]["native_cpp_authority_ready"] is False
+    assert any("probe must be rithmic_latency_probe" in reason for reason in envelope["execution_path_audit"]["native_cpp_authority_reject_reasons"])
+    assert any(gate["gate"] == "low_latency_execution_path_audit" for gate in envelope["promotion_blockers"])
+
+
+def test_operating_envelope_blocks_current_audit_without_source_host_proof() -> None:
+    audit = _passing_execution_audit()
+    audit.pop("source_host")
+
+    envelope = build_latency_operating_envelope(
+        run_id="RUN_AUDIT_NO_SOURCE_HOST",
+        model_id="HYP_5",
+        event_id="EV_A",
+        viability=_viability(),
+        cpp_profile=_profile(),
+        phase5_timestamp_schema={"complete": True, "monotonic_non_decreasing": True},
+        audit_records=[],
+        chi404_observed=True,
+        execution_path_audit_status=audit,
+    )
+
+    assert envelope["status"] == "FAIL"
+    assert envelope["execution_path_audit"]["native_cpp_authority_ready"] is False
+    assert any(
+        "source_host must be CHI404" in reason
+        for reason in envelope["execution_path_audit"]["native_cpp_authority_reject_reasons"]
+    )
 
 
 def test_operating_envelope_writer_emits_json_and_markdown(tmp_path: Path) -> None:

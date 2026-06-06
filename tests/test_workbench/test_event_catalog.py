@@ -10,6 +10,7 @@ from decision_engine.python.src.walk_forward import ValidationPeriod
 from workbench.src.data.event_catalog import (
     list_campaign_events,
     list_universe_events,
+    load_periods,
     load_model_binding,
     row_to_event_context,
 )
@@ -30,12 +31,23 @@ def test_hyp_5_discovery_lists_cpi_events():
     period = ValidationPeriod("Discovery", 2018, 2020)
     events = list_campaign_events("HYP_5", period, "MES.v.0", REPO)
     ids = [e.event_id for e in events]
+    contexts = {e.event_context for e in events}
     assert "CPI_2018_01_11_TIGHT" in ids
+    assert contexts <= {"CPI_TIGHT", "NFP_TIGHT"}
+    assert {"CPI_TIGHT", "NFP_TIGHT"}.issubset(contexts)
     for e in events:
         if e.event_id.startswith("CPI_"):
             assert e.event_context == "CPI_TIGHT"
         elif e.event_id.startswith("NFP_"):
             assert e.event_context == "NFP_TIGHT"
+
+
+def test_hyp_5_campaign_contexts_are_macro_only():
+    allowed = {"CPI_TIGHT", "NFP_TIGHT"}
+    for period in load_periods(REPO):
+        events = list_campaign_events("HYP_5", period, "MES.v.0", REPO)
+        assert events, period.name
+        assert {e.event_context for e in events} <= allowed
 
 
 def test_hyp_29_does_not_list_cpi():

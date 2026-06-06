@@ -20,7 +20,10 @@ from workbench.src.latency.operating_envelope import (
     compact_envelope_fields,
     write_latency_operating_envelope,
 )
-from workbench.src.latency.execution_path_audit import load_current_low_latency_status
+from workbench.src.latency.execution_path_audit import (
+    ensure_chi404_latency_authority,
+    load_current_low_latency_status,
+)
 from workbench.src.core.composition import ModelComposition
 from workbench.src.registry.composition_orchestrator import CompositionOrchestrator
 from features_engine.src.model_registry import resolve_model_id
@@ -71,6 +74,7 @@ class WorkbenchEngine:
         history_years_available: float = 0.0,
         skip_history_gate: bool = True,
         fast_sweep: bool = True,
+        run_after_action: bool = False,
         composition: Optional[ModelComposition] = None,
         strategy_params: Optional[Dict[str, Any]] = None,
         wfc_status: Optional[str] = None,
@@ -90,6 +94,7 @@ class WorkbenchEngine:
         raw = loader.load(str(resolved_npz))
 
         chi404 = chi404_summary or (self.repo_root / "runtime/latency_reports/latency_summary.json")
+        ensure_chi404_latency_authority(self.repo_root, chi404)
         if not chi404.is_file():
             raise FileNotFoundError(
                 f"CHI404 latency summary missing: {chi404}. "
@@ -407,7 +412,8 @@ class WorkbenchEngine:
             card["certification_stamp"] = cert_stamp
         (ctx.artifact_dir / "research_card.json").write_text(json.dumps(card, indent=2), encoding="utf-8")
 
-        if not fast_sweep and _after_action_allowed():
+        should_run_after_action = (run_after_action or not fast_sweep) and _after_action_allowed()
+        if should_run_after_action:
             after_action_meta: Dict[str, Any] = {}
             try:
                 from data_layer.pipeline.after_action import run_after_action_report
@@ -431,7 +437,7 @@ class WorkbenchEngine:
             "promote_candidate": promote,
             **(
                 {"after_action": after_action_meta}
-                if not fast_sweep and _after_action_allowed()
+                if should_run_after_action
                 else {}
             ),
         }

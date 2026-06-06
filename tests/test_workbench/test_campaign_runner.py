@@ -24,6 +24,12 @@ def test_dry_run_returns_preview(tmp_path, monkeypatch):
         allow_partial=True,
     )
     assert result.status == "DRY_RUN"
+    assert result.periods
+    assert {event["event_context"] for period in result.periods for event in period.event_results} <= {
+        "CPI_TIGHT",
+        "NFP_TIGHT",
+    }
+    assert all(period.error == "DRY_RUN_PREVIEW_ONLY" for period in result.periods)
     preview = REPO / "artifacts" / "research_cards" / "workbench_runs" / result.campaign_id / "dry_run_preview.json"
     assert preview.is_file()
 

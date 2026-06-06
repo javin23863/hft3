@@ -8,9 +8,11 @@ import pytest
 from workbench.src.latency.execution_path_audit import (
     AuditConfig,
     build_span,
+    ensure_chi404_latency_authority,
     load_spans,
     main as audit_main,
     run_audit,
+    validate_native_baseline_summary,
 )
 
 
@@ -152,6 +154,82 @@ def test_paper_live_mode_fails_loudly_without_execution_boundaries(tmp_path: Pat
     assert summary["status"] == "blocked"
     assert summary["blocked_reason"] == "PAPER_LIVE_REPLACED_BY_NATIVE_CPP_PROBE"
     assert summary["sample_count"] == 0
+
+
+def _native_summary(*, count: int = 1000, probe: str = "rithmic_latency_probe") -> dict[str, object]:
+    metric = {
+        "count": count,
+        "p50_us": 1000.0,
+        "p95_us": 1500.0,
+        "p99_us": 2000.0,
+        "p99_9_us": 2500.0,
+    }
+    return {
+        "schema_version": "latency_baseline_summary_v1",
+        "run_id": "native-prod",
+        "sample_count": count,
+        "sample_path": "data/latency_baselines/2026-06-06/native-prod.jsonl",
+        "operating_profile": {"host": "CHI404"},
+        "broker_mode": {"status": "observed", "broker": "rithmic", "environment": "paper"},
+        "broker_artifacts": {
+            "hot_path_language": "c++",
+            "wrapper": "none",
+            "probe": probe,
+            "records_written": count,
+            "ack_count": count,
+        },
+        "metrics": {
+            "tick_to_send_trigger_us": dict(metric),
+            "tick_to_send_us": dict(metric),
+            "send_to_ack_us": dict(metric),
+        },
+    }
+
+
+def test_native_cpp_baseline_requires_production_submit_ack_count() -> None:
+    assert validate_native_baseline_summary(_native_summary(count=1000))["accepted"] is True
+
+    verdict = validate_native_baseline_summary(_native_summary(count=999))
+
+    assert verdict["accepted"] is False
+    assert "send_to_ack_us.count 999 < 1000" in verdict["reject_reasons"]
+
+
+def test_native_cpp_baseline_requires_chi404_source_host() -> None:
+    missing_host = _native_summary(count=1000)
+    missing_host.pop("operating_profile")
+
+    verdict = validate_native_baseline_summary(missing_host)
+
+    assert verdict["accepted"] is False
+    assert "operating_profile.host must be CHI404" in verdict["reject_reasons"]
+
+    wrong_host = _native_summary(count=1000)
+    wrong_host["operating_profile"] = {"host": "DEV-WORKSTATION"}
+
+    verdict = validate_native_baseline_summary(wrong_host)
+
+    assert verdict["accepted"] is False
+    assert "operating_profile.host must be CHI404" in verdict["reject_reasons"]
+
+
+def test_native_cpp_baseline_promotion_writes_workbench_authority_artifacts(tmp_path: Path) -> None:
+    reports = tmp_path / "reports" / "latency_baselines"
+    reports.mkdir(parents=True)
+    summary_path = reports / "native-prod_summary.json"
+    summary_path.write_text(json.dumps(_native_summary(count=1000), indent=2), encoding="utf-8")
+
+    current = ensure_chi404_latency_authority(tmp_path)
+
+    runtime_summary = json.loads(
+        (tmp_path / "runtime" / "latency_reports" / "latency_summary.json").read_text(encoding="utf-8")
+    )
+    assert current is not None
+    assert current["status"] == "PASS"
+    assert current["submit_to_ack_sample_count"] == 1000
+    assert runtime_summary["order_ack_measured"] is True
+    assert runtime_summary["order_ack_p99_ms"] == 2.0
+    assert runtime_summary["native_cpp_order_ack"]["probe"] == "rithmic_latency_probe"
 
 
 def test_span_validation_rejects_ack_as_placement_or_non_monotonic_order() -> None:

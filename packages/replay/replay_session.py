@@ -77,6 +77,8 @@ class ReplaySession:
         )
         self.clock = ReplayClock(seed=config.seed)
         self._lifecycle: List[dict[str, Any]] = []
+        self._lifecycle_keys: set[tuple[Any, ...]] = set()
+        self._intent_owners: Dict[str, tuple[str, str]] = {}
         self._intent_count = 0
         self._temp_npz: Optional[str] = None
 
@@ -141,6 +143,8 @@ class ReplaySession:
                 mda.sync_to_timestamp(ts)
                 state = mda.current_market_state(cfg.symbol)
                 drained = adapter.drain_order_events()
+                for ev in drained:
+                    self._record_lifecycle(ev, ts, "", "")
 
                 ctx = ReplayStepContext(
                     run_id=self.run_id,
@@ -156,13 +160,19 @@ class ReplaySession:
                 actions = self.strategy.on_step(ctx)
                 for action in actions:
                     if isinstance(action, OrderIntent):
+                        self._intent_owners[action.intent_id] = (action.strategy_id, action.model_id)
                         self._intent_count += 1
                         ev = adapter.submit_order(action)
                         self._record_lifecycle(ev, ts, action.strategy_id, action.model_id)
                     elif isinstance(action, CancelIntent):
+                        self._intent_owners.setdefault(action.intent_id, (action.strategy_id, action.model_id))
                         ev = adapter.cancel_order(action.order_id)
                         self._record_lifecycle(ev, ts, action.strategy_id, action.model_id)
                     elif isinstance(action, ReplaceIntent):
+                        self._intent_owners[action.new_order_intent.intent_id] = (
+                            action.new_order_intent.strategy_id,
+                            action.new_order_intent.model_id,
+                        )
                         ev = adapter.replace_order(action.order_id, action.new_order_intent)
                         self._record_lifecycle(ev, ts, action.new_order_intent.strategy_id, action.new_order_intent.model_id)
 
@@ -193,6 +203,15 @@ class ReplaySession:
                 "position": account.position,
                 "order_intent_count": self._intent_count,
                 "order_lifecycle_summary": summary,
+                "fill_events": [
+                    row
+                    for row in self._lifecycle
+                    if row.get("event_type")
+                    in {
+                        OrderEventType.ORDER_FILLED.value,
+                        OrderEventType.ORDER_PARTIALLY_FILLED.value,
+                    }
+                ],
                 "lifecycle_path": str(cfg.audit_dir / f"{self.run_id}_order_lifecycle.jsonl"),
                 "summary_path": str(cfg.audit_dir / f"{self.run_id}_summary.json"),
                 "certification_stamp": stamp,
@@ -213,6 +232,20 @@ class ReplaySession:
         strategy_id: str,
         model_id: str,
     ) -> None:
+        key = (
+            ev.order_id,
+            ev.intent_id,
+            ev.event_type.value,
+            ev.timestamp_ns,
+            ev.filled_quantity,
+            ev.remaining_quantity,
+        )
+        if key in self._lifecycle_keys:
+            return
+        self._lifecycle_keys.add(key)
+        owner = self._intent_owners.get(ev.intent_id, ("", ""))
+        strategy_id = strategy_id or owner[0]
+        model_id = model_id or owner[1]
         self._lifecycle.append(
             {
                 "run_id": self.run_id,

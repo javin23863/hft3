@@ -95,3 +95,39 @@ def test_run_per_hypothesis_replay_smoke(tmp_path):
     build_minimal_mbo_npz(npz)
     res = run_hypothesis_replay(_AlwaysLong(), str(npz), latency_ms=1.0, max_steps=300)
     assert res.num_trades >= 0
+    if res.num_trades:
+        assert len(res.fills) == res.num_trades
+        assert all(fill.timestamp_ns > 0 for fill in res.fills)
+        assert all(fill.exec_price > 0 for fill in res.fills)
+
+
+def test_run_hypothesis_replay_fails_when_trades_lack_lifecycle_fills(monkeypatch, tmp_path):
+    from backtest_pipeline.src import replay_matrix
+    from backtest_pipeline.src.replay_matrix import run_hypothesis_replay
+    from features_engine.src.hypotheses.modules import BaseHypothesis, MarketState
+
+    class _AlwaysLong(BaseHypothesis):
+        def __init__(self):
+            super().__init__(1, "always_long")
+
+        def evaluate(self, state: MarketState) -> float:
+            return 0.5
+
+    class _BrokenReplaySession:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def run(self):
+            return {
+                "balance": 1.0,
+                "num_trades": 1,
+                "fill_events": [],
+                "order_lifecycle_summary": {"filled_count": 0},
+            }
+
+    monkeypatch.setattr(replay_matrix, "ReplaySession", _BrokenReplaySession)
+    npz = tmp_path / "dummy.npz"
+    np.savez_compressed(npz, data=np.array([], dtype=np.int64))
+
+    with pytest.raises(RuntimeError, match="reported trades but emitted no lifecycle fill events"):
+        run_hypothesis_replay(_AlwaysLong(), str(npz))

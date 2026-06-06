@@ -33,6 +33,11 @@ PDF_OVERRIDES = {
         "campaign_mode": "options_lane",
     },
 }
+HYP_OVERRIDES = {
+    _L2S["HYP_5"]: {
+        "required_event_contexts": ["CPI_TIGHT", "NFP_TIGHT"],
+    },
+}
 
 
 def _extract_hyp_bindings() -> dict[str, dict]:
@@ -91,6 +96,8 @@ def main() -> int:
     wf = yaml.safe_load(WF.read_text(encoding="utf-8")) or {}
 
     hyp = _extract_hyp_bindings()
+    for slug, override in HYP_OVERRIDES.items():
+        hyp[slug] = dict(override)
 
     pdf = {}
     for i in range(1, 12):

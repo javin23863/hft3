@@ -235,6 +235,29 @@ def make_campaign_id(model_id: str, symbol: str) -> str:
     return _campaign_id(model_id, symbol)
 
 
+def _dry_run_period_results(preview: Dict[str, Any], wf_cfg: dict[str, Any]) -> List[PeriodResult]:
+    results: List[PeriodResult] = []
+    for name, payload in (preview.get("periods") or {}).items():
+        events = list(payload.get("events") or [])
+        missing = sum(1 for event in events if not event.get("npz_present"))
+        results.append(
+            PeriodResult(
+                name=name,
+                gate_pass=False,
+                evaluate_only=_period_evaluate_only(wf_cfg, name),
+                net_pnl=0.0,
+                num_trades=0,
+                expectancy=0.0,
+                events_run=len(events) - missing,
+                events_missing=missing,
+                survives_cpp=False,
+                event_results=events,
+                error="DRY_RUN_PREVIEW_ONLY",
+            )
+        )
+    return results
+
+
 def _sim_shadow_status(artifact_dir: Path) -> str:
     path = artifact_dir / "sim_shadow.json"
     if path.is_file():
@@ -796,6 +819,7 @@ def run_campaign(
             symbol=symbol,
             status="DRY_RUN",
             param_hash=param_hash,
+            periods=_dry_run_period_results(preview, wf_cfg),
             artifact_dir=str(artifact_dir),
         )
 

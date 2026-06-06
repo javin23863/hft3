@@ -35,6 +35,11 @@ def main(argv: list[str] | None = None) -> int:
     run_p.add_argument("--history-years", type=float, default=0.0)
     run_p.add_argument("--enforce-history-gate", action="store_true")
     run_p.add_argument("--full-sweep", action="store_true", help="Run full latency band matrix")
+    run_p.add_argument(
+        "--after-action",
+        action="store_true",
+        help="Run after-action audit after the bounded model run without enabling full sweep",
+    )
 
     run_p.add_argument("--composition", default=None, help="JSON file with ModelComposition")
     run_p.add_argument(
@@ -380,6 +385,7 @@ def main(argv: list[str] | None = None) -> int:
         history_years_available=args.history_years,
         skip_history_gate=not args.enforce_history_gate,
         fast_sweep=not args.full_sweep,
+        run_after_action=args.after_action,
         composition=composition,
     )
     print(json.dumps(out, indent=2))

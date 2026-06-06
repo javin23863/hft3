@@ -60,6 +60,9 @@ COMPARISON_THRESHOLDS = {
     "tick_to_send_p99_9_hard_fail_pct": 25.0,
 }
 DEFAULT_WARN_LIMITS_US = {"tick_to_send_p50": 100.0, "tick_to_send_p99": 500.0, "tick_to_send_p99_9": 1_000.0}
+NATIVE_CPP_MIN_SUBMIT_ACK_SAMPLES = 1_000
+NATIVE_CPP_PROBE = "rithmic_latency_probe"
+NATIVE_CPP_REQUIRED_HOST = "CHI404"
 
 TIMESTAMP_FIELDS = (
     "market_event_received_ts",
@@ -126,6 +129,199 @@ def current_low_latency_status_path(repo_root: Path) -> Path:
 
 def load_current_low_latency_status(repo_root: Path | str) -> dict[str, Any] | None:
     return _load_json(current_low_latency_status_path(Path(repo_root)))
+
+
+def ensure_chi404_latency_authority(
+    repo_root: Path | str,
+    latency_summary_path: Path | None = None,
+    *,
+    min_submit_ack_samples: int = NATIVE_CPP_MIN_SUBMIT_ACK_SAMPLES,
+) -> dict[str, Any] | None:
+    """Promote valid CHI404 native C++ latency evidence into Workbench inputs."""
+
+    root = Path(repo_root)
+    summary_path = latency_summary_path or root / "runtime" / "latency_reports" / "latency_summary.json"
+    current_status = load_current_low_latency_status(root)
+    candidate = _latest_valid_native_baseline(root, min_submit_ack_samples=min_submit_ack_samples)
+    if candidate is None:
+        return current_status
+    source_path, source_summary, validation = candidate
+    return promote_native_baseline_summary(
+        root,
+        source_path,
+        source_summary=source_summary,
+        validation=validation,
+        latency_summary_path=summary_path,
+    )
+
+
+def promote_native_baseline_summary(
+    repo_root: Path | str,
+    baseline_summary_path: Path,
+    *,
+    source_summary: Mapping[str, Any] | None = None,
+    validation: Mapping[str, Any] | None = None,
+    latency_summary_path: Path | None = None,
+) -> dict[str, Any]:
+    """Write Workbench authority artifacts from an accepted native C++ baseline."""
+
+    root = Path(repo_root)
+    source = dict(source_summary or _load_json(Path(baseline_summary_path)) or {})
+    verdict = dict(validation or validate_native_baseline_summary(source))
+    if not verdict.get("accepted"):
+        reasons = ", ".join(str(r) for r in verdict.get("reject_reasons") or ["invalid native baseline"])
+        raise ValueError(f"native baseline rejected: {reasons}")
+
+    metrics = source.get("metrics") if isinstance(source.get("metrics"), Mapping) else {}
+    send_to_ack = dict(metrics.get("send_to_ack_us") or {})
+    tick_to_send = dict(metrics.get("tick_to_send_us") or {})
+    tick_to_trigger = dict(metrics.get("tick_to_send_trigger_us") or {})
+    run_id = str(source.get("run_id") or Path(baseline_summary_path).stem.replace("_summary", ""))
+    generated_at = utc_now_iso()
+
+    current = {
+        "schema_version": "current_low_latency_status_v1",
+        "run_id": run_id,
+        "status": "PASS",
+        "mode": "paper-native-cpp",
+        "generated_at_utc": generated_at,
+        "primary_kpi": "tick_to_send_us",
+        "placement_trigger_kpi": "tick_to_send_trigger_us",
+        "tick_to_send_trigger_p50_us": tick_to_trigger.get("p50_us"),
+        "tick_to_send_trigger_p99_us": tick_to_trigger.get("p99_us"),
+        "tick_to_send_trigger_p99_9_us": tick_to_trigger.get("p99_9_us"),
+        "tick_to_send_p50_us": tick_to_send.get("p50_us"),
+        "tick_to_send_p99_us": tick_to_send.get("p99_us"),
+        "tick_to_send_p99_9_us": tick_to_send.get("p99_9_us"),
+        "send_to_ack_p50_us": send_to_ack.get("p50_us"),
+        "send_to_ack_p99_us": send_to_ack.get("p99_us"),
+        "send_to_ack_p99_9_us": send_to_ack.get("p99_9_us"),
+        "sample_count": source.get("sample_count"),
+        "submit_to_ack_sample_count": send_to_ack.get("count"),
+        "expected_host": NATIVE_CPP_REQUIRED_HOST,
+        "source_host": _native_baseline_host(source),
+        "host_role": "colo_execution",
+        "hot_path_language": "c++",
+        "wrapper": "none",
+        "probe": NATIVE_CPP_PROBE,
+        "reason": "CHI404 native C++ rithmic_latency_probe production submit-to-ack evidence observed",
+        "failures": [],
+        "warnings": [],
+        "optimization_status": {
+            "critical_language_path": {
+                "status": "active_verified",
+                "active_verified": True,
+                "reason": "native C++ probe, no Python wrapper",
+                "evidence": source.get("broker_artifacts") or {},
+            }
+        },
+        "metrics": metrics,
+        "summary_json": str(Path(baseline_summary_path)),
+        "summary_md": str(Path(baseline_summary_path).with_suffix(".md")),
+        "spans_path": str(source.get("sample_path") or (source.get("broker_artifacts") or {}).get("raw_events_path") or ""),
+        "runtime_env_path": "",
+    }
+
+    current_path = current_low_latency_status_path(root)
+    current_path.parent.mkdir(parents=True, exist_ok=True)
+    current_path.write_text(json.dumps(current, indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8")
+
+    runtime_summary_path = latency_summary_path or root / "runtime" / "latency_reports" / "latency_summary.json"
+    runtime = _load_json(runtime_summary_path) or {}
+    runtime.update(
+        {
+            "run_id": run_id,
+            "timestamp_utc": generated_at,
+            "authoritative_source": "chi404_native_cpp_latency_probe",
+            "order_ack_measured": True,
+            "order_ack_p99_ms": float(send_to_ack["p99_us"]) / 1000.0,
+            "paper_order_latency": {
+                "measured": True,
+                "authoritative": True,
+                "paired_count": int(send_to_ack["count"]),
+                "source": "chi404_native_cpp_rithmic_latency_probe",
+                "measurement_tier": "native_cpp",
+                "profile_path": str(Path(baseline_summary_path)),
+            },
+            "native_cpp_order_ack": {
+                "authoritative": True,
+                "source": "chi404_native_cpp_rithmic_latency_probe",
+                "source_summary_json": str(Path(baseline_summary_path)),
+                "source_sample_path": str(source.get("sample_path") or ""),
+                "hot_path_language": "c++",
+                "wrapper": "none",
+                "probe": NATIVE_CPP_PROBE,
+                "send_to_ack_us": send_to_ack,
+                "tick_to_send_us": tick_to_send,
+                "tick_to_send_trigger_us": tick_to_trigger,
+            },
+            "rithmic_app_latency": {
+                "status": "ok",
+                "reason": "paper order submit-to-ack measured by native C++ rithmic_latency_probe",
+                "probe": "rithmic_gateway/tools/rithmic_latency_probe.cpp",
+            },
+        }
+    )
+    lane = runtime.get("recommended_lane")
+    if isinstance(lane, dict):
+        lane["order_ack_blocked"] = False
+        lane["partial"] = False
+        lane["note"] = "paper order submit-to-ack measured by native C++ rithmic_latency_probe"
+    runtime_summary_path.parent.mkdir(parents=True, exist_ok=True)
+    runtime_summary_path.write_text(json.dumps(runtime, indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8")
+    return current
+
+
+def validate_native_baseline_summary(
+    summary: Mapping[str, Any],
+    *,
+    min_submit_ack_samples: int = NATIVE_CPP_MIN_SUBMIT_ACK_SAMPLES,
+) -> dict[str, Any]:
+    reasons: list[str] = []
+    if summary.get("schema_version") != "latency_baseline_summary_v1":
+        reasons.append("schema_version must be latency_baseline_summary_v1")
+    broker_artifacts = summary.get("broker_artifacts")
+    if not isinstance(broker_artifacts, Mapping):
+        reasons.append("broker_artifacts missing")
+        broker_artifacts = {}
+    broker_mode = summary.get("broker_mode")
+    if not isinstance(broker_mode, Mapping):
+        reasons.append("broker_mode missing")
+        broker_mode = {}
+    if str(broker_artifacts.get("hot_path_language") or "").lower() != "c++":
+        reasons.append("hot_path_language must be c++")
+    if str(broker_artifacts.get("wrapper") or "").lower() != "none":
+        reasons.append("wrapper must be none")
+    if str(broker_artifacts.get("probe") or "") != NATIVE_CPP_PROBE:
+        reasons.append(f"probe must be {NATIVE_CPP_PROBE}")
+    if str(broker_mode.get("status") or "").lower() != "observed":
+        reasons.append("broker_mode.status must be observed")
+    if _native_baseline_host(summary) != NATIVE_CPP_REQUIRED_HOST:
+        reasons.append(f"operating_profile.host must be {NATIVE_CPP_REQUIRED_HOST}")
+
+    metrics = summary.get("metrics") if isinstance(summary.get("metrics"), Mapping) else {}
+    send_to_ack = metrics.get("send_to_ack_us") if isinstance(metrics.get("send_to_ack_us"), Mapping) else {}
+    tick_to_send = metrics.get("tick_to_send_us") if isinstance(metrics.get("tick_to_send_us"), Mapping) else {}
+    ack_count = int(send_to_ack.get("count") or 0)
+    if ack_count < int(min_submit_ack_samples):
+        reasons.append(f"send_to_ack_us.count {ack_count} < {int(min_submit_ack_samples)}")
+    if not _finite_number(send_to_ack.get("p99_us")):
+        reasons.append("send_to_ack_us.p99_us missing")
+    if not _finite_number(tick_to_send.get("p99_us")):
+        reasons.append("tick_to_send_us.p99_us missing")
+    return {
+        "accepted": not reasons,
+        "reject_reasons": reasons,
+        "run_id": summary.get("run_id"),
+        "submit_to_ack_sample_count": ack_count,
+    }
+
+
+def _native_baseline_host(summary: Mapping[str, Any]) -> str:
+    operating_profile = summary.get("operating_profile")
+    if isinstance(operating_profile, Mapping):
+        return str(operating_profile.get("host") or "")
+    return ""
 
 
 def build_span(
@@ -1040,6 +1236,42 @@ def _process_affinity() -> list[int] | None:
 
 def _env_bool(name: str) -> bool:
     return str(os.environ.get(name) or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _latest_valid_native_baseline(
+    repo_root: Path,
+    *,
+    min_submit_ack_samples: int,
+) -> tuple[Path, dict[str, Any], dict[str, Any]] | None:
+    reports_root = repo_root / "reports" / "latency_baselines"
+    candidates: list[Path] = []
+    current = reports_root / "current_baseline.json"
+    if current.is_file():
+        candidates.append(current)
+    if reports_root.is_dir():
+        summaries = sorted(
+            reports_root.glob("*_summary.json"),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
+        candidates.extend(path for path in summaries if path not in candidates)
+    for path in candidates:
+        payload = _load_json(path)
+        if payload is None:
+            continue
+        validation = validate_native_baseline_summary(
+            payload,
+            min_submit_ack_samples=min_submit_ack_samples,
+        )
+        if validation.get("accepted"):
+            return path, payload, validation
+    return None
+
+
+def _finite_number(value: Any) -> bool:
+    if not isinstance(value, (int, float)):
+        return False
+    return math.isfinite(float(value))
 
 
 def _load_json(path: Path) -> dict[str, Any] | None:

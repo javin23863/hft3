@@ -272,6 +272,37 @@ def test_cme_runtime_readiness_blocks_ready_endpoint_without_submit_ack(
     assert "rithmic_paper_endpoint" not in blocking_gates
 
 
+def test_rithmic_trial_paired_rows_do_not_satisfy_native_submit_ack_gate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_cme_runtime_dependencies(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        evidence_snapshot,
+        "_rithmic_endpoint_status",
+        lambda _repo, force_paper=False: _fake_cme_endpoint_status("READY_TO_CONNECT"),
+    )
+    monkeypatch.setattr(
+        evidence_snapshot,
+        "_latest_rithmic_trial_bundle",
+        lambda _repo: {
+            "run_id": "trial-old",
+            "paired_count": 2000,
+            "report_binding_status": "PASS",
+            "report_binding": {"status": "PASS"},
+        },
+    )
+
+    snapshot = load_run_evidence(tmp_path, "cme_rithmic")
+
+    ack = snapshot.latency["rithmic_order_ack"]
+    assert ack["order_ack_measured"] is False
+    assert ack["paired_count"] == 0
+    assert ack["trial_capture_paired_count"] == 2000
+    assert ack["source"] == "missing_native_cpp_latency_baseline"
+    assert snapshot.decision["runtime_readiness"]["status"] == "BLOCKING"
+
+
 def test_rithmic_endpoint_status_exception_fails_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import data_system.rithmic_trial.endpoint_status as endpoint_status
 
@@ -308,8 +339,14 @@ def test_latest_latency_baseline_summary_prefers_newest_observed_broker_run(tmp_
                 "run_id": "old",
                 "generated_at_utc": "2026-06-04T00:01:00Z",
                 "sample_path": str(tmp_path / "old.jsonl"),
+                "operating_profile": {"host": "CHI404"},
                 "broker_mode": {"status": "observed", "broker": "rithmic", "environment": "paper"},
-                "metrics": {"send_to_ack_us": {"count": 1, "p50_us": 250000.0}},
+                "broker_artifacts": {
+                    "hot_path_language": "c++",
+                    "wrapper": "none",
+                    "probe": "rithmic_latency_probe",
+                },
+                "metrics": {"send_to_ack_us": {"count": 1000, "p50_us": 250000.0}},
             }
         ),
         encoding="utf-8",
@@ -321,8 +358,14 @@ def test_latest_latency_baseline_summary_prefers_newest_observed_broker_run(tmp_
                 "run_id": "new",
                 "generated_at_utc": "2026-06-04T00:02:00Z",
                 "sample_path": str(tmp_path / "new.jsonl"),
+                "operating_profile": {"host": "CHI404"},
                 "broker_mode": {"status": "observed", "broker": "rithmic", "environment": "paper"},
-                "metrics": {"send_to_ack_us": {"count": 2, "p50_us": 125000.0}},
+                "broker_artifacts": {
+                    "hot_path_language": "c++",
+                    "wrapper": "none",
+                    "probe": "rithmic_latency_probe",
+                },
+                "metrics": {"send_to_ack_us": {"count": 1000, "p50_us": 125000.0}},
             }
         ),
         encoding="utf-8",
@@ -346,8 +389,14 @@ def test_latest_latency_baseline_summary_prefers_current_baseline(tmp_path: Path
                 "run_id": "accepted",
                 "generated_at_utc": "2026-06-04T00:01:00Z",
                 "sample_path": str(tmp_path / "accepted.jsonl"),
+                "operating_profile": {"host": "CHI404"},
                 "broker_mode": {"status": "observed", "broker": "rithmic", "environment": "paper"},
-                "metrics": {"send_to_ack_us": {"count": 1, "p50_us": 3000.0}},
+                "broker_artifacts": {
+                    "hot_path_language": "c++",
+                    "wrapper": "none",
+                    "probe": "rithmic_latency_probe",
+                },
+                "metrics": {"send_to_ack_us": {"count": 1000, "p50_us": 3000.0}},
             }
         ),
         encoding="utf-8",
@@ -359,8 +408,14 @@ def test_latest_latency_baseline_summary_prefers_current_baseline(tmp_path: Path
                 "run_id": "newer-but-not-accepted",
                 "generated_at_utc": "2026-06-04T00:03:00Z",
                 "sample_path": str(tmp_path / "newer.jsonl"),
+                "operating_profile": {"host": "CHI404"},
                 "broker_mode": {"status": "observed", "broker": "rithmic", "environment": "paper"},
-                "metrics": {"send_to_ack_us": {"count": 1, "p50_us": 2000.0}},
+                "broker_artifacts": {
+                    "hot_path_language": "c++",
+                    "wrapper": "none",
+                    "probe": "rithmic_latency_probe",
+                },
+                "metrics": {"send_to_ack_us": {"count": 1000, "p50_us": 2000.0}},
             }
         ),
         encoding="utf-8",
@@ -373,6 +428,37 @@ def test_latest_latency_baseline_summary_prefers_current_baseline(tmp_path: Path
     assert summary["_path"].endswith("current_baseline.json")
 
 
+def test_latest_latency_baseline_summary_rejects_non_chi404_native_looking_run(tmp_path: Path) -> None:
+    reports = tmp_path / "reports" / "latency_baselines"
+    reports.mkdir(parents=True)
+    (reports / "dev_native_summary.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "latency_baseline_summary_v1",
+                "run_id": "dev-native",
+                "generated_at_utc": "2026-06-04T00:02:00Z",
+                "sample_path": str(tmp_path / "dev-native.jsonl"),
+                "operating_profile": {"host": "DEV-WORKSTATION"},
+                "broker_mode": {"status": "observed", "broker": "rithmic", "environment": "paper"},
+                "broker_artifacts": {
+                    "hot_path_language": "c++",
+                    "wrapper": "none",
+                    "probe": "rithmic_latency_probe",
+                },
+                "metrics": {
+                    "tick_to_send_us": {"count": 1000, "p50_us": 26.8, "p99_us": 26.8},
+                    "send_to_ack_us": {"count": 1000, "p50_us": 220715.9, "p99_us": 220715.9},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    summary = _latest_latency_baseline_summary(tmp_path, broker="rithmic", environment="paper")
+
+    assert summary == {}
+
+
 def test_cme_rithmic_snapshot_uses_latency_baseline_as_ack_evidence(tmp_path: Path, monkeypatch) -> None:
     reports = tmp_path / "reports" / "latency_baselines"
     reports.mkdir(parents=True)
@@ -383,16 +469,23 @@ def test_cme_rithmic_snapshot_uses_latency_baseline_as_ack_evidence(tmp_path: Pa
                 "run_id": "paper-hot",
                 "generated_at_utc": "2026-06-04T00:02:00Z",
                 "sample_path": str(tmp_path / "paper-hot.jsonl"),
+                "operating_profile": {"host": "CHI404"},
                 "broker_mode": {
                     "status": "observed",
                     "broker": "rithmic",
                     "environment": "paper",
                     "venue": "CME",
                 },
-                "broker_artifacts": {"stop_reason": "cancel_ack_timeout", "poll_interval_us": "0"},
+                "broker_artifacts": {
+                    "hot_path_language": "c++",
+                    "wrapper": "none",
+                    "probe": "rithmic_latency_probe",
+                    "stop_reason": "completed",
+                    "poll_interval_us": "0",
+                },
                 "metrics": {
-                    "tick_to_send_us": {"count": 1, "p50_us": 26.8, "p99_us": 26.8},
-                    "send_to_ack_us": {"count": 1, "p50_us": 220715.9, "p99_us": 220715.9},
+                    "tick_to_send_us": {"count": 1000, "p50_us": 26.8, "p99_us": 26.8},
+                    "send_to_ack_us": {"count": 1000, "p50_us": 220715.9, "p99_us": 220715.9},
                 },
             }
         ),
@@ -404,7 +497,7 @@ def test_cme_rithmic_snapshot_uses_latency_baseline_as_ack_evidence(tmp_path: Pa
 
     assert snapshot.latency["latency_baseline"]["run_id"] == "paper-hot"
     assert snapshot.latency["rithmic_order_ack"]["order_ack_measured"] is True
-    assert snapshot.latency["rithmic_order_ack"]["paired_count"] == 1
+    assert snapshot.latency["rithmic_order_ack"]["paired_count"] == 1000
     assert snapshot.latency["rithmic_order_ack"]["source"] == "latency_baseline"
 
 
@@ -441,16 +534,21 @@ def test_latency_baseline_backfills_trigger_metrics_from_cpp_jsonl(tmp_path: Pat
                 # CHI404 summaries can carry remote absolute paths; the loader
                 # must resolve the repo-relative data/latency_baselines suffix.
                 "sample_path": f"/root/hft3/repo/{sample_path.relative_to(tmp_path).as_posix()}",
+                "operating_profile": {"host": "CHI404"},
                 "broker_mode": {
                     "status": "observed",
                     "broker": "rithmic",
                     "environment": "paper",
                     "venue": "CME",
                 },
-                "broker_artifacts": {"hot_path_language": "c++", "wrapper": "none"},
+                "broker_artifacts": {
+                    "hot_path_language": "c++",
+                    "wrapper": "none",
+                    "probe": "rithmic_latency_probe",
+                },
                 "metrics": {
-                    "tick_to_send_us": {"count": 1, "p50_us": 43.0},
-                    "send_to_ack_us": {"count": 1, "p50_us": 1000.0},
+                    "tick_to_send_us": {"count": 1000, "p50_us": 43.0, "p99_us": 43.0},
+                    "send_to_ack_us": {"count": 1000, "p50_us": 1000.0, "p99_us": 1000.0},
                 },
             }
         ),

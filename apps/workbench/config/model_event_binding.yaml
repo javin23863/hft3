@@ -92,7 +92,9 @@ hypothesis:
   SECOND_WAVE_CONTINUATION:
     event_context_policy: catalog_all_contexts
   SPREAD_BLOWOUT_RECOMPRESSION:
-    event_context_policy: catalog_all_contexts
+    required_event_contexts:
+    - CPI_TIGHT
+    - NFP_TIGHT
   SPREAD_REGIME_CHANGE:
     event_context_policy: catalog_all_contexts
   STOP_LOSS_CASCADE_CONTINUATION:

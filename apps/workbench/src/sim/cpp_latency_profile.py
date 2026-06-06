@@ -59,39 +59,10 @@ class CppLatencyProfile:
     @classmethod
     def _ack_from_summary(cls, data: dict[str, Any]) -> tuple[LatencyPercentilesUs, LatencyPercentilesUs, bool, List[str]]:
         notes: List[str] = []
-        paper = data.get("paper_order_latency") or {}
-        measured = bool(data.get("order_ack_measured") or paper.get("measured"))
-        order_ack_ms = data.get("order_ack_p99_ms")
-
-        appendix = data.get("trial_order_ack_appendix") or {}
-        stats = appendix.get("order_submit_to_ack_us") or {}
-
-        def _us(key: str, fallback_ms: float) -> float:
-            v = stats.get(key)
-            if isinstance(v, (int, float)):
-                return float(v)
-            if key == "p95_us":
-                v90 = stats.get("p90_us")
-                if isinstance(v90, (int, float)):
-                    return float(v90)
-            if isinstance(order_ack_ms, (int, float)) and key == "p99_us":
-                return float(order_ack_ms) * 1000.0
-            return fallback_ms * 1000.0
-
-        if measured and (stats.get("count") or order_ack_ms is not None):
-            ack = LatencyPercentilesUs(
-                _us("p50_us", float(order_ack_ms or 0)),
-                _us("p90_us", float(order_ack_ms or 0)),
-                _us("p99_us", float(order_ack_ms or 0)),
-                "paper_order_submit_to_ack",
-            )
-            send = LatencyPercentilesUs(0.0, 0.0, 0.0, "included_in_gateway_ack")
-            notes.append("gateway_ack from measured R|Trader paper submit→ack")
-            return send, ack, False, notes
-
         notes.append(
-            "order_ack_blocked: paper submit→ack not measured; "
-            "TCP connect is network health only — not used for gateway_ack"
+            "order_ack_blocked: CHI404 native C++ rithmic_latency_probe submit→ack "
+            "evidence with >=1000 paired samples is not present; TCP/trial/legacy "
+            "paper_order_latency fields are not authoritative"
         )
         return (
             LatencyPercentilesUs(0.0, 0.0, 0.0, "order_ack_unmeasured_blocked"),
@@ -103,6 +74,56 @@ class CppLatencyProfile:
     @classmethod
     def from_chi404_summary(cls, summary_path: Path) -> "CppLatencyProfile":
         data = json.loads(summary_path.read_text(encoding="utf-8"))
+        native = data.get("native_cpp_order_ack") or {}
+        if isinstance(native, dict) and native.get("authoritative") is True:
+            native_ack = native.get("send_to_ack_us") if isinstance(native.get("send_to_ack_us"), dict) else {}
+            native_send = native.get("tick_to_send_us") if isinstance(native.get("tick_to_send_us"), dict) else {}
+            if (
+                str(native.get("hot_path_language") or "").lower() == "c++"
+                and str(native.get("wrapper") or "").lower() == "none"
+                and str(native.get("probe") or "") == "rithmic_latency_probe"
+                and isinstance(native_ack.get("count"), (int, float))
+                and int(native_ack.get("count") or 0) >= 1000
+                and isinstance(native_ack.get("p99_us"), (int, float))
+                and isinstance(native_send.get("p99_us"), (int, float))
+            ):
+                def _native(stats: dict[str, Any], key: str) -> float:
+                    value = stats.get(key)
+                    if isinstance(value, (int, float)):
+                        return float(value)
+                    if key == "p95_us":
+                        value = stats.get("p90_us")
+                        if isinstance(value, (int, float)):
+                            return float(value)
+                    return float(stats["p99_us"])
+
+                return cls(
+                    cpp_decision_compute=LatencyPercentilesUs(
+                        0.0, 0.0, 0.0, "included_in_chi404_native_cpp_tick_to_send"
+                    ),
+                    order_send=LatencyPercentilesUs(
+                        _native(native_send, "p50_us"),
+                        _native(native_send, "p95_us"),
+                        _native(native_send, "p99_us"),
+                        "chi404_native_cpp_tick_to_send",
+                    ),
+                    gateway_ack=LatencyPercentilesUs(
+                        _native(native_ack, "p50_us"),
+                        _native(native_ack, "p95_us"),
+                        _native(native_ack, "p99_us"),
+                        "chi404_native_cpp_rithmic_latency_probe",
+                    ),
+                    feed_delay=LatencyPercentilesUs(
+                        0.0, 0.0, 0.0, "included_in_chi404_native_cpp_tick_to_send"
+                    ),
+                    injection_sweep_us=list(LATENCY_INJECTION_SWEEP_US),
+                    order_ack_blocked=False,
+                    notes=[
+                        "placement from CHI404 native C++ tick_to_send_us",
+                        "gateway_ack from CHI404 native C++ rithmic_latency_probe submit-to-ack",
+                    ],
+                )
+
         cyclic = data.get("cyclictest") or {}
         max_p99_us = float(cyclic.get("max_p99_us") or 11)
         compute = LatencyPercentilesUs(max_p99_us * 0.5, max_p99_us * 0.9, max_p99_us, "cyclictest_loaded")

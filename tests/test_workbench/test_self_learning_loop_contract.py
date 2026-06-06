@@ -43,10 +43,13 @@ def test_parameter_optimization_paths_do_not_call_llm_or_after_action() -> None:
 
 def test_after_action_is_post_run_and_fast_sweep_skipped() -> None:
     engine_src = _read("apps/workbench/src/run/engine.py")
+    cli_src = _read("apps/workbench/__main__.py")
     campaign_src = _read("apps/workbench/src/run/campaign_runner.py")
 
-    assert "if not fast_sweep and _after_action_allowed():" in engine_src
+    assert "should_run_after_action = (run_after_action or not fast_sweep) and _after_action_allowed()" in engine_src
     assert "run_after_action_report(ctx.artifact_dir" in engine_src
+    assert '"--after-action"' in cli_src
+    assert "run_after_action=args.after_action" in cli_src
     assert "strategy_params" not in engine_src.split("run_after_action_report", 1)[1]
     assert "run_after_action_report" not in campaign_src
 

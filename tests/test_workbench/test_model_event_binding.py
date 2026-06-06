@@ -55,10 +55,10 @@ def test_operator_scripts_do_not_default_to_one_macro_event():
             assert needle not in text, f"{path.relative_to(REPO)} still has {needle}"
 
 
-def test_hyp_5_uses_catalog_context_policy():
+def test_hyp_5_uses_macro_cpi_nfp_contexts():
     raw = yaml.safe_load(BINDING.read_text(encoding="utf-8"))
     cfg = raw["hypothesis"]["SPREAD_BLOWOUT_RECOMPRESSION"]
-    assert cfg["event_context_policy"] == "catalog_all_contexts"
+    assert cfg["required_event_contexts"] == ["CPI_TIGHT", "NFP_TIGHT"]
 
 
 def test_pdf_model_5_options_lane():

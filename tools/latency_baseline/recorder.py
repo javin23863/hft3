@@ -6,7 +6,7 @@ call-return cost, and broker/exchange acknowledgment latency.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 import json
 import math
@@ -349,9 +349,12 @@ class LatencyRecorder:
     model_id: str = ""
     trade_manager_id: str = ""
     jsonl_path: Path | None = None
+    _explicit_jsonl_path: bool = field(init=False, default=False)
+    _sample_written: bool = field(init=False, default=False)
 
     def __post_init__(self) -> None:
         self.repo_root = Path(self.repo_root)
+        self._explicit_jsonl_path = self.jsonl_path is not None
         if self.jsonl_path is None:
             self.jsonl_path = dated_jsonl_path(self.repo_root, self.run_id)
 
@@ -371,7 +374,9 @@ class LatencyRecorder:
         success: bool = True,
         reject_reason: str = "",
         timestamp_utc: str | None = None,
-    ) -> dict[str, Any]:
+        ) -> dict[str, Any]:
+        if timestamp_utc and not self._explicit_jsonl_path and not self._sample_written:
+            self.jsonl_path = dated_jsonl_path(self.repo_root, self.run_id, timestamp_utc=timestamp_utc)
         record = build_latency_sample(
             run_id=self.run_id,
             timestamp_utc=timestamp_utc,
@@ -394,4 +399,5 @@ class LatencyRecorder:
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(record, sort_keys=True, allow_nan=False) + "\n")
+        self._sample_written = True
         return record

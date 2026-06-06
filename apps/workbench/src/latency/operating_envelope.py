@@ -25,6 +25,13 @@ from workbench.src.sim.cpp_latency_profile import CppLatencyProfile
 
 DEFAULT_OPPORTUNITY_DECAY_WINDOWS_US = (100.0, 250.0, 500.0, 1_000.0, 2_000.0, 5_000.0)
 DEFAULT_COMPETITOR_MULTIPLIERS = {"faster": 0.5, "equal": 1.0, "slower": 2.0}
+EXECUTION_HOST_REQUIRED = "CHI404"
+EXECUTION_HOST_ROLE = "colo_execution"
+CURRENT_HOST_ROLE = "dev_workstation_research"
+CHI404_LATENCY_SUMMARY_ARTIFACT = "runtime/latency_reports/latency_summary.json"
+EXECUTION_PATH_AUDIT_ARTIFACT = "reports/latency_audit/current_low_latency_status.json"
+NATIVE_CPP_ORDER_ACK_MIN_SAMPLES = 1_000
+NATIVE_CPP_PROBE = "rithmic_latency_probe"
 
 
 def build_latency_operating_envelope(
@@ -55,6 +62,7 @@ def build_latency_operating_envelope(
     effective_trigger = tick_to_trigger if tick_to_trigger is not None else tick_to_send
     send_to_ack = _p(confirmation, "send_to_ack_us", "p99")
     latency_authority = _latency_authority(cpp_profile, chi404_observed)
+    execution_path_audit = _execution_path_audit_payload(execution_path_audit_status)
     role = _catalog_role(model_id)
     composition_payload = _composition_payload(composition, composition_trace)
     defensive_timing_required = bool(
@@ -75,7 +83,7 @@ def build_latency_operating_envelope(
         composition_payload=composition_payload,
         competitor=competitor,
         defensive_timing_required=defensive_timing_required,
-        execution_path_audit=_execution_path_audit_payload(execution_path_audit_status),
+        execution_path_audit=execution_path_audit,
     )
     promotion_blockers = [
         {
@@ -103,6 +111,7 @@ def build_latency_operating_envelope(
         "source_authoritative": bool(latency_authority["authoritative"]),
         "source_authority_detail": latency_authority,
         "python_runtime_authoritative": False,
+        "execution_topology": _execution_topology_payload(latency_authority, execution_path_audit),
         "wfc_status": wfc_status,
         "model_role": role.get("role", "unknown"),
         "model_default_phase": role.get("default_phase", "unknown"),
@@ -140,7 +149,7 @@ def build_latency_operating_envelope(
         },
         "competitor_speed_sensitivity": competitor,
         "pending_state_risk": pending_controls,
-        "execution_path_audit": _execution_path_audit_payload(execution_path_audit_status),
+        "execution_path_audit": execution_path_audit,
         "checks": checks,
         "promotion_blockers": promotion_blockers,
         "robustness": robustness_payload,
@@ -155,9 +164,15 @@ def compact_envelope_fields(envelope: Mapping[str, Any]) -> dict[str, Any]:
     send_to_ack = confirmation.get("send_to_ack_us") if isinstance(confirmation.get("send_to_ack_us"), Mapping) else {}
     tick_to_trigger = placement.get("tick_to_send_trigger_us") if isinstance(placement.get("tick_to_send_trigger_us"), Mapping) else {}
     tick_to_send = placement.get("tick_to_send_us") if isinstance(placement.get("tick_to_send_us"), Mapping) else {}
+    topology = envelope.get("execution_topology") if isinstance(envelope.get("execution_topology"), Mapping) else {}
     return {
         "latency_operating_envelope_status": envelope.get("status"),
         "latency_operating_envelope_source": envelope.get("source_authority"),
+        "execution_topology_status": topology.get("status"),
+        "execution_topology_reason": topology.get("reason"),
+        "execution_host_required": topology.get("execution_host_required"),
+        "current_host_role": topology.get("current_host_role"),
+        "dev_workstation_in_trade_path": topology.get("dev_workstation_in_trade_path"),
         "offensive_operating_band": offensive.get("operating_band"),
         "async_ack_risk": (envelope.get("pending_state_risk") or {}).get("stale_state_risk"),
         "placement_trigger_p50_us": tick_to_trigger.get("p50"),
@@ -265,6 +280,8 @@ def render_latency_operating_envelope_markdown(envelope: Mapping[str, Any]) -> s
         f"Run ID: `{envelope.get('run_id', '')}`",
         f"Status: `{envelope.get('status', 'unknown')}`",
         f"Source authority: `{envelope.get('source_authority', 'unknown')}`",
+        f"Execution topology: `{compact.get('current_host_role', 'unknown')} -> {compact.get('execution_host_required', 'unknown')}`",
+        f"Execution evidence: `{compact.get('execution_topology_status') or 'unknown'}`",
         f"Placement band: `{compact.get('offensive_operating_band', 'unknown')}`",
         f"Tick-to-trigger p99: `{_fmt(compact.get('placement_trigger_p99_us'))}`",
         f"Tick-to-SDK-return p99: `{_fmt(compact.get('placement_speed_p99_us'))}`",
@@ -392,7 +409,9 @@ def _checks(
     }
     status = str(execution_path_audit.get("status") or "").lower()
     checks["low_latency_execution_path_audit"] = _check(
-        bool(execution_path_audit.get("observed")) and status not in {"fail", "failed", "blocked", "missing"},
+        bool(execution_path_audit.get("observed"))
+        and bool(execution_path_audit.get("native_cpp_authority_ready"))
+        and status not in {"fail", "failed", "blocked", "missing"},
         "latest low-latency execution-path audit is present and not failing",
         str(execution_path_audit.get("reason") or "latest low-latency execution-path audit is missing, failing, or blocked"),
     )
@@ -446,11 +465,11 @@ def _latency_authority(profile: CppLatencyProfile, chi404_observed: bool) -> dic
     ]
     authoritative = bool(chi404_observed and ack_measured and measured_components)
     if not chi404_observed:
-        reason = "CHI404 latency summary is missing; no default latency substitute is allowed"
+        reason = "CHI404 execution-host latency summary is missing; dev workstation replay cannot substitute for trade-placement evidence"
     elif not ack_measured:
-        reason = "CHI404 latency summary reports order_ack_blocked; submit-to-ack evidence is not measured"
+        reason = "CHI404 execution-host latency summary reports order_ack_blocked; submit-to-ack evidence from the execution computer is not measured"
     elif not measured_components:
-        reason = "CHI404 latency summary did not provide measured C++ latency components"
+        reason = "CHI404 execution-host latency summary did not provide measured C++ latency components"
     else:
         reason = "CHI404/C++ latency evidence is authoritative"
     return {
@@ -464,12 +483,64 @@ def _latency_authority(profile: CppLatencyProfile, chi404_observed: bool) -> dic
     }
 
 
+def _execution_topology_payload(
+    latency_authority: Mapping[str, Any],
+    execution_path_audit: Mapping[str, Any],
+) -> dict[str, Any]:
+    audit_status = str(execution_path_audit.get("status") or "").lower()
+    audit_ready = (
+        bool(execution_path_audit.get("observed"))
+        and bool(execution_path_audit.get("native_cpp_authority_ready"))
+        and audit_status not in {
+            "fail",
+            "failed",
+            "blocked",
+            "missing",
+        }
+    )
+    latency_ready = bool(latency_authority.get("authoritative"))
+    ready = bool(latency_ready and audit_ready)
+    if ready:
+        reason = "CHI404 execution-computer evidence is present"
+    elif not bool(latency_authority.get("chi404_observed")):
+        reason = str(latency_authority.get("reason") or "CHI404 execution-host latency summary is missing")
+    elif not bool(latency_authority.get("ack_measured")):
+        reason = str(latency_authority.get("reason") or "CHI404 execution-host submit-to-ack evidence is not measured")
+    elif not audit_ready:
+        reason = str(
+            execution_path_audit.get("reason")
+            or f"CHI404 execution-path audit is missing at {EXECUTION_PATH_AUDIT_ARTIFACT}"
+        )
+    else:
+        reason = "CHI404 execution-computer evidence is blocked"
+    return {
+        "status": "ready" if ready else "blocked",
+        "reason": reason,
+        "current_host_role": CURRENT_HOST_ROLE,
+        "execution_host_required": EXECUTION_HOST_REQUIRED,
+        "execution_host_role": EXECUTION_HOST_ROLE,
+        "dev_workstation_in_trade_path": False,
+        "chi404_latency_summary_path": CHI404_LATENCY_SUMMARY_ARTIFACT,
+        "execution_path_audit_path": EXECUTION_PATH_AUDIT_ARTIFACT,
+        "chi404_summary_observed": bool(latency_authority.get("chi404_observed")),
+        "order_ack_measured": bool(latency_authority.get("ack_measured")),
+        "execution_path_audit_observed": bool(execution_path_audit.get("observed")),
+        "execution_path_audit_native_cpp_ready": bool(execution_path_audit.get("native_cpp_authority_ready")),
+        "execution_evidence_ready": ready,
+    }
+
+
 def _execution_path_audit_payload(status: Mapping[str, Any] | None) -> dict[str, Any]:
     if not status:
         return {
             "observed": False,
             "status": "missing",
-            "reason": "current_low_latency_status.json not found",
+            "expected_host": EXECUTION_HOST_REQUIRED,
+            "expected_path": EXECUTION_PATH_AUDIT_ARTIFACT,
+            "reason": (
+                f"CHI404 execution-host audit missing: {EXECUTION_PATH_AUDIT_ARTIFACT} not found in the synced repo; "
+                "dev workstation replay cannot satisfy the execution-path audit"
+            ),
         }
     failures = status.get("failures") if isinstance(status.get("failures"), list) else []
     warnings = status.get("warnings") if isinstance(status.get("warnings"), list) else []
@@ -478,6 +549,8 @@ def _execution_path_audit_payload(status: Mapping[str, Any] | None) -> dict[str,
         for row in failures
         if isinstance(row, Mapping)
     ]
+    native_reasons = _native_audit_reject_reasons(status)
+    native_ready = not native_reasons
     return {
         "observed": True,
         "run_id": status.get("run_id"),
@@ -491,11 +564,50 @@ def _execution_path_audit_payload(status: Mapping[str, Any] | None) -> dict[str,
         "summary_md": status.get("summary_md"),
         "spans_path": status.get("spans_path"),
         "runtime_env_path": status.get("runtime_env_path"),
+        "expected_host": EXECUTION_HOST_REQUIRED,
+        "expected_path": EXECUTION_PATH_AUDIT_ARTIFACT,
+        "hot_path_language": status.get("hot_path_language"),
+        "wrapper": status.get("wrapper"),
+        "probe": status.get("probe"),
+        "submit_to_ack_sample_count": status.get("submit_to_ack_sample_count"),
+        "native_cpp_authority_ready": native_ready,
+        "native_cpp_authority_reject_reasons": native_reasons,
         "optimization_status": status.get("optimization_status") or {},
         "failure_count": len(failures),
         "warning_count": len(warnings),
-        "reason": "; ".join(reason for reason in failure_reasons if reason) or status.get("blocked_reason") or "",
+        "reason": (
+            "; ".join(reason for reason in failure_reasons if reason)
+            or "; ".join(native_reasons)
+            or status.get("blocked_reason")
+            or ""
+        ),
     }
+
+
+def _native_audit_reject_reasons(status: Mapping[str, Any]) -> list[str]:
+    reasons: list[str] = []
+    if str(status.get("expected_host") or "") != EXECUTION_HOST_REQUIRED:
+        reasons.append("current_low_latency_status expected_host must be CHI404")
+    if str(status.get("source_host") or "") != EXECUTION_HOST_REQUIRED:
+        reasons.append("current_low_latency_status source_host must be CHI404")
+    if str(status.get("host_role") or "") != EXECUTION_HOST_ROLE:
+        reasons.append(f"current_low_latency_status host_role must be {EXECUTION_HOST_ROLE}")
+    if str(status.get("hot_path_language") or "").lower() != "c++":
+        reasons.append("current_low_latency_status hot_path_language must be c++")
+    if str(status.get("wrapper") or "").lower() != "none":
+        reasons.append("current_low_latency_status wrapper must be none")
+    if str(status.get("probe") or "") != NATIVE_CPP_PROBE:
+        reasons.append(f"current_low_latency_status probe must be {NATIVE_CPP_PROBE}")
+    try:
+        sample_count = int(status.get("submit_to_ack_sample_count") or 0)
+    except (TypeError, ValueError):
+        sample_count = 0
+    if sample_count < NATIVE_CPP_ORDER_ACK_MIN_SAMPLES:
+        reasons.append(
+            "current_low_latency_status submit_to_ack_sample_count "
+            f"{sample_count} < {NATIVE_CPP_ORDER_ACK_MIN_SAMPLES}"
+        )
+    return reasons
 
 
 def _competitor_sensitivity(
