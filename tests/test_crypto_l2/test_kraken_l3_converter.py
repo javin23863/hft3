@@ -13,6 +13,8 @@ from hftbacktest.types import ADD_ORDER_EVENT, BUY_EVENT, CANCEL_ORDER_EVENT, EX
 from crypto_lane.src.data_io.kraken_l3_converter import (
     KrakenOrderBook,
     convert_ndjson_to_npz,
+    convert_ndjson_to_npz_with_meta,
+    write_replay_meta,
 )
 
 
@@ -68,6 +70,22 @@ class TestKrakenOrderBook:
             ["50000.0", "1.0", "1780299151.807140"],
             1_000_000_000,
         ) == 1_780_299_151_807_140_000
+
+    def test_snapshot_uses_entry_timestamp_when_present(self):
+        book = KrakenOrderBook()
+        data = {
+            "bs": [["50000.0", "1.5", "1780299151.807140"]],
+            "as": [["50000.1", "1.0", "1780299151.807141"]],
+        }
+        events = book.apply_snapshot(data, fallback_ns=999)
+        assert events[0][1] == 1_780_299_151_807_140_000
+        assert events[1][1] == 1_780_299_151_807_141_000
+
+    def test_update_uses_entry_timestamp_when_present(self):
+        book = KrakenOrderBook()
+        book.bids[50000.0] = 1.0
+        events = book.apply_update({"b": [["50000.5", "2.0", "1780299152.016379"]]}, fallback_ns=999)
+        assert events[0][1] == 1_780_299_152_016_379_000
 
     def test_update_adds_bid(self):
         book = KrakenOrderBook()
@@ -170,6 +188,21 @@ class TestConvertNdjsonToNpz:
         convert_ndjson_to_npz(ndjson_path, npz_path)
         data = np.load(npz_path)["data"]
         assert len(data) == 4
+
+    def test_writes_l2_depth_meta_sidecar(self, tmp_dir: Path):
+        lines = [
+            _make_snapshot(1000, [["50000.0", "1.0"]], [["50000.1", "1.0"]]),
+        ]
+        ndjson_path = _ndjson(tmp_dir, lines)
+        npz_path = tmp_dir / "BTC_USD_depth.npz"
+
+        convert_ndjson_to_npz_with_meta(ndjson_path, npz_path, symbol="BTC/USD")
+        meta_path = tmp_dir / "BTC_USD_depth.meta.json"
+        assert meta_path.is_file()
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        assert meta["data_class"] == "L2_DEPTH"
+        assert meta["execution_classification"] == "L2_DEPTH_VALIDATED"
+        assert meta["source_feed"] == "kraken_ws_book"
 
     def test_event_flags_correct(self, tmp_dir: Path):
         lines = [

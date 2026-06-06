@@ -722,7 +722,7 @@ def render_backtest_evidence(snapshot: RunEvidenceSnapshot) -> None:
     if hft_rows:
         st.subheader("Crypto Execution Replay")
         st.caption(
-            "Validation rows from replay reports. Only L3_VALIDATED or FULL_EXECUTION rows satisfy the execution replay gate; L2 proxy rows are diagnostic."
+            "Validation rows from replay reports. Only L3_VALIDATED or FULL_EXECUTION rows satisfy the execution replay gate; L2 depth and L2 proxy rows are diagnostic."
         )
         _display_df(
             hft_rows,

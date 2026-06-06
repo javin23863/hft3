@@ -214,22 +214,28 @@ class TestAssetClassRouting:
         assert not path.route_to_hftbacktest
         assert path.execution_capability.name == "NO_EXECUTION_VALIDATION"
 
-    def test_crypto_routes_to_l3_before_l2_when_both_exist(self, tmp_path):
+    def test_crypto_routes_to_kraken_depth_before_binance_l2_when_both_exist(self, tmp_path):
         from backtest_pipeline.src.asset_class_routing import resolve_validation_path
 
-        l2 = tmp_path / "data" / "replay" / "hftbacktest" / "crypto" / "binance" / "BTCUSDT"
-        l3 = tmp_path / "data" / "replay" / "hftbacktest" / "crypto" / "kraken" / "BTC_USD"
+        l2 = tmp_path / "data" / "replay" / "hftbacktest" / "crypto" / "binance" / "btcusdt"
+        depth = tmp_path / "data" / "replay" / "hftbacktest" / "crypto" / "kraken" / "BTC_USD"
         l2.mkdir(parents=True)
-        l3.mkdir(parents=True)
+        depth.mkdir(parents=True)
         (l2 / "sample_l2.npz").write_bytes(b"placeholder")
-        (l3 / "sample_l3.npz").write_bytes(b"placeholder")
+        (depth / "sample_depth.npz").write_bytes(b"placeholder")
 
         c = _mock_candidate("CRYPTO_H4")
         c.metadata["symbol"] = "BTCUSDT"
         path = resolve_validation_path(c, tmp_path)
 
-        assert path.execution_capability.name == "L3_VALIDATED"
-        assert any("Kraken order-book replay" in note for note in path.notes)
+        assert path.execution_capability.name == "L2_DEPTH_VALIDATION"
+        assert any("Kraken WS book-depth" in note for note in path.notes)
+
+    def test_binance_l2_npz_path_is_lowercase(self, tmp_path):
+        from backtest_pipeline.src.asset_class_routing import _crypto_l2_npz_path
+
+        path = _crypto_l2_npz_path(tmp_path, "BTCUSDT")
+        assert path.parts[-1] == "btcusdt"
 
     def test_equities_no_execution(self):
         from backtest_pipeline.src.asset_class_routing import resolve_validation_path

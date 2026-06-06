@@ -246,7 +246,10 @@ def main(argv: list[str] | None = None) -> int:
     p_live.add_argument("--timeout", type=float, default=10.0, help="Connection timeout in seconds")
     p_live.set_defaults(func=cmd_measure_live_ws_rtt)
 
-    p_record = sub.add_parser("record-l3", help="Record Kraken L3 order book via WebSocket")
+    p_record = sub.add_parser(
+        "record-l3",
+        help="Record Kraken WS book-depth via WebSocket (L2_DEPTH raw — not order-level MBO)",
+    )
     p_record.add_argument("--symbols", default=None, help="Comma-separated symbols (default: BTC/USD,ETH/USD,SOL/USD)")
     p_record.add_argument("--output-dir", default=None, help="Output directory")
     p_record.add_argument("--depth", type=int, default=1000)
@@ -269,7 +272,10 @@ def main(argv: list[str] | None = None) -> int:
     p_bn_conv.add_argument("--step-ns", type=int, default=1_000_000)
     p_bn_conv.set_defaults(func=cmd_convert_binance_l2)
 
-    p_conv = sub.add_parser("convert-l3", help="Convert Kraken L3 NDJSON to NPZ")
+    p_conv = sub.add_parser(
+        "convert-l3",
+        help="Convert Kraken WS book-depth NDJSON to NPZ (L2_DEPTH — not true order-level MBO)",
+    )
     p_conv.add_argument("ndjson", type=str, help="Path to NDJSON file")
     p_conv.add_argument("--output", default=None, help="Explicit NPZ output path")
     p_conv.add_argument("--routing-symbol", default=None, help="Write to routing-expected data dir for this symbol")

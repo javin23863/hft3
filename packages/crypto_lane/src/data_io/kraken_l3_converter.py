@@ -1,4 +1,9 @@
-"""NDJSON → NPZ converter for Kraken L3 order book recordings."""
+"""NDJSON → NPZ converter for Kraken WS book-depth recordings.
+
+Kraken public ``book`` channel delivers aggregated price/qty levels, not
+order-level MBO. Output NPZ uses synthetic order IDs and is labeled
+``L2_DEPTH`` in the sidecar metadata — not true L3.
+"""
 
 from __future__ import annotations
 
@@ -47,7 +52,7 @@ class KrakenOrderBook:
         for entry in data.get("bs", []):
             price = float(entry[0])
             qty = float(entry[1])
-            ts_ns = fallback_ns
+            ts_ns = self._extract_ts_ns(entry, fallback_ns)
             if qty > 0:
                 self.bids[price] = qty
                 events.append((ADD_ORDER_EVENT | BUY_EVENT | EXCH_EVENT | LOCAL_EVENT, ts_ns, ts_ns, price, qty, self.next_order_id, 0, 0.0))
@@ -56,7 +61,7 @@ class KrakenOrderBook:
         for entry in data.get("as", []):
             price = float(entry[0])
             qty = float(entry[1])
-            ts_ns = fallback_ns
+            ts_ns = self._extract_ts_ns(entry, fallback_ns)
             if qty > 0:
                 self.asks[price] = qty
                 events.append((ADD_ORDER_EVENT | SELL_EVENT | EXCH_EVENT | LOCAL_EVENT, ts_ns, ts_ns, price, qty, self.next_order_id, 0, 0.0))
@@ -72,7 +77,7 @@ class KrakenOrderBook:
             for entry in entries:
                 price = float(entry[0])
                 qty = float(entry[1])
-                ts_ns = fallback_ns
+                ts_ns = self._extract_ts_ns(entry, fallback_ns)
 
                 if qty > 0:
                     side_store[price] = qty
@@ -154,6 +159,58 @@ def _normalize_replay_clock(events: List[Tuple], start_time_ns: int) -> List[Tup
     return normalized
 
 
+REPLAY_META_VERSION = 1
+KRAKEN_DEPTH_DATA_CLASS = "L2_DEPTH"
+KRAKEN_DEPTH_EXEC_CLASS = "L2_DEPTH_VALIDATED"
+
+
+def write_replay_meta(
+    npz_path: Path,
+    *,
+    symbol: str,
+    ndjson_source: Path,
+    event_count: int,
+) -> Path:
+    meta_path = npz_path.with_name(npz_path.stem + ".meta.json")
+    meta_path.write_text(
+        json.dumps(
+            {
+                "replay_meta_version": REPLAY_META_VERSION,
+                "data_class": KRAKEN_DEPTH_DATA_CLASS,
+                "source_feed": "kraken_ws_book",
+                "execution_classification": KRAKEN_DEPTH_EXEC_CLASS,
+                "symbol": symbol,
+                "ndjson_source": str(ndjson_source),
+                "event_count": event_count,
+                "honest_label": "Aggregated book depth with synthetic order IDs — not order-level MBO",
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return meta_path
+
+
+def convert_ndjson_to_npz_with_meta(
+    ndjson_path: Path,
+    npz_path: Path,
+    *,
+    symbol: str = "",
+    start_time_ns: int = 1_000_000_000,
+    step_ns: int = 1_000_000,
+) -> Path:
+    result = convert_ndjson_to_npz(
+        ndjson_path,
+        npz_path,
+        start_time_ns=start_time_ns,
+        step_ns=step_ns,
+    )
+    event_count = int(len(np.load(result)["data"]))
+    write_replay_meta(result, symbol=symbol, ndjson_source=ndjson_path, event_count=event_count)
+    return result
+
+
 def _routing_npz_path(symbol: str) -> Path:
     """Returns the path where asset_class_routing expects the NPZ file for a symbol.
 
@@ -176,13 +233,14 @@ def cmd_convert_kraken_l3(args: Any) -> int:
         routing_dir = _routing_npz_path(args.routing_symbol)
         routing_dir.mkdir(parents=True, exist_ok=True)
         safe = args.routing_symbol.replace("/", "_").replace("-", "_")
-        npz_path = routing_dir / f"{safe}_l3.npz"
+        npz_path = routing_dir / f"{safe}_depth.npz"
     else:
         npz_path = ndjson_path.with_suffix(".npz")
 
-    result = convert_ndjson_to_npz(
+    result = convert_ndjson_to_npz_with_meta(
         ndjson_path,
         npz_path,
+        symbol=args.routing_symbol or "",
         start_time_ns=args.start_time_ns,
         step_ns=args.step_ns,
     )

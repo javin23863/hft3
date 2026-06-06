@@ -11,10 +11,13 @@ from research_pipeline.types import CandidateModel
 from backtest_pipeline.src.asset_class_routing import (
     CRYPTO_PERP_TO_KRAKEN_SPOT,
     CRYPTO_PERP_TO_L2,
+    EXEC_CLASS_L2_DEPTH_VALIDATED,
+    EXEC_CLASS_L2_PROXY_ONLY,
+    EXEC_CLASS_L3_VALIDATED,
     ExecutionCapability,
     ValidationPath,
+    _crypto_kraken_depth_npz_path,
     _crypto_l2_npz_path,
-    _crypto_l3_npz_path,
     resolve_validation_path,
 )
 from backtest_pipeline.src.crypto_hft_builder import (
@@ -93,21 +96,21 @@ def validate_crypto_candidate(
             queue_model="SquareProbQueueModel",
             max_steps=max_steps,
         )
-        result = compute_crypto_metrics(run_result, "L2_PROXY_ONLY")
+        result = compute_crypto_metrics(run_result, EXEC_CLASS_L2_PROXY_ONLY)
         return CryptoValidationReport(
             candidate_id=candidate.candidate_id,
             model_id=candidate.model_id,
             asset_class="CRYPTO",
-            execution_classification="L2_PROXY_ONLY",
+            execution_classification=EXEC_CLASS_L2_PROXY_ONLY,
             validation_path=ExecutionCapability.L2_PROXY_VALIDATION,
             npz_path=npz_path,
             result=result,
             notes=[f"Validated via Binance L2 proxy for {l2_sym}", "Execution style: marketable limit replay"],
         )
 
-    elif path.execution_capability == ExecutionCapability.L3_VALIDATED:
+    elif path.execution_capability == ExecutionCapability.L2_DEPTH_VALIDATION:
         kraken_sym = CRYPTO_PERP_TO_KRAKEN_SPOT.get(perp_symbol, perp_symbol)
-        npz_dir = _crypto_l3_npz_path(data_catalog_root, kraken_sym)
+        npz_dir = _crypto_kraken_depth_npz_path(data_catalog_root, kraken_sym)
         npz_files = sorted(npz_dir.glob("*.npz"))
         if not npz_files:
             return CryptoValidationReport(
@@ -117,8 +120,63 @@ def validate_crypto_candidate(
                 execution_classification="NO_EXECUTION",
                 validation_path=ExecutionCapability.NO_EXECUTION_VALIDATION,
                 npz_path="",
-                result=CryptoExecutionResult(error="No L3 NPZ files found"),
-                notes=["No Kraken order-book replay NPZ files in expected path"],
+                result=CryptoExecutionResult(error="No Kraken depth NPZ files found"),
+                notes=["No Kraken WS book-depth replay NPZ files in expected path"],
+            )
+        npz_path = str(npz_files[0])
+        hbt = build_kraken_hftbacktest(npz_path, symbol=kraken_sym, latency_ms=latency_ms)
+        strategy = CryptoReplayStrategy(
+            signal_threshold=signal_threshold,
+            base_quantity=1.0,
+            tick_size=0.1,
+            max_position=10.0,
+            latency_ms=latency_ms,
+            model_id=candidate.model_id,
+            is_perp=False,
+            marketable_limit=True,
+        )
+        if signal_sequence:
+            _attach_signal_sequence(strategy, signal_sequence)
+        run_result = run_crypto_replay(
+            hbt=hbt,
+            strategy=strategy,
+            npz_path=npz_path,
+            symbol=kraken_sym,
+            tick_size=0.1,
+            latency_ms=latency_ms,
+            queue_model="SquareProbQueueModel",
+            max_steps=max_steps,
+        )
+        result = compute_crypto_metrics(run_result, EXEC_CLASS_L2_DEPTH_VALIDATED)
+        return CryptoValidationReport(
+            candidate_id=candidate.candidate_id,
+            model_id=candidate.model_id,
+            asset_class="CRYPTO",
+            execution_classification=EXEC_CLASS_L2_DEPTH_VALIDATED,
+            validation_path=ExecutionCapability.L2_DEPTH_VALIDATION,
+            npz_path=npz_path,
+            result=result,
+            notes=[
+                f"Validated via Kraken WS book-depth replay for {kraken_sym}",
+                "Data class: L2_DEPTH (aggregated levels; synthetic order IDs)",
+                "Queue model: SquareProbQueueModel (not L3Fifo — no true order queue)",
+            ],
+        )
+
+    elif path.execution_capability == ExecutionCapability.L3_VALIDATED:
+        kraken_sym = CRYPTO_PERP_TO_KRAKEN_SPOT.get(perp_symbol, perp_symbol)
+        npz_dir = _crypto_kraken_depth_npz_path(data_catalog_root, kraken_sym)
+        npz_files = sorted(npz_dir.glob("*.npz"))
+        if not npz_files:
+            return CryptoValidationReport(
+                candidate_id=candidate.candidate_id,
+                model_id=candidate.model_id,
+                asset_class="CRYPTO",
+                execution_classification="NO_EXECUTION",
+                validation_path=ExecutionCapability.NO_EXECUTION_VALIDATION,
+                npz_path="",
+                result=CryptoExecutionResult(error="No L3 MBO NPZ files found"),
+                notes=["No true order-level MBO NPZ files in expected path"],
             )
         npz_path = str(npz_files[0])
         hbt = build_kraken_hftbacktest(npz_path, symbol=kraken_sym, latency_ms=latency_ms)
@@ -144,16 +202,16 @@ def validate_crypto_candidate(
             queue_model="L3FifoQueueModel",
             max_steps=max_steps,
         )
-        result = compute_crypto_metrics(run_result, "L3_VALIDATED")
+        result = compute_crypto_metrics(run_result, EXEC_CLASS_L3_VALIDATED)
         return CryptoValidationReport(
             candidate_id=candidate.candidate_id,
             model_id=candidate.model_id,
             asset_class="CRYPTO",
-            execution_classification="L3_VALIDATED",
+            execution_classification=EXEC_CLASS_L3_VALIDATED,
             validation_path=ExecutionCapability.L3_VALIDATED,
             npz_path=npz_path,
             result=result,
-            notes=[f"Validated via Kraken order-book replay for {kraken_sym}", "Execution style: marketable limit replay"],
+            notes=[f"Validated via true order-level MBO replay for {kraken_sym}", "Execution style: marketable limit replay"],
         )
 
     else:

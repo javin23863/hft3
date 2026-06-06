@@ -25,7 +25,7 @@ from ..lane import (
 
 CRYPTO_LATENCY_BANDS_MS = [5.0, 50.0, 200.0]
 CRYPTO_VENUES = ["binance_spot", "binance_perp", "deribit", "kraken"]
-CRYPTO_EVENT_TYPES = ["crypto_l2", "crypto_l3", "crypto_shock_event"]
+CRYPTO_EVENT_TYPES = ["crypto_l2", "crypto_l2_depth", "crypto_l3", "crypto_shock_event"]
 CRYPTO_CONFIG_INSTRUMENT_COVERAGE = "candidate_config"
 
 

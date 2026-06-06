@@ -48,10 +48,11 @@ def _session_filename(symbol: str, output_dir: Path) -> Path:
 
 
 class KrakenL3Recorder:
-    """Records Kraken L3 order book messages to NDJSON files.
+    """Records Kraken WS book-depth messages to NDJSON files.
 
-    Connects to Kraken public WebSocket, subscribes to the full-depth
-    book channel, and writes each received message as a JSON line.
+    Connects to Kraken public WebSocket, subscribes to the aggregated
+    ``book`` channel (price/qty levels — not order-level MBO), and writes
+    each received message as a JSON line.
     Supports graceful shutdown via SIGINT/SIGTERM.
 
     Handles both v1 (list) and v2 (dict) Kraken WebSocket API formats,

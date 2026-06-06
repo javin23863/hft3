@@ -31,7 +31,7 @@ def _real_binance_npz() -> bool:
     )
 
 
-def _real_kraken_npz() -> bool:
+def _real_kraken_depth_npz() -> bool:
     return any(
         (_REPO / "data" / "replay" / "hftbacktest" / "crypto" / "kraken" / sym).glob("*.npz")
         for sym in ("BTC_USD", "ETH_USD", "SOL_USD")
@@ -148,9 +148,12 @@ def test_run_crypto_replay_with_binance_l2():
     assert "error" not in result or not result.get("error")
 
 
-@pytest.mark.skipif(not _real_kraken_npz(), reason="No real Kraken L3 NPZ data. Run: python -m crypto_lane.pipeline convert-l3 <ndjson> --routing-symbol BTC/USD")
-def test_run_crypto_replay_with_kraken_l3():
-    """run_crypto_replay executes against real Kraken L3 NPZ data."""
+@pytest.mark.skipif(
+    not _real_kraken_depth_npz(),
+    reason="No Kraken depth NPZ. Run: python scripts/setup_crypto_replay_data.py",
+)
+def test_run_crypto_replay_with_kraken_depth():
+    """run_crypto_replay executes against real Kraken WS book-depth NPZ (L2_DEPTH, not MBO)."""
     os.environ["EXECUTION_MODE"] = "REPLAY"
     npz_dir = _REPO / "data" / "replay" / "hftbacktest" / "crypto" / "kraken" / "BTC_USD"
     npz_files = sorted(npz_dir.glob("*.npz"))
@@ -175,7 +178,7 @@ def test_run_crypto_replay_with_kraken_l3():
         symbol=symbol,
         tick_size=0.1,
         latency_ms=50.0,
-        queue_model="LogProbQueueModel2",
+        queue_model="SquareProbQueueModel",
         max_steps=2000,
     )
     assert "error" not in result or not result.get("error")
@@ -194,6 +197,13 @@ def test_compute_crypto_metrics_returns_defaults_for_empty_run():
     assert result.execution_classification == "L2_PROXY_ONLY"
     assert result.error == ""
     assert result.trade_pnls == []
+
+
+def test_compute_crypto_metrics_l2_depth_classification():
+    result = compute_crypto_metrics({"error": 10, "fill_events": []}, "L2_DEPTH_VALIDATED")
+    assert result.error == "10"
+    assert result.execution_classification == "L2_DEPTH_VALIDATED"
+    assert result.num_trades == 0
 
 
 def test_compute_crypto_metrics_preserves_replay_error():

@@ -19,9 +19,16 @@ from research_pipeline.types import CandidateModel
 
 class ExecutionCapability(Enum):
     FULL_EXECUTION = auto()
-    L3_VALIDATED = auto()
+    L3_VALIDATED = auto()  # True order-level MBO replay only
+    L2_DEPTH_VALIDATION = auto()  # Kraken WS aggregated book depth (not order-level)
     L2_PROXY_VALIDATION = auto()
     NO_EXECUTION_VALIDATION = auto()
+
+
+# Human-readable execution_classification strings (validation reports)
+EXEC_CLASS_L3_VALIDATED = "L3_VALIDATED"
+EXEC_CLASS_L2_DEPTH_VALIDATED = "L2_DEPTH_VALIDATED"
+EXEC_CLASS_L2_PROXY_ONLY = "L2_PROXY_ONLY"
 
 
 @dataclass
@@ -47,8 +54,9 @@ CRYPTO_LANE_MODEL_PREFIXES = ("CRYPTO_", "BTC_", "ETH_")
 # Crypto symbols that may have Binance L2 depth data
 CRYPTO_BINANCE_L2_SYMBOLS = {"BTCUSDT", "ETHUSDT", "SOLUSDT"}
 
-# Crypto symbols that may have Kraken order-book replay data (spot only, using wsname format)
-CRYPTO_KRAKEN_L3_SYMBOLS = {"BTC/USD", "ETH/USD", "SOL/USD"}
+# Kraken spot symbols with WS book-depth replay NPZ (aggregated levels, not true MBO)
+CRYPTO_KRAKEN_DEPTH_SYMBOLS = {"BTC/USD", "ETH/USD", "SOL/USD"}
+CRYPTO_KRAKEN_L3_SYMBOLS = CRYPTO_KRAKEN_DEPTH_SYMBOLS  # deprecated alias
 
 # Mapping from perp symbol (as used by hypotheses) to Binance L2 symbol
 CRYPTO_PERP_TO_L2 = {
@@ -89,11 +97,14 @@ def resolve_symbol(candidate: CandidateModel) -> str:
 
 
 def _crypto_l2_npz_path(data_catalog_root: Path, symbol: str) -> Path:
-    return data_catalog_root / "data" / "replay" / "hftbacktest" / "crypto" / "binance" / symbol
+    return data_catalog_root / "data" / "replay" / "hftbacktest" / "crypto" / "binance" / symbol.lower()
 
 
-def _crypto_l3_npz_path(data_catalog_root: Path, symbol: str) -> Path:
+def _crypto_kraken_depth_npz_path(data_catalog_root: Path, symbol: str) -> Path:
     return data_catalog_root / "data" / "replay" / "hftbacktest" / "crypto" / "kraken" / symbol.replace("/", "_")
+
+
+_crypto_l3_npz_path = _crypto_kraken_depth_npz_path  # deprecated alias
 
 
 def _crypto_l2_npz_exists(data_catalog_root: Optional[Path], symbol: str) -> bool:
@@ -103,11 +114,14 @@ def _crypto_l2_npz_exists(data_catalog_root: Optional[Path], symbol: str) -> boo
     return npz_dir.exists() and any(npz_dir.glob("*.npz"))
 
 
-def _crypto_l3_npz_exists(data_catalog_root: Optional[Path], symbol: str) -> bool:
+def _crypto_kraken_depth_npz_exists(data_catalog_root: Optional[Path], symbol: str) -> bool:
     if not data_catalog_root:
         return False
-    npz_dir = _crypto_l3_npz_path(data_catalog_root, symbol)
+    npz_dir = _crypto_kraken_depth_npz_path(data_catalog_root, symbol)
     return npz_dir.exists() and any(npz_dir.glob("*.npz"))
+
+
+_crypto_l3_npz_exists = _crypto_kraken_depth_npz_exists  # deprecated alias
 
 
 def resolve_validation_path(
@@ -139,11 +153,14 @@ def resolve_validation_path(
         l2_sym = CRYPTO_PERP_TO_L2.get(perp_symbol)
         kraken_sym = CRYPTO_PERP_TO_KRAKEN_SPOT.get(perp_symbol)
 
-        if kraken_sym and _crypto_l3_npz_exists(data_catalog_root, kraken_sym):
+        if kraken_sym and _crypto_kraken_depth_npz_exists(data_catalog_root, kraken_sym):
             has_order_book = True
             has_tick = True
-            exec_cap = ExecutionCapability.L3_VALIDATED
-            notes.append(f"Kraken order-book replay NPZ found for {kraken_sym}; L3_VALIDATED")
+            exec_cap = ExecutionCapability.L2_DEPTH_VALIDATION
+            notes.append(
+                f"Kraken WS book-depth replay NPZ found for {kraken_sym}; "
+                f"{EXEC_CLASS_L2_DEPTH_VALIDATED} (aggregated depth, not order-level MBO)"
+            )
         elif l2_sym and _crypto_l2_npz_exists(data_catalog_root, l2_sym):
             has_order_book = True
             has_tick = True
@@ -173,6 +190,7 @@ def resolve_validation_path(
     route_to_hft = exec_cap in (
         ExecutionCapability.FULL_EXECUTION,
         ExecutionCapability.L3_VALIDATED,
+        ExecutionCapability.L2_DEPTH_VALIDATION,
         ExecutionCapability.L2_PROXY_VALIDATION,
     )
 
