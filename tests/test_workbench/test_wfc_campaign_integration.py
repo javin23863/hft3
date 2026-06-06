@@ -300,6 +300,7 @@ def test_wfc_skipped_when_no_bounds(mock_list, MockEngine, mock_bounds, mock_wfc
     model_card = json.loads(model_card_path.read_text(encoding="utf-8"))["model_card"]
     validation_card = json.loads(validation_card_path.read_text(encoding="utf-8"))["validation_card"]
     assert model_card["model_id"] == summary["model_id"] == "BOOK_PRESSURE"
+    assert model_card["feature_ids"] == ["pdf.ofi_pca.ofi_value", "pdf.ofi_pca.mlofi_pc1"]
     assert model_card["validation_card_id"] == validation_card["validation_id"]
     assert model_card["promotion_status"] == "research_only"
     assert model_card["validation_status"]["robustness_tests_passed"] is False

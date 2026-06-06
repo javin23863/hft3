@@ -85,6 +85,15 @@ def _campaign_id(model_id: str, symbol: str) -> str:
     return f"{model_id}_{sym}_{ts}"
 
 
+def _model_feature_ids(model_id: str) -> List[str]:
+    from features_engine.src.features.registry import feature_ids_for_model
+
+    try:
+        return feature_ids_for_model(model_id)
+    except KeyError:
+        return ["unregistered_feature_for_unknown_model"]
+
+
 def _param_hash(model_id: str, params: Optional[Dict[str, Any]] = None, *, seed: int = 42) -> str:
     if params:
         return param_hash_from_dict(model_id, params)
@@ -387,7 +396,7 @@ def _write_campaign_cards(artifact_dir: Path, summary: Dict[str, Any]) -> None:
             "model_id": str(summary.get("model_id")),
             "model_type": "workbench_campaign",
             "hypothesis_ids": [str(summary.get("model_id"))],
-            "feature_ids": [str(summary.get("model_id"))],
+            "feature_ids": _model_feature_ids(str(summary.get("model_id"))),
             "label_id": f"campaign:{summary.get('symbol')}",
             "asset_scope": [str(summary.get("symbol"))],
             "regime_scope": event_context,

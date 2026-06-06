@@ -738,6 +738,9 @@ def test_catalog_feature_fabric_generation_passes_all_lanes(tmp_path: Path) -> N
         assert snapshot["pit_validation_status"] == "PASS"
         assert snapshot["catalog_pit_eligibility_status"] == "PASS"
         assert snapshot["model_feature_usage_status"] == "not_observed"
+        assert snapshot["manifest"]["registry_enforced"] is True
+        assert snapshot["manifest"]["feature_registry_status"] == "PASS"
+        assert snapshot["manifest"]["model_feature_map_status"] == "PASS"
         assert snapshot["blocking_gates"] == []
         assert {path.name for path in root.iterdir()} >= {
             "feature_fabric_manifest.json",
@@ -745,14 +748,14 @@ def test_catalog_feature_fabric_generation_passes_all_lanes(tmp_path: Path) -> N
             "feature_pit_audit.json",
             "rejected_features.json",
         }
-        assert {row["source_lane"] for row in snapshot["rows"]} >= {
-            "cme_futures",
-            "crypto",
-            "equities",
-            "options",
-        }
+        assert {row["source_lane"] for row in snapshot["rows"]} >= {"cme_futures", "equities"}
+        rejected = json.loads((root / "rejected_features.json").read_text(encoding="utf-8"))
+        assert {row["source_lane"] for row in rejected["rows"]} >= {"crypto", "options"}
         assert all(row["run_id"] == "fresh_run" for row in snapshot["rows"])
         assert all(row["evidence_scope"] == "catalog_eligibility_not_model_usage" for row in snapshot["rows"])
+        assert all(row["feature_id"] == row["feature"] for row in snapshot["rows"])
+        assert all(row["acceptance_status"] == "ACCEPTED" for row in snapshot["rows"])
+        assert not any("catalog_feature" in row["feature"] for row in snapshot["rows"])
 
 
 def test_feature_fabric_blocks_missing_active_run_identity(tmp_path: Path) -> None:
@@ -770,12 +773,58 @@ def test_feature_fabric_blocks_missing_active_run_identity(tmp_path: Path) -> No
     assert snapshot["run_identity_issues"]
 
 
-def test_feature_fabric_passes_with_observed_pit_safe_rows(tmp_path: Path) -> None:
+def test_feature_fabric_regenerates_artifacts_without_registry_enforcement(tmp_path: Path) -> None:
     (tmp_path / "feature_fabric_manifest.json").write_text('{"run_id":"unit"}', encoding="utf-8")
     (tmp_path / "feature_lineage.json").write_text(
         '{"features":[{"feature":"btc_mempool_pressure","source_lane":"crypto",'
-        '"asset":"BTC","source_available_timestamp":"2026-06-04T00:00:00Z",'
+        '"source_available_timestamp":"2026-06-04T00:00:00Z",'
         '"decision_timestamp":"2026-06-04T00:00:01Z","pit_status":"PASS"}]}',
+        encoding="utf-8",
+    )
+    (tmp_path / "feature_pit_audit.json").write_text('{"rows":[]}', encoding="utf-8")
+    (tmp_path / "rejected_features.json").write_text('{"rows":[]}', encoding="utf-8")
+
+    evidence_snapshot._ensure_catalog_feature_fabric(REPO, consumer_lane="equities", selected_root=tmp_path, run_id="unit")
+
+    manifest = json.loads((tmp_path / "feature_fabric_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["registry_enforced"] is True
+    assert manifest["feature_registry_status"] == "PASS"
+    assert manifest["model_feature_map_status"] == "PASS"
+
+
+def test_feature_fabric_passes_with_observed_pit_safe_rows(tmp_path: Path) -> None:
+    (tmp_path / "feature_fabric_manifest.json").write_text(
+        json.dumps(
+            {
+                "run_id": "unit",
+                "registry_enforced": True,
+                "feature_registry_status": "PASS",
+                "model_feature_map_status": "PASS",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "feature_lineage.json").write_text(
+        json.dumps(
+            {
+                "features": [
+                    {
+                        "feature": "mbo.depth.spread_stress",
+                        "feature_id": "mbo.depth.spread_stress",
+                        "source_lane": "cme_futures",
+                        "consumer_lane": "cme_futures",
+                        "asset": "futures",
+                        "source_symbol": "ES",
+                        "source_available_timestamp": "2026-06-04T00:00:00Z",
+                        "decision_timestamp": "2026-06-04T00:00:01Z",
+                        "pit_status": "PASS",
+                        "pit_safe": True,
+                        "acceptance_status": "ACCEPTED",
+                        "source_tier": "tier_1_primary",
+                    }
+                ]
+            }
+        ),
         encoding="utf-8",
     )
     (tmp_path / "feature_pit_audit.json").write_text('{"rows":[]}', encoding="utf-8")
@@ -788,6 +837,50 @@ def test_feature_fabric_passes_with_observed_pit_safe_rows(tmp_path: Path) -> No
     assert snapshot["evidence_gate_passed"] is True
     assert snapshot["pit_validation_status"] == "PASS"
     assert snapshot["blocking_gates"] == []
+
+
+def test_feature_fabric_blocks_unregistered_rows(tmp_path: Path) -> None:
+    (tmp_path / "feature_fabric_manifest.json").write_text(
+        json.dumps(
+            {
+                "run_id": "unit",
+                "registry_enforced": True,
+                "feature_registry_status": "PASS",
+                "model_feature_map_status": "PASS",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "feature_lineage.json").write_text(
+        json.dumps(
+            {
+                "features": [
+                    {
+                        "feature": "btc_mempool_pressure",
+                        "feature_id": "btc_mempool_pressure",
+                        "source_lane": "crypto",
+                        "consumer_lane": "cme_futures",
+                        "asset": "BTC",
+                        "source_available_timestamp": "2026-06-04T00:00:00Z",
+                        "decision_timestamp": "2026-06-04T00:00:01Z",
+                        "pit_status": "PASS",
+                        "pit_safe": True,
+                        "acceptance_status": "ACCEPTED",
+                        "source_tier": "tier_2_vendor_normalized",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "feature_pit_audit.json").write_text('{"rows":[]}', encoding="utf-8")
+    (tmp_path / "rejected_features.json").write_text('{"rows":[]}', encoding="utf-8")
+
+    snapshot = _feature_fabric_snapshot(REPO, selected_root=tmp_path, consumer_lane="cme_futures")
+
+    assert snapshot["status"] == "BLOCKING"
+    assert any(gate["gate"] == "feature_registry_acceptance" for gate in snapshot["blocking_gates"])
+    assert snapshot["registry_issues"][0]["issue"] == "feature_id_unregistered"
 
 
 def test_feature_fabric_blocks_pit_leakage_rows(tmp_path: Path) -> None:

@@ -332,6 +332,22 @@ def test_model_card_promotion_requires_passing_validation_status():
     _assert_valid("MODEL_CARD.schema.json", model)
 
 
+def test_model_card_feature_ids_must_resolve_to_registry_features():
+    model = _sample_model_card()
+    model["model_card"]["feature_ids"] = ["not_registered_feature"]
+    _assert_invalid("MODEL_CARD.schema.json", model, "unknown feature_id not_registered_feature")
+
+    model = _sample_model_card()
+    model["model_card"]["feature_ids"] = ["BOOK_PRESSURE"]
+    _assert_invalid("MODEL_CARD.schema.json", model, "unknown feature_id BOOK_PRESSURE")
+
+    model = _sample_model_card()
+    model["model_card"]["model_id"] = "BOOK_PRESSURE"
+    model["model_card"]["model_type"] = "pdf_structural"
+    model["model_card"]["feature_ids"] = ["crypto.basis.spot_perp_basis"]
+    _assert_invalid("MODEL_CARD.schema.json", model, "not eligible for model_kind pdf_structural")
+
+
 def test_llm_facing_markdown_files_have_required_front_matter():
     docs = [
         REPO / "docs" / "agents" / "MBO_AGENT_ONTOLOGY_HARDENING_SOURCE_OF_TRUTH.md",

@@ -30,12 +30,17 @@
           "enum": [
             "depth",
             "flow",
+            "microprice",
             "queue",
             "liquidity_quality",
             "event_intensity",
             "cross_asset",
             "execution",
-            "regime"
+            "regime",
+            "options",
+            "equities",
+            "equities_l3",
+            "crypto"
           ]
         },
         "formula": { "$ref": "#/definitions/non_empty_string" },

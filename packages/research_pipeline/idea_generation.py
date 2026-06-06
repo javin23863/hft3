@@ -6,6 +6,7 @@ import math
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
 
+from features_engine.src.features.registry import feature_ids_for_model, load_feature_registry
 from features_engine.src.model_registry import all_slugs, load_model_registry
 
 from data_layer.llm.packet_runner import run_llm_on_idea_generation_request
@@ -20,6 +21,12 @@ from research_pipeline.review_memory import (
 from research_pipeline.types import CandidateModel, EvaluationResult, ParsedHypothesis
 
 ALLOWED_LANE_CODES = ["cme", "crypto", "options", "equities"]
+LANE_CODE_TO_OWNER = {
+    "cme": "cme_futures",
+    "crypto": "crypto",
+    "options": "options",
+    "equities": "equities",
+}
 IDEA_STATUSES = {
     "proposed",
     "schema_reject",
@@ -28,6 +35,13 @@ IDEA_STATUSES = {
     "tested_fail",
     "tested_pass",
 }
+
+
+def _default_feature_ids_for_model(model_id: str) -> List[str]:
+    try:
+        return feature_ids_for_model(model_id)
+    except KeyError:
+        return ["unregistered_feature_for_unknown_model"]
 
 
 def hypothesis_model_ids() -> List[str]:
@@ -74,7 +88,7 @@ def _fallback_packet(
         "thesis_code": parsed.thesis,
         "instrument_ids": parsed.instrument_universe or ["MES"],
         "primary_model_id": parsed.primary_model_id,
-        "feature_ids": parsed.feature_list or [parsed.primary_model_id],
+        "feature_ids": parsed.feature_list or _default_feature_ids_for_model(parsed.primary_model_id),
         "param_ranges": parsed.param_ranges or {"signal_threshold": [0.05, 0.35]},
         "entry_rule_codes": parsed.entry_rules,
         "exit_rule_codes": parsed.exit_rules,
@@ -196,7 +210,10 @@ def _static_errors(
     allowed_models = set(constraints.get("allowed_model_ids") or [])
     allowed_lanes = set(constraints.get("allowed_lane_codes") or [])
     model_slugs = set(all_slugs())
-    valid_feature_refs = model_slugs | allowed_models
+    registry = load_feature_registry()
+    model_entry = (load_model_registry().get("models") or {}).get(str(idea.get("primary_model_id") or ""), {})
+    model_kind = str(model_entry.get("kind") or "")
+    consumer_lane = LANE_CODE_TO_OWNER.get(str(idea.get("lane_code") or ""), str(idea.get("lane_code") or ""))
     memory_ids = {str(item.get("memory_id")) for item in review_memory}
     ref_ids = set(refs) | memory_ids
 
@@ -207,11 +224,25 @@ def _static_errors(
     if idea.get("lane_code") not in allowed_lanes:
         errors.append("lane_code_not_allowed")
     for feature_id in idea.get("feature_ids") or []:
-        if feature_id not in valid_feature_refs:
+        if feature_id in model_slugs or feature_id in allowed_models:
+            errors.append("feature_id_is_model_id")
+            break
+        try:
+            spec = registry.resolve(str(feature_id))
+        except KeyError:
             errors.append("feature_id_not_valid")
             break
-        if feature_id in model_slugs and feature_id not in allowed_models:
-            errors.append("feature_model_id_not_allowed")
+        acceptance = registry.accept(
+            spec.feature_id,
+            consumer_lane=consumer_lane,
+            source_lane=spec.lane_owner,
+            model_kind=model_kind,
+            pit_safe=True,
+            source_tier=spec.source_tier_required,
+            required_inputs_available=True,
+        )
+        if not acceptance.accepted:
+            errors.append(f"feature_id_not_accepted:{';'.join(acceptance.reasons)}")
             break
     param_ranges = idea.get("param_ranges") or {}
     if not param_ranges:
@@ -263,7 +294,7 @@ def parsed_from_idea(idea: Dict[str, Any]) -> ParsedHypothesis:
         entry_rules=list(idea.get("entry_rule_codes") or []),
         exit_rules=list(idea.get("exit_rule_codes") or []),
         indicators=feature_ids or [model_id],
-        feature_list=[model_id],
+        feature_list=feature_ids,
         param_ranges={"signal_threshold": [0.05, 0.35]},
         primary_model_id=model_id,
         source="idea_set",

@@ -36,6 +36,8 @@ def validate_agent_contract(schema_name: str, obj: Any) -> List[str]:
         out.append(f"{path}: {err.message}" if path else err.message)
     _append_non_finite_number_errors(out, obj, "")
     _append_datetime_format_errors(out, obj, "")
+    if schema_name == "MODEL_CARD.schema.json":
+        _append_model_card_feature_registry_errors(out, obj)
     return out
 
 
@@ -86,3 +88,53 @@ def _is_rfc3339_datetime(value: str) -> bool:
     except ValueError:
         return False
     return parsed.tzinfo is not None
+
+
+def _append_model_card_feature_registry_errors(errors: List[str], obj: Any) -> None:
+    if not isinstance(obj, dict):
+        return
+    card = obj.get("model_card")
+    if not isinstance(card, dict):
+        return
+    feature_ids = card.get("feature_ids") or []
+    if not isinstance(feature_ids, list):
+        return
+    try:
+        from features_engine.src.features.registry import load_feature_registry
+        from features_engine.src.model_registry import load_model_registry, resolve_model_id
+
+        registry = load_feature_registry()
+    except Exception as exc:
+        errors.append(f"model_card.feature_ids: feature registry unavailable: {exc}")
+        return
+    model_kind = str(card.get("model_type") or "")
+    try:
+        slug = resolve_model_id(str(card.get("model_id") or ""))
+        model_entry = (load_model_registry().get("models") or {}).get(slug, {})
+        model_kind = str(model_entry.get("kind") or model_kind)
+    except KeyError:
+        pass
+    if model_kind == "existing_hft3_candidate":
+        model_kind = "hypothesis"
+    for idx, feature_id in enumerate(feature_ids):
+        if not isinstance(feature_id, str):
+            continue
+        try:
+            spec = registry.resolve(feature_id)
+        except KeyError:
+            errors.append(f"model_card.feature_ids[{idx}]: unknown feature_id {feature_id}")
+            continue
+        acceptance = registry.accept(
+            spec.feature_id,
+            consumer_lane="all_lanes",
+            source_lane=spec.lane_owner,
+            model_kind=model_kind,
+            pit_safe=True,
+            source_tier=spec.source_tier_required,
+            required_inputs_available=True,
+        )
+        if not acceptance.accepted:
+            errors.append(
+                f"model_card.feature_ids[{idx}]: feature_id {feature_id} not eligible for "
+                f"model_kind {model_kind}: {';'.join(acceptance.reasons)}"
+            )

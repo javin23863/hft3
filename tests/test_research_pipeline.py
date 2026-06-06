@@ -76,7 +76,7 @@ def _idea_packet():
                 "thesis_code": "book_pressure",
                 "instrument_ids": ["MES"],
                 "primary_model_id": "BOOK_PRESSURE",
-                "feature_ids": ["BOOK_PRESSURE"],
+                "feature_ids": ["pdf.ofi_pca.ofi_value"],
                 "param_ranges": {"signal_threshold": [0.05, 0.35]},
                 "entry_rule_codes": ["enter_pressure"],
                 "exit_rule_codes": ["exit_revert"],
@@ -97,7 +97,7 @@ def _idea_packet():
                 "thesis_code": "spread_recompression",
                 "instrument_ids": ["MES"],
                 "primary_model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
-                "feature_ids": ["SPREAD_BLOWOUT_RECOMPRESSION"],
+                "feature_ids": ["mbo.depth.spread_stress"],
                 "param_ranges": {"signal_threshold": [0.05, 0.35]},
                 "entry_rule_codes": ["enter_spread_signal"],
                 "exit_rule_codes": ["exit_revert"],
@@ -174,7 +174,7 @@ def test_idea_feature_ids_do_not_expand_candidate_model_families():
             "thesis_code": "spread_recompression_uses_book_pressure_context",
             "instrument_ids": ["MES"],
             "primary_model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
-            "feature_ids": ["BOOK_PRESSURE"],
+            "feature_ids": ["mbo.depth.spread_stress"],
             "param_ranges": {"signal_threshold": [0.05, 0.35]},
             "entry_rule_codes": ["enter_spread_signal"],
             "exit_rule_codes": ["exit_revert"],
@@ -191,15 +191,15 @@ def test_idea_feature_ids_do_not_expand_candidate_model_families():
     ]
 
     parsed = parsed_from_idea(packet["ideas"][0])
-    assert parsed.indicators == ["BOOK_PRESSURE"]
-    assert parsed.feature_list == ["SPREAD_BLOWOUT_RECOMPRESSION"]
+    assert parsed.indicators == ["mbo.depth.spread_stress"]
+    assert parsed.feature_list == ["mbo.depth.spread_stress"]
     generated = list(generate_candidates(parsed, max_candidates=6))
     assert {candidate.model_id for candidate in generated} == {"SPREAD_BLOWOUT_RECOMPRESSION"}
 
     candidates = candidates_from_ideas(packet, max_candidates=6)
-    assert candidates == []
-    assert packet["ideas"][0]["status"] == "static_reject"
-    assert "feature_model_id_not_allowed" in packet["ideas"][0]["static_error_codes"]
+    assert {candidate.model_id for candidate in candidates} == {"SPREAD_BLOWOUT_RECOMPRESSION"}
+    assert packet["ideas"][0]["status"] == "queued_for_test"
+    assert "static_error_codes" not in packet["ideas"][0]
 
 
 def test_idea_status_updates_only_from_evaluation_results():
@@ -473,7 +473,7 @@ def test_run_pipeline_vectorbt_only_promoted_exits_before_hftbacktest(
                 "thesis_code": "spread_recompression",
                 "instrument_ids": ["MES"],
                 "primary_model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
-                "feature_ids": ["SPREAD_BLOWOUT_RECOMPRESSION"],
+                "feature_ids": ["mbo.depth.spread_stress"],
                 "param_ranges": {"signal_threshold": [0.05, 0.35]},
                 "entry_rule_codes": ["enter_spread"],
                 "exit_rule_codes": ["exit_revert"],
@@ -677,7 +677,7 @@ def test_idea_generation_llm_uses_sampling_controls(monkeypatch):
                     "thesis_code": "spread_recompression",
                     "instrument_ids": ["MES"],
                     "primary_model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
-                    "feature_ids": ["SPREAD_BLOWOUT_RECOMPRESSION"],
+                    "feature_ids": ["mbo.depth.spread_stress"],
                     "param_ranges": {"signal_threshold": [0.05, 0.35]},
                     "entry_rule_codes": ["enter_spread"],
                     "exit_rule_codes": ["exit_revert"],

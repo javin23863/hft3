@@ -1,0 +1,361 @@
+schema_version: feature_registry_v1
+
+feature_groups:
+  - group_id: mbo_feature_index
+    kind: feature_index
+    lane_owner: cme_futures
+    source_domain: cme_l3_mbo
+    dtype: float64
+    unit: mixed
+    shape: scalar
+    timestamp_policy: exchange_event_time_lte_decision_timestamp
+    required_inputs:
+      - databento_mbo_event_stream
+      - reconstructed_l3_book
+    source_tier_required: tier_1_primary
+    pit_required: true
+    allowed_consumer_lanes: [all_lanes]
+    allowed_model_kinds: [hypothesis, pdf_structural, workbench_campaign]
+    status: active
+
+  - group_id: mbo_packet_features
+    kind: explicit
+    lane_owner: cme_futures
+    source_domain: mbo_feature_packet_v1
+    dtype: float64
+    unit: mixed
+    shape: scalar
+    timestamp_policy: packet_timestamp_lte_decision_timestamp
+    required_inputs:
+      - mbo_feature_packet_v1
+    source_tier_required: tier_1_primary
+    pit_required: true
+    allowed_consumer_lanes: [all_lanes]
+    allowed_model_kinds: [hypothesis, pdf_structural, workbench_campaign]
+    status: active
+    features:
+      - feature_id: mbo.flow.normalized_ofi_10ms
+        aliases: [normalized_ofi_10, normalized_ofi_10ms]
+        family: flow
+        subfamily: dynamic_ofi
+      - feature_id: mbo.flow.normalized_ofi_100ms
+        aliases: [normalized_ofi_100ms]
+        family: flow
+        subfamily: dynamic_ofi
+      - feature_id: mbo.flow.normalized_ofi_1s
+        aliases: [normalized_ofi_1s]
+        family: flow
+        subfamily: dynamic_ofi
+      - feature_id: mbo.microprice.level_1_ticks
+        aliases: [level_1_microprice_ticks]
+        family: microprice
+        subfamily: microprice
+      - feature_id: mbo.microprice.multi_level_ticks
+        aliases: [multi_level_microprice_ticks]
+        family: microprice
+        subfamily: microprice
+      - feature_id: mbo.queue.passive_fill_probability
+        aliases: [passive_fill_probability]
+        family: queue
+        subfamily: fill_probability
+      - feature_id: mbo.queue.adverse_selection_probability
+        aliases: [adverse_selection_probability]
+        family: queue
+        subfamily: adverse_selection
+      - feature_id: mbo.execution.latency_adjusted_edge_bps
+        aliases: [latency_adjusted_edge_bps]
+        family: execution
+        subfamily: latency_haircut
+
+  - group_id: cme_macro_context
+    kind: explicit
+    lane_owner: cme_futures
+    source_domain: cme_macro_event_replay
+    dtype: float64
+    unit: mixed
+    shape: scalar
+    timestamp_policy: event_context_available_lte_decision_timestamp
+    required_inputs:
+      - events_csv
+      - replay_event_window
+    source_tier_required: tier_1_primary
+    pit_required: true
+    allowed_consumer_lanes: [all_lanes]
+    allowed_model_kinds: [hypothesis, workbench_campaign]
+    status: active
+    features:
+      - feature_id: cme.macro.macro_shadow_decay
+        aliases: [macro_shadow_decay]
+        family: event_intensity
+        subfamily: macro_shadow
+      - feature_id: cme.macro.micro_stale_quote_zscore
+        aliases: [micro_stale_quote_zscore]
+        family: execution
+        subfamily: stale_quote
+      - feature_id: cme.macro.macro_nofi
+        aliases: [macro_nofi]
+        family: flow
+        subfamily: macro_ofi
+      - feature_id: cme.execution.expected_edge_ticks
+        aliases: [expected_edge_ticks]
+        family: execution
+        subfamily: edge_estimate
+
+  - group_id: cross_asset_l3
+    kind: explicit
+    lane_owner: cme_futures
+    source_domain: hfc3_cross_asset_l3
+    dtype: float64
+    unit: mixed
+    shape: scalar
+    timestamp_policy: source_market_state_lte_decision_timestamp
+    required_inputs:
+      - cross_asset_l3_tensor
+    source_tier_required: tier_1_primary
+    pit_required: true
+    allowed_consumer_lanes: [all_lanes]
+    allowed_model_kinds: [hypothesis, pdf_structural, workbench_campaign]
+    status: active
+    features:
+      - feature_id: cross_asset.nq_minus_es_microstructure_pressure
+        aliases: [nq_minus_es_microstructure_pressure]
+        family: cross_asset
+        subfamily: equity_index_pressure
+      - feature_id: cross_asset.rty_minus_es_liquidity_stress
+        aliases: [rty_minus_es_liquidity_stress]
+        family: cross_asset
+        subfamily: equity_index_pressure
+      - feature_id: cross_asset.ym_minus_es_orderflow_confirmation
+        aliases: [ym_minus_es_orderflow_confirmation]
+        family: cross_asset
+        subfamily: equity_index_pressure
+      - feature_id: cross_asset.equity_index_mbo_dispersion
+        aliases: [equity_index_mbo_dispersion]
+        family: cross_asset
+        subfamily: equity_index_dispersion
+      - feature_id: cross_asset.first_equity_index_to_show_aggressor_imbalance
+        aliases: [first_equity_index_to_show_aggressor_imbalance]
+        family: cross_asset
+        subfamily: lead_lag
+      - feature_id: cross_asset.treasury_liquidity_vacuum_score
+        aliases: [treasury_liquidity_vacuum_score]
+        family: cross_asset
+        subfamily: rates_pressure
+      - feature_id: cross_asset.rates_first_vs_equities_first
+        aliases: [rates_first_vs_equities_first]
+        family: cross_asset
+        subfamily: rates_equity_pressure
+      - feature_id: cross_asset.gc_vs_zn_liquidity_stress
+        aliases: [gc_vs_zn_liquidity_stress]
+        family: cross_asset
+        subfamily: metals_rates_pressure
+      - feature_id: cross_asset.cl_orderflow_shock_score
+        aliases: [cl_orderflow_shock_score]
+        family: cross_asset
+        subfamily: energy_pressure
+      - feature_id: cross_asset.ng_orderflow_shock_score
+        aliases: [ng_orderflow_shock_score]
+        family: cross_asset
+        subfamily: energy_pressure
+      - feature_id: cross_asset.dollar_pressure_mbo_proxy
+        aliases: [dollar_pressure_mbo_proxy]
+        family: cross_asset
+        subfamily: fx_pressure
+      - feature_id: cross_asset.vix_level
+        aliases: [vix_level]
+        family: cross_asset
+        subfamily: volatility_sensor
+      - feature_id: cross_asset.volatility_sensor_confirms_equity_mbo_stress
+        aliases: [volatility_sensor_confirms_equity_mbo_stress]
+        family: cross_asset
+        subfamily: volatility_sensor
+      - feature_id: cross_asset.cross_asset_feature_count
+        aliases: [cross_asset_feature_count]
+        family: cross_asset
+        subfamily: audit_count
+
+  - group_id: pdf_structural_outputs
+    kind: explicit
+    lane_owner: cme_futures
+    source_domain: pdf_structural_models
+    dtype: float64
+    unit: mixed
+    shape: scalar_or_vector
+    timestamp_policy: model_inputs_lte_decision_timestamp
+    required_inputs:
+      - structural_model_input
+    source_tier_required: tier_2_vendor_normalized
+    pit_required: true
+    allowed_consumer_lanes: [all_lanes]
+    allowed_model_kinds: [pdf_structural, workbench_campaign]
+    status: active
+    features:
+      - feature_id: pdf.ofi_pca.ofi_value
+        aliases: [OFI_value, ofi_value]
+        family: flow
+        subfamily: ofi_pca
+      - feature_id: pdf.ofi_pca.mlofi_pc1
+        aliases: [MLOFI_PC1, mlofi_pc1]
+        family: flow
+        subfamily: ofi_pca
+      - feature_id: pdf.cross_asset.cross_impact_score
+        aliases: [cross_impact_score]
+        family: cross_asset
+        subfamily: lead_lag
+      - feature_id: pdf.vpin.vpin_value
+        aliases: [VPIN_value, vpin_value]
+        family: liquidity_quality
+        subfamily: flow_toxicity
+      - feature_id: pdf.hybrid_execution.reservation_price
+        aliases: [reservation_price]
+        family: execution
+        subfamily: avellaneda_stoikov
+      - feature_id: pdf.dealer_hedging.total_gex
+        aliases: [total_gex]
+        family: options
+        subfamily: dealer_greeks
+      - feature_id: pdf.dow_ym.dow_pressure
+        aliases: [YM_fair_pressure]
+        family: cross_asset
+        subfamily: index_pressure
+      - feature_id: pdf.treasury_ctd.implied_repo
+        aliases: [implied_repo_by_bond]
+        family: cross_asset
+        subfamily: treasury_basis
+      - feature_id: pdf.transfer_entropy.transfer_entropy
+        aliases: [transfer_entropy]
+        family: cross_asset
+        subfamily: transfer_entropy
+      - feature_id: pdf.quantum_spread.collapse_risk
+        aliases: [collapse_risk]
+        family: execution
+        subfamily: spread_defense
+      - feature_id: pdf.stochastic_thermo.free_energy
+        aliases: [free_energy]
+        family: regime
+        subfamily: thermodynamic_state
+      - feature_id: pdf.hawkes.toxic_cascade_score
+        aliases: [toxic_cascade_score]
+        family: event_intensity
+        subfamily: hawkes_toxic_flow
+
+  - group_id: equities_daily
+    kind: python_constant
+    module: equities_lane.src.prediction.features
+    constant: FEATURE_NAMES
+    feature_id_prefix: equities.daily
+    family: equities
+    subfamily: low_float_daily
+    lane_owner: equities
+    source_domain: equities_daily_ohlcv_float
+    dtype: float64
+    unit: mixed
+    shape: scalar
+    timestamp_policy: daily_bar_close_lte_prediction_timestamp
+    required_inputs:
+      - daily_bar
+      - float_metadata
+    source_tier_required: tier_2_vendor_normalized
+    pit_required: true
+    allowed_consumer_lanes: [all_lanes]
+    allowed_model_kinds: [equities_lane, workbench_campaign]
+    status: active
+
+  - group_id: equities_l3
+    kind: dataclass_fields
+    module: equities_lane.src.prediction.l3.features
+    class: L3Features
+    feature_id_prefix: equities.l3
+    family: equities_l3
+    subfamily: mbo_l3_equities
+    lane_owner: equities
+    source_domain: equities_l3_mbo
+    dtype: float64
+    unit: mixed
+    shape: scalar
+    timestamp_policy: exchange_event_time_lte_decision_timestamp
+    required_inputs:
+      - equities_l3_mbo_events
+      - equities_book_snapshots
+    source_tier_required: tier_1_primary
+    pit_required: true
+    allowed_consumer_lanes: [all_lanes]
+    allowed_model_kinds: [equities_lane, workbench_campaign]
+    status: active
+
+  - group_id: crypto_features
+    kind: explicit
+    lane_owner: crypto
+    source_domain: crypto_exchange_and_node
+    dtype: float64
+    unit: mixed
+    shape: scalar
+    timestamp_policy: exchange_or_node_available_lte_decision_timestamp
+    required_inputs:
+      - spot_perp_ticks
+      - deribit_surface
+      - btc_node_snapshots
+    source_tier_required: tier_2_vendor_normalized
+    pit_required: true
+    allowed_consumer_lanes: [all_lanes]
+    allowed_model_kinds: [crypto_lane, workbench_campaign]
+    status: active
+    features:
+      - {feature_id: crypto.basis.spot_perp_basis, aliases: [spot_perp_basis], family: crypto, subfamily: basis}
+      - {feature_id: crypto.basis.basis_pct, aliases: [basis_pct], family: crypto, subfamily: basis}
+      - {feature_id: crypto.basis.basis_zscore, aliases: [basis_zscore], family: crypto, subfamily: basis}
+      - {feature_id: crypto.basis.annualized_basis_yield, aliases: [annualized_basis_yield], family: crypto, subfamily: basis}
+      - {feature_id: crypto.basis.funding_adjusted_basis, aliases: [funding_adjusted_basis], family: crypto, subfamily: basis}
+      - {feature_id: crypto.basis.cross_venue_basis_dispersion, aliases: [cross_venue_basis_dispersion], family: crypto, subfamily: basis}
+      - {feature_id: crypto.basis.ou_theta, aliases: [ou_theta], family: crypto, subfamily: basis}
+      - {feature_id: crypto.basis.ou_mu, aliases: [ou_mu], family: crypto, subfamily: basis}
+      - {feature_id: crypto.basis.ou_sigma, aliases: [ou_sigma], family: crypto, subfamily: basis}
+      - {feature_id: crypto.basis.ou_basis_compression_signal, aliases: [ou_basis_compression_signal], family: crypto, subfamily: basis}
+      - {feature_id: crypto.basis.basis_momentum, aliases: [basis_momentum], family: crypto, subfamily: basis}
+      - {feature_id: crypto.basis.basis_volatility, aliases: [basis_volatility], family: crypto, subfamily: basis}
+      - {feature_id: crypto.funding.funding_level, aliases: [funding_level], family: crypto, subfamily: funding}
+      - {feature_id: crypto.funding.funding_slope, aliases: [funding_slope], family: crypto, subfamily: funding}
+      - {feature_id: crypto.funding.funding_zscore, aliases: [funding_zscore], family: crypto, subfamily: funding}
+      - {feature_id: crypto.funding.funding_dispersion, aliases: [funding_dispersion], family: crypto, subfamily: funding}
+      - {feature_id: crypto.funding.latent_funding_pressure, aliases: [latent_funding_pressure], family: crypto, subfamily: funding}
+      - {feature_id: crypto.funding.hedge_drift_estimate, aliases: [hedge_drift_estimate], family: crypto, subfamily: funding}
+      - {feature_id: crypto.funding.expected_net_funding_after_cost, aliases: [expected_net_funding_after_cost], family: crypto, subfamily: funding}
+      - {feature_id: crypto.exchange.exchange_spread, aliases: [exchange_spread], family: crypto, subfamily: exchange_microstructure}
+      - {feature_id: crypto.exchange.exchange_depth, aliases: [exchange_depth], family: crypto, subfamily: exchange_microstructure}
+      - {feature_id: crypto.exchange.exchange_order_imbalance, aliases: [exchange_order_imbalance], family: crypto, subfamily: exchange_microstructure}
+      - {feature_id: crypto.vol.atm_iv, aliases: [atm_iv], family: crypto, subfamily: deribit_vol}
+      - {feature_id: crypto.vol.iv_rv_spread, aliases: [iv_rv_spread], family: crypto, subfamily: deribit_vol}
+      - {feature_id: crypto.vol.realized_vol_forecast, aliases: [realized_vol_forecast], family: crypto, subfamily: deribit_vol}
+      - {feature_id: crypto.vol.skew_25d, aliases: [skew_25d], family: crypto, subfamily: deribit_vol}
+      - {feature_id: crypto.vol.put_call_parity_residual, aliases: [put_call_parity_residual], family: crypto, subfamily: deribit_vol}
+      - {feature_id: crypto.onchain.btc_mempool_usage_bytes, aliases: [btc_mempool_usage_bytes], family: crypto, subfamily: btc_node_mempool}
+      - {feature_id: crypto.onchain.btc_fee_spike_zscore, aliases: [btc_fee_spike_zscore], family: crypto, subfamily: btc_node_mempool}
+      - {feature_id: crypto.onchain.jump_intensity_lambda, aliases: [jump_intensity_lambda], family: crypto, subfamily: btc_node_mempool}
+      - {feature_id: crypto.onchain.btc_blockspace_stress_score, aliases: [btc_blockspace_stress_score], family: crypto, subfamily: blockspace}
+      - {feature_id: crypto.onchain.btc_node_data_available_flag, aliases: [btc_node_data_available_flag], family: crypto, subfamily: btc_node_mempool}
+
+  - group_id: options_features
+    kind: explicit
+    lane_owner: options
+    source_domain: options_chain_surface
+    dtype: float64
+    unit: mixed
+    shape: scalar
+    timestamp_policy: option_quote_or_chain_lte_decision_timestamp
+    required_inputs:
+      - options_chain
+      - underlying_market_state
+    source_tier_required: tier_2_vendor_normalized
+    pit_required: true
+    allowed_consumer_lanes: [all_lanes]
+    allowed_model_kinds: [options_lane, pdf_structural, workbench_campaign]
+    status: active
+    features:
+      - {feature_id: options.greeks.delta_pressure, aliases: [delta_pressure], family: options, subfamily: greeks}
+      - {feature_id: options.greeks.gamma_pressure, aliases: [gamma_pressure], family: options, subfamily: greeks}
+      - {feature_id: options.greeks.charm_pressure, aliases: [charm_pressure], family: options, subfamily: greeks}
+      - {feature_id: options.greeks.vanna_exposure, aliases: [vanna_exposure], family: options, subfamily: greeks}
+      - {feature_id: options.gex.total_gex, aliases: [options_total_gex], family: options, subfamily: dealer_gex}
+      - {feature_id: options.iv.iv_surface_slope, aliases: [iv_surface_slope], family: options, subfamily: iv_surface}
+      - {feature_id: options.iv.skew_25d, aliases: [options_skew_25d], family: options, subfamily: iv_surface}
+      - {feature_id: options.parity.put_call_parity_residual, aliases: [options_put_call_parity_residual], family: options, subfamily: parity}

@@ -1,0 +1,96 @@
+schema_version: model_feature_map_v1
+
+defaults:
+  hypothesis:
+    feature_ids:
+      - mbo.flow.aggressor_volume_imbalance
+      - mbo.flow.cancel_to_add_ratio
+      - mbo.flow.near_touch_cancel_pressure
+      - mbo.depth.book_slope
+      - mbo.depth.book_slope_change
+      - mbo.depth.spread
+      - mbo.depth.spread_stress
+      - mbo.liquidity_quality.liquidity_vacuum_score
+      - mbo.queue.queue_depletion_rate_bid
+      - mbo.queue.queue_depletion_rate_ask
+      - mbo.liquidity_quality.absorption_score
+      - mbo.liquidity_quality.iceberg_reload_score
+      - mbo.liquidity_quality.reload_drop_score
+      - mbo.execution.distance_to_round_number
+      - mbo.execution.distance_to_vwap
+      - mbo.execution.cutoff_pressure_score
+      - mbo.execution.prop_reentry_score
+      - mbo.execution.news_restriction_flatten_score
+      - mbo.execution.max_contract_trade_imbalance
+      - cme.macro.macro_shadow_decay
+      - cme.macro.micro_stale_quote_zscore
+      - cme.macro.macro_nofi
+      - cme.execution.expected_edge_ticks
+  pdf_structural:
+    feature_ids:
+      - pdf.ofi_pca.ofi_value
+      - pdf.cross_asset.cross_impact_score
+      - pdf.vpin.vpin_value
+      - pdf.hybrid_execution.reservation_price
+  workbench_campaign:
+    feature_ids:
+      - mbo.flow.aggressor_volume_imbalance
+      - mbo.depth.spread
+      - mbo.depth.spread_stress
+
+models:
+  BOOK_PRESSURE:
+    feature_ids:
+      - pdf.ofi_pca.ofi_value
+      - pdf.ofi_pca.mlofi_pc1
+  CROSS_ASSET_LEAD_LAG:
+    feature_ids:
+      - pdf.cross_asset.cross_impact_score
+      - cross_asset.nq_minus_es_microstructure_pressure
+      - cross_asset.first_equity_index_to_show_aggressor_imbalance
+  VPIN_TOXICITY:
+    feature_ids:
+      - pdf.vpin.vpin_value
+      - mbo.liquidity_quality.absorption_score
+  HYBRID_EXECUTION:
+    feature_ids:
+      - pdf.hybrid_execution.reservation_price
+      - pdf.ofi_pca.ofi_value
+      - pdf.vpin.vpin_value
+  DEALER_HEDGING:
+    feature_ids:
+      - pdf.dealer_hedging.total_gex
+      - options.greeks.gamma_pressure
+      - options.greeks.vanna_exposure
+      - options.greeks.charm_pressure
+  DOW_YM_INDEX:
+    feature_ids:
+      - pdf.dow_ym.dow_pressure
+      - cross_asset.ym_minus_es_orderflow_confirmation
+  TREASURY_CTD:
+    feature_ids:
+      - pdf.treasury_ctd.implied_repo
+      - cross_asset.treasury_liquidity_vacuum_score
+  TRANSFER_ENTROPY:
+    feature_ids:
+      - pdf.transfer_entropy.transfer_entropy
+      - cross_asset.rates_first_vs_equities_first
+  QUANTUM_SPREAD_DEFENSE:
+    feature_ids:
+      - pdf.quantum_spread.collapse_risk
+      - mbo.depth.spread_stress
+  STOCHASTIC_THERMO:
+    feature_ids:
+      - pdf.stochastic_thermo.free_energy
+      - mbo.regime.event_shock
+  HAWKES_TOXIC_FLOW:
+    feature_ids:
+      - pdf.hawkes.toxic_cascade_score
+      - pdf.hybrid_execution.reservation_price
+      - mbo.flow.near_touch_cancel_pressure
+  GHOST_ROUTE:
+    feature_ids:
+      - cme.macro.macro_shadow_decay
+      - cme.macro.micro_stale_quote_zscore
+      - cme.macro.macro_nofi
+      - cme.execution.expected_edge_ticks

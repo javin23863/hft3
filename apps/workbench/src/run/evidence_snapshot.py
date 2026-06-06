@@ -359,6 +359,112 @@ def _run_identity_issues(
     return issues
 
 
+def _feature_registry_issues(
+    rows: list[dict[str, Any]],
+    manifest: dict[str, Any],
+    *,
+    consumer_lane: str,
+) -> list[dict[str, Any]]:
+    issues: list[dict[str, Any]] = []
+    if manifest and manifest.get("registry_enforced") is not True:
+        issues.append(
+            {
+                "artifact": "feature_fabric_manifest",
+                "issue": "registry_enforced_missing",
+                "expected": True,
+                "observed": manifest.get("registry_enforced"),
+            }
+        )
+    if manifest and manifest.get("feature_registry_status") != "PASS":
+        issues.append(
+            {
+                "artifact": "feature_fabric_manifest",
+                "issue": "feature_registry_status_not_pass",
+                "observed": manifest.get("feature_registry_status"),
+            }
+        )
+    if manifest and manifest.get("model_feature_map_status") != "PASS":
+        issues.append(
+            {
+                "artifact": "feature_fabric_manifest",
+                "issue": "model_feature_map_status_not_pass",
+                "observed": manifest.get("model_feature_map_status"),
+            }
+        )
+    if not rows:
+        return issues
+    try:
+        from features_engine.src.features.registry import load_feature_registry
+
+        registry = load_feature_registry()
+    except Exception as exc:
+        return [
+            *issues,
+            {
+                "artifact": "feature_lineage",
+                "issue": "feature_registry_unavailable",
+                "error": str(exc),
+            },
+        ]
+    for index, row in enumerate(rows):
+        feature_id = str(row.get("feature_id") or row.get("feature") or "")
+        if not feature_id:
+            issues.append({"artifact": "feature_lineage", "row": index, "issue": "feature_id_missing"})
+            continue
+        try:
+            spec = registry.resolve(feature_id)
+        except KeyError:
+            issues.append(
+                {
+                    "artifact": "feature_lineage",
+                    "row": index,
+                    "feature": feature_id,
+                    "issue": "feature_id_unregistered",
+                }
+            )
+            continue
+        if feature_id != spec.feature_id or str(row.get("feature") or "") != spec.feature_id:
+            issues.append(
+                {
+                    "artifact": "feature_lineage",
+                    "row": index,
+                    "feature": feature_id,
+                    "issue": "feature_id_not_canonical",
+                    "canonical_feature_id": spec.feature_id,
+                }
+            )
+        if row.get("acceptance_status") != "ACCEPTED":
+            issues.append(
+                {
+                    "artifact": "feature_lineage",
+                    "row": index,
+                    "feature": spec.feature_id,
+                    "issue": "feature_acceptance_not_accepted",
+                    "observed": row.get("acceptance_status"),
+                }
+            )
+        acceptance = registry.accept(
+            spec.feature_id,
+            consumer_lane=consumer_lane or str(row.get("consumer_lane") or ""),
+            source_lane=str(row.get("source_lane") or ""),
+            model_kind="workbench_campaign",
+            pit_safe=bool(row.get("pit_safe", row.get("pit_status") == "PASS")),
+            source_tier=str(row.get("source_tier") or row.get("source_tier_required") or ""),
+            required_inputs_available=row.get("acceptance_status") == "ACCEPTED",
+        )
+        if not acceptance.accepted:
+            issues.append(
+                {
+                    "artifact": "feature_lineage",
+                    "row": index,
+                    "feature": spec.feature_id,
+                    "issue": "feature_registry_acceptance_failed",
+                    "reasons": list(acceptance.reasons),
+                }
+            )
+    return issues
+
+
 def _feature_fabric_snapshot(
     repo: Path,
     *,
@@ -387,6 +493,7 @@ def _feature_fabric_snapshot(
     )
     missing_artifacts = [name for name, path in paths.items() if not path.is_file()]
     issues = _pit_issues(lineage_rows)
+    registry_issues = _feature_registry_issues(lineage_rows, manifest, consumer_lane=consumer_lane)
     identity_issues = _run_identity_issues(
         selected_run_id=selected_run_id,
         artifacts={
@@ -422,6 +529,15 @@ def _feature_fabric_snapshot(
                 "status": "FAIL",
                 "reason": "One or more cross-lane features failed point-in-time validation.",
                 "issue_count": len(issues),
+            }
+        )
+    if registry_issues:
+        blocking_gates.append(
+            {
+                "gate": "feature_registry_acceptance",
+                "status": "FAIL",
+                "reason": "One or more feature-fabric rows failed registry validation.",
+                "issue_count": len(registry_issues),
             }
         )
     if identity_issues:
@@ -465,6 +581,7 @@ def _feature_fabric_snapshot(
         "lineage": lineage,
         "pit_audit": pit_audit,
         "pit_issues": issues,
+        "registry_issues": registry_issues,
         "run_identity_issues": identity_issues,
         "blocking_gates": blocking_gates,
         "rejected_features": rejected,
@@ -487,7 +604,15 @@ def _ensure_catalog_feature_fabric(
     root = Path(selected_root) if selected_root else repo / "runtime" / "workbench" / "feature_fabric"
     manifest = read_json(root / "feature_fabric_manifest.json") if _has_feature_fabric_artifacts(root) else {}
     identity_mismatch = bool(run_id) and str(manifest.get("run_id") or "") != run_id
-    if not _has_feature_fabric_artifacts(root) or identity_mismatch:
+    registry_stale = (
+        _has_feature_fabric_artifacts(root)
+        and (
+            manifest.get("registry_enforced") is not True
+            or manifest.get("feature_registry_status") != "PASS"
+            or manifest.get("model_feature_map_status") != "PASS"
+        )
+    )
+    if not _has_feature_fabric_artifacts(root) or identity_mismatch or registry_stale:
         ensure_catalog_feature_fabric(repo, consumer_lane, output_root=root, run_id=run_id)
     return root
 
