@@ -100,10 +100,23 @@ models/
 
 # Graphify (team commits report/labels; graph.json exceeds GitHub 100MB — rebuild locally)
 graphify-out/graph.json
+graphify-out/graph.html
+graphify-out/.graph.tmp.json
 graphify-out/manifest.json
 graphify-out/cost.json
 graphify-out/cache/
 graphify-out/.last-graph-query.json
+
+# Per-run pipeline + replay outputs (regenerated; not source)
+packages/runtime/replay_audits/
+artifacts/research_cards/pipeline_runs/
+
+# Operational logs (regenerated each run; not source)
+runtime/data_downloads/*.log
+runtime/data_downloads/*.err.log
+runtime/data_audits/*.log
+runtime/chi404/*.log
+runtime/chi404/*.txt
 
 # Ops artifacts and local logs
 logs/
