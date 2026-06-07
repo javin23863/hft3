@@ -65,6 +65,12 @@ def cmd_smoke(args: argparse.Namespace) -> int:
 
 def cmd_fill_test_gaps(args: argparse.Namespace) -> int:
     ensure_crypto_env()
+    if args.dry_run:
+        print(
+            "NOTE: dry-run writes crypto_readiness_dry_run.json only (not the pytest gate file). "
+            "B2 synthetic probe may be cached; use --refresh-b2-probe after CAE Contabo backfill.",
+            file=sys.stderr,
+        )
     report = run_fill_test_gaps(
         dry_run=args.dry_run,
         sync_chi404_node=args.sync_chi404_node,

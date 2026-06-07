@@ -122,21 +122,6 @@ def run_fill_test_gaps(
         steps["readiness_gate_unchanged"] = gate_mtime_before == gate_mtime_after
         if audit.get("b2_probe_note"):
             steps["b2_probe_note"] = audit["b2_probe_note"]
-        # #region agent log
-        from crypto_lane.src.ingest._agent_debug import agent_debug_log
-
-        agent_debug_log(
-            hypothesis_id="C",
-            location="fill_test_gaps.py:dry_run",
-            message="dry-run audit written",
-            data={
-                "dry_run_path": str(dry_out),
-                "gate_unchanged": steps["readiness_gate_unchanged"],
-                "gate_mtime_before": gate_mtime_before,
-                "gate_mtime_after": gate_mtime_after,
-            },
-        )
-        # #endregion
         steps["ready"] = bool(audit.get("crypto_ready")) and not pit_blocked
         if pit_blocked:
             steps["pit_strict_blocked"] = True
@@ -196,16 +181,6 @@ def run_fill_test_gaps(
                 start=start, end=end, step_hours=1
             )
             clear_bookticker_summary_cache()
-            # #region agent log
-            from crypto_lane.src.ingest._agent_debug import agent_debug_log
-
-            agent_debug_log(
-                hypothesis_id="A",
-                location="fill_test_gaps.py:blockspace",
-                message="blockspace done; summary cache only",
-                data={"invalidated_b2_probe_cache": False},
-            )
-            # #endregion
             mp_pf = preflight_mempool_gaps(
                 start=start, end=end, b2_probe_max_days=AUDIT_B2_PROBE_MAX_DAYS
             )

@@ -127,23 +127,6 @@ def build_crypto_readiness_report(
             "or fill-test-gaps --refresh-b2-probe after CAE Contabo backfill to B2"
         )
 
-    # #region agent log
-    from crypto_lane.src.ingest._agent_debug import agent_debug_log
-
-    agent_debug_log(
-        hypothesis_id="B",
-        location="crypto_readiness.py:build_crypto_readiness_report",
-        message="readiness built",
-        data={
-            "use_b2_synthetic_cache": use_b2_synthetic_cache,
-            "refresh_b2_synthetic_probe": refresh_b2_synthetic_probe,
-            "b2_synthetic_from_cache": b2_from_cache,
-            "purge_safe": bool(l3_pf.get("purge_safe")),
-            "synthetic_days": len(synthetic_bt),
-        },
-    )
-    # #endregion
-
     return {
         "audited_at": datetime.now(UTC).isoformat(),
         "crypto_date_range": {"start": start, "end": end},
