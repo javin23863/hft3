@@ -265,6 +265,10 @@ def pull_bookticker_from_vision(
             if len(error_samples) < 5:
                 error_samples.append(f"{year}-{month:02d}: {exc}")
 
+    if written:
+        from crypto_lane.src.ingest.bookticker_quality import invalidate_bookticker_caches
+
+        invalidate_bookticker_caches()
     return {
         "attempted": len(days),
         "written_days": len(written),

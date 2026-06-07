@@ -15,6 +15,7 @@ from crypto_lane.src.ingest.bookticker_quality import (
 from crypto_lane.src.ingest.crypto_readiness import (
     build_crypto_readiness_report,
     crypto_date_range_from_config,
+    crypto_readiness_dry_run_cache_path,
     write_crypto_readiness_cache,
 )
 from crypto_lane.src.ingest.l3_gap_fill import fill_l3_gaps as _fill_l3_gaps
@@ -108,7 +109,10 @@ def run_fill_test_gaps(
         steps["preflight_mempool"] = audit["preflight_mempool"]
         steps["cae_bookticker_backfill_status"] = audit["cae_bookticker_backfill_status"]
         steps["crypto_audit"] = _crypto_audit_subset(audit)
-        write_crypto_readiness_cache(audit)
+        dry_out = crypto_readiness_dry_run_cache_path()
+        dry_out.parent.mkdir(parents=True, exist_ok=True)
+        dry_out.write_text(json.dumps(audit, indent=2, default=str), encoding="utf-8")
+        steps["readiness_dry_run_path"] = str(dry_out)
         steps["ready"] = bool(audit.get("crypto_ready")) and not pit_blocked
         if pit_blocked:
             steps["pit_strict_blocked"] = True
@@ -167,7 +171,9 @@ def run_fill_test_gaps(
             steps["blockspace_written"] = backfill_blockspace_from_node(
                 start=start, end=end, step_hours=1
             )
-            clear_bookticker_summary_cache()
+            from crypto_lane.src.ingest.bookticker_quality import invalidate_bookticker_caches
+
+            invalidate_bookticker_caches()
             mp_pf = preflight_mempool_gaps(
                 start=start, end=end, b2_probe_max_days=AUDIT_B2_PROBE_MAX_DAYS
             )
@@ -203,6 +209,7 @@ def run_fill_test_gaps(
     elif int(l3_pf.get("synthetic_days", 0)) > 0 and not purge_safe:
         steps["replace_synthetic_skipped"] = l3_pf.get("purge_block_reason")
 
+    fill_aborted = False
     try:
         fill_report = _fill_l3_gaps(
             start=start,
@@ -215,8 +222,13 @@ def run_fill_test_gaps(
         )
         steps["fill_l3_gaps"] = fill_report
         if fill_report.get("aborted"):
-            if _abort(f"fill_l3_gaps aborted: {fill_report.get('abort_reason')}"):
-                steps["ready"] = False
+            fill_aborted = True
+            steps["errors"].append(
+                f"fill_l3_gaps aborted: {fill_report.get('abort_reason')}"
+            )
+            steps["normalize_skipped"] = "fill_l3_gaps aborted"
+            steps["ready"] = False
+            if not continue_on_error:
                 return steps
     except Exception as exc:
         steps["fill_l3_gaps_error"] = str(exc)
@@ -224,14 +236,15 @@ def run_fill_test_gaps(
             steps["ready"] = False
             return steps
 
-    try:
-        paths = normalize_all(start=start, end=end)
-        steps["normalize"] = {k: str(v) for k, v in paths.items()}
-    except Exception as exc:
-        steps["normalize_error"] = str(exc)
-        if _abort(f"normalize: {exc}"):
-            steps["ready"] = False
-            return steps
+    if not fill_aborted:
+        try:
+            paths = normalize_all(start=start, end=end)
+            steps["normalize"] = {k: str(v) for k, v in paths.items()}
+        except Exception as exc:
+            steps["normalize_error"] = str(exc)
+            if _abort(f"normalize: {exc}"):
+                steps["ready"] = False
+                return steps
 
     if ws_rtt_ms is not None:
         profile = calibrate_ws_rtt("binance_perp", ws_rtt_ms=ws_rtt_ms, live_measured=True)
@@ -249,7 +262,9 @@ def run_fill_test_gaps(
             "pass --ws-rtt-ms for pit_strict production smokes (H4–H7)"
         )
 
-    clear_bookticker_summary_cache()
+    from crypto_lane.src.ingest.bookticker_quality import invalidate_bookticker_caches
+
+    invalidate_bookticker_caches()
     audit = build_crypto_readiness_report(
         start=start,
         end=end,

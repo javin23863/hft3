@@ -44,6 +44,6 @@ def list_backtest_config_paths(
 ) -> list[Path]:
     root = configs_dir or (repo_root_from_lane() / "backtests" / "configs" / "crypto_hypotheses")
     paths = sorted(root.glob("h*.yaml"))
-    if not include_production:
-        paths = [p for p in paths if not p.stem.endswith("_production")]
-    return paths
+    if include_production:
+        return [p for p in paths if p.stem.endswith("_production")]
+    return [p for p in paths if not p.stem.endswith("_production")]

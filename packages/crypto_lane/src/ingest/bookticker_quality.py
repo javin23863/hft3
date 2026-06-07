@@ -74,6 +74,14 @@ def clear_bookticker_summary_cache() -> None:
     _range_summary_cache.clear()
 
 
+def invalidate_bookticker_caches() -> None:
+    """Clear bookticker summary + B2 synthetic probe disk caches after local gold changes."""
+    clear_bookticker_summary_cache()
+    from crypto_lane.src.ingest.b2_synthetic_probe_cache import clear_b2_synthetic_probe_cache
+
+    clear_b2_synthetic_probe_cache()
+
+
 def build_quality_manifest(*, start: str, end: str) -> dict[str, dict[str, Any]]:
     start_d = _parse_date(start)
     end_d = _parse_date(end)
@@ -144,7 +152,7 @@ def purge_synthetic_bookticker(*, start: str, end: str) -> list[str]:
             day = date.fromisoformat(iso)
             bookticker_dest(day, symbol).unlink(missing_ok=True)
             removed.append(iso)
-    clear_bookticker_summary_cache()
+    invalidate_bookticker_caches()
     return removed
 
 

@@ -213,6 +213,10 @@ def pull_bookticker_from_b2(
     from crypto_lane.src.ingest.bookticker_quality import absent_bookticker_days as _absent
 
     counts["still_missing"] = len(_absent(start=start, end=end))
+    if int(counts["downloaded"]) > 0:
+        from crypto_lane.src.ingest.bookticker_quality import invalidate_bookticker_caches
+
+        invalidate_bookticker_caches()
     return counts  # type: ignore[return-value]
 
 

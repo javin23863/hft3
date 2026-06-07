@@ -46,9 +46,7 @@ def cmd_discover(_: argparse.Namespace) -> int:
         "candidates": [c["candidate_id"] for c in discover_candidates()],
         "backtests": [b["config_id"] for b in discover_backtest_configs()],
         "backtests_production": [
-            load_yaml(p)["config_id"]
-            for p in list_backtest_config_paths(include_production=True)
-            if p.stem.endswith("_production")
+            load_yaml(p)["config_id"] for p in list_backtest_config_paths(include_production=True)
         ],
     }
     print(json.dumps(payload, indent=2))
@@ -204,7 +202,12 @@ def cmd_fill_l3_gaps(args: argparse.Namespace) -> int:
         print(json.dumps(audit_l3_gaps(start=args.start, end=args.end), indent=2))
         return 0
     if args.dry_run:
-        print(json.dumps(preflight_l3_gaps(start=args.start, end=args.end), indent=2))
+        print(
+            json.dumps(
+                preflight_l3_gaps(start=args.start, end=args.end, vision_probe=False),
+                indent=2,
+            )
+        )
         return 0
     report = fill_l3_gaps(
         start=args.start,

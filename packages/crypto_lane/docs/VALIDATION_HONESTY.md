@@ -28,9 +28,9 @@ Repo-wide: **[docs/VALIDATION_HONESTY.md](../../../docs/VALIDATION_HONESTY.md)**
 
 `crypto_readiness.json` includes `audited_at`, `synthetic_days`, and both purge fields. Production pytest re-validates cache age (24h) and live `synthetic_days` before running smokes.
 
-Dry-run: one warm `summarize_bookticker_range` scan when cache is hot; no cache clear at entry; Vision probes off; full synthetic B2 probe cached 24h in `runtime/data_audits/b2_synthetic_probe_cache.json`. Writes `crypto_readiness.json` for pytest gate.
+Dry-run: one warm `summarize_bookticker_range` scan when cache is hot; no cache clear at entry; Vision probes off; full synthetic B2 probe cached 24h in `runtime/data_audits/b2_synthetic_probe_cache.json` (invalidated on bookticker ingest/purge). Writes **`crypto_readiness_dry_run.json` only** — never overwrites pytest gate file `crypto_readiness.json`.
 
-Orchestrator fail-fast: aborts on `pull_gold`, `mempool_not_ready`, `normalize`, and `fill_l3_gaps` abort unless `--continue-on-error`. `pit_strict_blocked` forces `ready=false` without `--ws-rtt-ms`.
+Orchestrator fail-fast: aborts on `pull_gold`, `mempool_not_ready`, `normalize`, and `fill_l3_gaps` abort unless `--continue-on-error`. **`--continue-on-error` never normalizes after L3 abort.** `pit_strict_blocked` forces `ready=false` without `--ws-rtt-ms`. Only `scripts/audit_crypto_readiness.py` and successful full `fill-test-gaps` runs write `crypto_readiness.json`.
 
 ## Production testing entrypoints
 

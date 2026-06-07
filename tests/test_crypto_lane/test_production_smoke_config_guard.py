@@ -10,11 +10,7 @@ from crypto_lane.src.ml.walk_forward_runner import backtest_config_path, run_smo
 def test_all_production_backtest_configs_use_validation_mode_production():
     from crypto_lane.src.config_loader import list_backtest_config_paths
 
-    paths = [
-        p
-        for p in list_backtest_config_paths(include_production=True)
-        if p.stem.endswith("_production")
-    ]
+    paths = list_backtest_config_paths(include_production=True)
     assert len(paths) == 7
     for path in paths:
         doc = load_yaml(path)

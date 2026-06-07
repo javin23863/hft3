@@ -20,10 +20,15 @@ from crypto_lane.src.types import repo_root_from_lane
 
 READINESS_CACHE_MAX_AGE_HOURS = 24
 READINESS_CACHE_PATH = "runtime/data_audits/crypto_readiness.json"
+READINESS_DRY_RUN_CACHE_PATH = "runtime/data_audits/crypto_readiness_dry_run.json"
 
 
 def crypto_readiness_cache_path() -> Path:
     return repo_root_from_lane() / READINESS_CACHE_PATH
+
+
+def crypto_readiness_dry_run_cache_path() -> Path:
+    return repo_root_from_lane() / READINESS_DRY_RUN_CACHE_PATH
 
 
 def crypto_date_range_from_config() -> tuple[str, str]:

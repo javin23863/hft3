@@ -8,9 +8,8 @@ from crypto_lane.src.ml.walk_forward_runner import backtest_config_path
 
 def test_seven_production_backtest_configs_load():
     paths = list_backtest_config_paths(include_production=True)
-    prod = [p for p in paths if p.stem.endswith("_production")]
-    assert len(prod) == 7
-    for p in prod:
+    assert len(paths) == 7
+    for p in paths:
         doc = load_yaml(p)
         assert doc.get("validation_mode") == "production"
         errs = validate_backtest_config(doc)

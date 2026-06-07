@@ -165,7 +165,17 @@ def preflight_l3_gaps(
     else:
         b2_synthetic = _empty_b2_probe(bucket)
         b2_synthetic["skipped"] = True
-    b2_synthetic_estimate = b2_probe_bookticker_days_sampled(syn_dates)
+    synth_n = len(synthetic)
+    if syn_dates and b2_synthetic.get("skipped"):
+        b2_synthetic_estimate = b2_probe_bookticker_days_sampled(syn_dates)
+    elif syn_dates:
+        b2_synthetic_estimate = {
+            **{k: v for k, v in b2_synthetic.items() if k not in ("from_cache", "cache_age_hours")},
+            "sampled": False,
+            "probe_days": synth_n,
+        }
+    else:
+        b2_synthetic_estimate = _empty_b2_probe(bucket)
 
     vision_months: dict[str, dict[str, Any]] = {}
     vision_available_days = 0
@@ -185,7 +195,6 @@ def preflight_l3_gaps(
             elif status == "not_found":
                 vision_not_found_days += len(month_days)
 
-    synth_n = len(synthetic)
     b2_on_synthetic = int(b2_synthetic["available_count"])
     b2_on_synthetic_est = int(b2_synthetic_estimate["available_count"])
     purge_safe = synth_n == 0 or b2_on_synthetic >= synth_n
@@ -206,7 +215,7 @@ def preflight_l3_gaps(
         "b2_missing_non_synthetic_probe": b2,
         "b2_missing_non_synthetic_fillable_estimate": b2["available_count"],
         "b2_missing_non_synthetic_fillable_probed": int(b2.get("probed_available_count", 0)),
-        "true_l3_b2_fillable": b2["available_count"],
+        "true_l3_b2_fillable": int(b2.get("probed_available_count", b2["available_count"])),
         "b2_synthetic_fillable": b2_on_synthetic,
         "b2_synthetic_fillable_estimate": b2_on_synthetic_est,
         "b2_synthetic_from_cache": bool(b2_synthetic.get("from_cache")),

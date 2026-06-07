@@ -171,10 +171,15 @@ def test_preflight_purge_estimate_can_differ_from_full_probe(monkeypatch):
         },
     )
     report = l3_preflight.preflight_l3_gaps(
-        start="2024-04-02", end="2024-04-03", vision_probe=False
+        start="2024-04-02",
+        end="2024-04-03",
+        vision_probe=False,
+        full_synthetic_b2_probe=False,
+        use_b2_synthetic_cache=False,
     )
     assert report["purge_safe"] is False
     assert report["purge_safe_estimate"] is True
+    assert report["b2_synthetic"].get("skipped") is True
 
 
 def test_fill_aborts_unsafe_purge(monkeypatch):

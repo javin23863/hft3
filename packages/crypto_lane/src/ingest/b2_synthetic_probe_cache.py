@@ -54,6 +54,13 @@ def load_cached_b2_synthetic_probe(
     return {**probe, "from_cache": True, "cache_age_hours": round(age_h, 2)}
 
 
+def clear_b2_synthetic_probe_cache() -> None:
+    """Invalidate cached full B2 synthetic probes (call after bookticker ingest/purge)."""
+    path = _cache_path()
+    if path.is_file():
+        path.unlink(missing_ok=True)
+
+
 def save_cached_b2_synthetic_probe(synthetic_days: list[str], probe: dict[str, Any]) -> None:
     if not synthetic_days:
         return
