@@ -1,181 +1,323 @@
-﻿# CME macro MBO data lane — operator handoff
+﻿# CME macro MBO data — operator handoff
 
-Generated for handoff on 2026-06-07. Numbers below come from `runtime/data_audits/priority_lane_coverage.json` (2026-06-07T08:27:16Z) unless you re-run the report.
+**Repo:** `C:\Users\MSI\Documents\GitHub\hft3`  
+**Snapshot date:** 2026-06-07  
+**Numbers source:** `runtime/data_audits/priority_lane_coverage.json` (generated 2026-06-07T08:44 UTC). Re-run `python scripts/report_priority_lane_coverage.py` for a fresh count.
 
-## What this repo lane is
+Give this document to the next operator. It explains what the data is for, where it lives, how to download and verify it, what was fixed recently, and what will never fix itself.
 
-This workstream in **hft3** builds and fills **CME macro release book (MBO) data** for economic-event backtesting: per-event time windows around Tier 1–3 macro releases (plus UNEMPLOYMENT_CLAIMS), seven CME futures symbols, derived **NPZ** replay files, and **VIX.OPT** CMBP-1 sensor inputs in the same storage layout (`data/mbo_release/` and paid-data mirror).
+---
 
-It is **not** the crypto lane, equities decadal pull, or generic discovery audits — those live elsewhere in the repo.
+## 1. Executive summary
 
-## Current state
+- **Goal:** Fill order-book (MBO) data around US macro release windows for seven CME futures symbols, plus VIX options raw data, so economic-event backtests can replay real books.
+- **Progress:** **91.1%** of priority MBO slots are complete (valid raw + derived NPZ). **824** slots still need download; **732** slots have raw files but failed validation or NPZ derivation.
+- **Backtests:** Prior dry-runs show **~95% readiness** for main equity-index models on **MES** and **ES** macro campaigns — good enough to start testing, not enough to assume full coverage.
+- **Downloads:** Run dual keepalive — local machine shard 0, remote **chi404** shard 1, **32 workers** each — via `scripts/run_macro_mbo_download_dual_keepalive.ps1`.
+- **Separate problem:** VIX **sensor** files (derived from raw VIX options) are largely broken (all-NaN). Raw VIX may exist; sensor math needs its own fix. **VVIX** is not available from Databento at all.
 
-| Metric | Value |
-|--------|--------|
-| Priority windows | 2,494 |
-| CME symbols | MES.v.0, MNQ.v.0, ES.v.0, NQ.v.0, ZN.v.0, ZB.v.0, RTY.v.0 |
-| MBO slots (windows × 7) | 17,458 |
-| MBO **complete** (valid NPZ) | 15,902 (**91.09%**) |
-| **not_downloaded** | 765 |
-| **invalid** (raw often present, NPZ/validation failed) | 791 |
-| MES.v.0 complete (recomputed) | ~90.2% (2,249 / 2,494) |
-| ES.v.0 complete (recomputed) | ~89.8% (2,240 / 2,494) |
-| VIX post–CMBP-1 eligible | 879 windows |
-| VIX sensor **complete** (finite level in parquet) | 62 (**7.05%** of eligible) |
-| VIX derivable (raw present, sensor pending) | 280 |
-| VIX invalid (raw ok, sensor all-NaN / bad) | 525 |
+---
 
-**Backtest readiness:** MBO for primary equity index macros (MES/ES) is **high but not finished** (~90% slot fill). Campaign-level readiness (which events each model actually needs) is defined by the workbench catalog — use `backfill_catalog --dry-run` per model (see below). Do not assume 100% until dry-run shows zero missing NPZ for that model’s symbols and walk-forward periods.
+## 2. What this data is for
 
-Refresh inventory:
+This lane feeds **macro release order-book backtests** in the hft3 workbench.
+
+For each scheduled macro event (CPI, NFP, FOMC, PCE, GDP, etc.) the system defines a tight time window around the release. For that window it stores:
+
+1. **Raw MBO** from Databento (compressed `.dbn.zst` files)
+2. **Derived NPZ** files the backtest engine reads for replay
+3. **VIX options raw** (CMBP-1, available from 2023-03-28 onward) and optional **sensor** parquets for cross-asset features
+
+**Seven CME symbols** (priority lane):
+
+| Symbol | Instrument |
+|--------|------------|
+| MES.v.0 | Micro E-mini S&P 500 |
+| ES.v.0 | E-mini S&P 500 |
+| MNQ.v.0 | Micro E-mini Nasdaq |
+| NQ.v.0 | E-mini Nasdaq |
+| RTY.v.0 | E-mini Russell 2000 |
+| ZN.v.0 | 10-Year Treasury |
+| ZB.v.0 | 30-Year Treasury |
+
+**Priority event types** (2,494 windows total):
+
+CPI, CORE_CPI, NFP, FOMC_PRESS, FOMC_STATEMENT, FOMC_MINUTES, PROP_FLATTEN_TOPSTEP, CORE_PCE, PCE, GDP_ADVANCE, GDP_SECOND, GDP_FINAL, RETAIL_SALES, ISM_MANUFACTURING, ISM_SERVICES, JOLTS, FED_H41, FED_BEIGE_BOOK, TREASURY_AUCTION, TREASURY_REFUNDING, IMPORT_PRICES, EXPORT_PRICES, UNEMPLOYMENT_CLAIMS.
+
+**VIX:** symbol `VIX.OPT` — separate from the seven futures; used for volatility cross-asset sensors.
+
+---
+
+## 3. Current numbers
+
+Refresh anytime:
 
 ```powershell
 cd C:\Users\MSI\Documents\GitHub\hft3
 python scripts/report_priority_lane_coverage.py
 ```
 
-Output: `runtime/data_audits/priority_lane_coverage.json` and a short stdout summary.
+### MBO (7 symbols × 2,494 windows = 17,458 slots)
 
-## What was built
+| Metric | Count | Notes |
+|--------|------:|-------|
+| **Complete** | 15,902 | **91.09%** — raw OK and valid NPZ on disk |
+| **Not downloaded** | 824 | No raw file yet; keepalive should shrink this |
+| **Invalid** | 732 | Raw often present but NPZ missing or validation failed |
+| **Incomplete total** | 1,556 | not_downloaded + invalid |
 
-### Unified discovery
+### Backtest readiness (prior dry-runs)
 
-- **`packages/data_system/src/event_data_resolver.py`** — single place to resolve MBO NPZ, MBO raw under `mbo_release/`, VIX raw, and VIX sensor parquet; builds priority-lane coverage; sensor “complete” requires **finite `level`** in parquet (honesty fix for all-NaN files).
-- **`packages/data_system/src/data_roots.py`** — `HFT3_PAID_DATA_ROOT` and NPZ search paths (repo `data/` + paid root).
-- **`packages/data_system/src/npz_resolver.py`** — wired to paid/local NPZ trees (workbench/backtest consumption).
-- **`packages/mbo_release_lane/storage.py`** — canonical on-disk layout for macro MBO release lane (raw + metadata).
-- **`packages/mbo_release_lane/sensor_adapter.py`** — VIX sensor derivation adapter into the lane.
-- **`apps/workbench/src/data/event_catalog.py`**, **`verify_data.py`**, **`backfill_catalog.py`** — catalog and verification use unified resolution.
+- **MES.v.0** and **ES.v.0** macro campaigns: roughly **~95%** of required event NPZ paths present when running `backfill_catalog --dry-run` for primary models.
+- Slot-level MBO fill (~91%) is slightly lower because some invalid slots affect symbols unevenly.
+- Always re-check per model before a production run (see section 7).
 
-### Downloads and ops scripts
+### VIX options / sensors
 
-| Script | Purpose |
-|--------|---------|
-| `scripts/run_macro_mbo_download_dual_keepalive.ps1` | **Primary:** local shard 0 + chi404 shard 1, both keepalive, priority macro scope |
-| `scripts/run_macro_mbo_download_dual.ps1` | Dual-host one-shot variant |
-| `scripts/run_macro_mbo_download_keepalive.ps1` | Local-only keepalive |
-| `scripts/run_chi404_mbo_download_keepalive.sh` | Remote keepalive (deployed to chi404) |
-| `scripts/download_mbo_release_data.py` | CLI entry (referenced by keepalive wrappers) |
-| `scripts/merge_chi404_mbo_data.py` | Rsync/merge remote `data/mbo_release` + NPZ into local/paid root |
-| `scripts/mbo_monitor_progress.py` | Progress monitor |
-| `scripts/monitor_mbo_dual_download.ps1` | Dual-host monitor wrapper |
-| `scripts/rebuild_local_manifest.py` | Rebuild local Databento spend manifest |
-| `scripts/derive_missing_npz.py` / `scripts/derive_event_sensors.py` | Backfill NPZ/sensors from raw |
-| `scripts/mbo_download_cost_accounting.py` | Cost accounting helper |
-| `scripts/databento_portal_billing.py` | Portal billing scrape/compare |
-| `scripts/report_priority_lane_coverage.py` | Priority lane JSON report |
-| `scripts/migrate_vix_options_to_mbo_release.py` | Legacy VIX tree → mbo_release layout |
+| Metric | Count | Notes |
+|--------|------:|-------|
+| Total windows | 2,494 | |
+| Pre–CMBP-1 cutoff (skipped) | 1,615 | Before 2023-03-28; not a download gap |
+| Eligible post-cutoff | 879 | |
+| VIX raw complete | 292 | 33% of eligible |
+| VIX sensor complete (finite values) | 292 | Same as raw-complete with good sensors |
+| VIX invalid (raw OK, sensor bad) | 525 | Sensor parquet all-NaN or empty |
+| VIX not downloaded | 12 | |
+| VVIX | N/A | Not sold on Databento |
 
-### Budget / manifest fixes
+---
 
-- **`packages/data_system/src/budget_manager.py`** — operating cap raised to **$650**; spend deduped by **`output_path`** (duplicate manifest rows no longer block downloads); uses **`manifest_io.read_manifest_locked`**.
-- **`packages/data_system/src/manifest_io.py`** — locked parquet reads for concurrent downloaders.
-- **`packages/mbo_release_lane/download.py`** — download unblock / shard-safe behavior (with databento client updates).
+## 4. Repo layout
 
-### Tests
+All paths relative to repo root unless `HFT3_PAID_DATA_ROOT` points elsewhere (see section 11).
 
-- `tests/test_data_system/test_event_data_resolver.py`
+```
+hft3/
+├── data/
+│   ├── mbo_release/          # Raw MBO + VIX raw (canonical lane layout)
+│   │   └── {event_id}/
+│   │       └── {symbol}/     # e.g. CPI_2024_09_11_TIGHT/MES.v.0/raw.dbn.zst
+│   ├── npz/                  # Derived replay NPZ per event × symbol
+│   └── sensors/              # VIX sensor parquets ({event_id}_sensors.parquet)
+├── runtime/
+│   ├── data_audits/          # Coverage JSON, inventory reports
+│   └── data_downloads/       # Download logs, monitor state, manifest copies
+├── packages/
+│   ├── data_system/src/      # Resolver, budget, manifest I/O
+│   └── mbo_release_lane/     # Download, storage, NPZ derive, sensors
+└── scripts/                  # Operator entry points (see section 5)
+```
 
-VIX CMBP-1 availability starts **2023-03-28** (`CMBP1_START` in resolver). Pre-cutoff VIX windows are **skipped_pre_cmbp1**, not download gaps.
+**Paid data root (`HFT3_PAID_DATA_ROOT`):** Optional env var pointing at a larger disk (e.g. external drive). When set, tools also look under:
 
-## What is broken / permanent gaps
+- `{HFT3_PAID_DATA_ROOT}/mbo_release/`
+- `{HFT3_PAID_DATA_ROOT}/npz/`
+- `{HFT3_PAID_DATA_ROOT}/sensors/`
 
-1. **~791 MBO `invalid` slots** — often **raw.dbn.zst present** but NPZ missing or validation failed (`validation_status: invalid`). Needs re-derive (`--derive-npz`) or re-download; not all are vendor-unavailable.
-2. **~765 `not_downloaded`** — still in queue or blocked by budget/network; keepalive + merge from chi404.
-3. **VIX sensors** — many events show **`invalid` with `raw_ok: true, sensor_ok: false`** (all-NaN or empty sensor parquet). Resolver now marks these incomplete; run `derive_event_sensors.py` after raw is good.
-4. **chi404 history** — remote host hit the old **$325 cap** and duplicate manifest rows before fixes; local cap is 650 with dedupe. Merge script reconciles data; **portal invoice** is billing truth (`scripts/databento_portal_billing.py`).
-5. **Vendor-hard gaps** — some symbology/422 cases in unrelated options research audits; **VVIX** called out in coverage JSON as unavailable on Databento (not a local bug).
+Repo `data/` is always searched too. NPZ and raw can live split across repo + paid root.
 
-## How to run downloads
+---
 
-1. Ensure repo root `.env` has **`DATABENTO_API_KEY`**.
-2. Optional: set **`HFT3_PAID_DATA_ROOT`** if NPZ/raw live outside repo `data/` (defaults to repo `data/` when unset in many paths).
-3. From repo root:
+## 5. Scripts cheat sheet
+
+Run all from repo root (`C:\Users\MSI\Documents\GitHub\hft3`).
+
+| Task | Command |
+|------|---------|
+| **Coverage report** | `python scripts/report_priority_lane_coverage.py` |
+| **Download MBO (manual one-shot)** | `python scripts/download_mbo_release_data.py --download --derive-npz --scope macro_releases --priority-events --workers 32` |
+| **Dual keepalive (recommended)** | `.\scripts\run_macro_mbo_download_dual_keepalive.ps1 -Workers 32` |
+| **Derive missing NPZ from raw** | `python scripts/derive_missing_npz.py` |
+| **Derive VIX sensors from raw** | `python scripts/derive_event_sensors.py` |
+| **Audit all research data** | `python scripts/audit_all_research_data.py` |
+| **Backfill dry-run (per model)** | `python apps/workbench/scripts/backfill_catalog.py --model MODEL_NAME --symbol MES.v.0 --dry-run` |
+| **Merge chi404 downloads to local** | `python scripts/merge_chi404_mbo_data.py` |
+| **Monitor progress** | `python scripts/mbo_monitor_progress.py` |
+| **Rebuild spend manifest** | `python scripts/rebuild_local_manifest.py` |
+| **Portal billing check** | `python scripts/databento_portal_billing.py` |
+| **Migrate old VIX tree** | `python scripts/migrate_vix_options_to_mbo_release.py` |
+
+**Logs to tail during downloads:**
+
+- Local: `runtime/data_downloads/macro_releases_local.log`
+- chi404: `ssh chi404 "tail -f /root/hft3/repo/runtime/data_downloads/macro_releases_chi404.log"`
+
+---
+
+## 6. How to start downloads
+
+### Prerequisites
+
+1. `.env` in repo root must contain `DATABENTO_API_KEY=...`
+2. SSH alias **chi404** must work (remote QuantVPS downloader)
+3. Stop any stray duplicate downloaders first (see section 10)
+
+### Start dual keepalive
 
 ```powershell
+cd C:\Users\MSI\Documents\GitHub\hft3
 .\scripts\run_macro_mbo_download_dual_keepalive.ps1 -Workers 32 -ShardCount 2 -LocalShard 0 -RemoteShard 1
 ```
 
-This stops duplicate local download PIDs, syncs packages to **chi404**, starts remote keepalive shard 1, starts local keepalive shard 0 writing `runtime/data_downloads/macro_releases_local.log`.
+What this does:
 
-**Monitor:**
+1. Kills existing local `download_mbo_release_data` Python processes (avoids duplicate shards)
+2. Copies download scripts and packages to chi404 (`/root/hft3/repo`)
+3. Syncs `DATABENTO_API_KEY` to chi404 `/root/hft3/.env`
+4. Starts **chi404 shard 1** (keepalive loop, 32 workers)
+5. Starts **local shard 0** (keepalive loop, 32 workers)
+6. Each shard processes half the job queue (`--shard-index` / `--shard-count`)
 
-```powershell
-Get-Content runtime\data_downloads\macro_releases_local.log -Tail 40
-python scripts/mbo_monitor_progress.py
-ssh chi404 "tail -f /root/hft3/repo/runtime/data_downloads/macro_releases_chi404.log"
-```
+Both hosts auto-restart after each batch (30 second pause). Leave them running until `not_downloaded` in the coverage report is near zero.
 
-After chi404 runs, merge:
+### After chi404 finishes a batch
+
+Pull remote files to the workstation:
 
 ```powershell
 python scripts/merge_chi404_mbo_data.py
 ```
 
-## How to verify backtest readiness
+Then re-run coverage and optional NPZ derive pass.
 
-Per **model** and symbol set (workbench campaign):
+---
+
+## 7. How to verify backtests are ready
+
+Backtest readiness is **per model and symbol**, not just global slot counts.
 
 ```powershell
-python apps/workbench/scripts/backfill_catalog.py --model <MODEL_SLUG> --dry-run
+python apps/workbench/scripts/backfill_catalog.py --model BOOK_PRESSURE --symbol MES.v.0 --dry-run
+python apps/workbench/scripts/backfill_catalog.py --model BOOK_PRESSURE --symbol ES.v.0 --dry-run
 ```
 
-Lists missing NPZ paths per walk-forward period without downloading.
+Replace `BOOK_PRESSURE` with the model slug you care about. Output lists each walk-forward period and marks events **OK** or **MISSING** for NPZ and sensors.
 
-Broader matrix (all registry models × default CME symbols):
+**Ready** = dry-run shows no **MISSING** NPZ for the symbols and date ranges that model uses.
+
+Broader sweep (all registered models × default CME symbols):
 
 ```powershell
 python runtime/audit_all_models_symbols_backtest_ready.py
 ```
 
-(writes JSON under `runtime/data_audits/` when configured — check script output.)
-
-Also: `python apps/workbench/src/verify_data.py` for catalog-level checks.
-
-## Known blockers fixed (do not re-break)
-
-| Issue | Fix |
-|-------|-----|
-| Duplicate keepalive / double shard on same index | Dual script kills existing `download_mbo_release_data` PIDs; distinct **LocalShard** vs **RemoteShard** |
-| Budget stuck at $325 / false “over cap” | Cap **650**; manifest cost **dedupe by output_path** |
-| Manifest corruption / concurrent write | `read_manifest_locked` in budget + rebuild script |
-| chi404 data not on workstation | **`merge_chi404_mbo_data.py`** |
-| False “complete” VIX sensors | Resolver checks **finite level** in sensor parquet |
-
-## Do NOT do
-
-- **Do not** run full-repo discovery audits (`audit_all_research_data.py`, etc.) **instead of** keepalive downloads when the goal is filling MBO gaps.
-- **Do not** sum raw **`manifest.parquet` `cost`** for billing — duplicate rows and retries inflate totals; use **Databento portal** / `databento_portal_billing.py`.
-- **Do not** commit or wipe **`data/mbo_release/`**, **`data/npz/`**, or **`runtime/data_downloads/*.log`** into git — they are local/paid runtime artifacts.
-- **Do not** force-push **`main`**; branch tracks **`origin/feat/mbo-release-lane`**.
-
-## File map
-
-| Path | Role |
-|------|------|
-| `packages/data_system/src/event_data_resolver.py` | Unified asset resolution + coverage builder |
-| `packages/data_system/src/budget_manager.py` | Download credit gate |
-| `packages/data_system/src/manifest_io.py` | Locked manifest I/O |
-| `packages/data_system/src/data_roots.py` | Paid data root / NPZ dirs |
-| `packages/mbo_release_lane/` | Download, storage, validate, NPZ derive |
-| `packages/economic_event_universe/` | Macro windows, calendars, scope |
-| `data/mbo_release/` | Raw MBO + VIX lane files (local) |
-| `data/npz/` | Derived event NPZ for replay |
-| `data/sensors/` | VIX sensor parquets |
-| `runtime/data_audits/priority_lane_coverage.json` | Latest priority lane snapshot |
-| `runtime/data_downloads/` | Download logs, monitor state, local manifest copies |
-| `scripts/run_macro_mbo_download_dual_keepalive.ps1` | Main dual-host operator entry |
-
-## Contacts / environment
-
-| Item | Notes |
-|------|--------|
-| **`DATABENTO_API_KEY`** | Required in repo `.env`; dual script copies line to chi404 `/root/hft3/.env` |
-| **`HFT3_PAID_DATA_ROOT`** | Optional; when set, resolver searches `{root}/mbo_release`, `{root}/npz`, `{root}/sensors` |
-| **chi404** | SSH host alias for QuantVPS remote downloader; repo path `/root/hft3/repo` |
-| **Git remote** | `https://github.com/javin23863/hft3.git` |
-| **Branch** | Local `main` tracks `origin/feat/mbo-release-lane` |
+Also useful: `python apps/workbench/src/verify_data.py` for catalog-level sanity checks.
 
 ---
 
-Questions on model-specific gaps: run `backfill_catalog --dry-run` for that model first, then triage with `priority_lane_coverage.json` incomplete samples.
+## 8. What was fixed this session
+
+| Fix | What it means for operators |
+|-----|----------------------------|
+| **Unified resolver wiring** | One module (`event_data_resolver.py`) decides if MBO/VIX raw, NPZ, and sensors exist. Workbench and coverage reports use the same rules. |
+| **VIX moved to mbo_release layout** | VIX raw now lives under `data/mbo_release/{event_id}/VIX.OPT/` like the futures symbols. Old `data/vix_options/` tree is legacy; migration script available. |
+| **Manifest lock 120s** | Concurrent downloaders no longer corrupt `manifest.parquet`. Lock waits up to 120 seconds, then clears stale locks from dead processes. |
+| **Budget cap raised to $650** | `OPERATING_CAP = 650` in `budget_manager.py`. Old $325 cap was blocking chi404 mid-run. |
+| **Spend dedup by output path** | Retries and duplicate manifest rows no longer count twice toward the cap. |
+| **Duplicate keepalive fix** | Dual keepalive script kills existing download PIDs before starting; local and remote use **different shard indices** (0 vs 1). |
+| **chi404 CRLF fix** | Remote shell script gets `sed -i 's/\r$//'` so Windows line endings do not break bash on chi404. |
+| **VIX sensor honesty** | Coverage marks sensors incomplete when parquet exists but every `level` value is NaN (no false "complete"). |
+
+Key files changed: `budget_manager.py`, `manifest_io.py`, `event_data_resolver.py`, `backfill_catalog.py`, download keepalive scripts, `merge_chi404_mbo_data.py`.
+
+---
+
+## 9. Permanent gaps (will not fix by re-downloading alone)
+
+### ~732 invalid MBO slots (was ~791 earlier in session)
+
+These have a raw file on disk but NPZ is missing or validation marked the file **invalid**. Common causes:
+
+- Vendor returned an empty or truncated file
+- Window had no trading activity
+- Derive step failed once and was not retried
+
+**Action:** Try `python scripts/derive_missing_npz.py` first. Re-download only if raw is corrupt. Some slots will **never** become valid — accept as permanent holes.
+
+### ~824 not downloaded (was ~765 before latest pass started)
+
+These simply have no raw file yet. Keepalive downloads should reduce this number. After chi404 runs, merge locally.
+
+### VIX sensors effectively broken for most events
+
+525 eligible windows have raw VIX data but **sensor parquets are all-NaN**. Root cause: **ATM strike derivation** in the sensor adapter produces no usable strike/level. This is a **code fix**, not a download fix.
+
+- Do not block MBO backtests on VIX sensors unless the model explicitly requires them.
+- Fix lives in `packages/mbo_release_lane/sensor_adapter.py` / `derive_event_sensors.py` — separate task.
+
+### VVIX
+
+**VVIX index is not available on Databento.** Documented in coverage JSON. Not a local gap.
+
+### Pre-2023-03-28 VIX windows
+
+1,615 windows are **skipped_pre_cmbp1** — CMBP-1 data did not exist yet. Expected, not a failure.
+
+---
+
+## 10. Known pitfalls
+
+| Pitfall | What happens | What to do |
+|---------|--------------|------------|
+| **Trusting manifest raw spend sum for billing** | Duplicate rows and retries inflate totals; looks like you spent more than Databento charged | Use Databento web portal or `python scripts/databento_portal_billing.py` |
+| **Running two downloaders on the same shard** | Windows **Access denied (WinError 5)** writing the same files; manifest fights | Use dual keepalive script; never start a second local shard 0 by hand |
+| **chi404 still on old $325 cap logic** | Remote half of lane stops while local keeps going | Ensure latest `budget_manager.py` is synced to chi404 (dual script does this) |
+| **Invalid slots retried forever** | Wastes API credits re-fetching vendor-empty windows | Triage with coverage JSON; skip known-bad event×symbol pairs |
+| **Assuming 91% MBO = 100% backtest ready** | Model may need specific years/symbols with worse fill | Always `backfill_catalog --dry-run` for your model |
+| **Committing data/ to git** | Huge binary blobs | Keep `data/mbo_release/`, `data/npz/`, logs out of git |
+| **Full-repo audit instead of keepalive** | `audit_all_research_data.py` reports gaps but does not download MBO | Use keepalive for filling gaps; audit for inventory only |
+
+---
+
+## 11. Environment
+
+| Item | Value / location |
+|------|------------------|
+| **Repo path** | `C:\Users\MSI\Documents\GitHub\hft3` |
+| **Git remote** | `https://github.com/javin23863/hft3.git` |
+| **Branch** | Local branch name is `main`; tracks **`origin/feat/mbo-release-lane`** |
+| **API key** | `DATABENTO_API_KEY` in repo `.env` (required) |
+| **Paid data root** | `HFT3_PAID_DATA_ROOT` in `.env` if NPZ/raw live outside repo (optional) |
+| **Remote downloader** | SSH host **`chi404`**, repo at `/root/hft3/repo`, env at `/root/hft3/.env` |
+| **Python** | Run scripts from repo root so `hft3_bootstrap` resolves paths |
+| **Budget cap** | $650 operating cap (`packages/data_system/src/budget_manager.py`) |
+| **Manifest lock** | 120 second timeout (`packages/data_system/src/manifest_io.py`) |
+
+Load env before manual runs:
+
+```powershell
+# .env is auto-loaded by most scripts; or:
+Get-Content .env | Where-Object { $_ -match '^DATABENTO_API_KEY=' }
+```
+
+---
+
+## 12. Next operator TODO
+
+1. **Check keepalive is still running** on both local and chi404. If stopped, re-run `.\scripts\run_macro_mbo_download_dual_keepalive.ps1 -Workers 32`.
+2. **Finish the ~824 not_downloaded slots** — monitor `python scripts/report_priority_lane_coverage.py` until `not_downloaded` is minimal.
+3. **Merge chi404 data** after remote batches: `python scripts/merge_chi404_mbo_data.py`.
+4. **Derive NPZ** for any new raw: `python scripts/derive_missing_npz.py`.
+5. **Re-verify backtests:** `backfill_catalog --model <YOUR_MODEL> --symbol MES.v.0 --dry-run` (and ES if needed).
+6. **Optional:** Merge chi404 NPZ into paid root if using `HFT3_PAID_DATA_ROOT`.
+7. **Separate task:** Fix VIX sensor ATM strike algorithm — do not expect downloads alone to fix VIX sensors.
+8. **Do not** run competing download processes on the same shard index.
+
+---
+
+## Quick reference — key code paths
+
+| File | Role |
+|------|------|
+| `packages/data_system/src/event_data_resolver.py` | Finds raw/NPZ/sensors; builds coverage report |
+| `packages/data_system/src/budget_manager.py` | $650 cap, spend dedup |
+| `packages/data_system/src/manifest_io.py` | Locked manifest reads/writes |
+| `packages/data_system/src/data_roots.py` | `HFT3_PAID_DATA_ROOT` resolution |
+| `packages/mbo_release_lane/download.py` | Databento download worker |
+| `packages/mbo_release_lane/storage.py` | On-disk path layout |
+| `scripts/run_macro_mbo_download_dual_keepalive.ps1` | Main operator entry for downloads |
+| `runtime/data_audits/priority_lane_coverage.json` | Latest inventory snapshot |
+
+---
+
+*End of handoff. Questions on a specific model: run `backfill_catalog --dry-run` first, then look up failing event IDs in `priority_lane_coverage.json`.*
