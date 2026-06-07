@@ -97,7 +97,10 @@ def _promoted_to_candidates(
             strategy_params=p.param_values,
             thesis=parsed.thesis,
             metadata={
-                **source_meta.get(p.candidate_id, {}),
+                **source_meta.get(
+                    str(p.vectorbt_results.get("source_candidate_id") or p.candidate_id),
+                    {},
+                ),
                 "strategy_family": p.strategy_family,
                 "promoted": True,
                 "vectorbt_run_id": p.vectorbt_run_id,

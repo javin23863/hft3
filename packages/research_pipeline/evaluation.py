@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import math
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -16,9 +17,11 @@ def _first_float(*values: Any) -> Optional[float]:
         if value is None:
             continue
         try:
-            return float(value)
+            numeric = float(value)
         except (TypeError, ValueError):
             continue
+        if math.isfinite(numeric):
+            return numeric
     return None
 
 

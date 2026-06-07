@@ -53,6 +53,9 @@
           "model_id": { "type": "string" },
           "net_pnl": { "type": "number" },
           "num_trades": { "type": "integer" },
+          "sharpe": { "type": ["number", "null"] },
+          "drawdown_bps": { "type": ["number", "null"] },
+          "avg_latency_us": { "type": ["number", "null"] },
           "passes": { "type": "boolean" },
           "error": { "type": ["string", "null"] }
         }

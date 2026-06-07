@@ -2,9 +2,19 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+
+
+def _finite(value: Optional[float]) -> bool:
+    if value is None:
+        return False
+    try:
+        return math.isfinite(float(value))
+    except (TypeError, ValueError):
+        return False
 
 
 @dataclass
@@ -61,16 +71,16 @@ class GateThresholds:
         if win_rate < self.min_win_rate:
             return False
         if self.min_sharpe is not None:
-            if sharpe is None or sharpe < self.min_sharpe:
+            if not _finite(sharpe) or float(sharpe) < self.min_sharpe:
                 return False
         if (
             self.max_drawdown_bps is not None
-            and (drawdown_bps is None or drawdown_bps > self.max_drawdown_bps)
+            and (not _finite(drawdown_bps) or float(drawdown_bps) > self.max_drawdown_bps)
         ):
             return False
         if (
             self.max_avg_latency_us is not None
-            and (avg_latency_us is None or avg_latency_us > self.max_avg_latency_us)
+            and (not _finite(avg_latency_us) or float(avg_latency_us) > self.max_avg_latency_us)
         ):
             return False
         return True

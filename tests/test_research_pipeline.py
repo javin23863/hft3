@@ -504,6 +504,24 @@ def test_gate_thresholds():
     assert not risk_gates.passes(1.0, 2, 0.0, 0.5, sharpe=0.5)
     assert not risk_gates.passes(1.0, 2, 0.0, 0.5, drawdown_bps=75.0)
     assert not risk_gates.passes(1.0, 2, 0.0, 0.5, avg_latency_us=300.0)
+    assert not risk_gates.passes(
+        1.0,
+        2,
+        0.0,
+        0.5,
+        sharpe=float("nan"),
+        drawdown_bps=25.0,
+        avg_latency_us=100.0,
+    )
+    assert not risk_gates.passes(
+        1.0,
+        2,
+        0.0,
+        0.5,
+        sharpe=1.5,
+        drawdown_bps=float("inf"),
+        avg_latency_us=100.0,
+    )
 
 
 def test_evaluate_model_extracts_extended_gate_metrics(tmp_path, monkeypatch):
@@ -555,6 +573,51 @@ def test_evaluate_model_extracts_extended_gate_metrics(tmp_path, monkeypatch):
     assert result.drawdown_bps == 25.0
     assert result.avg_latency_us == 175.0
     assert result.passes_all_gates()
+
+
+def test_promoted_candidates_recover_source_metadata_after_vectorbt_rehash():
+    import scripts.run_pipeline as run_pipeline
+    from backtest_pipeline.src.promotion_gate import PromotedCandidate
+    from research_pipeline.types import ParsedHypothesis
+
+    parsed = ParsedHypothesis(
+        thesis="metadata",
+        instrument_universe=["MES"],
+        entry_rules=[],
+        exit_rules=[],
+        indicators=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        feature_list=[],
+        param_ranges={},
+        primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+    )
+    promoted = PromotedCandidate(
+        candidate_id="vectorbt_rehash",
+        hypothesis_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        strategy_family="SPREAD_BLOWOUT_RECOMPRESSION",
+        asset_class="CME",
+        symbol="MES",
+        timeframe="1m",
+        param_values={"signal_threshold": 0.2},
+        vectorbt_run_id="vbt_test",
+        vectorbt_results={"source_candidate_id": "source_cand"},
+        pass_reason="vectorbt_simulated",
+    )
+
+    [candidate] = run_pipeline._promoted_to_candidates(
+        [promoted],
+        parsed=parsed,
+        source_meta={
+            "source_cand": {
+                "idea_id": "idea_001",
+                "optimizer_backend": "heuristic",
+            }
+        },
+    )
+
+    assert candidate.candidate_id == "vectorbt_rehash"
+    assert candidate.metadata["idea_id"] == "idea_001"
+    assert candidate.metadata["optimizer_backend"] == "heuristic"
+    assert candidate.metadata["vectorbt_run_id"] == "vbt_test"
 
 
 def test_build_knowledge_graph_and_persist_idempotent(tmp_path, monkeypatch):
@@ -797,6 +860,9 @@ def test_run_pipeline_ignores_vectorbt_only_and_runs_full_idea_set_pipeline(
             "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
             "net_pnl": 1.0,
             "num_trades": 2,
+            "sharpe": None,
+            "drawdown_bps": None,
+            "avg_latency_us": None,
             "passes": True,
             "error": None,
         }
@@ -1033,7 +1099,7 @@ def test_run_pipeline_adaptive_retry_expands_search_after_gate_failure(tmp_path,
 
 def test_pipeline_request_response_roundtrip():
     from research_pipeline.packets import build_pipeline_request, build_pipeline_response
-    from research_pipeline.types import PipelineReport, ParsedHypothesis
+    from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds, PipelineReport, ParsedHypothesis
 
     parsed = ParsedHypothesis(
         thesis="test",
@@ -1051,8 +1117,27 @@ def test_pipeline_request_response_roundtrip():
         thesis="test",
         event_id="CPI_2024_09_11_TIGHT",
         parsed=parsed,
-        candidates_tested=0,
-        results=[],
+        candidates_tested=1,
+        results=[
+            EvaluationResult(
+                candidate=CandidateModel(
+                    candidate_id="cand_metrics",
+                    model_id="HYP_5",
+                    strategy_params={},
+                    thesis="test",
+                ),
+                event_id="CPI_2024_09_11_TIGHT",
+                net_pnl=1.0,
+                num_trades=2,
+                win_rate=0.5,
+                expectancy=0.1,
+                tail_loss=0.0,
+                gates=GateThresholds(),
+                sharpe=1.25,
+                drawdown_bps=20.0,
+                avg_latency_us=175.0,
+            )
+        ],
         selected=None,
         artifact_dir=None,
     )
@@ -1066,6 +1151,9 @@ def test_pipeline_request_response_roundtrip():
     resp = build_pipeline_response(report, req, llm_status="ok")
     assert resp["request_id"] == "pipeline_test"
     assert resp["parsed"]["primary_model_id"] == "HYP_5"
+    assert resp["results"][0]["sharpe"] == 1.25
+    assert resp["results"][0]["drawdown_bps"] == 20.0
+    assert resp["results"][0]["avg_latency_us"] == 175.0
 
 
 def test_hypothesis_packet_strict_mock(monkeypatch):

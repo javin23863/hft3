@@ -455,6 +455,7 @@ def _run_vectorbt_simulation(
             vectorbt_results = {
                 "evidence_scope": "vectorbt_parameter_prefilter",
                 "promotion_next_step": "hft_backtester_required",
+                "source_candidate_id": cand.candidate_id,
                 "signal_threshold": signal_thresh,
                 "holding_period_bars": holding_period,
                 "stop_loss_pct": stop_loss_f,

@@ -77,6 +77,9 @@ def build_pipeline_response(
                 "model_id": r.candidate.model_id,
                 "net_pnl": r.net_pnl,
                 "num_trades": r.num_trades,
+                "sharpe": r.sharpe,
+                "drawdown_bps": r.drawdown_bps,
+                "avg_latency_us": r.avg_latency_us,
                 "passes": r.passes_all_gates(),
                 "error": r.error,
             }
