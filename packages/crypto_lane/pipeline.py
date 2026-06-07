@@ -20,6 +20,7 @@ from crypto_lane.src.config.env_loader import ensure_crypto_env, redacted_env_re
 from crypto_lane.src.config_loader import load_hypotheses, load_manifest
 from crypto_lane.src.ingest.binance_vision_pull import pull_bookticker_from_vision
 from crypto_lane.src.ingest.l3_gap_fill import audit_l3_gaps, fill_l3_gaps
+from crypto_lane.src.ingest.mempool_preflight import preflight_mempool_gaps
 from crypto_lane.src.ingest.gold_pull import (
     pull_bookticker_from_b2,
     pull_gold,
@@ -60,9 +61,21 @@ def cmd_manifest(_: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_env_check(_: argparse.Namespace) -> int:
+def cmd_env_check(args: argparse.Namespace) -> int:
     ensure_crypto_env()
-    print(json.dumps(redacted_env_report(), indent=2))
+    report = redacted_env_report()
+    if args.mempool_start and args.mempool_end:
+        report["mempool_preflight"] = preflight_mempool_gaps(
+            start=args.mempool_start,
+            end=args.mempool_end,
+        )
+    print(json.dumps(report, indent=2))
+    return 0
+
+
+def cmd_mempool_preflight(args: argparse.Namespace) -> int:
+    ensure_crypto_env()
+    print(json.dumps(preflight_mempool_gaps(start=args.start, end=args.end), indent=2))
     return 0
 
 
@@ -201,7 +214,15 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("discover").set_defaults(func=cmd_discover)
     sub.add_parser("manifest").set_defaults(func=cmd_manifest)
-    sub.add_parser("env-check").set_defaults(func=cmd_env_check)
+    p_env = sub.add_parser("env-check")
+    p_env.add_argument("--mempool-start", default=None, help="Optional date for mempool preflight")
+    p_env.add_argument("--mempool-end", default=None, help="Optional date for mempool preflight")
+    p_env.set_defaults(func=cmd_env_check)
+
+    p_mpf = sub.add_parser("mempool-preflight", help="Probe B2 mempool gold and CAE btc-node status")
+    p_mpf.add_argument("--start", required=True)
+    p_mpf.add_argument("--end", required=True)
+    p_mpf.set_defaults(func=cmd_mempool_preflight)
 
     p_smoke = sub.add_parser("smoke")
     p_smoke.add_argument("--candidate", default=None)

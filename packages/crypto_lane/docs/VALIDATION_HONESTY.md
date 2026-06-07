@@ -24,6 +24,9 @@ Repo-wide: **[docs/VALIDATION_HONESTY.md](../../../docs/VALIDATION_HONESTY.md)**
 1. **Sub-second exchange book PIT** — hourly bookticker aggregation only; see [PIT_AVAILABILITY_BOUNDARY.md](PIT_AVAILABILITY_BOUNDARY.md) §6.
 2. **Production venue RTT** — `pit_strict` backtests require `calibrate-ws-rtt --live-measured --ws-rtt-ms <ms>`; synthetic default is fixture/replay only.
 3. **2024-04+ true L3 bookticker** — not on B2; Binance Vision monthly incomplete/missing. Run `fill-l3-gaps --dry-run` before any purge. CAE bookticker backfill → B2 is the production path.
+4. **Mempool / btc-node** — `mempool-preflight` and `env-check` read CAE `btc-node-status.json` and probe B2 `mempool_snapshot_15m`. Orchestrator re-pulls mempool gold before optional blockspace backfill.
+5. **ML challengers** — tree libs in `requirements-ml.txt` (optional); `env-check` reports `challengers` import status. Walk-forward evaluates all YAML challengers; production `pass_fail` fails on `challenger_errors`.
+6. **Mempool coverage** — `mempool_ready` requires 100% B2 days or ≥95% coverage (`MEMPOOL_MIN_COVERAGE_RATIO`); normalized CSV alone does not pass. Audit splits `crypto_l3_ready` vs `crypto_mempool_ready`.
 
 ## Closed (do not re-report)
 

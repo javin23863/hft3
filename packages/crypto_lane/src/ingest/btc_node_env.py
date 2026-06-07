@@ -26,11 +26,14 @@ class NodeEnv:
     def load(cls, path: Path | None = None) -> NodeEnv:
         ensure_crypto_env()
         if path is None:
-            candidates = [
-                repo_root_from_lane() / ".btc-node.env",
-                Path.home() / ".btc-node.env",
-            ]
-            p = next((c for c in candidates if c.is_file()), candidates[0])
+            root = repo_root_from_lane()
+            import sys
+
+            if str(root) not in sys.path:
+                sys.path.insert(0, str(root))
+            import desk_env
+
+            p = desk_env.resolve_btc_node_env_path(root) or (root / ".btc-node.env")
         else:
             p = path
 

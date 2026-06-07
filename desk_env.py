@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 
 _SIBLING_ENVS: tuple[tuple[str, str], ...] = (
@@ -80,3 +81,45 @@ def ensure_desk_env(repo_root: Path) -> list[Path]:
         if keys_path not in loaded:
             loaded.append(keys_path)
     return loaded
+
+
+def resolve_btc_node_env_path(repo_root: Path) -> Path | None:
+    """First existing .btc-node.env: hft3 root, home, or crypto-alpha-engine sibling."""
+    candidates = (
+        repo_root / ".btc-node.env",
+        Path.home() / ".btc-node.env",
+        (repo_root / "../crypto-alpha-engine/.btc-node.env").resolve(),
+    )
+    return next((p for p in candidates if p.is_file()), None)
+
+
+def resolve_btc_node_status_path(repo_root: Path) -> Path | None:
+    """CAE runtime btc-node-status.json when crypto-alpha-engine is a sibling."""
+    path = (repo_root / "../crypto-alpha-engine/runtime/state/btc-node-status.json").resolve()
+    return path if path.is_file() else None
+
+
+def read_btc_node_status(repo_root: Path, *, max_age_hours: float | None = None) -> dict | None:
+    path = resolve_btc_node_status_path(repo_root)
+    if path is None:
+        return None
+    import json
+
+    if max_age_hours is None:
+        raw = os.environ.get("CAE_BTC_CACHE_MAX_AGE_HOURS", "").strip()
+        max_age_hours = float(raw) if raw else 24.0
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        mtime = path.stat().st_mtime
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+
+    age_hours = (time.time() - mtime) / 3600.0
+    out = dict(data)
+    out["status_age_hours"] = age_hours
+    if age_hours > max_age_hours:
+        out["stale"] = True
+    return out

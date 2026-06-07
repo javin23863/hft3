@@ -7,10 +7,10 @@ from typing import Any
 
 import numpy as np
 import polars as pl
-from sklearn.linear_model import ElasticNet, Ridge
 from sklearn.metrics import r2_score
 
 from crypto_lane.src.config_loader import load_hypotheses, load_yaml
+from crypto_lane.src.ml.challenger_deps import ChallengerUnavailableError, fit_challenger
 from crypto_lane.src.features.feature_matrix import build_labeled_frame
 from crypto_lane.src.labels.event_study_labels import randomized_event_control_ic
 from crypto_lane.src.labels.forward_labels import LABEL_COLUMNS, information_coefficient
@@ -86,32 +86,6 @@ def _prepare_xy(df: pl.DataFrame, target: str, feat_cols: list[str]) -> tuple[np
     return X[finite], y[finite], clean[idx.tolist()]
 
 
-def _maybe_challenger(name: str, X: np.ndarray, y: np.ndarray, columns: list[str]):
-    if name == "lightgbm":
-        try:
-            import lightgbm as lgb
-            model = lgb.LGBMRegressor(n_estimators=30, max_depth=4, verbose=-1)
-            model.fit(X, y)
-            return model, "regression"
-        except ImportError:
-            pass
-    if name == "xgboost":
-        try:
-            import xgboost as xgb
-            model = xgb.XGBRegressor(n_estimators=30, max_depth=4, verbosity=0)
-            model.fit(X, y)
-            return model, "regression"
-        except ImportError:
-            pass
-    if name == "elastic_net":
-        model = ElasticNet(max_iter=3000)
-        model.fit(X, y)
-        return model, "regression"
-    model = Ridge()
-    model.fit(X, y)
-    return model, "regression"
-
-
 def _fixture_fold_sizes(n: int, backtest: dict | None) -> tuple[int, int]:
     if (backtest or {}).get("validation_mode") != "fixture":
         min_train = 6 if n >= 50 else max(4, n // 3)
@@ -131,7 +105,7 @@ def _evaluate_folds(
     target: str,
     feat_cols: list[str],
     baseline_name: str,
-    challenger_name: str,
+    challenger_names: list[str],
     validation: dict,
     *,
     backtest: dict | None = None,
@@ -152,8 +126,9 @@ def _evaluate_folds(
     )
 
     oos_ic_b: list[float] = []
-    oos_ic_c: list[float] = []
     oos_r2_b: list[float] = []
+    oos_ic_by_challenger: dict[str, list[float]] = {n: [] for n in challenger_names}
+    challenger_errors: dict[str, str] = {}
 
     for fold in folds:
         X_tr, y_tr = X_all[fold.train_idx], y_all[fold.train_idx]
@@ -165,9 +140,25 @@ def _evaluate_folds(
         oos_ic_b.append(information_coefficient(y_te, pred_b))
         oos_r2_b.append(float(r2_score(y_te, pred_b)) if len(y_te) > 1 else 0.0)
 
-        cm, _ = _maybe_challenger(challenger_name, X_tr, y_tr, feat_cols)
-        pred_c = cm.predict(X_te)
-        oos_ic_c.append(information_coefficient(y_te, pred_c))
+        for cname in challenger_names:
+            try:
+                cm, _, _ = fit_challenger(cname, X_tr, y_tr, feat_cols)
+                pred_c = cm.predict(X_te)
+                oos_ic_by_challenger[cname].append(information_coefficient(y_te, pred_c))
+            except ChallengerUnavailableError as exc:
+                challenger_errors[cname] = str(exc)
+
+    oos_ic_challengers = {
+        name: float(np.mean(ics)) if ics else None
+        for name, ics in oos_ic_by_challenger.items()
+    }
+    available_ics = [v for v in oos_ic_challengers.values() if v is not None]
+    best_name = None
+    best_ic = 0.0
+    for name, ic in oos_ic_challengers.items():
+        if ic is not None and abs(ic) >= abs(best_ic):
+            best_ic = ic
+            best_name = name
 
     return {
         "n_folds": len(folds),
@@ -176,7 +167,10 @@ def _evaluate_folds(
         "embargo_steps": embargo,
         "label_horizon_steps": label_horizon_steps,
         "oos_ic_baseline_mean": float(np.mean(oos_ic_b)) if oos_ic_b else 0.0,
-        "oos_ic_challenger_mean": float(np.mean(oos_ic_c)) if oos_ic_c else 0.0,
+        "oos_ic_challengers": oos_ic_challengers,
+        "oos_ic_challenger_best": best_name,
+        "oos_ic_challenger_mean": float(best_ic) if available_ics else 0.0,
+        "challenger_errors": challenger_errors,
         "oos_r2_baseline_mean": float(np.mean(oos_r2_b)) if oos_r2_b else 0.0,
     }
 
@@ -421,7 +415,7 @@ def run_smoke(candidate_id: str, output_dir: str | Path | None = None) -> dict[s
             target,
             feats,
             (cand.get("baseline") or ["ridge"])[0],
-            (cand.get("challengers") or ["ridge"])[0],
+            list(cand.get("challengers") or ["ridge"]),
             validation_eff,
             backtest=backtest,
             label_horizon_steps=label_h,
@@ -497,6 +491,16 @@ def run_smoke(candidate_id: str, output_dir: str | Path | None = None) -> dict[s
     if abs_ic > 0.995:
         reject_reasons.append("suspiciously perfect OOS IC on fixture")
 
+    validation_mode = backtest.get("validation_mode")
+    challenger_errors = dict(primary.get("challenger_errors") or {})
+    challenger_warnings: list[str] | None = None
+    if challenger_errors:
+        detail = "; ".join(f"{k}: {v}" for k, v in sorted(challenger_errors.items()))
+        if validation_mode == "production":
+            reject_reasons.append(f"challenger unavailable: {detail}")
+        elif validation_mode == "fixture":
+            challenger_warnings = [f"challenger unavailable: {detail}"]
+
     report: dict[str, Any] = {
         "candidate_id": candidate_id,
         "hypothesis_id": hypothesis_id,
@@ -518,6 +522,7 @@ def run_smoke(candidate_id: str, output_dir: str | Path | None = None) -> dict[s
         "embargo_steps": primary.get("embargo_steps"),
         "pass_fail": "pass" if not reject_reasons else "fail",
         "rejection_reason": "; ".join(reject_reasons) if reject_reasons else None,
+        "challenger_warnings": challenger_warnings,
     }
 
     out = Path(output_dir or repo_root_from_lane() / "research_cards" / "crypto" / candidate_id)

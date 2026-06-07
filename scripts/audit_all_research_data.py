@@ -140,6 +140,11 @@ def _crypto_gaps() -> dict[str, Any]:
         start, end = "2024-01-01", "2024-12-31"
 
     norm = normalized_dir()
+    l3_norm_missing = [
+        name
+        for name in ("spot_perp_ticks.csv", "deribit_surface.csv")
+        if not (norm / name).is_file() or (norm / name).stat().st_size == 0
+    ]
     norm_missing = [
         name
         for name in ("spot_perp_ticks.csv", "deribit_surface.csv", "mempool_snapshots.csv")
@@ -154,6 +159,12 @@ def _crypto_gaps() -> dict[str, Any]:
     absent_bt = absent_bookticker_days(start=start, end=end)
     missing_bt = missing_bookticker_days(start=start, end=end)
     synthetic_bt = synthetic_bookticker_days(start=start, end=end)
+
+    from crypto_lane.src.ingest.mempool_preflight import preflight_mempool_gaps
+
+    mempool_pf = preflight_mempool_gaps(start=start, end=end)
+    crypto_l3_ready = len(absent_bt) == 0 and len(synthetic_bt) == 0 and not l3_norm_missing
+    crypto_mempool_ready = bool(mempool_pf.get("mempool_ready"))
     return {
         "crypto_date_range": {"start": start, "end": end},
         "crypto_bookticker_by_class": by_class,
@@ -162,11 +173,13 @@ def _crypto_gaps() -> dict[str, Any]:
         "crypto_bookticker_synthetic_days": len(synthetic_bt),
         "crypto_bookticker_synthetic_sample": synthetic_bt[:20],
         "crypto_normalized_missing": norm_missing,
-        "crypto_ready": (
-            len(absent_bt) == 0
-            and len(synthetic_bt) == 0
-            and not norm_missing
-        ),
+        "crypto_mempool_missing_days": mempool_pf.get("crypto_mempool_missing_days"),
+        "crypto_mempool_available_count": mempool_pf.get("crypto_mempool_available_count"),
+        "crypto_btc_node_synced": mempool_pf.get("btc_node_synced"),
+        "crypto_l3_ready": crypto_l3_ready,
+        "crypto_mempool_ready": crypto_mempool_ready,
+        "crypto_mempool_recommendation": mempool_pf.get("recommendation"),
+        "crypto_ready": crypto_l3_ready and crypto_mempool_ready,
     }
 
 

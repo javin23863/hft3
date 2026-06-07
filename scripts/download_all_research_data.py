@@ -152,10 +152,14 @@ def _run_crypto_phase(
 ) -> dict[str, Any]:
     from crypto_lane.src.config.env_loader import ensure_crypto_env
     from crypto_lane.src.ingest.l3_preflight import preflight_l3_gaps
+    from crypto_lane.src.ingest.mempool_preflight import preflight_mempool_gaps
 
     ensure_crypto_env()
     start, end = _crypto_date_range()
-    steps: dict[str, Any] = {"preflight": preflight_l3_gaps(start=start, end=end)}
+    steps: dict[str, Any] = {
+        "preflight": preflight_l3_gaps(start=start, end=end),
+        "mempool_preflight": preflight_mempool_gaps(start=start, end=end),
+    }
     purge_safe = bool(steps["preflight"].get("purge_safe"))
     if replace_synthetic and not purge_safe:
         steps["replace_synthetic_skipped"] = steps["preflight"].get("purge_block_reason")
@@ -173,6 +177,23 @@ def _run_crypto_phase(
         ],
         check=False,
     )
+    if not steps["mempool_preflight"].get("mempool_ready"):
+        _run(
+            [
+                sys.executable,
+                "-m",
+                "crypto_lane.pipeline",
+                "pull-gold",
+                "--start",
+                start,
+                "--end",
+                end,
+                "--sources",
+                "mempool",
+            ],
+            check=False,
+        )
+        steps["mempool_preflight_after_pull"] = preflight_mempool_gaps(start=start, end=end)
     fill_cmd = [
         sys.executable,
         "-m",
@@ -202,14 +223,22 @@ def _run_crypto_phase(
         ],
         check=False,
     )
-    try:
-        from crypto_lane.src.ingest.mempool_pull import backfill_blockspace_from_node
+    mp_pf = steps.get("mempool_preflight_after_pull") or steps["mempool_preflight"]
+    if not mp_pf.get("mempool_ready"):
+        if mp_pf.get("btc_node_synced"):
+            try:
+                from crypto_lane.src.ingest.mempool_pull import backfill_blockspace_from_node
 
-        steps["blockspace_written"] = backfill_blockspace_from_node(
-            start=start, end=end, step_hours=1
-        )
-    except Exception as exc:
-        steps["blockspace_error"] = str(exc)
+                steps["blockspace_written"] = backfill_blockspace_from_node(
+                    start=start, end=end, step_hours=1
+                )
+                steps["mempool_preflight_after_blockspace"] = preflight_mempool_gaps(
+                    start=start, end=end
+                )
+            except Exception as exc:
+                steps["blockspace_error"] = str(exc)
+        else:
+            steps["blockspace_skipped"] = "mempool gaps remain; btc node not synced or status unknown"
     mod = _load_audit_module()
     steps["crypto_audit"] = {
         k: v
