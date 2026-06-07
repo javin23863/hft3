@@ -56,8 +56,8 @@ def test_preflight_mempool_ready_at_coverage_threshold(monkeypatch):
         "_mempool_probe",
         lambda days, **_: {
             "bucket": "crypto-alpha-datasets",
-            "available_days": [days[0].isoformat()],
-            "missing_days": [days[1].isoformat()],
+            "available_days": [d.isoformat() for d in days[:19]],
+            "missing_days": [d.isoformat() for d in days[19:]],
             "available_count": 19,
             "missing_count": 1,
             "error_samples": [],
@@ -67,6 +67,7 @@ def test_preflight_mempool_ready_at_coverage_threshold(monkeypatch):
     monkeypatch.setattr(mempool_preflight, "_normalized_mempool_covers_range", lambda *a, **k: False)
     report = mempool_preflight.preflight_mempool_gaps(start="2024-01-01", end="2024-01-20")
     assert report["mempool_ready"] is True
+    assert report["mempool_coverage_ratio"] == 0.95
 
 
 def test_preflight_mempool_normalized_only_not_ready(monkeypatch):
