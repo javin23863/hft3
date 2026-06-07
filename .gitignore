@@ -92,6 +92,11 @@ research_cards/equities/**
 !research_cards/equities/.gitkeep
 research_cards/crypto/**
 !research_cards/crypto/.gitkeep
+# Equities quarantined NPZ (mirror of data/npz/ structure but kept out of production path)
+data/equities/npz/**
+!data/equities/npz/.gitkeep
+data/equities/manifest/equities_npz_manifest.json
+data/equities/manifest/equities_npz_manifest.json.meta.json
 # Workbench runs may be regenerated under either location; the gitkeep is the only tracked item
 **/research_cards/workbench_runs/**
 !**/research_cards/workbench_runs/.gitkeep
@@ -118,6 +123,8 @@ artifacts/research_cards/pipeline_runs/
 # Operational logs (regenerated each run; not source)
 runtime/data_downloads/*.log
 runtime/data_downloads/*.err.log
+runtime/data_downloads/mbo_download_report_*.json
+runtime/data_downloads/mbo_hot_universe_*.json
 runtime/data_audits/*.log
 runtime/chi404/*.log
 runtime/chi404/*.txt

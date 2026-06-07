@@ -1,0 +1,6274 @@
+{
+  "generated_at_utc": "2026-06-07T13:49:57.190465+00:00",
+  "repo_root": "C:\\Users\\MSI\\Documents\\GitHub\\hft3",
+  "decadal_config": "C:\\Users\\MSI\\Documents\\GitHub\\hft3\\packages\\equities_lane\\config\\decadal_runners.yaml",
+  "universe_config": "C:\\Users\\MSI\\Documents\\GitHub\\hft3\\packages\\equities_lane\\config\\universe.yaml",
+  "model_count": 55,
+  "ticker_count": 13,
+  "tickers": [
+    "KODK",
+    "SPI",
+    "GME",
+    "EXPR",
+    "INDO",
+    "HKD",
+    "TOP",
+    "HOLO",
+    "CYCC",
+    "AIRE",
+    "BIRD",
+    "AMST",
+    "SNAL"
+  ],
+  "overall": {
+    "session_slots_total": 715,
+    "session_slots_npz_ready": 715,
+    "pct_session_runs": 100.0,
+    "fill_count_total": 2,
+    "fills_profitable": 0,
+    "pct_fills_profitable": 0.0,
+    "total_pnl": -5.072
+  },
+  "per_model_summary": [
+    {
+      "model": "ABSORPTION_FADE",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "AGGRESSOR_DECELERATION_FADE",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "BOOK_PRESSURE",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "BOOK_SLOPE_COLLAPSE",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "CANCEL_STORM_BEFORE_MOVE",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "CROSS_ASSET_LEAD_LAG",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "CUTOFF_PANIC_EXITS",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "DAILY_LOSS_LIMIT_DEFENSE",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "DEALER_HEDGING",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "DEPTH_REFILL_IMBALANCE",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "DOM_ILLUSION_TRAP",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "DOW_YM_INDEX",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "ECONOMIC_EVENT_RESTRICTION_FLATTENING",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "END_OF_DAY_FORCED_FLATTEN_FLOW",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "ES_MES_LEAD_LAG",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "ES_NQ_DIVERGENCE_SNAPBACK",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "FALSE_BREAKOUT_TRAP",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "FORCED_LIQUIDATION_CASCADE",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "FRIDAY_WEEKEND_DERISKING",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "HAWKES_TOXIC_FLOW",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "HYBRID_EXECUTION",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "ICEBERG_RELOAD_DETECTION",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "LATE_CANDLE_ENTRY_FADE",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "LIQUIDITY_DEFENSE_BREAK",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "LIQUIDITY_VACUUM_CONTINUATION",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "MAX_CONTRACT_CROWDING_IN_MICROS",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "MICRO_CONTRACT_RETAIL_LAG",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "NO_OVERNIGHT_INVENTORY_SQUEEZE",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "NQ_MNQ_LEAD_LAG",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "ONE_SIDED_ADD_CANCEL_IMBALANCE",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "OPENING_CANDLE_CHASE",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "PANIC_MARKET_ORDER_SPREAD_TAX",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "PASSIVE_TRAP_FILL",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "PRIOR_HIGH_LOW_BREAKOUT_TRAP",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "PROFIT_LOCK_BEHAVIOR",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "PROP_RESET_REOPEN_WINDOW",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "QUANTUM_SPREAD_DEFENSE",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "QUEUE_DEPLETION_TRIGGER",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "QUOTE_PULL_BEFORE_VOLATILITY",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "REBATE_TRAP_AVOIDANCE",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "REQUOTE_RACE_AFTER_SHOCK",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "ROUND_NUMBER_STOP_SWEEP",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "SECOND_WAVE_CONTINUATION",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "SPREAD_BLOWOUT_RECOMPRESSION",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "SPREAD_REGIME_CHANGE",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "STOCHASTIC_THERMO",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "STOP_LOSS_CASCADE_CONTINUATION",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "STOP_RUN_EXHAUSTION_FADE",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "THIN_BOOK_CONTINUATION",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "TRAILING_DRAWDOWN_PRESSURE",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "TRANSFER_ENTROPY",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "TREASURY_CTD",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "VPIN_TOXICITY",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "VWAP_DEFENSE_BREAK",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    },
+    {
+      "model": "ZN_ZB_ES_NQ_MACRO_IMPULSE",
+      "pct_session_runs": 100.0,
+      "pct_fills_profitable": null,
+      "total_pnl": null
+    }
+  ],
+  "per_ticker_summary": [
+    {
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest": {
+        "status": "skipped_large",
+        "skipped_reason": "normalized file 254.3MB > 5MB audit threshold",
+        "net_pnl": null,
+        "num_trades": 0
+      }
+    },
+    {
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest": {
+        "status": "skipped_large",
+        "skipped_reason": "normalized file 343.4MB > 5MB audit threshold",
+        "net_pnl": null,
+        "num_trades": 0
+      }
+    },
+    {
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest": {
+        "status": "skipped_large",
+        "skipped_reason": "normalized file 543.2MB > 5MB audit threshold",
+        "net_pnl": null,
+        "num_trades": 0
+      }
+    },
+    {
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest": {
+        "status": "skipped_large",
+        "skipped_reason": "normalized file 195.2MB > 5MB audit threshold",
+        "net_pnl": null,
+        "num_trades": 0
+      }
+    },
+    {
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest": {
+        "status": "ok",
+        "net_pnl": 0.0,
+        "num_trades": 0,
+        "max_drawdown": 0.0,
+        "degraded_mode": false,
+        "failure_notes": [],
+        "round_trip_pnl_estimate": 0.0,
+        "profitable_round_trip": 0
+      }
+    },
+    {
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest": {
+        "status": "skipped_large",
+        "skipped_reason": "normalized file 6.4MB > 5MB audit threshold",
+        "net_pnl": null,
+        "num_trades": 0
+      }
+    },
+    {
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest": {
+        "status": "skipped_large",
+        "skipped_reason": "normalized file 63.3MB > 5MB audit threshold",
+        "net_pnl": null,
+        "num_trades": 0
+      }
+    },
+    {
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest": {
+        "status": "skipped_large",
+        "skipped_reason": "normalized file 245.0MB > 5MB audit threshold",
+        "net_pnl": null,
+        "num_trades": 0
+      }
+    },
+    {
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest": {
+        "status": "skipped_large",
+        "skipped_reason": "normalized file 151.9MB > 5MB audit threshold",
+        "net_pnl": null,
+        "num_trades": 0
+      }
+    },
+    {
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest": {
+        "status": "ok",
+        "net_pnl": -5.07198,
+        "num_trades": 2,
+        "max_drawdown": 0.0,
+        "degraded_mode": false,
+        "failure_notes": [],
+        "round_trip_pnl_estimate": -0.04071979999999997,
+        "profitable_round_trip": 0
+      }
+    },
+    {
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest": {
+        "status": "skipped_large",
+        "skipped_reason": "normalized file 778.4MB > 5MB audit threshold",
+        "net_pnl": null,
+        "num_trades": 0
+      }
+    },
+    {
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest": {
+        "status": "ok",
+        "net_pnl": 0.0,
+        "num_trades": 0,
+        "max_drawdown": 0.0,
+        "degraded_mode": false,
+        "failure_notes": [],
+        "round_trip_pnl_estimate": 0.0,
+        "profitable_round_trip": 0
+      }
+    },
+    {
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest": {
+        "status": "ok",
+        "net_pnl": 0.0,
+        "num_trades": 0,
+        "max_drawdown": 0.0,
+        "degraded_mode": false,
+        "failure_notes": [],
+        "round_trip_pnl_estimate": 0.0,
+        "profitable_round_trip": 0
+      }
+    }
+  ],
+  "per_combo": [
+    {
+      "model": "ABSORPTION_FADE",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ABSORPTION_FADE",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ABSORPTION_FADE",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ABSORPTION_FADE",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ABSORPTION_FADE",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "ABSORPTION_FADE",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ABSORPTION_FADE",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ABSORPTION_FADE",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ABSORPTION_FADE",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ABSORPTION_FADE",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "ABSORPTION_FADE",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ABSORPTION_FADE",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "ABSORPTION_FADE",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "AGGRESSOR_DECELERATION_FADE",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "AGGRESSOR_DECELERATION_FADE",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "AGGRESSOR_DECELERATION_FADE",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "AGGRESSOR_DECELERATION_FADE",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "AGGRESSOR_DECELERATION_FADE",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "AGGRESSOR_DECELERATION_FADE",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "AGGRESSOR_DECELERATION_FADE",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "AGGRESSOR_DECELERATION_FADE",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "AGGRESSOR_DECELERATION_FADE",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "AGGRESSOR_DECELERATION_FADE",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "AGGRESSOR_DECELERATION_FADE",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "AGGRESSOR_DECELERATION_FADE",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "AGGRESSOR_DECELERATION_FADE",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "BOOK_PRESSURE",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "BOOK_PRESSURE",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "BOOK_PRESSURE",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "BOOK_PRESSURE",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "BOOK_PRESSURE",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "BOOK_PRESSURE",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "BOOK_PRESSURE",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "BOOK_PRESSURE",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "BOOK_PRESSURE",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "BOOK_PRESSURE",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "BOOK_PRESSURE",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "BOOK_PRESSURE",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "BOOK_PRESSURE",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "BOOK_SLOPE_COLLAPSE",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "BOOK_SLOPE_COLLAPSE",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "BOOK_SLOPE_COLLAPSE",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "BOOK_SLOPE_COLLAPSE",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "BOOK_SLOPE_COLLAPSE",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "BOOK_SLOPE_COLLAPSE",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "BOOK_SLOPE_COLLAPSE",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "BOOK_SLOPE_COLLAPSE",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "BOOK_SLOPE_COLLAPSE",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "BOOK_SLOPE_COLLAPSE",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "BOOK_SLOPE_COLLAPSE",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "BOOK_SLOPE_COLLAPSE",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "BOOK_SLOPE_COLLAPSE",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "CANCEL_STORM_BEFORE_MOVE",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "CANCEL_STORM_BEFORE_MOVE",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "CANCEL_STORM_BEFORE_MOVE",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "CANCEL_STORM_BEFORE_MOVE",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "CANCEL_STORM_BEFORE_MOVE",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "CANCEL_STORM_BEFORE_MOVE",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "CANCEL_STORM_BEFORE_MOVE",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "CANCEL_STORM_BEFORE_MOVE",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "CANCEL_STORM_BEFORE_MOVE",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "CANCEL_STORM_BEFORE_MOVE",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "CANCEL_STORM_BEFORE_MOVE",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "CANCEL_STORM_BEFORE_MOVE",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "CANCEL_STORM_BEFORE_MOVE",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "CROSS_ASSET_LEAD_LAG",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "CROSS_ASSET_LEAD_LAG",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "CROSS_ASSET_LEAD_LAG",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "CROSS_ASSET_LEAD_LAG",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "CROSS_ASSET_LEAD_LAG",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "CROSS_ASSET_LEAD_LAG",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "CROSS_ASSET_LEAD_LAG",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "CROSS_ASSET_LEAD_LAG",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "CROSS_ASSET_LEAD_LAG",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "CROSS_ASSET_LEAD_LAG",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "CROSS_ASSET_LEAD_LAG",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "CROSS_ASSET_LEAD_LAG",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "CROSS_ASSET_LEAD_LAG",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "CUTOFF_PANIC_EXITS",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "CUTOFF_PANIC_EXITS",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "CUTOFF_PANIC_EXITS",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "CUTOFF_PANIC_EXITS",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "CUTOFF_PANIC_EXITS",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "CUTOFF_PANIC_EXITS",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "CUTOFF_PANIC_EXITS",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "CUTOFF_PANIC_EXITS",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "CUTOFF_PANIC_EXITS",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "CUTOFF_PANIC_EXITS",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "CUTOFF_PANIC_EXITS",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "CUTOFF_PANIC_EXITS",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "CUTOFF_PANIC_EXITS",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "DAILY_LOSS_LIMIT_DEFENSE",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DAILY_LOSS_LIMIT_DEFENSE",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DAILY_LOSS_LIMIT_DEFENSE",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DAILY_LOSS_LIMIT_DEFENSE",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DAILY_LOSS_LIMIT_DEFENSE",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "DAILY_LOSS_LIMIT_DEFENSE",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DAILY_LOSS_LIMIT_DEFENSE",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DAILY_LOSS_LIMIT_DEFENSE",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DAILY_LOSS_LIMIT_DEFENSE",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DAILY_LOSS_LIMIT_DEFENSE",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "DAILY_LOSS_LIMIT_DEFENSE",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DAILY_LOSS_LIMIT_DEFENSE",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "DAILY_LOSS_LIMIT_DEFENSE",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "DEALER_HEDGING",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DEALER_HEDGING",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DEALER_HEDGING",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DEALER_HEDGING",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DEALER_HEDGING",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "DEALER_HEDGING",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DEALER_HEDGING",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DEALER_HEDGING",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DEALER_HEDGING",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DEALER_HEDGING",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "DEALER_HEDGING",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DEALER_HEDGING",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "DEALER_HEDGING",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "DEPTH_REFILL_IMBALANCE",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DEPTH_REFILL_IMBALANCE",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DEPTH_REFILL_IMBALANCE",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DEPTH_REFILL_IMBALANCE",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DEPTH_REFILL_IMBALANCE",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "DEPTH_REFILL_IMBALANCE",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DEPTH_REFILL_IMBALANCE",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DEPTH_REFILL_IMBALANCE",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DEPTH_REFILL_IMBALANCE",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DEPTH_REFILL_IMBALANCE",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "DEPTH_REFILL_IMBALANCE",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DEPTH_REFILL_IMBALANCE",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "DEPTH_REFILL_IMBALANCE",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "DOM_ILLUSION_TRAP",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DOM_ILLUSION_TRAP",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DOM_ILLUSION_TRAP",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DOM_ILLUSION_TRAP",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DOM_ILLUSION_TRAP",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "DOM_ILLUSION_TRAP",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DOM_ILLUSION_TRAP",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DOM_ILLUSION_TRAP",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DOM_ILLUSION_TRAP",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DOM_ILLUSION_TRAP",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "DOM_ILLUSION_TRAP",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DOM_ILLUSION_TRAP",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "DOM_ILLUSION_TRAP",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "DOW_YM_INDEX",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DOW_YM_INDEX",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DOW_YM_INDEX",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DOW_YM_INDEX",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DOW_YM_INDEX",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "DOW_YM_INDEX",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DOW_YM_INDEX",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DOW_YM_INDEX",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DOW_YM_INDEX",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DOW_YM_INDEX",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "DOW_YM_INDEX",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "DOW_YM_INDEX",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "DOW_YM_INDEX",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "ECONOMIC_EVENT_RESTRICTION_FLATTENING",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ECONOMIC_EVENT_RESTRICTION_FLATTENING",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ECONOMIC_EVENT_RESTRICTION_FLATTENING",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ECONOMIC_EVENT_RESTRICTION_FLATTENING",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ECONOMIC_EVENT_RESTRICTION_FLATTENING",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "ECONOMIC_EVENT_RESTRICTION_FLATTENING",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ECONOMIC_EVENT_RESTRICTION_FLATTENING",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ECONOMIC_EVENT_RESTRICTION_FLATTENING",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ECONOMIC_EVENT_RESTRICTION_FLATTENING",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ECONOMIC_EVENT_RESTRICTION_FLATTENING",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "ECONOMIC_EVENT_RESTRICTION_FLATTENING",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ECONOMIC_EVENT_RESTRICTION_FLATTENING",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "ECONOMIC_EVENT_RESTRICTION_FLATTENING",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "END_OF_DAY_FORCED_FLATTEN_FLOW",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "END_OF_DAY_FORCED_FLATTEN_FLOW",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "END_OF_DAY_FORCED_FLATTEN_FLOW",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "END_OF_DAY_FORCED_FLATTEN_FLOW",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "END_OF_DAY_FORCED_FLATTEN_FLOW",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "END_OF_DAY_FORCED_FLATTEN_FLOW",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "END_OF_DAY_FORCED_FLATTEN_FLOW",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "END_OF_DAY_FORCED_FLATTEN_FLOW",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "END_OF_DAY_FORCED_FLATTEN_FLOW",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "END_OF_DAY_FORCED_FLATTEN_FLOW",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "END_OF_DAY_FORCED_FLATTEN_FLOW",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "END_OF_DAY_FORCED_FLATTEN_FLOW",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "END_OF_DAY_FORCED_FLATTEN_FLOW",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "ES_MES_LEAD_LAG",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ES_MES_LEAD_LAG",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ES_MES_LEAD_LAG",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ES_MES_LEAD_LAG",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ES_MES_LEAD_LAG",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "ES_MES_LEAD_LAG",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ES_MES_LEAD_LAG",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ES_MES_LEAD_LAG",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ES_MES_LEAD_LAG",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ES_MES_LEAD_LAG",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "ES_MES_LEAD_LAG",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ES_MES_LEAD_LAG",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "ES_MES_LEAD_LAG",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "ES_NQ_DIVERGENCE_SNAPBACK",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ES_NQ_DIVERGENCE_SNAPBACK",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ES_NQ_DIVERGENCE_SNAPBACK",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ES_NQ_DIVERGENCE_SNAPBACK",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ES_NQ_DIVERGENCE_SNAPBACK",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "ES_NQ_DIVERGENCE_SNAPBACK",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ES_NQ_DIVERGENCE_SNAPBACK",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ES_NQ_DIVERGENCE_SNAPBACK",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ES_NQ_DIVERGENCE_SNAPBACK",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ES_NQ_DIVERGENCE_SNAPBACK",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "ES_NQ_DIVERGENCE_SNAPBACK",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ES_NQ_DIVERGENCE_SNAPBACK",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "ES_NQ_DIVERGENCE_SNAPBACK",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "FALSE_BREAKOUT_TRAP",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "FALSE_BREAKOUT_TRAP",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "FALSE_BREAKOUT_TRAP",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "FALSE_BREAKOUT_TRAP",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "FALSE_BREAKOUT_TRAP",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "FALSE_BREAKOUT_TRAP",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "FALSE_BREAKOUT_TRAP",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "FALSE_BREAKOUT_TRAP",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "FALSE_BREAKOUT_TRAP",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "FALSE_BREAKOUT_TRAP",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "FALSE_BREAKOUT_TRAP",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "FALSE_BREAKOUT_TRAP",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "FALSE_BREAKOUT_TRAP",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "FORCED_LIQUIDATION_CASCADE",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "FORCED_LIQUIDATION_CASCADE",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "FORCED_LIQUIDATION_CASCADE",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "FORCED_LIQUIDATION_CASCADE",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "FORCED_LIQUIDATION_CASCADE",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "FORCED_LIQUIDATION_CASCADE",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "FORCED_LIQUIDATION_CASCADE",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "FORCED_LIQUIDATION_CASCADE",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "FORCED_LIQUIDATION_CASCADE",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "FORCED_LIQUIDATION_CASCADE",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "FORCED_LIQUIDATION_CASCADE",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "FORCED_LIQUIDATION_CASCADE",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "FORCED_LIQUIDATION_CASCADE",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "FRIDAY_WEEKEND_DERISKING",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "FRIDAY_WEEKEND_DERISKING",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "FRIDAY_WEEKEND_DERISKING",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "FRIDAY_WEEKEND_DERISKING",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "FRIDAY_WEEKEND_DERISKING",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "FRIDAY_WEEKEND_DERISKING",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "FRIDAY_WEEKEND_DERISKING",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "FRIDAY_WEEKEND_DERISKING",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "FRIDAY_WEEKEND_DERISKING",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "FRIDAY_WEEKEND_DERISKING",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "FRIDAY_WEEKEND_DERISKING",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "FRIDAY_WEEKEND_DERISKING",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "FRIDAY_WEEKEND_DERISKING",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "HAWKES_TOXIC_FLOW",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "HAWKES_TOXIC_FLOW",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "HAWKES_TOXIC_FLOW",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "HAWKES_TOXIC_FLOW",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "HAWKES_TOXIC_FLOW",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "HAWKES_TOXIC_FLOW",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "HAWKES_TOXIC_FLOW",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "HAWKES_TOXIC_FLOW",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "HAWKES_TOXIC_FLOW",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "HAWKES_TOXIC_FLOW",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "HAWKES_TOXIC_FLOW",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "HAWKES_TOXIC_FLOW",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "HAWKES_TOXIC_FLOW",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "HYBRID_EXECUTION",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "HYBRID_EXECUTION",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "HYBRID_EXECUTION",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "HYBRID_EXECUTION",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "HYBRID_EXECUTION",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "HYBRID_EXECUTION",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "HYBRID_EXECUTION",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "HYBRID_EXECUTION",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "HYBRID_EXECUTION",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "HYBRID_EXECUTION",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "HYBRID_EXECUTION",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "HYBRID_EXECUTION",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "HYBRID_EXECUTION",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "ICEBERG_RELOAD_DETECTION",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ICEBERG_RELOAD_DETECTION",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ICEBERG_RELOAD_DETECTION",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ICEBERG_RELOAD_DETECTION",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ICEBERG_RELOAD_DETECTION",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "ICEBERG_RELOAD_DETECTION",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ICEBERG_RELOAD_DETECTION",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ICEBERG_RELOAD_DETECTION",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ICEBERG_RELOAD_DETECTION",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ICEBERG_RELOAD_DETECTION",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "ICEBERG_RELOAD_DETECTION",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ICEBERG_RELOAD_DETECTION",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "ICEBERG_RELOAD_DETECTION",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "LATE_CANDLE_ENTRY_FADE",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "LATE_CANDLE_ENTRY_FADE",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "LATE_CANDLE_ENTRY_FADE",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "LATE_CANDLE_ENTRY_FADE",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "LATE_CANDLE_ENTRY_FADE",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "LATE_CANDLE_ENTRY_FADE",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "LATE_CANDLE_ENTRY_FADE",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "LATE_CANDLE_ENTRY_FADE",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "LATE_CANDLE_ENTRY_FADE",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "LATE_CANDLE_ENTRY_FADE",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "LATE_CANDLE_ENTRY_FADE",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "LATE_CANDLE_ENTRY_FADE",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "LATE_CANDLE_ENTRY_FADE",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "LIQUIDITY_DEFENSE_BREAK",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "LIQUIDITY_DEFENSE_BREAK",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "LIQUIDITY_DEFENSE_BREAK",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "LIQUIDITY_DEFENSE_BREAK",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "LIQUIDITY_DEFENSE_BREAK",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "LIQUIDITY_DEFENSE_BREAK",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "LIQUIDITY_DEFENSE_BREAK",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "LIQUIDITY_DEFENSE_BREAK",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "LIQUIDITY_DEFENSE_BREAK",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "LIQUIDITY_DEFENSE_BREAK",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "LIQUIDITY_DEFENSE_BREAK",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "LIQUIDITY_DEFENSE_BREAK",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "LIQUIDITY_DEFENSE_BREAK",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "LIQUIDITY_VACUUM_CONTINUATION",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "LIQUIDITY_VACUUM_CONTINUATION",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "LIQUIDITY_VACUUM_CONTINUATION",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "LIQUIDITY_VACUUM_CONTINUATION",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "LIQUIDITY_VACUUM_CONTINUATION",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "LIQUIDITY_VACUUM_CONTINUATION",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "LIQUIDITY_VACUUM_CONTINUATION",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "LIQUIDITY_VACUUM_CONTINUATION",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "LIQUIDITY_VACUUM_CONTINUATION",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "LIQUIDITY_VACUUM_CONTINUATION",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "LIQUIDITY_VACUUM_CONTINUATION",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "LIQUIDITY_VACUUM_CONTINUATION",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "LIQUIDITY_VACUUM_CONTINUATION",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "MAX_CONTRACT_CROWDING_IN_MICROS",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "MAX_CONTRACT_CROWDING_IN_MICROS",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "MAX_CONTRACT_CROWDING_IN_MICROS",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "MAX_CONTRACT_CROWDING_IN_MICROS",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "MAX_CONTRACT_CROWDING_IN_MICROS",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "MAX_CONTRACT_CROWDING_IN_MICROS",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "MAX_CONTRACT_CROWDING_IN_MICROS",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "MAX_CONTRACT_CROWDING_IN_MICROS",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "MAX_CONTRACT_CROWDING_IN_MICROS",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "MAX_CONTRACT_CROWDING_IN_MICROS",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "MAX_CONTRACT_CROWDING_IN_MICROS",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "MAX_CONTRACT_CROWDING_IN_MICROS",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "MAX_CONTRACT_CROWDING_IN_MICROS",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "MICRO_CONTRACT_RETAIL_LAG",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "MICRO_CONTRACT_RETAIL_LAG",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "MICRO_CONTRACT_RETAIL_LAG",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "MICRO_CONTRACT_RETAIL_LAG",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "MICRO_CONTRACT_RETAIL_LAG",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "MICRO_CONTRACT_RETAIL_LAG",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "MICRO_CONTRACT_RETAIL_LAG",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "MICRO_CONTRACT_RETAIL_LAG",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "MICRO_CONTRACT_RETAIL_LAG",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "MICRO_CONTRACT_RETAIL_LAG",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "MICRO_CONTRACT_RETAIL_LAG",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "MICRO_CONTRACT_RETAIL_LAG",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "MICRO_CONTRACT_RETAIL_LAG",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "NO_OVERNIGHT_INVENTORY_SQUEEZE",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "NO_OVERNIGHT_INVENTORY_SQUEEZE",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "NO_OVERNIGHT_INVENTORY_SQUEEZE",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "NO_OVERNIGHT_INVENTORY_SQUEEZE",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "NO_OVERNIGHT_INVENTORY_SQUEEZE",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "NO_OVERNIGHT_INVENTORY_SQUEEZE",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "NO_OVERNIGHT_INVENTORY_SQUEEZE",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "NO_OVERNIGHT_INVENTORY_SQUEEZE",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "NO_OVERNIGHT_INVENTORY_SQUEEZE",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "NO_OVERNIGHT_INVENTORY_SQUEEZE",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "NO_OVERNIGHT_INVENTORY_SQUEEZE",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "NO_OVERNIGHT_INVENTORY_SQUEEZE",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "NO_OVERNIGHT_INVENTORY_SQUEEZE",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "NQ_MNQ_LEAD_LAG",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "NQ_MNQ_LEAD_LAG",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "NQ_MNQ_LEAD_LAG",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "NQ_MNQ_LEAD_LAG",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "NQ_MNQ_LEAD_LAG",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "NQ_MNQ_LEAD_LAG",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "NQ_MNQ_LEAD_LAG",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "NQ_MNQ_LEAD_LAG",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "NQ_MNQ_LEAD_LAG",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "NQ_MNQ_LEAD_LAG",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "NQ_MNQ_LEAD_LAG",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "NQ_MNQ_LEAD_LAG",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "NQ_MNQ_LEAD_LAG",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "ONE_SIDED_ADD_CANCEL_IMBALANCE",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ONE_SIDED_ADD_CANCEL_IMBALANCE",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ONE_SIDED_ADD_CANCEL_IMBALANCE",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ONE_SIDED_ADD_CANCEL_IMBALANCE",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ONE_SIDED_ADD_CANCEL_IMBALANCE",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "ONE_SIDED_ADD_CANCEL_IMBALANCE",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ONE_SIDED_ADD_CANCEL_IMBALANCE",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ONE_SIDED_ADD_CANCEL_IMBALANCE",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ONE_SIDED_ADD_CANCEL_IMBALANCE",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ONE_SIDED_ADD_CANCEL_IMBALANCE",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "ONE_SIDED_ADD_CANCEL_IMBALANCE",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ONE_SIDED_ADD_CANCEL_IMBALANCE",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "ONE_SIDED_ADD_CANCEL_IMBALANCE",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "OPENING_CANDLE_CHASE",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "OPENING_CANDLE_CHASE",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "OPENING_CANDLE_CHASE",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "OPENING_CANDLE_CHASE",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "OPENING_CANDLE_CHASE",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "OPENING_CANDLE_CHASE",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "OPENING_CANDLE_CHASE",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "OPENING_CANDLE_CHASE",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "OPENING_CANDLE_CHASE",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "OPENING_CANDLE_CHASE",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "OPENING_CANDLE_CHASE",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "OPENING_CANDLE_CHASE",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "OPENING_CANDLE_CHASE",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "PANIC_MARKET_ORDER_SPREAD_TAX",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PANIC_MARKET_ORDER_SPREAD_TAX",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PANIC_MARKET_ORDER_SPREAD_TAX",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PANIC_MARKET_ORDER_SPREAD_TAX",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PANIC_MARKET_ORDER_SPREAD_TAX",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "PANIC_MARKET_ORDER_SPREAD_TAX",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PANIC_MARKET_ORDER_SPREAD_TAX",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PANIC_MARKET_ORDER_SPREAD_TAX",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PANIC_MARKET_ORDER_SPREAD_TAX",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PANIC_MARKET_ORDER_SPREAD_TAX",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "PANIC_MARKET_ORDER_SPREAD_TAX",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PANIC_MARKET_ORDER_SPREAD_TAX",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "PANIC_MARKET_ORDER_SPREAD_TAX",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "PASSIVE_TRAP_FILL",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PASSIVE_TRAP_FILL",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PASSIVE_TRAP_FILL",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PASSIVE_TRAP_FILL",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PASSIVE_TRAP_FILL",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "PASSIVE_TRAP_FILL",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PASSIVE_TRAP_FILL",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PASSIVE_TRAP_FILL",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PASSIVE_TRAP_FILL",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PASSIVE_TRAP_FILL",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "PASSIVE_TRAP_FILL",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PASSIVE_TRAP_FILL",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "PASSIVE_TRAP_FILL",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "PRIOR_HIGH_LOW_BREAKOUT_TRAP",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PRIOR_HIGH_LOW_BREAKOUT_TRAP",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PRIOR_HIGH_LOW_BREAKOUT_TRAP",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PRIOR_HIGH_LOW_BREAKOUT_TRAP",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PRIOR_HIGH_LOW_BREAKOUT_TRAP",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "PRIOR_HIGH_LOW_BREAKOUT_TRAP",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PRIOR_HIGH_LOW_BREAKOUT_TRAP",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PRIOR_HIGH_LOW_BREAKOUT_TRAP",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PRIOR_HIGH_LOW_BREAKOUT_TRAP",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PRIOR_HIGH_LOW_BREAKOUT_TRAP",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "PRIOR_HIGH_LOW_BREAKOUT_TRAP",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PRIOR_HIGH_LOW_BREAKOUT_TRAP",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "PRIOR_HIGH_LOW_BREAKOUT_TRAP",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "PROFIT_LOCK_BEHAVIOR",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PROFIT_LOCK_BEHAVIOR",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PROFIT_LOCK_BEHAVIOR",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PROFIT_LOCK_BEHAVIOR",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PROFIT_LOCK_BEHAVIOR",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "PROFIT_LOCK_BEHAVIOR",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PROFIT_LOCK_BEHAVIOR",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PROFIT_LOCK_BEHAVIOR",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PROFIT_LOCK_BEHAVIOR",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PROFIT_LOCK_BEHAVIOR",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "PROFIT_LOCK_BEHAVIOR",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PROFIT_LOCK_BEHAVIOR",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "PROFIT_LOCK_BEHAVIOR",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "PROP_RESET_REOPEN_WINDOW",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PROP_RESET_REOPEN_WINDOW",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PROP_RESET_REOPEN_WINDOW",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PROP_RESET_REOPEN_WINDOW",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PROP_RESET_REOPEN_WINDOW",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "PROP_RESET_REOPEN_WINDOW",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PROP_RESET_REOPEN_WINDOW",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PROP_RESET_REOPEN_WINDOW",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PROP_RESET_REOPEN_WINDOW",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PROP_RESET_REOPEN_WINDOW",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "PROP_RESET_REOPEN_WINDOW",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "PROP_RESET_REOPEN_WINDOW",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "PROP_RESET_REOPEN_WINDOW",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUANTUM_SPREAD_DEFENSE",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUANTUM_SPREAD_DEFENSE",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUANTUM_SPREAD_DEFENSE",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUANTUM_SPREAD_DEFENSE",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUANTUM_SPREAD_DEFENSE",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUANTUM_SPREAD_DEFENSE",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUANTUM_SPREAD_DEFENSE",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUANTUM_SPREAD_DEFENSE",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUANTUM_SPREAD_DEFENSE",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUANTUM_SPREAD_DEFENSE",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUANTUM_SPREAD_DEFENSE",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUANTUM_SPREAD_DEFENSE",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUANTUM_SPREAD_DEFENSE",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUEUE_DEPLETION_TRIGGER",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUEUE_DEPLETION_TRIGGER",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUEUE_DEPLETION_TRIGGER",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUEUE_DEPLETION_TRIGGER",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUEUE_DEPLETION_TRIGGER",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUEUE_DEPLETION_TRIGGER",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUEUE_DEPLETION_TRIGGER",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUEUE_DEPLETION_TRIGGER",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUEUE_DEPLETION_TRIGGER",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUEUE_DEPLETION_TRIGGER",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUEUE_DEPLETION_TRIGGER",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUEUE_DEPLETION_TRIGGER",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUEUE_DEPLETION_TRIGGER",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUOTE_PULL_BEFORE_VOLATILITY",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUOTE_PULL_BEFORE_VOLATILITY",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUOTE_PULL_BEFORE_VOLATILITY",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUOTE_PULL_BEFORE_VOLATILITY",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUOTE_PULL_BEFORE_VOLATILITY",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUOTE_PULL_BEFORE_VOLATILITY",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUOTE_PULL_BEFORE_VOLATILITY",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUOTE_PULL_BEFORE_VOLATILITY",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUOTE_PULL_BEFORE_VOLATILITY",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUOTE_PULL_BEFORE_VOLATILITY",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUOTE_PULL_BEFORE_VOLATILITY",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUOTE_PULL_BEFORE_VOLATILITY",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "QUOTE_PULL_BEFORE_VOLATILITY",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "REBATE_TRAP_AVOIDANCE",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "REBATE_TRAP_AVOIDANCE",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "REBATE_TRAP_AVOIDANCE",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "REBATE_TRAP_AVOIDANCE",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "REBATE_TRAP_AVOIDANCE",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "REBATE_TRAP_AVOIDANCE",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "REBATE_TRAP_AVOIDANCE",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "REBATE_TRAP_AVOIDANCE",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "REBATE_TRAP_AVOIDANCE",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "REBATE_TRAP_AVOIDANCE",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "REBATE_TRAP_AVOIDANCE",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "REBATE_TRAP_AVOIDANCE",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "REBATE_TRAP_AVOIDANCE",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "REQUOTE_RACE_AFTER_SHOCK",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "REQUOTE_RACE_AFTER_SHOCK",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "REQUOTE_RACE_AFTER_SHOCK",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "REQUOTE_RACE_AFTER_SHOCK",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "REQUOTE_RACE_AFTER_SHOCK",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "REQUOTE_RACE_AFTER_SHOCK",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "REQUOTE_RACE_AFTER_SHOCK",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "REQUOTE_RACE_AFTER_SHOCK",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "REQUOTE_RACE_AFTER_SHOCK",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "REQUOTE_RACE_AFTER_SHOCK",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "REQUOTE_RACE_AFTER_SHOCK",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "REQUOTE_RACE_AFTER_SHOCK",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "REQUOTE_RACE_AFTER_SHOCK",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "ROUND_NUMBER_STOP_SWEEP",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ROUND_NUMBER_STOP_SWEEP",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ROUND_NUMBER_STOP_SWEEP",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ROUND_NUMBER_STOP_SWEEP",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ROUND_NUMBER_STOP_SWEEP",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "ROUND_NUMBER_STOP_SWEEP",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ROUND_NUMBER_STOP_SWEEP",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ROUND_NUMBER_STOP_SWEEP",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ROUND_NUMBER_STOP_SWEEP",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ROUND_NUMBER_STOP_SWEEP",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "ROUND_NUMBER_STOP_SWEEP",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ROUND_NUMBER_STOP_SWEEP",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "ROUND_NUMBER_STOP_SWEEP",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "SECOND_WAVE_CONTINUATION",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "SECOND_WAVE_CONTINUATION",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "SECOND_WAVE_CONTINUATION",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "SECOND_WAVE_CONTINUATION",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "SECOND_WAVE_CONTINUATION",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "SECOND_WAVE_CONTINUATION",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "SECOND_WAVE_CONTINUATION",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "SECOND_WAVE_CONTINUATION",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "SECOND_WAVE_CONTINUATION",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "SECOND_WAVE_CONTINUATION",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "SECOND_WAVE_CONTINUATION",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "SECOND_WAVE_CONTINUATION",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "SECOND_WAVE_CONTINUATION",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "SPREAD_BLOWOUT_RECOMPRESSION",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "SPREAD_BLOWOUT_RECOMPRESSION",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "SPREAD_BLOWOUT_RECOMPRESSION",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "SPREAD_BLOWOUT_RECOMPRESSION",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "SPREAD_BLOWOUT_RECOMPRESSION",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "SPREAD_BLOWOUT_RECOMPRESSION",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "SPREAD_BLOWOUT_RECOMPRESSION",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "SPREAD_BLOWOUT_RECOMPRESSION",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "SPREAD_BLOWOUT_RECOMPRESSION",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "SPREAD_BLOWOUT_RECOMPRESSION",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "SPREAD_BLOWOUT_RECOMPRESSION",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "SPREAD_BLOWOUT_RECOMPRESSION",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "SPREAD_BLOWOUT_RECOMPRESSION",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "SPREAD_REGIME_CHANGE",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "SPREAD_REGIME_CHANGE",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "SPREAD_REGIME_CHANGE",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "SPREAD_REGIME_CHANGE",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "SPREAD_REGIME_CHANGE",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "SPREAD_REGIME_CHANGE",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "SPREAD_REGIME_CHANGE",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "SPREAD_REGIME_CHANGE",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "SPREAD_REGIME_CHANGE",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "SPREAD_REGIME_CHANGE",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "SPREAD_REGIME_CHANGE",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "SPREAD_REGIME_CHANGE",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "SPREAD_REGIME_CHANGE",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOCHASTIC_THERMO",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOCHASTIC_THERMO",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOCHASTIC_THERMO",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOCHASTIC_THERMO",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOCHASTIC_THERMO",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOCHASTIC_THERMO",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOCHASTIC_THERMO",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOCHASTIC_THERMO",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOCHASTIC_THERMO",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOCHASTIC_THERMO",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOCHASTIC_THERMO",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOCHASTIC_THERMO",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOCHASTIC_THERMO",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOP_LOSS_CASCADE_CONTINUATION",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOP_LOSS_CASCADE_CONTINUATION",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOP_LOSS_CASCADE_CONTINUATION",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOP_LOSS_CASCADE_CONTINUATION",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOP_LOSS_CASCADE_CONTINUATION",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOP_LOSS_CASCADE_CONTINUATION",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOP_LOSS_CASCADE_CONTINUATION",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOP_LOSS_CASCADE_CONTINUATION",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOP_LOSS_CASCADE_CONTINUATION",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOP_LOSS_CASCADE_CONTINUATION",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOP_LOSS_CASCADE_CONTINUATION",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOP_LOSS_CASCADE_CONTINUATION",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOP_LOSS_CASCADE_CONTINUATION",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOP_RUN_EXHAUSTION_FADE",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOP_RUN_EXHAUSTION_FADE",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOP_RUN_EXHAUSTION_FADE",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOP_RUN_EXHAUSTION_FADE",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOP_RUN_EXHAUSTION_FADE",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOP_RUN_EXHAUSTION_FADE",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOP_RUN_EXHAUSTION_FADE",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOP_RUN_EXHAUSTION_FADE",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOP_RUN_EXHAUSTION_FADE",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOP_RUN_EXHAUSTION_FADE",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOP_RUN_EXHAUSTION_FADE",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOP_RUN_EXHAUSTION_FADE",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "STOP_RUN_EXHAUSTION_FADE",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "THIN_BOOK_CONTINUATION",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "THIN_BOOK_CONTINUATION",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "THIN_BOOK_CONTINUATION",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "THIN_BOOK_CONTINUATION",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "THIN_BOOK_CONTINUATION",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "THIN_BOOK_CONTINUATION",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "THIN_BOOK_CONTINUATION",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "THIN_BOOK_CONTINUATION",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "THIN_BOOK_CONTINUATION",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "THIN_BOOK_CONTINUATION",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "THIN_BOOK_CONTINUATION",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "THIN_BOOK_CONTINUATION",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "THIN_BOOK_CONTINUATION",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "TRAILING_DRAWDOWN_PRESSURE",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "TRAILING_DRAWDOWN_PRESSURE",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "TRAILING_DRAWDOWN_PRESSURE",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "TRAILING_DRAWDOWN_PRESSURE",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "TRAILING_DRAWDOWN_PRESSURE",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "TRAILING_DRAWDOWN_PRESSURE",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "TRAILING_DRAWDOWN_PRESSURE",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "TRAILING_DRAWDOWN_PRESSURE",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "TRAILING_DRAWDOWN_PRESSURE",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "TRAILING_DRAWDOWN_PRESSURE",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "TRAILING_DRAWDOWN_PRESSURE",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "TRAILING_DRAWDOWN_PRESSURE",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "TRAILING_DRAWDOWN_PRESSURE",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "TRANSFER_ENTROPY",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "TRANSFER_ENTROPY",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "TRANSFER_ENTROPY",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "TRANSFER_ENTROPY",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "TRANSFER_ENTROPY",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "TRANSFER_ENTROPY",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "TRANSFER_ENTROPY",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "TRANSFER_ENTROPY",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "TRANSFER_ENTROPY",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "TRANSFER_ENTROPY",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "TRANSFER_ENTROPY",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "TRANSFER_ENTROPY",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "TRANSFER_ENTROPY",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "TREASURY_CTD",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "TREASURY_CTD",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "TREASURY_CTD",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "TREASURY_CTD",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "TREASURY_CTD",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "TREASURY_CTD",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "TREASURY_CTD",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "TREASURY_CTD",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "TREASURY_CTD",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "TREASURY_CTD",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "TREASURY_CTD",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "TREASURY_CTD",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "TREASURY_CTD",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "VPIN_TOXICITY",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "VPIN_TOXICITY",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "VPIN_TOXICITY",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "VPIN_TOXICITY",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "VPIN_TOXICITY",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "VPIN_TOXICITY",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "VPIN_TOXICITY",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "VPIN_TOXICITY",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "VPIN_TOXICITY",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "VPIN_TOXICITY",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "VPIN_TOXICITY",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "VPIN_TOXICITY",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "VPIN_TOXICITY",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "VWAP_DEFENSE_BREAK",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "VWAP_DEFENSE_BREAK",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "VWAP_DEFENSE_BREAK",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "VWAP_DEFENSE_BREAK",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "VWAP_DEFENSE_BREAK",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "VWAP_DEFENSE_BREAK",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "VWAP_DEFENSE_BREAK",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "VWAP_DEFENSE_BREAK",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "VWAP_DEFENSE_BREAK",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "VWAP_DEFENSE_BREAK",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "VWAP_DEFENSE_BREAK",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "VWAP_DEFENSE_BREAK",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "VWAP_DEFENSE_BREAK",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "ZN_ZB_ES_NQ_MACRO_IMPULSE",
+      "ticker": "KODK",
+      "session_date": "2020-07-28",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ZN_ZB_ES_NQ_MACRO_IMPULSE",
+      "ticker": "SPI",
+      "session_date": "2020-09-23",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ZN_ZB_ES_NQ_MACRO_IMPULSE",
+      "ticker": "GME",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ZN_ZB_ES_NQ_MACRO_IMPULSE",
+      "ticker": "EXPR",
+      "session_date": "2021-01-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ZN_ZB_ES_NQ_MACRO_IMPULSE",
+      "ticker": "INDO",
+      "session_date": "2022-03-07",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "ZN_ZB_ES_NQ_MACRO_IMPULSE",
+      "ticker": "HKD",
+      "session_date": "2022-08-02",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ZN_ZB_ES_NQ_MACRO_IMPULSE",
+      "ticker": "TOP",
+      "session_date": "2023-04-27",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ZN_ZB_ES_NQ_MACRO_IMPULSE",
+      "ticker": "HOLO",
+      "session_date": "2024-02-07",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ZN_ZB_ES_NQ_MACRO_IMPULSE",
+      "ticker": "CYCC",
+      "session_date": "2025-07-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ZN_ZB_ES_NQ_MACRO_IMPULSE",
+      "ticker": "AIRE",
+      "session_date": "2025-07-10",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "ZN_ZB_ES_NQ_MACRO_IMPULSE",
+      "ticker": "BIRD",
+      "session_date": "2026-04-15",
+      "npz_present": true,
+      "backtest_status": "skipped_large",
+      "pct_ready": 1
+    },
+    {
+      "model": "ZN_ZB_ES_NQ_MACRO_IMPULSE",
+      "ticker": "AMST",
+      "session_date": "2026-05-12",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    },
+    {
+      "model": "ZN_ZB_ES_NQ_MACRO_IMPULSE",
+      "ticker": "SNAL",
+      "session_date": "2026-05-08",
+      "npz_present": true,
+      "backtest_status": "ok",
+      "pct_ready": 1
+    }
+  ],
+  "worst_5_models": [
+    {
+      "model": "ABSORPTION_FADE",
+      "pct_session_runs": 100.0
+    },
+    {
+      "model": "AGGRESSOR_DECELERATION_FADE",
+      "pct_session_runs": 100.0
+    },
+    {
+      "model": "BOOK_PRESSURE",
+      "pct_session_runs": 100.0
+    },
+    {
+      "model": "BOOK_SLOPE_COLLAPSE",
+      "pct_session_runs": 100.0
+    },
+    {
+      "model": "CANCEL_STORM_BEFORE_MOVE",
+      "pct_session_runs": 100.0
+    }
+  ],
+  "blocked_or_binding_errors": {},
+  "notes": [
+    "Equities lane is quarantined (AGENTS.md) -- NPZ writes to data/equities/npz/ only.",
+    "LowFloatBacktester uses a single shared universe; per-slug backtests are mirrors of per-ticker results."
+  ]
+}
