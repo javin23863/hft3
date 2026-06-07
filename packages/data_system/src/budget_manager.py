@@ -1,19 +1,23 @@
 import json
 import os
+import threading
 import pandas as pd
 from datetime import datetime
 
+_budget_lock = threading.Lock()
+
+
 class BudgetManager:
     """
-    Implements the strict Databento credit mathematics specified in the blueprint.
-    Initial credit: $125.00
-    Operating cap: $112.50
-    Reserve: $12.50
+    Databento credit gating for MBO downloads.
+    Initial credit: $350.00
+    Operating cap: $325.00 (priority macro backfill headroom)
+    Reserve: $25.00
     """
-    
-    INITIAL_CREDIT = 125.00
-    OPERATING_CAP = 112.50
-    RESERVE = 12.50
+
+    INITIAL_CREDIT = 350.00
+    OPERATING_CAP = 325.00
+    RESERVE = 25.00
     SOFT_LIMIT = 5.00
     HARD_LIMIT = 10.00
     
@@ -58,14 +62,19 @@ class BudgetManager:
         Validates if a request can be made based on cost estimate and budget constraints.
         Returns True if approved, raises ValueError if blocked.
         """
-        if cost_estimate > self.HARD_LIMIT and not override_hard_limit:
-            raise ValueError(f"Cost estimate ${cost_estimate:.2f} exceeds hard limit of ${self.HARD_LIMIT:.2f}")
-            
-        projected_total = self.total_used + cost_estimate
-        if projected_total > self.OPERATING_CAP:
-            raise ValueError(
-                f"Request cost ${cost_estimate:.2f} would exceed operating cap "
-                f"(${self.OPERATING_CAP:.2f}). Current usage: ${self.total_used:.2f}"
-            )
-            
-        return True
+        with _budget_lock:
+            self.total_used = self._calculate_total_used()
+            if cost_estimate > self.HARD_LIMIT and not override_hard_limit:
+                raise ValueError(
+                    f"Cost estimate ${cost_estimate:.2f} exceeds hard limit of ${self.HARD_LIMIT:.2f}"
+                )
+
+            projected_total = self.total_used + cost_estimate
+            if projected_total > self.OPERATING_CAP:
+                raise ValueError(
+                    f"Request cost ${cost_estimate:.2f} would exceed operating cap "
+                    f"(${self.OPERATING_CAP:.2f}). Current usage: ${self.total_used:.2f}"
+                )
+
+            self.total_used = projected_total
+            return True

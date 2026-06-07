@@ -10,6 +10,7 @@ from typing import Any
 import pandas as pd
 
 from equities_lane.src.decadal_config import get_decadal_session, load_decadal_catalog
+from equities_lane.src.ingest.daily_bars_io import daily_coverage_calendar_days, load_daily_parquet
 from equities_lane.src.ingest.databento_equities import (
     daily_window_utc,
     download_decadal_session,

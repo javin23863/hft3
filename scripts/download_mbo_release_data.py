@@ -49,9 +49,70 @@ def main() -> int:
     parser.add_argument("--end-year", type=int, default=2025)
     parser.add_argument("--max-cost-usd", type=float, default=None)
     parser.add_argument("--limit", type=int, default=None, help="Max release×symbol slots to process")
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=32,
+        help="Parallel Databento download workers (default 32)",
+    )
+    parser.add_argument(
+        "--shard-index",
+        type=int,
+        default=0,
+        help="Shard index for multi-host download (0..shard-count-1)",
+    )
+    parser.add_argument(
+        "--shard-count",
+        type=int,
+        default=1,
+        help="Total shards across hosts (default 1 = this machine only)",
+    )
     parser.add_argument("--derive-npz", action="store_true", help="Derive HftBacktest NPZ for valid paths")
+    parser.add_argument(
+        "--exclude-event-type",
+        action="append",
+        default=[],
+        metavar="TYPE",
+        help="Additional event types to skip (FACTORY_ORDERS excluded by default)",
+    )
+    parser.add_argument(
+        "--include-event-type",
+        action="append",
+        default=[],
+        metavar="TYPE",
+        help="Re-include a default-excluded type (e.g. FACTORY_ORDERS)",
+    )
+    parser.add_argument(
+        "--only-event-type",
+        action="append",
+        default=[],
+        metavar="TYPE",
+        help="Download only these event types (repeatable)",
+    )
+    parser.add_argument(
+        "--priority-events",
+        action="store_true",
+        help="Download Tier 1–3 priority macro + UNEMPLOYMENT_CLAIMS only",
+    )
     parser.add_argument("--output", type=Path, default=OUT_REPORT)
     args = parser.parse_args()
+
+    from mbo_release_lane.constants import (
+        DEFAULT_DOWNLOAD_EXCLUDE_EVENT_TYPES,
+        PRIORITY_DOWNLOAD_EVENT_TYPES,
+    )
+    from mbo_release_lane.download import resolve_download_exclusions
+
+    only_types: tuple[str, ...] = ()
+    if args.priority_events:
+        only_types = PRIORITY_DOWNLOAD_EVENT_TYPES
+    if args.only_event_type:
+        only_types = tuple(dict.fromkeys(list(only_types) + args.only_event_type))
+
+    download_exclusions = resolve_download_exclusions(
+        exclude_event_types=tuple(DEFAULT_DOWNLOAD_EXCLUDE_EVENT_TYPES) + tuple(args.exclude_event_type),
+        include_event_types=tuple(args.include_event_type),
+    )
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
@@ -87,6 +148,8 @@ def main() -> int:
     report_body: dict = {
         "scope": args.scope,
         "macro_event_type_count": catalog_event_type_count(),
+        "excluded_event_types": sorted(download_exclusions),
+        "only_event_types": sorted(only_types) if only_types else [],
         "catalog_summary": summary.to_dict(),
         "window_offsets_seconds": {"start": start_off, "end": end_off},
     }
@@ -101,6 +164,12 @@ def main() -> int:
             end_year=args.end_year,
             max_cost_usd=args.max_cost_usd,
             limit=args.limit,
+            workers=args.workers,
+            shard_index=args.shard_index,
+            shard_count=args.shard_count,
+            exclude_event_types=tuple(DEFAULT_DOWNLOAD_EXCLUDE_EVENT_TYPES) + tuple(args.exclude_event_type),
+            include_event_types=tuple(args.include_event_type),
+            only_event_types=only_types or None,
         )
         report_body.update(dl_report.to_dict())
 
@@ -122,9 +191,15 @@ def main() -> int:
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report_body, indent=2), encoding="utf-8")
-    print(f"Scope: {args.scope} | Catalog: {catalog_event_type_count()} event types | window {start_off}s to {end_off}s")
+    only_note = f" | Only: {', '.join(sorted(only_types))}" if only_types else ""
+    excl_note = f" | Excluding: {', '.join(sorted(download_exclusions))}" if download_exclusions and not only_types else ""
+    print(
+        f"Scope: {args.scope} | Catalog: {catalog_event_type_count()} event types | "
+        f"window {start_off}s to {end_off}s{only_note}{excl_note}"
+    )
     if args.download:
         rep = report_body.get("mbo_download_report", {})
+        print(f"Workers: {args.workers} | Shard: {args.shard_index}/{args.shard_count}")
         print(f"Valid paths: {len(rep.get('valid_release_paths', []))}")
         print(f"Invalid/blocked: {len(rep.get('invalid_release_paths', []))}")
     print(f"Wrote: {args.output}")

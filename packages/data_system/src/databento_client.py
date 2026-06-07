@@ -1,8 +1,13 @@
 import os
+import threading
+
 import databento as db
-from .budget_manager import BudgetManager
 import pandas as pd
 from datetime import datetime, timezone
+
+from .budget_manager import BudgetManager
+
+_manifest_lock = threading.Lock()
 
 class DatabentoResearchClient:
     """
@@ -102,13 +107,15 @@ class DatabentoResearchClient:
         output_path: str | None = None,
         override_hard_limit: bool = False,
         override_operating_cap: bool = False,
+        cost_estimate: float | None = None,
     ):
         """
         Calculates exact cost per Section 11 math, checks budget, and downloads if approved.
         """
-        cost_estimate = self.estimate_cost(
-            symbols, start_utc, end_utc, dataset, schema, stype_in
-        )
+        if cost_estimate is None:
+            cost_estimate = self.estimate_cost(
+                symbols, start_utc, end_utc, dataset, schema, stype_in
+            )
 
         if override_operating_cap:
             if cost_estimate > self.budget.HARD_LIMIT and not override_hard_limit:
@@ -159,18 +166,19 @@ class DatabentoResearchClient:
         return dest
         
     def _record_manifest(self, record: dict):
-        df_new = pd.DataFrame([record])
-        df_existing = pd.DataFrame()
-        if os.path.exists(self.manifest_path):
-            try:
-                df_existing = pd.read_parquet(self.manifest_path)
-            except Exception:
-                backup = f"{self.manifest_path}.corrupt.bak"
-                if not os.path.exists(backup):
-                    os.replace(self.manifest_path, backup)
-        if not df_existing.empty:
-            df_combined = pd.concat([df_existing, df_new], ignore_index=True)
-            df_combined.to_parquet(self.manifest_path)
-        else:
-            os.makedirs(os.path.dirname(self.manifest_path) or ".", exist_ok=True)
-            df_new.to_parquet(self.manifest_path)
+        with _manifest_lock:
+            df_new = pd.DataFrame([record])
+            df_existing = pd.DataFrame()
+            if os.path.exists(self.manifest_path):
+                try:
+                    df_existing = pd.read_parquet(self.manifest_path)
+                except Exception:
+                    backup = f"{self.manifest_path}.corrupt.bak"
+                    if not os.path.exists(backup):
+                        os.replace(self.manifest_path, backup)
+            if not df_existing.empty:
+                df_combined = pd.concat([df_existing, df_new], ignore_index=True)
+                df_combined.to_parquet(self.manifest_path)
+            else:
+                os.makedirs(os.path.dirname(self.manifest_path) or ".", exist_ok=True)
+                df_new.to_parquet(self.manifest_path)

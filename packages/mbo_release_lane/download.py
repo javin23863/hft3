@@ -3,16 +3,28 @@
 from __future__ import annotations
 
 import logging
+import threading
+import time
+import zlib
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from mbo_release_lane.constants import DEFAULT_DATASET_ID, MBO_SCHEMA, SOURCE_VENDOR
+from mbo_release_lane.constants import (
+    DEFAULT_DATASET_ID,
+    DEFAULT_DOWNLOAD_EXCLUDE_EVENT_TYPES,
+    MBO_SCHEMA,
+    SOURCE_VENDOR,
+)
 from mbo_release_lane.import_pipeline import ImportResult, import_release_window
 from mbo_release_lane.storage import release_slot_dir
 
 logger = logging.getLogger(__name__)
+
+_tls = threading.local()
+_report_lock = threading.Lock()
 
 
 @dataclass
@@ -80,6 +92,16 @@ def _event_spec(repo_root: Path, window, symbol: str):
     )
 
 
+def _get_databento_client():
+    from data_system.src.databento_client import DatabentoResearchClient
+
+    client = getattr(_tls, "databento_client", None)
+    if client is None:
+        client = DatabentoResearchClient()
+        _tls.databento_client = client
+    return client
+
+
 def download_catalog_slot(
     repo_root: Path,
     window,
@@ -88,10 +110,10 @@ def download_catalog_slot(
     max_cost_usd: float | None = None,
     skip_if_valid: bool = True,
     skip_if_npz: bool = True,
+    client: Any | None = None,
 ) -> ImportResult | None:
     """Download one release window for one symbol through MBO-only lane."""
     from workbench.src.data.catalog_backfill import resolve_download_symbol
-    from data_system.src.databento_client import DatabentoResearchClient
     from data_system.src.npz_resolver import resolve_npz_for_event
     from economic_event_universe.registry import default_cme_symbols
 
@@ -111,6 +133,9 @@ def download_catalog_slot(
 
     slot = release_slot_dir(repo_root, window.event_id, symbol)
     manifest = slot / "release_event_path.json"
+    raw_dest = slot / "raw.dbn.zst"
+    if raw_dest.is_file() and raw_dest.stat().st_size == 0:
+        raw_dest.unlink(missing_ok=True)
     if skip_if_valid and manifest.is_file():
         import json
 
@@ -126,9 +151,22 @@ def download_catalog_slot(
                 blockers=[],
                 paths_written=[str(manifest)],
             )
+        # Stale invalid import — delete artifacts so Databento fetch is not skipped.
+        raw_dest.unlink(missing_ok=True)
+        manifest.unlink(missing_ok=True)
+        for stale in (
+            slot / "validation.json",
+            slot / "events.jsonl",
+            slot / "hashes.json",
+        ):
+            if stale.is_file():
+                stale.unlink(missing_ok=True)
+    elif raw_dest.is_file():
+        # Orphaned/corrupt raw without a valid manifest — force re-fetch.
+        raw_dest.unlink(missing_ok=True)
 
     try:
-        client = DatabentoResearchClient()
+        client = client or _get_databento_client()
     except ValueError as exc:
         logger.error("No DATABENTO_API_KEY: %s", exc)
         return None
@@ -137,13 +175,10 @@ def download_catalog_slot(
     start = _as_datetime(window.start_utc)
     end = _as_datetime(window.end_utc)
 
-    if max_cost_usd is not None:
-        sym_used, cost = resolve_download_symbol(client, ev)
-        if cost > max_cost_usd:
-            logger.warning("Cost %.4f exceeds max for %s", cost, window.event_id)
-            return None
-    else:
-        sym_used, _ = resolve_download_symbol(client, ev)
+    sym_used, cost = resolve_download_symbol(client, ev)
+    if max_cost_usd is not None and cost > max_cost_usd:
+        logger.warning("Cost %.4f exceeds max for %s", cost, window.event_id)
+        return None
 
     raw_dest = slot / "raw.dbn.zst"
     slot.mkdir(parents=True, exist_ok=True)
@@ -155,6 +190,7 @@ def download_catalog_slot(
         schema=MBO_SCHEMA,
         requested_symbol=symbol,
         output_path=str(raw_dest),
+        cost_estimate=cost,
     )
 
     anchor = _as_datetime(window.start_utc)
@@ -177,6 +213,125 @@ def download_catalog_slot(
     )
 
 
+def _apply_slot_result(
+    report: DownloadReport,
+    repo_root: Path,
+    window,
+    symbol: str,
+    result: ImportResult | None,
+    *,
+    exc: Exception | None = None,
+) -> None:
+    if exc is not None:
+        logger.exception("Failed %s %s: %s", window.event_id, symbol, exc)
+        report.rejected_files.append(
+            {"release_id": window.event_id, "symbol": symbol, "reason": str(exc)}
+        )
+        report.blocker_count += 1
+        return
+    if result is None:
+        report.missing_windows.append({"release_id": window.event_id, "symbol": symbol})
+        return
+    report.total_events += result.event_count
+    rel_path = str(result.slot_dir.relative_to(repo_root))
+    if result.validation_status == "valid":
+        report.valid_release_paths.append(rel_path)
+    else:
+        report.invalid_release_paths.append(rel_path)
+        report.blocker_count += len(result.blockers)
+
+
+def _shard_key(event_id: str, symbol: str) -> int:
+    return zlib.crc32(f"{event_id}:{symbol}".encode("utf-8")) & 0xFFFFFFFF
+
+
+def resolve_download_exclusions(
+    *,
+    exclude_event_types: tuple[str, ...] | None = None,
+    include_event_types: tuple[str, ...] | None = None,
+) -> frozenset[str]:
+    """Default download exclusions minus explicit --include-event-type overrides."""
+    excluded = set(exclude_event_types or DEFAULT_DOWNLOAD_EXCLUDE_EVENT_TYPES)
+    excluded -= set(include_event_types or ())
+    return frozenset(excluded)
+
+
+def filter_windows_by_event_type(
+    windows: list,
+    *,
+    exclude_event_types: frozenset[str] | None = None,
+    only_event_types: frozenset[str] | None = None,
+) -> list:
+    if only_event_types:
+        return [w for w in windows if w.event_type in only_event_types]
+    if not exclude_event_types:
+        return windows
+    return [w for w in windows if w.event_type not in exclude_event_types]
+
+
+def filter_tasks_for_shard(
+    tasks: list[tuple[Any, str]],
+    *,
+    shard_index: int = 0,
+    shard_count: int = 1,
+) -> list[tuple[Any, str]]:
+    if shard_count <= 1:
+        return tasks
+    idx = int(shard_index) % int(shard_count)
+    count = int(shard_count)
+    return [
+        (window, symbol)
+        for window, symbol in tasks
+        if _shard_key(window.event_id, symbol) % count == idx
+    ]
+
+
+def _download_slot_task(
+    repo_root: Path,
+    window,
+    symbol: str,
+    max_cost_usd: float | None,
+    *,
+    skip_if_npz: bool = True,
+    max_attempts: int = 6,
+) -> tuple[Any, str, ImportResult | None, Exception | None]:
+    last_exc: Exception | None = None
+    for attempt in range(max_attempts):
+        try:
+            result = download_catalog_slot(
+                repo_root,
+                window,
+                symbol,
+                max_cost_usd=max_cost_usd,
+                skip_if_npz=skip_if_npz,
+            )
+            return window, symbol, result, None
+        except Exception as exc:
+            last_exc = exc
+            msg = str(exc)
+            retryable = (
+                "429 Too Many Requests" in msg
+                or "503" in msg
+                or "502" in msg
+                or "timeout" in msg.lower()
+            )
+            if retryable and attempt + 1 < max_attempts:
+                wait_s = min(30.0, 2.0 ** attempt)
+                logger.warning(
+                    "Retry %d/%d for %s %s in %.1fs: %s",
+                    attempt + 1,
+                    max_attempts,
+                    window.event_id,
+                    symbol,
+                    wait_s,
+                    msg[:120],
+                )
+                time.sleep(wait_s)
+                continue
+            return window, symbol, None, exc
+    return window, symbol, None, last_exc
+
+
 def run_catalog_download(
     repo_root: Path,
     *,
@@ -189,11 +344,25 @@ def run_catalog_download(
     symbols: tuple[str, ...] | None = None,
     max_cost_usd: float | None = None,
     limit: int | None = None,
+    workers: int = 1,
+    shard_index: int = 0,
+    shard_count: int = 1,
+    exclude_event_types: tuple[str, ...] | None = None,
+    include_event_types: tuple[str, ...] | None = None,
+    only_event_types: tuple[str, ...] | None = None,
+    skip_if_npz: bool = True,
 ) -> DownloadReport:
     from economic_event_universe.events_csv_builder import resolve_download_scope_windows
     from economic_event_universe.registry import default_cme_symbols
 
     syms = symbols or default_cme_symbols()
+    only_set = frozenset(only_event_types) if only_event_types else None
+    exclusions = frozenset()
+    if not only_set:
+        exclusions = resolve_download_exclusions(
+            exclude_event_types=exclude_event_types,
+            include_event_types=include_event_types,
+        )
     if windows is None:
         windows = resolve_download_scope_windows(
             repo_root,
@@ -203,43 +372,65 @@ def run_catalog_download(
             include_seed=include_seed,
             include_rule_based=include_rule_based,
         )
+    windows = filter_windows_by_event_type(
+        windows,
+        exclude_event_types=exclusions,
+        only_event_types=only_set,
+    )
+    if only_set:
+        logger.info("Only event types: %s", ", ".join(sorted(only_set)))
+    elif exclusions:
+        logger.info("Excluding event types from download: %s", ", ".join(sorted(exclusions)))
 
+    from economic_event_universe.window_catalog import iter_missing_npz_slots
+
+    missing_pairs = iter_missing_npz_slots(repo_root, windows, symbols=syms)
     report = DownloadReport(symbol_count=len(syms), products=list(syms))
+    report.release_count = len({w.event_id for w, _ in missing_pairs})
     slot_count = 0
 
-    for window in windows:
-        if limit is not None and slot_count >= limit:
-            break
-        report.release_count += 1
-        for symbol in syms:
-            if limit is not None and slot_count >= limit:
-                break
-            try:
-                result = download_catalog_slot(
-                    repo_root,
-                    window,
-                    symbol,
-                    max_cost_usd=max_cost_usd,
-                )
-            except Exception as exc:
-                logger.exception("Failed %s %s: %s", window.event_id, symbol, exc)
-                report.rejected_files.append(
-                    {"release_id": window.event_id, "symbol": symbol, "reason": str(exc)}
-                )
-                report.blocker_count += 1
-                continue
+    tasks: list[tuple[Any, str]] = [(w, symbol) for w, symbol in missing_pairs]
+    tasks = filter_tasks_for_shard(tasks, shard_index=shard_index, shard_count=shard_count)
+    if limit is not None:
+        tasks = tasks[:limit]
 
-            if result is None:
-                report.missing_windows.append({"release_id": window.event_id, "symbol": symbol})
-                continue
+    worker_count = max(1, int(workers))
+    if shard_count > 1:
+        logger.info(
+            "Shard %d/%d: %d slots assigned (of %d missing in scope)",
+            shard_index,
+            shard_count,
+            len(tasks),
+            len(missing_pairs),
+        )
+    if worker_count == 1:
+        for window, symbol in tasks:
+            window_obj, sym, result, exc = _download_slot_task(
+                repo_root, window, symbol, max_cost_usd, skip_if_npz=skip_if_npz
+            )
+            _apply_slot_result(report, repo_root, window_obj, sym, result, exc=exc)
+            if result is not None or exc is not None:
+                slot_count += 1
+        return report
 
-            slot_count += 1
-            report.total_events += result.event_count
-            rel_path = str(result.slot_dir.relative_to(repo_root))
-            if result.validation_status == "valid":
-                report.valid_release_paths.append(rel_path)
-            else:
-                report.invalid_release_paths.append(rel_path)
-                report.blocker_count += len(result.blockers)
+    logger.info("Parallel MBO download: %d slots, %d workers", len(tasks), worker_count)
+    with ThreadPoolExecutor(max_workers=worker_count) as pool:
+        futures = [
+            pool.submit(
+                _download_slot_task,
+                repo_root,
+                window,
+                symbol,
+                max_cost_usd,
+                skip_if_npz=skip_if_npz,
+            )
+            for window, symbol in tasks
+        ]
+        for fut in as_completed(futures):
+            window_obj, sym, result, exc = fut.result()
+            with _report_lock:
+                _apply_slot_result(report, repo_root, window_obj, sym, result, exc=exc)
+                if result is not None or exc is not None:
+                    slot_count += 1
 
     return report
