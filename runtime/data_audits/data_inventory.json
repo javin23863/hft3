@@ -1,0 +1,77 @@
+{
+  "generated_at_utc": "2026-06-07T19:03:19.797107+00:00",
+  "repo_root": "C:\\Users\\MSI\\Documents\\GitHub\\hft3",
+  "paid_data_root": "C:\\Users\\MSI\\Documents\\GitHub\\hft3\\data",
+  "locations": {
+    "repo_data_npz": {
+      "path": "C:\\Users\\MSI\\Documents\\GitHub\\hft3\\data\\npz",
+      "npz_files": 26799,
+      "npz_bytes": 7062881497,
+      "npz_gb": 7.06
+    },
+    "repo_data_raw_dbn": {
+      "path": "C:\\Users\\MSI\\Documents\\GitHub\\hft3\\data",
+      "raw_dbn_files": 22040,
+      "raw_dbn_bytes": 14353868637,
+      "raw_dbn_gb": 14.35
+    },
+    "repo_equities_npz": {
+      "path": "C:\\Users\\MSI\\Documents\\GitHub\\hft3\\data\\equities\\npz",
+      "npz_files": 13,
+      "npz_bytes": 81648490,
+      "npz_gb": 0.08
+    },
+    "paid_data_npz": {
+      "path": "C:\\Users\\MSI\\Documents\\GitHub\\hft3\\data\\npz",
+      "npz_files": 26799,
+      "npz_bytes": 7062881497,
+      "npz_gb": 7.06
+    },
+    "paid_data_raw_dbn": {
+      "path": "C:\\Users\\MSI\\Documents\\GitHub\\hft3\\data\\raw",
+      "raw_dbn_files": 7563,
+      "raw_dbn_bytes": 10604507597,
+      "raw_dbn_gb": 10.6
+    },
+    "chi404_npz": {
+      "path": "/root/hft3/repo/data/npz",
+      "npz_files": 9394,
+      "npz_bytes": 748701755,
+      "npz_gb": 0.75
+    },
+    "chi404_raw_dbn": {
+      "path": "/root/hft3/repo/data/",
+      "raw_dbn_files": 19894
+    },
+    "chi404_manifest": {
+      "info": ""
+    },
+    "chi404_processes": {
+      "download_mbo": ""
+    }
+  },
+  "totals": {
+    "all_npz_files": 53611,
+    "all_npz_bytes": 14207411484,
+    "all_npz_gb": 14.21,
+    "cme_unique_sym_eid_pairs": 21411,
+    "repo_cme_pairs": 21411,
+    "paid_cme_pairs": 21411,
+    "paid_cme_pairs_not_in_repo": 0
+  },
+  "cme_readiness": {
+    "event_slots_total": 3947496,
+    "event_slots_npz_ready": 1166672,
+    "pct_ready": 29.55,
+    "full_matrix_ready_today": false
+  },
+  "model_pct_distribution": {
+    "0%": 4,
+    "1-25%": 1,
+    "26-50%": 46,
+    "51-75%": 0,
+    "76-99%": 1,
+    "100%": 1,
+    "None": 2
+  }
+}
