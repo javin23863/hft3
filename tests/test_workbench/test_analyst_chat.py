@@ -42,7 +42,7 @@ def test_workbench_console_reply_uses_client_and_packet_context() -> None:
         diagnostics={"feature_fabric": {"status": "OBSERVED", "pit_validation_status": "PASS"}},
         decision={
             "action": "QUARANTINE",
-            "live_registry_ready": False,
+            "activation_registry_ready": False,
             "blocking_gates": [{"gate": "vectorbt_filter", "status": "PREFILTER_ONLY"}],
         },
         after_action={
@@ -70,7 +70,7 @@ def test_workbench_console_reply_uses_client_and_packet_context() -> None:
     assert seen["kwargs"] == {"model": analyst_panel.llm_client.DEFAULT_RESEARCH_MODEL, "num_predict": 1024}
     system_prompt = str(seen["system"])
     user_prompt = str(seen["user"])
-    assert "promotion, deployment, order, or live-routing authority" in system_prompt
+    assert "promotion, deployment, order, or broker-routing authority" in system_prompt
     assert "packet_status" in user_prompt
     assert "bitcoin_edge_packets" in user_prompt
     assert "SCHEMA_ONLY_INACTIVE" in user_prompt

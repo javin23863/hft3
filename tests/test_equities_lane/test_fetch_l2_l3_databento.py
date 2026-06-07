@@ -123,7 +123,7 @@ def test_dry_run_works_without_api_key(tmp_path, monkeypatch):
     assert (out_dir / "l2_l3_fetch_manifest.json").exists()
 
 
-def test_live_mode_refuses_without_confirm_purchase(tmp_path):
+def test_confirmed_download_refuses_without_confirm_purchase(tmp_path):
     plan_path = tmp_path / "plan.json"
     rows = [
         _row("A", "T-1 close", "2024-05-28T09:30:00", "2024-05-28T16:00:00", download_now=True, download_policy="free_daily_benchmark_passed"),
@@ -143,12 +143,14 @@ def test_live_mode_refuses_without_confirm_purchase(tmp_path):
         max_total_cost_usd=None,
         max_tickers=None,
     )
+    assert manifest["mode"] == "confirmed_download"
     assert manifest["status"] == "refused"
     assert "--confirm-purchase" in manifest["refusal_reason"]
+    assert "confirmed downloads" in manifest["refusal_reason"]
     assert "ticker_records" not in manifest
 
 
-def test_live_mode_refuses_without_api_key(tmp_path, monkeypatch):
+def test_confirmed_download_refuses_without_api_key(tmp_path, monkeypatch):
     plan_path = tmp_path / "plan.json"
     rows = [
         _row("A", "T-1 close", "2024-05-28T09:30:00", "2024-05-28T16:00:00", download_now=True, download_policy="free_daily_benchmark_passed"),
@@ -169,8 +171,10 @@ def test_live_mode_refuses_without_api_key(tmp_path, monkeypatch):
         max_total_cost_usd=None,
         max_tickers=None,
     )
+    assert manifest["mode"] == "confirmed_download"
     assert manifest["status"] == "refused"
     assert "DATABENTO_API_KEY" in manifest["refusal_reason"]
+    assert "confirmed downloads" in manifest["refusal_reason"]
 
 
 def test_dry_run_estimate_failure_is_recorded(tmp_path, monkeypatch):

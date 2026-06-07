@@ -13,13 +13,13 @@ from connectors.rithmic.smoke_test import (
 )
 
 
-def test_paper_smoke_blocks_test_orangeburg_endpoint(tmp_path: Path) -> None:
+def test_external_smoke_blocks_test_orangeburg_endpoint(tmp_path: Path) -> None:
     settings = SmokeSettings(
-        env="paper",
+        env="external",
         symbol_root="ES",
         exchange="CME",
         duration_sec=0,
-        config_path=tmp_path / "paper.yaml",
+        config_path=tmp_path / "external.yaml",
         url="wss://rituz00100.00.rithmic.com",
         system_name="Rithmic Test",
         gateway="Orangeburg",
@@ -29,16 +29,16 @@ def test_paper_smoke_blocks_test_orangeburg_endpoint(tmp_path: Path) -> None:
 
     codes = {blocker.code for blocker in settings.blockers()}
 
-    assert "PAPER_PROFILE_POINTS_TO_TEST" in codes
-    assert "PAPER_PROFILE_POINTS_TO_ORANGEBURG" in codes
-    assert "PAPER_PROTOCOL_ENDPOINT_IS_TEST_OR_ORANGEBURG" in codes
+    assert "EXTERNAL_PROFILE_POINTS_TO_TEST" in codes
+    assert "EXTERNAL_PROFILE_POINTS_TO_ORANGEBURG" in codes
+    assert "EXTERNAL_PROTOCOL_ENDPOINT_IS_TEST_OR_ORANGEBURG" in codes
 
 
-def test_paper_smoke_missing_url_blocks_without_secret_leak(
+def test_external_smoke_missing_url_blocks_without_secret_leak(
     tmp_path: Path,
     capsys,
 ) -> None:
-    config = tmp_path / "paper.yaml"
+    config = tmp_path / "external.yaml"
     config.write_text(
         """
 system: Rithmic Paper Trading
@@ -52,7 +52,7 @@ protocol:
     rc = smoke_main(
         [
             "--env",
-            "paper",
+            "external",
             "--config",
             str(config),
             "--symbol-root",
@@ -67,23 +67,23 @@ protocol:
 
     captured = capsys.readouterr()
     assert rc == 2
-    assert "PAPER_PROTOCOL_URL_MISSING" in captured.err
+    assert "EXTERNAL_PROTOCOL_URL_MISSING" in captured.err
     assert "unit_user" not in captured.err
     assert "unit_password" not in captured.err
 
 
-def test_paper_smoke_fake_client_writes_raw_jsonl_and_report_without_credentials(
+def test_external_smoke_fake_client_writes_raw_jsonl_and_report_without_credentials(
     tmp_path: Path,
 ) -> None:
     settings = SmokeSettings(
-        env="paper",
+        env="external",
         symbol_root="ES",
         exchange="CME",
         duration_sec=0,
-        config_path=tmp_path / "paper.yaml",
+        config_path=tmp_path / "external.yaml",
         raw_root=tmp_path / "raw",
         report_root=tmp_path / "reports",
-        url="paper-chicago.example.rithmic.com",
+        url="external-chicago.example.rithmic.com",
         system_name="Rithmic Paper Trading",
         gateway="Chicago Area",
         username="unit_user",
@@ -120,23 +120,23 @@ def test_paper_smoke_fake_client_writes_raw_jsonl_and_report_without_credentials
     assert all(row["exchange"] == "CME" for row in rows)
 
 
-def test_paper_smoke_check_config_ready_does_not_print_credentials(
+def test_external_smoke_check_config_ready_does_not_print_credentials(
     tmp_path: Path,
     capsys,
 ) -> None:
-    config = tmp_path / "paper.yaml"
+    config = tmp_path / "external.yaml"
     config.write_text(
         """
 system: Rithmic Paper Trading
 gateway: Chicago Area
 protocol:
-  url: paper-chicago.example.rithmic.com
+  url: external-chicago.example.rithmic.com
 """,
         encoding="utf-8",
     )
 
     rc = smoke_main(
-        ["--env", "paper", "--config", str(config), "--check-config"],
+        ["--env", "external", "--config", str(config), "--check-config"],
         environ={"RITHMIC_USERNAME": "unit_user", "RITHMIC_PASSWORD": "unit_password"},
     )
 
@@ -145,6 +145,35 @@ protocol:
     assert "ready_to_connect" in captured.out
     assert "unit_user" not in captured.out
     assert "unit_password" not in captured.out
+
+
+def test_external_smoke_real_client_blocks_off_chi404(
+    tmp_path: Path,
+    capsys,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr("connectors.rithmic.smoke_test.is_chi404_runtime", lambda: False)
+    config = tmp_path / "external.yaml"
+    config.write_text(
+        """
+system: Rithmic Paper Trading
+gateway: Chicago Area
+protocol:
+  url: external-chicago.example.rithmic.com
+""",
+        encoding="utf-8",
+    )
+
+    rc = smoke_main(
+        ["--env", "external", "--config", str(config), "--duration", "0"],
+        environ={"RITHMIC_USERNAME": "unit_user", "RITHMIC_PASSWORD": "unit_password"},
+    )
+
+    captured = capsys.readouterr()
+    assert rc == 2
+    assert "CHI404_REQUIRED" in captured.err
+    assert "unit_user" not in captured.err
+    assert "unit_password" not in captured.err
 
 
 class _FakeEvent:

@@ -206,7 +206,7 @@ def _run_header_blocker_message(snapshot: RunEvidenceSnapshot) -> str:
 
     action = str(decision.get("action") or decision.get("status") or "").upper()
     reason = str(decision.get("reason") or decision.get("current_stage") or snapshot.current_stage or "").strip()
-    if action == "BLOCKED" and not decision.get("live_registry_ready") and reason:
+    if action == "BLOCKED" and not decision.get("activation_registry_ready") and reason:
         return f"Backend readiness blocked: {action}: {reason}"
     return ""
 
@@ -350,7 +350,7 @@ def render_registry_data(snapshot: RunEvidenceSnapshot) -> None:
             )
     rithmic_trial = data.get("rithmic_trial") or {}
     if rithmic_trial.get("observed"):
-        st.subheader("Rithmic Paper Data")
+        st.subheader("Rithmic External Data")
         event_counts = rithmic_trial.get("event_type_counts") or {}
         c1, c2, c3, c4, c5 = st.columns(5)
         c1.metric("Symbol", rithmic_trial.get("symbol", ""))
@@ -358,7 +358,7 @@ def render_registry_data(snapshot: RunEvidenceSnapshot) -> None:
         c3.metric("Rows", int(_num(rithmic_trial.get("row_count"))))
         c4.metric("Trades", int(_num(event_counts.get("trade"))))
         c5.metric("Quotes", int(_num(event_counts.get("quote"))))
-        st.caption("This is observed Paper/Chicago market-data evidence. It is not a promoted model and it is not order latency.")
+        st.caption("This is observed External/Chicago market-data evidence. It is not a promoted model and it is not order latency.")
         if rithmic_trial.get("report_binding_status") and rithmic_trial.get("report_binding_status") != "PASS":
             st.error("Report binding is blocked. These reports are not trusted until they match the raw capture checksum, normalized file, and replay artifact.")
             _display_df(
@@ -503,7 +503,7 @@ def render_backtest_evidence(snapshot: RunEvidenceSnapshot) -> None:
         st.caption(f"Data quality: {str(summary.get('data_quality_status') or 'missing').upper()}")
         st.caption(
             "This tab is showing the data/replay lane. P&L appears after a model run emits strategy trades; "
-            "this capture only proves Paper/Chicago data and trade-only replay are working."
+            "this capture only proves External/Chicago data and trade-only replay are working."
         )
         if event_counts:
             event_frame = pd.DataFrame(
@@ -837,15 +837,15 @@ def render_latency_evidence(snapshot: RunEvidenceSnapshot) -> None:
         c3.metric("Gateway", rithmic_endpoint.get("gateway", ""))
         c4.metric("Status", rithmic_endpoint.get("status", "UNKNOWN"))
         missing = rithmic_endpoint.get("missing_endpoint_params") or []
-        if rithmic_endpoint.get("reason_code") == "PAPER_ENDPOINT_PARAMS_MISSING":
-            st.error("Paper/Chicago API parameters are missing; credentials alone are not an endpoint.")
+        if rithmic_endpoint.get("reason_code") == "EXTERNAL_ENDPOINT_PARAMS_MISSING":
+            st.error("External/Chicago API parameters are missing; credentials alone are not an endpoint.")
         elif rithmic_endpoint.get("reason_code") == "RITHMIC_CREDENTIALS_MISSING":
             if (latency.get("rithmic_capture_endpoint") or {}).get("status"):
                 st.warning("Current Workbench server credentials are not loaded. The selected capture has separate last-connection evidence below.")
             else:
-                st.error("Paper/Chicago endpoint parameters are present, but runtime credentials are not loaded.")
+                st.error("External/Chicago endpoint parameters are present, but runtime credentials are not loaded.")
         elif rithmic_endpoint.get("reason_code") == "GATEWAY_LIBRARY_NOT_FOUND":
-            st.error("Paper/Chicago endpoint parameters are present, but the C++ Rithmic gateway library is not available.")
+            st.error("External/Chicago endpoint parameters are present, but the C++ Rithmic gateway library is not available.")
         elif rithmic_endpoint.get("reason_code"):
             st.warning(str(rithmic_endpoint.get("reason_code")))
         if missing:
@@ -894,15 +894,15 @@ def render_latency_evidence(snapshot: RunEvidenceSnapshot) -> None:
         c4.metric("Account env set", bool((ibkr_endpoint.get("credentials") or {}).get("account_id_set")))
         c1, c2 = st.columns(2)
         c1.metric("Pipeline gate", ibkr_endpoint.get("pipeline_gate_status", "UNKNOWN"))
-        c2.metric("Live routing gate", ibkr_endpoint.get("live_routing_gate_status", "UNKNOWN"))
+        c2.metric("Broker routing gate", ibkr_endpoint.get("broker_routing_gate_status", "UNKNOWN"))
         if ibkr_endpoint.get("pipeline_note"):
             st.info(str(ibkr_endpoint.get("pipeline_note")))
         if ibkr_endpoint.get("headless_handshake_required"):
             st.caption("Headless API handshake is required for this Workbench lane gate.")
-        if api.get("api_client_status") == "PAPER_DISCLAIMER_PENDING":
+        if api.get("api_client_status") == "BROKER_DISCLAIMER_PENDING":
             st.warning(
-                "IBKR rejected the headless API handshake with paper-disclaimer error 10141. "
-                "Live routing remains gated, but this no longer blocks the equities/options research pipeline."
+                "IBKR rejected the headless API handshake with broker-disclaimer error 10141. "
+                "Broker routing remains gated, but this no longer blocks the equities/options research pipeline."
             )
             errors = api.get("errors") or []
             if errors:
@@ -920,7 +920,7 @@ def render_latency_evidence(snapshot: RunEvidenceSnapshot) -> None:
                 )
             else:
                 st.warning(
-                    "IBKR equities live routing is gated. Model production, backtest, robustness, and registry work can continue."
+                    "IBKR equities broker routing is gated. Model production, backtest, robustness, and registry work can continue."
                 )
             _display_df(
                 ibkr_endpoint["blocking_gates"],
@@ -931,7 +931,7 @@ def render_latency_evidence(snapshot: RunEvidenceSnapshot) -> None:
                 },
             )
         st.caption(
-            "QuantX reference: TWS/IB Gateway socket path, paper port 7497, live port 7496. "
+            "QuantX reference: TWS/IB Gateway socket path, broker endpoint port 7497. "
             "Client Portal is not the default equities lane endpoint."
         )
     latency_baseline = latency.get("latency_baseline") or {}
@@ -1236,7 +1236,7 @@ def render_signal_diagnostics(snapshot: RunEvidenceSnapshot) -> None:
         c2.metric("Model feature usage", feature_fabric.get("model_feature_usage_status", "not_observed"))
         st.caption(
             "Catalog rows prove configured feature eligibility and PIT safety. "
-            "They do not claim a live model consumed those features."
+            "They do not claim a activated model consumed those features."
         )
         if feature_fabric.get("gate_status") == "BLOCKING":
             st.error("Cross-lane feature fabric is blocked. The Workbench will not treat this policy as evidence until artifacts and PIT validation pass.")
@@ -1422,7 +1422,7 @@ def render_decision_registry(snapshot: RunEvidenceSnapshot) -> None:
     c1.metric("Evidence candidate", _short_id(evidence_candidate, keep=24))
     c2.metric("Smoke passes", int(_num(decision.get("smoke_pass_count"))))
     c3.metric("Positive P&L diagnostics", int(_num(decision.get("economic_diagnostic_pass_count"))))
-    c4.metric("Live-ready registry", bool(decision.get("live_registry_ready")))
+    c4.metric("Activation-ready registry", bool(decision.get("activation_registry_ready")))
     institutional_metrics = decision.get("institutional_metrics") or (snapshot.system or {}).get("institutional_metrics") or {}
     scorecard = institutional_metrics.get("scorecard") or {}
     envelope = institutional_metrics.get("envelope") or {}
@@ -1450,7 +1450,7 @@ def render_decision_registry(snapshot: RunEvidenceSnapshot) -> None:
                 )
             if envelope:
                 st.caption(
-                    "Behavior envelope monitors live/paper/shadow behavior against expected P&L, drawdown, slippage, fill, latency, regime, and feature bounds."
+                    "Behavior envelope monitors external/shadow behavior against expected P&L, drawdown, slippage, fill, latency, regime, and feature bounds."
                 )
                 _json_expander("Behavior envelope", envelope)
         else:
@@ -1475,7 +1475,7 @@ def render_decision_registry(snapshot: RunEvidenceSnapshot) -> None:
         st.caption(f"Bitcoin state packet gate: {decision['bitcoin_edge_packet_status']}")
 
 
-def _live_stage_rows(snapshot: RunEvidenceSnapshot) -> list[dict[str, Any]]:
+def _broker_stage_rows(snapshot: RunEvidenceSnapshot) -> list[dict[str, Any]]:
     tm = snapshot.trade_manager or {}
     decision = snapshot.decision or {}
     backtest = snapshot.backtest or {}
@@ -1483,7 +1483,7 @@ def _live_stage_rows(snapshot: RunEvidenceSnapshot) -> list[dict[str, Any]]:
     has_backtest = bool(backtest.get("rows") or backtest.get("reports") or backtest.get("campaigns") or backtest.get("observed"))
     robustness_failed = bool(robustness.get("failed") or (robustness.get("explanation") or {}).get("failed_required_checks"))
     robustness_observed = bool(robustness.get("rows") or robustness.get("gates") or robustness.get("crypto_robustness_summary"))
-    live_ready = bool(decision.get("live_registry_ready"))
+    activation_ready = bool(decision.get("activation_registry_ready"))
     promoted_count = int(_num(tm.get("promoted_model_count")))
     active_models = tm.get("active_models") or []
     order_intents = tm.get("order_intents") or []
@@ -1522,7 +1522,7 @@ def _live_stage_rows(snapshot: RunEvidenceSnapshot) -> list[dict[str, Any]]:
         },
         {
             "phase": "5. Registry promotion",
-            "status": "READY" if live_ready else ("PROMOTED_RECORDS" if promoted_count else "BLOCKED"),
+            "status": "READY" if activation_ready else ("PROMOTED_RECORDS" if promoted_count else "BLOCKED"),
             "operator_state": f"{promoted_count} promoted model records",
         },
         {
@@ -1551,15 +1551,15 @@ def _live_stage_rows(snapshot: RunEvidenceSnapshot) -> list[dict[str, Any]]:
             "operator_state": "active" if kill_switch.get("active") else "clear/not observed",
         },
         {
-            "phase": "11. Live routing",
-            "status": str(tm.get("live_routing_status") or "NOT_WIRED"),
-            "operator_state": tm.get("live_routing_reason", ""),
+            "phase": "11. Broker routing",
+            "status": str(tm.get("broker_routing_status") or "NOT_WIRED"),
+            "operator_state": tm.get("broker_routing_reason", ""),
         },
     ]
 
 
-def render_live_monitor(snapshot: RunEvidenceSnapshot) -> None:
-    st.header("Live Monitor")
+def render_broker_monitor(snapshot: RunEvidenceSnapshot) -> None:
+    st.header("Broker Monitor")
     render_run_header(snapshot)
     tm = snapshot.trade_manager or {}
     status = str(tm.get("status") or "not_observed")
@@ -1584,8 +1584,8 @@ def render_live_monitor(snapshot: RunEvidenceSnapshot) -> None:
     if tm.get("selected_run_link_reason"):
         st.caption(str(tm["selected_run_link_reason"]))
 
-    st.subheader("Pipeline To Live Trading")
-    _df(_live_stage_rows(snapshot))
+    st.subheader("Pipeline To Broker Activation")
+    _df(_broker_stage_rows(snapshot))
 
     st.subheader("Active Models")
     _display_df(
@@ -1825,7 +1825,7 @@ def render_system(snapshot: RunEvidenceSnapshot, repo: Path) -> None:
                 "headless_required": ibkr_endpoint.get("headless_handshake_required"),
                 "api_status": (ibkr_endpoint.get("api") or {}).get("api_client_status"),
                 "pipeline_gate": ibkr_endpoint.get("pipeline_gate_status"),
-                "live_routing_gate": ibkr_endpoint.get("live_routing_gate_status"),
+                "broker_routing_gate": ibkr_endpoint.get("broker_routing_gate_status"),
                 "account_id_set": (ibkr_endpoint.get("credentials") or {}).get("account_id_set"),
                 "secret_exposed": ibkr_endpoint.get("secret_exposed", False),
                 "config_path": ibkr_endpoint.get("config_path"),

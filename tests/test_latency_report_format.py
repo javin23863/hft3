@@ -43,7 +43,7 @@ def _sample_summary() -> dict:
             "status": "missing",
             "profile_path": "reports/rithmic_trial/2026-05-30/latency_profile.json",
             "reason": "No order ack events captured yet",
-            "populate_hint": "Send paper orders in R|Trader VM, then bash scripts/chi404_run_trial_live.sh",
+            "populate_hint": "Capture broker order acknowledgments in R|Trader VM, then bash scripts/chi404_run_trial_capture.sh",
             "note": "Does not affect colo recommended_lane",
         },
         "strategy_guidance": {

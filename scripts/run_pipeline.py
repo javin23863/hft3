@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import random
 import sys
 import uuid
 from datetime import datetime, timezone
@@ -39,7 +40,13 @@ from research_pipeline.packets import (
     build_pipeline_response,
     write_pipeline_packets,
 )
-from research_pipeline.types import CandidateModel, GateThresholds, PipelineReport, ParsedHypothesis
+from research_pipeline.types import (
+    CandidateModel,
+    EvaluationResult,
+    GateThresholds,
+    PipelineReport,
+    ParsedHypothesis,
+)
 from data_layer.llm.openai_compatible_client import DEFAULT_MODEL_DEVELOPMENT_MODEL
 
 
@@ -76,6 +83,72 @@ def _idea_set_missing_prefilter(
     return idea_set_enabled and not dry_run and not (vectorbt or vectorbt_only)
 
 
+def _promoted_to_candidates(
+    promoted: list,
+    *,
+    parsed: ParsedHypothesis,
+    source_meta: dict[str, dict],
+) -> list[CandidateModel]:
+    return [
+        CandidateModel(
+            candidate_id=p.candidate_id,
+            model_id=p.hypothesis_id,
+            strategy_params=p.param_values,
+            thesis=parsed.thesis,
+            metadata={
+                **source_meta.get(p.candidate_id, {}),
+                "strategy_family": p.strategy_family,
+                "promoted": True,
+                "vectorbt_run_id": p.vectorbt_run_id,
+                "vectorbt_results": p.vectorbt_results,
+                "asset_class": p.asset_class,
+                "symbol": p.symbol,
+            },
+        )
+        for p in promoted
+    ]
+
+
+def _validate_crypto_candidates(candidates: list[CandidateModel], repo_root: Path) -> None:
+    crypto_data = repo_root / "data" / "crypto"
+    for cand in candidates:
+        ac = cand.metadata.get("asset_class", "").upper()
+        if ac not in ("CRYPTO",):
+            continue
+        try:
+            from crypto_lane.src.validation.crypto_validation_workflow import validate_crypto_candidate  # noqa: F811
+            from backtest_pipeline.src.promotion_gate import set_execution_classification  # noqa: F811
+
+            print(f"  Validating crypto execution for {cand.candidate_id}...")
+            report = validate_crypto_candidate(cand, crypto_data)
+            error = report.result.error
+            classification = report.result.execution_classification if not error else "NO_EXECUTION"
+            cand.metadata["execution_classification"] = classification
+            cand.metadata["execution_quality"] = {
+                "mean_jump_bps": report.result.mean_jump_bps,
+                "mean_qqe": report.result.mean_qqe,
+                "total_fills": report.result.total_fills,
+                "error": error,
+            }
+            set_execution_classification(cand.candidate_id, classification)
+            print(
+                f"    {cand.candidate_id}: {classification}, "
+                f"fills={report.result.total_fills}, "
+                f"jump={report.result.mean_jump_bps:.2f}bps, "
+                f"qqe={report.result.mean_qqe:.2f}"
+            )
+        except ImportError:
+            print(
+                f"  Skipping crypto validation for {cand.candidate_id}: crypto_lane not installed",
+                file=sys.stderr,
+            )
+            cand.metadata["execution_classification"] = "NO_EXECUTION"
+        except Exception as exc:
+            print(f"  Crypto validation failed for {cand.candidate_id}: {exc}", file=sys.stderr)
+            cand.metadata["execution_classification"] = "NO_EXECUTION"
+            cand.metadata["execution_quality"] = {"error": str(exc)}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Autoresearch pipeline")
     parser.add_argument("--thesis", required=True, help="Natural-language trading thesis")
@@ -86,14 +159,56 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true", help="Parse and generate only")
     parser.add_argument("--no-llm", action="store_true", help="Heuristic hypothesis parse only")
     parser.add_argument("--repo-root", type=Path, default=REPO)
-    parser.add_argument("--vectorbt", action="store_true", help="Enable VectorBT pre-filter before HftBacktest")
-    parser.add_argument("--vectorbt-only", action="store_true", help="Run VectorBT filter only, skip HftBacktest")
-    parser.add_argument("--idea-set", action="store_true", help="Use packet-strict LLM idea set before candidate tests")
+    parser.add_argument(
+        "--lane",
+        choices=["cme", "equities", "crypto"],
+        default="equities",
+        help="Execution lane (cme, equities, crypto); crypto lane includes additional execution validation.",
+    )
+    parser.add_argument(
+        "--vectorbt",
+        action="store_true",
+        help="(ignored) VectorBT pre-filter is always enabled for all runs",
+    )
+    parser.add_argument(
+        "--vectorbt-only",
+        action="store_true",
+        help="(ignored) VectorBT-only mode is no longer supported",
+    )
+    parser.add_argument(
+        "--idea-set",
+        action="store_true",
+        help="(ignored) Idea generation is always enabled for all runs",
+    )
     parser.add_argument("--max-ideas", type=int, default=None, help="Maximum idea records to accept before static filtering")
     parser.add_argument("--review-memory-limit", type=int, default=5, help="Prior AAR/KG memory facts to include")
     parser.add_argument("--idea-temperature", type=float, default=None, help="Sampling temperature for idea generation only")
     parser.add_argument("--idea-top-p", type=float, default=None, help="Top-p sampling for idea generation only")
+    parser.add_argument(
+        "--search-mode",
+        choices=["grid", "random"],
+        default="grid",
+        help="Parameter search mode for candidate generation.",
+    )
+    parser.add_argument(
+        "--num-samples",
+        type=int,
+        default=5,
+        help="Number of random samples when --search-mode=random.",
+    )
+    parser.add_argument(
+        "--random-seed",
+        type=int,
+        default=None,
+        help="Seed for reproducible random search.",
+    )
     args = parser.parse_args()
+    # Enforce mandatory pipeline components.
+    args.vectorbt = True
+    args.vectorbt_only = False
+    args.idea_set = True
+    if args.random_seed is not None:
+        random.seed(args.random_seed)
 
     repo_root = args.repo_root.resolve()
     run_id = _run_id()
@@ -187,8 +302,11 @@ def main() -> int:
             repo_root=repo_root,
         )
         candidates = list(generate_candidates(
-            parsed, max_candidates=args.max_candidates,
+            parsed,
+            max_candidates=args.max_candidates,
             expand_for_vectorbt=bool(args.vectorbt or args.vectorbt_only),
+            search_mode=args.search_mode,
+            num_samples=args.num_samples,
         ))
 
     if args.vectorbt or args.vectorbt_only:
@@ -210,24 +328,11 @@ def main() -> int:
         for r in filter_result.rejected:
             print(f"  REJECTED {r.candidate_id}: {r.reject_reason}")
         if filter_result.promoted:
-            candidates = [
-                CandidateModel(
-                    candidate_id=p.candidate_id,
-                    model_id=p.hypothesis_id,
-                    strategy_params=p.param_values,
-                    thesis=parsed.thesis,
-                    metadata={
-                        **source_meta.get(p.candidate_id, {}),
-                        "strategy_family": p.strategy_family,
-                        "promoted": True,
-                        "vectorbt_run_id": p.vectorbt_run_id,
-                        "vectorbt_results": p.vectorbt_results,
-                        "asset_class": p.asset_class,
-                        "symbol": p.symbol,
-                    },
-                )
-                for p in filter_result.promoted
-            ]
+            candidates = _promoted_to_candidates(
+                filter_result.promoted,
+                parsed=parsed,
+                source_meta=source_meta,
+            )
         else:
             print("No candidates survived VectorBT filter.")
             candidates = []
@@ -314,37 +419,7 @@ def main() -> int:
 
     # === Crypto execution validation for promoted candidates ===
     if args.vectorbt and not args.vectorbt_only:
-        crypto_data = repo_root / "data" / "crypto"
-        for cand in candidates:
-            ac = cand.metadata.get("asset_class", "").upper()
-            if ac in ("CRYPTO",):
-                try:
-                    from crypto_lane.src.validation.crypto_validation_workflow import validate_crypto_candidate  # noqa: F811
-                    from backtest_pipeline.src.promotion_gate import set_execution_classification  # noqa: F811
-
-                    print(f"  Validating crypto execution for {cand.candidate_id}...")
-                    report = validate_crypto_candidate(cand, crypto_data)
-                    error = report.result.error
-                    classification = report.result.execution_classification if not error else "NO_EXECUTION"
-                    cand.metadata["execution_classification"] = classification
-                    cand.metadata["execution_quality"] = {
-                        "mean_jump_bps": report.result.mean_jump_bps,
-                        "mean_qqe": report.result.mean_qqe,
-                        "total_fills": report.result.total_fills,
-                        "error": error,
-                    }
-                    set_execution_classification(cand.candidate_id, classification)
-                    print(f"    {cand.candidate_id}: {classification}, "
-                          f"fills={report.result.total_fills}, "
-                          f"jump={report.result.mean_jump_bps:.2f}bps, "
-                          f"qqe={report.result.mean_qqe:.2f}")
-                except ImportError:
-                    print(f"  Skipping crypto validation for {cand.candidate_id}: crypto_lane not installed", file=sys.stderr)
-                    cand.metadata["execution_classification"] = "NO_EXECUTION"
-                except Exception as exc:
-                    print(f"  Crypto validation failed for {cand.candidate_id}: {exc}", file=sys.stderr)
-                    cand.metadata["execution_classification"] = "NO_EXECUTION"
-                    cand.metadata["execution_quality"] = {"error": str(exc)}
+        _validate_crypto_candidates(candidates, repo_root)
 
     if args.dry_run:
         idea_summary = (
@@ -410,12 +485,67 @@ def main() -> int:
         print("Warning: no latency data available; backtest will run without CHI404 latency", file=sys.stderr)
 
     gates = GateThresholds(min_trades=0)
-    results = []
-    for cand in candidates:
-        print(f"Evaluating {cand.model_id} threshold={cand.strategy_params.get('signal_threshold')}...")
-        results.append(
-            evaluate_model(cand, args.event_id, repo_root, chi404_summary=chi404, gates=gates)
+
+    def _evaluate_current(candidate_pool: list[CandidateModel]) -> list[EvaluationResult]:
+        evaluated = []
+        for cand in candidate_pool:
+            print(f"Evaluating {cand.model_id} threshold={cand.strategy_params.get('signal_threshold')}...")
+            evaluated.append(
+                evaluate_model(cand, args.event_id, repo_root, chi404_summary=chi404, gates=gates)
+            )
+        return evaluated
+
+    results = _evaluate_current(candidates)
+
+    if not any(r.passes_all_gates() for r in results):
+        retry_sample_count = max(1, int(args.num_samples)) * 2
+        retry_search_mode = args.search_mode if args.search_mode == "random" else "random"
+        print(
+            "No candidates passed gates; expanding parameter search "
+            f"with {retry_search_mode} mode and {retry_sample_count} samples..."
         )
+        retry_candidates = list(
+            generate_candidates(
+                parsed,
+                max_candidates=args.max_candidates,
+                expand_for_vectorbt=True,
+                search_mode=retry_search_mode,
+                num_samples=retry_sample_count,
+            )
+        )
+        if retry_candidates:
+            print(f"Running VectorBT filter on {len(retry_candidates)} adaptive candidates x grid...")
+            source_meta = {c.candidate_id: dict(c.metadata) for c in retry_candidates}
+            retry_filter_result = filter_candidates(
+                candidates=retry_candidates,
+                parsed=parsed,
+                event_id=args.event_id,
+                repo_root=repo_root,
+                gates=PromotionGate(
+                    min_oos_expectancy=0.0,
+                    max_drawdown_pct=-50.0,
+                    min_trades=10,
+                ),
+            )
+            print(
+                f"  Adaptive promoted: {len(retry_filter_result.promoted)}, "
+                f"Rejected: {len(retry_filter_result.rejected)}"
+            )
+            for rejected in retry_filter_result.rejected:
+                print(f"  ADAPTIVE REJECTED {rejected.candidate_id}: {rejected.reject_reason}")
+            if retry_filter_result.promoted:
+                candidates = _promoted_to_candidates(
+                    retry_filter_result.promoted,
+                    parsed=parsed,
+                    source_meta=source_meta,
+                )
+                if args.vectorbt and not args.vectorbt_only:
+                    _validate_crypto_candidates(candidates, repo_root)
+                results.extend(_evaluate_current(candidates))
+            else:
+                print("No adaptive candidates survived VectorBT filter.")
+        else:
+            print("Adaptive search generated no candidates.")
 
     if idea_packet:
         update_idea_statuses_from_results(idea_packet, results)

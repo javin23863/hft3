@@ -44,8 +44,8 @@ print(json.dumps(result, indent=2))
 if result.get("order_intent_count", 0) < 1:
     raise SystemExit("FAIL: order_intent_count < 1")
 summary = result["order_lifecycle_summary"]
-if summary.get("live_broker_call_count", -1) != 0:
-    raise SystemExit("FAIL: live_broker_call_count != 0")
+if summary.get("broker_call_count", -1) != 0:
+    raise SystemExit("FAIL: broker_call_count != 0")
 if summary.get("rithmic_order_call_count", -1) != 0:
     raise SystemExit("FAIL: rithmic_order_call_count != 0")
 
@@ -63,7 +63,7 @@ report.write_text(
             f"- order_intent_count: {result.get('order_intent_count')}",
             f"- accepted_count: {summary.get('accepted_count')}",
             f"- filled_count: {summary.get('filled_count')}",
-            f"- live_broker_call_count: {summary.get('live_broker_call_count')}",
+            f"- broker_call_count: {summary.get('broker_call_count')}",
             f"- rithmic_order_call_count: {summary.get('rithmic_order_call_count')}",
             f"- lifecycle: {result.get('lifecycle_path')}",
             f"- summary: {result.get('summary_path')}",

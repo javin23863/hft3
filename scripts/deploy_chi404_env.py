@@ -25,7 +25,6 @@ KEYS = (
     "HFT3_COLO_NTP",
     "HFT3_NIC",
     "HFT3_GATEWAY_IP",
-    "RITHMIC_ENVIRONMENT",
     "RITHMIC_USERNAME",
     "RITHMIC_PASSWORD",
     "RITHMIC_APP_NAME",
@@ -62,12 +61,11 @@ def _render_env(values: dict[str, str]) -> str:
     defaults = {
         "HFT3_DEPLOY_HOST": "CHI404",
         "HFT3_PUBLIC_IP": HOST,
-        "HFT3_ENV": "bare_metal_paper",
+        "HFT3_ENV": "bare_metal_external",
         "HFT3_REPO_DIR": "/root/hft3/repo",
         "HFT3_ISOL_CPUS": "2-11",
         "HFT3_RITHMIC_CPU": "1",
         "HFT3_OS_CPU": "0",
-        "RITHMIC_ENVIRONMENT": "Rithmic Paper Trading",
         "RITHMIC_APP_NAME": "HFT3",
         "RITHMIC_APP_VERSION": "1.0",
         "RITHMIC_SYMBOL": "MES",
@@ -76,8 +74,8 @@ def _render_env(values: dict[str, str]) -> str:
         "RITHMIC_TRIAL_ENABLED": "1",
         "RITHMIC_TRIAL_CONNECTOR": "rithmic_api",
         "RITHMIC_TRIAL_CONFIG": "packages/data_system/config/rithmic_trial.yaml",
-        "RITHMIC_ENDPOINT_PROFILE": "paper_chicago",
-        "RITHMIC_API_CONFIG": "packages/data_system/config/rithmic_api_paper.yaml",
+        "RITHMIC_ENDPOINT_PROFILE": "external_chicago",
+        "RITHMIC_API_CONFIG": "packages/data_system/config/rithmic_api_external.yaml",
         "RITHMIC_PROTOCOL_URL": "",
     }
     merged = {**defaults, **{k: values[k] for k in KEYS if k in values and values[k]}}

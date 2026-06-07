@@ -1,4 +1,0 @@
-#!/usr/bin/env bash
-echo "ERROR: chi404_host_paper_sweep_orchestrator.sh deprecated (synthetic SWEEP-* log inject forbidden)." >&2
-echo "Use: bash scripts/chi404_run_paper_latency_sweep.sh" >&2
-exit 1

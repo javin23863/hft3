@@ -1,8 +1,8 @@
 # E2E latency harness (tick → order ack)
 
-**Primary path (2026):** R|Trader VM paper orders → SMB log bridge → `paper_latency_daemon` → `records.ndjson` / `latency_waterfall.json`. See [docs/rithmic_trial/README.md](../../../docs/rithmic_trial/README.md#paper-order-submitack-latency-authoritative).
+**Primary path (2026):** R|Trader VM broker orders → SMB log bridge → `broker_latency_daemon` → `records.ndjson` / `latency_waterfall.json`. See [docs/rithmic_trial/README.md](../../../docs/rithmic_trial/README.md#broker-order-submitack-latency-authoritative).
 
-**Status: BLOCKED** for production claims until ≥1,000 paired paper submit→ack samples (`order_ack_measured=true`).
+**Status: BLOCKED** for production claims until >=1,000 paired broker submit→ack samples (`order_ack_measured=true`).
 
 ## Purpose
 
@@ -19,14 +19,14 @@ Report **submit→ack p50/p90/p99/p99.9** in microseconds; promote to `latency_s
 - Run **only** on CHI404 (BLUEPRINT §4). No workstation or file-bridge in the hot path.
 - Use R|Trader VM log export (not TCP connect as ack proxy).
 - Clock: `time.perf_counter_ns()` / monotonic for deltas; chrony discipline validated separately.
-- Quarantine: trial lane raw under `data/raw/rithmic_trial_live_capture/` — never production `data/npz/`.
+- Quarantine: trial lane raw under `data/raw/rithmic_trial_capture/` — never production `data/npz/`.
 
 ## Trial order ack (authoritative when promoted)
 
-Paper orders via R|Trader VM + automated sweep:
+Broker orders via R|Trader VM + automated sweep:
 
 ```bash
-bash scripts/chi404_run_paper_latency_sweep.sh
+bash scripts/chi404_run_broker_latency_sweep.sh
 python3 scripts/latency_probe/summarize_latency.py --run-id <probe_run_id> --include-trial-appendix
 ```
 

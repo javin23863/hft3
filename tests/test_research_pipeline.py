@@ -11,6 +11,12 @@ REPO = Path(__file__).resolve().parents[1]
 PDF = REPO / "docs" / "references" / "dev_instructions.pdf"
 
 
+def _loads_json_payload(stdout: str) -> dict:
+    start = stdout.find("{")
+    assert start >= 0, stdout
+    return json.loads(stdout[start:])
+
+
 def test_extract_text_dev_instructions_pdf():
     if not PDF.is_file():
         pytest.skip("dev_instructions.pdf not in repo")
@@ -38,6 +44,39 @@ def test_generate_candidates_respects_max():
     cands = list(generate_candidates(parsed, max_candidates=2))
     assert len(cands) == 2
     assert cands[0].strategy_params["signal_threshold"] != cands[1].strategy_params["signal_threshold"]
+
+
+def test_generate_candidates_random_search_uses_default_range():
+    import random
+
+    from research_pipeline.model_generation import generate_candidates
+    from research_pipeline.types import ParsedHypothesis
+
+    random.seed(7)
+    parsed = ParsedHypothesis(
+        thesis="random search",
+        instrument_universe=["MES"],
+        entry_rules=[],
+        exit_rules=[],
+        indicators=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        feature_list=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        param_ranges={},
+        primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+    )
+
+    cands = list(
+        generate_candidates(
+            parsed,
+            max_candidates=4,
+            search_mode="random",
+            num_samples=4,
+        )
+    )
+    thresholds = [c.strategy_params["signal_threshold"] for c in cands]
+
+    assert len(thresholds) == 4
+    assert len(set(thresholds)) > 1
+    assert all(0.05 <= threshold <= 0.50 for threshold in thresholds)
 
 
 def _idea_packet():
@@ -399,27 +438,28 @@ def test_run_pipeline_dry_run():
         env=env,
     )
     assert proc.returncode == 0, proc.stderr
-    data = json.loads(proc.stdout)
+    data = _loads_json_payload(proc.stdout)
     assert data.get("response_packet", {}).get("llm_status") == "skipped_no_llm"
     assert "response_packet" in data or "parsed" in data
     if "parsed" in data:
         assert data["parsed"]["primary_model_id"] == "SPREAD_BLOWOUT_RECOMPRESSION"
     if "candidates" in data:
-        assert len(data["candidates"]) == 3
+        assert len(data["candidates"]) <= 3
     elif data.get("response_packet"):
         assert data["response_packet"]["parsed"]["primary_model_id"] == "SPREAD_BLOWOUT_RECOMPRESSION"
+    assert "idea_set_packet" in data
 
 
-@pytest.mark.parametrize("idea_set", [False, True])
-def test_run_pipeline_vectorbt_only_promoted_exits_before_hftbacktest(
-    tmp_path, monkeypatch, idea_set
+@pytest.mark.parametrize("lane_args", [[], ["--lane", "crypto"]])
+def test_run_pipeline_ignores_vectorbt_only_and_runs_full_idea_set_pipeline(
+    tmp_path, monkeypatch, lane_args
 ):
     import sys
 
     import scripts.run_pipeline as run_pipeline
     from backtest_pipeline.src.promotion_gate import PromotedCandidate
     from backtest_pipeline.src.vectorbt_adapter import FilterResult
-    from research_pipeline.types import CandidateModel, ParsedHypothesis
+    from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds, ParsedHypothesis
 
     parsed = ParsedHypothesis(
         thesis="Fade spread blowout after CPI",
@@ -430,14 +470,14 @@ def test_run_pipeline_vectorbt_only_promoted_exits_before_hftbacktest(
         feature_list=["SPREAD_BLOWOUT_RECOMPRESSION"],
         param_ranges={"signal_threshold": [0.05, 0.35]},
         primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
-        source="idea_set" if idea_set else "heuristic",
+        source="idea_set",
     )
     candidate = CandidateModel(
         candidate_id="cand_vbt",
         model_id="SPREAD_BLOWOUT_RECOMPRESSION",
         strategy_params={"signal_threshold": 0.1},
         thesis=parsed.thesis,
-        metadata={"idea_id": "idea_001"} if idea_set else {},
+        metadata={"idea_id": "idea_001"},
     )
     request = {
         "schema_version": "1",
@@ -513,24 +553,42 @@ def test_run_pipeline_vectorbt_only_promoted_exits_before_hftbacktest(
             total_candidates=7,
         )
 
+    idea_set_calls = []
+    evaluate_calls = []
+    deploy_calls = []
+    gate = GateThresholds(min_net_pnl=0.0, min_trades=1)
+
+    def fake_generate_idea_set(*args, **kwargs):
+        idea_set_calls.append(kwargs)
+        return idea_packet
+
+    def fake_evaluate_model(cand, event_id, repo_root, **kwargs):
+        evaluate_calls.append((cand, event_id, repo_root, kwargs))
+        return EvaluationResult(
+            candidate=cand,
+            event_id=event_id,
+            net_pnl=1.0,
+            num_trades=2,
+            win_rate=1.0,
+            expectancy=1.0,
+            tail_loss=0.0,
+            gates=gate,
+        )
+
+    def fake_deploy_best(repo_root, report):
+        deploy_calls.append((repo_root, report))
+        return repo_root / "deployed.json"
+
     monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_vbt_only")
     monkeypatch.setattr(run_pipeline, "build_pipeline_request", lambda **kwargs: request)
     monkeypatch.setattr(run_pipeline, "parse_hypothesis", lambda *args, **kwargs: parsed)
     monkeypatch.setattr(run_pipeline, "generate_candidates", lambda *args, **kwargs: [candidate])
-    monkeypatch.setattr(run_pipeline, "generate_idea_set", lambda *args, **kwargs: idea_packet)
+    monkeypatch.setattr(run_pipeline, "generate_idea_set", fake_generate_idea_set)
     monkeypatch.setattr(run_pipeline, "candidates_from_ideas", lambda *args, **kwargs: [candidate])
     monkeypatch.setattr(run_pipeline, "parsed_from_idea", lambda idea: parsed)
     monkeypatch.setattr(run_pipeline, "filter_candidates", fake_filter_candidates)
-    monkeypatch.setattr(
-        run_pipeline,
-        "evaluate_model",
-        lambda *args, **kwargs: pytest.fail("vectorbt-only called HftBacktest evaluate"),
-    )
-    monkeypatch.setattr(
-        run_pipeline,
-        "deploy_best",
-        lambda *args, **kwargs: pytest.fail("vectorbt-only called deploy_best"),
-    )
+    monkeypatch.setattr(run_pipeline, "evaluate_model", fake_evaluate_model)
+    monkeypatch.setattr(run_pipeline, "deploy_best", fake_deploy_best)
 
     argv = [
         "run_pipeline.py",
@@ -545,22 +603,211 @@ def test_run_pipeline_vectorbt_only_promoted_exits_before_hftbacktest(
         "--no-llm",
         "--vectorbt-only",
     ]
-    if idea_set:
-        argv.append("--idea-set")
+    argv.extend(lane_args)
     monkeypatch.setattr(sys, "argv", argv)
 
     assert run_pipeline.main() == 0
     run_dir = tmp_path / "research_cards" / "pipeline_runs" / "pipeline_vbt_only"
     response = json.loads((run_dir / "response_packet.json").read_text(encoding="utf-8"))
-    vectorbt_filter = json.loads((run_dir / "vectorbt_filter.json").read_text(encoding="utf-8"))
+    idea_packet_out = json.loads((run_dir / "idea_set_packet.json").read_text(encoding="utf-8"))
 
-    assert response["candidates_tested"] == 7
-    assert response["results"] == []
+    assert idea_set_calls
+    assert len(evaluate_calls) == 1
+    assert len(deploy_calls) == 1
+    assert response["candidates_tested"] == 1
+    assert response["results"] == [
+        {
+            "candidate_id": "cand_vbt",
+            "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+            "net_pnl": 1.0,
+            "num_trades": 2,
+            "passes": True,
+            "error": None,
+        }
+    ]
     assert response["selected_model_id"] is None
-    assert vectorbt_filter["promoted_count"] == 1
-    if idea_set:
-        assert response["idea_summary"]["candidates_from_ideas"] == 1
-        assert (run_dir / "idea_set_packet.json").is_file()
+    assert response["idea_summary"]["candidates_from_ideas"] == 1
+    assert idea_packet_out["ideas"][0]["status"] == "tested_pass"
+    assert not (run_dir / "vectorbt_filter.json").exists()
+
+
+def test_run_pipeline_adaptive_retry_expands_search_after_gate_failure(tmp_path, monkeypatch):
+    import sys
+
+    import scripts.run_pipeline as run_pipeline
+    from backtest_pipeline.src.promotion_gate import PromotedCandidate
+    from backtest_pipeline.src.vectorbt_adapter import FilterResult
+    from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds, ParsedHypothesis
+
+    parsed = ParsedHypothesis(
+        thesis="Retry failed candidates",
+        instrument_universe=["MES"],
+        entry_rules=["enter_spread"],
+        exit_rules=["exit_revert"],
+        indicators=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        feature_list=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        param_ranges={"signal_threshold": [0.05, 0.35]},
+        primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        source="idea_set",
+    )
+    initial_candidate = CandidateModel(
+        candidate_id="cand_initial",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        strategy_params={"signal_threshold": 0.1},
+        thesis=parsed.thesis,
+        metadata={"idea_id": "idea_retry"},
+    )
+    retry_candidate = CandidateModel(
+        candidate_id="cand_retry",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        strategy_params={"signal_threshold": 0.3333},
+        thesis=parsed.thesis,
+        metadata={},
+    )
+    request = {
+        "schema_version": "1",
+        "request_id": "pipeline_retry",
+        "thesis": parsed.thesis,
+        "event_id": "CPI_2024_09_11_TIGHT",
+        "openfoundry_meta": {
+            "connector_id": "hft3-cme-mbo",
+            "asset_class": "cme_mbo_microstructure",
+            "vendor_shas": {"openfoundry": "test"},
+            "schema_version": "1",
+        },
+        "max_candidates": 1,
+    }
+    idea_packet = {
+        "schema_version": "1",
+        "request_id": "pipeline_retry",
+        "llm_model": "mock",
+        "llm_status": "ok",
+        "refs": {},
+        "constraints": {
+            "allowed_model_ids": ["SPREAD_BLOWOUT_RECOMPRESSION"],
+            "allowed_lane_codes": ["cme"],
+            "max_candidates": 1,
+            "no_promotion_authority": True,
+        },
+        "review_memory": [],
+        "ideas": [
+            {
+                "idea_id": "idea_retry",
+                "status": "queued_for_test",
+                "lane_code": "cme",
+                "thesis_code": "spread_recompression",
+                "instrument_ids": ["MES"],
+                "primary_model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+                "feature_ids": ["mbo.depth.spread_stress"],
+                "param_ranges": {"signal_threshold": [0.05, 0.35]},
+                "entry_rule_codes": ["enter_spread"],
+                "exit_rule_codes": ["exit_revert"],
+                "risk_codes": ["latency_gate_required"],
+                "evidence_ref_ids": [],
+                "rank_inputs": {
+                    "novelty": 0.1,
+                    "evidence_coverage": 0.0,
+                    "lane_fit": 1.0,
+                    "prior_failure_overlap": 0.0,
+                    "validation_readiness": 1.0,
+                },
+            }
+        ],
+    }
+
+    filter_calls = []
+    generate_calls = []
+    evaluate_calls = []
+    gate = GateThresholds(min_net_pnl=0.0, min_trades=1)
+
+    def fake_generate_candidates(*args, **kwargs):
+        generate_calls.append(kwargs)
+        return [retry_candidate]
+
+    def fake_filter_candidates(*args, **kwargs):
+        candidates = kwargs["candidates"]
+        filter_calls.append([candidate.candidate_id for candidate in candidates])
+        promoted = [
+            PromotedCandidate(
+                candidate_id=candidates[0].candidate_id,
+                hypothesis_id="SPREAD_BLOWOUT_RECOMPRESSION",
+                strategy_family="SPREAD_BLOWOUT_RECOMPRESSION",
+                asset_class="CME",
+                symbol="MES",
+                timeframe="1m",
+                param_values=candidates[0].strategy_params,
+                vectorbt_run_id=f"vbt_{len(filter_calls)}",
+                vectorbt_results={"oos_expectancy": 1.0, "num_trades": 10},
+                pass_reason="all_gates_passed",
+            )
+        ]
+        return FilterResult(
+            promoted=promoted,
+            rejected=[],
+            vectorbt_available=True,
+            backend="test",
+            run_id=f"vbt_{len(filter_calls)}",
+            total_candidates=len(candidates),
+        )
+
+    def fake_evaluate_model(cand, event_id, repo_root, **kwargs):
+        evaluate_calls.append(cand.candidate_id)
+        net_pnl = -1.0 if cand.candidate_id == "cand_initial" else 2.0
+        return EvaluationResult(
+            candidate=cand,
+            event_id=event_id,
+            net_pnl=net_pnl,
+            num_trades=2,
+            win_rate=1.0,
+            expectancy=net_pnl,
+            tail_loss=0.0,
+            gates=gate,
+        )
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_retry")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", lambda **kwargs: request)
+    monkeypatch.setattr(run_pipeline, "generate_idea_set", lambda *args, **kwargs: idea_packet)
+    monkeypatch.setattr(run_pipeline, "candidates_from_ideas", lambda *args, **kwargs: [initial_candidate])
+    monkeypatch.setattr(run_pipeline, "parsed_from_idea", lambda idea: parsed)
+    monkeypatch.setattr(run_pipeline, "generate_candidates", fake_generate_candidates)
+    monkeypatch.setattr(run_pipeline, "filter_candidates", fake_filter_candidates)
+    monkeypatch.setattr(run_pipeline, "evaluate_model", fake_evaluate_model)
+    monkeypatch.setattr(run_pipeline, "deploy_best", lambda repo_root, report: repo_root / "deployed.json")
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "run_pipeline.py",
+            "--thesis",
+            parsed.thesis,
+            "--event-id",
+            "CPI_2024_09_11_TIGHT",
+            "--repo-root",
+            str(tmp_path),
+            "--max-candidates",
+            "1",
+            "--no-llm",
+            "--search-mode",
+            "grid",
+            "--num-samples",
+            "4",
+            "--random-seed",
+            "99",
+        ],
+    )
+
+    assert run_pipeline.main() == 0
+
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / "pipeline_retry"
+    response = json.loads((run_dir / "response_packet.json").read_text(encoding="utf-8"))
+
+    assert filter_calls == [["cand_initial"], ["cand_retry"]]
+    assert generate_calls[0]["search_mode"] == "random"
+    assert generate_calls[0]["num_samples"] == 8
+    assert evaluate_calls == ["cand_initial", "cand_retry"]
+    assert response["candidates_tested"] == 2
+    assert [result["passes"] for result in response["results"]] == [False, True]
 
 
 def test_pipeline_request_response_roundtrip():

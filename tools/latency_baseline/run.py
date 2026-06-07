@@ -26,7 +26,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mode", choices=["broker", "synthetic"], default="synthetic")
     parser.add_argument("--repo-root", default=".", help="Repository root for data/ and reports/ outputs.")
     parser.add_argument("--run-id", default="", help="Stable run id. Defaults to timestamped latbase-*.")
-    parser.add_argument("--env", default="paper", dest="environment")
+    parser.add_argument("--env", default="external", dest="environment")
     parser.add_argument("--broker", default="rithmic")
     parser.add_argument("--venue", default="", help="Venue label. Defaults to --exchange when omitted.")
     parser.add_argument("--exchange", default="", help="Exchange label used as venue when --venue is omitted.")
@@ -72,7 +72,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--limit-price",
         type=float,
         default=None,
-        help="Optional explicit probe limit price. If omitted, latency_probe derives a passive price from live market data.",
+        help="Optional explicit probe limit price. If omitted, latency_probe derives a passive price from current market data.",
     )
     parser.add_argument("--ack-timeout-sec", type=float, default=20.0)
     parser.add_argument("--cancel-after-ack", action=argparse.BooleanOptionalAction, default=True)

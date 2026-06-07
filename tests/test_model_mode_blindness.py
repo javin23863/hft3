@@ -12,8 +12,7 @@ STRATEGY_FILES = [
 FORBIDDEN = (
     "execution_mode",
     'if mode == "replay"',
-    'if mode == "paper"',
-    'if mode == "live"',
+    'if mode == "external"',
     "if backtest",
 )
 

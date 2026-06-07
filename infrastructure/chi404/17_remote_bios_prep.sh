@@ -53,7 +53,7 @@ Remote EXPO/PBO from Cambodia (no Chicago flight)
    bash infrastructure/chi404/15_post_bios_oc_verify.sh
 
 7. During RTH market load:
-   HFT3_OC_MARKET_LOAD=1 HFT3_OC_RUN_PAPER_SWEEP=1 \\
+   HFT3_OC_MARKET_LOAD=1 HFT3_OC_RUN_BROKER_SWEEP=1 \\
      bash infrastructure/chi404/16_oc_stability_under_load.sh
 
 RESTORE_ID=$RESTORE_ID (rollback if POST fails)

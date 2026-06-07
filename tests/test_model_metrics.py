@@ -9,7 +9,7 @@ from hft3.validation.model_metrics import build_post_robustness_scorecard
 from model_metrics.backfill import backfill_model_metrics, generate_bundle_for_run_dir, run_inputs_from_run_dir
 from model_metrics.envelope import generate_behavior_envelope
 from model_metrics.registry import calculate_metric_values
-from model_metrics.schemas import ModelLiveObservation, strict_json_dumps
+from model_metrics.schemas import ModelRuntimeObservation, strict_json_dumps
 from trade_manager.model_behavior import ModelBehaviorRuleEngine
 from workbench.src.run.campaign_runner import record_sim_shadow
 
@@ -143,7 +143,7 @@ def test_model_behavior_engine_green_yellow_red() -> None:
 
     green = engine.evaluate(
         envelope,
-        ModelLiveObservation(
+        ModelRuntimeObservation(
             model_id="FUTURES_MODEL_A",
             regime_id="NORMAL",
             drawdown=1.0,
@@ -222,7 +222,7 @@ def test_model_behavior_engine_red_when_low_latency_audit_failed() -> None:
     envelope = generate_behavior_envelope(inputs, scorecard)
     decision = ModelBehaviorRuleEngine().evaluate(
         envelope,
-        ModelLiveObservation(
+        ModelRuntimeObservation(
             model_id="FUTURES_MODEL_A",
             regime_id="NORMAL",
             tick_to_send_us=900.0,

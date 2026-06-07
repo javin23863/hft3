@@ -218,7 +218,7 @@ def test_resolve_replay_latency_ms_from_chi404_summary(tmp_path: Path) -> None:
             {
                 "order_ack_measured": True,
                 "order_ack_p99_ms": 2.5,
-                "paper_order_latency": {"measured": True, "authoritative": True, "paired_count": 1100},
+                "broker_order_latency": {"measured": True, "authoritative": True, "paired_count": 1100},
             }
         ),
         encoding="utf-8",
@@ -254,10 +254,57 @@ def test_resolve_replay_latency_ms_rejects_chi404_out_of_band(tmp_path: Path) ->
             {
                 "order_ack_measured": True,
                 "order_ack_p99_ms": 0.01,
-                "paper_order_latency": {"measured": True},
+                "broker_order_latency": {"measured": True, "authoritative": True, "paired_count": 1100},
             }
         ),
         encoding="utf-8",
     )
     with pytest.raises(ValueError, match="outside BLUEPRINT band"):
         resolve_replay_latency_ms(latency_ms=None, chi404_summary=bad)
+
+
+def test_resolve_replay_latency_ms_rejects_non_authoritative_broker_latency(tmp_path: Path) -> None:
+    import json
+
+    from backtest_pipeline.src.chi404_latency import resolve_replay_latency_ms
+
+    summary = tmp_path / "latency_summary.json"
+    summary.write_text(
+        json.dumps(
+            {
+                "order_ack_measured": True,
+                "order_ack_p99_ms": 2.5,
+                "broker_order_latency": {
+                    "measured": True,
+                    "authoritative": False,
+                    "paired_count": 12,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="not measured"):
+        resolve_replay_latency_ms(latency_ms=None, chi404_summary=summary)
+
+
+def test_resolve_replay_latency_ms_rejects_low_pair_appendix_latency(tmp_path: Path) -> None:
+    import json
+
+    from backtest_pipeline.src.chi404_latency import resolve_replay_latency_ms
+
+    summary = tmp_path / "latency_summary.json"
+    summary.write_text(
+        json.dumps(
+            {
+                "trial_order_ack_appendix": {
+                    "status": "ok",
+                    "authoritative": True,
+                    "paired_count": 12,
+                    "order_ack_p99_ms": 2.5,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="not measured"):
+        resolve_replay_latency_ms(latency_ms=None, chi404_summary=summary)

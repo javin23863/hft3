@@ -20,7 +20,7 @@ This file defines ownership boundaries so multiple phase teams can work at the s
 | Phase 23 Session Reporting | `packages/trade_manager/session.py`, `tests/test_trade_manager_phase23.py` | order intents, risk decisions, order states | observer CLI, execution adapters |
 | Phase 24 Resumability Safety | `packages/hft3/research/run_autonomous.py`, `tests/test_autonomous_runner.py`, recovery tests/docs | checkpoints, registry atomicity, session artifacts | live adapters, Rithmic gateway, Trade Manager routing |
 | Phase 25 Required Tests | `docs/project/VALIDATION_MATRIX.md`, validation scripts, missing required tests | all tests/docs | product behavior; test helpers only under `tests/` or test-support paths |
-| Integration | `packages/trade_manager/manager.py`, cross-phase tests | all phase modules | CHI404/live routing unless explicitly approved |
+| Integration | `packages/trade_manager/manager.py`, cross-phase tests | all phase modules | CHI404/external routing unless explicitly approved |
 
 ## File Locks
 
@@ -40,7 +40,7 @@ Each workstream handoff must include:
 2. Contract types added or changed.
 3. Tests run with exact command and result.
 4. Known blockers and skipped tests.
-5. Confirmation that no routing/live/Rithmic path was added.
+5. Confirmation that no external broker/Rithmic routing path was added.
 6. GraphPost status.
 
 ## Conflict Resolution

@@ -11,11 +11,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .capture.live_capture import LiveCapture
+from .capture.trial_capture import TrialCapture
 from .config import TrialConfig, load_config
 from .connector import build_connector
 from .pipeline import cmd_process
-from .platform import is_windows
+from .platform import is_chi404_runtime, is_windows
 
 
 def _utc_date() -> str:
@@ -85,7 +85,7 @@ def ensure_rtrader_started(cfg: TrialConfig) -> Path | None:
 def _connect_with_retry(connector, cfg, poll_interval_sec: float, *, max_attempts: int = 5) -> bool:
     """Connect to the Rithmic backend with bounded retries.
 
-    A live capture daemon should not die on a single connect failure (transient
+    A CHI404 capture daemon should not die on a single connect failure (transient
     R|API+ 'Repository Connection Broken' alerts, an R|Trader VM still booting,
     a network blip on the colo uplink). We retry with a short backoff, then
     exit non-zero so systemd can restart us after RestartSec.
@@ -126,10 +126,10 @@ def run_unattended(
     start_rtrader: bool = True,
     symbol: str | None = None,
 ) -> int:
-    if is_windows():
+    if is_windows() or not is_chi404_runtime():
         print(
             "ERROR: Rithmic trial capture runs on CHI404 only (BLUEPRINT §4). "
-            "Windows is the dev workstation, not the trade-path host.",
+            "Use fixture connector for local tests; do not capture broker data from a workstation.",
             file=sys.stderr,
         )
         return 1
@@ -168,7 +168,7 @@ def run_unattended(
     connector = build_connector(cfg)
     if not _connect_with_retry(connector, cfg, poll):
         return 1
-    capture = LiveCapture(cfg, date=_utc_date(), symbol=sym)
+    capture = TrialCapture(cfg, date=_utc_date(), symbol=sym)
     total = 0
     market_total = 0
     market_types = {"trade", "quote"}
@@ -177,9 +177,9 @@ def run_unattended(
     started = time.time()
 
     logging.info(
-        "Unattended capture started symbol=%s env=%s gateway=%s poll=%ss",
+        "Unattended capture started symbol=%s profile=%s gateway=%s poll=%ss",
         sym,
-        cfg.rithmic.get("environment", "Rithmic Paper Trading"),
+        cfg.rithmic.get("endpoint_profile", "external_chicago"),
         cfg.rithmic.get("gateway", "Chicago"),
         poll,
     )

@@ -104,7 +104,7 @@ Create a command similar to:
 
 ```powershell
 python -m tools.latency_baseline.run `
-  --env paper `
+  --env external `
   --broker rithmic `
   --symbol ES `
   --exchange CME `

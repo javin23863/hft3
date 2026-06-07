@@ -2,7 +2,7 @@
 
 Python is allowed for **research, orchestration, visualization, parameter sweeps, and dashboarding**.
 
-Python runtime must **not** be the source of truth for production latency when the live hot path is C++.
+Python runtime must **not** be the source of truth for production latency when the execution hot path is C++.
 
 ## Three approved approaches
 
@@ -52,8 +52,8 @@ Loaded from CHI404 `runtime/latency_reports/latency_summary.json` + `workbench/c
 - `order_send_*` — native SDK call-return boundary; do not replace it with Python wall-clock timing
 - `network.rithmic_tcp_65000` — **network health only**; never used for `gateway_ack` or replay default latency
 
-Real paper placement evidence comes from `rithmic_gateway/tools/rithmic_latency_probe.cpp`
-with `hot_path_language=c++` and `wrapper=none`. The Python paper-latency daemon is
+Real broker placement evidence comes from `rithmic_gateway/tools/rithmic_latency_probe.cpp`
+with `hot_path_language=c++` and `wrapper=none`. The Python broker-latency daemon is
 capture/orchestration plumbing only and is not a placement-speed authority.
 
 Until `order_ack_measured=true`, replay scripts require explicit `--latency-ms`; TCP connect is not a silent fallback.

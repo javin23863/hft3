@@ -1,4 +1,4 @@
-"""Deploy selected candidate to research artifacts (no live gateway)."""
+"""Deploy selected candidate to research artifacts (no external gateway)."""
 
 from __future__ import annotations
 
@@ -61,10 +61,10 @@ def deploy_model(
     report: PipelineReport,
     eval_result: EvaluationResult,
     *,
-    live_deploy: bool = False,
+    external_deploy: bool = False,
 ) -> Path:
-    if live_deploy:
-        raise RuntimeError("Live deploy blocked until CHI404 is online (BLUEPRINT §4)")
+    if external_deploy:
+        raise RuntimeError("External deploy blocked until CHI404 is online (BLUEPRINT §4)")
 
     artifact_dir = repo_root / "research_cards" / "pipeline_runs" / report.run_id
     artifact_dir.mkdir(parents=True, exist_ok=True)
@@ -126,7 +126,7 @@ def deploy_best(
     repo_root: Path,
     report: PipelineReport,
     *,
-    live_deploy: bool = False,
+    external_deploy: bool = False,
 ) -> Optional[Path]:
     passing = [r for r in report.results if r.passes_all_gates()]
     if not passing and report.results:
@@ -135,6 +135,6 @@ def deploy_best(
         return None
     best = max(passing, key=lambda r: r.net_pnl)
     report.selected = best.candidate
-    path = deploy_model(repo_root, report, best, live_deploy=live_deploy)
+    path = deploy_model(repo_root, report, best, external_deploy=external_deploy)
     report.artifact_dir = str(path)
     return path

@@ -10,8 +10,8 @@ from typing import Any
 import yaml
 
 
-PAPER_ENDPOINT_PROFILE = "paper_chicago"
-PAPER_ENDPOINT_MISSING_CODE = "PAPER_ENDPOINT_PARAMS_MISSING"
+EXTERNAL_ENDPOINT_PROFILE = "external_chicago"
+EXTERNAL_ENDPOINT_MISSING_CODE = "EXTERNAL_ENDPOINT_PARAMS_MISSING"
 
 REQUIRED_ENVIRONMENT_PARAMS = (
     "MML_DMN_SRVR_ADDR",
@@ -38,7 +38,7 @@ def load_api_yaml(config_path: str | Path) -> dict[str, Any]:
 
 
 def default_api_config_for_profile(repo_root: Path, profile: str) -> Path:
-    name = "rithmic_api_paper.yaml" if profile == PAPER_ENDPOINT_PROFILE else "rithmic_api_test.yaml"
+    name = "rithmic_api_external.yaml" if profile == EXTERNAL_ENDPOINT_PROFILE else "rithmic_api_test.yaml"
     return repo_root / "packages" / "data_system" / "config" / name
 
 
@@ -97,9 +97,9 @@ def endpoint_status_from_config(
     if not config_exists:
         status = "BLOCKED"
         reason_code = "RITHMIC_API_CONFIG_MISSING"
-    elif profile == PAPER_ENDPOINT_PROFILE and missing_endpoint_params:
+    elif profile == EXTERNAL_ENDPOINT_PROFILE and missing_endpoint_params:
         status = "BLOCKED"
-        reason_code = PAPER_ENDPOINT_MISSING_CODE
+        reason_code = EXTERNAL_ENDPOINT_MISSING_CODE
     elif not username_set or not password_set:
         status = "CONFIGURED_NOT_AUTHENTICATED"
         reason_code = "RITHMIC_CREDENTIALS_MISSING"
@@ -107,11 +107,13 @@ def endpoint_status_from_config(
         status = "CONFIGURED_NOT_OBSERVED"
         reason_code = "GATEWAY_LIBRARY_NOT_FOUND"
 
+    display_system = "Rithmic external broker" if profile == EXTERNAL_ENDPOINT_PROFILE else str(cfg.get("system") or "")
+
     return {
         "status": status,
         "reason_code": reason_code,
         "profile": profile,
-        "system": str(cfg.get("system") or ""),
+        "system": display_system,
         "gateway": str(cfg.get("gateway") or ""),
         "config_path": str(path),
         "config_exists": config_exists,

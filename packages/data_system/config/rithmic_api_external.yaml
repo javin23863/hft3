@@ -1,13 +1,13 @@
-# Rithmic R|API Plus - Paper Trading / Chicago profile.
+# Rithmic R|API Plus - external Chicago broker profile.
 # Credentials are supplied at runtime with RITHMIC_USERNAME / RITHMIC_PASSWORD.
 # DO NOT copy secrets into this file.
 #
-# Paper/Chicago parameters observed from local Rithmic Trader Pro logs
+# Chicago endpoint parameters observed from local Rithmic Trader Pro logs
 # under C:\Users\MSI\Documents\Rithmic on 2026-06-04. Credentials remain
 # runtime-only via RITHMIC_USERNAME / RITHMIC_PASSWORD.
 
 api_version: "13.7.0.0"
-endpoint_profile: "paper_chicago"
+endpoint_profile: "external_chicago"
 system: "Rithmic Paper Trading"
 gateway: "Chicago Area"
 endpoint_params_status: "CONFIGURED_FROM_RTRADER_LOG"
@@ -56,7 +56,7 @@ ssl:
   cert_file: "rithmic_ssl_cert_auth_params"
 
 # R|Protocol websocket market-data smoke config. Rithmic has not supplied the
-# Paper/Chicago websocket URL in the SDK package; set RITHMIC_PROTOCOL_URL at
+# Chicago websocket URL in the SDK package; set RITHMIC_PROTOCOL_URL at
 # runtime once the actual endpoint is provided.
 protocol:
   url: ""

@@ -1,5 +1,5 @@
 # Measured C++ hot-path latency distributions (microseconds).
-# order_send / gateway_ack stay blocked until paper submit→ack is measured on CHI404.
+# order_send / gateway_ack stay blocked until broker submit→ack is measured on CHI404.
 # TCP connect (rithmic_tcp_65000) is network health telemetry only — see latency_summary.json.
 
 cpp_decision_compute:
@@ -12,13 +12,13 @@ order_send:
   p50_us: 0
   p95_us: 0
   p99_us: 0
-  source: blocked_until_paper_order_ack
+  source: blocked_until_broker_order_ack
 
 gateway_ack:
   p50_us: 0
   p95_us: 0
   p99_us: 0
-  source: blocked_until_paper_order_ack
+  source: blocked_until_broker_order_ack
 
 feed_delay:
   p50_us: 500

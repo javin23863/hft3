@@ -26,9 +26,9 @@ LANE_THRESHOLDS_MS = {
     3: (10.0, 50.0),
     4: (50.0, float("inf")),
 }
-PAPER_ORDER_MIN_PAIRED = 1000
+BROKER_ORDER_MIN_PAIRED = 1000
 ORDER_ACK_BLOCKED_NOTE = (
-    "Paper order submit→ack not measured; run scripts/chi404_run_paper_latency_sweep.sh on CHI404"
+    "Broker order submit→ack not measured; run scripts/chi404_run_broker_latency_sweep.sh on CHI404"
 )
 TRIAL_APPENDIX_LIMITATIONS = [
     "R|Trader VM log bridge; monotonic timestamps at ingest",
@@ -240,7 +240,7 @@ def _dominant_bottleneck(
     if clock_warnings:
         return f"clock_discipline ({clock_warnings[0]})"
     if order_ack_blocked:
-        return "order_submit_to_ack_not_measured (R|Trader paper path)"
+        return "order_submit_to_ack_not_measured (broker path)"
     return "none_identified"
 
 
@@ -261,7 +261,7 @@ def _strategy_guidance(
                 "Backtest at 0.5-2 ms latency bands; colo CPU/network support HFT-tier infra."
             )
             unrealistic.append(
-                "Assuming sub-2 ms order ack or production HFT execution without measured paper orders."
+                "Assuming sub-2 ms order ack or production HFT execution without measured broker orders."
             )
         elif not cyclictest_pass:
             realistic.append("Fix kernel isolation / jitter before any sub-ms strategy research.")
@@ -279,7 +279,7 @@ def _strategy_guidance(
         unrealistic.append("Workstation-mediated capture or orders (BLUEPRINT §4).")
     elif lane == 2:
         realistic.append("Low-latency scalping backtests at 2-10 ms bands.")
-        unrealistic.append("Sub-2 ms order ack assumptions in live execution.")
+        unrealistic.append("Sub-2 ms order ack assumptions in external execution.")
     elif lane == 3:
         realistic.append("Medium-latency strategies; 10-50 ms backtest bands.")
         unrealistic.append("HFT queue models tuned for sub-ms ack.")
@@ -315,7 +315,7 @@ def _build_trial_order_ack_appendix(
             **base,
             "status": "missing",
             "reason": "no reports/rithmic_trial/.../latency_profile.json",
-            "populate_hint": "Send paper orders in R|Trader VM, then bash scripts/chi404_run_trial_live.sh",
+            "populate_hint": "Send broker orders on CHI404, then bash scripts/chi404_run_trial_capture.sh",
         }
 
     base["profile_path"] = profile.get("path")
@@ -342,7 +342,7 @@ def _build_trial_order_ack_appendix(
             **base,
             "status": "missing",
             "reason": "No order ack events captured yet",
-            "populate_hint": "Send paper orders in R|Trader VM, then bash scripts/chi404_run_trial_live.sh",
+            "populate_hint": "Send broker orders on CHI404, then bash scripts/chi404_run_trial_capture.sh",
         }
 
     p99_us = order_stats.get("p99_us")
@@ -351,12 +351,12 @@ def _build_trial_order_ack_appendix(
             **base,
             "status": "missing",
             "reason": "order_submit_to_ack_us.p99_us not available",
-            "populate_hint": "Send paper orders in R|Trader VM, then bash scripts/chi404_run_trial_live.sh",
+            "populate_hint": "Send broker orders on CHI404, then bash scripts/chi404_run_trial_capture.sh",
         }
 
     order_ack_p99_ms = float(p99_us) / 1000.0
     count = int(order_stats.get("count") or 0)
-    authoritative = count >= PAPER_ORDER_MIN_PAIRED
+    authoritative = count >= BROKER_ORDER_MIN_PAIRED
 
     return {
         **base,
@@ -415,7 +415,7 @@ def build_summary(
 
     order_ack_blocked = True
     order_ack_p99_ms: float | None = None
-    paper_order_latency: dict[str, Any] = {
+    broker_order_latency: dict[str, Any] = {
         "measured": False,
         "authoritative": False,
         "paired_count": 0,
@@ -430,7 +430,7 @@ def build_summary(
         if isinstance(p99_us, (int, float)):
             order_ack_p99_ms = float(p99_us) / 1000.0
             order_ack_blocked = False
-            paper_order_latency = {
+            broker_order_latency = {
                 "measured": True,
                 "authoritative": True,
                 "paired_count": count,
@@ -479,16 +479,16 @@ def build_summary(
         "network_health": network_health,
         "rithmic_app_latency": {
             "status": "BLOCKED" if order_ack_blocked else "ok",
-            "reason": ORDER_ACK_BLOCKED_NOTE if order_ack_blocked else "paper order submit→ack measured",
-            "probe": "data_system/rithmic_trial/latency/paper_latency_daemon.py",
+            "reason": ORDER_ACK_BLOCKED_NOTE if order_ack_blocked else "broker order submit→ack measured",
+            "probe": "data_system/rithmic_trial/latency/broker_latency_daemon.py",
         },
         "e2e_harness": {
             "status": "BLOCKED" if order_ack_blocked else "ok",
-            "reason": ORDER_ACK_BLOCKED_NOTE if order_ack_blocked else "paper waterfall available",
+            "reason": ORDER_ACK_BLOCKED_NOTE if order_ack_blocked else "broker waterfall available",
             "spec": "scripts/latency_probe/build_waterfall_report.py",
         },
         "trial_order_ack_appendix": trial_appendix,
-        "paper_order_latency": paper_order_latency,
+        "broker_order_latency": broker_order_latency,
         "order_ack_p99_ms": order_ack_p99_ms,
         "order_ack_measured": not order_ack_blocked,
         "gates": {

@@ -10,7 +10,7 @@ artifact yet.
 
 - Macro/micro pairs: `ES/MES`, `NQ/MNQ`, `YM/MYM`
 - Wire-to-wire latency assumption: `23us`
-- Live routing authorized: `false`
+- External routing authorized: `false`
 - Acceptance requires measured compute latency, fees, partial fills, missed
   fills, slippage, adverse selection, realistic FAK simulation, and purged
   walk-forward validation.

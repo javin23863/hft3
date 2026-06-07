@@ -10,8 +10,8 @@ structural-model trading strategies on MBO L3 microstructure data. It already
 implements most of the surfaces required by the 26-phase hardening spec. The
 principal gaps are incomplete Trade Manager order/risk/execution modules,
 autonomous runner wiring to real Workbench backtest/robustness evidence,
-double-WF matrix wiring into campaign/autonomous promotion, and live
-session-reporting/execution integration.
+double-WF matrix wiring into campaign/autonomous promotion, and external
+broker session-reporting/execution integration.
 
 | # | Item | Status | One-line |
 |---|------|--------|----------|
@@ -35,7 +35,7 @@ session-reporting/execution integration.
 | 18 | Immutable `CertificationRecord` | EXISTS | atomic write, file lock, SHA-256 hash chain |
 | 19 | Artifacts tree (per-run + per-campaign + per-card) | EXISTS | `artifacts/research_cards/` |
 | 20 | Trade manager (signal → observer) | PARTIAL | Phase 14-23 handoff, signal ingress, inert order intent, risk decisions, order state, execution boundary, position monitor, kill switch, read-only observer, and session reporting exist; no execution orchestration yet |
-| 21 | Execution adapter + safety guards | EXISTS (live STUB) | `packages/execution/adapters/live_broker.py:30-37` |
+| 21 | Execution adapter + safety guards | EXISTS (external broker STUB) | `packages/execution/adapters/broker.py` |
 | 22 | Risk layer (size/loss/kill/pos/clock) | EXISTS (Trade Manager decision layer) | `trade_manager/risk_layer.py`, `production_safety.py`, and `risk_engine/` (C++) |
 | 23 | NL-thesis / auto-research driver (PDF → candidate) | EXISTS | 14-file intake bundle + `scripts/run_pipeline.py` |
 | 24 | Streamlit UI | EXISTS | `apps/workbench/ui/` — not on autonomous path |
@@ -169,7 +169,7 @@ session-reporting/execution integration.
 - **Phase 21 kill switch exists** — `packages/trade_manager/kill_switch.py` and `configs/risk/kill_switch.yaml` return requested action decisions across the 12 documented trigger families without adapter creation, routing, cancelling, or flattening.
 - The Python `packages/trade_manager/manager.py` Trade Manager now provides the Phase 14-23 signal-to-observer surfaces listed above. The C++ `risk_engine/include/risk_manager.hpp` remains a separate risk monitor, not the Trade Manager orchestrator.
 - `OrderIntent` exists in `packages/execution/interfaces.py` (52 matches); Phase 17 creates one only as production-safety monitor input, not as a routed execution request.
-- **Phase 22 observer exists** — `apps/observer/` reads local session artifacts and renders a deterministic read-only CLI view without Trade Manager mutation, adapter creation, routing, or paper/live/Rithmic calls.
+- **Phase 22 observer exists** — `apps/observer/` reads local session artifacts and renders a deterministic read-only CLI view without Trade Manager mutation, adapter creation, routing, or external broker/Rithmic calls.
 - **Phase 23 session reporting exists** — `packages/trade_manager/session.py` writes the 16 observer-compatible session artifacts from supplied data only, with traversal rejection, object-only JSON/JSONL validation, recursive non-finite rejection, and atomic same-directory replacement.
 
 ## Section 17 — Risk-layer components
@@ -177,8 +177,8 @@ session-reporting/execution integration.
 - **Trade Manager**: `packages/trade_manager/risk_layer.py` — static configured risk checks, adapter-context production-safety invocation, and inert `TradeManagerRiskDecision` output.
 - **Python production safety**: `packages/execution/production_safety.py` — `StaleDataMonitor`, `DisconnectMonitor`, `ClockDriftMonitor`, `PositionMismatchGuard`, `DailyLossLimitFlatten`.
 - **C++**: `risk_engine/{include/risk_manager.hpp, src/risk_manager.cpp}` — `FailureState` enum.
-- **Live-mode env vars**: `LIVE_MAX_ORDER_SIZE`, `LIVE_DAILY_LOSS_LIMIT`, `LIVE_KILL_SWITCH`, `LIVE_RISK_ENABLED`.
-- **Gap**: Phases 17-22 store risk decisions, state transitions, inert execution-boundary audit metadata, position reconciliation, kill-switch requested actions, and read-only observer views only. The live broker (stub) does not consume those decisions yet. The C++ `RiskManager` is not exposed via pybind. There is no `validate_live_env()` function.
+- **External-mode env vars**: `EXTERNAL_MAX_ORDER_SIZE`, `EXTERNAL_DAILY_LOSS_LIMIT`, `EXTERNAL_KILL_SWITCH`, `EXTERNAL_RISK_ENABLED`.
+- **Gap**: Phases 17-22 store risk decisions, state transitions, inert execution-boundary audit metadata, position reconciliation, kill-switch requested actions, and read-only observer views only. The broker adapter stub does not consume those decisions yet. The C++ `RiskManager` is not exposed via pybind. There is no `validate_external_env()` function.
 
 ## Section 18 — Execution-adapter components
 
@@ -187,10 +187,9 @@ session-reporting/execution integration.
 - **Safety helpers**: `packages/execution/safety.py`.
 - **Adapters**:
   - `hftbacktest_simulated_exchange.py` — simulated
-  - `paper_broker.py` — paper
-  - `live_broker.py:30-37` — **STUB** (returns `ORDER_REJECTED` with reason `"live_adapter_stub_not_wired"`)
+  - `broker.py` — **STUB** (returns `ORDER_REJECTED` with reason `"broker_adapter_stub_not_wired"`)
 - **Phase 19 boundary**: `packages/trade_manager/execution_boundary.py` validates declarative adapter config and `tests/test_trade_manager_phase19.py` enforces no adapter creation, no submit/cancel/replace, no Rithmic counter increments, and no Trade Manager routing methods.
-- **Gap**: there is no Rithmic live adapter implementation; only protocol stubs. Real routing remains future CHI404-only work.
+- **Gap**: there is no Rithmic external broker adapter implementation; only protocol stubs. Real routing remains future CHI404-only work.
 
 ## Section 19 — Streamlit / UI dependencies
 
@@ -219,7 +218,7 @@ session-reporting/execution integration.
 2. **Workbench backtest-to-robustness evidence is not wired into the autonomous runner** — Workbench emits Phase 5/9 artifacts; the runner still writes stub backtest metrics.
 3. **Double-WF correlator exists but is not campaign/autonomous promotion input** — real independent WF matrix wiring is still pending.
 4. **Trade Manager is partial** — Phase 14 registry handoff, Phase 15 signal ingress, Phase 16 order-intent schema, Phase 17 risk decisions, Phase 18 order-state transitions, Phase 19 inert execution boundary, Phase 20 inert position monitor, Phase 21 inert kill switch, Phase 22 read-only observer, and Phase 23 session reporting exist, but no execution orchestration exists yet.
-5. **Live broker adapter is a stub** — no real live execution path.
+5. **External broker adapter is a stub** — no real broker execution path.
 6. **C++ `RiskManager` not wired into Python** — risk is enforced only at the C++ engine boundary, not the backtest.
 7. **Production safety monitors are only used for Trade Manager decisions** — no adapter path consumes risk approvals/rejections yet.
 8. **No production session integration** — Phase 23 can write supplied session artifacts, but Phase 20 position reconciliation and Phase 21 kill-switch decisions are standalone and not integrated into a running Trade Manager session.
@@ -279,7 +278,7 @@ Phase 25 (required tests): `tests/test_phase25_required_tests.py`, `docs/project
 2. **Autonomous Workbench integration** — feed real `WorkbenchEngine` backtest, Phase 5 audit, Phase 9 robustness, and scoring evidence into the runner.
 3. **Campaign/autonomous double-WF wiring** — feed independent WF matrices into `double_wf.py` and promotion gates.
 4. **Wire `production_safety.py` into the adapter path** — enforce risk in the future execution-layer order-submission path.
-5. **Live broker adapter implementation** — replace the live stub with a CHI404-only execution path.
+5. **External broker adapter implementation** — replace the broker stub with a CHI404-only execution path.
 6. **Production session integration** — integrate Phase 20 position reconciliation and Phase 21 kill-switch decisions into running sessions without changing Phase 23's inert writer contract.
 7. **C++ `RiskManager` Python/backtest integration** — expose parity checks outside the C++ engine boundary.
 8. **Top-level `hft3` console script** — optional one-command wrapper for the existing module runner.

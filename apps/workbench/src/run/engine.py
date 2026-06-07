@@ -43,7 +43,7 @@ from hft3.validation.research_stamp import build_certification_stamp, format_sta
 
 
 def _after_action_allowed() -> bool:
-    """Post-run LLM runs on dev workstation only (BLUEPRINT live path is CHI404)."""
+    """Post-run LLM runs on dev workstation only (BLUEPRINT execution path is CHI404)."""
     import os
     import sys
 

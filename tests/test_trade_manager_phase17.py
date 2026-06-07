@@ -193,7 +193,7 @@ def _signal(**overrides) -> ModelSignal:
 def _context(intent, adapter: _FakeAdapter | None = None, **overrides) -> TradeManagerRiskContext:
     base = dict(
         adapter=adapter or _FakeAdapter(),
-        execution_mode="LIVE",
+        execution_mode="EXTERNAL",
         system_clock_ns=intent.timestamp + 1_000,
         exchange_clock_ns=intent.timestamp,
         last_market_data_ns=intent.timestamp + 500,
@@ -668,14 +668,11 @@ def test_phase17_risk_evaluation_does_not_create_adapters_or_route_orders(
     def forbid_call(*args, **kwargs):
         raise AssertionError("Phase 17 risk evaluation must not create adapters or route orders")
 
-    monkeypatch.setenv("EXECUTION_MODE", "LIVE")
+    monkeypatch.setenv("EXECUTION_MODE", "EXTERNAL")
     monkeypatch.setattr("execution.adapter_factory.create_adapter", forbid_call)
-    monkeypatch.setattr("execution.adapters.paper_broker.PaperBrokerAdapter.submit_order", forbid_call)
-    monkeypatch.setattr("execution.adapters.paper_broker.PaperBrokerAdapter.cancel_order", forbid_call)
-    monkeypatch.setattr("execution.adapters.paper_broker.PaperBrokerAdapter.replace_order", forbid_call)
-    monkeypatch.setattr("execution.adapters.live_broker.LiveBrokerAdapter.submit_order", forbid_call)
-    monkeypatch.setattr("execution.adapters.live_broker.LiveBrokerAdapter.cancel_order", forbid_call)
-    monkeypatch.setattr("execution.adapters.live_broker.LiveBrokerAdapter.replace_order", forbid_call)
+    monkeypatch.setattr("execution.adapters.broker.BrokerAdapter.submit_order", forbid_call)
+    monkeypatch.setattr("execution.adapters.broker.BrokerAdapter.cancel_order", forbid_call)
+    monkeypatch.setattr("execution.adapters.broker.BrokerAdapter.replace_order", forbid_call)
     safety.reset_counters()
 
     manager, intent = _manager_with_intent(tmp_path)
@@ -683,6 +680,6 @@ def test_phase17_risk_evaluation_does_not_create_adapters_or_route_orders(
 
     assert decision.allowed is True
     assert safety.counter_snapshot() == {
-        "live_broker_call_count": 0,
+        "broker_call_count": 0,
         "rithmic_order_call_count": 0,
     }

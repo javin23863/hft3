@@ -2,7 +2,7 @@
 
 Authority: [dev_instructions.pdf](../references/dev_instructions.pdf)
 
-Workstation-only NL → hypothesis → backtest → artifact pipeline. Does **not** touch live Rithmic or CHI404 hot path until colo is stable (BLUEPRINT §4).
+Workstation-only NL → hypothesis → backtest → artifact pipeline. Does **not** touch external Rithmic or CHI404 hot path until colo is stable (BLUEPRINT §4).
 
 **Vendor vs LLM vs relationship reasoning:** OpenFoundry + AlphaGeometry are **git submodules** under `vendor/`. GPT-5.5 is the OpenAI-compatible runtime LLM for research/model-development parsing and after-action analysis. The hft3 relationship-reasoning layer is separate offline code under `packages/research_pipeline/relationship_reasoning/`. See [VENDOR_BOUNDARIES.md](VENDOR_BOUNDARIES.md) and [PACKET_LLM_CONTRACT.md](PACKET_LLM_CONTRACT.md).
 
@@ -25,7 +25,7 @@ Workstation-only NL → hypothesis → backtest → artifact pipeline. Does **no
 - Full FIBO ontology or graph database
 - Authoritative OpenFoundry/KG relation writes from unvalidated relationship candidates
 - New C++ feature slots from natural language
-- Live gateway deploy (research artifacts only until CHI404 online)
+- External gateway deploy (research artifacts only until CHI404 online)
 
 ## Usage
 
@@ -35,10 +35,17 @@ pip install -r packages/research_pipeline/requirements.txt
 python scripts/run_pipeline.py \
   --thesis "Fade spread blowout after CPI surprise" \
   --event-id CPI_2024_09_11_TIGHT \
+  --lane cme \
   --max-candidates 5
 
 # Parse + candidate generation only (no backtest)
 python scripts/run_pipeline.py --thesis "..." --event-id CPI_2024_09_11_TIGHT --dry-run
+
+# Automation lanes: cme, equities, crypto
+python scripts/run_pipeline.py --thesis "..." --event-id EVTID --lane crypto
+
+# Random parameter search with reproducible sampling
+python scripts/run_pipeline.py --thesis "..." --event-id EVTID --search-mode random --num-samples 12 --random-seed 7
 ```
 
 Optional research document:
@@ -58,7 +65,13 @@ After-action reports use the same GPT-5.5 XHIGH runtime via `packet_runner`. See
 
 Relationship reasoning is not a packet LLM output surface. It may hold slow/offline candidate links across defined contexts only, but those candidates are non-authoritative until evidence and proof trace validation passes.
 
-Optional pre-run idea generation (`--idea-set`) emits `schema_pipeline_idea_set_v1` machine packets. Ideas expand the candidate queue only after static validation; full idea-set runs require VectorBT prefiltering and still must pass workbench gates. Ideas do not select models, tune parameters, or promote candidates. AAR-derived review memory is compacted into advisory fact codes for ideation context only.
+Pre-run idea generation runs on every pipeline execution and emits `schema_pipeline_idea_set_v1` machine packets. `--idea-set` is preserved for automation compatibility but ignored. Ideas expand the candidate queue only after static validation; they do not select models, tune parameters, or promote candidates. AAR-derived review memory is compacted into advisory fact codes for ideation context only.
+
+VectorBT prefiltering is also mandatory. `--vectorbt` and `--vectorbt-only` are preserved for compatibility but ignored; `--vectorbt-only` no longer exits after VectorBT. Promoted `asset_class=CRYPTO` candidates continue into crypto execution validation after VectorBT.
+
+Parameter search is configurable with `--search-mode`, `--num-samples`, and `--random-seed`. `--search-mode grid` uses a small deterministic threshold grid from the supplied `signal_threshold` range. `--search-mode random` samples thresholds from the same range, or from `0.05` to `0.50` when the hypothesis does not specify one. `--random-seed` makes random search reproducible for repeatable research packets.
+
+If no evaluated candidate passes the gates, the pipeline automatically performs one expanded re-search. It doubles the requested sample count, runs the generated candidates back through the mandatory VectorBT prefilter, validates promoted crypto candidates when applicable, and evaluates the promoted retry candidates before deciding whether deployment is allowed.
 
 ## Relationship Data Sources
 

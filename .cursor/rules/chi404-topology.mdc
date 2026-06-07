@@ -9,7 +9,7 @@ Production live architecture: **CHI404 bare metal** + **Rithmic Chicago/Aurora**
 
 ## Non-negotiable
 
-- **Live/paper market data, order submit, and Rithmic trial capture run on CHI404 only.**
+- **External broker market data, order submit, and Rithmic trial capture run on CHI404 only.**
 - **Dev workstation (Windows/Mac) is never in the hot loop** — no capture daemons, no R|Trader bridge from the PC, no file-bridge that adds workstation RTT to the path.
 - Workstation is allowed for: offline Databento replay, pytest, git, SSH/sync scripts, diagnostic probes that are **not** operational dependencies.
 

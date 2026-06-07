@@ -37,11 +37,11 @@ def _fake_ibkr_endpoint_status(status: str = "CONNECTED", api_status: str = "CON
         "schema_version": "ibkr_endpoint_status_v1",
         "status": status,
         "reason_code": "" if status == "CONNECTED" else "IBKR_API_HANDSHAKE",
-        "profile": "ibkr_paper_socket",
+        "profile": "ibkr_broker_socket",
         "provider": "interactive_brokers",
         "transport": "tws_socket",
-        "mode": "paper",
-        "system": "IBKR Paper Trading",
+        "mode": "external",
+        "system": "IBKR external broker socket",
         "gateway": "TWS or IB Gateway headless socket",
         "host": "127.0.0.1",
         "port": 7497,
@@ -67,10 +67,10 @@ def _fake_cme_endpoint_status(status: str = "READY_TO_CONNECT", reason_code: str
         "schema_version": "rithmic_endpoint_status_v1",
         "status": status,
         "reason_code": reason_code,
-        "profile": "paper_chicago",
-        "system": "Rithmic Paper Trading",
+        "profile": "external_chicago",
+        "system": "Rithmic external broker",
         "gateway": "Chicago Area",
-        "config_path": str(REPO / "packages" / "data_system" / "config" / "rithmic_api_paper.yaml"),
+        "config_path": str(REPO / "packages" / "data_system" / "config" / "rithmic_api_external.yaml"),
         "config_exists": True,
         "credentials": {"username_set": True, "password_set": True, "redacted": True},
         "gateway_library": {"path": "unit.dll", "exists": True},
@@ -186,7 +186,7 @@ def test_all_lanes_snapshot_requires_active_run_and_terminal_states(tmp_path: Pa
     assert not snapshot.decision["blocking_gates"]
 
 
-def test_all_lanes_summary_blockers_force_live_registry_not_ready(
+def test_all_lanes_summary_blockers_force_activation_registry_not_ready(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -208,7 +208,7 @@ def test_all_lanes_summary_blockers_force_live_registry_not_ready(
         json.dumps(
             {
                 "run_id": "fresh_all_lanes_1",
-                "live_registry_ready": True,
+                "activation_registry_ready": True,
                 "decision_action": "PROMOTE",
                 "blocking_gates": [{"gate": "submit_to_ack_latency", "status": "BLOCKING"}],
             }
@@ -218,19 +218,19 @@ def test_all_lanes_summary_blockers_force_live_registry_not_ready(
 
     snapshot = evidence_snapshot._all_lanes_snapshot(tmp_path)
 
-    assert snapshot.decision["live_registry_ready"] is False
+    assert snapshot.decision["activation_registry_ready"] is False
     assert snapshot.decision["action"] == "BLOCKED"
     assert any(gate["gate"] == "submit_to_ack_latency" for gate in snapshot.decision["blocking_gates"])
 
 
-def test_cme_rithmic_snapshot_surfaces_paper_endpoint_readiness() -> None:
+def test_cme_rithmic_snapshot_surfaces_external_endpoint_readiness() -> None:
     snapshot = load_run_evidence(REPO, "cme_rithmic")
 
     endpoint = snapshot.system["rithmic_endpoint"]
     readiness = snapshot.decision["runtime_readiness"]
     assert snapshot.source == "cme_rithmic"
-    assert endpoint["profile"] == "paper_chicago"
-    assert endpoint["system"] == "Rithmic Paper Trading"
+    assert endpoint["profile"] == "external_chicago"
+    assert endpoint["system"] == "Rithmic external broker"
     assert endpoint["gateway"] == "Chicago Area"
     assert endpoint["missing_endpoint_params"] == []
     assert endpoint["reason_code"] in {
@@ -257,7 +257,7 @@ def test_cme_runtime_readiness_blocks_ready_endpoint_without_submit_ack(
     monkeypatch.setattr(
         evidence_snapshot,
         "_rithmic_endpoint_status",
-        lambda _repo, force_paper=False: _fake_cme_endpoint_status("READY_TO_CONNECT"),
+        lambda _repo, force_external=False: _fake_cme_endpoint_status("READY_TO_CONNECT"),
     )
 
     snapshot = load_run_evidence(tmp_path, "cme_rithmic")
@@ -265,11 +265,11 @@ def test_cme_runtime_readiness_blocks_ready_endpoint_without_submit_ack(
     readiness = snapshot.decision["runtime_readiness"]
     blocking_gates = {gate["gate"] for gate in readiness["blocking_gates"]}
     assert readiness["status"] == "BLOCKING"
-    assert readiness["live_registry_ready"] is False
-    assert snapshot.decision["live_registry_ready"] is False
+    assert readiness["activation_registry_ready"] is False
+    assert snapshot.decision["activation_registry_ready"] is False
     assert snapshot.system["runtime_readiness"] == readiness
     assert "submit_to_ack_latency" in blocking_gates
-    assert "rithmic_paper_endpoint" not in blocking_gates
+    assert "rithmic_external_endpoint" not in blocking_gates
 
 
 def test_rithmic_trial_paired_rows_do_not_satisfy_native_submit_ack_gate(
@@ -280,7 +280,7 @@ def test_rithmic_trial_paired_rows_do_not_satisfy_native_submit_ack_gate(
     monkeypatch.setattr(
         evidence_snapshot,
         "_rithmic_endpoint_status",
-        lambda _repo, force_paper=False: _fake_cme_endpoint_status("READY_TO_CONNECT"),
+        lambda _repo, force_external=False: _fake_cme_endpoint_status("READY_TO_CONNECT"),
     )
     monkeypatch.setattr(
         evidence_snapshot,
@@ -311,7 +311,7 @@ def test_rithmic_endpoint_status_exception_fails_closed(tmp_path: Path, monkeypa
 
     monkeypatch.setattr(endpoint_status, "endpoint_status_from_config", broken_status)
 
-    status = evidence_snapshot._rithmic_endpoint_status(tmp_path, force_paper=True)
+    status = evidence_snapshot._rithmic_endpoint_status(tmp_path, force_external=True)
 
     assert status["status"] == "BLOCKING"
     assert status["reason_code"] == "RITHMIC_ENDPOINT_STATUS_ERROR"
@@ -340,7 +340,7 @@ def test_latest_latency_baseline_summary_prefers_newest_observed_broker_run(tmp_
                 "generated_at_utc": "2026-06-04T00:01:00Z",
                 "sample_path": str(tmp_path / "old.jsonl"),
                 "operating_profile": {"host": "CHI404"},
-                "broker_mode": {"status": "observed", "broker": "rithmic", "environment": "paper"},
+                "broker_mode": {"status": "observed", "broker": "rithmic", "environment": "external"},
                 "broker_artifacts": {
                     "hot_path_language": "c++",
                     "wrapper": "none",
@@ -359,7 +359,7 @@ def test_latest_latency_baseline_summary_prefers_newest_observed_broker_run(tmp_
                 "generated_at_utc": "2026-06-04T00:02:00Z",
                 "sample_path": str(tmp_path / "new.jsonl"),
                 "operating_profile": {"host": "CHI404"},
-                "broker_mode": {"status": "observed", "broker": "rithmic", "environment": "paper"},
+                "broker_mode": {"status": "observed", "broker": "rithmic", "environment": "external"},
                 "broker_artifacts": {
                     "hot_path_language": "c++",
                     "wrapper": "none",
@@ -371,7 +371,7 @@ def test_latest_latency_baseline_summary_prefers_newest_observed_broker_run(tmp_
         encoding="utf-8",
     )
 
-    summary = _latest_latency_baseline_summary(tmp_path, broker="rithmic", environment="paper")
+    summary = _latest_latency_baseline_summary(tmp_path, broker="rithmic", environment="external")
 
     assert summary["run_id"] == "new"
     assert summary["_path"].endswith("new_summary.json")
@@ -390,7 +390,7 @@ def test_latest_latency_baseline_summary_prefers_current_baseline(tmp_path: Path
                 "generated_at_utc": "2026-06-04T00:01:00Z",
                 "sample_path": str(tmp_path / "accepted.jsonl"),
                 "operating_profile": {"host": "CHI404"},
-                "broker_mode": {"status": "observed", "broker": "rithmic", "environment": "paper"},
+                "broker_mode": {"status": "observed", "broker": "rithmic", "environment": "external"},
                 "broker_artifacts": {
                     "hot_path_language": "c++",
                     "wrapper": "none",
@@ -409,7 +409,7 @@ def test_latest_latency_baseline_summary_prefers_current_baseline(tmp_path: Path
                 "generated_at_utc": "2026-06-04T00:03:00Z",
                 "sample_path": str(tmp_path / "newer.jsonl"),
                 "operating_profile": {"host": "CHI404"},
-                "broker_mode": {"status": "observed", "broker": "rithmic", "environment": "paper"},
+                "broker_mode": {"status": "observed", "broker": "rithmic", "environment": "external"},
                 "broker_artifacts": {
                     "hot_path_language": "c++",
                     "wrapper": "none",
@@ -421,7 +421,7 @@ def test_latest_latency_baseline_summary_prefers_current_baseline(tmp_path: Path
         encoding="utf-8",
     )
 
-    summary = _latest_latency_baseline_summary(tmp_path, broker="rithmic", environment="paper")
+    summary = _latest_latency_baseline_summary(tmp_path, broker="rithmic", environment="external")
 
     assert summary["run_id"] == "accepted"
     assert summary["_baseline_role"] == "current_baseline"
@@ -439,7 +439,7 @@ def test_latest_latency_baseline_summary_rejects_non_chi404_native_looking_run(t
                 "generated_at_utc": "2026-06-04T00:02:00Z",
                 "sample_path": str(tmp_path / "dev-native.jsonl"),
                 "operating_profile": {"host": "DEV-WORKSTATION"},
-                "broker_mode": {"status": "observed", "broker": "rithmic", "environment": "paper"},
+                "broker_mode": {"status": "observed", "broker": "rithmic", "environment": "external"},
                 "broker_artifacts": {
                     "hot_path_language": "c++",
                     "wrapper": "none",
@@ -454,7 +454,7 @@ def test_latest_latency_baseline_summary_rejects_non_chi404_native_looking_run(t
         encoding="utf-8",
     )
 
-    summary = _latest_latency_baseline_summary(tmp_path, broker="rithmic", environment="paper")
+    summary = _latest_latency_baseline_summary(tmp_path, broker="rithmic", environment="external")
 
     assert summary == {}
 
@@ -462,18 +462,18 @@ def test_latest_latency_baseline_summary_rejects_non_chi404_native_looking_run(t
 def test_cme_rithmic_snapshot_uses_latency_baseline_as_ack_evidence(tmp_path: Path, monkeypatch) -> None:
     reports = tmp_path / "reports" / "latency_baselines"
     reports.mkdir(parents=True)
-    (reports / "paper_summary.json").write_text(
+    (reports / "broker_summary.json").write_text(
         json.dumps(
             {
                 "schema_version": "latency_baseline_summary_v1",
-                "run_id": "paper-hot",
+                "run_id": "broker-hot",
                 "generated_at_utc": "2026-06-04T00:02:00Z",
-                "sample_path": str(tmp_path / "paper-hot.jsonl"),
+                "sample_path": str(tmp_path / "broker-hot.jsonl"),
                 "operating_profile": {"host": "CHI404"},
                 "broker_mode": {
                     "status": "observed",
                     "broker": "rithmic",
-                    "environment": "paper",
+                    "environment": "external",
                     "venue": "CME",
                 },
                 "broker_artifacts": {
@@ -492,10 +492,10 @@ def test_cme_rithmic_snapshot_uses_latency_baseline_as_ack_evidence(tmp_path: Pa
         encoding="utf-8",
     )
 
-    monkeypatch.setenv("RITHMIC_ENDPOINT_PROFILE", "paper_chicago")
+    monkeypatch.setenv("RITHMIC_ENDPOINT_PROFILE", "external_chicago")
     snapshot = load_run_evidence(tmp_path, "cme_rithmic")
 
-    assert snapshot.latency["latency_baseline"]["run_id"] == "paper-hot"
+    assert snapshot.latency["latency_baseline"]["run_id"] == "broker-hot"
     assert snapshot.latency["rithmic_order_ack"]["order_ack_measured"] is True
     assert snapshot.latency["rithmic_order_ack"]["paired_count"] == 1000
     assert snapshot.latency["rithmic_order_ack"]["source"] == "latency_baseline"
@@ -538,7 +538,7 @@ def test_latency_baseline_backfills_trigger_metrics_from_cpp_jsonl(tmp_path: Pat
                 "broker_mode": {
                     "status": "observed",
                     "broker": "rithmic",
-                    "environment": "paper",
+                    "environment": "external",
                     "venue": "CME",
                 },
                 "broker_artifacts": {
@@ -555,7 +555,7 @@ def test_latency_baseline_backfills_trigger_metrics_from_cpp_jsonl(tmp_path: Pat
         encoding="utf-8",
     )
 
-    summary = _latest_latency_baseline_summary(tmp_path, broker="rithmic", environment="paper")
+    summary = _latest_latency_baseline_summary(tmp_path, broker="rithmic", environment="external")
 
     assert summary["placement_trigger_kpi"] == "tick_to_send_trigger_us"
     assert summary["metrics"]["decision_to_send_trigger_us"]["p50_us"] == pytest.approx(2.0)
@@ -564,7 +564,7 @@ def test_latency_baseline_backfills_trigger_metrics_from_cpp_jsonl(tmp_path: Pat
 
 
 def test_latest_rithmic_trial_bundle_reads_observed_reports(tmp_path: Path) -> None:
-    raw_dir = tmp_path / "data" / "raw" / "rithmic_trial_live_capture" / "2026-06-04" / "ESM6"
+    raw_dir = tmp_path / "data" / "raw" / "rithmic_trial_capture" / "2026-06-04" / "ESM6"
     raw_dir.mkdir(parents=True)
     (raw_dir / "events.ndjson").write_text('{"event_type":"trade"}\n', encoding="utf-8")
     raw_file = raw_dir / "events.ndjson"
@@ -574,7 +574,7 @@ def test_latest_rithmic_trial_bundle_reads_observed_reports(tmp_path: Path) -> N
             {
                 "symbol": "ESM6",
                 "exchange": "CME",
-                "capture_environment": "rithmic_paper",
+                "capture_environment": "rithmic_external",
                 "capture_start_time": "2026-06-04T10:00:00Z",
                 "capture_end_time": "2026-06-04T10:00:15Z",
                 "row_count": 103,
@@ -586,7 +586,7 @@ def test_latest_rithmic_trial_bundle_reads_observed_reports(tmp_path: Path) -> N
     )
     reports = tmp_path / "reports" / "rithmic_trial" / "2026-06-04" / "ESM6"
     reports.mkdir(parents=True)
-    normalized = tmp_path / "data" / "normalized" / "rithmic_trial_live_capture" / "2026-06-04" / "ESM6"
+    normalized = tmp_path / "data" / "normalized" / "rithmic_trial_capture" / "2026-06-04" / "ESM6"
     normalized.mkdir(parents=True)
     normalized_file = normalized / "events.ndjson"
     normalized_file.write_text('{"event_type":"trade"}\n', encoding="utf-8")
@@ -644,11 +644,11 @@ def test_latest_rithmic_trial_bundle_reads_observed_reports(tmp_path: Path) -> N
         ),
         encoding="utf-8",
     )
-    (reports / "paper_order_summary.json").write_text('{"paired_count":0}', encoding="utf-8")
+    (reports / "broker_order_summary.json").write_text('{"paired_count":0}', encoding="utf-8")
 
     bundle = _latest_rithmic_trial_bundle(tmp_path)
 
-    assert bundle["run_id"] == "rithmic_paper_2026-06-04_ESM6"
+    assert bundle["run_id"] == "rithmic_external_2026-06-04_ESM6"
     assert bundle["row_count"] == 103
     assert bundle["trade_count"] == 43
     assert bundle["quote_count"] == 60
@@ -660,7 +660,7 @@ def test_latest_rithmic_trial_bundle_reads_observed_reports(tmp_path: Path) -> N
 
 
 def test_latest_rithmic_trial_bundle_blocks_stale_reports(tmp_path: Path) -> None:
-    raw_dir = tmp_path / "data" / "raw" / "rithmic_trial_live_capture" / "2026-06-04" / "ESM6"
+    raw_dir = tmp_path / "data" / "raw" / "rithmic_trial_capture" / "2026-06-04" / "ESM6"
     raw_dir.mkdir(parents=True)
     raw_file = raw_dir / "events.ndjson"
     raw_file.write_text('{"event_type":"trade"}\n', encoding="utf-8")
@@ -669,7 +669,7 @@ def test_latest_rithmic_trial_bundle_blocks_stale_reports(tmp_path: Path) -> Non
             {
                 "symbol": "ESM6",
                 "exchange": "CME",
-                "capture_environment": "rithmic_paper",
+                "capture_environment": "rithmic_external",
                 "row_count": 236,
                 "checksum_sha256": "fresh-checksum",
                 "raw_file": str(raw_file),
@@ -679,7 +679,7 @@ def test_latest_rithmic_trial_bundle_blocks_stale_reports(tmp_path: Path) -> Non
     )
     reports = tmp_path / "reports" / "rithmic_trial" / "2026-06-04" / "ESM6"
     reports.mkdir(parents=True)
-    stale_normalized = tmp_path / "data" / "normalized" / "rithmic_trial_live_capture" / "2026-06-04" / "MES"
+    stale_normalized = tmp_path / "data" / "normalized" / "rithmic_trial_capture" / "2026-06-04" / "MES"
     stale_normalized.mkdir(parents=True)
     stale_norm_file = stale_normalized / "events.ndjson"
     stale_norm_file.write_text('{"event_type":"trade"}\n', encoding="utf-8")
@@ -715,7 +715,7 @@ def test_latest_rithmic_trial_bundle_blocks_stale_reports(tmp_path: Path) -> Non
         json.dumps({"status": "pass", "input_files": [str(stale_norm_file)], "paired_count": 0}),
         encoding="utf-8",
     )
-    (reports / "paper_order_summary.json").write_text('{"paired_count":0}', encoding="utf-8")
+    (reports / "broker_order_summary.json").write_text('{"paired_count":0}', encoding="utf-8")
     (reports / "hftbacktest_conversion_report.json").write_text(
         json.dumps({"status": "pass", "mode": "trade_only", "output_file": "stale.npz"}),
         encoding="utf-8",
@@ -757,10 +757,10 @@ def test_equities_snapshot_surfaces_ibkr_endpoint_readiness(monkeypatch: pytest.
     endpoint = snapshot.system["ibkr_endpoint"]
     stages = {row["name"]: row["status"] for row in snapshot.stages}
 
-    assert endpoint["profile"] == "ibkr_paper_socket"
+    assert endpoint["profile"] == "ibkr_broker_socket"
     assert endpoint["provider"] == "interactive_brokers"
     assert endpoint["transport"] == "tws_socket"
-    assert endpoint["mode"] in {"paper", "live"}
+    assert endpoint["mode"] == "external"
     assert int(endpoint["port"]) > 0
     assert endpoint["credentials"]["redacted"] is True
     assert endpoint["secret_exposed"] is False
@@ -768,24 +768,25 @@ def test_equities_snapshot_surfaces_ibkr_endpoint_readiness(monkeypatch: pytest.
     assert endpoint["api"]["api_client_status"] == "CONNECTED"
     assert "account_id" not in endpoint
     assert "ibkr_equities_endpoint" in stages
-    assert snapshot.latency["ibkr_endpoint"]["profile"] == "ibkr_paper_socket"
+    assert snapshot.latency["ibkr_endpoint"]["profile"] == "ibkr_broker_socket"
     assert calls and all(calls)
     if endpoint["status"] == "BLOCKING":
         assert any(gate["gate"].startswith("ibkr_") for gate in endpoint["blocking_gates"])
 
 
-def test_equities_snapshot_allows_pipeline_when_live_routing_handshake_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_equities_snapshot_allows_pipeline_when_broker_routing_handshake_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         evidence_snapshot,
         "_ibkr_endpoint_status",
         lambda _repo, connect=True: {
-            **_fake_ibkr_endpoint_status("BLOCKING", "PAPER_DISCLAIMER_PENDING"),
-            "reason_code": "IBKR_PAPER_DISCLAIMER",
+            **_fake_ibkr_endpoint_status("BLOCKING", "BROKER_DISCLAIMER_PENDING"),
+            "reason_code": "IBKR_BROKER_DISCLAIMER",
             "blocking_gates": [
                 {
-                    "gate": "ibkr_paper_disclaimer",
+                    "gate": "ibkr_broker_disclaimer",
                     "status": "BLOCKING",
-                    "reason": "Paper trading disclaimer must be accepted before IBKR allows API connections.",
+                    "reason": "IBKR broker disclaimer must be accepted before IBKR allows API connections.",
+                    "vendor_error_code": 10141,
                 }
             ],
         },
@@ -800,10 +801,10 @@ def test_equities_snapshot_allows_pipeline_when_live_routing_handshake_fails(mon
     assert snapshot.current_stage == "lane_catalogued"
     assert stages["ibkr_equities_endpoint"] == "PASS"
     assert endpoint["pipeline_gate_status"] == "PASS"
-    assert endpoint["live_routing_gate_status"] == "ROUTING_BLOCKED"
+    assert endpoint["broker_routing_gate_status"] == "ROUTING_BLOCKED"
     assert endpoint["pipeline_blocking"] is False
     assert endpoint["routing_ready"] is False
-    assert snapshot.system["ibkr_endpoint"]["api"]["api_client_status"] == "PAPER_DISCLAIMER_PENDING"
+    assert snapshot.system["ibkr_endpoint"]["api"]["api_client_status"] == "BROKER_DISCLAIMER_PENDING"
     assert not any(gate["gate"] == "ibkr_equities_endpoint" for gate in snapshot.decision["blocking_gates"])
 
 
@@ -1018,9 +1019,9 @@ def test_catalog_feature_fabric_rejects_unsafe_cme_instrument(monkeypatch, tmp_p
         trade_print_available=True,
         index_sensor_available=False,
         point_in_time_safe=True,
-        data_delay_status="LIVE",
-        live_feed_status="LIVE",
-        historical_feed_status="LIVE",
+        data_delay_status="REALTIME",
+        realtime_feed_status="REALTIME",
+        historical_feed_status="AVAILABLE",
     )
     unsafe = InstrumentRecord(
         canonical_internal_symbol="UNSAFE",
@@ -1036,9 +1037,9 @@ def test_catalog_feature_fabric_rejects_unsafe_cme_instrument(monkeypatch, tmp_p
         trade_print_available=True,
         index_sensor_available=False,
         point_in_time_safe=False,
-        data_delay_status="LIVE",
-        live_feed_status="LIVE",
-        historical_feed_status="LIVE",
+        data_delay_status="REALTIME",
+        realtime_feed_status="REALTIME",
+        historical_feed_status="AVAILABLE",
     )
     monkeypatch.setattr(
         instrument_registry,
@@ -1212,7 +1213,7 @@ def test_trade_manager_snapshot_empty_state_is_explicit(tmp_path: Path) -> None:
     assert snapshot["active_models"] == []
     assert snapshot["open_positions"] == []
     assert snapshot["open_orders"] == []
-    assert snapshot["live_routing_status"] == "NOT_WIRED"
+    assert snapshot["broker_routing_status"] == "NOT_WIRED"
     assert "session_manifest.json" in snapshot["unavailable_artifacts"]
 
 

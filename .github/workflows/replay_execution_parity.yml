@@ -3,20 +3,24 @@ name: replay_execution_parity
 on:
   push:
     paths:
-      - "execution/**"
-      - "replay/**"
-      - "backtest_pipeline/**"
+      - "packages/execution/**"
+      - "packages/trade_manager/**"
+      - "packages/replay/**"
+      - "packages/backtest_pipeline/**"
+      - "packages/backtest_pipeline/src/chi404_latency.py"
       - "tests/test_replay_*"
       - "tests/test_execution_*"
       - "tests/test_hftbacktest_*"
       - "tests/test_model_mode_*"
       - "tests/test_latency_band_*"
-      - "backtest_pipeline/src/replay_npz_fixture.py"
+      - "packages/backtest_pipeline/src/replay_npz_fixture.py"
   pull_request:
     paths:
-      - "execution/**"
-      - "replay/**"
-      - "backtest_pipeline/**"
+      - "packages/execution/**"
+      - "packages/trade_manager/**"
+      - "packages/replay/**"
+      - "packages/backtest_pipeline/**"
+      - "packages/backtest_pipeline/src/chi404_latency.py"
       - "tests/test_replay_*"
       - "tests/test_execution_*"
       - "tests/test_hftbacktest_*"
@@ -37,7 +41,7 @@ jobs:
         run: |
           pytest tests/test_replay_must_emit_order_intents.py \
             tests/test_execution_interface_parity.py \
-            tests/test_replay_orders_do_not_route_live.py \
+            tests/test_replay_orders_do_not_route_external.py \
             tests/test_hftbacktest_adapter_order_lifecycle.py \
             tests/test_model_mode_blindness.py \
             tests/test_replay_clock_order_timestamps.py \

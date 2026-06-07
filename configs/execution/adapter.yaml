@@ -1,6 +1,6 @@
 mode: REPLAY
 adapter: hftbacktest_simulated_exchange
-live_broker: ""
+broker: ""
 venue: CME
 order_routing: direct
 reconnect_handling: manual

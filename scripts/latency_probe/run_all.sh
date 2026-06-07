@@ -23,8 +23,8 @@ echo "  LATENCY_PROBE_INCLUDE_TRIAL_APPENDIX=$INCLUDE_TRIAL"
 echo "  LATENCY_PROBE_TRIAL_CAPTURE=$TRIAL_CAPTURE"
 
 if [[ "$TRIAL_CAPTURE" == "1" ]]; then
-  echo "=== optional trial capture (paper orders must be sent in R|Trader VM) ==="
-  bash "$REPO/scripts/chi404_run_trial_live.sh"
+  echo "=== optional trial capture (broker orders must be sent on CHI404) ==="
+  bash "$REPO/scripts/chi404_run_trial_capture.sh"
 fi
 
 bash "$PROBE_DIR/local_cpu_probe.sh"

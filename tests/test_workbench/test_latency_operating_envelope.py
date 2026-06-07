@@ -26,8 +26,8 @@ def _profile() -> CppLatencyProfile:
 def _blocked_profile() -> CppLatencyProfile:
     return CppLatencyProfile(
         cpp_decision_compute=LatencyPercentilesUs(5.0, 8.0, 10.0, "test_cpp"),
-        order_send=LatencyPercentilesUs(0.0, 0.0, 0.0, "blocked_until_paper_order_ack"),
-        gateway_ack=LatencyPercentilesUs(0.0, 0.0, 0.0, "blocked_until_paper_order_ack"),
+        order_send=LatencyPercentilesUs(0.0, 0.0, 0.0, "blocked_until_broker_order_ack"),
+        gateway_ack=LatencyPercentilesUs(0.0, 0.0, 0.0, "blocked_until_broker_order_ack"),
         feed_delay=LatencyPercentilesUs(10.0, 15.0, 20.0, "test_feed"),
         order_ack_blocked=True,
     )
@@ -60,7 +60,7 @@ def _passing_execution_audit() -> dict:
     return {
         "run_id": "lataudit-pass",
         "status": "pass",
-        "mode": "paper_live",
+        "mode": "broker_external",
         "expected_host": "CHI404",
         "source_host": "CHI404",
         "host_role": "colo_execution",

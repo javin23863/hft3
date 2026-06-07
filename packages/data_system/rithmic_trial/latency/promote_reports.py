@@ -1,4 +1,4 @@
-"""Promote paper_latency daemon NDJSON into trial latency reports."""
+"""Promote broker_latency daemon NDJSON into trial latency reports."""
 
 from __future__ import annotations
 
@@ -6,12 +6,12 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ..reports.emit_reports import build_latency_profile, build_paper_order_summary
+from ..reports.emit_reports import build_broker_order_summary, build_latency_profile
 from ..reports.waterfall import write_waterfall_report
-from ..schema.paper_latency_record_v1 import PaperLatencyRecordV1
+from ..schema.broker_latency_record_v1 import BrokerLatencyRecordV1
 
 
-def records_to_events(records: list[PaperLatencyRecordV1]) -> list[dict[str, Any]]:
+def records_to_events(records: list[BrokerLatencyRecordV1]) -> list[dict[str, Any]]:
     """Synthetic event list for latency_profile dimensional stats."""
     events: list[dict[str, Any]] = []
     for rec in records:
@@ -47,8 +47,8 @@ def records_to_events(records: list[PaperLatencyRecordV1]) -> list[dict[str, Any
 SYNTHETIC_ORDER_PREFIXES = ("SWEEP-", "MKT-")
 
 
-def load_records(path: Path) -> list[PaperLatencyRecordV1]:
-    out: list[PaperLatencyRecordV1] = []
+def load_records(path: Path) -> list[BrokerLatencyRecordV1]:
+    out: list[BrokerLatencyRecordV1] = []
     if not path.is_file():
         return out
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -56,7 +56,7 @@ def load_records(path: Path) -> list[PaperLatencyRecordV1]:
         if not line:
             continue
         try:
-            rec = PaperLatencyRecordV1.from_dict(json.loads(line))
+            rec = BrokerLatencyRecordV1.from_dict(json.loads(line))
         except json.JSONDecodeError:
             continue
         oid = (rec.order_id or "").upper()
@@ -80,8 +80,8 @@ def promote_from_records(
         )
     events = records_to_events(records)
     latency = build_latency_profile(events)
-    paper_summary = build_paper_order_summary(events)
-    paired = int(paper_summary.get("paired_count", 0) or 0)
+    broker_summary = build_broker_order_summary(events)
+    paired = int(broker_summary.get("paired_count", 0) or 0)
     if min_paired > 0 and paired < min_paired:
         raise ValueError(
             f"paired_count={paired} < min_paired={min_paired} in {records_path} "
@@ -91,7 +91,7 @@ def promote_from_records(
 
     paths = {
         "latency_profile.json": reports_dir / "latency_profile.json",
-        "paper_order_summary.json": reports_dir / "paper_order_summary.json",
+        "broker_order_summary.json": reports_dir / "broker_order_summary.json",
         "latency_waterfall.json": reports_dir / "latency_waterfall.json",
         "data_capture_report.json": reports_dir / "data_capture_report.json",
     }
@@ -99,16 +99,16 @@ def promote_from_records(
         json.dumps({"input_files": [str(records_path)], **latency}, indent=2) + "\n",
         encoding="utf-8",
     )
-    paths["paper_order_summary.json"].write_text(json.dumps(paper_summary, indent=2) + "\n", encoding="utf-8")
+    paths["broker_order_summary.json"].write_text(json.dumps(broker_summary, indent=2) + "\n", encoding="utf-8")
     write_waterfall_report(records_path, paths["latency_waterfall.json"])
     paths["data_capture_report.json"].write_text(
         json.dumps(
             {
-                "status": "pass" if paper_summary.get("paired_count", 0) > 0 else "warn",
+                "status": "pass" if broker_summary.get("paired_count", 0) > 0 else "warn",
                 "manifest": {
                     "known_limitations": {
                         "connector": "rtrader_bridge",
-                        "note": "paper_latency_daemon records.ndjson promotion",
+                        "note": "broker_latency_daemon records.ndjson promotion",
                     }
                 },
             },
@@ -123,7 +123,7 @@ def promote_from_records(
 def main(argv: list[str] | None = None) -> int:
     import argparse
 
-    parser = argparse.ArgumentParser(description="Promote paper latency NDJSON to trial reports")
+    parser = argparse.ArgumentParser(description="Promote broker latency NDJSON to trial reports")
     parser.add_argument("--records", type=Path, required=True)
     parser.add_argument("--reports-dir", type=Path, required=True)
     parser.add_argument(
@@ -140,7 +140,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     for name, path in paths.items():
         print(f"Wrote {name}: {path}")
-    paired = json.loads(Path(paths["paper_order_summary.json"]).read_text())["paired_count"]
+    paired = json.loads(Path(paths["broker_order_summary.json"]).read_text())["paired_count"]
     return 0 if paired > 0 else 1
 
 

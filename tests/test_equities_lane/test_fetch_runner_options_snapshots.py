@@ -130,6 +130,8 @@ def test_existing_normalized_file_skips_before_costing(tmp_path, monkeypatch):
         override_hard_limit=False,
     )
 
+    assert manifest["mode"] == "confirmed_download"
+    assert manifest["status"] == "confirmed_download_completed"
     assert manifest["ticker_records"][0]["status"] == "skipped_already_normalized"
     assert manifest["estimated_total_cost_usd"] == 0.0
 
@@ -242,7 +244,7 @@ def test_terminal_symbology_failure_is_cached_and_skipped(tmp_path, monkeypatch)
     assert calls["n"] == 1
 
 
-def test_cli_refuses_live_without_key(tmp_path):
+def test_cli_refuses_confirmed_download_without_key(tmp_path):
     plan = tmp_path / "options_snapshot_plan.json"
     _write_plan(plan, [_row("AAA")])
     env = os.environ.copy()
@@ -265,3 +267,4 @@ def test_cli_refuses_live_without_key(tmp_path):
     )
     assert proc.returncode == 4
     assert "DATABENTO_API_KEY" in proc.stderr
+    assert "confirmed downloads" in proc.stderr

@@ -41,9 +41,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "strategy_family_overrides": {},
     "regime_overrides": {},
     "venue_overrides": {},
-    "mode_overrides": {
-        "live": {},
-        "paper": {},
+    "runtime_context_overrides": {
+        "external": {},
         "shadow": {},
     },
 }
@@ -78,7 +77,7 @@ def thresholds_for(
     strategy_family: str = "",
     regime_id: str = "",
     venue: str = "",
-    mode: str = "",
+    runtime_context: str = "",
 ) -> dict[str, Any]:
     threshold = dict(config.get("global") or {})
     selectors = (
@@ -87,7 +86,7 @@ def thresholds_for(
         ("strategy_family_overrides", strategy_family),
         ("regime_overrides", regime_id),
         ("venue_overrides", venue),
-        ("mode_overrides", mode),
+        ("runtime_context_overrides", runtime_context),
     )
     for section, key in selectors:
         if key:

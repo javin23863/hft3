@@ -66,7 +66,7 @@ class TradeManagerRiskConfig:
 @dataclass(frozen=True)
 class TradeManagerRiskContext:
     adapter: Any
-    execution_mode: str = "LIVE"
+    execution_mode: str = "EXTERNAL"
     system_clock_ns: int = 0
     exchange_clock_ns: int = 0
     last_market_data_ns: int = 0

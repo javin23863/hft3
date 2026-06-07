@@ -191,7 +191,7 @@ class _OrderPriorityFakeConnector(_FakeBrokerConnector):
 def test_tick_to_send_is_separate_from_send_to_ack() -> None:
     record = build_latency_sample(
         run_id="r1",
-        environment="paper",
+        environment="external",
         broker="rithmic",
         venue="CME",
         symbol="ES",
@@ -218,7 +218,7 @@ def test_tick_to_send_is_separate_from_send_to_ack() -> None:
 def test_action_specific_metrics_do_not_bleed_between_order_and_cancel() -> None:
     cancel = build_latency_sample(
         run_id="r1",
-        environment="paper",
+        environment="external",
         broker="rithmic",
         venue="CME",
         symbol="ES",
@@ -243,7 +243,7 @@ def test_recorder_persists_jsonl_under_dated_data_root(tmp_path: Path) -> None:
     recorder = LatencyRecorder(
         repo_root=tmp_path,
         run_id="run-a",
-        environment="paper",
+        environment="external",
         broker="rithmic",
         venue="CME",
         symbol="ES",
@@ -270,7 +270,7 @@ def test_summary_views_and_baseline_hard_fail(tmp_path: Path) -> None:
     records = [
         build_latency_sample(
             run_id="base",
-            environment="paper",
+            environment="external",
             broker="rithmic",
             venue="CME",
             symbol="ES",
@@ -298,7 +298,7 @@ def test_summary_views_and_baseline_hard_fail(tmp_path: Path) -> None:
     slower = [
         build_latency_sample(
             run_id="slow",
-            environment="paper",
+            environment="external",
             broker="rithmic",
             venue="CME",
             symbol="ES",
@@ -340,7 +340,7 @@ def test_synthetic_cli_writes_jsonl_and_reports(tmp_path: Path) -> None:
             "--samples",
             "9",
             "--env",
-            "paper",
+            "external",
             "--broker",
             "rithmic",
             "--symbol",
@@ -374,7 +374,7 @@ def test_invalid_samples_fail_loudly(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="order_api_call_start_ts before decision_ready_ts"):
         build_latency_sample(
             run_id="bad",
-            environment="paper",
+            environment="external",
             broker="rithmic",
             venue="CME",
             symbol="ES",
@@ -421,7 +421,7 @@ def test_broker_mode_refuses_fake_python_connector(tmp_path: Path, monkeypatch: 
             "--run-id",
             "broker-multi",
             "--env",
-            "paper",
+            "external",
             "--broker",
             "rithmic",
             "--symbol",
@@ -461,7 +461,7 @@ def test_broker_mode_records_cancel_timeout_without_faking_ack(tmp_path: Path, m
             "--run-id",
             "broker-cancel-timeout",
             "--env",
-            "paper",
+            "external",
             "--broker",
             "rithmic",
             "--symbol",
@@ -501,7 +501,7 @@ def test_broker_mode_prioritizes_order_event_queue_after_submit(tmp_path: Path, 
             "--run-id",
             "broker-order-priority",
             "--env",
-            "paper",
+            "external",
             "--broker",
             "rithmic",
             "--symbol",

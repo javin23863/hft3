@@ -1161,7 +1161,7 @@ class AutonomousRunner:
                 gate_failures = list(gate_failures) + [metrics_gate]
         if decision == "PROMOTE" and metrics_gate_failed:
             decision = "QUARANTINE"
-            reason = "Institutional model scorecard/envelope is not active for live promotion."
+            reason = "Institutional model scorecard/envelope is not active for broker promotion."
             scoring_summary["decision"] = decision
             scoring_summary["reason"] = reason
         path = self._write_artifact("scoring_summary.json", scoring_summary)

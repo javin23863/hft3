@@ -240,7 +240,7 @@ def test_research_decision_packet_rejects_unknown_action():
 
 def test_research_decision_packet_rejects_execution_routing_field():
     sample = _minimal_research_decision_packet()
-    sample["execution_routing"] = {"target": "live"}
+    sample["execution_routing"] = {"target": "broker"}
     errors = validate_research_decision_packet(sample)
     assert any("Additional properties" in err and "execution_routing" in err for err in errors)
 
@@ -280,7 +280,7 @@ def test_research_decision_packet_rejects_object_feature_value():
             "variable_ids": ["top_of_book_imbalance"],
             "formula_ids": ["top_of_book_imbalance_v1"],
             "source_ids": ["src_microstructure_pdf"],
-            "value": {"execution_routing": "live"},
+            "value": {"execution_routing": "broker"},
             "as_of_utc": "2026-06-04T13:42:55Z",
         }
     ]

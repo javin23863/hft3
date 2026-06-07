@@ -60,7 +60,7 @@ from trade_manager.signals import ModelSignal, SignalSource, StaticSignalSource
 from trade_manager.model_behavior import (
     ModelBehaviorEnvelope,
     ModelBehaviorRuleEngine,
-    ModelLiveObservation,
+    ModelRuntimeObservation,
     ModelStateDecision,
     classify_model_state,
 )
@@ -126,7 +126,7 @@ __all__ = [
     "StaticSignalSource",
     "ModelBehaviorEnvelope",
     "ModelBehaviorRuleEngine",
-    "ModelLiveObservation",
+    "ModelRuntimeObservation",
     "ModelStateDecision",
     "classify_model_state",
     "CapabilityAssumptions",

@@ -82,7 +82,7 @@ python scripts/run_hybrid_pipeline_gate.py --event-id CPI_2024_09_11_TIGHT  # wh
 
 ## 1b. Autoresearch pipeline (NL thesis)
 
-**When:** Ingest a natural-language trading thesis (and optional research PDF), generate candidate models, backtest, and write pipeline artifacts. Workstation-only; no live deploy until CHI404 is stable.
+**When:** Ingest a natural-language trading thesis (and optional research PDF), generate candidate models, backtest, and write pipeline artifacts. Workstation-only; no broker deploy until CHI404 is stable.
 
 ```bash
 pip install -r packages/research_pipeline/requirements.txt
@@ -90,7 +90,11 @@ pip install -r packages/research_pipeline/requirements.txt
 python scripts/run_pipeline.py \
   --thesis "Fade spread blowout after CPI surprise on MES" \
   --event-id CPI_2024_09_11_TIGHT \
+  --lane cme \
   --max-candidates 5
+
+# Automation lanes: cme, equities, crypto
+python scripts/run_pipeline.py --thesis "..." --event-id EVTID --lane crypto
 
 # Parse + candidates only (no backtest)
 python scripts/run_pipeline.py \
@@ -107,6 +111,11 @@ python scripts/run_pipeline.py \
   --doc docs/references/dev_instructions.pdf \
   --event-id CPI_2024_09_11_TIGHT
 ```
+
+Idea generation and VectorBT prefiltering run on every pipeline execution. `--idea-set`,
+`--vectorbt`, and `--vectorbt-only` remain accepted for automation compatibility but are
+ignored; `--vectorbt-only` no longer exits after VectorBT. Promoted
+`asset_class=CRYPTO` candidates run crypto execution validation after VectorBT.
 
 Output: `research_cards/pipeline_runs/<run_id>/`. Authority: [AUTORESEARCH_PIPELINE.md](../research/AUTORESEARCH_PIPELINE.md), source PDF [dev_instructions.pdf](../references/dev_instructions.pdf).
 
@@ -154,7 +163,7 @@ python -m crypto_lane.pipeline smoke
 
 **Validation modes** (crypto addendum: [packages/crypto_lane/docs/VALIDATION_HONESTY.md](../../packages/crypto_lane/docs/VALIDATION_HONESTY.md); repo-wide: [VALIDATION_HONESTY.md](../VALIDATION_HONESTY.md)):
 
-- **Dev/CI default:** `validation_mode: fixture` — bundled fixture CSVs; no live ingest required.
+- **Dev/CI default:** `validation_mode: fixture` — bundled fixture CSVs; no broker ingest required.
 - **Production real-data:** run ingest first (`python -m crypto_lane.pipeline ingest` or pull/normalize steps), populate `data/crypto/normalized/`, then smoke with `validation_mode: production` in backtest YAML.
 
 **Verify (scope-green gate):**
@@ -197,19 +206,19 @@ python scripts/run_offline_pipeline.py --skip-download --event-id CPI_2024_09_11
 
 Uses `SignalBacktester` per hypothesis. HftBacktest combined replay is **opt-in** (`--full-hft` on offline pipeline).
 
-## 4. Rithmic trial live (CHI404 only)
+## 4. Rithmic trial broker capture (CHI404 only)
 
-**When:** Paper-forward capture + optional replay after live session.
+**When:** Broker-forward capture + optional replay after a CHI404 session.
 
 ```bash
 # On CHI404 — tag manifest with macro event_id; replay uses Databento NPZ + CHI404 latency
-EVENT_ID=CPI_2024_09_11_TIGHT bash scripts/chi404_run_trial_live.sh
+EVENT_ID=CPI_2024_09_11_TIGHT bash scripts/chi404_run_trial_capture.sh
 ```
 
 - `--date` / folder `YYYY-MM-DD` = **capture session date** (ingest only).
 - `EVENT_ID` / `replay-event` = **research event** (from `events.csv`).
 
-**Paper order latency:** [CHI404_CANONICAL_ENTRYPOINTS.md](CHI404_CANONICAL_ENTRYPOINTS.md) — build and run native `rithmic_latency_probe` on CHI404. The compatibility sweep script refuses Python/ctypes hot-path measurement. No synthetic log inject.
+**Broker order latency:** [CHI404_CANONICAL_ENTRYPOINTS.md](CHI404_CANONICAL_ENTRYPOINTS.md) — build and run native `rithmic_latency_probe` on CHI404. The compatibility sweep script refuses Python/ctypes hot-path measurement. No synthetic log inject.
 
 **Verify (scope-green workstation):** `python -m pytest tests/test_rithmic_trial_pipeline.py tests/test_rithmic_topology_guards.py -q`. CHI404 PASS requires `validate_pass_criteria.py` on real logs — see [docs/chi404/VALIDATION_ADDENDUM.md](../chi404/VALIDATION_ADDENDUM.md).
 
@@ -235,7 +244,7 @@ python -m pytest tests/test_rithmic_trial_pipeline.py -q
 |-------|--------|------|
 | Macro MBO replay body | Databento | `data/npz/<symbol>_<event_id>_mbo.npz` |
 | Colo latency | CHI404 probe | `runtime/latency_reports/latency_summary.json` |
-| Rithmic live tape | CHI404 capture | `data/raw/rithmic_trial_live_capture/` (forward-only) |
+| Rithmic broker tape | CHI404 capture | `data/raw/rithmic_trial_capture/` (forward-only) |
 
 No historical Rithmic download for past CPI dates.
 

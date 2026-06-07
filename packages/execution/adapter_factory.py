@@ -1,13 +1,11 @@
-"""Factory for mode-aware execution adapters."""
+"""Factory for replay and external execution adapters."""
 from __future__ import annotations
 
-import os
 from typing import Any, Optional
 
 from execution import safety
+from execution.adapters.broker import BrokerAdapter
 from execution.adapters.hftbacktest_simulated_exchange import HftBacktestSimulatedExchangeAdapter
-from execution.adapters.live_broker import LiveBrokerAdapter
-from execution.adapters.paper_broker import PaperBrokerAdapter
 from execution.interfaces import ExecutionAdapter
 
 
@@ -36,18 +34,13 @@ def create_adapter(
         safety.assert_replay_safe(adapter)
         return adapter
 
-    if mode == "PAPER":
-        adapter = PaperBrokerAdapter(run_id=run_id)
-        safety.assert_paper_safe(adapter)
-        return adapter
-
-    if mode == "LIVE":
-        safety.assert_live_config()
-        return LiveBrokerAdapter(run_id=run_id)
+    if mode == "EXTERNAL":
+        safety.assert_external_config()
+        return BrokerAdapter(run_id=run_id)
 
     raise ValueError(f"Unknown EXECUTION_MODE: {mode}")
 
 
-def forbid_live_adapter_in_replay(adapter: ExecutionAdapter) -> None:
-    if safety.execution_mode() == "REPLAY" and isinstance(adapter, LiveBrokerAdapter):
-        raise RuntimeError("LiveBrokerAdapter forbidden in REPLAY mode")
+def forbid_broker_adapter_in_replay(adapter: ExecutionAdapter) -> None:
+    if safety.execution_mode() == "REPLAY" and isinstance(adapter, BrokerAdapter):
+        raise RuntimeError("BrokerAdapter forbidden in REPLAY mode")

@@ -21,7 +21,7 @@ Source: `runtime/latency_reports/latency_summary.json` — probe `20260530T03175
 | CPU loaded cyclictest p99 | 11 µs |
 | Gateway ping p99 | 0.166 ms |
 | Rithmic TCP 65000 p99 | **4.094 ms** (backtest latency default) |
-| Order ack p99 | not measured (R\|API+ / Stage 3 paper harness pending) |
+| Order ack p99 | not measured (R\|API+ / Stage 3 broker harness pending) |
 
 ## Dual backtest engines (do not conflate)
 
@@ -59,18 +59,18 @@ python scripts/run_single_hyp_backtest.py \
 # Sync CHI404 trial + latency to workstation
 bash scripts/chi404_sync_trial_data.sh
 
-# CHI404 live trial with macro event tag
-EVENT_ID=CPI_2024_09_11_TIGHT bash scripts/chi404_run_trial_live.sh
+# CHI404 broker trial with macro event tag
+EVENT_ID=CPI_2024_09_11_TIGHT bash scripts/chi404_run_trial_capture.sh
 ```
 
 ## Rithmic trial lane (CHI404 only)
 
-- Live capture: `data/raw/rithmic_trial_live_capture/YYYY-MM-DD/` (capture date ≠ event_id)
+- Broker capture: `data/raw/rithmic_trial_capture/YYYY-MM-DD/` (capture date ≠ event_id)
 - Manifest now supports `--event-id` for macro tagging
 - No historical Rithmic download for Sept 2024; CPI MBO body = Databento NPZ
 
 ## Open next
 
-1. Stage 1–3: R\|Trader paper verification + order-ack latency on CHI404
+1. Stage 1–3: R\|Trader broker verification + order-ack latency on CHI404
 2. Populate `hftbacktest_loop` in report (optimize or overnight run)
 3. R\|API+ connector swap when approved

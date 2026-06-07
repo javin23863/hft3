@@ -15,7 +15,7 @@ Authority: [BLUEPRINT.md §4](../../BLUEPRINT.md#4-live-architecture) · [MEMORY
 | Field | Value (2026-05-31 audit) |
 |-------|--------------------------|
 | Hostname | `CHI404` |
-| Role | Chicago colo bare metal — live/paper Rithmic, capture, latency probes |
+| Role | Chicago colo bare metal — external broker Rithmic, capture, latency probes |
 | Colo provider | **QuantVPS** |
 | Public IP | `64.44.98.219/25` |
 | OS | Ubuntu 22.04.5 LTS |

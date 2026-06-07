@@ -1,4 +1,4 @@
-"""Percentile helpers for paper order latency reports."""
+"""Percentile helpers for broker order latency reports."""
 
 from __future__ import annotations
 

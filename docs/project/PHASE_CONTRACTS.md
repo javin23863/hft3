@@ -65,7 +65,7 @@ Contract:
 2. Displays active models, symbols, positions, order states, risk decisions, kill-switch status, incidents, latency, and PnL.
 3. Never mutates Trade Manager state.
 4. Never creates adapters.
-5. Never calls live/paper/Rithmic paths.
+5. Never calls external broker/Rithmic paths.
 
 ## Phase 23: Session Reporting
 

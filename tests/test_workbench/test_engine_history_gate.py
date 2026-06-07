@@ -181,7 +181,7 @@ def _write_native_latency_baseline(repo: Path) -> None:
                 "sample_count": 1000,
                 "sample_path": "data/latency_baselines/2026-06-06/native-prod.jsonl",
                 "operating_profile": {"host": "CHI404"},
-                "broker_mode": {"status": "observed", "broker": "rithmic", "environment": "paper"},
+                "broker_mode": {"status": "observed", "broker": "rithmic", "environment": "external"},
                 "broker_artifacts": {
                     "hot_path_language": "c++",
                     "wrapper": "none",

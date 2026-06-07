@@ -115,7 +115,7 @@ class CertificationRecord:
 #
 # `CertificationRecord` above is per-backtester (one row per `run_full_certification`).
 # `PromotionRecord` below is per-model/per-candidate (one row per
-# `evaluate_promotion_gate` decision for a specific model). They live in
+# `evaluate_promotion_gate` decision for a specific model). They reside in
 # the same JSONL audit log but with `record_type="promotion"` so the chain
 # is still auditable. The Phase 11 spec's 27 new fields are modelled here.
 
@@ -757,7 +757,7 @@ def get_latest_status(root: Path | None = None) -> str:
 def save_promotion(record: PromotionRecord, root: Path | None = None) -> dict[str, Any]:
     """Atomically append a promotion record to the JSONL audit log.
 
-    Promotion records live in the same JSONL log as certification
+    Promotion records are stored in the same JSONL log as certification
     records but with `record_type="promotion"` so the hash chain
     stays unified. The legacy single-JSON file is *not* touched
     (it remains a "current certification status" mirror only).

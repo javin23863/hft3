@@ -177,7 +177,7 @@ class ModelBehaviorEnvelope:
 
 
 @dataclass(frozen=True)
-class ModelLiveObservation:
+class ModelRuntimeObservation:
     model_id: str
     model_version: str = ""
     run_id: str = ""
@@ -216,7 +216,7 @@ class ModelLiveObservation:
     order_reject_rate: float | None = None
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any]) -> "ModelLiveObservation":
+    def from_dict(cls, raw: dict[str, Any]) -> "ModelRuntimeObservation":
         fields = cls.__dataclass_fields__
         values = {name: raw[name] for name in fields if name in raw}
         return cls(**values)
@@ -231,7 +231,7 @@ class ModelStateDecision:
     action: str
     triggers: tuple[dict[str, Any], ...]
     alerts: tuple[dict[str, Any], ...]
-    observation: ModelLiveObservation
+    observation: ModelRuntimeObservation
     envelope_id: str
     calculation_version: str = CALCULATION_VERSION
 

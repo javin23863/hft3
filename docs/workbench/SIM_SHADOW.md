@@ -4,7 +4,7 @@ Authority: `chicago_cme_microstructure_a_plus_developer_handoff.pdf`, `chicago_c
 
 ## Purpose
 
-After a model **PASS**es Discovery → Confirmation → Holdout → Recent holdout (2025 only) on Databento MBO replay, sim shadow is the **required fifth gate** before promotion. It validates execution realism on **CHI404** paper/live colo — not Windows NPZ replay.
+After a model **PASS**es Discovery → Confirmation → Holdout → Recent holdout (2025 only) on Databento MBO replay, sim shadow is the **required fifth gate** before promotion. It validates execution realism on **CHI404** external broker colo evidence — not Windows NPZ replay.
 
 ## Policy (workbench config)
 

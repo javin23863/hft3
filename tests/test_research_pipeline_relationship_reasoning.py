@@ -257,7 +257,7 @@ def test_spoofed_source_ref_fails_validation():
             RelationshipEvidence(
                 "not canonical",
                 RelationshipDataSource.DATA_SYSTEM_EVENTS_CSV,
-                "live/news/feed:CPI_2024_09_11_TIGHT",
+                "external/news/feed:CPI_2024_09_11_TIGHT",
             ),
         ),
         proof_trace=("human proof",),

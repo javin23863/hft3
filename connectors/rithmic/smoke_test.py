@@ -14,13 +14,18 @@ from typing import Any, Callable
 
 import yaml
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_PAPER_CONFIG = REPO_ROOT / "packages" / "data_system" / "config" / "rithmic_api_paper.yaml"
-DEFAULT_RAW_ROOT = REPO_ROOT / "data" / "rithmic" / "paper" / "raw"
-DEFAULT_REPORT_ROOT = REPO_ROOT / "reports" / "rithmic_paper"
+for _path in (REPO_ROOT, REPO_ROOT / "packages", REPO_ROOT / "apps"):
+    if str(_path) not in sys.path:
+        sys.path.insert(0, str(_path))
 
-BAD_PAPER_ENDPOINT_TOKENS = (
+from data_system.rithmic_trial.platform import is_chi404_runtime
+
+DEFAULT_EXTERNAL_CONFIG = REPO_ROOT / "packages" / "data_system" / "config" / "rithmic_api_external.yaml"
+DEFAULT_RAW_ROOT = REPO_ROOT / "data" / "rithmic" / "external" / "raw"
+DEFAULT_REPORT_ROOT = REPO_ROOT / "reports" / "rithmic_external"
+
+BAD_EXTERNAL_ENDPOINT_TOKENS = (
     "rituz00100",
     "rithmic_uat",
     "uat_dmz",
@@ -62,7 +67,7 @@ class SmokeSettings:
     raw_root: Path = DEFAULT_RAW_ROOT
     report_root: Path = DEFAULT_REPORT_ROOT
     url: str = ""
-    system_name: str = "Rithmic Paper Trading"
+    system_name: str = ""
     gateway: str = "Chicago Area"
     app_name: str = "HFT3"
     app_version: str = "1.0"
@@ -101,48 +106,39 @@ class SmokeSettings:
         gateway = self.gateway.strip().lower()
         url = self.url.strip().lower()
 
-        if env != "paper":
-            blockers.append(Blocker("UNSUPPORTED_ENV", "This smoke command is scoped to --env paper."))
-        if "paper" not in system:
-            blockers.append(
-                Blocker(
-                    "PAPER_SYSTEM_NAME_MISSING",
-                    "Paper smoke requires System Name 'Rithmic Paper Trading'.",
-                )
-            )
         if "test" in system:
             blockers.append(
                 Blocker(
-                    "PAPER_PROFILE_POINTS_TO_TEST",
-                    "Paper smoke cannot use Rithmic Test as the system name.",
+                    "EXTERNAL_PROFILE_POINTS_TO_TEST",
+                    "External broker smoke cannot use Rithmic Test as the system name.",
                 )
             )
         if "chicago" not in gateway:
             blockers.append(
                 Blocker(
-                    "PAPER_CHICAGO_GATEWAY_MISSING",
-                    "Paper smoke requires a Chicago gateway/area label.",
+                    "EXTERNAL_CHICAGO_GATEWAY_MISSING",
+                    "External broker smoke requires a Chicago gateway/area label.",
                 )
             )
         if "orangeburg" in gateway:
             blockers.append(
                 Blocker(
-                    "PAPER_PROFILE_POINTS_TO_ORANGEBURG",
-                    "Paper smoke cannot use Orangeburg as the gateway.",
+                    "EXTERNAL_PROFILE_POINTS_TO_ORANGEBURG",
+                    "External broker smoke cannot use Orangeburg as the gateway.",
                 )
             )
         if not url:
             blockers.append(
                 Blocker(
-                    "PAPER_PROTOCOL_URL_MISSING",
-                    "Set RITHMIC_PROTOCOL_URL or protocol.url in the Paper profile.",
+                    "EXTERNAL_PROTOCOL_URL_MISSING",
+                    "Set RITHMIC_PROTOCOL_URL or protocol.url in the external broker profile.",
                 )
             )
-        elif any(token in url for token in BAD_PAPER_ENDPOINT_TOKENS):
+        elif any(token in url for token in BAD_EXTERNAL_ENDPOINT_TOKENS):
             blockers.append(
                 Blocker(
-                    "PAPER_PROTOCOL_ENDPOINT_IS_TEST_OR_ORANGEBURG",
-                    "Paper smoke cannot use Test/Orangeburg/UAT endpoint strings.",
+                    "EXTERNAL_PROTOCOL_ENDPOINT_IS_TEST_OR_ORANGEBURG",
+                    "External broker smoke cannot use Test/Orangeburg/UAT endpoint strings.",
                 )
             )
         if not self.username:
@@ -228,6 +224,15 @@ class RithmicProtocolSmokeRunner:
         blockers = self.settings.blockers()
         if blockers:
             raise SmokeBlockedError(blockers)
+        if self._client_factory is None and not is_chi404_runtime():
+            raise SmokeBlockedError(
+                [
+                    Blocker(
+                        "CHI404_REQUIRED",
+                        "External Rithmic smoke connects and subscribes only on CHI404.",
+                    )
+                ]
+            )
 
         runtime = _load_async_rithmic() if self._client_factory is None else {}
         client_cls = self._client_factory or runtime["RithmicClient"]
@@ -395,7 +400,7 @@ class RithmicProtocolSmokeRunner:
 
 def settings_from_args(args: argparse.Namespace, environ: dict[str, str] | None = None) -> SmokeSettings:
     env = environ if environ is not None else os.environ
-    config_path = Path(args.config or DEFAULT_PAPER_CONFIG).resolve()
+    config_path = Path(args.config or DEFAULT_EXTERNAL_CONFIG).resolve()
     cfg = _load_yaml(config_path)
     protocol = dict(cfg.get("protocol") or {})
     raw_root = Path(args.raw_root or DEFAULT_RAW_ROOT).resolve()
@@ -417,7 +422,7 @@ def settings_from_args(args: argparse.Namespace, environ: dict[str, str] | None 
         system_name=(
             env.get("RITHMIC_SYSTEM_NAME")
             or env.get("RITHMIC_API_SYSTEM")
-            or str(protocol.get("system_name") or cfg.get("system") or "Rithmic Paper Trading")
+            or str(protocol.get("system_name") or cfg.get("system") or "")
         ).strip(),
         gateway=(
             env.get("RITHMIC_GATEWAY")
@@ -434,12 +439,12 @@ def settings_from_args(args: argparse.Namespace, environ: dict[str, str] | None 
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Headless Rithmic Paper market-data smoke test")
-    parser.add_argument("--env", default="paper", help="Only 'paper' is supported for this command.")
+    parser = argparse.ArgumentParser(description="Headless Rithmic external broker market-data smoke test")
+    parser.add_argument("--env", default="external", help="Environment label for diagnostics.")
     parser.add_argument("--symbol-root", default="ES")
     parser.add_argument("--exchange", default="CME")
     parser.add_argument("--duration", type=float, default=60.0)
-    parser.add_argument("--config", default=str(DEFAULT_PAPER_CONFIG))
+    parser.add_argument("--config", default=str(DEFAULT_EXTERNAL_CONFIG))
     parser.add_argument("--url", default="", help="Runtime websocket URL override; prefer RITHMIC_PROTOCOL_URL.")
     parser.add_argument("--raw-root", default=str(DEFAULT_RAW_ROOT))
     parser.add_argument("--report-root", default=str(DEFAULT_REPORT_ROOT))
@@ -470,7 +475,7 @@ def main(argv: list[str] | None = None, environ: dict[str, str] | None = None) -
             json.dumps(
                 {
                     "status": "fail",
-                    "reason_code": "RITHMIC_PAPER_SMOKE_FAILED",
+                    "reason_code": "RITHMIC_EXTERNAL_SMOKE_FAILED",
                     "error": _safe_error(exc, settings),
                     "diagnostics": settings.redacted_diagnostics(),
                 },
@@ -489,7 +494,7 @@ def _print_blocked(settings: SmokeSettings, blockers: list[Blocker]) -> None:
         json.dumps(
             {
                 "status": "blocked",
-                "reason_code": "RITHMIC_PAPER_SMOKE_BLOCKED",
+                "reason_code": "RITHMIC_EXTERNAL_SMOKE_BLOCKED",
                 "blockers": [blocker.to_dict() for blocker in blockers],
                 "diagnostics": settings.redacted_diagnostics(),
             },

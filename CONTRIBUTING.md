@@ -35,7 +35,7 @@ Do not rely on blind repo-wide grep when the graph can scope the search.
 
 ## Topology
 
-Live/paper market data and orders: **CHI404 only**. See [BLUEPRINT.md](BLUEPRINT.md) §4.
+External broker market data and orders: **CHI404 only**. See [BLUEPRINT.md](BLUEPRINT.md) §4.
 
 ## Secrets
 

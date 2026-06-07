@@ -1,8 +1,8 @@
 """Interactive Brokers endpoint readiness for the equities lane.
 
-The endpoint shape follows the QuantX socket-first setup:
-TWS/IB Gateway paper on 7497, live on 7496, client IDs 17/18, and Client
-Portal treated as auxiliary rather than the daily headless path.
+The endpoint shape follows the QuantX socket-first setup: one external broker
+socket, client IDs 17/18, and Client Portal treated as auxiliary rather than the
+daily headless path.
 """
 
 from __future__ import annotations
@@ -142,7 +142,7 @@ def hydrate_runtime_env(repo_root: str | Path, config: dict[str, Any]) -> dict[s
         "BROKER_SOCKET_ENABLED": "1",
         "MARKET_DATA_PROVIDER": "ibkr-socket",
         "IBKR_SOCKET_HOST": "127.0.0.1",
-        "IBKR_SOCKET_MODE": str(config.get("mode") or "paper"),
+        "IBKR_SOCKET_PORT": str(config.get("port") or 7497),
         "IBKR_SOCKET_CLIENT_ID_PRIMARY": str((config.get("client_ids") or {}).get("broker_primary") or 17),
         "IBKR_SOCKET_CLIENT_ID_MARKETDATA": str((config.get("client_ids") or {}).get("market_data") or 18),
     }
@@ -199,19 +199,25 @@ def _unique_ints(values: list[Any]) -> list[int]:
     return out
 
 
-def _candidate_ports(config: dict[str, Any], mode: str, configured_port: int) -> list[int]:
+def _candidate_ports(config: dict[str, Any], configured_port: int) -> list[int]:
     candidates: list[Any] = []
     if os.environ.get("IBKR_SOCKET_PORT"):
         candidates.append(os.environ["IBKR_SOCKET_PORT"])
     candidates.append(configured_port)
-    by_mode = config.get("candidate_ports") or {}
-    if isinstance(by_mode, dict):
-        candidates.extend(by_mode.get(mode) or [])
-    ports = config.get("ports") or {}
-    if mode == "live":
-        candidates.extend([ports.get("live"), ports.get("legacy_gateway_live")])
+    configured_candidates = config.get("candidate_ports") or []
+    if isinstance(configured_candidates, dict):
+        for values in configured_candidates.values():
+            if isinstance(values, list):
+                candidates.extend(values)
+            else:
+                candidates.append(values)
+    elif isinstance(configured_candidates, list):
+        candidates.extend(configured_candidates)
     else:
-        candidates.extend([ports.get("paper"), ports.get("legacy_gateway_paper")])
+        candidates.append(configured_candidates)
+    ports = config.get("ports") or {}
+    if isinstance(ports, dict):
+        candidates.extend(ports.values())
     return _unique_ints(candidates)
 
 
@@ -353,10 +359,9 @@ def resolve_endpoint(
     ports = config.get("ports") or {}
     client_ids = config.get("client_ids") or {}
 
-    mode_name = _env_name(config, "mode", "IBKR_SOCKET_MODE")
-    mode = os.environ.get(mode_name, str(config.get("mode") or "paper")).strip().lower() or "paper"
-    default_port = int(ports.get("live" if mode == "live" else "paper") or 7497)
-    port_env = _env_name(config, "live_port" if mode == "live" else "paper_port", "IBKR_SOCKET_PORT_PAPER")
+    mode = str(config.get("mode") or "external").strip().lower() or "external"
+    default_port = int(config.get("port") or (ports.get("default") if isinstance(ports, dict) else None) or 7497)
+    port_env = _env_name(config, "port", "IBKR_SOCKET_PORT")
     host_env = _env_name(config, "host", "IBKR_SOCKET_HOST")
     broker_client_env = _env_name(config, "broker_client_id", "IBKR_SOCKET_CLIENT_ID_PRIMARY")
     market_client_env = _env_name(config, "market_data_client_id", "IBKR_SOCKET_CLIENT_ID_MARKETDATA")
@@ -366,14 +371,14 @@ def resolve_endpoint(
     provider_env = _env_name(config, "market_data_provider", "MARKET_DATA_PROVIDER")
     account_env = account_primary_env if os.environ.get(account_primary_env) else account_fallback_env
     configured_port = _env_int(port_env, default_port)
-    candidates = _candidate_ports(config, mode, configured_port)
+    candidates = _candidate_ports(config, configured_port)
 
     return ResolvedIbkrEndpoint(
-        profile=str(config.get("profile") or "ibkr_paper_socket"),
+        profile=str(config.get("profile") or "ibkr_broker_socket"),
         provider=str(config.get("provider") or "interactive_brokers"),
         transport=str(config.get("transport") or "tws_socket"),
         mode=mode,
-        system=str(config.get("system") or "IBKR Paper Trading"),
+        system=str(config.get("system") or "IBKR broker socket"),
         gateway=str(config.get("gateway") or "TWS or IB Gateway headless socket"),
         host=os.environ.get(host_env, str(config.get("host") or "127.0.0.1")).strip() or "127.0.0.1",
         port=configured_port,
@@ -440,7 +445,7 @@ def _headless_ibapi_handshake(endpoint: ResolvedIbkrEndpoint, timeout_sec: float
         if handshake_ready:
             status = "CONNECTED"
         elif any(int(error.get("code") or 0) == 10141 for error in errors):
-            status = "PAPER_DISCLAIMER_PENDING"
+            status = "BROKER_DISCLAIMER_PENDING"
         else:
             status = "IBAPI_HANDSHAKE_TIMEOUT"
         return {
@@ -567,19 +572,15 @@ def endpoint_status(
         api_handshake = _headless_ibapi_handshake(endpoint_for_connect, timeout_sec)
         if not api_handshake.get("connected"):
             api_status = str(api_handshake.get("api_client_status") or "IBAPI_HANDSHAKE_FAILED")
-            if api_status == "PAPER_DISCLAIMER_PENDING":
-                gate = "ibkr_paper_disclaimer"
-                reason = "Paper trading disclaimer must be accepted before IBKR allows API connections."
+            if api_status == "BROKER_DISCLAIMER_PENDING":
+                gate = "ibkr_broker_disclaimer"
+                reason = "IBKR broker disclaimer must be accepted before IBKR allows API connections."
+                extra_gate_fields = {"vendor_error_code": 10141}
             else:
                 gate = "ibkr_api_handshake"
                 reason = api_status
-            blockers.append(
-                {
-                    "gate": gate,
-                    "status": "BLOCKING",
-                    "reason": reason,
-                }
-            )
+                extra_gate_fields = {}
+            blockers.append({"gate": gate, "status": "BLOCKING", "reason": reason, **extra_gate_fields})
     elif connect and socket_open and not api_available:
         api_handshake["api_client_status"] = "IBAPI_PACKAGE_MISSING"
 
@@ -611,12 +612,12 @@ def endpoint_status(
         "routing_gates": routing_gates,
         "runtime_policy": runtime_policy,
         "launcher": launch_status,
-        "quantx_reference": {
+        "broker_socket_reference": {
             "repo": "C:/Users/MSI/Documents/GitHub/quant-x",
             "runbook": "docs/ibkr_weekly_login.md",
             "default_socket_provider": "ibkr-socket",
-            "paper_port": 7497,
-            "live_port": 7496,
+            "default_port": int(config.get("port") or 7497),
+            "candidate_ports": endpoint.candidate_ports or [endpoint.port],
             "broker_client_id": 17,
             "market_data_client_id": 18,
         },

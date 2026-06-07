@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CI/smoke only: fixture-style synthetic export lines (NOT live trial proof).
+# CI/smoke only: fixture-style synthetic export lines (NOT broker trial proof).
 set -euo pipefail
 REPO="${HFT3_REPO_DIR:-/root/hft3/repo}"
 cd "$REPO"

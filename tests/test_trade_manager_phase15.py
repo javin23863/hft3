@@ -248,7 +248,7 @@ def test_phase15_signal_envelope_has_no_order_intent_fields(tmp_path: Path) -> N
     )
 
 
-def test_phase15_signal_ingress_does_not_route_paper_live_or_rithmic_orders(
+def test_phase15_signal_ingress_does_not_route_broker_or_rithmic_orders(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -257,8 +257,7 @@ def test_phase15_signal_ingress_does_not_route_paper_live_or_rithmic_orders(
 
     monkeypatch.setenv("EXECUTION_MODE", "REPLAY")
     monkeypatch.setattr("execution.adapter_factory.create_adapter", forbid_call)
-    monkeypatch.setattr("execution.adapters.paper_broker.PaperBrokerAdapter.submit_order", forbid_call)
-    monkeypatch.setattr("execution.adapters.live_broker.LiveBrokerAdapter.submit_order", forbid_call)
+    monkeypatch.setattr("execution.adapters.broker.BrokerAdapter.submit_order", forbid_call)
     safety.reset_counters()
 
     manager = _manager_with_active_model(tmp_path)
@@ -271,6 +270,6 @@ def test_phase15_signal_ingress_does_not_route_paper_live_or_rithmic_orders(
 
     assert not isinstance(signal, OrderIntent)
     assert safety.counter_snapshot() == {
-        "live_broker_call_count": 0,
+        "broker_call_count": 0,
         "rithmic_order_call_count": 0,
     }

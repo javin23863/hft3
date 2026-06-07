@@ -29,7 +29,7 @@ def test_from_chi404_summary():
         assert prof.measured_production_p99_us > prof.cpp_decision_compute.p99_us
 
 
-def test_legacy_paper_order_latency_does_not_clear_native_ack_gate(tmp_path: Path):
+def test_broker_order_latency_does_not_clear_native_ack_gate(tmp_path: Path):
     summary = tmp_path / "latency_summary.json"
     summary.write_text(
         json.dumps(
@@ -38,7 +38,7 @@ def test_legacy_paper_order_latency_does_not_clear_native_ack_gate(tmp_path: Pat
                 "network": {"rithmic_tcp_65000": {"p99_ms": 4.0}},
                 "order_ack_measured": True,
                 "order_ack_p99_ms": 2.0,
-                "paper_order_latency": {
+                "broker_order_latency": {
                     "measured": True,
                     "authoritative": True,
                     "paired_count": 1200,

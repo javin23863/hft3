@@ -62,7 +62,7 @@ class CppLatencyProfile:
         notes.append(
             "order_ack_blocked: CHI404 native C++ rithmic_latency_probe submit→ack "
             "evidence with >=1000 paired samples is not present; TCP/trial/legacy "
-            "paper_order_latency fields are not authoritative"
+            "broker_order_latency fields are not authoritative"
         )
         return (
             LatencyPercentilesUs(0.0, 0.0, 0.0, "order_ack_unmeasured_blocked"),

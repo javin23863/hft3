@@ -27,7 +27,7 @@ DOWNLOAD_PRIORITY = [
 ]
 
 MBO_STATUS_VALUES = (
-    "MBO_LIVE",
+    "MBO_REALTIME",
     "MBO_HISTORICAL",
     "MBO_MISSING",
     "MBO_DEGRADED",
@@ -118,7 +118,7 @@ def build_inventory(repo: Path | None = None) -> Dict[str, Any]:
                 "event_windows_in_csv": sum(
                     1 for syms in event_syms.values() if research_sym in syms
                 ),
-                "live_feed_status": inst.get("live_feed_status", "MISSING"),
+                "realtime_feed_status": inst.get("realtime_feed_status", "MISSING"),
                 "historical_feed_status": inst.get("historical_feed_status", "MISSING"),
             }
         )

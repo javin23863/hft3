@@ -17,7 +17,7 @@ from hft3_bootstrap import setup_repo_paths
 
 setup_repo_paths()
 
-from data_system.rithmic_trial.capture.live_capture import LiveCapture
+from data_system.rithmic_trial.capture.trial_capture import TrialCapture
 from data_system.rithmic_trial.config import load_config
 from data_system.rithmic_trial.connector.fixture_connector import FixtureConnector
 from data_system.rithmic_trial.convert.hftbacktest_converter import convert_to_npz
@@ -29,12 +29,13 @@ from data_system.rithmic_trial.validate.quality_checks import validate_events
 
 
 @pytest.fixture
-def trial_cfg(tmp_path: Path):
+def trial_cfg(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     cfg_src = _REPO / "packages" / "data_system" / "config" / "rithmic_trial.yaml"
     text = cfg_src.read_text(encoding="utf-8").replace("repo_root: .", f"repo_root: {tmp_path}")
     cfg_path = tmp_path / "rithmic_trial.yaml"
     cfg_path.write_text(text, encoding="utf-8")
-    os.environ["RITHMIC_TRIAL_ENABLED"] = "1"
+    monkeypatch.setenv("RITHMIC_TRIAL_ENABLED", "1")
+    monkeypatch.setenv("RITHMIC_TRIAL_CONNECTOR", "fixture")
     return load_config(cfg_path)
 
 
@@ -45,7 +46,7 @@ def test_fixture_capture_normalize_reports(trial_cfg, tmp_path: Path) -> None:
     events = connector.poll_events()
     assert events
 
-    capture = LiveCapture(trial_cfg, date=date)
+    capture = TrialCapture(trial_cfg, date=date)
     n = capture.append_raw(events)
     assert n == len(events)
     lim = connector.limitations()
@@ -92,7 +93,7 @@ def test_process_cli(trial_cfg, tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     connector = FixtureConnector(trial_cfg)
     connector.connect()
-    capture = LiveCapture(trial_cfg, date=date)
+    capture = TrialCapture(trial_cfg, date=date)
     capture.append_raw(connector.poll_events())
     capture.finalize(connector.detected_event_types(), [], connector.limitations())
 
@@ -173,7 +174,7 @@ def test_force_capture_resets_existing_raw_file(trial_cfg, monkeypatch: pytest.M
     assert not (reports_dir / "data_quality_report.json").exists()
 
 
-def test_paper_profile_sets_capture_environment_metadata(
+def test_external_profile_sets_capture_environment_metadata(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -183,19 +184,19 @@ def test_paper_profile_sets_capture_environment_metadata(
         cfg_src.read_text(encoding="utf-8").replace("repo_root: .", f"repo_root: {tmp_path}"),
         encoding="utf-8",
     )
-    monkeypatch.setenv("RITHMIC_ENDPOINT_PROFILE", "paper_chicago")
+    monkeypatch.setenv("RITHMIC_ENDPOINT_PROFILE", "external_chicago")
     monkeypatch.delenv("RITHMIC_CAPTURE_ENVIRONMENT", raising=False)
 
     cfg = load_config(cfg_path)
 
-    assert cfg.capture_environment == "rithmic_paper"
+    assert cfg.capture_environment == "rithmic_external"
 
 
 def test_replay_sample_smoke(trial_cfg, tmp_path: Path) -> None:
     date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     connector = FixtureConnector(trial_cfg)
     connector.connect()
-    capture = LiveCapture(trial_cfg, date=date)
+    capture = TrialCapture(trial_cfg, date=date)
     capture.append_raw(connector.poll_events())
     norm_path = trial_cfg.normalized_dir(date) / "events.ndjson"
     normalized, _ = normalize_file(capture.raw_path, trial_cfg, norm_path)
@@ -258,17 +259,18 @@ def test_order_latency_burst_writes_rithmic_test_summary(
     date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     summary_path = trial_cfg.reports_dir(date) / "rithmic_test_order_summary_unit-test-run.json"
     assert not summary_path.exists()
-    assert "paper" not in summary_path.name
+    assert summary_path.name == "rithmic_test_order_summary_unit-test-run.json"
 
 
-def test_order_latency_burst_uses_paper_label_for_paper_profile(
+def test_order_latency_burst_uses_external_label_for_external_profile(
     trial_cfg,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     fake = _FakeOrderLatencyConnector()
     monkeypatch.setattr("data_system.rithmic_trial.pipeline.build_connector", lambda cfg: fake)
-    trial_cfg.rithmic["endpoint_profile"] = "paper_chicago"
+    trial_cfg.rithmic["endpoint_profile"] = "external_chicago"
+    # Vendor-required wire value; status/report labels still use the external profile.
     trial_cfg.rithmic["environment"] = "Rithmic Paper Trading"
     cfg_path = trial_cfg.repo_root / "rithmic_trial.yaml"
     cfg_data = cfg_path.read_text(encoding="utf-8")
@@ -277,7 +279,7 @@ def test_order_latency_burst_uses_paper_label_for_paper_profile(
         .replace('gateway: "Orangeburg"', 'gateway: "Chicago"'),
         encoding="utf-8",
     )
-    monkeypatch.setenv("RITHMIC_ENDPOINT_PROFILE", "paper_chicago")
+    monkeypatch.setenv("RITHMIC_ENDPOINT_PROFILE", "external_chicago")
     args = type(
         "Args",
         (),
@@ -291,7 +293,7 @@ def test_order_latency_burst_uses_paper_label_for_paper_profile(
             "count": 1,
             "ack_timeout_sec": 1.0,
             "interval_ms": 0.0,
-            "run_id": "paper-unit-run",
+            "run_id": "external-unit-run",
             "subscribe_md": False,
             "cancel_after_ack": False,
         },
@@ -301,7 +303,7 @@ def test_order_latency_burst_uses_paper_label_for_paper_profile(
     captured = capsys.readouterr()
     assert "rithmic_latency_probe.cpp" in captured.err
     date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    summary_path = trial_cfg.reports_dir(date) / "rithmic_paper_order_summary_paper-unit-run.json"
+    summary_path = trial_cfg.reports_dir(date) / "rithmic_external_order_summary_external-unit-run.json"
     assert not summary_path.exists()
 
 

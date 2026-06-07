@@ -1,5 +1,5 @@
 [Unit]
-Description=Bitcoin Edge Receiver for live BTC node packets
+Description=Bitcoin Edge Receiver for BTC node packets
 After=network-online.target
 Wants=network-online.target
 

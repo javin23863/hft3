@@ -1,4 +1,4 @@
-"""R|Trader bridge ingests live .cur.txt logs from VM SMB watch."""
+"""R|Trader bridge ingests .cur.txt logs from VM SMB watch."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -17,7 +17,7 @@ def trial_cfg(tmp_path: Path) -> TrialConfig:
         symbol="MES",
         exchange="CME",
         contract="",
-        capture_environment="paper_or_trial",
+        capture_environment="external_or_trial",
         source="rithmic_trial",
         schema_version="normalized_v1",
         repo_root=tmp_path,
@@ -54,7 +54,7 @@ def test_rtrader_bridge_ingests_comma_log(tmp_path: Path) -> None:
         symbol="MES",
         exchange="CME",
         contract="",
-        capture_environment="paper_or_trial",
+        capture_environment="external_or_trial",
         source="rithmic_trial",
         schema_version="normalized_v1",
         repo_root=tmp_path,

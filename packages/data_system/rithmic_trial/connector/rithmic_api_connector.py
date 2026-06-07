@@ -8,7 +8,7 @@ from typing import Any
 import yaml
 
 from data_system.rithmic_trial.endpoint_status import (
-    PAPER_ENDPOINT_MISSING_CODE,
+    EXTERNAL_ENDPOINT_MISSING_CODE,
     endpoint_status_from_config,
     write_endpoint_status,
 )
@@ -68,9 +68,9 @@ RITHMIC_API_SUPPORTED_EVENT_TYPES = {
 
 
 class RithmicApiConnector(ConnectorInterface):
-    """Direct R|API Plus connector for the Rithmic test environment.
+    """Direct R|API Plus connector for the external Rithmic broker endpoint.
 
-    Loads config from ``rithmic_api_test.yaml``, resolves SSL cert paths, and
+    Loads config from the selected Rithmic API YAML, resolves SSL cert paths, and
     delegates the engine calls to ``librithmic_gateway_shared.so`` via ctypes.
     """
 
@@ -173,11 +173,11 @@ class RithmicApiConnector(ConnectorInterface):
         if self._connected:
             return
         status = self.endpoint_status()
-        if status.get("reason_code") == PAPER_ENDPOINT_MISSING_CODE:
+        if status.get("reason_code") == EXTERNAL_ENDPOINT_MISSING_CODE:
             self._write_endpoint_status(status)
             missing = ", ".join(status.get("missing_endpoint_params") or [])
             raise EnvironmentError(
-                f"{PAPER_ENDPOINT_MISSING_CODE}: Rithmic Paper/Chicago API parameters "
+                f"{EXTERNAL_ENDPOINT_MISSING_CODE}: Rithmic Chicago API parameters "
                 f"are missing: {missing}"
             )
         username = os.environ.get("RITHMIC_USERNAME")

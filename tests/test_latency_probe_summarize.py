@@ -177,7 +177,7 @@ def test_build_summary_promotes_measured_ack(tmp_path: Path) -> None:
     summary = build_summary(repo, "testrun", include_trial_appendix=True)
     assert summary["order_ack_p99_ms"] == pytest.approx(4.2)
     assert summary["order_ack_measured"] is True
-    assert summary["paper_order_latency"]["authoritative"] is True
+    assert summary["broker_order_latency"]["authoritative"] is True
 
 
 def test_build_summary_tcp_not_used_as_order_ack(tmp_path: Path) -> None:

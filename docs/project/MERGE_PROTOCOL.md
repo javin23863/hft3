@@ -9,7 +9,7 @@ This protocol prevents parallel phase work from conflicting or accidentally chan
 3. Targeted phase tests pass.
 4. Relevant prior Trade Manager phase tests pass.
 5. Read-only review reports no red findings.
-6. No live/paper/Rithmic routing changes.
+6. No external broker/Rithmic routing changes.
 7. `git status` shows only intended files staged.
 
 ## Branch Rules
@@ -19,7 +19,7 @@ This protocol prevents parallel phase work from conflicting or accidentally chan
 | Phase branch | owned module, owned tests, owned docs | shared `manager.py`, adapters, Rithmic, unrelated docs |
 | Validation branch | docs, tests, test scripts, test-support helpers | product behavior |
 | Integration branch | shared Trade Manager wiring, cross-phase tests | live execution routing |
-| CHI404 execution branch | explicitly approved live/paper work | dev-workstation routing |
+| CHI404 execution branch | explicitly approved external broker work | dev-workstation routing |
 
 ## Integration Flow
 

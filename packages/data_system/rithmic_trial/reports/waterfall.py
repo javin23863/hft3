@@ -1,4 +1,4 @@
-"""Build latency waterfall JSON from paper_latency_record_v1 NDJSON."""
+"""Build latency waterfall JSON from broker_latency_record_v1 NDJSON."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from data_system.rithmic_trial.latency.percentile_stats import stats_us
-from data_system.rithmic_trial.schema.paper_latency_record_v1 import (
-    PaperLatencyRecordV1,
+from data_system.rithmic_trial.schema.broker_latency_record_v1 import (
+    BrokerLatencyRecordV1,
     stage_deltas_us,
 )
 
@@ -25,8 +25,8 @@ STAGE_ORDER = [
 ]
 
 
-def load_records(path: Path) -> list[PaperLatencyRecordV1]:
-    records: list[PaperLatencyRecordV1] = []
+def load_records(path: Path) -> list[BrokerLatencyRecordV1]:
+    records: list[BrokerLatencyRecordV1] = []
     if not path.is_file():
         return records
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -34,13 +34,13 @@ def load_records(path: Path) -> list[PaperLatencyRecordV1]:
         if not line:
             continue
         try:
-            records.append(PaperLatencyRecordV1.from_dict(json.loads(line)))
+            records.append(BrokerLatencyRecordV1.from_dict(json.loads(line)))
         except json.JSONDecodeError:
             continue
     return records
 
 
-def build_waterfall_report(records: list[PaperLatencyRecordV1]) -> dict[str, Any]:
+def build_waterfall_report(records: list[BrokerLatencyRecordV1]) -> dict[str, Any]:
     stage_values: dict[str, list[float]] = {s: [] for s in STAGE_ORDER}
     submit_ack_us: list[float] = []
 

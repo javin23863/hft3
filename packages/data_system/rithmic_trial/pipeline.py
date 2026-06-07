@@ -12,7 +12,7 @@ _REPO = Path(__file__).resolve().parents[3]
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
-from data_system.rithmic_trial.capture.live_capture import LiveCapture
+from data_system.rithmic_trial.capture.trial_capture import TrialCapture
 from data_system.rithmic_trial.config import load_config
 from data_system.rithmic_trial.connector import build_connector
 from data_system.rithmic_trial.convert.hftbacktest_converter import convert_to_npz
@@ -21,7 +21,8 @@ from data_system.rithmic_trial.reports.emit_reports import emit_all_reports
 from data_system.rithmic_trial.schema.normalized_v1 import SCHEMA_VERSION
 from data_system.rithmic_trial.validate.book_reconstruction import reconstruct_book
 from data_system.rithmic_trial.validate.quality_checks import validate_events
-from data_system.rithmic_trial.platform import is_windows
+from data_system.rithmic_trial.platform import is_chi404_runtime, is_windows
+from data_system.rithmic_trial.endpoint_status import EXTERNAL_ENDPOINT_PROFILE
 
 
 def cmd_capture(args: argparse.Namespace) -> int:
@@ -29,13 +30,14 @@ def cmd_capture(args: argparse.Namespace) -> int:
     if not cfg.enabled and not args.force:
         print("Rithmic trial lane disabled. Set enabled: true or RITHMIC_TRIAL_ENABLED=1")
         return 1
-    if is_windows() and cfg.connector.lower() in ("rtrader", "rtrader_bridge", "r-trader"):
-        print(
-            "ERROR: Legacy R|Trader capture runs on CHI404 only. "
-            "Use connector: rithmic_api for direct Rithmic Test capture on this machine.",
-            file=sys.stderr,
-        )
-        return 1
+    if cfg.connector.lower() in ("rtrader", "rtrader_bridge", "r-trader", "rithmic_api", "rithmicapi", "api"):
+        if is_windows() or not is_chi404_runtime():
+            print(
+                "ERROR: Rithmic trial capture runs on CHI404 only (BLUEPRINT §4). "
+                "Use fixture connector for local tests; do not capture broker data from a workstation.",
+                file=sys.stderr,
+            )
+            return 1
     connector = build_connector(cfg)
     connector.connect()
     symbol = args.symbol or cfg.symbol
@@ -54,7 +56,7 @@ def cmd_capture(args: argparse.Namespace) -> int:
         for path in cleanup_paths:
             if path.is_file():
                 path.unlink()
-    capture = LiveCapture(
+    capture = TrialCapture(
         cfg,
         date=capture_date,
         symbol=symbol,
@@ -88,9 +90,8 @@ def _utc_date() -> str:
 
 def _endpoint_artifact_label(cfg) -> str:
     profile = str((cfg.rithmic or {}).get("endpoint_profile") or os.environ.get("RITHMIC_ENDPOINT_PROFILE") or "")
-    system = str((cfg.rithmic or {}).get("environment") or "")
-    if profile == "paper_chicago" or "paper" in system.lower():
-        return "rithmic_paper"
+    if profile == EXTERNAL_ENDPOINT_PROFILE:
+        return "rithmic_external"
     return "rithmic_test"
 
 
@@ -134,9 +135,9 @@ def cmd_process(args: argparse.Namespace) -> int:
     }
     reports_dir = cfg.reports_dir(date) / symbol
     waterfall_path: Path | None = None
-    run_id = os.environ.get("PAPER_LATENCY_RUN_ID")
+    run_id = os.environ.get("BROKER_LATENCY_RUN_ID")
     if run_id:
-        candidate = cfg.repo_root / "runtime" / "paper_latency" / "raw" / run_id / "records.ndjson"
+        candidate = cfg.repo_root / "runtime" / "broker_latency" / "raw" / run_id / "records.ndjson"
         if candidate.is_file():
             waterfall_path = candidate
     report_paths = emit_all_reports(
@@ -225,8 +226,8 @@ def cmd_run_unattended(args: argparse.Namespace) -> int:
     )
 
 
-def cmd_paper_latency_daemon(args: argparse.Namespace) -> int:
-    from data_system.rithmic_trial.latency.paper_latency_daemon import main as daemon_main
+def cmd_broker_latency_daemon(args: argparse.Namespace) -> int:
+    from data_system.rithmic_trial.latency.broker_latency_daemon import main as daemon_main
 
     argv = ["--config", args.config, "--poll-interval-sec", str(args.poll_interval_sec)]
     if args.run_id:
@@ -333,13 +334,13 @@ def main() -> int:
     p_ol.set_defaults(func=cmd_order_latency_burst)
 
     p_pl = sub.add_parser(
-        "paper-latency-daemon",
-        help="Monotonic paper order latency waterfall daemon (CHI404 only)",
+        "broker-latency-daemon",
+        help="Monotonic broker order latency waterfall daemon (CHI404 only)",
     )
     _add_config(p_pl)
     p_pl.add_argument("--run-id", default=None)
     p_pl.add_argument("--poll-interval-sec", type=float, default=0.25)
-    p_pl.set_defaults(func=cmd_paper_latency_daemon)
+    p_pl.set_defaults(func=cmd_broker_latency_daemon)
 
     args = parser.parse_args()
     return args.func(args)

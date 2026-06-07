@@ -148,8 +148,8 @@ rituz00100.00.rithmic.com -> 38.79.0.86
 ping avg ~= 19.37 ms
 ```
 
-Older R|Trader logs on CHI404 show a Rithmic Paper Trading / Chicago Area route
-using `rithmic_paper_prod_domain` and `_paperc` connect points. Resolved admin
+Older R|Trader logs on CHI404 show a Rithmic external broker / Chicago Area route
+using broker-specific production-domain connect points. Resolved admin
 IPs from that route pinged around 2.16 ms and 4.07 ms from CHI404. Those logs
 demonstrate a faster Chicago route exists, but that route is not the same as the
 current Rithmic Test / Orangeburg API credentials and parameters.

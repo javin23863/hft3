@@ -22,8 +22,8 @@ rithmic:
 
 paths:
   repo_root: .
-  raw_root: data/raw/rithmic_trial_live_capture
-  normalized_root: data/normalized/rithmic_trial_live_capture
+  raw_root: data/raw/rithmic_trial_capture
+  normalized_root: data/normalized/rithmic_trial_capture
   replay_root: data/replay/hftbacktest/rithmic_trial
   reports_root: reports/rithmic_trial
 

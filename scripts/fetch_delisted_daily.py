@@ -3,7 +3,7 @@
 This is a paid-source remediation path for tickers that have no free daily
 history (see `delisted_seed_tickers` in the seed config). It is NOT part of
 the free-data phase. By default it runs in dry-run mode and produces a plan
-manifest; it refuses to run live without both:
+manifest; it refuses to run a confirmed download without both:
 
 - `--confirm-purchase` on the command line
 - `DATABENTO_API_KEY` in the environment
@@ -265,7 +265,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0] if __doc__ else "fetch_delisted_daily")
     p.add_argument("--config", default=str(REPO / "packages" / "equities_lane" / "config" / "historical_runner_benchmark.yaml"))
     p.add_argument("--dry-run", action="store_true", default=True, help="Plan only, no API key needed. (default)")
-    p.add_argument("--confirm-purchase", action="store_true", help="Required for live downloads.")
+    p.add_argument("--confirm-purchase", action="store_true", help="Required for confirmed downloads.")
     p.add_argument("--max-total-cost-usd", type=float, default=None)
     p.add_argument("--max-tickers", type=int, default=None)
     p.add_argument("--override-operating-cap", action="store_true")
@@ -276,8 +276,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    live = bool(args.confirm_purchase)
-    args.dry_run = not live
+    confirmed_download = bool(args.confirm_purchase)
+    args.dry_run = not confirmed_download
 
     config_path = Path(args.config)
     if not config_path.exists():
@@ -299,12 +299,12 @@ def main(argv: list[str] | None = None) -> int:
     estimated_total = 0.0
     api_key_present = bool(os.environ.get("DATABENTO_API_KEY"))
 
-    print(f"delisted daily pull: {n_planned} tickers; mode={'dry-run' if args.dry_run else 'live'}; output_root={output_root}", flush=True)
+    print(f"delisted daily pull: {n_planned} tickers; mode={'dry-run' if args.dry_run else 'confirmed-download'}; output_root={output_root}", flush=True)
 
     if not plans:
         manifest_path.parent.mkdir(parents=True, exist_ok=True)
         manifest_path.write_text(json.dumps({
-            "mode": "dry_run" if args.dry_run else "live",
+            "mode": "dry_run" if args.dry_run else "confirmed_download",
             "databento_api_key_present": api_key_present,
             "n_planned": 0,
             "n_executable": 0,
@@ -316,7 +316,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"no delisted tickers in config; empty manifest at {manifest_path}")
         return 0
 
-    if not live:
+    if not confirmed_download:
         for plan in plans:
             record = {
                 "ticker": plan.ticker,
@@ -347,7 +347,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if not api_key_present:
-        print("refusing: live mode requires DATABENTO_API_KEY in env", file=sys.stderr)
+        print("refusing: confirmed download requires DATABENTO_API_KEY in env", file=sys.stderr)
         return 4
     if db is None:
         print("refusing: databento library not installed", file=sys.stderr)
@@ -442,7 +442,7 @@ def main(argv: list[str] | None = None) -> int:
 
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(json.dumps({
-        "mode": "live",
+        "mode": "confirmed_download",
         "databento_api_key_present": True,
         "n_planned": n_planned,
         "n_executable": n_executable,
@@ -451,7 +451,7 @@ def main(argv: list[str] | None = None) -> int:
         "output_root": str(output_root),
         "ticker_records": ticker_records,
     }, indent=2), encoding="utf-8")
-    print(f"live manifest: {manifest_path}; estimated_total=${estimated_total:.4f}")
+    print(f"confirmed download manifest: {manifest_path}; estimated_total=${estimated_total:.4f}")
     return 0
 
 

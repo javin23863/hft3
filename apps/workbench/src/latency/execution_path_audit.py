@@ -2,7 +2,7 @@
 
 The audit measures internal placement speed and external acknowledgment latency
 as separate facts. Replay mode consumes captured execution boundary spans;
-paper-live mode must be wired to real execution boundary events before it can
+external mode must be wired to real execution boundary events before it can
 emit observed placement evidence.
 """
 
@@ -183,7 +183,7 @@ def promote_native_baseline_summary(
         "schema_version": "current_low_latency_status_v1",
         "run_id": run_id,
         "status": "PASS",
-        "mode": "paper-native-cpp",
+        "mode": "external-native-cpp",
         "generated_at_utc": generated_at,
         "primary_kpi": "tick_to_send_us",
         "placement_trigger_kpi": "tick_to_send_trigger_us",
@@ -235,7 +235,7 @@ def promote_native_baseline_summary(
             "authoritative_source": "chi404_native_cpp_latency_probe",
             "order_ack_measured": True,
             "order_ack_p99_ms": float(send_to_ack["p99_us"]) / 1000.0,
-            "paper_order_latency": {
+            "broker_order_latency": {
                 "measured": True,
                 "authoritative": True,
                 "paired_count": int(send_to_ack["count"]),
@@ -257,7 +257,7 @@ def promote_native_baseline_summary(
             },
             "rithmic_app_latency": {
                 "status": "ok",
-                "reason": "paper order submit-to-ack measured by native C++ rithmic_latency_probe",
+                "reason": "broker order submit-to-ack measured by native C++ rithmic_latency_probe",
                 "probe": "rithmic_gateway/tools/rithmic_latency_probe.cpp",
             },
         }
@@ -266,7 +266,7 @@ def promote_native_baseline_summary(
     if isinstance(lane, dict):
         lane["order_ack_blocked"] = False
         lane["partial"] = False
-        lane["note"] = "paper order submit-to-ack measured by native C++ rithmic_latency_probe"
+        lane["note"] = "broker order submit-to-ack measured by native C++ rithmic_latency_probe"
     runtime_summary_path.parent.mkdir(parents=True, exist_ok=True)
     runtime_summary_path.write_text(json.dumps(runtime, indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8")
     return current
@@ -479,11 +479,11 @@ def run_audit(config: AuditConfig) -> dict[str, Any]:
                 blocked_reason="REPLAY_SPANS_JSONL_EMPTY",
             )
         return write_audit_outputs(config, spans, runtime_env=runtime_env)
-    if config.mode == "paper-live":
+    if config.mode == "external":
         return write_blocked_audit(
             config,
             runtime_env=runtime_env,
-            blocked_reason="PAPER_LIVE_REPLACED_BY_NATIVE_CPP_PROBE",
+            blocked_reason="EXTERNAL_REQUIRES_NATIVE_CPP_PROBE",
         )
     raise ValueError(f"unsupported mode: {config.mode}")
 
@@ -968,11 +968,11 @@ def collect_runtime_env(config: AuditConfig) -> dict[str, Any]:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Audit execution-path placement speed separately from acknowledgment latency.")
-    parser.add_argument("--mode", choices=["replay", "paper-live"], default="replay")
+    parser.add_argument("--mode", choices=["replay", "external"], default="replay")
     parser.add_argument("--repo-root", default=".")
     parser.add_argument("--run-id", default="")
     parser.add_argument("--spans-jsonl", default="", help="Captured execution boundary spans JSONL for replay mode.")
-    parser.add_argument("--env", default="paper", dest="environment")
+    parser.add_argument("--env", default="external", dest="environment")
     parser.add_argument("--broker", default="rithmic")
     parser.add_argument("--venue", default="")
     parser.add_argument("--exchange", default="")

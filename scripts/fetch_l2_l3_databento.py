@@ -8,7 +8,7 @@ Behavior:
   - dry-run (default): groups windows by ticker, estimates cost per ticker
     using Databento metadata.get_cost, sums, writes a manifest. No API
     download is performed and no API key is required.
-  - live (--confirm-purchase): requires DATABENTO_API_KEY in env, calls
+  - confirmed download (--confirm-purchase): requires DATABENTO_API_KEY in env, calls
     the existing DatabentoResearchClient per ticker, and respects the
     BudgetManager hard limit and operating cap. Use --override-operating-cap
     / --override-hard-limit to bypass the gated layers if you have
@@ -177,7 +177,7 @@ def build_manifest(
 
     has_api_key = bool(os.getenv("DATABENTO_API_KEY"))
     manifest: dict[str, Any] = {
-        "mode": "dry_run" if dry_run else "live",
+        "mode": "dry_run" if dry_run else "confirmed_download",
         "plan_path": str(plan_path),
         "output_dir": str(output_dir),
         "dataset": dataset,
@@ -192,11 +192,11 @@ def build_manifest(
     }
     if not dry_run and not confirm_purchase:
         manifest["status"] = "refused"
-        manifest["refusal_reason"] = "--confirm-purchase required for live downloads"
+        manifest["refusal_reason"] = "--confirm-purchase required for confirmed downloads"
         return manifest
     if not dry_run and not has_api_key:
         manifest["status"] = "refused"
-        manifest["refusal_reason"] = "DATABENTO_API_KEY env var is required for live downloads"
+        manifest["refusal_reason"] = "DATABENTO_API_KEY env var is required for confirmed downloads"
         return manifest
 
     ticker_records: list[dict[str, Any]] = []
@@ -270,7 +270,7 @@ def build_manifest(
     manifest["ticker_records"] = ticker_records
     manifest["estimated_total_cost_usd"] = round(running_total, 4)
     manifest["n_cost_overrides"] = n_cost_overrides
-    manifest["status"] = "completed" if dry_run else "live_completed"
+    manifest["status"] = "completed" if dry_run else "confirmed_download_completed"
 
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "l2_l3_fetch_manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
@@ -285,7 +285,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--schema", default="mbo")
     parser.add_argument("--stype-in", default=_default_stype_in())
     parser.add_argument("--dry-run", action="store_true", help="Estimate cost only; no download, no key required")
-    parser.add_argument("--confirm-purchase", action="store_true", help="Required for live downloads")
+    parser.add_argument("--confirm-purchase", action="store_true", help="Required for confirmed downloads")
     parser.add_argument("--override-operating-cap", action="store_true")
     parser.add_argument("--override-hard-limit", action="store_true")
     parser.add_argument("--max-total-cost-usd", type=float, default=None)
@@ -307,7 +307,7 @@ def main(argv: list[str] | None = None) -> int:
         return 3
 
     if not args.dry_run and not os.getenv("DATABENTO_API_KEY"):
-        print("refusing to run: DATABENTO_API_KEY must be set for live downloads", file=sys.stderr)
+        print("refusing to run: DATABENTO_API_KEY must be set for confirmed downloads", file=sys.stderr)
         return 4
 
     manifest = build_manifest(
@@ -324,7 +324,7 @@ def main(argv: list[str] | None = None) -> int:
         max_tickers=args.max_tickers,
     )
     print(json.dumps(manifest, indent=2, sort_keys=True))
-    return 0 if manifest.get("status") in {"completed", "live_completed"} else 1
+    return 0 if manifest.get("status") in {"completed", "confirmed_download_completed"} else 1
 
 
 if __name__ == "__main__":

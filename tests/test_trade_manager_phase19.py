@@ -164,7 +164,7 @@ def _risk_layer() -> TradeManagerRiskLayer:
 def _context(intent) -> TradeManagerRiskContext:
     return TradeManagerRiskContext(
         adapter=_FakeAdapter(),
-        execution_mode="LIVE",
+        execution_mode="EXTERNAL",
         system_clock_ns=intent.timestamp + 1_000,
         exchange_clock_ns=intent.timestamp,
         last_market_data_ns=intent.timestamp + 500,
@@ -189,10 +189,11 @@ def test_phase19_loads_execution_config_without_creating_adapter(monkeypatch: py
 @pytest.mark.parametrize(
     ("raw", "invalid_field"),
     [
-        ({"mode": "PAPER", "adapter": "live_broker"}, "adapter"),
-        ({"mode": "LIVE", "adapter": "live_broker", "live_broker": ""}, "live_broker"),
+        ({"mode": "SIM", "adapter": "broker", "broker": "rithmic"}, "mode"),
+        ({"mode": "EXTERNAL", "adapter": "legacy_broker", "broker": "rithmic"}, "adapter"),
+        ({"mode": "EXTERNAL", "adapter": "broker", "broker": ""}, "broker"),
         ({"mode": "REPLAY", "adapter": "hftbacktest_simulated_exchange", "route_enabled": True}, "route_enabled"),
-        ({"mode": "SIM", "adapter": "hftbacktest_simulated_exchange"}, "mode"),
+        ({"mode": "UNKNOWN", "adapter": "hftbacktest_simulated_exchange"}, "mode"),
     ],
 )
 def test_phase19_execution_config_rejects_invalid_or_route_enabled(raw: dict, invalid_field: str) -> None:
@@ -202,13 +203,14 @@ def test_phase19_execution_config_rejects_invalid_or_route_enabled(raw: dict, in
     assert invalid_field in excinfo.value.invalid_fields
 
 
-def test_phase19_live_rithmic_is_metadata_only_when_route_disabled() -> None:
+def test_phase19_external_rithmic_is_metadata_only_when_route_disabled() -> None:
     config = TradeManagerExecutionConfig.from_dict(
-        {"mode": "LIVE", "adapter": "live_broker", "live_broker": "rithmic", "route_enabled": False}
+        {"mode": "EXTERNAL", "adapter": "broker", "broker": "rithmic", "route_enabled": False}
     )
 
-    assert config.mode == "LIVE"
-    assert config.live_broker == "rithmic"
+    assert config.mode == "EXTERNAL"
+    assert config.adapter == "broker"
+    assert config.broker == "rithmic"
     assert config.route_enabled is False
 
 
@@ -223,8 +225,8 @@ def test_phase19_direct_execution_config_construction_rejects_route_enabled() ->
     ("kwargs", "invalid_field"),
     [
         ({"mode": "SIM"}, "mode"),
-        ({"adapter": "paper_broker"}, "adapter"),
-        ({"live_broker": "rithmic"}, "live_broker"),
+        ({"adapter": "legacy_broker"}, "adapter"),
+        ({"broker": "rithmic"}, "broker"),
         ({"heartbeat_interval_sec": 0}, "heartbeat_interval_sec"),
         ({"heartbeat_interval_sec": True}, "heartbeat_interval_sec"),
         ({"route_enabled": "false"}, "route_enabled"),
@@ -243,10 +245,10 @@ def test_phase19_direct_execution_config_construction_rejects_invalid_values(
 def test_phase19_execution_config_rejects_unknown_fields() -> None:
     with pytest.raises(TradeManagerExecutionBoundaryError) as excinfo:
         TradeManagerExecutionConfig.from_dict(
-            {"mode": "REPLAY", "adapter": "hftbacktest_simulated_exchange", "submit": True}
+            {"mode": "EXTERNAL", "adapter": "broker", "legacy_broker": "rithmic"}
         )
 
-    assert "submit" in excinfo.value.invalid_fields
+    assert "legacy_broker" in excinfo.value.invalid_fields
 
 
 def test_phase19_execution_config_from_dict_rejects_non_object() -> None:
@@ -289,21 +291,22 @@ def test_phase19_prepares_audit_boundary_without_sent_to_execution(tmp_path: Pat
     assert manager.order_state_transitions["HYP_5"] == transitions_before
 
 
-def test_phase19_live_metadata_boundary_remains_non_routable_on_dev_workstation(tmp_path: Path) -> None:
+def test_phase19_external_metadata_boundary_remains_non_routable_on_dev_workstation(tmp_path: Path) -> None:
     manager, intent = _manager_with_intent(tmp_path)
     manager.evaluate_order_intent_risk("HYP_5", intent, _risk_layer(), _context(intent))
     config = TradeManagerExecutionConfig(
-        mode="LIVE",
-        adapter="live_broker",
-        live_broker="rithmic",
+        mode="EXTERNAL",
+        adapter="broker",
+        broker="rithmic",
         route_enabled=False,
         host_role="dev_workstation",
     )
 
     boundary = manager.prepare_execution_boundary("HYP_5", intent, config)
 
-    assert boundary.config.mode == "LIVE"
-    assert boundary.config.live_broker == "rithmic"
+    assert boundary.config.mode == "EXTERNAL"
+    assert boundary.config.adapter == "broker"
+    assert boundary.config.broker == "rithmic"
     assert boundary.config.host_role == "dev_workstation"
     assert boundary.can_route is False
     assert boundary.route_enabled is False
@@ -359,14 +362,11 @@ def test_phase19_execution_boundary_does_not_route_or_increment_counters(
     def forbid_call(*args, **kwargs):
         raise AssertionError("Phase 19 execution boundary must not route orders")
 
-    monkeypatch.setenv("EXECUTION_MODE", "LIVE")
+    monkeypatch.setenv("EXECUTION_MODE", "EXTERNAL")
     monkeypatch.setattr("execution.adapter_factory.create_adapter", forbid_call)
-    monkeypatch.setattr("execution.adapters.paper_broker.PaperBrokerAdapter.submit_order", forbid_call)
-    monkeypatch.setattr("execution.adapters.paper_broker.PaperBrokerAdapter.cancel_order", forbid_call)
-    monkeypatch.setattr("execution.adapters.paper_broker.PaperBrokerAdapter.replace_order", forbid_call)
-    monkeypatch.setattr("execution.adapters.live_broker.LiveBrokerAdapter.submit_order", forbid_call)
-    monkeypatch.setattr("execution.adapters.live_broker.LiveBrokerAdapter.cancel_order", forbid_call)
-    monkeypatch.setattr("execution.adapters.live_broker.LiveBrokerAdapter.replace_order", forbid_call)
+    monkeypatch.setattr("execution.adapters.broker.BrokerAdapter.submit_order", forbid_call)
+    monkeypatch.setattr("execution.adapters.broker.BrokerAdapter.cancel_order", forbid_call)
+    monkeypatch.setattr("execution.adapters.broker.BrokerAdapter.replace_order", forbid_call)
     safety.reset_counters()
 
     manager, intent = _manager_with_intent(tmp_path)
@@ -374,6 +374,6 @@ def test_phase19_execution_boundary_does_not_route_or_increment_counters(
     manager.prepare_execution_boundary("HYP_5", intent, load_execution_config(Path("configs/execution/adapter.yaml")))
 
     assert safety.counter_snapshot() == {
-        "live_broker_call_count": 0,
+        "broker_call_count": 0,
         "rithmic_order_call_count": 0,
     }

@@ -7,7 +7,7 @@ from typing import Any
 
 import yaml
 
-from data_system.rithmic_trial.endpoint_status import PAPER_ENDPOINT_PROFILE
+from data_system.rithmic_trial.endpoint_status import EXTERNAL_ENDPOINT_PROFILE
 
 
 @dataclass
@@ -102,8 +102,8 @@ def load_config(path: str | Path) -> TrialConfig:
         rithmic["gateway"] = os.environ["RITHMIC_GATEWAY"]
     rithmic_api_config = os.environ.get("RITHMIC_API_CONFIG", "").strip()
     if not rithmic_api_config:
-        if endpoint_profile == PAPER_ENDPOINT_PROFILE:
-            rithmic_api_config = "packages/data_system/config/rithmic_api_paper.yaml"
+        if endpoint_profile == EXTERNAL_ENDPOINT_PROFILE:
+            rithmic_api_config = "packages/data_system/config/rithmic_api_external.yaml"
         else:
             rithmic_api_config = data.get("rithmic_api_config", "")
 
@@ -123,12 +123,12 @@ def load_config(path: str | Path) -> TrialConfig:
         "RITHMIC_CAPTURE_ENVIRONMENT",
         data.get("capture_environment", "rithmic_test"),
     )
-    if endpoint_profile == PAPER_ENDPOINT_PROFILE and capture_environment in {
+    if endpoint_profile == EXTERNAL_ENDPOINT_PROFILE and capture_environment in {
         "rithmic_test",
         "test",
         "rithmic_trial",
     }:
-        capture_environment = "rithmic_paper"
+        capture_environment = "rithmic_external"
 
     return TrialConfig(
         enabled=enabled,

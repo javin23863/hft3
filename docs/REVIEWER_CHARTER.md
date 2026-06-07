@@ -12,7 +12,7 @@ When Pass B findings conflict with local convention, defer to these sources in o
 |----------|-----------|----------|
 | Mathematical model | `chicago_cme_microstructure_mathematical_model.pdf` | Filtration, event-time, marked-point-process semantics |
 | Developer handoff | `chicago_cme_microstructure_a_plus_developer_handoff.pdf` | Full system spec, validation standard, architecture |
-| Production build | `chicago_cme_a_plus_production_implementation_prompt.pdf` | Live execution, failure states, gateway behavior |
+| Production build | `chicago_cme_a_plus_production_implementation_prompt.pdf` | Broker execution, failure states, gateway behavior |
 | Trial pipeline | `rithmic_trial_hftbacktest_pipeline_prompt.pdf` | Quarantined trial lane, schema, replay wiring |
 | Math disputes | `Ultimate_Quantitative_Finance_Researcher.pdf` | Probability, econometrics, microstructure arguments |
 | Memory / concurrency / SIMD | `ultra_low_latency_hft_vector_search_architecture.pdf` | Zero-alloc hot path, cache alignment, lock-free IPC, MPHF/AVX design |
@@ -48,10 +48,10 @@ Apply on **every** diff regardless of area. Findings use severity rubric below.
 
 - Success criteria verifiable (test, gate script, report artifact)?
 - Tests added or updated when behavior changes?
-- Fake PASS anti-patterns absent (fixture-only live claims, skipped `pytest`, CHI404 validate without real logs)?
+- Fake PASS anti-patterns absent (fixture-only broker claims, skipped `pytest`, CHI404 validate without real logs)?
 - Subset pytest claimed as scope-green while scope directory or gate fails?
 - Verify todos marked complete when waived or not run?
-- Synthetic latency calibration labeled as live probe?
+- Synthetic latency calibration labeled as broker probe?
 
 ---
 
@@ -112,8 +112,8 @@ Regime is a **posterior** over latent states (`event_shock`, `liquidity_vacuum`,
 
 Trusted production research uses Databento GLBX.MDP3 MBO into `data/npz/`. Rithmic trial output stays quarantined:
 
-- `data/raw/rithmic_trial_live_capture/`
-- `data/normalized/rithmic_trial_live_capture/`
+- `data/raw/rithmic_trial_capture/`
+- `data/normalized/rithmic_trial_capture/`
 - `data/replay/hftbacktest/rithmic_trial/`
 
 **Reject if:** trial capture, trial NPZ, or fixture data written into `data/npz/`; production backtest silently loads trial paths; config default blurs lanes.
@@ -122,7 +122,7 @@ See [docs/rithmic_trial/README.md](rithmic_trial/README.md).
 
 ### B8. Production failure states
 
-Where live or gateway code applies, respect mathematical safety limits from production spec:
+Where broker or gateway code applies, respect mathematical safety limits from production spec:
 
 - stale market data halt
 - disconnect halt
@@ -168,7 +168,7 @@ path:line: <emoji> <severity>: <problem>. <fix>.
 | `rithmic_gateway/` | x | x | | | x | | | x |
 | `infrastructure/` | | | | | x | | | x |
 | `tests/` | scope | scope | scope | scope | scope | scope | scope | scope |
-| `scripts/` | if touches data/features | if touches replay | if touches splits | if touches eval | if touches sim | if touches regime | if touches paths | if touches live |
+| `scripts/` | if touches data/features | if touches replay | if touches splits | if touches eval | if touches sim | if touches regime | if touches paths | if touches broker path |
 
 Pass A applies to all rows. Pass B applies to marked columns for that area; when in doubt, run the full B1-B8 checklist.
 

@@ -1,6 +1,6 @@
 # Rithmic Trial Ingestion Lane
 
-Live R|API+ capture on CHI404 into the quarantined HftBacktest replay workflow. Does **not** write to the trusted production data lake (`data/npz/` from Databento).
+External R|API+ capture on CHI404 into the quarantined HftBacktest replay workflow. Does **not** write to the trusted production data lake (`data/npz/` from Databento).
 
 Spec: [rithmic_trial_hftbacktest_pipeline_prompt.pdf](../../rithmic_trial_hftbacktest_pipeline_prompt.pdf)
 Handoff: [RAPI_PLUS_HANDOFF_2026_06_02.md](../RAPI_PLUS_HANDOFF_2026_06_02.md)
@@ -8,7 +8,7 @@ Diamond / Diamond Cutter access packet: [DIAMOND_CUTTER_ACCESS_SAMPLE.md](DIAMON
 
 ## Topology
 
-CHI404 bare metal only. The live capture lane may use `librithmic_gateway_shared.so`
+CHI404 bare metal only. The broker capture lane may use `librithmic_gateway_shared.so`
 and `RithmicApiConnector` for non-hot data plumbing. Placement-speed authority
 does not go through that Python/ctypes connector; it is measured by the direct
 native C++ `rithmic_latency_probe`. There is no Windows VM, no R|Trader GUI, and
@@ -23,7 +23,7 @@ no SMB watch dir.
         ->  hft3-rithmic-trial.service (systemd, pinned to CPUs 2-11)
                 ->  runtime/rithmic_trial/  (R|API+ SDK log)
                 ->  logs/rithmic_trial/unattended.log
-                ->  data/raw/rithmic_trial_live_capture/.../events.ndjson
+                ->  data/raw/rithmic_trial_capture/.../events.ndjson
                 ->  data/normalized/.../events.ndjson (normalized_v1)
                 ->  data/replay/hftbacktest/rithmic_trial/.../SYMBOL_YYYY-MM-DD_trial.npz
 ```
@@ -31,11 +31,11 @@ no SMB watch dir.
 ## Storage layout
 
 ```
-data/raw/rithmic_trial_live_capture/YYYY-MM-DD/SYMBOL/
+data/raw/rithmic_trial_capture/YYYY-MM-DD/SYMBOL/
   events.ndjson          # append-only raw capture
   manifest.json          # checksum, counts, detected/missing types
 
-data/normalized/rithmic_trial_live_capture/YYYY-MM-DD/SYMBOL/
+data/normalized/rithmic_trial_capture/YYYY-MM-DD/SYMBOL/
   events.ndjson          # normalized_v1 schema
 
 data/replay/hftbacktest/rithmic_trial/YYYY-MM-DD/SYMBOL/
@@ -75,10 +75,10 @@ python -m data_system.rithmic_trial.pipeline process \
   --date YYYY-MM-DD --symbol MES
 ```
 
-CHI404 live (recommended):
+CHI404 broker capture (recommended):
 
 ```bash
-EVENT_ID=CPI_2024_09_11_TIGHT bash scripts/chi404_run_trial_live.sh
+EVENT_ID=CPI_2024_09_11_TIGHT bash scripts/chi404_run_trial_capture.sh
 ```
 
 **Smoke only** (trial NPZ wiring check — not macro research):
@@ -93,7 +93,7 @@ See [docs/vault/RESEARCH_ENTRYPOINTS.md](../vault/RESEARCH_ENTRYPOINTS.md) and [
 
 ## CHI404 only (Chicago colo)
 
-Live Rithmic trial capture **must run on CHI404** — not on a Windows workstation. Millisecond latency cannot tolerate a remote desktop or file-bridge loop through your PC.
+Rithmic trial capture **must run on CHI404** — not on a Windows workstation. Millisecond latency cannot tolerate a remote desktop or file-bridge loop through your PC.
 
 **Supported capture path:** native R|API+ adapter (libRApiPlus 13.7.0.0),
 consumed via the `librithmic_gateway_shared.so` ctypes bridge.
@@ -123,25 +123,25 @@ Verification gates (run once each):
 systemctl is-active hft3-rithmic-trial              # active
 journalctl -u hft3-rithmic-trial -n 50 --no-pager
 ls /root/hft3/repo/runtime/rithmic_trial/          # SDK log
-ls /root/hft3/repo/data/raw/rithmic_trial_live_capture/$(date -u +%F)/MES/
+ls /root/hft3/repo/data/raw/rithmic_trial_capture/$(date -u +%F)/MES/
 ```
 
-`RITHMIC_USERNAME` / `RITHMIC_PASSWORD` (paper trading) live in `/root/hft3/.env`. They are user-deployed and **must not be committed**.
+`RITHMIC_USERNAME` / `RITHMIC_PASSWORD` are broker credentials in `/root/hft3/.env`. They are user-deployed and **must not be committed**.
 
-### Paper order submit→ack latency (authoritative)
+### Broker order submit→ack latency (authoritative)
 
 TCP connect probes (`network.rithmic_tcp_65000`) are **network health only** — they do not set replay or workbench `gateway_ack`.
 
 **Canonical agent doc:** [docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md](../vault/CHI404_CANONICAL_ENTRYPOINTS.md)
 
-Measured paper submit→ack and placement speed require real paired orders through the native C++ `rithmic_latency_probe` target. Python/ctypes connector paths are capture/orchestration plumbing only and are not hot-path authority. **Synthetic log inject (`Add-Content`, host `f.write`) is forbidden** and blocked by pytest.
+Measured broker submit→ack and placement speed require real paired orders through the native C++ `rithmic_latency_probe` target. Python/ctypes connector paths are capture/orchestration plumbing only and are not hot-path authority. **Synthetic log inject (`Add-Content`, host `f.write`) is forbidden** and blocked by pytest.
 
 ```bash
 cd /root/hft3/repo
 cmake --build build --target rithmic_latency_probe --config Release
-RITHMIC_ENDPOINT_PROFILE=paper_chicago \
-RITHMIC_CONFIG_PATH=/root/hft3/repo/packages/data_system/config/rithmic_api_paper.yaml \
-RITHMIC_PROBE_ENV_LABEL=paper \
+RITHMIC_ENDPOINT_PROFILE=external_chicago \
+RITHMIC_CONFIG_PATH=/root/hft3/repo/packages/data_system/config/rithmic_api_external.yaml \
+RITHMIC_PROBE_ENV_LABEL=external \
 RITHMIC_PROBE_SYMBOL=ESM6 \
 RITHMIC_PROBE_EXCHANGE=CME \
 RITHMIC_PROBE_ORDER_COUNT=30 \
@@ -156,10 +156,10 @@ RITHMIC_PROBE_PREFAULT_BYTES=16777216 \
 
 The current CHI404 latency baseline uses no CPU affinity and no realtime
 priority, while keeping memory lock and 16 MiB prefault enabled. That profile is
-the fastest observed usable native C++ Rithmic Paper baseline and is stored in
+the fastest observed usable native C++ Rithmic broker baseline and is stored in
 `reports/latency_baselines/current_baseline.json`.
 
-`scripts/chi404_run_paper_latency_sweep.sh` is now a compatibility blocker that prints the native C++ command shape and exits non-zero.
+`scripts/chi404_run_broker_latency_sweep.sh` is now the native C++ broker latency sweep entrypoint.
 
 Do **not** use deprecated host-side sweep scripts under `scripts/deprecated/`.
 
@@ -168,7 +168,7 @@ Artifacts:
 ```
 data/latency_baselines/YYYY-MM-DD/<run_id>.jsonl
 reports/latency_baselines/<run_id>_summary.json
-reports/rithmic_trial/<date>/paper_order_summary.json
+reports/rithmic_trial/<date>/broker_order_summary.json
 runtime/latency_reports/latency_summary.json        # order_ack_p99_ms when promoted
 ```
 
@@ -193,7 +193,7 @@ Until `order_ack_measured=true`, macro replay requires explicit `--latency-ms`.
 
 ## Detected vs missing event types
 
-After first live capture, see `manifest.json` → `detected_event_types` and `missing_event_types`.
+After first broker capture, see `manifest.json` → `detected_event_types` and `missing_event_types`.
 
 Expected gaps via R|API+:
 
@@ -215,16 +215,16 @@ CHI404 CPU/network baseline: `infrastructure/03_latency_report.sh` → `latency_
 [`data_system/config/rithmic_trial.yaml`](../data_system/config/rithmic_trial.yaml) — symbols, paths, connector selection. Override via env:
 
 - `RITHMIC_TRIAL_ENABLED=1`
-- `RITHMIC_TRIAL_CONNECTOR=fixture|rithmic_api` (only `rithmic_api` is the live market-data capture path on CHI404; order placement uses the native C++ probe)
+- `RITHMIC_TRIAL_CONNECTOR=fixture|rithmic_api` (only `rithmic_api` is the broker market-data capture path on CHI404; order placement uses the native C++ probe)
 - `RITHMIC_TRIAL_CONFIG` — config YAML
 - `HFT3_RITHMIC_GATEWAY_SO` — path to `librithmic_gateway_shared.so` (no silent fallback)
 - `RITHMIC_SYMBOL`, `RITHMIC_EXCHANGE`
-- `RITHMIC_USERNAME`, `RITHMIC_PASSWORD` — paper creds; live in `/root/hft3/.env`
+- `RITHMIC_USERNAME`, `RITHMIC_PASSWORD` — broker credentials in `/root/hft3/.env`
 - `HFT3_RITHMIC_GATEWAY_*` — SSL cert, MML_LOG_TYPE, MML_LOG_ADDR (UAT defaults; port 45454 may be firewalled by Rithmic — see RAPI+ handoff)
 
 ## Historical / removed
 
-The following paths existed for the now-removed R|Trader Windows VM and are no longer maintained. They are not on the live trade path:
+The following paths existed for the now-removed R|Trader Windows VM and are no longer maintained. They are not on the broker execution path:
 
 - `scripts/chi404_vm_*.{sh,py,ps1}` — VM deploy / restart / SMB / log path
 - `infrastructure/chi404/08_rtrader_wine_setup.sh`

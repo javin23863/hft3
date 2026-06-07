@@ -1,4 +1,4 @@
-"""paper_latency_record_v1 — monotonic timestamp audit for paper order waterfall."""
+"""broker_latency_record_v1 — monotonic timestamp audit for broker order waterfall."""
 
 from __future__ import annotations
 
@@ -6,11 +6,11 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 
-SCHEMA_VERSION = "paper_latency_record_v1"
+SCHEMA_VERSION = "broker_latency_record_v1"
 
 
 @dataclass
-class PaperLatencyRecordV1:
+class BrokerLatencyRecordV1:
     schema_version: str = SCHEMA_VERSION
     run_id: str = ""
     order_id: str = ""
@@ -45,7 +45,7 @@ class PaperLatencyRecordV1:
         return d
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any]) -> PaperLatencyRecordV1:
+    def from_dict(cls, raw: dict[str, Any]) -> BrokerLatencyRecordV1:
         known = {f.name for f in cls.__dataclass_fields__.values()}
         kwargs = {k: v for k, v in raw.items() if k in known and k != "extra"}
         extra = {k: v for k, v in raw.items() if k not in known}
@@ -71,7 +71,7 @@ def validate_record(raw: dict[str, Any]) -> list[str]:
     return errors
 
 
-def stage_deltas_us(rec: PaperLatencyRecordV1) -> dict[str, float | None]:
+def stage_deltas_us(rec: BrokerLatencyRecordV1) -> dict[str, float | None]:
     """Compute tick→ack waterfall stage deltas in microseconds."""
 
     def delta(a: int | None, b: int | None) -> float | None:

@@ -8,8 +8,8 @@ print(
     file=sys.stderr,
 )
 print(
-    "Use: bash scripts/chi404_run_paper_latency_sweep.sh "
-    "(daemon + real R|Trader UI exports only).",
+    "Use: bash scripts/chi404_run_broker_latency_sweep.sh "
+    "(daemon + real broker exports only).",
     file=sys.stderr,
 )
 raise SystemExit(1)

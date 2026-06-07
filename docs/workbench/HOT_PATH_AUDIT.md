@@ -4,7 +4,7 @@
 
 | Host | Role |
 |------|------|
-| **CHI404** | Live/paper MBO capture, order submit, Rithmic trial lane, latency probes |
+| **CHI404** | External broker MBO capture, order submit, Rithmic trial lane, latency probes |
 | **Dev workstation** | Offline replay, pytest, git, after-action LLM — **never** in exchange hot loop |
 
 Python trial capture (`data_system/rithmic_trial/`) is quarantined non-hot

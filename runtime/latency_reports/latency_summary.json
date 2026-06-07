@@ -154,7 +154,7 @@
   },
   "trial_order_ack_appendix": {
     "status": "ok",
-    "source": "chi404_paper_latency_daemon",
+    "source": "chi404_broker_latency_daemon",
     "run_id": "20260601T180202Z",
     "date": "2026-06-01",
     "paired_count": 12,
@@ -198,10 +198,10 @@
       "Tier-0.5 ms production tier with worst network p99 above PASS limit."
     ]
   },
-  "paper_order_latency": {
+  "broker_order_latency": {
     "measured": false,
     "paired_count": 12,
-    "source": "chi404_paper_latency_daemon",
+    "source": "chi404_broker_latency_daemon",
     "run_id": "20260601T180202Z"
   }
 }

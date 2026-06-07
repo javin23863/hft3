@@ -23,7 +23,7 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-class LiveCapture:
+class TrialCapture:
     def __init__(
         self,
         cfg: TrialConfig,

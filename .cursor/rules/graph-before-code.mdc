@@ -23,9 +23,9 @@ CHI404 paths: [docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md](../../docs/vault/CHI4
 - Editing `chi404_vm_*` / `rithmic_trial` latency paths without reading CHI404 canonical entrypoints doc
 - Using TCP :65000 or synthetic `Add-Content` order lines as measured ack
 
-## CHI404 paper latency (canonical)
+## CHI404 broker latency (canonical)
 
 Deploy: `bash scripts/chi404_vm_deploy.sh`  
-Measure: `bash scripts/chi404_run_paper_latency_sweep.sh` (live gate, real R|Trader exports only)
+Measure: `bash scripts/chi404_run_broker_latency_sweep.sh` (live gate, real R|Trader exports only)
 
 If graph query returns unrelated nodes, **refine the query** — do not fall back to grep-first exploration.

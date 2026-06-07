@@ -126,12 +126,12 @@ def _latency_status(repo: Path) -> dict[str, Any]:
         data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         return {"path": path, "exists": True, "error": str(exc)}
-    paper = data.get("paper_order_latency") if isinstance(data.get("paper_order_latency"), dict) else {}
+    broker_order = data.get("broker_order_latency") if isinstance(data.get("broker_order_latency"), dict) else {}
     return {
         "path": path,
         "exists": True,
-        "order_ack_measured": bool(data.get("order_ack_measured") or paper.get("measured")),
-        "paired_count": paper.get("paired_count"),
+        "order_ack_measured": bool(data.get("order_ack_measured") or broker_order.get("measured")),
+        "paired_count": broker_order.get("paired_count"),
         "order_ack_p99_ms": data.get("order_ack_p99_ms"),
         "network_pass": data.get("network_pass"),
         "dominant_bottleneck": data.get("dominant_bottleneck"),

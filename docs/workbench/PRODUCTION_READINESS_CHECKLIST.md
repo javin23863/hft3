@@ -153,7 +153,7 @@ Operational checklist for turning the Developer Work Order into production-ready
 - [ ] Current canonical CME replay execution artifact is still missing.
   - Audit evidence: path contract drift is fixed, but no fresh canonical `engines.replay_execution_adapter.result` card has been produced by the existing CME replay flow for the readiness claim.
   - Audit evidence: observed CPI replay evidence uses older engine keys, so it remains invalid for `CMEBacktester` production-readiness evidence.
-  - Attempt evidence: `python scripts/run_event_replay.py --event-id CPI_2024_09_11_TIGHT` exited with missing measured paper order submit-to-ack latency, as expected from the existing latency gate.
+  - Attempt evidence: `python scripts/run_event_replay.py --event-id CPI_2024_09_11_TIGHT` exited with missing measured broker order submit-to-ack latency, as expected from the existing latency gate.
   - Attempt evidence: `python scripts/run_event_replay.py --event-id CPI_2024_09_11_TIGHT --latency-ms 1.0` exceeded the 5-minute hard stop and was killed; no fresh replay artifact was written.
   - Attempt evidence: `CMEBacktester(CMEConfig()).run(target="CPI_2024_09_11_TIGHT")` degrades the stale artifact with `INVALID_REPLAY_ARTIFACT` because `engines.replay_execution_adapter` is absent.
   - Unblock condition: run the existing canonical CME replay entrypoint and attach the current artifact path plus green command output to this checklist.
@@ -212,7 +212,7 @@ Operational checklist for turning the Developer Work Order into production-ready
 ## CME Lane Readiness
 
 - [ ] Bind CME readiness to the canonical CME replay and validation entrypoints.
-- [ ] Confirm no workstation live/paper execution path is introduced.
+- [ ] Confirm no workstation external broker execution path is introduced.
 - [ ] Confirm CME artifacts stay in their intended research/output locations.
 - [ ] Verify latency, replay, and acceptance gates are explicitly represented in the workbench.
 - [ ] Require blocked status when CME inputs, artifacts, or validation reports are missing.

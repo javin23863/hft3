@@ -16,7 +16,7 @@ cp $CHRONY_CONF "${CHRONY_CONF}.bak"
 cat << 'EOF' > $CHRONY_CONF
 # High-precision CME colocation chrony config
 
-# Use Chicago-area NTP pools (replace with direct colocation PTP/NTP IPs when live)
+# Use Chicago-area NTP pools (replace with direct colocation PTP/NTP IPs for deployment)
 server 0.us.pool.ntp.org iburst maxpoll 4
 server 1.us.pool.ntp.org iburst maxpoll 4
 server 2.us.pool.ntp.org iburst maxpoll 4

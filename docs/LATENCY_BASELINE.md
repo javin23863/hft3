@@ -99,7 +99,7 @@ placement-speed authority.
 
 ```powershell
 python -m tools.latency_baseline.run --mode broker `
-  --env paper `
+  --env external `
   --broker rithmic `
   --symbol ES `
   --exchange CME `
@@ -113,27 +113,20 @@ That command writes a loud blocker:
 BROKER_MODE_REPLACED_BY_NATIVE_CPP_PROBE
 ```
 
-Real Rithmic Paper placement-speed evidence comes from the native C++ probe:
+Real Rithmic broker placement-speed evidence comes from the native C++ probe on CHI404 only:
 
 ```powershell
-cmake --build build --target rithmic_latency_probe --config Release
-$env:RITHMIC_CONFIG_PATH="packages/data_system/config/rithmic_api_paper.yaml"
-$env:RITHMIC_ENDPOINT_PROFILE="paper_chicago"
-$env:RITHMIC_PROBE_RUN_ID="rithmic-cpp-paper-baseline"
-$env:RITHMIC_PROBE_ORDER_COUNT="30"
-$env:RITHMIC_PROBE_ORDER_SIDE="B"
-$env:RITHMIC_PROBE_ORDER_QTY="1"
-$env:RITHMIC_PROBE_CANCEL_AFTER_ACK="1"
-.\build\rithmic_gateway\Release\rithmic_latency_probe.exe
+# Do not run the broker-order probe from Windows or a dev workstation.
+# Use the CHI404 Linux command below.
 ```
 
-On CHI404, run the Linux binary from the same target:
+On CHI404, run the Linux binary from the native target:
 
 ```bash
 cmake --build build --target rithmic_latency_probe --config Release
-RITHMIC_CONFIG_PATH=/root/hft3/repo/packages/data_system/config/rithmic_api_paper.yaml \
-RITHMIC_ENDPOINT_PROFILE=paper_chicago \
-RITHMIC_PROBE_RUN_ID=rithmic-cpp-chi404-paper-baseline \
+RITHMIC_CONFIG_PATH=/root/hft3/repo/packages/data_system/config/rithmic_api_external.yaml \
+RITHMIC_ENDPOINT_PROFILE=external_chicago \
+RITHMIC_PROBE_RUN_ID=rithmic-cpp-chi404-broker-baseline \
 RITHMIC_PROBE_ORDER_COUNT=30 \
 RITHMIC_PROBE_ORDER_SIDE=B \
 RITHMIC_PROBE_ORDER_QTY=1 \
@@ -181,7 +174,7 @@ Accepted profile:
 - `RITHMIC_PROBE_MLOCK=1`
 - `RITHMIC_PROBE_PREFAULT_BYTES=16777216`
 
-Observed native C++ Paper/Chicago values:
+Observed native C++ broker/Chicago values:
 
 - `tick_to_send_trigger_us` p50/p99/p99.9: `0.792 us`
 - `tick_to_send_us` p50/p99/p99.9: `23.314 us`
@@ -198,7 +191,7 @@ The baseline command also accepts speed-aware testing assumptions:
 ```powershell
 python -m tools.latency_baseline.run `
   --mode synthetic `
-  --env paper `
+  --env external `
   --broker rithmic `
   --symbol ES `
   --exchange CME `

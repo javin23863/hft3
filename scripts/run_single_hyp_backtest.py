@@ -128,7 +128,7 @@ def main() -> int:
         "events": int(len(raw)),
         "hypothesis_id": hyp.hyp_id,
         "hypothesis_name": hyp.name,
-        "live_orders_sent": False,
+        "broker_orders_sent": False,
         "chi404_measured_speed": chi404,
         "backtest_latency_ms": latency_ms,
         "net_pnl_usd": round(res.net_pnl, 4),

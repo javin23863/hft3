@@ -1,11 +1,11 @@
 # CHI404 canonical entrypoints (agents: read before any CHI404 / Rithmic work)
 
-**Graph first:** `graphify query "CHI404 R|API+ paper latency"` or read this doc.  
+**Graph first:** `graphify query "CHI404 R|API+ broker latency"` or read this doc.
 **Do not** invent host-side log inject, workstation round-trips, or parallel orchestrators.
 
 ## Topology (non-negotiable)
 
-Per [BLUEPRINT.md §4](../../BLUEPRINT.md#4-live-architecture): live/paper capture and order measurement run on **CHI404 bare metal** only.  
+Per [BLUEPRINT.md §4](../../BLUEPRINT.md#4-live-architecture): broker capture and order measurement run on **CHI404 bare metal** only.
 Latency authority path: **R|API+ C++ adapter (in-process) → `rithmic_latency_probe` → JSONL/summary artifacts**.
 
 The legacy capture daemon may still use `librithmic_gateway_shared.so` and Python ctypes for non-hot orchestration/capture plumbing. It is **not** the placement-speed authority. Order placement timing must come from the direct native C++ probe, with no Python broker wrapper in the measured path.
@@ -15,7 +15,7 @@ The legacy capture daemon may still use `librithmic_gateway_shared.so` and Pytho
 - No SMB watch_dir.
 - No `.cur.txt` ingest.
 
-The `rtrader_bridge` connector (`RTraderBridgeConnector`) is **defensive legacy** for synthetic file-based ingest only. Live R|API+ market-data capture is the `rithmic_api` connector. Order placement is not.
+The `rtrader_bridge` connector (`RTraderBridgeConnector`) is **defensive legacy** for synthetic file-based ingest only. External broker R|API+ market-data capture is the `rithmic_api` connector. Order placement is not.
 
 ## Capture Daemon
 
@@ -32,16 +32,16 @@ Config (in `/root/hft3/.env`):
 
 | Var | Required | Default | Purpose |
 |-----|----------|---------|---------|
-| `RITHMIC_TRIAL_ENABLED` | yes | unset | `1` to allow live capture |
-| `RITHMIC_TRIAL_CONNECTOR` | yes | — | `rithmic_api` (the only live capture path) |
+| `RITHMIC_TRIAL_ENABLED` | yes | unset | `1` to allow broker capture |
+| `RITHMIC_TRIAL_CONNECTOR` | yes | — | `rithmic_api` (the only broker capture path) |
 | `RITHMIC_TRIAL_CONFIG` | yes | — | `packages/data_system/config/rithmic_trial.yaml` |
 | `HFT3_RITHMIC_GATEWAY_SO` | yes | — | `/root/hft3/repo/build/rithmic_gateway/librithmic_gateway_shared.so` |
-| `RITHMIC_USERNAME` / `RITHMIC_PASSWORD` | yes | — | UAT (paper) creds; user-deployed, never committed |
+| `RITHMIC_USERNAME` / `RITHMIC_PASSWORD` | yes | — | Broker credentials; user-deployed, never committed |
 
-## Live capture (real market + order logs)
+## Broker capture (real market + order logs)
 
 ```bash
-bash scripts/chi404_run_trial_live.sh        # live gate → capture → process → replay
+bash scripts/chi404_run_trial_capture.sh     # capture gate -> capture -> process -> replay
 ```
 
 This script:
@@ -53,7 +53,7 @@ This script:
 
 Requires `EVENT_ID` (e.g. `CPI_2024_09_11_TIGHT`) for canonical research. Without it the script does a smoke replay only.
 
-## Paper order submit→ack latency
+## Broker order submit→ack latency
 
 **Forbidden:** `Add-Content`, host `f.write` order lines, `SWEEP-*` synthetic order IDs, TCP :65000 as ack.
 
@@ -63,9 +63,9 @@ Use the direct native C++ probe for placement-speed and submit-to-ack baselines:
 cd /root/hft3/repo
 cmake --build build --target rithmic_latency_probe --config Release
 set -a; . /root/hft3/.env; set +a
-RITHMIC_ENDPOINT_PROFILE=paper_chicago \
-RITHMIC_CONFIG_PATH=/root/hft3/repo/packages/data_system/config/rithmic_api_paper.yaml \
-RITHMIC_PROBE_ENV_LABEL=paper \
+RITHMIC_ENDPOINT_PROFILE=external_chicago \
+RITHMIC_CONFIG_PATH=/root/hft3/repo/packages/data_system/config/rithmic_api_external.yaml \
+RITHMIC_PROBE_ENV_LABEL=external \
 RITHMIC_PROBE_SYMBOL=ESM6 \
 RITHMIC_PROBE_EXCHANGE=CME \
 RITHMIC_PROBE_ORDER_COUNT=30 \
@@ -95,7 +95,7 @@ The compatibility sweep script now refuses Python/ctypes latency measurement and
 prints this native-probe command shape:
 
 ```bash
-bash scripts/chi404_run_paper_latency_sweep.sh
+bash scripts/chi404_run_broker_latency_sweep.sh
 ```
 
 | Artifact | Path |
@@ -128,11 +128,11 @@ These units pin the daemon to CPUs 2-11, 8 GB memory high / 12 GB max, and recre
 |------|----------------|
 | `scripts/deprecated/chi404_*host*sweep*` | Host-side synthetic log inject |
 | `scripts/deprecated/chi404_*fast_market*` | Host-side synthetic log inject |
-| `scripts/deprecated/chi404_run_paper_sweep_direct.sh` | Skips live gate; session bypass |
-| `RTraderBridgeConnector` for live capture | VM is gone; use `rithmic_api` |
+| `scripts/deprecated/chi404_run_broker_sweep_direct.sh` | Skips broker capture gate; session bypass |
+| `RTraderBridgeConnector` for broker capture | VM is gone; use `rithmic_api` |
 | `chi404_vm_*.{sh,py,ps1}` | VM chain is removed; do not resurrect |
 | Workstation capture / log-push | BLUEPRINT §4 |
-| `chi404_vm_paper_order_sweep.ps1` with `Add-Content` | Fake orders — blocked by pytest |
+| `chi404_vm_broker_order_sweep.ps1` with `Add-Content` | Fake orders — blocked by pytest |
 
 ## Agent checklist (before editing CHI404 scripts)
 

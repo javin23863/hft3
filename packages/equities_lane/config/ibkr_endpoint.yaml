@@ -1,32 +1,24 @@
 schema_version: ibkr_endpoint_v1
-profile: ibkr_paper_socket
+profile: ibkr_broker_socket
 provider: interactive_brokers
 transport: tws_socket
 source_reference: C:/Users/MSI/Documents/GitHub/quant-x/docs/ibkr_weekly_login.md
-mode: paper
-system: IBKR Paper Trading
+mode: external
+system: IBKR external broker socket
 gateway: TWS or IB Gateway headless socket
 host: 127.0.0.1
-ports:
-  paper: 7497
-  live: 7496
-  legacy_gateway_paper: 4002
-  legacy_gateway_live: 4001
+port: 7497
 candidate_ports:
-  paper:
-    - 7497
-    - 4002
-  live:
-    - 7496
-    - 4001
+  - 7497
+  - 7496
+  - 4002
+  - 4001
 client_ids:
   broker_primary: 17
   market_data: 18
 env:
   host: IBKR_SOCKET_HOST
-  mode: IBKR_SOCKET_MODE
-  paper_port: IBKR_SOCKET_PORT_PAPER
-  live_port: IBKR_SOCKET_PORT_LIVE
+  port: IBKR_SOCKET_PORT
   broker_client_id: IBKR_SOCKET_CLIENT_ID_PRIMARY
   market_data_client_id: IBKR_SOCKET_CLIENT_ID_MARKETDATA
   account_primary: IBKR_ACCOUNT_ID_PRIMARY

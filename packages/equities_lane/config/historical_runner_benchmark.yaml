@@ -153,8 +153,8 @@ delisted_seed_tickers:
     output_root: data/equities/daily_delisted
     script: scripts/fetch_delisted_daily.py
     refusal_policy:
-      live_mode_requires_confirm: "--confirm-purchase"
-      live_mode_requires_env: "DATABENTO_API_KEY"
+      confirmed_download_requires_confirm: "--confirm-purchase"
+      confirmed_download_requires_env: "DATABENTO_API_KEY"
       dry_run_default: true
       cost_controls:
         - "--max-total-cost-usd"

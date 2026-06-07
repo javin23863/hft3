@@ -17,7 +17,7 @@ This readiness map is source-of-truth material for LLM discoverability. It descr
 
 - Research LLM verdict: partially wired, not production-ready.
 - Model Development LLM verdict: partially wired, not production-ready.
-- Both lanes are advisory only. No LLM lane has promotion authority, deploy authority, live-routing authority, or permission to override deterministic replay, schema, registry, validation, workbench, VectorBT, CHI404, Rithmic, or promotion gates.
+- Both lanes are advisory only. No LLM lane has promotion authority, deploy authority, external-routing authority, or permission to override deterministic replay, schema, registry, validation, workbench, VectorBT, CHI404, Rithmic, or promotion gates.
 
 ### Production Blockers
 
@@ -181,7 +181,7 @@ Runtime entry: `data_layer.llm.packet_runner.run_llm_on_idea_generation_request`
 
 Schema: `schema_pipeline_idea_set_v1.json`.
 
-This lane is opt-in (`scripts/run_pipeline.py --idea-set`) and emits compact machine-review packets only: IDs, enums, numeric ranges, ref tables, rank inputs, and status codes. It must not emit markdown, narrative fields, promotion claims, or human review text.
+This lane runs on every `scripts/run_pipeline.py` execution and emits compact machine-review packets only: IDs, enums, numeric ranges, ref tables, rank inputs, and status codes. `--idea-set` is preserved for automation compatibility but ignored. It must not emit markdown, narrative fields, promotion claims, or human review text.
 
 Idea records are non-authoritative queue inputs. Static validation may move an idea from `proposed` to `static_reject` or `queued_for_test`; only existing VectorBT/workbench/promotion-gate evaluation may move it to `tested_fail` or `tested_pass`. Server-side deterministic ordering and fair candidate allocation control test order; LLM-provided `rank_inputs` are packet telemetry only and never mark an idea as good.
 
@@ -191,7 +191,7 @@ Review memory is advisory and bounded. Prior AAR/KG artifacts may be compacted i
 
 Schema: `schema_research_decision_packet_v1.json`.
 
-The Research Decision Packet is an offline, advisory-only input contract for future ontology-governed research. It carries market, event, knowledge, ontology, validation, risk-handoff, and audit state in one closed JSON object. It has no promotion authority and contains no live routing, CHI404, Rithmic, order-submit, or deploy fields.
+The Research Decision Packet is an offline, advisory-only input contract for future ontology-governed research. It carries market, event, knowledge, ontology, validation, risk-handoff, and audit state in one closed JSON object. It has no promotion authority and contains no external routing, CHI404, Rithmic, order-submit, or deploy fields.
 
 Candidate research questions must name required ontology variables and evidence sources. `ontology_state` must carry allowed entities, variables, and formulas, and `audit` must include `source_registry_version`, `ontology_version`, and `code_commit`.
 

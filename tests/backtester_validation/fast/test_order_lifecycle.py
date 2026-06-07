@@ -21,7 +21,7 @@ def test_replay_emits_order_intents(minimal_npz: Path, tmp_path: Path) -> None:
     assert result["order_intent_count"] > 0
     summary = result["order_lifecycle_summary"]
     assert summary["accepted_count"] > 0
-    assert summary["live_broker_call_count"] == 0
+    assert summary["broker_call_count"] == 0
     assert summary["rithmic_order_call_count"] == 0
 
     lc_path = Path(result["lifecycle_path"])

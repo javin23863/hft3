@@ -1,7 +1,7 @@
 # Institutional Model Metrics Contract
 
 This repo now has an additive, asset-class-neutral measurement layer for
-post-robustness model scorecards, behavior envelopes, and live/paper/shadow
+post-robustness model scorecards, behavior envelopes, and external/shadow
 state checks.
 
 The reusable engine lives in `packages/model_metrics`. Validation code can use

@@ -31,7 +31,7 @@ from trade_manager.latency_capability import (
 def _summary(tmp_path: Path, *, tick_to_send_us: int = 80, send_to_ack_us: int = 250_000) -> dict:
     record = build_latency_sample(
         run_id="cap1",
-        environment="paper",
+        environment="external",
         broker="rithmic",
         venue="CME",
         symbol="ESM6",

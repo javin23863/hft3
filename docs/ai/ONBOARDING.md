@@ -57,4 +57,4 @@ Use `tools/shell/run_with_timeout.ps1` (Windows) or `run_with_timeout.sh` (Unix)
 
 ## Topology reminder
 
-Live/paper Rithmic capture and orders: **CHI404 bare metal only**. Workstation: offline replay, pytest, workbench, after-action LLM — never the hot loop.
+External broker Rithmic capture and orders: **CHI404 bare metal only**. Workstation: offline replay, pytest, workbench, after-action LLM — never the hot loop.

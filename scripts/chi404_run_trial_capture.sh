@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Live trial capture -> process -> replay on CHI404 (no synthetic writes, no VM).
+# Trial capture -> process -> replay on CHI404 (no synthetic writes, no VM).
 # Replaces the previous VM-coupled variant. Uses the R|API+ connector directly.
 set -euo pipefail
 REPO="${HFT3_REPO_DIR:-/root/hft3/repo}"
@@ -14,7 +14,7 @@ if [[ "${RITHMIC_TRIAL_CONNECTOR:-}" != "rithmic_api" ]]; then
 fi
 
 # R|API+ is already running as a systemd daemon (hft3-rithmic-trial.service).
-# Verify it's live before we kick off the capture/process/replay pipeline.
+# Verify it's active before we kick off the capture/process/replay pipeline.
 if ! systemctl is-active --quiet hft3-rithmic-trial.service; then
   echo "FAIL: hft3-rithmic-trial.service is not active. Start it first." >&2
   exit 1

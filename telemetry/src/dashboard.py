@@ -14,14 +14,14 @@ REPO = Path(__file__).resolve().parents[2]
 st.title("Chicago CME Microstructure - Telemetry Dashboard")
 
 st.sidebar.header("Navigation")
-page = st.sidebar.radio("Go to", ["Live/Sim Performance", "Databento Budget", "Research Models"])
+page = st.sidebar.radio("Go to", ["External/Sim Performance", "Databento Budget", "Research Models"])
 
 manifest_path = REPO / "data" / "manifest.parquet"
 research_index_path = REPO / "research_cards" / "all_hypotheses.json"
 research_card_path = REPO / "research_cards" / "matrix_smoke.json"
 fills_path = REPO / "research_cards" / "fills.csv"
 
-if page == "Live/Sim Performance":
+if page == "External/Sim Performance":
     st.header("Execution Quality & Disagreement")
 
     if fills_path.exists():

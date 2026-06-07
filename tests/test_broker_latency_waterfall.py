@@ -1,4 +1,4 @@
-"""Tests for paper_latency_record_v1 schema and waterfall."""
+"""Tests for broker_latency_record_v1 schema and waterfall."""
 from __future__ import annotations
 
 import json
@@ -7,15 +7,15 @@ from pathlib import Path
 import pytest
 
 from data_system.rithmic_trial.reports.waterfall import build_waterfall_report
-from data_system.rithmic_trial.schema.paper_latency_record_v1 import (
-    PaperLatencyRecordV1,
+from data_system.rithmic_trial.schema.broker_latency_record_v1 import (
+    BrokerLatencyRecordV1,
     stage_deltas_us,
     validate_record,
 )
 
 
 def test_stage_deltas_submit_to_ack() -> None:
-    rec = PaperLatencyRecordV1(
+    rec = BrokerLatencyRecordV1(
         order_id="1",
         run_id="r1",
         tick_receive_mono_ns=1_000_000,
@@ -29,7 +29,7 @@ def test_stage_deltas_submit_to_ack() -> None:
 
 def test_validate_record_rejects_inverted_ack() -> None:
     raw = {
-        "schema_version": "paper_latency_record_v1",
+        "schema_version": "broker_latency_record_v1",
         "order_id": "x",
         "run_id": "r",
         "rithmic_submit_mono_ns": 5000,
@@ -45,7 +45,7 @@ def test_waterfall_report_percentiles() -> None:
         submit = 1_000_000 + i * 1000
         ack = submit + 2000 + i
         records.append(
-            PaperLatencyRecordV1(
+            BrokerLatencyRecordV1(
                 run_id="r",
                 order_id=str(i),
                 rithmic_submit_mono_ns=submit,
@@ -66,7 +66,7 @@ def test_promote_rejects_sweep_synthetic_order_ids(tmp_path: Path) -> None:
     records.write_text(
         json.dumps(
             {
-                "schema_version": "paper_latency_record_v1",
+                "schema_version": "broker_latency_record_v1",
                 "run_id": "r1",
                 "order_id": "SWEEP-batch-0",
                 "symbol": "ES",
@@ -88,7 +88,7 @@ def test_promote_rejects_mkt_synthetic_order_ids(tmp_path: Path) -> None:
     records.write_text(
         json.dumps(
             {
-                "schema_version": "paper_latency_record_v1",
+                "schema_version": "broker_latency_record_v1",
                 "run_id": "r1",
                 "order_id": "MKT-batch-0",
                 "symbol": "MES",
@@ -114,7 +114,7 @@ def test_promote_min_paired_gate(tmp_path: Path) -> None:
         lines.append(
             json.dumps(
                 {
-                    "schema_version": "paper_latency_record_v1",
+                    "schema_version": "broker_latency_record_v1",
                     "run_id": "r1",
                     "order_id": str(i),
                     "symbol": "MES",
@@ -139,7 +139,7 @@ def test_promote_reports_from_synthetic_records(tmp_path: Path) -> None:
         lines.append(
             json.dumps(
                 {
-                    "schema_version": "paper_latency_record_v1",
+                    "schema_version": "broker_latency_record_v1",
                     "run_id": "r1",
                     "order_id": str(i),
                     "symbol": "ES",
@@ -173,7 +173,7 @@ def test_bridge_monotonic_stamp_on_csv(tmp_path: Path) -> None:
         symbol="ES",
         exchange="CME",
         contract="ES",
-        capture_environment="paper_or_trial",
+        capture_environment="external_or_trial",
         source="rithmic_trial",
         schema_version="normalized_v1",
         repo_root=tmp_path,
@@ -190,3 +190,13 @@ def test_bridge_monotonic_stamp_on_csv(tmp_path: Path) -> None:
     assert conn._pending
     ev = conn._pending[0]
     assert "local_monotonic_receive_ns" in ev
+
+
+def test_broker_latency_daemon_refuses_non_chi404_linux(monkeypatch: pytest.MonkeyPatch) -> None:
+    from data_system.rithmic_trial.latency import broker_latency_daemon as daemon
+
+    monkeypatch.setattr(daemon, "is_windows", lambda: False)
+    monkeypatch.setattr(daemon, "is_chi404_runtime", lambda: False)
+
+    with pytest.raises(RuntimeError, match="CHI404"):
+        daemon._assert_chi404_only()

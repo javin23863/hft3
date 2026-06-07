@@ -2,7 +2,7 @@
 
 Every emitted violation carries a cite back to a real section of
 `docs/references/chicago_cme_microstructure_mathematical_model.pdf` so the
-symbolic gate is grounded, not hand-waved. Citation table and rationale live
+symbolic gate is grounded, not hand-waved. Citation table and rationale reside
 in `docs/research/ONTOLOGY_CITATIONS.md`.
 """
 

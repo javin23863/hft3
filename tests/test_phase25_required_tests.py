@@ -153,7 +153,7 @@ def test_required_blockers_remain_documented() -> None:
 
     assert re.search(r"Scaffolded mode.*WorkbenchEngine", runbook)
     assert re.search(r"Single-WF only.*double-WF", runbook)
-    assert "Real paper/live/Rithmic routing remains unimplemented" in runbook
+    assert "External broker/Rithmic routing remains unimplemented" in runbook
     chi404_row = _table_row(matrix, "CHI404 remote gates")
     cpp_row = _table_row(matrix, "C++ golden binaries")
     assert "not local by default" in chi404_row

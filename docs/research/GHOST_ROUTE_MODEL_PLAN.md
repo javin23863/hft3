@@ -18,7 +18,7 @@ risk layer, data lake, or Golden Pipeline architecture. Implement this as a
 standalone model module that consumes historical CME MDP 3.0 Level 3 MBO data
 and emits structured signal objects for backtest simulation.
 
-No live routing is authorized in this task. Output is a latency-adjusted
+No external routing is authorized in this task. Output is a latency-adjusted
 research report proving whether the edge survives realistic execution
 assumptions.
 

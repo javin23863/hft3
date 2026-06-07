@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build human-readable + JSON latency waterfall from paper_latency records.ndjson."""
+"""Build human-readable + JSON latency waterfall from broker_latency records.ndjson."""
 from __future__ import annotations
 
 import argparse
@@ -16,7 +16,7 @@ from data_system.rithmic_trial.reports.waterfall import build_waterfall_report, 
 
 def render_markdown(report: dict) -> str:
     lines = [
-        "# Paper order latency waterfall",
+        "# Broker order latency waterfall",
         "",
         f"- Records: {report.get('record_count', 0)}",
         f"- Paired submit→ack: {report.get('paired_submit_ack_count', 0)}",

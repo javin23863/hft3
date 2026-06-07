@@ -42,6 +42,6 @@ Spec → GraphPre → Plan → Delegate → Review → Verify → GraphPost
 - Filtration \(F_t\): no lookahead in features or signals.
 - Event-time ordering for replay and backtest.
 - Walk-forward discipline for promotion (see BLUEPRINT).
-- CHI404 topology for live/paper paths.
+- CHI404 topology for external broker paths.
 
 See [AGENTIC_ENGINEERING.md](../AGENTIC_ENGINEERING.md) for full workflow diagrams.

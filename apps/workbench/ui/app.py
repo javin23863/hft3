@@ -33,7 +33,7 @@ from workbench.ui.evidence_panels import (  # noqa: E402
     render_backtest_evidence,
     render_decision_registry,
     render_latency_evidence,
-    render_live_monitor,
+    render_broker_monitor,
     render_registry_data,
     render_reports_analyst,
     render_robustness,
@@ -137,7 +137,7 @@ with tabs[6]:
     render_decision_registry(snapshot)
 
 with tabs[7]:
-    render_live_monitor(snapshot)
+    render_broker_monitor(snapshot)
 
 with tabs[8]:
     render_reports_analyst(snapshot)

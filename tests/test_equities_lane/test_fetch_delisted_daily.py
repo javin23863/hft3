@@ -1,7 +1,7 @@
 """Tests for scripts/fetch_delisted_daily.py.
 
-The live download path requires DATABENTO_API_KEY. These tests verify
-the dry-run plan, refusal paths, and a mocked live download that converts
+The confirmed download path requires DATABENTO_API_KEY. These tests verify
+the dry-run plan, refusal paths, and a mocked confirmed download that converts
 a fake .dbn.zst-like object to a CSV in DailyBar format.
 """
 from __future__ import annotations
@@ -61,7 +61,7 @@ def test_dry_run_produces_plan_for_all_known_delisted(tmp_path):
 def test_default_mode_is_dry_run(tmp_path):
     """Without --confirm-purchase, the script silently defaults to dry-run.
 
-    The only way to enter live mode is to pass --confirm-purchase; there is
+    The only way to enter confirmed download mode is to pass --confirm-purchase; there is
     no separate 'refuse without confirm' refusal path because the
     --confirm-purchase flag IS the gate.
     """
@@ -77,7 +77,7 @@ def test_default_mode_is_dry_run(tmp_path):
     assert payload["n_planned"] == 8
 
 
-def test_live_refuses_without_api_key(tmp_path):
+def test_confirmed_download_refuses_without_api_key(tmp_path):
     env = os.environ.copy()
     env.pop("DATABENTO_API_KEY", None)
     env["PYTHONPATH"] = str(WORKTREE / "packages")
@@ -93,9 +93,10 @@ def test_live_refuses_without_api_key(tmp_path):
     proc = subprocess.run(cmd, capture_output=True, text=True, env=env, cwd=str(WORKTREE))
     assert proc.returncode == 4
     assert "DATABENTO_API_KEY" in proc.stderr
+    assert "confirmed download" in proc.stderr
 
 
-def test_live_redacts_api_key_in_error():
+def test_confirmed_download_redacts_api_key_in_error():
     sys.path.insert(0, str(WORKTREE))
     sys.path.insert(0, str(WORKTREE / "packages"))
     from scripts.fetch_delisted_daily import _redact

@@ -158,7 +158,7 @@ def test_phase14_trade_manager_promoted_records_use_latest_status(tmp_path: Path
     assert [record.model_id for record in manager.promoted_records()] == ["HYP_5"]
 
 
-def test_phase14_trade_manager_does_not_route_live_or_rithmic_orders(
+def test_phase14_trade_manager_does_not_route_broker_or_rithmic_orders(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -170,6 +170,6 @@ def test_phase14_trade_manager_does_not_route_live_or_rithmic_orders(
     TradeManager(tmp_path).activate_model("HYP_5")
 
     assert safety.counter_snapshot() == {
-        "live_broker_call_count": 0,
+        "broker_call_count": 0,
         "rithmic_order_call_count": 0,
     }

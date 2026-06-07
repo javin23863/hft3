@@ -11,7 +11,7 @@ verify-run:      CHI404 (Linux): pytest tests/test_rithmic_api_bridge.py -v -> 1
                  CHI404 (Linux): nm -D build/rithmic_gateway/librithmic_gateway_shared.so | grep hft_rithmic_adapter_ -> 10 symbols exported
                  Windows (MinGW): pytest tests/test_rithmic_api_bridge.py tests/test_rithmic_trial_pipeline.py -v -> 11 passed, 4 skipped
                  Windows (MinGW): hft_feature_golden.exe still builds (hft_research_sim and rithmic_gateway_shared do not link — pre-existing, no MSVC)
-data-mode:       fixture (no live Rithmic)
+data-mode:       fixture (no external Rithmic)
 known-gaps:      Windows link of librithmic_gateway_shared.so impossible without MSVC (SDK ships MSVC .lib only). On Linux/MinGW, use the bundled linux-gnu-4.18-x86_64 .a archives.
                  hftbacktest API drift on CHI404: test_replay_sample_smoke fails with 'BacktestAsset has no attribute constant_order_latency' (pre-existing, not from this work; Linux hftbacktest pkg is older than the Windows one).
                  R|Trader VM (hft3-rtrader-win) is still RUNNING on CHI404; with R|API+ the VM is no longer needed for the trade path but was not torn down (out of scope).
@@ -51,7 +51,7 @@ export HFT3_RITHMIC_GATEWAY_SO=/root/hft3/repo/build/rithmic_gateway/librithmic_
 python3 -m pytest tests/test_rithmic_api_bridge.py -v
 ```
 
-To use the connector (no live Rithmic, just smoke):
+To use the connector (no external Rithmic, just smoke):
 ```bash
 python3 -c "
 from data_system.rithmic_trial.connector.rithmic_api_connector import RithmicApiConnector
@@ -72,7 +72,7 @@ print('env vars (preview):', c._build_connection_config().env_vars[:3])
 
 ## What is NOT done (and why)
 
-- **Live paper order/ack loop**: superseded. The Python/ctypes connector must not issue paper orders. Real paper placement-speed evidence now comes only from the direct native C++ `rithmic_latency_probe` target; the shared-library wrapper returns explicit order-entry blockers.
+- **Broker order/ack loop**: superseded. The Python/ctypes connector must not issue broker orders. Real broker placement-speed evidence now comes only from the direct native C++ `rithmic_latency_probe` target; the shared-library wrapper returns explicit order-entry blockers.
 - **VM teardown**: the KVM R|Trader VM is still RUNNING on CHI404. With R|API+ it is not needed. Tearing it down is a separate decision (might be kept for parity tests, or for fallback).
 - **`hft_research_sim` Windows build**: pre-existing breakage; not from this diff. Static `rithmic_gateway` target still uses MSVC-format `.lib` archives. Fix is to add a Linux-branch-aware static target as well, but that is a separate concern.
 - **Sync to CHI404**: the new Python files were scp'd to `/root/hft3/repo/` for the test run, but they are not yet committed. Operator should commit on the workstation, push to origin, then `git pull` on CHI404.
@@ -172,7 +172,7 @@ The 3 R|API+ auth endpoints (DMN, LIC, LOC_BROK) are reachable, but the **logger
 
 Workarounds (none done autonomously):
 1. **Ask Rithmic support** to whitelist CHI404's source IP (`64.44.98.219`) on port 45454, or upgrade the account to a tier that includes logger access.
-2. **Paper trading**: the paper cluster (`ritpz04063.04.rithmic.com`) connection points are not in the SDK samples. The user must supply them. Same logger-port issue likely applies.
+2. **Broker credentials**: the broker cluster (`ritpz04063.04.rithmic.com`) connection points are not in the SDK samples. The user must supply them. Same logger-port issue likely applies.
 3. **Roll back the connector switch** (`RITHMIC_TRIAL_CONNECTOR=rtrader`) and the daemon falls back to polling an empty `rtrader_watch` dir — at least no crash loop, but no data either.
 
 **For now:** the daemon is in the retry loop, systemd restarts it after 5 attempts, the `unattended.log` records each attempt. No CPU/memory pressure (47 MiB used, 7.9 GB high-budget headroom).
@@ -267,8 +267,8 @@ CHI404 is the only trade-path host. The R|Trader Windows VM was already torn dow
 
 | Path | Before | After |
 |------|--------|-------|
-| `scripts/chi404_run_trial_live.sh` | calls `chi404_vm_live_gate.sh` (deleted) | verifies `hft3-rithmic-trial.service` is active, runs `pipeline capture` / `process` / `replay-event` |
-| `scripts/chi404_run_paper_latency_sweep.sh` | calls VM UI orders + RTraderBridgeConnector | rithmic_api: reachability gate → daemon → wait for `paired_submit_ack_count >= 1000` (or `PAPER_LATENCY_SKIP_ORDERS_BURST=1` for connectivity check) |
+| `scripts/chi404_run_trial_capture.sh` | calls `chi404_broker_gate.sh` (deleted) | verifies `hft3-rithmic-trial.service` is active, runs `pipeline capture` / `process` / `replay-event` |
+| `scripts/chi404_run_broker_latency_sweep.sh` | calls VM UI orders + RTraderBridgeConnector | rithmic_api: reachability gate → daemon → wait for `paired_submit_ack_count >= 1000` (or `BROKER_LATENCY_SKIP_ORDERS_BURST=1` for connectivity check) |
 | `scripts/deploy_chi404_env.py` | default `RITHMIC_TRIAL_CONNECTOR=rtrader` | default `RITHMIC_TRIAL_CONNECTOR=rithmic_api` |
 
 ## Docs updated
@@ -286,7 +286,7 @@ CHI404 is the only trade-path host. The R|Trader Windows VM was already torn dow
 
 - `unattended.py` — "Do not run capture/unattended on a Windows workstation" → "Windows is the dev workstation, not the trade-path host."
 - `pipeline.py` — "not this Windows workstation" → "BLUEPRINT §4; use connector: fixture for local tests"
-- `paper_latency_daemon.py` — "Do not run on a dev workstation" → "Windows is the dev workstation, not the trade-path host"
+- `broker_latency_daemon.py` — "Do not run on a dev workstation" → "Windows is the dev workstation, not the trade-path host"
 - `rtrader_bridge.py` — same clarification
 
 ## Status
@@ -301,7 +301,7 @@ CHI404 is the only trade-path host. The R|Trader Windows VM was already torn dow
 ## Open (unchanged from Session 2)
 
 - R|API+ UAT port 45454 blocked by Rithmic firewall (`loginRepository` "Repository Connection Broken") — user action pending
-- R|API+ order callbacks not wired to SPSC queue — `paper_latency_daemon` paired count stays at 0; `PAPER_LATENCY_SKIP_ORDERS_BURST=1` works around
+- R|API+ order callbacks not wired to SPSC queue — `broker_latency_daemon` paired count stays at 0; `BROKER_LATENCY_SKIP_ORDERS_BURST=1` works around
 
 ---
 
@@ -365,7 +365,7 @@ REngine::loginRepository : pCnnctPt : login_agent_repositoryc   <-- correct
 AlertInfo : ||Repository Connection Login Failed. Please contact the FCM/IB who issued your login id for assistance.|5|5|13|permission denied
 ```
 
-`rp code : 13` = permission denied. Rithmic's UAT server is rejecting the credentials in `RITHMIC_USERNAME` for the `rithmic_uat_dmz_domain` cluster. This is an **account-level** issue, not a code or network issue. User action: contact Rithmic / the FCM that issued the login, or supply paper trading credentials.
+`rp code : 13` = permission denied. Rithmic's UAT server is rejecting the credentials in `RITHMIC_USERNAME` for the `rithmic_uat_dmz_domain` cluster. This is an **account-level** issue, not a code or network issue. User action: contact Rithmic / the FCM that issued the login, or supply broker credentials.
 
 ## New regression test
 
@@ -376,15 +376,15 @@ AlertInfo : ||Repository Connection Login Failed. Please contact the FCM/IB who 
 - 19 → 20 tests on Windows / 37 → 38 tests on CHI404 (15 + 4 skipped on Windows; 37/0 on CHI404 with the new test)
 - 1 commit (00848cc), pushed to origin/main, CHI404 pulled, rebuilt
 - `hft3-rithmic-trial.service` restarted; SDK log now shows `pCnnctPt : login_agent_repositoryc` and an immediate `rp code 13` from Rithmic
-- C++ defensive alert mapping verified live: failure path returns in ~10s (was 30s)
+- C++ defensive alert mapping verified against the broker path: failure path returns in ~10s (was 30s)
 
 ## User action (real, not code)
 
 The remaining blocker is Rithmic UAT account authorization for the credentials in `/root/hft3/.env`:
 
 1. Contact Rithmic support / the FCM that issued the login ID and ask them to authorize the runtime Rithmic UAT login in `/root/hft3/.env` on the `rithmic_uat_dmz_domain` UAT cluster, OR
-2. Supply paper trading credentials (same authorization issue likely applies), OR
+2. Supply broker credentials (same authorization issue likely applies), OR
 3. Confirm a different UAT cluster / connect point is required (the SDK has `login_agent_pnlc`, `login_agent_tpc`, `login_agent_opc`, `login_agent_historyc`, `login_agent_repositoryc` — only the repository one is failing on auth; the others would only matter after repo login succeeds).
 
-As soon as auth succeeds, the order-callback wiring (Sessions 2-3) will deliver `StatusReport` / `FillReport` / etc. into the SPSC queue, `RithmicApiConnector.poll_order_events()` will emit them as `order_ack` / `fill` / `cancel`, and `paper_latency_daemon.paired_submit_ack_count` will tick toward the orchestrator's 1000-pair target.
+As soon as auth succeeds, the order-callback wiring (Sessions 2-3) will deliver `StatusReport` / `FillReport` / etc. into the SPSC queue, `RithmicApiConnector.poll_order_events()` will emit them as `order_ack` / `fill` / `cancel`, and `broker_latency_daemon.paired_submit_ack_count` will tick toward the orchestrator's 1000-pair target.
 

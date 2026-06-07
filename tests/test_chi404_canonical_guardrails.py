@@ -1,4 +1,4 @@
-"""Guardrails: CHI404 canonical path only; no synthetic paper order inject in active scripts."""
+"""Guardrails: CHI404 canonical path only; no synthetic broker order inject in active scripts."""
 from __future__ import annotations
 
 import re
@@ -61,9 +61,9 @@ def test_no_rtrader_active_scripts() -> None:
         "chi404_finish_rtrader.sh",
         "chi404_vm_apply_headless.py",
         "chi404_vm_restart_rtrader.py",
-        "chi404_trigger_vm_paper_sweep.py",
+        "chi404_trigger_vm_broker_sweep.py",
         "chi404_vm_run_interactive.py",
-        "chi404_vm_paper_order_sweep.ps1",
+        "chi404_vm_broker_order_sweep.ps1",
     ]
     survivors = [n for n in rtrader_files if (SCRIPTS / n).is_file()]
     assert not survivors, f"R|Trader VM scripts must be deleted: {survivors}"
@@ -80,12 +80,31 @@ def test_reprocess_sweep_log_is_stub() -> None:
 
 
 def test_sweep_orchestrator_no_virsh_fallback() -> None:
-    sh = (SCRIPTS / "chi404_run_paper_latency_sweep.sh").read_text(encoding="utf-8")
+    sh = (SCRIPTS / "chi404_run_broker_latency_sweep.sh").read_text(encoding="utf-8")
     assert "virsh" not in sh, "orchestrator must not depend on libvirt (VM is gone)"
+    assert "CHI404_REQUIRED" in sh
     assert "rithmic_latency_probe" in sh
+    assert "cmake --build build --target rithmic_latency_probe" in sh
     assert "hot_path_language=c++" in sh
     assert "wrapper=none" in sh
-    assert "python3 -m data_system.rithmic_trial.pipeline paper-latency-daemon" not in sh
+    assert "data_system.rithmic_trial.pipeline" not in sh
+
+
+def test_native_rithmic_latency_probe_has_chi404_guard() -> None:
+    cpp = (REPO / "rithmic_gateway" / "tools" / "rithmic_latency_probe.cpp").read_text(
+        encoding="utf-8"
+    )
+    assert "is_chi404_runtime" in cpp
+    assert "CHI404_REQUIRED" in cpp
+    assert "must run on CHI404 only" in cpp
+
+
+def test_broker_latency_systemd_uses_package_paths() -> None:
+    sh = (REPO / "infrastructure" / "chi404" / "10_broker_latency_systemd.sh").read_text(
+        encoding="utf-8"
+    )
+    assert "packages/data_system/config/rithmic_trial.yaml" in sh
+    assert "PYTHONPATH=${REPO_DIR}/packages:${REPO_DIR}/apps:${REPO_DIR}" in sh
 
 
 def test_chi404_sync_pulls_execution_evidence() -> None:

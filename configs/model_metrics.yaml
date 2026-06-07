@@ -36,10 +36,8 @@ symbol_overrides: {}
 strategy_family_overrides: {}
 regime_overrides: {}
 venue_overrides: {}
-mode_overrides:
-  live:
+runtime_context_overrides:
+  external:
     minimum_fill_rate: 0.9
-  paper:
-    minimum_fill_rate: 0.8
   shadow:
     minimum_fill_rate: 0.0

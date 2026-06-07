@@ -61,10 +61,10 @@ data/**/*.parquet
 data/**/*.csv
 data/latency_baselines/**/*.jsonl
 !data_system/config/events.csv
-data/raw/rithmic_trial_live_capture/**
-!data/raw/rithmic_trial_live_capture/.gitkeep
-data/normalized/rithmic_trial_live_capture/**
-!data/normalized/rithmic_trial_live_capture/.gitkeep
+data/raw/rithmic_trial_capture/**
+!data/raw/rithmic_trial_capture/.gitkeep
+data/normalized/rithmic_trial_capture/**
+!data/normalized/rithmic_trial_capture/.gitkeep
 data/replay/hftbacktest/rithmic_trial/**
 !data/replay/hftbacktest/rithmic_trial/.gitkeep
 reports/rithmic_trial/**
@@ -77,7 +77,7 @@ reports/latency_baselines/*_broker_blocker.json
 logs/rithmic_trial/**
 runtime/rithmic_latency_probe.log*
 runtime/latency_baselines/**
-runtime/rithmic_paper_latency/**
+runtime/broker_latency/**
 runtime/rithmic_test_latency/**
 runtime/crypto_edge/**
 runtime/equities_lane/**

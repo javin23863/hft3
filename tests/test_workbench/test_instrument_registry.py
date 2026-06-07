@@ -62,7 +62,7 @@ defaults:
   index_sensor_available: false
   point_in_time_safe: true
   data_delay_status: MISSING
-  live_feed_status: MISSING
+  realtime_feed_status: MISSING
   historical_feed_status: MISSING
 instruments:
   - canonical_internal_symbol: ES

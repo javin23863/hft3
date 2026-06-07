@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Unified round-trip latency probe: loopback, ping, TCP, trial profile, optional CHI404.
 
-Workstation RTT tiers here are diagnostic only — not part of the live execution path
+Workstation RTT tiers here are diagnostic only — not part of the execution path
 (BLUEPRINT §4: CHI404 colo is self-sufficient for capture and orders).
 """
 from __future__ import annotations

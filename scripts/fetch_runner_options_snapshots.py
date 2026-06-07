@@ -5,8 +5,8 @@ reads `options_snapshot_plan.json` produced by
 `equities_lane.pipeline resolve-runner-seeds` and pulls OPRA parent-chain
 `cbbo-1m` windows for the same point-in-time snapshots as the equity plan.
 
-Dry-run mode estimates cost only. Live mode requires `--confirm-purchase` and
-`DATABENTO_API_KEY`.
+Dry-run mode estimates cost only. Confirmed download mode requires
+`--confirm-purchase` and `DATABENTO_API_KEY`.
 """
 from __future__ import annotations
 
@@ -175,7 +175,7 @@ def build_manifest(
     executable = _filter_executable(plan)
     has_api_key = bool(os.getenv("DATABENTO_API_KEY"))
     manifest: dict[str, Any] = {
-        "mode": "dry_run" if dry_run else "live",
+        "mode": "dry_run" if dry_run else "confirmed_download",
         "plan_path": str(plan_path),
         "output_dir": str(output_dir),
         "n_plan_rows": len(plan),
@@ -186,11 +186,11 @@ def build_manifest(
     }
     if not dry_run and not confirm_purchase:
         manifest["status"] = "refused"
-        manifest["refusal_reason"] = "--confirm-purchase required for live downloads"
+        manifest["refusal_reason"] = "--confirm-purchase required for confirmed downloads"
         return manifest
     if not dry_run and not has_api_key:
         manifest["status"] = "refused"
-        manifest["refusal_reason"] = "DATABENTO_API_KEY env var is required for live downloads"
+        manifest["refusal_reason"] = "DATABENTO_API_KEY env var is required for confirmed downloads"
         return manifest
 
     records: list[dict[str, Any]] = []
@@ -300,7 +300,7 @@ def build_manifest(
     manifest["estimated_total_cost_usd"] = round(running_total, 6)
     manifest["n_priced"] = n_priced
     manifest["n_downloaded"] = n_downloaded
-    manifest["status"] = "completed" if dry_run else "live_completed"
+    manifest["status"] = "completed" if dry_run else "confirmed_download_completed"
     (output_dir / "options_snapshot_fetch_manifest.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True),
         encoding="utf-8",
@@ -332,7 +332,7 @@ def main(argv: list[str] | None = None) -> int:
         print("refusing to run: pass --dry-run or --confirm-purchase", file=sys.stderr)
         return 3
     if not args.dry_run and not os.getenv("DATABENTO_API_KEY"):
-        print("refusing to run: DATABENTO_API_KEY must be set for live downloads", file=sys.stderr)
+        print("refusing to run: DATABENTO_API_KEY must be set for confirmed downloads", file=sys.stderr)
         return 4
 
     manifest = build_manifest(
@@ -346,7 +346,7 @@ def main(argv: list[str] | None = None) -> int:
         override_hard_limit=args.override_hard_limit,
     )
     print(json.dumps(manifest, indent=2, sort_keys=True))
-    return 0 if manifest.get("status") in {"completed", "live_completed"} else 1
+    return 0 if manifest.get("status") in {"completed", "confirmed_download_completed"} else 1
 
 
 if __name__ == "__main__":

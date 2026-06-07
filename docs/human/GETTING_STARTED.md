@@ -17,10 +17,10 @@ hft3 implements [BLUEPRINT.md](../BLUEPRINT.md): a filtration-safe, event-time M
 | **After-action** | Post-run packet, symbolic checks, local LLM narrative | `data_layer/` |
 | **Decision** | Feature store, training | `decision_engine/python/` |
 | **Production infra** | CHI404 tuning and validation | `infrastructure/chi404/` |
-| **Rithmic trial** | Quarantined interim live capture | `data_system/rithmic_trial/` |
+| **Rithmic trial** | Quarantined interim external capture | `data_system/rithmic_trial/` |
 | **Telemetry** | Latency dashboards | `telemetry/` |
 
-**Topology (non-negotiable):** live/paper capture and orders run on **CHI404 bare metal** only. The dev workstation runs offline replay, pytest, workbench, and **post-run** after-action LLM ΓÇö never the live Rithmic hot loop. See BLUEPRINT ┬º4.
+**Topology (non-negotiable):** external broker capture and orders run on **CHI404 bare metal** only. The dev workstation runs offline replay, pytest, workbench, and **post-run** after-action LLM ΓÇö never the external Rithmic hot loop. See BLUEPRINT ┬º4.
 
 ---
 
@@ -199,9 +199,9 @@ Pass criteria: `infrastructure/chi404/PASS_CRITERIA.json`.
 
 ## 9. Rithmic trial lane (quarantined)
 
-Interim live capture via R\|Trader until R\|API. **Never writes to trusted `data/npz/`.**
+Interim external capture via R\|Trader until R\|API. **Never writes to trusted `data/npz/`.**
 
-Live capture: **CHI404 only.**
+External capture: **CHI404 only.**
 
 ```bash
 # CHI404 ΓÇö see docs/rithmic_trial/README.md
@@ -289,7 +289,7 @@ hft3/
 | Path | Reason |
 |------|--------|
 | `.env` | Secrets |
-| `data/**/*.npz`, live Rithmic raw | Market data |
+| `data/**/*.npz`, external Rithmic raw | Market data |
 | `research_cards/workbench_runs/` | Ephemeral run outputs |
 | `logs/`, `graphify-out/cache/` | Local runtime |
 | `graphify-out/manifest.json`, `cost.json` | Local graphify metadata |

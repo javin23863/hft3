@@ -194,11 +194,11 @@ class TestDailyLossLimitFlatten:
         assert result.allowed
 
     def test_configure_from_env(self):
-        os.environ["LIVE_DAILY_LOSS_LIMIT"] = "5000.0"
+        os.environ["EXTERNAL_DAILY_LOSS_LIMIT"] = "5000.0"
         d = DailyLossLimitFlatten()
         d.configure_from_env()
         assert d.loss_limit == 5000.0
-        del os.environ["LIVE_DAILY_LOSS_LIMIT"]
+        del os.environ["EXTERNAL_DAILY_LOSS_LIMIT"]
 
 
 class TestProductionSafetyOrchestrator:
@@ -215,13 +215,13 @@ class TestProductionSafetyOrchestrator:
         assert result.allowed
         assert result.action == HaltAction.NONE
 
-    def test_live_mode_rejects_on_stale_data(self, mock_intent: OrderIntent, mock_adapter: MagicMock):
+    def test_external_mode_rejects_on_stale_data(self, mock_intent: OrderIntent, mock_adapter: MagicMock):
         o = ProductionSafetyOrchestrator()
-        o.execution_mode = "LIVE"
+        o.execution_mode = "EXTERNAL"
         ctx = SafetyContext(
             order_intent=mock_intent,
             adapter=mock_adapter,
-            execution_mode="LIVE",
+            execution_mode="EXTERNAL",
             last_market_data_ns=100_000_000,
             system_clock_ns=1_000_000_000,
             session_start_ns=1_000_000_000,
@@ -229,6 +229,6 @@ class TestProductionSafetyOrchestrator:
         result = o.pre_trade_check(ctx)
         # At minimum the orchestrator ran without crashing
         assert result is not None
-        # In LIVE mode with stale data, StaleDataMonitor should fire.
+        # In external mode with stale data, StaleDataMonitor should fire.
         # The orchestrator returns the highest-severity halt.
         # At minimum, the test verifies the orchestrator doesn't crash.

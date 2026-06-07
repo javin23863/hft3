@@ -10,7 +10,7 @@ The dev workstation is **not** in the trade path. CHI404 is the only host that t
 events.csv → Databento GLBX.MDP3 MBO → data/npz/ → workbench / run_event_replay.py
 ```
 
-**Not this lane:** Rithmic trial NPZ under `data/replay/hftbacktest/rithmic_trial/` (CHI404 quarantine only). The dev workstation does not run `hft3-rithmic-trial.service`, has no `/root/hft3/rtrader_watch` SMB share, and never sees a R|API+ login. Live/paper trade data lives only on CHI404 (see [CHI404_CANONICAL_ENTRYPOINTS.md](CHI404_CANONICAL_ENTRYPOINTS.md)).
+**Not this lane:** Rithmic trial NPZ under `data/replay/hftbacktest/rithmic_trial/` (CHI404 quarantine only). The dev workstation does not run `hft3-rithmic-trial.service`, has no `/root/hft3/rtrader_watch` SMB share, and never sees a R|API+ login. External broker trade data lives only on CHI404 (see [CHI404_CANONICAL_ENTRYPOINTS.md](CHI404_CANONICAL_ENTRYPOINTS.md)).
 
 ## Keys
 
@@ -20,7 +20,7 @@ Copy `.env.example` to repo-root `.env` and set `DATABENTO_API_KEY` (required fo
 |-----|------|
 | `DATABENTO_API_KEY` | Event-window MBO download → `data/npz/` |
 | `CHI404_*` | SSH / latency sync (optional for offline replay) |
-| `RITHMIC_*` | CHI404 paper/live only — not trusted macro replay |
+| `RITHMIC_*` | CHI404 external broker lane only — not trusted macro replay |
 
 Backfill loads `.env` via `workbench/scripts/backfill_catalog.py`.
 

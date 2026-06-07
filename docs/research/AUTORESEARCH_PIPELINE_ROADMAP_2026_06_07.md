@@ -2,13 +2,13 @@
 
 ## Goal
 
-Build the autoresearch pipeline into a repeatable path from idea intake to candidate generation, cheap vectorbt filtering, evidence packaging, and later gated promotion into the existing research workbench. The first code slice starts adaptive threshold candidate search while preserving the current default grid behavior.
+Build the autoresearch pipeline into a repeatable path from idea intake to candidate generation, cheap vectorbt filtering, evidence packaging, and later gated promotion into the existing research workbench. The first code slice adds configurable threshold search and an expanded retry when no candidate passes the gates.
 
 ## Phased Plan
 
 1. Candidate generation controls
-   - Preserve default deterministic grid thresholds for existing callers.
-   - Add an explicit random threshold search mode with bounded `num_samples` and `max_iterations`.
+   - Use the supplied `signal_threshold` range when present, otherwise search the default `0.05` to `0.50` range.
+   - Add an explicit random threshold search mode with bounded `num_samples`.
    - Keep candidate IDs derived from model and strategy params so dedupe semantics remain stable.
 
 2. Cheap screening
@@ -34,7 +34,7 @@ Build the autoresearch pipeline into a repeatable path from idea intake to candi
 ## Constraints
 
 - Graph commands were explicitly waived by the user for this slice; no graph commands were run.
-- Default `generate_candidates(...)` grid behavior must remain unchanged.
+- `generate_candidates(...)` must keep deterministic `grid` mode available for existing callers.
 - Workstation code must not wire into Rithmic capture, order submission, or broker hot paths.
 - Rithmic trial, options parity, and low-float equities data must remain quarantined.
 - Secrets stay out of git and generated artifacts.
@@ -42,7 +42,7 @@ Build the autoresearch pipeline into a repeatable path from idea intake to candi
 ## Current Status
 
 - Planning document added.
-- First coding slice added opt-in random threshold generation behind `search_mode="random"`.
+- First coding slice added opt-in random threshold generation behind `search_mode="random"` and an expanded retry in `scripts/run_pipeline.py`.
 - Merge-ready: no.
 - Scope-green: no.
 - Verify-run: `python -m pytest tests/test_research_pipeline.py::test_generate_candidates_respects_max -q` passed; direct random-mode smoke passed.

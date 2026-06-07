@@ -125,7 +125,7 @@ This document maps each major requirement from the 26-phase spec to:
 | Phase 20 position monitor | `packages/trade_manager/monitor.py::PositionSnapshot`; `ExpectedPosition`; `PositionReconciliationResult`; `PositionMonitorConfig` | `tests/test_trade_manager_phase20.py` (11 tests) | Inert position snapshots and reconciliation results; stale/missing/future/duplicate data is `UNKNOWN`; no adapter creation/routing/flattening |
 | Phase 21 kill switch | `packages/trade_manager/kill_switch.py::KillSwitchConfig`; `KillSwitchContext`; `KillSwitchDecision`; `KillSwitchEvent`; `configs/risk/kill_switch.yaml` | `tests/test_trade_manager_phase21.py` (12 tests) | Closed 12-trigger and 7-action inventory; Phase 20 mismatch/unknown maps to `position_mismatch`; requested actions only; no adapter creation/routing/cancel/flatten |
 | Phase 22 observer CLI | `apps/observer/read_model.py`; `apps/observer/cli.py` | `tests/test_observer_view_read_only.py` (10 tests) | With `PYTHONPATH=packages;apps`: `python -m observer view --session-id SESSION_ID --sessions-root artifacts/sessions`; missing artifacts shown unavailable; malformed/non-finite artifacts fail closed; no adapter creation/routing |
-| Real execution adapter routing | **STUB** (`live_broker.py` returns ORDER_REJECTED) | N/A | N/A |
+| Real execution adapter routing | **STUB** (`broker.py` returns ORDER_REJECTED) | N/A | N/A |
 | Phase 23 session reporting | `packages/trade_manager/session.py::write_session_report`; `SessionReportInput`; `SessionArtifacts` | `tests/test_trade_manager_phase23.py` (10 tests) | 16 observer-compatible artifacts under `artifacts/sessions/{session_id}/`; JSON/JSONL object enforcement; atomic writes; no adapter creation/routing |
 
 ## Phase 24: Resumability and Failure Safety

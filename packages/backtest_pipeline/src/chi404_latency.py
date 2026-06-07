@@ -9,14 +9,14 @@ from typing import Any
 _REPO = Path(__file__).resolve().parents[3]
 DEFAULT_CHI404_SUMMARY = _REPO / "runtime" / "latency_reports" / "latency_summary.json"
 
-PAPER_ORDER_MIN_PAIRED = 1000
+BROKER_ORDER_MIN_PAIRED = 1000
 
 BACKTEST_LATENCY_NOTE_MEASURED = (
-    "Paper order submit→ack p99 from R|Trader log bridge (CHI404 colo)"
+    "Broker order submit→ack p99 from CHI404 latency evidence"
 )
 BACKTEST_LATENCY_NOTE_UNMEASURED = (
-    "Paper order submit→ack not measured; pass --latency-ms or run "
-    "scripts/chi404_run_paper_latency_sweep.sh on CHI404. "
+    "Broker order submit→ack not measured; pass --latency-ms or run "
+    "scripts/chi404_run_broker_latency_sweep.sh on CHI404. "
     "TCP connect is network health only — not used for execution latency."
 )
 # Backward-compatible alias for scripts that reference a single note string.
@@ -38,23 +38,33 @@ def validate_replay_latency_ms(latency_ms: float, *, source: str) -> float:
 
 def resolve_order_ack_ms(summary: dict[str, Any]) -> tuple[float | None, bool, str]:
     """Return (order_ack_p99_ms, measured, source_label)."""
-    paper = summary.get("paper_order_latency") or {}
-    if paper.get("measured") and isinstance(summary.get("order_ack_p99_ms"), (int, float)):
-        return float(summary["order_ack_p99_ms"]), True, "paper_order_latency.authoritative"
+    broker = summary.get("broker_order_latency") or {}
+    paired_count = int(broker.get("paired_count") or 0)
+    if (
+        broker.get("measured")
+        and broker.get("authoritative")
+        and paired_count >= BROKER_ORDER_MIN_PAIRED
+        and isinstance(summary.get("order_ack_p99_ms"), (int, float))
+    ):
+        return float(summary["order_ack_p99_ms"]), True, "broker_order_latency.authoritative"
 
     appendix = summary.get("trial_order_ack_appendix") or {}
-    if appendix.get("status") == "ok" and appendix.get("authoritative"):
+    stats = appendix.get("order_submit_to_ack_us") or {}
+    count = int(appendix.get("paired_count") or stats.get("count") or 0)
+    if (
+        appendix.get("status") == "ok"
+        and appendix.get("authoritative")
+        and count >= BROKER_ORDER_MIN_PAIRED
+    ):
         ms = appendix.get("order_ack_p99_ms")
         if isinstance(ms, (int, float)):
             return float(ms), True, "trial_order_ack_appendix.authoritative"
 
-    stats = appendix.get("order_submit_to_ack_us") or {}
-    count = int(stats.get("count") or 0)
     p99_us = stats.get("p99_us")
     if (
         appendix.get("status") == "ok"
         and appendix.get("authoritative")
-        and count >= PAPER_ORDER_MIN_PAIRED
+        and count >= BROKER_ORDER_MIN_PAIRED
         and isinstance(p99_us, (int, float))
     ):
         return float(p99_us) / 1000.0, True, "trial_order_ack_appendix.authoritative"
@@ -96,7 +106,7 @@ def load_chi404_speed(summary_path: Path) -> dict[str, Any]:
         "trial_order_ack_p99_ms": trial.get("order_ack_p99_ms"),
         "trial_order_ack_status": trial.get("status"),
         "order_ack_measured": measured,
-        "paper_order_latency": s.get("paper_order_latency"),
+        "broker_order_latency": s.get("broker_order_latency"),
     }
 
     if measured and order_ack_ms is not None:

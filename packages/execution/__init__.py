@@ -1,4 +1,4 @@
-"""Shared execution interface for replay, paper, and live order routing."""
+"""Shared execution interface for replay and external broker routing."""
 
 from execution.interfaces import (
     AccountState,

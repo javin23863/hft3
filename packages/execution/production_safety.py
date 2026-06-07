@@ -315,7 +315,7 @@ class DailyLossLimitFlatten:
         self.loss_limit: float = float("inf")
 
     def configure_from_env(self) -> None:
-        raw = os.environ.get("LIVE_DAILY_LOSS_LIMIT", "")
+        raw = os.environ.get("EXTERNAL_DAILY_LOSS_LIMIT", "")
         if raw:
             try:
                 self.loss_limit = float(raw)
@@ -372,7 +372,7 @@ class ProductionSafetyOrchestrator:
 
     Monitors run in priority order. The highest-severity halt wins.
     In REPLAY mode, all monitors run in audit-only (log warnings, never halt).
-    In LIVE mode, halts are enforced.
+    In EXTERNAL mode, halts are enforced.
 
     Priority order (matches BLUEPRINT §9):
     1. DisconnectMonitor   — kills everything
@@ -431,7 +431,7 @@ class ProductionSafetyOrchestrator:
         return [intent]
 
     def pre_trade_check(self, ctx: SafetyContext) -> SafetyResult:
-        is_live = ctx.execution_mode.upper() == "LIVE"
+        enforce_halts = ctx.execution_mode.upper() != "REPLAY"
         worst_result = SafetyResult(allowed=True, action=HaltAction.NONE)
         all_results: List[SafetyResult] = []
 
@@ -453,7 +453,7 @@ class ProductionSafetyOrchestrator:
 
         all_results.extend(results_ordered)
 
-        if not is_live:
+        if not enforce_halts:
             return SafetyResult(
                 allowed=True,
                 action=HaltAction.NONE,

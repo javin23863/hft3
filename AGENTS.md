@@ -29,7 +29,7 @@ Main thread must **not**:
 - Run large inline grep/read sweeps when investigator or explore would suffice
 - Edit three or more files in one turn without explicit user approval
 - Skip subagent delegation and absorb locate → edit → review inline to save time
-- Wire a dev workstation into live/paper Rithmic or execution paths (BLUEPRINT §4 violation)
+- Wire a dev workstation into external broker Rithmic or execution paths (BLUEPRINT §4 violation)
 - Skip verification after code changes
 - Claim merge-ready or "done" without a reviewer verdict and green verify commands
 - Hide skipped tests or missing tooling behind a passing pytest summary
@@ -151,17 +151,17 @@ Per [BLUEPRINT.md §4 Live Architecture](BLUEPRINT.md#4-live-architecture): prod
 
 | Host | Role |
 |------|------|
-| **CHI404** | Live/paper market data, order submit, capture, tuning, PASS gates, Rithmic trial lane |
-| **Dev workstation** | Offline research (Databento replay), pytest, git, SSH/sync to CHI404, docs — **never** live capture or orders |
+| **CHI404** | External broker market data, order submit, capture, tuning, PASS gates, Rithmic trial lane |
+| **Dev workstation** | Offline research (Databento replay), pytest, git, SSH/sync to CHI404, docs — **never** external capture or orders |
 
 **Forbidden** (unless the user explicitly requests an exception in the task):
 
 - Windows or Mac R\|Trader capture, unattended daemons, or scheduled tasks on a dev PC
-- File-bridge or API loop that routes live/paper data or orders through a non-colo host
+- File-bridge or API loop that routes external broker data or orders through a non-colo host
 - Setup scripts that auto-start capture on the workstation
 - Treating workstation RTT as an operational dependency for execution or capture
 
-**Before any Rithmic trial, infra, or latency work:** read BLUEPRINT §4 and [docs/rithmic_trial/README.md](docs/rithmic_trial/README.md). Live capture code must refuse to run on Windows (see `data_system/rithmic_trial/pipeline.py`).
+**Before any Rithmic trial, infra, or latency work:** read BLUEPRINT §4 and [docs/rithmic_trial/README.md](docs/rithmic_trial/README.md). External capture code must refuse to run on Windows (see `data_system/rithmic_trial/pipeline.py`).
 
 ### PDF structural models (signal layer)
 
@@ -192,7 +192,7 @@ Trial capture is isolated from trusted production data (`data/npz/` from Databen
 - Code: `data_system/rithmic_trial/`
 - Config: `data_system/config/rithmic_trial.yaml`
 - Docs: [docs/rithmic_trial/README.md](docs/rithmic_trial/README.md)
-- **CHI404 canonical paths (agents):** [docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md](docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md) — deploy via `chi404_vm_deploy.sh`; paper latency via live gate + real R|Trader exports only. **Never** host-side synthetic order log inject.
+- **CHI404 canonical paths (agents):** [docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md](docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md) — deploy via `chi404_vm_deploy.sh`; broker latency via live gate + real R|Trader exports only. **Never** host-side synthetic order log inject.
 
 Do not write trial output into production NPZ paths or bypass quarantine without explicit approval.
 

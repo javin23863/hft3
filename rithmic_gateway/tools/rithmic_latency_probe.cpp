@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -17,6 +18,7 @@
 #include <numeric>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 #include <thread>
 
@@ -35,6 +37,33 @@
 static const char* get_env_or(const char* key, const char* def) {
     const char* v = std::getenv(key);
     return v ? v : def;
+}
+
+static std::string lower_copy(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return value;
+}
+
+static bool value_is_chi404(const char* value) {
+    return value && lower_copy(std::string(value)) == "chi404";
+}
+
+static bool is_chi404_runtime() {
+#if defined(_WIN32)
+    return false;
+#else
+    const char* env_keys[] = {"HFT3_DEPLOY_HOST", "HFT3_HOST_ID", "HOSTNAME", "COMPUTERNAME"};
+    for (const char* key : env_keys) {
+        if (value_is_chi404(std::getenv(key))) return true;
+    }
+    char host[256] = {0};
+    if (gethostname(host, sizeof(host) - 1) == 0 && value_is_chi404(host)) {
+        return true;
+    }
+    return false;
+#endif
 }
 
 static int get_env_int_or(const char* key, int def) {
@@ -279,9 +308,9 @@ static std::string utc_timestamp() {
 }
 
 static std::string default_config_path(const std::string& repo) {
-    const std::string profile = get_env_or_string("RITHMIC_ENDPOINT_PROFILE", "paper_chicago");
-    if (profile == "paper_chicago" || profile == "paper") {
-        return repo + "/packages/data_system/config/rithmic_api_paper.yaml";
+    const std::string profile = get_env_or_string("RITHMIC_ENDPOINT_PROFILE", "external_chicago");
+    if (profile == "external_chicago" || profile == "external") {
+        return repo + "/packages/data_system/config/rithmic_api_external.yaml";
     }
     return repo + "/packages/data_system/config/rithmic_api_test.yaml";
 }
@@ -798,6 +827,13 @@ int main(int argc, char** argv) {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     std::setvbuf(stderr, nullptr, _IONBF, 0);
 
+    if (!is_chi404_runtime()) {
+        std::fprintf(stderr,
+            "FAIL: CHI404_REQUIRED rithmic_latency_probe submits broker orders "
+            "and must run on CHI404 only (BLUEPRINT §4).\n");
+        return 2;
+    }
+
     const RuntimeTuningStatus tuning_status = apply_runtime_tuning();
     std::printf("RUNTIME_TUNING platform=%s cpu_requested=%d cpu_applied=%d"
                 " rt_requested=%d rt_applied=%d mlock_requested=%d mlock_applied=%d"
@@ -846,7 +882,7 @@ int main(int argc, char** argv) {
     hft::ConnectionConfig cfg;
     cfg.environment = get_env_or_string(
         "RITHMIC_ENVIRONMENT",
-        load_yaml_scalar(yaml_path, "", "system", "Rithmic Paper Trading")
+        load_yaml_scalar(yaml_path, "", "system", "")
     );
     cfg.username = user;
     cfg.password = pass;
@@ -855,31 +891,46 @@ int main(int argc, char** argv) {
     cfg.log_file_path = repo + "/runtime/rithmic_latency_probe.log";
     cfg.rep_connect_point = get_env_or_string(
         "RITHMIC_REP_CONNECT_POINT",
-        load_yaml_scalar(yaml_path, "repository_login", "sCnnctPt", "login_agent_repositoryc")
+        load_yaml_scalar(yaml_path, "repository_login", "sCnnctPt", "")
     );
     cfg.md_connect_point = get_env_or_string(
         "RITHMIC_MD_CONNECT_POINT",
-        load_yaml_scalar(yaml_path, "login_params", "sMdCnnctPt", "login_agent_tp_agg_paperc")
+        load_yaml_scalar(yaml_path, "login_params", "sMdCnnctPt", "")
     );
     cfg.ts_connect_point = get_env_or_string(
         "RITHMIC_TS_CONNECT_POINT",
-        load_yaml_scalar(yaml_path, "login_params", "sTsCnnctPt", "login_agent_op_paperc")
+        load_yaml_scalar(yaml_path, "login_params", "sTsCnnctPt", "")
     );
     cfg.pnl_connect_point = get_env_or_string(
         "RITHMIC_PNL_CONNECT_POINT",
-        load_yaml_scalar(yaml_path, "login_params", "sPnlCnnctPt", "login_agent_pnl_paperc")
+        load_yaml_scalar(yaml_path, "login_params", "sPnlCnnctPt", "")
     );
     cfg.ih_connect_point = get_env_or_string(
         "RITHMIC_IH_CONNECT_POINT",
-        load_yaml_scalar(yaml_path, "login_params", "sIhCnnctPt", "login_agent_history_paperc")
+        load_yaml_scalar(yaml_path, "login_params", "sIhCnnctPt", "")
     );
     cfg.env_vars = env_vars;
+
+    const std::pair<const char*, const std::string*> required_connect_points[] = {
+        {"repository_login.sCnnctPt", &cfg.rep_connect_point},
+        {"login_params.sMdCnnctPt", &cfg.md_connect_point},
+        {"login_params.sTsCnnctPt", &cfg.ts_connect_point},
+        {"login_params.sPnlCnnctPt", &cfg.pnl_connect_point},
+        {"login_params.sIhCnnctPt", &cfg.ih_connect_point},
+    };
+    for (const auto& item : required_connect_points) {
+        if (item.second->empty()) {
+            std::fprintf(stderr, "FAIL: missing Rithmic config value %s in %s\n",
+                         item.first, yaml_path.c_str());
+            return 1;
+        }
+    }
 
     auto mbo_queue = std::make_unique<hft::SPSCQueue<hft::MarketDataEvent, 8192>>();
     auto order_queue = std::make_unique<hft::SPSCQueue<hft::OrderEvent, 8192>>();
 
     hft::RithmicAdapter adapter(cfg, mbo_queue.get(), order_queue.get());
-    const std::string env_name_str = get_env_or_string("RITHMIC_PROBE_ENV_LABEL", "paper");
+    const std::string env_name_str = get_env_or_string("RITHMIC_PROBE_ENV_LABEL", "external");
     const char* env_name = env_name_str.c_str();
 
     // --- Phase 1: Initialize ---
@@ -944,7 +995,7 @@ int main(int argc, char** argv) {
     const double passive_offset = std::atof(get_env_or("RITHMIC_PROBE_PASSIVE_PRICE_OFFSET", "1000.0"));
     const std::string run_id = get_env_or_string(
         "RITHMIC_PROBE_RUN_ID",
-        std::string("rithmic-cpp-paper-baseline-") + run_id_utc()
+        std::string("rithmic-cpp-broker-baseline-") + run_id_utc()
     );
     const std::string strategy_id = get_env_or_string("RITHMIC_PROBE_STRATEGY_ID", "latency_probe");
     const std::string model_id = get_env_or_string("RITHMIC_PROBE_MODEL_ID", "latency_probe");

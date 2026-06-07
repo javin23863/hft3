@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from model_metrics.schemas import (
     ModelBehaviorEnvelope,
-    ModelLiveObservation,
+    ModelRuntimeObservation,
     ModelStateDecision,
 )
 from model_metrics.state_engine import classify_model_state
@@ -16,7 +16,7 @@ class ModelBehaviorRuleEngine:
     def evaluate(
         self,
         envelope: ModelBehaviorEnvelope | dict,
-        observation: ModelLiveObservation | dict,
+        observation: ModelRuntimeObservation | dict,
     ) -> ModelStateDecision:
         return classify_model_state(envelope, observation)
 
@@ -24,7 +24,7 @@ class ModelBehaviorRuleEngine:
 __all__ = [
     "ModelBehaviorEnvelope",
     "ModelBehaviorRuleEngine",
-    "ModelLiveObservation",
+    "ModelRuntimeObservation",
     "ModelStateDecision",
     "classify_model_state",
 ]

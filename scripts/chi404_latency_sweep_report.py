@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CHI404 paper latency sweep report — percentiles by stage and symbol."""
+"""CHI404 broker latency sweep report — percentiles by stage and symbol."""
 from __future__ import annotations
 
 import argparse
@@ -12,28 +12,28 @@ if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
 from data_system.rithmic_trial.latency.percentile_stats import stats_by_key, stats_us
-from data_system.rithmic_trial.schema.paper_latency_record_v1 import (
-    PaperLatencyRecordV1,
+from data_system.rithmic_trial.schema.broker_latency_record_v1 import (
+    BrokerLatencyRecordV1,
     stage_deltas_us,
 )
 
-PAPER_ORDER_MIN_PAIRED = 1000
+BROKER_ORDER_MIN_PAIRED = 1000
 
 
-def load_records(path: Path) -> list[PaperLatencyRecordV1]:
-    out: list[PaperLatencyRecordV1] = []
+def load_records(path: Path) -> list[BrokerLatencyRecordV1]:
+    out: list[BrokerLatencyRecordV1] = []
     for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line:
             continue
         try:
-            out.append(PaperLatencyRecordV1.from_dict(json.loads(line)))
+            out.append(BrokerLatencyRecordV1.from_dict(json.loads(line)))
         except json.JSONDecodeError:
             continue
     return out
 
 
-def build_report(records: list[PaperLatencyRecordV1], run_id: str) -> dict:
+def build_report(records: list[BrokerLatencyRecordV1], run_id: str) -> dict:
     submit_ack: list[float] = []
     tick_decision: list[float] = []
     decision_submit: list[float] = []
@@ -61,7 +61,7 @@ def build_report(records: list[PaperLatencyRecordV1], run_id: str) -> dict:
             replace_submit_ack.append(sa)
 
     paired = len(submit_ack)
-    authoritative = paired >= PAPER_ORDER_MIN_PAIRED
+    authoritative = paired >= BROKER_ORDER_MIN_PAIRED
     sa_stats = stats_us(submit_ack)
     p99_ms = (sa_stats.get("p99_us") or 0) / 1000.0 if sa_stats.get("p99_us") else None
     p999_ms = (sa_stats.get("p999_us") or 0) / 1000.0 if sa_stats.get("p999_us") else None
@@ -82,7 +82,7 @@ def build_report(records: list[PaperLatencyRecordV1], run_id: str) -> dict:
     else:
         operating_tier = "tier_2ms_provisional"
         backtest_bands = [0.5, 1.0, 2.0]
-        promotion = f"blocked_until_{PAPER_ORDER_MIN_PAIRED}_pairs"
+        promotion = f"blocked_until_{BROKER_ORDER_MIN_PAIRED}_pairs"
 
     return {
         "run_id": run_id,

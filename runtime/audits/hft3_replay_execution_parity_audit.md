@@ -18,7 +18,7 @@ Parity requires a unified **mode-blind OrderIntent → ExecutionAdapter** path w
 | 1 | Does `CombinedHypothesisStrategy.on_step` submit during replay? | **Partial** — yes on HftBacktest path; no on primary SignalBacktester path |
 | 2 | Where does the decision stop? | SignalBacktester: signal → `_PendingAction` → `_apply_pending`. Hft: direct `hbt.submit_*` |
 | 3 | Scores vs OrderIntent? | Primary emits scores only; no `OrderIntent` type |
-| 4 | Different path from paper/live? | Yes — three parallel lanes (SignalBacktester, hbt, trial capture, C++ stub) |
+| 4 | Different path from external broker? | Yes — three parallel lanes (SignalBacktester, hbt, trial capture, C++ stub) |
 | 5 | `if backtest: do_not_send`? | De facto via `--skip-hftbacktest` and `skip_hft=True` default; no literal branch in strategy |
 | 6 | HftBacktest order methods? | Yes: `submit_buy_order`, `submit_sell_order`; PDF hybrid also `cancel` |
 | 7 | Fills/cancels/rejects captured? | Engine-internal only; not lifecycle-audited |
@@ -28,7 +28,7 @@ Parity requires a unified **mode-blind OrderIntent → ExecutionAdapter** path w
 | 11 | Latency on lifecycle? | `constant_order_latency` on asset; deferred fills in SignalBacktester |
 | 12 | Queue models? | Yes — `LogProbQueueModel2`, `SquareProbQueueModel` in `ReplayRunner.build_backtest` |
 | 13 | Compatible order objects? | **No** shared contract |
-| 14 | Live-broker risk in replay? | **No** today (no live adapter wired) |
+| 14 | External-broker risk in replay? | **No** today (no live adapter wired) |
 | 15 | Smallest patch? | Adapter layer + ReplaySession + deprecate SignalBacktester fills (not a one-line fix) |
 
 ## Key evidence

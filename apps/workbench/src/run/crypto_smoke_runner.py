@@ -238,7 +238,7 @@ def _run_crypto_after_action(
         "data_sufficient": bool(status.get("candidates")),
         "eval_scope": "crypto_autonomous_smoke",
         "cpp_replay_available": any(_hft_validation_passed(row) for row in validation_reports),
-        "promote_candidate": bool(decision.get("live_registry_ready")),
+        "promote_candidate": bool(decision.get("activation_registry_ready")),
         "wfc_status": double_wf.get("status"),
         "robustness_passed": str(robustness_summary.get("status") or "").upper() in {"PASS", "OBSERVED"},
         "pnl_by_injection_us": {"0": totals["net_pnl"]},
@@ -709,7 +709,7 @@ def _decision(
             "action": "QUARANTINE",
             "reason": "no candidate passed smoke evidence gates",
             "top_smoke_candidate": "",
-            "live_registry_ready": False,
+            "activation_registry_ready": False,
             "bitcoin_edge_packet_status": edge_packets.get("status", ""),
         }
     vectorbt_blockers = _vectorbt_blockers(vectorbt_summary)
@@ -719,7 +719,7 @@ def _decision(
             "action": "QUARANTINE",
             "reason": "vectorBT filter evidence is incomplete",
             "top_smoke_candidate": top_smoke.get("candidate_id", ""),
-            "live_registry_ready": False,
+            "activation_registry_ready": False,
             "bitcoin_edge_packet_status": edge_packets.get("status", ""),
             "blocking_gates": vectorbt_blockers,
         }
@@ -729,7 +729,7 @@ def _decision(
             "action": "QUARANTINE",
             "reason": "candidate evidence identity is incomplete",
             "top_smoke_candidate": top_smoke.get("candidate_id", ""),
-            "live_registry_ready": False,
+            "activation_registry_ready": False,
             "bitcoin_edge_packet_status": edge_packets.get("status", ""),
             "blocking_gates": [
                 {
@@ -745,7 +745,7 @@ def _decision(
             "action": "QUARANTINE",
             "reason": "candidate evidence identity is incomplete",
             "top_smoke_candidate": top_smoke.get("candidate_id", ""),
-            "live_registry_ready": False,
+            "activation_registry_ready": False,
             "bitcoin_edge_packet_status": edge_packets.get("status", ""),
             "blocking_gates": [
                 {
@@ -764,7 +764,7 @@ def _decision(
             "reason": "crypto execution replay evidence is incomplete",
             "top_smoke_candidate": vectorbt_ranked[0].get("candidate_id", ""),
             "evidence_candidate_id": vectorbt_ranked[0].get("candidate_id", ""),
-            "live_registry_ready": False,
+            "activation_registry_ready": False,
             "bitcoin_edge_packet_status": edge_packets.get("status", ""),
             "blocking_gates": validation_blockers,
         }
@@ -780,7 +780,7 @@ def _decision(
             "reason": "robustness evidence failed observed gates" if observed_failure else "robustness evidence is incomplete",
             "top_smoke_candidate": replay_candidate_id,
             "evidence_candidate_id": replay_candidate_id,
-            "live_registry_ready": False,
+            "activation_registry_ready": False,
             "bitcoin_edge_packet_status": edge_packets.get("status", ""),
             "blocking_gates": robustness_blockers,
         }
@@ -791,7 +791,7 @@ def _decision(
             "reason": "candidate evidence identity is incomplete",
             "top_smoke_candidate": replay_candidate_id,
             "evidence_candidate_id": replay_candidate_id,
-            "live_registry_ready": False,
+            "activation_registry_ready": False,
             "bitcoin_edge_packet_status": edge_packets.get("status", ""),
             "blocking_gates": [
                 {
@@ -809,7 +809,7 @@ def _decision(
             "reason": "candidate evidence identity is incomplete",
             "top_smoke_candidate": _candidate_id(vectorbt_ranked[0]),
             "evidence_candidate_id": _candidate_id(vectorbt_ranked[0]),
-            "live_registry_ready": False,
+            "activation_registry_ready": False,
             "bitcoin_edge_packet_status": edge_packets.get("status", ""),
             "blocking_gates": [
                 {
@@ -827,7 +827,7 @@ def _decision(
             "reason": "crypto venue submit-to-ack evidence is insufficient",
             "top_smoke_candidate": top.get("candidate_id", ""),
             "evidence_candidate_id": top.get("candidate_id", ""),
-            "live_registry_ready": False,
+            "activation_registry_ready": False,
             "bitcoin_edge_packet_status": edge_packets.get("status", ""),
             "blocking_gates": [
                 {"gate": "crypto_venue_submit_ack", "status": "INSUFFICIENT"},
@@ -844,7 +844,7 @@ def _decision(
             "reason": "Bitcoin edge packet current-state stream is not observed",
             "top_smoke_candidate": top.get("candidate_id", ""),
             "evidence_candidate_id": top.get("candidate_id", ""),
-            "live_registry_ready": False,
+            "activation_registry_ready": False,
             "bitcoin_edge_packet_status": edge_packets.get("status", ""),
             "blocking_gates": [
                 {
@@ -859,7 +859,7 @@ def _decision(
         "reason": "smoke, vectorBT, crypto execution replay, and robustness evidence passed; venue execution evidence still requires operator review",
         "top_smoke_candidate": top.get("candidate_id", ""),
         "evidence_candidate_id": top.get("candidate_id", ""),
-        "live_registry_ready": False,
+        "activation_registry_ready": False,
         "bitcoin_edge_packet_status": edge_packets.get("status", ""),
     }
 
@@ -1687,7 +1687,7 @@ def run_crypto_smoke(repo: Path, *, candidate_id: str | None = None) -> dict[str
                 "action": "QUARANTINE",
                 "reason": "no crypto candidates discovered from tracked crypto registry",
                 "top_smoke_candidate": "",
-                "live_registry_ready": False,
+                "activation_registry_ready": False,
             }
             status["stages"][1]["status"] = "blocked"
             status["stages"][2]["status"] = "blocked"
@@ -1871,7 +1871,7 @@ def run_crypto_smoke(repo: Path, *, candidate_id: str | None = None) -> dict[str
                     gates.append(metrics_gate)
             status["decision"] = {
                 **(status.get("decision") or {}),
-                "live_registry_ready": False,
+                "activation_registry_ready": False,
                 "blocking_gates": gates,
             }
             status["state"] = "blocked"
@@ -1911,7 +1911,7 @@ def run_crypto_smoke(repo: Path, *, candidate_id: str | None = None) -> dict[str
             status["state"] = "blocked"
             status["decision"] = {
                 **(status.get("decision") or {}),
-                "live_registry_ready": False,
+                "activation_registry_ready": False,
                 "after_action_blocking_gate": {
                     "gate": "after_action_gpt55_xhigh",
                     "status": "FAIL",

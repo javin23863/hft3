@@ -45,7 +45,7 @@ python scripts/run_hybrid_pipeline_gate.py --event-id <EVENT_ID> --min-trades 0 
 
 ## Latency
 
-- **CHI404 colo:** uses measured paper order submit→ack from `runtime/latency_reports/latency_summary.json` when available.
+- **CHI404 colo:** uses measured broker order submit→ack from `runtime/latency_reports/latency_summary.json` when available.
 - **Workstation gate:** falls back to **1.0 ms** inside blueprint band `[0.5, 10]` when order ack is unmeasured; recorded in gate manifest `gate_latency_note`.
 
 Production promotion still requires CHI404 measured ack — see [PDF_HYBRID_REPLAY.md](PDF_HYBRID_REPLAY.md).

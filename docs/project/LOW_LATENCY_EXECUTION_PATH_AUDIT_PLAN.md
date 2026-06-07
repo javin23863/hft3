@@ -67,10 +67,10 @@ Add commands shaped like:
 ```powershell
 python -m apps.workbench.src.latency.execution_path_audit --mode synthetic --duration 30
 python -m apps.workbench.src.latency.execution_path_audit --mode replay --symbol ES --duration 120
-python -m apps.workbench.src.latency.execution_path_audit --mode paper-live --broker rithmic --symbol ES --exchange CME --duration 300
+python -m apps.workbench.src.latency.execution_path_audit --mode external --broker rithmic --symbol ES --exchange CME --duration 300
 ```
 
-Synthetic mode must run without broker connectivity. Replay mode must use deterministic market events. Paper-live mode must use real-time paper market data when available.
+Synthetic mode must run without broker connectivity. Replay mode must use deterministic market events. External mode must use CHI404 native broker evidence when available.
 
 ## Report Requirements
 

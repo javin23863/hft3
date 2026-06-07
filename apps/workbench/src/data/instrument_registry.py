@@ -11,7 +11,7 @@ import yaml
 HOT_MEMORY_TIERS = frozenset({"HOT_EXECUTABLE", "HOT_SENSOR", "WARM", "COLD"})
 INSTRUMENT_TYPES = frozenset({"futures", "index_sensor"})
 DATA_DELAY_STATUSES = frozenset(
-    {"LIVE", "DELAYED", "HISTORICAL_ONLY", "MISSING", "DISABLED"}
+    {"REALTIME", "DELAYED", "HISTORICAL_ONLY", "MISSING", "DISABLED"}
 )
 INDEX_SENSORS = frozenset({"VIX", "VVIX"})
 
@@ -32,7 +32,7 @@ class InstrumentRecord:
     index_sensor_available: bool
     point_in_time_safe: bool
     data_delay_status: str
-    live_feed_status: str
+    realtime_feed_status: str
     historical_feed_status: str
     broker_symbol: Optional[str] = None
     continuous_contract_symbol: Optional[str] = None
@@ -78,7 +78,7 @@ def _record_from_dict(raw: Mapping[str, Any]) -> InstrumentRecord:
         index_sensor_available=bool(raw.get("index_sensor_available", False)),
         point_in_time_safe=bool(raw.get("point_in_time_safe", True)),
         data_delay_status=str(raw.get("data_delay_status", "MISSING")),
-        live_feed_status=str(raw.get("live_feed_status", "MISSING")),
+        realtime_feed_status=str(raw.get("realtime_feed_status", "MISSING")),
         historical_feed_status=str(raw.get("historical_feed_status", "MISSING")),
         broker_symbol=raw.get("broker_symbol"),
         continuous_contract_symbol=raw.get("continuous_contract_symbol"),

@@ -41,16 +41,16 @@ class TelemetryMetrics:
         return results
         
     @staticmethod
-    def sim_live_disagreement(sim_fills: pd.DataFrame, live_fills: pd.DataFrame) -> dict:
+    def sim_external_disagreement(sim_fills: pd.DataFrame, external_fills: pd.DataFrame) -> dict:
         """
-        Compares sim vs live fills to detect disagreement.
+        Compares sim vs external fills to detect disagreement.
         """
         # Simplistic stub for metric generation
-        if sim_fills.empty or live_fills.empty:
+        if sim_fills.empty or external_fills.empty:
             return {"disagreement_rate": 0.0}
             
-        merged = pd.merge(sim_fills, live_fills, on='order_id', suffixes=('_sim', '_live'))
-        price_diff = np.abs(merged['exec_price_sim'] - merged['exec_price_live'])
+        merged = pd.merge(sim_fills, external_fills, on='order_id', suffixes=('_sim', '_external'))
+        price_diff = np.abs(merged['exec_price_sim'] - merged['exec_price_external'])
         
         return {
             "disagreement_rate": len(merged[price_diff > 0]) / len(merged),

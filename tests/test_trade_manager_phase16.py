@@ -320,8 +320,7 @@ def test_phase16_order_intent_creation_does_not_call_risk_or_execution_adapters(
 
     monkeypatch.setenv("EXECUTION_MODE", "REPLAY")
     monkeypatch.setattr("execution.adapter_factory.create_adapter", forbid_call)
-    monkeypatch.setattr("execution.adapters.paper_broker.PaperBrokerAdapter.submit_order", forbid_call)
-    monkeypatch.setattr("execution.adapters.live_broker.LiveBrokerAdapter.submit_order", forbid_call)
+    monkeypatch.setattr("execution.adapters.broker.BrokerAdapter.submit_order", forbid_call)
     monkeypatch.setattr("execution.production_safety.ProductionSafetyOrchestrator.pre_trade_check", forbid_call)
     safety.reset_counters()
 
@@ -332,6 +331,6 @@ def test_phase16_order_intent_creation_does_not_call_risk_or_execution_adapters(
     assert isinstance(intent, TradeManagerOrderIntent)
     assert not isinstance(intent, ExecutionOrderIntent)
     assert safety.counter_snapshot() == {
-        "live_broker_call_count": 0,
+        "broker_call_count": 0,
         "rithmic_order_call_count": 0,
     }

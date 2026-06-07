@@ -23,7 +23,7 @@ $ScriptMap = @{
 
 $OcEnv = @(
     "HFT3_OC_MIN_MHZ", "HFT3_OC_TARGET_MHZ", "HFT3_OC_MIN_MEM_MTS",
-    "HFT3_OC_STRESS_SEC", "HFT3_OC_MARKET_LOAD", "HFT3_OC_RUN_PAPER_SWEEP",
+    "HFT3_OC_STRESS_SEC", "HFT3_OC_MARKET_LOAD", "HFT3_OC_RUN_BROKER_SWEEP",
     "HFT3_OC_REQUIRE_MARKET_LOAD", "RUN_ID"
 ) | ForEach-Object {
     $val = (Get-Item -Path "env:$_" -ErrorAction SilentlyContinue).Value

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from model_metrics.schemas import CALCULATION_VERSION, ModelBehaviorEnvelope, ModelLiveObservation, ModelStateDecision, finite_or_none
+from model_metrics.schemas import CALCULATION_VERSION, ModelBehaviorEnvelope, ModelRuntimeObservation, ModelStateDecision, finite_or_none
 
 
 STATE_ACTIONS = {
@@ -38,12 +38,12 @@ def _loss_magnitude_above(value: float | None, threshold: float | None) -> bool:
 
 def classify_model_state(
     envelope: ModelBehaviorEnvelope | dict[str, Any],
-    observation: ModelLiveObservation | dict[str, Any],
+    observation: ModelRuntimeObservation | dict[str, Any],
 ) -> ModelStateDecision:
-    """Classify live/paper/shadow behavior using only replayable rules."""
+    """Classify runtime behavior using only replayable rules."""
 
     env = envelope if isinstance(envelope, ModelBehaviorEnvelope) else _envelope_from_dict(envelope)
-    obs = observation if isinstance(observation, ModelLiveObservation) else ModelLiveObservation.from_dict(observation)
+    obs = observation if isinstance(observation, ModelRuntimeObservation) else ModelRuntimeObservation.from_dict(observation)
     triggers: list[dict[str, Any]] = []
 
     if not env.active:

@@ -16,18 +16,18 @@ from workbench.ui.flow_state import event_artifact_dir, load_json_artifact
 CHAT_SYSTEM = (
     SYSTEM_PROMPT
     + "\n\nYou are now in follow-up Q&A mode. Answer only about the attached run artifacts. "
-    "Do not suggest live trading actions."
+    "Do not suggest order-routing actions."
 )
 
 WORKBENCH_CONSOLE_SYSTEM = (
     "You are the HFT3 Workbench research console. Answer the operator in concise "
     "plain text from the provided Workbench snapshot and packet status context. "
     "This lane is advisory only: you have no "
-    "promotion, deployment, order, or live-routing authority. RDP is schema-only and "
+    "promotion, deployment, order, or broker-routing authority. RDP is schema-only and "
     "inactive. The idea-set lane is queue-only. VectorBT-only evidence is "
     "PREFILTER_ONLY and is not fully validated. Idea param ranges are packet integrity "
     "fields and are clamped or ignored until tested params exist. Do not suggest "
-    "live, CHI404, Rithmic, or order-submit hooks, and do not imply that chat output "
+    "broker activation, CHI404, Rithmic, or order-submit hooks, and do not imply that chat output "
     "changes any gate state."
 )
 
@@ -117,7 +117,7 @@ def _workbench_console_context(snapshot: Any) -> dict[str, Any]:
         },
         "decision_gate": {
             "action": decision.get("action") or decision.get("decision"),
-            "live_registry_ready": bool(decision.get("live_registry_ready")),
+            "activation_registry_ready": bool(decision.get("activation_registry_ready")),
             "reason": decision.get("reason"),
             "blocking_gates": _compact_gates(decision.get("blocking_gates")),
         },
@@ -137,7 +137,7 @@ def _workbench_console_context(snapshot: Any) -> dict[str, Any]:
                 "promotion",
                 "deployment",
                 "order_submit",
-                "live_routing",
+                "broker_routing",
                 "CHI404_or_Rithmic_hooks",
                 "gate_override",
             ],

@@ -55,7 +55,7 @@ Strict walk-forward periods:
 * Confirmation: 2021-2022
 * Holdout: 2023-2024
 * Recent holdout: 2025-present
-* Live/sim shadow: latest 60 CME days
+* External/sim shadow: latest 60 CME days
 
 ## 9. Production failure states
 Mathematical system safety limits including: stale market data halt, disconnect halt, clock drift halt, position mismatch block, and daily loss limit flatten.

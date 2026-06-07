@@ -6,8 +6,8 @@ from pathlib import Path
 
 from backtest_pipeline.src.hypothesis_replay_strategy import ToyAlwaysLongStrategy
 from execution import safety
-from execution.adapter_factory import create_adapter, forbid_live_adapter_in_replay
-from execution.adapters.live_broker import LiveBrokerAdapter
+from execution.adapter_factory import create_adapter, forbid_broker_adapter_in_replay
+from execution.adapters.broker import BrokerAdapter
 from replay.replay_clock import ReplayClock, deterministic_run_id
 from replay.replay_session import ReplaySession, ReplaySessionConfig
 
@@ -41,11 +41,11 @@ def test_replay_clock_and_session_bundle(minimal_npz: Path, tmp_path: Path) -> N
     lc_path = Path(result["lifecycle_path"])
     lines = [json.loads(x) for x in lc_path.read_text(encoding="utf-8").splitlines() if x.strip()]
     assert any(row["event_type"] == "ORDER_ACCEPTED" for row in lines)
-    assert safety.live_broker_call_count == 0
+    assert safety.broker_call_count == 0
 
-    live = LiveBrokerAdapter(run_id="x")
+    broker = BrokerAdapter(run_id="x")
     try:
-        forbid_live_adapter_in_replay(live)
+        forbid_broker_adapter_in_replay(broker)
         raised = False
     except RuntimeError:
         raised = True

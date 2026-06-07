@@ -3,5 +3,5 @@
 import sys
 
 print("ERROR: chi404_reprocess_sweep_log.py deprecated (log-laundering forbidden).", file=sys.stderr)
-print("Use: bash scripts/chi404_run_paper_latency_sweep.sh", file=sys.stderr)
+print("Use: bash scripts/chi404_run_broker_latency_sweep.sh", file=sys.stderr)
 raise SystemExit(1)

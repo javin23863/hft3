@@ -75,7 +75,7 @@ def build_latency_profile(events: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def build_paper_order_summary(events: list[dict[str, Any]]) -> dict[str, Any]:
+def build_broker_order_summary(events: list[dict[str, Any]]) -> dict[str, Any]:
     profile = build_latency_profile(events)
     orders = profile.get("order_submit_to_ack_us") or {}
     count = int(orders.get("count") or 0)
@@ -119,15 +119,15 @@ def emit_all_reports(
     reports_dir.mkdir(parents=True, exist_ok=True)
     latency = build_latency_profile(events)
     capture_env = str(manifest.get("capture_environment") or "").lower()
-    use_legacy_paper_summary = "paper" in capture_env or waterfall_records_path is not None
+    use_broker_summary = "external" in capture_env or waterfall_records_path is not None
     order_summary_name = (
-        "paper_order_summary.json"
-        if use_legacy_paper_summary
+        "broker_order_summary.json"
+        if use_broker_summary
         else "rithmic_test_order_summary.json"
     )
     order_summary = (
-        build_paper_order_summary(events)
-        if use_legacy_paper_summary
+        build_broker_order_summary(events)
+        if use_broker_summary
         else build_rithmic_test_order_summary(events)
     )
 

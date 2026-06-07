@@ -44,7 +44,7 @@ def test_crypto_smoke_decision_quarantines_without_venue_submit_ack() -> None:
     assert decision["action"] == "QUARANTINE"
     assert "crypto venue submit-to-ack" in decision["reason"]
     assert decision["top_smoke_candidate"] == "crypto_candidate"
-    assert decision["live_registry_ready"] is False
+    assert decision["activation_registry_ready"] is False
     assert any(gate["gate"] == "bitcoin_edge_packets" for gate in decision["blocking_gates"])
 
 
@@ -1076,7 +1076,7 @@ def test_crypto_smoke_blocks_run_when_after_action_required_gate_fails(tmp_path,
 
     assert result["state"] == "blocked"
     assert stages["after_action"] == "blocked"
-    assert result["decision"]["live_registry_ready"] is False
+    assert result["decision"]["activation_registry_ready"] is False
     assert result["decision"]["after_action_blocking_gate"]["gate"] == "after_action_gpt55_xhigh"
 
 

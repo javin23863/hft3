@@ -112,8 +112,8 @@ int main(int argc, char** argv) {
     hft::SPSCQueue<hft::OrderEvent, 8192> order_queue;
     hft::ConnectionConfig gw_cfg;
     gw_cfg.environment = "Rithmic Aurora";
-    gw_cfg.username = "paper";
-    gw_cfg.password = "paper";
+    gw_cfg.username = "sim_user";
+    gw_cfg.password = "sim_password";
     gw_cfg.app_name = "hft3_research_sim";
     gw_cfg.app_version = "1.0";
     hft::RithmicAdapter gateway(gw_cfg, &mbo_queue, &order_queue);

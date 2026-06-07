@@ -86,7 +86,7 @@ CME_RUNTIME_READINESS_SCHEMA = "workbench_cme_runtime_readiness_v1"
 CME_RUNTIME_REQUIRED_GATES = (
     "lane_registry",
     "cross_lane_feature_fabric",
-    "rithmic_paper_endpoint",
+    "rithmic_external_endpoint",
     "submit_to_ack_latency",
     "event_universe",
 )
@@ -639,7 +639,7 @@ def _append_decision_blocking_gates(snapshot: RunEvidenceSnapshot, gates: list[d
             existing.append(gate)
             seen.add(key)
     decision["blocking_gates"] = existing
-    decision["live_registry_ready"] = False
+    decision["activation_registry_ready"] = False
     if str(decision.get("action") or "").upper() == "PROMOTE":
         gate_names = ", ".join(str(gate.get("gate", "")) for gate in gates if gate.get("gate"))
         decision["action"] = "QUARANTINE"
@@ -647,26 +647,26 @@ def _append_decision_blocking_gates(snapshot: RunEvidenceSnapshot, gates: list[d
     snapshot.decision = decision
 
 
-def _rithmic_endpoint_status(repo: Path, *, force_paper: bool = False) -> dict[str, Any]:
+def _rithmic_endpoint_status(repo: Path, *, force_external: bool = False) -> dict[str, Any]:
     try:
         from data_system.rithmic_trial.endpoint_status import (
-            PAPER_ENDPOINT_PROFILE,
+            EXTERNAL_ENDPOINT_PROFILE,
             default_api_config_for_profile,
             endpoint_status_from_config,
         )
 
         env_config = os.environ.get("RITHMIC_API_CONFIG", "").strip()
         profile = os.environ.get("RITHMIC_ENDPOINT_PROFILE", "").strip()
-        if force_paper:
-            profile = PAPER_ENDPOINT_PROFILE
-        if env_config and not force_paper:
+        if force_external:
+            profile = EXTERNAL_ENDPOINT_PROFILE
+        if env_config and not force_external:
             config_path = Path(env_config)
             if not config_path.is_absolute():
                 config_path = repo / config_path
         else:
             config_path = default_api_config_for_profile(
                 repo,
-                PAPER_ENDPOINT_PROFILE if profile == PAPER_ENDPOINT_PROFILE or force_paper else "test_orangeburg",
+                EXTERNAL_ENDPOINT_PROFILE if profile == EXTERNAL_ENDPOINT_PROFILE or force_external else "test_orangeburg",
             )
         return endpoint_status_from_config(config_path, repo_root=repo)
     except Exception as exc:
@@ -676,9 +676,9 @@ def _rithmic_endpoint_status(repo: Path, *, force_paper: bool = False) -> dict[s
             "generated_at_utc": datetime.now().astimezone().isoformat(),
             "status": "BLOCKING",
             "reason_code": "RITHMIC_ENDPOINT_STATUS_ERROR",
-            "profile": "paper_chicago" if force_paper else os.environ.get("RITHMIC_ENDPOINT_PROFILE", ""),
-            "system": "Rithmic Paper Trading" if force_paper else "",
-            "gateway": "Chicago Area" if force_paper else "",
+            "profile": "external_chicago" if force_external else os.environ.get("RITHMIC_ENDPOINT_PROFILE", ""),
+            "system": "Rithmic external broker" if force_external else "",
+            "gateway": "Chicago Area" if force_external else "",
             "config_path": "",
             "config_exists": False,
             "credentials": {"username_set": False, "password_set": False, "redacted": True},
@@ -709,10 +709,10 @@ def _cme_runtime_readiness(
 ) -> dict[str, Any]:
     readiness_blocking = [dict(gate) for gate in blocking_gates if isinstance(gate, dict)]
     endpoint_status = str(rithmic_endpoint.get("status") or "").upper()
-    if endpoint_status not in {"READY_TO_CONNECT", "CONNECTED"} and not _has_gate(readiness_blocking, "rithmic_paper_endpoint"):
+    if endpoint_status not in {"READY_TO_CONNECT", "CONNECTED"} and not _has_gate(readiness_blocking, "rithmic_external_endpoint"):
         readiness_blocking.append(
             {
-                "gate": "rithmic_paper_endpoint",
+                "gate": "rithmic_external_endpoint",
                 "status": rithmic_endpoint.get("status", "BLOCKING"),
                 "reason": rithmic_endpoint.get("reason_code") or "RITHMIC_ENDPOINT_NOT_READY",
             }
@@ -731,7 +731,7 @@ def _cme_runtime_readiness(
         "lane": "cme_futures",
         "status": status,
         "fail_closed": True,
-        "live_registry_ready": status == "PASS",
+        "activation_registry_ready": status == "PASS",
         "required_gates": list(CME_RUNTIME_REQUIRED_GATES),
         "blocking_gates": readiness_blocking,
     }
@@ -760,11 +760,11 @@ def _ibkr_endpoint_status(repo: Path, *, connect: bool = True) -> dict[str, Any]
             "generated_at_utc": datetime.now().astimezone().isoformat(),
             "status": "BLOCKING",
             "reason_code": "IBKR_ENDPOINT_STATUS_ERROR",
-            "profile": "ibkr_paper_socket",
+            "profile": "ibkr_broker_socket",
             "provider": "interactive_brokers",
             "transport": "tws_socket",
-            "mode": os.environ.get("IBKR_SOCKET_MODE", "paper"),
-            "system": "IBKR Paper Trading",
+            "mode": os.environ.get("IBKR_SOCKET_MODE", "external"),
+            "system": "IBKR external broker socket",
             "gateway": "TWS or IB Gateway headless socket",
             "credentials": {"account_id_set": False, "redacted": True},
             "secret_exposed": False,
@@ -780,7 +780,7 @@ def _ibkr_endpoint_status(repo: Path, *, connect: bool = True) -> dict[str, Any]
 
 
 def _decorate_ibkr_endpoint_for_pipeline(endpoint: dict[str, Any]) -> dict[str, Any]:
-    """Separate model-pipeline readiness from broker live-routing readiness."""
+    """Separate model-pipeline readiness from broker broker-routing readiness."""
 
     if not endpoint:
         return {}
@@ -797,12 +797,12 @@ def _decorate_ibkr_endpoint_for_pipeline(endpoint: dict[str, Any]) -> dict[str, 
     decorated["routing_ready"] = routing_ready
     decorated["pipeline_blocking"] = pipeline_blocking
     decorated["pipeline_gate_status"] = "BLOCKING" if pipeline_blocking else "PASS"
-    decorated["live_routing_gate_status"] = "PASS" if routing_ready else "ROUTING_BLOCKED"
+    decorated["broker_routing_gate_status"] = "PASS" if routing_ready else "ROUTING_BLOCKED"
     decorated["routing_blocking_gates"] = decorated.get("blocking_gates", [])
     if not routing_ready and not pipeline_blocking:
         decorated["pipeline_note"] = (
             "Equities/options research pipeline is allowed to continue. "
-            "IBKR live routing remains gated until the headless API session is connected."
+            "IBKR broker routing remains gated until the headless API session is connected."
         )
     return decorated
 
@@ -946,8 +946,8 @@ def _rithmic_report_binding(
                 }
             )
 
-    if not (reports.get("paper_order_summary") or reports.get("rithmic_test_order_summary")):
-        issues.append({"artifact": "paper_order_summary.json", "issue": "missing"})
+    if not reports.get("broker_order_summary"):
+        issues.append({"artifact": "broker_order_summary.json", "issue": "missing"})
 
     return {
         "status": "PASS" if not issues else "BLOCKING",
@@ -960,7 +960,7 @@ def _rithmic_report_binding(
 
 
 def _latest_rithmic_trial_bundle(repo: Path) -> dict[str, Any]:
-    capture_root = repo / "data" / "raw" / "rithmic_trial_live_capture"
+    capture_root = repo / "data" / "raw" / "rithmic_trial_capture"
     manifests = [path for path in capture_root.glob("*/*/manifest.json") if path.is_file()]
     if not manifests:
         return {}
@@ -972,7 +972,7 @@ def _latest_rithmic_trial_bundle(repo: Path) -> dict[str, Any]:
     symbol_reports_dir = repo / "reports" / "rithmic_trial" / capture_date / symbol
     legacy_reports_dir = repo / "reports" / "rithmic_trial" / capture_date
     reports_dir = symbol_reports_dir if symbol_reports_dir.is_dir() else legacy_reports_dir
-    normalized_file = repo / "data" / "normalized" / "rithmic_trial_live_capture" / capture_date / symbol / "events.ndjson"
+    normalized_file = repo / "data" / "normalized" / "rithmic_trial_capture" / capture_date / symbol / "events.ndjson"
     replay_file = (
         repo
         / "data"
@@ -989,8 +989,7 @@ def _latest_rithmic_trial_bundle(repo: Path) -> dict[str, Any]:
         "data_quality": read_json(reports_dir / "data_quality_report.json"),
         "book_reconstruction": read_json(reports_dir / "book_reconstruction_report.json"),
         "latency_profile": read_json(reports_dir / "latency_profile.json"),
-        "paper_order_summary": read_json(reports_dir / "paper_order_summary.json"),
-        "rithmic_test_order_summary": read_json(reports_dir / "rithmic_test_order_summary.json"),
+        "broker_order_summary": read_json(reports_dir / "broker_order_summary.json"),
         "hftbacktest_conversion": read_json(reports_dir / "hftbacktest_conversion_report.json"),
     }
     paths = {
@@ -1004,7 +1003,7 @@ def _latest_rithmic_trial_bundle(repo: Path) -> dict[str, Any]:
         "data_quality_report": str(reports_dir / "data_quality_report.json"),
         "book_reconstruction_report": str(reports_dir / "book_reconstruction_report.json"),
         "latency_profile": str(reports_dir / "latency_profile.json"),
-        "paper_order_summary": str(reports_dir / "paper_order_summary.json"),
+        "broker_order_summary": str(reports_dir / "broker_order_summary.json"),
         "hftbacktest_conversion_report": str(reports_dir / "hftbacktest_conversion_report.json"),
     }
     manifest = read_json(manifest_path)
@@ -1018,18 +1017,18 @@ def _latest_rithmic_trial_bundle(repo: Path) -> dict[str, Any]:
     quality = reports["data_quality"]
     conversion = reports["hftbacktest_conversion"]
     latency = reports["latency_profile"]
-    paper_summary = reports["paper_order_summary"] or reports["rithmic_test_order_summary"]
+    broker_summary = reports["broker_order_summary"]
     event_type_counts = quality.get("event_type_counts") or {}
     row_count = quality.get("event_count") or manifest.get("row_count") or 0
     trade_count = event_type_counts.get("trade", 0)
     quote_count = event_type_counts.get("quote", 0)
     depth_count = event_type_counts.get("depth", 0)
-    paired_count = paper_summary.get("paired_count", latency.get("paired_count", 0))
+    paired_count = broker_summary.get("paired_count", latency.get("paired_count", 0))
     quality_status = str(quality.get("status") or "missing")
     conversion_status = str(conversion.get("status") or "missing")
     latency_status = str(latency.get("status") or "missing")
     return {
-        "run_id": f"rithmic_paper_{capture_date}_{symbol}",
+        "run_id": f"rithmic_external_{capture_date}_{symbol}",
         "root": str(symbol_dir),
         "capture_date": capture_date,
         "symbol": manifest.get("symbol") or symbol,
@@ -1479,7 +1478,7 @@ def _selected_run_link(
     session_run_ids: set[str],
 ) -> tuple[str, str]:
     if _path_is_within(session_dir, selected_root):
-        return "MATCHED", "Trade Manager session artifacts live under the selected run root."
+        return "MATCHED", "Trade Manager session artifacts are stored under the selected run root."
     if not selected_run_id:
         return "NOT_SELECTED", "No selected run id was supplied for session linkage."
     if selected_run_id in session_run_ids:
@@ -1534,8 +1533,8 @@ def _trade_manager_artifact_error(
         "selected_run_link_status": "ERROR",
         "selected_run_link_reason": "Session artifacts could not be loaded safely.",
         "session_run_ids": [],
-        "live_routing_status": "NOT_WIRED",
-        "live_routing_reason": "Live routing stays blocked because Trade Manager session evidence is malformed.",
+        "broker_routing_status": "NOT_WIRED",
+        "broker_routing_reason": "Broker routing stays blocked because Trade Manager session evidence is malformed.",
     }
 
 
@@ -1591,8 +1590,8 @@ def _trade_manager_snapshot(
             "selected_run_link_status": "NO_SESSION",
             "selected_run_link_reason": "No Trade Manager session artifacts were found.",
             "session_run_ids": [],
-            "live_routing_status": "NOT_WIRED",
-            "live_routing_reason": "Trade Manager artifacts are present as inert/session evidence; no live execution orchestration is wired.",
+            "broker_routing_status": "NOT_WIRED",
+            "broker_routing_reason": "Trade Manager artifacts are present as inert/session evidence; no broker execution orchestration is wired.",
         }
 
     try:
@@ -1709,8 +1708,8 @@ def _trade_manager_snapshot(
         "selected_run_link_status": link_status,
         "selected_run_link_reason": link_reason,
         "session_run_ids": sorted(session_run_ids),
-        "live_routing_status": "NOT_WIRED",
-        "live_routing_reason": "Trade Manager Phase 14-23 artifacts are observable; broker/live routing remains blocked until execution orchestration is implemented.",
+        "broker_routing_status": "NOT_WIRED",
+        "broker_routing_reason": "Trade Manager Phase 14-23 artifacts are observable; broker/broker routing remains blocked until execution orchestration is implemented.",
     }
 
 
@@ -2633,7 +2632,7 @@ def _crypto_snapshot(repo: Path) -> RunEvidenceSnapshot:
         "action": "NO_RUN",
         "reason": "No crypto candidate loop status observed.",
         "top_smoke_candidate": "",
-        "live_registry_ready": False,
+        "activation_registry_ready": False,
     })
     decision_action = str(decision.get("action") or "").upper()
     blocking_gates = [
@@ -2779,7 +2778,7 @@ def _crypto_snapshot(repo: Path) -> RunEvidenceSnapshot:
             "vectorbt_promoted_order": status.get("vectorbt_promoted_order", []),
             "smoke_pass_count": sum(1 for c in candidate_rows if str(c.get("pass_fail", "")).lower() == "pass"),
             "economic_diagnostic_pass_count": _positive_proxy_pnl_count(candidate_rows),
-            "live_registry_ready": bool(decision.get("live_registry_ready")) and bool(edge_packets.get("observed")),
+            "activation_registry_ready": bool(decision.get("activation_registry_ready")) and bool(edge_packets.get("observed")),
             "bitcoin_edge_packet_status": edge_packets.get("status"),
             "blocking_gates": blocking_gates,
             "institutional_metrics": institutional_metrics,
@@ -2825,7 +2824,7 @@ def _workbench_snapshot(repo: Path, campaign_id: str = "") -> RunEvidenceSnapsho
             decision={
                 "action": "BLOCKED",
                 "reason": "Workbench campaign evidence requires an explicit selected campaign id.",
-                "live_registry_ready": False,
+                "activation_registry_ready": False,
                 "blocking_gates": [
                     {
                         "gate": "campaign_selection",
@@ -2846,7 +2845,7 @@ def _workbench_snapshot(repo: Path, campaign_id: str = "") -> RunEvidenceSnapsho
             decision={
                 "action": "BLOCKED",
                 "reason": "Selected Workbench campaign artifacts are missing.",
-                "live_registry_ready": False,
+                "activation_registry_ready": False,
                 "blocking_gates": [
                     {
                         "gate": "campaign_artifact_missing",
@@ -2914,7 +2913,7 @@ def _workbench_snapshot(repo: Path, campaign_id: str = "") -> RunEvidenceSnapsho
         decision={
             "action": "PROMOTE" if summary.get("promote_candidate") else "QUARANTINE",
             "reason": summary.get("promote_note", ""),
-            "live_registry_ready": bool(summary.get("promote_candidate")),
+            "activation_registry_ready": bool(summary.get("promote_candidate")),
             "ranking": event_rows,
             "institutional_metrics": institutional_metrics,
             "blocking_gates": summary.get("blocking_gates", []),
@@ -2945,7 +2944,7 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
     config = lane_row.get("config") or {}
     is_cme = lane == "cme_futures"
     is_ibkr_lane = lane in {"equities", "options"}
-    rithmic_endpoint = _rithmic_endpoint_status(repo, force_paper=is_cme) if is_cme else {}
+    rithmic_endpoint = _rithmic_endpoint_status(repo, force_external=is_cme) if is_cme else {}
     ibkr_endpoint = (
         _decorate_ibkr_endpoint_for_pipeline(_ibkr_endpoint_status(repo, connect=True))
         if is_ibkr_lane
@@ -2955,7 +2954,7 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
     latency_baseline = _latest_latency_baseline_summary(
         repo,
         broker="rithmic",
-        environment="paper",
+        environment="external",
     ) if is_cme else {}
     endpoint_status = str(rithmic_endpoint.get("status") or "").upper()
     endpoint_ready = (not is_cme) or endpoint_status in {"READY_TO_CONNECT", "CONNECTED"}
@@ -3000,30 +2999,30 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
         else "catalogued"
     )
     if report_binding_blocked:
-        current_stage = "paper_report_binding_blocked"
+        current_stage = "external_report_binding_blocked"
         reason = (
-            "Rithmic Paper capture is present, but its reports are not bound to the same raw checksum, "
+            "Rithmic external capture is present, but its reports are not bound to the same raw checksum, "
             "normalized file, and replay artifact."
         )
     elif has_rithmic_trial and not order_ack_measured:
-        current_stage = "paper_market_data_observed_order_ack_missing"
+        current_stage = "external_market_data_observed_order_ack_missing"
         reason = (
-            "Rithmic Paper market data capture and trade-only replay are observed, "
+            "Rithmic external market data capture and trade-only replay are observed, "
             "but no tagged submit-to-ack order pairs have been captured yet."
         )
     elif baseline_order_ack_measured:
-        current_stage = "paper_latency_baseline_observed"
+        current_stage = "broker_latency_baseline_observed"
         reason = (
-            "Rithmic Paper submit-to-ack baseline is observed. Placement speed is separate from broker "
+            "Rithmic broker submit-to-ack baseline is observed. Placement speed is separate from broker "
             "acknowledgment latency; remaining Workbench gates still control promotion."
         )
     elif endpoint_blocked:
         current_stage = "endpoint_not_ready"
         reason_code = str(rithmic_endpoint.get("reason_code") or endpoint_status or "RITHMIC_ENDPOINT_NOT_READY")
-        if reason_code == "PAPER_ENDPOINT_PARAMS_MISSING":
-            reason = "Rithmic Paper/Chicago endpoint parameters are missing."
+        if reason_code == "EXTERNAL_ENDPOINT_PARAMS_MISSING":
+            reason = "Rithmic external Chicago endpoint parameters are missing."
         elif reason_code == "RITHMIC_CREDENTIALS_MISSING":
-            reason = "Rithmic Paper credentials are not loaded into the runtime environment."
+            reason = "Rithmic credentials are not loaded into the runtime environment."
         elif reason_code == "GATEWAY_LIBRARY_NOT_FOUND":
             reason = "Rithmic C++ gateway library is not built or not pointed to by HFT3_RITHMIC_GATEWAY_SO."
         else:
@@ -3035,9 +3034,9 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
             reason = "IBKR TWS/Gateway socket is not reachable for the equities lane."
         elif reason_code == "IBKR_API_PACKAGE":
             reason = "IBKR API package is missing, so a headless API handshake cannot run."
-        elif reason_code == "IBKR_PAPER_DISCLAIMER":
+        elif reason_code == "IBKR_BROKER_DISCLAIMER":
             reason = (
-                "IBKR rejected the headless API handshake because the paper trading disclaimer is pending."
+                "IBKR rejected the headless API handshake because the broker trading disclaimer is pending."
             )
         elif reason_code == "IBKR_API_HANDSHAKE":
             reason = "IBKR socket is reachable, but the headless API handshake did not complete."
@@ -3056,7 +3055,7 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
         reason = "Lane is registered; no active selected run has emitted execution evidence."
     blocking_gates = [
         {
-            "gate": "rithmic_paper_endpoint"
+            "gate": "rithmic_external_endpoint"
             if endpoint_blocked
             else "ibkr_equities_endpoint"
             if ibkr_endpoint_blocked
@@ -3089,7 +3088,7 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
     conversion = rithmic_reports.get("hftbacktest_conversion") or {}
     book = rithmic_reports.get("book_reconstruction") or {}
     latency_profile = rithmic_reports.get("latency_profile") or {}
-    paper_order_summary = rithmic_reports.get("paper_order_summary") or {}
+    broker_order_summary = rithmic_reports.get("broker_order_summary") or {}
     rithmic_paths = rithmic_trial.get("paths") or {}
     event_counts = rithmic_trial.get("event_type_counts") or {}
     data_files = []
@@ -3116,7 +3115,7 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
         backtest_rows.append(
             {
                 "candidate_id": rithmic_trial.get("run_id"),
-                "target": "CME paper market-data replay",
+                "target": "CME external market-data replay",
                 "pass_fail": "PASS"
                 if reports_bound and data_quality.get("status") == "pass" and conversion.get("status") == "pass"
                 else "BLOCKING",
@@ -3136,7 +3135,7 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
         "rithmic_data_quality_report": rithmic_paths.get("data_quality_report", ""),
         "rithmic_hftbacktest_conversion_report": rithmic_paths.get("hftbacktest_conversion_report", ""),
         "rithmic_latency_profile": rithmic_paths.get("latency_profile", ""),
-        "rithmic_paper_order_summary": rithmic_paths.get("paper_order_summary", ""),
+        "rithmic_broker_order_summary": rithmic_paths.get("broker_order_summary", ""),
     }
     if not has_rithmic_trial:
         trial_artifacts = {}
@@ -3167,7 +3166,7 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
         "endpoint_profile": rithmic_endpoint.get("profile", "") if is_cme else "",
         "paired_count": baseline_order_ack_count,
         "trial_capture_paired_count": rithmic_trial.get("paired_count", 0),
-        "summary": latency_baseline or paper_order_summary,
+        "summary": latency_baseline or broker_order_summary,
         "source": "latency_baseline" if baseline_order_ack_measured else "missing_native_cpp_latency_baseline",
     }
     runtime_readiness = (
@@ -3182,7 +3181,7 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
     decision = {
         "action": "QUARANTINE",
         "reason": reason,
-        "live_registry_ready": bool(runtime_readiness.get("live_registry_ready")) if is_cme else False,
+        "activation_registry_ready": bool(runtime_readiness.get("activation_registry_ready")) if is_cme else False,
         "blocking_gates": blocking_gates,
     }
     system = {
@@ -3215,7 +3214,7 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
                 "status": feature_fabric.get("status", "BLOCKING"),
             },
             {
-                "name": "rithmic_paper_endpoint",
+                "name": "rithmic_external_endpoint",
                 "status": rithmic_endpoint.get("status", "not_applicable") if is_cme else "not_applicable",
             },
             {
@@ -3225,7 +3224,7 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
                 else "not_applicable",
             },
             {
-                "name": "paper_market_data_capture",
+                "name": "external_market_data_capture",
                 "status": "observed" if has_rithmic_trial else "missing",
             },
             {
@@ -3244,7 +3243,7 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
                 "name": "submit_to_ack_latency",
                 "status": order_ack_status,
             },
-            {"name": "trade_manager_session", "status": "loaded_by_live_monitor"},
+            {"name": "trade_manager_session", "status": "loaded_by_broker_monitor"},
         ],
         artifacts={
             "feature_fabric_manifest": feature_fabric.get("expected_artifacts", {}).get("feature_fabric_manifest.json", ""),
@@ -3296,9 +3295,9 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
                     else "not_observed"
                 ),
                 "reason": (
-                    "Rithmic Paper market data was normalized and converted into a trade-only HFT replay artifact."
+                    "Rithmic external market data was normalized and converted into a trade-only HFT replay artifact."
                     if has_rithmic_trial and reports_bound
-                    else "Rithmic Paper capture is present, but report binding failed; replay evidence is blocked until process regenerates matching artifacts."
+                    else "Rithmic external capture is present, but report binding failed; replay evidence is blocked until process regenerates matching artifacts."
                     if report_binding_blocked
                     else "No active lane run artifact has emitted backtest rows for this source."
                 ),
@@ -3321,7 +3320,7 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
             "latency_baseline": latency_baseline,
             "latency_profile": latency_profile,
             "feed_latency_us": latency_profile.get("feed_latency_us", {}),
-            "paper_order_summary": paper_order_summary,
+            "broker_order_summary": broker_order_summary,
         },
         diagnostics={
             "feature_fabric": feature_fabric,
@@ -3333,7 +3332,7 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
             "explanation": {
                 "aggregate_status": "PENDING",
                 "operator_explanation": (
-                    "CME Paper data capture is observed. Model robustness is still pending because this selected "
+                    "CME external data capture is observed. Model robustness is still pending because this selected "
                     "evidence is a data/replay lane artifact, not a promoted candidate robustness run."
                 ),
             },
@@ -3344,7 +3343,7 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
             "data_quality_report": rithmic_paths.get("data_quality_report", ""),
             "book_reconstruction_report": rithmic_paths.get("book_reconstruction_report", ""),
             "latency_profile": rithmic_paths.get("latency_profile", ""),
-            "paper_order_summary": rithmic_paths.get("paper_order_summary", ""),
+            "broker_order_summary": rithmic_paths.get("broker_order_summary", ""),
             "hftbacktest_conversion_report": rithmic_paths.get("hftbacktest_conversion_report", ""),
             "hftbacktest_npz": rithmic_paths.get("npz", ""),
         }
@@ -3363,7 +3362,7 @@ def _autonomous_snapshot(repo: Path) -> RunEvidenceSnapshot:
         decision={
             "action": "BLOCKED",
             "reason": "Autonomous latest-run fallback is disabled for the fresh all-lane boundary.",
-            "live_registry_ready": False,
+            "activation_registry_ready": False,
             "blocking_gates": [
                 {
                     "gate": "autonomous_latest_fallback",
@@ -3406,7 +3405,7 @@ def _stale_source_blocked_snapshot(repo: Path, source: str, active: dict[str, An
                 f"{source} artifacts are outside the active all-lane run boundary. "
                 "They cannot be used as evidence for the fresh run."
             ),
-            "live_registry_ready": False,
+            "activation_registry_ready": False,
             "blocking_gates": [
                 {
                     "gate": "stale_artifact_source",
@@ -3433,7 +3432,7 @@ def _legacy_source_disabled_snapshot(repo: Path, source: str) -> RunEvidenceSnap
         decision={
             "action": "BLOCKED",
             "reason": f"{source} is not a production Workbench run source for the fresh all-lane boundary.",
-            "live_registry_ready": False,
+            "activation_registry_ready": False,
             "blocking_gates": [
                 {
                     "gate": "legacy_source_disabled",
@@ -3463,7 +3462,7 @@ def _all_lanes_snapshot(repo: Path) -> RunEvidenceSnapshot:
             decision={
                 "action": "BLOCKED",
                 "reason": "No active all-lane run manifest exists. Run fresh-start before all-model testing.",
-                "live_registry_ready": False,
+                "activation_registry_ready": False,
                 "blocking_gates": [
                     {
                         "gate": "active_run_manifest",
@@ -3562,7 +3561,7 @@ def _all_lanes_snapshot(repo: Path) -> RunEvidenceSnapshot:
     state = str(summary.get("state") or active.get("state") or ("blocked" if blocking_gates else "planned"))
     summary_blocking_gates = list(summary.get("blocking_gates") or [])
     decision_blocking_gates = blocking_gates + summary_blocking_gates
-    live_registry_ready = bool(summary.get("live_registry_ready", False)) and not decision_blocking_gates
+    activation_registry_ready = bool(summary.get("activation_registry_ready", False)) and not decision_blocking_gates
     decision_action = "BLOCKED" if decision_blocking_gates else summary.get("decision_action") or "QUARANTINE"
     decision_reason = (
         "All-lane summary has blocking gates; production promotion is blocked."
@@ -3644,7 +3643,7 @@ def _all_lanes_snapshot(repo: Path) -> RunEvidenceSnapshot:
         decision={
             "action": decision_action,
             "reason": decision_reason,
-            "live_registry_ready": live_registry_ready,
+            "activation_registry_ready": activation_registry_ready,
             "blocking_gates": decision_blocking_gates,
             "terminal_counts": terminal_counts,
         },
@@ -3699,7 +3698,7 @@ def load_run_evidence(repo: Path, source: str, *, campaign_id: str = "") -> RunE
     is_cme_lane = lane == "cme_futures"
     is_ibkr_lane = lane in {"equities", "options"}
     rithmic_endpoint = (snapshot.system or {}).get("rithmic_endpoint") or (
-        _rithmic_endpoint_status(repo, force_paper=True) if is_cme_lane else {}
+        _rithmic_endpoint_status(repo, force_external=True) if is_cme_lane else {}
     )
     ibkr_endpoint = (snapshot.system or {}).get("ibkr_endpoint") or (
         _ibkr_endpoint_status(repo, connect=True) if is_ibkr_lane else {}
@@ -3769,7 +3768,7 @@ def load_run_evidence(repo: Path, source: str, *, campaign_id: str = "") -> RunE
         )
         decision = dict(snapshot.decision or {})
         decision["runtime_readiness"] = readiness
-        decision["live_registry_ready"] = readiness["live_registry_ready"]
+        decision["activation_registry_ready"] = readiness["activation_registry_ready"]
         snapshot.decision = decision
         snapshot.system = {
             **(snapshot.system or {}),

@@ -92,7 +92,7 @@ def test_render_run_header_surfaces_backend_blocking_gates(monkeypatch) -> None:
         current_stage="decision",
         decision={
             "action": "BLOCKED",
-            "live_registry_ready": False,
+            "activation_registry_ready": False,
             "blocking_gates": [
                 {
                     "gate": "active_run_manifest",
@@ -121,7 +121,7 @@ def test_render_run_header_ready_snapshot_has_no_blocker_banner(monkeypatch) -> 
         run_id="run-1",
         state="completed",
         current_stage="decision",
-        decision={"action": "PROMOTE", "live_registry_ready": True, "blocking_gates": []},
+        decision={"action": "PROMOTE", "activation_registry_ready": True, "blocking_gates": []},
     )
 
     evidence_panels.render_run_header(snapshot)
@@ -189,8 +189,8 @@ def test_tabs_are_pipeline_monitor_surface() -> None:
         "Latency Evidence",
     ]
     assert "Decision & Registry" in WORKFLOW_TABS
-    assert WORKFLOW_TABS.index("Live Monitor") > WORKFLOW_TABS.index("Decision & Registry")
-    assert WORKFLOW_TABS.index("Live Monitor") < WORKFLOW_TABS.index("Reports & Analyst")
+    assert WORKFLOW_TABS.index("Broker Monitor") > WORKFLOW_TABS.index("Decision & Registry")
+    assert WORKFLOW_TABS.index("Broker Monitor") < WORKFLOW_TABS.index("Reports & Analyst")
     assert "Model Selector" not in WORKFLOW_TABS
 
 
@@ -458,7 +458,7 @@ def test_app_tabs_use_shared_run_evidence_snapshot() -> None:
     assert "Rithmic Endpoint Status" in panel_src
     assert "Cross-Lane Feature Fabric" in panel_src
     assert "Registered model lanes" in panel_src
-    assert "Paper/Chicago API parameters are missing" in panel_src
+    assert "External/Chicago API parameters are missing" in panel_src
     assert "Google/Gemini" not in panel_src
     assert "Evidence candidate" in panel_src
     assert "Smoke triage order" in panel_src

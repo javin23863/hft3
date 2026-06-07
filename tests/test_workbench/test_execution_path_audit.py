@@ -54,7 +54,7 @@ def _span(tmp_path: Path, *, action: str = "new", offset_ns: int = 0) -> dict[st
     return build_span(
         run_id="captured",
         mode="replay",
-        environment="paper",
+        environment="external",
         broker="rithmic",
         venue="CME",
         exchange="CME",
@@ -90,7 +90,7 @@ def _config(tmp_path: Path, *, run_id: str = "audit-replay", mode: str = "replay
         repo_root=tmp_path,
         run_id=run_id,
         mode=mode,
-        environment="paper",
+        environment="external",
         broker="rithmic",
         venue="CME",
         exchange="CME",
@@ -146,13 +146,13 @@ def test_audit_cli_consumes_captured_replay_spans(tmp_path: Path) -> None:
     assert replay_summary["status"] in {"pass", "warn"}
 
 
-def test_paper_live_mode_fails_loudly_without_execution_boundaries(tmp_path: Path) -> None:
-    rc = audit_main(["--mode", "paper-live", "--repo-root", str(tmp_path), "--run-id", "paper-blocked"])
+def test_external_mode_fails_loudly_without_execution_boundaries(tmp_path: Path) -> None:
+    rc = audit_main(["--mode", "external", "--repo-root", str(tmp_path), "--run-id", "external-blocked"])
 
     assert rc == 2
-    summary = json.loads((tmp_path / "reports" / "latency_audit" / "paper-blocked_summary.json").read_text(encoding="utf-8"))
+    summary = json.loads((tmp_path / "reports" / "latency_audit" / "external-blocked_summary.json").read_text(encoding="utf-8"))
     assert summary["status"] == "blocked"
-    assert summary["blocked_reason"] == "PAPER_LIVE_REPLACED_BY_NATIVE_CPP_PROBE"
+    assert summary["blocked_reason"] == "EXTERNAL_REQUIRES_NATIVE_CPP_PROBE"
     assert summary["sample_count"] == 0
 
 
@@ -170,7 +170,7 @@ def _native_summary(*, count: int = 1000, probe: str = "rithmic_latency_probe") 
         "sample_count": count,
         "sample_path": "data/latency_baselines/2026-06-06/native-prod.jsonl",
         "operating_profile": {"host": "CHI404"},
-        "broker_mode": {"status": "observed", "broker": "rithmic", "environment": "paper"},
+        "broker_mode": {"status": "observed", "broker": "rithmic", "environment": "external"},
         "broker_artifacts": {
             "hot_path_language": "c++",
             "wrapper": "none",
@@ -237,7 +237,7 @@ def test_span_validation_rejects_ack_as_placement_or_non_monotonic_order() -> No
         build_span(
             run_id="bad",
             mode="replay",
-            environment="paper",
+            environment="external",
             broker="rithmic",
             venue="CME",
             exchange="CME",
@@ -266,7 +266,7 @@ def test_pre_send_blocking_io_is_a_hard_failure(tmp_path: Path) -> None:
     span = build_span(
         run_id="io-fail",
         mode="replay",
-        environment="paper",
+        environment="external",
         broker="rithmic",
         venue="CME",
         exchange="CME",

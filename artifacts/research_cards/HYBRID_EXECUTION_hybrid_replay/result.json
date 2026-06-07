@@ -21,7 +21,7 @@
       "events": 146184,
       "latency_ms": 1.0,
       "latency_source": "workstation_gate_fallback_1ms",
-      "backtest_latency_note": "Paper order submit\u2192ack not measured; pass --latency-ms or run scripts/chi404_run_paper_latency_sweep.sh on CHI404. TCP connect is network health only \u2014 not used for execution latency.",
+      "backtest_latency_note": "Broker order submit\u2192ack not measured; pass --latency-ms or run scripts/chi404_run_broker_latency_sweep.sh on CHI404. TCP connect is network health only \u2014 not used for execution latency.",
       "chi404_measured_speed": null,
       "queue_model": "LogProbQueueModel2",
       "step_ns": 100000,
@@ -33,7 +33,7 @@
         "trading_volume": 20966.0,
         "position": 2736.0
       },
-      "gate_latency_note": "Paper order submit\u2192ack not measured; pass --latency-ms or run scripts/chi404_run_paper_latency_sweep.sh on CHI404. TCP connect is network health only \u2014 not used for execution latency. Gate used --latency-ms 1.0 workstation fallback for repeatable local PASS."
+      "gate_latency_note": "Broker order submit\u2192ack not measured; pass --latency-ms or run scripts/chi404_run_broker_latency_sweep.sh on CHI404. TCP connect is network health only \u2014 not used for execution latency. Gate used --latency-ms 1.0 workstation fallback for repeatable local PASS."
     }
   }
 }

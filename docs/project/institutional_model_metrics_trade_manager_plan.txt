@@ -1,10 +1,10 @@
 Developer Task: Add Institutional Model Metrics Tracking + Trade Manager Behavior Envelope
 
 Objective:
-Implement a metrics and monitoring layer that grades every model after robustness testing and continuously monitors live/paper/shadow behavior against expected bounds. This is not a redesign of the research pipeline, robustness engine, execution engine, or trade manager. Add a clean, versioned measurement layer that plugs into the existing backtest, robustness, portfolio, and live-monitoring flows.
+Implement a metrics and monitoring layer that grades every model after robustness testing and continuously monitors external/shadow behavior against expected bounds. This is not a redesign of the research pipeline, robustness engine, execution engine, or trade manager. Add a clean, versioned measurement layer that plugs into the existing backtest, robustness, portfolio, and live-monitoring flows.
 
 Core Principle:
-Robustness testing qualifies the model. The trade manager governs the model. Every promoted model must produce a model scorecard and a model behavior envelope that can be monitored in live/paper/shadow mode.
+Robustness testing qualifies the model. The trade manager governs the model. Every promoted model must produce a model scorecard and a model behavior envelope that can be monitored in external/shadow mode.
 
 Do not remove existing functionality. Do not change existing model logic unless required to expose metrics. Do not hardcode for one symbol or one asset class. This must work across equities, options, futures, crypto/BTC, and prediction-market forks where applicable.
 
@@ -403,7 +403,7 @@ Stores GREEN/YELLOW/RED state over time.
 Stores warnings, breaches, kill events, and state transitions.
 
 6. model_live_observations
-Stores rolling live/paper/shadow behavior snapshots.
+Stores rolling external/shadow behavior snapshots.
 
 7. model_metric_calculation_logs
 Stores calculation version, source data, errors, and warnings.
@@ -470,7 +470,7 @@ For each model, allow inspection by:
 - signal bucket
 - confidence bucket
 - execution venue
-- live / paper / shadow mode
+- external / shadow mode
 
 ============================================================
 8. SCORING SYSTEM
@@ -526,7 +526,7 @@ Example structure:
 - strategy-family overrides
 - regime overrides
 - venue overrides
-- live/paper/shadow overrides
+- external/shadow overrides
 
 The config should allow threshold tuning without code changes.
 
@@ -612,7 +612,7 @@ This task is complete only when:
 1. Every model exiting robustness testing automatically produces a full model scorecard.
 2. Every promoted model receives a versioned Model Behavior Envelope.
 3. The trade manager can read the envelope and classify the model as GREEN, YELLOW, or RED.
-4. Live/paper/shadow behavior is compared against historical expected ranges.
+4. External/shadow behavior is compared against historical expected ranges.
 5. Alerts are generated for drift, drawdown breaches, slippage breaches, latency breaches, and abnormal signal behavior.
 6. Metrics are persisted, versioned, auditable, and reproducible.
 7. Existing backtest/robustness outputs can be backfilled.

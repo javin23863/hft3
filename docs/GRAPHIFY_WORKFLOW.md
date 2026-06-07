@@ -27,7 +27,7 @@ From repo root (`C:\...\hft3`):
 On CHI404:
 
 ```bash
-bash scripts/graphify_gate.sh "CHI404 R|Trader deploy paper latency"
+bash scripts/graphify_gate.sh "CHI404 R|Trader deploy broker latency"
 bash scripts/graphify_pre_edit.ps1   # if using PowerShell on workstation only
 ```
 

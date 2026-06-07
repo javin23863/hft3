@@ -1,5 +1,5 @@
 #!/bin/bash
-# Full OC stability: post-BIOS verify + jitter + optional paper sweep under market load.
+# Full OC stability: post-BIOS verify + jitter + optional broker sweep under market load.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -25,20 +25,20 @@ fi
 
 if [[ "${HFT3_OC_MARKET_LOAD:-0}" == "1" ]]; then
   log "Market-load phase enabled"
-  if [[ "${HFT3_OC_RUN_PAPER_SWEEP:-0}" == "1" ]]; then
-    log "Running paper latency sweep (canonical path)"
+  if [[ "${HFT3_OC_RUN_BROKER_SWEEP:-0}" == "1" ]]; then
+    log "Running broker latency sweep (canonical path)"
     cd "$REPO"
-    export PAPER_LATENCY_RUN_ID="${PAPER_LATENCY_RUN_ID:-${RUN_ID}_paper}"
-    bash scripts/chi404_run_paper_latency_sweep.sh 2>&1 | tee -a "$LOG_DIR/stability.log"
+    export BROKER_LATENCY_RUN_ID="${BROKER_LATENCY_RUN_ID:-${RUN_ID}_broker}"
+    bash scripts/chi404_run_broker_latency_sweep.sh 2>&1 | tee -a "$LOG_DIR/stability.log"
   else
-    log "FAIL: HFT3_OC_MARKET_LOAD=1 requires HFT3_OC_RUN_PAPER_SWEEP=1 for full pass"
+    log "FAIL: HFT3_OC_MARKET_LOAD=1 requires HFT3_OC_RUN_BROKER_SWEEP=1 for full pass"
     echo "OC_STABILITY=FAIL" > "$LOG_DIR/result.txt"
     exit 1
   fi
   log "OC_STABILITY=PASS"
   echo "OC_STABILITY=PASS" > "$LOG_DIR/result.txt"
 else
-  log "OC_STABILITY=JITTER_PASS (set HFT3_OC_MARKET_LOAD=1 + HFT3_OC_RUN_PAPER_SWEEP=1 during RTH for full pass)"
+  log "OC_STABILITY=JITTER_PASS (set HFT3_OC_MARKET_LOAD=1 + HFT3_OC_RUN_BROKER_SWEEP=1 during RTH for full pass)"
   echo "OC_STABILITY=JITTER_PASS" > "$LOG_DIR/result.txt"
 fi
 

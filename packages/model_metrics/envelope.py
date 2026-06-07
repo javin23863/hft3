@@ -1,4 +1,4 @@
-"""Generate live operating envelopes from scorecards and observed evidence."""
+"""Generate runtime operating envelopes from scorecards and observed evidence."""
 
 from __future__ import annotations
 
@@ -105,7 +105,7 @@ def generate_behavior_envelope(
         strategy_family=str(meta.get("strategy_family", "")),
         regime_id=str(meta.get("regime_id", "")),
         venue=str(meta.get("venue", "")),
-        mode=str(meta.get("mode", "")),
+        runtime_context=str(meta.get("runtime_context", "")),
     )
     returns = _numbers(inputs.get("returns") or [])
     trades = [row for row in inputs.get("trades", []) if isinstance(row, dict)]
@@ -137,7 +137,7 @@ def generate_behavior_envelope(
     }
     warnings = []
     if scorecard.grade in {"D", "F"}:
-        warnings.append("scorecard grade is not eligible for active live operation")
+        warnings.append("scorecard grade is not eligible for active operation")
     if not returns:
         warnings.append("return samples missing; PnL envelope ranges unavailable")
     audit_status = str(execution_audit.get("status") or "missing").lower()

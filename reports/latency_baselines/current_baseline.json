@@ -2,7 +2,7 @@
   "schema_version": "latency_baseline_summary_v1",
   "baseline_role": "current_baseline",
   "baseline_status": "active",
-  "baseline_reason": "Fastest observed usable CHI404 Rithmic Paper native C++ profile. No CPU affinity and no realtime priority avoided starving Rithmic callback threads; memory lock and prefault stayed enabled.",
+  "baseline_reason": "Fastest observed usable CHI404 Rithmic external native C++ profile. No CPU affinity and no realtime priority avoided starving Rithmic callback threads; memory lock and prefault stayed enabled.",
   "accepted_as_baseline_at_utc": "2026-06-05T00:00:00Z",
   "run_id": "opt_floor_noaff_nort_20260605",
   "generated_at_utc": "2026-06-04T19:29:06Z",
@@ -13,7 +13,7 @@
   "principle": "placement_trigger_and_sdk_return_are_separate_from_ack_latency",
   "operating_profile": {
     "host": "CHI404",
-    "gateway": "Rithmic Paper/Chicago",
+    "gateway": "Rithmic external Chicago",
     "hot_path_language": "c++",
     "wrapper": "none",
     "rithmic_probe_cpu": -1,
@@ -263,7 +263,7 @@
   "broker_mode": {
     "status": "observed",
     "broker": "rithmic",
-    "environment": "paper",
+    "environment": "external",
     "requested_symbol": "ESM6",
     "resolved_symbol": "ESM6",
     "venue": "CME",

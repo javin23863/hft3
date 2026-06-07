@@ -1,6 +1,6 @@
 # CHI404 CPU + memory overclock (operator)
 
-**Goal:** Run DDR5 at **4800 MT/s** (EXPO) and raise Ryzen 9 9900X boost toward **~5.6–5.7 GHz** under load while keeping jitter PASS and paper-latency stable during RTH.
+**Goal:** Run DDR5 at **4800 MT/s** (EXPO) and raise Ryzen 9 9900X boost toward **~5.6–5.7 GHz** under load while keeping jitter PASS and broker-latency stable during RTH.
 
 **Board:** ASRockRack **B650D4U-2L2T/BCM** — BMC at **`10.10.91.93`** (in-band VLAN, reachable from the host only while Linux + SSH are up). **Never reboot to BIOS without a proven out-of-band recovery path** (see [OOB requirement](#oob-requirement-never-reboot-to-bios-blind) below).
 
@@ -120,17 +120,17 @@ After **4800 PASS**, tune PBO in small steps. Log each profile in `runtime/chi40
 | B | +50 MHz PBO boost override (if exposed) | Yes | same |
 | C | Curve Optimizer **−10** all cores (optional, stability) | Yes | same + jitter |
 
-**Stop** if: POST fail, MCE in `dmesg`, `JITTER_GATE=FAIL`, or paper sweep error rate spikes.
+**Stop** if: POST fail, MCE in `dmesg`, `JITTER_GATE=FAIL`, or broker sweep error rate spikes.
 
 Do **not** chase 5.7 GHz all-core — 9900X advertises **single-core** max boost; hot path uses **2–11** under load; gate on **minimum hot-core MHz** during stress and **jitter**, not idle `cpupower`.
 
 ### 4. Stability under market load
 
-During **RTH** with R|Trader paper session healthy:
+During **RTH** with broker session healthy:
 
 ```bash
 export HFT3_OC_MARKET_LOAD=1
-export HFT3_OC_RUN_PAPER_SWEEP=1   # optional: ≥1000 order pairs
+export HFT3_OC_RUN_BROKER_SWEEP=1  # optional: >=1000 order pairs
 bash infrastructure/chi404/16_oc_stability_under_load.sh
 ```
 
@@ -138,7 +138,7 @@ Or from workstation:
 
 ```powershell
 $env:HFT3_OC_MARKET_LOAD = "1"
-$env:HFT3_OC_RUN_PAPER_SWEEP = "1"
+$env:HFT3_OC_RUN_BROKER_SWEEP = "1"
 .\scripts\run_chi404_oc_validate_remote.ps1 -Phase stability
 ```
 
@@ -146,7 +146,7 @@ Pass criteria:
 
 - `OC_VERIFY=PASS` (memory ≥4800 MT/s, min hot-core MHz ≥5400 under stress)
 - `JITTER_GATE=PASS` (p99 ≤ 20 µs on hot CPUs)
-- Paper sweep completes (if enabled)
+- Broker sweep completes (if enabled)
 - No new MCE / EDAC errors in `dmesg`
 
 ### 5. Commit new baseline
@@ -171,5 +171,5 @@ Update [docs/ai/chi404_system_spec.json](../ai/chi404_system_spec.json) `known_g
 ## Related
 
 - [HARDWARE_BASELINE.md](HARDWARE_BASELINE.md)
-- Paper latency: [CHI404_CANONICAL_ENTRYPOINTS.md](../vault/CHI404_CANONICAL_ENTRYPOINTS.md)
+- Broker latency: [CHI404_CANONICAL_ENTRYPOINTS.md](../vault/CHI404_CANONICAL_ENTRYPOINTS.md)
 - Jitter gate: `infrastructure/chi404/05_jitter_gate.sh`

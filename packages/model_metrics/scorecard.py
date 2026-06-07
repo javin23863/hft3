@@ -115,7 +115,7 @@ def generate_model_scorecard(
         strategy_family=str(meta.get("strategy_family", "")),
         regime_id=str(meta.get("regime_id", "")),
         venue=str(meta.get("venue", "")),
-        mode=str(meta.get("mode", "")),
+        runtime_context=str(meta.get("runtime_context", "")),
     )
     metric_values = metrics or calculate_metric_values(inputs)
     mmap = _metric_map(metric_values)

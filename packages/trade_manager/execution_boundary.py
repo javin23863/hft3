@@ -13,8 +13,8 @@ from trade_manager.order_state import TradeManagerOrderState, TradeManagerOrderT
 from trade_manager.risk_layer import TradeManagerRiskDecision
 
 
-EXECUTION_MODES = frozenset({"REPLAY", "PAPER", "LIVE"})
-EXECUTION_ADAPTERS = frozenset({"hftbacktest_simulated_exchange", "paper_broker", "live_broker"})
+EXECUTION_MODES = frozenset({"REPLAY", "EXTERNAL"})
+EXECUTION_ADAPTERS = frozenset({"hftbacktest_simulated_exchange", "broker"})
 ORDER_ROUTING_MODES = frozenset({"direct", "aggregated"})
 RECONNECT_HANDLING_MODES = frozenset({"automatic", "manual"})
 
@@ -35,7 +35,7 @@ class TradeManagerExecutionBoundaryError(ValueError):
 class TradeManagerExecutionConfig:
     mode: str = "REPLAY"
     adapter: str = "hftbacktest_simulated_exchange"
-    live_broker: str = ""
+    broker: str = ""
     venue: str = "CME"
     order_routing: str = "direct"
     reconnect_handling: str = "manual"
@@ -68,8 +68,8 @@ class TradeManagerExecutionConfig:
             invalid.append("mode")
         if not isinstance(adapter, str):
             invalid.append("adapter")
-        if not isinstance(self.live_broker, str):
-            invalid.append("live_broker")
+        if not isinstance(self.broker, str):
+            invalid.append("broker")
         if not isinstance(self.venue, str):
             invalid.append("venue")
         if not isinstance(self.order_routing, str):
@@ -96,15 +96,14 @@ class TradeManagerExecutionConfig:
             invalid.append("heartbeat_interval_sec")
         expected_adapter = {
             "REPLAY": "hftbacktest_simulated_exchange",
-            "PAPER": "paper_broker",
-            "LIVE": "live_broker",
+            "EXTERNAL": "broker",
         }.get(mode)
         if expected_adapter is not None and adapter != expected_adapter:
             invalid.append("adapter")
-        if mode == "LIVE" and self.live_broker != "rithmic":
-            invalid.append("live_broker")
-        if mode != "LIVE" and self.live_broker:
-            invalid.append("live_broker")
+        if mode == "EXTERNAL" and self.broker != "rithmic":
+            invalid.append("broker")
+        if mode != "EXTERNAL" and self.broker:
+            invalid.append("broker")
         if self.route_enabled:
             invalid.append("route_enabled")
         if invalid:
@@ -116,7 +115,7 @@ class TradeManagerExecutionConfig:
         return TradeManagerExecutionConfig(
             mode=self.mode.upper(),
             adapter=self.adapter,
-            live_broker=self.live_broker,
+            broker=self.broker,
             venue=self.venue,
             order_routing=self.order_routing,
             reconnect_handling=self.reconnect_handling,
@@ -130,7 +129,7 @@ class TradeManagerExecutionConfig:
         return {
             "mode": config.mode,
             "adapter": config.adapter,
-            "live_broker": config.live_broker,
+            "broker": config.broker,
             "venue": config.venue,
             "order_routing": config.order_routing,
             "reconnect_handling": config.reconnect_handling,

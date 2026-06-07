@@ -1,4 +1,4 @@
-"""CHI404 paper order latency daemon — monotonic waterfall audit (colo only)."""
+"""CHI404 broker order latency daemon — monotonic waterfall audit (colo only)."""
 
 from __future__ import annotations
 
@@ -14,8 +14,8 @@ from typing import Any
 
 from ..config import TrialConfig, load_config
 from ..connector import build_connector
-from ..platform import is_windows
-from ..schema.paper_latency_record_v1 import PaperLatencyRecordV1
+from ..platform import is_chi404_runtime, is_windows
+from ..schema.broker_latency_record_v1 import BrokerLatencyRecordV1
 
 logger = logging.getLogger(__name__)
 
@@ -27,14 +27,14 @@ def _utc_now() -> str:
 
 
 def _run_id() -> str:
-    return os.environ.get("PAPER_LATENCY_RUN_ID") or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return os.environ.get("BROKER_LATENCY_RUN_ID") or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
 def _assert_chi404_only() -> None:
-    if is_windows():
+    if is_windows() or not is_chi404_runtime():
         raise RuntimeError(
-            "paper_latency_daemon runs on CHI404 only (BLUEPRINT §4). "
-            "Windows is the dev workstation, not the trade-path host."
+            "broker_latency_daemon runs on CHI404 only (BLUEPRINT §4). "
+            "Use fixture tests locally; do not run broker latency capture from a workstation."
         )
 
 
@@ -58,22 +58,22 @@ def _shadow_probe_mono_ns() -> tuple[int | None, int | None, int | None, int | N
     return t0, t1, t2, t3
 
 
-class PaperLatencyDaemon:
+class BrokerLatencyDaemon:
     def __init__(self, cfg: TrialConfig, *, run_id: str | None = None) -> None:
         self.cfg = cfg
         self.run_id = run_id or _run_id()
         self.repo_root = cfg.repo_root
         self.connector = build_connector(cfg)
-        raw_base = self.repo_root / "runtime" / "paper_latency" / "raw" / self.run_id
+        raw_base = self.repo_root / "runtime" / "broker_latency" / "raw" / self.run_id
         raw_base.mkdir(parents=True, exist_ok=True)
         self.records_path = raw_base / "records.ndjson"
-        self.status_path = self.repo_root / "runtime" / "paper_latency" / "daemon_status.json"
-        self._open_orders: dict[str, PaperLatencyRecordV1] = {}
+        self.status_path = self.repo_root / "runtime" / "broker_latency" / "daemon_status.json"
+        self._open_orders: dict[str, BrokerLatencyRecordV1] = {}
         self._last_tick_mono: int | None = None
         self._record_count = 0
         self._paired_count = 0
 
-    def _append_record(self, rec: PaperLatencyRecordV1) -> None:
+    def _append_record(self, rec: BrokerLatencyRecordV1) -> None:
         with self.records_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(rec.to_dict()) + "\n")
         self._record_count += 1
@@ -103,7 +103,7 @@ class PaperLatencyDaemon:
             "decision_end_mono_ns": dec_end,
             "order_construct_mono_ns": construct,
             "risk_check_mono_ns": risk,
-            "market_state": manifest.get("market_state") or os.environ.get("PAPER_LATENCY_MARKET_STATE", "quiet"),
+            "market_state": manifest.get("market_state") or os.environ.get("BROKER_LATENCY_MARKET_STATE", "quiet"),
             "session_tag": manifest.get("session") or "regular",
             "shadow_synthetic": True,
         }
@@ -117,12 +117,12 @@ class PaperLatencyDaemon:
         if mono is None:
             return
         mono_i = int(mono)
-        market_state = manifest.get("market_state") or os.environ.get("PAPER_LATENCY_MARKET_STATE", "quiet")
+        market_state = manifest.get("market_state") or os.environ.get("BROKER_LATENCY_MARKET_STATE", "quiet")
         session_tag = manifest.get("session") or "regular"
         shadow = getattr(self, "_shadow", {})
 
         if et == "order_submit":
-            rec = PaperLatencyRecordV1(
+            rec = BrokerLatencyRecordV1(
                 run_id=self.run_id,
                 order_id=oid,
                 symbol=str(ev.get("symbol") or self.cfg.symbol),
@@ -146,7 +146,7 @@ class PaperLatencyDaemon:
         if rec is None:
             if et not in ("order_ack", "ack"):
                 return
-            rec = PaperLatencyRecordV1(
+            rec = BrokerLatencyRecordV1(
                 run_id=self.run_id,
                 order_id=oid,
                 symbol=str(ev.get("symbol") or self.cfg.symbol),
@@ -190,7 +190,7 @@ class PaperLatencyDaemon:
     def run(self, *, poll_interval_sec: float = 0.25) -> None:
         _assert_chi404_only()
         self.connector.connect()
-        logger.info("paper_latency_daemon run_id=%s records=%s", self.run_id, self.records_path)
+        logger.info("broker_latency_daemon run_id=%s records=%s", self.run_id, self.records_path)
         self._write_status({"state": "running"})
 
         while not _STOP:
@@ -229,7 +229,7 @@ def _handle_signal(signum: int, _frame: Any) -> None:
 def main(argv: list[str] | None = None) -> int:
     import argparse
 
-    parser = argparse.ArgumentParser(description="CHI404 paper order latency daemon")
+    parser = argparse.ArgumentParser(description="CHI404 broker order latency daemon")
     parser.add_argument("--config", default="data_system/config/rithmic_trial.yaml")
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--poll-interval-sec", type=float, default=0.25)
@@ -240,7 +240,7 @@ def main(argv: list[str] | None = None) -> int:
     signal.signal(signal.SIGTERM, _handle_signal)
 
     cfg = load_config(args.config)
-    daemon = PaperLatencyDaemon(cfg, run_id=args.run_id)
+    daemon = BrokerLatencyDaemon(cfg, run_id=args.run_id)
     try:
         daemon.run(poll_interval_sec=args.poll_interval_sec)
     except KeyboardInterrupt:

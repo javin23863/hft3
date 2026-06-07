@@ -9,7 +9,7 @@ def resolve_pull_symbols(session: DecadalSession) -> tuple[list[str], str, str]:
     Return (symbols, stype_in, schema) for Databento options pull.
 
     Uses parent stype so OPRA returns the full underlying option chain in-window.
-    Strike/expiry rules live in catalog for downstream quant use; pull is not filtered here.
+    Strike/expiry rules reside in catalog for downstream quant use; pull is not filtered here.
     """
     opts = session.options
     if opts is None or not opts.enabled:

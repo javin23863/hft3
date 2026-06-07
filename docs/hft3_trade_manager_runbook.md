@@ -10,7 +10,7 @@ When a candidate is PROMOTED by the autonomous runner, the runner writes a YELLO
 3. Loads the model's configuration from `artifacts/runs/{run_id}/manifest.json`
 4. Produces an `ActiveModel` handoff object for future Trade Manager sessions
 
-Live/paper operation is future state and must run on CHI404 only. The development workstation remains offline research/replay only and must not route live/paper market data or orders.
+External broker operation is future state and must run on CHI404 only. The development workstation remains offline research/replay only and must not route external broker market data or orders.
 
 ## 1A. How active models accept signals (Phase 15)
 
@@ -20,7 +20,7 @@ Phase 15 adds `packages/trade_manager/signals.py` and the `TradeManager` signal-
 3. Validate registry identity, run identity, symbol allowlist, timestamp, side, strength, confidence, expected edge, and latency profile
 4. Store the signal in Trade Manager state for Phase 16 conversion
 
-Signals are not orders. Phase 15 does not create `OrderIntent`, does not size orders, does not call risk, and does not create paper/live/Rithmic adapters.
+Signals are not orders. Phase 15 does not create `OrderIntent`, does not size orders, does not call risk, and does not create external broker/Rithmic adapters.
 
 ## 2. Required registry fields for operation
 
@@ -41,18 +41,18 @@ The Trade Manager loads risk limits from `configs/risk/limits.yaml` (Phase 17):
 - `price_band_check`, `price_band_ticks`, `liquidity_check`, `spread_check`, `max_spread_ticks`, `kill_switch_status`
 - `disconnect_grace_ns`, `max_clock_drift_ns`, `max_position_mismatch_contracts`
 
-Phase 17 invokes `packages/execution/production_safety.py::ProductionSafetyOrchestrator.pre_trade_check()` with a supplied adapter context before static order-level rejects, so fatal safety states such as disconnect and daily-loss breach are not masked by ordinary order rejections. It records a `TradeManagerRiskDecision` and never creates adapters, submits orders, cancels orders, replaces orders, or routes to paper/live/Rithmic.
+Phase 17 invokes `packages/execution/production_safety.py::ProductionSafetyOrchestrator.pre_trade_check()` with a supplied adapter context before static order-level rejects, so fatal safety states such as disconnect and daily-loss breach are not masked by ordinary order rejections. It records a `TradeManagerRiskDecision` and never creates adapters, submits orders, cancels orders, replaces orders, or routes to external broker/Rithmic.
 
-`TradeManagerRiskContext` defaults to enforced `LIVE` checks. Replay/audit-only monitor behavior must be requested explicitly with `execution_mode="REPLAY"`.
+`TradeManagerRiskContext` defaults to enforced `EXTERNAL` checks. Replay/audit-only monitor behavior must be requested explicitly with `execution_mode="REPLAY"`.
 
 Phase 17 does not support a symbol/instrument split in the order-intent envelope. If `TradeManagerRiskContext.instrument` is provided, it must match the intent `symbol`; divergent instrument context is rejected before adapter-facing production-safety checks.
 
 ## 4. Required execution adapter config
 
-The Trade Manager loads mode-aware execution-boundary config from `configs/execution/adapter.yaml` (Phase 19):
-- `mode`: "REPLAY" | "PAPER" | "LIVE"
-- `adapter`: "hftbacktest_simulated_exchange" | "paper_broker" | "live_broker"
-- `live_broker`: "rithmic" (LIVE only; stub today)
+The Trade Manager loads execution-boundary config from `configs/execution/adapter.yaml` (Phase 19):
+- `mode`: "REPLAY" | "EXTERNAL"
+- `adapter`: "hftbacktest_simulated_exchange" | "broker"
+- `broker`: "rithmic" (EXTERNAL only; stub today)
 - `venue`: derived from registry-allowed instruments and symbols
 - `order_routing`: "direct" | "aggregated"
 - `reconnect_handling`: "automatic" | "manual"
@@ -60,7 +60,7 @@ The Trade Manager loads mode-aware execution-boundary config from `configs/execu
 - `route_enabled`: false (Phase 19 rejects true)
 - `host_role`: "dev_workstation" by default
 
-Phase 19 validates this config and exposes `TradeManager.prepare_execution_boundary()` as audit metadata only. It does not call `execution.adapter_factory.create_adapter()`, does not instantiate paper/live/Rithmic adapters, does not submit/cancel/replace orders, and does not transition orders to `SENT_TO_EXECUTION`.
+Phase 19 validates this config and exposes `TradeManager.prepare_execution_boundary()` as audit metadata only. It does not call `execution.adapter_factory.create_adapter()`, does not instantiate external broker/Rithmic adapters, does not submit/cancel/replace orders, and does not transition orders to `SENT_TO_EXECUTION`.
 
 ## 5. Order-intent schema (Phase 16)
 
@@ -82,7 +82,7 @@ Phase 17 adds `packages/trade_manager/risk_layer.py` and `TradeManager.evaluate_
 5. Converts the Trade Manager-local intent to an adapter-level `execution.interfaces.OrderIntent` only as input to production-safety monitors
 6. Stores an inert `TradeManagerRiskDecision` for audit/state handoff
 
-Risk approval is not execution approval. Phase 17 does not create an order state machine, execution adapter, session artifact, observer view, or live/paper route.
+Risk approval is not execution approval. Phase 17 does not create an order state machine, execution adapter, session artifact, observer view, or external broker route.
 
 ## 6. Order-state machine (Phase 18)
 
@@ -100,7 +100,7 @@ Phase 18 adds `packages/trade_manager/order_state.py` and stores timestamped `Tr
 5. Re-risking an approved order can safely move `RISK_APPROVED -> SENT_TO_RISK -> RISK_REJECTED` before execution
 6. Invalid transitions append an `ERROR` transition and raise `OrderStateTransitionError`
 
-Phase 18 is inert. It does not create adapters, submit orders, cancel orders, replace orders, or route to paper/live/Rithmic. `SENT_TO_EXECUTION` and adapter event states are state-machine vocabulary for future consumers only.
+Phase 18 is inert. It does not create adapters, submit orders, cancel orders, replace orders, or route to external broker/Rithmic. `SENT_TO_EXECUTION` and adapter event states are state-machine vocabulary for future consumers only.
 
 ## 6A. Execution boundary (Phase 19)
 
@@ -111,7 +111,7 @@ Phase 19 adds `packages/trade_manager/execution_boundary.py`, `configs/execution
 4. Produces a `TradeManagerExecutionBoundary` audit payload with `can_route=False`, `route_enabled=False`, `adapter_created=False`, and `adapter_instance=None`
 5. Marks risk-approved orders as blocked by `PHASE19_INERT_BOUNDARY` rather than sending to execution
 
-Phase 19 is not a live or paper execution adapter. It deliberately leaves `TradeManager.submit_order()`, `cancel_order()`, and `replace_order()` undefined.
+Phase 19 is not an external broker execution adapter. It deliberately leaves `TradeManager.submit_order()`, `cancel_order()`, and `replace_order()` undefined.
 
 ## 6B. Position monitor (Phase 20)
 
@@ -121,7 +121,7 @@ Phase 20 adds `packages/trade_manager/monitor.py` as a standalone, read-only rec
 3. `PositionReconciliationResult` returns `OK`, `MISMATCH`, or `UNKNOWN` with mismatch details.
 4. `PositionMonitorConfig` controls mismatch and staleness thresholds.
 
-The monitor can read supplied adapter state with `get_position()` and `get_account_state()` or reconcile a supplied snapshot. It does not create adapters, submit orders, cancel orders, replace orders, flatten positions, mutate `TradeManager`, or route to paper/live/Rithmic.
+The monitor can read supplied adapter state with `get_position()` and `get_account_state()` or reconcile a supplied snapshot. It does not create adapters, submit orders, cancel orders, replace orders, flatten positions, mutate `TradeManager`, or route to external broker/Rithmic.
 
 ## 7. Kill-switch configuration (Phase 21)
 
@@ -150,7 +150,7 @@ Each trading session report writes artifacts under `artifacts/sessions/{session_
 
 The writer is observer-compatible with `apps/observer/read_model.py`: the seven `.json` artifacts are JSON objects, the eight `.jsonl` artifacts contain JSON object records only, and missing optional streams are written as empty JSONL files or `{}` object defaults. Values are serialized via `to_dict()` when supplied and non-finite numbers are rejected recursively with `allow_nan=False`.
 
-Phase 23 is inert. It does not mutate `TradeManager`, create execution adapters, submit orders, cancel orders, replace orders, flatten positions, or route to paper/live/Rithmic.
+Phase 23 is inert. It does not mutate `TradeManager`, create execution adapters, submit orders, cancel orders, replace orders, flatten positions, or route to external broker/Rithmic.
 
 ## 9. Observer view instructions (Phase 22)
 
@@ -171,7 +171,7 @@ The observer displays:
 
 The system will continue operating according to configured rules without requiring observer approval.
 
-Phase 22 does not mutate `TradeManager`, create execution adapters, submit orders, cancel orders, replace orders, flatten positions, or call paper/live/Rithmic paths.
+Phase 22 does not mutate `TradeManager`, create execution adapters, submit orders, cancel orders, replace orders, flatten positions, or call external broker/Rithmic paths.
 
 ## 10. Restart/recovery procedure (future Trade Manager work)
 
@@ -221,14 +221,14 @@ Phase 23: `tests/test_trade_manager_phase23.py` has 10/10 passing tests.
 - **Execution boundary exists.** Phase 19 validates config and produces an inert audit payload, but it does not create adapters or route execution.
 - **Position monitor exists.** Phase 20 records/reconciles supplied position snapshots, but it does not flatten positions, create adapters, or route execution.
 - **Kill switch exists.** Phase 21 returns inert decisions for documented trigger families and requested actions, but it does not create adapters, cancel orders, flatten positions, or route execution.
-- **Execution adapter is a stub.** `packages/execution/adapters/live_broker.py` returns `ORDER_REJECTED` with reason `"live_adapter_stub_not_wired"` (Phase 19).
+- **Execution adapter is a stub.** `packages/execution/adapters/broker.py` returns `ORDER_REJECTED` with reason `"broker_adapter_stub_not_wired"` (Phase 19).
 - **Observer view exists.** Phase 22 reads local session artifacts and renders a deterministic read-only CLI view without adapters or routing.
 - **Session reporting exists.** Phase 23 writes the 16 observer-compatible artifacts atomically from supplied data only.
 
 ## 14. Remaining risks
 
 - **Restart-recovery integration remains future work.** Phase 23 writes session reports, but Trade Manager restart recovery is not implemented yet.
-- **Rithmic live adapter is not implemented.** The C++ `rithmic_gateway` exists but the Python execution adapter is a stub.
+- **Rithmic external broker adapter is not implemented.** The C++ `rithmic_gateway` exists but the Python execution adapter is a stub.
 - **Risk/state/boundary/monitor/kill-switch/observer/session outputs are not execution.** Phases 17-23 record approvals/rejections/state transitions, boundary audit metadata, reconciliation results, kill-switch requested actions, read-only local artifact views, and session artifacts only; no adapter lifecycle exists yet.
 - **Autonomous Phase 24 is not Trade Manager restart recovery.** Phase 24 hardens the autonomous runner; a separate Trade Manager restart module is still needed.
 
@@ -281,7 +281,7 @@ The Trade Manager will be built in 4 milestones:
 - Tests: `tests/test_trade_manager_phase23.py`
 
 ### Future milestone: Real execution adapter routing
-- `packages/execution/adapters/live_broker.py` — replace stub with real CHI404-only Rithmic adapter when explicitly authorized
+- `packages/execution/adapters/broker.py` — replace stub with real CHI404-only Rithmic adapter when explicitly authorized
 - Tests: `test_execution_adapter_boundary.py` and CHI404 safety gates
 
 ### Milestone 3: Position monitoring + kill switch (Phases 20, 21)

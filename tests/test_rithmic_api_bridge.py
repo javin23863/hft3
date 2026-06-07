@@ -516,13 +516,13 @@ def test_connector_repository_connect_point_from_repository_login_block() -> Non
     assert cfg.ts_connect_point == "login_agent_opc"
 
 
-def test_paper_chicago_profile_has_runtime_only_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_external_chicago_profile_has_runtime_only_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
     cfg_path = (
         Path(__file__).resolve().parents[1]
         / "packages"
         / "data_system"
         / "config"
-        / "rithmic_api_paper.yaml"
+        / "rithmic_api_external.yaml"
     )
     monkeypatch.delenv("RITHMIC_USERNAME", raising=False)
     monkeypatch.delenv("RITHMIC_PASSWORD", raising=False)
@@ -532,8 +532,8 @@ def test_paper_chicago_profile_has_runtime_only_credentials(monkeypatch: pytest.
 
     assert status["status"] == "CONFIGURED_NOT_AUTHENTICATED"
     assert status["reason_code"] == "RITHMIC_CREDENTIALS_MISSING"
-    assert status["profile"] == "paper_chicago"
-    assert status["system"] == "Rithmic Paper Trading"
+    assert status["profile"] == "external_chicago"
+    assert status["system"] == "Rithmic external broker"
     assert status["gateway"] == "Chicago Area"
     assert status["missing_endpoint_params"] == []
     assert status["credentials"] == {
@@ -549,7 +549,7 @@ def test_paper_chicago_profile_has_runtime_only_credentials(monkeypatch: pytest.
         connector.connect()
 
 
-def test_paper_chicago_connection_config_uses_paper_connect_points(
+def test_external_chicago_connection_config_uses_vendor_connect_points(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     cfg_path = (
@@ -557,7 +557,7 @@ def test_paper_chicago_connection_config_uses_paper_connect_points(
         / "packages"
         / "data_system"
         / "config"
-        / "rithmic_api_paper.yaml"
+        / "rithmic_api_external.yaml"
     )
     monkeypatch.setenv("RITHMIC_USERNAME", "unit_user")
     monkeypatch.setenv("RITHMIC_PASSWORD", "unit_password")
@@ -588,13 +588,13 @@ def test_load_config_selects_nested_api_config_from_env(monkeypatch: pytest.Monk
         / "config"
         / "rithmic_trial.yaml"
     )
-    monkeypatch.setenv("RITHMIC_ENDPOINT_PROFILE", "paper_chicago")
+    monkeypatch.setenv("RITHMIC_ENDPOINT_PROFILE", "external_chicago")
     monkeypatch.delenv("RITHMIC_API_CONFIG", raising=False)
 
     cfg = load_config(trial_cfg)
 
-    assert cfg.rithmic["endpoint_profile"] == "paper_chicago"
-    assert cfg.rithmic_api_config.endswith("packages/data_system/config/rithmic_api_paper.yaml")
+    assert cfg.rithmic["endpoint_profile"] == "external_chicago"
+    assert cfg.rithmic_api_config.endswith("packages/data_system/config/rithmic_api_external.yaml")
 
 
 class _FakeBridge:

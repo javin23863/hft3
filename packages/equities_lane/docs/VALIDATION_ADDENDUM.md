@@ -7,6 +7,6 @@ Repo-wide: [docs/VALIDATION_HONESTY.md](../../../docs/VALIDATION_HONESTY.md)
 ## Known gaps (open)
 
 1. **Quarantined data** — production Databento download not required for CI; fixture backtest only proves plumbing.
-2. **Options normalize** — fixture NDJSON path; live options tape not in default verify.
+2. **Options normalize** — fixture NDJSON path; external options tape not in default verify.
 
 Update when gaps close.

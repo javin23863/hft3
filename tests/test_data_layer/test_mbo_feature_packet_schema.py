@@ -196,7 +196,7 @@ def test_mbo_feature_packet_rejects_narrative_fields():
 
 def test_mbo_feature_packet_rejects_execution_routing_fields():
     sample = deepcopy(_sample_packet())
-    sample["execution"]["order_route"] = "paper"
+    sample["execution"]["order_route"] = "broker"
     errors = validate_mbo_feature_packet(sample)
     assert any("Additional properties" in err and "order_route" in err for err in errors)
 

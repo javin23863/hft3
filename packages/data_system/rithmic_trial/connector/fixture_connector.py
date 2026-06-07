@@ -103,7 +103,7 @@ class FixtureConnector(ConnectorInterface):
         return {
             "connector": "fixture",
             "missing_event_types": missing,
-            "note": "Synthetic fixture; no live Rithmic feed",
+            "note": "Synthetic fixture; no external Rithmic feed",
         }
 
     def close(self) -> None:
