@@ -34,6 +34,7 @@ from crypto_lane.src.ingest.mempool_pull import (
     pull_mempool_backfill,
 )
 from crypto_lane.src.ingest.normalize import normalize_all
+from crypto_lane.src.config_loader import list_backtest_config_paths
 from crypto_lane.src.ml.candidate_registry import discover_candidates, discover_backtest_configs
 from crypto_lane.src.ingest.fill_test_gaps import run_fill_test_gaps, write_fill_report
 from crypto_lane.src.ml.walk_forward_runner import run_all_smokes, run_smoke
@@ -44,6 +45,7 @@ def cmd_discover(_: argparse.Namespace) -> int:
         "hypotheses": [h["hypothesis_id"] for h in load_hypotheses()],
         "candidates": [c["candidate_id"] for c in discover_candidates()],
         "backtests": [b["config_id"] for b in discover_backtest_configs()],
+        "backtests_production": [p.stem for p in list_backtest_config_paths(include_production=True)],
     }
     print(json.dumps(payload, indent=2))
     return 0
@@ -68,6 +70,7 @@ def cmd_fill_test_gaps(args: argparse.Namespace) -> int:
         ws_rtt_ms=args.ws_rtt_ms,
         force_replace_synthetic=args.force_replace_synthetic,
         allow_degraded=args.allow_degraded,
+        continue_on_error=args.continue_on_error,
     )
     out = write_fill_report(report)
     report["report_path"] = str(out)
@@ -297,6 +300,11 @@ def main(argv: list[str] | None = None) -> int:
         "--allow-degraded",
         action="store_true",
         help="Fill remaining bookticker gaps from perp klines",
+    )
+    p_ftg.add_argument(
+        "--continue-on-error",
+        action="store_true",
+        help="Continue pipeline after pull_gold/normalize failures (default: fail-fast)",
     )
     p_ftg.set_defaults(func=cmd_fill_test_gaps)
 

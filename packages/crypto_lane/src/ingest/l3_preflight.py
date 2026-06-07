@@ -15,6 +15,7 @@ from crypto_lane.src.ingest.gold_reader import gold_key, resolve_gold_bucket
 from crypto_lane.src.ingest.mempool_preflight import _sample_probe_days
 
 SYNTHETIC_B2_PROBE_MAX_DAYS = 31
+MISSING_B2_PROBE_MAX_DAYS = 31
 
 
 def probe_vision_month(symbol: str, year: int, month: int, *, timeout_s: int = 30) -> str:
@@ -95,7 +96,7 @@ def b2_probe_bookticker_days_sampled(
     max_probe_days: int | None = SYNTHETIC_B2_PROBE_MAX_DAYS,
     max_error_samples: int = 5,
 ) -> dict[str, Any]:
-    """Sampled B2 probe for large day lists (e.g. synthetic purge readiness)."""
+    """Sampled B2 probe for large day lists (audit estimates only)."""
     ensure_crypto_env()
     bucket = resolve_gold_bucket("binance")
     if not days:
@@ -119,21 +120,34 @@ def b2_probe_bookticker_days_sampled(
     return probe
 
 
+def _non_synthetic_missing(missing: list[date], synthetic: list[str]) -> list[date]:
+    syn_set = set(synthetic)
+    return [d for d in missing if d.isoformat() not in syn_set]
+
+
 def preflight_l3_gaps(
     *,
     start: str,
     end: str,
     vision_probe: bool = True,
+    bookticker_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Report B2/Vision fillability for missing days (no downloads, no deletes)."""
     symbol = _symbol_map().get("binance_perp", "BTCUSDT")
-    summary = summarize_bookticker_range(start=start, end=end)
+    summary = bookticker_summary or summarize_bookticker_range(start=start, end=end)
     missing = list(summary["missing"])
     synthetic = list(summary["synthetic"])
+    missing_non_syn = _non_synthetic_missing(missing, synthetic)
 
-    b2 = b2_probe_bookticker_days(missing)
+    b2 = b2_probe_bookticker_days_sampled(
+        missing_non_syn,
+        max_probe_days=MISSING_B2_PROBE_MAX_DAYS,
+    )
     syn_dates = [date.fromisoformat(d) for d in synthetic]
-    b2_synthetic = b2_probe_bookticker_days_sampled(syn_dates)
+    b2_synthetic = b2_probe_bookticker_days(syn_dates) if syn_dates else _empty_b2_probe(
+        resolve_gold_bucket("binance")
+    )
+    b2_synthetic_estimate = b2_probe_bookticker_days_sampled(syn_dates)
 
     vision_months: dict[str, dict[str, Any]] = {}
     vision_available_days = 0
@@ -155,26 +169,32 @@ def preflight_l3_gaps(
 
     synth_n = len(synthetic)
     b2_on_synthetic = int(b2_synthetic["available_count"])
+    b2_on_synthetic_est = int(b2_synthetic_estimate["available_count"])
     purge_safe = synth_n == 0 or b2_on_synthetic >= synth_n
+    purge_safe_estimate = synth_n == 0 or b2_on_synthetic_est >= synth_n
     return {
         "start": start,
         "end": end,
         "missing_days": len(missing),
+        "missing_non_synthetic_days": len(missing_non_syn),
         "synthetic_days": synth_n,
         "synthetic_day_list": synthetic,
         "b2": b2,
         "b2_synthetic": b2_synthetic,
+        "b2_synthetic_estimate": b2_synthetic_estimate,
         "vision_months": vision_months,
         "vision_available_days_estimate": vision_available_days,
         "vision_not_found_days": vision_not_found_days,
         "true_l3_b2_fillable": b2["available_count"],
         "b2_synthetic_fillable": b2_on_synthetic,
+        "b2_synthetic_fillable_estimate": b2_on_synthetic_est,
         "purge_safe": purge_safe,
+        "purge_safe_estimate": purge_safe_estimate,
         "purge_block_reason": (
             None
             if purge_safe
             else (
-                f"B2 has {b2_on_synthetic}/{synth_n} synthetic-replacement days; "
+                f"B2 has {b2_on_synthetic}/{synth_n} synthetic-replacement days (full probe); "
                 "Vision monthly alone is not purge-safe (archives may be incomplete). "
                 "Run CAE bookticker backfill to B2, or pass --force to purge anyway."
             )

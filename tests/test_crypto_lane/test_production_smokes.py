@@ -1,8 +1,9 @@
-"""Production crypto smokes — gated on crypto_ready (cached audit file)."""
+"""Production crypto smokes — gated on fresh crypto_ready cache."""
 from __future__ import annotations
 
 import json
 import sys
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -15,18 +16,32 @@ _READINESS_CACHE = _REPO / "runtime/data_audits/crypto_readiness.json"
 
 
 def _crypto_ready() -> bool:
-    if _READINESS_CACHE.is_file():
-        try:
-            return bool(json.loads(_READINESS_CACHE.read_text(encoding="utf-8")).get("crypto_ready"))
-        except (json.JSONDecodeError, OSError):
-            pass
-    return False
+    from crypto_lane.src.ingest.bookticker_quality import summarize_bookticker_range
+    from crypto_lane.src.ingest.crypto_readiness import readiness_cache_fresh
+
+    if not _READINESS_CACHE.is_file():
+        return False
+    try:
+        cached = json.loads(_READINESS_CACHE.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return False
+    dr = cached.get("crypto_date_range") or {}
+    start = str(dr.get("start", "2024-01-01"))
+    end = str(dr.get("end", "2024-12-31"))
+    try:
+        live_syn = len(summarize_bookticker_range(start=start, end=end, use_cache=True)["synthetic"])
+    except OSError:
+        return False
+    return readiness_cache_fresh(cached, live_synthetic_days=live_syn)
 
 
 pytestmark = pytest.mark.production
 
 
-@pytest.mark.skipif(not _crypto_ready(), reason="crypto_ready false; run audit_crypto_readiness.py first")
+@pytest.mark.skipif(
+    not _crypto_ready(),
+    reason="crypto_ready false or stale cache; run audit_crypto_readiness.py first",
+)
 def test_all_production_candidate_smokes_complete():
     from crypto_lane.src.ml.walk_forward_runner import run_all_smokes
 

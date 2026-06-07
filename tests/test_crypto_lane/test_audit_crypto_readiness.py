@@ -4,32 +4,25 @@ from __future__ import annotations
 from unittest.mock import patch
 
 
-def test_crypto_readiness_report_merges_cae_status():
+def test_crypto_readiness_report_delegates_to_builder():
     from scripts.audit_crypto_readiness import crypto_readiness_report
 
+    expected = {
+        "crypto_ready": False,
+        "crypto_l3_ready": False,
+        "crypto_mempool_ready": False,
+        "purge_safe": False,
+        "purge_safe_estimate": False,
+        "days_until_purge_safe": 10,
+        "cae_bookticker_backfill_status": {"days_until_purge_safe": 10},
+        "audited_at": "2026-06-07T12:00:00+00:00",
+    }
     with patch(
-        "crypto_lane.src.ingest.bookticker_quality.clear_bookticker_summary_cache",
-    ), patch(
-        "scripts.audit_all_research_data._crypto_gaps",
-        return_value={
-            "crypto_ready": False,
-            "crypto_l3_ready": False,
-            "crypto_mempool_ready": False,
-            "crypto_date_range": {"start": "2024-01-01", "end": "2024-12-31"},
-        },
-    ), patch(
-        "crypto_lane.src.ingest.l3_preflight.preflight_l3_gaps",
-        return_value={
-            "purge_safe": False,
-            "purge_block_reason": "blocked",
-            "recommendation": "do_not_replace_synthetic_until_b2_ready",
-            "synthetic_day_list": ["2024-04-02"],
-        },
-    ), patch(
-        "crypto_lane.src.ingest.cae_backfill_status.cae_bookticker_backfill_status",
-        return_value={"days_until_purge_safe": 10},
-    ):
+        "crypto_lane.src.ingest.crypto_readiness.build_crypto_readiness_report",
+        return_value=expected,
+    ) as mock_build:
         report = crypto_readiness_report()
+    mock_build.assert_called_once_with(clear_cache=True)
     assert report["purge_safe"] is False
     assert report["days_until_purge_safe"] == 10
     assert "cae_bookticker_backfill_status" in report

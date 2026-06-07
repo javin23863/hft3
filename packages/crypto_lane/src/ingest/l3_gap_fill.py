@@ -7,9 +7,9 @@ from crypto_lane.src.config.env_loader import ensure_crypto_env
 from crypto_lane.src.ingest.binance_vision_pull import pull_bookticker_from_vision
 from crypto_lane.src.ingest.bookticker_quality import (
     absent_bookticker_days,
-    build_quality_manifest,
     missing_bookticker_days,
     purge_synthetic_bookticker,
+    summarize_bookticker_range,
     synthetic_bookticker_days,
     write_quality_manifest,
 )
@@ -21,14 +21,11 @@ from crypto_lane.src.ingest.paths import ensure_data_dirs
 
 def audit_l3_gaps(*, start: str, end: str) -> dict[str, Any]:
     ensure_data_dirs()
-    missing = missing_bookticker_days(start=start, end=end)
-    absent = absent_bookticker_days(start=start, end=end)
-    synthetic = synthetic_bookticker_days(start=start, end=end)
-    manifest = build_quality_manifest(start=start, end=end)
-    by_class: dict[str, int] = {}
-    for entry in manifest.values():
-        cls = str(entry.get("class", "missing"))
-        by_class[cls] = by_class.get(cls, 0) + 1
+    summary = summarize_bookticker_range(start=start, end=end)
+    absent = summary["absent"]
+    missing = summary["missing"]
+    synthetic = summary["synthetic"]
+    by_class = dict(summary["by_class"])
     return {
         "granularity": "futures_um_bookticker_tick",
         "symbol": "BTCUSDT",

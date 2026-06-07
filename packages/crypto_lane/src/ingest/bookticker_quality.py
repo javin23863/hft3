@@ -25,14 +25,7 @@ def bookticker_dest(day: date, symbol: str | None = None) -> Path:
     return _local_cache_path(gold_key("binance", sym, day, _GRANULARITY))
 
 
-def classify_bookticker_file(path: Path) -> str:
-    """Return: missing | synthetic | b2_real | sparse."""
-    if not path.is_file():
-        return "missing"
-    try:
-        df = pl.read_parquet(path)
-    except Exception:
-        return "missing"
+def _classify_from_df(df: pl.DataFrame) -> str:
     if df.is_empty():
         return "missing"
     if "source" in df.columns:
@@ -42,6 +35,27 @@ def classify_bookticker_file(path: Path) -> str:
     if df.height < _MIN_REAL_ROWS:
         return "sparse"
     return "b2_real"
+
+
+def inspect_bookticker_file(path: Path) -> tuple[str, dict[str, Any]]:
+    """Single parquet read: return (class, {rows, source?})."""
+    if not path.is_file():
+        return "missing", {"rows": 0}
+    try:
+        df = pl.read_parquet(path)
+    except Exception:
+        return "missing", {"rows": 0}
+    cls = _classify_from_df(df)
+    meta: dict[str, Any] = {"rows": df.height}
+    if "source" in df.columns and not df["source"].is_empty():
+        meta["source"] = str(df["source"][0])
+    return cls, meta
+
+
+def classify_bookticker_file(path: Path) -> str:
+    """Return: missing | synthetic | b2_real | sparse."""
+    cls, _ = inspect_bookticker_file(path)
+    return cls
 
 
 def classify_bookticker_day(day: date, symbol: str | None = None) -> str:
@@ -58,6 +72,18 @@ _range_summary_cache: dict[tuple[str, str], dict[str, Any]] = {}
 def clear_bookticker_summary_cache() -> None:
     """Clear in-process bookticker range scan cache (call after ingest/purge)."""
     _range_summary_cache.clear()
+
+
+def build_quality_manifest(*, start: str, end: str) -> dict[str, dict[str, Any]]:
+    start_d = _parse_date(start)
+    end_d = _parse_date(end)
+    symbol = _symbol_map().get("binance_perp", "BTCUSDT")
+    manifest: dict[str, dict[str, Any]] = {}
+    for day in _date_range(start_d, end_d):
+        path = bookticker_dest(day, symbol)
+        cls, meta = inspect_bookticker_file(path)
+        manifest[day.isoformat()] = {"class": cls, **meta}
+    return manifest
 
 
 def summarize_bookticker_range(*, start: str, end: str, use_cache: bool = True) -> dict[str, Any]:
@@ -109,38 +135,17 @@ def synthetic_bookticker_days(*, start: str, end: str) -> list[str]:
 
 def purge_synthetic_bookticker(*, start: str, end: str) -> list[str]:
     """Delete local synthetic/sparse bookticker parquet files in range."""
-    start_d = _parse_date(start)
-    end_d = _parse_date(end)
     symbol = _symbol_map().get("binance_perp", "BTCUSDT")
+    summary = summarize_bookticker_range(start=start, end=end, use_cache=False)
     removed: list[str] = []
-    for day in _date_range(start_d, end_d):
-        path = bookticker_dest(day, symbol)
-        cls = classify_bookticker_file(path)
+    for iso, entry in summary["manifest"].items():
+        cls = str(entry.get("class", "missing"))
         if cls in ("synthetic", "sparse"):
-            path.unlink(missing_ok=True)
-            removed.append(day.isoformat())
+            day = date.fromisoformat(iso)
+            bookticker_dest(day, symbol).unlink(missing_ok=True)
+            removed.append(iso)
+    clear_bookticker_summary_cache()
     return removed
-
-
-def build_quality_manifest(*, start: str, end: str) -> dict[str, dict[str, Any]]:
-    start_d = _parse_date(start)
-    end_d = _parse_date(end)
-    symbol = _symbol_map().get("binance_perp", "BTCUSDT")
-    manifest: dict[str, dict[str, Any]] = {}
-    for day in _date_range(start_d, end_d):
-        path = bookticker_dest(day, symbol)
-        cls = classify_bookticker_file(path)
-        entry: dict[str, Any] = {"class": cls, "rows": 0}
-        if path.is_file():
-            try:
-                df = pl.read_parquet(path)
-                entry["rows"] = df.height
-                if "source" in df.columns and not df["source"].is_empty():
-                    entry["source"] = str(df["source"][0])
-            except Exception:
-                entry["class"] = "missing"
-        manifest[day.isoformat()] = entry
-    return manifest
 
 
 def quality_manifest_path() -> Path:

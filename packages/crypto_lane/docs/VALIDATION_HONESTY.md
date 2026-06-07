@@ -19,6 +19,17 @@ Repo-wide: **[docs/VALIDATION_HONESTY.md](../../../docs/VALIDATION_HONESTY.md)**
 | `calibrate-ws-rtt` / `probe-ws-rtt` CLI | synthetic calibration (`source: synthetic_calibrated:*`) |
 | YAML `ws_rtt_ms` fallback | synthetic replay calibration |
 
+### B2 purge gates
+
+| Field | Probe | Used for |
+|-------|-------|----------|
+| `purge_safe` | Full B2 probe on **all** synthetic days (`b2_synthetic`) | `fill-l3-gaps --replace-synthetic`, gap-fill orchestrator |
+| `purge_safe_estimate` | Sampled probe (≤31 days, extrapolated) | Audit dashboards only — **not** destructive decisions |
+
+`crypto_readiness.json` includes `audited_at`, `synthetic_days`, and both purge fields. Production pytest re-validates cache age (24h) and live `synthetic_days` before running smokes.
+
+Dry-run target: one `summarize_bookticker_range` scan (~2–3 min for 366 days); no duplicate preflight inside nested audit.
+
 ## Production testing entrypoints
 
 | Command | Purpose |

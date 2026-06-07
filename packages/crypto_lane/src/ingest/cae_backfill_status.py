@@ -23,23 +23,27 @@ def cae_bookticker_backfill_status(
     """
     Report B2 coverage for synthetic bookticker days and purge readiness.
 
-    Uses l3_preflight B2 synthetic probe only (no crypto-alpha-engine imports).
+    purge_safe uses full B2 synthetic probe; purge_safe_estimate is sampled (audit only).
     """
     pf = l3_preflight or preflight_l3_gaps(start=start, end=end, vision_probe=False)
     synthetic = list(pf.get("synthetic_day_list") or [])
     b2_syn = pf.get("b2_synthetic") or {}
+    b2_syn_est = pf.get("b2_synthetic_estimate") or {}
     b2_on_synthetic = int(b2_syn.get("available_count", 0))
     synth_n = len(synthetic)
     purge_safe = bool(pf.get("purge_safe"))
+    purge_safe_estimate = bool(pf.get("purge_safe_estimate"))
     days_until_purge_safe = max(0, synth_n - b2_on_synthetic)
     return {
         "date_range": {"start": start, "end": end},
         "synthetic_days": synth_n,
         "synthetic_by_month": _month_labels(synthetic),
         "b2_synthetic_probe": b2_syn,
+        "b2_synthetic_probe_estimate": b2_syn_est,
         "b2_available_for_synthetic": b2_on_synthetic,
         "b2_available_for_missing": int((pf.get("b2") or {}).get("available_count", 0)),
         "purge_safe": purge_safe,
+        "purge_safe_estimate": purge_safe_estimate,
         "purge_block_reason": pf.get("purge_block_reason"),
         "days_until_purge_safe": days_until_purge_safe,
         "recommendation": (

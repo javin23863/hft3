@@ -77,10 +77,68 @@ def test_preflight_purge_safe_when_b2_covers_synthetic(monkeypatch):
         "b2_probe_bookticker_days",
         lambda days, **_: {
             "bucket": "crypto-alpha-datasets",
-            "available_days": [],
+            "available_days": ["2024-04-02"],
             "missing_days": [],
-            "available_count": 0,
+            "available_count": len(days),
             "missing_count": 0,
+            "error_samples": [],
+            "sampled": False,
+            "probe_days": len(days),
+        },
+    )
+    def _sampled_probe(days, **kwargs):
+        if not days:
+            return {
+                "bucket": "crypto-alpha-datasets",
+                "available_days": [],
+                "missing_days": [],
+                "available_count": 0,
+                "missing_count": 0,
+                "error_samples": [],
+                "sampled": False,
+                "probe_days": 0,
+            }
+        return {
+            "bucket": "crypto-alpha-datasets",
+            "available_days": ["2024-04-02"],
+            "missing_days": [],
+            "available_count": 1,
+            "missing_count": 0,
+            "error_samples": [],
+            "sampled": False,
+            "probe_days": 1,
+        }
+
+    monkeypatch.setattr(l3_preflight, "b2_probe_bookticker_days_sampled", _sampled_probe)
+    report = l3_preflight.preflight_l3_gaps(
+        start="2024-04-02", end="2024-04-02", vision_probe=False
+    )
+    assert report["purge_safe"] is True
+    assert report["purge_safe_estimate"] is True
+    assert report["recommendation"] == "run_fill_l3_gaps_replace_synthetic"
+
+
+def test_preflight_purge_estimate_can_differ_from_full_probe(monkeypatch):
+    monkeypatch.setattr(
+        l3_preflight,
+        "summarize_bookticker_range",
+        lambda **_: {
+            "missing": [date(2024, 4, 2), date(2024, 4, 3)],
+            "synthetic": ["2024-04-02", "2024-04-03"],
+            "absent": [],
+            "by_class": {"synthetic": 2},
+            "manifest": {},
+        },
+    )
+    monkeypatch.setattr(
+        l3_preflight,
+        "b2_probe_bookticker_days",
+        lambda days, **_: {
+            "bucket": "crypto-alpha-datasets",
+            "available_days": [],
+            "missing_days": [d.isoformat() for d in days],
+            "available_count": 0,
+            "missing_count": len(days),
             "error_samples": [],
             "sampled": False,
             "probe_days": len(days),
@@ -93,18 +151,18 @@ def test_preflight_purge_safe_when_b2_covers_synthetic(monkeypatch):
             "bucket": "crypto-alpha-datasets",
             "available_days": ["2024-04-02"],
             "missing_days": [],
-            "available_count": 1,
+            "available_count": 2,
             "missing_count": 0,
             "error_samples": [],
-            "sampled": False,
+            "sampled": True,
             "probe_days": 1,
         },
     )
     report = l3_preflight.preflight_l3_gaps(
-        start="2024-04-02", end="2024-04-02", vision_probe=False
+        start="2024-04-02", end="2024-04-03", vision_probe=False
     )
-    assert report["purge_safe"] is True
-    assert report["recommendation"] == "run_fill_l3_gaps_replace_synthetic"
+    assert report["purge_safe"] is False
+    assert report["purge_safe_estimate"] is True
 
 
 def test_fill_aborts_unsafe_purge(monkeypatch):

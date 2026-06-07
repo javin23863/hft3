@@ -14,6 +14,8 @@ def test_cae_status_no_synthetic():
         "purge_block_reason": None,
         "b2": {"available_count": 0},
         "b2_synthetic": {"available_count": 0, "sampled": False},
+        "b2_synthetic_estimate": {"available_count": 0, "sampled": True},
+        "purge_safe_estimate": True,
     }
     report = cae_bookticker_backfill_status(
         start="2024-01-01", end="2024-03-31", l3_preflight=pf
@@ -21,6 +23,7 @@ def test_cae_status_no_synthetic():
     assert report["synthetic_days"] == 0
     assert report["recommendation"] == "no_synthetic_days"
     assert report["days_until_purge_safe"] == 0
+    assert report["purge_safe_estimate"] is True
 
 
 def test_cae_status_needs_backfill():
@@ -31,6 +34,8 @@ def test_cae_status_needs_backfill():
         "purge_block_reason": "B2 has 0/2 synthetic-replacement days",
         "b2": {"available_count": 0},
         "b2_synthetic": {"available_count": 0, "sampled": False},
+        "b2_synthetic_estimate": {"available_count": 2, "sampled": True},
+        "purge_safe_estimate": True,
     }
     report = cae_bookticker_backfill_status(
         start="2024-01-01", end="2024-12-31", l3_preflight=pf
@@ -38,6 +43,8 @@ def test_cae_status_needs_backfill():
     assert report["synthetic_days"] == 2
     assert report["recommendation"] == "cae_contabo_bookticker_backfill_required"
     assert report["days_until_purge_safe"] == 2
+    assert report["purge_safe"] is False
+    assert report["purge_safe_estimate"] is True
     assert report["synthetic_by_month"]["2024-04"] == 2
 
 
