@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import itertools
 import copy
+import itertools
+import random
 from typing import Any, Dict, Iterator, List
 
 from workbench.src.core.params import DEFAULT_STRATEGY_PARAMS, param_hash_from_dict
@@ -14,13 +15,23 @@ _DEFAULT_THRESHOLDS = [0.10, 0.15, 0.20, 0.25]
 _DEFAULT_HOLDING_PERIODS_BARS = [15, 30, 60]
 
 
-def _threshold_grid(parsed: ParsedHypothesis) -> List[float]:
+def _threshold_grid(
+    parsed: ParsedHypothesis,
+    *,
+    mode: str = "grid",
+    n_samples: int = 5,
+) -> List[float]:
     pr = parsed.param_ranges.get("signal_threshold")
     if not pr or len(pr) < 2:
         return list(_DEFAULT_THRESHOLDS)
     lo, hi = float(pr[0]), float(pr[1])
     if hi <= lo:
         return [lo]
+    if mode == "random":
+        samples = max(1, int(n_samples))
+        return [round(random.uniform(lo, hi), 4) for _ in range(samples)]
+    if mode != "grid":
+        raise ValueError(f"unsupported search mode: {mode}")
     mid = (lo + hi) / 2.0
     return sorted({round(lo, 4), round(mid, 4), round(hi, 4)})
 
@@ -30,6 +41,9 @@ def generate_candidates(
     *,
     max_candidates: int = 20,
     expand_for_vectorbt: bool = False,
+    search_mode: str = "grid",
+    num_samples: int = 5,
+    max_iterations: int = 1,
 ) -> Iterator[CandidateModel]:
     """Yield param variants for primary model and keyword-adjacent slugs.
 
@@ -43,7 +57,8 @@ def generate_candidates(
             models.append(feat)
     models = models[:3]
 
-    thresholds = _threshold_grid(parsed)
+    sample_count = max(1, int(num_samples)) * max(1, int(max_iterations))
+    thresholds = _threshold_grid(parsed, mode=search_mode, n_samples=sample_count)
     count = 0
     for model_id, threshold in itertools.product(models, thresholds):
         if count >= max_candidates:
