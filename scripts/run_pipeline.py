@@ -25,6 +25,7 @@ from research_pipeline.evaluation import evaluate_model
 from research_pipeline.hypothesis_parser import parse_hypothesis
 from research_pipeline.knowledge_graph import persist_graph_slice
 from research_pipeline.model_generation import generate_candidates
+from research_pipeline.optimizer import propose_optimized_candidates
 from research_pipeline.idea_generation import (
     candidates_from_ideas,
     generate_idea_set,
@@ -203,11 +204,26 @@ def main() -> int:
         help="Maximum candidate generation/evaluation iterations before giving up.",
     )
     parser.add_argument(
+        "--optimizer-backend",
+        choices=["heuristic", "optuna"],
+        default="heuristic",
+        help="Hyperparameter optimizer backend for retry iterations.",
+    )
+    parser.add_argument(
+        "--optimizer-top-k",
+        type=int,
+        default=3,
+        help="Number of best prior candidates used as heuristic optimizer anchors.",
+    )
+    parser.add_argument(
         "--random-seed",
         type=int,
         default=None,
         help="Seed for reproducible random search.",
     )
+    parser.add_argument("--min-sharpe", type=float, default=None, help="Minimum Sharpe ratio gate.")
+    parser.add_argument("--max-drawdown-bps", type=float, default=None, help="Maximum drawdown gate in basis points.")
+    parser.add_argument("--max-avg-latency-us", type=float, default=None, help="Maximum average execution latency gate in microseconds.")
     args = parser.parse_args()
     # Enforce mandatory pipeline components.
     args.vectorbt = True
@@ -494,7 +510,12 @@ def main() -> int:
     if chi404 is None:
         print("Warning: no latency data available; backtest will run without CHI404 latency", file=sys.stderr)
 
-    gates = GateThresholds(min_trades=0)
+    gates = GateThresholds(
+        min_trades=0,
+        min_sharpe=args.min_sharpe,
+        max_drawdown_bps=args.max_drawdown_bps,
+        max_avg_latency_us=args.max_avg_latency_us,
+    )
 
     def _evaluate_current(candidate_pool: list[CandidateModel]) -> list[EvaluationResult]:
         evaluated = []
@@ -506,6 +527,7 @@ def main() -> int:
         return evaluated
 
     results = _evaluate_current(candidates)
+    optimization_trace: list[dict] = []
 
     max_iterations = max(1, int(args.max_iterations))
     for iteration in range(2, max_iterations + 1):
@@ -513,38 +535,27 @@ def main() -> int:
             break
         retry_sample_count = max(1, int(args.num_samples)) * iteration
         retry_max_candidates = max(args.max_candidates, retry_sample_count)
-        retry_search_mode = args.search_mode if args.search_mode == "random" else "random"
         print(
-            "No candidates passed gates; expanding parameter search "
+            "No candidates passed gates; optimizing parameter search "
             f"(iteration {iteration}/{max_iterations}) with "
-            f"{retry_search_mode} mode, {retry_sample_count} samples, "
+            f"{args.optimizer_backend} backend, {retry_sample_count} samples, "
             f"and up to {retry_max_candidates} candidates..."
         )
-        if idea_packet:
-            retry_candidates = candidates_from_ideas(
-                idea_packet,
-                max_candidates=retry_max_candidates,
-                expand_for_vectorbt=True,
-                search_mode=retry_search_mode,
-                num_samples=retry_sample_count,
-                max_iterations=1,
-            )
-        else:
-            retry_candidates = list(
-                generate_candidates(
-                    parsed,
-                    max_candidates=retry_max_candidates,
-                    expand_for_vectorbt=True,
-                    search_mode=retry_search_mode,
-                    num_samples=retry_sample_count,
-                    max_iterations=1,
-                )
-            )
+        retry_candidates, trace = propose_optimized_candidates(
+            parsed,
+            results,
+            max_candidates=retry_max_candidates,
+            iteration=iteration,
+            backend=args.optimizer_backend,
+            random_seed=args.random_seed,
+            top_k=args.optimizer_top_k,
+        )
+        optimization_trace.append(trace.to_dict())
         if not retry_candidates:
-            print("Expanded parameter search generated no candidates.")
+            print("Optimizer generated no candidates.")
             continue
 
-        print(f"Running VectorBT filter on {len(retry_candidates)} retry candidates...")
+        print(f"Running VectorBT filter on {len(retry_candidates)} optimized candidates...")
         source_meta = {c.candidate_id: dict(c.metadata) for c in retry_candidates}
         retry_filter_result = filter_candidates(
             candidates=retry_candidates,
@@ -562,9 +573,9 @@ def main() -> int:
             f"Rejected: {len(retry_filter_result.rejected)}"
         )
         for rejected in retry_filter_result.rejected:
-            print(f"  ADAPTIVE REJECTED {rejected.candidate_id}: {rejected.reject_reason}")
+            print(f"  OPTIMIZER REJECTED {rejected.candidate_id}: {rejected.reject_reason}")
         if not retry_filter_result.promoted:
-            print("No retry candidates survived VectorBT filter.")
+            print("No optimized candidates survived VectorBT filter.")
             continue
 
         candidates = _promoted_to_candidates(
@@ -575,6 +586,11 @@ def main() -> int:
         if args.vectorbt and not args.vectorbt_only:
             _validate_crypto_candidates(candidates, repo_root)
         results.extend(_evaluate_current(candidates))
+
+    if optimization_trace:
+        (artifact_dir / "optimization_trace.json").write_text(
+            json.dumps(optimization_trace, indent=2), encoding="utf-8"
+        )
 
     if idea_packet:
         update_idea_statuses_from_results(idea_packet, results)

@@ -44,8 +44,11 @@ python scripts/run_pipeline.py --thesis "..." --event-id CPI_2024_09_11_TIGHT --
 # Automation lanes: cme, equities, crypto
 python scripts/run_pipeline.py --thesis "..." --event-id EVTID --lane crypto
 
-# Random parameter search with reproducible sampling and bounded retries
-python scripts/run_pipeline.py --thesis "..." --event-id EVTID --search-mode random --num-samples 12 --max-iterations 3 --random-seed 7
+# Random parameter search with reproducible optimization retries
+python scripts/run_pipeline.py --thesis "..." --event-id EVTID --search-mode random --num-samples 12 --max-iterations 3 --optimizer-backend heuristic --random-seed 7
+
+# Risk and latency gates
+python scripts/run_pipeline.py --thesis "..." --event-id EVTID --min-sharpe 1.0 --max-drawdown-bps 250 --max-avg-latency-us 500
 ```
 
 Optional research document:
@@ -69,9 +72,11 @@ Pre-run idea generation runs on every pipeline execution and emits `schema_pipel
 
 VectorBT prefiltering is also mandatory. `--vectorbt` and `--vectorbt-only` are preserved for compatibility but ignored; `--vectorbt-only` no longer exits after VectorBT. Promoted `asset_class=CRYPTO` candidates continue into crypto execution validation after VectorBT.
 
-Parameter search is configurable with `--search-mode`, `--num-samples`, `--max-iterations`, and `--random-seed`. `--search-mode grid` uses a small deterministic threshold grid from the supplied `signal_threshold` range. `--search-mode random` samples thresholds from the same range, or from `0.05` to `0.50` when the hypothesis does not specify one. `--random-seed` makes random search reproducible for repeatable research packets.
+Parameter search is configurable with `--search-mode`, `--num-samples`, `--max-iterations`, `--optimizer-backend`, `--optimizer-top-k`, and `--random-seed`. `--search-mode grid` uses a small deterministic threshold grid from the supplied `signal_threshold` range. `--search-mode random` samples thresholds from the same range, or from `0.05` to `0.50` when the hypothesis does not specify one. `--random-seed` makes random search and optimizer retries reproducible for repeatable research packets.
 
-If no evaluated candidate passes the gates, the pipeline automatically performs expanded re-search until a candidate passes or `--max-iterations` is reached. Each retry increases the requested sample count by the iteration number, raises the retry candidate cap to at least that sample count, runs the generated candidates back through the mandatory VectorBT prefilter, validates promoted crypto candidates when applicable, and evaluates the promoted retry candidates before deciding whether deployment is allowed.
+If no evaluated candidate passes the gates, the pipeline automatically performs optimized re-search until a candidate passes or `--max-iterations` is reached. Each retry uses prior evaluation results as an objective history, raises the retry candidate cap to at least the expanded sample count, proposes signal threshold, holding-period, stop-loss, and take-profit variants, runs those candidates back through the mandatory VectorBT prefilter, validates promoted crypto candidates when applicable, and evaluates the promoted retry candidates before deciding whether deployment is allowed. `--optimizer-backend heuristic` is built in. `--optimizer-backend optuna` uses Optuna's TPE sampler when Optuna is installed and falls back to the built-in heuristic if it is not available. The pipeline writes `optimization_trace.json` under the run artifact directory.
+
+Evaluation gates can also include `--min-sharpe`, `--max-drawdown-bps`, and `--max-avg-latency-us`. These fields default to unset so legacy pipeline runs remain permissive. When a metric gate is set, missing metrics fail that gate instead of passing silently. `EvaluationResult` records Sharpe, drawdown, and average latency when workbench diagnostics or candidate execution metadata provide them.
 
 ## Relationship Data Sources
 

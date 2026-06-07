@@ -79,6 +79,88 @@ def test_generate_candidates_random_search_uses_default_range():
     assert all(0.05 <= threshold <= 0.50 for threshold in thresholds)
 
 
+def test_optimizer_proposes_hyperparameter_candidates_from_prior_results():
+    from research_pipeline.optimizer import propose_optimized_candidates, score_result
+    from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds, ParsedHypothesis
+
+    parsed = ParsedHypothesis(
+        thesis="optimize spread",
+        instrument_universe=["MES"],
+        entry_rules=[],
+        exit_rules=[],
+        indicators=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        feature_list=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        param_ranges={"signal_threshold": [0.05, 0.35]},
+        primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+    )
+    gate = GateThresholds(min_net_pnl=0.0, min_trades=1, min_sharpe=0.5)
+    weak = EvaluationResult(
+        candidate=CandidateModel(
+            candidate_id="weak",
+            model_id=parsed.primary_model_id,
+            strategy_params={"signal_threshold": 0.08, "holding_period_bars": 5},
+            thesis=parsed.thesis,
+        ),
+        event_id="EVT",
+        net_pnl=-1.0,
+        num_trades=2,
+        win_rate=0.1,
+        expectancy=-0.5,
+        tail_loss=0.0,
+        sharpe=0.1,
+        gates=gate,
+    )
+    strong = EvaluationResult(
+        candidate=CandidateModel(
+            candidate_id="strong",
+            model_id=parsed.primary_model_id,
+            strategy_params={
+                "signal_threshold": 0.22,
+                "holding_period_bars": 30,
+                "stop_loss_pct": 0.8,
+                "take_profit_pct": 1.4,
+            },
+            thesis=parsed.thesis,
+            metadata={"idea_id": "idea_strong", "idea_lane_code": "cme"},
+        ),
+        event_id="EVT",
+        net_pnl=3.0,
+        num_trades=4,
+        win_rate=0.75,
+        expectancy=1.2,
+        tail_loss=0.0,
+        sharpe=1.1,
+        drawdown_bps=20.0,
+        avg_latency_us=100.0,
+        gates=gate,
+    )
+
+    candidates, trace = propose_optimized_candidates(
+        parsed,
+        [weak, strong],
+        max_candidates=4,
+        iteration=2,
+        backend="heuristic",
+        random_seed=17,
+        top_k=1,
+    )
+
+    assert score_result(strong) > score_result(weak)
+    assert trace.backend == "heuristic"
+    assert trace.best_prior_candidate_id == "strong"
+    assert len(candidates) == 4
+    for candidate in candidates:
+        params = candidate.strategy_params
+        assert 0.05 <= params["signal_threshold"] <= 0.35
+        assert 5 <= params["holding_period_bars"] <= 60
+        assert 0.25 <= params["stop_loss_pct"] <= 2.0
+        assert 0.25 <= params["take_profit_pct"] <= 2.5
+        assert candidate.metadata["optimized"] is True
+        assert candidate.metadata["idea_id"] == "idea_strong"
+        assert candidate.metadata["idea_lane_code"] == "cme"
+        assert candidate.metadata["optimizer_anchor_candidate_id"] == "strong"
+
+
 def _idea_packet():
     return {
         "schema_version": "1",
@@ -379,6 +461,100 @@ def test_gate_thresholds():
     assert gates.passes(1.0, 2, 0.0, 0.5)
     assert not gates.passes(-1.0, 2, 0.0, 0.5)
     assert not gates.passes(1.0, 0, 0.0, 0.5)
+
+    metric_gates = GateThresholds(
+        min_sharpe=1.0,
+        max_drawdown_bps=25.0,
+        max_avg_latency_us=500.0,
+    )
+    assert metric_gates.passes(
+        1.0,
+        2,
+        0.0,
+        0.5,
+        sharpe=1.1,
+        drawdown_bps=20.0,
+        avg_latency_us=100.0,
+    )
+    assert not metric_gates.passes(1.0, 2, 0.0, 0.5)
+    assert not metric_gates.passes(
+        1.0,
+        2,
+        0.0,
+        0.5,
+        sharpe=0.9,
+        drawdown_bps=20.0,
+        avg_latency_us=100.0,
+    )
+
+    risk_gates = GateThresholds(
+        min_sharpe=1.0,
+        max_drawdown_bps=50.0,
+        max_avg_latency_us=250.0,
+    )
+    assert risk_gates.passes(
+        1.0,
+        2,
+        0.0,
+        0.5,
+        sharpe=1.5,
+        drawdown_bps=25.0,
+        avg_latency_us=100.0,
+    )
+    assert not risk_gates.passes(1.0, 2, 0.0, 0.5, sharpe=0.5)
+    assert not risk_gates.passes(1.0, 2, 0.0, 0.5, drawdown_bps=75.0)
+    assert not risk_gates.passes(1.0, 2, 0.0, 0.5, avg_latency_us=300.0)
+
+
+def test_evaluate_model_extracts_extended_gate_metrics(tmp_path, monkeypatch):
+    import sys
+    from types import ModuleType
+
+    import research_pipeline.evaluation as evaluation
+    from research_pipeline.types import CandidateModel, GateThresholds
+
+    class FakeWorkbenchEngine:
+        def __init__(self, repo_root):
+            self.repo_root = repo_root
+
+        def run(self, *args, **kwargs):
+            return {
+                "report": {
+                    "net_pnl": 3.0,
+                    "num_trades": 4,
+                    "max_drawdown_pct": -0.25,
+                    "latency_authority": {"avg_latency_us": 175.0},
+                },
+                "diagnostics": {
+                    "win_rate": 0.75,
+                    "expectancy": 0.5,
+                    "tail_loss": 0.1,
+                    "sharpe_ratio": 1.25,
+                },
+            }
+
+    fake_engine_module = ModuleType("workbench.src.run.engine")
+    fake_engine_module.WorkbenchEngine = FakeWorkbenchEngine
+    monkeypatch.setitem(sys.modules, "workbench.src.run.engine", fake_engine_module)
+    monkeypatch.setattr(evaluation, "resolve_model_id", lambda model_id: model_id)
+
+    result = evaluation.evaluate_model(
+        CandidateModel(
+            candidate_id="cand_metrics",
+            model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+            strategy_params={},
+            thesis="metrics",
+        ),
+        "CPI_2024_09_11_TIGHT",
+        tmp_path,
+        gates=GateThresholds(min_sharpe=1.0, max_drawdown_bps=30.0, max_avg_latency_us=200.0),
+    )
+
+    assert result.error is None
+    assert result.sharpe == 1.25
+    assert result.drawdown_bps == 25.0
+    assert result.avg_latency_us == 175.0
+    assert result.passes_all_gates()
 
 
 def test_build_knowledge_graph_and_persist_idempotent(tmp_path, monkeypatch):
@@ -717,12 +893,33 @@ def test_run_pipeline_adaptive_retry_expands_search_after_gate_failure(tmp_path,
 
     filter_calls = []
     idea_candidate_calls = []
+    optimizer_calls = []
     evaluate_calls = []
     gate = GateThresholds(min_net_pnl=0.0, min_trades=1)
 
     def fake_candidates_from_ideas(*args, **kwargs):
         idea_candidate_calls.append(kwargs)
-        return [initial_candidate] if len(idea_candidate_calls) == 1 else [retry_candidate]
+        return [initial_candidate]
+
+    def fake_propose_optimized_candidates(*args, **kwargs):
+        optimizer_calls.append((args, kwargs))
+        return [
+            retry_candidate
+        ], type(
+            "Trace",
+            (),
+            {
+                "to_dict": lambda self: {
+                    "backend": kwargs["backend"],
+                    "iteration": kwargs["iteration"],
+                    "requested_candidates": kwargs["max_candidates"],
+                    "emitted_candidates": 1,
+                    "best_prior_candidate_id": args[1][0].candidate.candidate_id,
+                    "best_prior_score": -1.0,
+                    "fallback_reason": None,
+                }
+            },
+        )()
 
     def fake_filter_candidates(*args, **kwargs):
         candidates = kwargs["candidates"]
@@ -770,6 +967,7 @@ def test_run_pipeline_adaptive_retry_expands_search_after_gate_failure(tmp_path,
     monkeypatch.setattr(run_pipeline, "candidates_from_ideas", fake_candidates_from_ideas)
     monkeypatch.setattr(run_pipeline, "parsed_from_idea", lambda idea: parsed)
     monkeypatch.setattr(run_pipeline, "generate_candidates", lambda *args, **kwargs: pytest.fail("fallback generator should not run for idea-set retry"))
+    monkeypatch.setattr(run_pipeline, "propose_optimized_candidates", fake_propose_optimized_candidates)
     monkeypatch.setattr(run_pipeline, "filter_candidates", fake_filter_candidates)
     monkeypatch.setattr(run_pipeline, "evaluate_model", fake_evaluate_model)
     monkeypatch.setattr(run_pipeline, "deploy_best", lambda repo_root, report: repo_root / "deployed.json")
@@ -794,6 +992,8 @@ def test_run_pipeline_adaptive_retry_expands_search_after_gate_failure(tmp_path,
             "4",
             "--max-iterations",
             "3",
+            "--optimizer-backend",
+            "heuristic",
             "--random-seed",
             "99",
         ],
@@ -803,19 +1003,32 @@ def test_run_pipeline_adaptive_retry_expands_search_after_gate_failure(tmp_path,
 
     run_dir = tmp_path / "research_cards" / "pipeline_runs" / "pipeline_retry"
     response = json.loads((run_dir / "response_packet.json").read_text(encoding="utf-8"))
+    optimization_trace = json.loads((run_dir / "optimization_trace.json").read_text(encoding="utf-8"))
 
     assert filter_calls == [["cand_initial"], ["cand_retry"]]
     assert idea_candidate_calls[0]["search_mode"] == "grid"
     assert idea_candidate_calls[0]["max_candidates"] == 1
     assert idea_candidate_calls[0]["num_samples"] == 4
     assert idea_candidate_calls[0]["max_iterations"] == 1
-    assert idea_candidate_calls[1]["search_mode"] == "random"
-    assert idea_candidate_calls[1]["max_candidates"] == 8
-    assert idea_candidate_calls[1]["num_samples"] == 8
-    assert idea_candidate_calls[1]["max_iterations"] == 1
+    assert len(idea_candidate_calls) == 1
+    assert optimizer_calls[0][0][1][0].candidate.candidate_id == "cand_initial"
+    assert optimizer_calls[0][1]["backend"] == "heuristic"
+    assert optimizer_calls[0][1]["max_candidates"] == 8
+    assert optimizer_calls[0][1]["iteration"] == 2
     assert evaluate_calls == ["cand_initial", "cand_retry"]
     assert response["candidates_tested"] == 2
     assert [result["passes"] for result in response["results"]] == [False, True]
+    assert optimization_trace == [
+        {
+            "backend": "heuristic",
+            "iteration": 2,
+            "requested_candidates": 8,
+            "emitted_candidates": 1,
+            "best_prior_candidate_id": "cand_initial",
+            "best_prior_score": -1.0,
+            "fallback_reason": None,
+        }
+    ]
 
 
 def test_pipeline_request_response_roundtrip():

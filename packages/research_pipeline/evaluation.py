@@ -11,6 +11,54 @@ from features_engine.src.model_registry import resolve_model_id
 from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds
 
 
+def _first_float(*values: Any) -> Optional[float]:
+    for value in values:
+        if value is None:
+            continue
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _drawdown_bps(report: Dict[str, Any], diag: Dict[str, Any]) -> Optional[float]:
+    bps = _first_float(
+        diag.get("drawdown_bps"),
+        diag.get("max_drawdown_bps"),
+        diag.get("proxy_max_drawdown_bps"),
+        report.get("drawdown_bps"),
+        report.get("max_drawdown_bps"),
+        report.get("proxy_max_drawdown_bps"),
+    )
+    if bps is not None:
+        return abs(bps)
+    pct = _first_float(diag.get("max_drawdown_pct"), report.get("max_drawdown_pct"))
+    if pct is None:
+        return None
+    return abs(pct) * 100.0
+
+
+def _avg_latency_us(candidate: CandidateModel, report: Dict[str, Any], diag: Dict[str, Any]) -> Optional[float]:
+    execution_quality = candidate.metadata.get("execution_quality")
+    if not isinstance(execution_quality, dict):
+        execution_quality = {}
+    latency_authority = report.get("latency_authority")
+    if not isinstance(latency_authority, dict):
+        latency_authority = {}
+    return _first_float(
+        execution_quality.get("avg_latency_us"),
+        execution_quality.get("mean_latency_us"),
+        execution_quality.get("mean_submit_ack_us"),
+        diag.get("avg_latency_us"),
+        diag.get("mean_latency_us"),
+        report.get("avg_latency_us"),
+        report.get("mean_latency_us"),
+        latency_authority.get("avg_latency_us"),
+        latency_authority.get("mean_latency_us"),
+    )
+
+
 def evaluate_model(
     candidate: CandidateModel,
     event_id: str,
@@ -71,6 +119,16 @@ def evaluate_model(
     win_rate = float(diag.get("win_rate", 0.0))
     expectancy = float(diag.get("expectancy", report.get("expectancy", 0.0)))
     tail_loss = float(diag.get("tail_loss", 0.0))
+    sharpe = _first_float(
+        diag.get("sharpe"),
+        diag.get("sharpe_ratio"),
+        diag.get("proxy_sharpe"),
+        report.get("sharpe"),
+        report.get("sharpe_ratio"),
+        report.get("proxy_sharpe"),
+    )
+    drawdown_bps = _drawdown_bps(report, diag)
+    avg_latency_us = _avg_latency_us(candidate, report, diag)
 
     return EvaluationResult(
         candidate=candidate,
@@ -81,5 +139,8 @@ def evaluate_model(
         expectancy=expectancy,
         tail_loss=tail_loss,
         gates=gates,
+        sharpe=sharpe,
+        drawdown_bps=drawdown_bps,
+        avg_latency_us=avg_latency_us,
         workbench_out=out,
     )

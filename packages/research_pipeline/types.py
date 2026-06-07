@@ -37,8 +37,21 @@ class GateThresholds:
     min_trades: int = 0
     max_tail_loss: float = 1e9
     min_win_rate: float = 0.0
+    min_sharpe: Optional[float] = None
+    max_drawdown_bps: Optional[float] = None
+    max_avg_latency_us: Optional[float] = None
 
-    def passes(self, net_pnl: float, num_trades: int, tail_loss: float, win_rate: float) -> bool:
+    def passes(
+        self,
+        net_pnl: float,
+        num_trades: int,
+        tail_loss: float,
+        win_rate: float,
+        *,
+        sharpe: Optional[float] = None,
+        drawdown_bps: Optional[float] = None,
+        avg_latency_us: Optional[float] = None,
+    ) -> bool:
         if net_pnl < self.min_net_pnl:
             return False
         if num_trades < self.min_trades:
@@ -46,6 +59,19 @@ class GateThresholds:
         if tail_loss > self.max_tail_loss:
             return False
         if win_rate < self.min_win_rate:
+            return False
+        if self.min_sharpe is not None:
+            if sharpe is None or sharpe < self.min_sharpe:
+                return False
+        if (
+            self.max_drawdown_bps is not None
+            and (drawdown_bps is None or drawdown_bps > self.max_drawdown_bps)
+        ):
+            return False
+        if (
+            self.max_avg_latency_us is not None
+            and (avg_latency_us is None or avg_latency_us > self.max_avg_latency_us)
+        ):
             return False
         return True
 
@@ -60,13 +86,24 @@ class EvaluationResult:
     expectancy: float
     tail_loss: float
     gates: GateThresholds
+    sharpe: Optional[float] = None
+    drawdown_bps: Optional[float] = None
+    avg_latency_us: Optional[float] = None
     workbench_out: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
 
     def passes_all_gates(self) -> bool:
         if self.error:
             return False
-        return self.gates.passes(self.net_pnl, self.num_trades, self.tail_loss, self.win_rate)
+        return self.gates.passes(
+            self.net_pnl,
+            self.num_trades,
+            self.tail_loss,
+            self.win_rate,
+            sharpe=self.sharpe,
+            drawdown_bps=self.drawdown_bps,
+            avg_latency_us=self.avg_latency_us,
+        )
 
 
 @dataclass
@@ -106,6 +143,9 @@ class PipelineReport:
                     "model_id": r.candidate.model_id,
                     "net_pnl": r.net_pnl,
                     "num_trades": r.num_trades,
+                    "sharpe": r.sharpe,
+                    "drawdown_bps": r.drawdown_bps,
+                    "avg_latency_us": r.avg_latency_us,
                     "passes": r.passes_all_gates(),
                     "error": r.error,
                 }
