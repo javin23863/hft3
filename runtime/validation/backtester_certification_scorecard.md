@@ -1,9 +1,9 @@
 # Backtester Certification Scorecard
 
 - **Status:** GREEN
-- **Run ID:** CERT-20260531T003912Z-fef72226
-- **Git SHA:** 3951a16a84785cab08796ce6d46bb4cdd0d4b12d
-- **Timestamp UTC:** 2026-05-31T00:39:27.009861+00:00
+- **Run ID:** CERT-20260607T101801Z-6377cb66
+- **Git SHA:** b89f552a3dfdf13a6c225b441c26c41a2ca84654
+- **Timestamp UTC:** 2026-06-07T10:19:23.945252+00:00
 
 ## T0 Fast Gate
 - Passed: True
