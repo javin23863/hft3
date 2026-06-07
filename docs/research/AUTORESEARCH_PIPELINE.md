@@ -44,8 +44,8 @@ python scripts/run_pipeline.py --thesis "..." --event-id CPI_2024_09_11_TIGHT --
 # Automation lanes: cme, equities, crypto
 python scripts/run_pipeline.py --thesis "..." --event-id EVTID --lane crypto
 
-# Random parameter search with reproducible sampling
-python scripts/run_pipeline.py --thesis "..." --event-id EVTID --search-mode random --num-samples 12 --random-seed 7
+# Random parameter search with reproducible sampling and bounded retries
+python scripts/run_pipeline.py --thesis "..." --event-id EVTID --search-mode random --num-samples 12 --max-iterations 3 --random-seed 7
 ```
 
 Optional research document:
@@ -69,9 +69,9 @@ Pre-run idea generation runs on every pipeline execution and emits `schema_pipel
 
 VectorBT prefiltering is also mandatory. `--vectorbt` and `--vectorbt-only` are preserved for compatibility but ignored; `--vectorbt-only` no longer exits after VectorBT. Promoted `asset_class=CRYPTO` candidates continue into crypto execution validation after VectorBT.
 
-Parameter search is configurable with `--search-mode`, `--num-samples`, and `--random-seed`. `--search-mode grid` uses a small deterministic threshold grid from the supplied `signal_threshold` range. `--search-mode random` samples thresholds from the same range, or from `0.05` to `0.50` when the hypothesis does not specify one. `--random-seed` makes random search reproducible for repeatable research packets.
+Parameter search is configurable with `--search-mode`, `--num-samples`, `--max-iterations`, and `--random-seed`. `--search-mode grid` uses a small deterministic threshold grid from the supplied `signal_threshold` range. `--search-mode random` samples thresholds from the same range, or from `0.05` to `0.50` when the hypothesis does not specify one. `--random-seed` makes random search reproducible for repeatable research packets.
 
-If no evaluated candidate passes the gates, the pipeline automatically performs one expanded re-search. It doubles the requested sample count, runs the generated candidates back through the mandatory VectorBT prefilter, validates promoted crypto candidates when applicable, and evaluates the promoted retry candidates before deciding whether deployment is allowed.
+If no evaluated candidate passes the gates, the pipeline automatically performs expanded re-search until a candidate passes or `--max-iterations` is reached. Each retry increases the requested sample count by the iteration number, raises the retry candidate cap to at least that sample count, runs the generated candidates back through the mandatory VectorBT prefilter, validates promoted crypto candidates when applicable, and evaluates the promoted retry candidates before deciding whether deployment is allowed.
 
 ## Relationship Data Sources
 

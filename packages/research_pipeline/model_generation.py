@@ -5,13 +5,14 @@ from __future__ import annotations
 import copy
 import itertools
 import random
-from typing import Any, Dict, Iterator, List
+from typing import Iterator, List
 
 from workbench.src.core.params import DEFAULT_STRATEGY_PARAMS, param_hash_from_dict
 
 from research_pipeline.types import CandidateModel, ParsedHypothesis
 
 _DEFAULT_THRESHOLDS = [0.10, 0.15, 0.20, 0.25]
+_DEFAULT_RANDOM_THRESHOLD_RANGE = (0.05, 0.50)
 _DEFAULT_HOLDING_PERIODS_BARS = [15, 30, 60]
 
 
@@ -23,6 +24,12 @@ def _threshold_grid(
 ) -> List[float]:
     pr = parsed.param_ranges.get("signal_threshold")
     if not pr or len(pr) < 2:
+        if mode == "random":
+            lo, hi = _DEFAULT_RANDOM_THRESHOLD_RANGE
+            samples = max(1, int(n_samples))
+            return [round(random.uniform(lo, hi), 4) for _ in range(samples)]
+        if mode != "grid":
+            raise ValueError(f"unsupported search mode: {mode}")
         return list(_DEFAULT_THRESHOLDS)
     lo, hi = float(pr[0]), float(pr[1])
     if hi <= lo:

@@ -197,6 +197,12 @@ def main() -> int:
         help="Number of random samples when --search-mode=random.",
     )
     parser.add_argument(
+        "--max-iterations",
+        type=int,
+        default=2,
+        help="Maximum candidate generation/evaluation iterations before giving up.",
+    )
+    parser.add_argument(
         "--random-seed",
         type=int,
         default=None,
@@ -266,6 +272,9 @@ def main() -> int:
             idea_packet,
             max_candidates=args.max_candidates,
             expand_for_vectorbt=bool(args.vectorbt or args.vectorbt_only),
+            search_mode=args.search_mode,
+            num_samples=args.num_samples,
+            max_iterations=1,
         )
         idea_candidates_count = len(candidates)
         queued = [idea for idea in idea_packet.get("ideas", []) if idea.get("status") == "queued_for_test"]
@@ -307,6 +316,7 @@ def main() -> int:
             expand_for_vectorbt=bool(args.vectorbt or args.vectorbt_only),
             search_mode=args.search_mode,
             num_samples=args.num_samples,
+            max_iterations=1,
         ))
 
     if args.vectorbt or args.vectorbt_only:
@@ -497,55 +507,74 @@ def main() -> int:
 
     results = _evaluate_current(candidates)
 
-    if not any(r.passes_all_gates() for r in results):
-        retry_sample_count = max(1, int(args.num_samples)) * 2
+    max_iterations = max(1, int(args.max_iterations))
+    for iteration in range(2, max_iterations + 1):
+        if any(r.passes_all_gates() for r in results):
+            break
+        retry_sample_count = max(1, int(args.num_samples)) * iteration
+        retry_max_candidates = max(args.max_candidates, retry_sample_count)
         retry_search_mode = args.search_mode if args.search_mode == "random" else "random"
         print(
             "No candidates passed gates; expanding parameter search "
-            f"with {retry_search_mode} mode and {retry_sample_count} samples..."
+            f"(iteration {iteration}/{max_iterations}) with "
+            f"{retry_search_mode} mode, {retry_sample_count} samples, "
+            f"and up to {retry_max_candidates} candidates..."
         )
-        retry_candidates = list(
-            generate_candidates(
-                parsed,
-                max_candidates=args.max_candidates,
+        if idea_packet:
+            retry_candidates = candidates_from_ideas(
+                idea_packet,
+                max_candidates=retry_max_candidates,
                 expand_for_vectorbt=True,
                 search_mode=retry_search_mode,
                 num_samples=retry_sample_count,
+                max_iterations=1,
             )
-        )
-        if retry_candidates:
-            print(f"Running VectorBT filter on {len(retry_candidates)} adaptive candidates x grid...")
-            source_meta = {c.candidate_id: dict(c.metadata) for c in retry_candidates}
-            retry_filter_result = filter_candidates(
-                candidates=retry_candidates,
-                parsed=parsed,
-                event_id=args.event_id,
-                repo_root=repo_root,
-                gates=PromotionGate(
-                    min_oos_expectancy=0.0,
-                    max_drawdown_pct=-50.0,
-                    min_trades=10,
-                ),
-            )
-            print(
-                f"  Adaptive promoted: {len(retry_filter_result.promoted)}, "
-                f"Rejected: {len(retry_filter_result.rejected)}"
-            )
-            for rejected in retry_filter_result.rejected:
-                print(f"  ADAPTIVE REJECTED {rejected.candidate_id}: {rejected.reject_reason}")
-            if retry_filter_result.promoted:
-                candidates = _promoted_to_candidates(
-                    retry_filter_result.promoted,
-                    parsed=parsed,
-                    source_meta=source_meta,
-                )
-                if args.vectorbt and not args.vectorbt_only:
-                    _validate_crypto_candidates(candidates, repo_root)
-                results.extend(_evaluate_current(candidates))
-            else:
-                print("No adaptive candidates survived VectorBT filter.")
         else:
-            print("Adaptive search generated no candidates.")
+            retry_candidates = list(
+                generate_candidates(
+                    parsed,
+                    max_candidates=retry_max_candidates,
+                    expand_for_vectorbt=True,
+                    search_mode=retry_search_mode,
+                    num_samples=retry_sample_count,
+                    max_iterations=1,
+                )
+            )
+        if not retry_candidates:
+            print("Expanded parameter search generated no candidates.")
+            continue
+
+        print(f"Running VectorBT filter on {len(retry_candidates)} retry candidates...")
+        source_meta = {c.candidate_id: dict(c.metadata) for c in retry_candidates}
+        retry_filter_result = filter_candidates(
+            candidates=retry_candidates,
+            parsed=parsed,
+            event_id=args.event_id,
+            repo_root=repo_root,
+            gates=PromotionGate(
+                min_oos_expectancy=0.0,
+                max_drawdown_pct=-50.0,
+                min_trades=10,
+            ),
+        )
+        print(
+            f"  Adaptive promoted: {len(retry_filter_result.promoted)}, "
+            f"Rejected: {len(retry_filter_result.rejected)}"
+        )
+        for rejected in retry_filter_result.rejected:
+            print(f"  ADAPTIVE REJECTED {rejected.candidate_id}: {rejected.reject_reason}")
+        if not retry_filter_result.promoted:
+            print("No retry candidates survived VectorBT filter.")
+            continue
+
+        candidates = _promoted_to_candidates(
+            retry_filter_result.promoted,
+            parsed=parsed,
+            source_meta=source_meta,
+        )
+        if args.vectorbt and not args.vectorbt_only:
+            _validate_crypto_candidates(candidates, repo_root)
+        results.extend(_evaluate_current(candidates))
 
     if idea_packet:
         update_idea_statuses_from_results(idea_packet, results)

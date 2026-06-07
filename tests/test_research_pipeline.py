@@ -716,13 +716,13 @@ def test_run_pipeline_adaptive_retry_expands_search_after_gate_failure(tmp_path,
     }
 
     filter_calls = []
-    generate_calls = []
+    idea_candidate_calls = []
     evaluate_calls = []
     gate = GateThresholds(min_net_pnl=0.0, min_trades=1)
 
-    def fake_generate_candidates(*args, **kwargs):
-        generate_calls.append(kwargs)
-        return [retry_candidate]
+    def fake_candidates_from_ideas(*args, **kwargs):
+        idea_candidate_calls.append(kwargs)
+        return [initial_candidate] if len(idea_candidate_calls) == 1 else [retry_candidate]
 
     def fake_filter_candidates(*args, **kwargs):
         candidates = kwargs["candidates"]
@@ -767,9 +767,9 @@ def test_run_pipeline_adaptive_retry_expands_search_after_gate_failure(tmp_path,
     monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_retry")
     monkeypatch.setattr(run_pipeline, "build_pipeline_request", lambda **kwargs: request)
     monkeypatch.setattr(run_pipeline, "generate_idea_set", lambda *args, **kwargs: idea_packet)
-    monkeypatch.setattr(run_pipeline, "candidates_from_ideas", lambda *args, **kwargs: [initial_candidate])
+    monkeypatch.setattr(run_pipeline, "candidates_from_ideas", fake_candidates_from_ideas)
     monkeypatch.setattr(run_pipeline, "parsed_from_idea", lambda idea: parsed)
-    monkeypatch.setattr(run_pipeline, "generate_candidates", fake_generate_candidates)
+    monkeypatch.setattr(run_pipeline, "generate_candidates", lambda *args, **kwargs: pytest.fail("fallback generator should not run for idea-set retry"))
     monkeypatch.setattr(run_pipeline, "filter_candidates", fake_filter_candidates)
     monkeypatch.setattr(run_pipeline, "evaluate_model", fake_evaluate_model)
     monkeypatch.setattr(run_pipeline, "deploy_best", lambda repo_root, report: repo_root / "deployed.json")
@@ -792,6 +792,8 @@ def test_run_pipeline_adaptive_retry_expands_search_after_gate_failure(tmp_path,
             "grid",
             "--num-samples",
             "4",
+            "--max-iterations",
+            "3",
             "--random-seed",
             "99",
         ],
@@ -803,8 +805,14 @@ def test_run_pipeline_adaptive_retry_expands_search_after_gate_failure(tmp_path,
     response = json.loads((run_dir / "response_packet.json").read_text(encoding="utf-8"))
 
     assert filter_calls == [["cand_initial"], ["cand_retry"]]
-    assert generate_calls[0]["search_mode"] == "random"
-    assert generate_calls[0]["num_samples"] == 8
+    assert idea_candidate_calls[0]["search_mode"] == "grid"
+    assert idea_candidate_calls[0]["max_candidates"] == 1
+    assert idea_candidate_calls[0]["num_samples"] == 4
+    assert idea_candidate_calls[0]["max_iterations"] == 1
+    assert idea_candidate_calls[1]["search_mode"] == "random"
+    assert idea_candidate_calls[1]["max_candidates"] == 8
+    assert idea_candidate_calls[1]["num_samples"] == 8
+    assert idea_candidate_calls[1]["max_iterations"] == 1
     assert evaluate_calls == ["cand_initial", "cand_retry"]
     assert response["candidates_tested"] == 2
     assert [result["passes"] for result in response["results"]] == [False, True]
