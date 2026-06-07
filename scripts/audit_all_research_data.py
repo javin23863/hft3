@@ -160,9 +160,13 @@ def _crypto_gaps() -> dict[str, Any]:
     missing_bt = missing_bookticker_days(start=start, end=end)
     synthetic_bt = synthetic_bookticker_days(start=start, end=end)
 
-    from crypto_lane.src.ingest.mempool_preflight import preflight_mempool_gaps
+    from crypto_lane.src.ingest.mempool_preflight import AUDIT_B2_PROBE_MAX_DAYS, preflight_mempool_gaps
 
-    mempool_pf = preflight_mempool_gaps(start=start, end=end)
+    mempool_pf = preflight_mempool_gaps(
+        start=start,
+        end=end,
+        b2_probe_max_days=AUDIT_B2_PROBE_MAX_DAYS,
+    )
     crypto_l3_ready = len(absent_bt) == 0 and len(synthetic_bt) == 0 and not l3_norm_missing
     crypto_mempool_ready = bool(mempool_pf.get("mempool_ready"))
     return {

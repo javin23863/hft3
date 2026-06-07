@@ -12,6 +12,15 @@ from crypto_lane.src.ingest.paths import normalized_dir
 from crypto_lane.src.types import repo_root_from_lane
 
 MEMPOOL_MIN_COVERAGE_RATIO = 0.95
+AUDIT_B2_PROBE_MAX_DAYS = 31
+
+
+def _sample_probe_days(days: list[date], max_probe_days: int) -> list[date]:
+    if max_probe_days <= 0 or len(days) <= max_probe_days:
+        return days
+    n = len(days)
+    idxs = sorted({int(round(i * (n - 1) / (max_probe_days - 1))) for i in range(max_probe_days)})
+    return [days[i] for i in idxs]
 
 
 def _desk():
@@ -94,13 +103,30 @@ def _mempool_probe(
     }
 
 
-def preflight_mempool_gaps(*, start: str, end: str, allow_degraded_mempool: bool = False) -> dict[str, Any]:
+def preflight_mempool_gaps(
+    *,
+    start: str,
+    end: str,
+    allow_degraded_mempool: bool = False,
+    b2_probe_max_days: int | None = None,
+) -> dict[str, Any]:
     """Report mempool_snapshot_15m coverage on B2/local cache and node sync."""
     start_d = _parse_date(start)
     end_d = _parse_date(end)
     days = list(_date_range(start_d, end_d))
     total_days = len(days)
-    probe = _mempool_probe(days)
+    probe_days = _sample_probe_days(days, b2_probe_max_days) if b2_probe_max_days else days
+    probe = _mempool_probe(probe_days)
+    sampled = len(probe_days) < total_days
+    if sampled:
+        sample_coverage = probe["available_count"] / max(len(probe_days), 1)
+        available_count = int(round(sample_coverage * total_days))
+        missing_count = total_days - available_count
+        coverage_ratio = available_count / max(total_days, 1)
+    else:
+        available_count = probe["available_count"]
+        missing_count = probe["missing_count"]
+        coverage_ratio = available_count / max(total_days, 1)
     node_status = _read_btc_node_status()
     if node_status is None:
         synced = None
@@ -109,9 +135,6 @@ def preflight_mempool_gaps(*, start: str, end: str, allow_degraded_mempool: bool
         status_stale = bool(node_status.get("stale"))
         synced = bool(node_status.get("synced")) and not status_stale
     normalized_ok = _normalized_mempool_covers_range(start, end)
-    missing_count = probe["missing_count"]
-    available_count = probe["available_count"]
-    coverage_ratio = available_count / max(total_days, 1)
     if allow_degraded_mempool:
         mempool_ready = normalized_ok or coverage_ratio >= 0.5
     else:
@@ -122,8 +145,10 @@ def preflight_mempool_gaps(*, start: str, end: str, allow_degraded_mempool: bool
         "date_range": {"start": start, "end": end},
         "total_days": total_days,
         "b2_probe": probe,
+        "b2_probe_sampled": sampled,
+        "b2_probe_days": len(probe_days),
         "crypto_mempool_missing_days": missing_count,
-        "crypto_mempool_available_count": probe["available_count"],
+        "crypto_mempool_available_count": available_count,
         "missing_days_sample": probe["missing_days"][:20],
         "btc_node_status_path": str(desk_env.resolve_btc_node_status_path(root) or ""),
         "btc_node_env_path": str(desk_env.resolve_btc_node_env_path(root) or ""),

@@ -107,3 +107,28 @@ def test_preflight_mempool_allow_degraded(monkeypatch):
         start="2024-01-01", end="2024-01-02", allow_degraded_mempool=True
     )
     assert report["mempool_ready"] is True
+
+
+def test_preflight_sampled_probe_extrapolates(monkeypatch):
+    monkeypatch.setattr(
+        mempool_preflight,
+        "_mempool_probe",
+        lambda days, **_: {
+            "bucket": "crypto-alpha-datasets",
+            "available_days": [d.isoformat() for d in days],
+            "missing_days": [],
+            "available_count": len(days),
+            "missing_count": 0,
+            "error_samples": [],
+        },
+    )
+    monkeypatch.setattr(mempool_preflight, "_read_btc_node_status", lambda: None)
+    monkeypatch.setattr(mempool_preflight, "_normalized_mempool_covers_range", lambda *a, **k: False)
+    report = mempool_preflight.preflight_mempool_gaps(
+        start="2024-01-01",
+        end="2024-03-31",
+        b2_probe_max_days=10,
+    )
+    assert report["b2_probe_sampled"] is True
+    assert report["b2_probe_days"] == 10
+    assert report["mempool_ready"] is True

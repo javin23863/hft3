@@ -14,3 +14,6 @@ def test_smoke_oos_ic_challengers_keys():
     oos = primary["oos_ic_challengers"]
     for name in _EXPECTED_CHALLENGERS:
         assert name in oos
+    assert "purged_cv_ic_challengers" in primary
+    for name in _EXPECTED_CHALLENGERS:
+        assert name in primary["purged_cv_ic_challengers"]

@@ -239,6 +239,11 @@ def _run_crypto_phase(
                 steps["blockspace_error"] = str(exc)
         else:
             steps["blockspace_skipped"] = "mempool gaps remain; btc node not synced or status unknown"
+            steps["mempool_preflight_degraded"] = preflight_mempool_gaps(
+                start=start,
+                end=end,
+                allow_degraded_mempool=True,
+            )
     mod = _load_audit_module()
     steps["crypto_audit"] = {
         k: v

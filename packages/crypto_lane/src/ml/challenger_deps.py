@@ -1,4 +1,4 @@
-"""Optional ML challenger imports and fit helpers."""
+"""ML challenger imports and fit helpers."""
 from __future__ import annotations
 
 from typing import Any

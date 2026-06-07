@@ -182,6 +182,7 @@ def _evaluate_purged_cv(
     baseline_name: str,
     validation: dict,
     *,
+    challenger_names: list[str] | None = None,
     backtest: dict | None = None,
     label_horizon_steps: int = 1,
 ) -> dict[str, Any]:
@@ -191,6 +192,9 @@ def _evaluate_purged_cv(
     n_splits = int(validation.get("min_folds", 3))
     min_train, test_size = _fixture_fold_sizes(n, backtest)
     ics: list[float] = []
+    names = list(challenger_names or [])
+    purged_ic_by_challenger: dict[str, list[float]] = {name: [] for name in names}
+    purged_challenger_errors: dict[str, str] = {}
     folds = purged_expanding_folds(
         n,
         min_train=min_train,
@@ -207,9 +211,21 @@ def _evaluate_purged_cv(
         bm, kind, idx = train_baseline(baseline_name, X_tr, y_tr, feat_cols)
         pred = predict_baseline(bm, kind, idx, X_te)
         ics.append(information_coefficient(y_te, pred))
+        for cname in names:
+            try:
+                cm, _, _ = fit_challenger(cname, X_tr, y_tr, feat_cols)
+                purged_ic_by_challenger[cname].append(information_coefficient(y_te, cm.predict(X_te)))
+            except ChallengerUnavailableError as exc:
+                purged_challenger_errors[cname] = str(exc)
+    purged_cv_ic_challengers = {
+        name: float(np.mean(vals)) if vals else None
+        for name, vals in purged_ic_by_challenger.items()
+    }
     return {
         "n_splits": len(ics),
         "purged_cv_ic_mean": float(np.mean(ics)) if ics else 0.0,
+        "purged_cv_ic_challengers": purged_cv_ic_challengers,
+        "purged_cv_challenger_errors": purged_challenger_errors,
         "embargo_steps": embargo,
         "label_horizon_steps": label_horizon_steps,
     }
@@ -421,8 +437,14 @@ def run_smoke(candidate_id: str, output_dir: str | Path | None = None) -> dict[s
             label_horizon_steps=label_h,
         )
         purged = _evaluate_purged_cv(
-            df, target, feats, (cand.get("baseline") or ["ridge"])[0], validation_eff,
-            backtest=backtest, label_horizon_steps=label_h,
+            df,
+            target,
+            feats,
+            (cand.get("baseline") or ["ridge"])[0],
+            validation_eff,
+            challenger_names=list(cand.get("challengers") or ["ridge"]),
+            backtest=backtest,
+            label_horizon_steps=label_h,
         )
         runs[run_name] = {**metrics, **purged, "n_features": len(feats), "n_rows": df.height}
 
