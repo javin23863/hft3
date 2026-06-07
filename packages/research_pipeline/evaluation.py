@@ -25,6 +25,36 @@ def _first_float(*values: Any) -> Optional[float]:
     return None
 
 
+def _required_float(name: str, invalid_metrics: List[str], *values: Any) -> float:
+    for value in values:
+        if value is None:
+            continue
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(numeric):
+            return numeric
+        invalid_metrics.append(name)
+        return 0.0
+    return 0.0
+
+
+def _required_int(name: str, invalid_metrics: List[str], *values: Any) -> int:
+    for value in values:
+        if value is None:
+            continue
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(numeric):
+            return int(numeric)
+        invalid_metrics.append(name)
+        return 0
+    return 0
+
+
 def _drawdown_bps(report: Dict[str, Any], diag: Dict[str, Any]) -> Optional[float]:
     bps = _first_float(
         diag.get("drawdown_bps"),
@@ -117,11 +147,12 @@ def evaluate_model(
 
     report = out.get("report") or {}
     diag = out.get("diagnostics") or {}
-    net_pnl = float(report.get("net_pnl", diag.get("net_pnl", 0.0)))
-    num_trades = int(report.get("num_trades", diag.get("num_trades", 0)))
-    win_rate = float(diag.get("win_rate", 0.0))
-    expectancy = float(diag.get("expectancy", report.get("expectancy", 0.0)))
-    tail_loss = float(diag.get("tail_loss", 0.0))
+    invalid_metrics: List[str] = []
+    net_pnl = _required_float("net_pnl", invalid_metrics, report.get("net_pnl"), diag.get("net_pnl"))
+    num_trades = _required_int("num_trades", invalid_metrics, report.get("num_trades"), diag.get("num_trades"))
+    win_rate = _required_float("win_rate", invalid_metrics, diag.get("win_rate"), report.get("win_rate"))
+    expectancy = _required_float("expectancy", invalid_metrics, diag.get("expectancy"), report.get("expectancy"))
+    tail_loss = _required_float("tail_loss", invalid_metrics, diag.get("tail_loss"), report.get("tail_loss"))
     sharpe = _first_float(
         diag.get("sharpe"),
         diag.get("sharpe_ratio"),
@@ -146,4 +177,9 @@ def evaluate_model(
         drawdown_bps=drawdown_bps,
         avg_latency_us=avg_latency_us,
         workbench_out=out,
+        error=(
+            f"non_finite_metric: {', '.join(sorted(set(invalid_metrics)))}"
+            if invalid_metrics
+            else None
+        ),
     )

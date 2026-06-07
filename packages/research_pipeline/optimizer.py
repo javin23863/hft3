@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import random
 from dataclasses import dataclass
 from typing import Any, Iterable, List, Tuple
@@ -17,6 +18,8 @@ _DEFAULT_RANGES = {
     "stop_loss_pct": (0.25, 2.0),
     "take_profit_pct": (0.25, 2.5),
 }
+
+_FAILED_SCORE = -1_000_000_000.0
 
 
 @dataclass(frozen=True)
@@ -48,19 +51,27 @@ def score_result(result: EvaluationResult) -> float:
     signals, while drawdown, latency, and hard failures are penalized.
     """
     if result.error:
-        return -1_000_000_000.0
-    score = float(result.expectancy)
-    score += 0.001 * float(result.net_pnl)
-    score += 0.10 * float(result.win_rate)
-    if result.sharpe is not None:
-        score += 0.25 * float(result.sharpe)
-    if result.drawdown_bps is not None:
-        score -= 0.001 * abs(float(result.drawdown_bps))
-    if result.avg_latency_us is not None:
-        score -= 0.0001 * max(0.0, float(result.avg_latency_us))
+        return _FAILED_SCORE
+    expectancy = _finite_float(result.expectancy)
+    net_pnl = _finite_float(result.net_pnl)
+    win_rate = _finite_float(result.win_rate)
+    if expectancy is None or net_pnl is None or win_rate is None:
+        return _FAILED_SCORE
+    score = expectancy
+    score += 0.001 * net_pnl
+    score += 0.10 * win_rate
+    sharpe = _finite_float(result.sharpe)
+    if sharpe is not None:
+        score += 0.25 * sharpe
+    drawdown_bps = _finite_float(result.drawdown_bps)
+    if drawdown_bps is not None:
+        score -= 0.001 * abs(drawdown_bps)
+    avg_latency_us = _finite_float(result.avg_latency_us)
+    if avg_latency_us is not None:
+        score -= 0.0001 * max(0.0, avg_latency_us)
     if result.passes_all_gates():
         score += 1_000.0
-    return score
+    return score if math.isfinite(score) else _FAILED_SCORE
 
 
 def propose_optimized_candidates(
@@ -72,6 +83,7 @@ def propose_optimized_candidates(
     backend: str = "heuristic",
     random_seed: int | None = None,
     top_k: int = 3,
+    seed_metadata: dict[str, Any] | None = None,
 ) -> Tuple[List[CandidateModel], OptimizerTrace]:
     """Propose the next candidate batch from prior evaluation outcomes."""
     history_list = list(history)
@@ -90,6 +102,7 @@ def propose_optimized_candidates(
             rng=rng,
             random_seed=random_seed,
             top_k=top_k,
+            seed_metadata=seed_metadata,
         )
         actual_backend = "optuna" if fallback is None else "heuristic"
     elif backend == "heuristic":
@@ -100,6 +113,7 @@ def propose_optimized_candidates(
             iteration=iteration,
             rng=rng,
             top_k=top_k,
+            seed_metadata=seed_metadata,
         )
         fallback = None
         actual_backend = "heuristic"
@@ -126,6 +140,7 @@ def _propose_heuristic(
     iteration: int,
     rng: random.Random,
     top_k: int,
+    seed_metadata: dict[str, Any] | None = None,
 ) -> List[CandidateModel]:
     anchors = ranked[: max(1, int(top_k))]
     candidates: List[CandidateModel] = []
@@ -141,6 +156,7 @@ def _propose_heuristic(
             iteration=iteration,
             backend="heuristic",
             anchor=anchor,
+            seed_metadata=seed_metadata,
         )
         if candidate.candidate_id in seen:
             continue
@@ -158,6 +174,7 @@ def _propose_optuna(
     rng: random.Random,
     random_seed: int | None,
     top_k: int,
+    seed_metadata: dict[str, Any] | None = None,
 ) -> tuple[List[CandidateModel], str | None]:
     try:
         import optuna  # type: ignore
@@ -172,6 +189,7 @@ def _propose_optuna(
                 iteration=iteration,
                 rng=rng,
                 top_k=top_k,
+                seed_metadata=seed_metadata,
             ),
             f"optuna_unavailable: {exc}",
         )
@@ -228,6 +246,7 @@ def _propose_optuna(
             iteration=iteration,
             backend="optuna",
             anchor=ranked[0] if ranked else None,
+            seed_metadata=seed_metadata,
         )
         if candidate.candidate_id in seen:
             continue
@@ -267,10 +286,14 @@ def _candidate_from_params(
     iteration: int,
     backend: str,
     anchor: EvaluationResult | None = None,
+    seed_metadata: dict[str, Any] | None = None,
 ) -> CandidateModel:
     model_id = parsed.primary_model_id
     cid = param_hash_from_dict(model_id, params)
-    inherited = _inherited_metadata(anchor)
+    inherited = {
+        **_lineage_metadata(seed_metadata or {}),
+        **_inherited_metadata(anchor),
+    }
     return CandidateModel(
         candidate_id=cid,
         model_id=model_id,
@@ -290,14 +313,28 @@ def _candidate_from_params(
 def _inherited_metadata(anchor: EvaluationResult | None) -> dict[str, Any]:
     if anchor is None:
         return {}
-    metadata = anchor.candidate.metadata
+    inherited = _lineage_metadata(anchor.candidate.metadata)
+    if anchor.candidate.candidate_id:
+        inherited["optimizer_anchor_candidate_id"] = anchor.candidate.candidate_id
+    return inherited
+
+
+def _lineage_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
     inherited: dict[str, Any] = {}
     for key in ("idea_id", "idea_status", "idea_lane_code", "idea_queue_index"):
         if key in metadata:
             inherited[key] = metadata[key]
-    if anchor.candidate.candidate_id:
-        inherited["optimizer_anchor_candidate_id"] = anchor.candidate.candidate_id
     return inherited
+
+
+def _finite_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    return numeric if math.isfinite(numeric) else None
 
 
 def _param_ranges(parsed: ParsedHypothesis) -> dict[str, tuple[float, float]]:

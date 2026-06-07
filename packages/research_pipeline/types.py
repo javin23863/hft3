@@ -17,6 +17,16 @@ def _finite(value: Optional[float]) -> bool:
         return False
 
 
+def _finite_int(value: Any) -> Optional[int]:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(numeric):
+        return None
+    return int(numeric)
+
+
 @dataclass
 class ParsedHypothesis:
     thesis: str
@@ -62,13 +72,14 @@ class GateThresholds:
         drawdown_bps: Optional[float] = None,
         avg_latency_us: Optional[float] = None,
     ) -> bool:
-        if net_pnl < self.min_net_pnl:
+        if not _finite(net_pnl) or float(net_pnl) < self.min_net_pnl:
             return False
-        if num_trades < self.min_trades:
+        trades = _finite_int(num_trades)
+        if trades is None or trades < self.min_trades:
             return False
-        if tail_loss > self.max_tail_loss:
+        if not _finite(tail_loss) or float(tail_loss) > self.max_tail_loss:
             return False
-        if win_rate < self.min_win_rate:
+        if not _finite(win_rate) or float(win_rate) < self.min_win_rate:
             return False
         if self.min_sharpe is not None:
             if not _finite(sharpe) or float(sharpe) < self.min_sharpe:

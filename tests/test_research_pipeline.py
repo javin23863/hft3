@@ -161,6 +161,55 @@ def test_optimizer_proposes_hyperparameter_candidates_from_prior_results():
         assert candidate.metadata["optimizer_anchor_candidate_id"] == "strong"
 
 
+def test_optimizer_rejects_non_finite_scores_and_preserves_seed_lineage():
+    from research_pipeline.optimizer import propose_optimized_candidates, score_result
+    from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds, ParsedHypothesis
+
+    parsed = ParsedHypothesis(
+        thesis="seed retry",
+        instrument_universe=["MES"],
+        entry_rules=[],
+        exit_rules=[],
+        indicators=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        feature_list=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        param_ranges={"signal_threshold": [0.05, 0.35]},
+        primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+    )
+    bad = EvaluationResult(
+        candidate=CandidateModel(
+            candidate_id="bad",
+            model_id=parsed.primary_model_id,
+            strategy_params={"signal_threshold": 0.1},
+            thesis=parsed.thesis,
+        ),
+        event_id="EVT",
+        net_pnl=0.0,
+        num_trades=1,
+        win_rate=0.5,
+        expectancy=float("nan"),
+        tail_loss=0.0,
+        gates=GateThresholds(min_trades=1),
+    )
+
+    assert score_result(bad) == -1_000_000_000.0
+
+    candidates, trace = propose_optimized_candidates(
+        parsed,
+        [],
+        max_candidates=2,
+        iteration=2,
+        backend="heuristic",
+        random_seed=11,
+        seed_metadata={"idea_id": "idea_seed", "idea_lane_code": "cme", "idea_queue_index": 0},
+    )
+
+    assert trace.best_prior_candidate_id is None
+    assert trace.best_prior_score is None
+    assert len(candidates) == 2
+    assert {candidate.metadata["idea_id"] for candidate in candidates} == {"idea_seed"}
+    assert {candidate.metadata["idea_lane_code"] for candidate in candidates} == {"cme"}
+
+
 def _idea_packet():
     return {
         "schema_version": "1",
@@ -461,6 +510,10 @@ def test_gate_thresholds():
     assert gates.passes(1.0, 2, 0.0, 0.5)
     assert not gates.passes(-1.0, 2, 0.0, 0.5)
     assert not gates.passes(1.0, 0, 0.0, 0.5)
+    assert not gates.passes(1.0, float("nan"), 0.0, 0.5)
+    assert not gates.passes(float("nan"), 2, 0.0, 0.5)
+    assert not gates.passes(1.0, 2, float("inf"), 0.5)
+    assert not gates.passes(1.0, 2, 0.0, float("nan"))
 
     metric_gates = GateThresholds(
         min_sharpe=1.0,
@@ -573,6 +626,53 @@ def test_evaluate_model_extracts_extended_gate_metrics(tmp_path, monkeypatch):
     assert result.drawdown_bps == 25.0
     assert result.avg_latency_us == 175.0
     assert result.passes_all_gates()
+
+
+def test_evaluate_model_sanitizes_non_finite_primary_metrics(tmp_path, monkeypatch):
+    import sys
+    from types import ModuleType
+
+    import research_pipeline.evaluation as evaluation
+    from research_pipeline.types import CandidateModel, GateThresholds
+
+    class FakeWorkbenchEngine:
+        def __init__(self, repo_root):
+            self.repo_root = repo_root
+
+        def run(self, *args, **kwargs):
+            return {
+                "report": {"net_pnl": float("nan"), "num_trades": float("nan")},
+                "diagnostics": {
+                    "win_rate": float("nan"),
+                    "expectancy": float("inf"),
+                    "tail_loss": float("inf"),
+                },
+            }
+
+    fake_engine_module = ModuleType("workbench.src.run.engine")
+    fake_engine_module.WorkbenchEngine = FakeWorkbenchEngine
+    monkeypatch.setitem(sys.modules, "workbench.src.run.engine", fake_engine_module)
+    monkeypatch.setattr(evaluation, "resolve_model_id", lambda model_id: model_id)
+
+    result = evaluation.evaluate_model(
+        CandidateModel(
+            candidate_id="cand_nonfinite",
+            model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+            strategy_params={},
+            thesis="nonfinite",
+        ),
+        "CPI_2024_09_11_TIGHT",
+        tmp_path,
+        gates=GateThresholds(min_trades=1, min_win_rate=0.1),
+    )
+
+    assert result.net_pnl == 0.0
+    assert result.num_trades == 0
+    assert result.win_rate == 0.0
+    assert result.expectancy == 0.0
+    assert result.tail_loss == 0.0
+    assert result.error == "non_finite_metric: expectancy, net_pnl, num_trades, tail_loss, win_rate"
+    assert not result.passes_all_gates()
 
 
 def test_promoted_candidates_recover_source_metadata_after_vectorbt_rehash():
@@ -1095,6 +1195,210 @@ def test_run_pipeline_adaptive_retry_expands_search_after_gate_failure(tmp_path,
             "fallback_reason": None,
         }
     ]
+
+
+def test_run_pipeline_retry_preserves_idea_lineage_after_empty_initial_vectorbt(
+    tmp_path,
+    monkeypatch,
+):
+    import sys
+
+    import scripts.run_pipeline as run_pipeline
+    from backtest_pipeline.src.promotion_gate import PromotedCandidate, RejectedCandidate
+    from backtest_pipeline.src.vectorbt_adapter import FilterResult
+    from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds, ParsedHypothesis
+
+    parsed = ParsedHypothesis(
+        thesis="Retry rejected prefilter ideas",
+        instrument_universe=["MES"],
+        entry_rules=["enter_spread"],
+        exit_rules=["exit_revert"],
+        indicators=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        feature_list=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        param_ranges={"signal_threshold": [0.05, 0.35]},
+        primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        source="idea_set",
+    )
+    initial_candidate = CandidateModel(
+        candidate_id="cand_initial_rejected",
+        model_id=parsed.primary_model_id,
+        strategy_params={"signal_threshold": 0.1},
+        thesis=parsed.thesis,
+        metadata={"idea_id": "idea_retry", "idea_lane_code": "cme", "idea_queue_index": 0},
+    )
+    request = {
+        "schema_version": "1",
+        "request_id": "pipeline_retry_empty_vbt",
+        "thesis": parsed.thesis,
+        "event_id": "CPI_2024_09_11_TIGHT",
+        "openfoundry_meta": {
+            "connector_id": "hft3-cme-mbo",
+            "asset_class": "cme_mbo_microstructure",
+            "vendor_shas": {"openfoundry": "test"},
+            "schema_version": "1",
+        },
+        "max_candidates": 1,
+    }
+    idea_packet = {
+        "schema_version": "1",
+        "request_id": "pipeline_retry_empty_vbt",
+        "llm_model": "mock",
+        "llm_status": "ok",
+        "refs": {},
+        "constraints": {
+            "allowed_model_ids": ["SPREAD_BLOWOUT_RECOMPRESSION"],
+            "allowed_lane_codes": ["cme"],
+            "max_candidates": 1,
+            "no_promotion_authority": True,
+        },
+        "review_memory": [],
+        "ideas": [
+            {
+                "idea_id": "idea_retry",
+                "status": "queued_for_test",
+                "lane_code": "cme",
+                "thesis_code": "spread_recompression",
+                "instrument_ids": ["MES"],
+                "primary_model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+                "feature_ids": ["mbo.depth.spread_stress"],
+                "param_ranges": {"signal_threshold": [0.05, 0.35]},
+                "entry_rule_codes": ["enter_spread"],
+                "exit_rule_codes": ["exit_revert"],
+                "risk_codes": ["latency_gate_required"],
+                "evidence_ref_ids": [],
+                "rank_inputs": {
+                    "novelty": 0.1,
+                    "evidence_coverage": 0.0,
+                    "lane_fit": 1.0,
+                    "prior_failure_overlap": 0.0,
+                    "validation_readiness": 1.0,
+                },
+            }
+        ],
+    }
+    gate = GateThresholds(min_net_pnl=0.0, min_trades=1)
+    filter_calls = []
+    evaluated_metadata = []
+
+    def fake_filter_candidates(*args, **kwargs):
+        candidates = kwargs["candidates"]
+        filter_calls.append([candidate.candidate_id for candidate in candidates])
+        if len(filter_calls) == 1:
+            return FilterResult(
+                promoted=[],
+                rejected=[
+                    RejectedCandidate(
+                        candidate_id=initial_candidate.candidate_id,
+                        hypothesis_id=parsed.primary_model_id,
+                        reject_reason="below_oos_expectancy",
+                    )
+                ],
+                vectorbt_available=True,
+                backend="test",
+                run_id="vbt_initial_empty",
+                total_candidates=len(candidates),
+            )
+        promoted_candidate = candidates[0]
+        return FilterResult(
+            promoted=[
+                PromotedCandidate(
+                    candidate_id=promoted_candidate.candidate_id,
+                    hypothesis_id=parsed.primary_model_id,
+                    strategy_family=parsed.primary_model_id,
+                    asset_class="CME",
+                    symbol="MES",
+                    timeframe="1m",
+                    param_values=promoted_candidate.strategy_params,
+                    vectorbt_run_id="vbt_retry",
+                    vectorbt_results={
+                        "source_candidate_id": promoted_candidate.candidate_id,
+                        "oos_expectancy": 1.0,
+                        "num_trades": 10,
+                    },
+                    pass_reason="all_gates_passed",
+                )
+            ],
+            rejected=[],
+            vectorbt_available=True,
+            backend="test",
+            run_id="vbt_retry",
+            total_candidates=len(candidates),
+        )
+
+    def fake_evaluate_model(cand, event_id, repo_root, **kwargs):
+        evaluated_metadata.append(dict(cand.metadata))
+        return EvaluationResult(
+            candidate=cand,
+            event_id=event_id,
+            net_pnl=2.0,
+            num_trades=2,
+            win_rate=1.0,
+            expectancy=2.0,
+            tail_loss=0.0,
+            gates=gate,
+        )
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_retry_empty_vbt")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", lambda **kwargs: request)
+    monkeypatch.setattr(run_pipeline, "generate_idea_set", lambda *args, **kwargs: idea_packet)
+    monkeypatch.setattr(run_pipeline, "candidates_from_ideas", lambda *args, **kwargs: [initial_candidate])
+    monkeypatch.setattr(run_pipeline, "parsed_from_idea", lambda idea: parsed)
+    monkeypatch.setattr(run_pipeline, "filter_candidates", fake_filter_candidates)
+    monkeypatch.setattr(run_pipeline, "evaluate_model", fake_evaluate_model)
+    monkeypatch.setattr(run_pipeline, "deploy_best", lambda repo_root, report: repo_root / "deployed.json")
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "run_pipeline.py",
+            "--thesis",
+            parsed.thesis,
+            "--event-id",
+            "CPI_2024_09_11_TIGHT",
+            "--repo-root",
+            str(tmp_path),
+            "--max-candidates",
+            "1",
+            "--no-llm",
+            "--max-iterations",
+            "2",
+            "--random-seed",
+            "17",
+        ],
+    )
+
+    assert run_pipeline.main() == 0
+
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / "pipeline_retry_empty_vbt"
+    idea_packet_out = json.loads((run_dir / "idea_set_packet.json").read_text(encoding="utf-8"))
+    optimization_trace = json.loads((run_dir / "optimization_trace.json").read_text(encoding="utf-8"))
+
+    assert len(filter_calls) == 2
+    assert filter_calls[0] == ["cand_initial_rejected"]
+    assert evaluated_metadata == [
+        {
+            "idea_id": "idea_retry",
+            "idea_lane_code": "cme",
+            "idea_queue_index": 0,
+            "source_model": parsed.primary_model_id,
+            "strategy_family": parsed.primary_model_id,
+            "optimizer_backend": "heuristic",
+            "optimizer_iteration": 2,
+            "optimized": True,
+            "promoted": True,
+            "vectorbt_run_id": "vbt_retry",
+            "vectorbt_results": {
+                "source_candidate_id": filter_calls[1][0],
+                "oos_expectancy": 1.0,
+                "num_trades": 10,
+            },
+            "asset_class": "CME",
+            "symbol": "MES",
+        }
+    ]
+    assert idea_packet_out["ideas"][0]["status"] == "tested_pass"
+    assert optimization_trace[0]["best_prior_candidate_id"] is None
 
 
 def test_pipeline_request_response_roundtrip():

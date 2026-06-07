@@ -113,6 +113,15 @@ def _promoted_to_candidates(
     ]
 
 
+def _lineage_seed_from_candidates(candidates: list[CandidateModel]) -> dict | None:
+    for candidate in candidates:
+        if candidate.metadata.get("idea_id"):
+            return dict(candidate.metadata)
+    if candidates:
+        return dict(candidates[0].metadata)
+    return None
+
+
 def _validate_crypto_candidates(candidates: list[CandidateModel], repo_root: Path) -> None:
     crypto_data = repo_root / "data" / "crypto"
     for cand in candidates:
@@ -338,6 +347,8 @@ def main() -> int:
             max_iterations=1,
         ))
 
+    initial_candidate_pool = list(candidates)
+
     if args.vectorbt or args.vectorbt_only:
         print(f"Running VectorBT filter on {len(candidates)} candidates x grid...")
         source_meta = {c.candidate_id: dict(c.metadata) for c in candidates}
@@ -365,11 +376,6 @@ def main() -> int:
         else:
             print("No candidates survived VectorBT filter.")
             candidates = []
-            if idea_packet:
-                mark_queued_ideas_without_candidates_failed(idea_packet, [])
-                (artifact_dir / "idea_set_packet.json").write_text(
-                    json.dumps(idea_packet, indent=2), encoding="utf-8"
-                )
         if idea_packet and candidates:
             mark_queued_ideas_without_candidates_failed(
                 idea_packet,
@@ -531,6 +537,7 @@ def main() -> int:
 
     results = _evaluate_current(candidates)
     optimization_trace: list[dict] = []
+    optimizer_seed_metadata = _lineage_seed_from_candidates(initial_candidate_pool)
 
     max_iterations = max(1, int(args.max_iterations))
     for iteration in range(2, max_iterations + 1):
@@ -552,6 +559,7 @@ def main() -> int:
             backend=args.optimizer_backend,
             random_seed=args.random_seed,
             top_k=args.optimizer_top_k,
+            seed_metadata=optimizer_seed_metadata,
         )
         optimization_trace.append(trace.to_dict())
         if not retry_candidates:
@@ -597,6 +605,14 @@ def main() -> int:
 
     if idea_packet:
         update_idea_statuses_from_results(idea_packet, results)
+        mark_queued_ideas_without_candidates_failed(
+            idea_packet,
+            {
+                str(result.candidate.metadata.get("idea_id"))
+                for result in results
+                if result.candidate.metadata.get("idea_id")
+            },
+        )
         (artifact_dir / "idea_set_packet.json").write_text(
             json.dumps(idea_packet, indent=2), encoding="utf-8"
         )
