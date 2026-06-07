@@ -4,19 +4,20 @@ import threading
 import pandas as pd
 from datetime import datetime
 
+from .manifest_io import read_manifest_locked
+
 _budget_lock = threading.Lock()
 
 
 class BudgetManager:
     """
     Databento credit gating for MBO downloads.
-    Initial credit: $350.00
-    Operating cap: $325.00 (priority macro backfill headroom)
-    Reserve: $25.00
+    Operating cap is a local guardrail; portal invoice is ground truth.
+    Spend is deduped by output_path so duplicate manifest rows do not block pulls.
     """
 
-    INITIAL_CREDIT = 350.00
-    OPERATING_CAP = 325.00
+    INITIAL_CREDIT = 650.00
+    OPERATING_CAP = 650.00
     RESERVE = 25.00
     SOFT_LIMIT = 5.00
     HARD_LIMIT = 10.00
@@ -28,9 +29,17 @@ class BudgetManager:
     def _calculate_total_used(self) -> float:
         if os.path.exists(self.manifest_path):
             try:
-                df = pd.read_parquet(self.manifest_path)
-                if "cost" in df.columns:
-                    return float(df["cost"].sum())
+                df = read_manifest_locked(self.manifest_path)
+                if "cost" not in df.columns:
+                    return 0.0
+                if "output_path" in df.columns:
+                    df = df.copy()
+                    df["output_path"] = df["output_path"].astype(str)
+                    df = df[df["output_path"].str.len() > 0]
+                    if "download_time" in df.columns:
+                        df = df.sort_values("download_time")
+                    df = df.drop_duplicates(subset=["output_path"], keep="last")
+                return float(df["cost"].sum())
             except Exception:
                 # Corrupt or legacy manifest — treat as zero spend so downloads can proceed.
                 pass
@@ -75,6 +84,4 @@ class BudgetManager:
                     f"Request cost ${cost_estimate:.2f} would exceed operating cap "
                     f"(${self.OPERATING_CAP:.2f}). Current usage: ${self.total_used:.2f}"
                 )
-
-            self.total_used = projected_total
             return True

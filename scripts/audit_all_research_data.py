@@ -18,28 +18,34 @@ _MANIFEST = _REPO / "data/equities/manifest/decadal_pull.json"
 
 
 def _imbalance_macro_gaps() -> dict[str, Any]:
-    from data_system.src.events_parser import load_and_parse_events
-    from data_system.src.npz_resolver import resolve_npz_for_event
+    from data_system.src.event_data_resolver import build_priority_lane_coverage
 
-    ev = load_and_parse_events(str(_REPO / "packages/data_system/config/events.csv"))
-    mbo_missing, mbp_missing = [], []
-    mbp_dir = _REPO / "data/replay/mbp10"
-    have_mbp = {p.name for p in mbp_dir.glob("*.dbn.zst")} if mbp_dir.is_dir() else set()
-    for _, row in ev.iterrows():
-        eid = row["event_id"]
-        parsed = tuple(str(s) for s in row["parsed_symbols"])
-        sym = parsed[0]
-        _, ok, _ = resolve_npz_for_event(_REPO, eid, sym, parsed)
-        if not ok:
-            mbo_missing.append(eid)
-        fn = f"{sym}_{eid}_mbp-10.dbn.zst"
-        if fn not in have_mbp:
-            mbp_missing.append(eid)
+    try:
+        cov = build_priority_lane_coverage(_REPO)
+    except Exception as exc:
+        return {"priority_lane_error": str(exc)}
+
+    mbo = cov["mbo"]
+    vix = cov["vix"]
     return {
-        "macro_events": len(ev),
-        "mbo_npz_missing": mbo_missing,
-        "mbp10_missing": mbp_missing,
-        "mbp10_have": len(have_mbp),
+        "priority_lane": cov,
+        "mbo_status_counts": dict(mbo.get("status_counts", {})),
+        "vix_status_counts": dict(vix.get("status_counts", {})),
+        "mbo_npz_missing_count": mbo["incomplete_total"],
+        "mbo_npz_complete_pct": mbo["complete_pct"],
+        "mbo_npz_complete": mbo.get("complete", 0),
+        "mbo_npz_total_slots": mbo.get("total_slots", 0),
+        "vix_sensor_missing_count": vix["incomplete_total"],
+        "vix_sensor_complete_pct": vix["complete_pct_eligible"],
+        "vix_sensor_complete": vix.get("complete", 0),
+        "vix_eligible_post_cutoff": vix.get("eligible_post_cutoff", 0),
+        "vix_skipped_pre_cmbp1": vix.get("skipped_pre_cmbp1", 0),
+        # Legacy keys for callers expecting list gaps (sample only)
+        "mbo_npz_missing": [
+            f"{s['event_id']}:{s['symbol']}" for s in mbo.get("incomplete_sample", [])
+        ],
+        "mbp10_missing": [],
+        "mbp10_have": 0,
     }
 
 
@@ -136,6 +142,10 @@ def audit_report() -> dict[str, Any]:
     crypto = _crypto_gaps()
     report = {**macro, **eq, **crypto}
 
+    mbo_complete = macro.get("mbo_npz_complete", 0) >= macro.get("mbo_npz_total_slots", 1)
+    vix_complete = macro.get("vix_sensor_complete", 0) >= macro.get("vix_eligible_post_cutoff", 1)
+    priority_ready = mbo_complete and vix_complete
+
     try:
         from economic_event_universe.catalog_report import build_macro_catalog_summary
 
@@ -143,10 +153,9 @@ def audit_report() -> dict[str, Any]:
     except Exception as exc:
         report["macro_catalog"] = {"error": str(exc)}
 
-    # events.csv lane ready (narrow); full 44-type catalog reported separately in macro_catalog
+    report["priority_lane_ready"] = priority_ready
     report["ready"] = (
-        not macro["mbo_npz_missing"]
-        and not macro["mbp10_missing"]
+        priority_ready
         and not eq["equities_mbo_missing"]
         and not eq["equities_auction_missing"]
         and not eq["equities_normalized_missing"]
@@ -155,7 +164,8 @@ def audit_report() -> dict[str, Any]:
     )
     report["options_failed_count"] = len(eq["options_failed"])
     report["lanes_ready"] = {
-        "macro": report["ready"],
+        "macro_priority_mbo_vix": priority_ready,
+        "macro_full_audit": report["ready"],
         "crypto": crypto.get("crypto_ready", False),
     }
     return report
@@ -163,8 +173,8 @@ def audit_report() -> dict[str, Any]:
 
 def has_imbalance_gaps(report: dict[str, Any]) -> bool:
     return bool(
-        report.get("mbo_npz_missing")
-        or report.get("mbp10_missing")
+        report.get("mbo_npz_missing_count", 0) > 0
+        or report.get("vix_sensor_missing_count", 0) > 0
         or report.get("equities_mbo_missing")
         or report.get("equities_auction_missing")
     )

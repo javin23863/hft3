@@ -31,7 +31,7 @@ def _find_npz_in_dirs(npz_dirs: List[Path], event_id: str, symbol: str) -> Path 
     name = npz_filename(symbol, event_id)
     for npz_dir in npz_dirs:
         candidate = npz_dir / name
-        if candidate.is_file():
+        if candidate.is_file() and candidate.stat().st_size > 0:
             return candidate
     return None
 

@@ -2,10 +2,10 @@ import os
 import threading
 
 import databento as db
-import pandas as pd
 from datetime import datetime, timezone
 
 from .budget_manager import BudgetManager
+from .manifest_io import append_manifest_record
 
 _manifest_lock = threading.Lock()
 
@@ -112,6 +112,11 @@ class DatabentoResearchClient:
         """
         Calculates exact cost per Section 11 math, checks budget, and downloads if approved.
         """
+        dest = output_path or f"data/{event_id}_{schema}.dbn.zst"
+        os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
+        if os.path.isfile(dest) and os.path.getsize(dest) > 0:
+            return dest
+
         if cost_estimate is None:
             cost_estimate = self.estimate_cost(
                 symbols, start_utc, end_utc, dataset, schema, stype_in
@@ -125,11 +130,6 @@ class DatabentoResearchClient:
                 )
         else:
             self.budget.check_request(cost_estimate, override_hard_limit=override_hard_limit)
-
-        dest = output_path or f"data/{event_id}_{schema}.dbn.zst"
-        os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
-        if os.path.isfile(dest) and os.path.getsize(dest) > 0:
-            return dest
 
         self.client.timeseries.get_range(
             dataset=dataset,
@@ -167,18 +167,4 @@ class DatabentoResearchClient:
         
     def _record_manifest(self, record: dict):
         with _manifest_lock:
-            df_new = pd.DataFrame([record])
-            df_existing = pd.DataFrame()
-            if os.path.exists(self.manifest_path):
-                try:
-                    df_existing = pd.read_parquet(self.manifest_path)
-                except Exception:
-                    backup = f"{self.manifest_path}.corrupt.bak"
-                    if not os.path.exists(backup):
-                        os.replace(self.manifest_path, backup)
-            if not df_existing.empty:
-                df_combined = pd.concat([df_existing, df_new], ignore_index=True)
-                df_combined.to_parquet(self.manifest_path)
-            else:
-                os.makedirs(os.path.dirname(self.manifest_path) or ".", exist_ok=True)
-                df_new.to_parquet(self.manifest_path)
+            append_manifest_record(self.manifest_path, record)

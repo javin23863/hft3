@@ -13,7 +13,7 @@ RATES_CANONICAL = ("ZT", "ZF", "ZN", "ZB", "UB", "SR3", "ZQ")
 METALS_CANONICAL = ("GC", "MGC", "HG")
 ENERGY_CANONICAL = ("CL", "MCL", "NG")
 FX_CANONICAL = ("6E",)
-VOL_SENSORS = ("VIX", "VVIX", "VX1", "VX2")
+VOL_SENSORS = ("VIX_ATM_STRIKE", "VIX", "VVIX", "VX1", "VX2")
 
 
 def _slice_offset(df: pd.DataFrame, offset_sec: int) -> pd.DataFrame:
@@ -147,10 +147,16 @@ def build_cross_asset_l3_features(
         out["dollar_pressure_mbo_proxy"] = fx_imb
 
     if sensor_df is not None and len(sensor_df):
-        vix_row = sensor_df[sensor_df.get("sensor", sensor_df.columns[0]) == "VIX"] if "sensor" in sensor_df.columns else sensor_df
+        sub = sensor_df
+        if "offset_sec" in sensor_df.columns:
+            sub = sensor_df[sensor_df["offset_sec"] == offset_sec]
+        if "sensor" in sub.columns:
+            vix_row = sub[sub["sensor"].isin(("VIX_ATM_STRIKE", "VIX"))]
+        else:
+            vix_row = sub
         if len(vix_row):
             vix = float(vix_row.iloc[0].get("level", float("nan")))
-            out["vix_level"] = vix
+            out["vix_atm_strike"] = vix
             if es_vac == es_vac and vix == vix:
                 out["volatility_sensor_confirms_equity_mbo_stress"] = 1.0 if vix > 20 and es_vac > 0.5 else 0.0
 

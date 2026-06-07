@@ -64,8 +64,12 @@ def main() -> int:
         for pname, pdata in preview["periods"].items():
             print(f"=== {pname} ({pdata['start_year']}-{pdata['end_year']}) ===")
             for ev in pdata["events"]:
-                flag = "OK" if ev["npz_present"] else "MISSING"
-                print(f"  [{flag}] {ev['event_id']} {ev['release_date']}")
+                npz_flag = "OK" if ev["npz_present"] else "MISSING"
+                sensor_flag = "OK" if ev.get("sensor_present") else "MISSING"
+                print(
+                    f"  [NPZ:{npz_flag} SENSOR:{sensor_flag}] "
+                    f"{ev['event_id']} {ev['release_date']}"
+                )
         print(f"Catalog years with NPZ: {preview['catalog_years']}")
         print(f"Personal locked: {preview['personal_locked']}")
         return 0

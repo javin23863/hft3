@@ -39,8 +39,10 @@ if page == "Live/Sim Performance":
 
 elif page == "Databento Budget":
     st.header("Databento Credit Management")
-    initial_credit = 125.00
-    operating_cap = 112.50
+    from data_system.src.budget_manager import BudgetManager
+
+    initial_credit = BudgetManager.INITIAL_CREDIT
+    operating_cap = BudgetManager.OPERATING_CAP
     total_used = 0.0
 
     if manifest_path.exists():

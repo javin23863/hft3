@@ -30,6 +30,8 @@ class EventSpec:
     source_url: str = ""
     parsed_symbols: tuple[str, ...] = ()
     npz_symbol_used: str = ""
+    sensor_path: Path = Path()
+    sensor_present: bool = False
 
 
 def _repo_paths(repo_root: Path) -> dict[str, Path]:
@@ -107,6 +109,11 @@ def load_sim_shadow_config(repo_root: Path) -> dict[str, Any]:
     return wf.get("sim_shadow") or {}
 
 
+def _binding_requires_sensor(binding: dict[str, Any]) -> bool:
+    required = {str(x).lower() for x in (binding.get("required_datasets") or [])}
+    return bool(required & {"vix_sensor", "sensors", "cross_asset_sensors"})
+
+
 def list_campaign_events(
     model_id: str,
     period: ValidationPeriod,
@@ -118,6 +125,7 @@ def list_campaign_events(
 ) -> List[EventSpec]:
     binding = load_model_binding(repo_root, model_id)
     allowed: Set[str] = binding["allowed_contexts"]
+    require_sensor = _binding_requires_sensor(binding)
     csv_path = events_csv or _repo_paths(repo_root)["events_csv"]
     df = load_and_parse_events(str(csv_path))
     specs: List[EventSpec] = []
@@ -143,6 +151,11 @@ def list_campaign_events(
         eid = str(row["event_id"])
         parsed = tuple(str(s) for s in syms)
         npz, present, sym_used = resolve_npz_for_event(repo_root, eid, symbol, parsed)
+        from data_system.src.event_data_resolver import resolve_sensor_for_event
+
+        sensor_path, sensor_present = resolve_sensor_for_event(repo_root, eid)
+        if require_sensor and not sensor_present:
+            continue
         specs.append(
             EventSpec(
                 event_id=eid,
@@ -158,6 +171,8 @@ def list_campaign_events(
                 source_url=str(row.get("source_url", "")),
                 parsed_symbols=parsed,
                 npz_symbol_used=sym_used if present else "",
+                sensor_path=sensor_path,
+                sensor_present=sensor_present,
             )
         )
     specs.sort(key=lambda s: s.release_date)
@@ -169,10 +184,13 @@ def catalog_years_available(
     symbol: str,
     repo_root: Path,
 ) -> int:
+    binding = load_model_binding(repo_root, model_id)
+    require_sensor = _binding_requires_sensor(binding)
     years: set[int] = set()
     for period in load_periods(repo_root):
         for ev in list_campaign_events(model_id, period, symbol, repo_root):
-            if ev.npz_present:
+            ready = ev.npz_present and (not require_sensor or ev.sensor_present)
+            if ready:
                 years.add(_release_year(ev.release_date))
     return len(years)
 
@@ -195,6 +213,7 @@ def campaign_preview(
                     "event_context": e.event_context,
                     "npz_present": e.npz_present,
                     "npz_symbol_used": e.npz_symbol_used,
+                    "sensor_present": e.sensor_present,
                 }
                 for e in events
             ],

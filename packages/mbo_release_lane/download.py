@@ -151,7 +151,18 @@ def download_catalog_slot(
                 blockers=[],
                 paths_written=[str(manifest)],
             )
-        # Stale invalid import — delete artifacts so Databento fetch is not skipped.
+        # Already imported (even if sequence-gap invalid) — do not re-bill Databento.
+        if raw_dest.is_file() and raw_dest.stat().st_size > 0 and int(rep.get("event_count", 0)) > 0:
+            return ImportResult(
+                release_id=window.event_id,
+                symbol=symbol,
+                slot_dir=slot,
+                validation_status=str(rep.get("validation_status", "invalid")),
+                event_count=int(rep.get("event_count", 0)),
+                blockers=[],
+                paths_written=[str(manifest)],
+            )
+        # Empty/stale import — delete artifacts so Databento fetch can retry.
         raw_dest.unlink(missing_ok=True)
         manifest.unlink(missing_ok=True)
         for stale in (
@@ -234,8 +245,14 @@ def _apply_slot_result(
         return
     report.total_events += result.event_count
     rel_path = str(result.slot_dir.relative_to(repo_root))
-    if result.validation_status == "valid":
+    if result.validation_status in ("valid", "invalid") and result.event_count > 0:
         report.valid_release_paths.append(rel_path)
+        try:
+            from mbo_release_lane.npz_adapter import derive_npz_from_release
+
+            derive_npz_from_release(repo_root, window.event_id, symbol)
+        except Exception as exc:
+            logger.warning("NPZ derive failed %s %s: %s", window.event_id, symbol, exc)
     else:
         report.invalid_release_paths.append(rel_path)
         report.blocker_count += len(result.blockers)

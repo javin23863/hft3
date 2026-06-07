@@ -16,25 +16,11 @@ from features_engine.src.features.mbo_features import MBOFeatureExtractor, Order
 from features_engine.src.features.npz_feed import iter_mbo_events, load_npz_events
 from features_engine.src.regime.event_context import EventContextEngine
 from features_engine.src.regime.regime_filter import RegimeFilter
-from data_system.src.npz_resolver import resolve_npz_for_event
+from data_system.src.event_data_resolver import load_sensor_df, resolve_mbo_npz_for_event
+from economic_event_universe.snapshot_offsets import default_snapshot_offsets_sec
 from hft3_bootstrap import data_system_root, workbench_root
 
-# Load default offsets from YAML without importing economic_event_universe package (__init__ cycle).
-def _default_snapshot_offsets_from_yaml() -> Tuple[int, ...]:
-    import yaml
-
-    yaml_path = (
-        Path(__file__).resolve().parents[2] / "economic_event_universe" / "config" / "event_universe.yaml"
-    )
-    if yaml_path.is_file():
-        raw = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
-        offs = raw.get("defaults", {}).get("snapshot_offsets_sec", [])
-        if offs:
-            return tuple(int(x) for x in offs)
-    return (-300, -60, -30, -10, 0, 1, 5, 10, 60, 300, 1800)
-
-
-SNAPSHOT_OFFSETS_SEC: Tuple[int, ...] = _default_snapshot_offsets_from_yaml()
+SNAPSHOT_OFFSETS_SEC: Tuple[int, ...] = default_snapshot_offsets_sec()
 
 REPO = Path(__file__).resolve().parents[2]
 _TICK_SIZE_CACHE: Dict[str, float] = {}
@@ -122,15 +108,12 @@ class L3SnapshotRow:
 def _resolve_npz(
     repo_root: Path, event_id: str, research_symbol: str, parsed: Sequence[str]
 ) -> Tuple[Optional[Path], str]:
-    path, present, sym_used = resolve_npz_for_event(
+    path, present, sym_used = resolve_mbo_npz_for_event(
         repo_root, event_id, research_symbol, tuple(parsed)
     )
     if present:
         return path, sym_used
-    direct = repo_root / "data" / "npz" / f"{research_symbol}_{event_id}_mbo.npz"
-    if direct.is_file():
-        return direct, research_symbol
-    return None, research_symbol
+    return None, sym_used
 
 
 def _capture_row(
@@ -505,6 +488,31 @@ def build_l3_event_tensor(
     return pd.DataFrame([asdict(x) for x in all_rows])
 
 
+def build_event_cross_asset_frame(
+    repo_root: Path,
+    event_id: str,
+    *,
+    offsets_sec: Sequence[int] | None = None,
+    **tensor_kwargs: Any,
+) -> pd.DataFrame:
+    """Cross-asset features from L3 tensor + optional VIX sensor parquet."""
+    from hfc3.features.cross_asset_l3_event_features import build_cross_asset_l3_features
+
+    tensor_df = build_l3_event_tensor(repo_root, event_id, offsets_sec=offsets_sec, **tensor_kwargs)
+    sensor_df = load_sensor_df(repo_root, event_id)
+    offs = offsets_sec or SNAPSHOT_OFFSETS_SEC
+    rows = []
+    for off in offs:
+        sensor_slice = sensor_df
+        if len(sensor_df) and "offset_sec" in sensor_df.columns:
+            sensor_slice = sensor_df[sensor_df["offset_sec"] == int(off)]
+        feats = build_cross_asset_l3_features(
+            tensor_df, offset_sec=int(off), sensor_df=sensor_slice
+        )
+        rows.append({"offset_sec": int(off), **feats})
+    return pd.DataFrame(rows)
+
+
 def write_l3_event_tensor(
     repo_root: Path,
     event_id: str,
@@ -516,6 +524,7 @@ def write_l3_event_tensor(
     out_dir = output_dir or (repo_root / "runtime" / "event_snapshots")
     out_dir.mkdir(parents=True, exist_ok=True)
     df = build_l3_event_tensor(repo_root, event_id, **kwargs)
+    sensor_df = load_sensor_df(repo_root, event_id)
     parquet_path = out_dir / f"{event_id}_l3_tensor.parquet"
     meta_path = out_dir / f"{event_id}_l3_tensor_meta.json"
     df.to_parquet(parquet_path, index=False)
@@ -529,6 +538,8 @@ def write_l3_event_tensor(
         else [],
         "data_source": "MBO_DERIVED",
         "filtration": "snapshot at T+offset uses MBO events with timestamp_ns <= snapshot_ts_ns",
+        "sensor_present": bool(len(sensor_df)),
+        "sensor_rows": int(len(sensor_df)),
     }
     meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
     return parquet_path, meta_path

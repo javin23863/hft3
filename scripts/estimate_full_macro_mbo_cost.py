@@ -250,6 +250,10 @@ def build_scope_report(
         include_seed=include_seed,
         include_rule_based=include_rule_based,
     )
+    from mbo_release_lane.download import filter_windows_by_event_type, resolve_download_exclusions
+
+    exclusions = resolve_download_exclusions()
+    windows = filter_windows_by_event_type(windows, exclude_event_types=exclusions)
 
     missing = iter_missing_npz_slots(_REPO, windows)
     slots = [
@@ -289,6 +293,7 @@ def build_scope_report(
         "walk_forward_year_range": [wf_start, wf_end],
         "include_seed_calendars": include_seed,
         "include_rule_based": include_rule_based,
+        "excluded_event_types": sorted(resolve_download_exclusions()),
         "events_csv_row_count": summary.events_csv_rows,
         "events_csv_type_count": summary.events_csv_types,
         "note": (

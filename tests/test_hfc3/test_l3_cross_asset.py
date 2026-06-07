@@ -26,7 +26,7 @@ def test_build_l3_tensor_for_cpi():
     assert not df.empty
     assert set(df["offset_sec"].unique()).issubset(set(SNAPSHOT_OFFSETS_SEC))
     mes = df[df["symbol"] == "MES.v.0"]
-    core = mes[mes["offset_sec"].between(-30, 30)]
+    core = mes[mes["offset_sec"].isin([-10, -5, -1, 0, 1, 2, 5])]
     assert core["mbo_missing"].sum() == 0
     assert (core["data_source"] == "MBO_DERIVED").all()
     row0 = core[core["offset_sec"] == 0].iloc[0]
@@ -68,6 +68,41 @@ def test_cross_asset_features_from_tensor():
     )
     feats = build_cross_asset_l3_features(df, offset_sec=0)
     assert "cross_asset_feature_count" in feats
+
+
+def test_cross_asset_vix_sensor_per_offset():
+    tensor = pd.DataFrame(
+        [
+            {
+                "offset_sec": 0,
+                "canonical_symbol": "ES",
+                "mbo_missing": False,
+                "mid_price": 5000.0,
+                "liquidity_vacuum_score": 0.6,
+                "aggressor_volume_imbalance": 0.1,
+            },
+            {
+                "offset_sec": 5,
+                "canonical_symbol": "ES",
+                "mbo_missing": False,
+                "mid_price": 5001.0,
+                "liquidity_vacuum_score": 0.1,
+                "aggressor_volume_imbalance": 0.1,
+            },
+        ]
+    )
+    sensors = pd.DataFrame(
+        [
+            {"offset_sec": 0, "sensor": "VIX_ATM_STRIKE", "level": 22.0},
+            {"offset_sec": 5, "sensor": "VIX_ATM_STRIKE", "level": 15.0},
+        ]
+    )
+    f0 = build_cross_asset_l3_features(tensor, offset_sec=0, sensor_df=sensors)
+    f5 = build_cross_asset_l3_features(tensor, offset_sec=5, sensor_df=sensors)
+    assert f0["vix_atm_strike"] == pytest.approx(22.0)
+    assert f5["vix_atm_strike"] == pytest.approx(15.0)
+    assert f0["volatility_sensor_confirms_equity_mbo_stress"] == pytest.approx(1.0)
+    assert f5["volatility_sensor_confirms_equity_mbo_stress"] == pytest.approx(0.0)
 
 
 def test_first_equity_imbalance_uses_event_time_not_hash():

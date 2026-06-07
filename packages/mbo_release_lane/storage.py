@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -116,4 +117,73 @@ def load_release_event_path(slot_dir: Path) -> dict[str, Any] | None:
     p = release_event_path_manifest(slot_dir)
     if not p.is_file():
         return None
-    return json.loads(p.read_text(encoding="utf-8"))
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except OSError:
+        return None
+
+
+@lru_cache(maxsize=4096)
+def _dbn_validity_cached(path_str: str, size: int, mtime_ns: int) -> bool:
+    if size <= 0:
+        return False
+    try:
+        import databento as db
+
+        db.DBNStore.from_file(path_str)
+        return True
+    except Exception:
+        return False
+
+
+def validate_dbn_readable(path: Path) -> bool:
+    """Return False when DBN metadata cannot be read (truncated/corrupt file)."""
+    try:
+        if not path.is_file():
+            return False
+        st = path.stat()
+    except OSError:
+        return False
+    return _dbn_validity_cached(str(path.resolve()), int(st.st_size), int(st.st_mtime_ns))
+
+
+@lru_cache(maxsize=4096)
+def _dbn_has_records_cached(path_str: str, size: int, mtime_ns: int) -> bool:
+    if size <= 0:
+        return False
+    try:
+        import databento as db
+
+        store = db.DBNStore.from_file(path_str)
+        for _ in store:
+            return True
+        return False
+    except Exception:
+        return False
+
+
+def dbn_has_quote_records(path: Path) -> bool:
+    """Return True when DBN contains at least one quote record (not symbology-only)."""
+    try:
+        if not path.is_file():
+            return False
+        st = path.stat()
+    except OSError:
+        return False
+    return _dbn_has_records_cached(str(path.resolve()), int(st.st_size), int(st.st_mtime_ns))
+
+
+def iter_release_manifest_paths(root: Path):
+    """Yield release_event_path.json paths, skipping unreadable slots."""
+    if not root.is_dir():
+        return
+    try:
+        manifests = root.glob("*/*/release_event_path.json")
+    except OSError:
+        return
+    for manifest in manifests:
+        try:
+            if manifest.is_file():
+                yield manifest
+        except OSError:
+            continue

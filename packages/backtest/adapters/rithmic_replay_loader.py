@@ -15,7 +15,7 @@ def resolve_event_npz(
     symbol: str | None = None,
 ) -> Path:
     """Return Databento MBO NPZ path for a macro event_id from events.csv."""
-    from data_system.src.npz_resolver import resolve_npz_for_event
+    from data_system.src.event_data_resolver import resolve_mbo_npz_for_event
 
     csv_path = events_csv or (data_system_root(repo_root) / "config" / "events.csv")
     events = load_and_parse_events(str(csv_path))
@@ -25,7 +25,7 @@ def resolve_event_npz(
 
     parsed = tuple(str(s) for s in row.iloc[0]["parsed_symbols"])
     sym = symbol or parsed[0]
-    npz, present, _ = resolve_npz_for_event(repo_root, event_id, sym, parsed)
+    npz, present, _ = resolve_mbo_npz_for_event(repo_root, event_id, sym, parsed)
     if not present:
         raise FileNotFoundError(f"NPZ missing for {event_id}: {npz}")
     return npz
