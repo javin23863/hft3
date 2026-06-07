@@ -22,7 +22,30 @@ def test_crypto_readiness_report_delegates_to_builder():
         return_value=expected,
     ) as mock_build:
         report = crypto_readiness_report()
-    mock_build.assert_called_once_with(clear_cache=True, use_b2_synthetic_cache=True)
+    mock_build.assert_called_once_with(
+        clear_cache=True,
+        use_b2_synthetic_cache=False,
+        refresh_b2_synthetic_probe=True,
+    )
     assert report["purge_safe"] is False
     assert report["days_until_purge_safe"] == 10
     assert "cae_bookticker_backfill_status" in report
+
+
+def test_audit_main_refreshes_b2_by_default():
+    from scripts import audit_crypto_readiness
+
+    with patch(
+        "crypto_lane.src.ingest.crypto_readiness.build_crypto_readiness_report",
+        return_value={"crypto_ready": False, "preflight_l3": {}},
+    ) as mock_build, patch(
+        "crypto_lane.src.ingest.crypto_readiness.write_crypto_readiness_cache",
+        return_value=__import__("pathlib").Path("/tmp/x.json"),
+    ):
+        code = audit_crypto_readiness.main([])
+    assert code == 1
+    mock_build.assert_called_once_with(
+        clear_cache=True,
+        use_b2_synthetic_cache=False,
+        refresh_b2_synthetic_probe=True,
+    )

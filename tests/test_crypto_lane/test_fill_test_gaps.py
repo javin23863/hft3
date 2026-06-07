@@ -40,6 +40,7 @@ def test_fill_test_gaps_dry_run_single_readiness_call():
     assert "readiness_dry_run_path" in report
     assert report["ready"] is False
     assert report.get("pit_strict_blocked") is True
+    assert report.get("readiness_gate_unchanged") is True
 
 
 def test_fill_test_gaps_fail_fast_on_mempool_not_ready():

@@ -166,7 +166,7 @@ def preflight_l3_gaps(
         b2_synthetic = _empty_b2_probe(bucket)
         b2_synthetic["skipped"] = True
     synth_n = len(synthetic)
-    if syn_dates and b2_synthetic.get("skipped"):
+    if syn_dates and (b2_synthetic.get("skipped") or b2_synthetic.get("from_cache")):
         b2_synthetic_estimate = b2_probe_bookticker_days_sampled(syn_dates)
     elif syn_dates:
         b2_synthetic_estimate = {

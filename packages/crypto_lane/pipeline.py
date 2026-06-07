@@ -73,6 +73,7 @@ def cmd_fill_test_gaps(args: argparse.Namespace) -> int:
         force_replace_synthetic=args.force_replace_synthetic,
         allow_degraded=args.allow_degraded,
         continue_on_error=args.continue_on_error,
+        refresh_b2_synthetic_probe=args.refresh_b2_probe,
     )
     out = write_fill_report(report)
     report["report_path"] = str(out)
@@ -312,6 +313,11 @@ def main(argv: list[str] | None = None) -> int:
         "--continue-on-error",
         action="store_true",
         help="Continue pipeline after pull_gold/normalize failures (default: fail-fast)",
+    )
+    p_ftg.add_argument(
+        "--refresh-b2-probe",
+        action="store_true",
+        help="Force full B2 synthetic probe (use after CAE Contabo backfill to B2)",
     )
     p_ftg.set_defaults(func=cmd_fill_test_gaps)
 

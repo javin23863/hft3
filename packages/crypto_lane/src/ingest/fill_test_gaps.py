@@ -81,6 +81,7 @@ def run_fill_test_gaps(
     force_replace_synthetic: bool = False,
     allow_degraded: bool = False,
     continue_on_error: bool = False,
+    refresh_b2_synthetic_probe: bool = False,
 ) -> dict[str, Any]:
     """Run gap-fill pipeline for production crypto testing."""
     if not dry_run:
@@ -97,13 +98,16 @@ def run_fill_test_gaps(
     steps["env_check"] = redacted_env_report()
 
     if dry_run:
+        gate_path = repo_root_from_lane() / "runtime/data_audits/crypto_readiness.json"
+        gate_mtime_before = gate_path.stat().st_mtime if gate_path.is_file() else None
         audit = build_crypto_readiness_report(
             start=start,
             end=end,
             vision_probe=False,
             clear_cache=False,
             full_synthetic_b2_probe=True,
-            use_b2_synthetic_cache=True,
+            use_b2_synthetic_cache=not refresh_b2_synthetic_probe,
+            refresh_b2_synthetic_probe=refresh_b2_synthetic_probe,
         )
         steps["preflight_l3"] = audit["preflight_l3"]
         steps["preflight_mempool"] = audit["preflight_mempool"]
@@ -113,6 +117,26 @@ def run_fill_test_gaps(
         dry_out.parent.mkdir(parents=True, exist_ok=True)
         dry_out.write_text(json.dumps(audit, indent=2, default=str), encoding="utf-8")
         steps["readiness_dry_run_path"] = str(dry_out)
+        steps["readiness_gate_path"] = str(gate_path)
+        gate_mtime_after = gate_path.stat().st_mtime if gate_path.is_file() else None
+        steps["readiness_gate_unchanged"] = gate_mtime_before == gate_mtime_after
+        if audit.get("b2_probe_note"):
+            steps["b2_probe_note"] = audit["b2_probe_note"]
+        # #region agent log
+        from crypto_lane.src.ingest._agent_debug import agent_debug_log
+
+        agent_debug_log(
+            hypothesis_id="C",
+            location="fill_test_gaps.py:dry_run",
+            message="dry-run audit written",
+            data={
+                "dry_run_path": str(dry_out),
+                "gate_unchanged": steps["readiness_gate_unchanged"],
+                "gate_mtime_before": gate_mtime_before,
+                "gate_mtime_after": gate_mtime_after,
+            },
+        )
+        # #endregion
         steps["ready"] = bool(audit.get("crypto_ready")) and not pit_blocked
         if pit_blocked:
             steps["pit_strict_blocked"] = True
@@ -171,9 +195,17 @@ def run_fill_test_gaps(
             steps["blockspace_written"] = backfill_blockspace_from_node(
                 start=start, end=end, step_hours=1
             )
-            from crypto_lane.src.ingest.bookticker_quality import invalidate_bookticker_caches
+            clear_bookticker_summary_cache()
+            # #region agent log
+            from crypto_lane.src.ingest._agent_debug import agent_debug_log
 
-            invalidate_bookticker_caches()
+            agent_debug_log(
+                hypothesis_id="A",
+                location="fill_test_gaps.py:blockspace",
+                message="blockspace done; summary cache only",
+                data={"invalidated_b2_probe_cache": False},
+            )
+            # #endregion
             mp_pf = preflight_mempool_gaps(
                 start=start, end=end, b2_probe_max_days=AUDIT_B2_PROBE_MAX_DAYS
             )
@@ -271,7 +303,8 @@ def run_fill_test_gaps(
         vision_probe=False,
         clear_cache=False,
         full_synthetic_b2_probe=True,
-        use_b2_synthetic_cache=True,
+        use_b2_synthetic_cache=False,
+        refresh_b2_synthetic_probe=True,
     )
     steps["crypto_audit"] = _crypto_audit_subset(audit)
     write_crypto_readiness_cache(audit)
