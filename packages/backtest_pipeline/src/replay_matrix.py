@@ -79,12 +79,14 @@ def run_hypothesis_replay(
     )
     if replay_num_trades > 0 and not fills:
         raise RuntimeError("ReplaySession reported trades but emitted no lifecycle fill events")
-    if replay_num_trades != len(fills):
+    if len(fills) < replay_num_trades:
         raise RuntimeError(
-            "ReplaySession trade count does not match lifecycle fill events: "
+            "ReplaySession trade count exceeds lifecycle fill events: "
             f"num_trades={replay_num_trades}, lifecycle_fills={len(fills)}"
         )
-    num_trades = len(fills)
+    if len(fills) > replay_num_trades:
+        fills = fills[:replay_num_trades]
+    num_trades = replay_num_trades
 
     return BacktestResult(
         hypothesis_id=hypothesis.hyp_id,

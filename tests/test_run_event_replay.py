@@ -131,3 +131,54 @@ def test_run_hypothesis_replay_fails_when_trades_lack_lifecycle_fills(monkeypatc
 
     with pytest.raises(RuntimeError, match="reported trades but emitted no lifecycle fill events"):
         run_hypothesis_replay(_AlwaysLong(), str(npz))
+
+
+def test_run_hypothesis_replay_caps_surplus_lifecycle_fills(monkeypatch, tmp_path):
+    from backtest_pipeline.src import replay_matrix
+    from backtest_pipeline.src.replay_matrix import run_hypothesis_replay
+    from features_engine.src.hypotheses.modules import BaseHypothesis, MarketState
+
+    class _AlwaysLong(BaseHypothesis):
+        def __init__(self):
+            super().__init__(1, "always_long")
+
+        def evaluate(self, state: MarketState) -> float:
+            return 0.5
+
+    class _ReplaySessionWithAuditOverage:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def run(self):
+            return {
+                "balance": 2.0,
+                "num_trades": 1,
+                "fill_events": [
+                    {
+                        "event_type": "ORDER_FILLED",
+                        "timestamp_ns": 100,
+                        "side": "BUY",
+                        "price": 5000.0,
+                        "quantity": 1,
+                        "filled_quantity": 1,
+                    },
+                    {
+                        "event_type": "ORDER_FILLED",
+                        "timestamp_ns": 200,
+                        "side": "BUY",
+                        "price": 5001.0,
+                        "quantity": 1,
+                        "filled_quantity": 1,
+                    },
+                ],
+            }
+
+    monkeypatch.setattr(replay_matrix, "ReplaySession", _ReplaySessionWithAuditOverage)
+    npz = tmp_path / "dummy.npz"
+    np.savez_compressed(npz, data=np.array([], dtype=np.int64))
+
+    result = run_hypothesis_replay(_AlwaysLong(), str(npz))
+
+    assert result.num_trades == 1
+    assert len(result.fills) == 1
+    assert result.expectancy == 2.0
