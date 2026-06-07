@@ -1,14 +1,14 @@
 # HFC3 MBO cross-asset inventory
 
-Generated: 2026-05-30T15:51:25.937135+00:00
+Generated: 2026-06-07T01:41:50.065231+00:00
 
 | Metric | Value |
 |--------|-------|
 | Instruments | 39 |
-| MBO historical (NPZ on disk) | 2 |
-| MBO missing | 35 |
+| MBO historical (NPZ on disk) | 17 |
+| MBO missing | 20 |
 | Sensor only | 2 |
-| Total NPZ files | 52 |
+| Total NPZ files | 10263 |
 
 **Success criterion:** MBO availability or explicit `MBO_MISSING` / `SENSOR_ONLY` — not L1/L2.
 
@@ -16,23 +16,23 @@ Generated: 2026-05-30T15:51:25.937135+00:00
 
 | Symbol | research_symbol | tier | mbo_status | npz_events | replay_ready |
 |--------|-----------------|------|------------|------------|--------------|
-| ES | ES.v.0 | HOT_EXECUTABLE | MBO_HISTORICAL | 8 | True |
-| MES | MES.v.0 | HOT_EXECUTABLE | MBO_HISTORICAL | 44 | True |
-| NQ | NQ.v.0 | HOT_EXECUTABLE | MBO_MISSING | 0 | False |
-| MNQ | MNQ.v.0 | HOT_EXECUTABLE | MBO_MISSING | 0 | False |
-| RTY | RTY.v.0 | HOT_EXECUTABLE | MBO_MISSING | 0 | False |
-| M2K | M2K.v.0 | HOT_EXECUTABLE | MBO_MISSING | 0 | False |
-| YM | YM.v.0 | HOT_EXECUTABLE | MBO_MISSING | 0 | False |
-| MYM | MYM.v.0 | HOT_EXECUTABLE | MBO_MISSING | 0 | False |
-| ZT | ZT.v.0 | HOT_EXECUTABLE | MBO_MISSING | 0 | False |
-| ZF | ZF.v.0 | HOT_EXECUTABLE | MBO_MISSING | 0 | False |
-| ZN | ZN.v.0 | HOT_EXECUTABLE | MBO_MISSING | 0 | False |
-| ZB | ZB.v.0 | HOT_EXECUTABLE | MBO_MISSING | 0 | False |
-| UB | UB.v.0 | HOT_EXECUTABLE | MBO_MISSING | 0 | False |
-| SR3 | SR3.v.0 | HOT_EXECUTABLE | MBO_MISSING | 0 | False |
-| ZQ | ZQ.v.0 | HOT_EXECUTABLE | MBO_MISSING | 0 | False |
-| CL | CL.v.0 | HOT_EXECUTABLE | MBO_MISSING | 0 | False |
-| MCL | MCL.v.0 | HOT_EXECUTABLE | MBO_MISSING | 0 | False |
+| ES | ES.v.0 | HOT_EXECUTABLE | MBO_HISTORICAL | 714 | True |
+| MES | MES.v.0 | HOT_EXECUTABLE | MBO_HISTORICAL | 707 | True |
+| NQ | NQ.v.0 | HOT_EXECUTABLE | MBO_HISTORICAL | 691 | True |
+| MNQ | MNQ.v.0 | HOT_EXECUTABLE | MBO_HISTORICAL | 691 | True |
+| RTY | RTY.v.0 | HOT_EXECUTABLE | MBO_HISTORICAL | 691 | True |
+| M2K | M2K.v.0 | HOT_EXECUTABLE | MBO_HISTORICAL | 428 | True |
+| YM | YM.v.0 | HOT_EXECUTABLE | MBO_HISTORICAL | 291 | True |
+| MYM | MYM.v.0 | HOT_EXECUTABLE | MBO_HISTORICAL | 656 | True |
+| ZT | ZT.v.0 | HOT_EXECUTABLE | MBO_HISTORICAL | 650 | True |
+| ZF | ZF.v.0 | HOT_EXECUTABLE | MBO_HISTORICAL | 678 | True |
+| ZN | ZN.v.0 | HOT_EXECUTABLE | MBO_HISTORICAL | 691 | True |
+| ZB | ZB.v.0 | HOT_EXECUTABLE | MBO_HISTORICAL | 691 | True |
+| UB | UB.v.0 | HOT_EXECUTABLE | MBO_HISTORICAL | 309 | True |
+| SR3 | SR3.v.0 | HOT_EXECUTABLE | MBO_HISTORICAL | 395 | True |
+| ZQ | ZQ.v.0 | HOT_EXECUTABLE | MBO_HISTORICAL | 653 | True |
+| CL | CL.v.0 | HOT_EXECUTABLE | MBO_HISTORICAL | 651 | True |
+| MCL | MCL.v.0 | HOT_EXECUTABLE | MBO_HISTORICAL | 676 | True |
 | NG | NG.v.0 | HOT_EXECUTABLE | MBO_MISSING | 0 | False |
 | GC | GC.v.0 | HOT_EXECUTABLE | MBO_MISSING | 0 | False |
 | MGC | MGC.v.0 | HOT_EXECUTABLE | MBO_MISSING | 0 | False |
