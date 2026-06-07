@@ -15,3 +15,11 @@ def test_run_smoke_production_requires_yaml(tmp_path, monkeypatch):
     assert not missing.is_file()
     with pytest.raises(FileNotFoundError, match="production backtest config missing"):
         run_smoke("crypto_h1_basis_compression", production=True)
+
+
+def test_run_smoke_production_yaml_has_validation_mode_production():
+    from crypto_lane.src.config_loader import load_yaml
+
+    path = backtest_config_path("crypto_h1_basis_compression", production=True)
+    doc = load_yaml(path)
+    assert doc.get("validation_mode") == "production"

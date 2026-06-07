@@ -8,6 +8,18 @@ import pytest
 from crypto_lane.src.ingest import l3_preflight
 
 
+@pytest.fixture(autouse=True)
+def _no_b2_synthetic_cache(monkeypatch):
+    monkeypatch.setattr(
+        "crypto_lane.src.ingest.l3_preflight.load_cached_b2_synthetic_probe",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        "crypto_lane.src.ingest.l3_preflight.save_cached_b2_synthetic_probe",
+        lambda *a, **k: None,
+    )
+
+
 def test_preflight_purge_unsafe_when_b2_synthetic_empty(monkeypatch):
     monkeypatch.setattr(
         l3_preflight,

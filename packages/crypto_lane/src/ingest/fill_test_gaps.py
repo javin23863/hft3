@@ -8,10 +8,14 @@ from typing import Any
 from crypto_lane.src.align.latency_profile import calibrate_ws_rtt, measure_node_profile_from_btc, save_node_profile
 from crypto_lane.src.config.env_loader import ensure_crypto_env, redacted_env_report
 from crypto_lane.src.config_loader import load_yaml
-from crypto_lane.src.ingest.bookticker_quality import clear_bookticker_summary_cache
+from crypto_lane.src.ingest.bookticker_quality import (
+    clear_bookticker_summary_cache,
+    summarize_bookticker_range,
+)
 from crypto_lane.src.ingest.crypto_readiness import (
     build_crypto_readiness_report,
     crypto_date_range_from_config,
+    write_crypto_readiness_cache,
 )
 from crypto_lane.src.ingest.l3_gap_fill import fill_l3_gaps as _fill_l3_gaps
 from crypto_lane.src.ingest.l3_preflight import preflight_l3_gaps
@@ -45,6 +49,28 @@ def _pit_strict_hypotheses() -> list[str]:
     return out
 
 
+def _pit_strict_blocked(ws_rtt_ms: float | None) -> bool:
+    return ws_rtt_ms is None
+
+
+def _crypto_audit_subset(audit: dict[str, Any]) -> dict[str, Any]:
+    return {
+        k: v
+        for k, v in audit.items()
+        if k.startswith("crypto_")
+        or k
+        in (
+            "audited_at",
+            "synthetic_days",
+            "purge_safe",
+            "purge_safe_estimate",
+            "purge_block_reason",
+            "days_until_purge_safe",
+            "l3_recommendation",
+        )
+    }
+
+
 def run_fill_test_gaps(
     *,
     dry_run: bool = False,
@@ -56,7 +82,8 @@ def run_fill_test_gaps(
     continue_on_error: bool = False,
 ) -> dict[str, Any]:
     """Run gap-fill pipeline for production crypto testing."""
-    clear_bookticker_summary_cache()
+    if not dry_run:
+        clear_bookticker_summary_cache()
     ensure_crypto_env()
     start, end = crypto_date_range_from_config()
     steps: dict[str, Any] = {
@@ -64,6 +91,7 @@ def run_fill_test_gaps(
         "dry_run": dry_run,
         "errors": [],
     }
+    pit_blocked = _pit_strict_blocked(ws_rtt_ms)
 
     steps["env_check"] = redacted_env_report()
 
@@ -71,30 +99,18 @@ def run_fill_test_gaps(
         audit = build_crypto_readiness_report(
             start=start,
             end=end,
-            vision_probe=True,
+            vision_probe=False,
             clear_cache=False,
+            full_synthetic_b2_probe=True,
+            use_b2_synthetic_cache=True,
         )
         steps["preflight_l3"] = audit["preflight_l3"]
         steps["preflight_mempool"] = audit["preflight_mempool"]
         steps["cae_bookticker_backfill_status"] = audit["cae_bookticker_backfill_status"]
-        steps["crypto_audit"] = {
-            k: v
-            for k, v in audit.items()
-            if k.startswith("crypto_")
-            or k
-            in (
-                "audited_at",
-                "synthetic_days",
-                "purge_safe",
-                "purge_safe_estimate",
-                "purge_block_reason",
-                "days_until_purge_safe",
-                "cae_bookticker_backfill_status",
-                "l3_recommendation",
-            )
-        }
-        steps["ready"] = bool(audit.get("crypto_ready"))
-        if ws_rtt_ms is None:
+        steps["crypto_audit"] = _crypto_audit_subset(audit)
+        write_crypto_readiness_cache(audit)
+        steps["ready"] = bool(audit.get("crypto_ready")) and not pit_blocked
+        if pit_blocked:
             steps["pit_strict_blocked"] = True
             steps["pit_strict_hypotheses"] = _pit_strict_hypotheses()
         return steps
@@ -164,7 +180,21 @@ def run_fill_test_gaps(
         steps["blockspace_skipped"] = "mempool gaps remain; btc node not synced or status unknown"
 
     steps["mempool_preflight_after_pull"] = mp_pf
-    l3_pf = preflight_l3_gaps(start=start, end=end)
+    if not mp_pf.get("mempool_ready"):
+        steps["mempool_not_ready"] = True
+        if _abort("mempool not ready after pull/sync"):
+            steps["ready"] = False
+            return steps
+
+    summary = summarize_bookticker_range(start=start, end=end)
+    l3_pf = preflight_l3_gaps(
+        start=start,
+        end=end,
+        vision_probe=False,
+        bookticker_summary=summary,
+        full_synthetic_b2_probe=True,
+        use_b2_synthetic_cache=True,
+    )
     steps["preflight_l3"] = l3_pf
     purge_safe = bool(l3_pf.get("purge_safe"))
     replace_synthetic = (purge_safe or force_replace_synthetic) and int(l3_pf.get("synthetic_days", 0)) > 0
@@ -180,10 +210,12 @@ def run_fill_test_gaps(
             replace_synthetic=replace_synthetic,
             allow_degraded=allow_degraded,
             force=force_replace_synthetic,
+            preflight=l3_pf,
+            bookticker_summary=summary,
         )
         steps["fill_l3_gaps"] = fill_report
         if fill_report.get("aborted"):
-            if _abort(f"fill_l3_gaps aborted: {fill_report.get('purge_block_reason')}"):
+            if _abort(f"fill_l3_gaps aborted: {fill_report.get('abort_reason')}"):
                 steps["ready"] = False
                 return steps
     except Exception as exc:
@@ -218,9 +250,17 @@ def run_fill_test_gaps(
         )
 
     clear_bookticker_summary_cache()
-    audit = build_crypto_readiness_report(start=start, end=end, clear_cache=False)
-    steps["crypto_audit"] = {k: v for k, v in audit.items() if not k.startswith("preflight_")}
-    steps["ready"] = bool(audit.get("crypto_ready")) and not steps["errors"]
+    audit = build_crypto_readiness_report(
+        start=start,
+        end=end,
+        vision_probe=False,
+        clear_cache=False,
+        full_synthetic_b2_probe=True,
+        use_b2_synthetic_cache=True,
+    )
+    steps["crypto_audit"] = _crypto_audit_subset(audit)
+    write_crypto_readiness_cache(audit)
+    steps["ready"] = bool(audit.get("crypto_ready")) and not steps["errors"] and not pit_blocked
     return steps
 
 

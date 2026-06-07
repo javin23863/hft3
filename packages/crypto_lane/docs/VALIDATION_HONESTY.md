@@ -28,7 +28,9 @@ Repo-wide: **[docs/VALIDATION_HONESTY.md](../../../docs/VALIDATION_HONESTY.md)**
 
 `crypto_readiness.json` includes `audited_at`, `synthetic_days`, and both purge fields. Production pytest re-validates cache age (24h) and live `synthetic_days` before running smokes.
 
-Dry-run target: one `summarize_bookticker_range` scan (~2–3 min for 366 days); no duplicate preflight inside nested audit.
+Dry-run: one warm `summarize_bookticker_range` scan when cache is hot; no cache clear at entry; Vision probes off; full synthetic B2 probe cached 24h in `runtime/data_audits/b2_synthetic_probe_cache.json`. Writes `crypto_readiness.json` for pytest gate.
+
+Orchestrator fail-fast: aborts on `pull_gold`, `mempool_not_ready`, `normalize`, and `fill_l3_gaps` abort unless `--continue-on-error`. `pit_strict_blocked` forces `ready=false` without `--ws-rtt-ms`.
 
 ## Production testing entrypoints
 

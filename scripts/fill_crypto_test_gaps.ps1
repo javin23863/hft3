@@ -5,7 +5,8 @@ param(
     [switch]$SkipChi404,
     [double]$WsRttMs,
     [switch]$ForceReplaceSynthetic,
-    [switch]$AllowDegraded
+    [switch]$AllowDegraded,
+    [switch]$ContinueOnError
 )
 
 $ErrorActionPreference = "Stop"
@@ -20,6 +21,7 @@ if ($SkipChi404) { $argsList += "--skip-chi404" }
 if ($PSBoundParameters.ContainsKey("WsRttMs")) { $argsList += @("--ws-rtt-ms", "$WsRttMs") }
 if ($ForceReplaceSynthetic) { $argsList += "--force-replace-synthetic" }
 if ($AllowDegraded) { $argsList += "--allow-degraded" }
+if ($ContinueOnError) { $argsList += "--continue-on-error" }
 
 python @argsList
 exit $LASTEXITCODE

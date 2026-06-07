@@ -154,10 +154,18 @@ def quality_manifest_path() -> Path:
 
 def write_quality_manifest(*, start: str, end: str) -> Path:
     manifest = build_quality_manifest(start=start, end=end)
+    return write_quality_manifest_dict(manifest)
+
+
+def write_quality_manifest_dict(manifest: dict[str, dict[str, Any]]) -> Path:
     path = quality_manifest_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     return path
+
+
+def write_quality_manifest_from_summary(summary: dict[str, Any]) -> Path:
+    return write_quality_manifest_dict(dict(summary.get("manifest") or {}))
 
 
 def load_quality_manifest() -> dict[str, dict[str, Any]]:

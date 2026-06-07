@@ -9,6 +9,10 @@ from urllib.request import Request, urlopen
 from crypto_lane.src.config.env_loader import ensure_crypto_env
 from crypto_lane.src.ingest.b2_client import B2Client, B2ClientError
 from crypto_lane.src.ingest.binance_vision_pull import _months_for_days, vision_monthly_url
+from crypto_lane.src.ingest.b2_synthetic_probe_cache import (
+    load_cached_b2_synthetic_probe,
+    save_cached_b2_synthetic_probe,
+)
 from crypto_lane.src.ingest.bookticker_quality import summarize_bookticker_range
 from crypto_lane.src.ingest.gold_pull import _symbol_map
 from crypto_lane.src.ingest.gold_reader import gold_key, resolve_gold_bucket
@@ -107,17 +111,19 @@ def b2_probe_bookticker_days_sampled(
         else days
     )
     probe = b2_probe_bookticker_days(probe_days, max_error_samples=max_error_samples)
+    probed_hits = int(probe["available_count"])
     if len(probe_days) < len(days):
-        ratio = probe["available_count"] / max(len(probe_days), 1)
+        ratio = probed_hits / max(len(probe_days), 1)
         estimated = int(round(ratio * len(days)))
         return {
             **probe,
+            "probed_available_count": probed_hits,
             "available_count": estimated,
             "missing_count": max(0, len(days) - estimated),
             "sampled": True,
             "probe_days": len(probe_days),
         }
-    return probe
+    return {**probe, "probed_available_count": probed_hits}
 
 
 def _non_synthetic_missing(missing: list[date], synthetic: list[str]) -> list[date]:
@@ -131,6 +137,8 @@ def preflight_l3_gaps(
     end: str,
     vision_probe: bool = True,
     bookticker_summary: dict[str, Any] | None = None,
+    full_synthetic_b2_probe: bool = True,
+    use_b2_synthetic_cache: bool = True,
 ) -> dict[str, Any]:
     """Report B2/Vision fillability for missing days (no downloads, no deletes)."""
     symbol = _symbol_map().get("binance_perp", "BTCUSDT")
@@ -144,9 +152,19 @@ def preflight_l3_gaps(
         max_probe_days=MISSING_B2_PROBE_MAX_DAYS,
     )
     syn_dates = [date.fromisoformat(d) for d in synthetic]
-    b2_synthetic = b2_probe_bookticker_days(syn_dates) if syn_dates else _empty_b2_probe(
-        resolve_gold_bucket("binance")
-    )
+    bucket = resolve_gold_bucket("binance")
+    b2_synthetic: dict[str, Any]
+    if not syn_dates:
+        b2_synthetic = _empty_b2_probe(bucket)
+    elif use_b2_synthetic_cache and (cached := load_cached_b2_synthetic_probe(synthetic)):
+        b2_synthetic = cached
+    elif full_synthetic_b2_probe:
+        b2_synthetic = b2_probe_bookticker_days(syn_dates)
+        if use_b2_synthetic_cache:
+            save_cached_b2_synthetic_probe(synthetic, b2_synthetic)
+    else:
+        b2_synthetic = _empty_b2_probe(bucket)
+        b2_synthetic["skipped"] = True
     b2_synthetic_estimate = b2_probe_bookticker_days_sampled(syn_dates)
 
     vision_months: dict[str, dict[str, Any]] = {}
@@ -185,9 +203,13 @@ def preflight_l3_gaps(
         "vision_months": vision_months,
         "vision_available_days_estimate": vision_available_days,
         "vision_not_found_days": vision_not_found_days,
+        "b2_missing_non_synthetic_probe": b2,
+        "b2_missing_non_synthetic_fillable_estimate": b2["available_count"],
+        "b2_missing_non_synthetic_fillable_probed": int(b2.get("probed_available_count", 0)),
         "true_l3_b2_fillable": b2["available_count"],
         "b2_synthetic_fillable": b2_on_synthetic,
         "b2_synthetic_fillable_estimate": b2_on_synthetic_est,
+        "b2_synthetic_from_cache": bool(b2_synthetic.get("from_cache")),
         "purge_safe": purge_safe,
         "purge_safe_estimate": purge_safe_estimate,
         "purge_block_reason": (
@@ -200,9 +222,9 @@ def preflight_l3_gaps(
             )
         ),
         "recommendation": _recommendation(
-            missing=len(missing),
+            missing_non_synthetic=len(missing_non_syn),
             synthetic=synth_n,
-            b2_available=b2["available_count"],
+            b2=b2,
             b2_synthetic_available=b2_on_synthetic,
             vision_not_found=vision_not_found_days,
             purge_safe=purge_safe,
@@ -212,20 +234,21 @@ def preflight_l3_gaps(
 
 def _recommendation(
     *,
-    missing: int,
+    missing_non_synthetic: int,
     synthetic: int,
-    b2_available: int,
+    b2: dict[str, Any],
     b2_synthetic_available: int,
     vision_not_found: int,
     purge_safe: bool,
 ) -> str:
-    if missing == 0 and synthetic == 0:
+    if missing_non_synthetic == 0 and synthetic == 0:
         return "no_action"
-    if b2_available >= missing:
+    probed_hits = int(b2.get("probed_available_count", 0))
+    if missing_non_synthetic > 0 and not b2.get("sampled") and probed_hits >= missing_non_synthetic:
         return "run_fill_l3_gaps"
-    if b2_available > 0:
+    if missing_non_synthetic > 0 and not b2.get("sampled") and probed_hits > 0:
         return "run_fill_l3_gaps_partial_b2"
-    if vision_not_found > 0 and missing > 0:
+    if vision_not_found > 0 and (missing_non_synthetic > 0 or synthetic > 0):
         return "cae_b2_backfill_required_or_allow_degraded"
     if not purge_safe and synthetic > 0:
         return "do_not_replace_synthetic_until_b2_ready"

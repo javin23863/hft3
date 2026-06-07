@@ -6,12 +6,9 @@ from typing import Any
 from crypto_lane.src.config.env_loader import ensure_crypto_env
 from crypto_lane.src.ingest.binance_vision_pull import pull_bookticker_from_vision
 from crypto_lane.src.ingest.bookticker_quality import (
-    absent_bookticker_days,
-    missing_bookticker_days,
     purge_synthetic_bookticker,
     summarize_bookticker_range,
-    synthetic_bookticker_days,
-    write_quality_manifest,
+    write_quality_manifest_from_summary,
 )
 from crypto_lane.src.ingest.coinstats_pull import fill_bookticker_gaps_degraded
 from crypto_lane.src.ingest.gold_pull import pull_bookticker_from_b2
@@ -50,34 +47,46 @@ def fill_l3_gaps(
     force: bool = False,
     sleep_s: float = 0.2,
     max_days: int | None = None,
+    preflight: dict[str, Any] | None = None,
+    bookticker_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     ensure_crypto_env()
     ensure_data_dirs()
 
-    preflight = preflight_l3_gaps(start=start, end=end)
+    summary = bookticker_summary or summarize_bookticker_range(start=start, end=end)
+    preflight = preflight or preflight_l3_gaps(
+        start=start,
+        end=end,
+        bookticker_summary=summary,
+        vision_probe=False,
+    )
     report: dict[str, Any] = {
         "preflight": preflight,
-        "missing_before": preflight["missing_days"],
-        "absent_before": len(absent_bookticker_days(start=start, end=end)),
+        "missing_before": len(summary["missing"]),
+        "absent_before": len(summary["absent"]),
         "purged_synthetic_days": [],
         "steps": {},
     }
 
+    def _finalize(final_summary: dict[str, Any]) -> dict[str, Any]:
+        report["absent_after"] = len(final_summary["absent"])
+        report["missing_after"] = len(final_summary["missing"])
+        report["synthetic_after"] = len(final_summary["synthetic"])
+        report["quality_manifest"] = str(write_quality_manifest_from_summary(final_summary))
+        return report
+
     if replace_synthetic and not force and not preflight["purge_safe"]:
         report["aborted"] = True
         report["abort_reason"] = preflight["purge_block_reason"]
-        report["absent_after"] = len(absent_bookticker_days(start=start, end=end))
-        report["missing_after"] = len(missing_bookticker_days(start=start, end=end))
-        report["synthetic_after"] = len(synthetic_bookticker_days(start=start, end=end))
-        report["quality_manifest"] = str(write_quality_manifest(start=start, end=end))
-        return report
+        return _finalize(summary)
 
     if replace_synthetic:
         report["purged_synthetic_days"] = purge_synthetic_bookticker(start=start, end=end)
+        summary = summarize_bookticker_range(start=start, end=end, use_cache=False)
 
     report["steps"]["b2"] = pull_bookticker_from_b2(start=start, end=end, max_days=max_days)
-
-    still_missing = absent_bookticker_days(start=start, end=end)
+    summary = summarize_bookticker_range(start=start, end=end, use_cache=False)
+    still_missing = list(summary["absent"])
     if still_missing:
         v_start = still_missing[0].isoformat()
         v_end = still_missing[-1].isoformat()
@@ -87,8 +96,9 @@ def fill_l3_gaps(
             sleep_s=sleep_s,
             max_days=max_days,
         )
+        summary = summarize_bookticker_range(start=start, end=end, use_cache=False)
+        still_missing = list(summary["absent"])
 
-    still_missing = absent_bookticker_days(start=start, end=end)
     if still_missing and allow_degraded:
         d_start = still_missing[0].isoformat()
         d_end = still_missing[-1].isoformat()
@@ -99,9 +109,6 @@ def fill_l3_gaps(
             max_days=max_days,
             prefer_klines=True,
         )
+        summary = summarize_bookticker_range(start=start, end=end, use_cache=False)
 
-    report["absent_after"] = len(absent_bookticker_days(start=start, end=end))
-    report["missing_after"] = len(missing_bookticker_days(start=start, end=end))
-    report["synthetic_after"] = len(synthetic_bookticker_days(start=start, end=end))
-    report["quality_manifest"] = str(write_quality_manifest(start=start, end=end))
-    return report
+    return _finalize(summary)

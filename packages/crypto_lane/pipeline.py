@@ -34,7 +34,7 @@ from crypto_lane.src.ingest.mempool_pull import (
     pull_mempool_backfill,
 )
 from crypto_lane.src.ingest.normalize import normalize_all
-from crypto_lane.src.config_loader import list_backtest_config_paths
+from crypto_lane.src.config_loader import list_backtest_config_paths, load_yaml
 from crypto_lane.src.ml.candidate_registry import discover_candidates, discover_backtest_configs
 from crypto_lane.src.ingest.fill_test_gaps import run_fill_test_gaps, write_fill_report
 from crypto_lane.src.ml.walk_forward_runner import run_all_smokes, run_smoke
@@ -45,7 +45,11 @@ def cmd_discover(_: argparse.Namespace) -> int:
         "hypotheses": [h["hypothesis_id"] for h in load_hypotheses()],
         "candidates": [c["candidate_id"] for c in discover_candidates()],
         "backtests": [b["config_id"] for b in discover_backtest_configs()],
-        "backtests_production": [p.stem for p in list_backtest_config_paths(include_production=True)],
+        "backtests_production": [
+            load_yaml(p)["config_id"]
+            for p in list_backtest_config_paths(include_production=True)
+            if p.stem.endswith("_production")
+        ],
     }
     print(json.dumps(payload, indent=2))
     return 0

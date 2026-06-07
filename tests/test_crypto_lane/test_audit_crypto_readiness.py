@@ -22,7 +22,7 @@ def test_crypto_readiness_report_delegates_to_builder():
         return_value=expected,
     ) as mock_build:
         report = crypto_readiness_report()
-    mock_build.assert_called_once_with(clear_cache=True)
+    mock_build.assert_called_once_with(clear_cache=True, use_b2_synthetic_cache=True)
     assert report["purge_safe"] is False
     assert report["days_until_purge_safe"] == 10
     assert "cae_bookticker_backfill_status" in report

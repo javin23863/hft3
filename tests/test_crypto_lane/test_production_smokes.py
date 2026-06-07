@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -16,8 +15,13 @@ _READINESS_CACHE = _REPO / "runtime/data_audits/crypto_readiness.json"
 
 
 def _crypto_ready() -> bool:
-    from crypto_lane.src.ingest.bookticker_quality import summarize_bookticker_range
-    from crypto_lane.src.ingest.crypto_readiness import readiness_cache_fresh
+    from crypto_lane.src.ingest.crypto_readiness import (
+        cache_audited_within_max_age,
+        crypto_date_range_from_config,
+        normalized_csv_ready,
+        readiness_cache_fresh,
+    )
+    from crypto_lane.src.ingest.mempool_preflight import AUDIT_B2_PROBE_MAX_DAYS, preflight_mempool_gaps
 
     if not _READINESS_CACHE.is_file():
         return False
@@ -25,14 +29,28 @@ def _crypto_ready() -> bool:
         cached = json.loads(_READINESS_CACHE.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return False
-    dr = cached.get("crypto_date_range") or {}
-    start = str(dr.get("start", "2024-01-01"))
-    end = str(dr.get("end", "2024-12-31"))
-    try:
-        live_syn = len(summarize_bookticker_range(start=start, end=end, use_cache=True)["synthetic"])
-    except OSError:
+    if not cache_audited_within_max_age(cached):
         return False
-    return readiness_cache_fresh(cached, live_synthetic_days=live_syn)
+    if not cached.get("crypto_ready"):
+        return False
+    start, end = crypto_date_range_from_config()
+    expected_dr = {"start": start, "end": end}
+    norm_ok, _ = normalized_csv_ready()
+    mp_pf = preflight_mempool_gaps(
+        start=start, end=end, b2_probe_max_days=AUDIT_B2_PROBE_MAX_DAYS
+    )
+    from crypto_lane.src.ingest.bookticker_quality import summarize_bookticker_range
+
+    live_syn = len(
+        summarize_bookticker_range(start=start, end=end, use_cache=True)["synthetic"]
+    )
+    return readiness_cache_fresh(
+        cached,
+        live_synthetic_days=live_syn,
+        live_mempool_ready=bool(mp_pf.get("mempool_ready")),
+        live_norm_ok=norm_ok,
+        expected_date_range=expected_dr,
+    )
 
 
 pytestmark = pytest.mark.production

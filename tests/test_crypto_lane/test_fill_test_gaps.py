@@ -39,6 +39,68 @@ def test_fill_test_gaps_dry_run_single_readiness_call():
     assert report["ready"] is False
     assert report["crypto_audit"]["crypto_ready"] is False
     assert report.get("pit_strict_blocked") is True
+    assert report["ready"] is False
+
+
+def test_fill_test_gaps_dry_run_writes_readiness_cache(tmp_path, monkeypatch):
+    audit = {
+        "crypto_ready": False,
+        "audited_at": "2026-06-07T12:00:00+00:00",
+        "preflight_l3": {},
+        "preflight_mempool": {},
+        "cae_bookticker_backfill_status": {},
+    }
+    written: list = []
+
+    def _write(report):
+        written.append(report)
+        return tmp_path / "crypto_readiness.json"
+
+    with patch(
+        "crypto_lane.src.ingest.fill_test_gaps.clear_bookticker_summary_cache",
+    ), patch(
+        "crypto_lane.src.ingest.fill_test_gaps.ensure_crypto_env",
+    ), patch(
+        "crypto_lane.src.ingest.fill_test_gaps.redacted_env_report",
+        return_value={},
+    ), patch(
+        "crypto_lane.src.ingest.fill_test_gaps.build_crypto_readiness_report",
+        return_value=audit,
+    ), patch(
+        "crypto_lane.src.ingest.fill_test_gaps.write_crypto_readiness_cache",
+        side_effect=_write,
+    ):
+        run_fill_test_gaps(dry_run=True)
+    assert len(written) == 1
+
+
+def test_fill_test_gaps_fail_fast_on_mempool_not_ready():
+    with patch(
+        "crypto_lane.src.ingest.fill_test_gaps.clear_bookticker_summary_cache",
+    ), patch(
+        "crypto_lane.src.ingest.fill_test_gaps.ensure_crypto_env",
+    ), patch(
+        "crypto_lane.src.ingest.fill_test_gaps.redacted_env_report",
+        return_value={},
+    ), patch(
+        "crypto_lane.src.ingest.fill_test_gaps.pull_gold",
+        return_value={},
+    ), patch(
+        "crypto_lane.src.ingest.fill_test_gaps.supplement_perp_from_binance",
+        return_value={},
+    ), patch(
+        "crypto_lane.src.ingest.fill_test_gaps.supplement_dvol_from_deribit",
+        return_value={},
+    ), patch(
+        "crypto_lane.src.ingest.fill_test_gaps.preflight_mempool_gaps",
+        return_value={"mempool_ready": False, "btc_node_synced": False},
+    ), patch(
+        "crypto_lane.src.ingest.fill_test_gaps._fill_l3_gaps",
+    ) as mock_fill:
+        report = run_fill_test_gaps(dry_run=False, continue_on_error=False)
+    assert report.get("mempool_not_ready") is True
+    mock_fill.assert_not_called()
+    assert report["ready"] is False
 
 
 def test_fill_test_gaps_fail_fast_on_pull_gold():
