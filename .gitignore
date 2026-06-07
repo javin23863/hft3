@@ -53,6 +53,9 @@ data/**/*.npz
 data/**/*.parquet
 data/**/*.csv
 !data_system/config/events.csv
+data/manifest.parquet.bak
+data/manifest.parquet.corrupt.bak
+data/manifest.parquet.lock
 data/raw/rithmic_trial_live_capture/**
 !data/raw/rithmic_trial_live_capture/.gitkeep
 data/normalized/rithmic_trial_live_capture/**
@@ -68,6 +71,10 @@ data/equities/**
 !data/equities/.gitkeep
 !data/equities/metadata/
 !data/equities/metadata/float_pit.csv
+data/mbo_release/**
+!data/mbo_release/.gitkeep
+data/vix_options/**
+!data/vix_options/.gitkeep
 data/replay/parity/**
 !data/replay/parity/.gitkeep
 data/replay/equities/**
@@ -82,7 +89,11 @@ research_cards/crypto/**
 !research_cards/crypto/.gitkeep
 research_cards/workbench_runs/**
 !research_cards/workbench_runs/.gitkeep
+# Workbench runs may be regenerated under either location; the gitkeep is the only tracked item
+**/research_cards/workbench_runs/**
+!**/research_cards/workbench_runs/.gitkeep
 research_cards/workbench_catalog_manifest.json
+artifacts/research_cards/workbench_catalog_manifest.json
 vendor/openfoundry_upstream_test/
 models/
 *.onnx
