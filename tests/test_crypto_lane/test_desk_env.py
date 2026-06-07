@@ -41,6 +41,16 @@ def test_resolve_btc_node_env_prefers_repo_root(tmp_path: Path):
     assert desk_env.resolve_btc_node_env_path(repo) == env_file
 
 
+def test_resolve_btc_node_status_prefers_chi404_cache(tmp_path: Path):
+    repo = tmp_path / "hft3"
+    repo.mkdir()
+    cache_dir = repo / "runtime/cache/node_hosts"
+    cache_dir.mkdir(parents=True)
+    cached = cache_dir / "chi404-btc-node-status.json"
+    cached.write_text('{"synced": true, "source": "chi404"}', encoding="utf-8")
+    assert desk_env.resolve_btc_node_status_path(repo) == cached
+
+
 def test_resolve_btc_node_status_sibling_cae(tmp_path: Path):
     repo = tmp_path / "hft3"
     cae = tmp_path / "crypto-alpha-engine"

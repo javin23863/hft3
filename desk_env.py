@@ -84,8 +84,9 @@ def ensure_desk_env(repo_root: Path) -> list[Path]:
 
 
 def resolve_btc_node_env_path(repo_root: Path) -> Path | None:
-    """First existing .btc-node.env: hft3 root, home, or crypto-alpha-engine sibling."""
+    """First existing .btc-node.env: chi404 cache, hft3 root, home, or CAE sibling."""
     candidates = (
+        repo_root / "runtime/cache/node_hosts/chi404.btc-node.env",
         repo_root / ".btc-node.env",
         Path.home() / ".btc-node.env",
         (repo_root / "../crypto-alpha-engine/.btc-node.env").resolve(),
@@ -93,10 +94,17 @@ def resolve_btc_node_env_path(repo_root: Path) -> Path | None:
     return next((p for p in candidates if p.is_file()), None)
 
 
+def resolve_btc_node_status_paths(repo_root: Path) -> tuple[Path, ...]:
+    """Status file search order: chi404 cache, CAE sibling, local runtime."""
+    return (
+        repo_root / "runtime/cache/node_hosts/chi404-btc-node-status.json",
+        (repo_root / "../crypto-alpha-engine/runtime/state/btc-node-status.json").resolve(),
+        repo_root / "runtime/state/btc-node-status.json",
+    )
+
+
 def resolve_btc_node_status_path(repo_root: Path) -> Path | None:
-    """CAE runtime btc-node-status.json when crypto-alpha-engine is a sibling."""
-    path = (repo_root / "../crypto-alpha-engine/runtime/state/btc-node-status.json").resolve()
-    return path if path.is_file() else None
+    return next((p for p in resolve_btc_node_status_paths(repo_root) if p.is_file()), None)
 
 
 def read_btc_node_status(repo_root: Path, *, max_age_hours: float | None = None) -> dict | None:

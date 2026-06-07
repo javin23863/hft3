@@ -153,10 +153,12 @@ def _run_crypto_phase(
     from crypto_lane.src.config.env_loader import ensure_crypto_env
     from crypto_lane.src.ingest.l3_preflight import preflight_l3_gaps
     from crypto_lane.src.ingest.mempool_preflight import preflight_mempool_gaps
+    from crypto_lane.src.ingest.node_remote_sync import sync_chi404_btc_node_artifacts
 
     ensure_crypto_env()
     start, end = _crypto_date_range()
     steps: dict[str, Any] = {
+        "chi404_node_sync": sync_chi404_btc_node_artifacts(),
         "preflight": preflight_l3_gaps(start=start, end=end),
         "mempool_preflight": preflight_mempool_gaps(start=start, end=end),
     }

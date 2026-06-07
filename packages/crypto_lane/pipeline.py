@@ -21,6 +21,7 @@ from crypto_lane.src.config_loader import load_hypotheses, load_manifest
 from crypto_lane.src.ingest.binance_vision_pull import pull_bookticker_from_vision
 from crypto_lane.src.ingest.l3_gap_fill import audit_l3_gaps, fill_l3_gaps
 from crypto_lane.src.ingest.mempool_preflight import preflight_mempool_gaps
+from crypto_lane.src.ingest.node_remote_sync import sync_chi404_btc_node_artifacts
 from crypto_lane.src.ingest.gold_pull import (
     pull_bookticker_from_b2,
     pull_gold,
@@ -61,9 +62,21 @@ def cmd_manifest(_: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_sync_node_host(args: argparse.Namespace) -> int:
+    ensure_crypto_env()
+    host = (args.host or "chi404").strip().lower()
+    if host != "chi404":
+        print(json.dumps({"error": f"unsupported host: {host}"}, indent=2))
+        return 1
+    print(json.dumps(sync_chi404_btc_node_artifacts(), indent=2))
+    return 0
+
+
 def cmd_env_check(args: argparse.Namespace) -> int:
     ensure_crypto_env()
     report = redacted_env_report()
+    if args.sync_chi404_node:
+        report["chi404_node_sync"] = sync_chi404_btc_node_artifacts()
     if args.mempool_start and args.mempool_end:
         report["mempool_preflight"] = preflight_mempool_gaps(
             start=args.mempool_start,
@@ -217,7 +230,19 @@ def main(argv: list[str] | None = None) -> int:
     p_env = sub.add_parser("env-check")
     p_env.add_argument("--mempool-start", default=None, help="Optional date for mempool preflight")
     p_env.add_argument("--mempool-end", default=None, help="Optional date for mempool preflight")
+    p_env.add_argument(
+        "--sync-chi404-node",
+        action="store_true",
+        help="SCP btc-node status, env, and mempool jsonl from chi404 before check",
+    )
     p_env.set_defaults(func=cmd_env_check)
+
+    p_sync = sub.add_parser(
+        "sync-node-host",
+        help="Sync btc-node status/env/mempool gold from remote host (default chi404)",
+    )
+    p_sync.add_argument("--host", default="chi404")
+    p_sync.set_defaults(func=cmd_sync_node_host)
 
     p_mpf = sub.add_parser("mempool-preflight", help="Probe B2 mempool gold and CAE btc-node status")
     p_mpf.add_argument("--start", required=True)

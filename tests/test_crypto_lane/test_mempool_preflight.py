@@ -44,6 +44,7 @@ def test_preflight_mempool_not_ready_without_b2_or_normalized(monkeypatch):
     )
     monkeypatch.setattr(mempool_preflight, "_read_btc_node_status", lambda: None)
     monkeypatch.setattr(mempool_preflight, "_normalized_mempool_covers_range", lambda *a, **k: False)
+    monkeypatch.setattr(mempool_preflight, "local_mempool_jsonl_days", lambda **_: [])
     report = mempool_preflight.preflight_mempool_gaps(start="2024-01-01", end="2024-01-01")
     assert report["mempool_ready"] is False
     assert report["btc_node_synced"] is None
@@ -83,6 +84,7 @@ def test_preflight_mempool_normalized_only_not_ready(monkeypatch):
     )
     monkeypatch.setattr(mempool_preflight, "_read_btc_node_status", lambda: None)
     monkeypatch.setattr(mempool_preflight, "_normalized_mempool_covers_range", lambda *a, **k: True)
+    monkeypatch.setattr(mempool_preflight, "local_mempool_jsonl_days", lambda **_: [])
     report = mempool_preflight.preflight_mempool_gaps(start="2024-01-01", end="2024-01-01")
     assert report["mempool_ready"] is False
     assert report["normalized_mempool_covers_range"] is True

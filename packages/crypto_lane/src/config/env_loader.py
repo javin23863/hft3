@@ -382,6 +382,8 @@ def redacted_env_report() -> dict[str, object]:
 
         "btc_node_status_age_hours": node_status.get("status_age_hours") if node_status else None,
 
+        "chi404_node_enabled": os.environ.get("HFT3_CHI404_NODE_ENABLED", "1"),
+
     }
 
 

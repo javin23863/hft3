@@ -8,6 +8,7 @@ from crypto_lane.src.config.env_loader import ensure_crypto_env
 from crypto_lane.src.ingest.b2_client import B2Client, B2ClientError
 from crypto_lane.src.ingest.gold_pull import _date_range, _parse_date, _symbol_map
 from crypto_lane.src.ingest.gold_reader import _local_cache_path, gold_key, resolve_gold_bucket
+from crypto_lane.src.ingest.node_remote_sync import local_mempool_jsonl_days
 from crypto_lane.src.ingest.paths import normalized_dir
 from crypto_lane.src.types import repo_root_from_lane
 
@@ -65,9 +66,28 @@ def _normalized_mempool_covers_range(start: str, end: str) -> bool:
         return False
 
 
+def _merged_mempool_available_days(
+    days: list[date],
+    *,
+    b2_available: set[str],
+    local_jsonl_days: set[str],
+) -> tuple[list[str], list[str]]:
+    available: list[str] = []
+    missing: list[str] = []
+    for day in days:
+        iso = day.isoformat()
+        if iso in b2_available or iso in local_jsonl_days:
+            available.append(iso)
+        else:
+            missing.append(iso)
+    return available, missing
+
+
 def _mempool_probe(
     days: list[date],
     *,
+    start: str,
+    end: str,
     max_error_samples: int = 5,
 ) -> dict[str, Any]:
     ensure_crypto_env()
@@ -75,26 +95,34 @@ def _mempool_probe(
     btc_sym = sym.get("bitcoind", "BTC")
     client = B2Client()
     bucket = resolve_gold_bucket("bitcoind")
-    available: list[str] = []
-    missing: list[str] = []
+    b2_available: set[str] = set()
     error_samples: list[dict[str, str]] = []
+    local_jsonl_days = set(local_mempool_jsonl_days(start=start, end=end))
     for day in days:
+        iso = day.isoformat()
+        if iso in local_jsonl_days:
+            b2_available.add(iso)
+            continue
         key = gold_key("bitcoind", btc_sym, day, "mempool_snapshot_15m")
-        local = _local_cache_path(key)
-        if local.is_file():
-            available.append(day.isoformat())
+        local_parquet = _local_cache_path(key)
+        if local_parquet.is_file():
+            b2_available.add(iso)
             continue
         try:
             if client.file_exists(bucket, key):
-                available.append(day.isoformat())
-            else:
-                missing.append(day.isoformat())
+                b2_available.add(iso)
         except B2ClientError as exc:
-            missing.append(day.isoformat())
             if len(error_samples) < max_error_samples:
-                error_samples.append({"day": day.isoformat(), "error": str(exc)})
+                error_samples.append({"day": iso, "error": str(exc)})
+    available, missing = _merged_mempool_available_days(
+        days,
+        b2_available=b2_available,
+        local_jsonl_days=local_jsonl_days,
+    )
     return {
         "bucket": bucket,
+        "local_jsonl_days": sorted(local_jsonl_days),
+        "local_jsonl_day_count": len(local_jsonl_days),
         "available_days": available,
         "missing_days": missing,
         "available_count": len(available),
@@ -116,16 +144,22 @@ def preflight_mempool_gaps(
     days = list(_date_range(start_d, end_d))
     total_days = len(days)
     probe_days = _sample_probe_days(days, b2_probe_max_days) if b2_probe_max_days else days
-    probe = _mempool_probe(probe_days)
+    probe = _mempool_probe(probe_days, start=start, end=end)
+    local_all = set(local_mempool_jsonl_days(start=start, end=end))
     sampled = len(probe_days) < total_days
     if sampled:
-        sample_coverage = probe["available_count"] / max(len(probe_days), 1)
-        available_count = int(round(sample_coverage * total_days))
-        missing_count = total_days - available_count
+        non_local_probe = [d for d in probe_days if d.isoformat() not in local_all]
+        probe_hits = set(probe["available_days"])
+        non_local_hits = sum(1 for d in non_local_probe if d.isoformat() in probe_hits)
+        b2_est_ratio = non_local_hits / max(len(non_local_probe), 1) if non_local_probe else 1.0
+        non_local_total = sum(1 for d in days if d.isoformat() not in local_all)
+        available_count = len(local_all) + int(round(b2_est_ratio * non_local_total))
+        missing_count = max(0, total_days - available_count)
         coverage_ratio = available_count / max(total_days, 1)
     else:
-        available_count = probe["available_count"]
-        missing_count = probe["missing_count"]
+        available_set = set(probe["available_days"]) | local_all
+        available_count = len(available_set)
+        missing_count = max(0, total_days - available_count)
         coverage_ratio = available_count / max(total_days, 1)
     node_status = _read_btc_node_status()
     if node_status is None:
@@ -154,6 +188,8 @@ def preflight_mempool_gaps(
         "btc_node_env_path": str(desk_env.resolve_btc_node_env_path(root) or ""),
         "btc_node_synced": synced,
         "btc_node_status_stale": status_stale,
+        "local_mempool_jsonl_days": sorted(local_all),
+        "local_mempool_jsonl_day_count": len(local_all),
         "normalized_mempool_covers_range": normalized_ok,
         "mempool_coverage_ratio": coverage_ratio,
         "mempool_ready": mempool_ready,

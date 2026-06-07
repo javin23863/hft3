@@ -1,0 +1,19 @@
+schema_version: 1
+# Bitcoin node emitter hosts (Chicago colo + CAE sibling). SSH alias must exist in ~/.ssh/config.
+hosts:
+  chi404:
+    ssh_alias_env: HFT3_CHI404_SSH
+    ssh_alias_default: chi404
+    remote_repo_env: HFT3_CHI404_REPO
+    remote_repo_default: /root/hft3/repo
+    status_paths:
+      - runtime/state/btc-node-status.json
+      - ../crypto-alpha-engine/runtime/state/btc-node-status.json
+    mempool_gold_dir: data/crypto/gold/bitcoind/mempool
+    btc_node_env_paths:
+      - .btc-node.env
+      - ../crypto-alpha-engine/.btc-node.env
+  cae_sibling:
+    kind: local
+    status_path: ../crypto-alpha-engine/runtime/state/btc-node-status.json
+    btc_node_env_path: ../crypto-alpha-engine/.btc-node.env

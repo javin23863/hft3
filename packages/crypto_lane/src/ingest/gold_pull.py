@@ -285,6 +285,7 @@ def pull_gold(
 
     if "mempool" in wanted:
         btc_sym = sym.get("bitcoind", "BTC")
+        mempool_bucket = resolve_gold_bucket("bitcoind")
         for day in _date_range(start_d, end_d):
             key = gold_key("bitcoind", btc_sym, day, "mempool_snapshot_15m")
             dest = _local_cache_path(key)
@@ -292,7 +293,7 @@ def pull_gold(
                 counts["skipped"] += 1
                 continue
             try:
-                client.download_to_path(bucket, key, dest)
+                client.download_to_path(mempool_bucket, key, dest)
                 counts["downloaded"] += 1
             except B2ClientError:
                 counts["errors"] += 1
