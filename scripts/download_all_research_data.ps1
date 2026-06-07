@@ -5,12 +5,15 @@
 param(
     [switch]$ConfirmPull,
     [double]$MaxCostUsd = 200.0,
-    [switch]$SkipImbalanceDownload
+    [switch]$SkipImbalanceDownload,
+    [switch]$SkipCryptoDownload
 )
 
 $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $RepoRoot
+
+. (Join-Path $PSScriptRoot "load_research_env.ps1") -RepoRoot $RepoRoot
 
 if (-not $env:DATABENTO_API_KEY) {
     if (Test-Path ".env") {
@@ -32,6 +35,7 @@ $pyArgs = @(
 )
 if ($ConfirmPull) { $pyArgs += "--confirm-pull" }
 if ($SkipImbalanceDownload) { $pyArgs += "--skip-imbalance-download" }
+if ($SkipCryptoDownload) { $pyArgs += "--skip-crypto-download" }
 
 python @pyArgs
 exit $LASTEXITCODE

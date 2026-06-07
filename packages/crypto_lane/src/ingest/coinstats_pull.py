@@ -1,13 +1,4 @@
-"""Backfill missing BTC futures_um_bookticker_tick gold from CoinStats exchange prices.
-
-CoinStats does not provide true L3 order-book ticks. This module writes hourly
-BinanceFutures price snapshots with a minimal synthetic spread so normalize can
-derive perp mids where B2 gold is absent.
-
-When CoinStats credits are exhausted (HTTP 406), falls back to local perp_klines_1h.
-
-API docs: https://coinstats.app/docs/authentication.md
-"""
+"""Degraded bookticker gap fill via CoinStats or perp klines (not production-grade L3)."""
 from __future__ import annotations
 
 import json
@@ -21,8 +12,10 @@ from typing import Iterable
 import polars as pl
 
 from crypto_lane.src.config.env_loader import ensure_crypto_env
-from crypto_lane.src.ingest.gold_pull import _date_range, _parse_date, _symbol_map
-from crypto_lane.src.ingest.gold_reader import GoldReadError, _local_cache_path, gold_key, read_gold_day
+from crypto_lane.src.ingest.bookticker_quality import absent_bookticker_days
+from crypto_lane.src.ingest.gold_pull import _parse_date, _symbol_map
+from crypto_lane.src.ingest.gold_reader import GoldReadError, gold_key, read_gold_day
+from crypto_lane.src.ingest.gold_reader import _local_cache_path
 from crypto_lane.src.ingest.paths import ensure_data_dirs
 
 _BASE_URL = "https://openapiv1.coinstats.app"
@@ -52,21 +45,6 @@ def _http_json(path: str, params: dict[str, str | int | float]) -> object:
     req = urllib.request.Request(url, headers=_coinstats_headers(), method="GET")
     with urllib.request.urlopen(req, timeout=60) as resp:
         return json.loads(resp.read().decode())
-
-
-def missing_bookticker_days(*, start: str, end: str) -> list[date]:
-    ensure_data_dirs()
-    start_d = _parse_date(start)
-    end_d = _parse_date(end)
-    symbol = _symbol_map().get("binance_perp", "BTCUSDT")
-    missing: list[date] = []
-    for day in _date_range(start_d, end_d):
-        dest = _local_cache_path(
-            gold_key("binance", symbol, day, "futures_um_bookticker_tick")
-        )
-        if not dest.is_file():
-            missing.append(day)
-    return missing
 
 
 def _hourly_timestamps(day: date) -> Iterable[datetime]:
@@ -153,7 +131,7 @@ def _rows_from_perp_klines(symbol: str, day: date) -> list[dict[str, object]]:
     return rows
 
 
-def _write_day_bookticker(
+def _write_day_degraded(
     symbol: str,
     day: date,
     *,
@@ -203,19 +181,19 @@ def _write_day_bookticker(
     return len(rows), source
 
 
-def fill_bookticker_gaps_from_coinstats(
+def fill_bookticker_gaps_degraded(
     *,
     start: str,
     end: str,
     sleep_s: float = 0.25,
     max_days: int | None = None,
-    prefer_klines: bool = False,
+    prefer_klines: bool = True,
 ) -> dict[str, int | list[str] | dict[str, int]]:
-    """Fill missing futures_um_bookticker_tick parquet days."""
+    """Fill missing bookticker days with degraded synthetic data."""
     ensure_crypto_env()
     ensure_data_dirs()
     symbol = _symbol_map().get("binance_perp", "BTCUSDT")
-    missing = missing_bookticker_days(start=start, end=end)
+    missing = absent_bookticker_days(start=start, end=end)
     missing_before = len(missing)
     if max_days is not None:
         missing = missing[: max(0, max_days)]
@@ -226,7 +204,7 @@ def fill_bookticker_gaps_from_coinstats(
     by_source: dict[str, int] = {}
     for day in missing:
         try:
-            n, source = _write_day_bookticker(
+            n, source = _write_day_degraded(
                 symbol, day, sleep_s=sleep_s, prefer_klines=prefer_klines
             )
             written_days.append(day.isoformat())
@@ -237,7 +215,7 @@ def fill_bookticker_gaps_from_coinstats(
 
     return {
         "missing_before": missing_before,
-        "missing_after": len(missing_bookticker_days(start=start, end=end)),
+        "missing_after": len(absent_bookticker_days(start=start, end=end)),
         "attempted": len(missing),
         "written_days": len(written_days),
         "rows_written": rows_written,

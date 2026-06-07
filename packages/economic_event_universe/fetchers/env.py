@@ -25,7 +25,7 @@ def _load_plain_env(path: Path) -> None:
 
 
 def ensure_macro_env() -> None:
-    """Load repo .env, then optional MACRO_KEYS_ENV / Desktop keys.env."""
+    """Load repo .env, QuantX sibling pointers, then desk keys.env."""
     global _LOADED
     if _LOADED:
         return
@@ -40,12 +40,14 @@ def ensure_macro_env() -> None:
         except ImportError:
             _load_plain_env(dotenv_path)
 
-    macro_keys = os.getenv("MACRO_KEYS_ENV", "").strip()
-    if macro_keys:
-        _load_plain_env(Path(macro_keys))
-    else:
-        desk = Path.home() / "Desktop" / "keys.env"
-        _load_plain_env(desk)
+    import desk_env
+
+    for path in desk_env.load_sibling_pointer_envs(root):
+        _load_plain_env(path)
+
+    keys_path = desk_env.resolve_desk_keys_path()
+    if keys_path:
+        _load_plain_env(keys_path)
 
     _LOADED = True
 

@@ -144,14 +144,17 @@ OPRA error text: `422 symbology_invalid_request` in [`data/equities/manifest/dec
 
 Full lane pull: `python -m equities_lane.pipeline pull-decadal --resume --pull-options --override-hard-limit --override-operating-cap`
 
-### 3.3 Crypto — not loaded by imbalance / macro download
+### 3.3 Crypto — orchestrated separately from macro download
 
 | Item | Status |
 |------|--------|
-| `data/crypto/normalized/*.csv` | **Empty** (only `.gitkeep` in repo) |
-| Production ingest | Requires `python -m crypto_lane.pipeline` (`pull-gold`, `pull-mempool`, `normalize`) + B2 crypto-alpha-datasets + optional btc-node tunnel |
-| Tests | Charter example: **not scope-green** (`tests/test_crypto_lane/`) |
-| PIT / clock | **Partial** — see [packages/crypto_lane/docs/PIT_AVAILABILITY_BOUNDARY.md](packages/crypto_lane/docs/PIT_AVAILABILITY_BOUNDARY.md) |
+| Orchestrator | **Phase C** in `scripts/download_all_research_data.py` (`pull-gold`, `fill-l3-gaps`, `normalize`, optional blockspace) |
+| Audit | `scripts/audit_all_research_data.py` reports `crypto_*` + `lanes_ready.crypto` |
+| True L3 bookticker | `fill-l3-gaps --dry-run` first; B2 → Vision monthly; `--replace-synthetic` only when preflight `purge_safe` (or `--force`) |
+| 2024-04+ bookticker on B2/Vision | **Gap** — CAE Contabo backfill required for true L3; use `--allow-degraded` for klines research fill only |
+| `data/crypto/normalized/*.csv` | Local workstation only — run normalize after gold pull |
+| Tests | Scope-green gate: `python -m pytest tests/test_crypto_lane/ -q` |
+| PIT / clock | **Partial** — θ sign tested; sub-second book PIT remains non-goal |
 
 Entry: [docs/vault/RESEARCH_ENTRYPOINTS.md](docs/vault/RESEARCH_ENTRYPOINTS.md) §1d · [research/reports/crypto_alpha_engine_extraction_report.md](research/reports/crypto_alpha_engine_extraction_report.md)
 
@@ -188,12 +191,13 @@ Macro futures: **no venue auction imbalance feed** in inventory (labels only) �
 
 | ID | Issue | Doc |
 |----|--------|-----|
-| CR-01 | Not in download orchestrator | This file §3.3 |
-| CR-02 | `data/crypto/` empty in git clone | Run `pull-gold` + optional `backfill-blockspace` + `normalize` (B2 `crypto-alpha-datasets`, path `quantx/bronze/`; bitcoind B2 uses `asset=onchain`) |
-| CR-03 | `tests/test_crypto_lane/` not green | [docs/VALIDATION_HONESTY.md](docs/VALIDATION_HONESTY.md) |
-| CR-04 | Default smokes use **fixtures** only | `packages/crypto_lane/fixtures/` |
-| CR-05 | θ convention audit **open** | [packages/crypto_lane/docs/VALIDATION_HONESTY.md](packages/crypto_lane/docs/VALIDATION_HONESTY.md) |
-| CR-06 | Venue RTT often **synthetic**, not measured | `venue_profiles.json` / calibrate-ws-rtt |
+| CR-01 | ~~Not in download orchestrator~~ **Fixed** — Phase C in download orchestrator | `scripts/download_all_research_data.py` |
+| CR-02 | `data/crypto/` empty in fresh git clone | Run Phase C or `python -m crypto_lane.pipeline ingest` locally |
+| CR-03 | Re-verify after each crypto_lane change | `python -m pytest tests/test_crypto_lane/ -q` |
+| CR-04 | Default smokes use **fixtures** only | `packages/crypto_lane/fixtures/` — not production claims |
+| CR-05 | θ sign convention | Covered by `tests/test_crypto_lane/test_theta_sign_convention.py` |
+| CR-06 | Production `pit_strict` needs **live_measured** venue RTT | `calibrate-ws-rtt --live-measured --ws-rtt-ms <ms>` |
+| CR-07 | Synthetic/degraded bookticker blocks production validation | Preflight before purge; `fill-l3-gaps --allow-degraded` for research-only holes; true L3 needs CAE→B2 |
 
 Crypto hypotheses (lane-local ids, not workbench slugs): `CRYPTO_H1` … `CRYPTO_H7` — configs under `backtests/configs/crypto_hypotheses/`.
 

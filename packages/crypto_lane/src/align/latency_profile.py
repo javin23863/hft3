@@ -149,22 +149,29 @@ def measure_node_profile_from_btc(*, tunnel_rtt_ms: float | None = None) -> Node
     )
 
 
-def calibrate_ws_rtt(venue: str, *, ws_rtt_ms: float | None = None) -> VenueLatencyProfile:
+def calibrate_ws_rtt(
+    venue: str,
+    *,
+    ws_rtt_ms: float | None = None,
+    live_measured: bool = False,
+) -> VenueLatencyProfile:
     """
-    Synthetic replay calibration from supplied or default ws_rtt_ms.
+    Calibrate θ_exch from ws_rtt_ms.
 
-    Not a live WebSocket probe — use only when no measured ping/pong artifact exists.
+    live_measured=True tags artifact as live_measured (user-supplied probe RTT).
+    Otherwise source is synthetic_calibrated (replay default).
     """
     latency_dir().mkdir(parents=True, exist_ok=True)
     rtt = float(ws_rtt_ms if ws_rtt_ms is not None else 5.0)
     ping_ns = 0
     pong_ns = int(rtt * 1_000_000)
     off = exchange_offset_from_ws_rtt(ping_ns, pong_ns, venue=venue)
+    source = f"live_measured:{venue}" if live_measured else f"synthetic_calibrated:{venue}"
     profile = VenueLatencyProfile(
         venue=venue,
         theta_exch_ms=off.theta_ms,
         ws_rtt_ms=off.rtt_ms,
-        source=f"synthetic_calibrated:{venue}",
+        source=source,
     )
     save_venue_profile(profile)
     return profile

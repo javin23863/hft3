@@ -119,10 +119,62 @@ def _equities_gaps() -> dict[str, Any]:
     }
 
 
+def _crypto_gaps() -> dict[str, Any]:
+    import yaml
+
+    from crypto_lane.src.ingest.bookticker_quality import (
+        absent_bookticker_days,
+        build_quality_manifest,
+        missing_bookticker_days,
+        synthetic_bookticker_days,
+    )
+    from crypto_lane.src.ingest.paths import normalized_dir
+
+    bt_cfg = _REPO / "backtests/configs/crypto_hypotheses/h1_basis_compression.yaml"
+    if bt_cfg.is_file():
+        cfg = yaml.safe_load(bt_cfg.read_text(encoding="utf-8"))
+        dr = cfg.get("date_range") or {}
+        start = str(dr.get("start", "2024-01-01"))
+        end = str(dr.get("end", "2024-12-31"))
+    else:
+        start, end = "2024-01-01", "2024-12-31"
+
+    norm = normalized_dir()
+    norm_missing = [
+        name
+        for name in ("spot_perp_ticks.csv", "deribit_surface.csv", "mempool_snapshots.csv")
+        if not (norm / name).is_file() or (norm / name).stat().st_size == 0
+    ]
+    manifest = build_quality_manifest(start=start, end=end)
+    by_class: dict[str, int] = {}
+    for entry in manifest.values():
+        cls = str(entry.get("class", "missing"))
+        by_class[cls] = by_class.get(cls, 0) + 1
+
+    absent_bt = absent_bookticker_days(start=start, end=end)
+    missing_bt = missing_bookticker_days(start=start, end=end)
+    synthetic_bt = synthetic_bookticker_days(start=start, end=end)
+    return {
+        "crypto_date_range": {"start": start, "end": end},
+        "crypto_bookticker_by_class": by_class,
+        "crypto_bookticker_absent_days": len(absent_bt),
+        "crypto_bookticker_true_l3_gap_days": len(missing_bt),
+        "crypto_bookticker_synthetic_days": len(synthetic_bt),
+        "crypto_bookticker_synthetic_sample": synthetic_bt[:20],
+        "crypto_normalized_missing": norm_missing,
+        "crypto_ready": (
+            len(absent_bt) == 0
+            and len(synthetic_bt) == 0
+            and not norm_missing
+        ),
+    }
+
+
 def audit_report() -> dict[str, Any]:
     macro = _imbalance_macro_gaps()
     eq = _equities_gaps()
-    report = {**macro, **eq}
+    crypto = _crypto_gaps()
+    report = {**macro, **eq, **crypto}
 
     try:
         from economic_event_universe.catalog_report import build_macro_catalog_summary
@@ -142,6 +194,10 @@ def audit_report() -> dict[str, Any]:
         and not eq["options_missing"]
     )
     report["options_failed_count"] = len(eq["options_failed"])
+    report["lanes_ready"] = {
+        "macro": report["ready"],
+        "crypto": crypto.get("crypto_ready", False),
+    }
     return report
 
 

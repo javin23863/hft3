@@ -8,6 +8,7 @@ from pathlib import Path
 import polars as pl
 
 from crypto_lane.src.config_loader import load_yaml
+from crypto_lane.src.ingest.bookticker_quality import classify_bookticker_day, is_production_bookticker_day
 from crypto_lane.src.ingest.gold_reader import (
     GoldReadError,
     deribit_options_key,
@@ -103,6 +104,86 @@ def _perp_mid_from_bookticker(symbol: str, start: date, end: date) -> pl.DataFra
     return pl.concat(frames, how="vertical").unique(subset=["exchange_timestamp"]).sort("exchange_timestamp")
 
 
+def _microstructure_from_bookticker(symbol: str, start: date, end: date) -> pl.DataFrame:
+    """Hourly spread/depth/imbalance from non-synthetic bookticker ticks."""
+    frames: list[pl.DataFrame] = []
+    cur = start
+    while cur <= end:
+        if not is_production_bookticker_day(cur, symbol):
+            cur += timedelta(days=1)
+            continue
+        try:
+            raw = read_gold_day("binance", symbol, cur, "futures_um_bookticker_tick")
+        except GoldReadError:
+            cur += timedelta(days=1)
+            continue
+        if raw.is_empty() or "source" in raw.columns:
+            cur += timedelta(days=1)
+            continue
+        ts_col = "timestamp" if "timestamp" in raw.columns else "event_ts_ms"
+        if ts_col == "event_ts_ms":
+            raw = raw.with_columns(
+                pl.from_epoch(pl.col("event_ts_ms"), time_unit="ms").alias("timestamp"),
+            )
+        hourly = (
+            raw.sort("timestamp")
+            .with_columns([
+                (pl.col("best_ask_px") - pl.col("best_bid_px")).alias("bid_ask_spread"),
+                (pl.col("best_bid_qty") + pl.col("best_ask_qty")).alias("depth_btc"),
+                (
+                    (pl.col("best_bid_qty") - pl.col("best_ask_qty"))
+                    / (pl.col("best_bid_qty") + pl.col("best_ask_qty") + 1e-9)
+                ).alias("order_imbalance"),
+                pl.col("timestamp").dt.truncate("1h").alias("bar_ts"),
+            ])
+            .group_by("bar_ts")
+            .agg([
+                pl.col("bid_ask_spread").last(),
+                pl.col("depth_btc").last(),
+                pl.col("order_imbalance").last(),
+            ])
+            .sort("bar_ts")
+            .with_columns(
+                _ts_ms(pl.col("bar_ts").cast(pl.Datetime(time_zone="UTC"), strict=False)).alias(
+                    "exchange_timestamp"
+                ),
+                pl.lit(0).alias("microstructure_quality_flag"),
+            )
+            .select([
+                "exchange_timestamp",
+                "bid_ask_spread",
+                "depth_btc",
+                "order_imbalance",
+                "microstructure_quality_flag",
+            ])
+        )
+        if not hourly.is_empty():
+            frames.append(hourly)
+        cur += timedelta(days=1)
+    if not frames:
+        return pl.DataFrame()
+    return pl.concat(frames, how="vertical").unique(subset=["exchange_timestamp"]).sort("exchange_timestamp")
+
+
+def _microstructure_quality_for_range(symbol: str, start: date, end: date) -> int:
+    """0=real ticks, 2=klines-only fallback, 3=synthetic."""
+    has_real = False
+    has_synthetic = False
+    cur = start
+    while cur <= end:
+        cls = classify_bookticker_day(cur, symbol)
+        if cls == "b2_real":
+            has_real = True
+        elif cls == "synthetic":
+            has_synthetic = True
+        cur += timedelta(days=1)
+    if has_real:
+        return 0
+    if has_synthetic:
+        return 3
+    return 2
+
+
 def _mid_from_klines(df: pl.DataFrame, prefix: str) -> pl.DataFrame:
     if df.is_empty():
         return df
@@ -173,6 +254,17 @@ def build_spot_perp_ticks(start: str, end: str) -> pl.DataFrame:
         pl.col("perp_mid").forward_fill(),
     ]).drop_nulls(subset=["exchange_timestamp"])
 
+    micro = _microstructure_from_bookticker(sym["binance_perp"], start_d, end_d)
+    quality_flag = _microstructure_quality_for_range(sym["binance_perp"], start_d, end_d)
+    if not micro.is_empty():
+        out = out.join(micro, on="exchange_timestamp", how="left")
+    else:
+        out = out.with_columns([
+            pl.lit(None).cast(pl.Float64).alias("bid_ask_spread"),
+            pl.lit(None).cast(pl.Float64).alias("depth_btc"),
+            pl.lit(None).cast(pl.Float64).alias("order_imbalance"),
+        ])
+
     out = out.with_columns([
         pl.col("perp_mid").alias("perp_mid_binance"),
         pl.col("perp_mid").alias("perp_mid_okx"),
@@ -180,16 +272,17 @@ def build_spot_perp_ticks(start: str, end: str) -> pl.DataFrame:
         pl.col("funding_rate").alias("funding_rate_okx"),
         (pl.col("spot_mid").log().diff()).fill_null(0.0).alias("spot_return"),
         (pl.col("perp_mid").log().diff()).fill_null(0.0).alias("perp_return"),
-        pl.lit(2.0).alias("bid_ask_spread"),
-        pl.lit(50.0).alias("depth_btc"),
-        pl.lit(0.0).alias("order_imbalance"),
+        pl.col("bid_ask_spread").fill_null(2.0).alias("bid_ask_spread"),
+        pl.col("depth_btc").fill_null(50.0).alias("depth_btc"),
+        pl.col("order_imbalance").fill_null(0.0).alias("order_imbalance"),
+        pl.col("microstructure_quality_flag").fill_null(quality_flag).alias("microstructure_quality_flag"),
     ])
     out = _assign_validation_periods(out.sort("exchange_timestamp"))
     cols = [
         "exchange_timestamp", "validation_period", "spot_mid", "perp_mid",
         "perp_mid_binance", "perp_mid_okx", "funding_rate", "funding_rate_binance",
         "funding_rate_okx", "spot_return", "perp_return", "bid_ask_spread",
-        "depth_btc", "order_imbalance",
+        "depth_btc", "order_imbalance", "microstructure_quality_flag",
     ]
     return out.select(cols)
 

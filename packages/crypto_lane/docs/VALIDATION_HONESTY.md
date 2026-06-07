@@ -21,8 +21,14 @@ Repo-wide: **[docs/VALIDATION_HONESTY.md](../../../docs/VALIDATION_HONESTY.md)**
 
 ## Known gaps (open)
 
-1. **θ convention audit** — doc `T_local_true = T_nominal − θ` vs ingest mediantime/wall usage; sign audit pending.
-2. **Live venue RTT** — default path is synthetic calibration until real WS trace stored in `venue_profiles.json`.
+1. **Sub-second exchange book PIT** — hourly bookticker aggregation only; see [PIT_AVAILABILITY_BOUNDARY.md](PIT_AVAILABILITY_BOUNDARY.md) §6.
+2. **Production venue RTT** — `pit_strict` backtests require `calibrate-ws-rtt --live-measured --ws-rtt-ms <ms>`; synthetic default is fixture/replay only.
+3. **2024-04+ true L3 bookticker** — not on B2; Binance Vision monthly incomplete/missing. Run `fill-l3-gaps --dry-run` before any purge. CAE bookticker backfill → B2 is the production path.
+
+## Closed (do not re-report)
+
+- **θ sign convention** — `tests/test_crypto_lane/test_theta_sign_convention.py` asserts `T_local_true = T_nominal − θ`.
+- **Synthetic L3 in production** — `walk_forward_runner._assert_production_ready` rejects synthetic bookticker days.
 
 Closed in code (do not re-report): PIT join runs before mempool/event features; normalize no longer nominal-pairs mempool to exchange bars.
 

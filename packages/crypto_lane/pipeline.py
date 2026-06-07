@@ -18,8 +18,14 @@ from crypto_lane.src.align.latency_profile import (
 )
 from crypto_lane.src.config.env_loader import ensure_crypto_env, redacted_env_report
 from crypto_lane.src.config_loader import load_hypotheses, load_manifest
-from crypto_lane.src.ingest.coinstats_pull import fill_bookticker_gaps_from_coinstats, missing_bookticker_days
-from crypto_lane.src.ingest.gold_pull import pull_gold, supplement_dvol_from_deribit, supplement_perp_from_binance
+from crypto_lane.src.ingest.binance_vision_pull import pull_bookticker_from_vision
+from crypto_lane.src.ingest.l3_gap_fill import audit_l3_gaps, fill_l3_gaps
+from crypto_lane.src.ingest.gold_pull import (
+    pull_bookticker_from_b2,
+    pull_gold,
+    supplement_dvol_from_deribit,
+    supplement_perp_from_binance,
+)
 from crypto_lane.src.ingest.mempool_pull import (
     backfill_blockspace_from_node,
     pull_live_mempool,
@@ -108,7 +114,11 @@ def cmd_normalize(args: argparse.Namespace) -> int:
 
 def cmd_calibrate_ws_rtt(args: argparse.Namespace) -> int:
     ensure_crypto_env()
-    profile = calibrate_ws_rtt(args.venue, ws_rtt_ms=args.ws_rtt_ms)
+    profile = calibrate_ws_rtt(
+        args.venue,
+        ws_rtt_ms=args.ws_rtt_ms,
+        live_measured=args.live_measured,
+    )
     if args.measure_node:
         node = measure_node_profile_from_btc(tunnel_rtt_ms=args.tunnel_rtt_ms)
         save_node_profile(node)
@@ -118,32 +128,52 @@ def cmd_calibrate_ws_rtt(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_pull_bookticker(args: argparse.Namespace) -> int:
+    ensure_crypto_env()
+    report = {
+        "b2": pull_bookticker_from_b2(
+            start=args.start, end=args.end, max_days=args.max_days
+        ),
+        "binance_vision": pull_bookticker_from_vision(
+            start=args.start,
+            end=args.end,
+            sleep_s=args.sleep_s,
+            max_days=args.max_days,
+        ),
+    }
+    print(json.dumps(report, indent=2))
+    return 0
+
+
 def cmd_fill_l3_gaps(args: argparse.Namespace) -> int:
+    from crypto_lane.src.ingest.l3_preflight import preflight_l3_gaps
+
     ensure_crypto_env()
     if args.audit_only:
-        days = missing_bookticker_days(start=args.start, end=args.end)
-        print(
-            json.dumps(
-                {
-                    "granularity": "futures_um_bookticker_tick",
-                    "symbol": "BTCUSDT",
-                    "missing_days": len(days),
-                    "dates": [d.isoformat() for d in days[:50]],
-                    "truncated": len(days) > 50,
-                },
-                indent=2,
-            )
-        )
+        print(json.dumps(audit_l3_gaps(start=args.start, end=args.end), indent=2))
         return 0
-    report = fill_bookticker_gaps_from_coinstats(
+    if args.dry_run:
+        print(json.dumps(preflight_l3_gaps(start=args.start, end=args.end), indent=2))
+        return 0
+    report = fill_l3_gaps(
         start=args.start,
         end=args.end,
+        replace_synthetic=args.replace_synthetic,
+        allow_degraded=args.allow_degraded,
+        force=args.force,
         sleep_s=args.sleep_s,
         max_days=args.max_days,
-        prefer_klines=args.prefer_klines,
     )
     print(json.dumps(report, indent=2))
-    return 0 if not report.get("errors") else 1
+    if report.get("aborted"):
+        return 1
+    absent_after = report.get("absent_after", 0)
+    synthetic_after = report.get("synthetic_after", 0)
+    if absent_after:
+        return 1
+    if synthetic_after and not args.allow_degraded:
+        return 1
+    return 0
 
 
 def cmd_ingest(args: argparse.Namespace) -> int:
@@ -204,20 +234,41 @@ def main(argv: list[str] | None = None) -> int:
     p_bf.add_argument("--step-hours", type=int, default=1)
     p_bf.set_defaults(func=cmd_backfill_blockspace)
 
+    p_bt = sub.add_parser(
+        "pull-bookticker",
+        help="Pull true L3 bookticker from B2 then Binance Vision",
+    )
+    p_bt.add_argument("--start", required=True)
+    p_bt.add_argument("--end", required=True)
+    p_bt.add_argument("--sleep-s", type=float, default=0.2)
+    p_bt.add_argument("--max-days", type=int, default=None)
+    p_bt.set_defaults(func=cmd_pull_bookticker)
+
     p_l3 = sub.add_parser(
         "fill-l3-gaps",
-        help="Backfill missing BTC futures_um_bookticker_tick via CoinStats (requires COINSTATS_API_KEY)",
+        help="Backfill missing BTC futures_um_bookticker_tick (B2 → Vision → degraded)",
     )
     p_l3.add_argument("--start", required=True)
     p_l3.add_argument("--end", required=True)
     p_l3.add_argument("--audit-only", action="store_true")
-    p_l3.add_argument("--sleep-s", type=float, default=0.25)
-    p_l3.add_argument("--max-days", type=int, default=None)
     p_l3.add_argument(
-        "--prefer-klines",
+        "--dry-run",
         action="store_true",
-        help="Skip CoinStats; synthesize bookticker from local perp_klines_1h",
+        help="Preflight B2/Vision fillability; no downloads or deletes",
     )
+    p_l3.add_argument("--replace-synthetic", action="store_true")
+    p_l3.add_argument(
+        "--force",
+        action="store_true",
+        help="Allow --replace-synthetic even when preflight says purge is unsafe",
+    )
+    p_l3.add_argument(
+        "--allow-degraded",
+        action="store_true",
+        help="Fill remaining gaps from perp klines (not production-grade L3)",
+    )
+    p_l3.add_argument("--sleep-s", type=float, default=0.2)
+    p_l3.add_argument("--max-days", type=int, default=None)
     p_l3.set_defaults(func=cmd_fill_l3_gaps)
 
     p_norm = sub.add_parser("normalize")
@@ -239,6 +290,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_cal.add_argument("--venue", default="binance_perp")
     p_cal.add_argument("--ws-rtt-ms", type=float, default=None)
+    p_cal.add_argument(
+        "--live-measured",
+        action="store_true",
+        help="Tag venue_profiles.json source as live_measured (requires --ws-rtt-ms)",
+    )
     p_cal.add_argument("--measure-node", action="store_true")
     p_cal.add_argument("--tunnel-rtt-ms", type=float, default=None)
     p_cal.set_defaults(func=cmd_calibrate_ws_rtt)
@@ -246,6 +302,7 @@ def main(argv: list[str] | None = None) -> int:
     p_probe = sub.add_parser("probe-ws-rtt", help="Deprecated alias for calibrate-ws-rtt")
     p_probe.add_argument("--venue", default="binance_perp")
     p_probe.add_argument("--ws-rtt-ms", type=float, default=None)
+    p_probe.add_argument("--live-measured", action="store_true")
     p_probe.add_argument("--measure-node", action="store_true")
     p_probe.add_argument("--tunnel-rtt-ms", type=float, default=None)
     p_probe.set_defaults(func=cmd_calibrate_ws_rtt)

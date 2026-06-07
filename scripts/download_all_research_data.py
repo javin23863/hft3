@@ -23,6 +23,7 @@ from hft3_bootstrap import setup_repo_paths
 setup_repo_paths()
 
 _DECADAL_CFG = _REPO / "packages/equities_lane/config/decadal_runners.yaml"
+_CRYPTO_BT_CFG = _REPO / "backtests/configs/crypto_hypotheses/h1_basis_compression.yaml"
 
 
 def _run(cmd: list[str], *, check: bool = True) -> subprocess.CompletedProcess:
@@ -134,6 +135,90 @@ def _options_retry_per_session(session_ids: list[str]) -> None:
         )
 
 
+def _crypto_date_range() -> tuple[str, str]:
+    import yaml
+
+    if _CRYPTO_BT_CFG.is_file():
+        cfg = yaml.safe_load(_CRYPTO_BT_CFG.read_text(encoding="utf-8"))
+        dr = cfg.get("date_range") or {}
+        return str(dr.get("start", "2024-01-01")), str(dr.get("end", "2024-12-31"))
+    return "2024-01-01", "2024-12-31"
+
+
+def _run_crypto_phase(
+    *,
+    replace_synthetic: bool = False,
+    allow_degraded: bool = True,
+) -> dict[str, Any]:
+    from crypto_lane.src.config.env_loader import ensure_crypto_env
+    from crypto_lane.src.ingest.l3_preflight import preflight_l3_gaps
+
+    ensure_crypto_env()
+    start, end = _crypto_date_range()
+    steps: dict[str, Any] = {"preflight": preflight_l3_gaps(start=start, end=end)}
+    purge_safe = bool(steps["preflight"].get("purge_safe"))
+    if replace_synthetic and not purge_safe:
+        steps["replace_synthetic_skipped"] = steps["preflight"].get("purge_block_reason")
+        replace_synthetic = False
+    _run(
+        [
+            sys.executable,
+            "-m",
+            "crypto_lane.pipeline",
+            "pull-gold",
+            "--start",
+            start,
+            "--end",
+            end,
+        ],
+        check=False,
+    )
+    fill_cmd = [
+        sys.executable,
+        "-m",
+        "crypto_lane.pipeline",
+        "fill-l3-gaps",
+        "--start",
+        start,
+        "--end",
+        end,
+    ]
+    if replace_synthetic:
+        fill_cmd.append("--replace-synthetic")
+    if allow_degraded:
+        fill_cmd.append("--allow-degraded")
+    proc = _run(fill_cmd, check=False)
+    steps["fill_l3_exit_code"] = proc.returncode
+    _run(
+        [
+            sys.executable,
+            "-m",
+            "crypto_lane.pipeline",
+            "normalize",
+            "--start",
+            start,
+            "--end",
+            end,
+        ],
+        check=False,
+    )
+    try:
+        from crypto_lane.src.ingest.mempool_pull import backfill_blockspace_from_node
+
+        steps["blockspace_written"] = backfill_blockspace_from_node(
+            start=start, end=end, step_hours=1
+        )
+    except Exception as exc:
+        steps["blockspace_error"] = str(exc)
+    mod = _load_audit_module()
+    steps["crypto_audit"] = {
+        k: v
+        for k, v in mod.audit_report().items()
+        if k.startswith("crypto_") or k == "lanes_ready"
+    }
+    return steps
+
+
 def _write_status(status: dict[str, Any]) -> Path:
     out = _REPO / "runtime/data_audits/research_data_status.json"
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -151,6 +236,21 @@ def main() -> int:
     )
     p.add_argument("--max-cost-usd", type=float, default=200.0)
     p.add_argument("--skip-imbalance-download", action="store_true")
+    p.add_argument(
+        "--skip-crypto-download",
+        action="store_true",
+        help="Skip Phase C crypto lane pull (B2/Vision/normalize)",
+    )
+    p.add_argument(
+        "--replace-synthetic-crypto",
+        action="store_true",
+        help="Phase C: purge synthetic bookticker only when preflight says B2 can replace",
+    )
+    p.add_argument(
+        "--no-degraded-crypto",
+        action="store_true",
+        help="Phase C: do not fill remaining bookticker gaps from perp klines",
+    )
     args = p.parse_args()
 
     status: dict[str, Any] = {"phase": "A" if not args.confirm_pull else "B"}
@@ -165,6 +265,15 @@ def main() -> int:
 
     estimate = _estimate_decadal()
     status["estimate"] = estimate
+
+    if not args.skip_crypto_download:
+        print("\n=== Phase C: crypto lane (no Databento spend) ===", flush=True)
+        status["crypto_phase"] = _run_crypto_phase(
+            replace_synthetic=args.replace_synthetic_crypto,
+            allow_degraded=not args.no_degraded_crypto,
+        )
+        report = _audit()
+        status["audit_after_crypto"] = {k: v for k, v in report.items() if not k.startswith("_")}
 
     if not args.confirm_pull:
         status["awaiting_confirmation"] = True

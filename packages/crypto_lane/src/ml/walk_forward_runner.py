@@ -19,7 +19,31 @@ from crypto_lane.src.ml.candidate_registry import candidate_by_id
 from crypto_lane.src.ml.embargo import horizon_steps_from_ms, resolve_embargo_steps, resolve_label_horizon_ms
 from crypto_lane.src.ml.holdout_gate import run_holdout_gate
 from crypto_lane.src.ml.walk_forward import purged_expanding_folds
+from crypto_lane.src.align.latency_profile import default_venue_from_backtest, resolve_theta_exch
+from crypto_lane.src.ingest.bookticker_quality import synthetic_bookticker_days
 from crypto_lane.src.types import repo_root_from_lane
+
+
+def _assert_production_ready(backtest: dict[str, Any]) -> None:
+    if backtest.get("validation_mode") != "production":
+        return
+    dr = backtest.get("date_range") or {}
+    start, end = dr.get("start"), dr.get("end")
+    if start and end:
+        synthetic = synthetic_bookticker_days(start=str(start), end=str(end))
+        if synthetic:
+            raise ValueError(
+                f"production validation blocked: {len(synthetic)} synthetic bookticker day(s); "
+                "run fill-l3-gaps --replace-synthetic"
+            )
+    if backtest.get("btc_node_feature_availability_mode") == "pit_strict":
+        venue = default_venue_from_backtest(backtest)
+        prof = resolve_theta_exch(venue, backtest)
+        if prof.source.startswith(("backtest_calibrated:", "synthetic_calibrated:", "ws_rtt:")):
+            raise ValueError(
+                f"production pit_strict blocked: venue RTT source={prof.source!r}; "
+                "run calibrate-ws-rtt --live-measured --ws-rtt-ms <ms>"
+            )
 
 
 def _all_label_names() -> frozenset[str]:
@@ -352,6 +376,7 @@ def run_smoke(candidate_id: str, output_dir: str | Path | None = None) -> dict[s
     bt_path = repo_root_from_lane() / "backtests" / "configs" / "crypto_hypotheses"
     bt_file = bt_path / f"{candidate_id.replace('crypto_', '')}.yaml"
     backtest = load_yaml(bt_file) if bt_file.exists() else {}
+    _assert_production_ready(backtest)
 
     target = cand["target"]
     hypothesis_id = cand.get("hypothesis_id")

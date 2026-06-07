@@ -152,6 +152,70 @@ def supplement_dvol_from_deribit(*, start: str, end: str) -> dict[str, int]:
     return {"written": written, "skipped": (end_d - start_d).days + 1 - len(missing)}
 
 
+def pull_bookticker_from_b2(
+    *,
+    start: str,
+    end: str,
+    max_days: int | None = None,
+) -> dict[str, int]:
+    """Download futures_um_bookticker_tick from B2 for days not already real locally."""
+    from crypto_lane.src.ingest.bookticker_quality import (
+        absent_bookticker_days,
+        classify_bookticker_day,
+    )
+
+    ensure_crypto_env()
+    require_env("HFT3_CRYPTO_B2_KEY_ID", "HFT3_CRYPTO_B2_APP_KEY", hint=".env.example")
+    ensure_data_dirs()
+    sym = _symbol_map()
+    perp = sym.get("binance_perp", "BTCUSDT")
+    client = B2Client()
+    bucket = resolve_gold_bucket("binance")
+    days = absent_bookticker_days(start=start, end=end)
+    if max_days is not None:
+        days = days[: max(0, max_days)]
+
+    counts: dict[str, object] = {
+        "downloaded": 0,
+        "skipped": 0,
+        "errors": 0,
+        "still_missing": 0,
+        "bucket": bucket,
+        "error_samples": [],
+    }
+    error_samples: list[dict[str, str]] = []
+    for day in days:
+        if classify_bookticker_day(day, perp) == "b2_real":
+            counts["skipped"] = int(counts["skipped"]) + 1
+            continue
+        key = gold_key("binance", perp, day, "futures_um_bookticker_tick")
+        dest = _local_cache_path(key)
+        try:
+            client.download_to_path(bucket, key, dest)
+            if classify_bookticker_day(day, perp) == "b2_real":
+                counts["downloaded"] = int(counts["downloaded"]) + 1
+            else:
+                dest.unlink(missing_ok=True)
+                counts["errors"] = int(counts["errors"]) + 1
+                if len(error_samples) < 5:
+                    error_samples.append(
+                        {
+                            "day": day.isoformat(),
+                            "error": "downloaded file failed quality check (sparse/synthetic)",
+                        }
+                    )
+        except B2ClientError as exc:
+            counts["errors"] = int(counts["errors"]) + 1
+            if len(error_samples) < 5:
+                error_samples.append({"day": day.isoformat(), "error": str(exc)})
+
+    counts["error_samples"] = error_samples
+    from crypto_lane.src.ingest.bookticker_quality import absent_bookticker_days as _absent
+
+    counts["still_missing"] = len(_absent(start=start, end=end))
+    return counts  # type: ignore[return-value]
+
+
 def pull_gold(
     *,
     start: str,
@@ -189,6 +253,16 @@ def pull_gold(
             if not dest.is_file():
                 try:
                     client.download_to_path(bucket, perp_key, dest)
+                    counts["downloaded"] += 1
+                except B2ClientError:
+                    counts["errors"] += 1
+            else:
+                counts["skipped"] += 1
+            bt_key = gold_key("binance", perp, day, "futures_um_bookticker_tick")
+            bt_dest = _local_cache_path(bt_key)
+            if not bt_dest.is_file():
+                try:
+                    client.download_to_path(bucket, bt_key, bt_dest)
                     counts["downloaded"] += 1
                 except B2ClientError:
                     counts["errors"] += 1
