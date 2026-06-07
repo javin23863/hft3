@@ -56,6 +56,7 @@ data/**/*.csv
 data/manifest.parquet.bak
 data/manifest.parquet.corrupt.bak
 data/manifest.parquet.lock
+data/manifest.parquet.tmp
 data/raw/rithmic_trial_live_capture/**
 !data/raw/rithmic_trial_live_capture/.gitkeep
 data/normalized/rithmic_trial_live_capture/**
@@ -79,16 +80,18 @@ data/replay/parity/**
 !data/replay/parity/.gitkeep
 data/replay/equities/**
 !data/replay/equities/.gitkeep
+data/symbols/**
+data/crypto/**
+!data/crypto/.gitkeep
+packages/data_system/data/**
+packages/runtime/validation/**
+research/reports/**
 research_cards/parity/**
 !research_cards/parity/.gitkeep
 research_cards/equities/**
 !research_cards/equities/.gitkeep
-data/crypto/**
-!data/crypto/.gitkeep
 research_cards/crypto/**
 !research_cards/crypto/.gitkeep
-research_cards/workbench_runs/**
-!research_cards/workbench_runs/.gitkeep
 # Workbench runs may be regenerated under either location; the gitkeep is the only tracked item
 **/research_cards/workbench_runs/**
 !**/research_cards/workbench_runs/.gitkeep
@@ -97,6 +100,7 @@ artifacts/research_cards/workbench_catalog_manifest.json
 vendor/openfoundry_upstream_test/
 models/
 *.onnx
+common/**
 
 # Graphify (team commits report/labels; graph.json exceeds GitHub 100MB — rebuild locally)
 graphify-out/graph.json
@@ -117,6 +121,8 @@ runtime/data_downloads/*.err.log
 runtime/data_audits/*.log
 runtime/chi404/*.log
 runtime/chi404/*.txt
+runtime/cache/**
+runtime/latency_reports/raw/**
 
 # Ops artifacts and local logs
 logs/
