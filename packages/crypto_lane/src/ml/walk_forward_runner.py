@@ -381,11 +381,30 @@ def _negative_controls(
     return out
 
 
-def run_smoke(candidate_id: str, output_dir: str | Path | None = None) -> dict[str, Any]:
-    cand = candidate_by_id(candidate_id)
+def backtest_config_path(candidate_id: str, *, production: bool = False) -> Path:
     bt_path = repo_root_from_lane() / "backtests" / "configs" / "crypto_hypotheses"
-    bt_file = bt_path / f"{candidate_id.replace('crypto_', '')}.yaml"
-    backtest = load_yaml(bt_file) if bt_file.exists() else {}
+    stem = candidate_id.replace("crypto_", "")
+    if production:
+        return bt_path / f"{stem}_production.yaml"
+    return bt_path / f"{stem}.yaml"
+
+
+def run_smoke(
+    candidate_id: str,
+    output_dir: str | Path | None = None,
+    *,
+    production: bool = False,
+) -> dict[str, Any]:
+    cand = candidate_by_id(candidate_id)
+    bt_file = backtest_config_path(candidate_id, production=production)
+    if production and not bt_file.is_file():
+        raise FileNotFoundError(f"production backtest config missing: {bt_file}")
+    backtest = load_yaml(bt_file) if bt_file.is_file() else {}
+    if production and backtest.get("validation_mode") != "production":
+        raise ValueError(
+            f"expected validation_mode=production in {bt_file.name}, "
+            f"got {backtest.get('validation_mode')!r}"
+        )
     _assert_production_ready(backtest)
 
     target = cand["target"]
@@ -556,6 +575,6 @@ def run_smoke(candidate_id: str, output_dir: str | Path | None = None) -> dict[s
     return report
 
 
-def run_all_smokes() -> list[dict[str, Any]]:
+def run_all_smokes(*, production: bool = False) -> list[dict[str, Any]]:
     from crypto_lane.src.ml.candidate_registry import discover_candidates
-    return [run_smoke(c["candidate_id"]) for c in discover_candidates()]
+    return [run_smoke(c["candidate_id"], production=production) for c in discover_candidates()]

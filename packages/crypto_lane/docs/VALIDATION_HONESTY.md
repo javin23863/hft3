@@ -19,11 +19,40 @@ Repo-wide: **[docs/VALIDATION_HONESTY.md](../../../docs/VALIDATION_HONESTY.md)**
 | `calibrate-ws-rtt` / `probe-ws-rtt` CLI | synthetic calibration (`source: synthetic_calibrated:*`) |
 | YAML `ws_rtt_ms` fallback | synthetic replay calibration |
 
+## Production testing entrypoints
+
+| Command | Purpose |
+|---------|---------|
+| `python -m crypto_lane.pipeline fill-test-gaps --dry-run` | Preflight L3/mempool + CAE backfill status without downloads |
+| `python -m crypto_lane.pipeline fill-test-gaps --sync-chi404-node --ws-rtt-ms <ms>` | Full gap-fill orchestration for full-year production |
+| `python scripts/audit_crypto_readiness.py` | Crypto-only audit; **exit 0** only when `crypto_ready` |
+| `scripts/fill_crypto_test_gaps.ps1` | Windows wrapper for `fill-test-gaps` |
+| `python -m crypto_lane.pipeline smoke --production` | Walk-forward smokes using `*_production.yaml` configs |
+
+**Prerequisite for full 2024 L3:** CAE Contabo `futures_um_bookticker` backfill (Apr–Dec 2024) → B2 before `fill-l3-gaps --replace-synthetic`. Check status via `audit_crypto_readiness` → `cae_bookticker_backfill_status`.
+
+### CAE operator steps (external to hft3)
+
+On Contabo (`btc-node` SSH alias), from `crypto-alpha-engine`:
+
+```bash
+bash scripts/contabo_max_cpu.sh                    # deriv pool + tick supervisors
+.venv/bin/python scripts/data_collection_status.py --json
+# Target dataset: futures_um_bookticker, symbol BTCUSDT, months 2024-04..2024-12
+```
+
+After B2 upload completes, from hft3:
+
+```bash
+python scripts/audit_crypto_readiness.py           # days_until_purge_safe → 0
+python -m crypto_lane.pipeline fill-test-gaps --sync-chi404-node --ws-rtt-ms <ms>
+```
+
 ## Known gaps (open)
 
 1. **Sub-second exchange book PIT** — hourly bookticker aggregation only; see [PIT_AVAILABILITY_BOUNDARY.md](PIT_AVAILABILITY_BOUNDARY.md) §6.
 2. **Production venue RTT** — `pit_strict` backtests require `calibrate-ws-rtt --live-measured --ws-rtt-ms <ms>`; synthetic default is fixture/replay only.
-3. **2024-04+ true L3 bookticker** — not on B2; Binance Vision monthly incomplete/missing. Run `fill-l3-gaps --dry-run` before any purge. CAE bookticker backfill → B2 is the production path.
+3. **2024-04+ true L3 bookticker** — not on B2; Binance Vision monthly incomplete/missing. Run `fill-l3-gaps --dry-run` before any purge. CAE bookticker backfill → B2 is the production path (see `cae_bookticker_backfill_status` in audit).
 4. **Mempool / btc-node** — `sync-node-host` / orchestrator pull chi404 btc-node status, `.btc-node.env`, and `data/crypto/gold/bitcoind/mempool/*.jsonl` via SSH; preflight counts B2 parquet **or** local/chi404 jsonl days. CAE sibling status remains fallback.
 5. **ML challengers** — `lightgbm` and `xgboost` are required in `requirements.txt`; `env-check` reports `challengers` import status. Walk-forward evaluates all YAML challengers; production `pass_fail` fails on `challenger_errors`.
 6. **Mempool coverage** — `mempool_ready` requires 100% B2 days or ≥95% coverage (`MEMPOOL_MIN_COVERAGE_RATIO`); normalized CSV alone does not pass. Audit splits `crypto_l3_ready` vs `crypto_mempool_ready` and samples ≤31 B2 probe days for speed.

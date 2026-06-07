@@ -122,12 +122,7 @@ def _equities_gaps() -> dict[str, Any]:
 def _crypto_gaps() -> dict[str, Any]:
     import yaml
 
-    from crypto_lane.src.ingest.bookticker_quality import (
-        absent_bookticker_days,
-        build_quality_manifest,
-        missing_bookticker_days,
-        synthetic_bookticker_days,
-    )
+    from crypto_lane.src.ingest.bookticker_quality import summarize_bookticker_range
     from crypto_lane.src.ingest.paths import normalized_dir
 
     bt_cfg = _REPO / "backtests/configs/crypto_hypotheses/h1_basis_compression.yaml"
@@ -150,15 +145,11 @@ def _crypto_gaps() -> dict[str, Any]:
         for name in ("spot_perp_ticks.csv", "deribit_surface.csv", "mempool_snapshots.csv")
         if not (norm / name).is_file() or (norm / name).stat().st_size == 0
     ]
-    manifest = build_quality_manifest(start=start, end=end)
-    by_class: dict[str, int] = {}
-    for entry in manifest.values():
-        cls = str(entry.get("class", "missing"))
-        by_class[cls] = by_class.get(cls, 0) + 1
-
-    absent_bt = absent_bookticker_days(start=start, end=end)
-    missing_bt = missing_bookticker_days(start=start, end=end)
-    synthetic_bt = synthetic_bookticker_days(start=start, end=end)
+    bt_summary = summarize_bookticker_range(start=start, end=end)
+    by_class = dict(bt_summary["by_class"])
+    absent_bt = bt_summary["absent"]
+    missing_bt = bt_summary["missing"]
+    synthetic_bt = bt_summary["synthetic"]
 
     from crypto_lane.src.ingest.mempool_preflight import AUDIT_B2_PROBE_MAX_DAYS, preflight_mempool_gaps
 

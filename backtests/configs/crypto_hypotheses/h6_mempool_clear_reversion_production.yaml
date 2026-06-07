@@ -1,0 +1,28 @@
+config_id: h6_mempool_clear_reversion_production
+hypothesis_id: CRYPTO_H6
+candidate_id: crypto_h6_mempool_clear_reversion
+validation_mode: production
+holdout_days: 30
+universe:
+- BTC
+venues:
+- binance_spot
+- binance_perp
+- deribit
+date_range:
+  start: '2024-01-01'
+  end: '2024-12-31'
+training_window: 90d
+test_window: 30d
+embargo: 24h
+bar_event_frequency: 1h
+cost_assumptions:
+  fee_bps: 2
+  spread_bps: 1
+latency_assumptions:
+  ws_rtt_ms: 5
+slippage_assumptions:
+  model: linear_bps
+max_feature_staleness_ms: 15000
+btc_node_feature_availability_mode: pit_strict
+output_report_path: research_cards/crypto/crypto_h6_mempool_clear_reversion/report.json

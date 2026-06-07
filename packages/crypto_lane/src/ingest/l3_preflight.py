@@ -9,13 +9,12 @@ from urllib.request import Request, urlopen
 from crypto_lane.src.config.env_loader import ensure_crypto_env
 from crypto_lane.src.ingest.b2_client import B2Client, B2ClientError
 from crypto_lane.src.ingest.binance_vision_pull import _months_for_days, vision_monthly_url
-from crypto_lane.src.ingest.bookticker_quality import (
-    classify_bookticker_day,
-    missing_bookticker_days,
-    synthetic_bookticker_days,
-)
+from crypto_lane.src.ingest.bookticker_quality import summarize_bookticker_range
 from crypto_lane.src.ingest.gold_pull import _symbol_map
 from crypto_lane.src.ingest.gold_reader import gold_key, resolve_gold_bucket
+from crypto_lane.src.ingest.mempool_preflight import _sample_probe_days
+
+SYNTHETIC_B2_PROBE_MAX_DAYS = 31
 
 
 def probe_vision_month(symbol: str, year: int, month: int, *, timeout_s: int = 30) -> str:
@@ -35,15 +34,31 @@ def probe_vision_month(symbol: str, year: int, month: int, *, timeout_s: int = 3
         return "network_error"
 
 
-def _b2_probe(
+def _empty_b2_probe(bucket: str) -> dict[str, Any]:
+    return {
+        "bucket": bucket,
+        "available_days": [],
+        "missing_days": [],
+        "available_count": 0,
+        "missing_count": 0,
+        "error_samples": [],
+        "sampled": False,
+        "probe_days": 0,
+    }
+
+
+def b2_probe_bookticker_days(
     days: list[date],
     *,
     max_error_samples: int = 5,
 ) -> dict[str, Any]:
+    """Probe B2 for futures_um_bookticker_tick on specific calendar days."""
     ensure_crypto_env()
     symbol = _symbol_map().get("binance_perp", "BTCUSDT")
     client = B2Client()
     bucket = resolve_gold_bucket("binance")
+    if not days:
+        return _empty_b2_probe(bucket)
     available: list[str] = []
     missing: list[str] = []
     error_samples: list[dict[str, str]] = []
@@ -65,7 +80,43 @@ def _b2_probe(
         "available_count": len(available),
         "missing_count": len(missing),
         "error_samples": error_samples,
+        "sampled": False,
+        "probe_days": len(days),
     }
+
+
+# Backward-compatible alias for tests patching _b2_probe
+_b2_probe = b2_probe_bookticker_days
+
+
+def b2_probe_bookticker_days_sampled(
+    days: list[date],
+    *,
+    max_probe_days: int | None = SYNTHETIC_B2_PROBE_MAX_DAYS,
+    max_error_samples: int = 5,
+) -> dict[str, Any]:
+    """Sampled B2 probe for large day lists (e.g. synthetic purge readiness)."""
+    ensure_crypto_env()
+    bucket = resolve_gold_bucket("binance")
+    if not days:
+        return _empty_b2_probe(bucket)
+    probe_days = (
+        _sample_probe_days(days, max_probe_days)
+        if max_probe_days and len(days) > max_probe_days
+        else days
+    )
+    probe = b2_probe_bookticker_days(probe_days, max_error_samples=max_error_samples)
+    if len(probe_days) < len(days):
+        ratio = probe["available_count"] / max(len(probe_days), 1)
+        estimated = int(round(ratio * len(days)))
+        return {
+            **probe,
+            "available_count": estimated,
+            "missing_count": max(0, len(days) - estimated),
+            "sampled": True,
+            "probe_days": len(probe_days),
+        }
+    return probe
 
 
 def preflight_l3_gaps(
@@ -76,10 +127,14 @@ def preflight_l3_gaps(
 ) -> dict[str, Any]:
     """Report B2/Vision fillability for missing days (no downloads, no deletes)."""
     symbol = _symbol_map().get("binance_perp", "BTCUSDT")
-    missing = missing_bookticker_days(start=start, end=end)
-    synthetic = synthetic_bookticker_days(start=start, end=end)
+    summary = summarize_bookticker_range(start=start, end=end)
+    missing = list(summary["missing"])
+    synthetic = list(summary["synthetic"])
 
-    b2 = _b2_probe(missing)
+    b2 = b2_probe_bookticker_days(missing)
+    syn_dates = [date.fromisoformat(d) for d in synthetic]
+    b2_synthetic = b2_probe_bookticker_days_sampled(syn_dates)
+
     vision_months: dict[str, dict[str, Any]] = {}
     vision_available_days = 0
     vision_not_found_days = 0
@@ -98,34 +153,37 @@ def preflight_l3_gaps(
             elif status == "not_found":
                 vision_not_found_days += len(month_days)
 
-    purge_safe = (
-        len(synthetic) == 0
-        or b2["available_count"] >= len(synthetic)
-    )
+    synth_n = len(synthetic)
+    b2_on_synthetic = int(b2_synthetic["available_count"])
+    purge_safe = synth_n == 0 or b2_on_synthetic >= synth_n
     return {
         "start": start,
         "end": end,
         "missing_days": len(missing),
-        "synthetic_days": len(synthetic),
+        "synthetic_days": synth_n,
+        "synthetic_day_list": synthetic,
         "b2": b2,
+        "b2_synthetic": b2_synthetic,
         "vision_months": vision_months,
         "vision_available_days_estimate": vision_available_days,
         "vision_not_found_days": vision_not_found_days,
         "true_l3_b2_fillable": b2["available_count"],
+        "b2_synthetic_fillable": b2_on_synthetic,
         "purge_safe": purge_safe,
         "purge_block_reason": (
             None
             if purge_safe
             else (
-                f"B2 has {b2['available_count']}/{len(synthetic)} synthetic days; "
+                f"B2 has {b2_on_synthetic}/{synth_n} synthetic-replacement days; "
                 "Vision monthly alone is not purge-safe (archives may be incomplete). "
                 "Run CAE bookticker backfill to B2, or pass --force to purge anyway."
             )
         ),
         "recommendation": _recommendation(
             missing=len(missing),
-            synthetic=len(synthetic),
+            synthetic=synth_n,
             b2_available=b2["available_count"],
+            b2_synthetic_available=b2_on_synthetic,
             vision_not_found=vision_not_found_days,
             purge_safe=purge_safe,
         ),
@@ -137,6 +195,7 @@ def _recommendation(
     missing: int,
     synthetic: int,
     b2_available: int,
+    b2_synthetic_available: int,
     vision_not_found: int,
     purge_safe: bool,
 ) -> str:
@@ -150,4 +209,6 @@ def _recommendation(
         return "cae_b2_backfill_required_or_allow_degraded"
     if not purge_safe and synthetic > 0:
         return "do_not_replace_synthetic_until_b2_ready"
+    if purge_safe and synthetic > 0 and b2_synthetic_available >= synthetic:
+        return "run_fill_l3_gaps_replace_synthetic"
     return "run_fill_l3_gaps_then_allow_degraded_if_still_missing"

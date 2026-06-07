@@ -187,6 +187,13 @@ def main() -> None:
         bt_dir.mkdir(parents=True, exist_ok=True)
         (bt_dir / f"{bt_id}.yaml").write_text(yaml.dump(bt, sort_keys=False), encoding="utf-8")
 
+        bt_prod = {k: v for k, v in bt.items() if not k.startswith("fixture_")}
+        bt_prod["config_id"] = f"{bt_id}_production"
+        bt_prod["validation_mode"] = "production"
+        (bt_dir / f"{bt_id}_production.yaml").write_text(
+            yaml.dump(bt_prod, sort_keys=False), encoding="utf-8"
+        )
+
     manifest = {
         "source_repo_url": "https://github.com/javin23863/crypto-alpha-engine",
         "ideas_only": commit_sha is None,

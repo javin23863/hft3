@@ -35,6 +35,7 @@ from crypto_lane.src.ingest.mempool_pull import (
 )
 from crypto_lane.src.ingest.normalize import normalize_all
 from crypto_lane.src.ml.candidate_registry import discover_candidates, discover_backtest_configs
+from crypto_lane.src.ingest.fill_test_gaps import run_fill_test_gaps, write_fill_report
 from crypto_lane.src.ml.walk_forward_runner import run_all_smokes, run_smoke
 
 
@@ -50,11 +51,28 @@ def cmd_discover(_: argparse.Namespace) -> int:
 
 def cmd_smoke(args: argparse.Namespace) -> int:
     if args.candidate:
-        report = run_smoke(args.candidate)
+        reports = [run_smoke(args.candidate, production=args.production)]
     else:
-        report = run_all_smokes()
+        reports = run_all_smokes(production=args.production)
+    payload = reports[0] if args.candidate else reports
+    print(json.dumps(payload, indent=2, default=str))
+    return 0 if all(r.get("pass_fail") == "pass" for r in reports) else 1
+
+
+def cmd_fill_test_gaps(args: argparse.Namespace) -> int:
+    ensure_crypto_env()
+    report = run_fill_test_gaps(
+        dry_run=args.dry_run,
+        sync_chi404_node=args.sync_chi404_node,
+        skip_chi404=args.skip_chi404,
+        ws_rtt_ms=args.ws_rtt_ms,
+        force_replace_synthetic=args.force_replace_synthetic,
+        allow_degraded=args.allow_degraded,
+    )
+    out = write_fill_report(report)
+    report["report_path"] = str(out)
     print(json.dumps(report, indent=2, default=str))
-    return 0
+    return 0 if report.get("ready") else 1
 
 
 def cmd_manifest(_: argparse.Namespace) -> int:
@@ -251,7 +269,36 @@ def main(argv: list[str] | None = None) -> int:
 
     p_smoke = sub.add_parser("smoke")
     p_smoke.add_argument("--candidate", default=None)
+    p_smoke.add_argument(
+        "--production",
+        action="store_true",
+        help="Use *_production.yaml backtest configs (requires normalized data)",
+    )
     p_smoke.set_defaults(func=cmd_smoke)
+
+    p_ftg = sub.add_parser(
+        "fill-test-gaps",
+        help="Orchestrate crypto data gap-fill for full-year production testing",
+    )
+    p_ftg.add_argument("--dry-run", action="store_true", help="Preflight and audit only")
+    p_ftg.add_argument(
+        "--sync-chi404-node",
+        action="store_true",
+        help="SCP btc-node status/env/mempool jsonl from chi404",
+    )
+    p_ftg.add_argument("--skip-chi404", action="store_true", help="Do not attempt chi404 sync")
+    p_ftg.add_argument("--ws-rtt-ms", type=float, default=None, help="Live-measured WS RTT for pit_strict")
+    p_ftg.add_argument(
+        "--force-replace-synthetic",
+        action="store_true",
+        help="Purge synthetic bookticker even when preflight says unsafe",
+    )
+    p_ftg.add_argument(
+        "--allow-degraded",
+        action="store_true",
+        help="Fill remaining bookticker gaps from perp klines",
+    )
+    p_ftg.set_defaults(func=cmd_fill_test_gaps)
 
     p_gold = sub.add_parser("pull-gold", help="Download production gold parquet from crypto-alpha-datasets")
     p_gold.add_argument("--start", required=True)

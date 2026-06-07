@@ -52,42 +52,59 @@ def is_production_bookticker_day(day: date, symbol: str | None = None) -> bool:
     return classify_bookticker_day(day, symbol) == "b2_real"
 
 
+_range_summary_cache: dict[tuple[str, str], dict[str, Any]] = {}
+
+
+def clear_bookticker_summary_cache() -> None:
+    """Clear in-process bookticker range scan cache (call after ingest/purge)."""
+    _range_summary_cache.clear()
+
+
+def summarize_bookticker_range(*, start: str, end: str, use_cache: bool = True) -> dict[str, Any]:
+    """Single parquet scan: manifest, class counts, absent/missing/synthetic day lists."""
+    key = (start, end)
+    if use_cache and key in _range_summary_cache:
+        return _range_summary_cache[key]
+    ensure_data_dirs()
+    manifest = build_quality_manifest(start=start, end=end)
+    absent: list[date] = []
+    missing: list[date] = []
+    synthetic: list[str] = []
+    by_class: dict[str, int] = {}
+    for iso, entry in manifest.items():
+        cls = str(entry.get("class", "missing"))
+        by_class[cls] = by_class.get(cls, 0) + 1
+        day = date.fromisoformat(iso)
+        if cls in ("missing", "sparse"):
+            absent.append(day)
+        if cls in ("missing", "sparse", "synthetic"):
+            missing.append(day)
+        if cls == "synthetic":
+            synthetic.append(iso)
+    summary = {
+        "manifest": manifest,
+        "by_class": by_class,
+        "absent": absent,
+        "missing": missing,
+        "synthetic": synthetic,
+    }
+    if use_cache:
+        _range_summary_cache[key] = summary
+    return summary
+
+
 def absent_bookticker_days(*, start: str, end: str) -> list[date]:
     """Days with no usable parquet (missing or sparse)."""
-    ensure_data_dirs()
-    start_d = _parse_date(start)
-    end_d = _parse_date(end)
-    symbol = _symbol_map().get("binance_perp", "BTCUSDT")
-    out: list[date] = []
-    for day in _date_range(start_d, end_d):
-        if classify_bookticker_day(day, symbol) in ("missing", "sparse"):
-            out.append(day)
-    return out
+    return list(summarize_bookticker_range(start=start, end=end)["absent"])
 
 
 def missing_bookticker_days(*, start: str, end: str) -> list[date]:
     """Days lacking true L3 (missing, sparse, or degraded synthetic)."""
-    ensure_data_dirs()
-    start_d = _parse_date(start)
-    end_d = _parse_date(end)
-    symbol = _symbol_map().get("binance_perp", "BTCUSDT")
-    missing: list[date] = []
-    for day in _date_range(start_d, end_d):
-        cls = classify_bookticker_day(day, symbol)
-        if cls in ("missing", "sparse", "synthetic"):
-            missing.append(day)
-    return missing
+    return list(summarize_bookticker_range(start=start, end=end)["missing"])
 
 
 def synthetic_bookticker_days(*, start: str, end: str) -> list[str]:
-    start_d = _parse_date(start)
-    end_d = _parse_date(end)
-    symbol = _symbol_map().get("binance_perp", "BTCUSDT")
-    out: list[str] = []
-    for day in _date_range(start_d, end_d):
-        if classify_bookticker_day(day, symbol) == "synthetic":
-            out.append(day.isoformat())
-    return out
+    return list(summarize_bookticker_range(start=start, end=end)["synthetic"])
 
 
 def purge_synthetic_bookticker(*, start: str, end: str) -> list[str]:

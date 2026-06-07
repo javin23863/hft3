@@ -37,6 +37,13 @@ def list_candidate_paths(candidates_dir: Path | None = None) -> list[Path]:
     return sorted(root.glob("crypto_h*.yaml"))
 
 
-def list_backtest_config_paths(configs_dir: Path | None = None) -> list[Path]:
+def list_backtest_config_paths(
+    configs_dir: Path | None = None,
+    *,
+    include_production: bool = False,
+) -> list[Path]:
     root = configs_dir or (repo_root_from_lane() / "backtests" / "configs" / "crypto_hypotheses")
-    return sorted(root.glob("h*.yaml"))
+    paths = sorted(root.glob("h*.yaml"))
+    if not include_production:
+        paths = [p for p in paths if not p.stem.endswith("_production")]
+    return paths
