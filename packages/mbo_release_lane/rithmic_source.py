@@ -242,9 +242,14 @@ def _credentials_present(creds: dict[str, str]) -> bool:
 
 
 def _build_ssl_context(ca_file: str | None) -> ssl.SSLContext:
-    """Build a chain-aware SSL context for the Rithmic gateway."""
+    """Build a chain-aware SSL context for the Rithmic gateway.
+
+    Rithmic cert SAN may not match the connection hostname (e.g., cert for
+    ritpz04063.04.rithmic.com but connecting to rituz00100.00.rithmic.com).
+    We verify the cert chain (Sectigo CA) but disable hostname check.
+    """
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    ctx.check_hostname = True
+    ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_REQUIRED
     ctx.set_default_verify_paths()
     if ca_file:
