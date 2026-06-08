@@ -49,8 +49,9 @@ function Exit-Launcher {
         [string]$Message = ''
     )
     if ($Message) {
-        Write-Host $Message -ForegroundColor Red
+        Write-Log "FATAL EXIT: $Message" 'ERROR'
     }
+    Write-Log "launcher exiting with code=$Code" 'INFO'
     if ([Environment]::UserInteractive -and $Host.Name -eq 'ConsoleHost') {
         Read-Host 'Press Enter to close'
     }

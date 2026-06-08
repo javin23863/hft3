@@ -37,7 +37,7 @@ def build_coverage_report(
     symbols: List[str],
     *,
     min_history_years: float = 0.0,
-    max_rows: int = 5000,
+    max_rows: int = 50000,
 ) -> List[CoverageRow]:
     """Lightweight coverage report.
 
