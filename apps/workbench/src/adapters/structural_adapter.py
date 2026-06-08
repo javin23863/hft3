@@ -76,29 +76,41 @@ class StructuralModelAdapter(WorkbenchModel):
         return float(val) if val is not None else 0.0
 
     def run_backtest(self, ctx: RunContext) -> Any:
-        if not ctx.metadata.get("pdf_book") and len(ctx.events):
-            self.build_features(ctx)
-        book = ctx.metadata.get("pdf_book")
-        bars = ctx.metadata.get("pdf_bars", [])
-        if book is not None and book.get_best_bid() > 0 and book.get_best_ask() < float("inf"):
+        # Build book and bars inline (no dependency on build_features being called first)
+        book = OrderBook()
+        bars = []
+        prev_mid = None
+        vol_acc = 0
+        for mbo in iter_mbo_events(ctx.events):
+            book.apply_event(mbo)
+            mid = (book.get_best_bid() + book.get_best_ask()) / 2 if book.get_best_bid() > 0 else 0
+            if mbo.action == "TRADE":
+                vol_acc += mbo.size
+            if prev_mid is not None and vol_acc >= 50:
+                bars.append({"mid": mid, "volume": float(vol_acc), "timestamp_ns": mbo.timestamp_ns})
+                vol_acc = 0
+            prev_mid = mid
+        
+        # Derive mid/volume from book BBO or last event
+        if book.get_best_bid() > 0 and book.get_best_ask() < float("inf"):
             mid = (book.get_best_bid() + book.get_best_ask()) / 2.0
-        elif book is not None and book.get_best_bid() > 0:
+        elif book.get_best_bid() > 0:
             mid = book.get_best_bid()
-        elif book is not None and book.get_best_ask() < float("inf"):
+        elif book.get_best_ask() < float("inf"):
             mid = book.get_best_ask()
         elif len(ctx.events):
             mid = float(ctx.events[-1]["px"])
         else:
             mid = 4500.0
         volume = float(ctx.events[-1]["qty"]) if len(ctx.events) else 100.0
+        
         kwargs: dict = {
             "mid": mid,
             "volume": volume,
             "bars": bars,
+            "book": book,  # Pass book to model
             "timestamp_ns": int(ctx.events[-1]["local_ts"]) if len(ctx.events) else 0,
         }
-        if book is not None:
-            kwargs["book"] = book
         if self.model_id == "DEALER_HEDGING":
             kwargs["chain"] = ctx.metadata.get(
                 "chain",
@@ -109,16 +121,25 @@ class StructuralModelAdapter(WorkbenchModel):
             kwargs["spot"] = mid
         outputs = self._orchestrator.run_subset([self.model_id], **kwargs)
         out = outputs.get(self.model_id)
+        
+        # Generate signal from orchestrator output (no metadata dependency)
+        signal = 0.0
+        if out is not None and out.payload is not None:
+            field_name = self.config.signal_field if self.config else "OFI_zscore"
+            val = getattr(out.payload, field_name, None)
+            if val is not None:
+                signal = float(val)
+        
         if self.config and self.config.diagnostics_only:
-            sig = self.generate_signals(ctx.metadata.get("pdf_book_outputs", []))
             comp_sig = ctx.metadata.get("composition_signal")
             if comp_sig is not None:
-                sig = float(comp_sig)
-            return {"diagnostics_output": out, "signal": sig}
-        signal = self.generate_signals(ctx.metadata.get("pdf_book_outputs", []))
+                signal = float(comp_sig)
+            return {"diagnostics_output": out, "signal": signal}
+        
         comp_sig = ctx.metadata.get("composition_signal")
         if comp_sig is not None:
             signal = float(comp_sig)
+        
         return BacktestResult(
             hypothesis_id=0,
             net_pnl=signal * 10.0,

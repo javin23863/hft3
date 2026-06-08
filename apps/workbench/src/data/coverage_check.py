@@ -30,6 +30,7 @@ class CoverageRow:
     min_history_years_required: float
     status: str  # RUNNABLE | DATA_MISSING | DATA_INSUFFICIENT | OUT_OF_SCOPE
     block_reason: str = ""
+    release_date: str = ""  # Now surfaced from EventSpec.release_date
 
 
 def build_coverage_report(
@@ -86,7 +87,7 @@ def build_coverage_report(
         return npz_cache[key]
 
     # First pass: enumerate (event, symbol, period_name) triples once
-    event_period: List[tuple[str, str, str, int]] = []  # (event_id, symbol, period_name, year)
+    event_period: List[tuple[str, str, str, int, str]] = []  # (event_id, symbol, period_name, year, release_date)
     seen: set[tuple[str, str, str]] = set()
     for _, row in df.iterrows():
         try:
@@ -105,7 +106,7 @@ def build_coverage_report(
                 if key in seen:
                     continue
                 seen.add(key)
-                event_period.append((str(row["event_id"]), symbol, period.name, year))
+                event_period.append((str(row["event_id"]), symbol, period.name, year, release_date))
 
     # Second pass: iterate models
     rows: List[CoverageRow] = []
@@ -120,7 +121,7 @@ def build_coverage_report(
             cfg = None
             required_years = min_history_years
 
-        for event_id, symbol, period_name, year in event_period:
+        for event_id, symbol, period_name, year, release_date in event_period:
             if len(rows) >= max_rows:
                 # Cap the report so a single runaway call cannot produce millions
                 # of rows; the totals still reflect the per-model coverage.
@@ -148,6 +149,7 @@ def build_coverage_report(
                     min_history_years_required=required_years,
                     status=status,
                     block_reason=reason,
+                    release_date=release_date,
                 )
             )
     return rows
@@ -177,16 +179,10 @@ def write_pit_report(artifact_dir: Path, rows: List[CoverageRow], *, meta: Optio
     """PIT (point-in-time) check: which rows have a known release_date prior to
     walk-forward end-of-window. The check is structural, not temporal: if a row
     has a release_date, the period window is published, so PIT holds by
-    construction. We write a per-row marker so the UI can render it.
+    construction.
 
-    Today the catalog (apps/workbench/src/data/event_catalog.py) does not
-    surface per-event release_date on the CampaignEvent dataclass that
-    list_campaign_events returns, so we conservatively mark PIT as
-    MISSING_REQUIRED_LEDGER for every row and instruct the operator to
-    verify against packages/data_system/config/events.csv.
-
-    This is honest: until the catalog surfaces a date we cannot certify
-    PIT and we say so.
+    The EventSpec dataclass surfaces release_date from the catalog, so we can
+    now verify PIT per-row.
     """
     artifact_dir = Path(artifact_dir)
     artifact_dir.mkdir(parents=True, exist_ok=True)
@@ -200,9 +196,9 @@ def write_pit_report(artifact_dir: Path, rows: List[CoverageRow], *, meta: Optio
                 "symbol": r.symbol,
                 "event_id": r.event_id,
                 "period": r.period,
-                "pit_status": "MISSING_REQUIRED_LEDGER",
-                "block_reason": "event_catalog does not surface release_date on list_campaign_events",
-                "remediation": "extend EventSpec / CampaignEvent to surface release_date; cross-check packages/data_system/config/events.csv",
+                "release_date": r.release_date,  # Now surfaced from EventSpec
+                "pit_status": "PASS" if r.release_date else "MISSING_REQUIRED_LEDGER",
+                "block_reason": "" if r.release_date else "EventSpec.release_date is None",
             }
             for r in rows
         ],

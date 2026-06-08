@@ -218,6 +218,7 @@ def compute_metrics(artifact_dir: Path) -> MetricsResult:
 
     has_per_trade_ledger = False
     per_trade_pnls: List[float] = []
+    pandas_missing_logged = False
     for ev_dir in event_dirs:
         trades = ev_dir / "trades.parquet"
         if trades.is_file():
@@ -228,6 +229,10 @@ def compute_metrics(artifact_dir: Path) -> MetricsResult:
                 if "pnl" in df.columns and len(df):
                     per_trade_pnls.extend(float(x) for x in df["pnl"].tolist())
                     has_per_trade_ledger = True
+            except ImportError:
+                if not pandas_missing_logged:
+                    res.notes.append("pandas not installed — trades.parquet cannot be read; win_rate/profit_factor/drawdown will be MISSING_REQUIRED_LEDGER")
+                    pandas_missing_logged = True
             except Exception:
                 # ledger unreadable for any reason -> we cannot compute the metrics
                 # that require it. Mark them missing below.

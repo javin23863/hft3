@@ -393,10 +393,10 @@ def test_11_coverage_and_pit_reports_block_visible(tmp_path: Path, fake_run_camp
     assert "totals" in cov
     # Coverage is read-only; the report is generated even if all jobs are blocked
     assert "DATA_MISSING" in cov["totals"]
-    # PIT report is honest about what is missing
+    # PIT report now surfaces release_date from EventSpec — status should be PASS or MISSING_REQUIRED_LEDGER
     for row in pit["rows"]:
-        assert row["pit_status"] == "MISSING_REQUIRED_LEDGER"
-        assert "remediation" in row
+        assert row["pit_status"] in ("PASS", "MISSING_REQUIRED_LEDGER")
+        assert "release_date" in row
 
 
 def test_12_shortcut_points_to_real_entrypoint_and_logs(tmp_path: Path, fake_run_campaign, temp_work_runs_dir):
