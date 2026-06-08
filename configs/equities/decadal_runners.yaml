@@ -1,0 +1,118 @@
+# Decadal parabolic low-float anomaly sessions (PARABOLIC_LOW_FLOAT_DECADAL.md)
+repo_root: .
+paths:
+  raw_root: data/equities/raw
+  normalized_root: data/equities/normalized
+  daily_root: data/equities/daily
+  manifest_root: data/equities/manifest
+  float_metadata: data/equities/metadata/float_pit.csv
+
+defaults:
+  schema: mbo
+  stype_in: raw_symbol
+  premarket_start: "04:00"
+  session_end: "16:00"
+  l3_only: true
+  daily_lookback_days: 756
+  options:
+    enabled: true
+    dataset: OPRA.PILLAR
+    schema: cbbo-1m
+    stype_in: parent
+    inherit_window: true
+    chain_rules:
+      reference_price: premarket_open
+      strike_window_pct: 0.30
+      max_strikes_per_side: 10
+      expiry_policy: nearest_listed
+      max_dte_days: 45
+
+sessions:
+  - id: drys_2016
+    symbol: DRYS
+    date: "2016-11-11"
+    dataset: XNAS.ITCH
+    catalyst: shipping_rate_squeeze
+    notes: Databento XNAS.ITCH available from 2018-05-01 only
+    skip_pull: true
+    skip_reason: databento_unavailable
+  - id: lfin_2017
+    symbol: LFIN
+    date: "2017-12-18"
+    dataset: XNAS.ITCH
+    catalyst: blockchain_acquisition
+    skip_pull: true
+    skip_reason: databento_unavailable
+  - id: lbcc_2017
+    symbol: LBCC
+    date: "2017-12-21"
+    dataset: XNAS.ITCH
+    catalyst: blockchain_rebrand
+    skip_pull: true
+    skip_reason: databento_unavailable
+  - id: kodk_2020
+    symbol: KODK
+    date: "2020-07-28"
+    dataset: XNYS.PILLAR
+    catalyst: govt_loan_pharma
+  - id: spi_2020
+    symbol: SPI
+    date: "2020-09-23"
+    dataset: XNAS.ITCH
+    catalyst: ev_subsidiary
+  - id: gme_2021
+    symbol: GME
+    date: "2021-01-27"
+    dataset: XNYS.PILLAR
+    catalyst: meme_short_squeeze
+  - id: expr_2021
+    symbol: EXPR
+    date: "2021-01-27"
+    dataset: XNYS.PILLAR
+    catalyst: meme_sympathy
+  - id: indo_2022
+    symbol: INDO
+    date: "2022-03-07"
+    dataset: XNYS.PILLAR
+    catalyst: oil_geopolitical
+  - id: hkd_2022
+    symbol: HKD
+    date: "2022-08-02"
+    dataset: XNAS.ITCH
+    catalyst: ipo_float_lockup
+  - id: top_2023
+    symbol: TOP
+    date: "2023-04-27"
+    dataset: XNAS.ITCH
+    catalyst: retail_squeeze
+  - id: holo_2024
+    symbol: HOLO
+    date: "2024-02-07"
+    dataset: XNAS.ITCH
+    catalyst: ai_retail_squeeze
+  - id: cycc_2025
+    symbol: CYCC
+    date: "2025-07-15"
+    dataset: XNAS.ITCH
+    catalyst: biotech_momentum
+  - id: aire_2025
+    symbol: AIRE
+    date: "2025-07-10"
+    dataset: XNAS.ITCH
+    catalyst: ai_surge
+  - id: bird_2026
+    symbol: BIRD
+    date: "2026-04-15"
+    dataset: XNAS.ITCH
+    catalyst: ai_infrastructure_pivot
+  - id: amst_2026
+    symbol: AMST
+    date: "2026-05-12"
+    dataset: XNAS.ITCH
+    catalyst: ai_nursing_platform
+  - id: snal_2026
+    symbol: SNAL
+    date: "2026-05-08"
+    dataset: XNAS.ITCH
+    catalyst: atm_dilution_negative_control
+    notes: negative control — active ATM overhang

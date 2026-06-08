@@ -1,4 +1,11 @@
-"""Bootstrap sys.path for apps/ and packages/ layout."""
+"""Bootstrap sys.path for src/, apps/ and packages/ layout.
+
+Adds the following to sys.path (in order):
+  1. packages/    — original lane packages (backward compat)
+  2. apps/        — workbench UI and adapters
+  3. src/         — new consolidated hft3 package tree
+  4. repo root    — top-level modules (hft3_bootstrap, run_workbench, etc.)
+"""
 from __future__ import annotations
 
 import sys
@@ -12,11 +19,7 @@ def repo_root() -> Path:
 
 
 def setup_repo_paths() -> Path:
-    for sub in ("", "packages", "apps"):
-        p = _ROOT if not sub else _ROOT / sub
-        s = str(p)
-        if p.is_dir() and s not in sys.path:
-            sys.path.insert(0, s)
+    _insert_reversed(pythonpath_entries())
     return _ROOT
 
 
@@ -30,7 +33,7 @@ def workbench_root(root: Path | None = None) -> Path:
 
 def package_root(name: str, root: Path | None = None) -> Path:
     base = root or _ROOT
-    for candidate in (base / "packages" / name, base / name):
+    for candidate in (base / "packages" / name, base / name, base / "src" / "hft3" / name):
         if candidate.is_dir():
             return candidate
     return base / "packages" / name
@@ -46,4 +49,19 @@ def features_engine_root(root: Path | None = None) -> Path:
 
 def pythonpath_entries(root: Path | None = None) -> list[str]:
     base = root or _ROOT
-    return [str(base), str(base / "packages"), str(base / "apps")]
+    # packages/ first so legacy hft3.validation wins over src/hft3
+    entries = [str(base / "packages"), str(base / "apps"), str(base / "src"), str(base)]
+    seen: set[str] = set()
+    result: list[str] = []
+    for e in entries:
+        if e not in seen:
+            seen.add(e)
+            result.append(e)
+    return result
+
+
+def _insert_reversed(entries: list[str]) -> None:
+    """Insert entries into sys.path so first entry has highest priority."""
+    for s in reversed(entries):
+        if s not in sys.path:
+            sys.path.insert(0, s)

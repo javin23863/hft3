@@ -33,8 +33,10 @@ python tools/graphify/build_wiki_index.py
 Full layout: [docs/REPO_MAP.md](docs/REPO_MAP.md)
 
 ```
+src/hft3/          Importable namespace (consolidation over packages/)
 apps/workbench     CLI + Streamlit UI
-packages/*         Python libraries (features, backtest, replay, …)
+packages/*         Python libraries (features, backtest, replay, …) — legacy
+configs/           Centralised configuration (YAML/JSON)
 artifacts/         Research outputs
 runtime/           Certification, latency, audits
 graphify-out/      Code graph (AI entry)

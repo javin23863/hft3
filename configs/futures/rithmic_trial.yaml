@@ -1,0 +1,43 @@
+# Rithmic trial lane — CHI404 colo only for live capture (BLUEPRINT §4).
+# Workstation: use connector fixture + pytest only.
+enabled: false
+connector: fixture
+symbol: MES
+exchange: CME
+contract: ""
+capture_environment: paper_or_trial
+source: rithmic_trial
+
+rithmic:
+  environment: "Rithmic Paper Trading"
+  gateway: "Chicago"
+
+paths:
+  repo_root: .
+  raw_root: data/raw/rithmic_trial_live_capture
+  normalized_root: data/normalized/rithmic_trial_live_capture
+  replay_root: data/replay/hftbacktest/rithmic_trial
+  reports_root: reports/rithmic_trial
+
+unattended:
+  poll_interval_sec: 2.0
+  process_interval_sec: 300
+  manifest_interval_sec: 60
+  log_file: logs/rithmic_trial/unattended.log
+
+rtrader:
+  platform: linux
+  wine_prefix: /root/.wine-rtrader
+  installer_path: ""
+  launch_script: /root/hft3/logs/rtrader/launch_rtrader.sh
+  skip_start_if_running: true
+  startup_wait_sec: 15
+  watch_dirs: []
+  log_globs:
+    - "**/*.log"
+    - "**/*.cur.txt"
+  export_globs:
+    - "**/*.csv"
+    - "**/*.ndjson"
+
+schema_version: normalized_v1

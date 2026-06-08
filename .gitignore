@@ -84,7 +84,7 @@ research_cards/workbench_runs/**
 !research_cards/workbench_runs/.gitkeep
 research_cards/workbench_catalog_manifest.json
 vendor/openfoundry_upstream_test/
-models/
+/models/
 *.onnx
 
 # Graphify (team commits report/labels; graph.json exceeds GitHub 100MB — rebuild locally)
