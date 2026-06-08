@@ -10,29 +10,27 @@ from pathlib import Path
 
 def _repo_root() -> Path:
     """Resolve repo root from this script's location (launcher sets PYTHONPATH)."""
-    script_repo = Path(__file__).resolve().parents[1]
-    if (script_repo / "workbench").is_dir():
-        return script_repo
-    for part in os.environ.get("PYTHONPATH", "").split(os.pathsep):
-        part = part.strip()
-        if not part:
-            continue
-        candidate = Path(part).resolve()
-        if (candidate / "workbench").is_dir():
-            return candidate
-    return script_repo
+    return Path(__file__).resolve().parents[1]
 
 
 def _bootstrap_sys_path(repo: Path) -> None:
-    repo_str = str(repo)
-    if repo_str not in sys.path:
-        sys.path.insert(0, repo_str)
+    """Use hft3_bootstrap.setup_repo_paths() so packages/ and src/ are wired correctly."""
+    if repo_str := str(repo):
+        if repo_str not in sys.path:
+            sys.path.insert(0, repo_str)
     os.environ.setdefault("PYTHONPATH", repo_str)
+    try:
+        import hft3_bootstrap
+        hft3_bootstrap.setup_repo_paths()
+    except Exception as exc:
+        print(f"hft3_bootstrap.setup_repo_paths() failed: {exc}", file=sys.stderr)
 
 
 def _assert_catalog_keys_namespaced(repo: Path) -> None:
     """Fail fast when campaign_panel still uses global catalog_search keys."""
-    panel_path = repo / "workbench" / "ui" / "campaign_panel.py"
+    panel_path = repo / "apps" / "workbench" / "ui" / "campaign_panel.py"
+    if not panel_path.is_file():
+        raise RuntimeError(f"missing {panel_path} (repo={repo})")
     text = panel_path.read_text(encoding="utf-8")
     forbidden = (
         'key="catalog_search"',
@@ -52,7 +50,7 @@ def _assert_catalog_keys_namespaced(repo: Path) -> None:
     if not hasattr(campaign_panel, "_catalog_widget_key"):
         raise RuntimeError(
             "campaign_panel missing _catalog_widget_key(); "
-            "update workbench/ui/campaign_panel.py from main"
+            "update apps/workbench/ui/campaign_panel.py from main"
         )
 
 
