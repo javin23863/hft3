@@ -198,26 +198,29 @@ Trial capture is isolated from trusted production data (`data/npz/` from Databen
 
 Do not write trial output into production NPZ paths or bypass quarantine without explicit approval.
 
-### Options parity lane (quarantined)
+### Options parity lane (operational, data-isolated)
 
-Options parity research is isolated from trusted production data (`data/npz/` from Databento).
+Options parity research is operational. Data is isolated from trusted production CME paths (`data/npz/` from Databento) but the lane is not blocked from running.
 
-- Code: `options_lane/`
+- Code: `options_lane/`, `packages/equities_lane/src/options/`
 - Data: `data/options/`, `data/replay/parity/`, `research_cards/parity/`
 - Config: `options_lane/config/parity_universe.yaml`
+- Source-of-truth: [docs/research/EQUITY_OPTIONS_DATA_MAP.md](docs/research/EQUITY_OPTIONS_DATA_MAP.md)
 
-Do not write options raw into production NPZ paths or bypass quarantine without explicit approval.
+Data isolation invariant: options raw/normalized data lives under `data/options/`. Do not write options raw into production CME NPZ paths. Stock + option + combo + no-trade route decisions are produced for every decision; see `PLAN_EQOPT.md`.
 
-### Low-float equities lane (quarantined)
+### Low-float equities lane (operational, data-isolated)
 
-Low-float momentum research is isolated from trusted production CME data (`data/npz/`).
+Low-float momentum research is operational. Data is isolated from trusted production CME paths (`data/npz/`) but the lane is not blocked from running.
 
 - Code: `packages/equities_lane/`
-- Data: `data/equities/`, `data/replay/equities/`, `research_cards/equities/`
+- Data: `data/equities/`, `data/replay/equities/`, `research_cards/equities/`, `data/options/equity_chains/` (OPRA)
 - Config: `packages/equities_lane/config/universe.yaml`
-- Docs: [docs/research/LOW_FLOAT_RUNNER.md](docs/research/LOW_FLOAT_RUNNER.md)
+- Docs: [docs/research/LOW_FLOAT_RUNNER.md](docs/research/LOW_FLOAT_RUNNER.md), [docs/research/EQUITY_OPTIONS_DATA_MAP.md](docs/research/EQUITY_OPTIONS_DATA_MAP.md)
 
-Do not write equities raw into production NPZ paths or bypass quarantine without explicit approval.
+Data isolation invariant: equities NPZ writes to `data/equities/npz/` only. L3-only enforcement (no silent MBP-1/MBP-10/bars downgrade in production research). Point-in-time filtration enforced for both equity and option data; contaminated runs are rejected before model fit/scoring with an explicit reason. Stock / option / stock+option / no-trade route comparison is required per [PLAN_EQOPT.md](PLAN_EQOPT.md).
+
+**Data coverage:** All 13 decadal sessions have equity data (MBO L3). Option data (OPRA cbbo-1m) is available for 3/13 sessions (EXPR, GME, KODK); the other 10 sessions have empty option directories and will route to STOCK_ONLY. Feature-based EV estimation uses real `compute_features` pipeline (OFI, VPIN, Hawkes, HMM, option Greeks) with sampling for efficiency.
 
 ### Secrets
 

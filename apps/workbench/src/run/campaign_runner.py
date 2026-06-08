@@ -203,7 +203,7 @@ def _run_options_campaign(
     *,
     dry_run: bool = False,
 ) -> CampaignResult:
-    """PDF_MODEL_5 fixture MVP — options_lane quarantine (B7)."""
+    """PDF_MODEL_5 fixture MVP — options_lane operational, data-isolated (B7)."""
     from workbench.src.registry.unified_registry import get_model_by_id
     from workbench.src.run.run_context import RunContext
 
@@ -287,7 +287,7 @@ def _run_options_campaign(
         "sim_shadow_status": sim_status,
         "sim_shadow_required": status == "PASS",
         "promote_candidate": status == "PASS" and sim_status == "PASS",
-        "promote_note": "Options lane quarantined; sim shadow on CHI404 required for MBO promotion path",
+        "promote_note": "Options lane operational, data-isolated; sim shadow on CHI404 required for MBO promotion path",
     }
     (artifact_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     (artifact_dir / "diagnostics.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")

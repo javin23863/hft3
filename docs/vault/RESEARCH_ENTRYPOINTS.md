@@ -114,7 +114,7 @@ Output: `research_cards/pipeline_runs/<run_id>/`. Authority: [AUTORESEARCH_PIPEL
 
 ## 1c. Low-float runner (equities lane)
 
-**When:** Screen and backtest low-float momentum sessions on quarantined equities data. Workstation-only; separate from CME MBO production path.
+**When:** Screen and backtest low-float momentum sessions on data-isolated equities data. Workstation-only; separate from CME MBO production path.
 
 ```bash
 pip install -r packages/equities_lane/requirements.txt

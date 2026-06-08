@@ -1,1 +1,1 @@
-"""Low-float momentum anomaly research lane (quarantined equities)."""
+"""Low-float momentum anomaly research lane (operational equities, data-isolated)."""

@@ -4,6 +4,11 @@ Authority: [low_float_momentum_anomaly_research_pack.pdf](../references/low_floa
 
 Quarantined equities research lane for low-float momentum anomaly backtesting. **Does not** write to production CME `data/npz/` (BLUEPRINT §4).
 
+> **Status (2026-06):** Operational. The data-isolation invariant is preserved
+> (equities NPZ writes to `data/equities/npz/` only) but the lane is not
+> blocked from running. See [PLAN_EQOPT.md](../../PLAN_EQOPT.md) for the
+> current run plan and route-comparison requirements.
+
 ## Package
 
 Code: `packages/equities_lane/`
@@ -67,15 +72,16 @@ powershell -File scripts/pull_equities_decadal.ps1
 
 Real float metadata: `data/equities/metadata/float_pit.csv`. Manifest: `data/equities/manifest/decadal_pull.json`.
 
-## Data paths (quarantined)
+## Data paths (data-isolated from production CME)
 
 | Path | Purpose |
 |------|---------|
 | `data/equities/raw/` | Databento DBN downloads |
 | `data/equities/daily/` | Databento ohlcv-1d parquet (756d lookback for walk-forward + RVOL) |
-| `data/equities/metadata/float_pit.csv` | Point-in-time float (SEC-sourced) |
+| `data/equities/metadata/float_pit.csv` | Point-in-time float (SEC-sourced, `as_of_date <= session_date` required) |
 | `data/equities/manifest/` | Pull audit manifest |
 | `data/equities/normalized/` | Lane NDJSON sessions |
+| `data/options/equity_chains/` | OPRA cbbo-1m DBN + NDJSON, time-aligned to equity session window |
 | `data/replay/equities/` | Replay artifacts |
 | `research_cards/equities/` | Experiment reports |
 

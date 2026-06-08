@@ -96,55 +96,41 @@ def main() -> int:
             }
         else:
             norm_path = _REPO / "data" / "equities" / "normalized" / f"{symbol}_{date}.ndjson"
-            # Backtest only on small files (<5MB) to keep audit fast. Large
-            # L3 dumps (GME, BIRD, KODK, etc.) take minutes per backtest;
-            # their NPZ presence is sufficient for the coverage metric, and
-            # the pnl metric is approximated from the small-ticker subset.
-            size_mb = norm_path.stat().st_size / (1024 * 1024) if norm_path.exists() else 999
-            if size_mb > 5.0:
+            try:
+                bt_result = backtester.run(str(norm_path), allow_degraded=False)
+                d = bt_result.to_dict()
+                fills = d.get("fills", []) or []
+                num_trades = d.get("num_trades", len(fills))
+                net_pnl = d.get("net_pnl", 0.0) or 0.0
+                round_trip_pnl = 0.0
+                buys = 0.0
+                for f in fills:
+                    if f.get("side") == "buy":
+                        buys = f.get("price", 0.0)
+                    elif f.get("side") == "sell" and buys:
+                        round_trip_pnl += f.get("price", 0.0) - buys
+                        buys = 0.0
+                profitable = 1 if round_trip_pnl > 0 else 0
                 result_row["backtest"] = {
-                    "status": "skipped_large",
-                    "skipped_reason": f"normalized file {size_mb:.1f}MB > 5MB audit threshold",
-                    "net_pnl": None,
-                    "num_trades": 0,
+                    "status": "ok",
+                    "net_pnl": net_pnl,
+                    "num_trades": num_trades,
+                    "max_drawdown": d.get("max_drawdown", 0.0),
+                    "degraded_mode": d.get("degraded_mode", False),
+                    "failure_notes": d.get("failure_notes", []),
+                    "round_trip_pnl_estimate": round_trip_pnl,
+                    "profitable_round_trip": profitable,
                 }
-                result_row["npz_present"] = npz_ok
-            else:
-                try:
-                    bt_result = backtester.run(str(norm_path), allow_degraded=False)
-                    d = bt_result.to_dict()
-                    fills = d.get("fills", []) or []
-                    num_trades = d.get("num_trades", len(fills))
-                    net_pnl = d.get("net_pnl", 0.0) or 0.0
-                    round_trip_pnl = 0.0
-                    buys = 0.0
-                    for f in fills:
-                        if f.get("side") == "buy":
-                            buys = f.get("price", 0.0)
-                        elif f.get("side") == "sell" and buys:
-                            round_trip_pnl += f.get("price", 0.0) - buys
-                            buys = 0.0
-                    profitable = 1 if round_trip_pnl > 0 else 0
-                    result_row["backtest"] = {
-                        "status": "ok",
-                        "net_pnl": net_pnl,
-                        "num_trades": num_trades,
-                        "max_drawdown": d.get("max_drawdown", 0.0),
-                        "degraded_mode": d.get("degraded_mode", False),
-                        "failure_notes": d.get("failure_notes", []),
-                        "round_trip_pnl_estimate": round_trip_pnl,
-                        "profitable_round_trip": profitable,
-                    }
-                    grand_fills += num_trades
-                    grand_profitable += profitable
-                    grand_pnl += net_pnl
-                except Exception as exc:
-                    result_row["backtest"] = {
-                        "status": "error",
-                        "error": f"{type(exc).__name__}: {exc}",
-                        "traceback": traceback.format_exc(limit=3),
-                    }
-                    error_models[f"{symbol}@{date}"] = str(exc)
+                grand_fills += num_trades
+                grand_profitable += profitable
+                grand_pnl += net_pnl
+            except Exception as exc:
+                result_row["backtest"] = {
+                    "status": "error",
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "traceback": traceback.format_exc(limit=3),
+                }
+                error_models[f"{symbol}@{date}"] = str(exc)
         ticker_results[symbol] = result_row
         per_ticker_summary.append(result_row)
 
@@ -152,7 +138,7 @@ def main() -> int:
     # shared universe (not per-slug), per-slug results mirror per-ticker
     # results. This is documented and honest: see plan notes.
     # Coverage semantics: "ready" means NPZ present. "Ran" means backtest
-    # completed (excludes skipped_large and error). Both are reported so
+    # completed (excludes error). Both are reported so
     # the user can distinguish "have data" from "ran backtest".
     for slug_idx, slug in enumerate(model_slugs):
         for session in sessions:
@@ -227,7 +213,7 @@ def main() -> int:
         "worst_5_models": [{"model": m["model"], "pct_session_runs": m["pct_session_runs"]} for m in worst5],
         "blocked_or_binding_errors": error_models,
         "notes": [
-            "Equities lane is quarantined (AGENTS.md) -- NPZ writes to data/equities/npz/ only.",
+            "Equities lane is operational, data-isolated (AGENTS.md) -- NPZ writes to data/equities/npz/ only.",
             "LowFloatBacktester uses a single shared universe; per-slug backtests are mirrors of per-ticker results.",
         ],
     }

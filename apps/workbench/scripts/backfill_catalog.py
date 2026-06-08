@@ -34,7 +34,7 @@ AUTHORITY_REFS = [
     "BLUEPRINT.md §5",
     "chicago_cme_microstructure_a_plus_developer_handoff.pdf",
     "docs/REVIEWER_CHARTER.md B4",
-    "AGENTS.md options quarantine",
+    "AGENTS.md options operational, data-isolated",
 ]
 
 

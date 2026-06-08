@@ -1,4 +1,4 @@
-"""Load equities universe config and enforce lane quarantine."""
+"""Load equities universe config and enforce lane data-isolation."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -20,18 +20,18 @@ from equities_lane.src.types import (
 )
 
 
-def _assert_quarantine(path: Path, repo_root: Path, label: str) -> None:
+def _assert_data_isolation(path: Path, repo_root: Path, label: str) -> None:
     prod_npz = (repo_root / "data" / "npz").resolve()
     resolved = path.resolve()
     try:
         resolved.relative_to(prod_npz)
         raise ValueError(
-            f"Quarantine violation: {label}={path} must not be under production {prod_npz}"
+            f"Data-isolation violation: {label}={path} must not be under production {prod_npz}"
         )
     except ValueError as exc:
-        if "Quarantine violation" in str(exc):
+        if "Data-isolation violation" in str(exc):
             raise
-        return
+    return
 
 
 def _paths_from_cfg(data: dict[str, Any], repo_root: Path) -> dict[str, Path]:
@@ -52,7 +52,7 @@ def _paths_from_cfg(data: dict[str, Any], repo_root: Path) -> dict[str, Path]:
         ),
     }
     for label, p in paths.items():
-        _assert_quarantine(p, repo_root, label)
+        _assert_data_isolation(p, repo_root, label)
     return paths
 
 

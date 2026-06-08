@@ -1,0 +1,56 @@
+# hft3 equities + options microstructure connector — extends OpenFoundry backtest-run stream
+connector_id: hft3-equities-options
+schema_version: "1"
+asset_class: equities_low_float_with_options
+upstream: https://github.com/syzygyhack/open-foundry
+upstream_core_pack: domain-packs/core/pack.yaml
+upstream_stream: backtest-run
+
+artifact_root: research_cards/equities
+artifact_files:
+  - diagnostics.json
+  - experiment_config.yaml
+  - report.md
+  - route_comparison.json
+  - leakage_report.json
+  - ontology_claims.json
+
+stream_mappings:
+  run_id: experiment_dir.name
+  underlying_symbol: diagnostics.underlying_symbol
+  session_date: diagnostics.session_date
+  decision_timestamp_ns: diagnostics.decision_timestamp
+  equity_data_source: diagnostics.equity_data_source
+  option_data_source: diagnostics.option_data_source
+  equity_schema_used: diagnostics.equity_schema_used
+  option_schema_used: diagnostics.option_schema_used
+  selected_option_contracts: diagnostics.selected_option_contracts
+  stock_expected_value: diagnostics.stock_expected_value
+  option_expected_value: diagnostics.option_expected_value
+  stock_plus_option_expected_value: diagnostics.stock_plus_option_expected_value
+  final_route_decision: diagnostics.final_route_decision
+  leakage_status: diagnostics.leakage_status
+
+ontology_extensions:
+  - EquitySessionContext
+  - EquityBookSnapshotAtDecision
+  - OptionChainSnapshotAtDecision
+  - OptionContractAtDecision
+  - EquityOptionPair
+  - StockOptionRouteDecision
+  - StockOptionPayoffComparison
+  - OptionFillOutcome
+  - OptionLiquiditySnapshot
+  - StockOptionFeatureVector
+  - FloatMetadataAtSession
+  - RouteReasonCode
+
+time_units:
+  exchange_timestamps: ns
+  option_quote_ts: ns
+  decision_timestamp: ns
+  latency_chain: us
+  iv_decimal: 1.0
+  delta_decimal: 1.0
+  gamma_per_1pct: 1.0
+  theta_per_day: 1.0

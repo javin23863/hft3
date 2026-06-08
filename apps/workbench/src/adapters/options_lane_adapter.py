@@ -1,4 +1,4 @@
-"""Adapter: options_lane fixture backtest for PDF_MODEL_5 (B7 quarantine)."""
+"""Adapter: options_lane fixture backtest for PDF_MODEL_5 (B7 operational, data-isolated)."""
 
 from __future__ import annotations
 

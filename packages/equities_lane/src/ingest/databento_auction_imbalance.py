@@ -1,4 +1,4 @@
-"""Databento auction imbalance schema pulls (quarantined equities lane)."""
+"""Databento auction imbalance schema pulls (operational equities lane, data-isolated)."""
 
 from __future__ import annotations
 

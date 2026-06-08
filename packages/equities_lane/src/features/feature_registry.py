@@ -12,13 +12,14 @@ def run_feature_pipeline(
     degraded: DegradedModeFlags,
     *,
     ablation: str | None = None,
+    options_loader=None,
 ) -> list[FeatureSnapshot]:
     toggles = (
         universe.features.with_ablation(ablation)
         if ablation
         else universe.features
     )
-    return compute_features(ticks, toggles, degraded)
+    return compute_features(ticks, toggles, degraded, options_loader=options_loader)
 
 
 def ablation_modules(universe: UniverseConfig) -> list[str]:

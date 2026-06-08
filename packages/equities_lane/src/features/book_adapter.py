@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from equities_lane.src.features.l3_stubs import compute_l3_features
 from equities_lane.src.models import SessionTick
 from equities_lane.src.types import DegradedModeFlags, FeatureToggles
+
+if TYPE_CHECKING:
+    from equities_lane.src.options.chain_loader import OptionsChainLoader
 
 
 @dataclass
@@ -19,6 +22,7 @@ class FeatureSnapshot:
     hmm_state: str = "unknown"
     hmm_markup_prob: float = 0.0
     l3: dict[str, Any] = field(default_factory=dict)
+    options: dict[str, Any] = field(default_factory=dict)
     degraded_assumptions: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -31,6 +35,7 @@ class FeatureSnapshot:
             "hmm_state": self.hmm_state,
             "hmm_markup_prob": self.hmm_markup_prob,
             "l3": self.l3,
+            "options": self.options,
             "degraded_assumptions": self.degraded_assumptions,
         }
 
@@ -39,6 +44,7 @@ def compute_features(
     ticks: list[SessionTick],
     toggles: FeatureToggles,
     degraded: DegradedModeFlags,
+    options_loader: "OptionsChainLoader | None" = None,
 ) -> list[FeatureSnapshot]:
     from features_engine.src.structural_models.model_01_book_pressure import BookPressureModel
     from features_engine.src.structural_models.model_03_vpin_toxicity import VPINToxicityModel
@@ -95,6 +101,15 @@ def compute_features(
 
         l3 = compute_l3_features(toggles, degraded)
         snap.l3 = l3.to_dict()
+
+        if options_loader is not None:
+            spot = (t.bid_px + t.ask_px) / 2.0 if (t.bid_px and t.ask_px) else (t.trade_px or 0.0)
+            if spot > 0:
+                opt_snap = options_loader.to_snapshot(t.ts_ns, spot)
+                snap.options = opt_snap.to_dict()
+            else:
+                snap.options = {"spot": 0.0, "num_quotes": 0, "coverage": 0.0}
+
         snapshots.append(snap)
 
     return snapshots

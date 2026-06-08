@@ -1,8 +1,8 @@
-"""Derive quarantined NPZ from normalized equities NDJSON.
+"""Derive data-isolated NPZ from normalized equities NDJSON.
 
-Mirror of CME ``derive_npz`` semantics but quarantined under ``data/equities/npz/``.
-Never writes to ``data/npz/`` (production CME/NPZ is quarantined from equities per
-AGENTS.md "Low-float equities lane (quarantined)").
+Mirror of CME ``derive_npz`` semantics but data-isolated under ``data/equities/npz/``.
+Never writes to ``data/npz/`` (production CME/NPZ is isolated from equities per
+AGENTS.md "Low-float equities lane (operational, data-isolated)").
 
 Output NPZ contains the minimal columns needed for equities backtesting:
 ``ts_ns``, ``bid_px``, ``bid_sz``, ``ask_px``, ``ask_sz``, ``trade_px``,

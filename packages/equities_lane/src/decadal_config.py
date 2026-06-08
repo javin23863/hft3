@@ -6,7 +6,7 @@ from typing import Any
 
 import yaml
 
-from equities_lane.src.config_loader import _assert_quarantine
+from equities_lane.src.config_loader import _assert_data_isolation
 from equities_lane.src.types import ChainRules, DecadalCatalog, DecadalSession, OptionsChainSpec
 
 
@@ -31,7 +31,7 @@ def _decadal_paths(data: dict[str, Any], repo_root: Path) -> dict[str, Path]:
         "options_chains_normalized": repo_root / "data/options/equity_chains/normalized",
     }
     for label, p in paths.items():
-        _assert_quarantine(p, repo_root, label)
+        _assert_data_isolation(p, repo_root, label)
     return paths
 
 

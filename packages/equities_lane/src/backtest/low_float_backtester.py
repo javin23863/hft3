@@ -7,14 +7,16 @@ from equities_lane.src.features.feature_registry import run_feature_pipeline
 from equities_lane.src.ingest.session_io import load_session
 from equities_lane.src.l3_policy import require_l3_session
 from equities_lane.src.models import SessionTick
+from equities_lane.src.options.chain_loader import OptionsChainLoader
 from equities_lane.src.patterns.consolidation import label_consolidation
 from equities_lane.src.patterns.opening_range_breakout import label_opening_range_breakout
 from equities_lane.src.types import BacktestResult, TradeFill, UniverseConfig
 
 
 class LowFloatBacktester:
-    def __init__(self, universe: UniverseConfig):
+    def __init__(self, universe: UniverseConfig, *, options_loader: OptionsChainLoader | None = None):
         self.universe = universe
+        self.options_loader = options_loader
 
     def run(
         self,
@@ -30,7 +32,10 @@ class LowFloatBacktester:
             allow_degraded=allow_degraded,
             context="backtest",
         )
-        features = run_feature_pipeline(ticks, self.universe, meta.degraded, ablation=ablation)
+        features = run_feature_pipeline(
+            ticks, self.universe, meta.degraded,
+            ablation=ablation, options_loader=self.options_loader,
+        )
 
         fills: list[TradeFill] = []
         position = 0

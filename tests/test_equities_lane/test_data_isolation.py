@@ -1,4 +1,4 @@
-"""Tests for equities lane quarantine."""
+"""Tests for equities lane data-isolation (quarantine invariant)."""
 from __future__ import annotations
 
 from pathlib import Path
