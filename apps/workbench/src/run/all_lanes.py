@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -181,8 +182,9 @@ def write_evidence_snapshot(
         "current_job": current_job.__dict__ if current_job else None,
         "counts": counts,
         "last_artifact": last_artifact,
-        "backend_pid": backend_pid,
-        "last_heartbeat": last_heartbeat,
+        "backend_pid": backend_pid or os.getpid(),
+        "last_heartbeat": last_heartbeat or time.time(),
+        "heartbeat_ts": time.time(),
         "control_command": control_command,
         "blocked_reasons": blocked_reasons,
         "skipped_reasons": skipped_reasons,
@@ -482,9 +484,29 @@ def run_all_lanes(
                 counts.blocked += 1
                 job.phase = "blocked"
                 blocked_reasons["DATA_MISSING"] = blocked_reasons.get("DATA_MISSING", 0) + 1
+                append_error(
+                    errors_path,
+                    job_id=job.job_id,
+                    kind="blocked",
+                    reason="DATA_MISSING",
+                    model_id=job.model_id,
+                    symbol=job.symbol,
+                    status=outcome_status,
+                    artifact_dir=result.artifact_dir,
+                )
             elif outcome_status in {"FAIL", "DATA_INSUFFICIENT"}:
                 counts.failed += 1
                 job.phase = "failed"
+                append_error(
+                    errors_path,
+                    job_id=job.job_id,
+                    kind="failed",
+                    reason=f"status={outcome_status}",
+                    model_id=job.model_id,
+                    symbol=job.symbol,
+                    status=outcome_status,
+                    artifact_dir=result.artifact_dir,
+                )
             else:
                 counts.skipped += 1
                 job.phase = "skipped"

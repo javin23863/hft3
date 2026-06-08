@@ -189,11 +189,15 @@ def compute_metrics(artifact_dir: Path) -> MetricsResult:
     #      where per-job-subdir is a sibling of summary.json.
     periods_root = artifact_dir / "periods"
     event_dirs: List[Path] = []
+    seen: set[str] = set()
     if periods_root.is_dir():
         for period_dir in periods_root.iterdir():
             events_root = period_dir / "events"
             if events_root.is_dir():
-                event_dirs.extend(p for p in events_root.iterdir() if p.is_dir())
+                for p in events_root.iterdir():
+                    if p.is_dir() and str(p) not in seen:
+                        seen.add(str(p))
+                        event_dirs.append(p)
     # Autonomous: walk per-job subdirs
     for sub in artifact_dir.iterdir():
         if not sub.is_dir() or sub.name in {"periods", "errors.jsonl", "planned_jobs.json",
@@ -207,7 +211,10 @@ def compute_metrics(artifact_dir: Path) -> MetricsResult:
             for period_dir in sub_periods.iterdir():
                 events_root = period_dir / "events"
                 if events_root.is_dir():
-                    event_dirs.extend(p for p in events_root.iterdir() if p.is_dir())
+                    for p in events_root.iterdir():
+                        if p.is_dir() and str(p) not in seen:
+                            seen.add(str(p))
+                            event_dirs.append(p)
 
     has_per_trade_ledger = False
     per_trade_pnls: List[float] = []

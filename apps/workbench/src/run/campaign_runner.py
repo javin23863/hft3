@@ -374,6 +374,7 @@ def run_campaign(
     write_campaign_manifest(artifact_dir / "campaign.json", campaign_meta)
 
     if history_gate and not allow_partial:
+        _write_status(job_dir, {"state": "data_insufficient", "campaign_id": campaign_id})
         return CampaignResult(
             campaign_id=campaign_id,
             model_id=model_id,
