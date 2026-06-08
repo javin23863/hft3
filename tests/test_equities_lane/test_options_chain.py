@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import math
+import json
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -34,6 +36,9 @@ def test_loader_to_snapshot_has_greeks():
     assert "gex_net" in d
     assert "dex_net" in d
     assert "pc_ratio_volume" in d
+    assert d["iv_atm_status"] == "SUCCESS"
+    assert d["iv_confidence"] in {"HIGH", "MEDIUM", "LOW"}
+    assert d["real_option_chain_available"] is True
 
 
 def test_bs_implied_vol_recovers_input():
@@ -92,6 +97,109 @@ def test_loader_lookup_uses_max_lag():
     loader = OptionsChainLoader(FIXTURE, underlying="RUNNER")
     far_future = loader._ts[0] + 10**18
     assert loader.lookup(far_future, max_lag_ns=60 * 1_000_000_000) is None
+
+
+def test_iv_failure_reports_no_arbitrage_status(tmp_path):
+    from equities_lane.src.options.chain_loader import OptionsChainLoader
+
+    p = tmp_path / "bad_chain.ndjson"
+    row = {
+        "quote_ts_ns": 1_596_000_000_000_000_000,
+        "symbol": "BAD",
+        "strike": 3.5,
+        "right": "C",
+        "expiry": "2020-08-21",
+        "bid": 10.0,
+        "ask": 10.2,
+    }
+    p.write_text(json.dumps(row) + "\n", encoding="utf-8")
+
+    snap = OptionsChainLoader(p, underlying="BAD").to_snapshot(
+        row["quote_ts_ns"],
+        spot=3.65,
+        decision_date=date(2020, 7, 28),
+    )
+
+    assert snap.iv_atm == 0.0
+    assert snap.iv_atm_status == "NO_ARBITRAGE_FAIL"
+    assert snap.iv_confidence == "BLOCKED"
+    assert snap.no_arbitrage_violation_count == 1
+
+
+def test_synthetic_only_chain_is_not_real_market_evidence(tmp_path):
+    from equities_lane.src.options.chain_loader import OptionsChainLoader
+
+    p = tmp_path / "synthetic_chain.ndjson"
+    row = {
+        "quote_ts_ns": 1_596_000_000_000_000_000,
+        "symbol": "SYN",
+        "strike": 10.0,
+        "right": "C",
+        "expiry": "2020-08-21",
+        "bid": 0.4,
+        "ask": 0.5,
+        "source": "PROXY_SYNTHETIC",
+    }
+    p.write_text(json.dumps(row) + "\n", encoding="utf-8")
+
+    snap = OptionsChainLoader(p, underlying="SYN").to_snapshot(
+        row["quote_ts_ns"],
+        spot=10.0,
+        decision_date=date(2020, 7, 28),
+    )
+
+    assert snap.real_quote_count == 0
+    assert snap.synthetic_quote_count == 1
+    assert snap.surface_source == "PROXY_SYNTHETIC"
+    assert snap.iv_atm_status == "SYNTHETIC_LOW_CONFIDENCE"
+    assert snap.iv_confidence == "BLOCKED"
+
+
+def test_mixed_synthetic_rows_do_not_contaminate_executable_snapshot(tmp_path):
+    from equities_lane.src.options.chain_loader import OptionsChainLoader
+
+    ts = 1_596_000_000_000_000_000
+    rows = [
+        {
+            "quote_ts_ns": ts,
+            "symbol": "MIX",
+            "strike": 10.0,
+            "right": "C",
+            "expiry": "2020-08-21",
+            "bid": 0.4,
+            "ask": 0.5,
+            "bid_size": 10,
+            "ask_size": 10,
+            "listed_at_ts_ns": ts - 1,
+        },
+        {
+            "quote_ts_ns": ts,
+            "symbol": "MIX",
+            "strike": 10.0,
+            "right": "P",
+            "expiry": "2020-08-21",
+            "bid": 0.4,
+            "ask": 0.5,
+            "source": "PROXY_SYNTHETIC",
+        },
+    ]
+    p = tmp_path / "mixed_chain.ndjson"
+    p.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+
+    snap = OptionsChainLoader(p, underlying="MIX").to_snapshot(
+        ts,
+        spot=10.0,
+        decision_date=date(2020, 7, 28),
+    )
+
+    assert snap.num_quotes == 2
+    assert snap.real_quote_count == 1
+    assert snap.synthetic_quote_count == 1
+    assert len(snap.quotes) == 1
+    assert snap.quotes[0].right == "C"
+    assert snap.pc_ratio_volume == 0.0
+    assert snap.real_nbbo_size_available is True
+    assert snap.valid_contract_count == 1
 
 
 def test_quarantine_path_isolation():

@@ -54,7 +54,12 @@ from equities_lane.src.ontology.payoff import (
     ROUTE_STOCK_ONLY,
 )
 from equities_lane.src.ontology.session_context import EquitySessionContext
-from equities_lane.src.options.chain_loader import OptionsChainLoader
+from equities_lane.src.options.chain_loader import (
+    CONFIDENCE_HIGH,
+    CONFIDENCE_MEDIUM,
+    IV_STATUS_SUCCESS,
+    OptionsChainLoader,
+)
 from equities_lane.src.route.comparator import RouteInputs, compare_routes
 
 _CONFIG = _REPO / "packages" / "equities_lane" / "config" / "universe.yaml"
@@ -81,7 +86,7 @@ def _compute_decision_features(
     ticks: list,
     options_loader: OptionsChainLoader | None,
     decision_ts_ns: int,
-) -> tuple[dict[str, float], dict[str, float], dict[str, Any]]:
+) -> tuple[dict[str, float], dict[str, Any], dict[str, Any]]:
     """Compute features at decision timestamp using the real feature pipeline.
     
     Samples up to 1000 ticks near the decision timestamp for efficiency.
@@ -203,12 +208,60 @@ def _estimate_stock_ev(
     return stock_ev, spread, slippage, fill_prob
 
 
+def _tick_spot(tick: Any) -> float:
+    bid = float(getattr(tick, "bid_px", 0.0) or 0.0)
+    ask = float(getattr(tick, "ask_px", 0.0) or 0.0)
+    trade = float(getattr(tick, "trade_px", 0.0) or 0.0)
+    if bid > 0 and ask > 0:
+        return (bid + ask) / 2.0
+    return trade if trade > 0 else 0.0
+
+
+def _spot_at_decision(ticks: list[Any], fallback: float) -> float:
+    for tick in reversed(ticks):
+        spot = _tick_spot(tick)
+        if spot > 0:
+            return spot
+    return fallback
+
+
+def _option_route_eligibility(
+    snap,
+    *,
+    avg_spread: float,
+    fill_probability: float,
+    spot: float,
+) -> tuple[bool, tuple[str, ...]]:
+    reasons: list[str] = []
+    if snap.real_quote_count <= 0:
+        reasons.append("no_real_executable_option_quotes")
+    if snap.quote_age_ns > 120 * 1_000_000_000:
+        reasons.append("option_quote_stale")
+    if not snap.real_nbbo_size_available:
+        reasons.append("option_nbbo_size_missing")
+    if not snap.contract_listing_metadata_available:
+        reasons.append("option_contract_listing_metadata_missing")
+    elif snap.valid_contract_count <= 0:
+        reasons.append("no_valid_option_contract_at_decision")
+    if snap.iv_atm_status != IV_STATUS_SUCCESS:
+        reasons.append(f"iv_status_{snap.iv_atm_status.lower()}")
+    if snap.iv_confidence not in {CONFIDENCE_HIGH, CONFIDENCE_MEDIUM}:
+        reasons.append(f"iv_confidence_{snap.iv_confidence.lower()}")
+    if avg_spread <= 0:
+        reasons.append("missing_option_spread")
+    elif spot > 0 and avg_spread > max(0.25, spot * 0.05):
+        reasons.append("option_spread_too_wide")
+    if fill_probability < 0.4:
+        reasons.append("option_fill_probability_below_40pct")
+    return not reasons, tuple(reasons)
+
+
 def _estimate_option_ev(
-    option_features: dict[str, float],
+    option_features: dict[str, Any],
     spot: float,
     decision_ts_ns: int,
     options_loader: OptionsChainLoader | None,
-) -> tuple[float, float, float, float, float, float, float, tuple[str, ...], tuple[str, ...]]:
+) -> tuple[float, float, float, float, float, float, float, tuple[str, ...], tuple[str, ...], bool, tuple[str, ...], dict[str, Any]]:
     """Estimate option EV using feature-based model.
     
     EV is computed from option features:
@@ -220,29 +273,53 @@ def _estimate_option_ev(
     Coefficients are calibrated placeholders per PLAN_EQOPT §4.2;
     production wiring will replace with trained model weights.
     
-    Returns (ev, spread, slippage, fill_prob, gamma, delta, convexity, contracts, features_used).
+    Returns EV/cost fields plus route eligibility and diagnostics. Raw option EV is
+    retained even when the option route is ineligible; the comparator gates route
+    selection separately.
     """
     if options_loader is None or spot <= 0:
-        return 0.0, 0.10, 0.10, 0.0, 0.0, 0.0, 0.0, (), ("iv_atm", "gex_net", "dex_net")
-    
-    iv_atm = option_features.get("iv_atm", 0.0)
-    gex_net = option_features.get("gex_net", 0.0)
-    dex_net = option_features.get("dex_net", 0.0)
-    iv_skew = option_features.get("iv_skew_25d", 0.0)
-    
-    if iv_atm <= 0:
-        return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, (), ("iv_atm", "gex_net", "dex_net")
-    
+        return 0.0, 0.10, 0.10, 0.0, 0.0, 0.0, 0.0, (), ("iv_atm", "gex_net", "dex_net"), False, ("no_options_loader",), {}
+
     # Get the option chain snapshot for contract selection
-    snap = options_loader.to_snapshot(decision_ts_ns, spot)
+    from datetime import datetime, timezone
+    decision_date = datetime.fromtimestamp(decision_ts_ns / 1e9, tz=timezone.utc).date()
+    snap = options_loader.to_snapshot(decision_ts_ns, spot, decision_date=decision_date)
     if snap.num_quotes == 0:
-        return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, (), ("iv_atm", "gex_net", "dex_net")
+        return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, (), ("iv_atm", "gex_net", "dex_net"), False, ("no_fresh_option_quotes",), snap.to_dict()
+
+    iv_atm = snap.iv_atm
+    gex_net = snap.gex_net
+    dex_net = snap.dex_net
+    iv_skew = snap.iv_skew_25d
     
     # Average spread from the chain
     avg_spread = (sum(q.spread for q in snap.quotes) / len(snap.quotes)) if snap.quotes else 0.0
     
     # Fill probability from coverage
     fill_prob = min(0.9, max(0.0, snap.coverage * 0.9))
+
+    option_route_eligible, option_block_reasons = _option_route_eligibility(
+        snap,
+        avg_spread=avg_spread,
+        fill_probability=fill_prob,
+        spot=spot,
+    )
+
+    if iv_atm <= 0:
+        return (
+            0.0,
+            avg_spread,
+            avg_spread * 0.5,
+            fill_prob,
+            0.0,
+            0.0,
+            0.0,
+            (),
+            ("iv_atm", "gex_net", "dex_net"),
+            option_route_eligible,
+            option_block_reasons,
+            snap.to_dict(),
+        )
     
     # Option EV from features
     # Base EV from IV (higher vol = more premium)
@@ -258,11 +335,10 @@ def _estimate_option_ev(
     option_ev = base_ev + gex_adj + dex_adj + skew_adj - avg_spread
     option_ev = max(0.0, option_ev)  # Floor at 0
     
-    # Select contracts (for now, use all quotes as selected)
     contracts = tuple(
         f"{snap.underlying} {q.expiry} {q.strike} {q.right}"
-        for q in snap.quotes[:10]  # Limit to 10 contracts
-    )
+        for q in snap.quotes[:10]
+    ) if option_route_eligible else ()
     
     features_used = ("iv_atm", "gex_net", "dex_net", "iv_skew_25d")
     
@@ -276,6 +352,9 @@ def _estimate_option_ev(
         iv_skew,
         contracts,
         features_used,
+        option_route_eligible,
+        option_block_reasons,
+        snap.to_dict(),
     )
 
 
@@ -313,6 +392,9 @@ def run_session(
         "ontology_claim_ids": [],
         "pdf_citations": [],
         "reason_codes": [],
+        "option_route_eligible": False,
+        "option_route_block_reasons": [],
+        "option_diagnostics": {},
     }
     if not norm_path.exists():
         record["leakage_status"] = "REJECTED"
@@ -368,7 +450,7 @@ def run_session(
         record["rejection_reason"] = float_pit.rejection_reason
         return record
 
-    options_path = _options_path_for_session(_session_id_for(sym, date))
+    options_path = _options_path_for_session(session["id"])
     options_loader: OptionsChainLoader | None = None
     option_quotes_for_pit: list[dict] = []
     option_contracts_for_pit: list[dict] = []
@@ -380,17 +462,20 @@ def run_session(
             record["rejection_reason"] = f"options loader failure: {e}"
             return record
         seen_contracts: dict[str, int] = {}
+        # Filter option quotes to only include those at or before decision timestamp
+        # (point-in-time: no future data available at decision time)
         for q in options_loader._bars.values():
             for opt in q:
-                option_quotes_for_pit.append({
-                    "quote_ts_ns": opt.ts_ns,
-                    "symbol": f"{sym}   {opt.expiry.replace('-', '')[2:]}{opt.right}{int(opt.strike*1000):08d}",
-                })
-                contract_sym = f"{sym}   {opt.expiry.replace('-', '')[2:]}{opt.right}{int(opt.strike*1000):08d}"
-                if contract_sym not in seen_contracts:
-                    seen_contracts[contract_sym] = opt.ts_ns
-                else:
-                    seen_contracts[contract_sym] = min(seen_contracts[contract_sym], opt.ts_ns)
+                if opt.ts_ns <= decision_ts:
+                    option_quotes_for_pit.append({
+                        "quote_ts_ns": opt.ts_ns,
+                        "symbol": f"{sym}   {opt.expiry.replace('-', '')[2:]}{opt.right}{int(opt.strike*1000):08d}",
+                    })
+                    contract_sym = f"{sym}   {opt.expiry.replace('-', '')[2:]}{opt.right}{int(opt.strike*1000):08d}"
+                    if contract_sym not in seen_contracts:
+                        seen_contracts[contract_sym] = opt.ts_ns
+                    else:
+                        seen_contracts[contract_sym] = min(seen_contracts[contract_sym], opt.ts_ns)
         for contract_sym, listed_ts in seen_contracts.items():
             option_contracts_for_pit.append({
                 "contract_symbol": contract_sym,
@@ -407,7 +492,9 @@ def run_session(
         record["rejection_reason"] = contract_pit.rejection_reason
         return record
 
-    spot = meta.premarket_open or meta.prior_close or 0.0
+    fallback_spot = meta.premarket_open or meta.prior_close or 0.0
+    spot = _spot_at_decision(ticks, fallback_spot)
+    record["decision_spot"] = spot
     
     # Compute features using the real feature pipeline
     equity_features, option_features, raw_snapshot = _compute_decision_features(
@@ -421,10 +508,13 @@ def run_session(
     
     # Estimate EV using feature-based models
     stock_ev, spread_s, slip_s, fill_s = _estimate_stock_ev(equity_features, liquidity_score)
-    opt_ev, spread_o, slip_o, fill_o, gamma, delta, conv, contracts, opt_used = _estimate_option_ev(
+    opt_ev, spread_o, slip_o, fill_o, gamma, delta, conv, contracts, opt_used, opt_eligible, opt_block_reasons, opt_diagnostics = _estimate_option_ev(
         option_features, spot, record["decision_timestamp_ns"], options_loader
     )
     record["selected_option_contracts"] = list(contracts)
+    record["option_route_eligible"] = opt_eligible
+    record["option_route_block_reasons"] = list(opt_block_reasons)
+    record["option_diagnostics"] = opt_diagnostics
 
     inputs = RouteInputs(
         underlying_symbol=sym,
@@ -452,6 +542,8 @@ def run_session(
         selected_option_contracts=contracts,
         equity_features_used=tuple(equity_features.keys()),
         option_features_used=opt_used,
+        option_route_eligible=opt_eligible,
+        option_route_block_reasons=opt_block_reasons,
     )
     decision = compare_routes(inputs)
     decision.validate()

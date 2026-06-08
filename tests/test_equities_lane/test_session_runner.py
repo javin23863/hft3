@@ -9,6 +9,18 @@ import pytest
 REPO = Path(__file__).resolve().parents[2]
 
 
+def test_spot_at_decision_uses_latest_predecision_tick():
+    from equities_lane.src.experiments.session_runner import _spot_at_decision
+    from equities_lane.src.models import SessionTick
+
+    ticks = [
+        SessionTick(ts_ns=100, bid_px=10.0, bid_sz=100, ask_px=10.2, ask_sz=100),
+        SessionTick(ts_ns=200, bid_px=12.0, bid_sz=100, ask_px=12.4, ask_sz=100),
+    ]
+
+    assert _spot_at_decision(ticks, fallback=9.0) == 12.2
+
+
 class TestRouteReachability:
     """All 4 routes are reachable from the comparator under valid inputs."""
 

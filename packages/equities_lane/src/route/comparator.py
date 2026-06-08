@@ -57,6 +57,8 @@ class RouteInputs:
     selected_option_contracts: tuple[str, ...] = ()
     equity_features_used: tuple[str, ...] = ()
     option_features_used: tuple[str, ...] = ()
+    option_route_eligible: bool = True
+    option_route_block_reasons: tuple[str, ...] = ()
 
 
 def _combined_ev(
@@ -99,6 +101,9 @@ def _route_reasons(
     reasons: list[str] = []
     if chosen == ROUTE_NO_TRADE:
         reasons.append("all_routes_negative_after_costs")
+        if not inputs.option_route_eligible:
+            reasons.append("option_route_ineligible")
+            reasons.extend(inputs.option_route_block_reasons)
         if inputs.fill_probability_stock < 0.4:
             reasons.append("stock_fill_probability_below_40pct")
         if inputs.fill_probability_option < 0.4:
@@ -108,6 +113,9 @@ def _route_reasons(
         return tuple(reasons)
     if chosen == ROUTE_STOCK_ONLY:
         reasons.append("stock_ev_strictly_dominates")
+        if not inputs.option_route_eligible:
+            reasons.append("option_route_ineligible")
+            reasons.extend(inputs.option_route_block_reasons)
         if inputs.spread_cost_option > inputs.spread_cost_stock * 2:
             reasons.append("option_spread_2x_stock")
     elif chosen == ROUTE_OPTION_ONLY:
@@ -139,15 +147,18 @@ def compare_routes(inputs: RouteInputs) -> StockOptionRouteDecision:
     """
     stock_ev = inputs.stock_expected_value
     option_ev = inputs.option_expected_value
-    combined = _combined_ev(
+    raw_combined = _combined_ev(
         stock_ev,
         option_ev,
         convexity_exposure=inputs.convexity_exposure,
         delta_exposure=inputs.delta_exposure,
     )
+    combined = raw_combined if inputs.option_route_eligible else stock_ev
 
-    combo_margin = combined - max(stock_ev, option_ev)
-    best_single = max(stock_ev, option_ev)
+    option_candidate = option_ev if inputs.option_route_eligible else float("-inf")
+    combined_candidate = raw_combined if inputs.option_route_eligible else float("-inf")
+    combo_margin = combined_candidate - max(stock_ev, option_candidate)
+    best_single = max(stock_ev, option_candidate)
     # Combo threshold: must exceed single-leg EV by more than:
     # - max of option spread cost, slippage, and 50c minimum ticket
     # - plus 10% of best single-leg EV (scaling for size)
@@ -160,17 +171,18 @@ def compare_routes(inputs: RouteInputs) -> StockOptionRouteDecision:
     ) + 0.10 * best_single
     chosen: str
     if (
-        combo_margin > combo_threshold
-        and combined > 0
+        inputs.option_route_eligible
+        and combo_margin > combo_threshold
+        and combined_candidate > 0
         and stock_ev > 0
         and option_ev > 0
     ):
         chosen = ROUTE_STOCK_AND_OPTION
-    elif stock_ev >= option_ev and stock_ev > 0:
+    elif stock_ev >= option_candidate and stock_ev > 0:
         chosen = ROUTE_STOCK_ONLY
-    elif option_ev > stock_ev and option_ev > 0:
+    elif inputs.option_route_eligible and option_ev > stock_ev and option_ev > 0:
         chosen = ROUTE_OPTION_ONLY
-    elif option_ev > 0:
+    elif inputs.option_route_eligible and option_ev > 0:
         chosen = ROUTE_OPTION_ONLY
     else:
         chosen = ROUTE_NO_TRADE

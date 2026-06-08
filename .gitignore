@@ -127,10 +127,30 @@ runtime/latency_reports/raw/**
 
 # Ops artifacts and local logs
 logs/
+.tmp/
 chi404_infra.tgz
 *.tgz
 _rithmic_staging/
 rithmic_portable.zip
+
+# Local one-off diagnostics/download helpers
+check_all_iv_coverage.py
+check_atm_quotes.py
+check_gme_expr_timestamps.py
+check_kodk_iv_coverage.py
+check_opra_availability.py
+check_option_timestamps.py
+check_sessions.py
+debug_bs_high_iv.py
+debug_iv_calculation.py
+debug_iv_with_date.py
+debug_option_features.py
+download_opra_decision_time.py
+download_opra_options.py
+generate_synthetic_options.py
+list_sessions.py
+test_databento_symbology.py
+verify_synthetic_options.py
 
 # IDEs
 .vscode/

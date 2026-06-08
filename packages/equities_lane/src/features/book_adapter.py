@@ -105,7 +105,10 @@ def compute_features(
         if options_loader is not None:
             spot = (t.bid_px + t.ask_px) / 2.0 if (t.bid_px and t.ask_px) else (t.trade_px or 0.0)
             if spot > 0:
-                opt_snap = options_loader.to_snapshot(t.ts_ns, spot)
+                # Extract the historical UTC session date for IV calculations.
+                from datetime import datetime, timezone
+                decision_date = datetime.fromtimestamp(t.ts_ns / 1e9, tz=timezone.utc).date()
+                opt_snap = options_loader.to_snapshot(t.ts_ns, spot, decision_date=decision_date)
                 snap.options = opt_snap.to_dict()
             else:
                 snap.options = {"spot": 0.0, "num_quotes": 0, "coverage": 0.0}

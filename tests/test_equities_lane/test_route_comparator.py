@@ -84,6 +84,35 @@ class TestCompareRoutes:
         d = compare_routes(_inputs(stock_ev=0.0, option_ev=5.0))
         assert d.final_route_decision == ROUTE_OPTION_ONLY
 
+    def test_ineligible_option_route_cannot_win(self):
+        inp = RouteInputs(
+            **{
+                **_inputs(stock_ev=0.0, option_ev=10.0).__dict__,
+                "option_route_eligible": False,
+                "option_route_block_reasons": ("synthetic_only_not_executable",),
+            }
+        )
+        d = compare_routes(inp)
+        assert d.final_route_decision == ROUTE_NO_TRADE
+        assert d.payoff.option_expected_value == 10.0
+        assert d.payoff.stock_plus_option_expected_value == 0.0
+        assert "option_route_ineligible" in d.reason_codes
+        assert "synthetic_only_not_executable" in d.reason_codes
+
+    def test_ineligible_option_route_falls_back_to_stock(self):
+        inp = RouteInputs(
+            **{
+                **_inputs(stock_ev=5.0, option_ev=10.0).__dict__,
+                "option_route_eligible": False,
+                "option_route_block_reasons": ("no_real_executable_option_quotes",),
+            }
+        )
+        d = compare_routes(inp)
+        assert d.final_route_decision == ROUTE_STOCK_ONLY
+        assert d.payoff.option_expected_value == 10.0
+        assert d.payoff.stock_plus_option_expected_value == 5.0
+        assert "no_real_executable_option_quotes" in d.reason_codes
+
     def test_decision_validates(self):
         d = compare_routes(_inputs(stock_ev=5.0, option_ev=0.0))
         d.validate()
