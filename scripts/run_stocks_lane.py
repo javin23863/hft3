@@ -319,8 +319,18 @@ def write_prediction_output(
 # CLI
 # ---------------------------------------------------------------------------
 
+def _has_meta_header(path: Path) -> bool:
+    """Quick check: first line of NDJSON must have _type: meta."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            first = f.readline().strip()
+            return '"meta"' in first or '"_type": "meta"' in first or "'_type': 'meta'" in first
+    except Exception:
+        return False
+
+
 def discover_sessions() -> list[dict[str, Any]]:
-    """Discover available session NDJSON files."""
+    """Discover available session NDJSON files (skips auction files, missing meta)."""
     sessions: list[dict[str, Any]] = []
 
     fixture = _REPO / "packages" / "equities_lane" / "fixtures" / "low_float_session_v1.ndjson"
@@ -334,6 +344,10 @@ def discover_sessions() -> list[dict[str, Any]]:
     normalized_dir = _REPO / "data" / "equities" / "normalized"
     if normalized_dir.exists():
         for f in sorted(normalized_dir.glob("*.ndjson")):
+            if "auction" in f.stem.lower():
+                continue
+            if not _has_meta_header(f):
+                continue
             stem = f.stem
             parts = stem.split("_", 1)
             sessions.append({
@@ -398,7 +412,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Session: {sp.name}")
         print(f"{'='*60}")
 
-        meta, ticks = load_session(str(sp))
+        try:
+            meta, ticks = load_session(str(sp))
+        except Exception as e:
+            print(f"  SKIP: load_session failed: {e}")
+            continue
         print(f"  ticks={len(ticks)} degraded={meta.degraded.degraded_mode}")
 
         result = run_session_pipeline(
