@@ -39,6 +39,7 @@ packages/*         Python libraries (features, backtest, replay, …) — legacy
 configs/           Reserved (currently empty; see configs/README.md)
 artifacts/         Research outputs
 runtime/           Certification, latency, audits
+docs/              Documentation (topic-organised: human/, ai/, vault/, chi404/, …)
 graphify-out/      Code graph (AI entry)
 ```
 
