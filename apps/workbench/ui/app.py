@@ -264,3 +264,7 @@ with tabs[8]:
 with tabs[9]:
     st.header("Personal Runs")
     personal_runs_panel(REPO, selected_model, selected_symbol)
+
+with tabs[10]:
+    from workbench.ui.autonomous_panel import autonomous_panel as _autonomous_panel
+    _autonomous_panel(REPO)
