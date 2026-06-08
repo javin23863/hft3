@@ -350,6 +350,7 @@ def run_campaign(
         )
 
     _write_control(job_dir, "run")
+    _write_status(job_dir, {"state": "running", "campaign_id": campaign_id})
     years_avail = catalog_years_available(primary_id, symbol, repo_root)
     history_gate = audit_grade and years_avail < cfg.min_history_years
 

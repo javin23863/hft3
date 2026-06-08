@@ -99,7 +99,14 @@ def get_job_status(repo_root: Path, campaign_id: str) -> Dict[str, Any]:
     d = job_dir_for(repo_root, campaign_id)
     status_path = d / "status.json"
     if status_path.is_file():
-        return json.loads(status_path.read_text(encoding="utf-8"))
+        payload = json.loads(status_path.read_text(encoding="utf-8"))
+        # Detect zombie: status says running but file is stale (>10 min)
+        if payload.get("state") == "running":
+            import time as _time
+            _age = _time.time() - status_path.stat().st_mtime
+            if _age > 600:
+                return {"state": "stale", "campaign_id": campaign_id, "stale_seconds": int(_age)}
+        return payload
     summary = d / "summary.json"
     if summary.is_file():
         return json.loads(summary.read_text(encoding="utf-8"))

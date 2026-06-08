@@ -10,7 +10,7 @@ from typing import Any, Dict, Optional, Tuple
 import streamlit as st
 
 _TERMINAL_STATES = frozenset(
-    {"pass", "fail", "blocked", "cancelled", "dry_run", "unknown", "complete", "completed"}
+    {"pass", "fail", "blocked", "cancelled", "dry_run", "unknown", "complete", "completed", "stale"}
 )
 _AAR_MARKERS = (
     "after_action_response.json",
@@ -215,7 +215,20 @@ def campaign_progress_panel(repo: Path, campaign_id: str) -> None:
     if state == "running":
         period = status.get("period") or "…"
         event_id = status.get("event_id") or "…"
-        st.status(f"Campaign running — {period} / {event_id}", state="running")
+        # Detect zombie: status.json older than 5 min with no recent period activity
+        _status_path = campaign_base(repo, campaign_id) / "status.json"
+        _stale = False
+        if _status_path.is_file():
+            import time as _time
+            _age = _time.time() - _status_path.stat().st_mtime
+            _periods_dir = campaign_base(repo, campaign_id) / "periods"
+            _has_periods = _periods_dir.is_dir() and any(True for _ in _periods_dir.iterdir())
+            if _age > 300 and not _has_periods:  # 5 min no activity
+                _stale = True
+        if _stale:
+            st.warning(f"Campaign appears stalled — no activity for {_age:.0f}s. The subprocess may have crashed.")
+        else:
+            st.status(f"Campaign running — {period} / {event_id}", state="running")
         return
 
     if state in _TERMINAL_STATES and state not in ("idle", "unknown"):
@@ -225,12 +238,16 @@ def campaign_progress_panel(repo: Path, campaign_id: str) -> None:
             st.session_state[done_key] = state
             if state in ("pass", "completed", "complete", "dry_run"):
                 st.success(f"Campaign finished ({state}). Loaded {period or 'summary'} / {event_id or '—'}.")
+            elif state == "fail":
+                st.error(f"Campaign FAILED. No walk-forward events passed the gate. Check summary.json for details.")
+            elif state == "stale":
+                st.error(f"Campaign stalled — process appears to have crashed {status.get('stale_seconds',0)}s ago. Restart from Model Selector.")
             elif state == "blocked":
                 st.warning("Campaign blocked (missing data or gate). See campaign log in Advanced.")
             elif state == "cancelled":
                 st.info("Campaign cancelled.")
             else:
-                st.info(f"Campaign state: {state}")
+                st.warning(f"Campaign state: {state}")
         return
 
     st.caption(f"Campaign `{campaign_id}` — state `{state}` (waiting for status.json)…")

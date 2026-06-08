@@ -17,6 +17,18 @@ from workbench.src.artifacts.paths import runtime_validation_dir, workbench_runs
 
 st.set_page_config(page_title="HFT3 Workbench", layout="wide")
 
+def _extract_aggregate_from_periods(diag: dict) -> dict:
+    """Extract net_pnl + num_trades from summary-level periods list."""
+    periods = diag.get("periods", [])
+    if not periods or not isinstance(periods, list):
+        return {}
+    total_pnl = 0.0
+    total_trades = 0
+    for p in periods:
+        total_pnl += float(p.get("net_pnl", 0))
+        total_trades += int(p.get("num_trades", 0))
+    return {"net_pnl": total_pnl, "num_trades": total_trades}
+
 from workbench.ui.analyst_panel import analyst_panel  # noqa: E402
 from workbench.ui.campaign_panel import (  # noqa: E402
     campaign_events,
@@ -50,7 +62,12 @@ if st.session_state.get("wb_nav_hint"):
 tabs = st.tabs(WORKFLOW_TABS)
 
 runs_dir = workbench_runs_dir()
-run_dirs = sorted(runs_dir.glob("*"), reverse=True) if runs_dir.is_dir() else []
+run_dirs = sorted(
+    [d for d in runs_dir.glob("*") if d.is_dir() and (
+        (d / "status.json").is_file() or (d / "summary.json").is_file() or (d / "diagnostics.json").is_file()
+    )],
+    reverse=True,
+) if runs_dir.is_dir() else []
 run_labels = [d.name for d in run_dirs]
 
 selected_model = st.session_state.get("wb_selected_model", "")
@@ -96,7 +113,7 @@ with tabs[1]:
     if not selected_model:
         st.info("Choose a model on **Model Selector**, then **Set primary** or **Run campaign**.")
     elif diag_data:
-        rep = diag_data if "net_pnl" in diag_data else {}
+        rep = diag_data if "net_pnl" in diag_data else _extract_aggregate_from_periods(diag_data)
         if "event_results" in diag_data:
             st.dataframe(pd.DataFrame(diag_data["event_results"]), use_container_width=True)
         if rep:
@@ -106,7 +123,13 @@ with tabs[1]:
             if pnl_lat:
                 st.line_chart(pd.Series(pnl_lat))
     elif selected_campaign:
-        st.info("Campaign running — open this tab as events complete (~5 min per event on Windows).")
+        _campaign_base = runs_dir / selected_campaign
+        _has_status = (_campaign_base / "status.json").is_file()
+        _has_summary = (_campaign_base / "summary.json").is_file()
+        if not _has_status and not _has_summary:
+            st.warning("Campaign directory exists but produced no results — likely crashed or was stopped before any events ran.")
+        else:
+            st.info("Campaign running — open this tab as events complete (~5 min per event on Windows).")
     else:
         st.info("Click **Run campaign** on Model Selector (trial mode: available NPZ only).")
 
