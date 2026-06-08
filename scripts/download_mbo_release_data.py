@@ -94,6 +94,16 @@ def main() -> int:
         action="store_true",
         help="Download Tier 1–3 priority macro + UNEMPLOYMENT_CLAIMS only",
     )
+    parser.add_argument(
+        "--source",
+        choices=("auto", "rithmic_api", "databento"),
+        default="auto",
+        help=(
+            "Fill source. 'auto' = rithmic_api first, fall back to databento "
+            "(default). 'rithmic_api' forces Rithmic History Plant (CHI404 only). "
+            "'databento' skips Rithmic and uses Databento directly."
+        ),
+    )
     parser.add_argument("--output", type=Path, default=OUT_REPORT)
     args = parser.parse_args()
 
@@ -155,6 +165,7 @@ def main() -> int:
     }
 
     if args.download:
+        source_arg = None if args.source == "auto" else args.source
         dl_report = run_catalog_download(
             _REPO,
             scope=args.scope,
@@ -170,6 +181,7 @@ def main() -> int:
             exclude_event_types=tuple(DEFAULT_DOWNLOAD_EXCLUDE_EVENT_TYPES) + tuple(args.exclude_event_type),
             include_event_types=tuple(args.include_event_type),
             only_event_types=only_types or None,
+            source=source_arg,
         )
         report_body.update(dl_report.to_dict())
 

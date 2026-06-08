@@ -5,7 +5,15 @@ from __future__ import annotations
 PARSER_VERSION = "1.0.0"
 MBO_SCHEMA = "mbo"
 SOURCE_VENDOR = "databento"
+SOURCE_VENDOR_RITHMIC = "rithmic_api"
 DEFAULT_DATASET_ID = "GLBX.MDP3"
+
+# Source priority for the MBO release lane.  Read left-to-right; the
+# first source that yields a valid MBO release_event_path wins.
+SOURCE_PRIORITY: tuple[str, ...] = (
+    SOURCE_VENDOR_RITHMIC,
+    SOURCE_VENDOR,
+)
 
 # Skipped by download_mbo_release_data.py unless --include-event-type overrides.
 DEFAULT_DOWNLOAD_EXCLUDE_EVENT_TYPES: tuple[str, ...] = ("FACTORY_ORDERS",)

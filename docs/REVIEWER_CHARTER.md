@@ -116,9 +116,17 @@ Trusted production research uses Databento GLBX.MDP3 MBO into `data/npz/`. Rithm
 - `data/normalized/rithmic_trial_live_capture/`
 - `data/replay/hftbacktest/rithmic_trial/`
 
-**Reject if:** trial capture, trial NPZ, or fixture data written into `data/npz/`; production backtest silently loads trial paths; config default blurs lanes.
+The **MBO release lane** has a second Rithmic source — `rithmic_api` — that fills the same `data/mbo_release/<event>/<symbol>/` slot structure that Databento fills, with `release_event_path.json` carrying `source_vendor: "rithmic_api"`. This output is **not quarantined** — it is intended to derive into the trusted `data/npz/` production lake after passing the same classification + validation gates as Databento slots.
 
-See [docs/rithmic_trial/README.md](rithmic_trial/README.md).
+**Reject if:**
+- trial capture, trial NPZ, or fixture data written into `data/npz/`
+- production backtest silently loads trial paths
+- config default blurs lanes
+- Rithmic-sourced `release_event_path.json` written without `data_label: mbo` (hard labeling rule)
+- Rithmic-sourced slot skips `events.jsonl`, `validation.json`, or `hashes.json`
+- Rithmic fill source invoked on Windows (BLUEPRINT §4)
+
+See [docs/rithmic_trial/README.md](rithmic_trial/README.md) and [packages/mbo_release_lane/rithmic_source.py](../packages/mbo_release_lane/rithmic_source.py).
 
 ### B8. Production failure states
 

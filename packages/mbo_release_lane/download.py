@@ -111,11 +111,21 @@ def download_catalog_slot(
     skip_if_valid: bool = True,
     skip_if_npz: bool = True,
     client: Any | None = None,
+    source: str | None = None,
 ) -> ImportResult | None:
-    """Download one release window for one symbol through MBO-only lane."""
+    """Download one release window for one symbol through MBO-only lane.
+
+    ``source`` may be ``"rithmic_api"`` / ``"databento"`` / ``None``.
+    ``None`` means "use the priority chain" — Rithmic first, Databento
+    fallback (see ``mbo_release_lane.source_priority``).  When Rithmic
+    is not applicable (no creds / Windows / non-MBO schema), control
+    transparently falls through to Databento.
+    """
     from workbench.src.data.catalog_backfill import resolve_download_symbol
     from data_system.src.npz_resolver import resolve_npz_for_event
     from economic_event_universe.registry import default_cme_symbols
+    from mbo_release_lane.constants import SOURCE_VENDOR_RITHMIC
+    from mbo_release_lane.source_priority import attempt_rithmic_fill, resolve_source
 
     if skip_if_npz:
         syms = default_cme_symbols()
@@ -175,6 +185,48 @@ def download_catalog_slot(
     elif raw_dest.is_file():
         # Orphaned/corrupt raw without a valid manifest — force re-fetch.
         raw_dest.unlink(missing_ok=True)
+
+    # Source priority: Rithmic first when the slot is empty and the
+    # caller did not pin a specific source.  Rithmic returns events.jsonl
+    # + a release_event_path.json with source_vendor="rithmic_api" — that
+    # is the same slot layout the Databento import path writes.  If
+    # Rithmic raises (topology, missing creds, no entitlement, non-MBO
+    # schema, parse failure), control transparently falls through to the
+    # existing Databento path below.
+    if source != "databento":
+        chosen = source or resolve_source(repo_root, window.event_id, symbol)
+        if chosen == SOURCE_VENDOR_RITHMIC:
+            anchor_dt = _as_datetime(window.start_utc)
+            scheduled = anchor_dt  # window.start_utc is already anchor + start_off
+            status, manifest, err = attempt_rithmic_fill(
+                repo_root,
+                release_id=window.event_id,
+                symbol=symbol,
+                exchange=window.exchange if hasattr(window, "exchange") else "CME",
+                start_utc=window.start_utc,
+                end_utc=window.end_utc,
+                scheduled_release_timestamp=scheduled.isoformat(),
+            )
+            if status.is_filled() and manifest is not None:
+                return ImportResult(
+                    release_id=window.event_id,
+                    symbol=symbol,
+                    slot_dir=release_slot_dir(repo_root, window.event_id, symbol),
+                    validation_status="valid",
+                    event_count=int(manifest.get("release_event_path", {}).get("event_count", 0)),
+                    blockers=[],
+                    paths_written=[
+                        str(release_slot_dir(repo_root, window.event_id, symbol) / "events.jsonl"),
+                        str(release_slot_dir(repo_root, window.event_id, symbol) / "release_event_path.json"),
+                    ],
+                )
+            # Rithmic not applicable — fall through to Databento.
+            logger.info(
+                "Rithmic source skipped for %s %s: %s — falling back to Databento",
+                window.event_id,
+                symbol,
+                err or "no detail",
+            )
 
     try:
         client = client or _get_databento_client()
@@ -311,6 +363,7 @@ def _download_slot_task(
     *,
     skip_if_npz: bool = True,
     max_attempts: int = 6,
+    source: str | None = None,
 ) -> tuple[Any, str, ImportResult | None, Exception | None]:
     last_exc: Exception | None = None
     for attempt in range(max_attempts):
@@ -321,6 +374,7 @@ def _download_slot_task(
                 symbol,
                 max_cost_usd=max_cost_usd,
                 skip_if_npz=skip_if_npz,
+                source=source,
             )
             return window, symbol, result, None
         except Exception as exc:
@@ -368,6 +422,7 @@ def run_catalog_download(
     include_event_types: tuple[str, ...] | None = None,
     only_event_types: tuple[str, ...] | None = None,
     skip_if_npz: bool = True,
+    source: str | None = None,
 ) -> DownloadReport:
     from economic_event_universe.events_csv_builder import resolve_download_scope_windows
     from economic_event_universe.registry import default_cme_symbols
@@ -423,7 +478,7 @@ def run_catalog_download(
     if worker_count == 1:
         for window, symbol in tasks:
             window_obj, sym, result, exc = _download_slot_task(
-                repo_root, window, symbol, max_cost_usd, skip_if_npz=skip_if_npz
+                repo_root, window, symbol, max_cost_usd, skip_if_npz=skip_if_npz, source=source
             )
             _apply_slot_result(report, repo_root, window_obj, sym, result, exc=exc)
             if result is not None or exc is not None:
@@ -440,6 +495,7 @@ def run_catalog_download(
                 symbol,
                 max_cost_usd,
                 skip_if_npz=skip_if_npz,
+                source=source,
             )
             for window, symbol in tasks
         ]

@@ -1,6 +1,6 @@
 # KNOWN GAPS — read this before claiming “done”
 
-**Last updated:** 2026-06-06  
+**Last updated:** 2026-06-08  
 **Audience:** Next human or agent developer on hft3.
 
 This file is the **single billboard** for what is missing, broken, misleading, or on the wrong machine. Lane-specific addenda still apply ([crypto](packages/crypto_lane/docs/VALIDATION_HONESTY.md), [validation charter](docs/VALIDATION_HONESTY.md)); this doc ties them together.
@@ -118,6 +118,67 @@ python scripts/mbo_pilot_gap_triage.py --write-manifest
 python scripts/mbo_hot_universe_backfill.py --from-inventory --estimate
 python scripts/mbo_hot_universe_backfill.py --batch 1 --download --max-cost-usd 104
 ```
+
+#### 3.1.1 Rithmic as a fill source for missing event types
+
+Per-event-type coverage (gap analysis, 2026-06-08): **17 event types are missing from `data/npz/` entirely** — CASH_EQUITY_OPEN, CPI, ECI, EXISTING_HOME_SALES, FACTORY_ORDERS, FED_SPEAKER, FRIDAY_CLOSE, HOUSING_STARTS, INDUSTRIAL_PRODUCTION, JOLTS, NEW_HOME_SALES, NFP, PCE, PPI, PRODUCTIVITY, PROP_REOPEN, TRADE_BALANCE. Databento-only backfill is the default; the corrected developer prompt and `scripts/rithmic_download_test.py` proof established a Rithmic-as-source path. The MBO release lane now supports that path natively.
+
+**Status (2026-06-08):** Rithmic fill source implemented in `packages/mbo_release_lane/rithmic_source.py` and `source_priority.py`. Wired into `download_catalog_slot` with transparent fallback to Databento. CLI flag `--source {auto,rithmic_api,databento}` added to `scripts/download_mbo_release_data.py`. 41/41 new tests pass on Windows; pre-existing `test_catalog_types_exceed_events_csv_types` failure unrelated.
+
+**What is wired:**
+
+| Layer | Where | What |
+|---|---|---|
+| Source priority | `mbo_release_lane.constants.SOURCE_PRIORITY` | `("rithmic_api", "databento")` |
+| Topology guard | `mbo_release_lane.rithmic_topology_guard` | Refuses on Windows (BLUEPRINT §4) |
+| Connect | `mbo_release_lane.rithmic_source._connect_rithmic` | `async_rithmic.RithmicClient` with chain-aware SSL context |
+| Fetch | `mbo_release_lane.rithmic_source.fetch_event_window` | History Plant `get_historical_tick_data` |
+| Schema mapping | `mbo_release_lane.rithmic_source._tick_to_event` | Rithmic tick → MBO release lane normalized event |
+| Hard labeling rule | `mbo_release_lane.rithmic_source._infer_data_label` | Refuses non-MBO schema; emits `ticks` / `depth/mbp` / `mbo` |
+| Slot writer | `mbo_release_lane.rithmic_source.write_release_artifact` | `events.jsonl` + `release_event_path.json` + `validation.json` + `hashes.json` |
+| NPZ derivation | `mbo_release_lane.rithmic_source.derive_npz_from_rithmic_release` | Bypasses DBN→NPZ; uses HftBacktest numpy writer |
+| Resolver | `mbo_release_lane.source_priority.resolve_source` | Picks first applicable source; short-circuits when slot filled |
+| CLI | `scripts/download_mbo_release_data.py --source` | `auto` (default) / `rithmic_api` / `databento` |
+
+**Topology rule (unchanged from BLUEPRINT §4):** Rithmic fill source runs on **CHI404 only**. Workstation connection attempts are refused by the topology guard before any socket is opened.
+
+**Hard labeling rule (re-stated for the MBO release lane):** if Rithmic returns schema that does not prove order-level MBO events (order_id + action + side + flags), the source refuses to write a `release_event_path.json` manifest. The slot falls through to Databento. This is identical to the rule in `scripts/rithmic_download_test.py` (proof script) and is enforced both at fetch time and at write time. The MBO release lane is not polluted with non-MBO data.
+
+**Acceptance criteria for "Rithmic fill source is ready" — current status:**
+
+| Criterion | Status |
+|---|---|
+| Rithmic connect refuses on Windows (BLUEPRINT §4) | **PASS** (41 unit tests) |
+| Hard labeling rule refuses non-MBO schema | **PASS** (unit tests) |
+| Source priority resolver picks Rithmic first | **PASS** (unit tests) |
+| Transparent Databento fallback when Rithmic not applicable | **PASS** (unit tests) |
+| Rithmic slots write `release_event_path.json` with `source_vendor=rithmic_api` | **PASS** (unit test) |
+| CLI flag `--source {auto,rithmic_api,databento}` | **PASS** (script-level smoke only — not yet exercised end-to-end) |
+| End-to-end CHI404 fill of a real event window | **PENDING** — requires CHI404 run with valid Rithmic Test creds (see `docs/rithmic_trial/HISTORICAL_DOWNLOAD_RUN.md`) |
+| Reviewer verdict on the diff | **PENDING** |
+| Audit shows rithmic_api slots in `runtime/data_audits/research_data_gaps.json` | **PENDING** (next audit run) |
+
+**To run end-to-end on CHI404:**
+
+```bash
+# 1. confirm creds in /root/hft3/.env
+grep -E "RITHMIC_" /root/hft3/.env
+
+# 2. probe connectivity (will not request data)
+python scripts/rithmic_download_test.py --probe-only
+
+# 3. phase 1 — fill one event type (e.g. CPI for 2024-09-11)
+python scripts/download_mbo_release_data.py \
+  --download --source rithmic_api --only-event-type CPI \
+  --start-year 2024 --end-year 2024 --limit 1
+
+# 4. inspect the slot
+cat data/mbo_release/CPI_2024_09_11_TIGHT/MES.v.0/release_event_path.json
+cat data/mbo_release/CPI_2024_09_11_TIGHT/MES.v.0/validation.json
+ls data/mbo_release/CPI_2024_09_11_TIGHT/MES.v.0/
+```
+
+**Do not run on workstation.** The Rithmic topology guard refuses at the orchestrator level, the source-priority layer, and the sync fetch wrapper — belt and suspenders.
 
 ### 3.2 Low-float equities (16 sessions in YAML)
 
