@@ -8,7 +8,8 @@ Generated: 2026-06-09. Last verified: 17/17 tests pass.
 | 1 | BookPressureModel.evaluate() crashed on missing bid_p — adapter now passes OrderBook | structural_adapter.py:94-95 | Pass book from build_features | [x] |
 | 2 | Hardcoded mid=4500.0 / volume=100.0 — now derived from book BBO + last event qty | structural_adapter.py:83-93 | Derive from book or events | [x] |
 | 3 | 5 tests added for evaluate(book=...), BBO kwargs, adapter path, all-models tolerance | test_book_pressure_evaluate.py | 5 tests | [x] |
-| 4 | build_features / generate_signals / run_backtest mutable ctx.metadata coupling — run_backtest now self-contained, builds book inline | structural_adapter.py:78-131 | [x] |
+| 4 | build_features / generate_signals mutable ctx.metadata coupling — run_backtest now self-contained, builds book inline; build_features/generate_signals kept as no-ops to satisfy abstract interface | structural_adapter.py:78-131 | [x] |
+| 5 | Test didn't verify book was passed to evaluate() — now uses mock to verify book kwarg | test_book_pressure_evaluate.py:76-123 | [x] |
 
 ## Campaign runner (pre-existing — acknowledged, not my bug)
 | # | Issue | File:Line | Status |
@@ -35,21 +36,21 @@ Generated: 2026-06-09. Last verified: 17/17 tests pass.
 | # | Issue | File:Line | Fix | Status |
 |---|-------|-----------|-----|--------|
 | 13 | event_dir walk uses dedup set — no double-counting across layouts | metrics.py:193,210 | seen set per dir | [x] |
-| 14 | trade_ledger.parquet pandas dependency — now logs ImportError to notes instead of silent skip | metrics.py:227-230 | [x] |
+| 14 | trade_ledger.parquet pandas dependency — now logs ImportError/ModuleNotFoundError to notes with error details | metrics.py:227-236 | [x] |
 
 ## Coverage / PIT
 | # | Issue | File:Line | Fix | Status |
 |---|-------|-----------|-----|--------|
 | 15 | Coverage row cap increased 5k → 50k — covers full 55×5×55 matrix | coverage_check.py:40 | [x] |
-| 16 | PIT report now surfaces release_date from EventSpec — no longer MISSING_REQUIRED_LEDGER | coverage_check.py:22,90,124,152 | [x] |
+| 16 | PIT report now surfaces release_date from EventSpec and validates against period end_year — status is PASS/FAIL/MISSING_REQUIRED_LEDGER/INVALID_DATE_FORMAT/PERIOD_NOT_FOUND | coverage_check.py:22,90,124,152,178-250 | [x] |
 
 ## UI / Streamlit
 | # | Issue | File:Line | Fix | Status |
 |---|-------|-----------|-----|--------|
-| 17 | st.set_page_config at module level caused test_app_module_imports to hang — now guarded with try/except | app.py:18-21 | [x] |
+| 17 | st.set_page_config at module level caused test_app_module_imports to hang — now guarded with try/except catching only StreamlitAPIException | app.py:18-23 | [x] |
 
 ## Total
 | Status | Count |
 |--------|-------|
-| [x] fixed | 17 |
+| [x] fixed | 19 |
 | [-] acknowledged (pre-existing, out of scope, or low-priority) | 3 |

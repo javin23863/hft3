@@ -393,10 +393,15 @@ def test_11_coverage_and_pit_reports_block_visible(tmp_path: Path, fake_run_camp
     assert "totals" in cov
     # Coverage is read-only; the report is generated even if all jobs are blocked
     assert "DATA_MISSING" in cov["totals"]
-    # PIT report now surfaces release_date from EventSpec — status should be PASS or MISSING_REQUIRED_LEDGER
+    # PIT report now validates release_date against period end_year
+    # Status should be one of: PASS, FAIL, MISSING_REQUIRED_LEDGER, INVALID_DATE_FORMAT, PERIOD_NOT_FOUND
+    valid_statuses = {"PASS", "FAIL", "MISSING_REQUIRED_LEDGER", "INVALID_DATE_FORMAT", "PERIOD_NOT_FOUND"}
     for row in pit["rows"]:
-        assert row["pit_status"] in ("PASS", "MISSING_REQUIRED_LEDGER")
+        assert row["pit_status"] in valid_statuses, f"Invalid PIT status: {row['pit_status']}"
         assert "release_date" in row
+        # If status is PASS, release_date must be present
+        if row["pit_status"] == "PASS":
+            assert row["release_date"], "PASS status requires release_date"
 
 
 def test_12_shortcut_points_to_real_entrypoint_and_logs(tmp_path: Path, fake_run_campaign, temp_work_runs_dir):

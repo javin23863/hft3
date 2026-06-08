@@ -176,33 +176,97 @@ def write_coverage_report(artifact_dir: Path, rows: List[CoverageRow], *, meta: 
 
 
 def write_pit_report(artifact_dir: Path, rows: List[CoverageRow], *, meta: Optional[Dict[str, Any]] = None) -> Path:
-    """PIT (point-in-time) check: which rows have a known release_date prior to
-    walk-forward end-of-window. The check is structural, not temporal: if a row
-    has a release_date, the period window is published, so PIT holds by
-    construction.
+    """PIT (point-in-time) check: verifies that each event's release_date is
+    before the walk-forward period's end date. This ensures we're not using
+    future data to make predictions about past events.
 
-    The EventSpec dataclass surfaces release_date from the catalog, so we can
-    now verify PIT per-row.
+    The check compares release_date (YYYY-MM-DD) against the period's end_year.
+    An event passes PIT if its release year <= period end_year.
     """
     artifact_dir = Path(artifact_dir)
     artifact_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Build period lookup: period_name -> end_year
+    # We need to load walk-forward config to get period end years
+    from workbench.src.data.event_catalog import load_walk_forward_config, load_periods
+    repo_root = Path(meta.get("repo_root", ".")) if meta else Path(".")
+    try:
+        periods = load_periods(repo_root)
+        period_end_years = {p.name: p.end_year for p in periods}
+    except Exception:
+        period_end_years = {}
+    
     payload = {
         "schema_version": 1,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "meta": meta or {},
         "rows": [
-            {
-                "model_id": r.model_id,
-                "symbol": r.symbol,
-                "event_id": r.event_id,
-                "period": r.period,
-                "release_date": r.release_date,  # Now surfaced from EventSpec
-                "pit_status": "PASS" if r.release_date else "MISSING_REQUIRED_LEDGER",
-                "block_reason": "" if r.release_date else "EventSpec.release_date is None",
-            }
+            _build_pit_row(r, period_end_years)
             for r in rows
         ],
     }
     out = artifact_dir / "pit_report.json"
     out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return out
+
+
+def _build_pit_row(r: CoverageRow, period_end_years: Dict[str, int]) -> Dict[str, Any]:
+    """Build PIT report row with actual date validation."""
+    if not r.release_date:
+        return {
+            "model_id": r.model_id,
+            "symbol": r.symbol,
+            "event_id": r.event_id,
+            "period": r.period,
+            "release_date": "",
+            "pit_status": "MISSING_REQUIRED_LEDGER",
+            "block_reason": "EventSpec.release_date is missing",
+        }
+    
+    # Parse release_date (YYYY-MM-DD format)
+    try:
+        release_year = int(r.release_date.split("-")[0])
+    except (ValueError, IndexError):
+        return {
+            "model_id": r.model_id,
+            "symbol": r.symbol,
+            "event_id": r.event_id,
+            "period": r.period,
+            "release_date": r.release_date,
+            "pit_status": "INVALID_DATE_FORMAT",
+            "block_reason": f"Cannot parse release_date: {r.release_date}",
+        }
+    
+    # Check if release_year <= period end_year
+    end_year = period_end_years.get(r.period)
+    if end_year is None:
+        return {
+            "model_id": r.model_id,
+            "symbol": r.symbol,
+            "event_id": r.event_id,
+            "period": r.period,
+            "release_date": r.release_date,
+            "pit_status": "PERIOD_NOT_FOUND",
+            "block_reason": f"Period {r.period} not found in walk-forward config",
+        }
+    
+    if release_year <= end_year:
+        return {
+            "model_id": r.model_id,
+            "symbol": r.symbol,
+            "event_id": r.event_id,
+            "period": r.period,
+            "release_date": r.release_date,
+            "pit_status": "PASS",
+            "block_reason": "",
+        }
+    else:
+        return {
+            "model_id": r.model_id,
+            "symbol": r.symbol,
+            "event_id": r.event_id,
+            "period": r.period,
+            "release_date": r.release_date,
+            "pit_status": "FAIL",
+            "block_reason": f"release_year {release_year} > period end_year {end_year}",
+        }
