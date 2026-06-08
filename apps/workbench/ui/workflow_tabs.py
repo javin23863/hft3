@@ -11,5 +11,6 @@ WORKFLOW_TABS = [
     "Analyst",
     "System",
     "Personal Runs",
+    "Equities",
     "Autonomous",
 ]

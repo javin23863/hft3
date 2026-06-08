@@ -250,5 +250,10 @@ with tabs[9]:
     personal_runs_panel(REPO, selected_model, selected_symbol)
 
 with tabs[10]:
+    st.header("Equities")
+    from workbench.ui.equities_panel import equities_panel as _equities_panel
+    _equities_panel(REPO)
+
+with tabs[11]:
     from workbench.ui.autonomous_panel import autonomous_panel as _autonomous_panel
     _autonomous_panel(REPO)
