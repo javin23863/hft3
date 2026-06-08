@@ -76,18 +76,24 @@ class StructuralModelAdapter(WorkbenchModel):
         return float(val) if val is not None else 0.0
 
     def run_backtest(self, ctx: RunContext) -> Any:
-        # Build book from MBO events so model_01_book_pressure.evaluate(...)
-        # receives either an OrderBook or the BBO fields it requires.
         if not ctx.metadata.get("pdf_book") and len(ctx.events):
             self.build_features(ctx)
         book = ctx.metadata.get("pdf_book")
         bars = ctx.metadata.get("pdf_bars", [])
-        mid = 4500.0
-        if len(ctx.events):
+        if book is not None and book.get_best_bid() > 0 and book.get_best_ask() < float("inf"):
+            mid = (book.get_best_bid() + book.get_best_ask()) / 2.0
+        elif book is not None and book.get_best_bid() > 0:
+            mid = book.get_best_bid()
+        elif book is not None and book.get_best_ask() < float("inf"):
+            mid = book.get_best_ask()
+        elif len(ctx.events):
             mid = float(ctx.events[-1]["px"])
+        else:
+            mid = 4500.0
+        volume = float(ctx.events[-1]["qty"]) if len(ctx.events) else 100.0
         kwargs: dict = {
             "mid": mid,
-            "volume": 100.0,
+            "volume": volume,
             "bars": bars,
             "timestamp_ns": int(ctx.events[-1]["local_ts"]) if len(ctx.events) else 0,
         }
