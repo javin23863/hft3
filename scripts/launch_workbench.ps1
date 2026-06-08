@@ -41,7 +41,7 @@ try {
 } catch {}
 
 if (-not $streamlitOk) {
-    Exit-Launcher -Message 'ERROR: streamlit not installed. Run: pip install -r workbench/requirements.txt'
+    Exit-Launcher -Message 'ERROR: streamlit not installed. Run: pip install -r apps/workbench/requirements.txt'
 }
 
 function Invoke-WorkbenchPreflight {
@@ -67,7 +67,7 @@ if (-not $SkipPreflight) {
     $preflightResult = Invoke-WorkbenchPreflight
     if ($preflightResult.Code -ne 0 -and $preflightResult.ErrorLines -notcontains "missing $(Join-Path $RepoRoot 'scripts/workbench_preflight.py')") {
         Write-Host 'Preflight failed; clearing workbench __pycache__ and retrying once...' -ForegroundColor Yellow
-        Get-ChildItem -Path (Join-Path $RepoRoot 'workbench') -Recurse -Directory -Filter '__pycache__' -ErrorAction SilentlyContinue |
+        Get-ChildItem -Path (Join-Path $RepoRoot 'apps/workbench') -Recurse -Directory -Filter '__pycache__' -ErrorAction SilentlyContinue |
             Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
         $preflightResult = Invoke-WorkbenchPreflight -ErrorLines $preflightResult.ErrorLines
     }
@@ -118,7 +118,7 @@ if (-not $SkipBrowser) {
     Start-Process $url
 }
 
-& python -m streamlit run workbench/ui/app.py --server.headless true --server.port $Port
+& python -m streamlit run apps/workbench/ui/app.py --server.headless true --server.port $Port
 $exitCode = $LASTEXITCODE
 if ($exitCode -ne 0) {
     Exit-Launcher -Code $exitCode -Message "Streamlit exited with code $exitCode"
