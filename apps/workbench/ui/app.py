@@ -15,7 +15,11 @@ import streamlit as st
 
 from workbench.src.artifacts.paths import runtime_validation_dir, workbench_runs_dir, artifact_root
 
-st.set_page_config(page_title="HFT3 Workbench", layout="wide")
+# Guard st.set_page_config so it only runs in Streamlit context (not during pytest imports)
+try:
+    st.set_page_config(page_title="HFT3 Workbench", layout="wide")
+except Exception:
+    pass  # Not in Streamlit context (e.g., pytest import)
 
 from workbench.ui.analyst_panel import analyst_panel  # noqa: E402
 from workbench.ui.campaign_panel import (  # noqa: E402
