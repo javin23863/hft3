@@ -37,13 +37,10 @@ hft3/
 │   ├── backtest/
 │   └── hft3/                # Validation governance (hft3.validation.*)
 ├── configs/                 # Reserved for centralization (currently empty; see configs/README.md)
-├── docs/                    # Documentation
+├── docs/                    # Documentation (topic-organised)
 │   ├── human/               # Human onboarding, runtime contract
 │   ├── ai/                  # AI onboarding, engineering standards
 │   ├── vault/               # Deep reference (certification, CHI404)
-│   ├── reference/           # Reserved (placeholder)
-│   ├── guides/              # Reserved (placeholder)
-│   ├── specs/               # Reserved (placeholder)
 │   ├── chi404/              # Host tuning & validation
 │   ├── rithmic_trial/       # Rithmic trial docs
 │   ├── workbench/           # Workbench runbooks
