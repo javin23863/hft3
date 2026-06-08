@@ -164,8 +164,11 @@ if (-not $SkipBrowser) {
     Start-Process $url
 }
 
+$prevEAP = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
 & python -m streamlit run apps/workbench/ui/app.py --server.headless true --server.port $Port 2>&1 | ForEach-Object { Write-Log $_ }
 $exitCode = $LASTEXITCODE
+$ErrorActionPreference = $prevEAP
 if ($exitCode -ne 0) {
     Write-Log "streamlit exited with code $exitCode" 'ERROR'
     if ([Environment]::UserInteractive -and $Host.Name -eq 'ConsoleHost') {
