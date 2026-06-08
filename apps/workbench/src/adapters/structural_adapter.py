@@ -35,45 +35,12 @@ class StructuralModelAdapter(WorkbenchModel):
         return errs
 
     def build_features(self, ctx: RunContext) -> Any:
-        book = OrderBook()
-        outputs = []
-        bars = []
-        prev_mid = None
-        vol_acc = 0
-        for mbo in iter_mbo_events(ctx.events):
-            book.apply_event(mbo)
-            mid = (book.get_best_bid() + book.get_best_ask()) / 2 if book.get_best_bid() > 0 else 0
-            if mbo.action == "TRADE":
-                vol_acc += mbo.size
-            if prev_mid is not None and vol_acc >= 50:
-                bars.append({"mid": mid, "volume": float(vol_acc), "timestamp_ns": mbo.timestamp_ns})
-                vol_acc = 0
-            prev_mid = mid
-            if self.model_id == "BOOK_PRESSURE":
-                m1 = get_structural_model_by_id("BOOK_PRESSURE")
-                assert isinstance(m1, BookPressureModel)
-                outputs.append(m1.update_book(book, mbo.timestamp_ns))
-        ctx.metadata["pdf_bars"] = bars
-        ctx.metadata["pdf_book_outputs"] = outputs
-        ctx.metadata["pdf_book"] = book
-        return outputs
+        """No-op: run_backtest builds features inline."""
+        return None
 
     def generate_signals(self, features: Any) -> float:
-        if self.model_id in {"TRANSFER_ENTROPY", "STOCHASTIC_THERMO", "CROSS_ASSET_LEAD_LAG", "DOW_YM_INDEX"}:
-            out = self._orchestrator.get_output(self.model_id)
-            if out is not None and out.payload is not None:
-                field_name = self.config.signal_field if self.config else "signal"
-                val = getattr(out.payload, field_name, None)
-                if val is not None:
-                    return float(val)
-        if not features:
-            return 0.0
-        payload = features[-1].payload
-        if payload is None:
-            return 0.0
-        field_name = self.config.signal_field if self.config else "OFI_zscore"
-        val = getattr(payload, field_name, None)
-        return float(val) if val is not None else 0.0
+        """No-op: run_backtest generates signals inline."""
+        return 0.0
 
     def run_backtest(self, ctx: RunContext) -> Any:
         # Build book and bars inline (no dependency on build_features being called first)

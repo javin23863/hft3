@@ -78,6 +78,7 @@ def test_adapter_run_backtest_passes_book() -> None:
     from workbench.src.adapters.structural_adapter import StructuralModelAdapter
     from workbench.src.core.protocol import ModelConfig
     from workbench.src.run.run_context import RunContext
+    from unittest.mock import patch, MagicMock
     import numpy as np
 
     cfg = ModelConfig(
@@ -114,13 +115,25 @@ def test_adapter_run_backtest_passes_book() -> None:
         npz_path=REPO / "tests" / "fixtures" / "dummy.npz",
         events=ev,
     )
-    from backtest_pipeline.src.signal_backtester import BacktestResult
-
-    result = adapter.run_backtest(ctx)
-    # run_backtest is now self-contained — it builds book inline and doesn't store in metadata
-    assert isinstance(result, BacktestResult) or isinstance(result, dict)
-    # Verify the adapter doesn't crash and produces a result
-    assert result is not None
+    
+    # Mock the orchestrator to verify book is passed
+    with patch.object(adapter._orchestrator, 'run_subset') as mock_run_subset:
+        mock_result = MagicMock()
+        mock_result.payload = MagicMock()
+        mock_result.payload.OFI_zscore = 0.5
+        mock_run_subset.return_value = {"BOOK_PRESSURE": mock_result}
+        
+        result = adapter.run_backtest(ctx)
+        
+        # Verify run_subset was called with book kwarg
+        assert mock_run_subset.called
+        call_kwargs = mock_run_subset.call_args[1]
+        assert "book" in call_kwargs
+        assert call_kwargs["book"] is not None
+        
+        # Verify result is valid
+        from backtest_pipeline.src.signal_backtester import BacktestResult
+        assert isinstance(result, BacktestResult) or isinstance(result, dict)
 
 
 def test_all_structural_models_tolerate_extra_book_kwarg() -> None:

@@ -229,14 +229,14 @@ def compute_metrics(artifact_dir: Path) -> MetricsResult:
                 if "pnl" in df.columns and len(df):
                     per_trade_pnls.extend(float(x) for x in df["pnl"].tolist())
                     has_per_trade_ledger = True
-            except ImportError:
+            except (ImportError, ModuleNotFoundError) as e:
+                # pandas or pyarrow not installed
                 if not pandas_missing_logged:
-                    res.notes.append("pandas not installed — trades.parquet cannot be read; win_rate/profit_factor/drawdown will be MISSING_REQUIRED_LEDGER")
+                    res.notes.append(f"pandas/pyarrow not installed — trades.parquet cannot be read; win_rate/profit_factor/drawdown will be MISSING_REQUIRED_LEDGER. Error: {type(e).__name__}")
                     pandas_missing_logged = True
-            except Exception:
-                # ledger unreadable for any reason -> we cannot compute the metrics
-                # that require it. Mark them missing below.
-                pass
+            except Exception as e:
+                # ledger unreadable for any other reason (corrupt file, etc)
+                res.notes.append(f"Failed to read {trades.name}: {type(e).__name__}: {str(e)[:100]}")
 
     if has_per_trade_ledger and per_trade_pnls:
         wins = [p for p in per_trade_pnls if p > 0]
