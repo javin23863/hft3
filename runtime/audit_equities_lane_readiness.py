@@ -111,7 +111,7 @@ def main() -> int:
                 result_row["npz_present"] = npz_ok
             else:
                 try:
-                    bt_result = backtester.run(str(norm_path), allow_degraded=True)
+                    bt_result = backtester.run(str(norm_path), allow_degraded=False)
                     d = bt_result.to_dict()
                     fills = d.get("fills", []) or []
                     num_trades = d.get("num_trades", len(fills))
