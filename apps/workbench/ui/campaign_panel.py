@@ -57,9 +57,9 @@ def init_session(repo: Path) -> None:
 
 
 _RECOMMENDED_STARTERS = [
-    ("HYP_5", "Spread blowout / recompression — recommended first run"),
-    ("HYP_1", "Second-wave continuation after CPI/NFP impulse"),
-    ("PDF_MODEL_1", "Book pressure OFI / MLOFI"),
+    ("SPREAD_BLOWOUT_RECOMPRESSION", "Spread blowout / recompression — recommended first run"),
+    ("SECOND_WAVE_CONTINUATION", "Second-wave continuation after CPI/NFP impulse"),
+    ("BOOK_PRESSURE", "Book pressure OFI / MLOFI / PCA"),
 ]
 
 
@@ -333,97 +333,137 @@ def personal_lock_sidebar(repo: Path) -> None:
         st.rerun()
 
 
+def _available_symbols(repo: Path) -> list[str]:
+    """Detect symbols that have NPZ data on disk."""
+    npz = repo / "data" / "npz"
+    if not npz.is_dir():
+        return ["MES.v.0"]
+    seen = set()
+    for f in npz.glob("*_mbo.npz"):
+        stem = f.stem
+        if stem.startswith("ES.") or stem.startswith("ES_"):
+            seen.add("ES.v.0")
+        elif stem.startswith("MES.") or stem.startswith("MES_"):
+            seen.add("MES.v.0")
+        elif stem.startswith("MNQ.") or stem.startswith("MNQ_"):
+            seen.add("MNQ.v.0")
+        elif stem.startswith("NQ.") or stem.startswith("NQ_"):
+            seen.add("NQ.v.0")
+        elif stem.startswith("RTY.") or stem.startswith("RTY_"):
+            seen.add("RTY.v.0")
+        elif stem.startswith("ZB.") or stem.startswith("ZB_"):
+            seen.add("ZB.v.0")
+        elif stem.startswith("ZN.") or stem.startswith("ZN_"):
+            seen.add("ZN.v.0")
+    out = sorted(seen)
+    return out if out else ["MES.v.0"]
+
+
+def _default_symbol_for_model(model_id: str) -> str:
+    """Return the most sensible symbol for a model based on its name."""
+    mapping = {
+        "ES_MES_LEAD_LAG": "MES.v.0",
+        "NQ_MNQ_LEAD_LAG": "MNQ.v.0",
+        "ZN_ZB_ES_NQ_MACRO_IMPULSE": "ZN.v.0",
+        "TREASURY_CTD": "ZN.v.0",
+        "DOW_YM_INDEX": "MES.v.0",
+        "MICRO_CONTRACT_RETAIL_LAG": "MES.v.0",
+        "MAX_CONTRACT_CROWDING_IN_MICROS": "MES.v.0",
+        "PROP_RESET_REOPEN_WINDOW": "MES.v.0",
+    }
+    return mapping.get(model_id, "MES.v.0")
+
+
 def model_selector_panel(repo: Path) -> Tuple[str, str, str]:
     configs = build_models_config()
     catalog = load_catalog(repo)
     runnable = _runnable_primary_ids(catalog)
 
-    st.caption(
-        "Trial mode: runs available NPZ events only (skips WFC matrix). "
-        "Latency lane and datasets come from each model's registry binding."
-    )
-
-    symbol = st.selectbox("Symbol", ["MES.v.0", "ES.v.0", "MNQ.v.0", "NQ.v.0"], key="wb__sym_pick")
-    st.session_state.wb_symbol = symbol
-
-    st.subheader("Quick start")
-    starter_cols = st.columns(len(_RECOMMENDED_STARTERS))
-    for col, (mid, blurb) in zip(starter_cols, _RECOMMENDED_STARTERS):
-        if mid not in catalog:
-            continue
-        entry = catalog[mid]
-        with col:
-            st.markdown(f"**{entry.display_name}**")
-            st.caption(blurb)
-            st.caption(f"`{mid}` · lane {configs[mid].latency_lane}")
-            if st.button("Start with this model", key=f"wb__starter__{mid}", type="primary"):
-                st.session_state.wb_selected_model = mid
-                composition = get_session_composition(mid)
-                cid = start_campaign_for_selection(
-                    repo,
-                    model_id=mid,
-                    symbol=st.session_state.wb_symbol,
-                    composition=composition,
-                    audit_grade=st.session_state.wb_audit_grade,
-                )
-                st.toast(f"Campaign started: {cid}")
-                st.rerun()
-
     if not runnable:
         st.error("No runnable alpha/hybrid models in catalog.")
-        return "", symbol, st.session_state.wb_active_campaign or ""
+        return "", "MES.v.0", st.session_state.wb_active_campaign or ""
 
     default_model = st.session_state.wb_selected_model
     if default_model not in runnable:
-        default_model = "HYP_5" if "HYP_5" in runnable else runnable[0]
+        default_model = "SPREAD_BLOWOUT_RECOMPRESSION" if "SPREAD_BLOWOUT_RECOMPRESSION" in runnable else runnable[0]
         st.session_state.wb_selected_model = default_model
 
-    picked = st.selectbox(
-        "Primary model",
-        runnable,
-        index=runnable.index(st.session_state.wb_selected_model),
-        format_func=lambda mid: f"{catalog[mid].display_name} ({mid})",
-        key="wb__primary_model",
-    )
-    st.session_state.wb_selected_model = picked
-    model = picked
+    available = _available_symbols(repo)
+    default_sym = _default_symbol_for_model(default_model)
+    if default_sym in available:
+        st.session_state.wb_symbol = default_sym
+    elif st.session_state.get("wb_symbol", "MES.v.0") not in available:
+        st.session_state.wb_symbol = available[0]
 
-    camp = st.session_state.wb_active_campaign or ""
-    workflow_status_strip(repo, model, symbol, camp)
+    symbol = st.session_state.get("wb_symbol", "MES.v.0")
 
-    preview = campaign_preview(model, symbol, repo)
-    runnable = sum(
-        1
-        for pdata in preview.get("periods", {}).values()
-        for ev in pdata.get("events", [])
-        if ev.get("npz_present")
-    )
-    total_catalog = sum(len(pdata.get("events", [])) for pdata in preview.get("periods", {}).values())
-    if total_catalog:
-        st.info(f"Runnable now: **{runnable} / {total_catalog}** walk-forward events (NPZ on disk)")
-
-    cfg = configs[model]
-    _render_dataset_panel(repo, model, symbol, cfg)
-
-    composition = get_session_composition(model)
-    st.caption(f"Defensive stubs in stack: {len(composition.defensive_stubs)} (optional — expand below)")
-
-    c_primary, c_run, c_pause, c_stop = st.columns(4)
-    with c_primary:
-        if st.button("Set primary", key="wb__set_primary", use_container_width=True):
-            st.session_state.wb_selected_model = model
-            navigate_to_tab("Backtest Results")
-            st.rerun()
+    c_model, c_sym, c_lane, c_run = st.columns([3, 1, 1, 1])
+    with c_model:
+        picked = st.selectbox(
+            "Primary model",
+            runnable,
+            index=runnable.index(st.session_state.wb_selected_model),
+            format_func=lambda mid: f"{catalog[mid].display_name} ({mid})",
+            key="wb__primary_model",
+        )
+        st.session_state.wb_selected_model = picked
+        # Auto-select default symbol when model changes
+        auto_sym = _default_symbol_for_model(picked)
+        if auto_sym in available:
+            st.session_state.wb_symbol = auto_sym
+            symbol = auto_sym
+    with c_sym:
+        symbol = st.selectbox(
+            "Symbol",
+            available,
+            index=available.index(st.session_state.wb_symbol) if st.session_state.wb_symbol in available else 0,
+            key="wb__sym_pick",
+        )
+        st.session_state.wb_symbol = symbol
+    with c_lane:
+        cfg = configs.get(picked)
+        st.metric("Lane", cfg.latency_lane if cfg else "—")
     with c_run:
+        st.markdown("")  # spacer
+        st.markdown("")
         if st.button("Run campaign", key="wb__start_campaign", type="primary", use_container_width=True):
+            composition = get_session_composition(picked)
             cid = start_campaign_for_selection(
                 repo,
-                model_id=model,
+                model_id=picked,
                 symbol=symbol,
                 composition=composition,
                 audit_grade=st.session_state.wb_audit_grade,
             )
             st.toast(f"Campaign started: {cid}")
+            st.rerun()
+
+    model = picked
+    camp = st.session_state.wb_active_campaign or ""
+
+    # ---- compact data strip ----
+    preview = campaign_preview(model, symbol, repo)
+    rdy = sum(
+        1 for pdata in preview.get("periods", {}).values()
+        for ev in pdata.get("events", [])
+        if ev.get("npz_present")
+    )
+    total = sum(len(pdata.get("events", [])) for pdata in preview.get("periods", {}).values())
+    binding = load_model_binding(repo, model)
+    cfg = configs.get(model)
+
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("NPZ ready", f"{rdy}/{total}")
+    c2.metric("History yr", f"{preview.get('catalog_years', 0)}/{cfg.min_history_years if cfg else 10}")
+    c3.metric("Contexts", len(binding.get("allowed_contexts", [])))
+    c4.metric("Stack stubs", len(st.session_state.wb_defensive_stubs))
+    c5.metric("Latency", cfg.latency_lane if cfg else "—")
+
+    # ---- controls ----
+    c_primary, c_pause, c_stop, c_dl = st.columns(4)
+    with c_primary:
+        if st.button("Set primary", key="wb__set_primary", use_container_width=True):
+            navigate_to_tab("Backtest Results")
             st.rerun()
     with c_pause:
         if st.button("Pause", key="wb__pause", use_container_width=True) and st.session_state.wb_active_campaign:
@@ -431,54 +471,39 @@ def model_selector_panel(repo: Path) -> Tuple[str, str, str]:
     with c_stop:
         if st.button("Stop", key="wb__stop", use_container_width=True) and st.session_state.wb_active_campaign:
             set_control(repo, st.session_state.wb_active_campaign, "stop")
+    with c_dl:
+        if st.button("Download NPZ", key="wb__download_missing", use_container_width=True):
+            cmd = [
+                sys.executable,
+                str(repo / "workbench" / "scripts" / "backfill_catalog.py"),
+                "--model", model, "--symbol", symbol,
+                "--download-missing", "--max-cost-usd", "25",
+            ]
+            subprocess.Popen(cmd, cwd=str(repo))
+            st.info("Backfill started (max $25).")
 
-    if st.button("Download missing NPZ", key="wb__download_missing"):
-        cmd = [
-            sys.executable,
-            str(repo / "workbench" / "scripts" / "backfill_catalog.py"),
-            "--model",
-            model,
-            "--symbol",
-            symbol,
-            "--download-missing",
-            "--max-cost-usd",
-            "25",
-        ]
-        subprocess.Popen(cmd, cwd=str(repo))
-        st.info(
-            "Backfill started (max $25). Uses DATABENTO_API_KEY from `.env`; "
-            "ES fallback for pre-2019 MES windows per handoff PDF §8."
-        )
-
-    with st.expander("Advanced — audit grade & full model grid"):
-        audit = st.checkbox(
-            "Audit grade (full-sweep + history gate)",
-            value=st.session_state.wb_audit_grade,
-            key="wb__audit",
-        )
-        st.session_state.wb_audit_grade = audit
-        st.markdown("**All models**")
-        all_entries = [catalog[mid] for mid in sorted(catalog.keys())]
-        _render_catalog_rows(
-            repo,
-            all_entries,
-            configs,
-            key_prefix="all_catalog",
-            symbol=symbol,
-            audit_grade=audit,
-        )
-
-    with st.expander("Defensive stack builder"):
-        stack_builder_panel(repo, model)
-
-    with st.expander("Advanced — load prior campaign"):
+    with st.expander("Advanced — stack builder, audit grade, full grid", expanded=False):
+        sb, ag = st.columns(2)
+        with sb:
+            stack_builder_panel(repo, model)
+        with ag:
+            audit = st.checkbox(
+                "Audit grade (full-sweep + history gate)",
+                value=st.session_state.wb_audit_grade,
+                key="wb__audit",
+            )
+            st.session_state.wb_audit_grade = audit
+            all_entries = [catalog[mid] for mid in sorted(catalog.keys())]
+            _render_catalog_rows(
+                repo, all_entries, configs,
+                key_prefix="all_catalog", symbol=symbol, audit_grade=audit,
+            )
         campaigns = list_active_campaigns(repo)
-        picked_camp = st.selectbox("Load campaign", [""] + campaigns, key="wb__camp_pick")
+        picked_camp = st.selectbox("Load prior campaign", [""] + campaigns, key="wb__camp_pick")
         if picked_camp:
             st.session_state.wb_active_campaign = picked_camp
             camp = picked_camp
-            status = get_job_status(repo, picked_camp)
-            st.json(status)
+            st.json(get_job_status(repo, picked_camp))
 
     return model, symbol, camp
 

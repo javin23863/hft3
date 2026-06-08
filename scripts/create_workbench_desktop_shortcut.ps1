@@ -21,7 +21,7 @@ $ShortcutPath = Join-Path $Desktop 'HFT3 Workbench.lnk'
 
 $WshShell = New-Object -ComObject WScript.Shell
 $Shortcut = $WshShell.CreateShortcut($ShortcutPath)
-$Shortcut.TargetPath = 'powershell.exe'
+$Shortcut.TargetPath = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
 $Shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Normal -File `"$Launcher`""
 $Shortcut.WorkingDirectory = $RepoRoot
 $Shortcut.Description = 'HFT3 microstructure workbench (Streamlit) — launch_workbench.ps1 with import preflight'

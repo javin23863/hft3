@@ -6,6 +6,8 @@ import json
 import sys
 from pathlib import Path
 
+import pandas as pd
+
 REPO = Path(__file__).resolve().parents[3]
 from hft3_bootstrap import setup_repo_paths
 
@@ -103,7 +105,7 @@ with tabs[1]:
     elif diag_data:
         rep = diag_data if "net_pnl" in diag_data else {}
         if "event_results" in diag_data:
-            st.dataframe(pd.DataFrame(diag_data["event_results"]), use_container_width=True)
+            st.dataframe(pd.DataFrame(diag_data["event_results"]), width="stretch")
         if rep:
             st.metric("Net PnL", rep.get("net_pnl", 0))
             st.metric("Trades", rep.get("num_trades", 0))
