@@ -159,6 +159,7 @@ class MboSlotStatus:
     status: SlotStatus
     raw_path: str
     npz_path: str
+    source_vendor: str = "unknown"
 
 
 @dataclass(frozen=True)
@@ -198,6 +199,28 @@ def _mbo_slot_status(
     else:
         status = "derivable"
 
+    # Read the per-slot source vendor (databento / rithmic_api) so the
+    # audit can report slot-level provenance.  A Rithmic-sourced slot
+    # with NPZ already derived looks identical to a Databento one at
+    # the NPZ layer; the source_vendor field is the only way to
+    # distinguish.  Default "unknown" when the manifest is missing.
+    # Read the manifest directly — do not gate on validation status,
+    # because Rithmic slots have no raw DBN file and therefore return
+    # validation=None through resolve_mbo_raw_for_event even when the
+    # slot itself is valid.
+    source_vendor: str = "unknown"
+    from mbo_release_lane.storage import load_release_event_path, release_slot_dir
+
+    for root_search in mbo_release_search_roots(repo_root):
+        slot = root_search / event_id / symbol.replace("/", "_")
+        if slot.is_dir():
+            rep = load_release_event_path(slot)
+            if rep:
+                source_vendor = str(
+                    rep.get("release_event_path", {}).get("source_vendor", "unknown")
+                )
+            break
+
     return MboSlotStatus(
         event_id=event_id,
         symbol=symbol,
@@ -205,6 +228,7 @@ def _mbo_slot_status(
         npz_ok=npz_ok,
         validation_status=validation,
         status=status,
+        source_vendor=source_vendor,
         raw_path=str(raw_path),
         npz_path=str(npz_path),
     )
@@ -317,6 +341,7 @@ def build_priority_lane_coverage(repo_root: Path) -> dict:
     vix_slots: list[dict] = []
     mbo_status_counts: Counter = Counter()
     vix_status_counts: Counter = Counter()
+    mbo_source_vendor_counts: Counter = Counter()
 
     def _as_dt(value):
         if hasattr(value, "to_pydatetime"):
@@ -330,6 +355,7 @@ def build_priority_lane_coverage(repo_root: Path) -> dict:
         for sym in syms:
             st = _mbo_slot_status(repo_root, w.event_id, sym, parsed)
             mbo_status_counts[st.status] += 1
+            mbo_source_vendor_counts[st.source_vendor] += 1
             if st.status != "complete":
                 mbo_slots.append(
                     {
@@ -339,6 +365,7 @@ def build_priority_lane_coverage(repo_root: Path) -> dict:
                         "raw_ok": st.raw_ok,
                         "npz_ok": st.npz_ok,
                         "validation_status": st.validation_status,
+                        "source_vendor": st.source_vendor,
                     }
                 )
 
@@ -373,6 +400,7 @@ def build_priority_lane_coverage(repo_root: Path) -> dict:
             "complete": mbo_complete,
             "complete_pct": round(100.0 * mbo_complete / max(total_mbo, 1), 2),
             "status_counts": dict(mbo_status_counts),
+            "source_vendor_counts": dict(mbo_source_vendor_counts),
             "incomplete_sample": mbo_slots[:100],
             "incomplete_total": len(mbo_slots),
         },
