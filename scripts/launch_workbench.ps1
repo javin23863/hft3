@@ -8,8 +8,40 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$LogDir = Join-Path $RepoRoot 'runtime/logs'
+$LogFile = Join-Path $LogDir 'workbench_launcher.log'
+New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+function Write-Log {
+    param([string]$Message, [string]$Level = 'INFO')
+    $ts = (Get-Date).ToString('o')
+    $line = "[$ts] [$Level] $Message"
+    Add-Content -LiteralPath $LogFile -Value $line -Encoding utf8
+    Write-Host $line
+}
+Write-Log "launcher start repo=$RepoRoot argv=$($MyInvocation.Line)"
+
 Set-Location $RepoRoot
 $env:PYTHONPATH = $RepoRoot
+
+# Refuse to launch if the workbench source tree is missing.
+$WorkbenchApp = Join-Path $RepoRoot 'apps/workbench/ui/app.py'
+if (-not (Test-Path $WorkbenchApp)) {
+    Write-Log "workbench app.py missing at $WorkbenchApp" 'ERROR'
+    if ([Environment]::UserInteractive -and $Host.Name -eq 'ConsoleHost') {
+        Read-Host 'Press Enter to close'
+    }
+    exit 1
+}
+
+# Verify we are using the same Python the repo expects (system python 3.12
+# at the standard install path; abort if a different one is on PATH).
+$ExpectedPy = 'C:\Users\MSI\AppData\Local\Programs\Python\Python312\python.exe'
+$ActualPy = (Get-Command python -ErrorAction SilentlyContinue).Source
+if ($ActualPy -ne $ExpectedPy) {
+    Write-Log "Python on PATH ($ActualPy) does not match expected ($ExpectedPy)" 'WARN'
+} else {
+    Write-Log "python OK ($ActualPy)"
+}
 
 function Exit-Launcher {
     param(
@@ -41,7 +73,7 @@ try {
 } catch {}
 
 if (-not $streamlitOk) {
-    Exit-Launcher -Message 'ERROR: streamlit not installed. Run: pip install -r workbench/requirements.txt'
+    Exit-Launcher -Message 'ERROR: streamlit not installed. Run: pip install -r apps/workbench/requirements.txt'
 }
 
 function Invoke-WorkbenchPreflight {
@@ -63,32 +95,26 @@ function Invoke-WorkbenchPreflight {
 }
 
 if (-not $SkipPreflight) {
-    Write-Host 'Preflight: workbench imports...' -ForegroundColor DarkCyan
+    Write-Log "preflight: workbench imports"
     $preflightResult = Invoke-WorkbenchPreflight
     if ($preflightResult.Code -ne 0 -and $preflightResult.ErrorLines -notcontains "missing $(Join-Path $RepoRoot 'scripts/workbench_preflight.py')") {
-        Write-Host 'Preflight failed; clearing workbench __pycache__ and retrying once...' -ForegroundColor Yellow
-        Get-ChildItem -Path (Join-Path $RepoRoot 'workbench') -Recurse -Directory -Filter '__pycache__' -ErrorAction SilentlyContinue |
+        Write-Log 'preflight failed; clearing __pycache__ and retrying' 'WARN'
+        Get-ChildItem -Path (Join-Path $RepoRoot 'apps/workbench') -Recurse -Directory -Filter '__pycache__' -ErrorAction SilentlyContinue |
             Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
         $preflightResult = Invoke-WorkbenchPreflight -ErrorLines $preflightResult.ErrorLines
     }
     if ($preflightResult.Code -ne 0) {
         if ($preflightResult.ErrorLines.Count -gt 0) {
-            Write-Host '--- Python preflight error ---' -ForegroundColor Red
-            $preflightResult.ErrorLines | ForEach-Object { Write-Host $_ -ForegroundColor Red }
-            Write-Host '------------------------------' -ForegroundColor Red
+            $preflightResult.ErrorLines | ForEach-Object { Write-Log $_ 'ERROR' }
         }
-        Exit-Launcher -Message @(
-            'ERROR: workbench import failed (CatalogEntry / model_catalog / campaign_panel).',
-            'Try: git pull; pip install -r apps/workbench/requirements.txt',
-            'Diagnostics: python scripts/workbench_preflight.py'
-        )
+        Write-Log "preflight FAILED. Diagnose: python scripts/workbench_preflight.py" 'ERROR'
+        if ([Environment]::UserInteractive -and $Host.Name -eq 'ConsoleHost') {
+            Read-Host 'Press Enter to close'
+        }
+        exit 1
     }
 
-    Write-Host 'Preflight: grader import tests...' -ForegroundColor DarkCyan
-    # Grader tests are advisory: they should be fast (~2s) but if a test
-    # hangs (e.g. test_app_module_imports calling st.set_page_config
-    # outside a Streamlit context), we warn and continue to launch the
-    # workbench rather than blocking the .lnk forever.
+    Write-Log "preflight: grader import tests (advisory, 120s timeout)"
     $graderTimeoutSec = 120
     $graderJob = Start-Job -ScriptBlock {
         & python -m pytest tests/test_workbench/test_ui_imports.py tests/test_workbench/test_event_catalog.py -q --tb=line 2>&1
@@ -100,45 +126,50 @@ if (-not $SkipPreflight) {
     }
     if ($graderJob.State -eq 'Completed') {
         Remove-Job -Job $graderJob -Force
-        Write-Host 'Grader tests passed.' -ForegroundColor Green
+        Write-Log "grader tests passed"
     } else {
-        # Don't kill mid-test on a long-running job. Leave it running in the
-        # background; if the user wants to debug they can re-run manually.
-        Write-Host "WARN: grader tests did not complete within ${graderTimeoutSec}s. Continuing to launch workbench; the test job (id=$($graderJob.Id)) is still running in the background." -ForegroundColor Yellow
-        Write-Host '      Diagnose: python -m pytest tests/test_workbench/test_ui_imports.py -q --tb=line' -ForegroundColor Yellow
-        Write-Host "      To stop the background job: Stop-Job -Id $($graderJob.Id); Remove-Job -Id $($graderJob.Id)" -ForegroundColor Yellow
+        Write-Log "grader tests did not complete within ${graderTimeoutSec}s (job id=$($graderJob.Id) still running)" 'WARN'
     }
 }
 
 if ($PreflightOnly) {
     if ($SkipPreflight) {
-        Exit-Launcher -Message 'ERROR: -PreflightOnly cannot be used with -SkipPreflight.'
+        Write-Log "ERROR: -PreflightOnly cannot be used with -SkipPreflight" 'ERROR'
+        if ([Environment]::UserInteractive -and $Host.Name -eq 'ConsoleHost') {
+            Read-Host 'Press Enter to close'
+        }
+        exit 1
     }
-    Write-Host 'Preflight complete.' -ForegroundColor Green
+    Write-Log "preflight complete"
     exit 0
 }
 
 $latencySummary = Join-Path $RepoRoot 'runtime/latency_reports/latency_summary.json'
 if (-not (Test-Path $latencySummary)) {
-    Write-Host "WARN: missing $latencySummary — backtests need CHI404 latency summary for C++ authority." -ForegroundColor Yellow
+    Write-Log "missing $latencySummary — backtests need CHI404 latency summary for C++ authority" 'WARN'
 }
 
 $npzDir = Join-Path $RepoRoot 'data/npz'
 $anyNpz = Get-ChildItem -Path $npzDir -Filter '*_mbo.npz' -ErrorAction SilentlyContinue | Select-Object -First 1
 if (-not $anyNpz) {
-    Write-Host "WARN: no *_mbo.npz under data/npz — pull macro events from packages/data_system/config/events.csv" -ForegroundColor Yellow
-    Write-Host "      List ids: python packages/data_system/src/macro_event_cli.py" -ForegroundColor Yellow
+    Write-Log "no *_mbo.npz under data/npz — pull macro events from packages/data_system/config/events.csv" 'WARN'
 }
 
 $url = "http://localhost:$Port"
+Write-Log "starting streamlit at $url"
 Write-Host "Starting HFT3 Workbench at $url (repo: $RepoRoot)" -ForegroundColor Cyan
 
 if (-not $SkipBrowser) {
     Start-Process $url
 }
 
-& python -m streamlit run workbench/ui/app.py --server.headless true --server.port $Port
+& python -m streamlit run apps/workbench/ui/app.py --server.headless true --server.port $Port 2>&1 | ForEach-Object { Write-Log $_ }
 $exitCode = $LASTEXITCODE
 if ($exitCode -ne 0) {
-    Exit-Launcher -Code $exitCode -Message "Streamlit exited with code $exitCode"
+    Write-Log "streamlit exited with code $exitCode" 'ERROR'
+    if ([Environment]::UserInteractive -and $Host.Name -eq 'ConsoleHost') {
+        Read-Host 'Press Enter to close'
+    }
+    exit $exitCode
 }
+Write-Log "streamlit exited cleanly rc=$exitCode"

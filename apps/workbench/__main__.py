@@ -70,6 +70,24 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("list", help="List registered models")
 
+    aut_p = sub.add_parser(
+        "autonomous",
+        help="Run all configured models through the real campaign pipeline",
+    )
+    aut_p.add_argument("--symbol", action="append", default=None, help="Symbol to run (repeat for multiple). Default: MES.v.0")
+    aut_p.add_argument("--campaign-id", default=None)
+    aut_p.add_argument(
+        "--trial", action="store_true", help="Smoke mode: skip WFC, allow partial NPZ"
+    )
+    aut_p.add_argument("--include-kinds", nargs="*", default=None)
+    aut_p.add_argument("--job-filter", nargs="*", default=None)
+    aut_p.add_argument("--download-missing", action="store_true")
+    aut_p.add_argument(
+        "--as-subprocess",
+        action="store_true",
+        help="Spawn the all_lanes orchestrator in a child process (so control.json is the only IPC). Default: in-process.",
+    )
+
     verify_data_p = sub.add_parser(
         "verify-data",
         help="Fail-closed MBO NPZ preflight for a single event/symbol",
@@ -105,6 +123,40 @@ def main(argv: list[str] | None = None) -> int:
 
         for mid in list_models():
             print(mid)
+        return 0
+
+    if args.command == "autonomous":
+        from workbench.src.run.all_lanes import run_all_lanes
+
+        symbols = args.symbol or ["MES.v.0"]
+        if args.as_subprocess:
+            import subprocess
+
+            cmd = [sys.executable, "-m", "workbench", "autonomous", "--symbol", *symbols]
+            if args.campaign_id:
+                cmd.extend(["--campaign-id", args.campaign_id])
+            if args.trial:
+                cmd.append("--trial")
+            if args.include_kinds:
+                cmd.extend(["--include-kinds", *args.include_kinds])
+            if args.job_filter:
+                cmd.extend(["--job-filter", *args.job_filter])
+            if args.download_missing:
+                cmd.append("--download-missing")
+            proc = subprocess.Popen(cmd, cwd=str(_REPO))
+            print(json.dumps({"pid": proc.pid, "command": cmd}, indent=2))
+            return 0
+        out = run_all_lanes(
+            _REPO,
+            symbols=symbols,
+            campaign_id=args.campaign_id,
+            include_kinds=tuple(args.include_kinds) if args.include_kinds else None,
+            audit_grade=not args.trial,
+            trial_mode=args.trial,
+            download_missing=args.download_missing,
+            job_filter=args.job_filter,
+        )
+        print(json.dumps({"artifact_dir": str(out)}, indent=2))
         return 0
 
     if args.command == "verify-data":
