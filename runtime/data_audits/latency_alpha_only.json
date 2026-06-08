@@ -1,0 +1,50 @@
+{
+  "run_id": "lat-ALPHA_ONLY",
+  "mode": "ALPHA_ONLY",
+  "generated_at_utc": "2026-06-08T09:55:03Z",
+  "ticks_processed": 500,
+  "counters": {
+    "late_veto_count": 0,
+    "risk_bypass_count": 0,
+    "stale_decision_count": 0,
+    "pit_violation_count": 0,
+    "data_isolation_violation_count": 0,
+    "synthetic_option_executable_violation_count": 0,
+    "route_flip_after_risk_count": 0,
+    "option_route_without_real_nbbo_count": 0,
+    "option_route_with_stale_quote_count": 0,
+    "option_route_with_wide_spread_count": 0,
+    "order_sent_before_defense_count": 0,
+    "order_sent_before_risk_count": 0,
+    "nondeterministic_replay_count": 0,
+    "bad_trades_blocked": 0,
+    "good_trades_blocked": 0,
+    "toxic_trade_block_rate": 0.0,
+    "good_trade_block_rate": 0.0,
+    "orders_sent": 46,
+    "orders_blocked": 454,
+    "final_route_distribution": {
+      "STOCK_ONLY": 46,
+      "NO_TRADE": 454
+    }
+  },
+  "latency": {
+    "p50_tick_to_send_ns": 3318300.0,
+    "p95_tick_to_send_ns": 3787900.0,
+    "p99_tick_to_send_ns": 5546619.999999994,
+    "p99_9_tick_to_send_ns": 6238522.000000009,
+    "max_tick_to_send_ns": 6315400,
+    "p50_defensive_eval_ns": 2757800.0,
+    "p95_defensive_eval_ns": 2971419.999999997,
+    "p99_defensive_eval_ns": 3250525.9999999986,
+    "p99_9_defensive_eval_ns": 4906514.600000057,
+    "defense_overhead_p50_ns": 0.0,
+    "defense_overhead_p99_ns": 0.0
+  },
+  "routes": {
+    "STOCK_ONLY": 46,
+    "NO_TRADE": 454
+  },
+  "pass_fail_status": "PASS",
+  "failure_reasons": []
+}
