@@ -5,12 +5,12 @@
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 299 nodes · 505 edges · 22 communities (21 shown, 1 thin omitted)
+- 298 nodes · 505 edges · 22 communities (21 shown, 1 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 4 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `c9810940`
+- Built from commit: `d0879ad0`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -48,15 +48,15 @@
 10. `locations` - 10 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `main()` --references--> `int`  [EXTRACTED]
-  runtime/audit_all_models_symbols_backtest_fast.py → apps/workbench/src/run/campaign_runner.py
+- `_param_hash()` --references--> `int`  [EXTRACTED]
+  apps/workbench/src/run/campaign_runner.py → runtime/audit_equities_lane_readiness.py
+- `run_campaign()` --references--> `int`  [EXTRACTED]
+  apps/workbench/src/run/campaign_runner.py → runtime/audit_equities_lane_readiness.py
 - `start_campaign_subprocess()` --calls--> `make_campaign_id()`  [INFERRED]
   apps/workbench/src/run/job_manager.py → apps/workbench/src/run/campaign_runner.py
 - `start_campaign_for_selection()` --calls--> `start_campaign_subprocess()`  [INFERRED]
   apps/workbench/ui/flow_state.py → apps/workbench/src/run/job_manager.py
 - `start_campaign_for_selection()` --calls--> `set_control()`  [INFERRED]
-  apps/workbench/ui/flow_state.py → apps/workbench/src/run/job_manager.py
-- `poll_campaign_status()` --calls--> `get_job_status()`  [INFERRED]
   apps/workbench/ui/flow_state.py → apps/workbench/src/run/job_manager.py
 
 ## Communities (22 total, 1 thin omitted)
@@ -67,11 +67,11 @@ Nodes (21): blocked_or_binding_errors, decadal_config, generated_at_utc, model_c
 
 ### Community 2 - "Community 2"
 Cohesion: 0.15
-Nodes (26): MES.v.0, RTY.v.0, MES.v.0, RTY.v.0, MES.v.0, RTY.v.0, MES.v.0, npz_ready (+18 more)
+Nodes (26): MES.v.0, ZB.v.0, MES.v.0, ZB.v.0, MES.v.0, ZB.v.0, MES.v.0, error (+18 more)
 
 ### Community 3 - "Community 3"
-Cohesion: 0.32
-Nodes (7): _load_sessions(), main(), _npz_present(), bool, int, str, Return the list of runnable (non-skip_pull) decadal sessions.
+Cohesion: 0.38
+Nodes (6): bool, _load_sessions(), main(), _npz_present(), Return the list of runnable (non-skip_pull) decadal sessions., str
 
 ### Community 4 - "Community 4"
 Cohesion: 0.16
@@ -90,16 +90,16 @@ Cohesion: 0.29
 Nodes (12): MNQ.v.0, MNQ.v.0, MNQ.v.0, npz_ready, pct_ready, total_events, error, npz_ready (+4 more)
 
 ### Community 8 - "Community 8"
-Cohesion: 0.29
-Nodes (12): NQ.v.0, NQ.v.0, NQ.v.0, error, npz_ready, pct_ready, periods, total_events (+4 more)
+Cohesion: 0.54
+Nodes (8): NQ.v.0, NQ.v.0, NQ.v.0, error, npz_ready, pct_ready, periods, total_events
 
 ### Community 9 - "Community 9"
 Cohesion: 0.22
 Nodes (22): Any, bool, ModelComposition, Path, str, campaign_base(), campaign_progress_panel(), event_artifact_dir() (+14 more)
 
 ### Community 10 - "Community 10"
-Cohesion: 0.54
-Nodes (8): ZB.v.0, ZB.v.0, ZB.v.0, error, npz_ready, pct_ready, periods, total_events
+Cohesion: 0.29
+Nodes (12): RTY.v.0, RTY.v.0, RTY.v.0, npz_ready, pct_ready, total_events, Holdout, error (+4 more)
 
 ### Community 11 - "Community 11"
 Cohesion: 0.54
@@ -134,7 +134,7 @@ Cohesion: 0.33
 Nodes (5): Path, _artifact_base(), _extract_aggregate_from_periods(), Streamlit microstructure workbench UI., Extract net_pnl + num_trades from summary-level periods list.
 
 ## Knowledge Gaps
-- **117 isolated node(s):** `generated_at_utc`, `repo_root`, `symbols`, `periods`, `model_count` (+112 more)
+- **116 isolated node(s):** `str`, `bool`, `generated_at_utc`, `repo_root`, `decadal_config` (+111 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **1 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -142,13 +142,13 @@ Nodes (5): Path, _artifact_base(), _extract_aggregate_from_periods(), Streamlit 
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `locations` connect `Community 12` to `Community 13`?**
-  _High betweenness centrality (0.034) - this node is a cross-community bridge._
+  _High betweenness centrality (0.035) - this node is a cross-community bridge._
 - **Why does `start_campaign_subprocess()` connect `Community 19` to `Community 16`, `Community 9`?**
-  _High betweenness centrality (0.028) - this node is a cross-community bridge._
-- **Why does `per_model_symbol` connect `Community 2` to `Community 5`?**
-  _High betweenness centrality (0.026) - this node is a cross-community bridge._
-- **What connects `generated_at_utc`, `repo_root`, `symbols` to the rest of the system?**
-  _133 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _High betweenness centrality (0.034) - this node is a cross-community bridge._
+- **Why does `make_campaign_id()` connect `Community 16` to `Community 19`?**
+  _High betweenness centrality (0.031) - this node is a cross-community bridge._
+- **What connects `str`, `bool`, `Return the list of runnable (non-skip_pull) decadal sessions.` to the rest of the system?**
+  _132 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 1` be split into smaller, more focused modules?**
   _Cohesion score 0.09090909090909091 - nodes in this community are weakly interconnected._
 - **Should `Community 5` be split into smaller, more focused modules?**
