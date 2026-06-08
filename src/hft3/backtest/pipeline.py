@@ -13,7 +13,7 @@ from backtest_pipeline.src.replay_matrix import (
 )
 from backtest_pipeline.src.signal_backtester import SignalBacktester
 from backtest_pipeline.src.pipeline_hyp_fanout import fan_out_hyp_reports
-from backtest_pipeline.src.pipeline_model_router import EngineRoute, all_model_ids, list_models, route
+from backtest_pipeline.src.pipeline_model_router import EngineRoute, all_model_ids, list_models, route  # id-verified: same function as pipeline_hyp_fanout.route
 from backtest_pipeline.src.pipeline_gate_report import finalize_catalog_models, write_catalog_artifacts
 from backtest_pipeline.src.hft_backtest_builder import BacktestAsset, HashMapMarketDepthBacktest, build_hftbacktest
 from backtest_pipeline.src.pdf_hybrid_strategy import (
