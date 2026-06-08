@@ -2,28 +2,14 @@
 """Preflight workbench imports for scripts/launch_workbench.ps1."""
 from __future__ import annotations
 
-import os
 import sys
 import traceback
 from pathlib import Path
 
 
 def _repo_root() -> Path:
-    """Resolve repo root from this script's location (launcher sets PYTHONPATH)."""
+    """Resolve repo root from this script's location."""
     return Path(__file__).resolve().parents[1]
-
-
-def _bootstrap_sys_path(repo: Path) -> None:
-    """Use hft3_bootstrap.setup_repo_paths() so packages/ and src/ are wired correctly."""
-    if repo_str := str(repo):
-        if repo_str not in sys.path:
-            sys.path.insert(0, repo_str)
-    os.environ.setdefault("PYTHONPATH", repo_str)
-    try:
-        import hft3_bootstrap
-        hft3_bootstrap.setup_repo_paths()
-    except Exception as exc:
-        print(f"hft3_bootstrap.setup_repo_paths() failed: {exc}", file=sys.stderr)
 
 
 def _assert_catalog_keys_namespaced(repo: Path) -> None:
@@ -56,7 +42,22 @@ def _assert_catalog_keys_namespaced(repo: Path) -> None:
 
 def main() -> int:
     repo = _repo_root()
-    _bootstrap_sys_path(repo)
+
+    # Make repo root importable so hft3_bootstrap is reachable regardless of
+    # whether the launcher (which sets PYTHONPATH) or a bare python invocation
+    # is used. Idempotent and harmless if already on sys.path.
+    repo_str = str(repo)
+    if repo_str not in sys.path:
+        sys.path.insert(0, repo_str)
+
+    # hft3_bootstrap wires packages/ and apps/ into sys.path
+    try:
+        import hft3_bootstrap
+        hft3_bootstrap.setup_repo_paths()
+    except Exception as exc:
+        print(f"hft3_bootstrap.setup_repo_paths() failed: {exc}", file=sys.stderr)
+        traceback.print_exc()
+        return 1
 
     try:
         _assert_catalog_keys_namespaced(repo)
