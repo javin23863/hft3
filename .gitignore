@@ -103,7 +103,7 @@ data/equities/manifest/equities_npz_manifest.json.meta.json
 research_cards/workbench_catalog_manifest.json
 artifacts/research_cards/workbench_catalog_manifest.json
 vendor/openfoundry_upstream_test/
-models/
+/models/
 *.onnx
 common/**
 

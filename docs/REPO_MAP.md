@@ -12,14 +12,21 @@ Single source of truth for top-level layout. Chronological human path: [human/DO
 | [AGENTS.md](../AGENTS.md) | Agent charter |
 | [graphify-out/wiki/index.md](../graphify-out/wiki/index.md) | AI graph index (freshness banner) |
 
-## Target layout (post-reorganization)
+## Layout
 
 ```
 hft3/
+├── src/hft3/                # Importable namespace (consolidation layer)
+│   ├── pipelines/           # Lane pipelines (equities, crypto, …)
+│   ├── models/              # Features, structural models, hypotheses
+│   ├── backtest/            # Backtest runners, certification
+│   ├── connectors/          # Data connectors (Databento, Rithmic, …)
+│   ├── validation/          # Certification registry, gates
+│   └── data/                # Data resolution, NPZ management
 ├── apps/                    # Runnable applications
 │   ├── workbench/           # CLI + Streamlit UI (from workbench/)
 │   └── cli/                 # User-facing scripts (from scripts/ entrypoints)
-├── packages/                # Python libraries
+├── packages/                # Python libraries (legacy — shim period)
 │   ├── data_system/
 │   ├── features_engine/
 │   ├── backtest_pipeline/
@@ -31,33 +38,41 @@ hft3/
 │   ├── options_lane/
 │   ├── backtest/
 │   └── hft3/                # Validation governance package
-├── tools/                   # Ops, migration, graphify helpers, shell timeouts
+├── configs/                 # Centralised configuration
+│   ├── equities/            # universe.yaml, decadal_runners.yaml
+│   ├── crypto/              # universe.yaml, lake_sources.yaml
+│   ├── options/             # parity_universe.yaml
+│   ├── futures/             # rithmic_trial.yaml
+│   └── features/            # model_registry.yaml, pdf_model_params.yaml
+├── docs/                    # Documentation
+│   ├── human/               # Human onboarding, runtime contract
+│   ├── ai/                  # AI onboarding, engineering standards
+│   ├── vault/               # Deep reference (certification, CHI404)
+│   ├── reference/           # Canonical PDF bundle
+│   ├── guides/              # Task-oriented walkthroughs
+│   └── specs/               # System specifications
+├── tools/                   # Ops, migration, graphify helpers
 ├── artifacts/               # Research outputs (from research_cards/)
 ├── runtime/                 # Ephemeral machine state
 ├── infrastructure/          # CHI404 bare metal
 ├── tests/
-├── docs/
-│   ├── human/
-│   ├── ai/
-│   └── vault/
 ├── graphify-out/
 ├── vendor/
 ├── integrations/
-├── rithmic_gateway/         # C++ execution hot path (do not touch casually)
+├── rithmic_gateway/         # C++ execution hot path
 ├── telemetry/
 └── BLUEPRINT.md
 ```
 
 ## Legacy paths (shim period)
 
-During migration, old import paths remain valid via shims and `pyproject.toml`:
+During migration, old import paths remain valid:
 
 | Legacy | Target |
 |--------|--------|
-| `workbench/` | `apps/workbench/` |
-| `features_engine/` | `packages/features_engine/` |
-| `research_cards/` | `artifacts/` |
-| `scripts/run_*.py` | `apps/cli/` |
+| `packages/*` | `packages/*` (unchanged — backward compat) |
+| `src/hft3/*` | New canonical imports (`hft3.pipelines.*`, etc.) |
+| `configs/*` | Centralised configs (originals remain under `packages/*/config/`) |
 
 Set `HFT3_ARTIFACTS_ROOT` to override artifact root (default: `artifacts/`).
 
@@ -74,7 +89,7 @@ Set `HFT3_ARTIFACTS_ROOT` to override artifact root (default: `artifacts/`).
 
 ## Model IDs
 
-Canonical IDs are **descriptive slugs** (e.g. `SPREAD_BLOWOUT_RECOMPRESSION`), not `HYP_N`. Registry: `features_engine/config/model_registry.yaml`.
+Canonical IDs are **descriptive slugs** (e.g. `SPREAD_BLOWOUT_RECOMPRESSION`), not `HYP_N`. Registry: `configs/features/model_registry.yaml`.
 
 ## Scripts by audience
 
