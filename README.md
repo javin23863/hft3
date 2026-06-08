@@ -36,7 +36,7 @@ Full layout: [docs/REPO_MAP.md](docs/REPO_MAP.md)
 src/hft3/          Importable namespace (consolidation over packages/)
 apps/workbench     CLI + Streamlit UI
 packages/*         Python libraries (features, backtest, replay, …) — legacy
-configs/           Centralised configuration (YAML/JSON)
+configs/           Reserved (currently empty; see configs/README.md)
 artifacts/         Research outputs
 runtime/           Certification, latency, audits
 graphify-out/      Code graph (AI entry)

@@ -17,15 +17,13 @@ Single source of truth for top-level layout. Chronological human path: [human/DO
 ```
 hft3/
 ├── src/hft3/                # Importable namespace (consolidation layer)
-│   ├── pipelines/           # Lane pipelines (equities, crypto, …)
-│   ├── models/              # Features, structural models, hypotheses
-│   ├── backtest/            # Backtest runners, certification
-│   ├── connectors/          # Data connectors (Databento, Rithmic, …)
-│   ├── validation/          # Certification registry, gates
-│   └── data/                # Data resolution, NPZ management
+│   ├── pipelines/           # Lane pipelines (equities built; crypto/options/futures planned)
+│   ├── models/              # Features (built); structural/hypotheses/regimes planned
+│   ├── backtest/            # Backtest runners (built)
+│   └── connectors/          # Databento (built); rithmic/exchange/data_layer planned
 ├── apps/                    # Runnable applications
-│   ├── workbench/           # CLI + Streamlit UI (from workbench/)
-│   └── cli/                 # User-facing scripts (from scripts/ entrypoints)
+│   ├── workbench/           # CLI + Streamlit UI
+│   └── observer/            # Telemetry observer
 ├── packages/                # Python libraries (legacy — shim period)
 │   ├── data_system/
 │   ├── features_engine/
@@ -37,20 +35,21 @@ hft3/
 │   ├── hfc3/
 │   ├── options_lane/
 │   ├── backtest/
-│   └── hft3/                # Validation governance package
-├── configs/                 # Centralised configuration
-│   ├── equities/            # universe.yaml, decadal_runners.yaml
-│   ├── crypto/              # universe.yaml, lake_sources.yaml
-│   ├── options/             # parity_universe.yaml
-│   ├── futures/             # rithmic_trial.yaml
-│   └── features/            # model_registry.yaml, pdf_model_params.yaml
+│   └── hft3/                # Validation governance (hft3.validation.*)
+├── configs/                 # Reserved for centralization (currently empty; see configs/README.md)
 ├── docs/                    # Documentation
 │   ├── human/               # Human onboarding, runtime contract
 │   ├── ai/                  # AI onboarding, engineering standards
 │   ├── vault/               # Deep reference (certification, CHI404)
-│   ├── reference/           # Canonical PDF bundle
-│   ├── guides/              # Task-oriented walkthroughs
-│   └── specs/               # System specifications
+│   ├── reference/           # Reserved (placeholder)
+│   ├── guides/              # Reserved (placeholder)
+│   ├── specs/               # Reserved (placeholder)
+│   ├── chi404/              # Host tuning & validation
+│   ├── rithmic_trial/       # Rithmic trial docs
+│   ├── workbench/           # Workbench runbooks
+│   ├── structural_models/   # Structural model docs
+│   ├── research/            # Research pipeline docs
+│   └── references/          # Canonical PDF bundle
 ├── tools/                   # Ops, migration, graphify helpers
 ├── artifacts/               # Research outputs (from research_cards/)
 ├── runtime/                 # Ephemeral machine state
@@ -72,7 +71,6 @@ During migration, old import paths remain valid:
 |--------|--------|
 | `packages/*` | `packages/*` (unchanged — backward compat) |
 | `src/hft3/*` | New canonical imports (`hft3.pipelines.*`, etc.) |
-| `configs/*` | Centralised configs (originals remain under `packages/*/config/`) |
 
 Set `HFT3_ARTIFACTS_ROOT` to override artifact root (default: `artifacts/`).
 
