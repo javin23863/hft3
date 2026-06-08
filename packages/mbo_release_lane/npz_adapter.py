@@ -1,4 +1,7 @@
-"""Derive HftBacktest NPZ from validated MBO release paths — downstream only."""
+"""Derive HftBacktest NPZ from validated MBO release paths — downstream only.
+
+Also provides ``derive_npz_from_vix_release`` for OPRA VIX.OPT cmbp-1 quote data.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +12,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
+from data_system.src.event_data_resolver import VIX_OPT_SYMBOL
 from mbo_release_lane.storage import (
     load_release_event_path,
     raw_dbn_path,
@@ -95,4 +99,50 @@ def derive_npz_from_release(
             target.unlink()
         shutil.move(str(produced), str(target))
 
+    return target if target.is_file() else None
+
+
+def derive_npz_from_vix_release(
+    repo_root: Path,
+    release_id: str,
+    *,
+    npz_dir: Path | None = None,
+) -> Path | None:
+    """Convert VIX.OPT cmbp-1 DBN to NPZ quote array. Returns None if empty."""
+    slot = release_slot_dir(repo_root, release_id, VIX_OPT_SYMBOL)
+    raw = raw_dbn_path(slot)
+    if not raw.is_file() or raw.stat().st_size == 0:
+        return None
+    import databento as db
+    import numpy as np
+    store = db.DBNStore.from_file(str(raw))
+    rows = []
+    for rec in store:
+        rows.append((
+            int(rec.ts_event),
+            int(rec.ts_recv),
+            float(rec.bid_px_00) / 1e9 if hasattr(rec, 'bid_px_00') and rec.bid_px_00 is not None else 0.0,
+            float(rec.ask_px_00) / 1e9 if hasattr(rec, 'ask_px_00') and rec.ask_px_00 is not None else 0.0,
+            float(rec.bid_sz_00) if hasattr(rec, 'bid_sz_00') and rec.bid_sz_00 is not None else 0.0,
+            float(rec.ask_sz_00) if hasattr(rec, 'ask_sz_00') and rec.ask_sz_00 is not None else 0.0,
+            int(rec.instrument_id),
+            int(rec.publisher_id),
+        ))
+    if not rows:
+        return None
+    dt = np.dtype([
+        ('ts_event', np.int64),
+        ('ts_recv', np.int64),
+        ('bid_px', np.float64),
+        ('ask_px', np.float64),
+        ('bid_sz', np.float64),
+        ('ask_sz', np.float64),
+        ('instrument_id', np.uint64),
+        ('publisher_id', np.uint32),
+    ])
+    arr = np.array(rows, dtype=dt)
+    out_dir = npz_dir or (repo_root / "data" / "npz")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    target = out_dir / f"{VIX_OPT_SYMBOL}_{release_id}_quotes.npz"
+    np.savez_compressed(target, quotes=arr)
     return target if target.is_file() else None
