@@ -79,30 +79,34 @@ if (-not $SkipPreflight) {
         }
         Exit-Launcher -Message @(
             'ERROR: workbench import failed (CatalogEntry / model_catalog / campaign_panel).',
-            'Try: git pull; pip install -r workbench/requirements.txt',
+            'Try: git pull; pip install -r apps/workbench/requirements.txt',
             'Diagnostics: python scripts/workbench_preflight.py'
         )
     }
 
     Write-Host 'Preflight: grader import tests...' -ForegroundColor DarkCyan
-    # Grader tests are advisory: a hang in test_app_module_imports (Streamlit
-    # top-level set_page_config) should NOT block the workbench from launching.
+    # Grader tests are advisory: they should be fast (~2s) but if a test
+    # hangs (e.g. test_app_module_imports calling st.set_page_config
+    # outside a Streamlit context), we warn and continue to launch the
+    # workbench rather than blocking the .lnk forever.
+    $graderTimeoutSec = 120
     $graderJob = Start-Job -ScriptBlock {
         & python -m pytest tests/test_workbench/test_ui_imports.py tests/test_workbench/test_event_catalog.py -q --tb=line 2>&1
         exit $LASTEXITCODE
     }
     $graderStart = Get-Date
-    while ($graderJob.State -eq 'Running' -and ((Get-Date) - $graderStart).TotalSeconds -lt 60) {
-        Start-Sleep -Seconds 2
+    while ($graderJob.State -eq 'Running' -and ((Get-Date) - $graderStart).TotalSeconds -lt $graderTimeoutSec) {
+        Start-Sleep -Seconds 1
     }
     if ($graderJob.State -eq 'Completed') {
         Remove-Job -Job $graderJob -Force
         Write-Host 'Grader tests passed.' -ForegroundColor Green
     } else {
-        Stop-Job -Job $graderJob
-        Remove-Job -Job $graderJob -Force
-        Write-Host 'WARN: grader tests hung (>60s). Continuing to launch workbench anyway.' -ForegroundColor Yellow
+        # Don't kill mid-test on a long-running job. Leave it running in the
+        # background; if the user wants to debug they can re-run manually.
+        Write-Host "WARN: grader tests did not complete within ${graderTimeoutSec}s. Continuing to launch workbench; the test job (id=$($graderJob.Id)) is still running in the background." -ForegroundColor Yellow
         Write-Host '      Diagnose: python -m pytest tests/test_workbench/test_ui_imports.py -q --tb=line' -ForegroundColor Yellow
+        Write-Host "      To stop the background job: Stop-Job -Id $($graderJob.Id); Remove-Job -Id $($graderJob.Id)" -ForegroundColor Yellow
     }
 }
 
