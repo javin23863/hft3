@@ -55,6 +55,7 @@ class StructuralModelAdapter(WorkbenchModel):
                 outputs.append(m1.update_book(book, mbo.timestamp_ns))
         ctx.metadata["pdf_bars"] = bars
         ctx.metadata["pdf_book_outputs"] = outputs
+        ctx.metadata["pdf_book"] = book
         return outputs
 
     def generate_signals(self, features: Any) -> float:
@@ -75,6 +76,11 @@ class StructuralModelAdapter(WorkbenchModel):
         return float(val) if val is not None else 0.0
 
     def run_backtest(self, ctx: RunContext) -> Any:
+        # Build book from MBO events so model_01_book_pressure.evaluate(...)
+        # receives either an OrderBook or the BBO fields it requires.
+        if not ctx.metadata.get("pdf_book") and len(ctx.events):
+            self.build_features(ctx)
+        book = ctx.metadata.get("pdf_book")
         bars = ctx.metadata.get("pdf_bars", [])
         mid = 4500.0
         if len(ctx.events):
@@ -85,6 +91,8 @@ class StructuralModelAdapter(WorkbenchModel):
             "bars": bars,
             "timestamp_ns": int(ctx.events[-1]["local_ts"]) if len(ctx.events) else 0,
         }
+        if book is not None:
+            kwargs["book"] = book
         if self.model_id == "DEALER_HEDGING":
             kwargs["chain"] = ctx.metadata.get(
                 "chain",
