@@ -31,7 +31,7 @@ parity_groups:
       source: constant
       value: 0.05
     legs:
-      - {role: spot, symbol: "SPX", dataset: OPRA.PILLAR}
+      - {role: spot, symbol: "SPX", dataset: OPRA.PILLAR, stype_in: raw_symbol, schema: cmbp-1}
       - {role: future, symbol: "ES.c.0", dataset: GLBX.MDP3}
-      - {role: call, symbol: "SPX", dataset: OPRA.PILLAR, strike: 5500, right: C}
-      - {role: put, symbol: "SPX", dataset: OPRA.PILLAR, strike: 5500, right: P}
+      - {role: call, symbol: "SPX", dataset: OPRA.PILLAR, stype_in: raw_symbol, schema: cmbp-1, strike: 5500, right: C}
+      - {role: put, symbol: "SPX", dataset: OPRA.PILLAR, stype_in: raw_symbol, schema: cmbp-1, strike: 5500, right: P}
