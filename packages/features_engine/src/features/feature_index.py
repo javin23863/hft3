@@ -39,7 +39,7 @@ class FeatureIndex(enum.IntEnum):
     BID_ADD_CANCEL_RATIO = 24
     ASK_ADD_CANCEL_RATIO = 25
     REALIZED_VOL_STATE = 26
-    IS_BREAKING_LEVEL = 27
+    SPREAD_STRESS_ELEVATED = 27  # renamed from IS_BREAKING_LEVEL: spread_stress > 2.0 proxy
     IS_BREAKING_SESSION_LEVEL = 28
     DISTANCE_TO_ROUND_NUMBER = 29
     DISTANCE_TO_VWAP = 30
@@ -86,7 +86,7 @@ FEATURE_NAME_TO_INDEX: Dict[str, int] = {
     "reload_drop_score": FeatureIndex.RELOAD_DROP_SCORE,
     "bid_add_cancel_ratio": FeatureIndex.BID_ADD_CANCEL_RATIO,
     "ask_add_cancel_ratio": FeatureIndex.ASK_ADD_CANCEL_RATIO,
-    "is_breaking_level": FeatureIndex.IS_BREAKING_LEVEL,
+    "spread_stress_elevated": FeatureIndex.SPREAD_STRESS_ELEVATED,
     "is_breaking_session_level": FeatureIndex.IS_BREAKING_SESSION_LEVEL,
     "distance_to_round_number": FeatureIndex.DISTANCE_TO_ROUND_NUMBER,
     "distance_to_vwap": FeatureIndex.DISTANCE_TO_VWAP,

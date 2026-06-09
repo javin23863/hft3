@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from equities_lane.src import ibkr_endpoint
-from equities_lane.src.ibkr_endpoint import endpoint_status, resolve_endpoint
+from equities_lane.src.ibkr_endpoint import endpoint_status, hydrate_runtime_env, resolve_endpoint
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -58,6 +58,10 @@ def test_endpoint_status_redacts_account_values(monkeypatch: pytest.MonkeyPatch,
     assert "account_id" not in status
 
 
+@pytest.mark.skipif(
+    importlib.util.find_spec("ibapi") is None,
+    reason="ibapi not installed; READY_TO_CONNECT requires ibapi on the Python path",
+)
 def test_endpoint_status_hydrates_quantx_env_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.delenv("IBKR_ACCOUNT_ID", raising=False)
     monkeypatch.delenv("IBKR_ACCOUNT_ID_PRIMARY", raising=False)
@@ -108,6 +112,10 @@ def test_endpoint_status_blocks_when_socket_is_closed(monkeypatch: pytest.Monkey
     assert any(gate["gate"] == "ibkr_socket" for gate in status["blocking_gates"])
 
 
+@pytest.mark.skipif(
+    importlib.util.find_spec("ibapi") is None,
+    reason="ibapi not installed; READY_TO_CONNECT requires ibapi on the Python path",
+)
 def test_missing_account_is_routing_warning_not_endpoint_blocker(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -186,3 +194,54 @@ def test_connect_mode_blocks_on_paper_disclaimer(
     assert status["headless_handshake_required"] is True
     assert status["api"]["api_client_status"] == "PAPER_DISCLAIMER_PENDING"
     assert any(gate["gate"] == "ibkr_paper_disclaimer" for gate in status["blocking_gates"])
+
+
+def test_env_hydration_loaded_key_count_reflects_file_keys_only(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """loaded_key_count must equal the number of keys read from the file.
+
+    A 4-key env file must report 4, not the larger number that includes
+    built-in defaults applied when a key is absent from the environment.
+    """
+    env_file = tmp_path / "keys.env"
+    env_file.write_text(
+        "\n".join([
+            "IBKR_ACCOUNT_ID_PRIMARY=DU999999",
+            "IBKR_SOCKET_PORT_PAPER=7497",
+            "BROKER_SOCKET_ENABLED=1",
+            "MARKET_DATA_PROVIDER=ibkr-socket",
+        ]),
+        encoding="utf-8",
+    )
+
+    # Clear every key the file contains so they're all eligible to be loaded.
+    for key in (
+        "IBKR_ACCOUNT_ID_PRIMARY",
+        "IBKR_SOCKET_PORT_PAPER",
+        "BROKER_SOCKET_ENABLED",
+        "MARKET_DATA_PROVIDER",
+        "IBKR_ACCOUNT_ID",
+        "IBKR_ENV_FILE",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+    # Restrict candidate env files to only our controlled file so that real
+    # env files on the developer machine (e.g. C:/QuantX/keys.env) do not
+    # contribute extra keys and skew the count.
+    monkeypatch.setattr(
+        ibkr_endpoint,
+        "_candidate_env_files",
+        lambda _repo, _config: [env_file],
+    )
+
+    config = ibkr_endpoint.load_endpoint_config(CONFIG)
+    result = hydrate_runtime_env(tmp_path, config)
+
+    # The file has 4 keys; loaded_key_count must be exactly 4.
+    assert result["loaded_key_count"] == 4, (
+        f"Expected 4 (file keys only), got {result['loaded_key_count']}. "
+        f"Loaded keys: {result['loaded_keys']}"
+    )
+    assert len(result["loaded_keys"]) == 4

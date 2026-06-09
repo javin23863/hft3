@@ -3,7 +3,7 @@
 
 Runs adapter-backed replay engines:
   1. replay_execution_adapter — ReplaySession + CombinedHypothesisReplayStrategy (HftBacktest adapter)
-  2. per_hypothesis_replay — ReplaySession matrix per hypothesis (replaces SignalBacktester fills)
+  2. per_hypothesis_replay — ReplaySession matrix per hypothesis
 """
 from __future__ import annotations
 
@@ -180,7 +180,7 @@ def write_report(
         "",
         "## Engine 2: per_hypothesis_replay (adapter-backed matrix)",
         "",
-        "ReplaySession per hypothesis; replaces deprecated SignalBacktester fill sim.",
+        "ReplaySession per hypothesis (queue-model fills, real slippage).",
         "",
         f"- hypotheses with trades: {hyp_result.get('hypotheses_with_trades')} / {hyp_result.get('hypothesis_count')}",
         f"- total trades (all hyps): {hyp_result.get('total_trades_all_hypotheses')}",

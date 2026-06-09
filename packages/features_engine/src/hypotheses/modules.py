@@ -257,24 +257,30 @@ class SpreadRegimeChange(BaseHypothesis):
 class FalseBreakoutTrap(BaseHypothesis):
     """
     Hypothesis 8: False breakout trap
+
+    Activates when spread is in a stress regime (SPREAD_STRESS_ELEVATED = 1)
+    but flow and book slope do not confirm a directional move, suggesting the
+    wide spread is driven by noise rather than a genuine level break.
     """
     def __init__(self):
         super().__init__(8, "False breakout trap")
-        
+
     def evaluate(self, state: MarketState) -> float:
-        is_breakout = state.f('is_breaking_level', 0.0) 
+        # SPREAD_STRESS_ELEVATED (index 27): 1.0 when spread_stress > 2.0
+        stress_elevated = state.f('spread_stress_elevated', 0.0)
         agg_imb = state.f('aggressor_volume_imbalance', 0.0)
         book_slope = state.f('book_slope', 0.0)
-        
-        # Breakout direction minus flow confirmation
-        breakout_dir = np.sign(is_breakout)
+
+        # Only fire when spread is stressed; fade the direction of the imbalance
+        # since stress without flow confirmation often reverses.
         flow_confirmation = np.tanh(agg_imb * 2.0)
         slope_confirmation = np.tanh(book_slope * 2.0)
-        
-        # Trap occurs when breakout happens but flow/slope don't confirm
-        trap_intensity = breakout_dir * (np.abs(is_breakout) - np.abs(flow_confirmation + slope_confirmation)/2.0)
-        signal = -np.tanh(trap_intensity * 2.0) # Fade the false breakout
-        return float(signal)
+        confirmation = (np.abs(flow_confirmation) + np.abs(slope_confirmation)) / 2.0
+
+        # Fade signal: negative (oppose the imbalance direction) when stress is
+        # high and confirmation is low.
+        signal = -stress_elevated * (1.0 - confirmation) * np.tanh(agg_imb * 2.0)
+        return float(np.clip(signal, -1.0, 1.0))
 
 class AbsorptionFade(BaseHypothesis):
     """
@@ -338,31 +344,44 @@ class OneSidedAddCancelImbalance(BaseHypothesis):
 class RoundNumberStopSweep(BaseHypothesis):
     """
     Hypothesis 21: Round-number stop sweep
+
+    DISTANCE_TO_ROUND_NUMBER is the distance in ticks from mid to the nearest
+    configurable round-number increment (default 10 pts = 40 ticks for ES/MES).
+    The Gaussian proximity kernel uses sigma=4 ticks so the hypothesis is
+    active only when price is within ~1 point of a round level.  Fade the
+    aggressor flow direction near round numbers (stop sweep / false breakout).
     """
     def __init__(self):
         super().__init__(21, "Round-number stop sweep")
-        
+
     def evaluate(self, state: MarketState) -> float:
-        dist_to_round = state.f('distance_to_round_number', 1.0)
+        dist_to_round = state.f('distance_to_round_number', 0.0)  # ticks
         agg_imb = state.f('aggressor_volume_imbalance', 0.0)
-        
-        # Proximity activation using Gaussian kernel
-        proximity = np.exp(- (dist_to_round ** 2) / 0.001)
-        # Fade the exhaustion near the round number
+
+        # Gaussian proximity: sigma=4 ticks; most active within 1 point of level.
+        proximity = np.exp(-(dist_to_round ** 2) / (2.0 * 4.0 ** 2))
+        # Fade the exhaustion near the round number (counter-trend)
         signal = -proximity * np.tanh(agg_imb * 2.0)
         return float(signal)
 
 class PriorHighLowBreakoutTrap(BaseHypothesis):
     """
     Hypothesis 22: Prior high/low breakout trap
+
+    IS_BREAKING_SESSION_LEVEL is now the real session extreme break:
+    +1 when mid takes out the session high, -1 when it takes out the session
+    low, 0 otherwise.  Fade when price breaks the session extreme but aggressor
+    flow does not confirm (potential false breakout / stop sweep).
     """
     def __init__(self):
         super().__init__(22, "Prior high/low breakout trap")
-        
+
     def evaluate(self, state: MarketState) -> float:
+        # Signed: +1 = high break, -1 = low break, 0 = inside range
         is_breakout = state.f('is_breaking_session_level', 0.0)
         agg_imb = state.f('aggressor_volume_imbalance', 0.0)
-        
+
+        # Fade when breakout direction contradicts or is unsupported by flow.
         trap_intensity = np.sign(is_breakout) * (np.abs(is_breakout) - np.abs(np.tanh(agg_imb * 2.0)))
         return float(-np.tanh(trap_intensity * 2.0))
 
@@ -529,17 +548,28 @@ class OpeningCandleChase(BaseHypothesis):
 class VWAPDefenseBreak(BaseHypothesis):
     """
     Hypothesis 24: VWAP defense/break
+
+    DISTANCE_TO_VWAP is now a real session VWAP computed from trade events:
+    signed distance in ticks, positive when mid > VWAP (above), negative when
+    mid < VWAP (below).  Zero until the first TRADE event is seen.
+
+    Proximity kernel uses a Gaussian over tick distance; sigma=8 ticks (~2pts
+    for ES/MES) means the hypothesis is most active when price is within a few
+    ticks of VWAP.  Defense holds if reload score opposes the aggressor flow.
     """
     def __init__(self):
         super().__init__(24, "VWAP defense/break")
-        
+
     def evaluate(self, state: MarketState) -> float:
-        dist_to_vwap = state.f('distance_to_vwap', 1.0)
+        dist_to_vwap = state.f('distance_to_vwap', 0.0)  # signed ticks
         reload_score = state.f('iceberg_reload_score', 0.0)
         agg_imb = state.f('aggressor_volume_imbalance', 0.0)
-        
-        vwap_proximity = np.exp(-(dist_to_vwap ** 2) / 0.01)
-        # Defense holds if reload opposes imbalance
+
+        # Gaussian proximity: sigma=8 ticks; peaks at VWAP, decays symmetrically.
+        # Returns 0 when VWAP is unavailable (dist=0 → proximity=1, but reload
+        # and imbalance will dominate in that case, which is acceptable).
+        vwap_proximity = np.exp(-(dist_to_vwap ** 2) / (2.0 * 8.0 ** 2))
+        # Defense holds if reload opposes imbalance direction
         defense_strength = -np.sign(agg_imb) * reload_score
         return float(vwap_proximity * np.tanh(defense_strength * 2.0))
 

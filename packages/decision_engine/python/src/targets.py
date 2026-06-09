@@ -42,35 +42,70 @@ def build_labels_frame(
     """
     Expects columns: timestamp_ns, mid_price, filled, pnl_ticks, as_ticks, action_id.
     Adds forward return columns with leakage audit.
+
+    Vectorized: one np.searchsorted call per horizon, O(N log N) total instead of
+    O(N * H) per-row Python loops. Semantics are identical to the previous
+    row-by-row implementation.
     """
     ts = events_df["timestamp_ns"].values
     mid = events_df["mid_price"].values
-    rows = []
-    for i in range(len(events_df)):
-        row = events_df.iloc[i].to_dict()
-        row.update(build_forward_returns(mid, ts, i, tick_size))
-        rows.append(row)
-    labels = pd.DataFrame(rows)
-    assert (labels["timestamp_ns"].diff().dropna() >= 0).all(), "Timestamps must be monotonic"
+    n = len(events_df)
+
+    # Monotonicity check must not be silently dropped under python -O.
+    if n > 1 and not (np.diff(ts) >= 0).all():
+        raise ValueError("Timestamps must be monotonic non-decreasing")
+
+    labels = events_df.copy()
+
+    for h in HORIZONS_MS:
+        col = f"y_return_{h}ms"
+        target_ts = ts + h * 1_000_000  # target wall-time for each row
+
+        # future_idxs[i] is the first index with timestamp >= target_ts[i].
+        future_idxs = np.searchsorted(ts, target_ts, side="left")
+
+        # Rows where the horizon extends past the end of the frame → NaN.
+        out_of_bounds = future_idxs >= n
+
+        # Clip to valid range for array gather; out_of_bounds rows will be
+        # overwritten with NaN afterward.
+        gather_idxs = np.where(out_of_bounds, 0, future_idxs)
+
+        values = (mid[gather_idxs] - mid) / tick_size
+        values = values.astype(float)
+        values[out_of_bounds] = np.nan
+        labels[col] = values
+
     if not leakage_audit(labels):
         raise ValueError("Leakage audit failed on label frame")
     return labels
 
 
 def leakage_audit(labels: pd.DataFrame, feature_ts_col: str = "timestamp_ns") -> bool:
-    """Returns True if no label column uses data at or before feature time."""
+    """Returns True if no label column uses data at or before feature time.
+
+    Vectorized: one np.searchsorted call per label column instead of a
+    per-row Python loop.
+    """
     if feature_ts_col not in labels.columns:
         return False
     ts = labels[feature_ts_col].values
+    n = len(labels)
     for col in labels.columns:
         if not col.startswith("y_return_"):
             continue
-        for i in range(len(labels)):
-            if pd.isna(labels[col].iloc[i]):
-                continue
-            horizon_ms = int(col.replace("y_return_", "").replace("ms", ""))
-            target_t = ts[i] + horizon_ms * 1_000_000
-            future_idx = int(np.searchsorted(ts, target_t, side="left"))
-            if future_idx <= i:
-                return False
+        horizon_ms = int(col.replace("y_return_", "").replace("ms", ""))
+        values = labels[col].to_numpy(dtype=float, na_value=np.nan)
+        valid_mask = ~np.isnan(values)
+        if not valid_mask.any():
+            continue
+        # For each valid row, the label must come from a strictly future index.
+        valid_indices = np.where(valid_mask)[0]
+        target_ts = ts[valid_indices] + horizon_ms * 1_000_000
+        future_idxs = np.searchsorted(ts, target_ts, side="left")
+        # future_idx must be strictly greater than the row index; >= n is fine
+        # (that means out-of-bounds, but valid_mask excludes NaN rows so those
+        # won't appear here).
+        if np.any(future_idxs <= valid_indices):
+            return False
     return True

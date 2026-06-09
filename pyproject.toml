@@ -28,3 +28,7 @@ exclude = ["connectors*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = [".", "packages", "apps"]
+markers = [
+    "integration: requires built C++ binaries (hft_research_sim, hft_feature_golden)",
+    "slow: long-running tests (external LLM endpoint, live services, etc.)",
+]

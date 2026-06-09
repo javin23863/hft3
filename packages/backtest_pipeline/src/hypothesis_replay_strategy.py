@@ -48,7 +48,7 @@ class ToyAlwaysLongStrategy:
 
 
 class HypothesisReplayStrategy:
-    """Single-hypothesis wrapper replacing SignalBacktester fill path."""
+    """Single-hypothesis wrapper for ReplaySession-backed backtesting."""
 
     def __init__(
         self,

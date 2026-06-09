@@ -142,7 +142,7 @@ def main() -> None:
             if not args.event_id:
                 print("ERROR: --event-id is required for canonical event replay.")
                 sys.exit(1)
-            print("=== Canonical event replay (SignalBacktester primary) ===")
+            print("=== Canonical event replay (ReplaySession primary) ===")
             replay_cmd = [
                 sys.executable,
                 str(_REPO / "scripts" / "run_event_replay.py"),
@@ -157,7 +157,7 @@ def main() -> None:
                 print("Event replay failed")
                 sys.exit(r.returncode)
 
-        print("=== Research matrix (SignalBacktester; HftBacktest combined opt-in) ===")
+        print("=== Research matrix (ReplaySession per-hypothesis; HftBacktest combined opt-in) ===")
         from backtest_pipeline.src.research_runner import run_all_research_cards
 
         run_all_research_cards(npz_path, skip_hft=not args.full_hft)

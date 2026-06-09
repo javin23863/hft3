@@ -51,7 +51,7 @@ class InjectedDecisionLatency:
         )
 
     def total_ms_for_backtest(self) -> float:
-        """Convert injected latency to ms for SignalBacktester deferral."""
+        """Convert injected latency to ms for replay backtest deferral."""
         return self.total_us / 1000.0
 
 

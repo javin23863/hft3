@@ -2,7 +2,8 @@ schema_version: ibkr_endpoint_v1
 profile: ibkr_paper_socket
 provider: interactive_brokers
 transport: tws_socket
-source_reference: C:/Users/MSI/Documents/GitHub/quant-x/docs/ibkr_weekly_login.md
+# Override with QUANTX_REPO env var if the quant-x repo is not a sibling of hft3.
+source_reference: '%QUANTX_REPO%/docs/ibkr_weekly_login.md'
 mode: paper
 system: IBKR Paper Trading
 gateway: TWS or IB Gateway headless socket

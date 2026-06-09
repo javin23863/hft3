@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 from dataclasses import dataclass
@@ -17,7 +18,13 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-DEFAULT_SOURCE_ROOT = Path(r"C:\Users\MSI\Documents\GitHub\hft3\data")
+# Default source root: prefer the HFT3_PAID_DATA_SOURCE env var; fall back to
+# a sibling data/ directory next to the repo root, which matches the original
+# layout on developer machines.  Override with --source-root at the CLI.
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_SOURCE_ROOT = Path(
+    os.environ.get("HFT3_PAID_DATA_SOURCE") or (_REPO_ROOT.parent / "hft3" / "data")
+)
 DATE_RE = re.compile(r"(20\d{2})[-_](\d{2})[-_](\d{2})")
 SYMBOL_RE = re.compile(r"^(?P<symbol>[A-Z0-9]+(?:\.v\.0)?)_", re.IGNORECASE)
 

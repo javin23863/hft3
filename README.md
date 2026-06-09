@@ -17,9 +17,9 @@ Coding style (Karpathy): [docs/ai/ENGINEERING.md](docs/ai/ENGINEERING.md). Contr
 git clone --recurse-submodules https://github.com/javin23863/hft3.git
 cd hft3
 cp .env.example .env
-pip install -r data_system/requirements.txt \
-            -r backtest_pipeline/requirements.txt \
-            -r workbench/requirements.txt
+pip install -r packages/data_system/requirements.txt \
+            -r packages/backtest_pipeline/requirements.txt \
+            -r apps/workbench/requirements.txt
 pip install graphifyy
 git submodule update --init vendor/openfoundry vendor/alphageometry
 python -m pytest tests/ -q

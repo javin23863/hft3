@@ -121,10 +121,17 @@ def _parse_env_file(path: Path) -> dict[str, str]:
 
 
 def hydrate_runtime_env(repo_root: str | Path, config: dict[str, Any]) -> dict[str, Any]:
-    """Load local runtime env values without exposing their contents."""
+    """Load local runtime env values without exposing their contents.
+
+    ``loaded_key_count`` reflects only keys actually read from env files on
+    disk, not built-in defaults applied when a key is absent.  A file
+    containing four keys produces a count of four, regardless of how many
+    defaults are subsequently applied.
+    """
 
     loaded_paths: list[str] = []
-    loaded_keys: set[str] = set()
+    # Keys sourced from files (determines loaded_key_count).
+    file_loaded_keys: set[str] = set()
     for path in _candidate_env_files(repo_root, config):
         if not path.is_file():
             continue
@@ -133,11 +140,13 @@ def hydrate_runtime_env(repo_root: str | Path, config: dict[str, Any]) -> dict[s
         for key, value in values.items():
             if not os.environ.get(key):
                 os.environ[key] = value
-                loaded_keys.add(key)
+                file_loaded_keys.add(key)
                 applied = True
         if applied:
             loaded_paths.append(str(path))
 
+    # Apply built-in defaults for keys not yet set; these do not count toward
+    # loaded_key_count because they were not read from any file.
     defaults = {
         "BROKER_SOCKET_ENABLED": "1",
         "MARKET_DATA_PROVIDER": "ibkr-socket",
@@ -149,15 +158,13 @@ def hydrate_runtime_env(repo_root: str | Path, config: dict[str, Any]) -> dict[s
     for key, value in defaults.items():
         if not os.environ.get(key):
             os.environ[key] = value
-            loaded_keys.add(key)
     if not os.environ.get("IBKR_ACCOUNT_ID") and os.environ.get("IBKR_ACCOUNT_ID_PRIMARY"):
         os.environ["IBKR_ACCOUNT_ID"] = os.environ["IBKR_ACCOUNT_ID_PRIMARY"]
-        loaded_keys.add("IBKR_ACCOUNT_ID")
 
     return {
         "loaded_paths": loaded_paths,
-        "loaded_key_count": len(loaded_keys),
-        "loaded_keys": sorted(loaded_keys),
+        "loaded_key_count": len(file_loaded_keys),
+        "loaded_keys": sorted(file_loaded_keys),
         "redacted": True,
     }
 
@@ -612,7 +619,12 @@ def endpoint_status(
         "runtime_policy": runtime_policy,
         "launcher": launch_status,
         "quantx_reference": {
-            "repo": "C:/Users/MSI/Documents/GitHub/quant-x",
+            # Prefer an explicit env override; fall back to the conventional
+            # sibling-directory layout (../quant-x relative to this repo).
+            "repo": os.environ.get(
+                "QUANTX_REPO",
+                str(Path(__file__).resolve().parents[4].parent / "quant-x"),
+            ),
             "runbook": "docs/ibkr_weekly_login.md",
             "default_socket_provider": "ibkr-socket",
             "paper_port": 7497,

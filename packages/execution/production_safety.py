@@ -485,9 +485,17 @@ class ProductionSafetyOrchestrator:
         enforce = ctx.execution_mode.upper() in ("LIVE", "PAPER")
         worst_result = SafetyResult(allowed=True, action=HaltAction.NONE)
 
-        now_ns = ctx.system_clock_ns or time.monotonic_ns()
+        # Relative-age monitors (StaleDataMonitor, DisconnectMonitor) only care
+        # about elapsed duration, so a monotonic clock is appropriate there.
+        now_ns_monotonic = ctx.system_clock_ns or time.monotonic_ns()
 
-        account = self._get_account(ctx.adapter, now_ns)
+        # ClockDriftMonitor compares now_ns against exchange_clock_ns (wall clock).
+        # Using a monotonic timestamp here would produce a meaningless constant
+        # offset that drifts independently of actual wall-clock skew.  Always use
+        # a wall-clock source so the comparison is physically meaningful.
+        now_ns_wall = ctx.system_clock_ns or time.time_ns()
+
+        account = self._get_account(ctx.adapter, now_ns_monotonic)
         if account is None:
             loss_result = SafetyResult(
                 allowed=False,
@@ -506,11 +514,11 @@ class ProductionSafetyOrchestrator:
             )
 
         results_ordered: List[SafetyResult] = [
-            self.disconnect.check(now_ns, ctx.adapter),
+            self.disconnect.check(now_ns_monotonic, ctx.adapter),
             loss_result,
             self.position_mismatch.check(ctx.adapter, ctx.order_intent.symbol, ctx.local_inventory),
-            self.clock_drift.check(now_ns, ctx.exchange_clock_ns),
-            self.stale_data.check(now_ns, ctx.last_market_data_ns),
+            self.clock_drift.check(now_ns_wall, ctx.exchange_clock_ns),
+            self.stale_data.check(now_ns_monotonic, ctx.last_market_data_ns),
         ]
 
         if not enforce:
@@ -550,7 +558,7 @@ class ProductionSafetyOrchestrator:
                             monitor_name=result.monitor_name,
                             details=dict(result.details),
                         )
-                    self._execute_flatten(ctx, now_ns, result)
+                    self._execute_flatten(ctx, now_ns_monotonic, result)
                 return result
 
         return worst_result

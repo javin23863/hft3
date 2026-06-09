@@ -57,4 +57,4 @@ def test_fan_out_writes_dirs_without_npz(tmp_path: Path) -> None:
         (out_root / "SPREAD_BLOWOUT_RECOMPRESSION_CPI_2024_09_11_TIGHT" / "result.json").read_text(encoding="utf-8")
     )
     assert payload["engine_kind"] == "hyp_mbo"
-    assert "SignalBacktester" in payload["backend_label"]
+    assert "ReplaySession" in payload["backend_label"]

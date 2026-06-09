@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Single-hypothesis event backtest on Databento NPZ; latency from CHI404 probe."""
+"""Single-hypothesis event backtest on Databento NPZ; latency from CHI404 probe.
+
+Replaced SignalBacktester with run_hypothesis_replay (ReplaySession-backed).
+The old SignalBacktester path was deleted because it had silently wrong math:
+100 µs markout window (not 100 ms), raw['px'] used as mid, zero slippage,
+and ES tick_value on MES contracts.
+"""
 from __future__ import annotations
 
 import argparse
@@ -14,10 +20,9 @@ for path in (_REPO, _REPO / "packages", _REPO / "apps"):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from backtest_pipeline.src.signal_backtester import SignalBacktester
+from backtest_pipeline.src.replay_matrix import run_hypothesis_replay
 from backtest.adapters.rithmic_replay_loader import resolve_event_npz
 from data_system.src.events_parser import load_and_parse_events
-from features_engine.src.features.npz_feed import load_npz_events
 from features_engine.src.hypotheses.modules import SpreadBlowoutRecompression
 
 DEFAULT_OUT = _REPO / "research_cards" / "single_run_hyp_backtest"
@@ -81,7 +86,9 @@ def _event_metadata(event_id: str) -> dict[str, str]:
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="Single HYP backtest with CHI404-measured latency (SignalBacktester)")
+    p = argparse.ArgumentParser(
+        description="Single HYP backtest with CHI404-measured latency (ReplaySession)"
+    )
     p.add_argument("--event-id", required=True, help="Explicit catalog event id from events.csv")
     p.add_argument("--npz", type=Path, default=None, help="Override NPZ; default from --event-id")
     p.add_argument("--out", type=Path, default=DEFAULT_OUT)
@@ -99,21 +106,23 @@ def main() -> int:
     latency_ms = chi404["backtest_latency_ms"]
 
     args.out.mkdir(parents=True, exist_ok=True)
-    raw = load_npz_events(str(npz_path))
     hyp = SpreadBlowoutRecompression()
 
-    print(f"Data: {npz_path} events={len(raw)}", flush=True)
+    print(f"Data: {npz_path}", flush=True)
     print(f"CHI404 probe run: {chi404['probe_run_id']}", flush=True)
     print(f"Backtest latency: {latency_ms:.4f} ms ({chi404['backtest_latency_source']})", flush=True)
     print(f"Running HYP_{hyp.hyp_id} {hyp.name}", flush=True)
 
-    bt = SignalBacktester()
-    res = bt.run_hypothesis(hyp, raw, latency_ms=latency_ms)
+    res = run_hypothesis_replay(hyp, str(npz_path), latency_ms=latency_ms)
 
     fills_path = args.out / "fills.csv"
-    df = bt.fills_to_dataframe(res.fills, raw)
-    if not df.empty:
-        df.to_csv(fills_path, index=False)
+    if res.fills:
+        try:
+            import pandas as pd
+
+            pd.DataFrame([f.__dict__ for f in res.fills]).to_csv(fills_path, index=False)
+        except ImportError:
+            print("Warning: pandas not installed, skipping fills.csv export", file=sys.stderr)
 
     payload = {
         "scenario": f"{args.event_id} single hypothesis backtest",
@@ -125,12 +134,12 @@ def main() -> int:
         "window_utc": event_meta["window_utc"],
         "symbol": "MES.v.0",
         "npz_path": _relative_npz(npz_path),
-        "events": int(len(raw)),
         "hypothesis_id": hyp.hyp_id,
         "hypothesis_name": hyp.name,
         "live_orders_sent": False,
         "chi404_measured_speed": chi404,
         "backtest_latency_ms": latency_ms,
+        "backend": "replay_matrix.run_hypothesis_replay / ReplaySession",
         "net_pnl_usd": round(res.net_pnl, 4),
         "num_trades": res.num_trades,
         "win_rate": round(res.win_rate, 4),
@@ -149,7 +158,7 @@ def main() -> int:
     print(f"  Order ack p99      : not measured (R|API+ not wired)")
     if chi404.get("trial_order_ack_status"):
         print(f"  Trial VM order ack : {chi404['trial_order_ack_status']}")
-    print("--- BACKTEST RESULT (NPZ replay @ Rithmic TCP p99) ---")
+    print("--- BACKTEST RESULT (NPZ replay @ Rithmic TCP p99, ReplaySession) ---")
     print(f"  Net PnL            : ${res.net_pnl:.2f}")
     print(f"  Trades             : {res.num_trades}")
     print(f"  Win rate           : {res.win_rate:.1%}")
@@ -158,7 +167,7 @@ def main() -> int:
     print(f"  Tail loss (5th)    : ${res.tail_loss:.2f}")
     print(f"Wrote {result_path}")
     if fills_path.exists():
-        print(f"Wrote {fills_path} ({len(df)} rows)")
+        print(f"Wrote {fills_path} ({len(res.fills)} rows)")
     return 0
 
 

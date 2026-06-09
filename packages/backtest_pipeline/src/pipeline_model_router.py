@@ -19,7 +19,7 @@ PDF_OPTIONS_FIXTURE = frozenset({"DEALER_HEDGING"})
 SMOKE_HYP_SAMPLE = frozenset({"SECOND_WAVE_CONTINUATION", "SPREAD_BLOWOUT_RECOMPRESSION"})
 
 _BACKEND_LABELS = {
-    "hyp_mbo": "SignalBacktester MBO pipeline (research path)",
+    "hyp_mbo": "ReplaySession MBO pipeline (research path)",
     "pdf_hybrid_replay": "ReplayRunner quote-engine (queue fills)",
     "pdf_structural_eval": "Structural signal eval (not queue-replay backtest)",
     "pdf_diagnostics": "Diagnostics-only (num_trades may be 0 by design)",

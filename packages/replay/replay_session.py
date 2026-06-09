@@ -66,6 +66,21 @@ class ReplaySessionConfig:
     symbol: str = "MES"
     seed: int = 0
     audit_dir: Path = field(default_factory=lambda: AUDIT_DIR)
+    # Feature feed latency in milliseconds.
+    #
+    # When set, the market-data adapter is synced to (current_timestamp -
+    # feature_latency_ns) rather than current_timestamp, so the strategy
+    # observes features that are as stale as the configured feed latency.
+    # This mirrors the order-latency bands swept by hbt on the execution side,
+    # ensuring that feature staleness and order latency are both modelled.
+    #
+    # Default (None): mirrors latency_ms — i.e. feature_latency_ms = latency_ms.
+    # Set to 0.0 to give the strategy perfectly fresh features (no feed delay).
+    # Values must be >= 0; negative values raise ValueError at runtime.
+    #
+    # Note: order latency is NOT affected; hbt already simulates that via its
+    # own latency model.  Only the feature clock is shifted here.
+    feature_latency_ms: Optional[float] = None
 
 
 class ReplaySession:
@@ -90,6 +105,15 @@ class ReplaySession:
         from backtest_pipeline.src.hft_backtest_builder import build_hftbacktest
 
         cfg = self.config
+
+        # Resolve feature latency: default mirrors order latency_ms.
+        feat_latency_ms = cfg.feature_latency_ms if cfg.feature_latency_ms is not None else cfg.latency_ms
+        if feat_latency_ms < 0.0:
+            raise ValueError(
+                f"feature_latency_ms must be >= 0, got {feat_latency_ms}"
+            )
+        feat_latency_ns = int(feat_latency_ms * 1_000_000)
+
         if cfg.events is not None:
             fd, tmp_path = tempfile.mkstemp(suffix='.npz')
             os.close(fd)
@@ -141,7 +165,12 @@ class ReplaySession:
                 depth = hbt.depth(0)
                 book_one_sided = depth.best_bid <= 0 or depth.best_ask <= 0
 
-                mda.sync_to_timestamp(ts)
+                # Sync the feature clock to ts - feat_latency_ns so the
+                # strategy observes features that are as stale as the
+                # configured feed latency.  Guard against negative timestamps
+                # (possible at the very first step when ts < feat_latency_ns).
+                feature_ts = max(0, ts - feat_latency_ns)
+                mda.sync_to_timestamp(feature_ts)
                 state = mda.current_market_state(cfg.symbol)
                 drained = adapter.drain_order_events()
                 self._record_fills(drained, ts, depth)

@@ -1,14 +1,13 @@
-"""ReplaySession-backed per-hypothesis matrix (replaces SignalBacktester fills)."""
+"""ReplaySession-backed per-hypothesis hypothesis matrix."""
 from __future__ import annotations
 
-import warnings
 from collections import deque
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
 from backtest_pipeline.src.hypothesis_replay_strategy import HypothesisReplayStrategy
-from backtest_pipeline.src.signal_backtester import BacktestResult, FillRecord
+from backtest_pipeline.src.backtest_result import BacktestResult, FillRecord
 from features_engine.src.hypotheses.modules import BaseHypothesis
 from replay.replay_session import ReplaySession, ReplaySessionConfig
 
@@ -175,10 +174,8 @@ def run_latency_matrix_replay(
     }
 
 
-def deprecate_signal_backtester_fill_path() -> None:
-    warnings.warn(
-        "SignalBacktester internal fill simulation is deprecated; "
-        "use replay_matrix.run_hypothesis_replay / ReplaySession instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
+# deprecate_signal_backtester_fill_path() has been removed: the fill
+# simulation it warned about was deleted in the same commit that removed
+# SignalBacktester's run_hypothesis / run_all_hypotheses / run_latency_matrix
+# methods.  The canonical entry points are run_hypothesis_replay,
+# run_all_hypotheses_replay, and run_latency_matrix_replay in this module.

@@ -33,7 +33,7 @@ def test_finalize_smoke_fills_not_run_rows() -> None:
             "artifact_dir": "research_cards/pipeline_runs/SECOND_WAVE_CONTINUATION_X",
             "num_trades": 1,
             "net_pnl_usd": 0.1,
-            "backend_label": "SignalBacktester MBO pipeline (research path)",
+            "backend_label": "ReplaySession MBO pipeline (research path)",
         },
     ]
     models = finalize_catalog_models(executed, "smoke")

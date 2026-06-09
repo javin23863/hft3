@@ -324,3 +324,70 @@ class TestProductionSafetyOrchestrator:
         )
         result_reduce = o.pre_trade_check(ctx_reduce)
         assert result_reduce.allowed
+
+
+class TestClockDriftMonitorWallClockFallback:
+    """Verify that ClockDriftMonitor is never fed a monotonic timestamp when
+    system_clock_ns is absent (0).  Prior to the fix, now_ns would be
+    time.monotonic_ns() — a relative counter that typically differs from a
+    wall-clock exchange timestamp by tens of billions of nanoseconds, causing a
+    spurious drift halt the moment the baseline sample count was reached.
+    """
+
+    def test_no_bogus_drift_halt_when_system_clock_ns_absent(
+        self, mock_intent: OrderIntent, mock_adapter: MagicMock
+    ):
+        """With system_clock_ns=0 the orchestrator must use time.time_ns() for
+        the drift check.  Supply a synthetic exchange_clock_ns close to
+        time.time_ns() so drift is small; the monitor must not halt."""
+        import time
+
+        o = ProductionSafetyOrchestrator()
+        # Use a realistic exchange_clock_ns: current wall time with ~2 ms offset.
+        exchange_clock_ns = time.time_ns() - 2_000_000  # 2 ms in the past
+
+        # Provide fresh market data so StaleDataMonitor does not trigger.
+        # last_market_data_ns must be recent relative to the monotonic now used
+        # by StaleDataMonitor.  We set it to 1 ns before the monotonic time so
+        # it is always "fresh".
+        monotonic_now = time.monotonic_ns()
+        last_market_data_ns = monotonic_now - 1
+
+        ctx = SafetyContext(
+            order_intent=mock_intent,
+            adapter=mock_adapter,
+            execution_mode="LIVE",
+            system_clock_ns=0,          # absent — triggers fallback path
+            exchange_clock_ns=exchange_clock_ns,
+            last_market_data_ns=last_market_data_ns,
+        )
+        # Warm the baseline (first call sets the baseline, second measures drift).
+        o.pre_trade_check(ctx)
+        result = o.pre_trade_check(ctx)
+
+        # The drift must not halt: wall fallback (time.time_ns) ≈ exchange_clock_ns.
+        if not result.allowed and result.monitor_name == "ClockDriftMonitor":
+            pytest.fail(
+                f"Spurious drift halt from monotonic-vs-wall mismatch: {result.halt_reason}"
+            )
+
+    def test_explicit_system_clock_ns_used_unchanged(
+        self, mock_intent: OrderIntent, mock_adapter: MagicMock
+    ):
+        """When system_clock_ns is provided it is forwarded directly to all monitors."""
+        o = ProductionSafetyOrchestrator()
+        wall_ns = 1_700_000_000_000_000_000
+        ctx = SafetyContext(
+            order_intent=mock_intent,
+            adapter=mock_adapter,
+            execution_mode="LIVE",
+            system_clock_ns=wall_ns,
+            exchange_clock_ns=wall_ns - 1_000_000,  # 1 ms behind — tiny drift
+            last_market_data_ns=wall_ns - 1_000_000,
+        )
+        # Baseline call
+        o.pre_trade_check(ctx)
+        result = o.pre_trade_check(ctx)
+        # Should not halt on clock drift with only 1 ms offset.
+        if not result.allowed and result.monitor_name == "ClockDriftMonitor":
+            pytest.fail(f"Unexpected drift halt: {result.halt_reason}")

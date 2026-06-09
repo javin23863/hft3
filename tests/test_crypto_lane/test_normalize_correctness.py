@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import math
+import os
 from datetime import UTC, datetime, timedelta
 
 import polars as pl
+import pytest
 import yaml
 
 from crypto_lane.src.features.feature_matrix import build_labeled_frame
@@ -60,6 +62,10 @@ def test_log_of_negative_does_not_poison():
     assert abs(vals[3] - math.log(102.0 / 101.0)) < 1e-9
 
 
+@pytest.mark.skipif(
+    not (os.environ.get("HFT3_CRYPTO_B2_KEY_ID") and os.environ.get("HFT3_CRYPTO_B2_APP_KEY")),
+    reason="Requires live B2/Backblaze credentials (HFT3_CRYPTO_B2_KEY_ID and HFT3_CRYPTO_B2_APP_KEY)",
+)
 def test_l2_data_quality_flag_default_zero():
     from crypto_lane.src.ingest.normalize import build_spot_perp_ticks
     df = build_spot_perp_ticks("2024-01-01", "2024-01-02")
