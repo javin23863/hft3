@@ -15,12 +15,20 @@ import pandas as pd
 
 from hft3_pipeline.inventory import RepoInventory, build_inventory
 from hft3_pipeline.manifest import (
+    EvidenceGrade,
+    EngineKind,
     HftTruthManifest,
     PipelineManifest,
+    ReconciliationStatus,
+    SignalSource,
     StageStatus,
     VectorbtFilterManifest,
 )
 from hft3_pipeline.run_mode import RunContext, RunMode
+from hft3_pipeline.walk_forward import (
+    check_tuning_allowed,
+    check_evaluation_allowed,
+)
 
 
 def _now_iso() -> str:
@@ -125,6 +133,25 @@ def stage_vectorbt_filter(repo_root: Path, run_ctx: RunContext, feature_result: 
     
     manifest.data_artifacts.append(npz_path)
     manifest.feature_artifacts.append(npz_path)
+
+    # Walk-forward enforcement (B4): refuse tuning on holdout events
+    event_id = run_ctx.event_id or feature_result.get("event_id", "")
+    if event_id:
+        is_fixture = run_ctx.run_mode in (RunMode.FIXTURE_CI, RunMode.DEBUG)
+        tuning_allowed, tuning_reason = check_tuning_allowed(
+            event_id, is_tuning_stage=True, fixture_mode=is_fixture,
+        )
+        if not tuning_allowed:
+            eval_allowed, eval_reason = check_evaluation_allowed(event_id, fixture_mode=is_fixture)
+            if not eval_allowed:
+                manifest.warnings.append(f"BLOCKED_BY_WALK_FORWARD: {eval_reason}")
+                manifest.next_action = "event_not_eligible_for_research"
+                manifest.time_taken_sec = round(time.time() - t0, 2)
+                return manifest
+            manifest.warnings.append(f"EVALUATE_ONLY_BY_WALK_FORWARD: {tuning_reason}")
+            manifest.walk_forward_period = tuning_reason
+        else:
+            manifest.walk_forward_period = tuning_reason
     
     # Process every MBO event through MarketStatePipeline to get real feature vectors
     from replay.market_data_adapter import HistoricalReplayMarketDataAdapter
@@ -193,12 +220,23 @@ def stage_vectorbt_filter(repo_root: Path, run_ctx: RunContext, feature_result: 
         manifest.search_space_version = "1.0"
     
     manifest.parameter_count = len(params)
+    manifest.engine_requested = EngineKind.VECTORBT.value
+    manifest.signal_source = SignalSource.MODEL_CATALOG_MSP.value
+    manifest.signal_model_id = run_ctx.model_id
+
+    # B4 walk-forward: in evaluate-only mode, use default params (no tuning sweep)
+    evaluate_only = any("EVALUATE_ONLY" in w for w in manifest.warnings)
+    if evaluate_only:
+        manifest.warnings.append("TUNING_SKIPPED_EVALUATE_ONLY_PERIOD")
+        manifest.tuning_skipped_reason = "holdout_period_evaluate_only"
     
     # Run VectorBT sweep
     import itertools
     param_combos = list(itertools.product(*params.values()))
     if len(param_combos) > 36:
         param_combos = param_combos[:36]
+    if evaluate_only:
+        param_combos = [param_combos[0]] if param_combos else []
     manifest.parameters_tested = len(param_combos)
     
     fast_results = []
@@ -273,6 +311,11 @@ def stage_vectorbt_filter(repo_root: Path, run_ctx: RunContext, feature_result: 
     if not use_vbt:
         manifest.backend = "numpy_fallback"
         manifest.vectorbt_available = False
+        manifest.engine_used = EngineKind.NUMPY_FALLBACK.value
+        manifest.evidence_status = EvidenceGrade.NON_AUTHORITATIVE_PREFILTER.value
+    else:
+        manifest.engine_used = EngineKind.VECTORBT.value
+        manifest.evidence_status = EvidenceGrade.NON_AUTHORITATIVE_PREFILTER.value
         for i, combo in enumerate(param_combos):
             pv = dict(zip(params.keys(), combo))
             threshold = pv.get("signal_threshold", 0.15)
@@ -370,13 +413,46 @@ def _load_search_space(repo_root: Path, model_id: str, lane_id: str) -> Optional
     return None
 
 
+def _load_latency_config(repo_root: Path) -> Dict[str, Any]:
+    """Load measured latency profile from workbench config."""
+    default = {"latency_ms": 1.0, "source": "hardcoded_default", "p99_us": 1000}
+    profile_path = repo_root / "apps" / "workbench" / "config" / "cpp_latency_profile.yaml"
+    if not profile_path.is_file():
+        return default
+    try:
+        import yaml
+        data = yaml.safe_load(profile_path.read_text(encoding="utf-8"))
+        feed = data.get("feed_delay", {})
+        p99_us = feed.get("p99_us", 1000)
+        latency_ms = p99_us / 1000.0
+        return {
+            "latency_ms": max(latency_ms, 0.5),
+            "source": data.get("feed_delay", {}).get("source", "chi404_profile"),
+            "p99_us": p99_us,
+            "decision_compute_p50_us": data.get("cpp_decision_compute", {}).get("p50_us", 11),
+            "decision_compute_p99_us": data.get("cpp_decision_compute", {}).get("p99_us", 11),
+        }
+    except Exception:
+        return default
+
+
 def stage_hft_truth(repo_root: Path, run_ctx: RunContext, vectorbt_manifest: VectorbtFilterManifest, feature_result: Dict[str, Any]) -> HftTruthManifest:
-    """Stage 4: HFTBacktest truth gate using SignalBacktester with real hypothesis evaluation."""
+    """Stage 4: HFTBacktest truth gate using ReplaySession with real hypothesis evaluation."""
     hft = HftTruthManifest(
         run_id=_run_id(), parent_vectorbt_run_id=vectorbt_manifest.run_id,
         lane_id=run_ctx.lane_id, model_id=run_ctx.model_id, symbol=run_ctx.symbol,
         event_id=run_ctx.event_id, run_mode=run_ctx.run_mode.value, promotion_eligible=False,
     )
+    
+    # Walk-forward enforcement (B4): block sim shadow events from workstation
+    event_id = run_ctx.event_id or feature_result.get("event_id", "")
+    if event_id:
+        is_fixture = run_ctx.run_mode in (RunMode.FIXTURE_CI, RunMode.DEBUG)
+        eval_allowed, eval_reason = check_evaluation_allowed(event_id, fixture_mode=is_fixture)
+        if not eval_allowed:
+            hft.rejection_reason = f"BLOCKED_BY_WALK_FORWARD: {eval_reason}"
+            hft.next_action = "run_on_CHI404"
+            return hft
     
     if not vectorbt_manifest.top_candidates:
         hft.rejection_reason = "no_vectorbt_candidates"
@@ -394,19 +470,33 @@ def stage_hft_truth(repo_root: Path, run_ctx: RunContext, vectorbt_manifest: Vec
         return hft
     
     hft.feature_artifacts = [npz_path]
+    # B5 execution realism: load measured CHI404 latency distributions
+    latency_cfg = _load_latency_config(repo_root)
+    latency_ms = latency_cfg["latency_ms"]
     hft.hftbacktest_config = {
-        "latency_ms": 1.0, "queue_model": "LogProbQueueModel2",
+        "latency_ms": latency_ms, "queue_model": "LogProbQueueModel2",
         "tick_size": 0.25, "lot_size": 1.0,
         "product": (run_ctx.symbol or "MES.v.0").split(".")[0],
+        "latency_source": latency_cfg["source"],
+        "feed_delay_p99_us": latency_cfg["p99_us"],
+        "decision_compute_p50_us": latency_cfg.get("decision_compute_p50_us", 11),
+        "decision_compute_p99_us": latency_cfg.get("decision_compute_p99_us", 11),
     }
-    hft.latency_config = {"measured_p99_ms": 1.0, "source": "chi404_default"}
+    hft.latency_config = {"measured_p99_ms": latency_ms, "source": latency_cfg["source"], "p99_us": latency_cfg["p99_us"]}
     hft.queue_model = "LogProbQueueModel2"
     hft.fill_model = "no_partial_fill"
     hft.fee_model = "FeeModel"
     hft.slippage_model = "half_spread"
     
+    hft.engine_requested = EngineKind.REPLAY_SESSION_HFTBACKTEST.value
+    hft.engine_used = EngineKind.REPLAY_SESSION_HFTBACKTEST.value
+
     # Use replay_matrix with ReplaySession (real hftbacktest engine)
-    from backtest_pipeline.src.replay_matrix import run_hypothesis_replay
+    from backtest_pipeline.src.replay_matrix import (
+        reconcile_pnl,
+        run_hypothesis_replay,
+        write_hft_ledgers,
+    )
     from features_engine.src.features.npz_feed import load_npz_events
     from features_engine.src.hypotheses.registry import get_active_hypotheses
     from features_engine.src.model_registry import resolve_model_id, get_hyp_id_for_slug
@@ -436,14 +526,20 @@ def stage_hft_truth(repo_root: Path, run_ctx: RunContext, vectorbt_manifest: Vec
             hft_max_steps = 20000
     
     hypothesis = hyps[0]
+    meta: dict[str, Any] = {}
     result = run_hypothesis_replay(
         hypothesis=hypothesis,
         npz_path=npz_path,
-        latency_ms=1.0,
+        latency_ms=latency_ms,
         signal_threshold=0.15,
         max_steps=hft_max_steps,
+        meta_out=meta,
     )
     
+    hft.max_steps_set = hft_max_steps
+    hft.total_steps_available = meta.get("steps", 0)
+    replay_run_id = meta.get("run_id", "")
+
     if result is None:
         hft.rejection_reason = "no_backtest_results"
         hft.next_action = "check_data_quality"
@@ -466,13 +562,46 @@ def stage_hft_truth(repo_root: Path, run_ctx: RunContext, vectorbt_manifest: Vec
     }
     
     hft.execution_realism.update({
-        "latency_ms": 1.0,
+        "latency_ms": latency_ms,
+        "latency_source": latency_cfg["source"],
+        "feed_delay_p99_us": latency_cfg["p99_us"],
         "queue_model": "LogProbQueueModel2",
         "fill_model": "no_partial_fill",
         "fee_per_trade": 0.85,
         "slippage_estimate": round(result.adverse_selection_ticks * 0.25, 4),
     })
-    
+
+    # Evidence grading: determine grade based on run mode, max_steps, and data
+    if hft_max_steps is not None and hft.total_steps_available and hft_max_steps < hft.total_steps_available:
+        hft.evidence_status = EvidenceGrade.PARTIAL_HFT_TRUTH_DEBUG_ONLY.value
+        hft.rejection_reason = "partial_replay: max_steps truncated replay"
+    elif run_ctx.run_mode == RunMode.FIXTURE_CI:
+        hft.evidence_status = EvidenceGrade.FIXTURE_ONLY.value
+    elif run_ctx.run_mode == RunMode.DEBUG:
+        hft.evidence_status = EvidenceGrade.DEBUG_ONLY.value
+    else:
+        hft.evidence_status = EvidenceGrade.AUTHORITATIVE_EVIDENCE.value
+
+    # PnL reconciliation from fills
+    fills_detail = meta.get("fills_detail", [])
+    if fills_detail:
+        recon = reconcile_pnl({"fills_detail": fills_detail, "balance": hft.pnl, "fee": 0.0})
+        hft.pnl_from_fills = recon["pnl_from_fills"]
+        hft.pnl_from_account = recon["pnl_from_account"]
+        hft.pnl_reconciliation_pass = recon["passes"]
+        if recon["passes"]:
+            hft.reconciliation_status = ReconciliationStatus.PASSED.value
+        else:
+            hft.reconciliation_status = ReconciliationStatus.FAILED.value
+            hft.evidence_status = EvidenceGrade.FAILED_ACCOUNTING_RECONCILIATION.value
+            hft.rejection_reason = recon.get("reason", "pnl_reconciliation_failed")
+
+    # Write HFT ledgers alongside pipeline manifests
+    if meta.get("run_id"):
+        pipeline_run_dir = repo_root / "artifacts" / "pipeline_runs" / meta["run_id"]
+        ledgers = write_hft_ledgers(meta["run_id"], meta, manifest_dir=pipeline_run_dir / "ledgers")
+        hft.ledger_paths = ledgers
+
     # Compare VectorBT vs HFT results
     vbt_pnl = best.get("net_pnl", 0.0)
     delta = abs(result.net_pnl - vbt_pnl)
@@ -549,8 +678,13 @@ def stage_promotion(repo_root: Path, run_ctx: RunContext, hft_manifest: HftTruth
     overall_grade = scorecard.get("overall_grade", "F")
     net_return = metrics.get("net_return", 0.0) or 0.0
     
+    evidence_ok = hft_manifest.evidence_status in (
+        EvidenceGrade.AUTHORITATIVE_EVIDENCE.value,
+        "",  # not set yet — treated as ungraded, allow through
+    )
     promote = (
         hft_manifest.promotion_eligible
+        and evidence_ok
         and overall_grade in ("A", "B+", "B", "C")
         and net_return > 0
         and run_ctx.run_mode.promotion_eligible

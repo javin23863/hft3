@@ -10,7 +10,7 @@ sys.path.insert(0, str(REPO_ROOT / "packages"))
 sys.path.insert(0, str(REPO_ROOT / "apps"))
 
 from hft3_pipeline.run_mode import RunContext, RunMode
-from hft3_pipeline.manifest import PipelineManifest, StageStatus
+from hft3_pipeline.manifest import EvidenceGrade, PipelineManifest, StageStatus
 from hft3_pipeline import stages
 
 
@@ -118,6 +118,14 @@ def _run_single_model(repo_root: Path, run_ctx: RunContext, print_prefix: str = 
         event_id=run_ctx.event_id, session_id=run_ctx.session_id, group_id=run_ctx.group_id,
         run_mode=run_ctx.run_mode.value,
     )
+
+    # Single-event smoke detection: only FIXTURE_CI/DEBUG are smoke-only
+    if run_ctx.event_id:
+        if run_ctx.run_mode in (RunMode.FIXTURE_CI, RunMode.DEBUG):
+            manifest.single_event_smoke = True
+            manifest.evidence_grade = EvidenceGrade.SMOKE_E2E_SINGLE_EVENT.value
+            manifest.blockers.append("smoke_e2e_single_event_only")
+
     p = print_prefix
 
     print(f"{p}[Stage 0] Inventory...")

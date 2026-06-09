@@ -50,6 +50,15 @@ class CmeEntryTruth:
     hft_truth_last_run: str = ""
     promotion_status: str = "PENDING"      # PROMOTED, QUARANTINED, PENDING
     pipeline_last_run_id: str = ""
+    # Evidence quality fields
+    engine_requested: str = ""
+    engine_used: str = ""
+    evidence_status: str = ""
+    signal_source: str = ""
+    input_artifact_paths: list[str] = field(default_factory=list)
+    output_artifact_paths: list[str] = field(default_factory=list)
+    reconciliation_status: str = ""
+    ledgers_available: bool = False
 
 
 @dataclass
@@ -247,6 +256,14 @@ def _read_latest_pipeline_stage(repo: Path, symbol: str) -> dict:
         "hft_truth_last_run": "",
         "promotion_status": "PENDING",
         "pipeline_last_run_id": "",
+        "engine_requested": "",
+        "engine_used": "",
+        "evidence_status": "",
+        "signal_source": "",
+        "input_artifact_paths": [],
+        "output_artifact_paths": [],
+        "reconciliation_status": "",
+        "ledgers_available": False,
     }
     pipeline_dir = repo / "artifacts" / "pipeline_runs"
     if not pipeline_dir.is_dir():
@@ -275,6 +292,16 @@ def _read_latest_pipeline_stage(repo: Path, symbol: str) -> dict:
                 "hft_truth_last_run": hf.get("run_id", "") if isinstance(hf, dict) else "",
                 "promotion_status": data.get("promotion_status", "PENDING"),
                 "pipeline_last_run_id": data.get("run_id", ""),
+                "engine_requested": vb.get("engine_requested", "") if isinstance(vb, dict) else "",
+                "engine_used": hf.get("engine_used", "") if isinstance(hf, dict) else vb.get("engine_used", ""),
+                "evidence_status": hf.get("evidence_status") or vb.get("evidence_status") or "",
+                "signal_source": vb.get("signal_source", "") if isinstance(vb, dict) else "",
+                "input_artifact_paths": (
+                    vb.get("data_artifacts", []) + vb.get("feature_artifacts", [])
+                ) if isinstance(vb, dict) else [],
+                "output_artifact_paths": list(hf.get("ledger_paths", {}).values()) if isinstance(hf, dict) else [],
+                "reconciliation_status": hf.get("reconciliation_status", "") if isinstance(hf, dict) else "",
+                "ledgers_available": bool(hf.get("ledger_paths", {})) if isinstance(hf, dict) else False,
             })
             break
         except Exception:
@@ -335,6 +362,14 @@ def _build_cme_entry(repo: Path, symbol: str) -> CmeEntryTruth:
         hft_truth_last_run=stage["hft_truth_last_run"],
         promotion_status=stage["promotion_status"],
         pipeline_last_run_id=stage["pipeline_last_run_id"],
+        engine_requested=stage["engine_requested"],
+        engine_used=stage["engine_used"],
+        evidence_status=stage["evidence_status"],
+        signal_source=stage["signal_source"],
+        input_artifact_paths=stage["input_artifact_paths"],
+        output_artifact_paths=stage["output_artifact_paths"],
+        reconciliation_status=stage["reconciliation_status"],
+        ledgers_available=stage["ledgers_available"],
     )
 
 

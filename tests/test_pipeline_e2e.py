@@ -253,7 +253,8 @@ class TestManifestPersistence:
         
         required_fields = [
             "run_id", "hftbacktest_required", "pit_status", "leakage_status",
-            "missing_reasons", "next_action",
+            "missing_reasons", "next_action", "engine_requested", "engine_used",
+            "evidence_status", "signal_source", "signal_model_id",
         ]
         for field in required_fields:
             assert field in d, f"Missing field: {field}"
@@ -271,6 +272,8 @@ class TestManifestPersistence:
             "parent_vectorbt_run_id", "parameter_set_id", "hftbacktest_config",
             "latency_config", "queue_model", "fill_model", "fee_model",
             "slippage_model", "execution_realism", "promotion_eligible", "next_action",
+            "engine_requested", "engine_used", "evidence_status",
+            "reconciliation_status", "ledger_paths",
         ]
         for field in required_fields:
             assert field in d, f"Missing field: {field}"

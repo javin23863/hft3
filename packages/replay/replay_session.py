@@ -191,6 +191,8 @@ class ReplaySession:
             imbalance_summary = self._imbalance_collector.summarize()
             imbalance_samples = self._imbalance_collector.samples[-100:]
 
+        fills_detail = self._extract_fills(adapter)
+
         return {
             "run_id": self.run_id,
             "steps": steps,
@@ -203,6 +205,7 @@ class ReplaySession:
             "position": account.position,
             "order_intent_count": self._intent_count,
             "order_lifecycle_summary": summary,
+            "fills_detail": fills_detail,
             "lifecycle_path": str(cfg.audit_dir / f"{self.run_id}_order_lifecycle.jsonl"),
             "summary_path": str(cfg.audit_dir / f"{self.run_id}_summary.json"),
             "certification_stamp": stamp,
@@ -270,6 +273,24 @@ class ReplaySession:
             "replay_end_time_ns": self.clock.now_ns,
             "steps": steps,
         }
+
+    def _extract_fills(self, adapter: ExecutionAdapter) -> List[Dict[str, Any]]:
+        fills: List[Dict[str, Any]] = []
+        events = getattr(adapter, "all_events", [])
+        for ev in events:
+            if ev.event_type in (OrderEventType.ORDER_FILLED, OrderEventType.ORDER_PARTIALLY_FILLED):
+                fills.append({
+                    "timestamp_ns": ev.timestamp_ns,
+                    "order_id": ev.order_id,
+                    "intent_id": ev.intent_id,
+                    "symbol": ev.symbol,
+                    "side": ev.side,
+                    "filled_quantity": ev.filled_quantity,
+                    "avg_fill_price": ev.avg_fill_price,
+                    "fees": ev.fees,
+                    "latency_ms": ev.latency_ms,
+                })
+        return fills
 
     def _write_audits(self, summary: Dict[str, Any]) -> None:
         cfg = self.config

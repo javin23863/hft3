@@ -284,6 +284,11 @@ class TestManifestPersistence:
         assert "leakage_status" in d
         assert "missing_reasons" in d
         assert "next_action" in d
+        assert "engine_requested" in d
+        assert "engine_used" in d
+        assert "evidence_status" in d
+        assert "signal_source" in d
+        assert "signal_model_id" in d
 
     def test_hft_truth_manifest_has_required_fields(self):
         m = HftTruthManifest(
@@ -301,6 +306,11 @@ class TestManifestPersistence:
         assert "execution_realism" in d
         assert "promotion_eligible" in d
         assert "next_action" in d
+        assert "engine_requested" in d
+        assert "engine_used" in d
+        assert "evidence_status" in d
+        assert "reconciliation_status" in d
+        assert "ledger_paths" in d
 
 
 # ---------------------------------------------------------------------------
