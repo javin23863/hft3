@@ -116,6 +116,25 @@ def main(argv: list[str] | None = None) -> int:
     )
     abl_p.add_argument("--output", default=None, help="JSON output path")
 
+    rob_p = sub.add_parser("robustness", help="Lane-aware robustness pipeline (search for edge)")
+    rob_sub = rob_p.add_subparsers(dest="robustness_command")
+    rob_status = rob_sub.add_parser("status", help="Show per-lane robustness status from WorkbenchTruth")
+    rob_status.add_argument("--json", action="store_true", help="Machine-readable output")
+    rob_status.add_argument("--lane", default=None, help="Filter to specific lane (cme_futures, equities_low_float, options_parity, crypto)")
+    rob_run = rob_sub.add_parser("run", help="Run robustness on a model-lane-session triple")
+    rob_run.add_argument("--lane", required=True, help="Lane ID")
+    rob_run.add_argument("--symbol", default=None, help="CME symbol (required for cme_futures)")
+    rob_run.add_argument("--session-id", default=None, help="Equities session ID (required for equities_low_float)")
+    rob_run.add_argument("--group", default=None, help="Options group ID (required for options_parity)")
+    rob_run.add_argument("--model", required=True)
+    rob_run.add_argument("--output", default=None, help="Manifest output path")
+    rob_run.add_argument("--dry-run", action="store_true", help="Plan only — don't execute")
+    rob_run.add_argument("--ci-fixture", action="store_true", help="Allow fixture-only path (CI mode, not real research)")
+    rob_explain = rob_sub.add_parser("explain", help="Explain robustness manifest")
+    rob_explain.add_argument("--manifest", required=True, help="Path to robustness manifest JSON")
+    rob_resume = rob_sub.add_parser("resume", help="Resume a run from manifest")
+    rob_resume.add_argument("--manifest", required=True, help="Path to partial manifest")
+
     args = parser.parse_args(argv)
 
     if args.command == "list":
@@ -198,6 +217,35 @@ def main(argv: list[str] | None = None) -> int:
             Path(args.output).write_text(text, encoding="utf-8")
         print(text)
         return 0
+
+    if args.command == "robustness":
+        from workbench.src.robustness.pipeline import (
+            cmd_robustness_status,
+            cmd_robustness_run,
+            cmd_robustness_explain,
+            cmd_robustness_resume,
+        )
+
+        if args.robustness_command == "status":
+            return cmd_robustness_status(_REPO, lane=args.lane, json_output=args.json)
+        if args.robustness_command == "run":
+            return cmd_robustness_run(
+                _REPO,
+                lane=args.lane,
+                symbol=args.symbol,
+                session_id=args.session_id,
+                group=args.group,
+                model=args.model,
+                output=args.output,
+                dry_run=args.dry_run,
+                ci_fixture=args.ci_fixture,
+            )
+        if args.robustness_command == "explain":
+            return cmd_robustness_explain(Path(args.manifest))
+        if args.robustness_command == "resume":
+            return cmd_robustness_resume(Path(args.manifest))
+        rob_p.print_help()
+        return 1
 
     if args.command == "campaign":
         from workbench.src.run.campaign_runner import record_sim_shadow, run_campaign

@@ -1,0 +1,215 @@
+# Lane-first binding: every lane declares its universe, data, and model bindings.
+# The workbench reads this to discover lanes, not hard-coded UI assumptions.
+lanes:
+  cme_futures:
+    lane_id: cme_futures
+    lane_name: CME Futures / Microstructure
+    description: MBO replay walk-forward campaigns across 55 models on 7 CME futures symbols
+    status: operational
+    allowed_symbols: [MES.v.0, ES.v.0, MNQ.v.0, NQ.v.0, ZN.v.0, ZB.v.0, RTY.v.0]
+    event_catalog: packages/data_system/config/events.csv
+    data_roots:
+      npz: data/npz
+      latency_baselines: data/latency_baselines
+    artifact_root: artifacts/research_cards/workbench_runs
+    config_root: apps/workbench/config
+    pipeline_class: campaign_runner
+    runner_module: workbench.src.run.campaign_runner
+    event_driven: true
+    walk_forward_config: apps/workbench/config/walk_forward.yaml
+    wfc_config: apps/workbench/config/wfc_gate.yaml
+    cpp_latency_profile: apps/workbench/config/cpp_latency_profile.yaml
+    validation_policies:
+      - event_pit
+      - walk_forward_gate
+      - latency_authority
+      - queue_realism
+      - execution_cost_model
+
+  equities_low_float:
+    lane_id: equities_low_float
+    lane_name: Equities Low-Float Runner
+    description: Decadal parabolic anomaly stock sessions with MBO/L3 features, optional OPRA options
+    status: operational
+    session_config: packages/equities_lane/config/decadal_runners.yaml
+    universe_config: packages/equities_lane/config/universe.yaml
+    data_roots:
+      raw: data/equities/raw
+      normalized: data/equities/normalized
+      daily: data/equities/daily
+      npz: data/equities/npz
+      float_metadata: data/equities/metadata
+      options: data/options/equity_chains
+    artifact_root: research_cards/equities
+    config_root: packages/equities_lane/config
+    pipeline_class: equities_runner
+    runner_module: scripts.run_stocks_lane
+    runner_args: [--max-events, "50000"]
+    l3_policy: enforce
+    l3_only: true
+    options_feature_phase: optional
+    options_feature_enabled_for: [KODK_2020, GME_2021, EXPR_2021]
+    validation_policies:
+      - equity_pit
+      - l3_required
+      - float_metadata_pit
+      - option_quote_pit
+      - parent_symbol_mapping
+
+  options_parity:
+    lane_id: options_parity
+    lane_name: Options Put-Call Parity
+    description: Multi-leg put-call parity arbitrage on futures options and index futures
+    status: operational
+    group_config: packages/options_lane/config/parity_universe.yaml
+    data_roots:
+      raw: data/options/raw
+      normalized: data/options/normalized
+    artifact_root: research_cards/parity
+    config_root: packages/options_lane/config
+    pipeline_class: parity_backtester
+    runner_module: packages.options_lane.pipeline
+    validation_policies:
+      - quote_alignment
+      - leg_definition_pit
+      - multi_leg_fill_realism
+      - rate_assumption_sensitivity
+
+  crypto:
+    lane_id: crypto
+    lane_name: Crypto BTC Edge Detection
+    description: BTC mempool, bookticker, and gold-data hypothesis testing with 7 ML models
+    status: operational
+    universe_config: packages/crypto_lane/config/universe.yaml
+    data_roots:
+      gold: data/crypto/gold
+      mempool: data/crypto/mempool
+      bookticker: data/crypto/bookticker
+    artifact_root: research_cards/crypto
+    config_root: packages/crypto_lane/config
+    pipeline_class: crypto_smoke
+    runner_module: packages.crypto_lane.pipeline
+    validation_policies:
+      - venue_data_availability
+      - node_sync_status
+      - mempool_preflight
+      - bookticker_l3_gap_fill
+
+# Default model-to-lane bindings: which models run in which lanes.
+# Models not listed below default to cme_futures only.
+model_lane_bindings:
+  # Equities-specific models (run on stock sessions)
+  ABSORPTION_FADE:
+    lanes: [equities_low_float]
+  AGGRESSOR_DECELERATION_FADE:
+    lanes: [equities_low_float]
+  BOOK_SLOPE_COLLAPSE:
+    lanes: [equities_low_float]
+  CANCEL_STORM_BEFORE_MOVE:
+    lanes: [equities_low_float]
+  CUTOFF_PANIC_EXITS:
+    lanes: [equities_low_float]
+  DEPTH_REFILL_IMBALANCE:
+    lanes: [equities_low_float]
+  DOM_ILLUSION_TRAP:
+    lanes: [equities_low_float]
+  ECONOMIC_EVENT_RESTRICTION_FLATTENING:
+    lanes: [equities_low_float]
+  ES_MES_LEAD_LAG:
+    lanes: [equities_low_float]
+  ES_NQ_DIVERGENCE_SNAPBACK:
+    lanes: [equities_low_float]
+  FALSE_BREAKOUT_TRAP:
+    lanes: [equities_low_float]
+  FORCED_LIQUIDATION_CASCADE:
+    lanes: [equities_low_float]
+  FRIDAY_WEEKEND_DERISKING:
+    lanes: [equities_low_float]
+  ICEBERG_RELOAD_DETECTION:
+    lanes: [equities_low_float]
+  LATE_CANDLE_ENTRY_FADE:
+    lanes: [equities_low_float]
+  LIQUIDITY_VACUUM_CONTINUATION:
+    lanes: [equities_low_float]
+  MAX_CONTRACT_CROWDING_IN_MICROS:
+    lanes: [equities_low_float]
+  MICRO_CONTRACT_RETAIL_LAG:
+    lanes: [equities_low_float]
+  NQ_MNQ_LEAD_LAG:
+    lanes: [equities_low_float]
+  NO_OVERNIGHT_INVENTORY_SQUEEZE:
+    lanes: [equities_low_float]
+  ONE_SIDED_ADD_CANCEL_IMBALANCE:
+    lanes: [equities_low_float]
+  OPENING_CANDLE_CHASE:
+    lanes: [equities_low_float]
+  PANIC_MARKET_ORDER_SPREAD_TAX:
+    lanes: [equities_low_float]
+  PASSIVE_TRAP_FILL:
+    lanes: [equities_low_float]
+  PRIOR_HIGH_LOW_BREAKOUT_TRAP:
+    lanes: [equities_low_float]
+  PROFIT_LOCK_BEHAVIOR:
+    lanes: [equities_low_float]
+  PROP_RESET_REOPEN_WINDOW:
+    lanes: [equities_low_float]
+  QUEUE_DEPLETION_TRIGGER:
+    lanes: [equities_low_float]
+  REBATE_TRAP_AVOIDANCE:
+    lanes: [equities_low_float]
+  ROUND_NUMBER_STOP_SWEEP:
+    lanes: [equities_low_float]
+  SECOND_WAVE_CONTINUATION:
+    lanes: [equities_low_float]
+  SPREAD_BLOWOUT_RECOMPRESSION:
+    lanes: [equities_low_float]
+  SPREAD_REGIME_CHANGE:
+    lanes: [equities_low_float]
+  STOP_LOSS_CASCADE_CONTINUATION:
+    lanes: [equities_low_float]
+  STOP_RUN_EXHAUSTION_FADE:
+    lanes: [equities_low_float]
+  THIN_BOOK_CONTINUATION:
+    lanes: [equities_low_float]
+  TRAILING_DRAWDOWN_PRESSURE:
+    lanes: [equities_low_float]
+  VWAP_DEFENSE_BREAK:
+    lanes: [equities_low_float]
+  ZN_ZB_ES_NQ_MACRO_IMPULSE:
+    lanes: [equities_low_float]
+
+  # CME-only models
+  BOOK_PRESSURE:
+    lanes: [cme_futures]
+  CROSS_ASSET_LEAD_LAG:
+    lanes: [cme_futures]
+  VPIN_TOXICITY:
+    lanes: [cme_futures]
+  HYBRID_EXECUTION:
+    lanes: [cme_futures]
+  DEALER_HEDGING:
+    lanes: [cme_futures]
+  DOW_YM_INDEX:
+    lanes: [cme_futures]
+  TREASURY_CTD:
+    lanes: [cme_futures]
+  TRANSFER_ENTROPY:
+    lanes: [cme_futures]
+  QUANTUM_SPREAD_DEFENSE:
+    lanes: [cme_futures]
+  STOCHASTIC_THERMO:
+    lanes: [cme_futures]
+  HAWKES_TOXIC_FLOW:
+    lanes: [cme_futures]
+
+  # Both CME and equities
+  LIQUIDITY_DEFENSE_BREAK:
+    lanes: [cme_futures, equities_low_float]
+  END_OF_DAY_FORCED_FLATTEN_FLOW:
+    lanes: [cme_futures, equities_low_float]
+  DAILY_LOSS_LIMIT_DEFENSE:
+    lanes: [cme_futures, equities_low_float]
+  QUOTE_PULL_BEFORE_VOLATILITY:
+    lanes: [cme_futures, equities_low_float]
+  REQUOTE_RACE_AFTER_SHOCK:
+    lanes: [cme_futures, equities_low_float]
