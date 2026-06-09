@@ -166,7 +166,7 @@ def run_crypto_replay(
         latency_ms=latency_ms,
         queue_model=queue_model,
     )
-    safety.assert_replay_safe(adapter)
+    safety.assert_replay_safe(adapter, declared_mode="REPLAY")
 
     clock = ReplayClock()
     lifecycle: List[Dict[str, Any]] = []
@@ -182,7 +182,8 @@ def run_crypto_replay(
 
         ts = int(hbt.current_timestamp)
         clock.advance_to(ts)
-        hbt.clear_inactive_orders(0)
+        # Adapter observes terminal order states and clears inactive orders
+        # itself; clearing here first would hide fills from it.
         adapter.after_elapse(ts)
 
         depth = hbt.depth(0)

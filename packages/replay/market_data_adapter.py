@@ -24,6 +24,7 @@ class HistoricalReplayMarketDataAdapter:
         self._current_time_ns = 0
         self._last_state: Optional[MarketState] = None
         self._finished = False
+        self._peeked: Optional[MBOEvent] = None
 
     @classmethod
     def from_npz(cls, path: str = "", events: Optional[np.ndarray] = None, **kwargs) -> HistoricalReplayMarketDataAdapter:
@@ -31,18 +32,22 @@ class HistoricalReplayMarketDataAdapter:
             return cls(events, **kwargs)
         return cls(load_npz_events(path), **kwargs)
 
+    def _peek(self) -> Optional[MBOEvent]:
+        if self._peeked is None and not self._finished:
+            try:
+                self._peeked = next(self._iter)
+            except StopIteration:
+                self._finished = True
+        return self._peeked
+
     def next_event(self) -> Optional[MBOEvent]:
-        if self._finished:
+        ev = self._peek()
+        if ev is None:
             return None
-        try:
-            ev = next(self._iter)
-        except StopIteration:
-            self._finished = True
-            return None
+        self._peeked = None
+        self._last_state = self._pipeline.process_event(ev)
         if ev.timestamp_ns > self._current_time_ns:
             self._current_time_ns = ev.timestamp_ns
-        if ev.timestamp_ns <= self._current_time_ns:
-            self._last_state = self._pipeline.process_event(ev)
         return ev
 
     def current_time_ns(self) -> int:
@@ -53,14 +58,17 @@ class HistoricalReplayMarketDataAdapter:
         return self._last_state
 
     def is_finished(self) -> bool:
-        return self._finished
+        return self._finished and self._peeked is None
 
     def sync_to_timestamp(self, timestamp_ns: int) -> Optional[MarketState]:
-        """Feed all MBO events with ts <= timestamp_ns (filtration-safe)."""
+        """Feed all MBO events with ts <= timestamp_ns (filtration-safe).
+
+        Events with ts > timestamp_ns stay buffered and are not applied to the
+        pipeline, so the returned state never contains future information.
+        """
         while True:
-            ev = self.next_event()
-            if ev is None:
+            ev = self._peek()
+            if ev is None or ev.timestamp_ns > timestamp_ns:
                 break
-            if ev.timestamp_ns > timestamp_ns:
-                return self._last_state
+            self.next_event()
         return self._last_state

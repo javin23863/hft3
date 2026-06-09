@@ -10,6 +10,16 @@
 #include <set>
 #include "spsc_queue.hpp"
 
+// Event-type codes used in OrderEvent::event_type.
+// The gateway consumer must handle all of these:
+//   'A' ack/status, 'F' fill, 'C' cancel, 'M' modify-confirmed,
+//   'R' reject, 'X' failure/not-cancelled,
+//   'B' bust (trade reversed — position changed retroactively),
+//   'N' not-modified (modify rejected — local order state may be wrong),
+//   'L' auto-liquidate (broker force-flattened position).
+// The consumer must treat 'B', 'N', and 'L' as requiring immediate
+// reconciliation or halt.
+
 namespace hft {
 
 struct PreparedLimitOrder;
@@ -29,7 +39,10 @@ struct OrderEvent {
     uint64_t callback_monotonic_ns;
     uint64_t callback_wall_ns;
     uint64_t order_id;
-    char event_type;   // 'S' submit, 'A' ack, 'F' fill, 'C' cancel, 'M' modify, 'R' reject, 'X' failure
+    char event_type;   // 'S' submit, 'A' ack, 'F' fill, 'C' cancel, 'M' modify, 'R' reject, 'X' failure/not-cancelled,
+                       // 'B' bust (fill reversed — position changed retroactively; reconcile immediately),
+                       // 'N' not-modified (modify rejected — local order state wrong; reconcile immediately),
+                       // 'L' auto-liquidate (broker force-flattened; halt and reconcile)
     char side;         // 'B' buy, 'A' sell, ' ' unknown
     char order_type;   // 'L' limit, 'M' market, ' ' unknown
     double price;
@@ -98,6 +111,38 @@ public:
     bool has_agreement_list() const { return agreement_list_ready_.load(); }
     const char* last_agreement_list_text() const;
 
+    // ---------------------------------------------------------------------------
+    // Drop counters and safety flags — all lock-free; safe to read from any thread.
+    //
+    // md_drops:           market-data queue overruns (TradePrint / BestBidAskQuote).
+    // order_event_drops:  order-event queue overruns (any order callback).
+    // md_data_gap:        set when a market-data event was dropped; stale book —
+    //                     consumer must force a book resync or halt before trusting quotes.
+    // order_halt:         set when an order event was dropped (order state unknown);
+    //                     consumer must halt trading immediately.
+    // position_desync:    set when a trade bust is received; position changed retroactively.
+    // order_desync:       set when a not-modified report is received; local modify state wrong.
+    // auto_liquidate_halt: set when the broker force-flattened a position outside our control.
+    // adm_alert_severity: highest AdmCallbacks::Alert severity seen (0 = none); values ≥ 2
+    //                     indicate a condition that warrants operator attention or halt.
+    // ---------------------------------------------------------------------------
+    uint64_t md_drops()           const noexcept { return md_drops_.load(std::memory_order_relaxed); }
+    uint64_t order_event_drops()  const noexcept { return order_event_drops_.load(std::memory_order_relaxed); }
+    bool     md_data_gap()        const noexcept { return md_data_gap_.load(std::memory_order_acquire); }
+    bool     order_halt()         const noexcept { return order_halt_.load(std::memory_order_acquire); }
+    bool     position_desync()    const noexcept { return position_desync_.load(std::memory_order_acquire); }
+    bool     order_desync()       const noexcept { return order_desync_.load(std::memory_order_acquire); }
+    bool     auto_liquidate_halt() const noexcept { return auto_liquidate_halt_.load(std::memory_order_acquire); }
+    int      adm_alert_severity() const noexcept { return adm_alert_severity_.load(std::memory_order_relaxed); }
+
+    // Reset flags after the consumer has acknowledged and acted on them.
+    void clear_md_data_gap()        noexcept { md_data_gap_.store(false, std::memory_order_release); }
+    void clear_order_halt()         noexcept { order_halt_.store(false, std::memory_order_release); }
+    void clear_position_desync()    noexcept { position_desync_.store(false, std::memory_order_release); }
+    void clear_order_desync()       noexcept { order_desync_.store(false, std::memory_order_release); }
+    void clear_auto_liquidate_halt() noexcept { auto_liquidate_halt_.store(false, std::memory_order_release); }
+    void clear_adm_alert_severity() noexcept { adm_alert_severity_.store(0, std::memory_order_relaxed); }
+
 private:
     ConnectionConfig config_;
     SPSCQueue<MarketDataEvent, 8192>* mbo_queue_;
@@ -144,6 +189,17 @@ private:
     std::set<std::string> price_incr_ready_keys_;
     std::vector<std::string> env_storage_;
     std::vector<char*> env_strings_;
+
+    // Drop counters and safety flags — written only from Rithmic callback threads,
+    // read from the gateway consumer thread.
+    std::atomic<uint64_t> md_drops_{0};
+    std::atomic<uint64_t> order_event_drops_{0};
+    std::atomic<bool>     md_data_gap_{false};
+    std::atomic<bool>     order_halt_{false};
+    std::atomic<bool>     position_desync_{false};
+    std::atomic<bool>     order_desync_{false};
+    std::atomic<bool>     auto_liquidate_halt_{false};
+    std::atomic<int>      adm_alert_severity_{0};
 
     void build_envp();
     void cleanup_envp();

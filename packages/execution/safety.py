@@ -31,8 +31,15 @@ def execution_mode() -> str:
     return os.environ.get("EXECUTION_MODE", "REPLAY").upper()
 
 
-def assert_replay_safe(adapter: ExecutionAdapter) -> None:
-    mode = execution_mode()
+def assert_replay_safe(adapter: ExecutionAdapter, declared_mode: str | None = None) -> None:
+    """Forbid live-capable adapters in a replay session.
+
+    Key the check off the session's declared mode, not ambient env: a research
+    replay launched from a shell with EXECUTION_MODE=PAPER/LIVE exported must
+    still be checked. Callers that know their mode should pass it explicitly;
+    the env fallback exists only for legacy call sites.
+    """
+    mode = (declared_mode or execution_mode()).upper()
     if mode != "REPLAY":
         return
     name = type(adapter).__name__

@@ -72,7 +72,9 @@ class TradeManagerRiskContext:
     last_market_data_ns: int = 0
     local_inventory: float = 0.0
     local_realized_pnl: float = 0.0
-    daily_loss_so_far: float = 0.0
+    # Signed PnL carried into this check (negative when losing), excluding the
+    # realized/unrealized PnL already in the adapter's account snapshot.
+    carried_session_pnl_signed: float = 0.0
     current_drawdown: float = 0.0
     gross_exposure: float | None = None
     net_exposure: float | None = None
@@ -161,7 +163,7 @@ class TradeManagerRiskLayer:
             system_clock_ns=context.system_clock_ns,
             execution_mode=context.execution_mode,
             daily_loss_limit=self.config.max_daily_loss,
-            daily_loss_so_far=context.daily_loss_so_far,
+            carried_session_pnl_signed=context.carried_session_pnl_signed,
         )
         result = self.orchestrator.pre_trade_check(safety_context)
         if not result.allowed:

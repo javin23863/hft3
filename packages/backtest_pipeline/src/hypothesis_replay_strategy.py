@@ -65,6 +65,8 @@ class HypothesisReplayStrategy:
     def on_step(self, ctx: ReplayStepContext) -> List[OrderIntent]:
         if ctx.market_state is None:
             return []
+        if ctx.book_one_sided:
+            return []
         sig = float(self.hypothesis.evaluate(ctx.market_state))
         pos = ctx.position
         intents: List[OrderIntent] = []
@@ -175,6 +177,8 @@ class CombinedHypothesisReplayStrategy:
         return self._last_state
 
     def on_step(self, ctx: ReplayStepContext) -> List[OrderIntent]:
+        if ctx.book_one_sided:
+            return []
         state = self._advance_pipeline(ctx.clock.now_ns)
         if state is None:
             state = ctx.market_state or self._state_from_depth(ctx)

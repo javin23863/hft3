@@ -168,7 +168,24 @@ public:
         : adapter_(adapter) {}
     ~MyAdmCallbacks() override = default;
 
-    int Alert(RApi::AlertInfo*, void*, int* aiCode) override {
+    int Alert(RApi::AlertInfo* pInfo, void*, int* aiCode) override {
+        // Forward the administrative alert into the adapter's severity tracker and
+        // log it via the adapter's existing error string so it is visible on the
+        // gateway loop without blocking this callback thread on I/O.
+        if (pInfo) {
+            int sev = pInfo->iSeverity;  // 0=info, 1=warning, 2=error, 3=fatal (RApiPlus convention)
+            // Raise the high-water severity atomically so the consumer can read it.
+            int prev = adapter_->adm_alert_severity_.load(std::memory_order_relaxed);
+            while (sev > prev &&
+                   !adapter_->adm_alert_severity_.compare_exchange_weak(
+                       prev, sev, std::memory_order_relaxed)) { /* retry */ }
+
+            // Severe alerts (error/fatal) set the order halt flag; position state
+            // after a fatal administrative alert is unknown.
+            if (sev >= 2) {
+                adapter_->order_halt_.store(true, std::memory_order_release);
+            }
+        }
         *aiCode = API_OK;
         return OK;
     }
@@ -350,8 +367,9 @@ public:
         if (pInfo) {
             OrderEvent evt = make_line_event(pInfo);
             if (adapter_->order_queue_ && !adapter_->order_queue_->push(evt)) {
-                std::cerr << "[CRITICAL] Order Queue overrun on LineUpdate event_type="
-                          << evt.event_type << " order_id=" << evt.order_id << std::endl;
+                // Order state is now unknown — hard halt.  Never block this thread.
+                adapter_->order_event_drops_.fetch_add(1, std::memory_order_relaxed);
+                adapter_->order_halt_.store(true, std::memory_order_release);
             }
         }
         *aiCode = API_OK;
@@ -375,7 +393,10 @@ public:
         }
 
         if (!adapter_->mbo_queue_->push(evt)) {
-            std::cerr << "[CRITICAL] MBO Queue overrun on TradePrint!" << std::endl;
+            // Never block inside a Rithmic callback thread.  Count the drop and
+            // flag the data gap so the consumer forces a book resync.
+            adapter_->md_drops_.fetch_add(1, std::memory_order_relaxed);
+            adapter_->md_data_gap_.store(true, std::memory_order_release);
         }
 
         *aiCode = API_OK;
@@ -396,7 +417,11 @@ public:
             evt.action = 'M';
             evt.side = 'B';
             evt.order_id = 0;
-            adapter_->mbo_queue_->push(evt);
+            if (!adapter_->mbo_queue_->push(evt)) {
+                adapter_->md_drops_.fetch_add(1, std::memory_order_relaxed);
+                // Stale best-bid is now in the consumer's future; force a resync.
+                adapter_->md_data_gap_.store(true, std::memory_order_release);
+            }
         }
 
         if (pAsk && pAsk->bPriceFlag) {
@@ -409,7 +434,10 @@ public:
             evt.action = 'M';
             evt.side = 'A';
             evt.order_id = 0;
-            adapter_->mbo_queue_->push(evt);
+            if (!adapter_->mbo_queue_->push(evt)) {
+                adapter_->md_drops_.fetch_add(1, std::memory_order_relaxed);
+                adapter_->md_data_gap_.store(true, std::memory_order_release);
+            }
         }
 
         *aiCode = API_OK;
@@ -421,8 +449,8 @@ public:
         auto* base = static_cast<RApi::OrderReport*>(pReport);
         OrderEvent evt = make_order_event(base, report_type_char(base));
         if (adapter_->order_queue_ && !adapter_->order_queue_->push(evt)) {
-            std::cerr << "[CRITICAL] Order Queue overrun on event_type=" << evt.event_type
-                      << " order_id=" << evt.order_id << std::endl;
+            adapter_->order_event_drops_.fetch_add(1, std::memory_order_relaxed);
+            adapter_->order_halt_.store(true, std::memory_order_release);
         }
         *aiCode = API_OK;
         return OK;
@@ -433,8 +461,8 @@ public:
         auto* base = static_cast<RApi::OrderReport*>(pReport);
         OrderEvent evt = make_order_event(base, report_type_char(base));
         if (adapter_->order_queue_ && !adapter_->order_queue_->push(evt)) {
-            std::cerr << "[CRITICAL] Order Queue overrun on event_type=" << evt.event_type
-                      << " order_id=" << evt.order_id << std::endl;
+            adapter_->order_event_drops_.fetch_add(1, std::memory_order_relaxed);
+            adapter_->order_halt_.store(true, std::memory_order_release);
         }
         *aiCode = API_OK;
         return OK;
@@ -445,8 +473,8 @@ public:
         auto* base = static_cast<RApi::OrderReport*>(pReport);
         OrderEvent evt = make_order_event(base, report_type_char(base));
         if (adapter_->order_queue_ && !adapter_->order_queue_->push(evt)) {
-            std::cerr << "[CRITICAL] Order Queue overrun on event_type=" << evt.event_type
-                      << " order_id=" << evt.order_id << std::endl;
+            adapter_->order_event_drops_.fetch_add(1, std::memory_order_relaxed);
+            adapter_->order_halt_.store(true, std::memory_order_release);
         }
         *aiCode = API_OK;
         return OK;
@@ -457,8 +485,8 @@ public:
         auto* base = static_cast<RApi::OrderReport*>(pReport);
         OrderEvent evt = make_order_event(base, report_type_char(base));
         if (adapter_->order_queue_ && !adapter_->order_queue_->push(evt)) {
-            std::cerr << "[CRITICAL] Order Queue overrun on event_type=" << evt.event_type
-                      << " order_id=" << evt.order_id << std::endl;
+            adapter_->order_event_drops_.fetch_add(1, std::memory_order_relaxed);
+            adapter_->order_halt_.store(true, std::memory_order_release);
         }
         *aiCode = API_OK;
         return OK;
@@ -469,8 +497,8 @@ public:
         auto* base = static_cast<RApi::OrderReport*>(pReport);
         OrderEvent evt = make_order_event(base, report_type_char(base));
         if (adapter_->order_queue_ && !adapter_->order_queue_->push(evt)) {
-            std::cerr << "[CRITICAL] Order Queue overrun on event_type=" << evt.event_type
-                      << " order_id=" << evt.order_id << std::endl;
+            adapter_->order_event_drops_.fetch_add(1, std::memory_order_relaxed);
+            adapter_->order_halt_.store(true, std::memory_order_release);
         }
         *aiCode = API_OK;
         return OK;
@@ -481,8 +509,8 @@ public:
         auto* base = static_cast<RApi::OrderReport*>(pReport);
         OrderEvent evt = make_order_event(base, report_type_char(base));
         if (adapter_->order_queue_ && !adapter_->order_queue_->push(evt)) {
-            std::cerr << "[CRITICAL] Order Queue overrun on event_type=" << evt.event_type
-                      << " order_id=" << evt.order_id << std::endl;
+            adapter_->order_event_drops_.fetch_add(1, std::memory_order_relaxed);
+            adapter_->order_halt_.store(true, std::memory_order_release);
         }
         *aiCode = API_OK;
         return OK;
@@ -492,7 +520,35 @@ public:
     int Aggregator(RApi::AggregatorInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
     int AskQuote(RApi::AskInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
     int AssignedUserList(RApi::AssignedUserListInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
-    int AutoLiquidate(RApi::AutoLiquidateInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int AutoLiquidate(RApi::AutoLiquidateInfo* pInfo, void* pContext, int* aiCode) override {
+        (void)pContext;
+        // Broker has force-flattened the position outside our control.  Position
+        // state is unknown — set halt-level flags immediately, then push a synthetic
+        // OrderEvent of type 'L' so the consumer's event loop sees it without polling.
+        // The consumer must stop sending orders and reconcile before resuming.
+        adapter_->auto_liquidate_halt_.store(true, std::memory_order_release);
+        adapter_->position_desync_.store(true, std::memory_order_release);
+        adapter_->order_halt_.store(true, std::memory_order_release);
+
+        if (adapter_->order_queue_) {
+            OrderEvent evt{};
+            evt.callback_monotonic_ns = steady_now_ns();
+            evt.callback_wall_ns = wall_now_ns();
+            evt.event_type = 'L';  // auto-liquidate
+            if (pInfo) {
+                evt.timestamp_ns = static_cast<uint64_t>(pInfo->iSsboe) * 1000000000ULL
+                                 + static_cast<uint64_t>(pInfo->iUsecs) * 1000ULL;
+            } else {
+                evt.timestamp_ns = evt.callback_wall_ns;
+            }
+            if (!adapter_->order_queue_->push(evt)) {
+                // Flags are already set above; count the drop but do not double-halt.
+                adapter_->order_event_drops_.fetch_add(1, std::memory_order_relaxed);
+            }
+        }
+        *aiCode = API_OK;
+        return OK;
+    }
     int AuxRefData(RApi::AuxRefDataInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
     int Bar(RApi::BarInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
     int BarReplay(RApi::BarReplayInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
@@ -503,7 +559,28 @@ public:
     int BracketReplay(RApi::BracketReplayInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
     int BracketTierModify(RApi::BracketTierModifyInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
     int BracketUpdate(RApi::BracketInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
-    int BustReport(RApi::OrderBustReport*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int BustReport(RApi::OrderBustReport* pReport, void* pContext, int* aiCode) override {
+        (void)pContext;
+        // A bust reverses a fill: position has changed retroactively.  Emit an
+        // event so the consumer can apply the reversal, and set the position-desync
+        // flag so the gateway loop knows reconciliation is required even if the
+        // queue is full.
+        if (pReport) {
+            auto* base = static_cast<RApi::OrderReport*>(pReport);
+            OrderEvent evt = make_order_event(base, 'B');  // 'B' = bust
+            if (adapter_->order_queue_ && !adapter_->order_queue_->push(evt)) {
+                // Queue full — the consumer cannot see this bust; order state is now
+                // unknown.  Set the hard-halt flag rather than silently dropping.
+                adapter_->order_event_drops_.fetch_add(1, std::memory_order_relaxed);
+                adapter_->order_halt_.store(true, std::memory_order_release);
+            }
+            // Always flag position desync regardless of queue success; the consumer
+            // must reconcile position after processing the bust event.
+            adapter_->position_desync_.store(true, std::memory_order_release);
+        }
+        *aiCode = API_OK;
+        return OK;
+    }
     int CloseMidPrice(RApi::CloseMidPriceInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
     int ClosePrice(RApi::ClosePriceInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
     int ClosingIndicator(RApi::ClosingIndicatorInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
@@ -532,13 +609,30 @@ public:
         auto* base = static_cast<RApi::OrderReport*>(pReport);
         OrderEvent evt = make_order_event(base, 'X');
         if (adapter_->order_queue_ && !adapter_->order_queue_->push(evt)) {
-            std::cerr << "[CRITICAL] Order Queue overrun on NotCancelledReport order_id="
-                      << evt.order_id << std::endl;
+            adapter_->order_event_drops_.fetch_add(1, std::memory_order_relaxed);
+            adapter_->order_halt_.store(true, std::memory_order_release);
         }
         *aiCode = API_OK;
         return OK;
     }
-    int NotModifiedReport(RApi::OrderNotModifiedReport*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
+    int NotModifiedReport(RApi::OrderNotModifiedReport* pReport, void* pContext, int* aiCode) override {
+        (void)pContext;
+        // The modify was rejected by the exchange; local order state (price/qty)
+        // diverges from what the exchange has.  Emit an event so the consumer can
+        // reconcile, and set the order-desync flag.
+        if (pReport) {
+            auto* base = static_cast<RApi::OrderReport*>(pReport);
+            OrderEvent evt = make_order_event(base, 'N');  // 'N' = not-modified
+            if (adapter_->order_queue_ && !adapter_->order_queue_->push(evt)) {
+                adapter_->order_event_drops_.fetch_add(1, std::memory_order_relaxed);
+                adapter_->order_halt_.store(true, std::memory_order_release);
+            }
+            // Flag order desync regardless; the consumer must re-query order state.
+            adapter_->order_desync_.store(true, std::memory_order_release);
+        }
+        *aiCode = API_OK;
+        return OK;
+    }
     int OpenInterest(RApi::OpenInterestInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
     int OpenOrderReplay(RApi::OrderReplayInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }
     int OpenPrice(RApi::OpenPriceInfo*, void*, int* aiCode) override { *aiCode = API_OK; return OK; }

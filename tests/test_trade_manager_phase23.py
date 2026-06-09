@@ -94,6 +94,26 @@ def test_phase23_path_traversal_rejected_and_no_outside_write(tmp_path) -> None:
     assert not outside.exists()
 
 
+def test_validate_session_id_rejects_path_traversal_payloads(tmp_path) -> None:
+    # Backslash payloads pass the old name-equality check on Linux because
+    # pathlib treats backslash as a regular filename character there.  Verify
+    # that all separator-based traversal attempts are rejected on every
+    # platform.
+    traversal_ids = [
+        "..\\evil",   # backslash traversal — passes Path.name check on Linux
+        "../evil",    # forward-slash traversal
+        "a/b",        # embedded forward slash
+        "a\\b",       # embedded backslash
+        "a\x00b",     # NUL byte
+    ]
+    for bad_id in traversal_ids:
+        with pytest.raises(SessionReportError, match="SESSION_PATH_TRAVERSAL"):
+            write_session_report(tmp_path, _sample_input(bad_id))
+
+    # A well-formed session id must not be rejected.
+    write_session_report(tmp_path, _sample_input("SESSION-OK-123"))
+
+
 def test_phase23_rejects_recursive_nonfinite_values(tmp_path) -> None:
     bad = SessionReportInput(session_id="SESSION-1", session_metrics={"nested": {"pnl": math.inf}})
 

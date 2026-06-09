@@ -6,6 +6,7 @@ call-return cost, and broker/exchange acknowledgment latency.
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass
 from datetime import UTC, datetime
 import json
@@ -348,17 +349,41 @@ class LatencyRecorder:
     strategy_id: str
     model_id: str = ""
     trade_manager_id: str = ""
+    # jsonl_path is intentionally not frozen at construction time; it is
+    # derived from each record's timestamp_utc so that midnight rollovers and
+    # backfills land in the correct dated directory.  The field may still be
+    # set explicitly for testing or replay purposes; when set it overrides the
+    # per-record derivation for every write.
     jsonl_path: Path | None = None
+
+    # Internal cache: the dated path used for the most recent write.  Kept so
+    # callers can inspect the last-written path via sample_path().
+    _last_sample_path: Path | None = dataclasses.field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
         self.repo_root = Path(self.repo_root)
-        if self.jsonl_path is None:
-            self.jsonl_path = dated_jsonl_path(self.repo_root, self.run_id)
+
+    def _path_for_timestamp(self, timestamp_utc: str | None) -> Path:
+        """Return the JSONL path derived from *timestamp_utc* (or wall clock)."""
+        if self.jsonl_path is not None:
+            # Explicit override: caller pinned a path (e.g. tests, replay).
+            return self.jsonl_path
+        return dated_jsonl_path(self.repo_root, self.run_id, timestamp_utc)
 
     def sample_path(self) -> Path:
-        if self.jsonl_path is None:
-            raise RuntimeError("jsonl_path not initialized")
-        return self.jsonl_path
+        """Return the path used by the most recent write_sample call.
+
+        Raises RuntimeError if write_sample has not yet been called and no
+        explicit jsonl_path was provided at construction time.
+        """
+        if self.jsonl_path is not None:
+            return self.jsonl_path
+        if self._last_sample_path is not None:
+            return self._last_sample_path
+        raise RuntimeError(
+            "sample_path() called before write_sample(); path is not known until "
+            "the first record's timestamp is available"
+        )
 
     def write_sample(
         self,
@@ -390,7 +415,11 @@ class LatencyRecorder:
             success=success,
             reject_reason=reject_reason,
         )
-        path = self.sample_path()
+        # Derive the output path from the record's own timestamp_utc so that
+        # samples near midnight and backfills always land in the correct dated
+        # directory, regardless of when the recorder was constructed.
+        path = self._path_for_timestamp(record["timestamp_utc"])
+        self._last_sample_path = path
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(record, sort_keys=True, allow_nan=False) + "\n")

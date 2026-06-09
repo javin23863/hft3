@@ -46,7 +46,10 @@ class SafetyContext:
     execution_mode: str = "REPLAY"
     session_start_ns: int = 0
     daily_loss_limit: float = float("inf")
-    daily_loss_so_far: float = 0.0
+    # Signed PnL carried into this check from earlier in the session,
+    # EXCLUDING the realized/unrealized PnL in the current account snapshot
+    # (those are added by DailyLossLimitFlatten itself). Negative when losing.
+    carried_session_pnl_signed: float = 0.0
 
 
 class StaleDataMonitor:
@@ -326,11 +329,20 @@ class DailyLossLimitFlatten:
         self,
         account: AccountState,
         daily_loss_limit: float,
-        daily_loss_so_far: float,
+        carried_session_pnl_signed: float,
         current_local_inventory: float,
         symbol: str,
     ) -> SafetyResult:
-        total_loss = -(daily_loss_so_far + account.unrealized_pnl + account.realized_pnl)
+        """Evaluate the daily loss limit.
+
+        ``carried_session_pnl_signed`` is signed PnL (negative when losing)
+        carried from earlier in the session and must NOT already include the
+        realized/unrealized PnL of the ``account`` snapshot, which is added
+        here. ``total_loss`` is a positive magnitude when the session is down.
+        """
+        total_loss = -(
+            carried_session_pnl_signed + account.unrealized_pnl + account.realized_pnl
+        )
         effective_limit = daily_loss_limit
         if daily_loss_limit == float("inf") and self.loss_limit != float("inf"):
             effective_limit = self.loss_limit
@@ -347,7 +359,7 @@ class DailyLossLimitFlatten:
                 details={
                     "total_loss": total_loss,
                     "daily_loss_limit": effective_limit,
-                    "daily_loss_so_far": daily_loss_so_far,
+                    "carried_session_pnl_signed": carried_session_pnl_signed,
                     "unrealized_pnl": account.unrealized_pnl,
                     "realized_pnl": account.realized_pnl,
                     "current_inventory": current_local_inventory,
@@ -372,7 +384,8 @@ class ProductionSafetyOrchestrator:
 
     Monitors run in priority order. The highest-severity halt wins.
     In REPLAY mode, all monitors run in audit-only (log warnings, never halt).
-    In LIVE mode, halts are enforced.
+    In LIVE and PAPER modes, halts are enforced identically — paper exists to
+    validate safety behavior before live, so it must exercise the same paths.
 
     Priority order (matches BLUEPRINT §9):
     1. DisconnectMonitor   — kills everything
@@ -392,18 +405,38 @@ class ProductionSafetyOrchestrator:
         self._cached_account: Optional[AccountState] = None
         self._cache_age_ns: int = 0
         self._cache_ttl_ns: int = 1_000_000  # 1ms cache TTL
+        self._flatten_submitted: bool = False
 
-    def _get_account(self, adapter: ExecutionAdapter, now_ns: int) -> AccountState:
-        if self._cached_account is None or (now_ns - self._cache_age_ns) > self._cache_ttl_ns:
-            try:
-                self._cached_account = adapter.get_account_state()
-            except Exception:
-                if self._cached_account is None:
-                    self._cached_account = AccountState()
+    def _get_account(self, adapter: ExecutionAdapter, now_ns: int) -> Optional[AccountState]:
+        """Return the account state, or None when the read fails.
+
+        A failed read must surface as a halt condition upstream — broker API
+        errors cluster during disconnects/stress, exactly when substituting
+        zeros would let the daily-loss check silently pass.
+        """
+        if (
+            self._cached_account is not None
+            and (now_ns - self._cache_age_ns) <= self._cache_ttl_ns
+        ):
+            return self._cached_account
+        try:
+            self._cached_account = adapter.get_account_state()
             self._cache_age_ns = now_ns
+        except Exception:
+            self._cached_account = None
         return self._cached_account
 
-    def _submit_flatten_orders(
+    @staticmethod
+    def _strictly_reduces(intent: OrderIntent, inventory: float) -> bool:
+        """True when the order strictly decreases |position| (reduce-only)."""
+        side = intent.side.upper()
+        if inventory > 0:
+            return side == "SELL" and intent.quantity <= inventory
+        if inventory < 0:
+            return side == "BUY" and intent.quantity <= -inventory
+        return False
+
+    def _build_flatten_intents(
         self,
         adapter: ExecutionAdapter,
         symbol: str,
@@ -430,30 +463,57 @@ class ProductionSafetyOrchestrator:
         )
         return [intent]
 
+    def _execute_flatten(self, ctx: SafetyContext, now_ns: int, result: SafetyResult) -> None:
+        """Actually submit the flatten intents on a FLATTEN_AND_HALT breach (once)."""
+        if self._flatten_submitted:
+            return
+        self._flatten_submitted = True
+        intents = self._build_flatten_intents(
+            ctx.adapter, ctx.order_intent.symbol, ctx.local_inventory, now_ns
+        )
+        submitted: List[str] = []
+        for intent in intents:
+            try:
+                ctx.adapter.submit_order(intent)
+                submitted.append(intent.intent_id)
+            except Exception as exc:
+                result.details["flatten_submit_error"] = repr(exc)
+        result.details["flatten_intents_submitted"] = submitted
+
     def pre_trade_check(self, ctx: SafetyContext) -> SafetyResult:
-        is_live = ctx.execution_mode.upper() == "LIVE"
+        # PAPER must enforce identically to LIVE; only REPLAY is audit-only.
+        enforce = ctx.execution_mode.upper() in ("LIVE", "PAPER")
         worst_result = SafetyResult(allowed=True, action=HaltAction.NONE)
-        all_results: List[SafetyResult] = []
 
         now_ns = ctx.system_clock_ns or time.monotonic_ns()
 
-        results_ordered: List[SafetyResult] = [
-            self.disconnect.check(now_ns, ctx.adapter),
-            self.daily_loss.check(
-                self._get_account(ctx.adapter, now_ns),
+        account = self._get_account(ctx.adapter, now_ns)
+        if account is None:
+            loss_result = SafetyResult(
+                allowed=False,
+                halt_reason="Account state unavailable — failed reads must halt, not pass",
+                action=HaltAction.CANCEL_ALL_AND_HALT,
+                monitor_name="AccountStateMonitor",
+                details={"status": "account_read_failed"},
+            )
+        else:
+            loss_result = self.daily_loss.check(
+                account,
                 ctx.daily_loss_limit,
-                ctx.daily_loss_so_far,
+                ctx.carried_session_pnl_signed,
                 ctx.local_inventory,
                 ctx.order_intent.symbol,
-            ),
+            )
+
+        results_ordered: List[SafetyResult] = [
+            self.disconnect.check(now_ns, ctx.adapter),
+            loss_result,
             self.position_mismatch.check(ctx.adapter, ctx.order_intent.symbol, ctx.local_inventory),
             self.clock_drift.check(now_ns, ctx.exchange_clock_ns),
             self.stale_data.check(now_ns, ctx.last_market_data_ns),
         ]
 
-        all_results.extend(results_ordered)
-
-        if not is_live:
+        if not enforce:
             return SafetyResult(
                 allowed=True,
                 action=HaltAction.NONE,
@@ -466,7 +526,7 @@ class ProductionSafetyOrchestrator:
                             "action": r.action.name,
                             "reason": r.halt_reason,
                         }
-                        for r in all_results
+                        for r in results_ordered
                     ],
                 },
             )
@@ -479,6 +539,18 @@ class ProductionSafetyOrchestrator:
                 HaltAction.FLATTEN_AND_HALT,
                 HaltAction.REJECT_ORDER,
             ):
+                if result.action == HaltAction.FLATTEN_AND_HALT:
+                    # Reduce-only carve-out: an order that strictly decreases
+                    # |position| is the flatten — let it through.
+                    if self._strictly_reduces(ctx.order_intent, ctx.local_inventory):
+                        return SafetyResult(
+                            allowed=True,
+                            action=HaltAction.NONE,
+                            halt_reason="reduce-only order allowed under FLATTEN_AND_HALT",
+                            monitor_name=result.monitor_name,
+                            details=dict(result.details),
+                        )
+                    self._execute_flatten(ctx, now_ns, result)
                 return result
 
         return worst_result
@@ -496,6 +568,9 @@ class ProductionSafetyOrchestrator:
         self.clock_drift = ClockDriftMonitor()
         self.position_mismatch = PositionMismatchGuard()
         self.daily_loss = DailyLossLimitFlatten()
+        self._cached_account = None
+        self._cache_age_ns = 0
+        self._flatten_submitted = False
 
 
 _global_orchestrator: Optional[ProductionSafetyOrchestrator] = None

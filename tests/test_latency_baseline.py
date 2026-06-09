@@ -240,6 +240,9 @@ def test_action_specific_metrics_do_not_bleed_between_order_and_cancel() -> None
 
 
 def test_recorder_persists_jsonl_under_dated_data_root(tmp_path: Path) -> None:
+    # The dated directory must be derived from the record's timestamp_utc, not
+    # from wall-clock time at construction.  Pass a fixed timestamp so the test
+    # is deterministic regardless of the calendar day it runs on.
     recorder = LatencyRecorder(
         repo_root=tmp_path,
         run_id="run-a",
@@ -264,6 +267,39 @@ def test_recorder_persists_jsonl_under_dated_data_root(tmp_path: Path) -> None:
     records = load_jsonl(path)
     assert len(records) == 1
     assert records[0]["run_id"] == "run-a"
+
+
+def test_recorder_date_bucketing_uses_record_timestamp_not_construction_time(tmp_path: Path) -> None:
+    # Verify that two samples with timestamps on different UTC dates land in
+    # separate dated directories, and that neither directory is keyed to the
+    # actual wall-clock date on which this test runs.
+    recorder = LatencyRecorder(
+        repo_root=tmp_path,
+        run_id="run-b",
+        environment="paper",
+        broker="rithmic",
+        venue="CME",
+        symbol="ES",
+        strategy_id="latency_probe",
+    )
+    _ts = {
+        "market_event_received_ts": 1,
+        "decision_ready_ts": 11,
+        "order_send_ts": 21,
+        "ack_received_ts": 31,
+    }
+    recorder.write_sample(order_action="new", timestamps=_ts, timestamp_utc="2024-01-31T23:59:59Z")
+    path_day1 = recorder.sample_path()
+    assert path_day1 == tmp_path / "data" / "latency_baselines" / "2024-01-31" / "run-b.jsonl"
+
+    # A second sample on the following day must land in a different directory.
+    recorder.write_sample(order_action="new", timestamps=_ts, timestamp_utc="2024-02-01T00:00:01Z")
+    path_day2 = recorder.sample_path()
+    assert path_day2 == tmp_path / "data" / "latency_baselines" / "2024-02-01" / "run-b.jsonl"
+
+    assert path_day1 != path_day2
+    assert load_jsonl(path_day1)[0]["timestamp_utc"] == "2024-01-31T23:59:59Z"
+    assert load_jsonl(path_day2)[0]["timestamp_utc"] == "2024-02-01T00:00:01Z"
 
 
 def test_summary_views_and_baseline_hard_fail(tmp_path: Path) -> None:

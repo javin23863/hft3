@@ -29,7 +29,6 @@ def test_submit_accept_fill_lifecycle(minimal_npz_tmp) -> None:
     for _ in range(500):
         if hbt.elapse(100_000) == 1:
             break
-        hbt.clear_inactive_orders(0)
         adapter.after_elapse(int(hbt.current_timestamp))
         if adapter.get_position("MES") != 0:
             break

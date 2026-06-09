@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-from hftbacktest.order import GTC, LIMIT
+from hftbacktest.order import FILLED, GTC, LIMIT, PARTIALLY_FILLED
 
 from execution.interfaces import (
     AccountState,
@@ -50,7 +50,6 @@ class HftBacktestSimulatedExchangeAdapter:
         self._orders: Dict[str, _TrackedOrder] = {}
         self._hbt_oid_to_order_id: Dict[int, str] = {}
         self._next_hbt_oid = 1000
-        self._last_num_trades = 0
         self._last_position = 0.0
         self._last_fee = 0.0
 
@@ -208,38 +207,67 @@ class HftBacktestSimulatedExchangeAdapter:
 
     def after_elapse(self, replay_time_ns: int) -> None:
         state = self._hbt.state_values(self._asset_no)
-        pos = float(self._hbt.position(self._asset_no))
-        num_trades = int(state.num_trades)
+        orders = self._hbt.orders(self._asset_no)
+        fee_now = float(state.fee)
+        fee_delta = fee_now - self._last_fee
 
-        if num_trades > self._last_num_trades:
-            for order_id, tracked in self._orders.items():
-                if tracked.filled_quantity >= tracked.quantity:
-                    continue
-                tracked.filled_quantity = tracked.quantity
-                self._emit(
-                    OrderEvent(
-                        order_id=order_id,
-                        intent_id=tracked.intent_id,
-                        run_id=self._run_id,
-                        timestamp_ns=replay_time_ns,
-                        receive_timestamp_ns=replay_time_ns,
-                        event_type=OrderEventType.ORDER_FILLED,
-                        symbol="",
-                        side=tracked.side,
-                        price=tracked.price,
-                        quantity=tracked.quantity,
-                        filled_quantity=tracked.quantity,
-                        remaining_quantity=0.0,
-                        avg_fill_price=tracked.price,
-                        fees=float(state.fee) - self._last_fee,
-                        latency_ms=self._latency_ms,
-                        source_adapter=self.source_adapter,
-                    )
+        # Diff per-order execution state against hbt's order book rather than
+        # inferring fills from the trade counter: only orders hbt reports as
+        # (partially) filled get fill events, with their actual exec price.
+        new_fills: List[tuple] = []
+        for tracked in self._orders.values():
+            if tracked.filled_quantity >= tracked.quantity:
+                continue
+            order = orders.get(tracked.hbt_oid)
+            if order is None:
+                continue
+            status = int(order.status)
+            if status == FILLED:
+                cum_filled = float(order.qty)
+            elif status == PARTIALLY_FILLED:
+                cum_filled = float(order.qty) - float(order.leaves_qty)
+            else:
+                continue
+            fill_qty = cum_filled - tracked.filled_quantity
+            if fill_qty <= 0.0:
+                continue
+            new_fills.append(
+                (tracked, fill_qty, cum_filled, float(order.exec_price), status == FILLED)
+            )
+
+        total_fill_qty = sum(f[1] for f in new_fills)
+        for tracked, fill_qty, cum_filled, exec_price, terminal in new_fills:
+            tracked.filled_quantity = cum_filled
+            self._emit(
+                OrderEvent(
+                    order_id=tracked.order_id,
+                    intent_id=tracked.intent_id,
+                    run_id=self._run_id,
+                    timestamp_ns=replay_time_ns,
+                    receive_timestamp_ns=replay_time_ns,
+                    event_type=(
+                        OrderEventType.ORDER_FILLED
+                        if terminal
+                        else OrderEventType.ORDER_PARTIALLY_FILLED
+                    ),
+                    symbol="",
+                    side=tracked.side,
+                    price=tracked.price,
+                    quantity=tracked.quantity,
+                    filled_quantity=cum_filled,
+                    remaining_quantity=tracked.quantity - cum_filled,
+                    avg_fill_price=exec_price,
+                    fees=fee_delta * (fill_qty / total_fill_qty),
+                    latency_ms=self._latency_ms,
+                    source_adapter=self.source_adapter,
                 )
-            self._last_num_trades = num_trades
-            self._last_fee = float(state.fee)
+            )
 
-        self._last_position = pos
+        self._last_fee = fee_now
+        self._last_position = float(self._hbt.position(self._asset_no))
+        # Clear only after terminal states were observed above; clearing first
+        # makes filled orders invisible to the diff.
+        self._hbt.clear_inactive_orders(self._asset_no)
 
     @property
     def all_events(self) -> List[OrderEvent]:

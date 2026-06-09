@@ -63,7 +63,9 @@ class BinanceL2Recorder:
         for sig in (signal.SIGINT, signal.SIGTERM):
             try:
                 loop.add_signal_handler(sig, self._request_stop)
-            except NotImplementedError:
+            except (NotImplementedError, ValueError, RuntimeError):
+                # Unsupported platform, or not the main thread (Linux raises
+                # ValueError there) — rely on the try/finally in run().
                 pass
 
     def _request_stop(self) -> None:
@@ -106,14 +108,14 @@ class BinanceL2Recorder:
 
     async def run(self, duration_s: Optional[float] = None) -> Dict[str, Any]:
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        self._files = {sym: open(_session_filename(sym, self.output_dir), "w", encoding="utf-8") for sym in self.symbols}
         self._start_time = time.monotonic()
-        self._setup_signal_handlers()
 
         session_start = datetime.now(timezone.utc).isoformat()
         last_heartbeat = time.monotonic()
 
         try:
+            self._files = {sym: open(_session_filename(sym, self.output_dir), "w", encoding="utf-8") for sym in self.symbols}
+            self._setup_signal_handlers()
             while self._running and not self._stop_requested:
                 try:
                     async with websockets.connect(BINANCE_WS_URL) as ws:

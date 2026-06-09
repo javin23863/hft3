@@ -235,6 +235,13 @@ def _atomic_write_text(path: Path, text: str) -> None:
 def _validate_session_id(session_id: str) -> None:
     if not isinstance(session_id, str) or not session_id:
         raise SessionReportError("SESSION_ID_INVALID")
+    # Reject separator characters and NUL explicitly before handing off to
+    # pathlib.  On Linux, Path("..\\evil").name == "..\\evil" (backslash is a
+    # legal filename character), so the name-equality check below would pass
+    # and the payload would traverse on Windows.  Rejecting these bytes here
+    # makes the guard platform-independent.
+    if "/" in session_id or "\\" in session_id or "\x00" in session_id:
+        raise SessionReportError("SESSION_PATH_TRAVERSAL")
     path = Path(session_id)
     if path.is_absolute() or path.name != session_id or session_id in {".", ".."}:
         raise SessionReportError("SESSION_PATH_TRAVERSAL")

@@ -47,6 +47,10 @@ def build_hftbacktest(
     asset.lot_size(lot_size)
     _apply_constant_latency(asset, latency_ns, latency_ns)
     asset.no_partial_fill_exchange()
-    asset.trading_value_fee_model(0.0, fee_model.get_fee_per_contract())
+    # Per-contract fees (USD/contract) on both sides: CME charges exchange+clearing
+    # for maker and taker alike. trading_value_fee_model expects fractional rates on
+    # notional, not dollar amounts — using it here charged ~10% of notional per fill.
+    fee = fee_model.get_fee_per_contract()
+    asset.trading_qty_fee_model(fee, fee)
     QUEUE_MODEL_BUILDERS[queue_model_type](asset)
     return HashMapMarketDepthBacktest([asset])

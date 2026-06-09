@@ -33,7 +33,7 @@ def create_adapter(
             queue_model=queue_model,
             asset_no=asset_no,
         )
-        safety.assert_replay_safe(adapter)
+        safety.assert_replay_safe(adapter, declared_mode=mode)
         return adapter
 
     if mode == "PAPER":

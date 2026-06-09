@@ -150,13 +150,13 @@ class CoinbaseMboRecorder:
 
     async def run(self, duration_s: Optional[float] = None) -> Dict[str, Any]:
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        self._files = {
-            pid: open(_session_filename(pid, self.output_dir), "w", encoding="utf-8")
-            for pid in self.product_ids
-        }
         start = time.monotonic()
 
         try:
+            self._files = {
+                pid: open(_session_filename(pid, self.output_dir), "w", encoding="utf-8")
+                for pid in self.product_ids
+            }
             while self._running and not self._stop_requested:
                 try:
                     async with websockets.connect(COINBASE_WS_URL, ping_interval=20, ping_timeout=20) as ws:

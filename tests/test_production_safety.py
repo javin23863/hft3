@@ -200,6 +200,22 @@ class TestDailyLossLimitFlatten:
         assert d.loss_limit == 5000.0
         del os.environ["LIVE_DAILY_LOSS_LIMIT"]
 
+    def test_carried_pnl_is_signed_losing_day_breaches(self):
+        # carried_session_pnl_signed is signed PnL: negative when losing.
+        d = DailyLossLimitFlatten()
+        account = AccountState(realized_pnl=-300.0, unrealized_pnl=-200.0)
+        result = d.check(account, 1000.0, -600.0, 1.0, "MES")
+        assert not result.allowed
+        assert result.action == HaltAction.FLATTEN_AND_HALT
+        assert result.details["total_loss"] == pytest.approx(1100.0)
+
+    def test_carried_pnl_is_signed_winning_carry_offsets(self):
+        d = DailyLossLimitFlatten()
+        account = AccountState(realized_pnl=-800.0, unrealized_pnl=-300.0)
+        result = d.check(account, 1000.0, 500.0, 1.0, "MES")
+        assert result.allowed
+        assert result.details["total_loss"] == pytest.approx(600.0)
+
 
 class TestProductionSafetyOrchestrator:
     def test_replay_mode_always_allows(self, mock_intent: OrderIntent, mock_adapter: MagicMock):
@@ -227,8 +243,84 @@ class TestProductionSafetyOrchestrator:
             session_start_ns=1_000_000_000,
         )
         result = o.pre_trade_check(ctx)
-        # At minimum the orchestrator ran without crashing
-        assert result is not None
-        # In LIVE mode with stale data, StaleDataMonitor should fire.
-        # The orchestrator returns the highest-severity halt.
-        # At minimum, the test verifies the orchestrator doesn't crash.
+        assert not result.allowed
+        assert result.action == HaltAction.REJECT_ORDER
+
+    def test_paper_mode_enforces_like_live(self, mock_intent: OrderIntent, mock_adapter: MagicMock):
+        o = ProductionSafetyOrchestrator()
+        ctx = SafetyContext(
+            order_intent=mock_intent,
+            adapter=mock_adapter,
+            execution_mode="PAPER",
+            last_market_data_ns=100_000_000,
+            system_clock_ns=1_000_000_000,
+            session_start_ns=1_000_000_000,
+        )
+        result = o.pre_trade_check(ctx)
+        assert not result.allowed
+
+    def test_account_read_failure_halts(self, mock_intent: OrderIntent, mock_adapter: MagicMock):
+        o = ProductionSafetyOrchestrator()
+        mock_adapter.get_account_state.side_effect = RuntimeError("broker down")
+        ctx = SafetyContext(
+            order_intent=mock_intent,
+            adapter=mock_adapter,
+            execution_mode="LIVE",
+            last_market_data_ns=999_000_000,
+            system_clock_ns=1_000_000_000,
+        )
+        result = o.pre_trade_check(ctx)
+        assert not result.allowed
+        assert result.action == HaltAction.CANCEL_ALL_AND_HALT
+        assert result.monitor_name == "AccountStateMonitor"
+
+    def test_flatten_breach_submits_flatten_and_allows_reduce_only(
+        self, mock_intent: OrderIntent, mock_adapter: MagicMock
+    ):
+        o = ProductionSafetyOrchestrator()
+        mock_adapter.get_account_state.return_value = AccountState(
+            realized_pnl=-2000.0, unrealized_pnl=0.0
+        )
+        mock_adapter.get_position.return_value = 5.0
+        ctx = SafetyContext(
+            order_intent=mock_intent,  # BUY increases the long — not reduce-only
+            adapter=mock_adapter,
+            local_inventory=5.0,
+            execution_mode="LIVE",
+            last_market_data_ns=999_000_000,
+            system_clock_ns=1_000_000_000,
+            daily_loss_limit=1000.0,
+        )
+        result = o.pre_trade_check(ctx)
+        assert not result.allowed
+        assert result.action == HaltAction.FLATTEN_AND_HALT
+        # The breach must actually submit a flatten order, not only reject.
+        assert mock_adapter.submit_order.call_count == 1
+        flatten_intent = mock_adapter.submit_order.call_args[0][0]
+        assert flatten_intent.side == "SELL"
+        assert flatten_intent.quantity == 5.0
+
+        # A reduce-only order passes under FLATTEN_AND_HALT.
+        reduce_intent = OrderIntent(
+            intent_id=new_intent_id(),
+            run_id="test",
+            timestamp_ns=1_700_000_000_000_000_000,
+            strategy_id="test",
+            model_id="test",
+            symbol="MES",
+            side="SELL",
+            order_type="LIMIT",
+            price=100.0,
+            quantity=2.0,
+        )
+        ctx_reduce = SafetyContext(
+            order_intent=reduce_intent,
+            adapter=mock_adapter,
+            local_inventory=5.0,
+            execution_mode="LIVE",
+            last_market_data_ns=999_000_000,
+            system_clock_ns=1_000_000_000,
+            daily_loss_limit=1000.0,
+        )
+        result_reduce = o.pre_trade_check(ctx_reduce)
+        assert result_reduce.allowed

@@ -40,6 +40,10 @@ class ReplayStepContext:
     order_events: List[OrderEvent]
     execution: ExecutionAdapter
     symbol: str
+    # True when one or both book sides are empty (liquidity vacuum). The
+    # strategy is still stepped so it can cancel/flatten; it should suppress
+    # new passive quotes itself while this is set.
+    book_one_sided: bool = False
 
 
 @runtime_checkable
@@ -79,6 +83,8 @@ class ReplaySession:
         self._lifecycle: List[dict[str, Any]] = []
         self._intent_count = 0
         self._temp_npz: Optional[str] = None
+        self._fill_records: List[Dict[str, Any]] = []
+        self._cum_filled_by_order: Dict[str, float] = {}
 
     def run(self) -> Dict[str, Any]:
         from backtest_pipeline.src.hft_backtest_builder import build_hftbacktest
@@ -109,7 +115,7 @@ class ReplaySession:
                 latency_ms=cfg.latency_ms,
                 queue_model=cfg.queue_model,
             )
-            safety.assert_replay_safe(adapter)
+            safety.assert_replay_safe(adapter, declared_mode="REPLAY")
 
             mda = HistoricalReplayMarketDataAdapter.from_npz(
                 cfg.npz_path,
@@ -128,19 +134,17 @@ class ReplaySession:
 
                 ts = int(hbt.current_timestamp)
                 self.clock.advance_to(ts)
-                hbt.clear_inactive_orders(0)
+                # Adapter observes terminal order states and clears inactive
+                # orders itself; clearing here first would hide fills from it.
                 adapter.after_elapse(ts)
 
                 depth = hbt.depth(0)
-                if depth.best_bid <= 0 or depth.best_ask <= 0:
-                    steps += 1
-                    if cfg.max_steps and steps >= cfg.max_steps:
-                        break
-                    continue
+                book_one_sided = depth.best_bid <= 0 or depth.best_ask <= 0
 
                 mda.sync_to_timestamp(ts)
                 state = mda.current_market_state(cfg.symbol)
                 drained = adapter.drain_order_events()
+                self._record_fills(drained, ts, depth)
 
                 ctx = ReplayStepContext(
                     run_id=self.run_id,
@@ -152,6 +156,7 @@ class ReplaySession:
                     order_events=drained,
                     execution=adapter,
                     symbol=cfg.symbol,
+                    book_one_sided=book_one_sided,
                 )
                 actions = self.strategy.on_step(ctx)
                 for action in actions:
@@ -192,6 +197,7 @@ class ReplaySession:
                 "trading_volume": account.trading_volume,
                 "position": account.position,
                 "order_intent_count": self._intent_count,
+                "fill_events": list(self._fill_records),
                 "order_lifecycle_summary": summary,
                 "lifecycle_path": str(cfg.audit_dir / f"{self.run_id}_order_lifecycle.jsonl"),
                 "summary_path": str(cfg.audit_dir / f"{self.run_id}_summary.json"),
@@ -205,6 +211,40 @@ class ReplaySession:
                 except OSError:
                     pass
                 self._temp_npz = None
+
+    def _record_fills(self, drained: List[OrderEvent], ts: int, depth: Any) -> None:
+        """Record fill events into the lifecycle audit and the fill ledger.
+
+        Submission/accept/cancel events are already recorded at action time;
+        fills only surface asynchronously via the drain, so they are captured
+        here together with the book state observed at drain time (used
+        downstream for adverse-selection markouts).
+        """
+        for ev in drained:
+            if ev.event_type not in (
+                OrderEventType.ORDER_FILLED,
+                OrderEventType.ORDER_PARTIALLY_FILLED,
+            ):
+                continue
+            self._record_lifecycle(ev, ts, "", "")
+            prev_cum = self._cum_filled_by_order.get(ev.order_id, 0.0)
+            fill_qty = float(ev.filled_quantity) - prev_cum
+            self._cum_filled_by_order[ev.order_id] = float(ev.filled_quantity)
+            if fill_qty <= 0.0:
+                continue
+            best_bid = float(depth.best_bid)
+            best_ask = float(depth.best_ask)
+            self._fill_records.append(
+                {
+                    "timestamp_ns": int(ev.timestamp_ns),
+                    "side": ev.side,
+                    "exec_price": float(ev.avg_fill_price),
+                    "qty": fill_qty,
+                    "fees": float(ev.fees),
+                    "best_bid": best_bid if best_bid > 0 else None,
+                    "best_ask": best_ask if best_ask > 0 else None,
+                }
+            )
 
     def _record_lifecycle(
         self,

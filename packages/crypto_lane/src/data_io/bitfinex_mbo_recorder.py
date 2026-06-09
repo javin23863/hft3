@@ -138,13 +138,13 @@ class BitfinexMboRecorder:
 
     async def run(self, duration_s: Optional[float] = None) -> Dict[str, Any]:
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        self._files = {
-            sym: open(_session_filename(sym, self.output_dir), "w", encoding="utf-8")
-            for sym in self.symbols
-        }
         start = time.monotonic()
 
         try:
+            self._files = {
+                sym: open(_session_filename(sym, self.output_dir), "w", encoding="utf-8")
+                for sym in self.symbols
+            }
             while self._running and not self._stop_requested:
                 try:
                     async with websockets.connect(BITFINEX_WS_URL, ping_interval=20, ping_timeout=20) as ws:
