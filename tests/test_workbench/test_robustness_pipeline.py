@@ -25,6 +25,12 @@ from workbench.src.robustness.pipeline import (
     _validate_binding,
     _inventory_data,
     _construct_search_space,
+    _run_discovery_search,
+    _run_wfc,
+    _run_confirmation,
+    _run_holdout,
+    _run_execution_realism,
+    _generate_explanation,
     run_robustness_pipeline,
 )
 from workbench.src.state.workbench_truth import build_workbench_truth
@@ -305,3 +311,192 @@ def test_pipeline_produces_manifest_with_all_stages():
     assert manifest.edge_status
     assert manifest.champion_status is not None
     assert manifest.next_action
+
+
+def test_wfc_from_campaign_no_periods():
+    """WFC must fail when no campaign periods exist."""
+    m = create_cme_manifest("run", "sha", "MODEL", "MES.v.0")
+    m.period_results = []
+    result = _run_wfc(REPO, "cme_futures", "MODEL", m, [])
+    assert result.get("passed") is False
+    assert result.get("total_periods") == 0
+    assert result.get("pass_rate") == 0.0
+    assert "error" in result
+
+
+def test_wfc_from_campaign_all_pass():
+    """WFC must pass when all campaign periods pass."""
+    m = create_cme_manifest("run", "sha", "MODEL", "MES.v.0")
+    m.period_results = [
+        {"period": "P1", "gate_pass": True, "net_pnl": 100.0, "num_trades": 5},
+        {"period": "P2", "gate_pass": True, "net_pnl": 80.0, "num_trades": 4},
+        {"period": "P3", "gate_pass": True, "net_pnl": 120.0, "num_trades": 6},
+    ]
+    result = _run_wfc(REPO, "cme_futures", "MODEL", m, [])
+    assert result.get("passed") is True
+    assert result.get("total_periods") == 3
+    assert result.get("pass_rate") == 1.0
+
+
+def test_wfc_from_campaign_mixed_results():
+    """WFC must pass with 2/3 gate pass."""
+    m = create_cme_manifest("run", "sha", "MODEL", "MES.v.0")
+    m.period_results = [
+        {"period": "P1", "gate_pass": True, "net_pnl": 100.0},
+        {"period": "P2", "gate_pass": False, "net_pnl": -50.0},
+        {"period": "P3", "gate_pass": True, "net_pnl": 80.0},
+    ]
+    result = _run_wfc(REPO, "cme_futures", "MODEL", m, [])
+    assert result.get("passed") is True
+    assert result.get("total_periods") == 3
+    assert result.get("pass_rate") == 2.0 / 3.0
+
+
+def test_confirmation_rejects_no_pnl():
+    """Confirmation must fail when no PnL present."""
+    m = create_cme_manifest("run", "sha", "MODEL", "MES.v.0")
+    m.wfc_out_of_sample_pnl = 0.0
+    m.wfc_pass_rate = 0.5
+    result = _run_confirmation(REPO, "cme_futures", "MODEL", m)
+    assert result.get("passed") is False
+
+
+def test_confirmation_rejects_no_trades():
+    """Confirmation must fail with zero trades."""
+    m = create_cme_manifest("run", "sha", "MODEL", "MES.v.0")
+    m.wfc_out_of_sample_pnl = 100.0
+    m.wfc_pass_rate = 0.7
+    m.period_results = []
+    result = _run_confirmation(REPO, "cme_futures", "MODEL", m)
+    assert result.get("passed") is False
+
+
+def test_confirmation_accepts_valid():
+    """Confirmation must pass with positive PnL and trades."""
+    m = create_cme_manifest("run", "sha", "MODEL", "MES.v.0")
+    m.wfc_out_of_sample_pnl = 200.0
+    m.wfc_pass_rate = 0.8
+    m.period_results = [
+        {"num_trades": 5},
+        {"num_trades": 7},
+    ]
+    result = _run_confirmation(REPO, "cme_futures", "MODEL", m)
+    assert result.get("passed") is True
+    assert result.get("pnl") == 200.0
+    assert result.get("trades") == 12
+
+
+def test_holdout_rejects_zero_pnl():
+    """Holdout must fail when confirmation PnL is zero."""
+    m = create_cme_manifest("run", "sha", "MODEL", "MES.v.0")
+    m.wfc_out_of_sample_pnl = 100.0
+    m.confirmation_pnl = 0.0
+    result = _run_holdout(REPO, "cme_futures", "MODEL", m)
+    assert result.get("passed") is False
+
+
+def test_holdout_requires_50pct_retention():
+    """Holdout must require at least 50% retention."""
+    m = create_cme_manifest("run", "sha", "MODEL", "MES.v.0")
+    m.wfc_out_of_sample_pnl = 100.0
+    m.confirmation_pnl = 30.0
+    result = _run_holdout(REPO, "cme_futures", "MODEL", m)
+    assert result.get("passed") is False
+    assert result.get("pnl_retention") == 0.3
+
+
+def test_holdout_accepts_high_retention():
+    """Holdout must pass with >= 50% PnL retention."""
+    m = create_cme_manifest("run", "sha", "MODEL", "MES.v.0")
+    m.wfc_out_of_sample_pnl = 100.0
+    m.confirmation_pnl = 80.0
+    result = _run_holdout(REPO, "cme_futures", "MODEL", m)
+    assert result.get("passed") is True
+    assert result.get("pnl_retention") == 0.8
+
+
+def test_execution_realism_per_lane_defaults():
+    """Execution realism must produce per-lane defaults."""
+    m = create_cme_manifest("run", "sha", "MODEL", "MES.v.0")
+    result = _run_execution_realism(REPO, "cme_futures", "MODEL", m)
+    assert "latency_ms" in result
+    assert "slippage_model" in result
+    assert "fee_model" in result
+    assert result.get("latency_ms") == 5.0
+    assert result.get("slippage_model") == "MBO_queue"
+    assert result.get("fee_model") == "CME_fee_schedule"
+
+
+def test_execution_realism_equities_defaults():
+    """Execution realism must have equities-specific defaults."""
+    m = create_equities_manifest("run", "sha", "MODEL", "gme_2021", "GME", "2021-01-27", "meme")
+    result = _run_execution_realism(REPO, "equities_low_float", "MODEL", m)
+    assert result.get("slippage_model") == "L3_spread_crossing"
+    assert result.get("fee_model") == "taker_maker_5bps"
+
+
+def test_generate_explanation_all_stages_pass():
+    """Full explanation must produce EDGE_FOUND when all stages pass."""
+    m = create_cme_manifest("run", "sha", "MODEL", "MES.v.0")
+    m.binding_valid = True
+    m.wfc_out_of_sample_pnl = 100.0
+    m.wfc_pass_rate = 1.0
+    m.holdout_retention = 0.8
+    m.data_inventory = {"npz_events": "700", "npz_status": "available"}
+
+    discovery = [{"status": "completed"}]
+    wfc = {"passed": True, "pass_rate": 1.0, "oos_pnl": 100.0}
+    confirmation = {"passed": True, "pnl": 100.0, "trades": 20}
+    holdout = {"passed": True, "pnl": 80.0, "pnl_retention": 0.8}
+    execution = {"passed": True, "pit_leakage": False}
+
+    result = _generate_explanation(
+        "cme_futures", "MODEL", m,
+        discovery, wfc, confirmation, holdout, execution,
+        ci_fixture=False,
+    )
+    assert result["edge_status"] == "EDGE_FOUND"
+    assert result["champion_status"] == "champion"
+
+
+def test_generate_explanation_partial_stages():
+    """Partial stage pass must produce PROMISING_EDGE."""
+    m = create_cme_manifest("run", "sha", "MODEL", "MES.v.0")
+    m.binding_valid = True
+    m.wfc_out_of_sample_pnl = 50.0
+    m.data_inventory = {"npz_status": "available"}
+
+    discovery = [{"status": "completed"}]
+    wfc = {"passed": True}
+    confirmation = {"passed": True}
+    holdout = {"passed": False}
+    execution = {"passed": True}
+
+    result = _generate_explanation(
+        "cme_futures", "MODEL", m,
+        discovery, wfc, confirmation, holdout, execution,
+        ci_fixture=False,
+    )
+    assert result["edge_status"] == "PROMISING_EDGE"
+    assert result["champion_status"] == "candidate"
+
+
+def test_generate_explanation_ci_fixture():
+    """CI fixture mode must return fixture_only champion."""
+    m = create_cme_manifest("run", "sha", "MODEL", "MES.v.0")
+    result = _generate_explanation(
+        "cme_futures", "MODEL", m,
+        [], {}, {}, {}, {},
+        ci_fixture=True,
+    )
+    assert result["edge_status"] == "EDGE_FOUND"
+    assert result["champion_status"] == "fixture_only"
+
+
+def test_discovery_crypto_returns_pending():
+    """Crypto discovery must return pending_implementation."""
+    m = RobustnessManifest()
+    from workbench.src.robustness.pipeline import _discovery_crypto
+    results = _discovery_crypto(REPO, "MODEL", m)
+    assert len(results) == 1
+    assert results[0]["status"] == "pending_implementation"

@@ -18,8 +18,8 @@ Every run must explain what was tried, what worked, what failed, and why.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
-import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -31,7 +31,7 @@ from workbench.src.robustness.manifest import (
     create_equities_manifest,
     create_options_manifest,
 )
-from workbench.src.state.workbench_truth import WorkbenchTruth, build_workbench_truth
+from workbench.src.state.workbench_truth import build_workbench_truth
 
 
 def _git_sha(repo: Path) -> str:
@@ -324,19 +324,22 @@ def run_robustness_pipeline(
     manifest.discovery_results = discovery
     manifest.stage_completed = 3
 
-    # Check if discovery was blocked
-    if discovery and any(d.get("status") == "blocked" for d in discovery):
-        blocker = next((d.get("error", "unknown") for d in discovery if d.get("status") == "blocked"), "unknown")
-        manifest.edge_status = "BLOCKED"
+    # Check if discovery was blocked or pending implementation
+    blocked = [d for d in discovery if d.get("status") in ("blocked", "pending_implementation")]
+    if blocked:
+        blocker_msg = blocked[0].get("error") or blocked[0].get("message", "unknown")
+        manifest.edge_status = "BLOCKED" if blocked[0].get("status") == "blocked" else "INCOMPLETE"
         manifest.champion_status = "blocked"
-        manifest.blocking_reasons = [blocker]
-        manifest.next_action = "Resolve discovery blockers before continuing"
+        manifest.blocking_reasons = [blocker_msg]
+        manifest.next_action = blocked[0].get("next_step",
+            "Resolve discovery blockers before continuing")
         manifest.wall_time_s = round(time.time() - t0, 2)
         _write_manifest_output(manifest, output, repo, rid)
         return manifest
 
     # Stage 4: Walk-forward cross-validation
     wfc_result = _run_wfc(repo, lane_id, model_id, manifest, discovery)
+    manifest.wfc_results = wfc_result
     manifest.wfc_passed = wfc_result.get("passed", False)
     manifest.wfc_periods = wfc_result.get("total_periods", 0)
     manifest.wfc_pass_rate = wfc_result.get("pass_rate", 0.0)
@@ -358,6 +361,7 @@ def run_robustness_pipeline(
 
     # Stage 5: Confirmation (frozen parameters)
     confirmation = _run_confirmation(repo, lane_id, model_id, manifest)
+    manifest.confirmation_results = confirmation
     manifest.confirmation_passed = confirmation.get("passed", False)
     manifest.confirmation_pnl = confirmation.get("pnl", 0.0)
     manifest.confirmation_trades = confirmation.get("trades", 0)
@@ -378,6 +382,7 @@ def run_robustness_pipeline(
 
     # Stage 6: Holdout (untouched data)
     holdout = _run_holdout(repo, lane_id, model_id, manifest)
+    manifest.holdout_results = holdout
     manifest.holdout_passed = holdout.get("passed", False)
     manifest.holdout_pnl = holdout.get("pnl", 0.0)
     manifest.holdout_retention = holdout.get("pnl_retention", 0.0)
@@ -509,23 +514,25 @@ def _discovery_equities(repo: Path, model_id: str, manifest: RobustnessManifest)
             }
         ]
 
+    try:
+        from equities_lane.src.backtest.low_float_backtester import LowFloatBacktester
+        from equities_lane.src.config_loader import load_universe
+
+        _, universe, _ = load_universe(
+            str(repo / "packages" / "equities_lane" / "config" / "universe.yaml")
+        )
+        bt = LowFloatBacktester(universe)
+    except ImportError:
+        return [{"stage": "discovery", "status": "failed", "error": "Cannot import equities_lane"}]
+    except Exception as e:
+        return [{"stage": "discovery", "status": "failed", "error": str(e)}]
+
     feature_ablations = ["ofi", "vpin", "hawkes", "hmm", "l3_queue"]
     ablation_results: list[dict[str, Any]] = []
 
     for ab in feature_ablations:
         try:
-            from equities_lane.src.backtest.low_float_backtester import LowFloatBacktester
-            from equities_lane.src.config_loader import load_universe
-
-            _, universe, _ = load_universe(
-                str(repo / "packages" / "equities_lane" / "config" / "universe.yaml")
-            )
-            bt = LowFloatBacktester(universe)
-            result = bt.run(
-                str(ndjson_path),
-                ablation=ab,
-                allow_degraded=True,
-            )
+            result = bt.run(str(ndjson_path), ablation=ab, allow_degraded=True)
             ablation_results.append({
                 "feature": ab,
                 "net_pnl": result.net_pnl,
@@ -533,9 +540,6 @@ def _discovery_equities(repo: Path, model_id: str, manifest: RobustnessManifest)
                 "max_drawdown": result.max_drawdown,
                 "failure_notes": result.failure_notes,
             })
-        except ImportError:
-            ablation_results.append({"feature": ab, "status": "skipped", "reason": "import_error"})
-            break
         except Exception as e:
             ablation_results.append({"feature": ab, "status": "error", "error": str(e)})
             continue
@@ -556,7 +560,7 @@ def _discovery_equities(repo: Path, model_id: str, manifest: RobustnessManifest)
 
 
 def _discovery_options(repo: Path, model_id: str, manifest: RobustnessManifest) -> list[dict[str, Any]]:
-    """Options parity discovery: run backtest with threshold sweep."""
+    """Options parity discovery: inventory DBN files, stage for backtest."""
     if not manifest.group_id:
         return [{"stage": "discovery", "status": "blocked", "error": "No group specified"}]
 
@@ -568,6 +572,18 @@ def _discovery_options(repo: Path, model_id: str, manifest: RobustnessManifest) 
     if not dbn_files:
         return [{"stage": "discovery", "status": "blocked", "error": "No DBN files in raw dir"}]
 
+    # Check if normalized NDJSON files exist (required for backtest)
+    norm_dir = repo / "data" / "options" / "normalized"
+    norm_files = list(norm_dir.rglob("*.ndjson")) if norm_dir.is_dir() else []
+    if not norm_files:
+        return [{
+            "stage": "discovery",
+            "status": "blocked",
+            "error": "No normalized NDJSON files — run `python -m options_lane.pipeline download` first, then normalize",
+            "raw_dbn_count": len(dbn_files),
+            "next_step": "Normalize DBN to NDJSON before backtest",
+        }]
+
     try:
         from options_lane.src.config_loader import load_group_by_id
 
@@ -575,13 +591,7 @@ def _discovery_options(repo: Path, model_id: str, manifest: RobustnessManifest) 
         group = load_group_by_id(config, manifest.group_id)
 
         thresholds = [0.5, 1.0, 2.0, 3.0]
-        sweep_results = []
-        for t in thresholds:
-            sweep_results.append({
-                "threshold_ticks": t,
-                "status": "evaluated",
-                "note": f"Threshold {t} evaluated against group {manifest.group_id}",
-            })
+        sweep_results = [{"threshold_ticks": t, "status": "evaluated"} for t in thresholds]
 
         return [
             {
@@ -592,6 +602,7 @@ def _discovery_options(repo: Path, model_id: str, manifest: RobustnessManifest) 
                 "group_type": group.type,
                 "legs": [l.role for l in group.legs],
                 "dbn_files_found": len(dbn_files),
+                "norm_files_found": len(norm_files),
                 "threshold_sweep": sweep_results,
             }
         ]
@@ -630,8 +641,8 @@ def _run_wfc(
     elif lane_id == "options_parity":
         return _wfc_from_threshold_sweep(manifest, discovery)
     else:
-        return {"passed": True, "total_periods": 0, "pass_rate": 1.0,
-                "oos_pnl": 0.0, "note": "WFC not applicable for crypto lane"}
+        return {"passed": False, "total_periods": 0, "pass_rate": 0.0,
+                "oos_pnl": 0.0, "note": "WFC not applicable for crypto lane — discovery is pending"}
 
 
 def _wfc_from_campaign(manifest: RobustnessManifest) -> dict[str, Any]:
