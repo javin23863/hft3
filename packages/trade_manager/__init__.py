@@ -1,0 +1,107 @@
+"""Trade Manager package (Phases 14-23)."""
+
+from trade_manager.manager import (
+    ActiveModel,
+    TradeManager,
+    TradeManagerActivationError,
+    TradeManagerError,
+    TradeManagerSignalError,
+)
+from trade_manager.order_intent import (
+    OrderIntentValidationError,
+    TradeManagerOrderIntent,
+    order_intent_from_signal,
+)
+from trade_manager.execution_boundary import (
+    TradeManagerExecutionBoundary,
+    TradeManagerExecutionBoundaryError,
+    TradeManagerExecutionConfig,
+    load_execution_config,
+    prepare_execution_boundary,
+)
+from trade_manager.kill_switch import (
+    KILL_SWITCH_ACTIONS,
+    KILL_SWITCH_TRIGGERS,
+    KillSwitchConfig,
+    KillSwitchConfigError,
+    KillSwitchContext,
+    KillSwitchDecision,
+    KillSwitchEvent,
+    KillSwitchThresholds,
+    evaluate_kill_switch,
+    load_kill_switch_config,
+)
+from trade_manager.order_state import (
+    ORDER_STATE_VALUES,
+    TERMINAL_ORDER_STATES,
+    OrderStateTransitionError,
+    TradeManagerOrderState,
+    TradeManagerOrderTransition,
+)
+from trade_manager.risk_layer import (
+    TradeManagerRiskConfig,
+    TradeManagerRiskContext,
+    TradeManagerRiskDecision,
+    TradeManagerRiskError,
+    TradeManagerRiskLayer,
+    load_risk_config,
+)
+from trade_manager.session import (
+    JSON_OBJECT_ARTIFACTS,
+    JSONL_OBJECT_ARTIFACTS,
+    SESSION_ARTIFACTS,
+    SessionArtifacts,
+    SessionReportError,
+    SessionReportInput,
+    resolve_session_path,
+    write_session_report,
+)
+from trade_manager.signals import ModelSignal, SignalSource, StaticSignalSource
+
+__all__ = [
+    "ActiveModel",
+    "TradeManager",
+    "TradeManagerActivationError",
+    "TradeManagerError",
+    "TradeManagerSignalError",
+    "OrderIntentValidationError",
+    "TradeManagerOrderIntent",
+    "order_intent_from_signal",
+    "TradeManagerExecutionBoundary",
+    "TradeManagerExecutionBoundaryError",
+    "TradeManagerExecutionConfig",
+    "load_execution_config",
+    "prepare_execution_boundary",
+    "KILL_SWITCH_ACTIONS",
+    "KILL_SWITCH_TRIGGERS",
+    "KillSwitchConfig",
+    "KillSwitchConfigError",
+    "KillSwitchContext",
+    "KillSwitchDecision",
+    "KillSwitchEvent",
+    "KillSwitchThresholds",
+    "evaluate_kill_switch",
+    "load_kill_switch_config",
+    "ORDER_STATE_VALUES",
+    "TERMINAL_ORDER_STATES",
+    "OrderStateTransitionError",
+    "TradeManagerOrderState",
+    "TradeManagerOrderTransition",
+    "TradeManagerRiskConfig",
+    "TradeManagerRiskContext",
+    "TradeManagerRiskDecision",
+    "TradeManagerRiskError",
+    "TradeManagerRiskLayer",
+    "load_risk_config",
+    "JSON_OBJECT_ARTIFACTS",
+    "JSONL_OBJECT_ARTIFACTS",
+    "SESSION_ARTIFACTS",
+    "SessionArtifacts",
+    "SessionReportError",
+    "SessionReportInput",
+    "resolve_session_path",
+    "write_session_report",
+    "ModelSignal",
+    "SignalSource",
+    "StaticSignalSource",
+]
