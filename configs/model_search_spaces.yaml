@@ -1,0 +1,141 @@
+# Shared model search space registry
+# VectorBT and HFTBacktest consume the same parameter definitions.
+# parameter_set_id produced by VectorBT is passed unchanged to HFTBacktest.
+
+search_spaces:
+  SPREAD_BLOWOUT_RECOMPRESSION_CME:
+    search_space_id: "SPREAD_BLOWOUT_RECOMPRESSION_CME"
+    version: "1.0"
+    lane_id: cme_futures
+    model_id: SPREAD_BLOWOUT_RECOMPRESSION
+    vectorbt_supported: true
+    hftbacktest_supported: true
+    promotion_eligible: true
+    parameters:
+      signal_threshold: [0.05, 0.10, 0.15, 0.20]
+      holding_period_bars: [5, 10, 20]
+      stop_loss_pct: [0.005, 0.01, 0.02]
+    objectives:
+      primary: sharpe
+      secondary:
+        - net_pnl
+        - max_drawdown
+        - num_trades
+    vectorbt_top_n: 10
+    hftbacktest_top_n: 5
+    selection_policy: top_n_by_sharpe
+    feature_requirements:
+      - mbo_64dim
+      - mid_price
+      - spread
+    data_requirements:
+      - mbo_npz
+
+  BOOK_PRESSURE_CME:
+    search_space_id: "BOOK_PRESSURE_CME"
+    version: "1.0"
+    lane_id: cme_futures
+    model_id: BOOK_PRESSURE
+    vectorbt_supported: true
+    hftbacktest_supported: true
+    promotion_eligible: true
+    parameters:
+      ofi_window_ns: [100000, 500000, 1000000]
+      imbalance_threshold: [0.10, 0.15, 0.20, 0.30]
+      entry_threshold: [0.15, 0.25, 0.35]
+      exit_threshold: [0.05, 0.10]
+      latency_ms: [0.5, 1.0, 2.0]
+      max_spread_ticks: [1, 2, 4]
+    objectives:
+      primary: sharpe
+      secondary:
+        - expectancy_per_trade
+        - max_drawdown
+        - fill_rate
+        - slippage_bps
+        - adverse_selection_rate
+    vectorbt_top_n: 25
+    hftbacktest_top_n: 10
+    selection_policy: top_n_by_deflated_sharpe
+    feature_requirements:
+      - mbo_64dim
+      - ofi
+      - imbalance
+    data_requirements:
+      - mbo_npz
+
+  STOP_RUN_EXHAUSTION_FADE_CME:
+    search_space_id: "STOP_RUN_EXHAUSTION_FADE_CME"
+    version: "1.0"
+    lane_id: cme_futures
+    model_id: STOP_RUN_EXHAUSTION_FADE
+    vectorbt_supported: true
+    hftbacktest_supported: true
+    promotion_eligible: true
+    parameters:
+      signal_threshold: [0.10, 0.15, 0.20]
+      holding_period_bars: [5, 10, 15]
+      stop_loss_pct: [0.005, 0.01]
+    objectives:
+      primary: sharpe
+      secondary:
+        - net_pnl
+        - max_drawdown
+    vectorbt_top_n: 10
+    hftbacktest_top_n: 5
+    selection_policy: top_n_by_sharpe
+    feature_requirements:
+      - mbo_64dim
+    data_requirements:
+      - mbo_npz
+
+  DEPTH_REFILL_IMBALANCE_CME:
+    search_space_id: "DEPTH_REFILL_IMBALANCE_CME"
+    version: "1.0"
+    lane_id: cme_futures
+    model_id: DEPTH_REFILL_IMBALANCE
+    vectorbt_supported: true
+    hftbacktest_supported: true
+    promotion_eligible: true
+    parameters:
+      signal_threshold: [0.10, 0.15, 0.20]
+      holding_period_bars: [5, 10, 20]
+      stop_loss_pct: [0.005, 0.01, 0.02]
+    objectives:
+      primary: sharpe
+      secondary:
+        - net_pnl
+        - num_trades
+    vectorbt_top_n: 10
+    hftbacktest_top_n: 5
+    selection_policy: top_n_by_sharpe
+    feature_requirements:
+      - mbo_64dim
+      - depth
+    data_requirements:
+      - mbo_npz
+
+  LIQUIDITY_VACUUM_CONTINUATION_CME:
+    search_space_id: "LIQUIDITY_VACUUM_CONTINUATION_CME"
+    version: "1.0"
+    lane_id: cme_futures
+    model_id: LIQUIDITY_VACUUM_CONTINUATION
+    vectorbt_supported: true
+    hftbacktest_supported: true
+    promotion_eligible: true
+    parameters:
+      signal_threshold: [0.10, 0.15, 0.20]
+      holding_period_bars: [5, 10, 20]
+      stop_loss_pct: [0.005, 0.01]
+    objectives:
+      primary: sharpe
+      secondary:
+        - net_pnl
+        - max_drawdown
+    vectorbt_top_n: 10
+    hftbacktest_top_n: 5
+    selection_policy: top_n_by_sharpe
+    feature_requirements:
+      - mbo_64dim
+    data_requirements:
+      - mbo_npz

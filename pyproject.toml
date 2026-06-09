@@ -15,6 +15,7 @@ dependencies = [
 [project.scripts]
 workbench = "workbench.__main__:main"
 economic-event-universe = "economic_event_universe.cli:main"
+hft3-pipeline = "hft3_pipeline.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["apps", "packages"]

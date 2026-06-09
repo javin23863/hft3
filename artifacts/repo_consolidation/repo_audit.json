@@ -1,0 +1,206 @@
+{
+  "audit_timestamp": "2026-06-09T05:00:00Z",
+  "repo_root": "C:\\Users\\MSI\\Documents\\opencode\\hft3",
+  "current_branch": "feat/mbo-release-lane",
+  "current_commit": "1cb8503",
+  
+  "vectorbt_status": {
+    "exists_on_current_branch": false,
+    "exists_in_git_history": true,
+    "source_commits": [
+      "a1b4eadf7af7ec8087b476a1263e74eb3c37a8aa",
+      "2b804e02739ab676088e01aa54a3199455e75582",
+      "d71c31e84f779f1ad7d65066f16d74303fd7258b"
+    ],
+    "source_branch": "remotes/origin/mandatory-vectorbt-idea-crypto-lane",
+    "files_found": [
+      "packages/backtest_pipeline/src/vectorbt_adapter.py",
+      "packages/backtest_pipeline/src/promotion_gate.py",
+      "tests/test_vectorbt_adapter.py",
+      "docs/human/VECTORBT_PIPELINE.md"
+    ],
+    "installed": false,
+    "in_requirements": false,
+    "action_required": "RESTORE from git + install vectorbt dependency"
+  },
+  
+  "backtest_path": {
+    "primary_engine": "packages/backtest_pipeline/",
+    "files": [
+      "packages/backtest_pipeline/src/runner.py",
+      "packages/backtest_pipeline/src/replay_matrix.py",
+      "packages/backtest_pipeline/src/hft_backtest_builder.py",
+      "packages/backtest_pipeline/src/hypothesis_replay_strategy.py",
+      "packages/backtest_pipeline/src/signal_backtester.py",
+      "packages/replay/replay_session.py",
+      "packages/replay/market_data_adapter.py",
+      "packages/features_engine/src/pipeline/market_state_pipeline.py"
+    ],
+    "hftbacktest_version": ">=2.4.0",
+    "status": "OPERATIONAL"
+  },
+  
+  "model_metrics": {
+    "location": "packages/hft3/model_metrics/",
+    "files": [
+      "packages/hft3/model_metrics/__init__.py",
+      "packages/hft3/model_metrics/schemas.py"
+    ],
+    "classes": ["MetricValues", "ModelScorecard", "CategoryScore"],
+    "functions": ["calculate_metric_values", "generate_model_scorecard"],
+    "status": "MINIMAL - needs expansion to full 6-group surface",
+    "missing_groups": [
+      "net_alpha_quality (partial)",
+      "drawdown_loss_behavior (partial)",
+      "robustness_stability (partial)",
+      "execution_realism (partial)",
+      "portfolio_fit (stubs only)",
+      "prediction_calibration_quality (stubs only)"
+    ]
+  },
+  
+  "promotion_certification": {
+    "location": "packages/hft3/validation/",
+    "files": [
+      "packages/hft3/validation/certification_registry.py",
+      "packages/hft3/validation/certification_runner.py",
+      "packages/hft3/validation/promotion_gate.py",
+      "packages/hft3/validation/registry_errors.py"
+    ],
+    "classes": ["CertificationRecord", "PromotionRecord"],
+    "functions": ["save_promotion", "load_latest_promotion", "list_promotion_models"],
+    "status": "OPERATIONAL"
+  },
+  
+  "trade_manager": {
+    "location": "packages/trade_manager/",
+    "files": [
+      "packages/trade_manager/__init__.py",
+      "packages/trade_manager/manager.py",
+      "packages/trade_manager/signals.py",
+      "packages/trade_manager/order_intent.py",
+      "packages/trade_manager/risk_layer.py",
+      "packages/trade_manager/order_state.py",
+      "packages/trade_manager/execution_boundary.py",
+      "packages/trade_manager/monitor.py",
+      "packages/trade_manager/kill_switch.py",
+      "packages/trade_manager/session.py"
+    ],
+    "phases": "14-23 (restored from git commit a3f1c29)",
+    "status": "OPERATIONAL"
+  },
+  
+  "workbench_ui": {
+    "location": "apps/workbench/",
+    "entry_point": "apps/workbench/ui/app.py",
+    "truth_module": "apps/workbench/src/state/workbench_truth.py",
+    "ui_files": [
+      "apps/workbench/ui/app.py",
+      "apps/workbench/ui/lane_command.py",
+      "apps/workbench/ui/campaign_panel.py",
+      "apps/workbench/ui/autonomous_panel.py",
+      "apps/workbench/ui/equities_panel.py",
+      "apps/workbench/ui/analyst_panel.py",
+      "apps/workbench/ui/workflow_tabs.py"
+    ],
+    "truth_classes": [
+      "WorkbenchTruth",
+      "LaneTruth",
+      "CmeEntryTruth",
+      "EquitiesEntryTruth",
+      "OptionsEntryTruth",
+      "CryptoEntryTruth"
+    ],
+    "status": "OPERATIONAL - missing VectorBT stage in truth"
+  },
+  
+  "lanes": {
+    "cme_futures": {
+      "packages": ["packages/backtest_pipeline", "packages/features_engine", "packages/replay", "packages/data_system"],
+      "symbols": ["MES.v.0", "MNQ.v.0", "ES.v.0", "NQ.v.0"],
+      "data_location": "data/npz/",
+      "status": "OPERATIONAL"
+    },
+    "equities_low_float": {
+      "packages": ["packages/equities_lane"],
+      "data_location": "data/equities/",
+      "status": "OPERATIONAL"
+    },
+    "options_parity": {
+      "packages": ["packages/options_lane"],
+      "data_location": "data/options/",
+      "status": "OPERATIONAL"
+    },
+    "crypto": {
+      "packages": ["packages/crypto_lane"],
+      "data_location": "data/replay/hftbacktest/crypto/",
+      "status": "OPERATIONAL"
+    },
+    "mbo_release": {
+      "packages": ["packages/mbo_release_lane"],
+      "status": "OPERATIONAL"
+    }
+  },
+  
+  "gaps_preventing_coherent_program": [
+    {
+      "id": "GAP-001",
+      "severity": "HIGH",
+      "description": "VectorBT not installed and not on current branch",
+      "resolution": "Restore from git commit a1b4eadf + pip install vectorbt"
+    },
+    {
+      "id": "GAP-002",
+      "severity": "HIGH",
+      "description": "No unified CLI orchestrator (only scripts/unify_pipeline.py)",
+      "resolution": "Create hft3_pipeline package with __main__.py"
+    },
+    {
+      "id": "GAP-003",
+      "severity": "MEDIUM",
+      "description": "model_metrics has only 3 categories, needs full 6-group surface",
+      "resolution": "Expand schemas.py with all metric groups"
+    },
+    {
+      "id": "GAP-004",
+      "severity": "MEDIUM",
+      "description": "No shared model search space registry",
+      "resolution": "Create configs/model_search_spaces.yaml"
+    },
+    {
+      "id": "GAP-005",
+      "severity": "MEDIUM",
+      "description": "WorkbenchTruth missing VectorBT stage",
+      "resolution": "Add VectorbtStageTruth to workbench_truth.py"
+    },
+    {
+      "id": "GAP-006",
+      "severity": "MEDIUM",
+      "description": "No run mode enforcement (REAL_RESEARCH vs FIXTURE_CI)",
+      "resolution": "Add RunMode enum and promotion eligibility checks"
+    },
+    {
+      "id": "GAP-007",
+      "severity": "LOW",
+      "description": "Missing acceptance tests for pipeline integration",
+      "resolution": "Add tests/test_pipeline_integration.py"
+    }
+  ],
+  
+  "branches_with_vectorbt": [
+    "remotes/origin/mandatory-vectorbt-idea-crypto-lane"
+  ],
+  
+  "all_branches": [
+    "feat/mbo-release-lane",
+    "main",
+    "runner-seed-resolver",
+    "remotes/origin/chore/repo-cleanup-and-data-fill",
+    "remotes/origin/codex/workbench-runtime-sync",
+    "remotes/origin/feat/mbo-release-lane",
+    "remotes/origin/main",
+    "remotes/origin/mandatory-vectorbt-idea-crypto-lane",
+    "remotes/origin/runner-seed-resolver",
+    "remotes/origin/stocks-lane-restored"
+  ]
+}
