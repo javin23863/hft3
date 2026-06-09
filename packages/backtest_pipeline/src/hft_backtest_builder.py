@@ -31,7 +31,7 @@ def build_hftbacktest(
     asset.data(data_path)
     asset.tick_size(tick_size)
     asset.lot_size(lot_size)
-    asset.constant_order_latency(latency_ns, latency_ns)
+    asset.constant_latency(latency_ns, latency_ns)
     asset.no_partial_fill_exchange()
     asset.trading_value_fee_model(0.0, fee_model.get_fee_per_contract())
     QUEUE_MODEL_BUILDERS[queue_model_type](asset)
