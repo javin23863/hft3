@@ -57,8 +57,8 @@ def download_leg_window(
         start_utc=start_utc,
         end_utc=end_utc,
         dataset=leg.dataset or "GLBX.MDP3",
-        schema=schema,
-        stype_in=stype_in,
+        schema=leg.schema or schema or "mbp-1",
+        stype_in=leg.stype_in or stype_in or "continuous",
     )
     src = Path(result_path)
     output_dir.mkdir(parents=True, exist_ok=True)

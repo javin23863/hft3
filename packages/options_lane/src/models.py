@@ -20,6 +20,8 @@ class LegSpec:
     role: str
     symbol: str
     dataset: str = ""
+    stype_in: str = "continuous"
+    schema: str = ""
     strike: float | None = None
     right: str | None = None
 
@@ -30,6 +32,8 @@ class LegSpec:
             role=str(data["role"]),
             symbol=str(data["symbol"]),
             dataset=str(data.get("dataset", "")),
+            stype_in=str(data.get("stype_in", "continuous")),
+            schema=str(data.get("schema", "")),
             strike=float(strike) if strike is not None else None,
             right=data.get("right"),
         )

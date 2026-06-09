@@ -69,6 +69,43 @@ class RobustnessManifest:
     wfc_results: dict[str, Any] = field(default_factory=dict)
     confirmation_results: dict[str, Any] = field(default_factory=dict)
     holdout_results: dict[str, Any] = field(default_factory=dict)
+    stage_completed: int = 0
+
+    # Campaign / backtest period results
+    period_results: list[dict[str, Any]] = field(default_factory=list)
+    num_periods: int = 0
+    gate_pass_periods: int = 0
+    ablation_results: list[dict[str, Any]] = field(default_factory=list)
+
+    # WFC
+    wfc_passed: bool = False
+    wfc_periods: int = 0
+    wfc_pass_rate: float = 0.0
+    wfc_out_of_sample_pnl: float = 0.0
+
+    # Confirmation
+    confirmation_passed: bool = False
+    confirmation_pnl: float = 0.0
+    confirmation_trades: int = 0
+
+    # Holdout
+    holdout_passed: bool = False
+    holdout_pnl: float = 0.0
+    holdout_retention: float = 0.0
+
+    # Execution
+    execution_passed: bool = False
+    pit_leakage_detected: bool = False
+    latency_realism_ms: float = 0.0
+    slippage_model: str = ""
+    fee_model: str = ""
+
+    # Risks and warnings
+    risk_flags: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+    # Wall time
+    wall_time_s: float = 0.0
 
     # Selected candidate
     selected_candidate: str = ""
@@ -140,6 +177,29 @@ class RobustnessManifest:
             "wfc_results": self.wfc_results,
             "confirmation_results": self.confirmation_results,
             "holdout_results": self.holdout_results,
+            "stage_completed": self.stage_completed,
+            "period_results": self.period_results,
+            "num_periods": self.num_periods,
+            "gate_pass_periods": self.gate_pass_periods,
+            "ablation_results": self.ablation_results,
+            "wfc_passed": self.wfc_passed,
+            "wfc_periods": self.wfc_periods,
+            "wfc_pass_rate": self.wfc_pass_rate,
+            "wfc_out_of_sample_pnl": self.wfc_out_of_sample_pnl,
+            "confirmation_passed": self.confirmation_passed,
+            "confirmation_pnl": self.confirmation_pnl,
+            "confirmation_trades": self.confirmation_trades,
+            "holdout_passed": self.holdout_passed,
+            "holdout_pnl": self.holdout_pnl,
+            "holdout_retention": self.holdout_retention,
+            "execution_passed": self.execution_passed,
+            "pit_leakage_detected": self.pit_leakage_detected,
+            "latency_realism_ms": self.latency_realism_ms,
+            "slippage_model": self.slippage_model,
+            "fee_model": self.fee_model,
+            "risk_flags": self.risk_flags,
+            "warnings": self.warnings,
+            "wall_time_s": self.wall_time_s,
             "selected_candidate": self.selected_candidate,
             "selection_reason": self.selection_reason,
             "frozen_parameters": self.frozen_parameters,

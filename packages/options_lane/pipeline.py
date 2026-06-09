@@ -9,12 +9,19 @@ from pathlib import Path
 _REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO))
 
+import os
+from datetime import datetime, timedelta, timezone
+
 from options_lane.src.backtest.multi_leg_backtester import (
     MultiLegParityBacktester,
     write_research_card,
 )
 from options_lane.src.config_loader import load_group_by_id, load_universe
-from options_lane.src.ingest.databento_options import collect_download_specs, discover_groups
+from options_lane.src.ingest.databento_options import (
+    collect_download_specs,
+    discover_groups,
+    download_leg_window,
+)
 from options_lane.src.ingest.quote_aligner import align_quotes
 from options_lane.src.ingest.quotes_io import load_quote_ndjson
 from options_lane.src.parity_engine import compute_violation, is_actionable
@@ -29,6 +36,84 @@ def cmd_discover(args: argparse.Namespace) -> int:
     }
     print(json.dumps(payload, indent=2))
     return 0
+
+
+def _default_window() -> tuple[datetime, datetime]:
+    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    end = today
+    start = end - timedelta(days=7)
+    return start, end
+
+
+def cmd_download(args: argparse.Namespace) -> int:
+    """Download quote data for all parity legs (budget-gated)."""
+    if not os.getenv("DATABENTO_API_KEY"):
+        raise RuntimeError("DATABENTO_API_KEY must be set")
+
+    repo_root, groups, paths = load_universe(args.config)
+    raw_root = paths["raw_root"]
+    raw_root.mkdir(parents=True, exist_ok=True)
+
+    if args.start:
+        start_utc = datetime.fromisoformat(args.start)
+    else:
+        start_utc = _default_window()[0]
+    if args.end:
+        end_utc = datetime.fromisoformat(args.end)
+    else:
+        end_utc = _default_window()[1]
+    schema = args.schema
+
+    results: list[dict] = []
+    for group in groups:
+        for leg in group.legs:
+            if not leg.dataset:
+                continue
+            output_dir = raw_root / f"{group.id}_{leg.role}_{leg.symbol.replace('.', '_')}"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            existing = list(output_dir.glob("*.dbn.zst"))
+            if existing and not args.refresh:
+                results.append(
+                    {
+                        "group_id": group.id,
+                        "role": leg.role,
+                        "symbol": leg.symbol,
+                        "status": "skipped",
+                        "reason": "already downloaded",
+                        "files": [str(f) for f in existing],
+                    }
+                )
+                continue
+            try:
+                dest = download_leg_window(
+                    leg,
+                    start_utc=start_utc,
+                    end_utc=end_utc,
+                    output_dir=output_dir,
+                    schema=schema,
+                )
+                results.append(
+                    {
+                        "group_id": group.id,
+                        "role": leg.role,
+                        "symbol": leg.symbol,
+                        "status": "downloaded",
+                        "path": str(dest),
+                    }
+                )
+            except Exception as exc:
+                results.append(
+                    {
+                        "group_id": group.id,
+                        "role": leg.role,
+                        "symbol": leg.symbol,
+                        "status": "failed",
+                        "error": str(exc),
+                    }
+                )
+    print(json.dumps(results, indent=2, default=str))
+    failed = [r for r in results if r["status"] == "failed"]
+    return 1 if failed else 0
 
 
 def cmd_backtest(args: argparse.Namespace) -> int:
@@ -82,6 +167,13 @@ def main(argv: list[str] | None = None) -> int:
 
     p_disc = sub.add_parser("discover", help="List parity groups and download jobs")
     p_disc.set_defaults(func=cmd_discover)
+
+    p_down = sub.add_parser("download", help="Download quote data for parity legs")
+    p_down.add_argument("--start", type=str, default=None, help="Start UTC ISO8601 (default: 7 days ago)")
+    p_down.add_argument("--end", type=str, default=None, help="End UTC ISO8601 (default: today)")
+    p_down.add_argument("--schema", type=str, default="mbp-1", help="Databento schema (default: mbp-1)")
+    p_down.add_argument("--refresh", action="store_true", help="Re-download even if files exist")
+    p_down.set_defaults(func=cmd_download)
 
     p_bt = sub.add_parser("backtest", help="Backtest parity arb on quote NDJSON")
     p_bt.add_argument("--group", required=True)
