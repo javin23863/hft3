@@ -48,6 +48,30 @@ class StageStatus(str, Enum):
     BLOCKED = "BLOCKED"
 
 
+_ENUM_FIELDS = {
+    "VectorbtFilterManifest": [
+        ("engine_requested", EngineKind), ("engine_used", EngineKind),
+        ("evidence_status", EvidenceGrade), ("signal_source", SignalSource),
+    ],
+    "HftTruthManifest": [
+        ("engine_requested", EngineKind), ("engine_used", EngineKind),
+        ("evidence_status", EvidenceGrade),
+        ("reconciliation_status", ReconciliationStatus),
+    ],
+    "PipelineManifest": [
+        ("evidence_grade", EvidenceGrade),
+    ],
+}
+
+
+def _coerce_enums(obj: Any) -> None:
+    cls_name = type(obj).__name__
+    for field_name, enum_cls in _ENUM_FIELDS.get(cls_name, []):
+        v = getattr(obj, field_name, "")
+        if isinstance(v, Enum):
+            object.__setattr__(obj, field_name, v.value)
+
+
 @dataclass
 class VectorbtFilterManifest:
     run_id: str = ""
@@ -91,6 +115,9 @@ class VectorbtFilterManifest:
     evidence_status: str = ""
     signal_source: str = ""
     signal_model_id: str = ""
+
+    def __post_init__(self) -> None:
+        _coerce_enums(self)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -144,6 +171,9 @@ class HftTruthManifest:
     pnl_from_fills: Optional[float] = None
     pnl_from_account: Optional[float] = None
 
+    def __post_init__(self) -> None:
+        _coerce_enums(self)
+
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
@@ -176,9 +206,12 @@ class PipelineManifest:
     single_event_smoke: bool = False
     evidence_grade: str = ""
 
+    def __post_init__(self) -> None:
+        _coerce_enums(self)
+
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
-        d["stages"] = {k: v.value for k, v in self.stages.items()}
+        d["stages"] = {k: (v.value if isinstance(v, Enum) else v) for k, v in self.stages.items()}
         d["vectorbt_manifest"] = self.vectorbt_manifest.to_dict() if self.vectorbt_manifest else None
         d["hft_truth_manifest"] = self.hft_truth_manifest.to_dict() if self.hft_truth_manifest else None
         return d

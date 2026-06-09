@@ -191,7 +191,7 @@ class ReplaySession:
             imbalance_summary = self._imbalance_collector.summarize()
             imbalance_samples = self._imbalance_collector.samples[-100:]
 
-        fills_detail = self._extract_fills(adapter)
+        fills_detail = self._extract_fills()
 
         return {
             "run_id": self.run_id,
@@ -247,21 +247,24 @@ class ReplaySession:
         )
 
     def _build_summary(self, adapter: ExecutionAdapter, account: Any, steps: int) -> Dict[str, Any]:
-        events = getattr(adapter, "all_events", [])
-        counts = {t.value: 0 for t in OrderEventType}
-        for ev in events:
-            counts[ev.event_type.value] = counts.get(ev.event_type.value, 0) + 1
+        lifecycle_types = {OrderEventType.ORDER_ACCEPTED.value: 0, OrderEventType.ORDER_REJECTED.value: 0,
+                           OrderEventType.ORDER_PARTIALLY_FILLED.value: 0, OrderEventType.ORDER_FILLED.value: 0,
+                           OrderEventType.ORDER_CANCELLED.value: 0, OrderEventType.ORDER_REPLACED.value: 0}
+        for ev in self._lifecycle:
+            et = ev.get("event_type", "")
+            if et in lifecycle_types:
+                lifecycle_types[et] += 1
 
         counters = safety.counter_snapshot()
         return {
             "run_id": self.run_id,
             "order_intent_count": self._intent_count,
-            "accepted_count": counts.get(OrderEventType.ORDER_ACCEPTED.value, 0),
-            "rejected_count": counts.get(OrderEventType.ORDER_REJECTED.value, 0),
-            "partial_fill_count": counts.get(OrderEventType.ORDER_PARTIALLY_FILLED.value, 0),
-            "filled_count": counts.get(OrderEventType.ORDER_FILLED.value, 0),
-            "cancel_count": counts.get(OrderEventType.ORDER_CANCELLED.value, 0),
-            "replace_count": counts.get(OrderEventType.ORDER_REPLACED.value, 0),
+            "accepted_count": lifecycle_types.get(OrderEventType.ORDER_ACCEPTED.value, 0),
+            "rejected_count": lifecycle_types.get(OrderEventType.ORDER_REJECTED.value, 0),
+            "partial_fill_count": lifecycle_types.get(OrderEventType.ORDER_PARTIALLY_FILLED.value, 0),
+            "filled_count": lifecycle_types.get(OrderEventType.ORDER_FILLED.value, 0),
+            "cancel_count": lifecycle_types.get(OrderEventType.ORDER_CANCELLED.value, 0),
+            "replace_count": lifecycle_types.get(OrderEventType.ORDER_REPLACED.value, 0),
             **counters,
             "total_fees": account.fee,
             "realized_pnl": account.balance,
@@ -274,21 +277,21 @@ class ReplaySession:
             "steps": steps,
         }
 
-    def _extract_fills(self, adapter: ExecutionAdapter) -> List[Dict[str, Any]]:
+    def _extract_fills(self) -> List[Dict[str, Any]]:
         fills: List[Dict[str, Any]] = []
-        events = getattr(adapter, "all_events", [])
-        for ev in events:
-            if ev.event_type in (OrderEventType.ORDER_FILLED, OrderEventType.ORDER_PARTIALLY_FILLED):
+        for ev in self._lifecycle:
+            et = ev.get("event_type", "")
+            if et in (OrderEventType.ORDER_FILLED.value, OrderEventType.ORDER_PARTIALLY_FILLED.value):
                 fills.append({
-                    "timestamp_ns": ev.timestamp_ns,
-                    "order_id": ev.order_id,
-                    "intent_id": ev.intent_id,
-                    "symbol": ev.symbol,
-                    "side": ev.side,
-                    "filled_quantity": ev.filled_quantity,
-                    "avg_fill_price": ev.avg_fill_price,
-                    "fees": ev.fees,
-                    "latency_ms": ev.latency_ms,
+                    "timestamp_ns": ev.get("timestamp_ns", 0),
+                    "order_id": ev.get("order_id", ""),
+                    "intent_id": ev.get("intent_id", ""),
+                    "symbol": ev.get("symbol", ""),
+                    "side": ev.get("side", ""),
+                    "filled_quantity": ev.get("filled_quantity", 0.0),
+                    "avg_fill_price": ev.get("avg_fill_price", 0.0),
+                    "fees": ev.get("fees", 0.0),
+                    "latency_ms": ev.get("latency_ms", 0.0),
                 })
         return fills
 

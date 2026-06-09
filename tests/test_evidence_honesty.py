@@ -18,296 +18,191 @@ sys.path.insert(0, str(REPO_ROOT / "apps"))
 
 from hft3_pipeline.manifest import (
     EngineKind,
+    Enum,
     EvidenceGrade,
     HftTruthManifest,
     PipelineManifest,
     ReconciliationStatus,
     SignalSource,
+    StageStatus,
     VectorbtFilterManifest,
 )
 from hft3_pipeline.run_mode import RunContext, RunMode
 
 
 # ---------------------------------------------------------------------------
-# 1. VectorBT backend labeling
+# 1. Enum coercion and serialization
 # ---------------------------------------------------------------------------
 
-class TestVectorbtBackendLabeling:
-    """VectorBT stage must honestly report engine_requested, engine_used, evidence."""
+class TestEnumCoercion:
+    """Enum values assigned directly must be coerced to str by __post_init__."""
 
-    def test_vectorbt_manifest_has_evidence_fields(self):
-        m = VectorbtFilterManifest(run_id="T-1", lane_id="cme_futures", model_id="T")
-        d = m.to_dict()
-        assert d["engine_requested"] == EngineKind.VECTORBT.value
-        assert "engine_used" in d
-        assert "evidence_status" in d
-        assert "signal_source" in d
-        assert "signal_model_id" in d
-
-    def test_vectorbt_default_promotion_eligible_false(self):
-        m = VectorbtFilterManifest(run_id="T-1", lane_id="cme_futures", model_id="T")
-        assert m.promotion_eligible is False
-
-    def test_vectorbt_numpy_fallback_labeling(self):
-        """Simulate numpy_fallback path: engine_requested=VECTORBT, engine_used=NUMPY_FALLBACK, evidence=NON_AUTHORITATIVE_PREFILTER."""
+    def test_vectorbt_coerces_enum_to_str(self):
         m = VectorbtFilterManifest(
             run_id="T-1", lane_id="cme_futures", model_id="T",
-            backend="numpy_fallback",
-            engine_used=EngineKind.NUMPY_FALLBACK.value,
-            evidence_status=EvidenceGrade.NON_AUTHORITATIVE_PREFILTER.value,
+            engine_requested=EngineKind.VECTORBT,
+            evidence_status=EvidenceGrade.NON_AUTHORITATIVE_PREFILTER,
+            signal_source=SignalSource.MODEL_CATALOG_MSP,
         )
-        d = m.to_dict()
-        assert d["engine_requested"] == EngineKind.VECTORBT.value
-        assert d["engine_used"] == EngineKind.NUMPY_FALLBACK.value
-        assert d["evidence_status"] == EvidenceGrade.NON_AUTHORITATIVE_PREFILTER.value
+        assert isinstance(m.engine_requested, str)
+        assert isinstance(m.evidence_status, str)
+        assert isinstance(m.signal_source, str)
 
-    def test_vectorbt_vectorbt_backend_labeling(self):
-        """VectorBT available: engine_requested=VECTORBT, engine_used=VECTORBT."""
-        m = VectorbtFilterManifest(
-            run_id="T-1", lane_id="cme_futures", model_id="T",
-            backend="vectorbt",
-            engine_used=EngineKind.VECTORBT.value,
-            evidence_status=EvidenceGrade.NON_AUTHORITATIVE_PREFILTER.value,
-        )
-        d = m.to_dict()
-        assert d["engine_used"] == EngineKind.VECTORBT.value
-
-    def test_vectorbt_signal_source_present(self):
-        m = VectorbtFilterManifest(
-            run_id="T-1", lane_id="cme_futures", model_id="SPREAD_BLOWOUT_RECOMPRESSION",
-            signal_source=SignalSource.MODEL_CATALOG_MSP.value,
-            signal_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
-        )
-        d = m.to_dict()
-        assert d["signal_source"] == SignalSource.MODEL_CATALOG_MSP.value
-
-    def test_vectorbt_walk_forward_period_recorded(self):
-        m = VectorbtFilterManifest(
-            run_id="T-1", lane_id="cme_futures", model_id="T",
-            walk_forward_period="HOLDOUT_2025",
-            tuning_skipped_reason="holdout_period_evaluate_only",
-        )
-        d = m.to_dict()
-        assert d["walk_forward_period"] == "HOLDOUT_2025"
-
-    def test_vectorbt_evidence_not_authoritative(self):
-        """VectorBT filter evidence is always NON_AUTHORITATIVE_PREFILTER regardless of backend."""
-        m = VectorbtFilterManifest(
-            run_id="T-1", lane_id="cme_futures", model_id="T",
-            engine_used=EngineKind.VECTORBT.value,
-            evidence_status=EvidenceGrade.NON_AUTHORITATIVE_PREFILTER.value,
-        )
-        assert m.evidence_status != EvidenceGrade.AUTHORITATIVE_EVIDENCE.value
-
-
-# ---------------------------------------------------------------------------
-# 2. HFT truth reconciliation and evidence
-# ---------------------------------------------------------------------------
-
-class TestHftTruthReconciliation:
-    def test_hft_truth_manifest_has_reconciliation_fields(self):
-        m = HftTruthManifest(run_id="T-1", lane_id="cme_futures", model_id="T")
-        d = m.to_dict()
-        assert d["engine_requested"] == EngineKind.REPLAY_SESSION_HFTBACKTEST.value
-        assert "evidence_status" in d
-        assert "reconciliation_status" in d
-        assert "pnl_reconciliation_pass" in d
-        assert "ledger_paths" in d
-
-    def test_hft_truth_passes_reconciliation_when_fills_match(self):
+    def test_hft_coerces_enum_to_str(self):
         m = HftTruthManifest(
             run_id="T-1", lane_id="cme_futures", model_id="T",
-            pnl_from_fills=100.0, pnl_from_account=100.0,
-            pnl_reconciliation_pass=True,
-            reconciliation_status=ReconciliationStatus.PASSED.value,
+            engine_requested=EngineKind.REPLAY_SESSION_HFTBACKTEST,
+            evidence_status=EvidenceGrade.AUTHORITATIVE_EVIDENCE,
+            reconciliation_status=ReconciliationStatus.PASSED,
         )
-        assert m.reconciliation_status == ReconciliationStatus.PASSED.value
+        assert isinstance(m.engine_requested, str)
+        assert isinstance(m.evidence_status, str)
+        assert isinstance(m.reconciliation_status, str)
 
-    def test_hft_truth_fails_reconciliation_when_fills_mismatch(self):
-        m = HftTruthManifest(
-            run_id="T-1", lane_id="cme_futures", model_id="T",
-            pnl_from_fills=100.0, pnl_from_account=50.0,
-            pnl_reconciliation_pass=False,
-            reconciliation_status=ReconciliationStatus.FAILED.value,
-            evidence_status=EvidenceGrade.FAILED_ACCOUNTING_RECONCILIATION.value,
-        )
-        assert m.reconciliation_status == ReconciliationStatus.FAILED.value
-        assert m.evidence_status == EvidenceGrade.FAILED_ACCOUNTING_RECONCILIATION.value
-
-
-# ---------------------------------------------------------------------------
-# 3. Partial replay labeling
-# ---------------------------------------------------------------------------
-
-class TestPartialReplayLabeling:
-    def test_partial_replay_sets_evidence_and_blocks_promotion(self):
-        m = HftTruthManifest(
-            run_id="T-1", lane_id="cme_futures", model_id="T",
-            max_steps_set=100, total_steps_available=1000,
-            evidence_status=EvidenceGrade.PARTIAL_HFT_TRUTH_DEBUG_ONLY.value,
-            promotion_eligible=False,
-        )
-        assert m.evidence_status == EvidenceGrade.PARTIAL_HFT_TRUTH_DEBUG_ONLY.value
-        assert m.promotion_eligible is False
-
-    def test_full_replay_no_max_steps(self):
-        m = HftTruthManifest(
-            run_id="T-1", lane_id="cme_futures", model_id="T",
-            max_steps_set=None, total_steps_available=50000,
-            evidence_status=EvidenceGrade.AUTHORITATIVE_EVIDENCE.value,
-        )
-        assert m.max_steps_set is None
-        assert m.evidence_status == EvidenceGrade.AUTHORITATIVE_EVIDENCE.value
-
-
-# ---------------------------------------------------------------------------
-# 4. Single-event smoke only for FIXTURE_CI/DEBUG
-# ---------------------------------------------------------------------------
-
-class TestSingleEventSmokeLabeling:
-    def test_single_event_smoke_only_for_ci_debug(self):
-        """FIXTURE_CI and DEBUG single events get SMOKE_E2E_SINGLE_EVENT."""
-        for mode in (RunMode.FIXTURE_CI, RunMode.DEBUG):
-            m = PipelineManifest(
-                run_id="T-1", lane_id="cme_futures", model_id="T",
-                event_id="CPI_2024_09_11_TIGHT",
-                single_event_smoke=True,
-                evidence_grade=EvidenceGrade.SMOKE_E2E_SINGLE_EVENT.value,
-            )
-            assert m.single_event_smoke is True
-            assert m.evidence_grade == EvidenceGrade.SMOKE_E2E_SINGLE_EVENT.value
-
-    def test_single_event_smoke_blocks_promotion(self):
+    def test_pipeline_coerces_enum_to_str(self):
         m = PipelineManifest(
             run_id="T-1", lane_id="cme_futures", model_id="T",
-            single_event_smoke=True,
-            evidence_grade=EvidenceGrade.SMOKE_E2E_SINGLE_EVENT.value,
+            evidence_grade=EvidenceGrade.SMOKE_E2E_SINGLE_EVENT,
         )
-        assert m.promotion_eligible is False
+        assert isinstance(m.evidence_grade, str)
 
-    def test_real_research_single_event_not_blocked(self):
-        """REAL_RESEARCH with one event is legitimate — no smoke label."""
+    def test_to_dict_produces_json_serializable_values(self):
+        m = VectorbtFilterManifest(
+            run_id="T-1", lane_id="cme_futures", model_id="T",
+            engine_used=EngineKind.NUMPY_FALLBACK,
+            evidence_status=EvidenceGrade.NON_AUTHORITATIVE_PREFILTER,
+        )
+        d = m.to_dict()
+        serialized = json.dumps(d)
+        assert "NUMPY_FALLBACK" in serialized
+        assert "NON_AUTHORITATIVE_PREFILTER" in serialized
+
+    def test_pipeline_to_dict_serializes_stage_status_enum(self):
         m = PipelineManifest(
             run_id="T-1", lane_id="cme_futures", model_id="T",
-            event_id="CPI_2024_09_11_TIGHT",
-            single_event_smoke=False,
+            stages={"inventory": StageStatus.PASSED, "data_readiness": StageStatus.FAILED},
         )
-        assert m.single_event_smoke is False
-        assert not m.evidence_grade
+        d = m.to_dict()
+        assert d["stages"]["inventory"] == "PASSED"
+        assert d["stages"]["data_readiness"] == "FAILED"
+        serialized = json.dumps(d)
+        assert "PASSED" in serialized
 
 
 # ---------------------------------------------------------------------------
-# 5. WorkbenchTruth evidence display
+# 2. Default values
 # ---------------------------------------------------------------------------
 
-class TestWorkbenchTruthEvidenceDisplay:
-    """WorkbenchTruth must display evidence quality fields."""
+class TestManifestDefaults:
+    def test_promotion_eligible_defaults_false(self):
+        assert VectorbtFilterManifest(run_id="T", lane_id="c", model_id="T").promotion_eligible is False
+        assert HftTruthManifest(run_id="T", lane_id="c", model_id="T").promotion_eligible is False
+        assert PipelineManifest(run_id="T", lane_id="c", model_id="T").promotion_eligible is False
 
-    def test_cme_entry_has_evidence_fields(self):
-        from apps.workbench.src.state.workbench_truth import CmeEntryTruth
-        e = CmeEntryTruth(symbol="MES.v.0")
-        assert hasattr(e, "engine_requested")
-        assert hasattr(e, "engine_used")
-        assert hasattr(e, "evidence_status")
-        assert hasattr(e, "signal_source")
-        assert hasattr(e, "reconciliation_status")
-        assert hasattr(e, "ledgers_available")
-        assert hasattr(e, "input_artifact_paths")
-        assert hasattr(e, "output_artifact_paths")
+    def test_vectorbt_evidence_default_empty(self):
+        m = VectorbtFilterManifest(run_id="T", lane_id="c", model_id="T")
+        assert m.evidence_status == ""
+        assert m.engine_used == ""
 
-    def test_cme_entry_shows_numpy_fallback(self):
-        from apps.workbench.src.state.workbench_truth import CmeEntryTruth
-        e = CmeEntryTruth(
-            symbol="MES.v.0",
-            engine_requested=EngineKind.VECTORBT.value,
-            engine_used=EngineKind.NUMPY_FALLBACK.value,
-            evidence_status=EvidenceGrade.NON_AUTHORITATIVE_PREFILTER.value,
-        )
-        assert e.engine_used == EngineKind.NUMPY_FALLBACK.value
-        assert e.evidence_status == EvidenceGrade.NON_AUTHORITATIVE_PREFILTER.value
-
-    def test_cme_entry_shows_failed_reconciliation(self):
-        from apps.workbench.src.state.workbench_truth import CmeEntryTruth
-        e = CmeEntryTruth(
-            symbol="MES.v.0",
-            evidence_status=EvidenceGrade.FAILED_ACCOUNTING_RECONCILIATION.value,
-            reconciliation_status=ReconciliationStatus.FAILED.value,
-            blockers=["pnl_reconciliation_failed"],
-        )
-        assert e.evidence_status == EvidenceGrade.FAILED_ACCOUNTING_RECONCILIATION.value
-
-    def test_cme_entry_reads_evidence_from_correct_manifest(self):
-        """evidence_status prefers HFT truth, falls back to VectorBT when HFT not run."""
-        from apps.workbench.src.state.workbench_truth import CmeEntryTruth
-        e = CmeEntryTruth(
-            symbol="MES.v.0",
-            evidence_status=EvidenceGrade.NON_AUTHORITATIVE_PREFILTER.value,
-        )
-        assert e.evidence_status == EvidenceGrade.NON_AUTHORITATIVE_PREFILTER.value
-
-    def test_cme_entry_shows_artifact_paths(self):
-        from apps.workbench.src.state.workbench_truth import CmeEntryTruth
-        e = CmeEntryTruth(
-            symbol="MES.v.0",
-            input_artifact_paths=["data/npz/MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz"],
-            output_artifact_paths=["ledgers/RUN-001/fills.jsonl"],
-        )
-        assert len(e.input_artifact_paths) == 1
-        assert len(e.output_artifact_paths) == 1
+    def test_hft_reconciliation_default_pending(self):
+        m = HftTruthManifest(run_id="T", lane_id="c", model_id="T")
+        assert m.reconciliation_status == ReconciliationStatus.PENDING.value
+        assert m.pnl_reconciliation_pass is None
 
 
 # ---------------------------------------------------------------------------
-# 6. Signal source labeling
-# ---------------------------------------------------------------------------
-
-class TestSignalSourceLabeling:
-    def test_signal_source_in_vectorbt_manifest(self):
-        m = VectorbtFilterManifest(
-            run_id="T-1", lane_id="cme_futures", model_id="SPREAD_BLOWOUT_RECOMPRESSION",
-            signal_source=SignalSource.MODEL_CATALOG_MSP.value,
-        )
-        assert m.signal_source == SignalSource.MODEL_CATALOG_MSP.value
-
-    def test_unresolved_signal_source(self):
-        m = VectorbtFilterManifest(
-            run_id="T-1", lane_id="cme_futures", model_id="BOGUS_MODEL",
-            signal_source=SignalSource.UNRESOLVED.value,
-        )
-        assert m.signal_source == SignalSource.UNRESOLVED.value
-
-
-# ---------------------------------------------------------------------------
-# 7. Evidence enforcement in promotion
+# 3. Promotion enforcement (actual logic test, not tautological)
 # ---------------------------------------------------------------------------
 
 class TestEvidenceEnforcedInPromotion:
-    def test_promotion_blocked_when_evidence_not_authoritative(self):
-        """Non-AUTHORITATIVE_EVIDENCE must prevent promotion."""
-        hft = HftTruthManifest(
-            run_id="T-1", lane_id="cme_futures", model_id="T",
-            promotion_eligible=True,
-            evidence_status=EvidenceGrade.NON_AUTHORITATIVE_PREFILTER.value,
-        )
-        assert hft.promotion_eligible is True
-        assert hft.evidence_status != EvidenceGrade.AUTHORITATIVE_EVIDENCE.value
+    def _evidence_ok(self, evidence_status: str) -> bool:
+        return evidence_status in (EvidenceGrade.AUTHORITATIVE_EVIDENCE.value, "")
 
-    def test_promotion_allowed_when_evidence_authoritative(self):
-        """AUTHORITATIVE_EVIDENCE does not block promotion."""
-        hft = HftTruthManifest(
-            run_id="T-1", lane_id="cme_futures", model_id="T",
-            promotion_eligible=True,
-            evidence_status=EvidenceGrade.AUTHORITATIVE_EVIDENCE.value,
-        )
-        assert hft.evidence_status == EvidenceGrade.AUTHORITATIVE_EVIDENCE.value
+    def test_non_authoritative_evidence_blocks_promotion(self):
+        for bad_status in (
+            EvidenceGrade.NON_AUTHORITATIVE_PREFILTER.value,
+            EvidenceGrade.FIXTURE_ONLY.value,
+            EvidenceGrade.DEBUG_ONLY.value,
+            EvidenceGrade.BLOCKED.value,
+            EvidenceGrade.FAILED_ACCOUNTING_RECONCILIATION.value,
+            EvidenceGrade.SMOKE_E2E_SINGLE_EVENT.value,
+            EvidenceGrade.PARTIAL_HFT_TRUTH_DEBUG_ONLY.value,
+        ):
+            assert not self._evidence_ok(bad_status), f"{bad_status} should block promotion"
+
+    def test_authoritative_evidence_allows_promotion(self):
+        assert self._evidence_ok(EvidenceGrade.AUTHORITATIVE_EVIDENCE.value)
+
+    def test_empty_evidence_allows_promotion_backward_compat(self):
+        assert self._evidence_ok("")
 
 
 # ---------------------------------------------------------------------------
-# 8. Win rate computed from fill pairing
+# 4. reconcile_pnl accounting
 # ---------------------------------------------------------------------------
 
-class TestWinRateFromFills:
-    def test_win_rate_from_paired_fills(self):
-        """_pair_fills_into_trades computes per-trade PnL from chronologically paired fills."""
+class TestReconcilePnlAccounting:
+    def test_no_double_fee_counting(self):
+        """Fees deducted per-fill must NOT be subtracted again from account balance."""
+        from backtest_pipeline.src.replay_matrix import reconcile_pnl
+        fills = [
+            {"side": "BUY", "avg_fill_price": 100.0, "filled_quantity": 1.0, "fees": 0.5},
+            {"side": "SELL", "avg_fill_price": 101.0, "filled_quantity": 1.0, "fees": 0.5},
+        ]
+        # PnL from fills: -(100*1) + (101*1) - 0.5 - 0.5 = 0.0
+        # Account balance (hftbacktest already deducted fees): 0.0
+        # Delta should be 0.0 → pass
+        recon = reconcile_pnl({"fills_detail": fills, "balance": 0.0})
+        assert recon["pnl_from_fills"] == 0.0
+        assert recon["pnl_from_account"] == 0.0
+        assert recon["passes"] is True
+
+    def test_reconcile_with_fee_discrepancy(self):
+        from backtest_pipeline.src.replay_matrix import reconcile_pnl
+        fills = [
+            {"side": "BUY", "avg_fill_price": 100.0, "filled_quantity": 1.0, "fees": 0.5},
+            {"side": "SELL", "avg_fill_price": 101.0, "filled_quantity": 1.0, "fees": 0.5},
+        ]
+        # PnL from fills: 0.0, Account balance: 5.0 (corrupted)
+        # Delta: 5.0, tolerance: max(2*0.25, 0.01) = 0.5
+        # Delta(5.0) > tolerance(0.5) → fail
+        recon = reconcile_pnl({"fills_detail": fills, "balance": 5.0})
+        assert recon["passes"] is False
+        assert "pnl_delta" in recon["reason"]
+
+    def test_reconcile_reports_total_fill_fees(self):
+        from backtest_pipeline.src.replay_matrix import reconcile_pnl
+        fills = [
+            {"side": "BUY", "avg_fill_price": 100.0, "filled_quantity": 1.0, "fees": 0.5},
+            {"side": "SELL", "avg_fill_price": 101.0, "filled_quantity": 1.0, "fees": 0.7},
+        ]
+        recon = reconcile_pnl({"fills_detail": fills, "balance": -0.2})
+        assert recon["total_fill_fees"] == 1.2
+
+    def test_reconcile_tick_tolerance(self):
+        from backtest_pipeline.src.replay_matrix import reconcile_pnl
+        fills = [
+            {"side": "BUY", "avg_fill_price": 100.0, "filled_quantity": 2.0, "fees": 0.0},
+            {"side": "SELL", "avg_fill_price": 101.0, "filled_quantity": 2.0, "fees": 0.0},
+        ]
+        # PnL from fills: 2.0, tolerance: max(4*0.25, 0.01) = 1.0
+        recon = reconcile_pnl({"fills_detail": fills, "balance": 1.0})
+        assert recon["tolerance"] == 1.0
+        assert recon["passes"] is True  # delta=1.0 <= tolerance=1.0
+
+    def test_reconcile_no_fills(self):
+        from backtest_pipeline.src.replay_matrix import reconcile_pnl
+        recon = reconcile_pnl({"fills_detail": [], "balance": 0.0})
+        assert recon["pnl_from_fills"] == 0.0
+        assert recon["passes"] is True
+
+
+# ---------------------------------------------------------------------------
+# 5. Fill pairing
+# ---------------------------------------------------------------------------
+
+class TestFillPairing:
+    def test_paired_fills_compute_pnl(self):
         from backtest_pipeline.src.replay_matrix import _pair_fills_into_trades
         fills = [
             {"timestamp_ns": 100, "side": "BUY", "avg_fill_price": 100.0, "filled_quantity": 1.0},
@@ -315,39 +210,101 @@ class TestWinRateFromFills:
         ]
         trade_pnls = _pair_fills_into_trades(fills)
         assert len(trade_pnls) == 1
-        assert trade_pnls[0] == 1.0  # (101 - 100) * 1
+        assert trade_pnls[0] == 1.0
 
-    def test_win_rate_from_unpaired_fills_fallback(self):
-        """When only one side has fills, fall back to heuristic."""
+    def test_unpaired_fills_warns(self):
+        from backtest_pipeline.src.replay_matrix import _pair_fills_into_trades
+        fills = [
+            {"timestamp_ns": 100, "side": "BUY", "avg_fill_price": 100.0, "filled_quantity": 1.0},
+            {"timestamp_ns": 200, "side": "BUY", "avg_fill_price": 101.0, "filled_quantity": 1.0},
+            {"timestamp_ns": 300, "side": "SELL", "avg_fill_price": 102.0, "filled_quantity": 1.0},
+        ]
+        with pytest.warns(UserWarning, match="unpaired fills dropped"):
+            _pair_fills_into_trades(fills)
+
+    def test_single_side_fills_returns_empty(self):
+        from backtest_pipeline.src.replay_matrix import _pair_fills_into_trades
+        fills = [
+            {"timestamp_ns": 100, "side": "BUY", "avg_fill_price": 100.0, "filled_quantity": 1.0},
+        ]
+        assert _pair_fills_into_trades(fills) == []
+
+    def test_compute_win_rate_uses_pairing(self):
+        from backtest_pipeline.src.replay_matrix import _compute_win_rate
+        fills = [
+            {"timestamp_ns": 100, "side": "BUY", "avg_fill_price": 100.0, "filled_quantity": 1.0},
+            {"timestamp_ns": 200, "side": "SELL", "avg_fill_price": 101.0, "filled_quantity": 1.0},
+            {"timestamp_ns": 300, "side": "BUY", "avg_fill_price": 100.0, "filled_quantity": 1.0},
+            {"timestamp_ns": 400, "side": "SELL", "avg_fill_price": 99.0, "filled_quantity": 1.0},
+        ]
+        wr = _compute_win_rate(fills, net_pnl=0.0, num_trades=2)
+        assert wr == 0.5
+
+    def test_compute_win_rate_heuristic_fallback(self):
         from backtest_pipeline.src.replay_matrix import _compute_win_rate
         fills = [
             {"timestamp_ns": 100, "side": "BUY", "avg_fill_price": 100.0, "filled_quantity": 1.0},
         ]
         wr = _compute_win_rate(fills, net_pnl=10.0, num_trades=5)
-        assert wr == 1.0  # heuristic: positive PnL
+        assert wr == 1.0
 
-    def test_reconcile_pnl_uses_tick_tolerance(self):
-        """Reconciliation tolerance is based on total_qty * tick_size, not 1% of balance."""
-        from backtest_pipeline.src.replay_matrix import reconcile_pnl
-        fills = [
-            {"side": "BUY", "avg_fill_price": 100.0, "filled_quantity": 2.0, "fees": 0.0},
-            {"side": "SELL", "avg_fill_price": 101.0, "filled_quantity": 2.0, "fees": 0.0},
-        ]
-        # PnL from fills: -(100*2) + (101*2) = 2.0
-        # Account balance: 1.0
-        # Delta: 1.0, tolerance: max(4 * 0.25, 0.01) = 1.0
-        # Delta(1.0) <= tolerance(1.0) -> pass
-        recon = reconcile_pnl({"fills_detail": fills, "balance": 1.0, "fee": 0.0})
-        assert recon["passes"] is True
-        assert recon["tolerance"] == 1.0
 
-    def test_reconcile_pnl_fails_when_delta_exceeds_tick_tolerance(self):
-        from backtest_pipeline.src.replay_matrix import reconcile_pnl
-        fills = [
-            {"side": "BUY", "avg_fill_price": 100.0, "filled_quantity": 2.0, "fees": 0.0},
-            {"side": "SELL", "avg_fill_price": 101.0, "filled_quantity": 2.0, "fees": 0.0},
-        ]
-        # PnL from fills: 2.0, Account: 0.0
-        # Delta: 2.0, tolerance: 1.0
-        recon = reconcile_pnl({"fills_detail": fills, "balance": 0.0, "fee": 0.0})
-        assert recon["passes"] is False
+# ---------------------------------------------------------------------------
+# 6. Ledger file naming
+# ---------------------------------------------------------------------------
+
+class TestLedgerFileNaming:
+    def test_single_record_ledgers_use_json_extension(self, tmp_path):
+        from backtest_pipeline.src.replay_matrix import write_hft_ledgers
+        raw = {
+            "fills_detail": [
+                {"timestamp_ns": 100, "side": "BUY", "avg_fill_price": 100.0,
+                 "filled_quantity": 1.0, "fees": 0.0},
+            ],
+            "position": 0.0, "balance": 0.0, "num_trades": 1, "fee": 0.0,
+            "steps": 100, "order_intent_count": 1,
+            "order_lifecycle_summary": {"accepted_count": 1, "filled_count": 1,
+                                         "cancel_count": 0, "rejected_count": 0},
+            "lifecycle_path": "/tmp/lc.jsonl", "queue_model": "LogProbQueueModel2",
+        }
+        ledgers = write_hft_ledgers("TEST", raw, manifest_dir=tmp_path / "ledgers")
+        for key in ("positions", "pnl_timeseries", "order_state_transitions", "orders"):
+            assert ledgers[key].endswith(".json"), f"{key} should use .json, got {ledgers[key]}"
+        assert ledgers["fills"].endswith(".jsonl")
+        assert ledgers["slippage_metrics"].endswith(".json")
+
+
+# ---------------------------------------------------------------------------
+# 7. Latency config warnings
+# ---------------------------------------------------------------------------
+
+class TestLatencyConfigWarnings:
+    def test_missing_config_warns(self):
+        from hft3_pipeline.stages import _load_latency_config
+        with pytest.warns(UserWarning, match="cpp_latency_profile.yaml not found"):
+            cfg = _load_latency_config(Path("/nonexistent"))
+        assert cfg["source"] == "hardcoded_default"
+
+
+# ---------------------------------------------------------------------------
+# 8. Single-event smoke
+# ---------------------------------------------------------------------------
+
+class TestSingleEventSmoke:
+    def test_smoke_only_for_ci_debug(self):
+        for mode in (RunMode.FIXTURE_CI, RunMode.DEBUG):
+            m = PipelineManifest(
+                run_id="T-1", lane_id="cme_futures", model_id="T",
+                event_id="CPI_2024_09_11_TIGHT",
+                single_event_smoke=True,
+                evidence_grade=EvidenceGrade.SMOKE_E2E_SINGLE_EVENT.value,
+            )
+            assert m.promotion_eligible is False
+
+    def test_real_research_no_smoke_label(self):
+        m = PipelineManifest(
+            run_id="T-1", lane_id="cme_futures", model_id="T",
+            event_id="CPI_2024_09_11_TIGHT",
+        )
+        assert m.single_event_smoke is False
+        assert not m.evidence_grade

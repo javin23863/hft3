@@ -418,6 +418,11 @@ def _load_latency_config(repo_root: Path) -> Dict[str, Any]:
     default = {"latency_ms": 1.0, "source": "hardcoded_default", "p99_us": 1000}
     profile_path = repo_root / "apps" / "workbench" / "config" / "cpp_latency_profile.yaml"
     if not profile_path.is_file():
+        warnings.warn(
+            f"cpp_latency_profile.yaml not found at {profile_path}; "
+            f"using hardcoded default latency_ms=1.0",
+            stacklevel=2,
+        )
         return default
     try:
         import yaml
@@ -432,7 +437,12 @@ def _load_latency_config(repo_root: Path) -> Dict[str, Any]:
             "decision_compute_p50_us": data.get("cpp_decision_compute", {}).get("p50_us", 11),
             "decision_compute_p99_us": data.get("cpp_decision_compute", {}).get("p99_us", 11),
         }
-    except Exception:
+    except Exception as exc:
+        warnings.warn(
+            f"Failed to load cpp_latency_profile.yaml: {exc}; "
+            f"using hardcoded default latency_ms=1.0",
+            stacklevel=2,
+        )
         return default
 
 
@@ -585,7 +595,7 @@ def stage_hft_truth(repo_root: Path, run_ctx: RunContext, vectorbt_manifest: Vec
     # PnL reconciliation from fills
     fills_detail = meta.get("fills_detail", [])
     if fills_detail:
-        recon = reconcile_pnl({"fills_detail": fills_detail, "balance": hft.pnl, "fee": 0.0})
+        recon = reconcile_pnl({"fills_detail": fills_detail, "balance": hft.pnl})
         hft.pnl_from_fills = recon["pnl_from_fills"]
         hft.pnl_from_account = recon["pnl_from_account"]
         hft.pnl_reconciliation_pass = recon["passes"]

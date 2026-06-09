@@ -39,46 +39,50 @@ def write_hft_ledgers(
             f.write(json.dumps(fill) + "\n")
     ledgers["fills"] = str(fills_path)
 
-    positions_path = ledger_dir / "positions.jsonl"
+    positions_path = ledger_dir / "positions.json"
     with positions_path.open("w", encoding="utf-8") as f:
-        f.write(json.dumps({
+        json.dump({
             "run_id": run_id,
             "final_position": raw.get("position", 0.0),
             "balance": raw.get("balance", 0.0),
             "num_trades": raw.get("num_trades", 0),
             "steps": raw.get("steps", 0),
-        }) + "\n")
+        }, f, indent=2)
+        f.write("\n")
     ledgers["positions"] = str(positions_path)
 
-    pnl_path = ledger_dir / "pnl_timeseries.jsonl"
+    pnl_path = ledger_dir / "pnl_timeseries.json"
     with pnl_path.open("w", encoding="utf-8") as f:
-        f.write(json.dumps({
+        json.dump({
             "run_id": run_id,
             "pnl": raw.get("balance", 0.0),
             "num_trades": raw.get("num_trades", 0),
             "fees": raw.get("fee", 0.0),
-        }) + "\n")
+        }, f, indent=2)
+        f.write("\n")
     ledgers["pnl_timeseries"] = str(pnl_path)
 
     summary = raw.get("order_lifecycle_summary", {})
-    transitions_path = ledger_dir / "order_state_transitions.jsonl"
+    transitions_path = ledger_dir / "order_state_transitions.json"
     with transitions_path.open("w", encoding="utf-8") as f:
-        f.write(json.dumps({
+        json.dump({
             "run_id": run_id,
             "accepted": summary.get("accepted_count", 0),
             "filled": summary.get("filled_count", 0),
             "cancelled": summary.get("cancel_count", 0),
             "rejected": summary.get("rejected_count", 0),
-        }) + "\n")
+        }, f, indent=2)
+        f.write("\n")
     ledgers["order_state_transitions"] = str(transitions_path)
 
-    orders_path = ledger_dir / "orders.jsonl"
+    orders_path = ledger_dir / "orders.json"
     with orders_path.open("w", encoding="utf-8") as f:
-        f.write(json.dumps({
+        json.dump({
             "run_id": run_id,
             "order_intent_count": raw.get("order_intent_count", 0),
             "lifecycle_path": raw.get("lifecycle_path", ""),
-        }) + "\n")
+        }, f, indent=2)
+        f.write("\n")
     ledgers["orders"] = str(orders_path)
 
     latency_path = ledger_dir / "latency_metrics.json"
@@ -94,16 +98,19 @@ def write_hft_ledgers(
     slippage_path = ledger_dir / "slippage_metrics.json"
     with slippage_path.open("w", encoding="utf-8") as f:
         fill_prices = [f["avg_fill_price"] for f in fills_detail if f.get("avg_fill_price", 0) > 0]
-        avg_slippage = 0.0
-        if fill_prices:
-            ref = fill_prices[0]
-            diffs = [abs(p - ref) / max(ref, 1e-10) for p in fill_prices]
-            avg_slippage = float(np.mean(diffs)) * 10000
+        price_range_bps = 0.0
+        if len(fill_prices) >= 2:
+            price_range = max(fill_prices) - min(fill_prices)
+            mid = (max(fill_prices) + min(fill_prices)) / 2.0
+            price_range_bps = (price_range / mid * 10000) if mid > 0 else 0.0
         json.dump({
             "run_id": run_id,
             "fills_count": len(fills_detail),
-            "average_slippage_bps": round(avg_slippage, 4),
+            "fill_price_range_bps": round(price_range_bps, 4),
+            "note": "fill_price_range_bps is NOT slippage; it measures fill price dispersion. "
+                    "True slippage requires signal/limit price vs fill price comparison.",
         }, f, indent=2)
+        f.write("\n")
     ledgers["slippage_metrics"] = str(slippage_path)
 
     manifest_path = ledger_dir / "hft_truth_manifest.json"
@@ -148,6 +155,15 @@ def _pair_fills_into_trades(fills_detail: List[Dict[str, Any]]) -> List[float]:
     entries = buys if pair_side == "BUY" else sells
     exits = sells if pair_side == "BUY" else buys
 
+    n_unpaired = abs(len(entries) - len(exits))
+    if n_unpaired > 0:
+        warnings.warn(
+            f"_pair_fills_into_trades: {n_unpaired} unpaired fills dropped "
+            f"({len(entries)} entries vs {len(exits)} exits); "
+            f"win_rate is approximate until proper trade matching is available",
+            stacklevel=2,
+        )
+
     trade_pnls: List[float] = []
     for entry, exit_ in zip(entries, exits):
         entry_price = float(entry.get("avg_fill_price", 0.0))
@@ -166,7 +182,6 @@ def _pair_fills_into_trades(fills_detail: List[Dict[str, Any]]) -> List[float]:
 def reconcile_pnl(raw: Dict[str, Any], tick_size: float = 0.25) -> Dict[str, Any]:
     fills_detail = raw.get("fills_detail", [])
     account_balance = float(raw.get("balance", 0.0))
-    fees = float(raw.get("fee", 0.0))
 
     if not fills_detail:
         return {
@@ -177,17 +192,20 @@ def reconcile_pnl(raw: Dict[str, Any], tick_size: float = 0.25) -> Dict[str, Any
         }
 
     pnl_from_fills = 0.0
+    total_fill_fees = 0.0
     for fill in fills_detail:
         side = fill.get("side", "BUY")
         price = float(fill.get("avg_fill_price", 0.0))
         qty = float(fill.get("filled_quantity", 0.0))
         fill_fees = float(fill.get("fees", 0.0))
+        total_fill_fees += fill_fees
         if side == "BUY":
-            pnl_from_fills -= price * qty + fill_fees
+            pnl_from_fills -= price * qty
         else:
-            pnl_from_fills += price * qty - fill_fees
+            pnl_from_fills += price * qty
+    pnl_from_fills -= total_fill_fees
 
-    pnl_from_account = account_balance - fees
+    pnl_from_account = account_balance
     delta = abs(pnl_from_fills - pnl_from_account)
     total_qty = sum(float(f.get("filled_quantity", 0.0)) for f in fills_detail)
     tolerance = max(total_qty * tick_size, 0.01)
@@ -196,6 +214,7 @@ def reconcile_pnl(raw: Dict[str, Any], tick_size: float = 0.25) -> Dict[str, Any
     return {
         "pnl_from_fills": round(pnl_from_fills, 4),
         "pnl_from_account": round(pnl_from_account, 4),
+        "total_fill_fees": round(total_fill_fees, 4),
         "passes": passes,
         "delta": round(delta, 4),
         "tolerance": round(tolerance, 4),
