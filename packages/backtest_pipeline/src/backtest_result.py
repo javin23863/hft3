@@ -16,7 +16,9 @@ class FillRecord:
     timestamp_ns: int
     side: str
     exec_price: float
-    qty: int
+    # float, not int: crypto fills are fractional and int() would truncate
+    # a 0.5-contract fill to zero in the ledger.
+    qty: float
     hypothesis_id: int
     signal: float
     mid_at_exec: float

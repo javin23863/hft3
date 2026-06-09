@@ -51,7 +51,7 @@ def _fill_metrics(
                 timestamp_ns=int(f["timestamp_ns"]),
                 side=side,
                 exec_price=px,
-                qty=int(qty),
+                qty=qty,
                 hypothesis_id=hyp_id,
                 signal=0.0,
                 mid_at_exec=mid,

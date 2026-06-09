@@ -464,21 +464,29 @@ class ProductionSafetyOrchestrator:
         return [intent]
 
     def _execute_flatten(self, ctx: SafetyContext, now_ns: int, result: SafetyResult) -> None:
-        """Actually submit the flatten intents on a FLATTEN_AND_HALT breach (once)."""
+        """Actually submit the flatten intents on a FLATTEN_AND_HALT breach.
+
+        Latches only after every intent submitted successfully — a failed
+        submit leaves the latch unset so the next pre-trade check retries
+        instead of leaving the breached position on forever.
+        """
         if self._flatten_submitted:
             return
-        self._flatten_submitted = True
         intents = self._build_flatten_intents(
             ctx.adapter, ctx.order_intent.symbol, ctx.local_inventory, now_ns
         )
         submitted: List[str] = []
+        all_ok = True
         for intent in intents:
             try:
                 ctx.adapter.submit_order(intent)
                 submitted.append(intent.intent_id)
             except Exception as exc:
+                all_ok = False
                 result.details["flatten_submit_error"] = repr(exc)
         result.details["flatten_intents_submitted"] = submitted
+        if all_ok:
+            self._flatten_submitted = True
 
     def pre_trade_check(self, ctx: SafetyContext) -> SafetyResult:
         # PAPER must enforce identically to LIVE; only REPLAY is audit-only.

@@ -153,10 +153,11 @@ class CoinbaseMboRecorder:
         start = time.monotonic()
 
         try:
-            self._files = {
-                pid: open(_session_filename(pid, self.output_dir), "w", encoding="utf-8")
-                for pid in self.product_ids
-            }
+            # Open one at a time into the already-assigned dict so a failure on
+            # file N leaves files 1..N-1 reachable for the finally-close.
+            self._files = {}
+            for pid in self.product_ids:
+                self._files[pid] = open(_session_filename(pid, self.output_dir), "w", encoding="utf-8")
             while self._running and not self._stop_requested:
                 try:
                     async with websockets.connect(COINBASE_WS_URL, ping_interval=20, ping_timeout=20) as ws:
