@@ -4,7 +4,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-from hftbacktest.order import FILLED, GTC, LIMIT, PARTIALLY_FILLED
+from hftbacktest.order import (
+    CANCELED,
+    EXPIRED,
+    FILLED,
+    GTC,
+    LIMIT,
+    PARTIALLY_FILLED,
+    REJECTED,
+)
 
 from execution.interfaces import (
     AccountState,
@@ -48,6 +56,11 @@ class HftBacktestSimulatedExchangeAdapter:
         self._events: List[OrderEvent] = []
         self._pending_drain: List[OrderEvent] = []
         self._orders: Dict[str, _TrackedOrder] = {}
+        # Orders that may still produce events (not yet observed terminal).
+        # after_elapse() only crosses the numba boxing boundary when this is
+        # non-empty — the hbt.orders()/state_values() calls per 100 µs step
+        # dominate replay wall-clock otherwise.
+        self._open_orders: Dict[str, _TrackedOrder] = {}
         self._hbt_oid_to_order_id: Dict[int, str] = {}
         self._next_hbt_oid = 1000
         self._last_position = 0.0
@@ -84,6 +97,7 @@ class HftBacktestSimulatedExchangeAdapter:
             quantity=qty,
         )
         self._orders[order_id] = tracked
+        self._open_orders[order_id] = tracked
         self._hbt_oid_to_order_id[hbt_oid] = order_id
 
         self._emit(
@@ -206,6 +220,13 @@ class HftBacktestSimulatedExchangeAdapter:
         return out
 
     def after_elapse(self, replay_time_ns: int) -> None:
+        # Fast path: with no live orders nothing can fill, so fees/position
+        # cannot move and there is nothing to observe or clear. Skipping the
+        # hbt calls here matters — each one crosses the numba jitclass boxing
+        # boundary and the replay loop calls after_elapse every 100 µs step.
+        if not self._open_orders:
+            return
+
         state = self._hbt.state_values(self._asset_no)
         orders = self._hbt.orders(self._asset_no)
         fee_now = float(state.fee)
@@ -215,17 +236,24 @@ class HftBacktestSimulatedExchangeAdapter:
         # inferring fills from the trade counter: only orders hbt reports as
         # (partially) filled get fill events, with their actual exec price.
         new_fills: List[tuple] = []
-        for tracked in self._orders.values():
-            if tracked.filled_quantity >= tracked.quantity:
-                continue
+        closed: List[str] = []
+        for order_id, tracked in self._open_orders.items():
             order = orders.get(tracked.hbt_oid)
             if order is None:
+                # Already cleared from hbt with no fill observed.
+                closed.append(order_id)
                 continue
             status = int(order.status)
             if status == FILLED:
                 cum_filled = float(order.qty)
+                closed.append(order_id)
             elif status == PARTIALLY_FILLED:
                 cum_filled = float(order.qty) - float(order.leaves_qty)
+            elif status in (CANCELED, EXPIRED, REJECTED):
+                # Terminal without (further) fills; cancel/reject events were
+                # already emitted eagerly at request time.
+                closed.append(order_id)
+                continue
             else:
                 continue
             fill_qty = cum_filled - tracked.filled_quantity
@@ -262,6 +290,9 @@ class HftBacktestSimulatedExchangeAdapter:
                     source_adapter=self.source_adapter,
                 )
             )
+
+        for order_id in closed:
+            self._open_orders.pop(order_id, None)
 
         self._last_fee = fee_now
         self._last_position = float(self._hbt.position(self._asset_no))
