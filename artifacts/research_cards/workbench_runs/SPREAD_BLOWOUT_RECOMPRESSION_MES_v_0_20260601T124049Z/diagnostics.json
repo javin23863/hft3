@@ -1,0 +1,185 @@
+{
+  "campaign_id": "SPREAD_BLOWOUT_RECOMPRESSION_MES_v_0_20260601T124049Z",
+  "status": "PASS",
+  "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+  "symbol": "MES.v.0",
+  "param_hash": "f607e418214bc7fc",
+  "composition": {
+    "primary_model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+    "defensive_stubs": []
+  },
+  "phase_budgets_us": {
+    "before": 0.0,
+    "during": 0.0,
+    "after": 0.0,
+    "continuous": 0.0
+  },
+  "trades_vetoed_by_defense": 0,
+  "periods": [
+    {
+      "name": "Discovery",
+      "gate_pass": true,
+      "evaluate_only": false,
+      "net_pnl": 1.0,
+      "num_trades": 2,
+      "expectancy": 0.5,
+      "events_run": 1,
+      "events_missing": 0,
+      "survives_cpp": true,
+      "event_results": [
+        {
+          "event_id": "CPI_2018_01_11_TIGHT",
+          "release_date": "2018-01-11",
+          "net_pnl": 1.0,
+          "num_trades": 2,
+          "expectancy": 0.5,
+          "survives_cpp_execution_delay": true,
+          "trades_vetoed_by_defense": 0,
+          "run_id": "x"
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "Confirmation",
+      "gate_pass": true,
+      "evaluate_only": false,
+      "net_pnl": 1.0,
+      "num_trades": 2,
+      "expectancy": 0.5,
+      "events_run": 1,
+      "events_missing": 0,
+      "survives_cpp": true,
+      "event_results": [
+        {
+          "event_id": "CPI_2018_01_11_TIGHT",
+          "release_date": "2018-01-11",
+          "net_pnl": 1.0,
+          "num_trades": 2,
+          "expectancy": 0.5,
+          "survives_cpp_execution_delay": true,
+          "trades_vetoed_by_defense": 0,
+          "run_id": "x"
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "Holdout",
+      "gate_pass": true,
+      "evaluate_only": true,
+      "net_pnl": 1.0,
+      "num_trades": 2,
+      "expectancy": 0.5,
+      "events_run": 1,
+      "events_missing": 0,
+      "survives_cpp": true,
+      "event_results": [
+        {
+          "event_id": "CPI_2018_01_11_TIGHT",
+          "release_date": "2018-01-11",
+          "net_pnl": 1.0,
+          "num_trades": 2,
+          "expectancy": 0.5,
+          "survives_cpp_execution_delay": true,
+          "trades_vetoed_by_defense": 0,
+          "run_id": "x"
+        }
+      ],
+      "error": null
+    },
+    {
+      "name": "Recent holdout",
+      "gate_pass": true,
+      "evaluate_only": true,
+      "net_pnl": 1.0,
+      "num_trades": 2,
+      "expectancy": 0.5,
+      "events_run": 1,
+      "events_missing": 0,
+      "survives_cpp": true,
+      "event_results": [
+        {
+          "event_id": "CPI_2018_01_11_TIGHT",
+          "release_date": "2018-01-11",
+          "net_pnl": 1.0,
+          "num_trades": 2,
+          "expectancy": 0.5,
+          "survives_cpp_execution_delay": true,
+          "trades_vetoed_by_defense": 0,
+          "run_id": "x"
+        }
+      ],
+      "error": null
+    }
+  ],
+  "robustness_passed": true,
+  "overfit_risk": "unknown",
+  "walk_forward": {},
+  "wfc_status": "PASS",
+  "wfc": {
+    "run_id": "c",
+    "model_id": "HYP_5",
+    "strategy_id": "",
+    "wfc_status": "PASS",
+    "pearson": 0.0,
+    "spearman": 0.0,
+    "kendall": 0.0,
+    "pearson_ci": [],
+    "spearman_ci": [],
+    "p_value": 1.0,
+    "cost_adjusted_pearson": 0.0,
+    "cost_adjusted_spearman": 0.0,
+    "n_parameter_combinations": 2,
+    "n_folds": 1,
+    "positive_fold_ratio": 0.0,
+    "fold_correlations": {},
+    "top_decile_oos_median": 0.0,
+    "bottom_decile_oos_median": 0.0,
+    "outlier_sensitivity_pass": false,
+    "cost_adjusted_pass": false,
+    "drawdown_pass": false,
+    "secondary_metrics_pass": true,
+    "regime_consistency_pass": true,
+    "universe_consistency_pass": true,
+    "rejection_reasons": [],
+    "artifact_paths": [
+      "C:\\Users\\MSI\\Documents\\opencode\\hft3\\artifacts\\research_cards\\workbench_runs\\SPREAD_BLOWOUT_RECOMPRESSION_MES_v_0_20260601T124049Z\\wfc\\wfc_summary.json",
+      "C:\\Users\\MSI\\Documents\\opencode\\hft3\\artifacts\\research_cards\\workbench_runs\\SPREAD_BLOWOUT_RECOMPRESSION_MES_v_0_20260601T124049Z\\wfc\\wfc_audit.log",
+      "C:\\Users\\MSI\\Documents\\opencode\\hft3\\artifacts\\research_cards\\workbench_runs\\SPREAD_BLOWOUT_RECOMPRESSION_MES_v_0_20260601T124049Z\\wfc\\is_vs_oos_scatter.png",
+      "C:\\Users\\MSI\\Documents\\opencode\\hft3\\artifacts\\research_cards\\workbench_runs\\SPREAD_BLOWOUT_RECOMPRESSION_MES_v_0_20260601T124049Z\\wfc\\is_vs_oos_by_fold.png",
+      "C:\\Users\\MSI\\Documents\\opencode\\hft3\\artifacts\\research_cards\\workbench_runs\\SPREAD_BLOWOUT_RECOMPRESSION_MES_v_0_20260601T124049Z\\wfc\\top_decile_oos.png"
+    ]
+  },
+  "sim_shadow_anchor": "2026-03-01",
+  "sim_shadow_cme_days": 60,
+  "sim_shadow_status": "pending_CHI404",
+  "sim_shadow_required": true,
+  "certification_stamp": {
+    "status": "STALE",
+    "certification_run_id": "CERT-20260601T021203Z-961f7900",
+    "certification_commit": "a88321c4629ad22cb5f453cc5f691878d7474d95",
+    "current_commit": "a5af044042350c5e89d89081ac74daa2da050e96",
+    "git_sha": "a5af044042350c5e89d89081ac74daa2da050e96",
+    "git_commit": "a5af044042350c5e89d89081ac74daa2da050e96",
+    "stale": true,
+    "changed_core_files": [
+      "scripts/run_event_replay.py"
+    ],
+    "promotion_eligible": false,
+    "promotion_label": "STALE_CERTIFICATION",
+    "reason_if_not_promotion_eligible": "core_backtester_changed_since_green_certification",
+    "backtester_version": "a88321c-dirty",
+    "staleness_reason": "core_backtester_files_changed_since_certification",
+    "instrument": "MES.v.0",
+    "execution_adapter_mode": "workbench_campaign",
+    "execution_mode": "REPLAY",
+    "event_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+    "model_id": "SPREAD_BLOWOUT_RECOMPRESSION"
+  },
+  "certification_footer": "Backtester certification used: STALE, run_id=CERT-20260601T021203Z-961f7900, commit=a88321c4629ad22cb5f453cc5f691878d7474d95",
+  "promote_candidate": false,
+  "promote_note": "WFC PASS + sim shadow (60 CME days on CHI404) + backtester certification stamp required before promotion \u2014 BLUEPRINT \u00a78",
+  "trial_mode": false,
+  "events_ran": 4
+}

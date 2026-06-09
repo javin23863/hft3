@@ -89,6 +89,7 @@ class TestRepoInventory:
 # ---------------------------------------------------------------------------
 
 class TestPipelineOrder:
+    @pytest.mark.slow
     def test_vectorbt_filter_runs_before_hftbacktest(self, repo_root, cme_run_ctx, inventory):
         data_result = stages.stage_data_readiness(repo_root, cme_run_ctx, inventory)
         if data_result.get("status") != "ready":
@@ -99,6 +100,7 @@ class TestPipelineOrder:
         assert vbt.run_id
         assert vbt.parameters_tested > 0
 
+    @pytest.mark.slow
     def test_vectorbt_outputs_parameter_set_ids(self, repo_root, cme_run_ctx, inventory):
         data_result = stages.stage_data_readiness(repo_root, cme_run_ctx, inventory)
         if data_result.get("status") != "ready":
@@ -128,6 +130,7 @@ class TestPipelineOrder:
 # ---------------------------------------------------------------------------
 
 class TestPromotionGates:
+    @pytest.mark.slow
     def test_vectorbt_results_cannot_promote_model(self, repo_root, cme_run_ctx, inventory):
         data_result = stages.stage_data_readiness(repo_root, cme_run_ctx, inventory)
         if data_result.get("status") != "ready":

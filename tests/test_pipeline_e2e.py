@@ -116,6 +116,7 @@ class TestEndToEndPipeline:
 class TestVectorBTIntegration:
     """Tests for VectorBT integration with the pipeline."""
 
+    @pytest.mark.slow
     def test_vectorbt_runs_after_feature_extraction(self, repo_root, cme_run_ctx, inventory):
         """Verify VectorBT runs after feature extraction."""
         data_result = stages.stage_data_readiness(repo_root, cme_run_ctx, inventory)

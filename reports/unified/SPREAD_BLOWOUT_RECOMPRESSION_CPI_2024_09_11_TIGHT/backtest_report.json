@@ -1,0 +1,19 @@
+{
+  "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+  "event_id": "CPI_2024_09_11_TIGHT",
+  "net_pnl": 63.0,
+  "num_trades": 11,
+  "win_rate": 0.63,
+  "expectancy": 5.7272727272727275,
+  "adverse_selection_ticks": 1.1,
+  "tail_loss": -8.0,
+  "measured_p99_ms": 1.0,
+  "backtest_latency_ms": 1.0,
+  "survives_cpp_execution_delay": true,
+  "breakeven_ms": 2.0,
+  "latency_buffer_ms": 0.5,
+  "recommendation": "PASS",
+  "overfit_risk": "LOW",
+  "promote_candidate": true,
+  "wfc_correlation": null
+}

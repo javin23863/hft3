@@ -1,0 +1,7 @@
+WFC status: ERROR
+Pearson: 0.0000 CI []
+Spearman: 0.0000 CI []
+p-value: 1.0000
+fold_correlations: {}
+Rejection reasons:
+  - No per-parameter fold vectors for correlation

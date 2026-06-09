@@ -1,0 +1,753 @@
+{
+  "run_id": "",
+  "created_at": "",
+  "repo_commit": "",
+  "lane_id": "cme_futures",
+  "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+  "symbol": "MES.v.0",
+  "event_id": "CPI_2024_09_11_TIGHT",
+  "session_id": null,
+  "group_id": null,
+  "run_mode": "REAL_RESEARCH",
+  "promotion_eligible": true,
+  "synthetic_data_used": false,
+  "fixture_data_used": false,
+  "reason": "",
+  "stages": {
+    "inventory": "PASSED",
+    "data_readiness": "PASSED",
+    "feature_generation": "PASSED",
+    "vectorbt_filter": "PASSED",
+    "hft_truth": "PASSED",
+    "full_metrics": "PASSED",
+    "robustness": "SKIPPED",
+    "promotion": "FAILED",
+    "trade_manager": "SKIPPED",
+    "workbench_truth": "PASSED"
+  },
+  "vectorbt_manifest": {
+    "run_id": "RUN-20260609T061011Z-c4f34578",
+    "created_at": "2026-06-09T06:10:11.667175+00:00",
+    "repo_commit": "1cb8503ff140dd160d31e6cea0340ed7fcee874f",
+    "lane_id": "cme_futures",
+    "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+    "symbol": "MES.v.0",
+    "session_id": null,
+    "group_id": null,
+    "run_mode": "REAL_RESEARCH",
+    "promotion_eligible": false,
+    "data_artifacts": [
+      "C:\\Users\\MSI\\Documents\\opencode\\hft3\\data\\npz\\MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz"
+    ],
+    "feature_artifacts": [],
+    "feature_hashes": {
+      "primary": "f2cc15b1a3fca281"
+    },
+    "search_space_id": "default_SPREAD_BLOWOUT_RECOMPRESSION",
+    "search_space_version": "1.0",
+    "parameter_count": 3,
+    "parameters_tested": 20,
+    "entry_logic": "signal > entry_threshold",
+    "exit_logic": "signal < exit_threshold OR holding_period_expired",
+    "fast_metric_names": [
+      "net_pnl",
+      "num_trades",
+      "sharpe",
+      "max_drawdown",
+      "filter_score"
+    ],
+    "fast_results": [
+      {
+        "parameter_set_id": "ps_0000",
+        "parameter_values": {
+          "signal_threshold": 0.001,
+          "holding_period_bars": 5,
+          "entry_threshold": 0.001
+        },
+        "net_pnl": 0.0251,
+        "num_trades": 5,
+        "sharpe": 39775765.1375,
+        "max_drawdown": 0.0,
+        "filter_score": 39775765.1375,
+        "passed": true,
+        "rejection_reason": ""
+      },
+      {
+        "parameter_set_id": "ps_0001",
+        "parameter_values": {
+          "signal_threshold": 0.001,
+          "holding_period_bars": 5,
+          "entry_threshold": 0.002
+        },
+        "net_pnl": 0.0251,
+        "num_trades": 5,
+        "sharpe": 39775765.1375,
+        "max_drawdown": 0.0,
+        "filter_score": 39775765.1375,
+        "passed": true,
+        "rejection_reason": ""
+      },
+      {
+        "parameter_set_id": "ps_0002",
+        "parameter_values": {
+          "signal_threshold": 0.001,
+          "holding_period_bars": 5,
+          "entry_threshold": 0.005
+        },
+        "net_pnl": 0.0251,
+        "num_trades": 5,
+        "sharpe": 39775765.1375,
+        "max_drawdown": 0.0,
+        "filter_score": 39775765.1375,
+        "passed": true,
+        "rejection_reason": ""
+      },
+      {
+        "parameter_set_id": "ps_0003",
+        "parameter_values": {
+          "signal_threshold": 0.001,
+          "holding_period_bars": 15,
+          "entry_threshold": 0.001
+        },
+        "net_pnl": 0.0251,
+        "num_trades": 2,
+        "sharpe": 39775765.1375,
+        "max_drawdown": 0.0,
+        "filter_score": 3977576.5138,
+        "passed": false,
+        "rejection_reason": "insufficient_trades"
+      },
+      {
+        "parameter_set_id": "ps_0004",
+        "parameter_values": {
+          "signal_threshold": 0.001,
+          "holding_period_bars": 15,
+          "entry_threshold": 0.002
+        },
+        "net_pnl": 0.0251,
+        "num_trades": 2,
+        "sharpe": 39775765.1375,
+        "max_drawdown": 0.0,
+        "filter_score": 3977576.5138,
+        "passed": false,
+        "rejection_reason": "insufficient_trades"
+      },
+      {
+        "parameter_set_id": "ps_0005",
+        "parameter_values": {
+          "signal_threshold": 0.001,
+          "holding_period_bars": 15,
+          "entry_threshold": 0.005
+        },
+        "net_pnl": 0.0251,
+        "num_trades": 2,
+        "sharpe": 39775765.1375,
+        "max_drawdown": 0.0,
+        "filter_score": 3977576.5138,
+        "passed": false,
+        "rejection_reason": "insufficient_trades"
+      },
+      {
+        "parameter_set_id": "ps_0006",
+        "parameter_values": {
+          "signal_threshold": 0.001,
+          "holding_period_bars": 30,
+          "entry_threshold": 0.001
+        },
+        "net_pnl": 0.0251,
+        "num_trades": 2,
+        "sharpe": 39775765.1375,
+        "max_drawdown": 0.0,
+        "filter_score": 3977576.5138,
+        "passed": false,
+        "rejection_reason": "insufficient_trades"
+      },
+      {
+        "parameter_set_id": "ps_0007",
+        "parameter_values": {
+          "signal_threshold": 0.001,
+          "holding_period_bars": 30,
+          "entry_threshold": 0.002
+        },
+        "net_pnl": 0.0251,
+        "num_trades": 2,
+        "sharpe": 39775765.1375,
+        "max_drawdown": 0.0,
+        "filter_score": 3977576.5138,
+        "passed": false,
+        "rejection_reason": "insufficient_trades"
+      },
+      {
+        "parameter_set_id": "ps_0008",
+        "parameter_values": {
+          "signal_threshold": 0.001,
+          "holding_period_bars": 30,
+          "entry_threshold": 0.005
+        },
+        "net_pnl": 0.0251,
+        "num_trades": 2,
+        "sharpe": 39775765.1375,
+        "max_drawdown": 0.0,
+        "filter_score": 3977576.5138,
+        "passed": false,
+        "rejection_reason": "insufficient_trades"
+      },
+      {
+        "parameter_set_id": "ps_0009",
+        "parameter_values": {
+          "signal_threshold": 0.002,
+          "holding_period_bars": 5,
+          "entry_threshold": 0.001
+        },
+        "net_pnl": 0.0251,
+        "num_trades": 5,
+        "sharpe": 39775765.1375,
+        "max_drawdown": 0.0,
+        "filter_score": 39775765.1375,
+        "passed": true,
+        "rejection_reason": ""
+      },
+      {
+        "parameter_set_id": "ps_0010",
+        "parameter_values": {
+          "signal_threshold": 0.002,
+          "holding_period_bars": 5,
+          "entry_threshold": 0.002
+        },
+        "net_pnl": 0.0251,
+        "num_trades": 5,
+        "sharpe": 39775765.1375,
+        "max_drawdown": 0.0,
+        "filter_score": 39775765.1375,
+        "passed": true,
+        "rejection_reason": ""
+      },
+      {
+        "parameter_set_id": "ps_0011",
+        "parameter_values": {
+          "signal_threshold": 0.002,
+          "holding_period_bars": 5,
+          "entry_threshold": 0.005
+        },
+        "net_pnl": 0.0251,
+        "num_trades": 5,
+        "sharpe": 39775765.1375,
+        "max_drawdown": 0.0,
+        "filter_score": 39775765.1375,
+        "passed": true,
+        "rejection_reason": ""
+      },
+      {
+        "parameter_set_id": "ps_0012",
+        "parameter_values": {
+          "signal_threshold": 0.002,
+          "holding_period_bars": 15,
+          "entry_threshold": 0.001
+        },
+        "net_pnl": 0.0251,
+        "num_trades": 2,
+        "sharpe": 39775765.1375,
+        "max_drawdown": 0.0,
+        "filter_score": 3977576.5138,
+        "passed": false,
+        "rejection_reason": "insufficient_trades"
+      },
+      {
+        "parameter_set_id": "ps_0013",
+        "parameter_values": {
+          "signal_threshold": 0.002,
+          "holding_period_bars": 15,
+          "entry_threshold": 0.002
+        },
+        "net_pnl": 0.0251,
+        "num_trades": 2,
+        "sharpe": 39775765.1375,
+        "max_drawdown": 0.0,
+        "filter_score": 3977576.5138,
+        "passed": false,
+        "rejection_reason": "insufficient_trades"
+      },
+      {
+        "parameter_set_id": "ps_0014",
+        "parameter_values": {
+          "signal_threshold": 0.002,
+          "holding_period_bars": 15,
+          "entry_threshold": 0.005
+        },
+        "net_pnl": 0.0251,
+        "num_trades": 2,
+        "sharpe": 39775765.1375,
+        "max_drawdown": 0.0,
+        "filter_score": 3977576.5138,
+        "passed": false,
+        "rejection_reason": "insufficient_trades"
+      },
+      {
+        "parameter_set_id": "ps_0015",
+        "parameter_values": {
+          "signal_threshold": 0.002,
+          "holding_period_bars": 30,
+          "entry_threshold": 0.001
+        },
+        "net_pnl": 0.0251,
+        "num_trades": 2,
+        "sharpe": 39775765.1375,
+        "max_drawdown": 0.0,
+        "filter_score": 3977576.5138,
+        "passed": false,
+        "rejection_reason": "insufficient_trades"
+      },
+      {
+        "parameter_set_id": "ps_0016",
+        "parameter_values": {
+          "signal_threshold": 0.002,
+          "holding_period_bars": 30,
+          "entry_threshold": 0.002
+        },
+        "net_pnl": 0.0251,
+        "num_trades": 2,
+        "sharpe": 39775765.1375,
+        "max_drawdown": 0.0,
+        "filter_score": 3977576.5138,
+        "passed": false,
+        "rejection_reason": "insufficient_trades"
+      },
+      {
+        "parameter_set_id": "ps_0017",
+        "parameter_values": {
+          "signal_threshold": 0.002,
+          "holding_period_bars": 30,
+          "entry_threshold": 0.005
+        },
+        "net_pnl": 0.0251,
+        "num_trades": 2,
+        "sharpe": 39775765.1375,
+        "max_drawdown": 0.0,
+        "filter_score": 3977576.5138,
+        "passed": false,
+        "rejection_reason": "insufficient_trades"
+      },
+      {
+        "parameter_set_id": "ps_0018",
+        "parameter_values": {
+          "signal_threshold": 0.005,
+          "holding_period_bars": 5,
+          "entry_threshold": 0.001
+        },
+        "net_pnl": 0.0251,
+        "num_trades": 5,
+        "sharpe": 39775765.1375,
+        "max_drawdown": 0.0,
+        "filter_score": 39775765.1375,
+        "passed": true,
+        "rejection_reason": ""
+      },
+      {
+        "parameter_set_id": "ps_0019",
+        "parameter_values": {
+          "signal_threshold": 0.005,
+          "holding_period_bars": 5,
+          "entry_threshold": 0.002
+        },
+        "net_pnl": 0.0251,
+        "num_trades": 5,
+        "sharpe": 39775765.1375,
+        "max_drawdown": 0.0,
+        "filter_score": 39775765.1375,
+        "passed": true,
+        "rejection_reason": ""
+      }
+    ],
+    "top_candidates": [
+      {
+        "parameter_set_id": "ps_0000",
+        "parameter_values": {
+          "signal_threshold": 0.001,
+          "holding_period_bars": 5,
+          "entry_threshold": 0.001
+        },
+        "net_pnl": 0.0251,
+        "num_trades": 5,
+        "sharpe": 39775765.1375,
+        "max_drawdown": 0.0,
+        "filter_score": 39775765.1375,
+        "passed": true,
+        "rejection_reason": ""
+      },
+      {
+        "parameter_set_id": "ps_0001",
+        "parameter_values": {
+          "signal_threshold": 0.001,
+          "holding_period_bars": 5,
+          "entry_threshold": 0.002
+        },
+        "net_pnl": 0.0251,
+        "num_trades": 5,
+        "sharpe": 39775765.1375,
+        "max_drawdown": 0.0,
+        "filter_score": 39775765.1375,
+        "passed": true,
+        "rejection_reason": ""
+      },
+      {
+        "parameter_set_id": "ps_0002",
+        "parameter_values": {
+          "signal_threshold": 0.001,
+          "holding_period_bars": 5,
+          "entry_threshold": 0.005
+        },
+        "net_pnl": 0.0251,
+        "num_trades": 5,
+        "sharpe": 39775765.1375,
+        "max_drawdown": 0.0,
+        "filter_score": 39775765.1375,
+        "passed": true,
+        "rejection_reason": ""
+      },
+      {
+        "parameter_set_id": "ps_0009",
+        "parameter_values": {
+          "signal_threshold": 0.002,
+          "holding_period_bars": 5,
+          "entry_threshold": 0.001
+        },
+        "net_pnl": 0.0251,
+        "num_trades": 5,
+        "sharpe": 39775765.1375,
+        "max_drawdown": 0.0,
+        "filter_score": 39775765.1375,
+        "passed": true,
+        "rejection_reason": ""
+      },
+      {
+        "parameter_set_id": "ps_0010",
+        "parameter_values": {
+          "signal_threshold": 0.002,
+          "holding_period_bars": 5,
+          "entry_threshold": 0.002
+        },
+        "net_pnl": 0.0251,
+        "num_trades": 5,
+        "sharpe": 39775765.1375,
+        "max_drawdown": 0.0,
+        "filter_score": 39775765.1375,
+        "passed": true,
+        "rejection_reason": ""
+      },
+      {
+        "parameter_set_id": "ps_0011",
+        "parameter_values": {
+          "signal_threshold": 0.002,
+          "holding_period_bars": 5,
+          "entry_threshold": 0.005
+        },
+        "net_pnl": 0.0251,
+        "num_trades": 5,
+        "sharpe": 39775765.1375,
+        "max_drawdown": 0.0,
+        "filter_score": 39775765.1375,
+        "passed": true,
+        "rejection_reason": ""
+      },
+      {
+        "parameter_set_id": "ps_0018",
+        "parameter_values": {
+          "signal_threshold": 0.005,
+          "holding_period_bars": 5,
+          "entry_threshold": 0.001
+        },
+        "net_pnl": 0.0251,
+        "num_trades": 5,
+        "sharpe": 39775765.1375,
+        "max_drawdown": 0.0,
+        "filter_score": 39775765.1375,
+        "passed": true,
+        "rejection_reason": ""
+      },
+      {
+        "parameter_set_id": "ps_0019",
+        "parameter_values": {
+          "signal_threshold": 0.005,
+          "holding_period_bars": 5,
+          "entry_threshold": 0.002
+        },
+        "net_pnl": 0.0251,
+        "num_trades": 5,
+        "sharpe": 39775765.1375,
+        "max_drawdown": 0.0,
+        "filter_score": 39775765.1375,
+        "passed": true,
+        "rejection_reason": ""
+      }
+    ],
+    "rejected_candidates_summary": [
+      {
+        "parameter_set_id": "ps_0003",
+        "rejection_reason": "insufficient_trades"
+      },
+      {
+        "parameter_set_id": "ps_0004",
+        "rejection_reason": "insufficient_trades"
+      },
+      {
+        "parameter_set_id": "ps_0005",
+        "rejection_reason": "insufficient_trades"
+      },
+      {
+        "parameter_set_id": "ps_0006",
+        "rejection_reason": "insufficient_trades"
+      },
+      {
+        "parameter_set_id": "ps_0007",
+        "rejection_reason": "insufficient_trades"
+      },
+      {
+        "parameter_set_id": "ps_0008",
+        "rejection_reason": "insufficient_trades"
+      },
+      {
+        "parameter_set_id": "ps_0012",
+        "rejection_reason": "insufficient_trades"
+      },
+      {
+        "parameter_set_id": "ps_0013",
+        "rejection_reason": "insufficient_trades"
+      },
+      {
+        "parameter_set_id": "ps_0014",
+        "rejection_reason": "insufficient_trades"
+      },
+      {
+        "parameter_set_id": "ps_0015",
+        "rejection_reason": "insufficient_trades"
+      },
+      {
+        "parameter_set_id": "ps_0016",
+        "rejection_reason": "insufficient_trades"
+      },
+      {
+        "parameter_set_id": "ps_0017",
+        "rejection_reason": "insufficient_trades"
+      }
+    ],
+    "selection_policy": "top_n_by_sharpe",
+    "top_n_forwarded": 8,
+    "hftbacktest_required": true,
+    "pit_status": "PASS",
+    "leakage_status": "PASS",
+    "missing_reasons": {},
+    "warnings": [],
+    "next_action": "run_hftbacktest_truth",
+    "vectorbt_available": true,
+    "backend": "vectorbt",
+    "time_taken_sec": 79.31
+  },
+  "hft_truth_manifest": {
+    "run_id": "RUN-20260609T061130Z-bd419383",
+    "parent_vectorbt_run_id": "RUN-20260609T061011Z-c4f34578",
+    "candidate_id": "ps_0000",
+    "parameter_set_id": "ps_0000",
+    "lane_id": "cme_futures",
+    "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+    "symbol": "MES.v.0",
+    "event_id": "CPI_2024_09_11_TIGHT",
+    "session_id": "",
+    "group_id": "",
+    "run_mode": "REAL_RESEARCH",
+    "promotion_eligible": true,
+    "feature_artifacts": [
+      "C:\\Users\\MSI\\Documents\\opencode\\hft3\\data\\npz\\MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz"
+    ],
+    "hftbacktest_config": {
+      "latency_ms": 1.0,
+      "queue_model": "LogProbQueueModel2",
+      "tick_size": 0.25,
+      "lot_size": 1.0,
+      "product": "MES"
+    },
+    "latency_config": {
+      "measured_p99_ms": 1.0,
+      "source": "chi404_default"
+    },
+    "queue_model": "LogProbQueueModel2",
+    "fill_model": "no_partial_fill",
+    "fee_model": "FeeModel",
+    "slippage_model": "half_spread",
+    "orders": 10,
+    "fills": 5,
+    "pnl": 0.0251,
+    "trades": 5,
+    "positions": [],
+    "metrics": {
+      "net_pnl": 0.0251,
+      "num_trades": 5,
+      "win_rate": 1.0,
+      "expectancy": 0.005,
+      "adverse_selection_ticks": 0.0,
+      "tail_loss": 0.00025056376847907793,
+      "vectorbt_pnl": 0.0251,
+      "vectorbt_sharpe": 39775765.1375
+    },
+    "execution_realism": {
+      "latency_ms": 1.0,
+      "queue_model": "LogProbQueueModel2",
+      "fill_model": "no_partial_fill",
+      "fee_per_trade": 0.85,
+      "slippage_estimate": 0.0
+    },
+    "vectorbt_vs_hft_delta": {
+      "vbt_pnl": 0.0251,
+      "hft_pnl": 0.025056376847907794,
+      "absolute_delta": 0.0,
+      "relative_delta_pct": 0.17
+    },
+    "divergence_reason": "",
+    "rejection_reason": "",
+    "promotion_eligible_reason": "pnl_positive, trades_sufficient, run_mode_eligible",
+    "next_action": "compute_full_metrics",
+    "synthetic_data_used": false,
+    "fixture_data_used": false
+  },
+  "scorecard": {
+    "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+    "run_id": "RUN-20260609T061130Z-bd419383",
+    "overall_grade": "D",
+    "overall_score": 56.13,
+    "category_scores": [
+      {
+        "category": "Performance",
+        "score": 58.333333333333336,
+        "grade": "D",
+        "metrics_used": [
+          "net_return",
+          "sharpe",
+          "sortino",
+          "profit_factor",
+          "hit_rate",
+          "expectancy_per_trade"
+        ],
+        "notes": []
+      },
+      {
+        "category": "Risk",
+        "score": 72.5,
+        "grade": "B",
+        "metrics_used": [
+          "max_drawdown",
+          "cvar_95"
+        ],
+        "notes": []
+      },
+      {
+        "category": "Robustness",
+        "score": 50.0,
+        "grade": "D",
+        "metrics_used": [
+          "walk_forward_efficiency",
+          "parameter_stability",
+          "feature_stability",
+          "regime_stability"
+        ],
+        "notes": [
+          "Single-event run: WFC/parameter/feature/regime stability require multi-period campaign"
+        ]
+      },
+      {
+        "category": "Execution Realism",
+        "score": 47.0,
+        "grade": "F",
+        "metrics_used": [
+          "slippage_bps",
+          "fill_rate",
+          "execution_latency_vs_alpha_half_life",
+          "adverse_selection_rate",
+          "capacity_estimate"
+        ],
+        "notes": []
+      },
+      {
+        "category": "Portfolio Fit",
+        "score": 50.0,
+        "grade": "D",
+        "metrics_used": [
+          "correlation_to_existing_models",
+          "marginal_sharpe_contribution"
+        ],
+        "notes": [
+          "Requires multi-model campaign for correlation/marginal Sharpe"
+        ]
+      },
+      {
+        "category": "Prediction Calibration",
+        "score": 50.0,
+        "grade": "D",
+        "metrics_used": [
+          "prediction_calibration_ic",
+          "prediction_calibration_brier",
+          "prediction_calibration_ece",
+          "high_confident_trade_performance"
+        ],
+        "notes": [
+          "Requires signal/return pair analysis over multiple events"
+        ]
+      },
+      {
+        "category": "Walk-Forward",
+        "score": 50.0,
+        "grade": "D",
+        "metrics_used": [
+          "walk_forward_efficiency"
+        ],
+        "notes": []
+      }
+    ],
+    "metrics": {
+      "net_return": 0.0251,
+      "sharpe": null,
+      "sortino": null,
+      "max_drawdown": 0.0,
+      "cvar_95": null,
+      "profit_factor": null,
+      "expectancy_per_trade": 0.005,
+      "hit_rate": 1.0,
+      "num_trades": 5,
+      "walk_forward_efficiency": null,
+      "parameter_stability": null,
+      "feature_stability": null,
+      "regime_stability": null,
+      "slippage_bps": 0.5,
+      "fill_rate": null,
+      "execution_latency_vs_alpha_half_life": 200.0,
+      "adverse_selection_rate": null,
+      "capacity_estimate": 2.5100000000000002,
+      "correlation_to_existing_models": null,
+      "marginal_sharpe_contribution": null,
+      "prediction_calibration_ic": null,
+      "prediction_calibration_brier": null,
+      "prediction_calibration_ece": null,
+      "high_confident_trade_performance": null,
+      "missing_reasons": {
+        "fill_rate": "no replay lifecycle data",
+        "adverse_selection_rate": "no replay lifecycle data",
+        "capacity_estimate": "extrapolated from single-event PnL",
+        "walk_forward_efficiency": "WFC not run for single event",
+        "parameter_stability": "requires multi-period campaign",
+        "feature_stability": "requires multi-period campaign",
+        "regime_stability": "requires multi-period campaign",
+        "correlation_to_existing_models": "requires multi-model campaign",
+        "marginal_sharpe_contribution": "requires portfolio context",
+        "prediction_calibration_ic": "requires signal/return pairs",
+        "prediction_calibration_brier": "requires signal/return pairs",
+        "prediction_calibration_ece": "requires signal/return pairs",
+        "high_confident_trade_performance": "requires confidence-tagged trades"
+      }
+    }
+  },
+  "promotion_status": "QUARANTINED",
+  "trade_manager_status": "SKIPPED",
+  "session_id_live": "",
+  "blockers": [
+    "promotion_failed"
+  ],
+  "next_action": "resolve_blockers"
+}

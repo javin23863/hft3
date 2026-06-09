@@ -106,105 +106,8 @@ def stage_data_fingerprint(repo_root: Path, run_ctx: RunContext, data_result: Di
     return {"status": "ready", "data_type": "lane_default", "pit_status": "PASS"}
 
 
-def _build_ohlcv_bars_from_npz(npz_path: str, bar_size: int = 50) -> tuple[pd.DataFrame, np.ndarray]:
-    """Build OHLCV bars from MBO events for VectorBT using time-based intervals.
-    
-    Uses raw NPZ arrays directly (no MarketStatePipeline dependency).
-    Targets >= bar_size bars for statistical validity.
-    
-    Returns:
-        - DataFrame with columns: open, high, low, close, volume
-        - Array of timestamps (ns) for each bar
-    """
-    from features_engine.src.features.npz_feed import load_npz_events
-    
-    raw = load_npz_events(npz_path)
-    ts = raw["local_ts"].astype(np.int64)
-    px = raw["px"].astype(np.float64)
-    qty = raw["qty"].astype(np.float64)
-    
-    if len(px) < 2:
-        return pd.DataFrame(), np.array([])
-    
-    # Adaptive time-based bar sizing
-    start_ts = ts[0]
-    end_ts = ts[-1]
-    event_duration_ns = end_ts - start_ts
-    target_bars = max(bar_size, 30)
-    min_bar_interval_ns = 1_000_000_000
-    
-    bar_interval_ns = max(event_duration_ns // target_bars, min_bar_interval_ns)
-    n_bars = max(1, int(event_duration_ns / bar_interval_ns))
-    
-    if n_bars < 30:
-        return pd.DataFrame(), np.array([])
-    
-    o = np.zeros(n_bars)
-    h = np.zeros(n_bars)
-    l = np.full(n_bars, np.inf)
-    c = np.zeros(n_bars)
-    v = np.zeros(n_bars)
-    bar_times = np.zeros(n_bars, dtype=np.int64)
-    
-    for i in range(n_bars):
-        bar_start = start_ts + i * bar_interval_ns
-        bar_end = bar_start + bar_interval_ns
-        mask = (ts >= bar_start) & (ts < bar_end)
-        mid = bar_start + bar_interval_ns // 2
-        bar_times[i] = mid
-        if not mask.any():
-            o[i] = c[i - 1] if i > 0 else px[0]
-            h[i] = o[i]
-            l[i] = o[i]
-            c[i] = o[i]
-            continue
-        idx = np.where(mask)[0]
-        bar_px = px[idx]
-        bar_qty = qty[idx]
-        o[i] = bar_px[0]
-        h[i] = bar_px.max()
-        l[i] = bar_px.min()
-        c[i] = bar_px[-1]
-        v[i] = bar_qty.sum()
-    
-    l[l == np.inf] = o[l == np.inf]
-    
-    df = pd.DataFrame({
-        'open': o, 'high': h, 'low': l, 'close': c, 'volume': v,
-    })
-    
-    return df, bar_times
-
-
-def _generate_hypothesis_signals(model_id: str, bars_df: pd.DataFrame, bar_timestamps: np.ndarray, bar_size: int = 50) -> np.ndarray:
-    """Generate trading signals from OHLCV bar data for VectorBT pre-filter.
-    
-    VectorBT is a fast pre-filter, not the truth gate. This function computes
-    a mean-reversion signal: percentage deviation of close from recent MA,
-    positive when oversold (buy), negative when overbought (sell).
-    Real hypothesis evaluation happens in the HFT truth stage via ReplaySession.
-    
-    Returns array of signals aligned with bar timestamps.
-    """
-    close = bars_df['close'].values
-    if len(close) < 5:
-        return np.zeros(len(bar_timestamps))
-    
-    window = max(3, min(bar_size // 4, len(close) // 3))
-    signal = np.zeros_like(close)
-    
-    for i in range(window, len(close)):
-        mu = np.mean(close[i-window:i])
-        if mu > 1e-8:
-            signal[i] = (mu - close[i]) / mu * 100.0
-    
-    signal = np.clip(signal, -5.0, 5.0)
-    
-    return signal
-
-
 def stage_vectorbt_filter(repo_root: Path, run_ctx: RunContext, feature_result: Dict[str, Any], inventory: RepoInventory) -> VectorbtFilterManifest:
-    """Stage 3: VectorBT quick filter using actual vectorbt library."""
+    """Stage 3: VectorBT quick filter using real MarketStatePipeline feature matrix."""
     t0 = time.time()
     manifest = VectorbtFilterManifest(
         run_id=_run_id(), created_at=_now_iso(), repo_commit=_git_sha(repo_root),
@@ -221,19 +124,58 @@ def stage_vectorbt_filter(repo_root: Path, run_ctx: RunContext, feature_result: 
         return manifest
     
     manifest.data_artifacts.append(npz_path)
-    if feature_result.get("feature_hash"):
-        manifest.feature_hashes["primary"] = feature_result["feature_hash"]
+    manifest.feature_artifacts.append(npz_path)
     
-    # Build OHLCV bars from MBO events (time-based, target 50+ bars)
-    bars_df, bar_timestamps = _build_ohlcv_bars_from_npz(npz_path, bar_size=50)
-    if bars_df.empty:
-        manifest.warnings.append("insufficient_data_for_bars")
+    # Process every MBO event through MarketStatePipeline to get real feature vectors
+    from replay.market_data_adapter import HistoricalReplayMarketDataAdapter
+    from features_engine.src.hypotheses.registry import get_active_hypotheses
+    from features_engine.src.model_registry import resolve_model_id, get_hyp_id_for_slug
+    
+    # Resolve the model's hypothesis
+    try:
+        canonical = resolve_model_id(run_ctx.model_id)
+        hyp_id = get_hyp_id_for_slug(canonical)
+        hyps = [h for h in get_active_hypotheses() if h.hyp_id == hyp_id]
+    except (KeyError, Exception):
+        hyps = get_active_hypotheses()[:1]
+    
+    if not hyps:
+        manifest.warnings.append("no_hypothesis_found")
+        manifest.next_action = "check_model_registry"
+        manifest.time_taken_sec = round(time.time() - t0, 2)
+        return manifest
+    
+    hypothesis = hyps[0]
+    
+    # Iterate all events through MarketStatePipeline, collect mid prices and hypothesis signals
+    adapter = HistoricalReplayMarketDataAdapter.from_npz(npz_path, tick_size=0.25)
+    mid_prices = []
+    signal_values = []
+    while True:
+        ev = adapter.next_event()
+        if ev is None:
+            break
+        state = adapter.current_market_state(run_ctx.symbol or "MES")
+        if state is not None:
+            mid = state.f('mid_price', 0.0)
+            if mid > 1e-8:
+                mid_prices.append(mid)
+                signal_values.append(hypothesis.evaluate(state))
+    
+    n_events = len(mid_prices)
+    if n_events < 30:
+        manifest.warnings.append("INSUFFICIENT_VECTORBT_INPUT")
         manifest.next_action = "resolve_data"
         manifest.time_taken_sec = round(time.time() - t0, 2)
         return manifest
     
-    # Generate signals from bar data (no MarketStatePipeline - real hypothesis eval in HFT truth)
-    signals = _generate_hypothesis_signals(run_ctx.model_id, bars_df, bar_timestamps, bar_size=50)
+    manifest.feature_hashes["event_count"] = str(n_events)
+    
+    signals = np.array(signal_values)
+    close = np.array(mid_prices)
+    
+    # Build a bars_df for VectorBT (close-only; microstructure events-not bars)
+    bars_df = pd.DataFrame({"close": close})
     
     # Load search space
     search_space = _load_search_space(repo_root, run_ctx.model_id, run_ctx.lane_id)
@@ -274,12 +216,10 @@ def stage_vectorbt_filter(repo_root: Path, run_ctx: RunContext, feature_result: 
                 holding = pv.get("holding_period_bars", 10)
                 stop_loss = pv.get("stop_loss_pct", 0.01)
                 
-                # Generate entry/exit signals
                 entries = pd.Series(signals > threshold)
                 exits = pd.Series(signals < -threshold * 0.5)
                 
                 try:
-                    # Run VectorBT portfolio simulation
                     pf = vbt.Portfolio.from_signals(
                         close=bars_df['close'],
                         entries=entries,
@@ -295,9 +235,8 @@ def stage_vectorbt_filter(repo_root: Path, run_ctx: RunContext, feature_result: 
                     sharpe = float(pf.sharpe_ratio()) if num_trades > 1 else 0.0
                     max_dd = float(pf.max_drawdown()) if hasattr(pf, 'max_drawdown') else 0.0
                     
-                    # Validate Sharpe (cap at reasonable values)
                     if abs(sharpe) > 100:
-                        sharpe = 0.0  # Numerical artifact
+                        sharpe = 0.0
                     
                     filter_score = sharpe if num_trades >= 3 else sharpe * 0.1
                     passed = num_trades >= 3 and net_pnl > 0 and max_dd > -0.30
@@ -334,7 +273,6 @@ def stage_vectorbt_filter(repo_root: Path, run_ctx: RunContext, feature_result: 
     if not use_vbt:
         manifest.backend = "numpy_fallback"
         manifest.vectorbt_available = False
-        # Fallback: simple momentum simulation
         for i, combo in enumerate(param_combos):
             pv = dict(zip(params.keys(), combo))
             threshold = pv.get("signal_threshold", 0.15)
@@ -344,7 +282,7 @@ def stage_vectorbt_filter(repo_root: Path, run_ctx: RunContext, feature_result: 
             exits = signals < -threshold * 0.5
             
             position, pnl, trade_count, hold_counter, trade_pnls = 0.0, 0.0, 0, 0, []
-            returns = bars_df['close'].pct_change().fillna(0).values
+            returns = np.diff(close, prepend=close[:1]) / np.maximum(close, 1e-10)
             
             for j in range(len(returns)):
                 if hold_counter > 0:
@@ -405,7 +343,7 @@ def stage_vectorbt_filter(repo_root: Path, run_ctx: RunContext, feature_result: 
         for r in fast_results if not r.get("passed")
     ][:50]
     
-    manifest.entry_logic = "signal > entry_threshold"
+    manifest.entry_logic = f"hypothesis.evaluate(state) > entry_threshold [{hypothesis.name}]"
     manifest.exit_logic = "signal < exit_threshold OR holding_period_expired"
     manifest.selection_policy = search_space.get("selection_policy", "top_n_by_sharpe") if search_space else "top_n_by_sharpe"
     manifest.time_taken_sec = round(time.time() - t0, 2)
@@ -820,6 +758,6 @@ def stage_trade_manager(repo_root: Path, run_ctx: RunContext, promotion_result: 
     }
 
 
-def stage_workbench_truth(repo_root: Path, pipeline_manifest: PipelineManifest) -> Dict[str, Any]:
+def stage_workbench_truth(repo_root: Path, pipeline_manifest: Optional[PipelineManifest] = None) -> Dict[str, Any]:
     """Stage 9: Workbench truth."""
-    return {"status": "COMPLETED", "pipeline_manifest": pipeline_manifest.to_dict()}
+    return {"status": "COMPLETED", "pipeline_manifest": pipeline_manifest.to_dict() if pipeline_manifest else None}

@@ -1,0 +1,1 @@
+{"report": {"net_pnl": 100.0, "num_trades": 10, "trades_vetoed_by_defense": 0, "fees_total": 1.5, "slippage_estimate": 0.5, "exposure_time_sec": 60.0, "turnover": 2.0, "avg_holding_time_sec": 30.0, "latency_ms": {"p50": 1.0, "p95": 2.0, "p99": 5.0}, "route_distribution": {"SMART": 10}}}

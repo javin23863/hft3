@@ -1,0 +1,17 @@
+[
+  {
+    "caption": "Sharpe: $SR = \\frac{\\mu}{\\sigma}$.",
+    "headers": [
+      "Strategy",
+      "Sharpe"
+    ],
+    "rows": [
+      [
+        "baseline",
+        "0.5"
+      ]
+    ],
+    "source_page": null,
+    "table_id": "t1"
+  }
+]

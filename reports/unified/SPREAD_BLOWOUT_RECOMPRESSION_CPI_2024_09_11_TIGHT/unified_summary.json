@@ -1,0 +1,109 @@
+{
+  "identity": {
+    "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+    "event_id": "CPI_2024_09_11_TIGHT",
+    "run_id": "unify_SPREAD_BLOWOUT_RECOMPRESSION_CPI_2024_09_11_TIGHT_20260609T045106Z",
+    "promotion_status": "PROMOTED",
+    "generated_at": "2026-06-09T04:51:06.703712+00:00"
+  },
+  "scorecard": {
+    "overall_grade": "C",
+    "overall_score": 64.28,
+    "categories": {
+      "Performance": {
+        "score": 82.5,
+        "grade": "B+"
+      },
+      "Risk": {
+        "score": 65.0,
+        "grade": "C"
+      },
+      "Robustness": {
+        "score": 50.0,
+        "grade": "D"
+      },
+      "Execution Realism": {
+        "score": 71.0,
+        "grade": "B"
+      },
+      "Portfolio Fit": {
+        "score": 50.0,
+        "grade": "D"
+      },
+      "Prediction Calibration": {
+        "score": 50.0,
+        "grade": "D"
+      },
+      "Walk-Forward": {
+        "score": 50.0,
+        "grade": "D"
+      }
+    }
+  },
+  "performance_metrics": {
+    "net_return": 63.0,
+    "sharpe": 6.007385040937022,
+    "sortino": 9.019606742265651,
+    "max_drawdown": -22.909090909090903,
+    "cvar_95": null,
+    "profit_factor": 2.25,
+    "expectancy_per_trade": 2.6033057851239674,
+    "hit_rate": 0.5454545454545454,
+    "num_trades": 11
+  },
+  "robustness_metrics": {
+    "walk_forward_efficiency": null,
+    "parameter_stability": null,
+    "feature_stability": null,
+    "regime_stability": null
+  },
+  "execution_realism": {
+    "slippage_bps": 0.5,
+    "fill_rate": null,
+    "execution_latency_vs_alpha_half_life": 0.1746031746031746,
+    "adverse_selection_rate": null,
+    "capacity_estimate": 6300.0
+  },
+  "portfolio_fit": {
+    "correlation_to_existing_models": null,
+    "marginal_sharpe_contribution": null
+  },
+  "prediction_calibration": {
+    "IC": null,
+    "brier_score": null,
+    "expected_calibration_error": null,
+    "high_confident_trade_performance": null
+  },
+  "backtest_context": {
+    "survives_cpp_execution_delay": true,
+    "measured_p99_ms": 1.0,
+    "breakeven_ms": 2.0,
+    "latency_buffer_ms": 0.5,
+    "recommendation": "PASS",
+    "overfit_risk": "LOW"
+  },
+  "missing_metrics": {
+    "fill_rate": "no replay lifecycle data",
+    "adverse_selection_rate": "no replay lifecycle data",
+    "capacity_estimate": "extrapolated from single-event PnL",
+    "walk_forward_efficiency": "WFC not run for single event",
+    "parameter_stability": "requires multi-period campaign",
+    "feature_stability": "requires multi-period campaign",
+    "regime_stability": "requires multi-period campaign",
+    "correlation_to_existing_models": "requires multi-model campaign",
+    "marginal_sharpe_contribution": "requires portfolio context",
+    "prediction_calibration_ic": "requires signal/return pairs",
+    "prediction_calibration_brier": "requires signal/return pairs",
+    "prediction_calibration_ece": "requires signal/return pairs",
+    "high_confident_trade_performance": "requires confidence-tagged trades"
+  },
+  "live_session": {
+    "session_id": "unify_SPREAD_BLOWOUT_RECOMPRESSION_CPI_2024_09_11_TIGHT_20260609T045106Z",
+    "fills_count": 0,
+    "rejections_count": 5,
+    "realized_pnl": 0.0,
+    "final_position": 0.0,
+    "num_signals": 5,
+    "session_artifacts_path": "C:\\Users\\MSI\\Documents\\opencode\\hft3\\runtime\\sessions\\unify_SPREAD_BLOWOUT_RECOMPRESSION_CPI_2024_09_11_TIGHT_20260609T045106Z"
+  }
+}

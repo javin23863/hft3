@@ -1,0 +1,95 @@
+{
+  "campaign_id": "SPREAD_BLOWOUT_RECOMPRESSION_MES_v_0_20260603T004008Z",
+  "status": "FAIL",
+  "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+  "symbol": "MES.v.0",
+  "param_hash": "097a72ecae888d1f",
+  "composition": {
+    "primary_model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+    "defensive_stubs": []
+  },
+  "phase_budgets_us": {
+    "before": 0.0,
+    "during": 0.0,
+    "after": 0.0,
+    "continuous": 0.0
+  },
+  "trades_vetoed_by_defense": 0,
+  "periods": [
+    {
+      "name": "Discovery",
+      "gate_pass": false,
+      "evaluate_only": false,
+      "net_pnl": -1.0,
+      "num_trades": 1,
+      "expectancy": -1.0,
+      "events_run": 1,
+      "events_missing": 0,
+      "survives_cpp": false,
+      "event_results": [
+        {
+          "event_id": "CPI_2018_01_11_TIGHT",
+          "release_date": "2018-01-11",
+          "net_pnl": -1.0,
+          "num_trades": 1,
+          "expectancy": -1.0,
+          "survives_cpp_execution_delay": false,
+          "trades_vetoed_by_defense": 0,
+          "run_id": "x"
+        }
+      ],
+      "error": null
+    }
+  ],
+  "robustness_passed": false,
+  "overfit_risk": "medium",
+  "walk_forward": {
+    "periods": [
+      {
+        "name": "Discovery",
+        "gate_pass": false,
+        "expectancy": -1.0,
+        "evaluate_only": false
+      }
+    ],
+    "status": "FAIL",
+    "missing_periods": [
+      "Confirmation",
+      "Holdout",
+      "Recent holdout"
+    ]
+  },
+  "wfc_status": "SKIPPED",
+  "wfc": {},
+  "sim_shadow_anchor": "2026-03-01",
+  "sim_shadow_cme_days": 60,
+  "sim_shadow_status": "pending_CHI404",
+  "sim_shadow_required": false,
+  "certification_stamp": {
+    "status": "STALE",
+    "certification_run_id": "CERT-20260601T021203Z-961f7900",
+    "certification_commit": "a88321c4629ad22cb5f453cc5f691878d7474d95",
+    "current_commit": "210bd825850228fd1762aa29918a8022ff82e7b3",
+    "git_sha": "210bd825850228fd1762aa29918a8022ff82e7b3",
+    "git_commit": "210bd825850228fd1762aa29918a8022ff82e7b3",
+    "stale": true,
+    "changed_core_files": [
+      "scripts/run_event_replay.py"
+    ],
+    "promotion_eligible": false,
+    "promotion_label": "STALE_CERTIFICATION",
+    "reason_if_not_promotion_eligible": "core_backtester_changed_since_green_certification",
+    "backtester_version": "a88321c-dirty",
+    "staleness_reason": "core_backtester_files_changed_since_certification",
+    "instrument": "MES.v.0",
+    "execution_adapter_mode": "workbench_campaign",
+    "execution_mode": "REPLAY",
+    "event_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+    "model_id": "SPREAD_BLOWOUT_RECOMPRESSION"
+  },
+  "certification_footer": "Backtester certification used: STALE, run_id=CERT-20260601T021203Z-961f7900, commit=a88321c4629ad22cb5f453cc5f691878d7474d95",
+  "promote_candidate": false,
+  "promote_note": "WFC PASS + sim shadow (60 CME days on CHI404) + backtester certification stamp required before promotion \u2014 BLUEPRINT \u00a78",
+  "trial_mode": false,
+  "events_ran": 1
+}

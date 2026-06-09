@@ -1,0 +1,16 @@
+{
+  "schema_version": "1",
+  "request_id": "pipeline_20260602T051141Z_2b0d41b7",
+  "thesis": "Fade spread blowout after CPI",
+  "event_id": "CPI_2024_09_11_TIGHT",
+  "openfoundry_meta": {
+    "connector_id": "hft3-cme-mbo",
+    "asset_class": "cme_mbo_microstructure",
+    "vendor_shas": {
+      "openfoundry": "57b2bfa99a81e6c057105164fc38ad7f825a12de",
+      "alphageometry": "6777cb586cbb46beed28db12dc72c69770b68337"
+    },
+    "schema_version": "1"
+  },
+  "max_candidates": 3
+}

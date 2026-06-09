@@ -1,0 +1,30 @@
+{
+  "session_id": "unify_SPREAD_BLOWOUT_RECOMPRESSION_CPI_2024_09_11_TIGHT_20260609T045106Z",
+  "session_artifacts": {
+    "session_id": "unify_SPREAD_BLOWOUT_RECOMPRESSION_CPI_2024_09_11_TIGHT_20260609T045106Z",
+    "session_path": "C:\\Users\\MSI\\Documents\\opencode\\hft3\\runtime\\sessions\\unify_SPREAD_BLOWOUT_RECOMPRESSION_CPI_2024_09_11_TIGHT_20260609T045106Z",
+    "artifacts": [
+      "session_manifest.json",
+      "active_models.json",
+      "registry_references.json",
+      "risk_limits.json",
+      "latency_metrics.json",
+      "slippage_metrics.json",
+      "session_metrics.json",
+      "order_intents.jsonl",
+      "order_state_transitions.jsonl",
+      "risk_rejections.jsonl",
+      "fills.jsonl",
+      "positions.jsonl",
+      "pnl_timeseries.jsonl",
+      "incident_log.jsonl",
+      "kill_switch_events.jsonl",
+      "session_report.md"
+    ]
+  },
+  "signals_count": 5,
+  "fills_count": 0,
+  "rejections_count": 5,
+  "realized_pnl": 0.0,
+  "final_position": 0.0
+}

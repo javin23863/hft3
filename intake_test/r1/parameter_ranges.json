@@ -1,0 +1,10 @@
+[
+  {
+    "default": 0.5,
+    "distribution": null,
+    "max": 1.0,
+    "min": 0.0,
+    "param": "x",
+    "units": null
+  }
+]

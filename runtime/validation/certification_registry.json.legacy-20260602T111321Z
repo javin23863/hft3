@@ -1,0 +1,39 @@
+{
+  "latest_certification_run_id": "CERT-20260601T021203Z-961f7900",
+  "latest_certification_commit": "a88321c4629ad22cb5f453cc5f691878d7474d95",
+  "latest_certification_timestamp": "2026-06-01T02:12:15.816266+00:00",
+  "latest_certification_status": "GREEN",
+  "backtester_version": "a88321c-dirty",
+  "covered_modules": [
+    "backtest_pipeline",
+    "execution",
+    "replay",
+    "features_engine",
+    "workbench"
+  ],
+  "covered_symbols": [
+    "ES",
+    "MES"
+  ],
+  "covered_event_types": [
+    "macro",
+    "synthetic"
+  ],
+  "covered_latency_bands": [
+    0.5,
+    1.0,
+    2.0,
+    5.0,
+    10.0
+  ],
+  "covered_queue_models": [
+    "LogProbQueueModel2",
+    "SquareProbQueueModel"
+  ],
+  "covered_execution_modes": [
+    "REPLAY"
+  ],
+  "scorecard_path": "runtime/validation/backtester_certification_scorecard.json",
+  "blocking_failures": [],
+  "warnings": []
+}

@@ -1,0 +1,73 @@
+{
+  "promotion_status": "PROMOTED",
+  "promotion_record": {
+    "registry_id": "0b04e8de-66df-40f3-bf02-910b1096e1b1",
+    "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+    "candidate_id": "SPREAD_BLOWOUT_RECOMPRESSION:CPI_2024_09_11_TIGHT",
+    "experiment_id": "unify_pipeline:CPI_2024_09_11_TIGHT",
+    "run_id": "unify_SPREAD_BLOWOUT_RECOMPRESSION_CPI_2024_09_11_TIGHT_20260609T045106Z",
+    "dataset_id": "databento_mbo:MES.v.0:CPI_2024_09_11_TIGHT",
+    "feature_set_id": "mbo_64dim",
+    "config_hash": "",
+    "git_commit": "1cb8503ff140dd160d31e6cea0340ed7fcee874f",
+    "timestamp": "2026-06-09T04:51:06.584581+00:00",
+    "promotion_status": "PROMOTED",
+    "promotion_reason": "grade=C, net_return=63.00",
+    "passed_gates": [
+      "backtest",
+      "metrics_scorecard"
+    ],
+    "failed_gates": [],
+    "quarantined_warnings": [],
+    "backtest_metrics": {
+      "net_pnl": 63.0,
+      "num_trades": 11,
+      "sharpe": 6.007385040937022,
+      "sortino": 9.019606742265651,
+      "max_drawdown": -22.909090909090903
+    },
+    "robustness_metrics": {
+      "overall_score": 64.28,
+      "overall_grade": "C"
+    },
+    "walk_forward_metrics": {
+      "walk_forward_efficiency": null
+    },
+    "walk_forward_correlation_metrics": {},
+    "latency_profile": {
+      "measured_p99_ms": 1.0
+    },
+    "execution_assumptions": {
+      "queue_model": "LogProbQueueModel2",
+      "latency_ms": 1.0,
+      "fill_model": "no_partial_fill"
+    },
+    "data_resolution": "mbo_npz",
+    "model_combination": {
+      "primary": "SPREAD_BLOWOUT_RECOMPRESSION"
+    },
+    "alpha_components": [
+      "SPREAD_BLOWOUT_RECOMPRESSION"
+    ],
+    "defensive_components": [],
+    "hybrid_components": [],
+    "allowed_symbols": [
+      "MES.v.0"
+    ],
+    "allowed_instruments": [
+      "MES"
+    ],
+    "allowed_order_types": [
+      "LIMIT"
+    ],
+    "risk_limits_reference": "risk_limits:SPREAD_BLOWOUT_RECOMPRESSION",
+    "capital_allocation_reference": "capital:SPREAD_BLOWOUT_RECOMPRESSION",
+    "kill_switch_reference": "kill_switch:SPREAD_BLOWOUT_RECOMPRESSION",
+    "report_path": "C:\\Users\\MSI\\Documents\\opencode\\hft3\\research_cards\\workbench_runs\\unify_SPREAD_BLOWOUT_RECOMPRESSION_CPI_2024_09_11_TIGHT_20260609T045106Z",
+    "artifact_path": "C:\\Users\\MSI\\Documents\\opencode\\hft3\\research_cards\\workbench_runs\\unify_SPREAD_BLOWOUT_RECOMPRESSION_CPI_2024_09_11_TIGHT_20260609T045106Z",
+    "record_type": "promotion",
+    "record_seq": 34,
+    "prev_hash": "d363223e524eb94e2b7ee1dffcd924fe3b106ca147e66d9800a60c110ece9aca",
+    "self_hash": "425b542bb99294c8b47e21e2ad92ea3f8a514d4ab17172ef13af1618598d6aea"
+  }
+}

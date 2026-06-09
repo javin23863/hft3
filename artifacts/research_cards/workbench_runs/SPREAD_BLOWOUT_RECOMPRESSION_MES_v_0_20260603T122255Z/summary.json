@@ -1,0 +1,348 @@
+{
+  "campaign_id": "SPREAD_BLOWOUT_RECOMPRESSION_MES_v_0_20260603T122255Z",
+  "status": "FAIL",
+  "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+  "symbol": "MES.v.0",
+  "param_hash": "097a72ecae888d1f",
+  "composition": {
+    "primary_model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+    "defensive_stubs": []
+  },
+  "phase_budgets_us": {
+    "before": 0.0,
+    "during": 0.0,
+    "after": 0.0,
+    "continuous": 0.0
+  },
+  "trades_vetoed_by_defense": 0,
+  "periods": [
+    {
+      "name": "Discovery",
+      "gate_pass": false,
+      "evaluate_only": false,
+      "net_pnl": -1.0,
+      "num_trades": 1,
+      "expectancy": -1.0,
+      "events_run": 1,
+      "events_missing": 0,
+      "survives_cpp": false,
+      "event_results": [
+        {
+          "event_id": "CPI_2018_01_11_TIGHT",
+          "release_date": "2018-01-11",
+          "net_pnl": -1.0,
+          "num_trades": 1,
+          "expectancy": -1.0,
+          "survives_cpp_execution_delay": false,
+          "trades_vetoed_by_defense": 0,
+          "run_id": "x"
+        }
+      ],
+      "error": null
+    }
+  ],
+  "robustness_passed": false,
+  "robustness_input_status": "PENDING_PHASE9_METRICS",
+  "robustness_pending_checks": [
+    "feature_leakage",
+    "label_leakage",
+    "timestamp_leakage",
+    "future_data_leakage",
+    "parameter_stability",
+    "regime_stability",
+    "drawdown_limit",
+    "tail_risk_limit",
+    "turnover_limit",
+    "transaction_cost_sensitivity",
+    "slippage_sensitivity",
+    "latency_sensitivity",
+    "liquidity_capacity_constraint",
+    "event_window_stability",
+    "data_resolution_eligibility",
+    "model_combination_attribution",
+    "model_combination_degradation_detection",
+    "registry_eligibility",
+    "artifact_completeness",
+    "purged_cv"
+  ],
+  "robustness_failed_checks": [
+    "walk_forward_validation"
+  ],
+  "robustness_checks": [
+    {
+      "name": "feature_leakage",
+      "status": "PENDING",
+      "passed": false,
+      "observed_value": null,
+      "threshold": null,
+      "comparison_operator": "",
+      "reason_code": "ROBUSTNESS_INPUT_MISSING"
+    },
+    {
+      "name": "label_leakage",
+      "status": "PENDING",
+      "passed": false,
+      "observed_value": null,
+      "threshold": null,
+      "comparison_operator": "",
+      "reason_code": "ROBUSTNESS_INPUT_MISSING"
+    },
+    {
+      "name": "timestamp_leakage",
+      "status": "PENDING",
+      "passed": false,
+      "observed_value": null,
+      "threshold": null,
+      "comparison_operator": "",
+      "reason_code": "ROBUSTNESS_INPUT_MISSING"
+    },
+    {
+      "name": "future_data_leakage",
+      "status": "PENDING",
+      "passed": false,
+      "observed_value": null,
+      "threshold": null,
+      "comparison_operator": "",
+      "reason_code": "ROBUSTNESS_INPUT_MISSING"
+    },
+    {
+      "name": "parameter_stability",
+      "status": "PENDING",
+      "passed": false,
+      "observed_value": null,
+      "threshold": null,
+      "comparison_operator": "",
+      "reason_code": "ROBUSTNESS_INPUT_MISSING"
+    },
+    {
+      "name": "regime_stability",
+      "status": "PENDING",
+      "passed": false,
+      "observed_value": null,
+      "threshold": null,
+      "comparison_operator": "",
+      "reason_code": "ROBUSTNESS_INPUT_MISSING"
+    },
+    {
+      "name": "drawdown_limit",
+      "status": "PENDING",
+      "passed": false,
+      "observed_value": null,
+      "threshold": null,
+      "comparison_operator": "",
+      "reason_code": "ROBUSTNESS_INPUT_MISSING"
+    },
+    {
+      "name": "tail_risk_limit",
+      "status": "PENDING",
+      "passed": false,
+      "observed_value": null,
+      "threshold": null,
+      "comparison_operator": "",
+      "reason_code": "ROBUSTNESS_INPUT_MISSING"
+    },
+    {
+      "name": "turnover_limit",
+      "status": "PENDING",
+      "passed": false,
+      "observed_value": null,
+      "threshold": null,
+      "comparison_operator": "",
+      "reason_code": "ROBUSTNESS_INPUT_MISSING"
+    },
+    {
+      "name": "transaction_cost_sensitivity",
+      "status": "PENDING",
+      "passed": false,
+      "observed_value": null,
+      "threshold": null,
+      "comparison_operator": "",
+      "reason_code": "ROBUSTNESS_INPUT_MISSING"
+    },
+    {
+      "name": "slippage_sensitivity",
+      "status": "PENDING",
+      "passed": false,
+      "observed_value": null,
+      "threshold": null,
+      "comparison_operator": "",
+      "reason_code": "ROBUSTNESS_INPUT_MISSING"
+    },
+    {
+      "name": "latency_sensitivity",
+      "status": "PENDING",
+      "passed": false,
+      "observed_value": null,
+      "threshold": null,
+      "comparison_operator": "",
+      "reason_code": "ROBUSTNESS_INPUT_MISSING"
+    },
+    {
+      "name": "liquidity_capacity_constraint",
+      "status": "PENDING",
+      "passed": false,
+      "observed_value": null,
+      "threshold": null,
+      "comparison_operator": "",
+      "reason_code": "ROBUSTNESS_INPUT_MISSING"
+    },
+    {
+      "name": "event_window_stability",
+      "status": "PENDING",
+      "passed": false,
+      "observed_value": null,
+      "threshold": null,
+      "comparison_operator": "",
+      "reason_code": "ROBUSTNESS_INPUT_MISSING"
+    },
+    {
+      "name": "data_resolution_eligibility",
+      "status": "PENDING",
+      "passed": false,
+      "observed_value": null,
+      "threshold": null,
+      "comparison_operator": "",
+      "reason_code": "ROBUSTNESS_INPUT_MISSING"
+    },
+    {
+      "name": "model_combination_attribution",
+      "status": "PENDING",
+      "passed": false,
+      "observed_value": null,
+      "threshold": null,
+      "comparison_operator": "",
+      "reason_code": "ROBUSTNESS_INPUT_MISSING"
+    },
+    {
+      "name": "model_combination_degradation_detection",
+      "status": "PENDING",
+      "passed": false,
+      "observed_value": null,
+      "threshold": null,
+      "comparison_operator": "",
+      "reason_code": "ROBUSTNESS_INPUT_MISSING"
+    },
+    {
+      "name": "registry_eligibility",
+      "status": "PENDING",
+      "passed": false,
+      "observed_value": null,
+      "threshold": null,
+      "comparison_operator": "",
+      "reason_code": "ROBUSTNESS_INPUT_MISSING"
+    },
+    {
+      "name": "artifact_completeness",
+      "status": "PENDING",
+      "passed": false,
+      "observed_value": null,
+      "threshold": null,
+      "comparison_operator": "",
+      "reason_code": "ROBUSTNESS_INPUT_MISSING"
+    },
+    {
+      "name": "walk_forward_validation",
+      "status": "FAIL",
+      "passed": false,
+      "observed_value": 0.0,
+      "threshold": 1.0,
+      "comparison_operator": "==",
+      "reason_code": "WALK_FORWARD_FAILED"
+    },
+    {
+      "name": "purged_cv",
+      "status": "PENDING",
+      "passed": false,
+      "observed_value": null,
+      "threshold": null,
+      "comparison_operator": "",
+      "reason_code": "PURGED_CV_NOT_OBSERVED"
+    },
+    {
+      "name": "monte_carlo_sharpe",
+      "status": "PASS",
+      "passed": true,
+      "observed_value": 0.0,
+      "threshold": -0.5,
+      "comparison_operator": ">",
+      "reason_code": "PASS"
+    },
+    {
+      "name": "monte_carlo_drawdown",
+      "status": "PASS",
+      "passed": true,
+      "observed_value": 0.0,
+      "threshold": -500.0,
+      "comparison_operator": ">",
+      "reason_code": "PASS"
+    },
+    {
+      "name": "bonferroni_penalty",
+      "status": "PASS",
+      "passed": true,
+      "observed_value": 1.0,
+      "threshold": 1.0,
+      "comparison_operator": ">=",
+      "reason_code": "PASS"
+    },
+    {
+      "name": "holdout_tuning_veto",
+      "status": "PASS",
+      "passed": true,
+      "observed_value": 0.0,
+      "threshold": 0.0,
+      "comparison_operator": "==",
+      "reason_code": "PASS"
+    }
+  ],
+  "overfit_risk": "medium",
+  "walk_forward": {
+    "periods": [
+      {
+        "name": "Discovery",
+        "gate_pass": false,
+        "expectancy": -1.0,
+        "evaluate_only": false
+      }
+    ],
+    "status": "FAIL",
+    "missing_periods": [
+      "Confirmation",
+      "Holdout",
+      "Recent holdout"
+    ]
+  },
+  "wfc_status": "SKIPPED",
+  "wfc": {},
+  "sim_shadow_anchor": "2026-03-01",
+  "sim_shadow_cme_days": 60,
+  "sim_shadow_status": "pending_CHI404",
+  "sim_shadow_required": false,
+  "certification_stamp": {
+    "status": "STALE",
+    "certification_run_id": "CERT-20260601T021203Z-961f7900",
+    "certification_commit": "a88321c4629ad22cb5f453cc5f691878d7474d95",
+    "current_commit": "d258438cd0e6986f7b43160c1cf860098b89aca7",
+    "git_sha": "d258438cd0e6986f7b43160c1cf860098b89aca7",
+    "git_commit": "d258438cd0e6986f7b43160c1cf860098b89aca7",
+    "stale": true,
+    "changed_core_files": [
+      "scripts/run_event_replay.py"
+    ],
+    "promotion_eligible": false,
+    "promotion_label": "STALE_CERTIFICATION",
+    "reason_if_not_promotion_eligible": "core_backtester_changed_since_green_certification",
+    "backtester_version": "a88321c-dirty",
+    "staleness_reason": "core_backtester_files_changed_since_certification",
+    "instrument": "MES.v.0",
+    "execution_adapter_mode": "workbench_campaign",
+    "execution_mode": "REPLAY",
+    "event_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+    "model_id": "SPREAD_BLOWOUT_RECOMPRESSION"
+  },
+  "certification_footer": "Backtester certification used: STALE, run_id=CERT-20260601T021203Z-961f7900, commit=a88321c4629ad22cb5f453cc5f691878d7474d95",
+  "promote_candidate": false,
+  "promote_note": "WFC PASS + sim shadow (60 CME days on CHI404) + backtester certification stamp required before promotion \u2014 BLUEPRINT \u00a78",
+  "trial_mode": false,
+  "events_ran": 1
+}

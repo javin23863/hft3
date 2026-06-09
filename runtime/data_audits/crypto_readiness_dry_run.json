@@ -1,0 +1,18 @@
+{
+  "crypto_ready": false,
+  "crypto_l3_ready": false,
+  "crypto_mempool_ready": false,
+  "purge_safe": false,
+  "purge_safe_estimate": false,
+  "days_until_purge_safe": 274,
+  "preflight_l3": {
+    "purge_safe": false,
+    "synthetic_days": 274
+  },
+  "preflight_mempool": {
+    "mempool_ready": false
+  },
+  "cae_bookticker_backfill_status": {
+    "days_until_purge_safe": 274
+  }
+}

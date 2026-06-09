@@ -1,0 +1,44 @@
+{
+  "run_id": "SPREAD_BLOWOUT_RECOMPRESSION_MES_v_0_20260601T035856Z",
+  "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+  "strategy_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+  "wfc_status": "PASS",
+  "pearson": 0.9971204831952047,
+  "spearman": 1.0,
+  "kendall": 1.0,
+  "pearson_ci": [
+    0.9940467302000436,
+    0.997995240664572
+  ],
+  "spearman_ci": [
+    1.0,
+    1.0
+  ],
+  "p_value": 0.0,
+  "cost_adjusted_pearson": 0.0,
+  "cost_adjusted_spearman": 0.0,
+  "n_parameter_combinations": 25,
+  "n_folds": 3,
+  "positive_fold_ratio": 1.0,
+  "fold_correlations": {
+    "D1": 0.44970518332129195,
+    "D2": 0.4529643756412421,
+    "D3": 0.45692660843073923
+  },
+  "top_decile_oos_median": 3.10307596515175,
+  "bottom_decile_oos_median": 2.15153665444485,
+  "outlier_sensitivity_pass": true,
+  "cost_adjusted_pass": true,
+  "drawdown_pass": true,
+  "secondary_metrics_pass": true,
+  "regime_consistency_pass": true,
+  "universe_consistency_pass": true,
+  "rejection_reasons": [],
+  "artifact_paths": [
+    "C:\\Users\\MSI\\Documents\\opencode\\hft3\\artifacts\\research_cards\\workbench_runs\\SPREAD_BLOWOUT_RECOMPRESSION_MES_v_0_20260601T035856Z\\wfc\\wfc_summary.json",
+    "C:\\Users\\MSI\\Documents\\opencode\\hft3\\artifacts\\research_cards\\workbench_runs\\SPREAD_BLOWOUT_RECOMPRESSION_MES_v_0_20260601T035856Z\\wfc\\wfc_audit.log",
+    "C:\\Users\\MSI\\Documents\\opencode\\hft3\\artifacts\\research_cards\\workbench_runs\\SPREAD_BLOWOUT_RECOMPRESSION_MES_v_0_20260601T035856Z\\wfc\\is_vs_oos_scatter.png",
+    "C:\\Users\\MSI\\Documents\\opencode\\hft3\\artifacts\\research_cards\\workbench_runs\\SPREAD_BLOWOUT_RECOMPRESSION_MES_v_0_20260601T035856Z\\wfc\\is_vs_oos_by_fold.png",
+    "C:\\Users\\MSI\\Documents\\opencode\\hft3\\artifacts\\research_cards\\workbench_runs\\SPREAD_BLOWOUT_RECOMPRESSION_MES_v_0_20260601T035856Z\\wfc\\top_decile_oos.png"
+  ]
+}

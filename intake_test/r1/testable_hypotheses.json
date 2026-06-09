@@ -1,0 +1,11 @@
+[
+  {
+    "evaluation_window": null,
+    "fail_criteria": "sharpe<0",
+    "hypothesis_id": "h1",
+    "metric": "sharpe",
+    "pass_criteria": "sharpe>0",
+    "statement": "mean reversion works",
+    "threshold": 0.0
+  }
+]

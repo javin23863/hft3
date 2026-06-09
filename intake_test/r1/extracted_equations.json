@@ -1,0 +1,14 @@
+[
+  {
+    "context": "Sharpe:",
+    "eq_id": "e1",
+    "latex": "SR = \\frac{\\mu}{\\sigma}",
+    "source_page": null,
+    "variables": [
+      "S",
+      "\\frac",
+      "\\mu",
+      "\\sigma"
+    ]
+  }
+]

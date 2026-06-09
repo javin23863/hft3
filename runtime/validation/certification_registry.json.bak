@@ -1,0 +1,61 @@
+{
+  "latest_certification_run_id": "CERT-20260603T171616Z-68c99bf2",
+  "latest_certification_commit": "1d2f74139d6d2761f5af5caf4575a3f2f4581a08",
+  "latest_certification_timestamp": "2026-06-03T17:16:56.771651+00:00",
+  "latest_certification_status": "GREEN",
+  "backtester_version": "1d2f741-dirty",
+  "covered_modules": [
+    "backtest_pipeline",
+    "crypto_lane",
+    "equities_lane",
+    "execution",
+    "features_engine",
+    "options_lane",
+    "replay",
+    "workbench"
+  ],
+  "covered_symbols": [
+    "CL",
+    "ES",
+    "GC",
+    "HG",
+    "MES",
+    "MNQ",
+    "NQ",
+    "RTY",
+    "RUNNER",
+    "SI",
+    "YM",
+    "ZB",
+    "ZN"
+  ],
+  "covered_event_types": [
+    "crypto_l2",
+    "crypto_l3",
+    "crypto_shock_event",
+    "equities_low_float",
+    "equities_runner_event",
+    "macro",
+    "options_parity",
+    "synthetic"
+  ],
+  "covered_latency_bands": [
+    0.5,
+    1.0,
+    2.0,
+    5.0,
+    10.0,
+    50.0,
+    200.0
+  ],
+  "covered_queue_models": [
+    "LogProbQueueModel2",
+    "SquareProbQueueModel"
+  ],
+  "covered_execution_modes": [
+    "REPLAY"
+  ],
+  "scorecard_path": "runtime/validation/backtester_certification_scorecard.json",
+  "blocking_failures": [],
+  "warnings": []
+}

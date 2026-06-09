@@ -1,0 +1,11 @@
+{
+  "entry": [
+    "long"
+  ],
+  "exit": [
+    "30 bars"
+  ],
+  "regime_filter": null,
+  "signal": "book_imbalance_top5 < -0.5",
+  "time_stop_bars": null
+}

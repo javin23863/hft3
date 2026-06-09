@@ -1,0 +1,5 @@
+{"message":"Trade Manager order intent failed for 'SPREAD_BLOWOUT_RECOMPRESSION': SIGNAL_NOT_INGESTED","timestamp_ns":1780980572886777856,"type":"ORDER_INTENT_ERROR"}
+{"message":"Trade Manager order intent failed for 'SPREAD_BLOWOUT_RECOMPRESSION': SIGNAL_NOT_INGESTED","timestamp_ns":1780980572986777856,"type":"ORDER_INTENT_ERROR"}
+{"message":"Trade Manager order intent failed for 'SPREAD_BLOWOUT_RECOMPRESSION': SIGNAL_NOT_INGESTED","timestamp_ns":1780980573086777856,"type":"ORDER_INTENT_ERROR"}
+{"message":"Trade Manager order intent failed for 'SPREAD_BLOWOUT_RECOMPRESSION': SIGNAL_NOT_INGESTED","timestamp_ns":1780980573186777856,"type":"ORDER_INTENT_ERROR"}
+{"message":"Trade Manager order intent failed for 'SPREAD_BLOWOUT_RECOMPRESSION': SIGNAL_NOT_INGESTED","timestamp_ns":1780980573286777856,"type":"ORDER_INTENT_ERROR"}

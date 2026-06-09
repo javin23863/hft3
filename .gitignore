@@ -45,6 +45,10 @@ cmake_install.cmake
 *.dylib
 *.dll
 *.exe
+*.lib
+*.zip
+rithmic_gateway/**/win10/**
+rithmic_gateway/**/win7/**
 
 # Data and Models
 data/**/*.dbn

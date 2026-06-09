@@ -1,0 +1,135 @@
+{
+  "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+  "run_id": "unify_SPREAD_BLOWOUT_RECOMPRESSION_CPI_2024_09_11_TIGHT_20260609T045106Z",
+  "overall_grade": "C",
+  "overall_score": 64.28,
+  "category_scores": [
+    {
+      "category": "Performance",
+      "score": 82.5,
+      "grade": "B+",
+      "metrics_used": [
+        "net_return",
+        "sharpe",
+        "sortino",
+        "profit_factor",
+        "hit_rate",
+        "expectancy_per_trade"
+      ],
+      "notes": []
+    },
+    {
+      "category": "Risk",
+      "score": 65.0,
+      "grade": "C",
+      "metrics_used": [
+        "max_drawdown",
+        "cvar_95"
+      ],
+      "notes": []
+    },
+    {
+      "category": "Robustness",
+      "score": 50.0,
+      "grade": "D",
+      "metrics_used": [
+        "walk_forward_efficiency",
+        "parameter_stability",
+        "feature_stability",
+        "regime_stability"
+      ],
+      "notes": [
+        "Single-event run: WFC/parameter/feature/regime stability require multi-period campaign"
+      ]
+    },
+    {
+      "category": "Execution Realism",
+      "score": 71.0,
+      "grade": "B",
+      "metrics_used": [
+        "slippage_bps",
+        "fill_rate",
+        "execution_latency_vs_alpha_half_life",
+        "adverse_selection_rate",
+        "capacity_estimate"
+      ],
+      "notes": []
+    },
+    {
+      "category": "Portfolio Fit",
+      "score": 50.0,
+      "grade": "D",
+      "metrics_used": [
+        "correlation_to_existing_models",
+        "marginal_sharpe_contribution"
+      ],
+      "notes": [
+        "Requires multi-model campaign for correlation/marginal Sharpe"
+      ]
+    },
+    {
+      "category": "Prediction Calibration",
+      "score": 50.0,
+      "grade": "D",
+      "metrics_used": [
+        "prediction_calibration_ic",
+        "prediction_calibration_brier",
+        "prediction_calibration_ece",
+        "high_confident_trade_performance"
+      ],
+      "notes": [
+        "Requires signal/return pair analysis over multiple events"
+      ]
+    },
+    {
+      "category": "Walk-Forward",
+      "score": 50.0,
+      "grade": "D",
+      "metrics_used": [
+        "walk_forward_efficiency"
+      ],
+      "notes": []
+    }
+  ],
+  "metrics": {
+    "net_return": 63.0,
+    "sharpe": 6.007385040937022,
+    "sortino": 9.019606742265651,
+    "max_drawdown": -22.909090909090903,
+    "cvar_95": null,
+    "profit_factor": 2.25,
+    "expectancy_per_trade": 2.6033057851239674,
+    "hit_rate": 0.5454545454545454,
+    "num_trades": 11,
+    "walk_forward_efficiency": null,
+    "parameter_stability": null,
+    "feature_stability": null,
+    "regime_stability": null,
+    "slippage_bps": 0.5,
+    "fill_rate": null,
+    "execution_latency_vs_alpha_half_life": 0.1746031746031746,
+    "adverse_selection_rate": null,
+    "capacity_estimate": 6300.0,
+    "correlation_to_existing_models": null,
+    "marginal_sharpe_contribution": null,
+    "prediction_calibration_ic": null,
+    "prediction_calibration_brier": null,
+    "prediction_calibration_ece": null,
+    "high_confident_trade_performance": null,
+    "missing_reasons": {
+      "fill_rate": "no replay lifecycle data",
+      "adverse_selection_rate": "no replay lifecycle data",
+      "capacity_estimate": "extrapolated from single-event PnL",
+      "walk_forward_efficiency": "WFC not run for single event",
+      "parameter_stability": "requires multi-period campaign",
+      "feature_stability": "requires multi-period campaign",
+      "regime_stability": "requires multi-period campaign",
+      "correlation_to_existing_models": "requires multi-model campaign",
+      "marginal_sharpe_contribution": "requires portfolio context",
+      "prediction_calibration_ic": "requires signal/return pairs",
+      "prediction_calibration_brier": "requires signal/return pairs",
+      "prediction_calibration_ece": "requires signal/return pairs",
+      "high_confident_trade_performance": "requires confidence-tagged trades"
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "run_id": "BOOK_PRESSURE_MES_v_0_20260601T045521Z",
+  "model_id": "BOOK_PRESSURE",
+  "strategy_id": "",
+  "wfc_status": "SKIPPED",
+  "pearson": 0.0,
+  "spearman": 0.0,
+  "kendall": 0.0,
+  "pearson_ci": [],
+  "spearman_ci": [],
+  "p_value": 1.0,
+  "cost_adjusted_pearson": 0.0,
+  "cost_adjusted_spearman": 0.0,
+  "n_parameter_combinations": 0,
+  "n_folds": 0,
+  "positive_fold_ratio": 0.0,
+  "fold_correlations": {},
+  "top_decile_oos_median": 0.0,
+  "bottom_decile_oos_median": 0.0,
+  "outlier_sensitivity_pass": false,
+  "cost_adjusted_pass": false,
+  "drawdown_pass": false,
+  "secondary_metrics_pass": true,
+  "regime_consistency_pass": true,
+  "universe_consistency_pass": true,
+  "rejection_reasons": [
+    "No parameter_bounds configured for model"
+  ],
+  "artifact_paths": []
+}

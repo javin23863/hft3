@@ -1,0 +1,10 @@
+{
+  "run_id": "SPREAD_BLOWOUT_RECOMPRESSION_CPI_2024_09_11_TIGHT_20260601T100525Z",
+  "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+  "event_id": "CPI_2024_09_11_TIGHT",
+  "npz_path": "C:\\Users\\MSI\\Documents\\opencode\\hft3\\data\\npz\\MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz",
+  "npz_hash": "77df7980cca0fc3d",
+  "seed": 42,
+  "git_sha": "adfc7cbda2e4473540edad3fa733d0a334bc9246",
+  "measured_p99_ms": 4.105202995474916
+}

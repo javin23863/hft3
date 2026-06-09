@@ -1,0 +1,660 @@
+{
+  "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+  "symbol": "MES.v.0",
+  "allowed_contexts": [
+    "CPI_TIGHT",
+    "NFP_TIGHT"
+  ],
+  "catalog_years": 1,
+  "personal_locked": true,
+  "personal_range": [
+    "2026-03-01",
+    "2026-05-30"
+  ],
+  "periods": {
+    "Discovery": {
+      "start_year": 2018,
+      "end_year": 2020,
+      "events": [
+        {
+          "event_id": "NFP_2018_01_05_TIGHT",
+          "release_date": "2018-01-05",
+          "event_context": "NFP_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "CPI_2018_01_11_TIGHT",
+          "release_date": "2018-01-11",
+          "event_context": "CPI_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "NFP_2018_02_02_TIGHT",
+          "release_date": "2018-02-02",
+          "event_context": "NFP_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "NFP_2018_03_09_TIGHT",
+          "release_date": "2018-03-09",
+          "event_context": "NFP_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "NFP_2019_01_04_TIGHT",
+          "release_date": "2019-01-04",
+          "event_context": "NFP_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "NFP_2019_02_01_TIGHT",
+          "release_date": "2019-02-01",
+          "event_context": "NFP_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "CPI_2019_02_13_TIGHT",
+          "release_date": "2019-02-13",
+          "event_context": "CPI_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "NFP_2019_03_08_TIGHT",
+          "release_date": "2019-03-08",
+          "event_context": "NFP_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "NFP_2020_01_10_TIGHT",
+          "release_date": "2020-01-10",
+          "event_context": "NFP_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "NFP_2020_02_07_TIGHT",
+          "release_date": "2020-02-07",
+          "event_context": "NFP_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "NFP_2020_03_06_TIGHT",
+          "release_date": "2020-03-06",
+          "event_context": "NFP_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "CPI_2020_03_11_TIGHT",
+          "release_date": "2020-03-11",
+          "event_context": "CPI_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        }
+      ]
+    },
+    "Confirmation": {
+      "start_year": 2021,
+      "end_year": 2022,
+      "events": [
+        {
+          "event_id": "NFP_2021_01_08_TIGHT",
+          "release_date": "2021-01-08",
+          "event_context": "NFP_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "NFP_2021_02_05_TIGHT",
+          "release_date": "2021-02-05",
+          "event_context": "NFP_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "NFP_2021_03_05_TIGHT",
+          "release_date": "2021-03-05",
+          "event_context": "NFP_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "CPI_2021_04_13_TIGHT",
+          "release_date": "2021-04-13",
+          "event_context": "CPI_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "NFP_2022_01_07_TIGHT",
+          "release_date": "2022-01-07",
+          "event_context": "NFP_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "NFP_2022_02_04_TIGHT",
+          "release_date": "2022-02-04",
+          "event_context": "NFP_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "NFP_2022_03_04_TIGHT",
+          "release_date": "2022-03-04",
+          "event_context": "NFP_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "CPI_2022_05_11_TIGHT",
+          "release_date": "2022-05-11",
+          "event_context": "CPI_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        }
+      ]
+    },
+    "Holdout": {
+      "start_year": 2023,
+      "end_year": 2024,
+      "events": [
+        {
+          "event_id": "NFP_2023_01_06_TIGHT",
+          "release_date": "2023-01-06",
+          "event_context": "NFP_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "NFP_2023_02_03_TIGHT",
+          "release_date": "2023-02-03",
+          "event_context": "NFP_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "NFP_2023_03_10_TIGHT",
+          "release_date": "2023-03-10",
+          "event_context": "NFP_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "CPI_2023_06_13_TIGHT",
+          "release_date": "2023-06-13",
+          "event_context": "CPI_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "NFP_2024_01_05_TIGHT",
+          "release_date": "2024-01-05",
+          "event_context": "NFP_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "NFP_2024_02_02_TIGHT",
+          "release_date": "2024-02-02",
+          "event_context": "NFP_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "NFP_2024_03_08_TIGHT",
+          "release_date": "2024-03-08",
+          "event_context": "NFP_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "CPI_2024_09_11_TIGHT",
+          "release_date": "2024-09-11",
+          "event_context": "CPI_TIGHT",
+          "npz_present": true,
+          "npz_symbol_used": "MES.v.0"
+        }
+      ]
+    },
+    "Recent holdout": {
+      "start_year": 2025,
+      "end_year": 2025,
+      "events": [
+        {
+          "event_id": "NFP_2025_01_10_TIGHT",
+          "release_date": "2025-01-10",
+          "event_context": "NFP_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "CPI_2025_01_15_TIGHT",
+          "release_date": "2025-01-15",
+          "event_context": "CPI_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "NFP_2025_02_07_TIGHT",
+          "release_date": "2025-02-07",
+          "event_context": "NFP_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "CPI_2025_02_12_TIGHT",
+          "release_date": "2025-02-12",
+          "event_context": "CPI_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "NFP_2025_03_07_TIGHT",
+          "release_date": "2025-03-07",
+          "event_context": "NFP_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "CPI_2025_03_12_TIGHT",
+          "release_date": "2025-03-12",
+          "event_context": "CPI_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "NFP_2025_04_04_TIGHT",
+          "release_date": "2025-04-04",
+          "event_context": "NFP_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "CPI_2025_04_10_TIGHT",
+          "release_date": "2025-04-10",
+          "event_context": "CPI_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "NFP_2025_05_02_TIGHT",
+          "release_date": "2025-05-02",
+          "event_context": "NFP_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "CPI_2025_05_13_TIGHT",
+          "release_date": "2025-05-13",
+          "event_context": "CPI_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "NFP_2025_06_06_TIGHT",
+          "release_date": "2025-06-06",
+          "event_context": "NFP_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "CPI_2025_06_11_TIGHT",
+          "release_date": "2025-06-11",
+          "event_context": "CPI_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "NFP_2025_07_03_TIGHT",
+          "release_date": "2025-07-03",
+          "event_context": "NFP_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "CPI_2025_07_11_TIGHT",
+          "release_date": "2025-07-11",
+          "event_context": "CPI_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "NFP_2025_08_01_TIGHT",
+          "release_date": "2025-08-01",
+          "event_context": "NFP_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "CPI_2025_08_12_TIGHT",
+          "release_date": "2025-08-12",
+          "event_context": "CPI_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "NFP_2025_09_05_TIGHT",
+          "release_date": "2025-09-05",
+          "event_context": "NFP_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "CPI_2025_09_11_TIGHT",
+          "release_date": "2025-09-11",
+          "event_context": "CPI_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "NFP_2025_10_03_TIGHT",
+          "release_date": "2025-10-03",
+          "event_context": "NFP_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "CPI_2025_10_15_TIGHT",
+          "release_date": "2025-10-15",
+          "event_context": "CPI_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "NFP_2025_11_07_TIGHT",
+          "release_date": "2025-11-07",
+          "event_context": "NFP_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "CPI_2025_11_13_TIGHT",
+          "release_date": "2025-11-13",
+          "event_context": "CPI_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "NFP_2025_12_05_TIGHT",
+          "release_date": "2025-12-05",
+          "event_context": "NFP_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        },
+        {
+          "event_id": "CPI_2025_12_11_TIGHT",
+          "release_date": "2025-12-11",
+          "event_context": "CPI_TIGHT",
+          "npz_present": false,
+          "npz_symbol_used": ""
+        }
+      ]
+    }
+  },
+  "diagnostics": {
+    "hot_memory_telemetry": {
+      "registry_status": "ok",
+      "hot_executable": [
+        "6E",
+        "CL",
+        "ES",
+        "GC",
+        "HG",
+        "M2K",
+        "MCL",
+        "MES",
+        "MGC",
+        "MNQ",
+        "MYM",
+        "NG",
+        "NQ",
+        "RTY",
+        "SR3",
+        "UB",
+        "YM",
+        "ZB",
+        "ZF",
+        "ZN",
+        "ZQ",
+        "ZT"
+      ],
+      "hot_sensor": [
+        "VIX",
+        "VVIX",
+        "VX1",
+        "VX2"
+      ],
+      "warm": [
+        "6A",
+        "6B",
+        "6C",
+        "6J",
+        "HO",
+        "KE",
+        "RB",
+        "SI",
+        "ZC",
+        "ZL",
+        "ZM",
+        "ZS",
+        "ZW"
+      ],
+      "cold": [],
+      "resident": [
+        "6E",
+        "CL",
+        "ES",
+        "GC",
+        "HG",
+        "M2K",
+        "MCL",
+        "MES",
+        "MGC",
+        "MNQ",
+        "MYM",
+        "NG",
+        "NQ",
+        "RTY",
+        "SR3",
+        "UB",
+        "VIX",
+        "VVIX",
+        "VX1",
+        "VX2",
+        "YM",
+        "ZB",
+        "ZF",
+        "ZN",
+        "ZQ",
+        "ZT"
+      ],
+      "promoted_resident": [],
+      "core_protected_symbols": [
+        "ES",
+        "NQ",
+        "SR3",
+        "ZN",
+        "ZT"
+      ],
+      "missing_sensor_warnings": [
+        "VIX",
+        "VVIX",
+        "VX1",
+        "VX2"
+      ],
+      "promotion_audit_tail": [],
+      "degradation_flags": {
+        "load_pressure_demotions_available": false,
+        "missing_vix_family": true
+      },
+      "feed_status": {
+        "ES": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "MES": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "NQ": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "MNQ": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "RTY": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "M2K": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "YM": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "MYM": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "ZT": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "ZF": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "ZN": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "ZB": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "UB": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "SR3": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "ZQ": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "CL": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "MCL": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "NG": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "GC": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "MGC": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "HG": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "6E": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "VIX": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "VVIX": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "VX1": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "VX2": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "RB": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "HO": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "SI": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "6J": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "6B": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "6A": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "6C": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "ZC": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "ZS": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "ZW": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "KE": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "ZL": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        },
+        "ZM": {
+          "data_delay_status": "MISSING",
+          "last_update_age_ms": null
+        }
+      }
+    }
+  }
+}

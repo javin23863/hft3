@@ -1,0 +1,10 @@
+{
+  "cost_model": null,
+  "latency_budget_us": 80,
+  "max_position": null,
+  "order_types": [
+    "limit"
+  ],
+  "slippage_bps": null,
+  "venue": null
+}

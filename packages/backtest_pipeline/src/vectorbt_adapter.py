@@ -89,13 +89,20 @@ class FilterResult:
         }
 
 
+class InsufficientVectorBTInputError(Exception):
+    """Raised when VectorBT input has insufficient bars for meaningful analysis."""
+    pass
+
+
 def _default_data_loader(
     event_id: str,
     repo_root: Path,
 ) -> Optional[np.ndarray]:
-    """Load OHLCV bars from existing HFT3 data pipeline.
-    Falls back to building bars from the NPZ MBO data.
-    Returns None if no data is available.
+    """Load OHLCV bars from existing HFT3 data pipeline with adaptive bar sizing.
+    
+    Uses adaptive bar intervals to ensure ≥50 bars for VectorBT analysis.
+    For short events (< 5 min), uses smaller bar intervals.
+    Raises InsufficientVectorBTInputError if cannot produce ≥30 bars.
     """
     npz_dir = repo_root / "data" / "npz"
     candidates = list(npz_dir.glob(f"*{event_id}*_mbo.npz")) if npz_dir.exists() else []
@@ -114,10 +121,29 @@ def _default_data_loader(
         side_flags = raw["ev"].astype(np.int64)
         buy_mask = (side_flags & 0x1) == 1
 
-        bar_interval_ns = 60_000_000_000
+        # Calculate event duration and use adaptive bar sizing
         start_ts = ts[0]
         end_ts = ts[-1]
-        n_bars = max(1, int((end_ts - start_ts) / bar_interval_ns))
+        event_duration_ns = end_ts - start_ts
+        
+        # Target 50 bars minimum for VectorBT statistical validity
+        target_bars = 50
+        min_bar_interval_ns = 1_000_000_000  # Minimum 1 second
+        
+        # Adaptive bar interval: event_duration / target_bars, but at least 1 second
+        bar_interval_ns = max(event_duration_ns // target_bars, min_bar_interval_ns)
+        
+        n_bars = max(1, int(event_duration_ns / bar_interval_ns))
+        
+        # Validate minimum bar count
+        if n_bars < 30:
+            raise InsufficientVectorBTInputError(
+                f"Event {event_id} produces only {n_bars} bars (minimum 30 required). "
+                f"Event duration: {event_duration_ns / 1e9:.1f}s, "
+                f"Bar interval: {bar_interval_ns / 1e9:.1f}s. "
+                f"Consider using a longer event window or reducing bar interval."
+            )
+        
         o = np.zeros(n_bars)
         h = np.zeros(n_bars)
         l = np.full(n_bars, np.inf)
@@ -146,6 +172,8 @@ def _default_data_loader(
 
         l[l == np.inf] = o[l == np.inf]
         return np.column_stack([o, h, l, c, v])
+    except InsufficientVectorBTInputError:
+        raise
     except Exception as exc:
         print(f"Warning: NPZ data load failed: {exc}", file=sys.stderr)
         return None
