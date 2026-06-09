@@ -1,5 +1,6 @@
 """
 Maps timestamp t to event context E_t using events.csv windows (F_t only).
+O(log M) binary search instead of O(M) linear scan.
 """
 from __future__ import annotations
 
@@ -7,6 +8,7 @@ import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -19,17 +21,26 @@ from economic_event_universe.registry import context_priority
 from hft3_bootstrap import data_system_root
 
 
-def _effective_date_active(effective_date: object, ts_utc: datetime) -> bool:
-    if effective_date is None or (isinstance(effective_date, float) and pd.isna(effective_date)):
-        return True
-    raw = str(effective_date).strip()[:10]
-    if not raw:
-        return True
-    return date.fromisoformat(raw) <= ts_utc.date()
+def _ns(dt: datetime) -> int:
+    if getattr(dt, "tzinfo", None) is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return int(dt.timestamp() * 1_000_000_000)
+
+
+def _ymd(d: object) -> int:
+    if d is None or (isinstance(d, float) and np.isnan(d)):
+        return 0
+    s = str(d).strip()[:10]
+    if not s:
+        return 0
+    return int(s.replace("-", ""))
 
 
 class EventContextEngine:
-    """Resolves E_t label for a UTC timestamp against parsed event windows."""
+    """Resolves E_t label for a UTC timestamp against parsed event windows.
+    
+    Uses binary search on pre-sorted arrays for O(log M) lookup.
+    """
 
     def __init__(
         self,
@@ -48,35 +59,52 @@ class EventContextEngine:
             df = df[df["event_type"] == event_type]
             if df.empty:
                 raise ValueError(f"event_type not in events.csv: {event_type}")
-        self.events_df = df.reset_index(drop=True)
+        df = df.reset_index(drop=True)
+
+        sort_key = df["start_utc"].apply(_ns)
+        df = df.iloc[sort_key.argsort()].reset_index(drop=True)
+
+        self._start_ns = np.array([_ns(v) for v in df["start_utc"]], dtype=np.int64)
+        self._end_ns = np.array([_ns(v) for v in df["end_utc"]], dtype=np.int64)
+        self._effective_ymd = np.array([_ymd(v) for v in df.get("effective_date", pd.Series([None] * len(df)))], dtype=np.int32)
+        self._event_types = df["event_type"].astype(str).tolist()
+        self._window_names = df["window_name"].astype(str).tolist()
+
+        for i, et in enumerate(self._event_types):
+            if not et or et.lower() == "nan":
+                self._event_types[i] = ""
 
     def resolve(self, ts_utc: datetime) -> str:
         if ts_utc.tzinfo is None:
             ts_utc = ts_utc.replace(tzinfo=timezone.utc)
         else:
             ts_utc = ts_utc.astimezone(timezone.utc)
+        return self.resolve_ns(int(ts_utc.timestamp() * 1_000_000_000))
+
+    def resolve_ns(self, timestamp_ns: int) -> str:
+        n = len(self._start_ns)
+        if n == 0:
+            return "NORMAL"
+
+        right = int(np.searchsorted(self._start_ns, timestamp_ns, side="right"))
+        left = int(np.searchsorted(self._end_ns, timestamp_ns, side="left"))
 
         candidates = []
-        for _, row in self.events_df.iterrows():
-            if not _effective_date_active(row.get("effective_date"), ts_utc):
+        ts_ymd = _ymd(date.fromtimestamp(timestamp_ns / 1e9).isoformat())
+
+        for i in range(left, right):
+            if self._effective_ymd[i] > 0 and self._effective_ymd[i] > ts_ymd:
                 continue
-            start = row["start_utc"]
-            end = row["end_utc"]
-            if getattr(start, "tzinfo", None) is None:
-                start = start.replace(tzinfo=timezone.utc)
-            if getattr(end, "tzinfo", None) is None:
-                end = end.replace(tzinfo=timezone.utc)
-            if start <= ts_utc <= end:
-                et = str(row["event_type"]).strip()
-                if not et or et.lower() == "nan":
-                    raise ValueError("events.csv row has empty event_type inside active window")
-                candidates.append(
-                    (
-                        context_priority(et),
-                        et,
-                        str(row["window_name"]),
-                    )
+            et = self._event_types[i]
+            if not et:
+                continue
+            candidates.append(
+                (
+                    context_priority(et),
+                    et,
+                    self._window_names[i],
                 )
+            )
 
         if not candidates:
             return "NORMAL"
@@ -84,7 +112,3 @@ class EventContextEngine:
         candidates.sort(key=lambda x: x[0])
         event_type, window_name = candidates[0][1], candidates[0][2]
         return row_to_event_context(str(event_type), str(window_name))
-
-    def resolve_ns(self, timestamp_ns: int) -> str:
-        ts = datetime.fromtimestamp(timestamp_ns / 1e9, tz=timezone.utc)
-        return self.resolve(ts)
