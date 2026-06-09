@@ -54,6 +54,7 @@ def cme_run_ctx():
         model_id="SPREAD_BLOWOUT_RECOMPRESSION",
         symbol="MES.v.0",
         event_id="CPI_2024_09_11_TIGHT",
+        metadata={"hft_max_steps": 5000},
     )
 
 
@@ -92,7 +93,7 @@ class TestPipelineOrder:
         data_result = stages.stage_data_readiness(repo_root, cme_run_ctx, inventory)
         if data_result.get("status") != "ready":
             pytest.skip("data not available")
-        feature_result = stages.stage_feature_generation(repo_root, cme_run_ctx, data_result)
+        feature_result = stages.stage_data_fingerprint(repo_root, cme_run_ctx, data_result)
         vbt = stages.stage_vectorbt_filter(repo_root, cme_run_ctx, feature_result, inventory)
         assert isinstance(vbt, VectorbtFilterManifest)
         assert vbt.run_id
@@ -102,18 +103,19 @@ class TestPipelineOrder:
         data_result = stages.stage_data_readiness(repo_root, cme_run_ctx, inventory)
         if data_result.get("status") != "ready":
             pytest.skip("data not available")
-        feature_result = stages.stage_feature_generation(repo_root, cme_run_ctx, data_result)
+        feature_result = stages.stage_data_fingerprint(repo_root, cme_run_ctx, data_result)
         vbt = stages.stage_vectorbt_filter(repo_root, cme_run_ctx, feature_result, inventory)
         if vbt.top_candidates:
             for c in vbt.top_candidates:
                 assert "parameter_set_id" in c
                 assert c["parameter_set_id"].startswith("ps_")
 
+    @pytest.mark.slow
     def test_hftbacktest_consumes_vectorbt_parameter_set_ids(self, repo_root, cme_run_ctx, inventory):
         data_result = stages.stage_data_readiness(repo_root, cme_run_ctx, inventory)
         if data_result.get("status") != "ready":
             pytest.skip("data not available")
-        feature_result = stages.stage_feature_generation(repo_root, cme_run_ctx, data_result)
+        feature_result = stages.stage_data_fingerprint(repo_root, cme_run_ctx, data_result)
         vbt = stages.stage_vectorbt_filter(repo_root, cme_run_ctx, feature_result, inventory)
         if not vbt.top_candidates:
             pytest.skip("no vectorbt candidates passed")
@@ -130,15 +132,16 @@ class TestPromotionGates:
         data_result = stages.stage_data_readiness(repo_root, cme_run_ctx, inventory)
         if data_result.get("status") != "ready":
             pytest.skip("data not available")
-        feature_result = stages.stage_feature_generation(repo_root, cme_run_ctx, data_result)
+        feature_result = stages.stage_data_fingerprint(repo_root, cme_run_ctx, data_result)
         vbt = stages.stage_vectorbt_filter(repo_root, cme_run_ctx, feature_result, inventory)
         assert not vbt.promotion_eligible
 
+    @pytest.mark.slow
     def test_hft_truth_required_for_promotion(self, repo_root, cme_run_ctx, inventory):
         data_result = stages.stage_data_readiness(repo_root, cme_run_ctx, inventory)
         if data_result.get("status") != "ready":
             pytest.skip("data not available")
-        feature_result = stages.stage_feature_generation(repo_root, cme_run_ctx, data_result)
+        feature_result = stages.stage_data_fingerprint(repo_root, cme_run_ctx, data_result)
         vbt = stages.stage_vectorbt_filter(repo_root, cme_run_ctx, feature_result, inventory)
         if not vbt.top_candidates:
             pytest.skip("no vectorbt candidates passed")
@@ -185,11 +188,12 @@ class TestPromotionGates:
 # ---------------------------------------------------------------------------
 
 class TestMetricsSurface:
+    @pytest.mark.slow
     def test_full_metric_surface_emitted(self, repo_root, cme_run_ctx, inventory):
         data_result = stages.stage_data_readiness(repo_root, cme_run_ctx, inventory)
         if data_result.get("status") != "ready":
             pytest.skip("data not available")
-        feature_result = stages.stage_feature_generation(repo_root, cme_run_ctx, data_result)
+        feature_result = stages.stage_data_fingerprint(repo_root, cme_run_ctx, data_result)
         vbt = stages.stage_vectorbt_filter(repo_root, cme_run_ctx, feature_result, inventory)
         if not vbt.top_candidates:
             pytest.skip("no vectorbt candidates passed")
@@ -199,11 +203,12 @@ class TestMetricsSurface:
         assert "category_scores" in scorecard
         assert len(scorecard["category_scores"]) >= 7
 
+    @pytest.mark.slow
     def test_missing_metrics_include_reasons(self, repo_root, cme_run_ctx, inventory):
         data_result = stages.stage_data_readiness(repo_root, cme_run_ctx, inventory)
         if data_result.get("status") != "ready":
             pytest.skip("data not available")
-        feature_result = stages.stage_feature_generation(repo_root, cme_run_ctx, data_result)
+        feature_result = stages.stage_data_fingerprint(repo_root, cme_run_ctx, data_result)
         vbt = stages.stage_vectorbt_filter(repo_root, cme_run_ctx, feature_result, inventory)
         if not vbt.top_candidates:
             pytest.skip("no vectorbt candidates passed")

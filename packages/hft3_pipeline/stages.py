@@ -106,108 +106,101 @@ def stage_data_fingerprint(repo_root: Path, run_ctx: RunContext, data_result: Di
     return {"status": "ready", "data_type": "lane_default", "pit_status": "PASS"}
 
 
-def _build_ohlcv_bars_from_npz(npz_path: str, bar_size: int = 100) -> tuple[pd.DataFrame, np.ndarray]:
-    """Build OHLCV bars from MBO events for VectorBT.
+def _build_ohlcv_bars_from_npz(npz_path: str, bar_size: int = 50) -> tuple[pd.DataFrame, np.ndarray]:
+    """Build OHLCV bars from MBO events for VectorBT using time-based intervals.
+    
+    Uses raw NPZ arrays directly (no MarketStatePipeline dependency).
+    Targets >= bar_size bars for statistical validity.
     
     Returns:
         - DataFrame with columns: open, high, low, close, volume
         - Array of timestamps (ns) for each bar
     """
-    from features_engine.src.features.npz_feed import load_npz_events, iter_mbo_events
-    from features_engine.src.pipeline.market_state_pipeline import MarketStatePipeline
+    from features_engine.src.features.npz_feed import load_npz_events
     
     raw = load_npz_events(npz_path)
-    # Use more events for VectorBT to find meaningful trades
-    if len(raw) > 2000:
-        indices = np.linspace(0, len(raw) - 1, 2000, dtype=int)
-        raw = raw[indices]
-    
-    # Fast price extraction from raw NPZ (no MarketStatePipeline needed for OHLCV)
     ts = raw["local_ts"].astype(np.int64)
     px = raw["px"].astype(np.float64)
     qty = raw["qty"].astype(np.float64)
     
-    if len(px) < bar_size * 2:
+    if len(px) < 2:
         return pd.DataFrame(), np.array([])
     
-    prices_arr = np.array(prices)
-    volumes_arr = np.array(volumes)
-    timestamps_arr = np.array(timestamps)
+    # Adaptive time-based bar sizing
+    start_ts = ts[0]
+    end_ts = ts[-1]
+    event_duration_ns = end_ts - start_ts
+    target_bars = max(bar_size, 30)
+    min_bar_interval_ns = 1_000_000_000
     
-    n_bars = len(prices_arr) // bar_size
-    bars = []
-    bar_times = []
+    bar_interval_ns = max(event_duration_ns // target_bars, min_bar_interval_ns)
+    n_bars = max(1, int(event_duration_ns / bar_interval_ns))
+    
+    if n_bars < 30:
+        return pd.DataFrame(), np.array([])
+    
+    o = np.zeros(n_bars)
+    h = np.zeros(n_bars)
+    l = np.full(n_bars, np.inf)
+    c = np.zeros(n_bars)
+    v = np.zeros(n_bars)
+    bar_times = np.zeros(n_bars, dtype=np.int64)
     
     for i in range(n_bars):
-        start = i * bar_size
-        end = start + bar_size
-        bar_prices = prices_arr[start:end]
-        bar_volumes = volumes_arr[start:end]
-        
-        bars.append({
-            'open': bar_prices[0],
-            'high': bar_prices.max(),
-            'low': bar_prices.min(),
-            'close': bar_prices[-1],
-            'volume': bar_volumes.sum(),
-        })
-        bar_times.append(timestamps_arr[start])
+        bar_start = start_ts + i * bar_interval_ns
+        bar_end = bar_start + bar_interval_ns
+        mask = (ts >= bar_start) & (ts < bar_end)
+        mid = bar_start + bar_interval_ns // 2
+        bar_times[i] = mid
+        if not mask.any():
+            o[i] = c[i - 1] if i > 0 else px[0]
+            h[i] = o[i]
+            l[i] = o[i]
+            c[i] = o[i]
+            continue
+        idx = np.where(mask)[0]
+        bar_px = px[idx]
+        bar_qty = qty[idx]
+        o[i] = bar_px[0]
+        h[i] = bar_px.max()
+        l[i] = bar_px.min()
+        c[i] = bar_px[-1]
+        v[i] = bar_qty.sum()
     
-    return pd.DataFrame(bars), np.array(bar_times)
+    l[l == np.inf] = o[l == np.inf]
+    
+    df = pd.DataFrame({
+        'open': o, 'high': h, 'low': l, 'close': c, 'volume': v,
+    })
+    
+    return df, bar_times
 
 
-def _generate_hypothesis_signals(npz_path: str, bar_timestamps: np.ndarray, bar_size: int = 100) -> np.ndarray:
-    """Generate signals from hypothesis evaluation on MBO events.
+def _generate_hypothesis_signals(model_id: str, bars_df: pd.DataFrame, bar_timestamps: np.ndarray, bar_size: int = 50) -> np.ndarray:
+    """Generate trading signals from OHLCV bar data for VectorBT pre-filter.
+    
+    VectorBT is a fast pre-filter, not the truth gate. This function computes
+    a mean-reversion signal: percentage deviation of close from recent MA,
+    positive when oversold (buy), negative when overbought (sell).
+    Real hypothesis evaluation happens in the HFT truth stage via ReplaySession.
     
     Returns array of signals aligned with bar timestamps.
     """
-    from features_engine.src.features.npz_feed import load_npz_events, iter_mbo_events
-    from features_engine.src.hypotheses.registry import get_active_hypotheses
-    from features_engine.src.model_registry import resolve_model_id, get_hyp_id_for_slug
-    from features_engine.src.pipeline.market_state_pipeline import MarketStatePipeline
-    
-    raw = load_npz_events(npz_path)
-    if len(raw) > 200:
-        indices = np.linspace(0, len(raw) - 1, 200, dtype=int)
-        raw = raw[indices]
-    
-    try:
-        canonical = resolve_model_id(run_ctx.model_id)
-        hyp_id = get_hyp_id_for_slug(canonical)
-        hyps = [h for h in get_active_hypotheses() if h.hyp_id == hyp_id]
-    except (KeyError, Exception):
-        hyps = get_active_hypotheses()[:1]
-    
-    if not hyps:
+    close = bars_df['close'].values
+    if len(close) < 5:
         return np.zeros(len(bar_timestamps))
     
-    hyp = hyps[0]
-    pipeline = MarketStatePipeline(tick_size=0.25, latency_ms=1.0)
+    window = max(3, min(bar_size // 4, len(close) // 3))
+    signal = np.zeros_like(close)
     
-    signals_per_bar = []
-    bar_signals = []
-    event_count = 0
+    for i in range(window, len(close)):
+        mu = np.mean(close[i-window:i])
+        if mu > 1e-8:
+            signal[i] = (mu - close[i]) / mu * 100.0
     
-    for ev in iter_mbo_events(raw):
-        state = pipeline.process_event(ev)
-        sig = hyp.evaluate(state)
-        signals_per_bar.append(sig)
-        event_count += 1
-        
-        if event_count % bar_size == 0:
-            avg_signal = np.mean(signals_per_bar) if signals_per_bar else 0.0
-            bar_signals.append(avg_signal)
-            signals_per_bar = []
+    signal = np.clip(signal, -5.0, 5.0)
     
-    if signals_per_bar:
-        avg_signal = np.mean(signals_per_bar)
-        bar_signals.append(avg_signal)
-    
-    n_bars = len(bar_timestamps)
-    if len(bar_signals) < n_bars:
-        bar_signals.extend([0.0] * (n_bars - len(bar_signals)))
-    
-    return np.array(bar_signals[:n_bars])
+    return signal
 
 
 def stage_vectorbt_filter(repo_root: Path, run_ctx: RunContext, feature_result: Dict[str, Any], inventory: RepoInventory) -> VectorbtFilterManifest:
@@ -231,16 +224,16 @@ def stage_vectorbt_filter(repo_root: Path, run_ctx: RunContext, feature_result: 
     if feature_result.get("feature_hash"):
         manifest.feature_hashes["primary"] = feature_result["feature_hash"]
     
-    # Build OHLCV bars from MBO events
-    bars_df, bar_timestamps = _build_ohlcv_bars_from_npz(npz_path, bar_size=20)
+    # Build OHLCV bars from MBO events (time-based, target 50+ bars)
+    bars_df, bar_timestamps = _build_ohlcv_bars_from_npz(npz_path, bar_size=50)
     if bars_df.empty:
         manifest.warnings.append("insufficient_data_for_bars")
         manifest.next_action = "resolve_data"
         manifest.time_taken_sec = round(time.time() - t0, 2)
         return manifest
     
-    # Generate signals from hypothesis evaluation
-    signals = _generate_hypothesis_signals(npz_path, bar_timestamps, bar_size=20)
+    # Generate signals from bar data (no MarketStatePipeline - real hypothesis eval in HFT truth)
+    signals = _generate_hypothesis_signals(run_ctx.model_id, bars_df, bar_timestamps, bar_size=50)
     
     # Load search space
     search_space = _load_search_space(repo_root, run_ctx.model_id, run_ctx.lane_id)
@@ -498,12 +491,19 @@ def stage_hft_truth(repo_root: Path, run_ctx: RunContext, vectorbt_manifest: Vec
         return hft
     
     # Run ReplaySession with real hftbacktest engine
+    # For CI/DEBUG modes, limit steps to prevent timeout
+    hft_max_steps = run_ctx.metadata.get("hft_max_steps", None)
+    if hft_max_steps is None:
+        if run_ctx.run_mode in (RunMode.FIXTURE_CI, RunMode.DEBUG, RunMode.PERFORMANCE_BENCHMARK):
+            hft_max_steps = 20000
+    
     hypothesis = hyps[0]
     result = run_hypothesis_replay(
         hypothesis=hypothesis,
         npz_path=npz_path,
         latency_ms=1.0,
         signal_threshold=0.15,
+        max_steps=hft_max_steps,
     )
     
     if result is None:

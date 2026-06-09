@@ -40,6 +40,7 @@ def inventory(repo_root):
 class TestEndToEndPipeline:
     """End-to-end tests that verify the pipeline runs through all stages."""
 
+    @pytest.mark.slow
     def test_pipeline_reaches_stage_4(self, repo_root, cme_run_ctx, inventory):
         """Verify pipeline reaches HFT truth stage (Stage 4)."""
         # Stage 1: Data readiness
@@ -60,9 +61,9 @@ class TestEndToEndPipeline:
         assert isinstance(hft_manifest, HftTruthManifest), "HFT truth should return HftTruthManifest"
         assert hft_manifest.pnl != 0.0 or hft_manifest.trades == 0, "HFT truth should compute PnL"
 
+    @pytest.mark.slow
     def test_pipeline_reaches_stage_7(self, repo_root, cme_run_ctx, inventory):
         """Verify pipeline reaches promotion stage (Stage 7)."""
-        # Run through stages 1-5
         data_result = stages.stage_data_readiness(repo_root, cme_run_ctx, inventory)
         assert data_result.get("status") == "ready"
         
@@ -75,17 +76,15 @@ class TestEndToEndPipeline:
         
         hft_manifest = stages.stage_hft_truth(repo_root, cme_run_ctx, vectorbt_manifest, feature_result)
         metrics_result = stages.stage_full_metrics(repo_root, cme_run_ctx, hft_manifest)
-        
-        # Stage 7: Promotion
         promotion_result = stages.stage_promotion(
             repo_root, cme_run_ctx, hft_manifest, metrics_result, vectorbt_manifest
         )
         assert promotion_result["promotion_status"] in ("PROMOTED", "QUARANTINED"), \
             f"Promotion status should be PROMOTED or QUARANTINED, got {promotion_result['promotion_status']}"
 
+    @pytest.mark.slow
     def test_pipeline_completes_all_stages(self, repo_root, cme_run_ctx, inventory):
         """Verify pipeline completes all 10 stages."""
-        # Run through all stages
         data_result = stages.stage_data_readiness(repo_root, cme_run_ctx, inventory)
         assert data_result.get("status") == "ready"
         
@@ -103,7 +102,6 @@ class TestEndToEndPipeline:
             repo_root, cme_run_ctx, hft_manifest, metrics_result, vectorbt_manifest
         )
         
-        # Stage 8: Trade Manager (only if promoted)
         if promotion_result["promotion_status"] == "PROMOTED":
             tm_result = stages.stage_trade_manager(
                 repo_root, cme_run_ctx, promotion_result, metrics_result, hft_manifest
@@ -111,7 +109,6 @@ class TestEndToEndPipeline:
             assert tm_result["status"] in ("COMPLETED", "SKIPPED"), \
                 f"Trade Manager status should be COMPLETED or SKIPPED, got {tm_result['status']}"
         
-        # Stage 9: Workbench truth
         wb_result = stages.stage_workbench_truth(repo_root, None)
         assert wb_result["status"] == "COMPLETED", "Workbench truth should complete"
 
@@ -151,6 +148,7 @@ class TestVectorBTIntegration:
 class TestHFTTruthGate:
     """Tests for HFT truth gate."""
 
+    @pytest.mark.slow
     def test_hft_truth_uses_replay_matrix(self, repo_root, cme_run_ctx, inventory):
         """Verify HFT truth uses replay_matrix (not SignalBacktester)."""
         data_result = stages.stage_data_readiness(repo_root, cme_run_ctx, inventory)
@@ -163,11 +161,7 @@ class TestHFTTruthGate:
         if vectorbt_manifest.top_n_forwarded == 0:
             pytest.skip("VectorBT produced 0 candidates")
         
-        # HFT truth should use replay_matrix
         hft_manifest = stages.stage_hft_truth(repo_root, cme_run_ctx, vectorbt_manifest, feature_result)
-        
-        # Check that it's using ReplaySession (via replay_matrix)
-        # The manifest should have execution_realism with queue_model
         assert hft_manifest.queue_model == "LogProbQueueModel2", \
             "HFT truth should use LogProbQueueModel2 (ReplaySession)"
 

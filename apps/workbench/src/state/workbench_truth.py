@@ -40,6 +40,16 @@ class CmeEntryTruth:
     blocked: int = 0
     blockers: list[str] = field(default_factory=list)
     next_action: str = ""
+    # Pipeline stage status (populated from manifests)
+    vectorbt_status: str = "PENDING"       # PASSED, FAILED, BLOCKED, PENDING
+    vectorbt_candidates: int = 0
+    vectorbt_last_run: str = ""
+    hft_truth_status: str = "PENDING"      # PASSED, FAILED, BLOCKED, PENDING
+    hft_truth_pnl: float = 0.0
+    hft_truth_trades: int = 0
+    hft_truth_last_run: str = ""
+    promotion_status: str = "PENDING"      # PROMOTED, QUARANTINED, PENDING
+    pipeline_last_run_id: str = ""
 
 
 @dataclass
@@ -225,10 +235,56 @@ def _build_cme_truth(repo: Path, binding: Any) -> LaneTruth:
     )
 
 
+def _read_latest_pipeline_stage(repo: Path, symbol: str) -> dict:
+    """Read latest pipeline manifest for a symbol and extract stage statuses."""
+    result = {
+        "vectorbt_status": "PENDING",
+        "vectorbt_candidates": 0,
+        "vectorbt_last_run": "",
+        "hft_truth_status": "PENDING",
+        "hft_truth_pnl": 0.0,
+        "hft_truth_trades": 0,
+        "hft_truth_last_run": "",
+        "promotion_status": "PENDING",
+        "pipeline_last_run_id": "",
+    }
+    pipeline_dir = repo / "artifacts" / "pipeline_runs"
+    if not pipeline_dir.is_dir():
+        return result
+    manifests = sorted(pipeline_dir.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True)
+    for manifest_dir in manifests:
+        if not manifest_dir.is_dir():
+            continue
+        manifest_file = manifest_dir / "pipeline_manifest.json"
+        if not manifest_file.is_file():
+            continue
+        try:
+            data = json.loads(manifest_file.read_text(encoding="utf-8"))
+            if data.get("symbol") != symbol:
+                continue
+            stages = data.get("stages", {})
+            vb = data.get("vectorbt_manifest") or {}
+            hf = data.get("hft_truth_manifest") or {}
+            result.update({
+                "vectorbt_status": stages.get("vectorbt_filter", "PENDING"),
+                "vectorbt_candidates": vb.get("top_n_forwarded", 0) if isinstance(vb, dict) else 0,
+                "vectorbt_last_run": vb.get("created_at", "") if isinstance(vb, dict) else "",
+                "hft_truth_status": stages.get("hft_truth", "PENDING"),
+                "hft_truth_pnl": hf.get("pnl", 0.0) if isinstance(hf, dict) else 0.0,
+                "hft_truth_trades": hf.get("trades", 0) if isinstance(hf, dict) else 0,
+                "hft_truth_last_run": hf.get("run_id", "") if isinstance(hf, dict) else "",
+                "promotion_status": data.get("promotion_status", "PENDING"),
+                "pipeline_last_run_id": data.get("run_id", ""),
+            })
+            break
+        except Exception:
+            continue
+    return result
+
+
 def _build_cme_entry(repo: Path, symbol: str) -> CmeEntryTruth:
     npz_count = _count_files(repo, "data/npz", f"{symbol}_*_mbo.npz")
     npz_dir = repo / "data" / "npz"
-    # Count events from the events CSV for this symbol
     event_count = 0
     events_csv = repo / "packages" / "data_system" / "config" / "events.csv"
     if events_csv.is_file():
@@ -249,11 +305,13 @@ def _build_cme_entry(repo: Path, symbol: str) -> CmeEntryTruth:
     if npz_count == 0:
         blockers.append(f"No NPZ data for {symbol}")
 
-    # Check if campaigns exist for this symbol
     runs_dir = repo / "artifacts" / "research_cards" / "workbench_runs"
     campaigns = []
     if runs_dir.is_dir():
         campaigns = [d.name for d in runs_dir.iterdir() if d.is_dir() and symbol in d.name]
+
+    # Read latest pipeline stage statuses
+    stage = _read_latest_pipeline_stage(repo, symbol)
 
     return CmeEntryTruth(
         symbol=symbol,
@@ -263,11 +321,20 @@ def _build_cme_entry(repo: Path, symbol: str) -> CmeEntryTruth:
         mbo_status="ready" if npz_count > 0 else "missing",
         mbp_status="unknown",
         depth_status="unknown",
-        bound_models=46,  # alpha+hybrid models
+        bound_models=46,
         latest_campaign=campaigns[0] if campaigns else "",
         latest_status="",
         blockers=blockers,
         next_action="Run discovery campaign" if npz_count > 0 else "Download NPZ data",
+        vectorbt_status=stage["vectorbt_status"],
+        vectorbt_candidates=stage["vectorbt_candidates"],
+        vectorbt_last_run=stage["vectorbt_last_run"],
+        hft_truth_status=stage["hft_truth_status"],
+        hft_truth_pnl=stage["hft_truth_pnl"],
+        hft_truth_trades=stage["hft_truth_trades"],
+        hft_truth_last_run=stage["hft_truth_last_run"],
+        promotion_status=stage["promotion_status"],
+        pipeline_last_run_id=stage["pipeline_last_run_id"],
     )
 
 
