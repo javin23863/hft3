@@ -29,6 +29,11 @@ A partially observed marked-point-process stochastic-control model.
 * **Execution gateway**: Receive model actions, run pre-trade risk, construct order intents.
 * **Model runtime**: Hot paths in Rust/C++/C#; Python/Numba allowed for research paths.
 
+Live hosts are **lane-scoped** (amended 2026-06-10, vault `decisions/2026-06-10 Crypto production spec set.md`):
+* **CME lane**: CHI404 bare metal only (above).
+* **Crypto lane**: Contabo BTC-node VPS only — co-located with Bitcoin Core + edge daemon; Bitfinex execution per `specs/CRYPTO_LIVE.md` §2.
+* **Dev workstation**: offline research only, for every lane. Lane live hosts do not cross.
+
 ## 5. Historical data plan
 Historical research uses **Databento GLBX.MDP3 MBO data** and **HftBacktest replay**.
 Primary study from 2018-present.

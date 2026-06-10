@@ -145,21 +145,23 @@ Production tuning and validation run on CHI404 via SSH (`Host chi404` in `~/.ssh
 
 Do not assume local Windows paths apply on CHI404.
 
-### Topology: Chicago colo only (BLUEPRINT §4)
+### Topology: lane-scoped live hosts (BLUEPRINT §4)
 
-Per [BLUEPRINT.md §4 Live Architecture](BLUEPRINT.md#4-live-architecture): production live path is **CHI404 bare metal** with a **dedicated route to Rithmic Chicago/Aurora**. Milliseconds matter — nothing else belongs in the hot loop.
+Per [BLUEPRINT.md §4 Live Architecture](BLUEPRINT.md#4-live-architecture): the CME production live path is **CHI404 bare metal** with a **dedicated route to Rithmic Chicago/Aurora**. The crypto lane live path is the **Contabo BTC-node VPS** per [specs/CRYPTO_LIVE.md §2](specs/CRYPTO_LIVE.md) (decision: vault `decisions/2026-06-10 Crypto production spec set.md`). Milliseconds matter — nothing else belongs in either hot loop.
 
 | Host | Role |
 |------|------|
-| **CHI404** | Live/paper market data, order submit, capture, tuning, PASS gates, Rithmic trial lane |
-| **Dev workstation** | Offline research (Databento replay), pytest, git, SSH/sync to CHI404, docs — **never** live capture or orders |
+| **CHI404** | CME lane: live/paper market data, order submit, capture, tuning, PASS gates, Rithmic trial lane |
+| **Contabo VPS** | Crypto lane: Bitcoin Core + edge daemon; crypto live/paper execution, order-ack measurement, live RTT authority (CRYPTO_LIVE.md §2) |
+| **Dev workstation** | Offline research (Databento replay, crypto MBO capture/sweep), pytest, git, SSH/sync, docs — **never** live capture or orders for any lane |
 
 **Forbidden** (unless the user explicitly requests an exception in the task):
 
 - Windows or Mac R\|Trader capture, unattended daemons, or scheduled tasks on a dev PC
-- File-bridge or API loop that routes live/paper data or orders through a non-colo host
+- File-bridge or API loop that routes live/paper data or orders through a host outside the lane's designated live host
 - Setup scripts that auto-start capture on the workstation
 - Treating workstation RTT as an operational dependency for execution or capture
+- Routing crypto live/paper orders through CHI404 or CME live/paper orders through the Contabo VPS — lane live hosts do not cross
 
 **Before any Rithmic trial, infra, or latency work:** read BLUEPRINT §4 and [docs/rithmic_trial/README.md](docs/rithmic_trial/README.md). Live capture code must refuse to run on Windows (see `data_system/rithmic_trial/pipeline.py`).
 

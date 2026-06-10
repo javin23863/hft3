@@ -185,5 +185,5 @@ no TWS or IB Gateway GUI is present anywhere in the lane.
 | Lane | Access | Capability | Latency policy | Promotion |
 |---|---|---|---|---|
 | cme_futures | Rithmic/DMA path | true HFT (proof required) | exact swept bands + measured ack | sim shadow CHI404 |
-| crypto | node-direct | true HFT (proof required) | exact swept bands | sim shadow |
+| crypto | node-direct (Bitfinex execution; live host = Contabo BTC-node VPS per CRYPTO_LIVE.md §2) | true HFT (proof required) | exact swept bands + measured ack (LATENCY.md §3, §10) | sim shadow + Bitfinex paper shadow per CRYPTO_LIVE.md §5/§7; campaign: ALPHA_CRYPTO.md |
 | equities (stocks+options) | IBKR Web API (OAuth headless / clientportal.gw), no DMA, no GUI | better-than-retail speed advantage | floor = max(5 ms, measured Web API RTT from endpoint status artifact); sim latency clamped to floor; slower never blocks; claims below floor rejected | IBKR paper shadow via Web API paper account |
