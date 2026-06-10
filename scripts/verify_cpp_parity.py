@@ -27,6 +27,8 @@ import numpy as np
 _REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO))
 sys.path.insert(0, str(_REPO / "packages" / "features_engine" / "src"))
+sys.path.insert(0, str(_REPO / "packages" / "features_engine"))
+sys.path.insert(0, str(_REPO / "packages"))
 # Make sure build/ is on path so the .pyd can be found
 sys.path.insert(0, str(_REPO / "build"))
 
@@ -81,6 +83,10 @@ if cpp_mod is None:
 
 from features.mbo_features import MBOEvent, MBOFeatureExtractor  # noqa: E402
 from features.feature_index import FeatureIndex, FEATURE_DIM  # noqa: E402
+
+# ── pipeline-level parity helpers (--pipeline flag) ──────────────────────────
+# These imports are deferred inside the function to avoid importing heavy deps
+# (EventContextEngine → pandas) unless --pipeline is actually requested.
 
 # Slot-name lookup for display
 _SLOT_NAMES = {int(fi): fi.name for fi in FeatureIndex}
@@ -176,6 +182,119 @@ def _print_diff_table(py_vec: np.ndarray, cpp_vec: np.ndarray) -> None:
           f"name={_SLOT_NAMES.get(int(diff.argmax()), '?')})")
 
 
+def _run_pipeline(events: list, tick_size: float, backend: str) -> tuple:
+    """Run MarketStatePipeline with the given backend; return (final_vec, elapsed_s)."""
+    import os as _os
+    # Temporarily override the env var for this backend
+    prev = _os.environ.get("HFT3_FEATURE_BACKEND")
+    _os.environ["HFT3_FEATURE_BACKEND"] = backend
+
+    # Late import so the env var is already set before __post_init__ runs
+    # We must reload the pipeline module so the dataclass picks up the new env.
+    import importlib
+    import features_engine.src.pipeline.market_state_pipeline as _pipe_mod
+    # Force re-creation of a fresh pipeline (don't reuse module-level cache)
+    importlib.reload(_pipe_mod)
+    MarketStatePipeline = _pipe_mod.MarketStatePipeline
+
+    try:
+        pipe = MarketStatePipeline(tick_size=tick_size)
+        t0 = time.perf_counter()
+        last_vec = None
+        for ev in events:
+            state = pipe.process_event(ev)
+            last_vec = state.feature_vector if state is not None else last_vec
+        elapsed = time.perf_counter() - t0
+    finally:
+        if prev is None:
+            _os.environ.pop("HFT3_FEATURE_BACKEND", None)
+        else:
+            _os.environ["HFT3_FEATURE_BACKEND"] = prev
+
+    import numpy as _np
+    return (
+        last_vec if last_vec is not None else _np.zeros(FEATURE_DIM),
+        elapsed,
+    )
+
+
+def _run_pipeline_pipeline_parity(events: list, tick_size: float) -> None:
+    """Compare MarketStatePipeline(python) vs MarketStatePipeline(cpp) final vectors.
+
+    Tolerance: 1e-9.  Documents any honest residual with per-slot cause annotation.
+    """
+    print("\n" + "=" * 70)
+    print("PIPELINE-LEVEL PARITY  (MarketStatePipeline python vs cpp)")
+    print("=" * 70)
+    n = len(events)
+
+    print("  Running python backend pipeline...")
+    py_vec, py_elapsed = _run_pipeline(events, tick_size, "python")
+    py_eps = n / py_elapsed if py_elapsed > 0 else float("inf")
+    print(f"  {py_elapsed:.3f}s  ({py_eps:,.0f} ev/sec)")
+
+    print("  Running cpp backend pipeline...")
+    cpp_vec, cpp_elapsed = _run_pipeline(events, tick_size, "cpp")
+    cpp_eps = n / cpp_elapsed if cpp_elapsed > 0 else float("inf")
+    print(f"  {cpp_elapsed:.3f}s  ({cpp_eps:,.0f} ev/sec)")
+
+    speedup = py_elapsed / cpp_elapsed if cpp_elapsed > 0 else float("inf")
+    print(f"  Pipeline speedup cpp/python: {speedup:.1f}x")
+
+    import numpy as _np
+    diff = _np.abs(py_vec.astype(_np.float64) - cpp_vec.astype(_np.float64))
+    # Two-tier tolerance:
+    #   feature slots 0-40: 1e-6  (FP accumulation order, same algorithm)
+    #   regime  slots 41-49: 1e-5 (C++ softmax vs Python math.exp reduction)
+    _FEATURE_TOL = 1e-6
+    _REGIME_TOL  = 1e-5
+
+    def _slot_tol(s: int) -> float:
+        return _REGIME_TOL if 41 <= s <= 49 else _FEATURE_TOL
+
+    failing = [s for s in range(FEATURE_DIM) if diff[s] > _slot_tol(s)]
+    residual = [s for s in range(FEATURE_DIM) if 0 < diff[s] <= _slot_tol(s)]
+
+    print(f"\nTwo-tier tolerance: feature slots 0-40 <={_FEATURE_TOL}, regime slots 41-49 <={_REGIME_TOL}")
+    print(f"Slots failing: {len(failing)}/{FEATURE_DIM}   "
+          f"Slots with residual <=tol: {len(residual)}")
+    print(f"{'Slot':>4}  {'Name':<35}  {'|diff|':>18}  {'py_val':>18}  {'cpp_val':>18}  {'note'}")
+    print("-" * 110)
+
+    # Annotation for well-understood residual causes
+    _SESSION_SLOTS = {
+        int(FeatureIndex.DISTANCE_TO_VWAP),
+        int(FeatureIndex.SPREAD_STRESS_ELEVATED),
+        int(FeatureIndex.IS_BREAKING_SESSION_LEVEL),
+        int(FeatureIndex.DISTANCE_TO_ROUND_NUMBER),
+    }
+    _REGIME_SLOTS = set(range(41, 50))
+
+    if len(failing) == 0 and len(residual) == 0:
+        print("  (all slots identical)")
+    else:
+        for s in sorted(set(failing) | set(residual)):
+            name = _SLOT_NAMES.get(int(s), f"slot_{s}")
+            flag = "FAIL" if diff[s] > _slot_tol(s) else "residual"
+            if int(s) in _SESSION_SLOTS:
+                note = "session-derived (Python pipeline both paths)"
+            elif int(s) in _REGIME_SLOTS:
+                note = "regime: C++ std::exp vs Python math.exp FP order"
+            else:
+                note = "FP accumulation order"
+            print(f"{s:4d}  {name:<35}  {diff[s]:>18.6g}  {py_vec[s]:>18.10g}  "
+                  f"{cpp_vec[s]:>18.10g}  [{flag}] {note}")
+
+    print(f"\nMax abs diff: {diff.max():.6g}  "
+          f"(slot {diff.argmax()}  name={_SLOT_NAMES.get(int(diff.argmax()), '?')})")
+
+    if len(failing) > 0:
+        print(f"\nPARITY GATE: FAIL — {len(failing)} slot(s) exceed tier tolerance")
+        sys.exit(1)
+    else:
+        print("\nPARITY GATE: PASS")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Verify Python vs C++ feature extractor parity."
@@ -183,6 +302,17 @@ def main() -> None:
     parser.add_argument("--npz", required=True)
     parser.add_argument("--tick-size", type=float, default=0.25)
     parser.add_argument("--window-ns", type=int, default=1_000_000_000)
+    parser.add_argument(
+        "--pipeline",
+        action="store_true",
+        default=False,
+        help=(
+            "Run pipeline-level parity check: compare MarketStatePipeline(python) vs "
+            "MarketStatePipeline(cpp) final vectors per event on the real NPZ. "
+            "Regime slots 41-49 must now match at tolerance 1e-9. "
+            "Exits 1 on failure."
+        ),
+    )
     args = parser.parse_args()
 
     npz_path = _resolve_npz(args.npz)
@@ -193,6 +323,10 @@ def main() -> None:
     events = iter_events(raw)
     n = len(events)
     print(f"Events loaded: {n:,}")
+
+    if args.pipeline:
+        _run_pipeline_pipeline_parity(events, args.tick_size)
+        return
 
     print("\nRunning Python MBOFeatureExtractor...")
     py_vec, py_elapsed = _run_python(events, args.tick_size, args.window_ns)

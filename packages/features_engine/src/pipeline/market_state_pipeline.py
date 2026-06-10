@@ -1,8 +1,16 @@
 """
 Builds full MarketState X_t from MBO events: features, regime posterior, event context.
+
+Backend selection via HFT3_FEATURE_BACKEND env var (default: "auto"):
+  - "auto"   : use C++ pybind module when available, else python (one-time warning)
+  - "cpp"    : C++ only — hard-fails at init time if module not loadable
+  - "python" : pure-Python path (ablation / debug)
 """
 from __future__ import annotations
 
+import logging
+import os
+import warnings
 from dataclasses import dataclass, field
 from typing import Dict, Optional, Tuple
 
@@ -18,6 +26,8 @@ from features_engine.src.features.mbo_features import MBOEvent, MBOFeatureExtrac
 from features_engine.src.hypotheses.modules import MarketState
 from features_engine.src.regime.event_context import EventContextEngine
 from features_engine.src.regime.regime_filter import RegimeFilter
+
+_log = logging.getLogger(__name__)
 
 # Feature keys consumed by RegimeFilter.update() — only these are needed for the
 # per-event regime posterior update; the rest of the dict can be deferred.
@@ -44,6 +54,18 @@ _REGIME_FILTER_INDICES = (
 def _regime_mini_dict(vec: np.ndarray) -> Dict[str, float]:
     """Build the minimal feature dict needed by RegimeFilter.update()."""
     return {k: float(vec[idx]) for k, idx in zip(_REGIME_FILTER_KEYS, _REGIME_FILTER_INDICES)}
+
+
+def _resolve_backend() -> str:
+    """Return the canonical backend string from env, default 'auto'."""
+    raw = os.environ.get("HFT3_FEATURE_BACKEND", "auto").strip().lower()
+    if raw not in ("auto", "cpp", "python"):
+        warnings.warn(
+            f"Unknown HFT3_FEATURE_BACKEND={raw!r}; falling back to 'auto'",
+            stacklevel=3,
+        )
+        return "auto"
+    return raw
 
 
 @dataclass
@@ -76,10 +98,38 @@ class MarketStatePipeline:
     _fast_dirty: bool = field(default=False, init=False, repr=False)
     _fast_cached_state: Optional[MarketState] = field(default=None, init=False, repr=False)
 
+    # --- C++ backend state ---
+    _cpp_extractor: Optional[object] = field(default=None, init=False, repr=False)
+    _cpp_backend_active: bool = field(default=False, init=False, repr=False)
+    _cpp_last_event_ctx: Optional[str] = field(default=None, init=False, repr=False)
+
     def __post_init__(self) -> None:
         self.extractor.tick_size = self.tick_size
         if self.event_engine is None:
             self.event_engine = EventContextEngine()
+
+        # Backend selection
+        backend = _resolve_backend()
+        if backend in ("cpp", "auto"):
+            from features_engine.src.features._cpp_loader import load_cpp_features
+            cpp_mod = load_cpp_features()
+            if cpp_mod is not None:
+                self._cpp_extractor = cpp_mod.FeatureExtractor(
+                    self.tick_size,
+                    self.extractor.rolling_window_ns,
+                )
+                self._cpp_backend_active = True
+                _log.debug("MarketStatePipeline: using C++ backend")
+            elif backend == "cpp":
+                raise RuntimeError(
+                    "HFT3_FEATURE_BACKEND=cpp but hft3_features_cpp module not loadable. "
+                    "Build it with cmake --build build first."
+                )
+            else:
+                _log.warning(
+                    "MarketStatePipeline: C++ module not available, falling back to Python backend"
+                )
+        # backend == "python": stay with pure-Python extractor (default)
 
     def reset_session(self) -> None:
         """Reset intra-session accumulators (call at session boundary if known)."""
@@ -139,23 +189,50 @@ class MarketStatePipeline:
 
         return dist_vwap, ss_elevated, session_break, dist_round
 
+    def _cpp_process_event_get_vec(self, event: MBOEvent, event_ctx: str) -> np.ndarray:
+        """Feed event into C++ extractor, push event_ctx when it changes, return vec copy."""
+        assert self._cpp_extractor is not None
+        # Forward event context only on change (cheap guard)
+        if event_ctx != self._cpp_last_event_ctx:
+            self._cpp_extractor.set_event_context(event_ctx)
+            self._cpp_last_event_ctx = event_ctx
+        self._cpp_extractor.process_event(
+            event.timestamp_ns,
+            event.order_id,
+            event.action,
+            event.side,
+            event.price,
+            event.size,
+        )
+        return self._cpp_extractor.extract()  # returns a fresh ndarray
+
     def process_event(self, event: MBOEvent) -> MarketState:
         """Fully eager path — returns a complete MarketState. Used by direct callers / tests."""
         self._update_vwap(event)
 
-        vec = self.extractor.process_event(event)
-        feat_dict = vector_to_feature_dict(vec)
-
         assert self.event_engine is not None
         event_ctx = self.event_engine.resolve_ns(event.timestamp_ns)
-        posterior = self.regime_filter.update(feat_dict, event_ctx)
 
-        for regime, prob in posterior.items():
-            idx = REGIME_INDEX_MAP.get(regime)
-            if idx is not None:
-                vec[idx] = prob
+        if self._cpp_backend_active:
+            vec = self._cpp_process_event_get_vec(event, event_ctx)
+            # C++ already filled regime slots 41-49; do NOT run Python RegimeFilter on vec.
+            # We still need a Python posterior for MarketState fields (regime_argmax, vol, liq).
+            # Re-derive it from the C++ regime slots in the vector.
+            posterior = {
+                regime: float(vec[idx])
+                for regime, idx in REGIME_INDEX_MAP.items()
+            }
+        else:
+            vec = self.extractor.process_event(event)
+            feat_dict = vector_to_feature_dict(vec)
+            posterior = self.regime_filter.update(feat_dict, event_ctx)
+            for regime, prob in posterior.items():
+                idx = REGIME_INDEX_MAP.get(regime)
+                if idx is not None:
+                    vec[idx] = prob
 
         regime_argmax = RegimeFilter.argmax(posterior)
+        feat_dict = vector_to_feature_dict(vec)
         vol_state = self.regime_filter.volatility_state(feat_dict)
         liq_state = self.regime_filter.liquidity_state(feat_dict)
 
@@ -191,15 +268,37 @@ class MarketStatePipeline:
 
         Per-event work only:
           - VWAP accumulation (stateful, affects _current_vwap for DISTANCE_TO_VWAP)
-          - Feature extraction (extractor.process_event → vec)
+          - Feature extraction (extractor.process_event → vec, or C++ extractor)
           - Session high/low state update (stateful; subsequent events need correct prev)
           - regime_filter.update (stateful posterior; 6-key mini dict, no full dict alloc)
+            [cpp path: posterior read back from C++ slots in vec]
           - event_context.resolve_ns
 
         Deferred to finalize(): full feat_dict, MarketState construction, argmax, vol/liq state.
         """
         self._update_vwap(event)
-        vec = self.extractor.process_event(event)
+
+        assert self.event_engine is not None
+        event_ctx = self.event_engine.resolve_ns(event.timestamp_ns)
+
+        if self._cpp_backend_active:
+            vec = self._cpp_process_event_get_vec(event, event_ctx)
+            # C++ slots 41-49 are the canonical regime posterior
+            posterior = {
+                regime: float(vec[idx])
+                for regime, idx in REGIME_INDEX_MAP.items()
+            }
+            # Sync Python RegimeFilter's internal state so vol/liq queries remain valid.
+            # We use a mini dict from the C++ vector so the Python filter mirrors C++.
+            mini_dict = _regime_mini_dict(vec)
+            self.regime_filter.update(mini_dict, event_ctx)
+        else:
+            vec = self.extractor.process_event(event)
+            # Compute and apply session features (must update _session_high/_session_low per event)
+            mid = float(vec[FeatureIndex.MID_PRICE])
+            # Regime filter: only build the 6-key mini dict
+            mini_dict = _regime_mini_dict(vec)
+            posterior = self.regime_filter.update(mini_dict, event_ctx)
 
         # Compute and apply session features (must update _session_high/_session_low per event)
         mid = float(vec[FeatureIndex.MID_PRICE])
@@ -217,15 +316,8 @@ class MarketStatePipeline:
             self._fast_session_break = 0.0
             self._fast_dist_round = 0.0
 
-        # Regime filter: only build the 6-key mini dict
-        mini_dict = _regime_mini_dict(vec)
-
-        assert self.event_engine is not None
-        event_ctx = self.event_engine.resolve_ns(event.timestamp_ns)
-        posterior = self.regime_filter.update(mini_dict, event_ctx)
-
-        # Copy vec (extractor reuses the same buffer)
-        self._fast_vec = vec.copy()
+        # Copy vec (extractor may reuse the same buffer)
+        self._fast_vec = vec.copy() if not self._cpp_backend_active else vec
         self._fast_posterior = posterior
         self._fast_event_ctx = event_ctx
         self._fast_dirty = True
@@ -247,11 +339,12 @@ class MarketStatePipeline:
         posterior = self._fast_posterior
         event_ctx = self._fast_event_ctx
 
-        # Write regime probabilities into vector
-        for regime, prob in posterior.items():
-            idx = REGIME_INDEX_MAP.get(regime)
-            if idx is not None:
-                vec[idx] = prob
+        if not self._cpp_backend_active:
+            # Write regime probabilities into vector (python path only; C++ already filled them)
+            for regime, prob in posterior.items():
+                idx = REGIME_INDEX_MAP.get(regime)
+                if idx is not None:
+                    vec[idx] = prob
 
         # Write session-level features (already computed per-event, stored as scalars)
         vec[FeatureIndex.DISTANCE_TO_VWAP] = self._fast_dist_vwap
