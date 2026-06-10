@@ -40,7 +40,7 @@ def build_labeled_frame(
         micro, on="exchange_timestamp", how="left"
     ).join(vol, on="exchange_timestamp", how="left")
 
-    if "perp_data_quality_flag" in ticks.columns:
+    if "perp_data_quality_flag" in ticks.columns and "perp_data_quality_flag" not in out.columns:
         out = out.join(
             ticks.select(["exchange_timestamp", "perp_data_quality_flag"]),
             on="exchange_timestamp",

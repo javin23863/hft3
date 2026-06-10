@@ -14,6 +14,10 @@ from crypto_lane.src.math.vol_rv_vrp import (
 )
 
 
+_SURF_DERIVED_COLS = ("atm_iv", "iv_rv_spread", "iv_rv_zscore", "skew_25d",
+                     "term_structure_slope", "put_call_parity_residual")
+
+
 def realized_volatility(log_returns: Sequence[float], annualization: float = 365.0 * 24.0) -> float:
     r = np.asarray(log_returns, dtype=float)
     if r.size == 0:
@@ -60,17 +64,19 @@ def build_deribit_vol_features(
             row = surf_rows[min(s_idx, len(surf_rows) - 1)]
             causal_r = log_returns[max(0, i + 1 - rv_window): i + 1]
             rv = realized_volatility(causal_r, annualization)
-            atm_iv = float(row.get("atm_iv", 0.0))
+            flag = int(row.get("vol_surface_quality_flag", 0))
+            null_surf = flag == 0
+            atm_iv = None if null_surf else float(row.get("atm_iv", 0.0))
             rows.append({
                 "exchange_timestamp": int(ts),
                 "atm_iv": atm_iv,
                 "spot_realized_volatility": rv,
                 "realized_vol_forecast": rv,
-                "iv_rv_spread": volatility_risk_premium(atm_iv, rv),
-                "iv_rv_zscore": float(row.get("iv_rv_zscore", 0.0)),
-                "skew_25d": float(row.get("skew_25d", 0.0)),
-                "term_structure_slope": float(row.get("term_structure_slope", 0.0)),
-                "put_call_parity_residual": put_call_parity_residual(
+                "iv_rv_spread": None if null_surf else volatility_risk_premium(float(row.get("atm_iv", 0.0)), rv),
+                "iv_rv_zscore": None if null_surf else float(row.get("iv_rv_zscore", 0.0)),
+                "skew_25d": None if null_surf else float(row.get("skew_25d", 0.0)),
+                "term_structure_slope": None if null_surf else float(row.get("term_structure_slope", 0.0)),
+                "put_call_parity_residual": None if null_surf else put_call_parity_residual(
                     float(row.get("call_mid", 0.0)),
                     float(row.get("put_mid", 0.0)),
                     float(row.get("spot_mid", 0.0)),
@@ -79,25 +85,31 @@ def build_deribit_vol_features(
                     yield_q=float(row.get("yield_q", 0.0)),
                     tau_years=float(row.get("tau_years", 0.0)),
                 ),
-                "vol_surface_quality_flag": int(row.get("vol_surface_quality_flag", 1)),
+                "vol_surface_quality_flag": flag,
             })
-        return pl.DataFrame(rows)
+        df = pl.DataFrame(rows)
+        for col in _SURF_DERIVED_COLS:
+            if col in df.columns and df[col].dtype != pl.Float64:
+                df = df.with_columns(pl.col(col).cast(pl.Float64))
+        return df
 
     rows = []
     for i, row in enumerate(surface.iter_rows(named=True)):
         causal_r = log_returns[max(0, i + 1 - rv_window): i + 1]
         rv = realized_volatility(causal_r, annualization)
-        atm_iv = float(row.get("atm_iv", 0.0))
+        flag = int(row.get("vol_surface_quality_flag", 0))
+        null_surf = flag == 0
+        atm_iv = None if null_surf else float(row.get("atm_iv", 0.0))
         rows.append({
             "exchange_timestamp": int(row["exchange_timestamp"]),
             "atm_iv": atm_iv,
             "spot_realized_volatility": rv,
             "realized_vol_forecast": rv,
-            "iv_rv_spread": volatility_risk_premium(atm_iv, rv),
-            "iv_rv_zscore": float(row.get("iv_rv_zscore", 0.0)),
-            "skew_25d": float(row.get("skew_25d", 0.0)),
-            "term_structure_slope": float(row.get("term_structure_slope", 0.0)),
-            "put_call_parity_residual": put_call_parity_residual(
+            "iv_rv_spread": None if null_surf else volatility_risk_premium(float(row.get("atm_iv", 0.0)), rv),
+            "iv_rv_zscore": None if null_surf else float(row.get("iv_rv_zscore", 0.0)),
+            "skew_25d": None if null_surf else float(row.get("skew_25d", 0.0)),
+            "term_structure_slope": None if null_surf else float(row.get("term_structure_slope", 0.0)),
+            "put_call_parity_residual": None if null_surf else put_call_parity_residual(
                 float(row.get("call_mid", 0.0)),
                 float(row.get("put_mid", 0.0)),
                 float(row.get("spot_mid", 0.0)),
@@ -106,6 +118,10 @@ def build_deribit_vol_features(
                 yield_q=float(row.get("yield_q", 0.0)),
                 tau_years=float(row.get("tau_years", 0.0)),
             ),
-            "vol_surface_quality_flag": int(row.get("vol_surface_quality_flag", 1)),
+            "vol_surface_quality_flag": flag,
         })
-    return pl.DataFrame(rows)
+    df = pl.DataFrame(rows)
+    for col in _SURF_DERIVED_COLS:
+        if col in df.columns and df[col].dtype != pl.Float64:
+            df = df.with_columns(pl.col(col).cast(pl.Float64))
+    return df
