@@ -125,7 +125,8 @@ if (-not (Test-Path $GPLUS)) {
         "-I", (Join-Path $REPO "rithmic_gateway\include"),
         "-I", (Join-Path $REPO "risk_engine\include"),
         "-I", (Join-Path $REPO "packages\decision_engine\cpp\include"),
-        "-I", (Join-Path $REPO "packages\features_engine\cpp\include")
+        "-I", (Join-Path $REPO "packages\features_engine\cpp\include"),
+        "-I", (Join-Path $REPO "engine\include")
     )
 
     # TU list: hot-path first-party translation units (source only, no SDK link needed for syntax check).
@@ -133,13 +134,16 @@ if (-not (Test-Path $GPLUS)) {
     # c_api.cpp covers rithmic_gateway headers without the SDK dependency.
     # safety_poller_syntax_check.cpp is a standalone tool with a -Werror=comment issue (backslash in
     # comment); it is checked via its own cmake target.
+    # engine/ TUs added per M3 milestone.
     $TUS = @(
         "rithmic_gateway\src\c_api.cpp",
         "risk_engine\src\risk_manager.cpp",
         "packages\decision_engine\cpp\src\decision_runtime.cpp",
         "packages\features_engine\cpp\src\feature_extractor.cpp",
         "packages\features_engine\cpp\src\event_context.cpp",
-        "packages\features_engine\cpp\src\regime_filter.cpp"
+        "packages\features_engine\cpp\src\regime_filter.cpp",
+        "engine\src\engine_config.cpp",
+        "engine\src\hft3_engine_main.cpp"
     )
 
     foreach ($tu in $TUS) {

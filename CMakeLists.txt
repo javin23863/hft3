@@ -139,6 +139,46 @@ else()
         "Install pybind11 and pass -Dpybind11_DIR=<path> (from: python -S -m pybind11 --cmakedir)")
 endif()
 
+# ── hft3_engine (REPLAY + conceptual LIVE) ───────────────────────────────────
+add_library(hft_engine_config
+    engine/src/engine_config.cpp
+)
+target_include_directories(hft_engine_config PUBLIC
+    engine/include
+    rithmic_gateway/include
+    risk_engine/include
+    packages/decision_engine/cpp/include
+    packages/features_engine/cpp/include
+)
+target_link_libraries(hft_engine_config PRIVATE hft_risk)
+
+add_executable(hft3_engine
+    engine/src/hft3_engine_main.cpp
+)
+target_include_directories(hft3_engine PRIVATE
+    engine/include
+    rithmic_gateway/include
+    risk_engine/include
+    packages/decision_engine/cpp/include
+    packages/features_engine/cpp/include
+)
+target_link_libraries(hft3_engine PRIVATE
+    hft_features hft_risk hft_decision hft_engine_config)
+
+# Engine unit test binary (gate proofs, CORRECTNESS row 7)
+add_executable(test_engine_loop
+    engine/tests/test_engine_loop.cpp
+)
+target_include_directories(test_engine_loop PRIVATE
+    engine/include
+    rithmic_gateway/include
+    risk_engine/include
+    packages/decision_engine/cpp/include
+    packages/features_engine/cpp/include
+)
+target_link_libraries(test_engine_loop PRIVATE
+    hft_features hft_risk hft_decision hft_engine_config)
+
 # Copy MinGW runtime DLLs to build directory for Windows
 if(WIN32 AND NOT MSVC)
     set(MINGW_DLL_DIR "" CACHE PATH "Path to MinGW bin directory containing runtime DLLs")
