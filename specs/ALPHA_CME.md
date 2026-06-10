@@ -24,7 +24,7 @@ contracts — it references and sequences existing ones.
 |----|-----------|---------|---------------|--------|---------|
 | M0 | **pybind 64-slot parity** — Python ↔ C++ `hft3_features_cpp` parity on real lake NPZ across all 64 slots. DONE for slots 0–40, 50–63. Regime slots 41–49 differ because the Python pipeline calls `RegimeFilter` outside the extractor while C++ integrates it; pipeline-level integration is in flight. | Laptop | CORRECTNESS.md §2 row 3 | **DONE (partial — regime integration in flight)** | — |
 | M1 | **`decision_runtime` hardening** — `evaluate_actions` writes all 10 slots every call; slots 3–9 receive `NEG_INFINITY_SENTINEL`; header validation tests pass; CORRECTNESS.md §3 defect (a) cleared. | Laptop | CHI404_RUNTIME.md §4; CORRECTNESS.md §3 defect a | **DONE** | — |
-| M2 | **C-lane CI** — sanitizer suite (ASan/UBSan/TSan), failure injection tests, and submission gate tests pass on every C++ commit. CORRECTNESS.md §3 defects (c) and (d) cleared. | Laptop | CORRECTNESS.md §2 rows 1-2, 6-7 | **OPEN** | M1 |
+| M2 | **C-lane CI** — sanitizer suite (ASan/UBSan/TSan), failure injection tests, and submission gate tests pass on every C++ commit. CORRECTNESS.md §3 defects (c) and (d) cleared. | Laptop | CORRECTNESS.md §2 rows 1-2, 6-7 | **DONE** | M1 |
 | M3 | **`hft3_engine` consumer loop, REPLAY-mode-first** — the fused hot loop (CHI404_RUNTIME.md §3) processes NPZ-derived event streams end-to-end in REPLAY mode; decision log produced. Gate: determinism check on lake NPZ (row 4 of CORRECTNESS.md §2). | Laptop → CHI404 | CHI404_RUNTIME.md §3; CORRECTNESS.md §2 row 4 | **OPEN** | M0, M1, M2 |
 | M4 | **Real waterfall timestamps** — `PaperLatencyDaemon` records real monotonic callback timestamps; `shadow_synthetic: true` probe eliminated from authoritative summaries; CORRECTNESS.md §3 defect (b) cleared. | CHI404 | CORRECTNESS.md §2 row 10; LATENCY.md §9 | **OPEN** | — |
 | M5 | **≥1000-paired-sample order-ack campaign** — `paper_order_latency.measured = true` in `runtime/latency_reports/latency_summary.json`; `order_ack_p99_ms` populated from ≥1000 paired submit→ack samples. Unblocks resolver rung 2 (LATENCY.md §4). Gate: `measured = true`. | CHI404 | LATENCY.md §9; LATENCY.md §4 resolution rung 2 | **OPEN** | M4 |
@@ -33,6 +33,8 @@ contracts — it references and sequences existing ones.
 | M8 | **Deployment automation + deploy to CHI404** — bundle transferred, startup validation passes (DEPLOYMENT.md §3), `current` symlink set. CORRECTNESS.md §3 defects (e) and (f) cleared. | Both | DEPLOYMENT.md §1-3; CORRECTNESS.md §3 defects e, f | **OPEN** | M3, M7 |
 | M9 | **Paper-shadow SIM over 2026-01-01 → 2026-06-10** — deployed bundle replayed through all 2026 event windows in REPLAY/PAPER mode at measured p99 (DEPLOYMENT.md §4). Gate: positive net expectancy on 2026 window; zero code-attributable safety halts; determinism spot-check passes. 2026 NPZ coverage required. | CHI404 | CHI404_RUNTIME.md §10; DEPLOYMENT.md §4 | **OPEN** | M8, 2026 NPZ coverage |
 | M10 | **Live arm** — pre-arm checklist complete, kill-switch drill passed, ARM entry appended to audit log, `hft3_engine` started in LIVE mode. Defect ledger MUST be empty (CORRECTNESS.md §3; DEPLOYMENT.md §5). | CHI404 | DEPLOYMENT.md §5; CORRECTNESS.md §3 | **OPEN** | M9, empty defect ledger |
+
+**M2 caveat**: `scripts/run_c_lane.ps1` ALL CHECKS PASSED on workstation; sanitizer full lane `scripts/run_c_lane.sh` pending first CHI404 run.
 
 ---
 

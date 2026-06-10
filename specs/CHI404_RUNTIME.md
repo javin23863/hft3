@@ -191,7 +191,9 @@ SafetyPoller.poll() ordering (most severe first; early-exit safe): (1) `order_ha
 | Modify rejected ('N') | `order_desync() == true` | `POSITION_MISMATCH` | `flatten_active=true` | Halt new entries; reconcile local order state | Call `ack_reconcile()` after reconciliation; clears both desync flags | No (after successful reconcile) |
 | Broker force-flatten ('L') | `auto_liquidate_halt() == true` | `MISSING_FILL_RECONCILIATION` | `hard_halt=true`, `halted=true` | Stop all submissions; do not attempt re-entry | No clear until operator restart; sticky | Yes |
 | ADM alert severity ≥ 3 | `adm_alert_severity() >= 3` | `ORDER_REJECT_ESCALATION` | `hard_halt=true`, `halted=true` | Stop all submissions; operator must investigate | No clear until operator restart; sticky | Yes |
-| ADM alert severity = 2 | `adm_alert_severity() == 2` | `LATENCY_SPIKE` | `halted=true` (soft) | Block new orders (latency/throttle condition) | Not cleared automatically; operator intervention | No (if transient) |
+| ADM alert severity = 2 | `adm_alert_severity() == 2` | `LATENCY_SPIKE` | `RiskManager.halted=true` (soft; via `handle_failure_state`); `PollResult.halted=false`[^sev2] | Block new submissions via `check_order` → HALT path (§3 step 5); `PollResult.halted` is **not** set — gate closure is driven by `RiskManager.halted`, not by `result.halted` | Not cleared automatically; operator intervention | No (if transient) |
+
+[^sev2]: Verified by `rithmic_gateway/tests/test_safety_failure_injection.cpp` (129-assertion suite): sev==2 asserts `PollResult.halted == false` and `risk.state_.halted == true`. Only sev≥3 sets `PollResult.halted=true`.
 
 Flags `position_desync` and `order_desync` persist until `ack_reconcile()` is called post-reconciliation (`safety_poller.hpp`).
 

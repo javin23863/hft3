@@ -82,6 +82,17 @@ add_executable(test_decision_runtime_hardening
 )
 target_link_libraries(test_decision_runtime_hardening PRIVATE hft_decision)
 
+# Safety failure-injection test binary
+# (CORRECTNESS.md §2 row 6 / CHI404_RUNTIME.md §5 failure-action table)
+add_executable(test_safety_failure_injection
+    rithmic_gateway/tests/test_safety_failure_injection.cpp
+)
+target_include_directories(test_safety_failure_injection PRIVATE
+    rithmic_gateway/include
+    risk_engine/include
+)
+target_link_libraries(test_safety_failure_injection PRIVATE hft_risk)
+
 # ── pybind11 Python extension ────────────────────────────────────────────────
 # Locate pybind11 via the cmake directory reported by:
 #   python -S -m pybind11 --cmakedir

@@ -23,4 +23,9 @@ CORE_BACKTESTER_PATHS: list[str] = [
     "scripts/run_event_replay.py",
     "decision_engine/python/src/walk_forward.py",
     "data_system/src/databento_client.py",
+    # C++ source trees — changes here stale T3 certification stamps (CORRECTNESS §2 row 11)
+    "rithmic_gateway/",
+    "risk_engine/",
+    "packages/decision_engine/cpp/",
+    "packages/features_engine/cpp/",
 ]
