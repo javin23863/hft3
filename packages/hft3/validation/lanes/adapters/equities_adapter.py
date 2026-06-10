@@ -24,6 +24,7 @@ from ..lane import (
 )
 
 EQUITIES_SYMBOLS = ["RUNNER", "LOW_FLOAT", "OPTIONS", "PARITY"]
+# Bands are reporting/sweep documentation only for this lane; gating is floor-based.
 EQUITIES_LATENCY_BANDS_MS = [5.0, 10.0, 50.0, 100.0, 250.0]
 EQUITIES_EVENT_TYPES = ["equities_low_float", "equities_runner_event", "options_parity", "parity"]
 
@@ -80,8 +81,17 @@ class EquitiesConfig:
         }
 
 
-def load_equities_config(universe_yaml: Path | None = None) -> EquitiesConfig:
-    """Load equities lane config from universe.yaml."""
+def load_equities_config(
+    universe_yaml: Path | None = None,
+    endpoint_status_path: Path | None = None,
+) -> EquitiesConfig:
+    """Load equities lane config from universe.yaml.
+
+    If *endpoint_status_path* is provided (or the default runtime artifact exists),
+    the latency floor is tightened to max(5 ms, measured_rtt_ms) so the promotion
+    gate's optimistic-claim rejection automatically reflects the real Web API RTT.
+    Missing / corrupt / absent status file is silently ignored; floor stays 5.0.
+    """
     cfg = EquitiesConfig()
     if universe_yaml is None:
         universe_yaml = Path(cfg.universe_yaml_path)
@@ -111,13 +121,41 @@ def load_equities_config(universe_yaml: Path | None = None) -> EquitiesConfig:
     if isinstance(exec_cfg, dict):
         lat = exec_cfg.get("latency_ms")
         if isinstance(lat, (int, float)):
-            cfg.latency_bands_ms = [float(lat)]
+            # Clamp to floor: anti-lookahead/optimistic-alpha guard.
+            cfg.latency_bands_ms = [max(float(lat), cfg.latency_floor_ms)]
             # latency_floor_ms is never removed by a yaml override
     cfg.windows = WindowConfig(
         training_window_days=cfg.train_days,
         test_window_days=cfg.test_days,
     )
+
+    # Tighten floor from endpoint status artifact when available.
+    # Tolerant: missing file / bad JSON / missing field → keep default.
+    _tighten_floor_from_endpoint_status(cfg, endpoint_status_path)
+
     return cfg
+
+
+def _tighten_floor_from_endpoint_status(
+    cfg: EquitiesConfig,
+    status_path: Path | None,
+) -> None:
+    """Raise cfg.latency_floor_ms to measured_rtt_ms from the status artifact.
+
+    Never lowers the floor below the hard-coded 5.0 ms minimum.
+    Silently no-ops on missing / corrupt / missing-field artifacts.
+    """
+    import json
+
+    if status_path is None:
+        status_path = Path("runtime/equities_lane/ibkr_endpoint_status.json")
+    try:
+        artifact = json.loads(status_path.read_text(encoding="utf-8"))
+        rtt = artifact.get("measured_rtt_ms")
+        if isinstance(rtt, (int, float)) and rtt > 0:
+            cfg.latency_floor_ms = max(cfg.latency_floor_ms, float(rtt))
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
 
 
 class EquitiesBacktester:

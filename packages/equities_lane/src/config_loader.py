@@ -12,6 +12,7 @@ from equities_lane.src.types import (
     ExperimentConfig,
     FeatureToggles,
     FilterConfig,
+    LATENCY_FLOOR_MS,
     PatternConfig,
     SessionSpec,
     SignalConfig,
@@ -127,7 +128,9 @@ def load_universe(path: str | Path) -> tuple[Path, UniverseConfig, dict[str, Pat
 
     ex_raw = data.get("execution", {})
     execution = ExecutionConfig(
-        latency_ms=float(ex_raw.get("latency_ms", 5.0)),
+        # Clamp to LATENCY_FLOOR_MS: anti-lookahead/optimistic-alpha guard.
+        # Sim latency below the Web API floor inflates alpha with unrealistic fills.
+        latency_ms=max(float(ex_raw.get("latency_ms", LATENCY_FLOOR_MS)), LATENCY_FLOOR_MS),
         slippage_bps=float(ex_raw.get("slippage_bps", 10.0)),
         fee_per_share=float(ex_raw.get("fee_per_share", 0.005)),
         allow_short=bool(ex_raw.get("allow_short", False)),

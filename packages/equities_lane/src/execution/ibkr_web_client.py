@@ -5,11 +5,11 @@ higher-level SDK wrapper is desired once it can be verified offline.
 
 WebSocket support
 -----------------
-``websockets`` is not currently listed as a dependency of this package.  The
-``ws_url()`` method and subscribe-message builders are provided; call
-``connect_ws(handler)`` to open a live WebSocket if you add ``websockets`` as
-a dependency and the package is importable.  Without it, message builders still
-work for testing.
+``websockets>=12`` is required for async WebSocket support.  Use
+``connect_ws(session_token)`` (async) which returns an ``IbkrWsSession``.
+The ``ws_url()`` helper and subscribe-message builders remain importable
+without websockets; websockets is imported lazily inside ``connect_ws`` so
+the REST-only path never requires it.
 
 Auth modes
 ----------
@@ -19,18 +19,30 @@ GatewayAuth
     host gets normal TLS verification.
 
 OAuthAuth
-    OAuth 1.0a flow:
+    OAuth 1.0a flow (real IBKR Client Portal protocol):
       1. Sign a live-session-token request with RSA-SHA256 (private signature
-         key at ``IBKR_OAUTH_SIGNATURE_KEY_PATH``).  Body carries a
-         Diffie-Hellman public key derived from the DH params at
-         ``IBKR_OAUTH_DH_PARAM_PATH``.
-      2. Decrypt the returned encrypted LST with the private encryption key at
-         ``IBKR_OAUTH_ENCRYPTION_KEY_PATH``.
+         key at ``IBKR_OAUTH_SIGNATURE_KEY_PATH``).  The Authorization header
+         carries a Diffie-Hellman public key (``diffie_hellman_challenge``).
+         The access-token secret is decrypted LOCALLY with the private
+         encryption key; it is never transmitted.
+      2. Compute the LST from the DH shared secret and the decrypted prepend
+         via HMAC-SHA1.  Validate against ``live_session_token_signature``.
       3. HMAC-SHA256 sign every subsequent request using the LST as the key.
 
-    Signing is implemented using the ``cryptography`` package.  If that package
-    is absent at runtime, methods raise ``NotImplementedError`` with a clear
-    message rather than failing silently.
+    Signing is implemented using the ``cryptography`` package.  If that
+    package is absent at runtime, methods raise ``NotImplementedError`` with a
+    clear message rather than failing silently.
+
+    Env vars consumed:
+      IBKR_OAUTH_CONSUMER_KEY
+      IBKR_OAUTH_ACCESS_TOKEN
+      IBKR_OAUTH_ACCESS_TOKEN_SECRET   — base64-encoded ciphertext; decrypted
+                                         locally with the encryption key; NEVER
+                                         transmitted to the server.
+      IBKR_OAUTH_SIGNATURE_KEY_PATH    — RSA private key (PEM) for signing
+      IBKR_OAUTH_ENCRYPTION_KEY_PATH   — RSA private key (PEM) for decryption
+      IBKR_OAUTH_DH_PARAM_PATH         — DH params (PEM) for key exchange
+      IBKR_OAUTH_REALM                 — OAuth realm, default "limited_poa"
 
 Live-account guard
 ------------------
@@ -49,9 +61,10 @@ import hashlib
 import hmac
 import json
 import os
+import random
 import time
-from typing import Any, Callable
-from urllib.parse import urlparse
+from typing import Any, AsyncIterator, Callable
+from urllib.parse import parse_qsl, quote, quote_plus, urlparse, urlsplit
 
 # ---------------------------------------------------------------------------
 # Exceptions
@@ -60,6 +73,10 @@ from urllib.parse import urlparse
 
 class LiveAccountRefusal(RuntimeError):
     """Raised when an order operation targets a non-paper account."""
+
+
+class LiveSessionTokenError(RuntimeError):
+    """Raised when the LST HMAC validation against the server signature fails."""
 
 
 # ---------------------------------------------------------------------------
@@ -144,7 +161,7 @@ class GatewayAuth(_AuthBase):
 
 
 # ---------------------------------------------------------------------------
-# OAuthAuth
+# OAuthAuth — pure helper functions
 # ---------------------------------------------------------------------------
 
 
@@ -167,7 +184,7 @@ def _load_private_key(path: str) -> Any:
 
 
 def _rsa_sha256_sign(private_key: Any, message: bytes) -> str:
-    """Return Base64-encoded RSA-SHA256 signature of *message*."""
+    """Return Base64-encoded RSA-SHA256 signature of *message* (PKCS1v15)."""
     from cryptography.hazmat.primitives import hashes  # type: ignore
     from cryptography.hazmat.primitives.asymmetric import padding  # type: ignore
 
@@ -175,56 +192,107 @@ def _rsa_sha256_sign(private_key: Any, message: bytes) -> str:
     return base64.b64encode(sig).decode()
 
 
-def _dh_generate_keypair(dh_params_path: str) -> tuple[Any, bytes]:
-    """Generate a DH keypair.  Returns (private_key, public_key_bytes_hex_encoded)."""
-    from cryptography.hazmat.primitives.serialization import (  # type: ignore
-        Encoding,
-        PublicFormat,
-        load_pem_parameters,
-    )
+def _int_to_signed_bytes(x: int) -> bytes:
+    """Convert a non-negative integer to big-endian bytes with an IBKR sign-byte quirk.
 
-    raw = open(dh_params_path, "rb").read()
-    parameters = load_pem_parameters(raw)
-    private_key = parameters.generate_private_key()
-    pub_bytes = private_key.public_key().public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
-    return private_key, pub_bytes
+    Standard big-endian representation, but if ``x.bit_length() % 8 == 0`` a
+    leading 0x00 byte is prepended — matching IBKR's server-side behaviour when
+    deriving the DH shared secret bytes for HMAC keying.
 
-
-def _dh_compute_shared_secret(private_key: Any, peer_pub_bytes: bytes) -> bytes:
-    """Compute DH shared secret from our private key and peer's DER-encoded public key."""
-    from cryptography.hazmat.primitives.asymmetric.dh import DHPublicNumbers  # type: ignore  # noqa: F401
-    from cryptography.hazmat.primitives.serialization import load_der_public_key  # type: ignore
-
-    peer_public = load_der_public_key(peer_pub_bytes)
-    return private_key.exchange(peer_public)
-
-
-def _decrypt_lst(encrypted_lst_b64: str, encryption_key_path: str, shared_secret: bytes) -> str:
-    """Decrypt the live-session-token using RSAOAEP+SHA256 and the shared DH secret.
-
-    The IBKR OAuth 1.0a protocol derives the final decryption key by XOR-ing
-    the RSA-decrypted intermediate with the DH shared secret.  The exact byte
-    layout follows IBKR's Web API OAuth documentation.
-
-    This implementation decrypts with the RSA encryption key (PKCS1 OAEP /
-    SHA-256) and XORs the result with the SHA-256 digest of the shared secret
-    to produce the LST bytes, then returns the hex string.
+    Examples:
+        _int_to_signed_bytes(2)   → b"\\x02"
+        _int_to_signed_bytes(128) → b"\\x00\\x80"  (bit_length=8 → prepend 0x00)
+        _int_to_signed_bytes(255) → b"\\x00\\xff"  (bit_length=8 → prepend 0x00)
+        _int_to_signed_bytes(256) → b"\\x01\\x00"  (bit_length=9 → no prepend)
     """
-    from cryptography.hazmat.primitives import hashes  # type: ignore
-    from cryptography.hazmat.primitives.asymmetric import padding  # type: ignore
-
-    enc_key = _load_private_key(encryption_key_path)
-    cipher_bytes = base64.b64decode(encrypted_lst_b64)
-    decrypted = enc_key.decrypt(cipher_bytes, padding.OAEP(padding.MGF1(hashes.SHA256()), hashes.SHA256(), None))
-    # Derive LST: XOR decrypted bytes with SHA-256 of shared secret (IBKR spec).
-    digest = hashlib.sha256(shared_secret).digest()
-    lst_bytes = bytes(a ^ b for a, b in zip(decrypted, digest * (len(decrypted) // len(digest) + 1)))
-    return lst_bytes[: len(decrypted)].hex()
+    h = hex(x)[2:]  # strip "0x"
+    if len(h) % 2:
+        h = "0" + h
+    raw = bytes.fromhex(h)
+    if x.bit_length() % 8 == 0:
+        raw = b"\x00" + raw
+    return raw
 
 
-def _hmac_sha256_sign(lst_hex: str, message: str) -> str:
-    """HMAC-SHA256 sign *message* using the LST bytes derived from *lst_hex*."""
-    key = bytes.fromhex(lst_hex)
+def _hmac_sha256_sign_bytes(key: bytes, message: bytes) -> bytes:
+    """HMAC-SHA256 over raw bytes — pure function, testable in isolation.
+
+    Args:
+        key: Raw HMAC key bytes.
+        message: Raw message bytes.
+
+    Returns:
+        32-byte HMAC-SHA256 digest.
+    """
+    return hmac.new(key, message, hashlib.sha256).digest()
+
+
+def _percent_encode(s: str) -> str:
+    """RFC 5849 §3.6 percent-encoding: encode every character except unreserved."""
+    return quote(s, safe="")
+
+
+def _build_oauth_base_string(
+    method: str,
+    base_url: str,
+    query_params: list[tuple[str, str]],
+    oauth_params: dict[str, str],
+    body_params: list[tuple[str, str]] | None = None,
+) -> str:
+    """Construct an OAuth 1.0a signature base string per RFC 5849 §3.4.1.
+
+    This is a pure function — all inputs are explicit, no side effects.
+
+    Args:
+        method: HTTP method, e.g. ``"POST"``.
+        base_url: The request URL *without* query string, e.g.
+                  ``"http://example.com/request"``.
+        query_params: List of ``(key, value)`` pairs from the query string,
+                      already URL-decoded (will be re-encoded here).
+        oauth_params: OAuth protocol parameters *excluding* ``realm``.
+                      ``oauth_signature`` must NOT be present.
+        body_params: Optional list of ``(key, value)`` pairs from the
+                     ``application/x-www-form-urlencoded`` body, already
+                     URL-decoded.
+
+    Returns:
+        The signature base string as defined in RFC 5849 §3.4.1.
+    """
+    # Collect all parameter pairs.
+    all_params: list[tuple[str, str]] = []
+    all_params.extend(query_params)
+    all_params.extend(body_params or [])
+    for k, v in oauth_params.items():
+        if k != "oauth_signature" and k != "realm":
+            all_params.append((k, v))
+
+    # Percent-encode each name and value, then sort lexicographically.
+    encoded: list[tuple[str, str]] = [(_percent_encode(k), _percent_encode(v)) for k, v in all_params]
+    encoded.sort()
+
+    normalized_params = "&".join(f"{k}={v}" for k, v in encoded)
+
+    base_string = (
+        _percent_encode(method.upper())
+        + "&"
+        + _percent_encode(base_url)
+        + "&"
+        + _percent_encode(normalized_params)
+    )
+    return base_string
+
+
+def _hmac_sha256_sign(lst_b64: str, message: str) -> str:
+    """HMAC-SHA256 sign *message* using the LST (base64-encoded) as key.
+
+    Args:
+        lst_b64: The live-session-token as a base64-encoded string.
+        message: The message to sign (UTF-8 encoded internally).
+
+    Returns:
+        Base64-encoded HMAC-SHA256 digest.
+    """
+    key = base64.b64decode(lst_b64)
     sig = hmac.new(key, message.encode("utf-8"), hashlib.sha256).digest()
     return base64.b64encode(sig).decode()
 
@@ -232,27 +300,140 @@ def _hmac_sha256_sign(lst_hex: str, message: str) -> str:
 def _oauth_authorization_header(
     consumer_key: str,
     access_token: str,
-    lst_hex: str,
+    lst_b64: str,
     method: str,
     url: str,
+    realm: str = "limited_poa",
 ) -> str:
-    """Build the OAuth Authorization header for a signed request.
+    """Build the OAuth Authorization header for a signed per-request call.
 
-    Signature base string = METHOD&url&timestamp&nonce (simplified IBKR variant).
+    Implements RFC 5849 §3.4.1 base string construction for HMAC-SHA256
+    signing.  Query-string parameters from *url* are split into the param set
+    so they are included in the signature but not double-encoded in the URL.
+
+    Args:
+        consumer_key: OAuth consumer key.
+        access_token: OAuth access token.
+        lst_b64: Live-session-token (base64).  Used as the HMAC-SHA256 key.
+        method: HTTP method (``"GET"``, ``"POST"``, …).
+        url: Full request URL, possibly with query string.
+        realm: OAuth realm string.  Default ``"limited_poa"``.
+
+    Returns:
+        Value for the ``Authorization`` HTTP header.
+    """
+    # Split URL into base (no query) + query params.
+    split = urlsplit(url)
+    base_url = f"{split.scheme}://{split.netloc}{split.path}"
+    query_params: list[tuple[str, str]] = parse_qsl(split.query, keep_blank_values=True)
+
+    timestamp = str(int(time.time()))
+    nonce = base64.urlsafe_b64encode(os.urandom(16)).decode().rstrip("=")
+
+    oauth_params: dict[str, str] = {
+        "oauth_consumer_key": consumer_key,
+        "oauth_nonce": nonce,
+        "oauth_signature_method": "HMAC-SHA256",
+        "oauth_timestamp": timestamp,
+        "oauth_token": access_token,
+    }
+
+    base_string = _build_oauth_base_string(
+        method=method,
+        base_url=base_url,
+        query_params=query_params,
+        oauth_params=oauth_params,
+    )
+
+    key = base64.b64decode(lst_b64)
+    sig_bytes = hmac.new(key, base_string.encode("utf-8"), hashlib.sha256).digest()
+    oauth_signature = quote_plus(base64.b64encode(sig_bytes))
+
+    # Build sorted header — realm first, then oauth params alphabetically,
+    # then oauth_signature last (conventional placement).
+    sorted_pairs = sorted(oauth_params.items())
+    pairs_str = ", ".join(f'{k}="{v}"' for k, v in sorted_pairs)
+    return f'OAuth realm="{realm}", {pairs_str}, oauth_signature="{oauth_signature}"'
+
+
+# ---------------------------------------------------------------------------
+# LST exchange helpers (private to OAuthAuth._obtain_lst)
+# ---------------------------------------------------------------------------
+
+
+def _lst_authorization_header(
+    consumer_key: str,
+    access_token: str,
+    dh_challenge_hex: str,
+    prepend: str,
+    sig_key: Any,
+    url: str,
+    realm: str,
+) -> tuple[str, str, str]:
+    """Build the RSA-SHA256 Authorization header for the LST exchange endpoint.
+
+    Returns a 3-tuple of ``(header_value, nonce, timestamp)`` so the caller
+    can reconstruct the prepend-prefixed base string for testing.
+
+    The signature base string is::
+
+        prepend + "POST&" + percent_encode(url) + "&" + percent_encode(params)
+
+    where ``prepend`` is the hex-encoded decrypted access-token-secret bytes
+    (never transmitted).
+
+    Args:
+        consumer_key: OAuth consumer key.
+        access_token: OAuth access token (the token, not its secret).
+        dh_challenge_hex: Lowercase hex of the client DH public value A.
+        prepend: Hex string prepended to the base string (NOT percent-encoded).
+        sig_key: Loaded RSA private key object for signing.
+        url: The LST endpoint URL (no query string).
+        realm: OAuth realm.
+
+    Returns:
+        ``(authorization_header, nonce, timestamp)``
     """
     timestamp = str(int(time.time()))
     nonce = base64.urlsafe_b64encode(os.urandom(16)).decode().rstrip("=")
-    base_string = f"{method.upper()}&{url}&{timestamp}&{nonce}"
-    signature = _hmac_sha256_sign(lst_hex, base_string)
-    return (
-        f'OAuth realm="test_realm",'
-        f' oauth_consumer_key="{consumer_key}",'
-        f' oauth_token="{access_token}",'
-        f' oauth_signature_method="HMAC-SHA256",'
-        f' oauth_timestamp="{timestamp}",'
-        f' oauth_nonce="{nonce}",'
-        f' oauth_signature="{signature}"'
+
+    oauth_params: dict[str, str] = {
+        "diffie_hellman_challenge": dh_challenge_hex,
+        "oauth_consumer_key": consumer_key,
+        "oauth_nonce": nonce,
+        "oauth_signature_method": "RSA-SHA256",
+        "oauth_timestamp": timestamp,
+        "oauth_token": access_token,
+    }
+
+    # RFC 5849 base string (no query or body params for this endpoint).
+    rfc_base = _build_oauth_base_string(
+        method="POST",
+        base_url=url,
+        query_params=[],
+        oauth_params=oauth_params,
     )
+
+    # Prepend the decrypted secret hex BEFORE the base string (not %-encoded).
+    base_string = prepend + rfc_base
+
+    # RSA-SHA256 sign.
+    from cryptography.hazmat.primitives import hashes  # type: ignore
+    from cryptography.hazmat.primitives.asymmetric import padding  # type: ignore
+
+    sig_bytes = sig_key.sign(base_string.encode("utf-8"), padding.PKCS1v15(), hashes.SHA256())
+    oauth_signature = quote_plus(base64.b64encode(sig_bytes))
+
+    # Build sorted header — realm first, params in sorted order, signature last.
+    sorted_pairs = sorted(oauth_params.items())
+    pairs_str = ", ".join(f'{k}="{v}"' for k, v in sorted_pairs)
+    header = f'OAuth realm="{realm}", {pairs_str}, oauth_signature="{oauth_signature}"'
+    return header, nonce, timestamp
+
+
+# ---------------------------------------------------------------------------
+# OAuthAuth
+# ---------------------------------------------------------------------------
 
 
 class OAuthAuth(_AuthBase):
@@ -262,15 +443,17 @@ class OAuthAuth(_AuthBase):
     cached for the session lifetime.  Call ``refresh_lst()`` to force renewal.
 
     All key paths are read from environment variables at construction time so
-    that no secrets are hard-coded.
+    that no secrets are hard-coded.  The access-token secret is decrypted
+    LOCALLY and is never transmitted to IBKR servers.
 
     Env vars consumed:
       IBKR_OAUTH_CONSUMER_KEY
       IBKR_OAUTH_ACCESS_TOKEN
-      IBKR_OAUTH_ACCESS_TOKEN_SECRET
+      IBKR_OAUTH_ACCESS_TOKEN_SECRET   — base64 ciphertext; decrypted locally
       IBKR_OAUTH_SIGNATURE_KEY_PATH
       IBKR_OAUTH_ENCRYPTION_KEY_PATH
       IBKR_OAUTH_DH_PARAM_PATH
+      IBKR_OAUTH_REALM                 — default "limited_poa"
 
     Args:
         base_url: IBKR production OAuth URL, default ``https://api.ibkr.com/v1/api``.
@@ -293,6 +476,7 @@ class OAuthAuth(_AuthBase):
         self._sig_key_path = os.environ.get("IBKR_OAUTH_SIGNATURE_KEY_PATH", "")
         self._enc_key_path = os.environ.get("IBKR_OAUTH_ENCRYPTION_KEY_PATH", "")
         self._dh_param_path = os.environ.get("IBKR_OAUTH_DH_PARAM_PATH", "")
+        self._realm = os.environ.get("IBKR_OAUTH_REALM", "limited_poa")
 
     def _sess(self) -> Any:
         if self._session is not None:
@@ -310,32 +494,102 @@ class OAuthAuth(_AuthBase):
         return self._lst
 
     def _obtain_lst(self) -> str:
-        """Perform the DH-challenge live-session-token exchange."""
-        dh_private, dh_pub_bytes = _dh_generate_keypair(self._dh_param_path)
-        dh_pub_b64 = base64.b64encode(dh_pub_bytes).decode()
+        """Perform the real IBKR OAuth 1.0a live-session-token exchange.
 
-        # Sign the DH challenge with our RSA signature key.
+        Protocol summary
+        ----------------
+        1. Load DH params (p, g) from the PEM file; generate a random 256-bit
+           private value ``a``; compute ``A = pow(g, a, p)``.
+        2. Decrypt the access-token secret ciphertext LOCALLY (PKCS1v15) to
+           obtain the ``prepend`` bytes (hex-encoded).  These are NEVER sent
+           to the server.
+        3. Build an RFC 5849 base string for POST /oauth/live_session_token,
+           prepend the decrypted prepend hex, then RSA-SHA256 sign the result.
+        4. POST to the endpoint with an Authorization header carrying
+           ``diffie_hellman_challenge`` (hex of A) and the RSA signature.
+           No secrets in the body.
+        5. From the response, compute ``shared_secret = pow(B, a, p)``,
+           convert to signed bytes, then derive:
+           ``lst = base64(HMAC-SHA1(key=signed_bytes, msg=prepend_bytes))``.
+        6. Validate: ``HMAC-SHA1(key=decoded_lst, msg=consumer_key).hexdigest()
+           == live_session_token_signature``; raise ``LiveSessionTokenError``
+           on mismatch.
+        """
+        from cryptography.hazmat.primitives.serialization import load_pem_parameters  # type: ignore
+        from cryptography.hazmat.primitives.asymmetric import padding  # type: ignore
+
+        # --- Step 1: DH parameter loading and private-value generation ------
+        dh_pem = open(self._dh_param_path, "rb").read()
+        params = load_pem_parameters(dh_pem)
+        pn = params.parameter_numbers()
+        p: int = pn.p
+        g: int = pn.g
+
+        # 256-bit random private value.
+        a: int = random.SystemRandom().getrandbits(256)
+        A: int = pow(g, a, p)
+        dh_challenge_hex: str = hex(A)[2:]  # lowercase, no "0x"
+
+        # --- Step 2: Decrypt access-token secret → prepend (local only) -----
+        enc_key = _load_private_key(self._enc_key_path)
+        prepend_bytes: bytes = enc_key.decrypt(
+            base64.b64decode(self._access_token_secret),
+            padding.PKCS1v15(),
+        )
+        prepend: str = prepend_bytes.hex()
+
+        # --- Step 3 & 4: Build signed Authorization header and POST ---------
         sig_key = _load_private_key(self._sig_key_path)
-        to_sign = f"{self._consumer_key}+{dh_pub_b64}".encode()
-        rsa_sig = _rsa_sha256_sign(sig_key, to_sign)
+        lst_url = f"{self.base_url}/oauth/live_session_token"
 
-        body = {
-            "diffie_hellman_challenge": dh_pub_b64,
-            "consumer_key": self._consumer_key,
-            "access_token": self._access_token,
-            "access_token_secret": self._access_token_secret,
-            "signature": rsa_sig,
-        }
-        url = f"{self.base_url}/oauth/live_session_token"
-        resp = self._sess().post(url, json=body, timeout=15)
+        auth_header, _nonce, _ts = _lst_authorization_header(
+            consumer_key=self._consumer_key,
+            access_token=self._access_token,
+            dh_challenge_hex=dh_challenge_hex,
+            prepend=prepend,
+            sig_key=sig_key,
+            url=lst_url,
+            realm=self._realm,
+        )
+
+        resp = self._sess().post(
+            lst_url,
+            headers={"Authorization": auth_header},
+            timeout=15,
+        )
         resp.raise_for_status()
         data = resp.json()
 
-        encrypted_lst = data["diffie_hellman_response"]
-        peer_pub_b64 = data["dh_server_public"]
-        peer_pub_bytes = base64.b64decode(peer_pub_b64)
-        shared_secret = _dh_compute_shared_secret(dh_private, peer_pub_bytes)
-        return _decrypt_lst(encrypted_lst, self._enc_key_path, shared_secret)
+        # --- Step 5: Compute LST from DH response ---------------------------
+        dh_response_hex: str = data["diffie_hellman_response"]
+        B: int = int(dh_response_hex, 16)
+        shared_secret: int = pow(B, a, p)
+        shared_secret_bytes: bytes = _int_to_signed_bytes(shared_secret)
+
+        lst: str = base64.b64encode(
+            hmac.new(
+                key=shared_secret_bytes,
+                msg=bytes.fromhex(prepend),
+                digestmod=hashlib.sha1,
+            ).digest()
+        ).decode()
+
+        # --- Step 6: Validate server's LST signature ------------------------
+        lst_sig_hex: str = data["live_session_token_signature"]
+        expected_sig = hmac.new(
+            key=base64.b64decode(lst),
+            msg=self._consumer_key.encode("utf-8"),
+            digestmod=hashlib.sha1,
+        ).hexdigest()
+        if expected_sig != lst_sig_hex:
+            raise LiveSessionTokenError(
+                "Live-session-token validation failed: HMAC-SHA1 of consumer_key "
+                f"under derived LST does not match server's live_session_token_signature. "
+                f"Expected {expected_sig!r}, got {lst_sig_hex!r}. "
+                "Check that the DH params, encryption key, and access-token secret are correct."
+            )
+
+        return lst
 
     def refresh_lst(self) -> None:
         """Force renewal of the live-session-token."""
@@ -343,7 +597,14 @@ class OAuthAuth(_AuthBase):
 
     def _signed_headers(self, method: str, url: str) -> dict[str, str]:
         lst = self._ensure_lst()
-        auth = _oauth_authorization_header(self._consumer_key, self._access_token, lst, method, url)
+        auth = _oauth_authorization_header(
+            consumer_key=self._consumer_key,
+            access_token=self._access_token,
+            lst_b64=lst,
+            method=method,
+            url=url,
+            realm=self._realm,
+        )
         return {"Authorization": auth, "Content-Type": "application/json"}
 
     def get(self, url: str, **kwargs: Any) -> Any:
@@ -543,26 +804,141 @@ class IbkrWebClient:
         """Build the subscription message for live order-status updates."""
         return json.dumps({"topic": "or", "subscribe": True, "account": account_id})
 
-    def connect_ws(self, handler: Callable[[str], None]) -> None:
-        """Open a WebSocket connection and call *handler* for each message.
+    async def connect_ws(
+        self,
+        session_token: str,
+        *,
+        ws_connect: Callable[..., Any] | None = None,
+    ) -> "IbkrWsSession":
+        """Open an async WebSocket connection and return an ``IbkrWsSession``.
 
-        Requires the ``websockets`` package (sync ``websockets.sync.client``
-        available in websockets >= 11).  Add ``websockets>=11`` to
-        requirements.txt to enable this method.
+        The session token must be obtained from ``tickle()`` by the caller
+        before invoking this method.  The token is sent in the initial
+        handshake frame and is never logged.
+
+        Live-account guard note: this client implements **read-only**
+        WebSocket subscriptions only (order/trade/market-data events).
+        Order placement over WebSocket is intentionally not implemented;
+        the live-account guard applies to REST order placement methods only.
+
+        Gateway mode connects to ``wss://localhost:5000/v1/api/ws`` with TLS
+        verification disabled (localhost self-signed cert, same constraint as
+        GatewayAuth).  OAuth mode connects to
+        ``wss://api.ibkr.com/v1/api/ws`` with full TLS verification.
 
         Args:
-            handler: Callable receiving raw message strings.
+            session_token: Session token from a recent ``tickle()`` call.
+            ws_connect: Optional injectable async callable returning a context
+                manager that yields an object with ``send``, ``recv``, and
+                ``close`` coroutines.  Defaults to ``websockets.connect``
+                (imported lazily so the REST-only path never imports
+                websockets).
+
+        Returns:
+            A connected ``IbkrWsSession`` ready for subscriptions.
         """
-        try:
-            from websockets.sync.client import connect  # type: ignore
-        except ImportError as exc:
-            raise NotImplementedError(
-                "connect_ws requires 'websockets>=11'. "
-                "Add it to packages/equities_lane/requirements.txt."
-            ) from exc
+        if ws_connect is None:
+            try:
+                from websockets import connect as _ws_connect  # type: ignore
+            except ImportError as exc:
+                raise NotImplementedError(
+                    "connect_ws requires 'websockets>=12'. "
+                    "Add it to packages/equities_lane/requirements.txt."
+                ) from exc
+            ws_connect = _ws_connect
 
         url = self.ws_url()
-        verify_ssl = "localhost" not in url and "127.0.0.1" not in url
-        with connect(url, ssl=verify_ssl or None) as ws:
-            for message in ws:
-                handler(str(message))
+        is_localhost = "localhost" in url or "127.0.0.1" in url
+
+        if is_localhost:
+            import ssl as _ssl
+            ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS_CLIENT)
+            ctx.check_hostname = False
+            ctx.verify_mode = _ssl.CERT_NONE
+            raw_ws = await ws_connect(url, ssl=ctx)
+        else:
+            raw_ws = await ws_connect(url)
+
+        session = IbkrWsSession(raw_ws)
+        await session._handshake(session_token)
+        return session
+
+
+# ---------------------------------------------------------------------------
+# IbkrWsSession
+# ---------------------------------------------------------------------------
+
+
+class IbkrWsSession:
+    """Async WebSocket session for IBKR Client Portal streaming events.
+
+    Obtained via ``IbkrWebClient.connect_ws()``.  Provides read-only
+    subscriptions — order placement over WebSocket is intentionally absent.
+    No reconnect logic; callers that need reconnect should wrap this class.
+
+    The session token passed to ``IbkrWebClient.connect_ws()`` is consumed
+    during the handshake and is not stored on this object.
+    """
+
+    def __init__(self, ws: Any) -> None:
+        self._ws = ws
+
+    async def _handshake(self, session_token: str) -> None:
+        """Send the session frame required by the IBKR WS protocol."""
+        frame = json.dumps({"session": session_token})
+        await self._ws.send(frame)
+
+    async def subscribe_orders(self) -> None:
+        """Subscribe to live order-status updates (``sor+{}``)."""
+        await self._ws.send("sor+{}")
+
+    async def subscribe_trades(self) -> None:
+        """Subscribe to trade/fill events (``str+{}``)."""
+        await self._ws.send("str+{}")
+
+    async def subscribe_market_data(self, conid: int | str, fields: list[str | int]) -> None:
+        """Subscribe to market-data ticks for *conid*.
+
+        Args:
+            conid: IBKR contract id.
+            fields: List of field codes, e.g. ``[31, 84, 86]``.
+        """
+        payload = json.dumps({"fields": [str(f) for f in fields]})
+        await self._ws.send(f"smd+{conid}+{payload}")
+
+    async def unsubscribe_orders(self) -> None:
+        """Unsubscribe from live order-status updates (``uor+{}``)."""
+        await self._ws.send("uor+{}")
+
+    async def unsubscribe_trades(self) -> None:
+        """Unsubscribe from trade/fill events (``ustr+{}``)."""
+        await self._ws.send("ustr+{}")
+
+    async def unsubscribe_market_data(self, conid: int | str) -> None:
+        """Unsubscribe from market-data ticks for *conid* (``umd+<conid>+{}``)."""
+        await self._ws.send(f"umd+{conid}+{{}}")
+
+    async def ping(self) -> None:
+        """Send a ``tic`` heartbeat frame to the server."""
+        await self._ws.send("tic")
+
+    async def messages(self) -> AsyncIterator[dict[str, Any]]:
+        """Async iterator yielding parsed JSON dicts from the server.
+
+        Non-JSON frames (e.g. raw protocol messages) are yielded as
+        ``{"raw": <text>}``.  Server heartbeat frames
+        (``{"topic":"system","hb":...}``) are passed through as-is.
+        """
+        while True:
+            try:
+                raw = await self._ws.recv()
+            except Exception:
+                return
+            try:
+                yield json.loads(raw)
+            except (json.JSONDecodeError, ValueError):
+                yield {"raw": raw}
+
+    async def close(self) -> None:
+        """Close the underlying WebSocket connection."""
+        await self._ws.close()

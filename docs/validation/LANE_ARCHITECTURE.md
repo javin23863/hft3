@@ -75,8 +75,11 @@ Each lane ships an adapter in
   `EquitiesBacktester`. Covers US stocks **and** options (symbols
   RUNNER/LOW_FLOAT/OPTIONS/PARITY; event types include `options_parity`).
   Reads `universe.yaml`; extracts session symbols + walk-forward config.
-  Latency bands `[5, 10, 50, 100, 250] ms`; `latency_floor_ms = 5.0`
-  (re-measured from IBKR Web API round-trip). Capability: better-than-retail
+  Latency bands `[5, 10, 50, 100, 250] ms` (reporting/sweep documentation only;
+  gating is floor-based). `latency_floor_ms = max(5 ms, measured Web API RTT)`
+  — floor is tightened from `runtime/equities_lane/ibkr_endpoint_status.json`
+  (`measured_rtt_ms` field) when available; never lowered below 5 ms. Sim
+  latency is clamped to the floor at both load time and point of use. Capability: better-than-retail
   speed advantage; not blocked for lacking true HFT/DMA. Endpoint: IBKR
   Web API (no GUI, no TWS, no IB Gateway); OAuth headless by default,
   clientportal.gw as fallback (v2 config). Endpoint readiness is

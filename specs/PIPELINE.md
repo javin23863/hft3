@@ -176,7 +176,9 @@ Stocks and options are one lane (equities); they share a single IBKR Web API
 access path, the same latency floor, and the same promotion requirement. The
 lane competes better-than-retail: IBKR provides no DMA, so latency is modelled
 honestly against the Web API round-trip floor — slower results never block
-alpha, but optimistic claims below the 5 ms floor are rejected. Promotion
+alpha, but claims below the floor are rejected. The floor is max(5 ms, measured
+Web API RTT from `runtime/equities_lane/ibkr_endpoint_status.json`); sim
+latency is clamped to the floor at load time and point of use. Promotion
 requires a shadow run on an IBKR paper account via the Web API paper endpoint;
 no TWS or IB Gateway GUI is present anywhere in the lane.
 
@@ -184,4 +186,4 @@ no TWS or IB Gateway GUI is present anywhere in the lane.
 |---|---|---|---|---|
 | cme_futures | Rithmic/DMA path | true HFT (proof required) | exact swept bands + measured ack | sim shadow CHI404 |
 | crypto | node-direct | true HFT (proof required) | exact swept bands | sim shadow |
-| equities (stocks+options) | IBKR Web API (OAuth headless / clientportal.gw), no DMA, no GUI | better-than-retail speed advantage | floor 5 ms (re-measure from Web API round-trip); slower never blocks; optimistic claims rejected | IBKR paper shadow via Web API paper account |
+| equities (stocks+options) | IBKR Web API (OAuth headless / clientportal.gw), no DMA, no GUI | better-than-retail speed advantage | floor = max(5 ms, measured Web API RTT from endpoint status artifact); sim latency clamped to floor; slower never blocks; claims below floor rejected | IBKR paper shadow via Web API paper account |

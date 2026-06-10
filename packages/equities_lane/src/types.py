@@ -5,6 +5,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+# Anti-lookahead / optimistic-alpha guard: backtest sim latency may never be
+# set below this floor.  Claims below the floor inflate alpha by simulating
+# fills that are unrealistically fast for a Web API (non-DMA) execution path.
+LATENCY_FLOOR_MS: float = 5.0
+
 
 @dataclass
 class DatabentoConfig:

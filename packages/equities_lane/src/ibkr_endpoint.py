@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -201,25 +202,29 @@ def _paper_account_id(config: dict[str, Any]) -> str | None:
 
 
 def _probe_auth_status(http_get: HttpGet, base_url: str) -> dict[str, Any]:
-    """GET /iserver/auth/status — returns {ok: bool, raw: dict}."""
+    """GET /iserver/auth/status — returns {ok: bool, wall_time_ms: float, raw: dict}."""
     try:
+        t0 = time.monotonic()
         response = http_get(f"{base_url}/iserver/auth/status")
+        wall_time_ms = (time.monotonic() - t0) * 1000.0
         authenticated = bool(
             (response or {}).get("authenticated")
             if isinstance(response, dict)
             else False
         )
-        return {"ok": authenticated, "raw": response}
+        return {"ok": authenticated, "wall_time_ms": wall_time_ms, "raw": response}
     except Exception as exc:
         return {"ok": False, "error": str(exc), "raw": None}
 
 
 def _probe_tickle(http_post: HttpPost, base_url: str) -> dict[str, Any]:
-    """POST /tickle — returns {ok: bool, raw: dict}."""
+    """POST /tickle — returns {ok: bool, wall_time_ms: float, raw: dict}."""
     try:
+        t0 = time.monotonic()
         response = http_post(f"{base_url}/tickle")
+        wall_time_ms = (time.monotonic() - t0) * 1000.0
         ok = response is not None and not (isinstance(response, dict) and response.get("error"))
-        return {"ok": ok, "raw": response}
+        return {"ok": ok, "wall_time_ms": wall_time_ms, "raw": response}
     except Exception as exc:
         return {"ok": False, "error": str(exc), "raw": None}
 
@@ -229,9 +234,11 @@ def _probe_accounts(
     base_url: str,
     paper_account_id: str | None,
 ) -> dict[str, Any]:
-    """GET /iserver/accounts — returns {ok: bool, paper_account_present: bool, raw: list}."""
+    """GET /iserver/accounts — returns {ok: bool, wall_time_ms: float, paper_account_present: bool, raw: list}."""
     try:
+        t0 = time.monotonic()
         response = http_get(f"{base_url}/iserver/accounts")
+        wall_time_ms = (time.monotonic() - t0) * 1000.0
         accounts: list[str] = []
         if isinstance(response, dict):
             accounts = list(response.get("accounts") or [])
@@ -240,6 +247,7 @@ def _probe_accounts(
         paper_present = bool(paper_account_id and paper_account_id in accounts)
         return {
             "ok": bool(accounts),
+            "wall_time_ms": wall_time_ms,
             "paper_account_present": paper_present,
             "account_count": len(accounts),
             "raw": response,
@@ -349,10 +357,11 @@ def endpoint_status(
           "transport": "web_api",
           "auth_mode": "<oauth|gateway>",
           "checked_at_utc": "<ISO-8601>",
+          "measured_rtt_ms": <float|null>,  # median probe wall-time in ms (null if no probe completed)
           "probes": {
-            "auth_status": {"ok": <bool>, ...},
-            "tickle":       {"ok": <bool>, ...},
-            "accounts":     {"ok": <bool>, "paper_account_present": <bool>, ...}
+            "auth_status": {"ok": <bool>, "wall_time_ms": <float>, ...},
+            "tickle":       {"ok": <bool>, "wall_time_ms": <float>, ...},
+            "accounts":     {"ok": <bool>, "wall_time_ms": <float>, "paper_account_present": <bool>, ...}
           },
           "paper_account_present": <bool>,
           "provider": "interactive_brokers",
@@ -388,12 +397,27 @@ def endpoint_status(
 
     ready = auth_ok and accounts_ok and paper_present
 
+    # Compute median RTT from completed probe wall-times (null when none completed).
+    _probe_times = [
+        p["wall_time_ms"]
+        for p in (probe_auth, probe_tick, probe_acct)
+        if isinstance(p.get("wall_time_ms"), (int, float))
+    ]
+    if _probe_times:
+        _sorted = sorted(_probe_times)
+        _mid = len(_sorted) // 2
+        _median = _sorted[_mid] if len(_sorted) % 2 else (_sorted[_mid - 1] + _sorted[_mid]) / 2.0
+        measured_rtt_ms: float | None = round(_median, 1)
+    else:
+        measured_rtt_ms = None
+
     payload: dict[str, Any] = {
         "ready": ready,
         "schema_version": "ibkr_endpoint_status_v2",
         "transport": "web_api",
         "auth_mode": endpoint.auth_mode,
         "checked_at_utc": utc_now(),
+        "measured_rtt_ms": measured_rtt_ms,
         "probes": {
             "auth_status": {k: v for k, v in probe_auth.items() if k != "raw"},
             "tickle": {k: v for k, v in probe_tick.items() if k != "raw"},

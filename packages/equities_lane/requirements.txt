@@ -6,3 +6,4 @@ lightgbm>=4.0
 scikit-learn>=1.4
 ibapi>=9.81.1
 cryptography>=41.0
+websockets>=12.0

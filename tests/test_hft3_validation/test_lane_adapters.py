@@ -1,6 +1,8 @@
 """Tests for per-lane adapters and LaneConfig Protocol."""
 from __future__ import annotations
 
+import json
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -255,3 +257,101 @@ def test_all_adapters_round_trip_to_dict():
         assert isinstance(d["latency_bands_ms"], list)
         assert isinstance(d["tick_size"], (int, float))
         assert isinstance(d["capability_profile"], dict)
+
+
+# --- Equities adapter: latency floor clamp (Finding 1) ---
+
+
+def test_equities_latency_band_clamped_to_floor(tmp_path: Path) -> None:
+    """yaml latency_ms 1.0 → cfg.latency_bands_ms == [5.0] (clamped to floor)."""
+    yaml_path = tmp_path / "universe.yaml"
+    yaml_path.write_text(
+        "execution:\n"
+        "  latency_ms: 1.0\n",
+        encoding="utf-8",
+    )
+    cfg = load_equities_config(yaml_path)
+    assert cfg.latency_bands_ms == [5.0], (
+        f"Expected [5.0] after clamp, got {cfg.latency_bands_ms}"
+    )
+
+
+def test_equities_latency_band_above_floor_unchanged(tmp_path: Path) -> None:
+    """yaml latency_ms 10.0 → cfg.latency_bands_ms == [10.0] (above floor, unaffected)."""
+    yaml_path = tmp_path / "universe.yaml"
+    yaml_path.write_text(
+        "execution:\n"
+        "  latency_ms: 10.0\n",
+        encoding="utf-8",
+    )
+    cfg = load_equities_config(yaml_path)
+    assert cfg.latency_bands_ms == [10.0]
+
+
+# --- Equities adapter: endpoint status floor tightening (Finding 2b) ---
+
+
+def test_equities_floor_tightened_from_endpoint_status(tmp_path: Path) -> None:
+    """When endpoint status has measured_rtt_ms > 5, floor is raised to that value."""
+    yaml_path = tmp_path / "universe.yaml"
+    yaml_path.write_text("execution:\n  latency_ms: 10.0\n", encoding="utf-8")
+
+    status_path = tmp_path / "ibkr_endpoint_status.json"
+    status_path.write_text(
+        json.dumps({"measured_rtt_ms": 12.5, "ready": True}),
+        encoding="utf-8",
+    )
+
+    cfg = load_equities_config(yaml_path, endpoint_status_path=status_path)
+    assert cfg.latency_floor_ms == 12.5
+
+
+def test_equities_floor_not_lowered_below_default(tmp_path: Path) -> None:
+    """measured_rtt_ms of 2.0 (below hard minimum) must not lower the floor."""
+    yaml_path = tmp_path / "universe.yaml"
+    yaml_path.write_text("execution:\n  latency_ms: 10.0\n", encoding="utf-8")
+
+    status_path = tmp_path / "ibkr_endpoint_status.json"
+    status_path.write_text(
+        json.dumps({"measured_rtt_ms": 2.0}),
+        encoding="utf-8",
+    )
+
+    cfg = load_equities_config(yaml_path, endpoint_status_path=status_path)
+    assert cfg.latency_floor_ms == 5.0
+
+
+def test_equities_floor_unchanged_when_status_file_missing(tmp_path: Path) -> None:
+    """Missing endpoint status file → floor stays at default 5.0."""
+    yaml_path = tmp_path / "universe.yaml"
+    yaml_path.write_text("execution:\n  latency_ms: 10.0\n", encoding="utf-8")
+
+    cfg = load_equities_config(
+        yaml_path,
+        endpoint_status_path=tmp_path / "nonexistent_status.json",
+    )
+    assert cfg.latency_floor_ms == 5.0
+
+
+def test_equities_floor_unchanged_when_status_json_corrupt(tmp_path: Path) -> None:
+    """Corrupt JSON in endpoint status file → floor stays at default 5.0."""
+    yaml_path = tmp_path / "universe.yaml"
+    yaml_path.write_text("execution:\n  latency_ms: 10.0\n", encoding="utf-8")
+
+    status_path = tmp_path / "ibkr_endpoint_status.json"
+    status_path.write_text("{not valid json", encoding="utf-8")
+
+    cfg = load_equities_config(yaml_path, endpoint_status_path=status_path)
+    assert cfg.latency_floor_ms == 5.0
+
+
+def test_equities_floor_unchanged_when_measured_rtt_ms_absent(tmp_path: Path) -> None:
+    """Status file without measured_rtt_ms field → floor stays at default 5.0."""
+    yaml_path = tmp_path / "universe.yaml"
+    yaml_path.write_text("execution:\n  latency_ms: 10.0\n", encoding="utf-8")
+
+    status_path = tmp_path / "ibkr_endpoint_status.json"
+    status_path.write_text(json.dumps({"ready": True}), encoding="utf-8")
+
+    cfg = load_equities_config(yaml_path, endpoint_status_path=status_path)
+    assert cfg.latency_floor_ms == 5.0

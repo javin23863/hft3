@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from equities_lane.src.types import ExecutionConfig, TradeFill
+from equities_lane.src.types import ExecutionConfig, LATENCY_FLOOR_MS, TradeFill
 
 
 @dataclass
@@ -24,7 +24,9 @@ def simulate_fill(
 ) -> TradeFill | None:
     if halted and config.halt_on_limit_up:
         return None
-    latency_ns = int(config.latency_ms * 1_000_000)
+    # Clamp at point of use so swept/cloned configs are also guarded.
+    # Anti-lookahead/optimistic-alpha guard: fills cannot be faster than the floor.
+    latency_ns = int(max(config.latency_ms, LATENCY_FLOOR_MS) * 1_000_000)
     exec_ts = intent.ts_ns + latency_ns
     slip = config.slippage_bps / 10_000.0
 
