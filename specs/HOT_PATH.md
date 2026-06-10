@@ -18,11 +18,22 @@ Python replay via hftbacktest + numba JIT. Key cost sources per step:
 | `np.std(deque(100))` per event | `mbo_features.py _extract_features()` | Full O(N) for REALIZED_VOL_STATE every tick |
 | `vector_to_feature_dict(vec)` per step | `market_state_pipeline.py line 80` | Dict allocation on every step (used by regime filter and hypothesis `state.f()`) |
 
-Benchmark anchor: TODO — no verified wall-clock timing for 113s/session
-(146k events, 3.3M steps, 1 hypothesis) was found in code or artifacts at
-time of writing. These numbers are cited in the system brief as the optimization
-target baseline but are not embedded in any file in the repository. Flag this
-as unverified until a benchmark run confirms it.
+Benchmark: `python scripts/bench_replay_session.py` on
+`MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz` (146,184 events, 330 s window,
+1 hypothesis, latency 1.0 ms). Measured progression on the dev box:
+
+| State | Wall clock | Steps |
+|-------|-----------|-------|
+| Pre-fix (after_elapse boxing every step) | ~5,400 s (extrapolated; killed) | 3.3 M |
+| + open-order fast path | 113 s | 3.3 M |
+| + incremental top-K, running stats, lazy MarketState | 33.7 s | 3.3 M |
+| + event-driven stepping (`step_mode="event"`, default) | 25.9 s | 117.6 k |
+| + ns-interval-cached `resolve_ns`, pure-python softmax | **24.4 s** | 117.6 k |
+
+Grid mode (`step_mode="grid"`, ablation/legacy) after the same feature-path
+work: 78.3 s. Remaining cost is split between the python feature extractor's
+per-event book/feature math and residual numba boxing on `depth()`/stepping
+calls; the ≤10 s target needs the stretch item (§2.5 pybind C++ extractor).
 
 Target: ≤10s for the same workload.
 
@@ -151,3 +162,34 @@ added in the current release (Phase 5a). Clear flags via corresponding
 
 Items 1–4 are listed requirements; current CHI404 configuration status is
 not verified in code artifacts at time of writing.
+
+---
+
+## 5. Compute Placement Policy
+
+Use all available processing power, on the box whose job it is.
+
+1. **MSI laptop (Windows, 8C/16T, RTX 3080) = research/batch compute.**
+   - Matrix sweeps: `scripts/run_event_universe.py` multiprocessing pool at
+     `cores − 2` — the canonical way to saturate the box.
+   - Test gates: run `pytest -n auto --dist loadfile` (pytest-xdist;
+     `loadfile` groups tests per file so shared runtime artifacts don't
+     race). Serial pytest leaves ~90% of the machine idle.
+   - The GPU contributes nothing to this pipeline (no stage is
+     GPU-accelerated; none needs to be). Constraint is per-core Python
+     speed and core count, not RAM (each replay loads ~1.4 MB NPZ).
+   - Caveats: laptop thermals throttle sustained all-core loads; Windows
+     spawn-based multiprocessing adds startup overhead. A cheap Linux box
+     beats it for large sweeps when one exists.
+2. **CHI404 = latency box. Keep it clean.**
+   - Bare-metal tuned for jitter (cyclictest p99 11 µs on isolated cores).
+     Batch research running concurrently with latency probes or a
+     paper/live session pollutes exactly the numbers the box exists to
+     produce.
+   - Isolated cores are reserved for the live hot chain (md callback →
+     book → features → decision → risk → submit); housekeeping cores
+     handle everything else.
+   - Exception: when CHI404 is fully idle — not trading, not probing — it
+     may run matrix sweeps (server CPU, Linux, no thermal throttle, numba
+     marginally better on Linux). Never concurrently with latency
+     measurement or any paper/live session.

@@ -66,6 +66,16 @@ class HftBacktestSimulatedExchangeAdapter:
         self._last_position = 0.0
         self._last_fee = 0.0
 
+    @property
+    def has_open_orders(self) -> bool:
+        """True while any tracked order may still produce events.
+
+        The replay loop uses this to pick its stepping mode: fine-grained
+        grid stepping while orders are live (queue/latency fidelity),
+        event-driven jumps otherwise.
+        """
+        return bool(self._open_orders)
+
     def _emit(self, ev: OrderEvent) -> OrderEvent:
         self._events.append(ev)
         self._pending_drain.append(ev)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import List, Tuple
 
@@ -9,8 +10,21 @@ from typing import List, Tuple
 PDF_PRIMARY_FALLBACK_ORDER: tuple[str, ...] = ("ES.v.0", "MNQ.v.0", "NQ.v.0")
 
 
+def npz_root(repo_root: Path) -> Path:
+    """Resolve the NPZ lake root.
+
+    HFT3_NPZ_ROOT overrides the default <repo>/data/npz so the multi-gigabyte
+    event lake can live outside the working clone (e.g. the paid-data mirror)
+    without copying it into every checkout.
+    """
+    override = os.environ.get("HFT3_NPZ_ROOT", "").strip()
+    if override:
+        return Path(override)
+    return repo_root / "data" / "npz"
+
+
 def npz_path_for(repo_root: Path, event_id: str, symbol: str) -> Path:
-    return repo_root / "data" / "npz" / f"{symbol}_{event_id}_mbo.npz"
+    return npz_root(repo_root) / f"{symbol}_{event_id}_mbo.npz"
 
 
 def candidate_npz_symbols(requested_symbol: str, parsed_symbols: tuple[str, ...]) -> List[str]:

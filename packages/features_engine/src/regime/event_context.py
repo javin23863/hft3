@@ -6,6 +6,7 @@ from __future__ import annotations
 import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 import pandas as pd
 
@@ -78,6 +79,41 @@ class EventContextEngine:
                 )
             )
 
+        # Pure-nanosecond window table for the hot path: label and priority
+        # precomputed, effective_date folded into an activation timestamp.
+        # (effective_date <= ts.date() is equivalent to ts >= midnight UTC of
+        # the effective date.)
+        self._windows_ns: list[tuple[int, int, int, int, Optional[str]]] = []
+        for effective_date, start, end, event_type, window_name in self._windows:
+            # Empty event_type stays lazily-fatal: the error fires only when a
+            # timestamp actually lands inside the bad window (matching
+            # resolve()), signalled here by a None label.
+            bad_type = not event_type or event_type.lower() == "nan"
+            if effective_date is None:
+                eff_ns = 0
+            else:
+                eff_dt = datetime(
+                    effective_date.year,
+                    effective_date.month,
+                    effective_date.day,
+                    tzinfo=timezone.utc,
+                )
+                eff_ns = int(eff_dt.timestamp() * 1e9)
+            self._windows_ns.append(
+                (
+                    int(start.timestamp() * 1e9),
+                    int(end.timestamp() * 1e9),
+                    eff_ns,
+                    context_priority(event_type) if not bad_type else 2**31,
+                    None if bad_type else row_to_event_context(event_type, str(window_name)),
+                )
+            )
+        # Constant-label interval cache for monotonic hot-path callers:
+        # within [lo, hi) the resolved label cannot change.
+        self._cache_lo_ns: int = 1
+        self._cache_hi_ns: int = 0
+        self._cache_label: str = "NORMAL"
+
     def resolve(self, ts_utc: datetime) -> str:
         if ts_utc.tzinfo is None:
             ts_utc = ts_utc.replace(tzinfo=timezone.utc)
@@ -107,5 +143,38 @@ class EventContextEngine:
         return row_to_event_context(str(event_type), str(window_name))
 
     def resolve_ns(self, timestamp_ns: int) -> str:
-        ts = datetime.fromtimestamp(timestamp_ns / 1e9, tz=timezone.utc)
-        return self.resolve(ts)
+        """Pure-integer resolve for the per-event hot path.
+
+        Caches the label over the interval where it is constant; replay
+        timestamps are (near-)monotonic, so this is O(1) amortized with a
+        full O(windows) rescan only at window boundaries.
+        """
+        ts = int(timestamp_ns)
+        if self._cache_lo_ns <= ts < self._cache_hi_ns:
+            return self._cache_label
+
+        best_priority: int | None = None
+        best_label = "NORMAL"
+        # Next timestamp at which any window's membership can change.
+        next_boundary = 2**63 - 1
+        for start_ns, end_ns, eff_ns, priority, label in self._windows_ns:
+            active = eff_ns <= ts and start_ns <= ts <= end_ns
+            if active:
+                if label is None:
+                    raise ValueError(
+                        "events.csv row has empty event_type inside active window"
+                    )
+                if best_priority is None or priority < best_priority:
+                    best_priority = priority
+                    best_label = label
+                if end_ns + 1 > ts:
+                    next_boundary = min(next_boundary, end_ns + 1)
+            else:
+                for b in (start_ns, eff_ns, end_ns + 1):
+                    if b > ts:
+                        next_boundary = min(next_boundary, b)
+
+        self._cache_lo_ns = ts
+        self._cache_hi_ns = next_boundary
+        self._cache_label = best_label
+        return best_label

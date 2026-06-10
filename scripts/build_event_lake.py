@@ -119,11 +119,15 @@ def _manifest_record(
     npz_path: Path,
     event_count: int,
 ) -> dict[str, Any]:
-    rel = npz_path.relative_to(repo_root).as_posix()
+    try:
+        path_str = npz_path.relative_to(repo_root).as_posix()
+    except ValueError:
+        # Lake root relocated outside the repo via HFT3_NPZ_ROOT.
+        path_str = str(npz_path)
     return {
         "event_id": event_id,
         "symbol": symbol,
-        "npz_path": rel,
+        "npz_path": path_str,
         "event_count": event_count,
         "sha256": _sha256(npz_path),
         "created_utc": datetime.now(timezone.utc).isoformat(),
@@ -131,7 +135,9 @@ def _manifest_record(
 
 
 def _write_manifest(repo_root: Path, records: list[dict[str, Any]]) -> Path:
-    manifest_path = repo_root / MANIFEST_REL_PATH
+    from data_system.src.lake_manifest import manifest_path as _manifest_path
+
+    manifest_path = _manifest_path(repo_root)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(
         json.dumps(records, indent=2, sort_keys=True), encoding="utf-8"

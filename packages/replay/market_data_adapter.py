@@ -45,7 +45,10 @@ class HistoricalReplayMarketDataAdapter:
         if ev is None:
             return None
         self._peeked = None
-        self._last_state = self._pipeline.process_event(ev)
+        # Use fast path: defer MarketState construction to current_market_state()
+        self._pipeline.process_event_fast(ev)
+        # Invalidate cached state (will be rebuilt lazily)
+        self._last_state = None
         if ev.timestamp_ns > self._current_time_ns:
             self._current_time_ns = ev.timestamp_ns
         return ev
@@ -55,6 +58,8 @@ class HistoricalReplayMarketDataAdapter:
 
     def current_market_state(self, symbol: str) -> Optional[MarketState]:
         del symbol
+        if self._last_state is None:
+            self._last_state = self._pipeline.finalize()
         return self._last_state
 
     def is_finished(self) -> bool:
@@ -71,4 +76,4 @@ class HistoricalReplayMarketDataAdapter:
             if ev is None or ev.timestamp_ns > timestamp_ns:
                 break
             self.next_event()
-        return self._last_state
+        return self.current_market_state("")

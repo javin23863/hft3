@@ -82,12 +82,16 @@ def _load_manifest(repo_root: Path) -> dict[tuple[str, str], str] | None:
     try:
         from data_system.src.lake_manifest import load_manifest  # type: ignore[import]
 
+        from data_system.src.lake_manifest import resolve_npz_path
+
         entries = load_manifest(repo_root)
         if entries is None:
             return None
         result: dict[tuple[str, str], str] = {}
         for e in entries:
-            result[(e["symbol"], e["event_id"])] = e["npz_path"]
+            result[(e["symbol"], e["event_id"])] = str(
+                resolve_npz_path(repo_root, e["npz_path"])
+            )
         return result
     except Exception:  # module not yet shipped — fall through to scan
         return None
@@ -105,15 +109,21 @@ def _scan_npz_dir(npz_dir: Path) -> dict[tuple[str, str], str]:
     return result
 
 
-def load_lake_index(repo_root: Path) -> dict[tuple[str, str], str]:
+def load_lake_index(
+    repo_root: Path, *, rescan: bool = False
+) -> dict[tuple[str, str], str]:
     """Return {(symbol, event_id): npz_path_str}.
 
     Tries lake_manifest first; falls back to scanning data/npz/*.npz.
+    Pass rescan=True to skip the manifest and force a directory scan.
     """
-    manifest = _load_manifest(repo_root)
-    if manifest is not None:
-        return manifest
-    return _scan_npz_dir(repo_root / "data" / "npz")
+    from data_system.src.npz_resolver import npz_root
+
+    if not rescan:
+        manifest = _load_manifest(repo_root)
+        if manifest:
+            return manifest
+    return _scan_npz_dir(npz_root(repo_root))
 
 
 # ---------------------------------------------------------------------------
@@ -151,11 +161,12 @@ def build_work_units(
     # stable sort by event_id for determinism
     rows.sort(key=lambda r: r["event_id"])
 
-    if max_events is not None:
-        rows = rows[:max_events]
-
     work: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
+    # max_events caps events that actually produce work units — truncating
+    # the raw rows first would just select the alphabetically-first events
+    # regardless of whether their NPZ exists.
+    events_with_work: set[str] = set()
 
     for row in rows:
         etype = row.get("event_type", "")
@@ -168,6 +179,18 @@ def build_work_units(
             candidate_symbols = [s for s in candidate_symbols if s in symbol_filter]
         if not candidate_symbols:
             candidate_symbols = [DEFAULT_SYMBOL]
+
+        has_any_npz = any(
+            lake_index.get((symbol, event_id)) is not None
+            for symbol in candidate_symbols
+        )
+        if (
+            max_events is not None
+            and has_any_npz
+            and event_id not in events_with_work
+            and len(events_with_work) >= max_events
+        ):
+            continue
 
         for symbol in sorted(candidate_symbols):
             npz_path = lake_index.get((symbol, event_id))
@@ -188,6 +211,7 @@ def build_work_units(
                         "event_type": etype,
                         "release_date": row.get("release_date", ""),
                     })
+                    events_with_work.add(event_id)
 
     return work, skipped
 
@@ -727,6 +751,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="Pool worker count (default: cpu_count-2)")
     p.add_argument("--max-events", type=int, default=None, dest="max_events",
                    help="Limit events processed (smoke runs)")
+    p.add_argument("--rescan", action="store_true", default=False,
+                   help="Skip manifest cache and scan NPZ dir directly (useful when manifest is stale)")
     args = p.parse_args(argv)
 
     utcstamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -743,7 +769,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"CHI404 measured order-ack band(s) added: {measured_bands} ms (tagged 'measured')", flush=True)
 
     print(f"Loading lake index…", flush=True)
-    lake_index = load_lake_index(_REPO)
+    lake_index = load_lake_index(_REPO, rescan=args.rescan)
     print(f"  lake index entries: {len(lake_index)}", flush=True)
 
     work_units, skipped = build_work_units(

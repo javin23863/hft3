@@ -1,0 +1,15 @@
+release_date,event_type,source,source_url,timezone,release_time
+2018-01-24,DURABLE_GOODS_ADVANCE,FRED,https://www.census.gov/economic-indicators/,America/New_York,08:30:00
+2019-02-01,DURABLE_GOODS_ADVANCE,FRED,https://www.census.gov/economic-indicators/,America/New_York,08:30:00
+2019-12-30,DURABLE_GOODS_ADVANCE,FRED,https://www.census.gov/economic-indicators/,America/New_York,08:30:00
+2021-12-21,DURABLE_GOODS_ADVANCE,FRED,https://www.census.gov/economic-indicators/,America/New_York,08:30:00
+2022-12-30,DURABLE_GOODS_ADVANCE,FRED,https://www.census.gov/economic-indicators/,America/New_York,08:30:00
+2023-12-19,DURABLE_GOODS_ADVANCE,FRED,https://www.census.gov/economic-indicators/,America/New_York,08:30:00
+2024-12-19,DURABLE_GOODS_ADVANCE,FRED,https://www.census.gov/economic-indicators/,America/New_York,08:30:00
+2018-01-24,DURABLE_GOODS_FULL,FRED,https://www.census.gov/economic-indicators/,America/New_York,10:00:00
+2019-02-01,DURABLE_GOODS_FULL,FRED,https://www.census.gov/economic-indicators/,America/New_York,10:00:00
+2019-12-30,DURABLE_GOODS_FULL,FRED,https://www.census.gov/economic-indicators/,America/New_York,10:00:00
+2021-12-21,DURABLE_GOODS_FULL,FRED,https://www.census.gov/economic-indicators/,America/New_York,10:00:00
+2022-12-30,DURABLE_GOODS_FULL,FRED,https://www.census.gov/economic-indicators/,America/New_York,10:00:00
+2023-12-19,DURABLE_GOODS_FULL,FRED,https://www.census.gov/economic-indicators/,America/New_York,10:00:00
+2024-12-19,DURABLE_GOODS_FULL,FRED,https://www.census.gov/economic-indicators/,America/New_York,10:00:00

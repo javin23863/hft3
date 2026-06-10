@@ -2,18 +2,49 @@ authority:
 - BLUEPRINT.md §8
 - docs/vault/ECONOMIC_EVENT_UNIVERSE.md
 defaults:
+  # HFT release download window — all event types (MBO-only lane).
+  download_window: &hft_release_window
+    start_offset_seconds: -60
+    end_offset_seconds: 10
+  # Post-replay feature snapshots only — must fall within download window [-60s, +10s].
+  snapshot_derivation_offsets:
+  - {offset_us: -10000000, label: "-10s"}
+  - {offset_us: -5000000, label: "-5s"}
+  - {offset_us: -1000000, label: "-1s"}
+  - {offset_us: -100000, label: "-100ms"}
+  - {offset_us: -10000, label: "-10ms"}
+  - {offset_us: -1000, label: "-1ms"}
+  - {offset_us: -100, label: "-100us"}
+  - {kind: release_boundary_pre, label: "0_pre"}
+  - {kind: release_boundary_post, label: "0_post"}
+  - {offset_us: 10, label: "+10us"}
+  - {offset_us: 50, label: "+50us"}
+  - {offset_us: 100, label: "+100us"}
+  - {offset_us: 250, label: "+250us"}
+  - {offset_us: 500, label: "+500us"}
+  - {offset_us: 1000, label: "+1ms"}
+  - {offset_us: 2000, label: "+2ms"}
+  - {offset_us: 5000, label: "+5ms"}
+  - {offset_us: 10000, label: "+10ms"}
+  - {offset_us: 25000, label: "+25ms"}
+  - {offset_us: 50000, label: "+50ms"}
+  - {offset_us: 100000, label: "+100ms"}
+  - {offset_us: 250000, label: "+250ms"}
+  - {offset_us: 500000, label: "+500ms"}
+  - {offset_us: 1000000, label: "+1s"}
+  - {offset_us: 2000000, label: "+2s"}
+  - {offset_us: 5000000, label: "+5s"}
+  - {offset_us: 10000000, label: "+10s"}
+  # Legacy second-granularity offsets for existing L3 tensor code (subset within window).
   snapshot_offsets_sec:
-  - -300
-  - -60
-  - -30
   - -10
+  - -5
+  - -1
   - 0
   - 1
+  - 2
   - 5
   - 10
-  - 60
-  - 300
-  - 1800
   symbol_universe_default: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
 events:
   CPI:
@@ -25,9 +56,7 @@ events:
     official_source_url: https://www.bls.gov/schedule/news_release/cpi.htm
     event_context_label: CPI_TIGHT
     window_name: TIGHT
-    download_window: &id001
-      start_offset_seconds: -30
-      end_offset_seconds: 300
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -43,7 +72,7 @@ events:
     official_source_url: https://www.bls.gov/schedule/news_release/cpi.htm
     event_context_label: CORE_CPI_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -59,7 +88,7 @@ events:
     official_source_url: https://www.bls.gov/schedule/news_release/ppi.htm
     event_context_label: PPI_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -75,7 +104,7 @@ events:
     official_source_url: https://www.bls.gov/schedule/news_release/ppi.htm
     event_context_label: CORE_PPI_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -91,7 +120,7 @@ events:
     official_source_url: https://www.bls.gov/schedule/news_release/empsit.htm
     event_context_label: NFP_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -107,9 +136,7 @@ events:
     official_source_url: https://www.dol.gov/ui/data.pdf
     event_context_label: CLAIMS_TIGHT
     window_name: TIGHT
-    download_window:
-      start_offset_seconds: -15
-      end_offset_seconds: 120
+    download_window: *hft_release_window
     holiday_rule: claims_thursday_to_wednesday
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -125,7 +152,7 @@ events:
     official_source_url: https://www.bls.gov/schedule/news_release/jolts.htm
     event_context_label: JOLTS_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -141,7 +168,7 @@ events:
     official_source_url: https://adpemploymentreport.com/
     event_context_label: ADP_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -157,7 +184,7 @@ events:
     official_source_url: https://www.bls.gov/schedule/news_release/prod2.htm
     event_context_label: PRODUCTIVITY_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -173,7 +200,7 @@ events:
     official_source_url: https://www.bea.gov/news/schedule
     event_context_label: PCE_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -189,7 +216,7 @@ events:
     official_source_url: https://www.bea.gov/news/schedule
     event_context_label: CORE_PCE_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -205,7 +232,7 @@ events:
     official_source_url: https://www.bea.gov/news/schedule
     event_context_label: GDP_ADVANCE_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -221,7 +248,7 @@ events:
     official_source_url: https://www.bea.gov/news/schedule
     event_context_label: GDP_SECOND_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -237,7 +264,7 @@ events:
     official_source_url: https://www.bea.gov/news/schedule
     event_context_label: GDP_FINAL_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -253,7 +280,7 @@ events:
     official_source_url: https://www.bls.gov/schedule/news_release/eci.htm
     event_context_label: ECI_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -269,7 +296,7 @@ events:
     official_source_url: https://www.bls.gov/schedule/news_release/ximpim.htm
     event_context_label: IMPORT_PRICES_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -285,7 +312,7 @@ events:
     official_source_url: https://www.bls.gov/schedule/news_release/ximpim.htm
     event_context_label: EXPORT_PRICES_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -301,7 +328,7 @@ events:
     official_source_url: https://www.ismworld.org/supply-management-news-and-reports/reports/ism-report-on-business/
     event_context_label: ISM_MFG_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -317,7 +344,7 @@ events:
     official_source_url: https://www.ismworld.org/supply-management-news-and-reports/reports/ism-report-on-business/
     event_context_label: ISM_SVC_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -333,7 +360,7 @@ events:
     official_source_url: https://www.census.gov/economic-indicators/
     event_context_label: DURABLE_GOODS_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -349,7 +376,7 @@ events:
     official_source_url: https://www.census.gov/economic-indicators/
     event_context_label: DURABLE_GOODS_FULL_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -365,7 +392,7 @@ events:
     official_source_url: https://www.census.gov/retail/marts.html
     event_context_label: RETAIL_SALES_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -381,7 +408,7 @@ events:
     official_source_url: https://www.census.gov/manufacturing/m3/
     event_context_label: FACTORY_ORDERS_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -397,7 +424,7 @@ events:
     official_source_url: https://www.federalreserve.gov/releases/g17/
     event_context_label: INDPRO_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -413,7 +440,7 @@ events:
     official_source_url: https://www.census.gov/construction/nrc/
     event_context_label: HOUSING_STARTS_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -429,7 +456,7 @@ events:
     official_source_url: https://www.census.gov/construction/bps/
     event_context_label: BUILDING_PERMITS_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -445,7 +472,7 @@ events:
     official_source_url: https://www.census.gov/construction/nrs/
     event_context_label: NEW_HOME_SALES_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -461,7 +488,7 @@ events:
     official_source_url: https://www.nar.realtor/research-and-statistics
     event_context_label: EXISTING_HOME_SALES_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -477,7 +504,7 @@ events:
     official_source_url: https://www.census.gov/construction/c30/
     event_context_label: CONSTRUCTION_SPENDING_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -493,7 +520,7 @@ events:
     official_source_url: https://www.census.gov/foreign-trade/Press-Release/current_press_release/
     event_context_label: TRADE_BALANCE_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -509,9 +536,7 @@ events:
     official_source_url: https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm
     event_context_label: FOMC_STATEMENT_TIGHT
     window_name: TIGHT
-    download_window: &id002
-      start_offset_seconds: -60
-      end_offset_seconds: 600
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -527,7 +552,7 @@ events:
     official_source_url: https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm
     event_context_label: FOMC_PRESS_TIGHT
     window_name: TIGHT
-    download_window: *id002
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -543,7 +568,7 @@ events:
     official_source_url: https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm
     event_context_label: FOMC_MINUTES_TIGHT
     window_name: TIGHT
-    download_window: *id002
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -559,7 +584,7 @@ events:
     official_source_url: https://www.federalreserve.gov/monetarypolicy/beigebook/
     event_context_label: FED_BEIGE_BOOK_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -575,7 +600,7 @@ events:
     official_source_url: https://www.federalreserve.gov/releases/h41/
     event_context_label: FED_H41_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -591,7 +616,7 @@ events:
     official_source_url: https://www.federalreserve.gov/newsevents/speeches.htm
     event_context_label: FED_SPEAKER_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -607,7 +632,7 @@ events:
     official_source_url: https://www.treasurydirect.gov/auctions/
     event_context_label: TREASURY_AUCTION_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -623,7 +648,7 @@ events:
     official_source_url: https://home.treasury.gov/policy-issues/financing-the-government/quarterly-refunding
     event_context_label: TREASURY_REFUNDING_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -639,7 +664,7 @@ events:
     official_source_url: https://www.eia.gov/petroleum/supply/weekly/
     event_context_label: EIA_CRUDE_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -655,7 +680,7 @@ events:
     official_source_url: https://www.eia.gov/naturalgas/storage/
     event_context_label: EIA_NATGAS_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -671,7 +696,7 @@ events:
     official_source_url: https://rigcount.bakerhughes.com/
     event_context_label: RIG_COUNT_TIGHT
     window_name: TIGHT
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -687,9 +712,7 @@ events:
     official_source_url: https://www.topstep.com/
     event_context_label: PROP_FLATTEN_TOPSTEP
     window_name: MAIN
-    download_window: &id003
-      start_offset_seconds: -1500
-      end_offset_seconds: 600
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: calendar_csv
@@ -706,7 +729,7 @@ events:
     official_source_url: https://www.topstep.com/
     event_context_label: PROP_REOPEN
     window_name: MAIN
-    download_window: *id003
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: rule_based
@@ -722,7 +745,7 @@ events:
     official_source_url: https://www.nyse.com/markets/hours-calendars
     event_context_label: CASH_EQUITY_OPEN
     window_name: MAIN
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: rule_based
@@ -738,7 +761,7 @@ events:
     official_source_url: https://www.cmegroup.com/trading-hours.html
     event_context_label: FRIDAY_CLOSE
     window_name: MAIN
-    download_window: *id001
+    download_window: *hft_release_window
     holiday_rule: none
     symbol_universe: MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0
     schedule: rule_based

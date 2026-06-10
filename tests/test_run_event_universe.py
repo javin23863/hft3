@@ -217,6 +217,48 @@ class TestLakeIndex:
         result = universe_mod.load_lake_index(tmp_path)
         assert isinstance(result, dict)
 
+    def test_load_lake_index_rescan_bypasses_manifest(
+        self, universe_mod, tmp_path, monkeypatch
+    ):
+        """rescan=True must skip the manifest and scan the NPZ dir directly."""
+        import json
+
+        import numpy as np
+
+        # Clear HFT3_NPZ_ROOT so the lake root resolves to tmp_path/data/npz.
+        monkeypatch.delenv("HFT3_NPZ_ROOT", raising=False)
+
+        # Plant a manifest that lists a *different* NPZ than what's on disk.
+        # Without rescan, load_lake_index would return the manifest entry.
+        # With rescan, it must return only what's on disk.
+        npz_dir = tmp_path / "data" / "npz"
+        npz_dir.mkdir(parents=True)
+        npz_file = npz_dir / "MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz"
+        data = np.arange(5, dtype=np.uint64)
+        np.savez_compressed(str(npz_file), data=data)
+
+        # Write a manifest with a ghost entry that does NOT exist on disk
+        manifest_path = npz_dir / "manifest.json"
+        ghost_record = [{
+            "event_id": "GHOST_2099_01_01_TIGHT",
+            "symbol": "MES.v.0",
+            "npz_path": "data/npz/MES.v.0_GHOST_2099_01_01_TIGHT_mbo.npz",
+            "event_count": 99,
+            "sha256": "deadbeef",
+            "created_utc": "2026-01-01T00:00:00+00:00",
+        }]
+        manifest_path.write_text(json.dumps(ghost_record), encoding="utf-8")
+
+        # Without rescan: manifest is loaded → only ghost entry
+        result_manifest = universe_mod.load_lake_index(tmp_path, rescan=False)
+        assert ("MES.v.0", "GHOST_2099_01_01_TIGHT") in result_manifest
+        assert ("MES.v.0", "CPI_2024_09_11_TIGHT") not in result_manifest
+
+        # With rescan: NPZ dir is scanned → only the disk file
+        result_scan = universe_mod.load_lake_index(tmp_path, rescan=True)
+        assert ("MES.v.0", "CPI_2024_09_11_TIGHT") in result_scan
+        assert ("MES.v.0", "GHOST_2099_01_01_TIGHT") not in result_scan
+
 
 # ---------------------------------------------------------------------------
 # 3. End-to-end smoke: 1 event × 1 band, workers=1
@@ -268,7 +310,7 @@ class TestEndToEndSmoke:
 
         out_dir = tmp_path / "out"
         mod = _load_fresh_universe_mod("run_event_universe_smoke")
-        mod.load_lake_index = lambda _: {("MES.v.0", "AAA_EVT_A"): str(minimal_npz)}
+        mod.load_lake_index = lambda _, rescan=False: {("MES.v.0", "AAA_EVT_A"): str(minimal_npz)}
 
         try:
             # Swap the function on the already-cached module so that any
@@ -314,7 +356,7 @@ class TestEndToEndSmoke:
         """When no NPZ exists, all units are skipped; result JSON still written."""
         out_dir = tmp_path / "out_skip"
         mod = _load_fresh_universe_mod("run_event_universe_skip")
-        mod.load_lake_index = lambda _: {}  # empty — everything skipped
+        mod.load_lake_index = lambda _, rescan=False: {}  # empty — everything skipped
 
         rc = mod.main([
             "--events-csv", str(events_csv),
@@ -562,3 +604,147 @@ class TestPValueAndCorrection:
         bh_passed = len(corrections["NFP"]["benjamini_hochberg"]["passed_slugs"])
         # BH is always at least as permissive as Holm on a single hypothesis
         assert bh_passed >= holm_passed
+
+
+# ---------------------------------------------------------------------------
+# 6. max-events semantics: cap counts events WITH data, not raw CSV rows
+# ---------------------------------------------------------------------------
+
+class TestMaxEventsWithDataSemantics:
+    """Verify max_events counts only events that actually have NPZ data.
+
+    The events.csv fixture has three rows sorted alphabetically:
+        AAA_EVT_A  (CPI)
+        BBB_EVT_B  (NFP)
+        ZZZ_NO_NPZ (CPI)
+
+    If the alphabetically-first events lack NPZ, they must not consume
+    the max_events budget — later events that DO have NPZ should be included.
+    """
+
+    def test_first_event_no_npz_later_event_included(
+        self, universe_mod, events_csv, tmp_path
+    ):
+        """AAA_EVT_A has no NPZ; BBB_EVT_B has NPZ.
+        With max_events=1, BBB_EVT_B (the first event WITH data) must be
+        included in work units even though it's alphabetically second.
+        """
+        from backtest_pipeline.src.replay_npz_fixture import build_minimal_mbo_npz
+
+        npz_b = tmp_path / "MES.v.0_BBB_EVT_B_mbo.npz"
+        build_minimal_mbo_npz(npz_b)
+
+        # Only BBB_EVT_B has an NPZ; AAA_EVT_A and ZZZ_NO_NPZ are absent
+        lake_index = {("MES.v.0", "BBB_EVT_B"): str(npz_b)}
+
+        work, skipped = universe_mod.build_work_units(
+            events_csv,
+            lake_index,
+            latency_bands=[1.0],
+            event_type_filter=None,
+            symbol_filter=["MES.v.0"],
+            max_events=1,
+        )
+
+        # BBB_EVT_B must appear in work units — it is the ONLY event with data
+        work_ids = {u["event_id"] for u in work}
+        assert "BBB_EVT_B" in work_ids, (
+            "BBB_EVT_B should be a work unit even though alphabetically-first "
+            "AAA_EVT_A lacks an NPZ"
+        )
+        # AAA_EVT_A and ZZZ_NO_NPZ have no NPZ → skipped with npz_missing
+        skipped_ids = {s["event_id"] for s in skipped}
+        assert "AAA_EVT_A" in skipped_ids
+        # ZZZ_NO_NPZ may or may not appear; it's after the cap; the important
+        # invariant is BBB_EVT_B (the first event with data) is a work unit.
+        assert len(work) == 1  # exactly 1 event × 1 band
+
+    def test_max_events_cap_excludes_events_after_budget_exhausted(
+        self, universe_mod, events_csv, tmp_path
+    ):
+        """Once max_events unique events-with-data have been collected,
+        subsequent events with NPZ are excluded (not skipped with npz_missing).
+        """
+        from backtest_pipeline.src.replay_npz_fixture import build_minimal_mbo_npz
+
+        npz_a = tmp_path / "MES.v.0_AAA_EVT_A_mbo.npz"
+        npz_b = tmp_path / "MES.v.0_BBB_EVT_B_mbo.npz"
+        build_minimal_mbo_npz(npz_a)
+        build_minimal_mbo_npz(npz_b)
+
+        lake_index = {
+            ("MES.v.0", "AAA_EVT_A"): str(npz_a),
+            ("MES.v.0", "BBB_EVT_B"): str(npz_b),
+        }
+
+        work, skipped = universe_mod.build_work_units(
+            events_csv,
+            lake_index,
+            latency_bands=[1.0],
+            event_type_filter=None,
+            symbol_filter=["MES.v.0"],
+            max_events=1,
+        )
+
+        # Only the first alphabetical event with data (AAA_EVT_A) should appear
+        work_ids = {u["event_id"] for u in work}
+        assert "AAA_EVT_A" in work_ids
+        assert "BBB_EVT_B" not in work_ids, (
+            "BBB_EVT_B should be excluded by max_events=1 after AAA_EVT_A consumed the budget"
+        )
+        # Total work units: exactly 1 event × 1 band
+        assert len(work) == 1
+
+
+# ---------------------------------------------------------------------------
+# 7. npz_resolver: npz_root override via HFT3_NPZ_ROOT
+# ---------------------------------------------------------------------------
+
+class TestNpzResolverRoot:
+    """Unit tests for npz_root() respecting HFT3_NPZ_ROOT env var."""
+
+    def test_npz_root_default_is_repo_data_npz(self, tmp_path):
+        """Without HFT3_NPZ_ROOT set, npz_root returns <repo>/data/npz."""
+        import os
+        from data_system.src.npz_resolver import npz_root
+
+        # Remove override if present
+        old = os.environ.pop("HFT3_NPZ_ROOT", None)
+        try:
+            result = npz_root(tmp_path)
+            assert result == tmp_path / "data" / "npz"
+        finally:
+            if old is not None:
+                os.environ["HFT3_NPZ_ROOT"] = old
+
+    def test_npz_root_overridden_by_env_var(self, tmp_path, monkeypatch):
+        """When HFT3_NPZ_ROOT is set, npz_root returns that path."""
+        from data_system.src.npz_resolver import npz_root
+
+        external = tmp_path / "external_lake"
+        external.mkdir()
+        monkeypatch.setenv("HFT3_NPZ_ROOT", str(external))
+
+        result = npz_root(tmp_path)
+        assert result == external
+
+    def test_npz_root_override_empty_string_falls_back_to_default(
+        self, tmp_path, monkeypatch
+    ):
+        """An empty HFT3_NPZ_ROOT behaves like the override not being set."""
+        from data_system.src.npz_resolver import npz_root
+
+        monkeypatch.setenv("HFT3_NPZ_ROOT", "   ")  # whitespace only → stripped to ""
+        result = npz_root(tmp_path)
+        assert result == tmp_path / "data" / "npz"
+
+    def test_npz_path_for_external_root(self, tmp_path, monkeypatch):
+        """npz_path_for constructs the canonical path under the external root."""
+        from data_system.src.npz_resolver import npz_path_for
+
+        external = tmp_path / "lake"
+        external.mkdir()
+        monkeypatch.setenv("HFT3_NPZ_ROOT", str(external))
+
+        path = npz_path_for(tmp_path, "CPI_2024_09_11_TIGHT", "MES.v.0")
+        assert path == external / "MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz"

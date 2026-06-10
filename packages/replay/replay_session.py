@@ -90,6 +90,17 @@ class ReplaySessionConfig:
     # Pre-loaded event arrays for cross-asset symbols (symbol → np.ndarray).
     # Takes priority over cross_asset_npz when both are supplied for a symbol.
     cross_asset_events: Dict[str, np.ndarray] = field(default_factory=dict)
+    # Stepping mode.
+    #
+    # "event" (canonical): while no orders are live, jump straight to the next
+    # market-data event via hbt.wait_next_feed — features only change on
+    # events, so nothing observable is skipped. While orders are live, fall
+    # back to fixed step_ns grid stepping so queue-position and order-latency
+    # simulation keep their granularity.
+    #
+    # "grid": fixed step_ns stepping throughout (legacy behavior; ablation
+    # and exact-reproduction of pre-event-stepping baselines only).
+    step_mode: str = "event"
 
 
 class ReplaySession:
@@ -178,13 +189,27 @@ class ReplaySession:
                         latency_ms=cfg.latency_ms,
                     )
 
+            event_stepping = cfg.step_mode == "event"
+            # Cap a single event-driven wait so the loop still advances the
+            # clock through dead air in bounded jumps (1s of sim time).
+            wait_cap_ns = max(cfg.step_ns, 1_000_000_000)
+
             steps = 0
             while True:
-                result = hbt.elapse(cfg.step_ns)
-                if result == 1:
-                    break
-                if result != 0:
-                    return {"error": int(result), "steps": steps, "run_id": self.run_id}
+                if event_stepping and not getattr(adapter, "has_open_orders", True):
+                    # No live orders: nothing can fill and features only move
+                    # on market-data events — jump to the next one.
+                    result = hbt.wait_next_feed(True, wait_cap_ns)
+                    if result == 1:
+                        break
+                    if result not in (0, 2, 3):
+                        return {"error": int(result), "steps": steps, "run_id": self.run_id}
+                else:
+                    result = hbt.elapse(cfg.step_ns)
+                    if result == 1:
+                        break
+                    if result != 0:
+                        return {"error": int(result), "steps": steps, "run_id": self.run_id}
 
                 ts = int(hbt.current_timestamp)
                 self.clock.advance_to(ts)

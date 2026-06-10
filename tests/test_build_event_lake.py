@@ -181,10 +181,15 @@ def test_npz_ok_returns_none_for_corrupt_file(tmp_path: Path) -> None:
     assert _npz_ok(p) is None
 
 
-def test_scan_existing_skips_missing_pairs(tmp_path: Path) -> None:
+def test_scan_existing_skips_missing_pairs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """scan_existing_npz should only return records for NPZs that exist."""
     if not _EVENTS_CSV.is_file():
         pytest.skip("events.csv not present")
+
+    # Ensure HFT3_NPZ_ROOT does not redirect the lake away from tmp_path.
+    monkeypatch.delenv("HFT3_NPZ_ROOT", raising=False)
 
     df = load_and_parse_events(str(_EVENTS_CSV))
 
@@ -197,10 +202,15 @@ def test_scan_existing_skips_missing_pairs(tmp_path: Path) -> None:
     assert records == [], "expected empty list when no NPZ files exist"
 
 
-def test_scan_existing_finds_planted_npz(tmp_path: Path) -> None:
+def test_scan_existing_finds_planted_npz(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """scan_existing_npz returns a record when an NPZ is planted at the canonical path."""
     if not _EVENTS_CSV.is_file():
         pytest.skip("events.csv not present")
+
+    # Ensure HFT3_NPZ_ROOT does not redirect the lake away from tmp_path.
+    monkeypatch.delenv("HFT3_NPZ_ROOT", raising=False)
 
     event_id = "CPI_2024_09_11_TIGHT"
     symbol = "MES.v.0"
@@ -228,10 +238,15 @@ def test_scan_existing_finds_planted_npz(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_manifest_only_writes_manifest_for_one_npz(tmp_path: Path) -> None:
+def test_manifest_only_writes_manifest_for_one_npz(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """run_manifest_only should write manifest.json listing the planted NPZ."""
     if not _EVENTS_CSV.is_file():
         pytest.skip("events.csv not present")
+
+    # Ensure HFT3_NPZ_ROOT does not redirect the lake away from tmp_path.
+    monkeypatch.delenv("HFT3_NPZ_ROOT", raising=False)
 
     event_id = "NFP_2025_01_10_TIGHT"
     symbol = "ZN.v.0"
@@ -256,10 +271,15 @@ def test_manifest_only_writes_manifest_for_one_npz(tmp_path: Path) -> None:
     ), f"expected record not found in manifest: {records}"
 
 
-def test_manifest_only_empty_lake(tmp_path: Path) -> None:
+def test_manifest_only_empty_lake(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """run_manifest_only on an empty data dir writes an empty manifest list."""
     if not _EVENTS_CSV.is_file():
         pytest.skip("events.csv not present")
+
+    # Ensure HFT3_NPZ_ROOT does not redirect the lake away from tmp_path.
+    monkeypatch.delenv("HFT3_NPZ_ROOT", raising=False)
 
     rc = run_manifest_only(
         repo_root=tmp_path,
@@ -312,6 +332,9 @@ def test_manifest_only_never_constructs_databento_client(
         _dc_mod, "DatabentoResearchClient", _NeverAllowed, raising=True
     )
 
+    # Ensure HFT3_NPZ_ROOT does not redirect the lake away from tmp_path.
+    monkeypatch.delenv("HFT3_NPZ_ROOT", raising=False)
+
     event_id = "CPI_2025_01_15_TIGHT"
     symbol = "MES.v.0"
     npz = npz_path_for(tmp_path, event_id, symbol)
@@ -336,12 +359,20 @@ def test_manifest_only_never_constructs_databento_client(
 # ---------------------------------------------------------------------------
 
 
-def test_load_manifest_returns_empty_list_when_no_file(tmp_path: Path) -> None:
+def test_load_manifest_returns_empty_list_when_no_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Ensure HFT3_NPZ_ROOT does not redirect manifest lookup away from tmp_path.
+    monkeypatch.delenv("HFT3_NPZ_ROOT", raising=False)
     result = load_manifest(tmp_path)
     assert result == []
 
 
-def test_load_manifest_round_trips_records(tmp_path: Path) -> None:
+def test_load_manifest_round_trips_records(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Ensure HFT3_NPZ_ROOT does not redirect manifest lookup away from tmp_path.
+    monkeypatch.delenv("HFT3_NPZ_ROOT", raising=False)
     manifest_path = tmp_path / MANIFEST_REL_PATH
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     expected: list[dict[str, Any]] = [
@@ -364,10 +395,15 @@ def test_load_manifest_round_trips_records(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_event_type_filter_narrows_scan(tmp_path: Path) -> None:
+def test_event_type_filter_narrows_scan(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """scan_existing_npz with event_type=CPI should not find NFP NPZ files."""
     if not _EVENTS_CSV.is_file():
         pytest.skip("events.csv not present")
+
+    # Ensure HFT3_NPZ_ROOT does not redirect the lake away from tmp_path.
+    monkeypatch.delenv("HFT3_NPZ_ROOT", raising=False)
 
     from build_event_lake import _load_events  # noqa: PLC0415
 
@@ -386,3 +422,97 @@ def test_event_type_filter_narrows_scan(tmp_path: Path) -> None:
     )
     ids = {r["event_id"] for r in records}
     assert nfp_id not in ids, "NFP event leaked through CPI filter"
+
+
+# ---------------------------------------------------------------------------
+# Test: external lake via HFT3_NPZ_ROOT — scan + manifest + load round-trip
+# ---------------------------------------------------------------------------
+
+
+def test_external_lake_via_hft3_npz_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """HFT3_NPZ_ROOT → external lake dir: scan finds the NPZ, manifest written
+    with absolute path, load_manifest resolves it correctly.
+
+    Layout:
+      tmp_path/
+        external_lake/          ← HFT3_NPZ_ROOT
+          MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz
+        repo_root/              ← repo_root (no data/npz/ subdir)
+    """
+    if not _EVENTS_CSV.is_file():
+        pytest.skip("events.csv not present")
+
+    external_lake = tmp_path / "external_lake"
+    external_lake.mkdir()
+    repo_root_dir = tmp_path / "repo_root"
+    repo_root_dir.mkdir()
+
+    # Plant the NPZ in the external lake dir
+    event_id = "CPI_2024_09_11_TIGHT"
+    symbol = "MES.v.0"
+    npz_name = f"{symbol}_{event_id}_mbo.npz"
+    npz_abs = external_lake / npz_name
+    _make_synthetic_npz(npz_abs, n_rows=8)
+
+    # Point HFT3_NPZ_ROOT at the external lake
+    monkeypatch.setenv("HFT3_NPZ_ROOT", str(external_lake))
+
+    # npz_path_for should now resolve to the external lake
+    from data_system.src.npz_resolver import npz_root, npz_path_for  # noqa: PLC0415
+
+    resolved_root = npz_root(repo_root_dir)
+    assert resolved_root == external_lake, f"Expected {external_lake}, got {resolved_root}"
+
+    resolved_path = npz_path_for(repo_root_dir, event_id, symbol)
+    assert resolved_path == npz_abs
+
+    # scan_existing_npz uses npz_path_for internally; it should find the file
+    df = load_and_parse_events(str(_EVENTS_CSV))
+    records = scan_existing_npz(
+        repo_root=repo_root_dir,
+        events_df=df,
+        target_symbols=(symbol,),
+    )
+    assert any(r["event_id"] == event_id for r in records), (
+        "scan_existing_npz did not find NPZ in external lake"
+    )
+
+    # Manifest records from an external lake must store absolute paths
+    external_records = [r for r in records if r["event_id"] == event_id]
+    assert external_records, "No record for the planted event"
+    rec = external_records[0]
+    # Path stored as absolute string (not relative to repo_root)
+    assert Path(rec["npz_path"]).is_absolute(), (
+        f"Expected absolute npz_path for external lake, got {rec['npz_path']!r}"
+    )
+    assert rec["event_count"] == 8
+
+    # run_manifest_only writes manifest.json under the external lake root
+    rc = run_manifest_only(
+        repo_root=repo_root_dir,
+        events_csv=_EVENTS_CSV,
+        target_symbols=(symbol,),
+        event_type_filter="CPI",
+    )
+    assert rc == 0
+
+    # Manifest lives at <external_lake>/manifest.json, not under repo_root
+    from data_system.src.lake_manifest import manifest_path as _mp, resolve_npz_path  # noqa: PLC0415
+
+    manifest_file = _mp(repo_root_dir)
+    assert manifest_file == external_lake / "manifest.json", (
+        f"manifest should be in external lake, got {manifest_file}"
+    )
+    assert manifest_file.is_file(), "manifest.json was not written to external lake dir"
+
+    loaded = load_manifest(repo_root_dir)
+    assert any(r["event_id"] == event_id for r in loaded), (
+        "load_manifest did not return the planted CPI record"
+    )
+
+    # resolve_npz_path on an absolute path should return it unchanged
+    abs_rec = next(r for r in loaded if r["event_id"] == event_id)
+    resolved = resolve_npz_path(repo_root_dir, abs_rec["npz_path"])
+    assert resolved == npz_abs

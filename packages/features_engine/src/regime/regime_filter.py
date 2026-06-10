@@ -38,12 +38,13 @@ def _regime_boost_labels() -> tuple[frozenset[str], frozenset[str]]:
 
 
 def _softmax(logits: Dict[str, float]) -> Dict[str, float]:
-    keys = list(logits.keys())
-    vals = np.array([logits[k] for k in keys], dtype=np.float64)
-    vals -= vals.max()
-    ex = np.exp(vals)
-    ex /= ex.sum()
-    return {k: float(v) for k, v in zip(keys, ex)}
+    # Pure-python: called once per MBO event on a 9-element dict, where
+    # numpy's per-call overhead dominates the actual arithmetic.
+    m = max(logits.values())
+    ex = {k: math.exp(v - m) for k, v in logits.items()}
+    total = sum(ex.values())
+    inv = 1.0 / total
+    return {k: v * inv for k, v in ex.items()}
 
 
 class RegimeFilter:
@@ -95,7 +96,11 @@ class RegimeFilter:
         for z in REGIME_LABELS:
             logits[z] += 0.15 * math.log(self._prev_posterior.get(z, 1e-9) + 1e-12)
 
-        posterior = _softmax({z: logits[z] / self.temperature for z in REGIME_LABELS})
+        if self.temperature != 1.0:
+            inv_t = 1.0 / self.temperature
+            for z in REGIME_LABELS:
+                logits[z] *= inv_t
+        posterior = _softmax(logits)
         self._prev_posterior = posterior
         return posterior
 
