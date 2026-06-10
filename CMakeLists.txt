@@ -4,6 +4,14 @@ if(POLICY CMP0091)
     cmake_policy(SET CMP0091 NEW)
 endif()
 
+# Allow caller to pass Python interpreter path (needed on Windows where bare
+# "python" may stall due to site-hook issues).
+if(DEFINED ENV{HFT3_PYTHON_EXECUTABLE})
+    set(Python_EXECUTABLE "$ENV{HFT3_PYTHON_EXECUTABLE}" CACHE FILEPATH "Python interpreter" FORCE)
+elseif(DEFINED HFT3_PYTHON_EXECUTABLE)
+    set(Python_EXECUTABLE "${HFT3_PYTHON_EXECUTABLE}" CACHE FILEPATH "Python interpreter" FORCE)
+endif()
+
 project(hft3 CXX)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -67,6 +75,52 @@ add_executable(hft_event_context_golden
 )
 target_link_libraries(hft_event_context_golden PRIVATE hft_features)
 
+# ── pybind11 Python extension ────────────────────────────────────────────────
+# Locate pybind11 via the cmake directory reported by:
+#   python -S -m pybind11 --cmakedir
+# Pass it with -Dpybind11_DIR=<path> or set HFT3_PYBIND11_DIR env var.
+if(DEFINED ENV{HFT3_PYBIND11_DIR})
+    set(pybind11_DIR "$ENV{HFT3_PYBIND11_DIR}" CACHE PATH "pybind11 cmake dir")
+endif()
+
+find_package(pybind11 CONFIG QUIET)
+
+if(pybind11_FOUND)
+    message(STATUS "pybind11 found: ${pybind11_VERSION} at ${pybind11_DIR}")
+
+    # Python extension module — same source as hft_features, same compilation flags.
+    pybind11_add_module(hft3_features_cpp
+        packages/features_engine/cpp/bindings/py_features.cpp
+        packages/features_engine/cpp/src/event_context.cpp
+        packages/features_engine/cpp/src/feature_extractor.cpp
+        packages/features_engine/cpp/src/regime_filter.cpp
+    )
+    target_include_directories(hft3_features_cpp PRIVATE
+        packages/features_engine/cpp/include
+    )
+    if(MSVC)
+        target_compile_options(hft3_features_cpp PRIVATE /O2 /W4)
+    else()
+        target_compile_options(hft3_features_cpp PRIVATE -O3 -Wall -Wextra)
+    endif()
+
+    # Place the .pyd/.so directly in build/ so the loader can find it.
+    set_target_properties(hft3_features_cpp PROPERTIES
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    )
+    # Also copy to Release/ sub-dir if that's where the other binaries land.
+    if(WIN32 AND NOT MSVC)
+        set(_PYBIND_OUT "${CMAKE_BINARY_DIR}")
+    endif()
+
+    message(STATUS "hft3_features_cpp target configured; output -> ${CMAKE_BINARY_DIR}")
+else()
+    message(WARNING
+        "pybind11 not found — hft3_features_cpp will NOT be built.\n"
+        "Install pybind11 and pass -Dpybind11_DIR=<path> (from: python -S -m pybind11 --cmakedir)")
+endif()
+
 # Copy MinGW runtime DLLs to build directory for Windows
 if(WIN32 AND NOT MSVC)
     set(MINGW_DLL_DIR "" CACHE PATH "Path to MinGW bin directory containing runtime DLLs")
@@ -97,6 +151,10 @@ if(WIN32 AND NOT MSVC)
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different "${MINGW_DLL_DIR}/${DLL}" "${_DLL_OUTPUT_DIR}")
             add_custom_command(TARGET hft_event_context_golden POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different "${MINGW_DLL_DIR}/${DLL}" "${_DLL_OUTPUT_DIR}")
+            if(TARGET hft3_features_cpp)
+                add_custom_command(TARGET hft3_features_cpp POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${MINGW_DLL_DIR}/${DLL}" "${_DLL_OUTPUT_DIR}")
+            endif()
         endforeach()
     else()
         message(WARNING "MinGW runtime DLLs not found. "
