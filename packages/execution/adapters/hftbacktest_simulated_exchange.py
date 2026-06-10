@@ -1,4 +1,4 @@
-"""HftBacktest-backed simulated exchange adapter."""
+﻿"""HftBacktest-backed simulated exchange adapter."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -230,10 +230,11 @@ class HftBacktestSimulatedExchangeAdapter:
         return out
 
     def after_elapse(self, replay_time_ns: int) -> None:
-        # Fast path: with no live orders nothing can fill, so fees/position
-        # cannot move and there is nothing to observe or clear. Skipping the
-        # hbt calls here matters — each one crosses the numba jitclass boxing
-        # boundary and the replay loop calls after_elapse every 100 µs step.
+        # Called after every loop wake: feed event (wait_next_feed ret=2),
+        # order response (ret=3), or timeout (ret=0).  With event-driven
+        # stepping (the default) this replaces the 100us grid; the numba
+        # boxing cost is paid only when fills actually arrive.
+        # Fast path: no live orders means no fills possible.
         if not self._open_orders:
             return
 

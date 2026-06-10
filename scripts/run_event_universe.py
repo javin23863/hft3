@@ -143,6 +143,75 @@ def _parse_symbols(symbols_str: str) -> list[str]:
     return [s.strip() for s in symbols_str.split(",") if s.strip()]
 
 
+# ---------------------------------------------------------------------------
+# Shard helpers
+# ---------------------------------------------------------------------------
+
+def parse_shard(shard_str: str) -> tuple[int, int]:
+    """Parse 'I/N' shard spec; return (shard_index, total_shards).
+
+    Raises ValueError on malformed input or out-of-range index.
+    """
+    parts = shard_str.strip().split("/")
+    if len(parts) != 2:
+        raise ValueError(
+            f"--shard must be 'I/N' (e.g. '0/2'), got: {shard_str!r}"
+        )
+    try:
+        shard_i = int(parts[0])
+        shard_n = int(parts[1])
+    except ValueError:
+        raise ValueError(
+            f"--shard I/N requires integer parts, got: {shard_str!r}"
+        )
+    if shard_n < 1:
+        raise ValueError(
+            f"--shard N must be >= 1, got N={shard_n}"
+        )
+    if shard_i < 0 or shard_i >= shard_n:
+        raise ValueError(
+            f"--shard I must satisfy 0 <= I < N; got I={shard_i}, N={shard_n}"
+        )
+    return shard_i, shard_n
+
+
+def _unit_shard_key(unit: dict) -> str:
+    """Stable string key for a work unit: 'event_id|symbol|band'."""
+    return f"{unit['event_id']}|{unit['symbol']}|{unit['latency_ms']}"
+
+
+def _stable_hash(s: str) -> int:
+    """SHA-256 of the key, truncated to an unsigned 64-bit int.
+
+    Deterministic across Python versions, platforms, and PYTHONHASHSEED
+    (unlike the built-in hash()).  The same key always maps to the same shard
+    on any machine, so the laptop and CHI404 agree on the partition even when
+    they scan the lake independently.
+    """
+    digest = hashlib.sha256(s.encode("utf-8")).digest()
+    # Take the first 8 bytes as a big-endian unsigned int
+    return int.from_bytes(digest[:8], "big")
+
+
+def apply_shard(
+    work_units: list[dict],
+    shard_i: int,
+    shard_n: int,
+) -> list[dict]:
+    """Return the subset of work_units assigned to shard I of N.
+
+    Assignment: stable_hash(event_id|symbol|band) % N == I.
+    The input list is first sorted by key for reproducibility (order must not
+    affect which shard a unit lands in — hashing ensures it does not — but a
+    stable sort keeps the within-shard order deterministic too).
+    """
+    sorted_units = sorted(work_units, key=_unit_shard_key)
+    return [
+        u for u in sorted_units
+        if _stable_hash(_unit_shard_key(u)) % shard_n == shard_i
+    ]
+
+
 def build_work_units(
     events_csv: Path,
     lake_index: dict[tuple[str, str], str],
@@ -753,7 +822,22 @@ def main(argv: list[str] | None = None) -> int:
                    help="Limit events processed (smoke runs)")
     p.add_argument("--rescan", action="store_true", default=False,
                    help="Skip manifest cache and scan NPZ dir directly (useful when manifest is stale)")
+    p.add_argument("--shard", default=None, metavar="I/N",
+                   help=(
+                       "Run only shard I of N (e.g. --shard 0/2 for the first half). "
+                       "Assignment is hash(event_id|symbol|band) %% N == I, so both machines "
+                       "scanning the lake independently produce the same partition. "
+                       "Omit to run all work units."
+                   ))
     args = p.parse_args(argv)
+
+    # Validate shard arg early so the user gets a clear error before any I/O
+    shard_spec: tuple[int, int] | None = None
+    if args.shard is not None:
+        try:
+            shard_spec = parse_shard(args.shard)
+        except ValueError as exc:
+            p.error(str(exc))
 
     utcstamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     out_dir = args.out or (_REPO / "research_cards" / f"universe_{utcstamp}")
@@ -780,6 +864,14 @@ def main(argv: list[str] | None = None) -> int:
         symbol_filter=symbol_filter,
         max_events=args.max_events,
     )
+    total_before_shard = len(work_units)
+    if shard_spec is not None:
+        shard_i, shard_n = shard_spec
+        work_units = apply_shard(work_units, shard_i, shard_n)
+        print(
+            f"Shard {shard_i}/{shard_n}: {len(work_units)} of {total_before_shard} units assigned to this shard",
+            flush=True,
+        )
     print(f"Work units: {len(work_units)}  skipped: {len(skipped)}", flush=True)
     if not work_units:
         print("No work units — check --symbols, --event-type, and data/npz/ contents.", flush=True)
@@ -812,6 +904,9 @@ def main(argv: list[str] | None = None) -> int:
         "events_csv": str(args.events_csv),
         "workers": args.workers,
         "max_events": args.max_events,
+        "shard": args.shard,
+        "shard_index": shard_spec[0] if shard_spec else None,
+        "shard_total": shard_spec[1] if shard_spec else None,
     }
 
     run_start_utc = datetime.now(timezone.utc).isoformat()
