@@ -157,8 +157,9 @@ add_executable(rithmic_latency_probe
 target_include_directories(rithmic_latency_probe PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${RAPIPLUS_ROOT}/include
+    ${CMAKE_SOURCE_DIR}/risk_engine/include
 )
-target_link_libraries(rithmic_latency_probe PRIVATE rithmic_gateway)
+target_link_libraries(rithmic_latency_probe PRIVATE rithmic_gateway hft_risk)
 target_compile_features(rithmic_latency_probe PRIVATE cxx_std_17)
 configure_rapiplus_msvc_runtime(rithmic_latency_probe)
 configure_hft_release_latency(rithmic_latency_probe)

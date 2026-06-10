@@ -349,10 +349,6 @@ def main() -> int:
     parser.add_argument("--symbol", default=DEFAULT_SYMBOL)
     parser.add_argument("--run-id", default=None, help="Run-id scoped artifact folder/report id")
     parser.add_argument("--latency-ms", type=float, default=None)
-    parser.add_argument("--skip-hybrid", action="store_true")
-    parser.add_argument("--skip-unit-tests", action="store_true")
-    parser.add_argument("--skip-ablation", action="store_true", help="Skip 4-mode ablation in hybrid block")
-    parser.add_argument("--skip-after-action", action="store_true")
     parser.add_argument("--min-trades", type=int, default=1)
     args = parser.parse_args()
     run_id = args.run_id or "full_pipeline_" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -373,20 +369,19 @@ def main() -> int:
 
     steps.append(_step("preflight", True, f"npz={_relative(npz)}"))
 
-    if not args.skip_unit_tests:
-        hg = _load_hybrid_gate()
-        ok, detail = hg.run_unit_tests()
-        steps.append(_step("unit_tests", ok, detail))
-        overall &= ok
+    hg = _load_hybrid_gate()
+    ok, detail = hg.run_unit_tests()
+    steps.append(_step("unit_tests", ok, detail))
+    overall &= ok
 
-    if overall and not args.skip_hybrid:
+    if overall:
         ok, detail, bundle = _run_hybrid_block(
             args.event_id,
             npz,
             args.symbol,
             args.latency_ms,
-            skip_ablation=args.skip_ablation or args.tier == "smoke",
-            skip_after_action=args.skip_after_action or args.tier == "smoke",
+            skip_ablation=args.tier == "smoke",
+            skip_after_action=args.tier == "smoke",
             min_trades=args.min_trades,
         )
         steps.append(_step("hybrid_block", ok, detail))

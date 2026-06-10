@@ -1,98 +1,31 @@
 {
   "tier": "T2",
   "status": "GREEN",
-  "run_id": "CERT-20260603T142035Z-4fd9a16b",
-  "git_sha": "80a61840568ca69349587ca881135890fff4a739",
-  "timestamp_utc": "2026-06-03T14:21:14.917354+00:00",
+  "run_id": "CERT-20260610T003646Z-5ea3fe09",
+  "git_sha": "dd4459eebeade2f911b549c63f8f0cd10a4a3cc0",
+  "timestamp_utc": "2026-06-10T00:36:58.676803+00:00",
   "t0_passed": true,
   "full_passed": true,
-  "t0_test_count": 19,
+  "t0_test_count": 21,
   "full_test_count": 9,
   "blocking_failures": [],
   "warnings": [],
-  "lane_results": {
-    "crypto": {
-      "lane": "crypto",
-      "passed": true,
-      "returncode": 0,
-      "output_tail": "=== tests/test_crypto_lane (rc=0) ===\nst_normalize_correctness.py::test_l2_data_quality_flag_default_zero\n  C:\\Users\\MSI\\Documents\\opencode\\hft3\\packages\\crypto_lane\\src\\ingest\\normalize.py:116: DeprecationWarning: use of `how='outer_coalesce'` should be replaced with `how='full', coalesce=True`.\n  (Deprecated in version 0.20.29)\n    out = spot.join(perp, on=\"exchange_timestamp\", how=\"outer_coalesce\").sort(\"exchange_timestamp\")\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n137 passed, 3 warnings in 20.31s\n",
-      "test_paths": [
-        "tests/test_crypto_lane"
-      ],
-      "failure_notes": []
-    },
-    "equities": {
-      "lane": "equities",
-      "passed": true,
-      "returncode": 0,
-      "output_tail": "=== tests/test_equities_lane (rc=0) ===\n...........................................                              [100%]\n43 passed in 5.43s\n",
-      "test_paths": [
-        "tests/test_equities_lane"
-      ],
-      "failure_notes": []
-    },
-    "options": {
-      "lane": "options",
-      "passed": true,
-      "returncode": 0,
-      "output_tail": "[skip] tests/test_options_lane (not present)\n",
-      "test_paths": [
-        "tests/test_options_lane"
-      ],
-      "failure_notes": []
-    },
-    "cme_futures": {
-      "lane": "cme_futures",
-      "passed": true,
-      "returncode": 0,
-      "test_paths": [
-        "tests/backtester_validation/fast",
-        "tests/backtester_validation/full"
-      ],
-      "failure_notes": [],
-      "covered_by": "T0 fast gate + T2 full suite (CME core)"
-    }
-  },
+  "lane_results": {},
   "lane_failures": [],
-  "backtester_version": "80a6184-dirty",
+  "backtester_version": "dd4459e-dirty",
   "covered_modules": [
     "backtest_pipeline",
-    "crypto_lane",
-    "equities_lane",
     "execution",
-    "features_engine",
-    "options_lane",
     "replay",
+    "features_engine",
     "workbench"
   ],
   "covered_symbols": [
-    "BTC/USD",
-    "BTCUSDT",
-    "CL",
     "ES",
-    "ETH/USD",
-    "ETHUSDT",
-    "GC",
-    "HG",
-    "MES",
-    "MNQ",
-    "NQ",
-    "RTY",
-    "RUNNER",
-    "SI",
-    "SOLUSDT",
-    "YM",
-    "ZB",
-    "ZN"
+    "MES"
   ],
   "covered_event_types": [
-    "crypto_l2",
-    "crypto_l3",
-    "crypto_shock_event",
-    "equities_low_float",
-    "equities_runner_event",
     "macro",
-    "options_parity",
     "synthetic"
   ],
   "covered_latency_bands": [
@@ -100,9 +33,7 @@
     1.0,
     2.0,
     5.0,
-    10.0,
-    50.0,
-    200.0
+    10.0
   ],
   "covered_queue_models": [
     "LogProbQueueModel2",
@@ -110,177 +41,5 @@
   ],
   "covered_execution_modes": [
     "REPLAY"
-  ],
-  "lane_coverage": {
-    "cme_futures": {
-      "symbols": [
-        "ES",
-        "MES",
-        "NQ",
-        "MNQ",
-        "ZN",
-        "ZB",
-        "YM",
-        "CL",
-        "GC",
-        "SI",
-        "HG",
-        "RTY"
-      ],
-      "event_types": [
-        "macro",
-        "synthetic"
-      ],
-      "latency_bands_ms": [
-        0.5,
-        1.0,
-        2.0,
-        5.0,
-        10.0
-      ],
-      "test_paths": [
-        "tests/backtester_validation/fast",
-        "tests/backtester_validation/full"
-      ],
-      "queue_models": [
-        "LogProbQueueModel2",
-        "SquareProbQueueModel"
-      ]
-    },
-    "crypto": {
-      "symbols": [
-        "BTCUSDT",
-        "ETHUSDT",
-        "SOLUSDT",
-        "BTC/USD",
-        "ETH/USD"
-      ],
-      "event_types": [
-        "crypto_l2",
-        "crypto_l3",
-        "crypto_shock_event"
-      ],
-      "latency_bands_ms": [
-        5.0,
-        50.0,
-        200.0
-      ],
-      "test_paths": [
-        "tests/test_crypto_lane"
-      ],
-      "venues": [
-        "binance_spot",
-        "binance_perp",
-        "deribit",
-        "kraken"
-      ],
-      "candidate_id": "",
-      "hypothesis_id": "",
-      "run_result": {
-        "lane": "crypto",
-        "passed": true,
-        "returncode": 0,
-        "output_tail": "=== tests/test_crypto_lane (rc=0) ===\nst_normalize_correctness.py::test_l2_data_quality_flag_default_zero\n  C:\\Users\\MSI\\Documents\\opencode\\hft3\\packages\\crypto_lane\\src\\ingest\\normalize.py:116: DeprecationWarning: use of `how='outer_coalesce'` should be replaced with `how='full', coalesce=True`.\n  (Deprecated in version 0.20.29)\n    out = spot.join(perp, on=\"exchange_timestamp\", how=\"outer_coalesce\").sort(\"exchange_timestamp\")\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n137 passed, 3 warnings in 20.31s\n",
-        "test_paths": [
-          "tests/test_crypto_lane"
-        ],
-        "failure_notes": []
-      }
-    },
-    "equities": {
-      "symbols": [
-        "RUNNER"
-      ],
-      "event_types": [
-        "equities_low_float",
-        "equities_runner_event"
-      ],
-      "latency_bands_ms": [
-        5.0
-      ],
-      "test_paths": [
-        "tests/test_equities_lane"
-      ],
-      "walk_forward": {
-        "train_days": 60,
-        "val_days": 20,
-        "test_days": 20,
-        "step_days": 20
-      },
-      "run_result": {
-        "lane": "equities",
-        "passed": true,
-        "returncode": 0,
-        "output_tail": "=== tests/test_equities_lane (rc=0) ===\n...........................................                              [100%]\n43 passed in 5.43s\n",
-        "test_paths": [
-          "tests/test_equities_lane"
-        ],
-        "failure_notes": []
-      }
-    },
-    "options": {
-      "symbols": [],
-      "event_types": [
-        "options_parity"
-      ],
-      "latency_bands_ms": [
-        1.0
-      ],
-      "test_paths": [
-        "tests/test_options_lane"
-      ],
-      "latency_ms": 1.0,
-      "run_result": {
-        "lane": "options",
-        "passed": true,
-        "returncode": 0,
-        "output_tail": "[skip] tests/test_options_lane (not present)\n",
-        "test_paths": [
-          "tests/test_options_lane"
-        ],
-        "failure_notes": []
-      }
-    }
-  },
-  "legacy_cme_fields": {
-    "covered_modules": [
-      "backtest_pipeline",
-      "execution",
-      "replay",
-      "features_engine",
-      "workbench"
-    ],
-    "covered_symbols": [
-      "ES",
-      "MES",
-      "NQ",
-      "MNQ",
-      "ZN",
-      "ZB",
-      "YM",
-      "CL",
-      "GC",
-      "SI",
-      "HG",
-      "RTY"
-    ],
-    "covered_event_types": [
-      "macro",
-      "synthetic"
-    ],
-    "covered_latency_bands": [
-      0.5,
-      1.0,
-      2.0,
-      5.0,
-      10.0
-    ],
-    "covered_queue_models": [
-      "LogProbQueueModel2",
-      "SquareProbQueueModel"
-    ],
-    "covered_execution_modes": [
-      "REPLAY"
-    ]
-  }
+  ]
 }

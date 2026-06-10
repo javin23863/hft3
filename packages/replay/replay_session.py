@@ -24,6 +24,7 @@ from execution.interfaces import (
 from replay.market_data_adapter import HistoricalReplayMarketDataAdapter
 from replay.replay_clock import ReplayClock, deterministic_run_id
 from hft3.validation.research_stamp import build_certification_stamp, format_stamp_footer
+from features_engine.src.hypotheses.modules import MarketState
 
 _REPO = Path(__file__).resolve().parents[1]
 AUDIT_DIR = _REPO / "runtime" / "replay_audits"
@@ -81,6 +82,14 @@ class ReplaySessionConfig:
     # Note: order latency is NOT affected; hbt already simulates that via its
     # own latency model.  Only the feature clock is shifted here.
     feature_latency_ms: Optional[float] = None
+    # Cross-asset secondary symbols.  Maps symbol name → npz file path.
+    # If non-empty, one HistoricalReplayMarketDataAdapter + MarketStatePipeline
+    # is built per entry; at each step their features are injected into
+    # ctx.market_state.cross_asset_features[symbol].
+    cross_asset_npz: Dict[str, str] = field(default_factory=dict)
+    # Pre-loaded event arrays for cross-asset symbols (symbol → np.ndarray).
+    # Takes priority over cross_asset_npz when both are supplied for a symbol.
+    cross_asset_events: Dict[str, np.ndarray] = field(default_factory=dict)
 
 
 class ReplaySession:
@@ -148,6 +157,27 @@ class ReplaySession:
                 latency_ms=cfg.latency_ms,
             )
 
+            # Build one secondary adapter per cross-asset symbol.  Zero overhead
+            # when cross_asset_npz is empty (the dict is never iterated).
+            secondary_mdas: Dict[str, HistoricalReplayMarketDataAdapter] = {}
+            for sym, npz_path in cfg.cross_asset_npz.items():
+                sec_events = cfg.cross_asset_events.get(sym)
+                secondary_mdas[sym] = HistoricalReplayMarketDataAdapter.from_npz(
+                    npz_path,
+                    events=sec_events,
+                    tick_size=cfg.tick_size,
+                    latency_ms=cfg.latency_ms,
+                )
+            # Also wire any symbols provided only via cross_asset_events (no npz).
+            for sym, sec_events in cfg.cross_asset_events.items():
+                if sym not in secondary_mdas:
+                    secondary_mdas[sym] = HistoricalReplayMarketDataAdapter.from_npz(
+                        "",
+                        events=sec_events,
+                        tick_size=cfg.tick_size,
+                        latency_ms=cfg.latency_ms,
+                    )
+
             steps = 0
             while True:
                 result = hbt.elapse(cfg.step_ns)
@@ -172,6 +202,29 @@ class ReplaySession:
                 feature_ts = max(0, ts - feat_latency_ns)
                 mda.sync_to_timestamp(feature_ts)
                 state = mda.current_market_state(cfg.symbol)
+
+                # Inject cross-asset features when secondary adapters exist.
+                if secondary_mdas and state is not None:
+                    cross: Dict[str, Dict[str, float]] = {}
+                    for sym, sec_mda in secondary_mdas.items():
+                        sec_mda.sync_to_timestamp(feature_ts)
+                        sec_state = sec_mda.current_market_state(sym)
+                        if sec_state is not None:
+                            cross[sym] = sec_state.primary_features
+                    if cross:
+                        state = MarketState(
+                            feature_vector=state.feature_vector,
+                            primary_features=state.primary_features,
+                            cross_asset_features=cross,
+                            regime_posterior=state.regime_posterior,
+                            regime_state=state.regime_state,
+                            event_context=state.event_context,
+                            volatility_state=state.volatility_state,
+                            liquidity_state=state.liquidity_state,
+                            latency_ms=state.latency_ms,
+                            current_inventory=state.current_inventory,
+                        )
+
                 drained = adapter.drain_order_events()
                 self._record_fills(drained, ts, depth)
 

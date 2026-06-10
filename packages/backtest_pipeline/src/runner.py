@@ -5,7 +5,7 @@ Delegates to ReplaySession + HftBacktestSimulatedExchangeAdapter for execution p
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Callable, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from backtest_pipeline.src.hft_backtest_builder import LATENCY_BANDS_MS, QUEUE_MODELS, build_hftbacktest
 from backtest_pipeline.src.hypothesis_replay_strategy import CombinedHypothesisReplayStrategy
@@ -15,15 +15,6 @@ from replay.replay_session import ReplaySession, ReplaySessionConfig
 
 _MIN_PNL = 0.0
 _MIN_BALANCE = -500.0
-
-
-class _CallbackStrategy:
-    def __init__(self, callback: Callable) -> None:
-        self._callback = callback
-
-    def on_step(self, ctx):
-        # Legacy callbacks receive hbt; build transient hbt from session not available here.
-        return []
 
 
 class ReplayRunner:
@@ -51,7 +42,6 @@ class ReplayRunner:
 
     def run_replay(
         self,
-        model_logic_callback: Callable | None = None,
         latency_ms: float = 1.0,
         queue_model: str = "LogProbQueueModel2",
         step_ns: int = 100_000,
@@ -59,17 +49,6 @@ class ReplayRunner:
         max_steps: Optional[int] = None,
         run_id: str | None = None,
     ) -> Dict:
-
-        if model_logic_callback is not None:
-            # Legacy hbt callback path: run direct hbt loop for pdf_hybrid compatibility
-            return self._run_legacy_callback(
-                model_logic_callback,
-                latency_ms=latency_ms,
-                queue_model=queue_model,
-                step_ns=step_ns,
-                max_steps=max_steps,
-            )
-
         raw_events = load_npz_events(self.data_path)
         if use_combined_strategy:
             hyps = get_active_hypotheses()
@@ -98,43 +77,9 @@ class ReplayRunner:
         )
         return ReplaySession(cfg, strategy).run()
 
-    def _run_legacy_callback(
-        self,
-        model_logic_callback: Callable,
-        *,
-        latency_ms: float,
-        queue_model: str,
-        step_ns: int,
-        max_steps: Optional[int],
-    ) -> Dict:
-        hbt = self.build_backtest(latency_ms, queue_model)
-        steps = 0
-        while True:
-            result = hbt.elapse(step_ns)
-            if result == 1:
-                break
-            if result != 0:
-                return {"error": int(result), "steps": steps}
-            hbt.clear_inactive_orders(0)
-            model_logic_callback(hbt)
-            steps += 1
-            if max_steps is not None and steps >= max_steps:
-                break
-        state = hbt.state_values(0)
-        return {
-            "steps": steps,
-            "balance": float(state.balance),
-            "fee": float(state.fee),
-            "num_trades": int(state.num_trades),
-            "trading_volume": float(state.trading_volume),
-            "position": float(state.position),
-            "order_intent_count": 0,
-        }
-
     def generate_research_card(
         self,
         hyp_id: str,
-        model_logic_callback: Callable | None = None,
         latency_bands: Optional[List[float]] = None,
         queue_model: str = "LogProbQueueModel2",
     ) -> Dict:
@@ -144,7 +89,6 @@ class ReplayRunner:
         for latency in latency_bands:
             print(f"Running replay for {hyp_id} at {latency}ms latency ({queue_model})...")
             results_by_band[f"{latency}ms"] = self.run_replay(
-                model_logic_callback,
                 latency_ms=latency,
                 queue_model=queue_model,
             )

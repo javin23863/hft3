@@ -1,4 +1,6 @@
 #include "rithmic_adapter.hpp"
+#include "risk_manager.hpp"
+#include "safety_poller.hpp"
 #include "spsc_queue.hpp"
 
 #include <chrono>
@@ -879,6 +881,13 @@ int main(int argc, char** argv) {
     auto order_queue = std::make_unique<hft::SPSCQueue<hft::OrderEvent, 8192>>();
 
     hft::RithmicAdapter adapter(cfg, mbo_queue.get(), order_queue.get());
+
+    // Safety infrastructure — wired to the adapter's flag/counter surface and
+    // the risk manager.  poll() is called at every consumer-loop iteration.
+    hft::risk::RiskLimits probe_limits{};        // default limits sufficient for the probe
+    hft::risk::RiskManager risk_manager(probe_limits);
+    hft::gateway::SafetyPoller<hft::RithmicAdapter> safety_poller(adapter, risk_manager);
+
     const std::string env_name_str = get_env_or_string("RITHMIC_PROBE_ENV_LABEL", "paper");
     const char* env_name = env_name_str.c_str();
 
@@ -1068,7 +1077,57 @@ int main(int argc, char** argv) {
         }
     }
 
+    // One-shot log flags so we only print each safety condition once outside
+    // the hot section rather than on every iteration.
+    bool logged_halt          = false;
+    bool logged_reconcile     = false;
+    bool logged_book_resync   = false;
+
     for (int i = 0; i < count; ++i) {
+        // --- Safety poll (must be first thing in the loop iteration) --------
+        {
+            const hft::gateway::PollResult pr = safety_poller.poll();
+
+            if (pr.halted && !logged_halt) {
+                std::printf("SAFETY_HALT run_id=%s iteration=%d"
+                            " order_halt=%d auto_liquidate=%d"
+                            " alert_severity=%d — stopping probe orders\n",
+                            run_id.c_str(), i + 1,
+                            adapter.order_halt()         ? 1 : 0,
+                            adapter.auto_liquidate_halt() ? 1 : 0,
+                            pr.alert_severity);
+                logged_halt = true;
+                stop_reason = "safety_halt";
+                break;
+            }
+            if (pr.reconcile_required && !logged_reconcile) {
+                std::printf("SAFETY_RECONCILE run_id=%s iteration=%d"
+                            " position_desync=%d order_desync=%d\n",
+                            run_id.c_str(), i + 1,
+                            adapter.position_desync() ? 1 : 0,
+                            adapter.order_desync()    ? 1 : 0);
+                logged_reconcile = true;
+                // Probe has no reconciliation logic; acknowledge immediately
+                // so the flag clears and subsequent iterations see a clean state.
+                safety_poller.ack_reconcile();
+            }
+            if (pr.book_resync_required && !logged_book_resync) {
+                std::printf("SAFETY_BOOK_RESYNC run_id=%s iteration=%d"
+                            " — probe has no book to rebuild; acknowledging\n",
+                            run_id.c_str(), i + 1);
+                logged_book_resync = true;
+                safety_poller.ack_book_resync();
+            }
+            if (pr.md_drops_delta > 0 || pr.order_drops_delta > 0) {
+                std::printf("SAFETY_DROPS run_id=%s iteration=%d"
+                            " md_drops_delta=%llu order_drops_delta=%llu\n",
+                            run_id.c_str(), i + 1,
+                            static_cast<unsigned long long>(pr.md_drops_delta),
+                            static_cast<unsigned long long>(pr.order_drops_delta));
+            }
+        }
+        // --- End safety poll ------------------------------------------------
+
         if (!adapter.set_prepared_limit_order_tag(
                 prepared_order,
                 user_msgs[static_cast<size_t>(i)].c_str())) {
@@ -1255,6 +1314,39 @@ int main(int argc, char** argv) {
             order_sample.success = false;
             order_sample.reject_reason = "order_failure";
             stop_reason = order_sample.reject_reason;
+        } else if (terminal_event.event_type == 'B') {
+            // Bust: a previously reported fill was reversed by the exchange.
+            // Position has changed retroactively — hard halt, reconcile required.
+            ++failure_count;
+            order_sample.success = false;
+            order_sample.reject_reason = "fill_bust";
+            stop_reason = order_sample.reject_reason;
+            std::printf("SAFETY_EVENT_BUST run_id=%s iteration=%d"
+                        " broker_order_id=%llu — fill reversed; halting\n",
+                        run_id.c_str(), i + 1,
+                        static_cast<unsigned long long>(terminal_event.order_id));
+        } else if (terminal_event.event_type == 'N') {
+            // Not-modified: a modify request was silently rejected; local order
+            // state is wrong — reconcile required.
+            ++failure_count;
+            order_sample.success = false;
+            order_sample.reject_reason = "not_modified";
+            stop_reason = order_sample.reject_reason;
+            std::printf("SAFETY_EVENT_NOT_MODIFIED run_id=%s iteration=%d"
+                        " broker_order_id=%llu — modify rejected; local state wrong\n",
+                        run_id.c_str(), i + 1,
+                        static_cast<unsigned long long>(terminal_event.order_id));
+        } else if (terminal_event.event_type == 'L') {
+            // Auto-liquidate: broker force-flattened our position outside our
+            // control — hard halt and reconcile.
+            ++failure_count;
+            order_sample.success = false;
+            order_sample.reject_reason = "auto_liquidate";
+            stop_reason = order_sample.reject_reason;
+            std::printf("SAFETY_EVENT_AUTO_LIQUIDATE run_id=%s iteration=%d"
+                        " broker_order_id=%llu — broker force-flattened; halting\n",
+                        run_id.c_str(), i + 1,
+                        static_cast<unsigned long long>(terminal_event.order_id));
         } else {
             ++failure_count;
             order_sample.success = false;

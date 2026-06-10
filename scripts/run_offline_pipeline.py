@@ -16,7 +16,6 @@ sys.path.insert(0, str(_REPO))
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--skip-download", action="store_true")
     parser.add_argument("--npz", default=None, help="Path to existing NPZ for replay")
     parser.add_argument(
         "--rithmic-trial",
@@ -37,11 +36,6 @@ def main() -> None:
         "--full-hft",
         action="store_true",
         help="Include slow HftBacktest combined replay in research matrix",
-    )
-    parser.add_argument(
-        "--skip-event-replay",
-        action="store_true",
-        help="Skip run_event_replay.py (matrix only)",
     )
     args = parser.parse_args()
 
@@ -93,16 +87,21 @@ def main() -> None:
         if npz.exists():
             args.npz = str(npz)
             print(f"Trial replay NPZ: {npz}")
-            args.skip_download = True
 
-    if not args.skip_download:
-        print("=== Phase 3: Databento micro-probe ===")
-        r = subprocess.run(
-            [sys.executable, str(_REPO / "data_system" / "scripts" / "download_micro_probe.py")],
-            cwd=str(_REPO),
-        )
-        if r.returncode != 0:
-            print("Download skipped or failed; continue with --npz if you have data.")
+    if not args.npz:
+        # Idempotent: skip download if target NPZ files already exist in data/npz.
+        _npz_dir = _REPO / "data" / "npz"
+        _existing = list(_npz_dir.glob("*.npz")) if _npz_dir.exists() else []
+        if _existing:
+            print(f"Download step: {len(_existing)} NPZ file(s) already exist in data/npz, skipping download.")
+        else:
+            print("=== Phase 3: Databento micro-probe ===")
+            r = subprocess.run(
+                [sys.executable, str(_REPO / "data_system" / "scripts" / "download_micro_probe.py")],
+                cwd=str(_REPO),
+            )
+            if r.returncode != 0:
+                print("Download skipped or failed; continue with --npz if you have data.")
 
     npz_path = args.npz
     if not npz_path:
@@ -138,24 +137,22 @@ def main() -> None:
         sys.exit(1)
 
     if npz_path:
-        if not args.skip_event_replay:
-            if not args.event_id:
-                print("ERROR: --event-id is required for canonical event replay.")
-                sys.exit(1)
-            print("=== Canonical event replay (ReplaySession primary) ===")
-            replay_cmd = [
-                sys.executable,
-                str(_REPO / "scripts" / "run_event_replay.py"),
-                "--event-id",
-                args.event_id,
-                "--npz",
-                npz_path,
-                "--skip-hftbacktest",
-            ]
-            r = subprocess.run(replay_cmd, cwd=str(_REPO))
-            if r.returncode != 0:
-                print("Event replay failed")
-                sys.exit(r.returncode)
+        if not args.event_id:
+            print("ERROR: --event-id is required for canonical event replay.")
+            sys.exit(1)
+        print("=== Canonical event replay (ReplaySession primary) ===")
+        replay_cmd = [
+            sys.executable,
+            str(_REPO / "scripts" / "run_event_replay.py"),
+            "--event-id",
+            args.event_id,
+            "--npz",
+            npz_path,
+        ]
+        r = subprocess.run(replay_cmd, cwd=str(_REPO))
+        if r.returncode != 0:
+            print("Event replay failed")
+            sys.exit(r.returncode)
 
         print("=== Research matrix (ReplaySession per-hypothesis; HftBacktest combined opt-in) ===")
         from backtest_pipeline.src.research_runner import run_all_research_cards

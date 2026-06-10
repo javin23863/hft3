@@ -90,6 +90,7 @@ def run_hypothesis_replay(
     max_steps: int | None = None,
     events: Optional[np.ndarray] = None,
     tick_size: float = 0.25,
+    cross_asset_npz: Optional[Dict[str, str]] = None,
 ) -> BacktestResult:
     strategy = HypothesisReplayStrategy(hypothesis, signal_threshold=signal_threshold)
     cfg = ReplaySessionConfig(
@@ -98,6 +99,7 @@ def run_hypothesis_replay(
         latency_ms=latency_ms,
         max_steps=max_steps,
         tick_size=tick_size,
+        cross_asset_npz=cross_asset_npz or {},
     )
     result = ReplaySession(cfg, strategy).run()
     if result.get("error"):
@@ -151,10 +153,16 @@ def run_all_hypotheses_replay(
     latency_ms: float = 1.0,
     signal_threshold: float = 0.15,
     events: Optional[np.ndarray] = None,
+    cross_asset_npz: Optional[Dict[str, str]] = None,
 ) -> Dict[int, BacktestResult]:
     return {
         h.hyp_id: run_hypothesis_replay(
-            h, npz_path, latency_ms=latency_ms, signal_threshold=signal_threshold, events=events
+            h,
+            npz_path,
+            latency_ms=latency_ms,
+            signal_threshold=signal_threshold,
+            events=events,
+            cross_asset_npz=cross_asset_npz,
         )
         for h in hypotheses
     }
@@ -179,3 +187,45 @@ def run_latency_matrix_replay(
 # SignalBacktester's run_hypothesis / run_all_hypotheses / run_latency_matrix
 # methods.  The canonical entry points are run_hypothesis_replay,
 # run_all_hypotheses_replay, and run_latency_matrix_replay in this module.
+
+
+def run_structural_models_replay(
+    npz_path: str,
+    *,
+    latency_ms: float = 1.0,
+    events: Optional[np.ndarray] = None,
+    cross_asset_npz: Optional[Dict[str, str]] = None,
+) -> None:
+    """NOT-WIRED: structural models cannot be evaluated through the replay matrix.
+
+    Interface mismatch:
+      - BaseHypothesis.evaluate(state: MarketState) -> float
+        (pure stateless signal on a fully built MarketState)
+      - BaseStructuralModel.evaluate(**kwargs) -> ModelOutput[T]
+        (accepts raw book/BBO/tick kwargs, returns a typed payload object, and
+        in several models — CrossAssetLeadLagModel, VPINToxicityModel,
+        TransferEntropyModel, HawkesToxicFlowModel — requires accumulated
+        internal state built up by prior update calls; a single evaluate() on
+        a fresh instance produces meaningless output)
+
+    A meaningful structural-model replay would need:
+      1. A per-model adapter that translates MBOEvent/MarketState fields into
+         the correct **kwargs (e.g. bid_p, bid_q, ask_p, ask_q for Model 1;
+         own_ofi + leader_ofi sequences for Model 2; trade volume buckets for
+         Model 3; etc.).
+      2. Stateful warm-up: many models need O(50-100) prior events before their
+         first output is valid (z-score windows, PCA history, VPIN buckets).
+      3. A different result schema: ModelOutput[T].payload is a typed dataclass
+         (BookPressureOutput, VPINToxicityOutput, etc.) with no single scalar
+         signal to compare against BacktestResult.
+
+    Wire structural models through their own dedicated evaluation harness
+    (e.g. apps/workbench/src/registry/pdf_orchestrator.py) rather than the
+    hypothesis replay matrix.
+    """
+    raise NotImplementedError(
+        "run_structural_models_replay is NOT-WIRED: structural models use "
+        "evaluate(**kwargs) -> ModelOutput[T] and require stateful warm-up; "
+        "they are incompatible with the MarketState-based hypothesis replay "
+        "matrix.  Use pdf_orchestrator.py for structural model evaluation."
+    )

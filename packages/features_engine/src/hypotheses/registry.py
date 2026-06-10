@@ -64,7 +64,7 @@ def get_active_hypotheses() -> List[BaseHypothesis]:
         RequoteRaceAfterShock(),
         GhostRoute()
     ]
-    if os.environ.get("HFT3_CROSS_ASSET", "").lower() not in ("1", "true", "yes"):
+    if os.environ.get("HFT3_CROSS_ASSET", "").lower() in ("0", "false", "no"):
         hyps = [h for h in hyps if h.hyp_id not in CROSS_ASSET_HYP_IDS]
     return hyps
 

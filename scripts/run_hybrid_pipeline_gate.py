@@ -287,9 +287,6 @@ def main() -> int:
         default=None,
         help="Override replay latency (default: CHI404 measured, else 1.0ms gate fallback)",
     )
-    parser.add_argument("--skip-unit-tests", action="store_true")
-    parser.add_argument("--skip-ablation", action="store_true")
-    parser.add_argument("--skip-after-action", action="store_true")
     parser.add_argument(
         "--min-trades",
         type=int,
@@ -322,12 +319,6 @@ def main() -> int:
             "--min-trades",
             str(args.min_trades),
         ]
-        if args.skip_unit_tests:
-            cmd.append("--skip-unit-tests")
-        if args.skip_ablation:
-            cmd.append("--skip-ablation")
-        if args.skip_after_action:
-            cmd.append("--skip-after-action")
         if args.latency_ms is not None:
             cmd.extend(["--latency-ms", str(args.latency_ms)])
         return subprocess.call(cmd)
@@ -339,13 +330,13 @@ def main() -> int:
     steps.append(_step("preflight", ok, detail))
     overall &= ok
 
-    if ok and not args.skip_unit_tests:
+    if ok:
         ok, detail = run_unit_tests()
         steps.append(_step("unit_tests", ok, detail))
         overall &= ok
 
     ablation_bundle: Dict[str, Any] = {}
-    if ok and not args.skip_ablation:
+    if ok:
         ok, detail, ablation_bundle = run_defensive_ablation(args.event_id, npz, args.latency_ms)
         steps.append(_step("defensive_ablation", ok, detail))
         overall &= ok
@@ -357,7 +348,7 @@ def main() -> int:
         overall &= ok
 
     after_action_meta: Dict[str, Any] = {}
-    if ok and not args.skip_after_action and payload:
+    if ok and payload:
         ok, detail, after_action_meta = run_after_action_step(
             args.event_id,
             args.symbol,

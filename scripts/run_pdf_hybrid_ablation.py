@@ -101,7 +101,7 @@ def main() -> int:
         print(str(exc), file=sys.stderr)
         print(
             "Prepare real MBO NPZ via:\n"
-            f"  python scripts/run_offline_pipeline.py --skip-download --event-id {args.event_id}",
+            f"  python scripts/run_offline_pipeline.py --event-id {args.event_id}",
             file=sys.stderr,
         )
         return 1

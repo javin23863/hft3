@@ -213,16 +213,6 @@ def main() -> int:
     p.add_argument("--latency-ms", type=float, default=None, help="Override CHI404 TCP p99")
     p.add_argument("--tick-size", type=float, default=0.25)
     p.add_argument(
-        "--skip-combined-replay",
-        action="store_true",
-        help="Skip combined ReplaySession loop; run per-hypothesis matrix only",
-    )
-    p.add_argument(
-        "--skip-hftbacktest",
-        action="store_true",
-        help="Deprecated alias for --skip-combined-replay",
-    )
-    p.add_argument(
         "--engine",
         choices=("default", "pdf_hybrid"),
         default="default",
@@ -305,22 +295,14 @@ def main() -> int:
     print(f"NPZ={npz_path} events={len(raw)}", flush=True)
     print(f"latency={latency_ms:.4f} ms ({latency_source}) probe={chi404.get('probe_run_id')}", flush=True)
 
-    if args.skip_hftbacktest:
-        print("Warning: --skip-hftbacktest is deprecated, use --skip-combined-replay", file=sys.stderr)
-    skip_combined = args.skip_combined_replay or args.skip_hftbacktest
-    if skip_combined:
-        hft_result = {"skipped": True}
-        lifecycle_summary = None
-        print("Skipping combined replay (--skip-combined-replay)", flush=True)
-    else:
-        print("=== engine 1: replay_execution_adapter ===", flush=True)
-        runner = ReplayRunner(str(npz_path), tick_size=args.tick_size)
-        hft_result = runner.run_replay(latency_ms=latency_ms, use_combined_strategy=True)
-        if "error" in hft_result:
-            print(json.dumps(hft_result, indent=2), flush=True)
-            return 1
-        lifecycle_summary = hft_result.get("order_lifecycle_summary")
+    print("=== engine 1: replay_execution_adapter ===", flush=True)
+    runner = ReplayRunner(str(npz_path), tick_size=args.tick_size)
+    hft_result = runner.run_replay(latency_ms=latency_ms, use_combined_strategy=True)
+    if "error" in hft_result:
         print(json.dumps(hft_result, indent=2), flush=True)
+        return 1
+    lifecycle_summary = hft_result.get("order_lifecycle_summary")
+    print(json.dumps(hft_result, indent=2), flush=True)
 
     print("=== engine 2: per_hypothesis_replay ===", flush=True)
     hyp_result = run_per_hypothesis_replay(str(npz_path), latency_ms)

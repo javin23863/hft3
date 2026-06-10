@@ -6,10 +6,11 @@ from __future__ import annotations
 
 import math
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from hftbacktest.order import GTC, LIMIT
 
+from execution.interfaces import CancelIntent, OrderIntent, new_intent_id
 from features_engine.src.features.mbo_features import MBOEvent, OrderBook
 from features_engine.src.features.npz_feed import iter_mbo_events, load_npz_events
 from features_engine.src.structural_models.model_01_book_pressure import BookPressureModel
@@ -17,6 +18,7 @@ from features_engine.src.structural_models.model_03_vpin_toxicity import VPINTox
 from features_engine.src.structural_models.model_04_hybrid_execution import HybridExecutionModel
 from features_engine.src.structural_models.registry import get_structural_model_by_id
 from features_engine.src.structural_models.types import VPINToxicityOutput
+from replay.replay_session import ReplayStepContext
 
 from backtest_pipeline.src.pdf_defensive_config import DefensiveConfig
 
@@ -369,3 +371,370 @@ class HybridExecutionStrategy:
         else:
             hbt.submit_sell_order(0, oid, price, self.order_qty, GTC, LIMIT, False)
             self._ask_oid = oid
+
+
+class HybridExecutionReplayStrategy:
+    """
+    ReplayStrategy-protocol adapter for the PDF_MODEL_1/3/4 hybrid execution stack.
+
+    Implements on_step(ctx: ReplayStepContext) -> List[OrderIntent | CancelIntent]
+    so it can be driven by ReplaySession without accessing the raw hftbacktest handle.
+
+    BBO and position are read from ReplayStepContext.  MBO sync for VPIN and the
+    book-pressure model uses the timestamp from ctx.clock.now_ns.  Order tracking
+    uses the string order_id returned by the adapter (SIM-<n>) rather than the
+    integer hbt OIDs used by HybridExecutionStrategy.
+    """
+
+    def __init__(
+        self,
+        npz_path: str,
+        *,
+        tick_size: float = 0.25,
+        order_qty: float = 1.0,
+        latency_ms: float = 1.0,
+        event_meta: Optional[Dict[str, Any]] = None,
+        mbo_events: Optional[List[MBOEvent]] = None,
+        use_ofi: Any = _UNSET,
+        use_vpin: Any = _UNSET,
+        defensive: Optional[DefensiveConfig] = None,
+        quote_refresh_ticks: int = 10,
+    ):
+        if defensive is not None:
+            if use_ofi is not _UNSET and use_ofi != defensive.use_ofi:
+                raise ValueError(
+                    "defensive= conflicts with use_ofi/use_vpin kwargs; "
+                    "pass flags only via DefensiveConfig"
+                )
+            if use_vpin is not _UNSET and use_vpin != defensive.use_vpin:
+                raise ValueError(
+                    "defensive= conflicts with use_ofi/use_vpin kwargs; "
+                    "pass flags only via DefensiveConfig"
+                )
+            cfg = defensive
+        else:
+            cfg = DefensiveConfig(
+                use_ofi=True if use_ofi is _UNSET else bool(use_ofi),
+                use_vpin=True if use_vpin is _UNSET else bool(use_vpin),
+            )
+        self.use_ofi = cfg.use_ofi
+        self.use_vpin = cfg.use_vpin
+        self.defensive_mode = cfg.mode_id
+        self.tick_size = tick_size
+        self.order_qty = order_qty
+        self.latency_ms = latency_ms
+        self.quote_refresh_ticks = max(1, int(quote_refresh_ticks))
+        self.event_meta = event_meta or {}
+        self._window_start_ns: Optional[int] = None
+        self._window_end_ns: Optional[int] = None
+        if self.event_meta:
+            self._window_start_ns = event_window_start_ns(self.event_meta)
+            self._window_end_ns = event_window_end_ns(self.event_meta)
+
+        raw = load_npz_events(npz_path) if mbo_events is None else None
+        self._mbo_events = mbo_events if mbo_events is not None else list(iter_mbo_events(raw))
+        self._mbo_idx = 0
+
+        # Resting order tracking: string order_id from adapter, not int hbt OID.
+        self._bid_order_id: Optional[str] = None
+        self._ask_order_id: Optional[str] = None
+        # Pending intent IDs: set when an intent is emitted, resolved to order_id
+        # on ORDER_ACCEPTED, cleared on terminal events.
+        self._pending_bid_intent_id: Optional[str] = None
+        self._pending_ask_intent_id: Optional[str] = None
+        self._last_bid_px: Optional[float] = None
+        self._last_ask_px: Optional[float] = None
+        self._steps_since_quote_refresh = 0
+
+        self._diag_cancel_count = 0
+        self._diag_quote_refresh_count = 0
+        self._diag_sum_vpin = 0.0
+        self._diag_sum_ofi_smooth = 0.0
+        self._diag_eval_steps = 0
+
+        self._book = OrderBook()
+        book_model = get_structural_model_by_id("PDF_MODEL_1")
+        vpin_model = get_structural_model_by_id("PDF_MODEL_3")
+        hybrid_model = get_structural_model_by_id("PDF_MODEL_4")
+        assert isinstance(book_model, BookPressureModel)
+        assert isinstance(vpin_model, VPINToxicityModel)
+        assert isinstance(hybrid_model, HybridExecutionModel)
+        self.book_model = book_model
+        self.vpin_model = vpin_model
+        self.hybrid_model = hybrid_model
+
+        self._last_book_out = None
+        self._last_vpin_out: Optional[VPINToxicityOutput] = VPINToxicityOutput()
+        self.last_hybrid_out = None
+
+    @property
+    def diagnostics(self) -> Dict[str, float]:
+        n = max(1, self._diag_eval_steps)
+        return {
+            "cancel_count": float(self._diag_cancel_count),
+            "quote_refresh_count": float(self._diag_quote_refresh_count),
+            "mean_vpin": self._diag_sum_vpin / n,
+            "mean_ofi_smooth": self._diag_sum_ofi_smooth / n,
+            "eval_steps": float(self._diag_eval_steps),
+            "ofi_unit_probe": float(self.use_vpin and not self.use_ofi),
+        }
+
+    def _book_level_qty(self, price: float, side: str) -> int:
+        book = self._book.bids if side == "B" else self._book.asks
+        level = book.get(price)
+        return int(level.total_qty) if level is not None else 0
+
+    def _book_bbo(self) -> Optional[tuple]:
+        bid_p = self._book.get_best_bid()
+        ask_p = self._book.get_best_ask()
+        if bid_p <= 0 or ask_p >= float("inf") or bid_p >= ask_p:
+            return None
+        return (
+            bid_p,
+            ask_p,
+            self._book_level_qty(bid_p, "B"),
+            self._book_level_qty(ask_p, "A"),
+        )
+
+    def _sync_mbo(self, ts: int, bid_fallback: float, ask_fallback: float) -> None:
+        depth_mid_fallback: Optional[float] = None
+        if bid_fallback > 0 and ask_fallback > 0 and math.isfinite(bid_fallback) and math.isfinite(ask_fallback):
+            depth_mid_fallback = (bid_fallback + ask_fallback) / 2.0
+        while self._mbo_idx < len(self._mbo_events):
+            mbo = self._mbo_events[self._mbo_idx]
+            if mbo.timestamp_ns > ts:
+                break
+            self._book.apply_event(mbo)
+            bid_p = self._book.get_best_bid()
+            ask_p = self._book.get_best_ask()
+            if bid_p > 0 and ask_p < float("inf"):
+                book_mid = (bid_p + ask_p) / 2.0
+            else:
+                book_mid = 0.0
+            if mbo.action == "TRADE" and mbo.size > 0 and self.use_vpin:
+                if book_mid > 0:
+                    mid = book_mid
+                elif depth_mid_fallback is not None and depth_mid_fallback > 0:
+                    mid = depth_mid_fallback
+                else:
+                    mid = 0.0
+                if mid > 0:
+                    out = self.vpin_model.ingest_bar(mid, float(mbo.size), mbo.timestamp_ns)
+                    if out is not None and out.payload is not None:
+                        self._last_vpin_out = out.payload
+            self._mbo_idx += 1
+
+    def _resolve_bbo(self, ctx: "ReplayStepContext") -> Optional[tuple]:
+        """Prefer ctx depth; fall back to MBO-synced internal book when ctx BBO is degenerate."""
+        ts = int(ctx.clock.now_ns)
+        self._sync_mbo(ts, ctx.best_bid, ctx.best_ask)
+        bid_p = ctx.best_bid
+        ask_p = ctx.best_ask
+        if math.isfinite(bid_p) and math.isfinite(ask_p) and bid_p > 0 and ask_p > 0 and bid_p < ask_p:
+            depth_qty_bid = self._book_level_qty(bid_p, "B")
+            depth_qty_ask = self._book_level_qty(ask_p, "A")
+            return bid_p, ask_p, depth_qty_bid, depth_qty_ask
+        return self._book_bbo()
+
+    def _time_remaining_sec(self, ts: int) -> float:
+        if self._window_end_ns is None:
+            return float(self.hybrid_model.time_horizon_sec)
+        if self._window_start_ns is not None and ts < self._window_start_ns:
+            return max(0.0, (self._window_end_ns - self._window_start_ns) / 1e9)
+        remaining_ns = self._window_end_ns - ts
+        return max(0.0, remaining_ns / 1e9)
+
+    def _sigma(self) -> float:
+        return float(self.hybrid_model.default_sigma)
+
+    def _prices_changed_materially(self, bid_px: float, ask_px: float) -> bool:
+        if self._last_bid_px is None or self._last_ask_px is None:
+            return True
+        return (
+            abs(bid_px - self._last_bid_px) >= self.tick_size
+            or abs(ask_px - self._last_ask_px) >= self.tick_size
+        )
+
+    def _should_refresh_quotes(self, bid_px: float, ask_px: float) -> bool:
+        self._steps_since_quote_refresh += 1
+        if self._prices_changed_materially(bid_px, ask_px):
+            return True
+        return self._steps_since_quote_refresh >= self.quote_refresh_ticks
+
+    def _record_eval_diagnostics(self, ofi_smooth: float, vpin_value: float) -> None:
+        self._diag_eval_steps += 1
+        self._diag_sum_ofi_smooth += ofi_smooth
+        self._diag_sum_vpin += vpin_value
+
+    def on_step(self, ctx: "ReplayStepContext") -> List[Union[OrderIntent, CancelIntent]]:
+        self._update_order_ids_from_events(ctx)
+
+        bbo = self._resolve_bbo(ctx)
+        if bbo is None:
+            return []
+
+        bid_p, ask_p, bid_q, ask_q = bbo
+        ts = int(ctx.clock.now_ns)
+
+        book_payload = None
+        if self.use_ofi:
+            book_out = self.book_model.update_bbo(bid_p, bid_q, ask_p, ask_q, ts)
+            self._last_book_out = book_out
+            book_payload = book_out.payload
+
+        vpin_payload = self._last_vpin_out if self.use_vpin else None
+        vpin_value = float(vpin_payload.VPIN_value) if vpin_payload is not None else 0.0
+
+        eval_kw: Dict[str, Any] = {}
+        if self.use_vpin and not self.use_ofi:
+            eval_kw["ofi_smooth"] = VPIN_ONLY_OFI_PROBE
+
+        hybrid_out = self.hybrid_model.evaluate(
+            mid=(bid_p + ask_p) / 2.0,
+            inventory=float(ctx.position),
+            sigma=self._sigma(),
+            time_remaining=self._time_remaining_sec(ts),
+            book_pressure=book_payload,
+            vpin=vpin_payload,
+            timestamp_ns=ts,
+            **eval_kw,
+        )
+        self.last_hybrid_out = hybrid_out
+        payload = hybrid_out.payload
+        if payload is None:
+            return []
+
+        ofi_smooth = float(eval_kw.get("ofi_smooth", book_payload.OFI_smooth if book_payload else 0.0))
+        self._record_eval_diagnostics(ofi_smooth, vpin_value)
+
+        inventory = float(ctx.position)
+        actions: List[Union[OrderIntent, CancelIntent]] = []
+
+        bid_px = _round_to_tick(payload.optimal_bid, self.tick_size)
+        ask_px = _round_to_tick(payload.optimal_ask, self.tick_size)
+
+        if payload.cancel_quote_flag:
+            actions.extend(self._cancel_resting_intents(ctx))
+            if abs(inventory) > 1.0:
+                if inventory > 0:
+                    actions.extend(self._submit_intent(ctx, buy=False, price=bid_p))
+                elif inventory < 0:
+                    actions.extend(self._submit_intent(ctx, buy=True, price=ask_p))
+            return actions
+
+        if payload.passive_to_aggressive_flag:
+            actions.extend(self._cancel_resting_intents(ctx))
+            if inventory > 0:
+                actions.extend(self._submit_intent(ctx, buy=False, price=bid_p))
+            elif inventory < 0:
+                actions.extend(self._submit_intent(ctx, buy=True, price=ask_p))
+            return actions
+
+        if not self._should_refresh_quotes(bid_px, ask_px):
+            return []
+
+        actions.extend(self._cancel_resting_intents(ctx))
+        if math.isfinite(bid_px) and bid_px > 0 and bid_px < ask_p:
+            actions.extend(self._submit_intent(ctx, buy=True, price=bid_px))
+        if math.isfinite(ask_px) and ask_px > bid_px:
+            actions.extend(self._submit_intent(ctx, buy=False, price=ask_px))
+
+        self._last_bid_px = bid_px
+        self._last_ask_px = ask_px
+        self._steps_since_quote_refresh = 0
+        self._diag_quote_refresh_count += 1
+        return actions
+
+    def _cancel_resting_intents(
+        self, ctx: "ReplayStepContext"
+    ) -> List[CancelIntent]:
+        cancelled: List[CancelIntent] = []
+        if self._bid_order_id is not None:
+            cancelled.append(
+                CancelIntent(
+                    intent_id=new_intent_id(),
+                    run_id=ctx.run_id,
+                    timestamp_ns=ctx.clock.now_ns,
+                    order_id=self._bid_order_id,
+                    strategy_id="pdf_hybrid",
+                    model_id="PDF_MODEL_4",
+                    symbol=ctx.symbol,
+                    reason_code="cancel_resting",
+                )
+            )
+            self._bid_order_id = None
+            self._diag_cancel_count += 1
+        if self._ask_order_id is not None:
+            cancelled.append(
+                CancelIntent(
+                    intent_id=new_intent_id(),
+                    run_id=ctx.run_id,
+                    timestamp_ns=ctx.clock.now_ns,
+                    order_id=self._ask_order_id,
+                    strategy_id="pdf_hybrid",
+                    model_id="PDF_MODEL_4",
+                    symbol=ctx.symbol,
+                    reason_code="cancel_resting",
+                )
+            )
+            self._ask_order_id = None
+            self._diag_cancel_count += 1
+        return cancelled
+
+    def _submit_intent(
+        self, ctx: "ReplayStepContext", *, buy: bool, price: float
+    ) -> List[OrderIntent]:
+        if not math.isfinite(price) or price <= 0:
+            return []
+        intent = OrderIntent(
+            intent_id=new_intent_id(),
+            run_id=ctx.run_id,
+            timestamp_ns=ctx.clock.now_ns,
+            strategy_id="pdf_hybrid",
+            model_id="PDF_MODEL_4",
+            symbol=ctx.symbol,
+            side="BUY" if buy else "SELL",
+            order_type="LIMIT",
+            price=price,
+            quantity=self.order_qty,
+            latency_budget_ms=self.latency_ms,
+            reason_code="quote_refresh",
+        )
+        # Track this intent so we can cancel it later.  The actual order_id is
+        # assigned by the adapter after submit; we capture it via order_events
+        # in the next step.  For now, stash the intent_id and resolve in
+        # _update_order_ids_from_events.
+        if buy:
+            self._pending_bid_intent_id = intent.intent_id
+        else:
+            self._pending_ask_intent_id = intent.intent_id
+        return [intent]
+
+    def _update_order_ids_from_events(self, ctx: "ReplayStepContext") -> None:
+        """
+        Two tasks in one pass:
+        1. When an ACCEPTED event arrives for a pending intent, record its order_id.
+        2. When a terminal event (FILLED / CANCELLED / REJECTED) arrives for a
+           tracked order, clear it so we don't try to cancel it again.
+        """
+        from execution.interfaces import OrderEventType
+        pending_bid = getattr(self, "_pending_bid_intent_id", None)
+        pending_ask = getattr(self, "_pending_ask_intent_id", None)
+        for ev in ctx.order_events:
+            if ev.event_type == OrderEventType.ORDER_ACCEPTED:
+                if pending_bid and ev.intent_id == pending_bid:
+                    self._bid_order_id = ev.order_id
+                    self._pending_bid_intent_id = None
+                elif pending_ask and ev.intent_id == pending_ask:
+                    self._ask_order_id = ev.order_id
+                    self._pending_ask_intent_id = None
+            elif ev.event_type in (
+                OrderEventType.ORDER_FILLED,
+                OrderEventType.ORDER_CANCELLED,
+                OrderEventType.ORDER_REJECTED,
+                OrderEventType.ORDER_EXPIRED,
+            ):
+                if ev.order_id == self._bid_order_id:
+                    self._bid_order_id = None
+                if ev.order_id == self._ask_order_id:
+                    self._ask_order_id = None

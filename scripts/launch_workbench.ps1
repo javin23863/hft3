@@ -1,7 +1,6 @@
 # Launch HFT3 Streamlit workbench from repo root (desktop shortcut target).
 param(
     [switch]$SkipBrowser,
-    [switch]$SkipPreflight,
     [switch]$PreflightOnly,
     [int]$Port = 8501
 )
@@ -62,39 +61,34 @@ function Invoke-WorkbenchPreflight {
     return @{ Code = $code; ErrorLines = $ErrorLines }
 }
 
-if (-not $SkipPreflight) {
-    Write-Host 'Preflight: workbench imports...' -ForegroundColor DarkCyan
-    $preflightResult = Invoke-WorkbenchPreflight
-    if ($preflightResult.Code -ne 0 -and $preflightResult.ErrorLines -notcontains "missing $(Join-Path $RepoRoot 'scripts/workbench_preflight.py')") {
-        Write-Host 'Preflight failed; clearing workbench __pycache__ and retrying once...' -ForegroundColor Yellow
-        Get-ChildItem -Path (Join-Path $RepoRoot 'apps\workbench') -Recurse -Directory -Filter '__pycache__' -ErrorAction SilentlyContinue |
-            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-        $preflightResult = Invoke-WorkbenchPreflight -ErrorLines $preflightResult.ErrorLines
+Write-Host 'Preflight: workbench imports...' -ForegroundColor DarkCyan
+$preflightResult = Invoke-WorkbenchPreflight
+if ($preflightResult.Code -ne 0 -and $preflightResult.ErrorLines -notcontains "missing $(Join-Path $RepoRoot 'scripts/workbench_preflight.py')") {
+    Write-Host 'Preflight failed; clearing workbench __pycache__ and retrying once...' -ForegroundColor Yellow
+    Get-ChildItem -Path (Join-Path $RepoRoot 'apps\workbench') -Recurse -Directory -Filter '__pycache__' -ErrorAction SilentlyContinue |
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    $preflightResult = Invoke-WorkbenchPreflight -ErrorLines $preflightResult.ErrorLines
+}
+if ($preflightResult.Code -ne 0) {
+    if ($preflightResult.ErrorLines.Count -gt 0) {
+        Write-Host '--- Python preflight error ---' -ForegroundColor Red
+        $preflightResult.ErrorLines | ForEach-Object { Write-Host $_ -ForegroundColor Red }
+        Write-Host '------------------------------' -ForegroundColor Red
     }
-    if ($preflightResult.Code -ne 0) {
-        if ($preflightResult.ErrorLines.Count -gt 0) {
-            Write-Host '--- Python preflight error ---' -ForegroundColor Red
-            $preflightResult.ErrorLines | ForEach-Object { Write-Host $_ -ForegroundColor Red }
-            Write-Host '------------------------------' -ForegroundColor Red
-        }
-        Exit-Launcher -Message @(
-            'ERROR: workbench import failed (CatalogEntry / model_catalog / campaign_panel).',
-            'Try: git pull; pip install -r apps/workbench/requirements.txt',
-            'Diagnostics: python scripts/workbench_preflight.py'
-        )
-    }
+    Exit-Launcher -Message @(
+        'ERROR: workbench import failed (CatalogEntry / model_catalog / campaign_panel).',
+        'Try: git pull; pip install -r apps/workbench/requirements.txt',
+        'Diagnostics: python scripts/workbench_preflight.py'
+    )
+}
 
-    Write-Host 'Preflight: grader import tests...' -ForegroundColor DarkCyan
-    & python -m pytest tests/test_workbench/test_ui_imports.py tests/test_workbench/test_event_catalog.py -q --tb=line
-    if ($LASTEXITCODE -ne 0) {
-        Exit-Launcher -Message 'ERROR: workbench grader import tests failed. Run: powershell -File scripts/verify_workbench.ps1'
-    }
+Write-Host 'Preflight: grader import tests...' -ForegroundColor DarkCyan
+& python -m pytest tests/test_workbench/test_ui_imports.py tests/test_workbench/test_event_catalog.py -q --tb=line
+if ($LASTEXITCODE -ne 0) {
+    Exit-Launcher -Message 'ERROR: workbench grader import tests failed. Run: powershell -File scripts/verify_workbench.ps1'
 }
 
 if ($PreflightOnly) {
-    if ($SkipPreflight) {
-        Exit-Launcher -Message 'ERROR: -PreflightOnly cannot be used with -SkipPreflight.'
-    }
     Write-Host 'Preflight complete.' -ForegroundColor Green
     exit 0
 }

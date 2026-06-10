@@ -1,0 +1,564 @@
+"""Tests for scripts/run_event_universe.py.
+
+Covers:
+  - work-unit collection from a synthetic manifest + tmp NPZ
+  - single-worker end-to-end smoke over 1 event × 1 band × active hypotheses
+  - aggregation math on hand-built per-event results
+  - p-value / correction plumbing with fabricated per-event expectancies
+
+Multiprocessing: all tests use workers=1 to avoid spawn overhead in CI.
+"""
+from __future__ import annotations
+
+import csv
+import importlib.util
+import json
+import math
+import sys
+from pathlib import Path
+from typing import Any
+from unittest import mock
+
+import numpy as np
+import pytest
+
+_REPO = Path(__file__).resolve().parents[1]
+
+# ---------------------------------------------------------------------------
+# Import helpers
+# ---------------------------------------------------------------------------
+
+def _load_script(name: str = "run_event_universe"):
+    script = _REPO / "scripts" / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(name, script)
+    mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    return mod
+
+
+@pytest.fixture(scope="module")
+def universe_mod():
+    return _load_script()
+
+
+# ---------------------------------------------------------------------------
+# Minimal events.csv fixture
+# ---------------------------------------------------------------------------
+
+_EVENTS_CSV_CONTENT = """\
+event_id,event_type,release_date,release_time,timezone,window_name,start_offset_seconds,end_offset_seconds,symbols,priority,source,source_url,effective_date,notes,row_status
+AAA_EVT_A,CPI,2024-01-10,08:30:00,America/New_York,TIGHT,-30,300,"MES.v.0",50,TEST,http://example.com,2024-01-01,test,SOURCED
+BBB_EVT_B,NFP,2024-02-02,08:30:00,America/New_York,TIGHT,-30,300,"MES.v.0",50,TEST,http://example.com,2024-01-01,test,SOURCED
+ZZZ_NO_NPZ,CPI,2024-03-13,08:30:00,America/New_York,TIGHT,-30,300,"MES.v.0",50,TEST,http://example.com,2024-01-01,test,SOURCED
+"""
+
+
+@pytest.fixture()
+def events_csv(tmp_path: Path) -> Path:
+    p = tmp_path / "events.csv"
+    p.write_text(_EVENTS_CSV_CONTENT, encoding="utf-8")
+    return p
+
+
+@pytest.fixture()
+def minimal_npz(tmp_path: Path) -> Path:
+    """Build a minimal MBO NPZ that HftBacktest can replay."""
+    from backtest_pipeline.src.replay_npz_fixture import build_minimal_mbo_npz
+
+    npz = tmp_path / "MES.v.0_AAA_EVT_A_mbo.npz"
+    build_minimal_mbo_npz(npz)
+    return npz
+
+
+@pytest.fixture()
+def minimal_npz_b(tmp_path: Path) -> Path:
+    """Second event NPZ."""
+    from backtest_pipeline.src.replay_npz_fixture import build_minimal_mbo_npz
+
+    npz = tmp_path / "MES.v.0_BBB_EVT_B_mbo.npz"
+    build_minimal_mbo_npz(npz)
+    return npz
+
+
+# ---------------------------------------------------------------------------
+# 1. Work-unit collection
+# ---------------------------------------------------------------------------
+
+class TestBuildWorkUnits:
+    def test_basic_collection(self, universe_mod, events_csv, minimal_npz, tmp_path):
+        lake_index = {("MES.v.0", "AAA_EVT_A"): str(minimal_npz)}
+        work, skipped = universe_mod.build_work_units(
+            events_csv,
+            lake_index,
+            latency_bands=[1.0],
+            event_type_filter=None,
+            symbol_filter=["MES.v.0"],
+            max_events=None,
+        )
+        event_ids = {u["event_id"] for u in work}
+        assert "AAA_EVT_A" in event_ids
+        # BBB_EVT_B and ZZZ_NO_NPZ have no NPZ — should be skipped
+        skipped_ids = {s["event_id"] for s in skipped}
+        assert "BBB_EVT_B" in skipped_ids
+        assert "ZZZ_NO_NPZ" in skipped_ids
+
+    def test_skipped_has_reason(self, universe_mod, events_csv, minimal_npz):
+        lake_index = {("MES.v.0", "AAA_EVT_A"): str(minimal_npz)}
+        _, skipped = universe_mod.build_work_units(
+            events_csv,
+            lake_index,
+            latency_bands=[1.0],
+            event_type_filter=None,
+            symbol_filter=["MES.v.0"],
+            max_events=None,
+        )
+        for s in skipped:
+            assert s["reason"] == "npz_missing"
+
+    def test_event_type_filter(self, universe_mod, events_csv, minimal_npz, tmp_path):
+        from backtest_pipeline.src.replay_npz_fixture import build_minimal_mbo_npz
+        npz_b = tmp_path / "MES.v.0_BBB_EVT_B_mbo.npz"
+        build_minimal_mbo_npz(npz_b)
+        lake_index = {
+            ("MES.v.0", "AAA_EVT_A"): str(minimal_npz),
+            ("MES.v.0", "BBB_EVT_B"): str(npz_b),
+        }
+        work, _ = universe_mod.build_work_units(
+            events_csv,
+            lake_index,
+            latency_bands=[1.0],
+            event_type_filter="CPI",
+            symbol_filter=["MES.v.0"],
+            max_events=None,
+        )
+        assert all(u["event_type"] == "CPI" for u in work)
+        assert any(u["event_id"] == "AAA_EVT_A" for u in work)
+        assert not any(u["event_id"] == "BBB_EVT_B" for u in work)
+
+    def test_max_events(self, universe_mod, events_csv, minimal_npz, tmp_path):
+        from backtest_pipeline.src.replay_npz_fixture import build_minimal_mbo_npz
+        npz_b = tmp_path / "MES.v.0_BBB_EVT_B_mbo.npz"
+        npz_c = tmp_path / "MES.v.0_ZZZ_NO_NPZ_mbo.npz"
+        build_minimal_mbo_npz(npz_b)
+        build_minimal_mbo_npz(npz_c)
+        lake_index = {
+            ("MES.v.0", "AAA_EVT_A"): str(minimal_npz),
+            ("MES.v.0", "BBB_EVT_B"): str(npz_b),
+            ("MES.v.0", "ZZZ_NO_NPZ"): str(npz_c),
+        }
+        work, skipped = universe_mod.build_work_units(
+            events_csv,
+            lake_index,
+            latency_bands=[1.0],
+            event_type_filter=None,
+            symbol_filter=["MES.v.0"],
+            max_events=1,
+        )
+        # max_events=1 caps the rows consumed before NPZ matching
+        total = len(work) + len(skipped)
+        assert total == 1  # 1 event_row × 1 band × 1 symbol
+
+    def test_multiple_bands_produce_multiple_units(self, universe_mod, events_csv, minimal_npz):
+        lake_index = {("MES.v.0", "AAA_EVT_A"): str(minimal_npz)}
+        work, _ = universe_mod.build_work_units(
+            events_csv,
+            lake_index,
+            latency_bands=[0.5, 1.0, 2.0],
+            event_type_filter="CPI",
+            symbol_filter=["MES.v.0"],
+            max_events=None,
+        )
+        bands = [u["latency_ms"] for u in work if u["event_id"] == "AAA_EVT_A"]
+        assert sorted(bands) == [0.5, 1.0, 2.0]
+
+    def test_deterministic_order(self, universe_mod, events_csv, minimal_npz):
+        lake_index = {("MES.v.0", "AAA_EVT_A"): str(minimal_npz)}
+        work1, _ = universe_mod.build_work_units(
+            events_csv,
+            lake_index,
+            latency_bands=[1.0, 0.5],
+            event_type_filter=None,
+            symbol_filter=["MES.v.0"],
+            max_events=None,
+        )
+        work2, _ = universe_mod.build_work_units(
+            events_csv,
+            lake_index,
+            latency_bands=[0.5, 1.0],
+            event_type_filter=None,
+            symbol_filter=["MES.v.0"],
+            max_events=None,
+        )
+        ids1 = [(u["event_id"], u["latency_ms"]) for u in work1]
+        ids2 = [(u["event_id"], u["latency_ms"]) for u in work2]
+        assert ids1 == ids2
+
+
+# ---------------------------------------------------------------------------
+# 2. NPZ discovery fallback
+# ---------------------------------------------------------------------------
+
+class TestLakeIndex:
+    def test_scan_fallback_parses_npz_names(self, universe_mod, tmp_path):
+        npz_dir = tmp_path / "npz"
+        npz_dir.mkdir()
+        (npz_dir / "MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz").touch()
+        (npz_dir / "MNQ.v.0_NFP_2025_01_10_TIGHT_mbo.npz").touch()
+        (npz_dir / "garbage.npz").touch()
+
+        result = universe_mod._scan_npz_dir(npz_dir)
+        assert ("MES.v.0", "CPI_2024_09_11_TIGHT") in result
+        assert ("MNQ.v.0", "NFP_2025_01_10_TIGHT") in result
+        # 'garbage' doesn't match the pattern
+        assert all("garbage" not in k[1] for k in result)
+
+    def test_load_lake_index_falls_back_gracefully(self, universe_mod, tmp_path):
+        """load_lake_index with a repo root that has no manifest or npz dir returns empty dict."""
+        result = universe_mod.load_lake_index(tmp_path)
+        assert isinstance(result, dict)
+
+
+# ---------------------------------------------------------------------------
+# 3. End-to-end smoke: 1 event × 1 band, workers=1
+# ---------------------------------------------------------------------------
+
+def _load_fresh_universe_mod(name: str):
+    """Load run_event_universe as a fresh module instance for isolation."""
+    script = _REPO / "scripts" / "run_event_universe.py"
+    spec = importlib.util.spec_from_file_location(name, script)
+    mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    return mod
+
+
+def _fake_hyp_results_for(hypotheses, npz_path: str, *, latency_ms: float = 1.0, **kw) -> dict:
+    """Stub for run_all_hypotheses_replay — returns instant BacktestResult per hypothesis."""
+    from backtest_pipeline.src.backtest_result import BacktestResult
+
+    return {
+        h.hyp_id: BacktestResult(
+            hypothesis_id=h.hyp_id,
+            net_pnl=0.1 * h.hyp_id,
+            num_trades=2,
+            win_rate=0.6,
+            expectancy=0.05,
+            adverse_selection_ticks=0.1,
+            tail_loss=-0.02,
+        )
+        for h in hypotheses
+    }
+
+
+class TestEndToEndSmoke:
+    def test_main_single_event_mocked_replay(self, tmp_path, events_csv, minimal_npz):
+        """Call main() with mocked run_all_hypotheses_replay; verify JSON/MD outputs and schema.
+
+        The mock keeps the test fast (< 1 s) by bypassing the 45-session replay
+        while still exercising the full CLI → worker → aggregation → correction → output path.
+
+        _worker does a local import:
+            from backtest_pipeline.src.replay_matrix import run_all_hypotheses_replay
+        With workers=1 the worker runs in the same process. We ensure
+        backtest_pipeline.src.replay_matrix is already imported before the worker
+        runs, then swap the function on that cached module object so the worker's
+        local-import alias also picks up the stub.
+        """
+        import backtest_pipeline.src.replay_matrix as _rm
+        _orig_fn = _rm.run_all_hypotheses_replay
+
+        out_dir = tmp_path / "out"
+        mod = _load_fresh_universe_mod("run_event_universe_smoke")
+        mod.load_lake_index = lambda _: {("MES.v.0", "AAA_EVT_A"): str(minimal_npz)}
+
+        try:
+            # Swap the function on the already-cached module so that any
+            # "from backtest_pipeline.src.replay_matrix import run_all_hypotheses_replay"
+            # inside _worker will resolve the stubbed version (workers=1, same process).
+            _rm.run_all_hypotheses_replay = _fake_hyp_results_for  # type: ignore[assignment]
+
+            # Also swap inside the universe module's own worker path if it cached it
+            if hasattr(mod, "_rm"):
+                mod._rm.run_all_hypotheses_replay = _fake_hyp_results_for  # type: ignore[assignment]
+
+            rc = mod.main([
+                "--events-csv", str(events_csv),
+                "--symbols", "MES.v.0",
+                "--event-type", "CPI",
+                "--out", str(out_dir),
+                "--workers", "1",
+                "--max-events", "1",
+                "--bands", "1.0",
+            ])
+        finally:
+            _rm.run_all_hypotheses_replay = _orig_fn
+
+        assert rc == 0
+        result_path = out_dir / "universe_result.json"
+        report_path = out_dir / "universe_report.md"
+        assert result_path.exists(), f"universe_result.json missing in {out_dir}"
+        assert report_path.exists(), f"universe_report.md missing in {out_dir}"
+
+        payload = json.loads(result_path.read_text(encoding="utf-8"))
+        assert payload["schema"] == "universe_result_v1"
+        assert isinstance(payload["units_run"], int)
+        assert payload["units_run"] >= 1
+        assert "certification_stamp" in payload
+        assert "aggregated" in payload
+        assert "corrections" in payload
+        # Confirm at least one unit ran without error and has hypotheses
+        non_errored = [u for u in payload["unit_results"] if u.get("error") is None]
+        assert len(non_errored) >= 1, f"All units errored: {[u.get('error') for u in payload['unit_results']]}"
+        assert len(non_errored[0]["hypotheses"]) > 0
+
+    def test_main_no_npz_writes_skipped(self, tmp_path, events_csv):
+        """When no NPZ exists, all units are skipped; result JSON still written."""
+        out_dir = tmp_path / "out_skip"
+        mod = _load_fresh_universe_mod("run_event_universe_skip")
+        mod.load_lake_index = lambda _: {}  # empty — everything skipped
+
+        rc = mod.main([
+            "--events-csv", str(events_csv),
+            "--symbols", "MES.v.0",
+            "--out", str(out_dir),
+            "--workers", "1",
+            "--bands", "1.0",
+        ])
+        assert rc == 0
+        result_path = out_dir / "universe_result.json"
+        assert result_path.exists()
+        payload = json.loads(result_path.read_text(encoding="utf-8"))
+        assert payload["units_skipped"] > 0
+
+
+# ---------------------------------------------------------------------------
+# 4. Aggregation math
+# ---------------------------------------------------------------------------
+
+class TestAggregation:
+    """Verify _aggregate_results math on hand-built per-event unit_results."""
+
+    def _make_unit_result(
+        self,
+        event_id: str,
+        etype: str,
+        band: float,
+        *,
+        hyp_id: int = 1,
+        expectancy: float = 0.5,
+        win_rate: float = 0.6,
+        num_trades: int = 10,
+        adverse: float = 0.1,
+    ) -> dict[str, Any]:
+        return {
+            "event_id": event_id,
+            "event_type": etype,
+            "latency_ms": band,
+            "symbol": "MES.v.0",
+            "npz_path": "x",
+            "error": None,
+            "hypotheses": [
+                {
+                    "hypothesis_id": hyp_id,
+                    "hypothesis_name": f"H{hyp_id}",
+                    "net_pnl_usd": expectancy * num_trades,
+                    "num_trades": num_trades,
+                    "win_rate": win_rate,
+                    "expectancy_usd": expectancy,
+                    "adverse_selection_ticks": adverse,
+                    "tail_loss_usd": -0.1,
+                }
+            ],
+        }
+
+    def test_mean_expectancy(self, universe_mod):
+        units = [
+            self._make_unit_result("E1", "CPI", 1.0, expectancy=0.5),
+            self._make_unit_result("E2", "CPI", 1.0, expectancy=1.5),
+        ]
+        agg = universe_mod._aggregate_results(units)
+        cell = agg["1"]["CPI"][1.0]
+        assert abs(cell["mean_expectancy_usd"] - 1.0) < 1e-9
+
+    def test_n_events_count(self, universe_mod):
+        units = [
+            self._make_unit_result("E1", "CPI", 1.0),
+            self._make_unit_result("E2", "CPI", 1.0),
+            self._make_unit_result("E3", "CPI", 1.0),
+        ]
+        agg = universe_mod._aggregate_results(units)
+        assert agg["1"]["CPI"][1.0]["n_events"] == 3
+
+    def test_total_trades_sum(self, universe_mod):
+        units = [
+            self._make_unit_result("E1", "CPI", 1.0, num_trades=7),
+            self._make_unit_result("E2", "CPI", 1.0, num_trades=13),
+        ]
+        agg = universe_mod._aggregate_results(units)
+        assert agg["1"]["CPI"][1.0]["total_trades"] == 20
+
+    def test_p5_tail_is_below_mean_for_mixed_values(self, universe_mod):
+        units = [
+            self._make_unit_result("E1", "CPI", 1.0, expectancy=1.0),
+            self._make_unit_result("E2", "CPI", 1.0, expectancy=-2.0),
+        ]
+        agg = universe_mod._aggregate_results(units)
+        cell = agg["1"]["CPI"][1.0]
+        # 5th percentile of [1.0, -2.0] via numpy linear interp is -1.85
+        # It must be below the mean (-0.5) and the minimum value (-2.0) ≤ p5 ≤ mean
+        assert cell["p5_expectancy_tail_usd"] < cell["mean_expectancy_usd"]
+        assert cell["p5_expectancy_tail_usd"] >= -2.0
+
+    def test_errored_unit_excluded(self, universe_mod):
+        units = [
+            {**self._make_unit_result("E1", "CPI", 1.0), "error": "crash", "hypotheses": []},
+            self._make_unit_result("E2", "CPI", 1.0, expectancy=0.5),
+        ]
+        agg = universe_mod._aggregate_results(units)
+        assert agg["1"]["CPI"][1.0]["n_events"] == 1
+
+    def test_multiple_event_types_separated(self, universe_mod):
+        units = [
+            self._make_unit_result("E1", "CPI", 1.0, expectancy=0.5),
+            self._make_unit_result("E2", "NFP", 1.0, expectancy=1.5),
+        ]
+        agg = universe_mod._aggregate_results(units)
+        assert "CPI" in agg["1"]
+        assert "NFP" in agg["1"]
+        assert agg["1"]["CPI"][1.0]["mean_expectancy_usd"] == pytest.approx(0.5)
+        assert agg["1"]["NFP"][1.0]["mean_expectancy_usd"] == pytest.approx(1.5)
+
+    def test_aggregation_note_present(self, universe_mod):
+        units = [self._make_unit_result("E1", "CPI", 1.0)]
+        agg = universe_mod._aggregate_results(units)
+        note = agg["1"]["CPI"][1.0]["aggregation_note"]
+        assert "arithmetic mean" in note
+        assert "worst-event" in note
+
+
+# ---------------------------------------------------------------------------
+# 5. p-value / correction plumbing
+# ---------------------------------------------------------------------------
+
+class TestPValueAndCorrection:
+    def test_p_value_below_1_for_strong_signal(self, universe_mod):
+        # All positive expectancies — strong signal, p < 1
+        expecs = [1.0, 1.2, 0.9, 1.1, 1.3, 0.8]
+        p = universe_mod._derive_p_value(expecs)
+        assert 0.0 < p < 0.5
+
+    def test_p_value_near_1_for_zero_signal(self, universe_mod):
+        # Centred on zero — p should be large
+        expecs = [0.01, -0.01, 0.005, -0.005, 0.002]
+        p = universe_mod._derive_p_value(expecs)
+        assert p > 0.5
+
+    def test_p_value_is_1_for_fewer_than_3(self, universe_mod):
+        assert universe_mod._derive_p_value([]) == 1.0
+        assert universe_mod._derive_p_value([0.5]) == 1.0
+        assert universe_mod._derive_p_value([0.5, 0.6]) == 1.0
+
+    def test_corrections_structure(self, universe_mod):
+        """_apply_corrections returns dict with 'holm' and 'benjamini_hochberg' per event_type."""
+        # Build a minimal aggregated dict
+        aggregated = {
+            "1": {
+                "CPI": {
+                    1.0: {
+                        "hypothesis_id": 1,
+                        "hypothesis_name": "H1",
+                        "n_events": 5,
+                        "total_trades": 50,
+                        "mean_expectancy_usd": 0.4,
+                        "mean_win_rate": 0.6,
+                        "mean_adverse_selection_ticks": 0.1,
+                        "p5_expectancy_tail_usd": 0.1,
+                        "per_event_expectancies": [0.3, 0.4, 0.5, 0.4, 0.4],
+                        "aggregation_note": "",
+                    }
+                }
+            }
+        }
+        corrections = universe_mod._apply_corrections(aggregated)
+        assert "CPI" in corrections
+        assert "holm" in corrections["CPI"]
+        assert "benjamini_hochberg" in corrections["CPI"]
+        assert "p_value_method" in corrections["CPI"]
+
+    def test_holm_passes_strong_hypothesis(self, universe_mod):
+        """A hypothesis with clearly positive per-event expectancies should survive Holm."""
+        # Large, consistent positive expectancies → small p → should pass
+        per_event = [5.0, 5.5, 4.8, 5.2, 5.1, 4.9, 5.3]
+        aggregated = {
+            "1": {
+                "CPI": {
+                    1.0: {
+                        "hypothesis_id": 1,
+                        "hypothesis_name": "H1",
+                        "n_events": len(per_event),
+                        "total_trades": 70,
+                        "mean_expectancy_usd": float(np.mean(per_event)),
+                        "mean_win_rate": 0.8,
+                        "mean_adverse_selection_ticks": 0.05,
+                        "p5_expectancy_tail_usd": float(np.percentile(per_event, 5)),
+                        "per_event_expectancies": per_event,
+                        "aggregation_note": "",
+                    }
+                }
+            }
+        }
+        corrections = universe_mod._apply_corrections(aggregated)
+        holm = corrections["CPI"]["holm"]
+        assert len(holm["passed_slugs"]) >= 1
+
+    def test_holm_fails_weak_hypothesis(self, universe_mod):
+        """A hypothesis with near-zero expectancies (noise) should not survive Holm."""
+        per_event = [0.01, -0.02, 0.005, -0.008, 0.003, -0.001]
+        aggregated = {
+            "99": {
+                "CPI": {
+                    2.0: {
+                        "hypothesis_id": 99,
+                        "hypothesis_name": "noise",
+                        "n_events": len(per_event),
+                        "total_trades": 10,
+                        "mean_expectancy_usd": float(np.mean(per_event)),
+                        "mean_win_rate": 0.5,
+                        "mean_adverse_selection_ticks": 0.0,
+                        "p5_expectancy_tail_usd": float(np.percentile(per_event, 5)),
+                        "per_event_expectancies": per_event,
+                        "aggregation_note": "",
+                    }
+                }
+            }
+        }
+        corrections = universe_mod._apply_corrections(aggregated)
+        holm = corrections["CPI"]["holm"]
+        assert "hyp_99_band_2.0" in holm["failed_slugs"]
+
+    def test_bh_less_conservative_than_holm(self, universe_mod):
+        """BH (FDR) should pass at least as many as Holm (FWER) in general."""
+        # Borderline: moderate but consistent signal
+        per_event = [0.3, 0.25, 0.28, 0.22, 0.31, 0.27]
+        aggregated = {
+            "2": {
+                "NFP": {
+                    1.0: {
+                        "hypothesis_id": 2,
+                        "hypothesis_name": "H2",
+                        "n_events": len(per_event),
+                        "total_trades": 30,
+                        "mean_expectancy_usd": float(np.mean(per_event)),
+                        "mean_win_rate": 0.65,
+                        "mean_adverse_selection_ticks": 0.05,
+                        "p5_expectancy_tail_usd": float(np.percentile(per_event, 5)),
+                        "per_event_expectancies": per_event,
+                        "aggregation_note": "",
+                    }
+                }
+            }
+        }
+        corrections = universe_mod._apply_corrections(aggregated)
+        holm_passed = len(corrections["NFP"]["holm"]["passed_slugs"])
+        bh_passed = len(corrections["NFP"]["benjamini_hochberg"]["passed_slugs"])
+        # BH is always at least as permissive as Holm on a single hypothesis
+        assert bh_passed >= holm_passed

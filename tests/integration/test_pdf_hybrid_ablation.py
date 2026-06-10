@@ -23,8 +23,7 @@ def _cpi_npz_or_skip():
     except FileNotFoundError:
         pytest.skip(
             f"Real NPZ missing for {event_id}. "
-            "Run: python scripts/run_offline_pipeline.py --skip-download "
-            f"--event-id {event_id}"
+            f"Run: python scripts/run_offline_pipeline.py --event-id {event_id}"
         )
     if not npz_path.is_file():
         pytest.skip(f"NPZ not on disk: {npz_path}")

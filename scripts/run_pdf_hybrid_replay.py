@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Trial run: PDF_MODEL_4 hybrid execution via ReplayRunner on real Databento MBO NPZ."""
+"""PDF_MODEL_4 hybrid execution via ReplaySession + HybridExecutionReplayStrategy on real Databento MBO NPZ."""
 
 from __future__ import annotations
 
@@ -21,10 +21,11 @@ from backtest_pipeline.src.chi404_latency import (
     resolve_replay_latency_ms,
 )
 from backtest_pipeline.src.event_meta import load_event_row
-from backtest_pipeline.src.pdf_hybrid_strategy import HybridExecutionStrategy
-from backtest_pipeline.src.runner import QUEUE_MODELS, ReplayRunner
+from backtest_pipeline.src.pdf_hybrid_strategy import HybridExecutionReplayStrategy
+from backtest_pipeline.src.runner import QUEUE_MODELS
 from features_engine.src.features.npz_feed import load_npz_events
 from hft3.validation.research_stamp import build_certification_stamp, format_stamp_footer
+from replay.replay_session import ReplaySession, ReplaySessionConfig
 
 
 DEFAULT_EVENTS_CSV = _REPO / "data_system" / "config" / "events.csv"
@@ -52,7 +53,7 @@ def run_pdf_hybrid_replay(
     chi404_measured_speed: dict | None = None,
 ) -> dict:
     raw = load_npz_events(str(npz_path))
-    strategy = HybridExecutionStrategy(
+    strategy = HybridExecutionReplayStrategy(
         str(npz_path),
         tick_size=tick_size,
         latency_ms=latency_ms,
@@ -60,18 +61,20 @@ def run_pdf_hybrid_replay(
         use_ofi=use_ofi,
         use_vpin=use_vpin,
     )
-    runner = ReplayRunner(str(npz_path), tick_size=tick_size)
-    result = runner.run_replay(
-        model_logic_callback=strategy.on_step,
+    cfg = ReplaySessionConfig(
+        npz_path=str(npz_path),
         latency_ms=latency_ms,
         queue_model=queue_model,
+        tick_size=tick_size,
         step_ns=step_ns,
-        use_combined_strategy=False,
+        product="MES",
     )
+    result = ReplaySession(cfg, strategy).run()
     return {
         "model_id": "PDF_MODEL_4",
         "engine": "pdf_hybrid",
-        "description": "ReplayRunner + HybridExecutionStrategy (PDF_MODEL_1/3/4, TRADE VPIN)",
+        "description": "ReplaySession + HybridExecutionReplayStrategy (PDF_MODEL_1/3/4, TRADE VPIN)",
+        "execution_adapter_mode": "hftbacktest_simulated_exchange",
         "event_id": event_id,
         "defensive_mode": strategy.defensive_mode,
         "use_ofi": use_ofi,
@@ -98,7 +101,7 @@ def write_research_card(out_dir: Path, payload: dict, event_meta: dict) -> None:
         latency_band=payload.get("latency_ms"),
         queue_model=payload.get("queue_model"),
         execution_mode="REPLAY",
-        execution_adapter_mode="legacy_hbt_callback",
+        execution_adapter_mode="hftbacktest_simulated_exchange",
     )
     card = {
         "scenario": f"{event_meta['event_id']} PDF hybrid replay",
@@ -181,8 +184,7 @@ def main() -> int:
         print(str(exc), file=sys.stderr)
         print(
             "Prepare real MBO NPZ via:\n"
-            "  python scripts/run_offline_pipeline.py --skip-download "
-            f"--event-id {args.event_id}",
+            f"  python scripts/run_offline_pipeline.py --event-id {args.event_id}",
             file=sys.stderr,
         )
         return 1
@@ -190,7 +192,7 @@ def main() -> int:
     if not npz_path.is_file():
         print(f"NPZ missing: {npz_path}", file=sys.stderr)
         print(
-            f"Run: python scripts/run_offline_pipeline.py --skip-download --event-id {args.event_id}",
+            f"Run: python scripts/run_offline_pipeline.py --event-id {args.event_id}",
             file=sys.stderr,
         )
         return 1
