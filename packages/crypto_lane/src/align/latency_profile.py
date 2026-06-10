@@ -193,6 +193,7 @@ async def measure_live_ws_rtt(venue: str, *, url: str | None = None, timeout_s: 
     venue_urls: dict[str, str] = {
         "binance_perp": "wss://fstream.binance.com/ws",
         "binance_spot": "wss://stream.binance.com:9443/ws",
+        "bitfinex": "wss://api.bitfinex.com/ws/2",
         "kraken_spot": "wss://ws.kraken.com",
         "kraken_futures": "wss://futures.kraken.com/ws/v1",
     }
@@ -223,6 +224,40 @@ async def measure_live_ws_rtt(venue: str, *, url: str | None = None, timeout_s: 
         # Catch-all is intentional: live probe must never crash the caller; fall back to synthetic calibration.
         # Note: asyncio.CancelledError is BaseException, not Exception — it propagates so callers can cancel cleanly.
         return calibrate_ws_rtt(venue)
+
+
+def assert_promotion_rtt_source(venue: str, profiles_path: Path | None = None) -> None:
+    """Hard-fail when the resolved venue RTT profile is not promotion-eligible.
+
+    Promotion-eligible sources: ``live_measured:*`` and ``ws_rtt:*``.
+    ``synthetic_calibrated:*`` (and any other source) is research-only.
+    Raises RuntimeError naming the venue and offending source; also raises
+    when no profile exists for the venue.
+    """
+    if profiles_path is not None:
+        if not profiles_path.is_file():
+            raise RuntimeError(f"No RTT profile found for venue '{venue}': profiles file does not exist")
+        raw = json.loads(profiles_path.read_text(encoding="utf-8"))
+        venues_raw = raw.get("venues") or {}
+        row = venues_raw.get(venue)
+        if row is None:
+            raise RuntimeError(f"No RTT profile found for venue '{venue}'")
+        source = str(row.get("source", ""))
+        if not source:
+            raise RuntimeError(f"No RTT profile found for venue '{venue}'")
+    else:
+        profiles = load_venue_profiles()
+        profile = profiles.get(venue)
+        if profile is None:
+            raise RuntimeError(f"No RTT profile found for venue '{venue}'")
+        source = profile.source
+        if not source:
+            raise RuntimeError(f"No RTT profile found for venue '{venue}'")
+    if not (source.startswith("live_measured:") or source.startswith("ws_rtt:")):
+        raise RuntimeError(
+            f"Venue '{venue}' RTT source '{source}' is not promotion-eligible; "
+            "only live_measured:* and ws_rtt:* sources are permitted in the promotion path"
+        )
 
 
 def probe_ws_rtt(venue: str, *, ws_rtt_ms: float | None = None) -> VenueLatencyProfile:
