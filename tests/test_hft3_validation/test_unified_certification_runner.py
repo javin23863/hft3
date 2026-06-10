@@ -18,8 +18,8 @@ from hft3.validation.lanes.unified_staleness import (
 
 def test_unified_certification_runs_all_lanes():
     card = run_unified_certification(skip_pytest=True)
-    assert len(card.covered_lanes) == 4
-    for lane_value in ("cme_futures", "crypto", "equities", "options"):
+    assert len(card.covered_lanes) == 3
+    for lane_value in ("cme_futures", "crypto", "equities"):
         assert lane_value in card.lane_coverage
         run_result = card.lane_coverage[lane_value].get("run_result")
         assert run_result is not None
@@ -36,7 +36,6 @@ def test_unified_certification_runs_subset_of_lanes():
     assert card.lane_coverage["crypto"].get("run_result") is not None
     assert card.lane_coverage["equities"].get("run_result") is not None
     assert "run_result" not in card.lane_coverage["cme_futures"]
-    assert "run_result" not in card.lane_coverage["options"]
 
 
 def test_write_unified_certification_report(tmp_path):
@@ -55,12 +54,12 @@ def test_lane_run_result_to_dict():
     assert d["passed"] is True
 
 
-def test_staleness_paths_cover_all_lanes():
+def test_staleness_paths_cover_all_active_lanes():
     paths = get_lane_staleness_paths()
     assert "cme_futures" in paths.paths_by_lane
     assert "crypto" in paths.paths_by_lane
     assert "equities" in paths.paths_by_lane
-    assert "options" in paths.paths_by_lane
+    assert "options" not in paths.paths_by_lane
 
 
 def test_staleness_crypto_includes_lane_packages():
@@ -75,10 +74,11 @@ def test_staleness_equities_includes_lane_packages():
     assert any("equities_lane" in p for p in equities_paths)
 
 
-def test_staleness_options_includes_lane_packages():
+def test_staleness_equities_includes_options_lane_paths():
+    """Options lane paths are folded into equities after the merge."""
     paths = get_lane_staleness_paths()
-    options_paths = paths.paths_by_lane["options"]
-    assert any("options_lane" in p for p in options_paths)
+    equities_paths = paths.paths_by_lane["equities"]
+    assert any("options_lane" in p for p in equities_paths)
 
 
 def test_staleness_cme_keeps_legacy_paths():
@@ -88,7 +88,7 @@ def test_staleness_cme_keeps_legacy_paths():
     assert "scripts/run_event_replay.py" in cme_paths
 
 
-def test_all_critical_paths_includes_all_lanes():
+def test_all_critical_paths_includes_all_active_lanes():
     all_paths = all_critical_paths()
     assert any("crypto_lane" in p for p in all_paths)
     assert any("equities_lane" in p for p in all_paths)

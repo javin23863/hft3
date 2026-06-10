@@ -23,9 +23,9 @@ from ..lane import (
     WindowConfig,
 )
 
-EQUITIES_SYMBOLS = ["RUNNER", "LOW_FLOAT"]
-EQUITIES_LATENCY_BANDS_MS = [5.0, 50.0]
-EQUITIES_EVENT_TYPES = ["equities_low_float", "equities_runner_event"]
+EQUITIES_SYMBOLS = ["RUNNER", "LOW_FLOAT", "OPTIONS", "PARITY"]
+EQUITIES_LATENCY_BANDS_MS = [5.0, 10.0, 50.0, 100.0, 250.0]
+EQUITIES_EVENT_TYPES = ["equities_low_float", "equities_runner_event", "options_parity", "parity"]
 
 
 @dataclass
@@ -48,6 +48,7 @@ class EquitiesConfig:
     test_days: int = 20
     step_days: int = 20
     universe_yaml_path: str = "packages/equities_lane/config/universe.yaml"
+    latency_floor_ms: float = 5.0
     capability_profile: LaneCapabilityProfile = EQUITIES_SPEED_ADVANTAGE_PROFILE
 
     def to_dict(self) -> dict[str, Any]:
@@ -74,6 +75,7 @@ class EquitiesConfig:
                 "test_days": self.test_days,
                 "step_days": self.step_days,
             },
+            "latency_floor_ms": self.latency_floor_ms,
             "capability_profile": self.capability_profile.to_dict(),
         }
 
@@ -98,7 +100,7 @@ def load_equities_config(universe_yaml: Path | None = None) -> EquitiesConfig:
             if isinstance(s, dict) and "symbol" in s:
                 symbols.append(str(s["symbol"]))
         if symbols:
-            cfg.symbols = symbols
+            cfg.symbols = symbols + [s for s in EQUITIES_SYMBOLS if s not in symbols]
     wf = data.get("walk_forward", {})
     if isinstance(wf, dict):
         cfg.train_days = int(wf.get("train_days", cfg.train_days))
@@ -110,6 +112,7 @@ def load_equities_config(universe_yaml: Path | None = None) -> EquitiesConfig:
         lat = exec_cfg.get("latency_ms")
         if isinstance(lat, (int, float)):
             cfg.latency_bands_ms = [float(lat)]
+            # latency_floor_ms is never removed by a yaml override
     cfg.windows = WindowConfig(
         training_window_days=cfg.train_days,
         test_window_days=cfg.test_days,

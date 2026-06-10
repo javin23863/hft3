@@ -56,6 +56,7 @@ def main(argv: list[str] | None = None) -> int:
     camp_p.add_argument("--allow-partial", action="store_true")
     camp_p.add_argument("--trial", action="store_true", help="Fast UI smoke: skip WFC, partial NPZ OK")
     camp_p.add_argument("--record-sim-shadow", choices=["PASS", "FAIL"], default=None)
+    camp_p.add_argument("--record-paper-shadow", choices=["PASS", "FAIL"], default=None)
     camp_p.add_argument("--composition", default=None, help="JSON file with ModelComposition")
     camp_p.add_argument(
         "--defensive",
@@ -311,12 +312,17 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if result.get("status") in {"READY_TO_CONNECT", "CONNECTED"} else 1
 
     if args.command == "campaign":
-        from workbench.src.run.campaign_runner import record_sim_shadow, run_campaign
+        from workbench.src.run.campaign_runner import record_paper_shadow, record_sim_shadow, run_campaign
 
         repo = _REPO
         if args.record_sim_shadow and args.campaign_id:
             record_sim_shadow(repo, args.campaign_id, args.record_sim_shadow)
             print(json.dumps({"campaign_id": args.campaign_id, "sim_shadow_status": args.record_sim_shadow}))
+            return 0
+
+        if args.record_paper_shadow and args.campaign_id:
+            record_paper_shadow(repo, args.campaign_id, args.record_paper_shadow)
+            print(json.dumps({"campaign_id": args.campaign_id, "paper_shadow_status": args.record_paper_shadow}))
             return 0
 
         chi404 = repo / args.chi404_summary

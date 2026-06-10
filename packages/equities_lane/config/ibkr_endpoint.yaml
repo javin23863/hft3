@@ -1,39 +1,59 @@
-schema_version: ibkr_endpoint_v1
-profile: ibkr_paper_socket
+schema_version: ibkr_endpoint_v2
 provider: interactive_brokers
-transport: tws_socket
-# Override with QUANTX_REPO env var if the quant-x repo is not a sibling of hft3.
-source_reference: '%QUANTX_REPO%/docs/ibkr_weekly_login.md'
+transport: web_api
 mode: paper
-system: IBKR Paper Trading
-gateway: TWS or IB Gateway headless socket
-host: 127.0.0.1
-ports:
-  paper: 7497
-  live: 7496
-  legacy_gateway_paper: 4002
-  legacy_gateway_live: 4001
-candidate_ports:
-  paper:
-    - 7497
-    - 4002
-  live:
-    - 7496
-    - 4001
-client_ids:
-  broker_primary: 17
-  market_data: 18
-env:
-  host: IBKR_SOCKET_HOST
-  mode: IBKR_SOCKET_MODE
-  paper_port: IBKR_SOCKET_PORT_PAPER
-  live_port: IBKR_SOCKET_PORT_LIVE
-  broker_client_id: IBKR_SOCKET_CLIENT_ID_PRIMARY
-  market_data_client_id: IBKR_SOCKET_CLIENT_ID_MARKETDATA
-  account_primary: IBKR_ACCOUNT_ID_PRIMARY
-  account_fallback: IBKR_ACCOUNT_ID
-  broker_socket_enabled: BROKER_SOCKET_ENABLED
-  market_data_provider: MARKET_DATA_PROVIDER
+
+# Two headless auth modes; no TWS/IB Gateway desktop required.
+auth_modes:
+  - oauth
+  - gateway
+default_auth: oauth
+
+# ---------------------------------------------------------------------------
+# OAuth 1.0a mode — fully unattended, direct to IBKR production REST API.
+#
+# Flow:
+#   1. Sign a live-session-token request with RSA-SHA256 using the private
+#      signature key.  The request body carries a Diffie-Hellman challenge.
+#   2. IBKR returns an encrypted live-session-token (LST); decrypt with the
+#      private encryption key.
+#   3. HMAC-SHA256 sign every subsequent REST request with the LST.
+#
+# All credential values come from environment variables — never serialized.
+# ---------------------------------------------------------------------------
+oauth:
+  base_url: https://api.ibkr.com/v1/api
+  env:
+    consumer_key: IBKR_OAUTH_CONSUMER_KEY
+    access_token: IBKR_OAUTH_ACCESS_TOKEN
+    access_token_secret: IBKR_OAUTH_ACCESS_TOKEN_SECRET
+    signature_key_path: IBKR_OAUTH_SIGNATURE_KEY_PATH
+    encryption_key_path: IBKR_OAUTH_ENCRYPTION_KEY_PATH
+    dh_param_path: IBKR_OAUTH_DH_PARAM_PATH
+
+# ---------------------------------------------------------------------------
+# Gateway mode — clientportal.gw headless Java gateway on localhost:5000.
+#
+# Usage:
+#   1. Start: java -jar clientportal.gw root/conf.yaml
+#   2. Complete the one-time browser login at https://localhost:5000
+#   3. Keep session alive via POST /tickle (every ~60 s; handled by IbkrWebClient)
+#
+# TLS note: localhost uses a self-signed cert; tls_verify is false ONLY for
+# localhost targets.  Any non-localhost URL ignores this flag and verifies TLS.
+# ---------------------------------------------------------------------------
+gateway:
+  base_url: https://localhost:5000/v1/api
+  launch: java -jar clientportal.gw root/conf.yaml
+  tls_verify: false
+  notes:
+    - One-time browser login required after each gateway restart.
+    - POST /tickle every ~60 s to keep the session alive.
+
+# Paper account identifier comes from the environment; never serialized here.
+paper_account_env: IBKR_ACCOUNT_ID_PAPER
+
+# Standard env-file search path (credentials loaded at runtime, not here).
 env_files:
   - C:/QuantX/keys.env
   - C:/QuantX/.env
@@ -41,15 +61,10 @@ env_files:
   - '%USERPROFILE%/.config/quant-x/.env'
   - '%USERPROFILE%/Documents/GitHub/quant-x/.env.local'
   - '%USERPROFILE%/Documents/GitHub/quant-x/.env'
-required_runtime:
-  broker_socket_enabled: true
-  market_data_provider: ibkr-socket
-launchers:
-  ib_gateway:
-    - C:/Jts/ibgateway/latest/ibgateway1.exe
-  tws:
-    - C:/Jts/1030/tws.exe
+
 notes:
-  - QuantX uses the TWS or IB Gateway socket path for daily headless operation.
-  - Client Portal on port 5000 is legacy/auxiliary and is not the equities lane default.
-  - Account identifiers and credentials are runtime secrets and must not be serialized.
+  - TWS socket path (port 7497) and IB Gateway socket (port 4002) are retired
+    per the no-GUI directive; this config uses the IBKR Web (Client Portal) API.
+  - Account identifiers and all credentials are runtime secrets sourced from
+    environment variables or env files; they must never be serialized into this
+    config or the runtime status artifact.

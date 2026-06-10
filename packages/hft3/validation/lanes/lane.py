@@ -17,25 +17,22 @@ class Lane(str, Enum):
     CME_FUTURES = "cme_futures"
     CRYPTO = "crypto"
     EQUITIES = "equities"
-    OPTIONS = "options"
 
     @classmethod
     def from_model_id(cls, model_id: str) -> "Lane":
         """Resolve a Lane from a model_id prefix.
 
         Recognized prefixes:
-          - CRYPTO_                    -> CRYPTO
-          - EQUITY_, LOW_FLOAT_         -> EQUITIES
-          - OPTIONS_, PARITY_           -> OPTIONS
-          - everything else             -> CME_FUTURES
+          - CRYPTO_                              -> CRYPTO
+          - EQUITY_, LOW_FLOAT_                  -> EQUITIES
+          - OPTIONS_, PARITY_                    -> EQUITIES (merged lane)
+          - everything else                      -> CME_FUTURES
         """
         upper = (model_id or "").upper()
         if upper.startswith("CRYPTO_"):
             return cls.CRYPTO
-        if upper.startswith(("EQUITY_", "LOW_FLOAT_")):
+        if upper.startswith(("EQUITY_", "LOW_FLOAT_", "OPTIONS_", "PARITY_")):
             return cls.EQUITIES
-        if upper.startswith(("OPTIONS_", "PARITY_")):
-            return cls.OPTIONS
         return cls.CME_FUTURES
 
 
@@ -91,18 +88,7 @@ EQUITIES_SPEED_ADVANTAGE_PROFILE = LaneCapabilityProfile(
     speed_advantage=True,
     research_only=False,
     hft_proof_required=False,
-    description="Equities lane: speed-advantage research/execution without true DMA HFT requirement.",
-)
-
-OPTIONS_RESEARCH_PROFILE = LaneCapabilityProfile(
-    name="research_non_hft",
-    is_hft=False,
-    dma=False,
-    node_direct=False,
-    speed_advantage=False,
-    research_only=True,
-    hft_proof_required=False,
-    description="Options lane: research/non-HFT unless separately proven.",
+    description="Equities lane: US stocks + options via IBKR Web API, speed-advantage non-DMA (better-than-retail; no true HFT/DMA claim).",
 )
 
 

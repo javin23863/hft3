@@ -20,7 +20,10 @@ def test_lane_enum_values():
     assert Lane.CME_FUTURES.value == "cme_futures"
     assert Lane.CRYPTO.value == "crypto"
     assert Lane.EQUITIES.value == "equities"
-    assert Lane.OPTIONS.value == "options"
+
+
+def test_lane_enum_no_options_member():
+    assert not hasattr(Lane, "OPTIONS")
 
 
 def test_lane_from_model_id_crypto():
@@ -38,9 +41,9 @@ def test_lane_from_model_id_equities():
     assert Lane.from_model_id("LOW_FLOAT_BREAKOUT") == Lane.EQUITIES
 
 
-def test_lane_from_model_id_options():
-    assert Lane.from_model_id("OPTIONS_PUT_CALL") == Lane.OPTIONS
-    assert Lane.from_model_id("PARITY_LEG") == Lane.OPTIONS
+def test_lane_from_model_id_options_merged_to_equities():
+    assert Lane.from_model_id("OPTIONS_PUT_CALL") == Lane.EQUITIES
+    assert Lane.from_model_id("PARITY_LEG") == Lane.EQUITIES
 
 
 def test_lane_from_model_id_cme_default():
@@ -49,13 +52,13 @@ def test_lane_from_model_id_cme_default():
     assert Lane.from_model_id("") == Lane.CME_FUTURES
 
 
-def test_registry_has_all_four_lanes():
+def test_registry_has_three_lanes():
     reg = LaneRegistry.instance()
     lanes = reg.all_lanes()
+    assert len(lanes) == 3
     assert Lane.CME_FUTURES in lanes
     assert Lane.CRYPTO in lanes
     assert Lane.EQUITIES in lanes
-    assert Lane.OPTIONS in lanes
 
 
 def test_registry_get_returns_registration():
@@ -71,10 +74,20 @@ def test_registry_resolve_lane_via_prefix():
     reg = LaneRegistry.instance()
     assert reg.resolve_lane("CRYPTO_H7") == Lane.CRYPTO
     assert reg.resolve_lane("EQUITY_LOW_FLOAT") == Lane.EQUITIES
-    assert reg.resolve_lane("OPTIONS_PUT") == Lane.OPTIONS
+    assert reg.resolve_lane("OPTIONS_PUT") == Lane.EQUITIES
 
 
 def test_registry_resolve_lane_falls_back_to_enum():
     reg = LaneRegistry.instance()
     assert reg.resolve_lane("UNKNOWN_PREFIX_123") == Lane.CME_FUTURES
     assert reg.resolve_lane("") == Lane.CME_FUTURES
+
+
+def test_resolve_lane_options_put_routes_to_equities():
+    reg = LaneRegistry.instance()
+    assert reg.resolve_lane("OPTIONS_PUT") == Lane.EQUITIES
+
+
+def test_resolve_lane_parity_routes_to_equities():
+    reg = LaneRegistry.instance()
+    assert reg.resolve_lane("PARITY_LEG") == Lane.EQUITIES

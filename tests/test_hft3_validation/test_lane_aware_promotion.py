@@ -35,8 +35,12 @@ def test_resolve_lane_equities_via_symbol():
     assert resolve_lane_for_candidate(symbol="LOW_FLOAT_X") == Lane.EQUITIES
 
 
-def test_resolve_lane_options_via_symbol():
-    assert resolve_lane_for_candidate(symbol="OPTIONS_LEG_A") == Lane.OPTIONS
+def test_resolve_lane_options_symbol_resolves_to_equities():
+    assert resolve_lane_for_candidate(symbol="OPTIONS_LEG_A") == Lane.EQUITIES
+
+
+def test_resolve_lane_parity_symbol_resolves_to_equities():
+    assert resolve_lane_for_candidate(symbol="PARITY_SPREAD") == Lane.EQUITIES
 
 
 def test_resolve_lane_cme_default():
@@ -46,6 +50,14 @@ def test_resolve_lane_cme_default():
 def test_resolve_lane_via_event_id():
     assert resolve_lane_for_candidate(event_id="CRYPTO_H7_RUN") == Lane.CRYPTO
     assert resolve_lane_for_candidate(event_id="EQUITY_RUNNER_2024") == Lane.EQUITIES
+
+
+def test_resolve_lane_options_event_id_resolves_to_equities():
+    assert resolve_lane_for_candidate(event_id="OPTIONS_PARITY_RUN") == Lane.EQUITIES
+
+
+def test_resolve_lane_parity_event_id_resolves_to_equities():
+    assert resolve_lane_for_candidate(event_id="PARITY_LEG_RUN") == Lane.EQUITIES
 
 
 def test_crypto_candidate_with_environment_covered_meme_symbol_passes():
@@ -144,6 +156,26 @@ def test_equities_candidate_with_testco_passes_coverage():
     assert result.passed is True
 
 
+def test_equities_options_candidate_passes_coverage():
+    result = check_candidate_lane_coverage(
+        model_id="OPTIONS_PUT_CALL",
+        symbol="OPTIONS_LEG_A",
+        event_id="OPTIONS_PARITY_v1",
+    )
+    assert result.passed is True
+    assert result.lane == "equities"
+
+
+def test_equities_parity_candidate_passes_coverage():
+    result = check_candidate_lane_coverage(
+        model_id="PARITY_LEG",
+        symbol="PARITY_SPREAD",
+        event_id="PARITY_RUN_v1",
+    )
+    assert result.passed is True
+    assert result.lane == "equities"
+
+
 def test_cme_candidate_with_es_passes_coverage():
     result = check_candidate_lane_coverage(
         model_id="HYP_1",
@@ -172,12 +204,15 @@ def test_cross_lane_crypto_symbol_against_cme_lane_fails():
     assert "DOGEUSDT" in result.failure_reasons[0]
 
 
-def test_check_lane_coverage_latency_band():
+# --- CME exact-band latency tests (unchanged semantics) ---
+
+
+def test_check_lane_coverage_latency_band_cme_1ms_passes():
     result = check_lane_coverage(Lane.CME_FUTURES, symbol="ES", latency_ms=1.0)
     assert result.passed is True
 
 
-def test_check_lane_coverage_latency_band_out_of_range():
+def test_check_lane_coverage_latency_band_cme_50ms_fails():
     result = check_lane_coverage(Lane.CME_FUTURES, symbol="ES", latency_ms=50.0)
     assert result.passed is False
 
@@ -190,6 +225,37 @@ def test_crypto_coverage_with_50ms_latency_passes():
         scorecard=_crypto_environment_scorecard(),
     )
     assert result.passed is True
+
+
+# --- Equities floor-semantics latency tests ---
+
+
+def test_equities_coverage_latency_50ms_passes():
+    """50ms is above floor (5ms); passes regardless of bands."""
+    result = check_lane_coverage(Lane.EQUITIES, symbol="RUNNER", latency_ms=50.0)
+    assert result.passed is True
+
+
+def test_equities_coverage_latency_1ms_fails_optimistic_claim():
+    """1ms is below floor (5ms); should fail with 'optimistic' reason."""
+    result = check_lane_coverage(Lane.EQUITIES, symbol="RUNNER", latency_ms=1.0)
+    assert result.passed is False
+    assert any("optimistic" in r for r in result.failure_reasons)
+
+
+def test_equities_coverage_latency_at_floor_passes():
+    """Exactly at floor passes."""
+    result = check_lane_coverage(Lane.EQUITIES, symbol="RUNNER", latency_ms=5.0)
+    assert result.passed is True
+
+
+def test_equities_coverage_latency_above_all_bands_passes():
+    """999ms is well above floor; floor semantics mean it still passes."""
+    result = check_lane_coverage(Lane.EQUITIES, symbol="RUNNER", latency_ms=999.0)
+    assert result.passed is True
+
+
+# --- Capability profile tests ---
 
 
 def test_cme_lane_requires_true_hft_dma_profile():

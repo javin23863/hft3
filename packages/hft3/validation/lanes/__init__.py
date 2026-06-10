@@ -11,7 +11,6 @@ from .lane import (
     Lane,
     LaneCapabilityProfile,
     LaneConfig,
-    OPTIONS_RESEARCH_PROFILE,
     WindowConfig,
 )
 from .lane_registry import LaneRegistration, LaneRegistry, register_lane
@@ -30,7 +29,6 @@ __all__ = [
     "LaneConfig",
     "LaneRegistration",
     "LaneRegistry",
-    "OPTIONS_RESEARCH_PROFILE",
     "WindowConfig",
     "register_all_lanes",
     "register_lane",

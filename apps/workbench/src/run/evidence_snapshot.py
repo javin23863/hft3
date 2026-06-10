@@ -2708,7 +2708,7 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
     lane_row = (lane_registry.get("by_lane") or {}).get(lane, {})
     config = lane_row.get("config") or {}
     is_cme = lane == "cme_futures"
-    is_ibkr_lane = lane in {"equities", "options"}
+    is_ibkr_lane = lane == "equities"
     rithmic_endpoint = _rithmic_endpoint_status(repo, force_paper=is_cme) if is_cme else {}
     ibkr_endpoint = (
         _decorate_ibkr_endpoint_for_pipeline(_ibkr_endpoint_status(repo, connect=True))
@@ -3442,7 +3442,7 @@ def load_run_evidence(repo: Path, source: str, *, campaign_id: str = "") -> RunE
             selected_run_id=snapshot.run_id,
         )
     is_cme_lane = lane == "cme_futures"
-    is_ibkr_lane = lane in {"equities", "options"}
+    is_ibkr_lane = lane == "equities"
     rithmic_endpoint = (snapshot.system or {}).get("rithmic_endpoint") or (
         _rithmic_endpoint_status(repo, force_paper=True) if is_cme_lane else {}
     )

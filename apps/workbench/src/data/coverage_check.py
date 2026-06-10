@@ -109,7 +109,7 @@ def data_type_for_model(model_id: str, binding: dict[str, Any] | None = None) ->
     slug = resolve_model_id(model_id)
     binding = binding or {}
     datasets = {str(v) for v in (binding.get("required_datasets") or [])}
-    if binding.get("campaign_mode") == "options_lane" or "options_chain" in datasets:
+    if "options_chain" in datasets:
         return "0DTE options and underlying intraday"
     if "cme_mdp3_mbo" in datasets or "mbo_npz" in datasets:
         return "CME MBO Level 3"
@@ -411,7 +411,8 @@ def compute_model_coverage(repo_root: Path, model_id: str, symbol: str) -> Cover
             event_date = _parse_date(event.release_date)
             if event_date is not None:
                 missing_dates.add(event_date)
-    option_dates = _option_dates(repo_root) if binding.get("campaign_mode") == "options_lane" else None
+    needs_option_dates = "options_chain" in {str(v) for v in (binding.get("required_datasets") or [])}
+    option_dates = _option_dates(repo_root) if needs_option_dates else None
     return build_coverage_summary_from_dates(
         model_name=slug,
         data_type=data_type,

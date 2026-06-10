@@ -120,7 +120,7 @@ pdf:
     required_datasets:
     - options_chain
     latency_lane: 10_250ms
-    campaign_mode: options_lane
+    campaign_mode: equities_lane
   DOW_YM_INDEX:
     event_context_policy: catalog_all_contexts
   TREASURY_CTD:

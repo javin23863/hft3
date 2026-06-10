@@ -1,6 +1,6 @@
 """Register all lane adapters with the LaneRegistry.
 
-Importing this module populates the LaneRegistry singleton with all four
+Importing this module populates the LaneRegistry singleton with all three
 lanes. The unified certification runner and promotion gate depend on
 this registration.
 """
@@ -9,7 +9,6 @@ from __future__ import annotations
 from .adapters.cme_adapter import CMEBacktester, CMEConfig, load_cme_config
 from .adapters.crypto_adapter import CryptoBacktester, CryptoConfig, load_crypto_config
 from .adapters.equities_adapter import EquitiesBacktester, EquitiesConfig, load_equities_config
-from .adapters.options_adapter import OptionsBacktester, OptionsConfig, load_options_config
 from .lane import Lane
 from .lane_registry import LaneRegistry, register_lane
 
@@ -26,12 +25,8 @@ def _equities_validator() -> "EquitiesBacktester":
     return EquitiesBacktester(load_equities_config())
 
 
-def _options_validator() -> "OptionsBacktester":
-    return OptionsBacktester(load_options_config())
-
-
 def register_all_lanes() -> None:
-    """Register all four lanes. Idempotent: safe to call multiple times."""
+    """Register all three lanes. Idempotent: safe to call multiple times."""
     reg = LaneRegistry.instance()
     if reg.get(Lane.CME_FUTURES) is None:
         register_lane(
@@ -57,17 +52,8 @@ def register_all_lanes() -> None:
             adapter_factory=lambda: EquitiesBacktester(load_equities_config()),
             config_loader=load_equities_config,
             validator=_equities_validator,
-            test_paths=["tests/test_equities_lane"],
-            model_id_prefixes=("EQUITY_", "LOW_FLOAT_"),
-        )
-    if reg.get(Lane.OPTIONS) is None:
-        register_lane(
-            lane=Lane.OPTIONS,
-            adapter_factory=lambda: OptionsBacktester(load_options_config()),
-            config_loader=load_options_config,
-            validator=_options_validator,
-            test_paths=["tests/test_options_lane"],
-            model_id_prefixes=("OPTIONS_", "PARITY_"),
+            test_paths=["tests/test_equities_lane", "tests/test_workbench/test_options_lane_campaign.py"],
+            model_id_prefixes=("EQUITY_", "LOW_FLOAT_", "OPTIONS_", "PARITY_"),
         )
 
 

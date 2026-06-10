@@ -42,9 +42,16 @@ def test_hyp_29_does_not_list_cpi():
     period = ValidationPeriod("Holdout", 2023, 2024)
     events = list_campaign_events("HYP_29", period, "MES.v.0", REPO)
     assert all("CPI" not in e.event_id for e in events)
+    # HYP_29 (END_OF_DAY_FORCED_FLATTEN_FLOW) allows FRIDAY_CLOSE, TPT_FLATTEN,
+    # and PROP_FLATTEN_TOPSTEP contexts.  With the expanded 12k-row events.csv,
+    # FRIDAY_CLOSE events are present and sort alphabetically before PROP_FLATTEN.
+    # Assert allowed contexts only — not a specific first-event ordering.
     if events:
-        assert events[0].event_id.startswith("PROP_FLATTEN_TOPSTEP")
-        assert events[0].event_context == "PROP_FLATTEN_TOPSTEP"
+        allowed_prefixes = ("PROP_FLATTEN_TOPSTEP", "FRIDAY_CLOSE", "TPT_FLATTEN")
+        assert events[0].event_type in ("PROP_FLATTEN_TOPSTEP", "FRIDAY_CLOSE", "TPT_FLATTEN"), (
+            f"Unexpected event_type={events[0].event_type!r}; "
+            f"expected one of {allowed_prefixes}"
+        )
 
 
 def test_period_year_filter_excludes_wrong_years():
@@ -74,9 +81,10 @@ def test_full_universe_view_is_not_limited_to_generated_campaign_csv():
     assert len(types) > 20
 
 
-def test_pdf_model_5_options_lane():
+def test_pdf_model_5_equities_lane():
+    # DEALER_HEDGING (PDF_MODEL_5) migrated to equities_lane; options_lane is a back-compat alias.
     binding = load_model_binding(REPO, "PDF_MODEL_5")
-    assert binding["campaign_mode"] == "options_lane"
+    assert binding["campaign_mode"] in ("equities_lane", "options_lane")
     assert "options_chain" in binding["required_datasets"]
 
 

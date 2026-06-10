@@ -23,6 +23,11 @@ from workbench.src.data.event_catalog import (
     load_walk_forward_config,
     write_campaign_manifest,
 )
+
+# Options-type model identifiers (options parity fixture flow)
+_OPTIONS_MODEL_IDS = frozenset({"PDF_MODEL_5", "DEALER_HEDGING"})
+_OPTIONS_PREFIXES = ("OPTIONS_", "PARITY_")
+_STOCK_PREFIXES = ("EQUITY_", "LOW_FLOAT_")
 from workbench.src.data.coverage_check import (
     compute_model_coverage,
     format_coverage_summary,
@@ -183,6 +188,87 @@ def _sim_shadow_status(artifact_dir: Path) -> str:
     return "pending_CHI404"
 
 
+def load_paper_shadow_config(repo_root: Path) -> dict[str, Any]:
+    """Load equities paper shadow config from walk_forward.yaml equities_paper_shadow block.
+
+    Defaults: 60 days, IBKR paper account.
+    """
+    wf = load_walk_forward_config(repo_root)
+    block = wf.get("equities_paper_shadow") or {}
+    return {
+        "ibkr_days": int(block.get("ibkr_days", 60)),
+        "account_type": str(block.get("account_type", "IBKR_PAPER")),
+        "lane": str(block.get("lane", "equities")),
+    }
+
+
+def _paper_shadow_status(artifact_dir: Path) -> str:
+    """Read recorded paper shadow status from artifact_dir/paper_shadow.json."""
+    path = artifact_dir / "paper_shadow.json"
+    if path.is_file():
+        try:
+            return str(json.loads(path.read_text(encoding="utf-8")).get("status", "PENDING"))
+        except json.JSONDecodeError:
+            pass
+    return "PENDING"
+
+
+def _ibkr_endpoint_ready(repo_root: Path) -> bool:
+    """Read top-level 'ready' field from runtime/equities_lane/ibkr_endpoint_status.json."""
+    path = repo_root / "runtime" / "equities_lane" / "ibkr_endpoint_status.json"
+    if path.is_file():
+        try:
+            return bool(json.loads(path.read_text(encoding="utf-8")).get("ready", False))
+        except (json.JSONDecodeError, Exception):
+            pass
+    return False
+
+
+def _is_options_type_model(model_id: str) -> bool:
+    """Return True for options/parity fixture models; False for stock models."""
+    if model_id in _OPTIONS_MODEL_IDS:
+        return True
+    if any(model_id.startswith(pfx) for pfx in _OPTIONS_PREFIXES):
+        return True
+    return False
+
+
+def record_paper_shadow(repo_root: Path, campaign_id: str, status: str) -> Path:
+    """Record IBKR paper shadow result for an equities lane campaign.
+
+    Mirrors record_sim_shadow exactly but writes paper_shadow.json and updates
+    the paper_shadow_status / promote_candidate fields.
+    """
+    artifact_dir = campaign_dir_for(repo_root, campaign_id)
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    paper_cfg = load_paper_shadow_config(repo_root)
+    payload = {
+        "status": status,
+        "ibkr_days": paper_cfg.get("ibkr_days"),
+        "account_type": paper_cfg.get("account_type"),
+        "lane": paper_cfg.get("lane"),
+    }
+    (artifact_dir / "paper_shadow.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    summary_path = artifact_dir / "summary.json"
+    if summary_path.is_file():
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        summary["paper_shadow_status"] = status
+        all_stages_pass = _all_stage_gates_pass(summary)
+        summary["promote_candidate"] = all_stages_pass and status == "PASS"
+        summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    return artifact_dir / "paper_shadow.json"
+
+
+def _all_stage_gates_pass(summary: dict[str, Any]) -> bool:
+    """Return True if all period stage gates passed (campaign status PASS, no blocking gates)."""
+    if summary.get("status") != "PASS":
+        return False
+    for p in summary.get("periods") or []:
+        if isinstance(p, dict) and not p.get("gate_pass", False) and not p.get("evaluate_only", False):
+            return False
+    return True
+
+
 def _append_blocking_gate(summary: Dict[str, Any], gate: Dict[str, Any]) -> None:
     gates = list(summary.get("blocking_gates") or [])
     gate_name = gate.get("gate") or gate.get("gate_name")
@@ -280,7 +366,7 @@ def _run_institutional_model_metrics(repo_root: Path, artifact_dir: Path) -> Dic
         return payload
 
 
-def _run_options_campaign(
+def _run_options_type_campaign(
     repo_root: Path,
     model_id: str,
     symbol: str,
@@ -289,20 +375,21 @@ def _run_options_campaign(
     *,
     dry_run: bool = False,
 ) -> CampaignResult:
-    """PDF_MODEL_5 fixture MVP — options_lane quarantine (B7)."""
+    """Options/parity fixture backtest for OPTIONS_-prefix / PARITY_-prefix / DEALER_HEDGING models."""
     from workbench.src.registry.unified_registry import get_model_by_id
     from workbench.src.run.run_context import RunContext
 
     campaign_id = artifact_dir.name
     parity_root = artifact_root() / "parity"
     parity_root.mkdir(parents=True, exist_ok=True)
+    ibkr_ready = _ibkr_endpoint_ready(repo_root)
 
     if dry_run:
         preview = {
             "model_id": model_id,
             "symbol": symbol,
-            "campaign_mode": "options_lane",
-            "fixture": "options_lane/fixtures/fair_futures_quotes.ndjson",
+            "campaign_mode": "equities_lane",
+            "fixture": "packages/options_lane/fixtures/fair_futures_quotes.ndjson",
             "artifact_root": str(parity_root),
         }
         write_campaign_manifest(artifact_dir / "dry_run_preview.json", preview)
@@ -323,9 +410,9 @@ def _run_options_campaign(
         run_id=f"{model_id}_options_fixture",
         model_id=model_id,
         event_id="OPTIONS_FIXTURE",
-        npz_path=repo_root / "options_lane" / "fixtures" / "fair_futures_quotes.ndjson",
+        npz_path=repo_root / "packages" / "options_lane" / "fixtures" / "fair_futures_quotes.ndjson",
         events=np.array([]),
-        metadata={"promotion_eligible": False},
+        metadata={},
     )
     errs = adapter.validate_inputs(ctx)
     if errs:
@@ -357,23 +444,26 @@ def _run_options_campaign(
     period_dir.mkdir(parents=True, exist_ok=True)
     (period_dir / "period_summary.json").write_text(json.dumps(asdict(pr), indent=2), encoding="utf-8")
     status = "PASS" if gate_pass else "FAIL"
-    sim_cfg = load_sim_shadow_config(repo_root)
-    sim_status = _sim_shadow_status(artifact_dir)
+    paper_cfg = load_paper_shadow_config(repo_root)
+    paper_status = _paper_shadow_status(artifact_dir)
+    promote_ok = status == "PASS" and paper_status == "PASS"
     summary = {
         "campaign_id": campaign_id,
         "status": status,
         "model_id": model_id,
         "symbol": symbol,
         "param_hash": param_hash,
-        "campaign_mode": "options_lane",
-        "promotion_eligible": False,
+        "campaign_mode": "equities_lane",
         "periods": [asdict(pr)],
-        "sim_shadow_anchor": str(sim_cfg.get("anchor_date")),
-        "sim_shadow_cme_days": sim_cfg.get("cme_days"),
-        "sim_shadow_status": sim_status,
-        "sim_shadow_required": status == "PASS",
-        "promote_candidate": status == "PASS" and sim_status == "PASS",
-        "promote_note": "Options lane quarantined; sim shadow on CHI404 required for MBO promotion path",
+        "paper_shadow_required": True,
+        "paper_shadow_status": paper_status,
+        "paper_shadow_days": paper_cfg.get("ibkr_days"),
+        "ibkr_endpoint_ready": ibkr_ready,
+        "promote_candidate": promote_ok,
+        "promote_note": (
+            "Equities lane (stocks+options, IBKR Web API non-DMA): "
+            "IBKR paper shadow required before promotion"
+        ),
     }
     (artifact_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     metrics_status = _run_institutional_model_metrics(repo_root, artifact_dir)
@@ -393,6 +483,272 @@ def _run_options_campaign(
         param_hash=param_hash,
         periods=[pr],
         artifact_dir=str(artifact_dir),
+    )
+
+
+def _run_stock_type_campaign(
+    repo_root: Path,
+    model_id: str,
+    symbol: str,
+    artifact_dir: Path,
+    param_hash: str,
+    *,
+    dry_run: bool = False,
+) -> CampaignResult:
+    """Lane-native walk-forward campaign for EQUITY_/LOW_FLOAT_ stock models.
+
+    Uses equities_lane fixtures (low_float_session_v1.ndjson, daily_bars.csv, float_metadata.csv).
+    Applies B4 stage discipline: Discovery / Confirmation / Holdout with Holdout evaluate_only=True.
+    Honesty rule: if fixtures cannot produce real folds, returns DATA_INSUFFICIENT with a blocking gate.
+    """
+    from equities_lane.src.backtest.low_float_backtester import LowFloatBacktester
+    from equities_lane.src.backtest.walk_forward import generate_folds
+    from equities_lane.src.config_loader import load_universe
+    from equities_lane.src.ingest.session_io import load_session
+    from equities_lane.src.screen.universe_screener import screen_session
+
+    campaign_id = artifact_dir.name
+    ibkr_ready = _ibkr_endpoint_ready(repo_root)
+    paper_cfg = load_paper_shadow_config(repo_root)
+    universe_cfg_path = repo_root / "packages" / "equities_lane" / "config" / "universe.yaml"
+
+    fixtures_root = repo_root / "packages" / "equities_lane" / "fixtures"
+    session_path = fixtures_root / "low_float_session_v1.ndjson"
+    daily_bars_path = fixtures_root / "daily_bars.csv"
+    float_csv_path = fixtures_root / "float_metadata.csv"
+
+    if dry_run:
+        preview = {
+            "model_id": model_id,
+            "symbol": symbol,
+            "campaign_mode": "equities_lane",
+            "session_fixture": str(session_path),
+            "artifact_dir": str(artifact_dir),
+        }
+        write_campaign_manifest(artifact_dir / "dry_run_preview.json", preview)
+        return CampaignResult(
+            campaign_id=campaign_id,
+            model_id=model_id,
+            symbol=symbol,
+            status="DRY_RUN",
+            param_hash=param_hash,
+            artifact_dir=str(artifact_dir),
+        )
+
+    # Load universe config for fold generation parameters.
+    _, universe, paths = load_universe(universe_cfg_path)
+
+    # Determine session date range from available fixture sessions.
+    session_dates: list[str] = []
+    if session_path.is_file():
+        try:
+            meta_line = session_path.read_text(encoding="utf-8").splitlines()[0]
+            meta = json.loads(meta_line)
+            if meta.get("_type") == "meta" and meta.get("session_date"):
+                session_dates.append(str(meta["session_date"]))
+        except Exception:
+            pass
+
+    # HONESTY RULE: generate_folds needs at least train+val+test days of coverage.
+    # The fixture has only 1 session date — 0 folds will be produced.
+    folds = []
+    if len(session_dates) >= 2:
+        folds = generate_folds(session_dates[0], session_dates[-1], universe)
+    # Single session or empty → folds is []; DATA_INSUFFICIENT applies.
+
+    if not folds:
+        blocking_gate = {
+            "gate": "equities_walk_forward_min_sessions",
+            "status": "DATA_INSUFFICIENT",
+            "reason": (
+                f"Equities lane walk-forward requires at least "
+                f"{universe.walk_forward.train_days + universe.walk_forward.val_days + universe.walk_forward.test_days} "
+                f"calendar days of session data to produce one fold "
+                f"(train={universe.walk_forward.train_days}d + val={universe.walk_forward.val_days}d "
+                f"+ test={universe.walk_forward.test_days}d); "
+                f"fixture provides {len(session_dates)} session(s). "
+                "Provide a multi-session dataset covering the required date span."
+            ),
+        }
+        paper_status = _paper_shadow_status(artifact_dir)
+        summary = {
+            "campaign_id": campaign_id,
+            "status": "DATA_INSUFFICIENT",
+            "model_id": model_id,
+            "symbol": symbol,
+            "param_hash": param_hash,
+            "campaign_mode": "equities_lane",
+            "periods": [],
+            "blocking_gates": [blocking_gate],
+            "paper_shadow_required": True,
+            "paper_shadow_status": paper_status,
+            "paper_shadow_days": paper_cfg.get("ibkr_days"),
+            "ibkr_endpoint_ready": ibkr_ready,
+            "promote_candidate": False,
+            "promote_note": (
+                "Equities lane (stocks+options, IBKR Web API non-DMA): "
+                "IBKR paper shadow required before promotion"
+            ),
+        }
+        write_campaign_manifest(artifact_dir / "campaign.json", summary)
+        (artifact_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+        return CampaignResult(
+            campaign_id=campaign_id,
+            model_id=model_id,
+            symbol=symbol,
+            status="DATA_INSUFFICIENT",
+            param_hash=param_hash,
+            artifact_dir=str(artifact_dir),
+        )
+
+    # Real folds available: map to B4 stages.
+    # Discovery = first fold, Confirmation = middle fold(s), Holdout = last fold (evaluate_only).
+    stage_assignments: list[tuple[str, bool]] = []
+    if len(folds) == 1:
+        stage_assignments = [("Discovery", False)]
+    elif len(folds) == 2:
+        stage_assignments = [("Discovery", False), ("Holdout", True)]
+    else:
+        stage_assignments = (
+            [("Discovery", False)]
+            + [("Confirmation", False)] * (len(folds) - 2)
+            + [("Holdout", True)]
+        )
+
+    backtester = LowFloatBacktester(universe)
+    period_results: List[PeriodResult] = []
+    status = "PASS"
+
+    for fold, (stage_name, evaluate_only) in zip(folds, stage_assignments):
+        # Optional screening pre-step when session data is present.
+        screen_pass: Optional[bool] = None
+        if session_path.is_file() and float_csv_path.is_file() and daily_bars_path.is_file():
+            try:
+                sr = screen_session(
+                    session_path,
+                    universe.filters,
+                    float_csv=float_csv_path,
+                    daily_bars_path=daily_bars_path,
+                    l3_only=universe.l3_only,
+                    allow_degraded=True,
+                )
+                screen_pass = sr.passed
+            except Exception:
+                screen_pass = None
+
+        # Evaluate_only (Holdout): use default params — no tuning.
+        if session_path.is_file():
+            try:
+                bt_result = backtester.run(str(session_path), allow_degraded=True)
+                net = bt_result.net_pnl
+                ntr = bt_result.num_trades
+                exp = net / max(ntr, 1)
+                gate_pass = (net > 0 and ntr > 0) if not evaluate_only else (net >= 0)
+                pr = PeriodResult(
+                    name=stage_name,
+                    gate_pass=gate_pass,
+                    evaluate_only=evaluate_only,
+                    net_pnl=net,
+                    num_trades=ntr,
+                    expectancy=exp,
+                    events_run=1,
+                    events_missing=0,
+                    survives_cpp=True,
+                    event_results=[{
+                        "session": str(session_path.name),
+                        "fold_id": fold.fold_id,
+                        "screen_pass": screen_pass,
+                    }],
+                )
+            except Exception as exc:
+                pr = PeriodResult(
+                    name=stage_name,
+                    gate_pass=False,
+                    evaluate_only=evaluate_only,
+                    net_pnl=0.0,
+                    num_trades=0,
+                    expectancy=0.0,
+                    events_run=0,
+                    events_missing=1,
+                    survives_cpp=False,
+                    error=str(exc),
+                )
+        else:
+            pr = PeriodResult(
+                name=stage_name,
+                gate_pass=False,
+                evaluate_only=evaluate_only,
+                net_pnl=0.0,
+                num_trades=0,
+                expectancy=0.0,
+                events_run=0,
+                events_missing=1,
+                survives_cpp=False,
+                error="session fixture missing",
+            )
+
+        period_dir = artifact_dir / "periods" / stage_name.replace(" ", "_")
+        period_dir.mkdir(parents=True, exist_ok=True)
+        (period_dir / "period_summary.json").write_text(json.dumps(asdict(pr), indent=2), encoding="utf-8")
+        period_results.append(pr)
+
+        if not pr.gate_pass and not evaluate_only:
+            status = "FAIL"
+            break
+
+    if status == "PASS" and any(not p.gate_pass and not p.evaluate_only for p in period_results):
+        status = "FAIL"
+
+    paper_status = _paper_shadow_status(artifact_dir)
+    all_stages_pass = status == "PASS"
+    promote_ok = all_stages_pass and paper_status == "PASS"
+    summary = {
+        "campaign_id": campaign_id,
+        "status": status,
+        "model_id": model_id,
+        "symbol": symbol,
+        "param_hash": param_hash,
+        "campaign_mode": "equities_lane",
+        "periods": [asdict(p) for p in period_results],
+        "paper_shadow_required": True,
+        "paper_shadow_status": paper_status,
+        "paper_shadow_days": paper_cfg.get("ibkr_days"),
+        "ibkr_endpoint_ready": ibkr_ready,
+        "promote_candidate": promote_ok,
+        "promote_note": (
+            "Equities lane (stocks+options, IBKR Web API non-DMA): "
+            "IBKR paper shadow required before promotion"
+        ),
+    }
+    (artifact_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    (artifact_dir / "diagnostics.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    return CampaignResult(
+        campaign_id=campaign_id,
+        model_id=model_id,
+        symbol=symbol,
+        status=status,
+        param_hash=param_hash,
+        periods=period_results,
+        artifact_dir=str(artifact_dir),
+    )
+
+
+def _run_equities_campaign(
+    repo_root: Path,
+    model_id: str,
+    symbol: str,
+    artifact_dir: Path,
+    param_hash: str,
+    *,
+    dry_run: bool = False,
+) -> CampaignResult:
+    """Equities lane dispatcher: routes to options-type or stock-type sub-runner by model_id prefix."""
+    if _is_options_type_model(model_id):
+        return _run_options_type_campaign(
+            repo_root, model_id, symbol, artifact_dir, param_hash, dry_run=dry_run
+        )
+    return _run_stock_type_campaign(
+        repo_root, model_id, symbol, artifact_dir, param_hash, dry_run=dry_run
     )
 
 
@@ -450,7 +806,8 @@ def run_campaign(
             coverage = replace(coverage, action_taken=f"data gap fill failed: {exc}")
     write_coverage_summary(artifact_dir / "coverage_summary.json", coverage)
 
-    if binding.get("campaign_mode") == "options_lane":
+    if binding.get("campaign_mode") in ("equities_lane", "options_lane"):
+        # "options_lane" is a back-compat alias; both dispatch to _run_equities_campaign.
         if audit_grade and coverage.coverage_status == "BELOW_MINIMUM" and not allow_partial and not dry_run:
             write_campaign_manifest(
                 artifact_dir / "campaign.json",
@@ -478,7 +835,7 @@ def run_campaign(
                 param_hash=param_hash,
                 artifact_dir=str(artifact_dir),
             )
-        return _run_options_campaign(
+        return _run_equities_campaign(
             repo_root,
             model_id,
             symbol,

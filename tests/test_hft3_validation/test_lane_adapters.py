@@ -26,11 +26,6 @@ from hft3.validation.lanes.adapters.equities_adapter import (
     EquitiesConfig,
     load_equities_config,
 )
-from hft3.validation.lanes.adapters.options_adapter import (
-    OptionsBacktester,
-    OptionsConfig,
-    load_options_config,
-)
 
 
 # --- CME adapter ---
@@ -60,8 +55,8 @@ def test_cme_config_loads_from_events_csv():
     if not csv_path.is_file():
         pytest.skip("events.csv not present in this checkout")
     cfg = load_cme_config(csv_path)
-    assert cfg.windows.start_offset_seconds == -30
-    assert cfg.windows.end_offset_seconds == 300
+    assert cfg.windows.start_offset_seconds == -60.0
+    assert cfg.windows.end_offset_seconds == 10.0
 
 
 def test_cme_backtester_satisfies_protocol():
@@ -148,7 +143,7 @@ def test_crypto_backtester_satisfies_protocol():
     assert result.degraded is False
 
 
-# --- Equities adapter ---
+# --- Equities adapter (merged: US stocks + options via IBKR) ---
 
 
 def test_equities_config_defaults():
@@ -156,10 +151,37 @@ def test_equities_config_defaults():
     assert cfg.lane == Lane.EQUITIES
     assert cfg.horizons.horizons == [1, 2, 5]
     assert cfg.horizons.lookback_days == 60
-    assert cfg.latency_bands_ms == [5.0, 50.0]
+    assert cfg.latency_bands_ms == [5.0, 10.0, 50.0, 100.0, 250.0]
     assert cfg.capability_profile.speed_advantage is True
     assert cfg.capability_profile.is_hft is False
     assert cfg.capability_profile.dma is False
+
+
+def test_equities_config_merged_symbols():
+    cfg = EquitiesConfig()
+    assert "RUNNER" in cfg.symbols
+    assert "LOW_FLOAT" in cfg.symbols
+    assert "OPTIONS" in cfg.symbols
+    assert "PARITY" in cfg.symbols
+
+
+def test_equities_config_merged_event_types():
+    cfg = EquitiesConfig()
+    assert "equities_low_float" in cfg.event_types
+    assert "equities_runner_event" in cfg.event_types
+    assert "options_parity" in cfg.event_types
+
+
+def test_equities_config_latency_floor():
+    cfg = EquitiesConfig()
+    assert cfg.latency_floor_ms == 5.0
+
+
+def test_equities_config_to_dict_includes_latency_floor():
+    cfg = EquitiesConfig()
+    d = cfg.to_dict()
+    assert "latency_floor_ms" in d
+    assert d["latency_floor_ms"] == 5.0
 
 
 def test_equities_config_satisfies_protocol():
@@ -185,11 +207,16 @@ def test_equities_config_loads_from_yaml(tmp_path):
     )
     cfg = load_equities_config(yaml_path)
     assert "TESTCO" in cfg.symbols
+    # structural merged-lane symbols must always be present even with a custom yaml session
+    assert "OPTIONS" in cfg.symbols
+    assert "PARITY" in cfg.symbols
     assert cfg.train_days == 90
     assert cfg.test_days == 30
     assert cfg.latency_bands_ms == [10.0]
     assert cfg.windows.training_window_days == 90
     assert cfg.windows.test_window_days == 30
+    # latency_floor_ms must survive yaml override
+    assert cfg.latency_floor_ms == 5.0
 
 
 def test_equities_backtester_satisfies_protocol():
@@ -199,32 +226,6 @@ def test_equities_backtester_satisfies_protocol():
     result = bt.run(target="fixture_low_float_v1")
     assert result.lane == Lane.EQUITIES
     assert result.degraded is False
-
-
-# --- Options adapter ---
-
-
-def test_options_config_defaults():
-    cfg = OptionsConfig()
-    assert cfg.lane == Lane.OPTIONS
-    assert cfg.latency_ms == 1.0
-    assert cfg.lot_size == 100.0
-    assert cfg.capability_profile.research_only is True
-    assert cfg.capability_profile.is_hft is False
-
-
-def test_options_config_satisfies_protocol():
-    cfg = load_options_config()
-    errors = validate_lane_config(cfg)
-    assert errors == []
-
-
-def test_options_backtester_satisfies_protocol():
-    bt = OptionsBacktester(load_options_config())
-    assert isinstance(bt, Backtester)
-    assert bt.validate_config() == []
-    result = bt.run(target="multi_leg_test")
-    assert result.lane == Lane.OPTIONS
 
 
 # --- Protocol validation ---
@@ -247,7 +248,6 @@ def test_all_adapters_round_trip_to_dict():
         load_cme_config(),
         CryptoConfig(),
         load_equities_config(),
-        load_options_config(),
     ):
         d = cfg.to_dict()
         assert d["lane"] == cfg.lane.value

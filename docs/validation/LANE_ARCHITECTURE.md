@@ -1,28 +1,32 @@
 # Lane Architecture (hft3 backtester validation)
 
-**Status:** Phase 38 design plan implemented (phases 1-5); phase 39 test suite green; phase 41 lane-aware backtester certification integrated (`run_full_certification` runs all 4 lanes); phase 44 capability profiles added.
+**Status:** Phase 38 design plan implemented (phases 1-5); phase 39 test suite green; phase 41 lane-aware backtester certification integrated (`run_full_certification` runs all 3 lanes); phase 44 capability profiles added; options merged into equities lane.
 
 ## Purpose
 
 The hft3 backtester validation system was originally CME-futures-only
 (`packages/hft3/validation/certification_runner.py`,
 `promotion_gate.py`). The lane-aware unification makes certification and
-promotion **lane-agnostic**: CME, crypto, equities, and options lanes
-each register as first-class citizens with their own latency bands,
-horizons, windows, tick sizes, lot sizes, test paths, and event types.
+promotion **lane-agnostic**: CME, crypto, and equities lanes each
+register as first-class citizens with their own latency bands, horizons,
+windows, tick sizes, lot sizes, test paths, and event types. The former
+options lane has been merged into the equities lane; `options_adapter.py`
+is deleted.
 
 The legacy CME-specific entry points remain functional for backward
 compatibility; new code should use the lane-aware API.
 
 ## Lane identity
 
-A `Lane` is one of: `CME_FUTURES`, `CRYPTO`, `EQUITIES`, `OPTIONS`.
+A `Lane` is one of: `CME_FUTURES`, `CRYPTO`, `EQUITIES`.
 
 Resolution priority for a candidate (model + symbol + event):
 
-1. `model_id` prefix → registered lane (e.g. `CRYPTO_H7` → `CRYPTO`)
-2. non-crypto `symbol` prefix → RUNNER/LOW_FLOAT → `EQUITIES`; OPTIONS/PARITY → `OPTIONS`
-3. `event_id` prefix → `CRYPTO_` → `CRYPTO`; `EQUITY_`/`LOW_FLOAT_` → `EQUITIES`; `OPTIONS_`/`PARITY_` → `OPTIONS`
+1. `model_id` prefix → registered lane (e.g. `CRYPTO_H7` → `CRYPTO`;
+   `OPTIONS_` / `PARITY_` prefixes → `EQUITIES`)
+2. non-crypto `symbol` prefix → RUNNER/LOW_FLOAT/OPTIONS/PARITY → `EQUITIES`
+3. `event_id` prefix → `CRYPTO_` → `CRYPTO`; `EQUITY_`/`LOW_FLOAT_`/
+   `OPTIONS_`/`PARITY_` → `EQUITIES`
 4. Default: `CME_FUTURES`
 
 Crypto is intentionally **not** inferred from ticker names such as BTC,
@@ -68,15 +72,21 @@ Each lane ships an adapter in
   coverage. Latency bands `[5, 50, 200] ms`. 24h embargo; 90/30-day
   walk-forward. Capability: node-direct HFT with proof required.
 - `equities_adapter.py`: `EquitiesConfig`, `load_equities_config()`,
-  `EquitiesBacktester`. Reads `universe.yaml`; extracts session symbols
-  + walk-forward config. Latency bands `[5, 50] ms` default. Capability:
-  speed-advantage non-DMA; not blocked for lacking true HFT/DMA.
-- `options_adapter.py`: `OptionsConfig`, `load_options_config()`,
-  `OptionsBacktester`. Defaults; lot size 100, tick 0.01. Latency
-  1 ms. Capability: research/non-HFT unless separately proven.
+  `EquitiesBacktester`. Covers US stocks **and** options (symbols
+  RUNNER/LOW_FLOAT/OPTIONS/PARITY; event types include `options_parity`).
+  Reads `universe.yaml`; extracts session symbols + walk-forward config.
+  Latency bands `[5, 10, 50, 100, 250] ms`; `latency_floor_ms = 5.0`
+  (re-measured from IBKR Web API round-trip). Capability: better-than-retail
+  speed advantage; not blocked for lacking true HFT/DMA. Endpoint: IBKR
+  Web API (no GUI, no TWS, no IB Gateway); OAuth headless by default,
+  clientportal.gw as fallback (v2 config). Endpoint readiness is
+  tracked at `runtime/equities_lane/ibkr_endpoint_status.json`; the
+  top-level `"ready"` field must be `true` before equities-lane models
+  advance past `BLOCKED_ENDPOINT`. `options_adapter.py` is deleted;
+  all OPTIONS_/PARITY_ model prefixes resolve to this lane.
 
 `registration.py` calls `register_all_lanes()` to auto-register all
-four on first import.
+three on first import.
 
 ## Scorecard
 
@@ -107,17 +117,16 @@ python -m hft3.validation.lanes.unified_certification_runner \
 
 The T2 backtester certification tier (`run_full_certification` in
 `packages/hft3/validation/certification_runner.py`) now runs the
-lane-aware unified runner for **all 4 lanes** in addition to the
+lane-aware unified runner for **all 3 lanes** in addition to the
 legacy T0 fast gate and T2 full suite:
 
 - **T0 fast gate** — `tests/backtester_validation/fast` (CME core, fast).
 - **T2 full suite** — `tests/backtester_validation/full` (CME core, adversarial).
 - **Crypto lane** — `tests/test_crypto_lane` (137 tests).
-- **Equities lane** — `tests/test_equities_lane` (43 tests).
-- **Options lane** — `tests/test_options_lane` (currently no test dir; marked as PASS when skipped).
+- **Equities lane** — `tests/test_equities_lane` (43 tests; covers stocks + options).
 
 CME core is not duplicated — `run_full_certification` calls
-`run_unified_certification(lanes=[CRYPTO, EQUITIES, OPTIONS])` to
+`run_unified_certification(lanes=[CRYPTO, EQUITIES])` to
 avoid running the backtester_validation/{fast,full} tests twice. CME
 is recorded in `lane_results["cme_futures"]` with `covered_by: "T0
 fast gate + T2 full suite (CME core)"`.
@@ -135,7 +144,7 @@ fast gate + T2 full suite (CME core)"`.
 ### Coverage aggregation
 
 `covered_symbols`, `covered_event_types`, `covered_latency_bands_ms`,
-and `covered_modules` in the scorecard are the **union across all 4
+and `covered_modules` in the scorecard are the **union across all 3
 lanes**, not just CME. Crypto instruments are not populated from a
 static BTC/ETH/SOL list. By default the crypto adapter records
 `instrument_coverage=candidate_config` with `environment_validated=false`;
@@ -171,7 +180,6 @@ result = run_full_certification(skip_lane_pytest=True)
 - Crypto: `packages/crypto_lane/`, `packages/crypto_l2_adapter/`,
   `tests/test_crypto_lane/`.
 - Equities: `packages/equities_lane/`, `tests/test_equities_lane/`.
-- Options: `packages/options_lane/`, `tests/test_options_lane/`.
 
 `all_critical_paths()` returns the union. A change to any of these
 paths invalidates the lane-aware GREEN certification.

@@ -22,7 +22,7 @@ def test_build_all_lanes_plan_assigns_one_terminal_state_per_model() -> None:
     for row in plan["models"]:
         assert row["run_id"] == "fresh_all_lanes_test"
         assert row["model_id"]
-        assert row["lane"] in {"cme_futures", "crypto", "equities", "options"}
+        assert row["lane"] in {"cme_futures", "crypto", "equities"}
         assert row["terminal_state"] in TERMINAL_STATES
     assert sum(plan["terminal_counts"].values()) == len(plan["models"])
 
@@ -193,3 +193,95 @@ def test_run_all_lanes_returns_fail_when_leakage_detector_blocks(
 def test_run_all_lanes_execute_mode_is_not_silent_fake_execution(tmp_path: Path) -> None:
     with pytest.raises(NotImplementedError, match="not wired"):
         run_all_lanes(tmp_path, "fresh_all_lanes_test", execute=True)
+
+
+def test_build_all_lanes_plan_equities_blocked_endpoint_when_status_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Equities-lane models get BLOCKED_ENDPOINT when ibkr_endpoint_status.json is absent."""
+    import workbench.src.run.all_lanes as module
+    from workbench.src.registry import model_catalog as catalog_module
+    from workbench.src.registry import unified_registry as registry_module
+
+    # Patch list_models to return one equities model and one crypto model.
+    monkeypatch.setattr(module, "list_models", lambda: ["EQUITIES_TEST_A", "CRYPTO_TEST_B"])
+    # Patch load_catalog to return an empty dict.
+    monkeypatch.setattr(module, "load_catalog", lambda repo: {})
+
+    # Patch lane resolution: equities prefix → equities, crypto prefix → crypto.
+    class _FakeEnum(str):
+        @property
+        def value(self) -> str:
+            return str(self)
+
+    class _FakeRegistry:
+        @staticmethod
+        def instance():
+            return _FakeRegistry()
+
+        def resolve_lane(self, model_id: str) -> _FakeEnum:
+            if model_id.startswith("EQUITIES_"):
+                return _FakeEnum("equities")
+            return _FakeEnum("crypto")
+
+        def all_registrations(self):
+            return []
+
+    monkeypatch.setattr(module, "LaneRegistry", _FakeRegistry)
+    monkeypatch.setattr(module, "register_all_lanes", lambda: None)
+
+    # No ibkr_endpoint_status.json in tmp_path → endpoint not ready.
+    plan = build_all_lanes_plan(tmp_path, "ep_test_missing")
+
+    equities_rows = [r for r in plan["models"] if r["lane"] == "equities"]
+    crypto_rows = [r for r in plan["models"] if r["lane"] == "crypto"]
+    assert equities_rows, "expected at least one equities row"
+    for row in equities_rows:
+        assert row["terminal_state"] == "BLOCKED_ENDPOINT", row
+        assert "IBKR Web API endpoint not ready" in row["reason"]
+    for row in crypto_rows:
+        assert row["terminal_state"] == "BLOCKED_VALIDATION", row
+
+
+def test_build_all_lanes_plan_equities_blocked_validation_when_ready_true(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Equities-lane models get BLOCKED_VALIDATION (planning default) when ready=true artifact present."""
+    import json as _json
+
+    import workbench.src.run.all_lanes as module
+    from workbench.src.registry import model_catalog as catalog_module
+    from workbench.src.registry import unified_registry as registry_module
+
+    monkeypatch.setattr(module, "list_models", lambda: ["EQUITIES_TEST_A"])
+    monkeypatch.setattr(module, "load_catalog", lambda repo: {})
+
+    class _FakeEnum(str):
+        @property
+        def value(self) -> str:
+            return str(self)
+
+    class _FakeRegistry:
+        @staticmethod
+        def instance():
+            return _FakeRegistry()
+
+        def resolve_lane(self, model_id: str) -> _FakeEnum:
+            return _FakeEnum("equities")
+
+        def all_registrations(self):
+            return []
+
+    monkeypatch.setattr(module, "LaneRegistry", _FakeRegistry)
+    monkeypatch.setattr(module, "register_all_lanes", lambda: None)
+
+    # Write ibkr_endpoint_status.json with ready=true.
+    status_path = tmp_path / "runtime" / "equities_lane" / "ibkr_endpoint_status.json"
+    status_path.parent.mkdir(parents=True, exist_ok=True)
+    status_path.write_text(_json.dumps({"ready": True}), encoding="utf-8")
+
+    plan = build_all_lanes_plan(tmp_path, "ep_test_ready")
+
+    for row in plan["models"]:
+        assert row["terminal_state"] == "BLOCKED_VALIDATION", row
+        assert "IBKR" not in row["reason"]

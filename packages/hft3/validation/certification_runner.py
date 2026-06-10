@@ -162,8 +162,6 @@ def _aggregate_lane_coverage(lane_card: LaneScorecard) -> dict[str, list[Any]]:
             modules.add("crypto_lane")
         elif lane_value == "equities":
             modules.add("equities_lane")
-        elif lane_value == "options":
-            modules.add("options_lane")
     return {
         "covered_modules": sorted(modules),
         "covered_symbols": sorted(symbols),
@@ -206,14 +204,14 @@ def run_full_certification(
         blocking.append("T2 full certification suite failed")
 
     # Step 3: Lane-aware certification (Phase 38+)
-    # Run non-CME lanes (CRYPTO, EQUITIES, OPTIONS). CME core is already
+    # Run non-CME lanes (CRYPTO, EQUITIES). CME core is already
     # covered by T0/T2; running it again would duplicate ~28 tests.
     lane_card: LaneScorecard | None = None
     if not skip_lane_pytest:
         try:
             lane_card = run_unified_certification(
                 root=root,
-                lanes=[Lane.CRYPTO, Lane.EQUITIES, Lane.OPTIONS],
+                lanes=[Lane.CRYPTO, Lane.EQUITIES],
                 skip_pytest=False,
                 pytest_timeout=300.0,
             )

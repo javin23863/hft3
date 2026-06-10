@@ -30,7 +30,7 @@ def test_certification_status_includes_lane_results(certification_result):
     assert "cme_futures" in certification_result.lane_results
     assert "crypto" in certification_result.lane_results
     assert "equities" in certification_result.lane_results
-    assert "options" in certification_result.lane_results
+    assert "options" not in certification_result.lane_results
 
 
 def test_cme_lane_marked_covered_by_t0_t2(certification_result):
@@ -58,13 +58,12 @@ def test_equities_lane_ran_pytest(certification_result):
     assert "tests/test_equities_lane" in equities.get("test_paths", [])
 
 
-def test_options_lane_handled(certification_result):
-    options = certification_result.lane_results["options"]
-    assert options.get("passed") in {True, None}
-    if options.get("passed") is None and options.get("test_paths") is None:
-        pass
-    else:
-        assert options.get("test_paths") == ["tests/test_options_lane"]
+def test_equities_lane_dict_contains_latency_floor(certification_result):
+    p = Path(certification_result.scorecard_json)
+    data = json.loads(p.read_text(encoding="utf-8"))
+    equities_cov = data.get("lane_coverage", {}).get("equities", {})
+    assert "latency_floor_ms" in equities_cov
+    assert equities_cov["latency_floor_ms"] == 5.0
 
 
 def test_scorecard_json_persisted(certification_result):

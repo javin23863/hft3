@@ -61,8 +61,9 @@ def test_hyp_5_uses_catalog_context_policy():
     assert cfg["event_context_policy"] == "catalog_all_contexts"
 
 
-def test_pdf_model_5_options_lane():
+def test_pdf_model_5_equities_lane():
+    # DEALER_HEDGING (PDF_MODEL_5) migrated to equities_lane; options_lane is a back-compat alias.
     raw = yaml.safe_load(BINDING.read_text(encoding="utf-8"))
     cfg = raw["pdf"]["DEALER_HEDGING"]
-    assert cfg.get("campaign_mode") == "options_lane"
+    assert cfg.get("campaign_mode") in ("equities_lane", "options_lane")
     assert "options_chain" in cfg.get("required_datasets", [])

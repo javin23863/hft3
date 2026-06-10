@@ -74,17 +74,13 @@ def resolve_lane_for_candidate(
         if lane != Lane.CME_FUTURES:
             return lane
     sym_upper = (symbol or "").upper()
-    if sym_upper.startswith(("RUNNER", "LOW_FLOAT")):
+    if sym_upper.startswith(("RUNNER", "LOW_FLOAT", "OPTIONS", "PARITY")):
         return Lane.EQUITIES
-    if sym_upper.startswith(("OPTIONS", "PARITY")):
-        return Lane.OPTIONS
     eid_upper = (event_id or "").upper()
     if eid_upper.startswith("CRYPTO_"):
         return Lane.CRYPTO
-    if eid_upper.startswith(("EQUITY_", "LOW_FLOAT_")):
+    if eid_upper.startswith(("EQUITY_", "LOW_FLOAT_", "OPTIONS_", "PARITY_")):
         return Lane.EQUITIES
-    if eid_upper.startswith(("OPTIONS_", "PARITY_")):
-        return Lane.OPTIONS
     return Lane.CME_FUTURES
 
 
@@ -132,9 +128,6 @@ def _capability_failures(lane: Lane, lane_dict: dict[str, Any]) -> tuple[list[st
     elif lane == Lane.EQUITIES:
         if not profile.get("speed_advantage") or profile.get("dma"):
             failures.append("equities lane requires speed-advantage non-DMA capability")
-    elif lane == Lane.OPTIONS:
-        if not profile.get("research_only") or profile.get("is_hft"):
-            failures.append("options lane is research/non-HFT unless separately proven")
     return failures, profile
 
 
@@ -202,11 +195,21 @@ def check_lane_coverage(
             f"event_id '{event_id}' does not match lane '{lane.value}' event_types {event_types}"
         )
     if latency_ms and latency_bands:
-        if not any(abs(latency_ms - band) < 0.01 for band in latency_bands):
-            nearest = min(latency_bands, key=lambda b: abs(b - latency_ms))
-            failures.append(
-                f"latency_ms {latency_ms} not in lane '{lane.value}' latency_bands (nearest={nearest})"
-            )
+        floor = lane_dict.get("latency_floor_ms")
+        if isinstance(floor, (int, float)) and float(floor) > 0:
+            # Floor semantics: only fail if latency_ms is below the floor (optimistic claim).
+            # Any latency at or above the floor passes regardless of bands.
+            if latency_ms < float(floor):
+                failures.append(
+                    f"latency_ms {latency_ms} below lane '{lane.value}' floor {floor} "
+                    f"(optimistic latency claim)"
+                )
+        else:
+            if not any(abs(latency_ms - band) < 0.01 for band in latency_bands):
+                nearest = min(latency_bands, key=lambda b: abs(b - latency_ms))
+                failures.append(
+                    f"latency_ms {latency_ms} not in lane '{lane.value}' latency_bands (nearest={nearest})"
+                )
     if queue_model and queue_models and queue_model not in queue_models:
         failures.append(
             f"queue_model '{queue_model}' not in lane '{lane.value}' queue_models {queue_models}"

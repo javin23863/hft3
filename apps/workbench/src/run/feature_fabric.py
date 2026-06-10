@@ -15,7 +15,7 @@ SOURCE_TO_LANE = {
     "crypto_lane": "crypto",
     "cme_rithmic": "cme_futures",
     "equities": "equities",
-    "options": "options",
+    "options": "equities",
     "workbench_campaign": "workbench_campaign",
     "autonomous": "autonomous",
 }

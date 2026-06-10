@@ -1,7 +1,7 @@
 """Per-lane staleness paths.
 
 Each lane registers its own critical file paths. The unified staleness
-check consults this registry so changes in crypto/equities/options lane
+check consults this registry so changes in crypto/equities lane
 packages invalidate a GREEN certification, not just CME paths.
 """
 from __future__ import annotations
@@ -41,8 +41,6 @@ DEFAULT_LANE_PATHS: dict[str, list[str]] = {
     Lane.EQUITIES.value: [
         "packages/equities_lane/src",
         "packages/equities_lane/config",
-    ],
-    Lane.OPTIONS.value: [
         "packages/options_lane/src",
         "packages/options_lane/config",
     ],

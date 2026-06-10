@@ -167,3 +167,21 @@ REPLAY is the one sanctioned mode difference. In REPLAY:
 Stage-skip flags are prohibited. All upstream stages (ingest → labels →
 matrix screen → multiple-testing → walk-forward → promotion stamp) must
 complete before any downstream stage runs. Partial pipelines are not supported.
+
+---
+
+## Lanes
+
+Stocks and options are one lane (equities); they share a single IBKR Web API
+access path, the same latency floor, and the same promotion requirement. The
+lane competes better-than-retail: IBKR provides no DMA, so latency is modelled
+honestly against the Web API round-trip floor — slower results never block
+alpha, but optimistic claims below the 5 ms floor are rejected. Promotion
+requires a shadow run on an IBKR paper account via the Web API paper endpoint;
+no TWS or IB Gateway GUI is present anywhere in the lane.
+
+| Lane | Access | Capability | Latency policy | Promotion |
+|---|---|---|---|---|
+| cme_futures | Rithmic/DMA path | true HFT (proof required) | exact swept bands + measured ack | sim shadow CHI404 |
+| crypto | node-direct | true HFT (proof required) | exact swept bands | sim shadow |
+| equities (stocks+options) | IBKR Web API (OAuth headless / clientportal.gw), no DMA, no GUI | better-than-retail speed advantage | floor 5 ms (re-measure from Web API round-trip); slower never blocks; optimistic claims rejected | IBKR paper shadow via Web API paper account |

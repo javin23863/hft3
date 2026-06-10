@@ -31,3 +31,8 @@ personal_sandbox:
   end_date: 2026-05-30
   default_locked: true
   artifact_root: research_cards/workbench_personal/
+
+equities_paper_shadow:
+  ibkr_days: 60
+  account_type: IBKR_PAPER
+  lane: equities
