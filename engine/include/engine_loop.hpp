@@ -28,6 +28,7 @@
 
 #include <atomic>
 #include <array>
+#include <cassert>
 #include <cstdint>
 #include <cstring>
 #include <chrono>
@@ -60,6 +61,12 @@ template <typename T, typename = void>
 struct has_refill_queue : std::false_type {};
 template <typename T>
 struct has_refill_queue<T, std::void_t<decltype(std::declval<T&>().refill_queue())>>
+    : std::true_type {};
+
+template <typename T, typename = void>
+struct has_set_current_event_ts : std::false_type {};
+template <typename T>
+struct has_set_current_event_ts<T, std::void_t<decltype(std::declval<T&>().set_current_event_ts(uint64_t{}))>>
     : std::true_type {};
 
 // ---------------------------------------------------------------------------
@@ -161,6 +168,10 @@ public:
                     ++popped;
 
                     // Update last event timestamp (REPLAY determinism §7.4).
+#ifndef NDEBUG
+                    // CHI404_RUNTIME.md §3 step 3: event-time must be non-decreasing.
+                    assert(mde.timestamp_ns >= last_event_ts_ns_);
+#endif
                     last_event_ts_ns_ = mde.timestamp_ns;
 
                     // Convert to MBOEventCpp for FeatureExtractorCpp.
@@ -212,12 +223,13 @@ public:
                 // may reach this gate; all others dropped" (§3 step 5).
                 const bool gate_a = book_valid_;
                 const bool gate_b = !risk_.is_halted();
-                const bool gate_c = true; // flatten_active handled by check_order in submit_gate (§3 step 5)
-                                          // DEVIATION NOTE: §3 step 4 lists !flatten_active as a gate condition,
-                                          // but RiskManager.state_ is private (cannot be read directly without
-                                          // adding an accessor that would require modifying risk_manager.hpp —
-                                          // which is outside M3 scope). Functionally equivalent: submit_gate
-                                          // will return FLATTEN/PASS per check_order, producing identical outcomes.
+                // gate_c: !flatten_active per §3 step 4.
+                // When flatten is active, reduce-only intents are still permitted via the
+                // PASS carve-out in check_order; new-entry intents are silently dropped.
+                // The decision step is entered even in flatten mode so reduce-only intents
+                // can reach the submission gate (§3 step 5: "only reduce-only intents may
+                // reach this gate; all others dropped").
+                const bool gate_c = !risk_.is_flatten_active();
                 const bool gate_d = armed_;
 
                 if (gate_a && gate_b && gate_c && gate_d) {
@@ -273,8 +285,8 @@ public:
                         submit_gate(best.action, side, qty, price);
                     }
                 } else if (!armed_) {
-                    // Warm-up counting (§8 step 10).
-                    ++warmup_count_;
+                    // Warm-up counting (§8 step 10): count processed MBO events, not iterations.
+                    warmup_count_ += book_changing_count;
                     if (warmup_count_ >= cfg_.warmup_events) {
                         armed_ = true;
                         book_valid_ = true; // treat book as valid after warm-up
@@ -499,6 +511,11 @@ private:
 
         switch (status) {
             case hft::risk::RiskStatus::PASS: {
+                // Propagate current event timestamp to REPLAY adapter before submit so
+                // synthetic ack uses pure event-time (no wall clock in REPLAY ack path).
+                if constexpr (has_set_current_event_ts<AdapterT>::value) {
+                    adapter_.set_current_event_ts(last_event_ts_ns_);
+                }
                 // Send prepared limit order — ONLY call site (§3 step 5).
                 adapter_.send_prepared_limit_order(nullptr, side, qty, price);
                 risk_.record_order_sent();

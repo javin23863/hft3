@@ -39,8 +39,20 @@ def _cpp_available() -> bool:
     return load_cpp_features() is not None
 
 
+_CPP_PRESENT = _cpp_available()
+_REQUIRE_CPP = os.environ.get("HFT3_REQUIRE_CPP", "0").strip() == "1"
+
+if _REQUIRE_CPP and not _CPP_PRESENT:
+    pytest.exit(
+        "HFT3_REQUIRE_CPP=1 but hft3_features_cpp module not found. "
+        "Build it with: cmake --build build",
+        returncode=1,
+    )
+
+# When HFT3_REQUIRE_CPP=1, module absence already caused exit above; when it is 0
+# and module is absent we skip cpp-gated tests as before.
 _SKIP_NO_CPP = pytest.mark.skipif(
-    not _cpp_available(),
+    not _CPP_PRESENT,
     reason="hft3_features_cpp not built (cmake --build build)",
 )
 
@@ -275,3 +287,102 @@ class TestBackendSelection:
             assert any("HFT3_FEATURE_BACKEND" in str(warning.message) for warning in w)
         finally:
             os.environ.pop("HFT3_FEATURE_BACKEND", None)
+
+
+# ---------------------------------------------------------------------------
+# feature_backend provenance attribute
+# ---------------------------------------------------------------------------
+
+class TestBackendProvenance:
+    @_SKIP_NO_CPP
+    def test_feature_backend_cpp(self):
+        """feature_backend attribute is 'cpp' when C++ module loaded."""
+        pipe = _make_pipeline("cpp", tick_size=0.25)
+        assert pipe.feature_backend == "cpp"
+
+    def test_feature_backend_python(self):
+        """feature_backend attribute is 'python' when forced to python."""
+        pipe = _make_pipeline("python", tick_size=0.25)
+        assert pipe.feature_backend == "python"
+
+
+# ---------------------------------------------------------------------------
+# event_ctx forwarding: change-only, first-event, and None normalization
+# ---------------------------------------------------------------------------
+
+class _CppExtractorSpy:
+    """Thin wrapper around a real hft3_features_cpp.FeatureExtractor that
+    records every set_event_context call.  Needed because pybind11 extension
+    types are read-only — direct attribute patching raises AttributeError.
+    """
+    def __init__(self, real_extractor):
+        self._real = real_extractor
+        self.ctx_calls: list[str] = []
+
+    def set_event_context(self, ctx: str) -> None:
+        self.ctx_calls.append(ctx)
+        self._real.set_event_context(ctx)
+
+    def process_event(self, *args, **kwargs):
+        return self._real.process_event(*args, **kwargs)
+
+    def extract(self):
+        return self._real.extract()
+
+    def reset(self):
+        return self._real.reset()
+
+
+def _make_pipeline_with_spy(tick_size: float = 0.25):
+    """Return (pipeline, spy) where spy wraps the C++ extractor."""
+    pipe = _make_pipeline("cpp", tick_size=tick_size)
+    spy = _CppExtractorSpy(pipe._cpp_extractor)
+    pipe._cpp_extractor = spy  # type: ignore[assignment]
+    return pipe, spy
+
+
+class TestEventCtxForwarding:
+    """Verify _cpp_process_event_get_vec forwards context on change only.
+
+    Uses _CppExtractorSpy so all real C++ state is exercised.
+    """
+
+    @_SKIP_NO_CPP
+    def test_context_forwarded_on_first_event(self):
+        """set_event_context must be called on the very first event (last_ctx starts None)."""
+        pipe, spy = _make_pipeline_with_spy()
+        pipe._cpp_process_event_get_vec(_SYNTHETIC_EVENTS[0], "NORMAL")
+
+        assert spy.ctx_calls == ["NORMAL"]
+
+    @_SKIP_NO_CPP
+    def test_context_forwarded_only_on_change(self):
+        """set_event_context is NOT re-called when context does not change."""
+        pipe, spy = _make_pipeline_with_spy()
+
+        pipe._cpp_process_event_get_vec(_SYNTHETIC_EVENTS[0], "NORMAL")       # first → call
+        pipe._cpp_process_event_get_vec(_SYNTHETIC_EVENTS[1], "NORMAL")       # same  → skip
+        pipe._cpp_process_event_get_vec(_SYNTHETIC_EVENTS[2], "EVENT_SHOCK")  # change → call
+        pipe._cpp_process_event_get_vec(_SYNTHETIC_EVENTS[3], "EVENT_SHOCK")  # same  → skip
+
+        assert spy.ctx_calls == ["NORMAL", "EVENT_SHOCK"]
+
+    @_SKIP_NO_CPP
+    def test_none_context_normalized_to_normal(self):
+        """None event_ctx must be normalised to 'NORMAL' — never passed raw to C++ binding."""
+        pipe, spy = _make_pipeline_with_spy()
+
+        # Pass None explicitly (simulates resolve_ns returning None outside a known window)
+        pipe._cpp_process_event_get_vec(_SYNTHETIC_EVENTS[0], None)  # type: ignore[arg-type]
+
+        assert spy.ctx_calls == ["NORMAL"], f"Expected ['NORMAL'], got {spy.ctx_calls!r}"
+
+    @_SKIP_NO_CPP
+    def test_none_then_real_context_triggers_change(self):
+        """None→'NORMAL' then a real label must trigger a second set_event_context call."""
+        pipe, spy = _make_pipeline_with_spy()
+
+        pipe._cpp_process_event_get_vec(_SYNTHETIC_EVENTS[0], None)           # None → "NORMAL"
+        pipe._cpp_process_event_get_vec(_SYNTHETIC_EVENTS[1], "EVENT_SHOCK")  # change → call
+
+        assert spy.ctx_calls == ["NORMAL", "EVENT_SHOCK"]

@@ -27,6 +27,7 @@ from __future__ import annotations
 import importlib
 import importlib.util
 import sys
+import warnings
 from pathlib import Path
 from typing import Optional
 
@@ -49,6 +50,43 @@ def _candidate_dirs(repo: Path):
     yield build
     yield build / "Release"
     yield build / "Debug"
+
+
+def _check_staleness(pyd_path: Path, repo: Path) -> None:
+    """Warn (do NOT fail) if any C++ source is newer than the .pyd.
+
+    Scans packages/features_engine/cpp/{src,include,bindings}/*.{cpp,hpp}.
+    Emits a single warnings.warn if any source mtime > pyd mtime.
+    """
+    try:
+        pyd_mtime = pyd_path.stat().st_mtime
+    except OSError:
+        return  # pyd disappeared between find and stat — ignore
+
+    cpp_root = repo / "packages" / "features_engine" / "cpp"
+    glob_patterns = [
+        "src/*.cpp", "src/*.hpp",
+        "include/*.cpp", "include/*.hpp",
+        "bindings/*.cpp", "bindings/*.hpp",
+    ]
+    newest_src: Optional[Path] = None
+    newest_mtime: float = 0.0
+    for pattern in glob_patterns:
+        for src in cpp_root.glob(pattern):
+            try:
+                mt = src.stat().st_mtime
+            except OSError:
+                continue
+            if mt > newest_mtime:
+                newest_mtime = mt
+                newest_src = src
+
+    if newest_src is not None and newest_mtime > pyd_mtime:
+        warnings.warn(
+            f"hft3_features_cpp.pyd may be stale: {newest_src.name} is newer than "
+            f"{pyd_path.name}. Run 'cmake --build build' to rebuild.",
+            stacklevel=4,
+        )
 
 
 def load_cpp_features() -> Optional[object]:
@@ -94,6 +132,7 @@ def load_cpp_features() -> Optional[object]:
                     spec.loader.exec_module(mod)  # type: ignore[union-attr]
                     _cached = mod
                     _searched = True
+                    _check_staleness(entry, repo)
                     return _cached
                 except Exception:
                     # Clean up on failure so a later retry can try the next candidate.
