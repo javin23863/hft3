@@ -27,7 +27,8 @@ A bundle is the atomic unit of deployment. Nothing deploys without a complete, v
   "model_id": <uint32, matches weights header>,
   "run_id": "<walk-forward run_id from WalkForwardValidator>",
   "source_commit": "<git SHA of repo at promotion time>",
-  "latency_ms_at_promotion": <float, value used in promotion replay>,
+  "latency_ms_at_promotion": <float, REQUIRED — measured p99 or explicit --latency-ms value; bundle build fails if absent or ≤ 0; when order-ack measured=false this must carry the explicit --latency-ms value supplied at promotion>,
+  "symbol": "<exchange symbol the weights were trained and promoted for; e.g. MES>",
   "files": {
     "weights.bin":              "<sha256hex>",
     "certification_stamp.json": "<sha256hex>"
@@ -54,7 +55,9 @@ Pre-conditions the script enforces before writing the bundle:
 - SHA-256 of `weights.bin` computed and written to manifest
 - `latency_ms_at_promotion` must be a measured value or an explicit `--latency-ms`
   argument; the UNMEASURED default is not permitted for promotion
-  (cite: LATENCY.md §4, resolution step 4 raises ValueError when unmeasured)
+  (cite: LATENCY.md §4, resolution step 4 raises ValueError when unmeasured);
+  field is REQUIRED — bundle build fails if absent or ≤ 0
+- `symbol` must be present; bundle build fails if absent
 
 Operator must not hand-edit any bundle file. Bundle is treated as immutable after construction.
 
@@ -96,6 +99,7 @@ by the deployment script before updating the `current` symlink.
 | Stamp eligibility re-check | Assert `promotion_eligible == true`, `status == "GREEN"`, `stale == false` | Refuse deploy |
 | Model ID consistency | `manifest.model_id == header.model_id` | Refuse deploy |
 | Latency value present | `manifest.latency_ms_at_promotion > 0` | Refuse deploy |
+| Symbol match | `manifest.symbol` present and equals engine's configured trading symbol; startup refuses when they differ. (Weights binary header v1 has no symbol field — this manifest-level check is the sole enforcement point; header v2 may add `symbol_id` later.) | Refuse deploy; do not update symlink |
 
 Any mismatch produces a human-readable error, appends a REJECTED entry to the audit
 log (§7), and exits non-zero. The `current` symlink is never updated on failure.
@@ -206,6 +210,12 @@ systemctl start hft3-engine.service
 
 ### 6.2 Rollback Constraints
 
+- **Position-zero requirement**: rollback command is refused while position ≠ 0 unless
+  the operator explicitly passes `--flatten-first`. The `--flatten-first` flag triggers:
+  (1) flatten order submitted and confirmed, (2) position reconciliation per
+  CHI404_RUNTIME.md §9, (3) engine shutdown, then (4) bundle switch proceeds.
+  The restarted engine must complete position reconciliation (CHI404_RUNTIME.md §9
+  final-reconcile step) before `armed` is set to true.
 - Rollback is only valid if the previous bundle passes all §3 startup validation checks
   after symlink switch.
 - Append ROLLBACK entry to audit log (§7) with operator handle, from_run_id,

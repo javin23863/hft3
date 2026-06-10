@@ -179,9 +179,44 @@ in replay; they read `cross_asset_features` from `MarketState`.
 
 ## Python ↔ C++ Parity Contract
 
-`tests/test_cpp_feature_golden.py` exercises the Python `MBOFeatureExtractor`
-and `RegimeFilter` against a known event sequence and validates slots
-`[26, 41..49]` (REALIZED_VOL_STATE + all regime posterior slots). Any change
-to `mbo_features.py` or `regime_filter.py` that breaks golden output will fail
-CI. The C++ binary `hft_feature_golden` is the counterpart; if built, the test
-runs cross-language comparison.
+### Scope: all 64 slots on real lake NPZ
+
+The parity contract covers all 64 slots of the feature vector. The canonical
+parity driver is `scripts/verify_cpp_parity.py`, which runs both the Python
+`MBOFeatureExtractor` and the C++ `hft3_features_cpp` pybind module on a real
+lake NPZ file and reports a per-slot diff table.
+
+**Silent-skip is prohibited.** `verify_cpp_parity.py` hard-fails with exit 2
+if the C++ module (`build/hft3_features_cpp.cp312-win_amd64.pyd`) cannot be
+imported. CI must assert the artefact is present before invoking the script;
+an absent module must not be treated as a pass (see CORRECTNESS.md §2 row 3
+and §3 defect e for the older script's exit-0 silent-skip hazard).
+
+Invocation:
+
+```bash
+python -S scripts/verify_cpp_parity.py --npz <lake_npz> [--tick-size 0.25] [--window-ns 1000000000]
+```
+
+### Regime-slot architecture note
+
+Slots 41–49 (regime posterior) currently differ between Python and C++ because
+the Python pipeline calls `RegimeFilter` outside the feature extractor in
+`market_state_pipeline.py`, while the C++ extractor integrates it internally.
+This is a documented architecture difference, not a bug in either extractor.
+It persists until the pipeline-level integration task lands (ALPHA_CME.md M0).
+
+All other slots (0–40, 50–63) must match bit-identically between Python and
+C++ on the same NPZ input. Any new slot implementation must maintain this
+invariant before merging.
+
+### Golden test (narrow scope — CI supplement)
+
+`tests/test_cpp_feature_golden.py` exercises a synthetic 5-event sequence and
+validates slots `[26, 41..49]` (REALIZED_VOL_STATE + all regime posterior
+slots) against the `hft_feature_golden` C++ binary. This test remains as a
+targeted regression guard for `mbo_features.py` and `regime_filter.py`: any
+change that breaks slots 26 or 41–49 on the synthetic sequence will fail CI.
+
+The golden test is **supplementary** to, not a replacement for, the full
+64-slot NPZ parity check via `verify_cpp_parity.py`. Both must pass.

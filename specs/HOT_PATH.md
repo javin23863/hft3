@@ -144,23 +144,63 @@ All flags are `std::atomic` — safe to read from the gateway consumer thread:
 | `auto_liquidate_halt()` | broker force-flatten ('L') | halt and reconcile |
 | `adm_alert_severity()` | AdmCallbacks alert ≥2 | operator attention or halt |
 
-**REQUIRED before live**: the gateway consumer loop must poll all six flags on
-every iteration and halt/reconcile on any non-zero value. Consumer is being
-added in the current release (Phase 5a). Clear flags via corresponding
+**REQUIREMENT (still stands)**: the gateway consumer loop MUST poll all six flags on
+every iteration and halt/reconcile on any non-zero value. Clear flags via corresponding
 `clear_*()` methods after action is taken.
+
+**Contract location moved**: the normative contract for the six-flag poll — execution
+order, SafetyPoller.poll() ordering, failure-action table, and ack/clear protocol — is
+**CHI404_RUNTIME.md §3 and §5**. This section (§3.5) is **informative only**; it
+describes the flags and their setter events. CHI404_RUNTIME.md §3/§5 is the authoritative
+source. This section is not superseded — the REQUIREMENT above still holds — only the
+contract location has moved.
+
+### 3.6 pybind11 Research Binding
+
+A pybind11 module `hft3_features_cpp` exposes the C++ `FeatureExtractor` to
+Python research tooling without a CMake invocation. The module is built via
+direct `g++` because `FindPython3` hangs on the development workstation
+(Windows, RTX 3080 Laptop); CMake is not used for this target.
+
+**Build command** (documented in `scripts/verify_cpp_parity.py` header,
+lines ~73–80):
+
+```bash
+g++ -O2 -std=c++20 -shared -DMS_WIN64 -DWIN32 \
+    -I packages/features_engine/cpp/include \
+    -I <python-include> -I <pybind11-include> -I <numpy-include> \
+    packages/features_engine/cpp/bindings/py_features.cpp \
+    packages/features_engine/cpp/src/*.cpp \
+    <python-lib> -o build/hft3_features_cpp.cp312-win_amd64.pyd
+```
+
+Output artefact: `build/hft3_features_cpp.cp312-win_amd64.pyd`.
+
+Status: **BUILT and golden bit-identical** on all non-regime slots. Regime
+slots 41–49 differ between Python and C++ because the Python pipeline calls
+`RegimeFilter` outside the extractor (in `market_state_pipeline.py`) while
+the C++ extractor integrates it internally; this architecture difference
+persists until the pipeline-level integration task lands (ALPHA_CME.md M0).
+
+**Parity driver**: `scripts/verify_cpp_parity.py` — hard-fails (exit 2) if
+the C++ module is absent; runs both extractors on a real lake NPZ and prints
+a per-slot diff table. CI must assert the `.pyd` artefact is present before
+invoking this script (see CORRECTNESS.md §2 row 3).
 
 ---
 
 ## 4. System Requirements for Live Hot Chain
 
-1. CPU isolation and core map: dedicated cores for MBO consumer, feature
-   extractor, decision engine, order submitter. Not yet configured on CHI404.
+1. CPU isolation and core map: **superseded by CHI404_RUNTIME.md §2 fused-thread
+   model** — the entire compute chain runs on one busy-spinning SCHED_FIFO
+   thread (core 2); no per-stage core splitting. See CHI404_RUNTIME.md §2.1
+   for rationale and the authoritative core map.
 2. Busy-spin consumers: no `sched_yield` or sleep in hot loop.
 3. No allocation post-init: all buffers pre-allocated; `SPSCQueue` uses
    stack/pre-allocated array; `DecisionEngine` weights loaded at startup.
 4. Hugepages: where supported on CHI404 kernel; reduces TLB miss latency.
 
-Items 1–4 are listed requirements; current CHI404 configuration status is
+Items 2–4 are listed requirements; current CHI404 configuration status is
 not verified in code artifacts at time of writing.
 
 ---

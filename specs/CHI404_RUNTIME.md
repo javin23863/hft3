@@ -204,6 +204,12 @@ Flags `position_desync` and `order_desync` persist until `ack_reconcile()` is ca
 
 ### 5.3 Python-Side Monitor Mapping
 
+**Precedence rule**: C++ atomics (`halted`, `flatten_active`, `hard_halt` in `RiskState`)
+are authoritative. Python supervisor-side monitors may only **ESCALATE** — they may set
+halt or flatten flags, but they must never clear a flag that was set by C++ code. Clearing
+a C++-set flag requires explicit operator action per the Ack/clear protocol column in §5.1.
+Violation of this rule constitutes a safety defect.
+
 Python monitors (`packages/execution/production_safety.py`) run in the supervisor process (not the hot thread). Priority: DisconnectMonitor (1s grace) → DailyLossLimitFlatten → PositionMismatchGuard → ClockDriftMonitor → StaleDataMonitor (5 ms).
 
 | Python monitor | C++ loop native equivalent? | Notes |
@@ -223,7 +229,7 @@ After startup (§8) completes and the loop enters run mode:
 | Category | Prohibition | Enforcement |
 |----------|-------------|-------------|
 | Memory | No heap allocation | Debug builds: counting allocator hook aborts on any `new`/`malloc` |
-| Synchronization | No mutex, no condition variable, no spinlock | Code review + TSAN in CI |
+| Synchronization | No mutex, no condition variable, no spinlock in the hot loop. Sync primitives (mutexes, condition variables) are **init/reconnect-phase only** — the Rithmic adapter login path may use them during startup and reconnect, but reconnect happens only while the submission gate is closed. The hot loop must never acquire them. Enforcement: TSan lane (`tsan` CMake build type) + review checklist item. | Code review + TSan in CI |
 | Formatting | No `std::string`, `std::iostream`, `printf`, or any formatting function | Static analysis |
 | I/O | No file or network I/O except inside Rithmic SDK `send_prepared_limit_order()` | Code review |
 | Scheduling | No `sleep()`, `sched_yield()`, `nanosleep()` | Code review + TSAN |
@@ -243,6 +249,16 @@ After startup (§8) completes and the loop enters run mode:
 7.4 **Mandatory events:** every non-empty `PollResult`; every submission attempt (PASS/BLOCK/HALT/FLATTEN); every fill/bust/not-modified/auto-liquidate; book resync start/end; every `evaluate_actions()` call with best action + EV (determinism artifact: byte-identical across replays of identical inputs).
 
 7.5 Drain thread (core 3) formats and writes; format errors do not propagate to hot thread.
+
+7.6 **Log-drain watchdog**: the drain thread updates a `drain_heartbeat_` atomic (e.g.
+    `std::atomic<uint64_t>`) with the current monotonic timestamp on every pass through
+    its consume loop. The hot thread checks this heartbeat at low frequency (e.g. every
+    N = 10,000 iterations) by comparing the current time against `drain_heartbeat_`. If
+    the heartbeat is stale by more than X seconds (recommended X = 5 s), the hot thread
+    treats this as `FailureState` — halt new submissions, keep the cancel path alive, and
+    log the watchdog failure via the ring (which may itself be draining slowly; the cancel
+    path must remain functional regardless). Telemetry and log loss must never be silent
+    while trading.
 
 ---
 

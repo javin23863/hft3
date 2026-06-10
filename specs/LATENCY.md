@@ -131,3 +131,61 @@ A hypothesis is promotion-eligible only when:
 Until `order_ack_measured=true` in `runtime/latency_reports/latency_summary.json`,
 no CME lane hypothesis can be promoted to live using the automated resolver;
 explicit `--latency-ms` is required for every replay run.
+
+---
+
+## 9. Order-Ack Measurement Campaign
+
+### 9.1 Requirement
+
+`paper_order_latency.measured` in `runtime/latency_reports/latency_summary.json`
+must flip to `true` before the automated resolver (§4 rung 2) can supply
+`order_ack_p99_ms` to replay runs and promotion bundle construction
+(DEPLOYMENT.md §1.3 `latency_ms_at_promotion`). Until that flag is set, every
+replay and promotion bundle construction requires an explicit `--latency-ms`
+argument.
+
+### 9.2 Timestamp Protocol
+
+**Real monotonic timestamps only.** The submit and ack timestamps recorded per
+order must come from `time.perf_counter_ns()` (or `std::chrono::steady_clock`
+on the C++ side) at the actual callback boundaries:
+
+- **submit_ns**: captured immediately before `send_prepared_limit_order()` is
+  called on the wire path.
+- **ack_ns**: captured inside the Rithmic order-event callback at the moment
+  the callback is entered (before any processing).
+
+The synthetic waterfall probe in `PaperLatencyDaemon._shadow_probe_mono_ns()`
+(lines ~53–57: `t1 = t0 + 1000; t2 = t1 + 500; t3 = t2 + 500`) must **not**
+be used to populate submit/ack timestamps in paired records. Records sourced
+from that probe must carry `shadow_synthetic: true` and must never appear in
+the authoritative `paper_order_latency` section of `latency_summary.json`.
+See CORRECTNESS.md §2 row 10 and §3 defect (b).
+
+### 9.3 Sample Size Gate
+
+Minimum **n ≥ 1000** paired submit→ack samples required before the campaign
+may set `paper_order_latency.measured = true`. Samples must be collected from
+actual Rithmic paper-broker sessions on CHI404 (not simulated). The resolver
+additionally requires `order_ack_p99_ms` to be present in the summary
+(§4 rung 2).
+
+The existing `trial_order_ack_appendix` in `latency_summary.json` currently
+holds n=12 (status: not authoritative; source: `runtime/latency_reports/
+latency_summary.json` run_id `20260530T031754Z`). A dedicated measurement
+session on CHI404 with R|API+ wired is required to accumulate the remaining
+samples.
+
+### 9.4 Campaign Unblock
+
+Setting `paper_order_latency.measured = true` (with valid `order_ack_p99_ms`)
+unblocks:
+
+1. §4 resolver rung 2 — automated latency injection for replay runs.
+2. ALPHA_CME.md M5 gate — research sweep at measured p99 (M6) may begin.
+3. DEPLOYMENT.md §1.3 — `latency_ms_at_promotion` may be drawn from the
+   measured value rather than requiring an explicit CLI override.
+
+Until this campaign completes, every replay invocation and every promotion
+bundle construction requires `--latency-ms` explicitly (§4 rung 1).
