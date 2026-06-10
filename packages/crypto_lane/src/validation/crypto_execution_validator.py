@@ -41,6 +41,13 @@ class CryptoExecutionResult:
     avg_trade_pnl: float = 0.0
     max_drawdown_pnl: float = 0.0
     slippage_bps: float = 0.0
+    slippage_bps_std: float = 0.0
+    slippage_bps_p95: float = 0.0
+    slippage_vs_mid_bps: float = 0.0
+    slippage_vs_mid_bps_std: float = 0.0
+    slippage_vs_mid_bps_p95: float = 0.0
+    num_fills: int = 0
+    num_fills_with_mid: int = 0
     mean_jump_bps: float = 0.0
     mean_qqe: float = 0.0
     execution_classification: str = "L2_PROXY_ONLY"
@@ -279,6 +286,9 @@ def compute_crypto_metrics(
     max_dd = 0.0
     slippages: List[float] = []
     fill_mids: List[float] = []
+    # slippage_vs_mid: cost relative to arrival mid (best_bid/best_ask captured at
+    # order-event time in _order_event_row — the arrival reference available today).
+    slippage_vs_mid: List[float] = []
 
     for ev in fill_events:
         qty = float(ev.get("filled_quantity", 0))
@@ -295,6 +305,12 @@ def compute_crypto_metrics(
         ba = float(ev.get("best_ask", 0))
         if bb > 0 and ba > 0:
             fill_mids.append((bb + ba) / 2.0)
+            mid = (bb + ba) / 2.0
+            if mid > 0 and price > 0:
+                if side == "BUY":
+                    slippage_vs_mid.append((price - mid) / mid * 1e4)
+                else:
+                    slippage_vs_mid.append((mid - price) / mid * 1e4)
 
         if side == "BUY":
             old_pos = position
@@ -322,6 +338,12 @@ def compute_crypto_metrics(
     tail = float(np.percentile(realized_trades, 5)) if len(realized_trades) >= 20 else 0.0
     as_cost_total = sum(as_costs) if as_costs else 0.0
     avg_slippage = float(np.mean(slippages)) if slippages else 0.0
+    slippage_std = float(np.std(slippages)) if len(slippages) >= 2 else 0.0
+    slippage_p95 = float(np.percentile(slippages, 95)) if slippages else 0.0
+    num_fills = len(slippages)
+    avg_slip_vs_mid = float(np.mean(slippage_vs_mid)) if slippage_vs_mid else 0.0
+    slip_vs_mid_std = float(np.std(slippage_vs_mid)) if len(slippage_vs_mid) >= 2 else 0.0
+    slip_vs_mid_p95 = float(np.percentile(slippage_vs_mid, 95)) if slippage_vs_mid else 0.0
     jmp = jump_metric(fill_events, fill_mids[:len(fill_events) * 5]) if fill_mids else 0.0
     qqe_val = 0.5
 
@@ -339,6 +361,13 @@ def compute_crypto_metrics(
         avg_trade_pnl=avg_trade_pnl,
         max_drawdown_pnl=max_dd,
         slippage_bps=avg_slippage,
+        slippage_bps_std=slippage_std,
+        slippage_bps_p95=slippage_p95,
+        slippage_vs_mid_bps=avg_slip_vs_mid,
+        slippage_vs_mid_bps_std=slip_vs_mid_std,
+        slippage_vs_mid_bps_p95=slip_vs_mid_p95,
+        num_fills=num_fills,
+        num_fills_with_mid=len(slippage_vs_mid),
         mean_jump_bps=jmp,
         mean_qqe=qqe_val,
         execution_classification=execution_classification,
