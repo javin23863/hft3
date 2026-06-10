@@ -40,7 +40,7 @@ This ledger must be **EMPTY** before live arm (DEPLOYMENT.md §5 references this
 
 | ID | Component | Description | Status |
 |----|-----------|-------------|--------|
-| a | `DecisionEngine::evaluate_actions` | Writes only slots 0–2 of 10; slots 3–9 zero-initialized; `get_optimal_action` scans all 10, producing UB on uninitialized reads; EV=0.0 codes can tie or beat legitimate actions. Fix: write `NEG_INFINITY_SENTINEL` to slots 3–9 every call (CHI404_RUNTIME.md §4.1). | **OPEN** |
+| a | `DecisionEngine::evaluate_actions` | Writes only slots 0–2 of 10; slots 3–9 zero-initialized; `get_optimal_action` scans all 10, producing UB on uninitialized reads; EV=0.0 codes can tie or beat legitimate actions. Fix: write `NEG_INFINITY_SENTINEL` to slots 3–9 every call (CHI404_RUNTIME.md §4.1). | **FIXED** — `packages/decision_engine/cpp/tests/test_decision_runtime_hardening.cpp` (poisoned 0xCD memory, 10k randomized argmax sweep) + `tests/test_decision_runtime_hardening.py`; 10053 assertions green. |
 | b | `PaperLatencyDaemon._shadow_probe_mono_ns` | Synthetic waterfall offsets (`t1 = t0+1000; t2 = t1+500; t3 = t2+500`) are fabricated nanosecond deltas, not real callback timestamps. If these populate the authoritative `latency_summary.json`, measured=true is false. | **OPEN** |
 | c | `RiskManager::check_order` | Return value is not enforced at the call site in the hot loop; BLOCK and HALT results are silently dropped rather than closing the submission gate. | **OPEN** |
 | d | `assert_live_config` | Not tied to the order submission path in the current `hft3_engine` startup sequence; live config validation can be bypassed if startup step 2 is skipped. | **OPEN** |

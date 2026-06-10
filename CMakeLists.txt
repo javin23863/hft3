@@ -75,6 +75,13 @@ add_executable(hft_event_context_golden
 )
 target_link_libraries(hft_event_context_golden PRIVATE hft_features)
 
+# Decision-runtime hardening regression test binary
+# (CHI404_RUNTIME.md §4 / CORRECTNESS.md §3 defect a)
+add_executable(test_decision_runtime_hardening
+    packages/decision_engine/cpp/tests/test_decision_runtime_hardening.cpp
+)
+target_link_libraries(test_decision_runtime_hardening PRIVATE hft_decision)
+
 # ── pybind11 Python extension ────────────────────────────────────────────────
 # Locate pybind11 via the cmake directory reported by:
 #   python -S -m pybind11 --cmakedir
