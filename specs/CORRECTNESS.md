@@ -38,6 +38,12 @@ is a wish. No row in this document is a wish.
 
 This ledger must be **EMPTY** before live arm (DEPLOYMENT.md §5 references this requirement).
 
+**Lane scoping**: this ledger is CME-lane scoped. The crypto lane maintains a
+lane-scoped ledger in CRYPTO_LIVE.md §9. The EMPTY-before-arm gate applies per
+lane — CME live arm (ALPHA_CME.md M10) gates on this ledger; crypto live arm
+(ALPHA_CRYPTO.md C12) gates on CRYPTO_LIVE.md §9. Neither lane's defects block
+the other lane's arm.
+
 | ID | Component | Description | Status |
 |----|-----------|-------------|--------|
 | a | `DecisionEngine::evaluate_actions` | Writes only slots 0–2 of 10; slots 3–9 zero-initialized; `get_optimal_action` scans all 10, producing UB on uninitialized reads; EV=0.0 codes can tie or beat legitimate actions. Fix: write `NEG_INFINITY_SENTINEL` to slots 3–9 every call (CHI404_RUNTIME.md §4.1). | **FIXED** — `packages/decision_engine/cpp/tests/test_decision_runtime_hardening.cpp` (poisoned 0xCD memory, 10k randomized argmax sweep) + `tests/test_decision_runtime_hardening.py`; 10053 assertions green. |
@@ -72,6 +78,13 @@ Source: vault `validation/Backtester Certification.md` (T0–T4 tier table).
 **C-lane** definition: any commit that modifies a path under `rithmic_gateway/`,
 `risk_engine/`, `packages/decision_engine/cpp/`, or `packages/features_engine/cpp/`
 triggers the C-lane column in addition to T0.
+
+**K-lane** (crypto analog, defined in CRYPTO_LIVE.md §10): any commit that
+modifies a path under `packages/crypto_lane/` or
+`packages/execution/adapters/crypto_*` triggers
+`python -m pytest tests/test_crypto_lane/ tests/test_crypto_l2/ -q`
+in addition to T0. The crypto regime rows K1–K12 and their tier mapping live
+in CRYPTO_LIVE.md §8/§10.
 
 ---
 
