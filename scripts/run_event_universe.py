@@ -619,6 +619,152 @@ def _apply_corrections(
 
 
 # ---------------------------------------------------------------------------
+# Robustness producers (additive block — does NOT alter Holm/BH logic above)
+# ---------------------------------------------------------------------------
+
+def _compute_robustness(
+    aggregated: dict[str, dict[str, dict[float, dict[str, Any]]]],
+    unit_results: list[dict[str, Any]],
+    stage_a_tested_cells: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Compute DSR, CSCV-PBO, and bootstrap CI for all cells in the aggregated pool.
+
+    Called AFTER _apply_corrections, BEFORE write_universe_result.
+    Does NOT touch Holm/BH logic, placeholders, or walk-forward sections.
+
+    n_trials convention
+    -------------------
+    n_trials for DSR = len(stage_a_tested_cells), the FULL family including
+    Stage-B placeholders (cells that were in Stage A but not re-run).
+    When stage_a_tested_cells is empty (standalone Stage-B run without --from-stage-a),
+    n_trials defaults to the count of cells actually aggregated in this run.
+    This is conservative: omitting the stage-A family understates the DSR penalty.
+    The n_trials value is echoed in every dsr_by_cell entry for audit.
+
+    CSCV matrix
+    -----------
+    Rows = date blocks formed by splitting unit_results events (sorted by
+    release_date, then event_id for ties) into n_splits=8 equal-ish blocks.
+    Cols = non-placeholder tested cells (hyp_id × event_type × band triples
+    that have per_event_expectancies in the aggregated pool).
+    Value = per-block mean expectancy of that cell.
+    Cells with no events in a block get NaN; cells with any NaN block are
+    excluded from the CSCV matrix (n_excluded is recorded).
+
+    Returns
+    -------
+    Dict matching the JSON shape:
+        {
+          "dsr_by_cell":      {slug: {...}},
+          "bootstrap_by_cell": {slug: {...}},
+          "pbo":              {...},
+          "producer_version": "rp_v1",
+        }
+    """
+    try:
+        from research_pipeline.src.robustness_producers import (  # type: ignore[import]
+            bootstrap_ci,
+            cscv_pbo,
+            deflated_sharpe_for_cell,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"robustness_producers import failed: {exc}", "producer_version": "rp_v1"}
+
+    # n_trials = full family including placeholders; fall back to live cell count
+    n_trials_total = len(stage_a_tested_cells) if stage_a_tested_cells else None
+
+    # Flatten aggregated cells to a list of (slug, per_event_expectancies)
+    # collecting only cells that actually have data (not placeholders)
+    cell_data: list[tuple[str, int, str, float, list[float]]] = []
+    # cell_data: [(slug, hyp_id, event_type, band, per_event_expectancies)]
+    for hyp_key, etype_map in aggregated.items():
+        for etype, band_map in etype_map.items():
+            for band, cell in band_map.items():
+                slug = f"hyp_{cell['hypothesis_id']}_band_{band}"
+                expecs = cell.get("per_event_expectancies", [])
+                cell_data.append((slug, int(cell["hypothesis_id"]), etype, float(band), expecs))
+
+    # If no stage_a_tested_cells supplied, use count of live cells as n_trials
+    n_trials_effective = n_trials_total if n_trials_total is not None else len(cell_data)
+
+    # --- Per-cell DSR and bootstrap ---
+    dsr_by_cell: dict[str, Any] = {}
+    bootstrap_by_cell: dict[str, Any] = {}
+
+    for slug, hyp_id, etype, band, expecs in cell_data:
+        cell_slug = f"{slug}_{etype}"
+        dsr_by_cell[cell_slug] = deflated_sharpe_for_cell(expecs, n_trials=n_trials_effective)
+        bootstrap_by_cell[cell_slug] = bootstrap_ci(expecs)
+
+    # --- CSCV PBO matrix ---
+    # Build date-ordered event list from non-errored unit_results
+    events_ordered: list[str] = []
+    seen_events: set[str] = set()
+    for ur in sorted(unit_results, key=lambda u: (u.get("release_date", ""), u["event_id"])):
+        if not ur.get("error") and ur["event_id"] not in seen_events:
+            events_ordered.append(ur["event_id"])
+            seen_events.add(ur["event_id"])
+
+    pbo_result: dict[str, Any]
+    N_SPLITS = 8
+
+    if len(events_ordered) < N_SPLITS:
+        pbo_result = {
+            "pbo": None,
+            "n_splits": N_SPLITS,
+            "n_configs": len(cell_data),
+            "n_partitions": 0,
+            "n_excluded": 0,
+            "reason": f"insufficient_events_for_cscv: {len(events_ordered)} < {N_SPLITS}",
+        }
+    else:
+        # Assign each event to one of N_SPLITS blocks (as equal as possible)
+        block_size = len(events_ordered) / N_SPLITS
+        event_to_block: dict[str, int] = {}
+        for i, eid in enumerate(events_ordered):
+            event_to_block[eid] = min(int(i / block_size), N_SPLITS - 1)
+
+        # Build matrix: rows=blocks, cols=cells
+        # cell_data already excludes placeholders (they have no per_event_expectancies)
+        n_cells = len(cell_data)
+        mat = np.full((N_SPLITS, n_cells), np.nan)
+
+        for col_idx, (slug, hyp_id, etype, band, _) in enumerate(cell_data):
+            # Collect per-event expectancies keyed by event_id for this cell
+            # We need to look up per-event values from unit_results
+            event_expec: dict[str, float] = {}
+            for ur in unit_results:
+                if ur.get("error") or ur.get("event_type", "") != etype:
+                    continue
+                for hrow in ur.get("hypotheses", []):
+                    if int(hrow["hypothesis_id"]) == hyp_id and float(ur["latency_ms"]) == band:
+                        event_expec[ur["event_id"]] = float(hrow["expectancy_usd"])
+                        break
+
+            # Accumulate block-level means
+            block_sums: dict[int, list[float]] = {b: [] for b in range(N_SPLITS)}
+            for eid, val in event_expec.items():
+                blk = event_to_block.get(eid)
+                if blk is not None:
+                    block_sums[blk].append(val)
+
+            for blk in range(N_SPLITS):
+                vals = block_sums[blk]
+                if vals:
+                    mat[blk, col_idx] = float(np.mean(vals))
+                # else stays NaN → cell excluded from CSCV
+
+        pbo_result = cscv_pbo(mat, n_splits=N_SPLITS)
+
+    return {
+        "dsr_by_cell": dsr_by_cell,
+        "bootstrap_by_cell": bootstrap_by_cell,
+        "pbo": pbo_result,
+        "producer_version": "rp_v1",
+    }
+
+
+# ---------------------------------------------------------------------------
 # Output writers
 # ---------------------------------------------------------------------------
 
@@ -646,6 +792,7 @@ def write_universe_result(
     skipped: list[dict[str, Any]],
     aggregated: dict[str, Any],
     corrections: dict[str, Any],
+    robustness: dict[str, Any] | None = None,
     latency_bands: list[float],
     cli_args: dict[str, Any],
     stamp: dict[str, Any],
@@ -677,6 +824,7 @@ def write_universe_result(
         "certification_footer": format_stamp_footer(stamp),
         "aggregated": aggregated,
         "corrections": corrections,
+        **({"robustness": robustness} if robustness is not None else {}),
         "unit_results": unit_results,
     }
     path = out_dir / "universe_result.json"
@@ -1061,6 +1209,13 @@ def main(argv: list[str] | None = None) -> int:
         stage_a_filter=stage_a_filter,
     )
 
+    # --- Robustness producers (additive; does not alter Holm/BH/placeholders) ---
+    robustness = _compute_robustness(
+        aggregated,
+        unit_results=unit_results,
+        stage_a_tested_cells=stage_a_tested_cells,
+    )
+
     stamp = build_certification_stamp(
         execution_mode="UNIVERSE_REPLAY",
         data_version="databento_mbo",
@@ -1075,6 +1230,7 @@ def main(argv: list[str] | None = None) -> int:
         skipped=skipped,
         aggregated=aggregated,
         corrections=corrections,
+        robustness=robustness,
         latency_bands=all_bands,
         cli_args=cli_args,
         stamp=stamp,
