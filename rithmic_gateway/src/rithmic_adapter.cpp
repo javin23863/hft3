@@ -173,16 +173,38 @@ public:
         // log it via the adapter's existing error string so it is visible on the
         // gateway loop without blocking this callback thread on I/O.
         if (pInfo) {
-            int sev = pInfo->iSeverity;  // 0=info, 1=warning, 2=error, 3=fatal (RApiPlus convention)
+            // AlertInfo has no iSeverity member in RApiPlus 13.7.  Derive severity
+            // from iAlertType using the ALERT_ constants (RApiPlus.h lines 149-159):
+            //   ALERT_CONNECTION_BROKEN(3), ALERT_LOGIN_FAILED(5),
+            //   ALERT_FORCED_LOGOUT(7), ALERT_TRADING_DISABLED(9),
+            //   ALERT_SHUTDOWN_SIGNAL(11) → sev 3 (hard; halt)
+            //   ALERT_SERVICE_ERROR(6)    → sev 2 (escalate; requires attention)
+            //   all other types           → sev 1 (info)
+            int sev;
+            switch (pInfo->iAlertType) {
+                case RApi::ALERT_CONNECTION_BROKEN:
+                case RApi::ALERT_LOGIN_FAILED:
+                case RApi::ALERT_FORCED_LOGOUT:
+                case RApi::ALERT_TRADING_DISABLED:
+                case RApi::ALERT_SHUTDOWN_SIGNAL:
+                    sev = 3;
+                    break;
+                case RApi::ALERT_SERVICE_ERROR:
+                    sev = 2;
+                    break;
+                default:
+                    sev = 1;
+                    break;
+            }
             // Raise the high-water severity atomically so the consumer can read it.
             int prev = adapter_->adm_alert_severity_.load(std::memory_order_relaxed);
             while (sev > prev &&
                    !adapter_->adm_alert_severity_.compare_exchange_weak(
                        prev, sev, std::memory_order_relaxed)) { /* retry */ }
 
-            // Severe alerts (error/fatal) set the order halt flag; position state
-            // after a fatal administrative alert is unknown.
-            if (sev >= 2) {
+            // Severe alerts (hard class) set the order halt flag; position state
+            // after a hard administrative alert is unknown.
+            if (sev >= 3) {
                 adapter_->order_halt_.store(true, std::memory_order_release);
             }
         }
@@ -536,8 +558,17 @@ public:
             evt.callback_wall_ns = wall_now_ns();
             evt.event_type = 'L';  // auto-liquidate
             if (pInfo) {
-                evt.timestamp_ns = static_cast<uint64_t>(pInfo->iSsboe) * 1000000000ULL
-                                 + static_cast<uint64_t>(pInfo->iUsecs) * 1000ULL;
+                // AutoLiquidateInfo has no iSsboe/iUsecs in RApiPlus 13.7.
+                // Use iAutoLiquidateThresholdCurrentValueSsboe (seconds epoch) when
+                // the corresponding enum flag indicates the field is present
+                // (eAutoLiquidateThresholdCurrentValueSsboe != 0), consistent with
+                // how other callbacks fall back to steady_clock when ssboe is absent.
+                if (pInfo->eAutoLiquidateThresholdCurrentValueSsboe != 0) {
+                    evt.timestamp_ns = static_cast<uint64_t>(
+                        pInfo->iAutoLiquidateThresholdCurrentValueSsboe) * 1000000000ULL;
+                } else {
+                    evt.timestamp_ns = evt.callback_wall_ns;
+                }
             } else {
                 evt.timestamp_ns = evt.callback_wall_ns;
             }
@@ -1301,3 +1332,4 @@ bool RithmicAdapter::cancel_order(const std::string& order_id) {
 }
 
 } // namespace hft
+
