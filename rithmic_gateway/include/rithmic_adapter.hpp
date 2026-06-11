@@ -28,11 +28,18 @@ struct MarketDataEvent {
     uint64_t timestamp_ns;
     uint64_t callback_monotonic_ns;
     uint64_t order_id;
-    char action; // 'A' add, 'C' cancel, 'M' modify, 'T' trade
-    char side;    // 'B' bid, 'A' ask
+    char action;          // 'A' add, 'C' cancel, 'M' modify, 'T' trade
+    char side;            // 'B' bid, 'A' ask
+    uint16_t symbol_id;   // registry id assigned by subscribe_mbo(); 0xFFFF = unknown
+                          // Placed inside existing 6-byte padding after side; struct size unchanged.
+    // 4 bytes implicit padding here (before double alignment)
     double price;
     int32_t size;
+    // 4 bytes trailing padding
 };
+
+static_assert(sizeof(MarketDataEvent) == 48,
+    "MarketDataEvent layout changed — update c_api.cpp pop path and any binary format readers");
 
 struct OrderEvent {
     uint64_t timestamp_ns;
@@ -86,7 +93,12 @@ public:
     bool connect();
     void disconnect();
 
+    // subscribe_mbo: subscribes and assigns a symbol_id (sequential, starting at 0).
+    // Returns false on adapter failure.  symbol_id is exposed via lookup_symbol_id().
     bool subscribe_mbo(const std::string& symbol, const std::string& exchange = "CME");
+
+    // Returns the symbol_id assigned to ticker, or 0xFFFF if not registered.
+    uint16_t lookup_symbol_id(const char* ticker, int len) const noexcept;
     bool warm_price_increment(const std::string& symbol, const std::string& exchange = "CME");
     PreparedLimitOrder* prepare_limit_order(const std::string& symbol,
                                             const std::string& exchange = "CME");
@@ -200,6 +212,21 @@ private:
     std::atomic<bool>     order_desync_{false};
     std::atomic<bool>     auto_liquidate_halt_{false};
     std::atomic<int>      adm_alert_severity_{0};
+
+    // Symbol registry — populated by subscribe_mbo() in subscription order.
+    // Max 16 symbols; ids are indices 0..N-1.  Written only from the calling
+    // thread before market data arrives; read lock-free from callback threads
+    // (harmless if a subscription races a callback for the same symbol because
+    // the worst outcome is id 0xFFFF on the very first event, which the daemon
+    // treats as a re-stamp-able gap).
+    static constexpr int kMaxSymbols = 16;
+    struct SymbolEntry {
+        char ticker[32];
+        int  len;
+        uint16_t id;
+    };
+    SymbolEntry symbol_registry_[kMaxSymbols] = {};
+    int symbol_count_ = 0;
 
     void build_envp();
     void cleanup_envp();

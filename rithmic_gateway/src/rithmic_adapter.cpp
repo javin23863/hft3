@@ -173,7 +173,23 @@ public:
         // log it via the adapter's existing error string so it is visible on the
         // gateway loop without blocking this callback thread on I/O.
         if (pInfo) {
-            int sev = pInfo->iSeverity;  // 0=info, 1=warning, 2=error, 3=fatal (RApiPlus convention)
+            // Map iAlertType to the 0-3 severity scale used throughout this adapter.
+            // (RApi::AlertInfo carries no iSeverity field in RApiPlus 13.7.0.0.)
+            int sev;
+            switch (pInfo->iAlertType) {
+                case RApi::ALERT_LOGIN_FAILED:
+                case RApi::ALERT_FORCED_LOGOUT:
+                case RApi::ALERT_SHUTDOWN_SIGNAL:
+                    sev = 3; break;  // fatal
+                case RApi::ALERT_CONNECTION_BROKEN:
+                case RApi::ALERT_SERVICE_ERROR:
+                case RApi::ALERT_TRADING_DISABLED:
+                    sev = 2; break;  // error
+                case RApi::ALERT_CONNECTION_CLOSED:
+                    sev = 1; break;  // warning
+                default:
+                    sev = 0; break;  // info
+            }
             // Raise the high-water severity atomically so the consumer can read it.
             int prev = adapter_->adm_alert_severity_.load(std::memory_order_relaxed);
             while (sev > prev &&
@@ -392,6 +408,10 @@ public:
             evt.side = ' ';
         }
 
+        // Resolve ticker to symbol_id; pInfo->sTicker is length-counted (NOT null-terminated).
+        evt.symbol_id = adapter_->lookup_symbol_id(
+            pInfo->sTicker.pData, pInfo->sTicker.iDataLen);
+
         if (!adapter_->mbo_queue_->push(evt)) {
             // Never block inside a Rithmic callback thread.  Count the drop and
             // flag the data gap so the consumer forces a book resync.
@@ -406,17 +426,22 @@ public:
     int BestBidAskQuote(RApi::BidInfo* pBid, RApi::AskInfo* pAsk,
                         void* pContext, int* aiCode) override {
         (void)pContext;
+        // Snapshot monotonic time once for both bid and ask to minimise overhead.
+        const uint64_t cb_mono = steady_now_ns();
 
         if (pBid && pBid->bPriceFlag) {
             MarketDataEvent evt{};
             evt.timestamp_ns = static_cast<uint64_t>(pBid->iSsboe) * 1000000000ULL
                              + static_cast<uint64_t>(pBid->iUsecs) * 1000ULL;
-            evt.callback_monotonic_ns = steady_now_ns();
+            evt.callback_monotonic_ns = cb_mono;
             evt.price = pBid->dPrice;
             evt.size = static_cast<int32_t>(pBid->llSize);
             evt.action = 'M';
             evt.side = 'B';
             evt.order_id = 0;
+            // Resolve ticker to symbol_id; pBid->sTicker is length-counted.
+            evt.symbol_id = adapter_->lookup_symbol_id(
+                pBid->sTicker.pData, pBid->sTicker.iDataLen);
             if (!adapter_->mbo_queue_->push(evt)) {
                 adapter_->md_drops_.fetch_add(1, std::memory_order_relaxed);
                 // Stale best-bid is now in the consumer's future; force a resync.
@@ -428,12 +453,15 @@ public:
             MarketDataEvent evt{};
             evt.timestamp_ns = static_cast<uint64_t>(pAsk->iSsboe) * 1000000000ULL
                              + static_cast<uint64_t>(pAsk->iUsecs) * 1000ULL;
-            evt.callback_monotonic_ns = steady_now_ns();
+            evt.callback_monotonic_ns = cb_mono;
             evt.price = pAsk->dPrice;
             evt.size = static_cast<int32_t>(pAsk->llSize);
             evt.action = 'M';
             evt.side = 'A';
             evt.order_id = 0;
+            // Resolve ticker to symbol_id; pAsk->sTicker is length-counted.
+            evt.symbol_id = adapter_->lookup_symbol_id(
+                pAsk->sTicker.pData, pAsk->sTicker.iDataLen);
             if (!adapter_->mbo_queue_->push(evt)) {
                 adapter_->md_drops_.fetch_add(1, std::memory_order_relaxed);
                 adapter_->md_data_gap_.store(true, std::memory_order_release);
@@ -535,12 +563,8 @@ public:
             evt.callback_monotonic_ns = steady_now_ns();
             evt.callback_wall_ns = wall_now_ns();
             evt.event_type = 'L';  // auto-liquidate
-            if (pInfo) {
-                evt.timestamp_ns = static_cast<uint64_t>(pInfo->iSsboe) * 1000000000ULL
-                                 + static_cast<uint64_t>(pInfo->iUsecs) * 1000ULL;
-            } else {
-                evt.timestamp_ns = evt.callback_wall_ns;
-            }
+            // RApi::AutoLiquidateInfo carries no event timestamp; use wall clock.
+            evt.timestamp_ns = evt.callback_wall_ns;
             if (!adapter_->order_queue_->push(evt)) {
                 // Flags are already set above; count the drop but do not double-halt.
                 adapter_->order_event_drops_.fetch_add(1, std::memory_order_relaxed);
@@ -1107,6 +1131,30 @@ void RithmicAdapter::disconnect() {
 bool RithmicAdapter::subscribe_mbo(const std::string& symbol, const std::string& exchange) {
     if (!connected_ || !engine_) return false;
 
+    // Register the ticker in the symbol registry before subscribing so that
+    // callbacks arriving immediately after subscribe() can resolve the id.
+    if (symbol_count_ < kMaxSymbols) {
+        bool already = false;
+        for (int i = 0; i < symbol_count_; ++i) {
+            if (static_cast<int>(symbol.size()) == symbol_registry_[i].len &&
+                std::memcmp(symbol.c_str(), symbol_registry_[i].ticker,
+                            static_cast<size_t>(symbol_registry_[i].len)) == 0) {
+                already = true;
+                break;
+            }
+        }
+        if (!already) {
+            SymbolEntry& e = symbol_registry_[symbol_count_];
+            int len = static_cast<int>(
+                symbol.size() < sizeof(e.ticker) - 1 ? symbol.size() : sizeof(e.ticker) - 1);
+            std::memcpy(e.ticker, symbol.c_str(), static_cast<size_t>(len));
+            e.ticker[len] = '\0';
+            e.len = len;
+            e.id  = static_cast<uint16_t>(symbol_count_);
+            ++symbol_count_;
+        }
+    }
+
     auto* pEngine = static_cast<RApi::REngine*>(engine_);
     tsNCharcb sExchange = make_ts(exchange.c_str());
     tsNCharcb sTicker = make_ts(symbol.c_str());
@@ -1118,6 +1166,18 @@ bool RithmicAdapter::subscribe_mbo(const std::string& symbol, const std::string&
         return false;
     }
     return true;
+}
+
+uint16_t RithmicAdapter::lookup_symbol_id(const char* ticker, int len) const noexcept {
+    if (!ticker || len <= 0) return 0xFFFF;
+    // Linear scan over <=16 entries; length-first comparison avoids memcmp on mismatch.
+    for (int i = 0; i < symbol_count_; ++i) {
+        if (symbol_registry_[i].len == len &&
+            std::memcmp(ticker, symbol_registry_[i].ticker, static_cast<size_t>(len)) == 0) {
+            return symbol_registry_[i].id;
+        }
+    }
+    return 0xFFFF;
 }
 
 bool RithmicAdapter::warm_price_increment(const std::string& symbol, const std::string& exchange) {
