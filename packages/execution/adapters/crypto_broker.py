@@ -14,7 +14,32 @@ import os
 import threading
 import time
 import urllib.request
+from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
+
+
+@dataclass
+class LatencySample:
+    """Paired submit/ack monotonic timestamps for one venue order-new call.
+
+    measurement_tier "rest_sync" = ack boundary is the synchronous REST response
+    return (REST adapter has no async order-confirm channel; a WS order-confirm
+    tier lands when the authenticated WS order channel is added at live deployment).
+    shadow_synthetic must stay False for any sample that feeds an authoritative
+    summary (CORRECTNESS.md §2 row 10 discipline mirrored for crypto).
+    """
+
+    intent_id: str
+    cid: int
+    submit_ns: int
+    ack_ns: int
+    accepted: bool
+    measurement_tier: str = "rest_sync"
+    shadow_synthetic: bool = False
+
+    @property
+    def latency_ms(self) -> float:
+        return (self.ack_ns - self.submit_ns) / 1e6
 
 
 class CryptoRateLimitError(RuntimeError):
@@ -160,6 +185,9 @@ class _CryptoBrokerBase:
         self._symbol_map: Dict[str, str] = symbol_map if symbol_map is not None else dict(self._DEFAULT_SYMBOL_MAP)
         self._events: List[OrderEvent] = []
         self._pending: List[OrderEvent] = []
+        self._latency_samples: list[LatencySample] = []
+        self._last_submit_ns: int = 0
+        self._last_ack_ns: int = 0
         self._position: float = 0.0
         self._cids_sent: set = set()
         self._order_cid_map: Dict[str, Dict[str, Any]] = {}  # order_id -> {cid, cid_date}
@@ -169,10 +197,20 @@ class _CryptoBrokerBase:
 
     # K1 single-submission-gate — THE one and only place self._transport.order_new is called.
     # grep-enforced: no other site in this module may call self._transport.order_new.
-    def _send_order_new(self, body: dict) -> Any:
+    def _send_order_new(self, body: dict) -> tuple[Any, int, int]:
         from execution import safety
         safety.record_crypto_order_call()
-        return self._transport.order_new(body)
+        submit_ns = time.perf_counter_ns()
+        self._last_submit_ns = submit_ns
+        try:
+            response = self._transport.order_new(body)
+        except Exception:
+            ack_ns = time.perf_counter_ns()
+            self._last_ack_ns = ack_ns
+            raise
+        ack_ns = time.perf_counter_ns()
+        self._last_ack_ns = ack_ns
+        return response, submit_ns, ack_ns
 
     def _default_risk_verdict(self) -> bool:
         return True
@@ -264,14 +302,26 @@ class _CryptoBrokerBase:
         self._events.append(submitted_ev)
         self._pending.append(submitted_ev)
 
+        wire_attempted = False
         try:
-            self._send_order_new(bfx_body)
+            wire_attempted = True
+            _response, submit_ns, ack_ns = self._send_order_new(bfx_body)
             # counter counts venue ATTEMPTS; cid registry commits only on successful send
             # so failed sends are retryable; risk BLOCK advances neither.
             cid_date = time.strftime("%Y-%m-%d", time.gmtime())
             self._cids_sent.add(cid)
             self._order_cid_map[f"CRYPTO-{cid}"] = {"cid": cid, "cid_date": cid_date}
         except (CryptoRateLimitError, CryptoTransportError) as exc:
+            if not wire_attempted:
+                raise
+            sample = LatencySample(
+                intent_id=order_intent.intent_id,
+                cid=cid,
+                submit_ns=self._last_submit_ns,
+                ack_ns=self._last_ack_ns,
+                accepted=False,
+            )
+            self._latency_samples.append(sample)
             rej_ev = OrderEvent(
                 order_id=f"CRYPTO-{cid}",
                 intent_id=order_intent.intent_id,
@@ -290,6 +340,14 @@ class _CryptoBrokerBase:
             self._pending.append(rej_ev)
             return rej_ev
 
+        sample = LatencySample(
+            intent_id=order_intent.intent_id,
+            cid=cid,
+            submit_ns=submit_ns,
+            ack_ns=ack_ns,
+            accepted=True,
+        )
+        self._latency_samples.append(sample)
         accepted_ev = OrderEvent(
             order_id=f"CRYPTO-{cid}",
             intent_id=order_intent.intent_id,
@@ -302,6 +360,7 @@ class _CryptoBrokerBase:
             price=order_intent.price,
             quantity=order_intent.quantity,
             remaining_quantity=order_intent.quantity,
+            latency_ms=sample.latency_ms,
             source_adapter=self.source_adapter,
         )
         self._events.append(accepted_ev)
@@ -372,6 +431,11 @@ class _CryptoBrokerBase:
     def drain_order_events(self) -> List:
         out = list(self._pending)
         self._pending.clear()
+        return out
+
+    def drain_latency_samples(self) -> list[LatencySample]:
+        out = list(self._latency_samples)
+        self._latency_samples.clear()
         return out
 
     def after_elapse(self, replay_time_ns: int) -> None:
