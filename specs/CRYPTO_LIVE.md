@@ -257,13 +257,13 @@ neither blocks the other. Seeded from the verified 2026-06-10 state
 
 | ID | Component | Description | Status |
 |----|-----------|-------------|--------|
-| ka | `packages/execution/adapters/` | No crypto execution adapter exists; `adapter_factory.py` cannot produce a crypto paper/live adapter | **OPEN** |
-| kb | Crypto submission path | No risk-check enforcement on any crypto order path; `LIVE_KILL_SWITCH` not wired to crypto cancel-all (no kill-switch reference in `packages/crypto_lane/`) | **OPEN** |
-| kc | `venue_profiles.json` | All venue RTT entries synthetic (`synthetic_calibrated:*`); `measure_live_ws_rtt` never run against a live venue; venue URL map (`latency_profile.py`) lacks `bitfinex` | **OPEN** |
-| kd | Production ingest | `l2_data_quality_flag=0` in production — no live L2 source wired; only fixtures carry flag=1 (L2-derived features null-gated, hence silently absent) | **OPEN** |
-| ke | `build_basis_features` / `build_deribit_vol_features` | Silent-zero hazard for standalone callers when quality flags=0 (safe only via `feature_matrix.py` null-gate) | **OPEN** |
-| kf | Queue/slippage models | `SquareProbQueueModel` / `L3FifoQueueModel` parameters never fit to real exchange data; no calibration artifact exists | **OPEN** |
-| kg | Crypto latency | Bands `[5, 50, 200]` ms declared but unmeasured live; LATENCY.md §3 sweep-list TODO outstanding; no crypto `latency_summary.json` | **OPEN** |
+| ka | `packages/execution/adapters/` | No crypto execution adapter exists; `adapter_factory.py` cannot produce a crypto paper/live adapter | **CLOSED** — C6 `cf36563` |
+| kb | Crypto submission path | No risk-check enforcement on any crypto order path; `LIVE_KILL_SWITCH` not wired to crypto cancel-all (no kill-switch reference in `packages/crypto_lane/`) | **CLOSED** — C7 `762c1cd` |
+| kc | `venue_profiles.json` | All venue RTT entries synthetic (`synthetic_calibrated:*`); `measure_live_ws_rtt` never run against a live venue; venue URL map (`latency_profile.py`) lacks `bitfinex` | **CLOSED (provisional)** — C0 `a00cb2b`; authoritative re-measurement at C9 |
+| kd | Production ingest | `l2_data_quality_flag=0` in production — no live L2 source wired; only fixtures carry flag=1 (L2-derived features null-gated, hence silently absent) | **CLOSED** — C4 `95d92e3` |
+| ke | `build_basis_features` / `build_deribit_vol_features` | Silent-zero hazard for standalone callers when quality flags=0 (safe only via `feature_matrix.py` null-gate) | **CLOSED** — C5 `925894e` |
+| kf | Queue/slippage models | `SquareProbQueueModel` / `L3FifoQueueModel` parameters never fit to real exchange data; no calibration artifact exists | **CLOSED (provisional)** — C3 `68cd7ff`; re-fit vs micro-live fills after C8 (§6.3) |
+| kg | Crypto latency | Bands `[5, 50, 200]` ms declared but unmeasured live; LATENCY.md §3 sweep-list TODO outstanding; no crypto `latency_summary.json` | **OPEN** — C0 done; C9 pending |
 
 Closure mapping: ka→C6, kb→C7, kc→C0, kd→C4, ke→C5, kf→C3 (re-fit after C8),
 kg→C0+C9 (see ALPHA_CRYPTO.md §2).
