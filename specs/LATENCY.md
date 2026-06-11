@@ -139,9 +139,14 @@ Four clocks, never conflated:
 (3.7 ms) — the measured ack latency is dominated by **distance/handling to
 Rithmic's paper cluster**, not engine or simulator compute. The paper p99
 remains the conservative injection value for research (§4 rung 2 unchanged).
-Live offensive capability is engine 15.3 µs + live-endpoint wire — bounded
-below by ~100–250 µs IF live order infrastructure is Aurora-local; this stays
-`live_unknown` until a live session measures it (CONTINUOUS_CME CC-1 follow-up).
+Live offensive capability is engine 15.3 µs + live-endpoint wire. Wire survey
+(CC-1 follow-up, 2026-06-11): trial SDK ships NO "Rithmic 01" live connection
+params (distributed by Rithmic ops only, post-conformance); nearest measured
+Rithmic-operated paper-infra node `ritpz01004.01.theomne.net` is 1.02 ms TCP
+p50 from CHI404; live wire bound stays **OPEN** with labeled inference ~1–4 ms
+from paper topology. Closing it requires: funded Rithmic 01 account + exchange
+data agreements + API conformance (rapi@rithmic.com) + the resulting
+connection_params.txt, then the existing probe with live guards.
 
 **Probe-target defect (fixed in truth artifact, gate code fix pending)**: the
 §5 `network_pass=false` verdict came from pinging `rituz00100.00.rithmic.com`

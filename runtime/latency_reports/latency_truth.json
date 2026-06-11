@@ -49,16 +49,93 @@
     "note": "paper-system processing artifact. MESM6 expired; MESU6 used. MESM6 1000-sample ref: p50=3.483ms p99=6.356ms"
   },
   "live_unknown": {
+    "sdk_finding": "Trial R|API+ SDK v13.7.0.0 ships NO Rithmic 01 (live) connection_params.txt. SDK docs state these are distributed by the Rithmic operations team after conformance testing. Rithmic 01 params require accepted user agreements and completed conformance test (rapi@rithmic.com). Hostname prefix for live system is not published in the trial SDK.",
+    "paper_system_wire_survey": {
+      "note": "All Rithmic Paper Trading (ritpz-cluster) hosts from rithmic_api_paper.yaml measured from CHI404. CHI cluster 01 node 184.105.22.229 shows ~1ms TCP RTT, indicating co-located or same-datacenter Rithmic infra. Port used: 64100 (MML_LOC_BROK_ADDR). Only 38.98.144.227 (ritpz04031) responds to ICMP.",
+      "measured_utc": "2026-06-11",
+      "all_candidates": [
+        {
+          "host": "ritpz01004.01.theomne.net",
+          "ip": "184.105.22.229",
+          "system": "Rithmic Paper Trading",
+          "role": "DMN/LIC cluster 01 CHI",
+          "tcp_p50_us": 1023,
+          "tcp_p99_us": 1173,
+          "tcp_min_us": 971,
+          "port": 64100,
+          "icmp": "filtered",
+          "n": 20
+        },
+        {
+          "host": "ritpz01000.01.theomne.net",
+          "ip": "38.65.210.71",
+          "system": "Rithmic Paper Trading",
+          "role": "LIC cluster 01 CHI",
+          "tcp_p50_us": 2530,
+          "tcp_p99_us": 2662,
+          "tcp_min_us": 1721,
+          "port": 64100,
+          "icmp": "filtered",
+          "n": 20
+        },
+        {
+          "host": "ritpz01001.01.theomne.net",
+          "ip": "38.65.202.197",
+          "system": "Rithmic Paper Trading",
+          "role": "LIC cluster 01 CHI",
+          "tcp_p50_us": 3392,
+          "tcp_p99_us": 4019,
+          "tcp_min_us": 2647,
+          "port": 64100,
+          "icmp": "filtered",
+          "n": 20
+        },
+        {
+          "host": "ritpz04031.04.theomne.net",
+          "ip": "38.98.144.227",
+          "system": "Rithmic Paper Trading",
+          "role": "TS/OP cluster 04 CHI (active paper order endpoint)",
+          "tcp_p50_us": 3500,
+          "tcp_p99_us": 4110,
+          "tcp_min_us": 3058,
+          "port": 64100,
+          "icmp_p50_ms": 4.027,
+          "icmp_p99_ms": 4.095,
+          "icmp_min_ms": 3.999,
+          "icmp_n": 50,
+          "n": 20
+        },
+        {
+          "host": "ritpz04063.04.theomne.net",
+          "ip": "38.65.202.203",
+          "system": "Rithmic Paper Trading",
+          "role": "LOC_BROK/DMN cluster 04 CHI",
+          "tcp_p50_us": 3499,
+          "tcp_p99_us": 4098,
+          "tcp_min_us": 3046,
+          "port": 64100,
+          "icmp": "filtered",
+          "n": 20
+        }
+      ]
+    },
+    "live_wire_bound": {
+      "status": "OPEN - not closeable without live Rithmic 01 credentials",
+      "lower_bound_inference": "ritpz01004.01.theomne.net (184.105.22.229, ~1ms TCP from CHI404) shows a co-located Paper Trading cluster node reachable at ~1ms. If Rithmic 01 live TS uses an equivalent co-located cluster in the same datacenter, wire RTT could be in the 1-4ms range. This is an inference from Paper Trading infrastructure topology only - NOT a Rithmic 01 live measurement.",
+      "remaining_unknown": "Rithmic 01 live system connection_params.txt not available in trial SDK. Closing this requires: funded live account, accepted exchange data agreements, completed API conformance testing with Omnesys/Rithmic ops. Also unknown: live order-server processing time, fill path through CME Globex, cancel-ack round-trip for live orders."
+    },
     "what_remains": [
-      "MD wire-to-callback (iSsboe+iUsecs vs callback_monotonic_ns)",
+      "MD wire-to-callback (iSsboe+iUsecs vs callback_monotonic_ns) - instrument AlertBidData/AlertAskData",
       "Cancel-ack: paper simulator does not return cancel-ack for far-from-market orders",
-      "Live order-to-fill not measurable on paper",
-      "CHI404-to-CME-Globex propagation needs exchange loopback"
+      "Live order-to-fill: not measurable on paper",
+      "CHI404-to-CME-Globex propagation: needs exchange loopback",
+      "Rithmic 01 live gateway TCP RTT: gated behind conformance testing (rapi@rithmic.com)"
     ],
     "how_to_close": {
       "md_wire": "Instrument AlertBidData/AlertAskData in rithmic_adapter, 10-min subscription, clock-offset cal",
       "cancel_ack": "Retry with at-market price or investigate paper simulator cancel event types",
-      "live_fill": "Requires live or SIM co-located account"
+      "live_fill": "Requires live or SIM co-located account",
+      "live_wire": "Obtain Rithmic 01 connection_params.txt after conformance testing; run same TCP RTT probe against live TS endpoint"
     }
   },
   "burst": {
