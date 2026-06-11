@@ -242,13 +242,33 @@ def _worker(unit: dict[str, Any]) -> dict[str, Any]:
         if vix_sp is not None:
             try:
                 import numpy as _npvix
+                _AUDIT_KEYS = {"ts", "ts_event_raw", "ts_recv_raw", "_attrs_json"}
                 with _npvix.load(str(vix_sp), allow_pickle=True) as va:
                     vix_ts = _npvix.array(va["ts"], dtype=_npvix.int64)
                     if "columns" in va.files:
+                        # Legacy matrix format: columns list + X matrix
                         vix_cols = list(va["columns"])
                         vix_X = _npvix.array(va["X"])
                     elif "X" in va.files:
+                        # Legacy matrix format: X only (no columns list)
                         vix_X = _npvix.array(va["X"])
+                    else:
+                        # Per-column format written by build_vix_feature_file:
+                        # each feature is a separate 1-D float64 key.
+                        n_ts = len(vix_ts)
+                        _feat_keys = sorted(
+                            k for k in va.files
+                            if k not in _AUDIT_KEYS
+                            and va[k].ndim == 1
+                            and va[k].dtype.kind == "f"
+                            and len(va[k]) == n_ts
+                        )
+                        if not _feat_keys:
+                            vix_ts = None
+                            vix_load_error = "no_feature_columns"
+                        else:
+                            vix_cols = _feat_keys
+                            vix_X = _npvix.column_stack([va[k] for k in _feat_keys])
             except Exception as _vix_exc:
                 vix_ts = None
                 vix_X = None

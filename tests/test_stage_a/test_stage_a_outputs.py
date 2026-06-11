@@ -203,14 +203,60 @@ def _setup_feature_root(tmp_path: Path, extra_records: list | None = None) -> Pa
 
 
 def _make_vix_store_npz(dest: Path) -> Path:
-    """Minimal VIX feature NPZ: ts + X + columns arrays."""
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    n = 20
-    ts_start = 1_700_000_000_000_000_000
-    ts = np.array([ts_start + i * 1_000_000 for i in range(n)], dtype=np.int64)
-    X = np.ones((n, 3), dtype=np.float64) * 20.0  # VIX ~20
-    columns = np.array(["vix_spot", "vix_1m", "vix_3m"], dtype=object)
-    np.savez_compressed(str(dest), ts=ts, X=X, columns=columns)
+    """Write a real per-column VIX feature NPZ by calling build_vix_feature_file.
+
+    Uses the same synthetic-quotes approach as test_vix_loader_nan_honesty.py
+    so the fixture format always matches the builder output.
+    """
+    import tempfile
+    import pandas as pd
+
+    _DTYPE = np.dtype([
+        ("ts_event", "i8"), ("ts_recv", "i8"),
+        ("bid_px", "f8"), ("ask_px", "f8"),
+        ("bid_sz", "f8"), ("ask_sz", "f8"),
+        ("instrument_id", "u8"), ("publisher_id", "u4"),
+    ])
+    _N = 200
+    _T0 = 1_700_000_000_000_000_000
+    rng = np.random.default_rng(99)
+    arr = np.zeros(_N, dtype=_DTYPE)
+    dt = 100_000_000  # 100 ms in ns
+    ts_base = np.arange(_N, dtype=np.int64) * dt + _T0
+    arr["ts_event"] = ts_base
+    arr["ts_recv"] = ts_base + 5_000_000
+    arr["instrument_id"] = np.tile([1001, 1002], _N // 2).astype(np.uint64)
+    arr["publisher_id"] = np.uint32(1)
+    mid = 20.0 + rng.standard_normal(_N) * 0.1
+    arr["bid_px"] = mid - 0.05
+    arr["ask_px"] = mid + 0.05
+    arr["bid_sz"] = rng.uniform(1.0, 10.0, _N)
+    arr["ask_sz"] = rng.uniform(1.0, 10.0, _N)
+
+    offsets_s = [-10, -5, -1, 0, 1, 2, 5, 10]
+    event_ns = _T0 + 10 * 1_000_000_000
+    sensor_rows = [
+        {
+            "event_id": "VIX_FEAT_BUILD",
+            "offset_sec": o,
+            "sensor": "VIX_ATM_STRIKE",
+            "level": 20.0 + o * 0.05,
+            "ts_ns": event_ns + o * 1_000_000_000,
+        }
+        for o in offsets_s
+    ]
+
+    with tempfile.TemporaryDirectory() as _td:
+        _tdp = Path(_td)
+        quotes_npz = _tdp / "VIX.OPT_VIX_FEAT_BUILD_quotes.npz"
+        np.savez(quotes_npz, quotes=arr)
+        sensors_pq = _tdp / "VIX_FEAT_BUILD_sensors.parquet"
+        pd.DataFrame(sensor_rows).to_parquet(sensors_pq, index=False)
+
+        from features_engine.src.features.vix_features import build_vix_feature_file
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        build_vix_feature_file(quotes_npz, sensors_pq, dest)
+
     return dest
 
 
