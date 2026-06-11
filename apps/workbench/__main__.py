@@ -302,14 +302,24 @@ def main(argv: list[str] | None = None) -> int:
         if args.json:
             print(json.dumps(result, indent=2, default=str))
         else:
-            print(f"IBKR endpoint: {result.get('status')}")
-            print(f"Profile: {result.get('profile')}")
-            print(f"Socket: {result.get('host')}:{result.get('port')}")
-            print(f"API: {(result.get('api') or {}).get('api_client_status')}")
+            ready_label = "READY" if result.get("ready") else "NOT READY"
+            print(f"IBKR endpoint: {ready_label}")
+            print(f"Auth mode: {result.get('auth_mode')}")
+            print(f"Base URL: {result.get('base_url')}")
+            rtt = result.get("measured_rtt_ms")
+            print(f"RTT (median): {rtt} ms" if rtt is not None else "RTT (median): n/a")
+            probes = result.get("probes") or {}
+            for probe_name in ("auth_status", "tickle", "accounts"):
+                p = probes.get(probe_name) or {}
+                ok_str = "ok" if p.get("ok") else "FAIL"
+                err = p.get("error", "")
+                err_str = f"  [{err}]" if err else ""
+                print(f"  probe/{probe_name}: {ok_str}{err_str}")
+            print(f"Paper account present: {result.get('paper_account_present')}")
             print(f"Status artifact: {result.get('runtime_status_path')}")
             for gate in result.get("blocking_gates") or []:
                 print(f"  BLOCKING {gate.get('gate')}: {gate.get('reason')}")
-        return 0 if result.get("status") in {"READY_TO_CONNECT", "CONNECTED"} else 1
+        return 0 if result.get("ready") else 1
 
     if args.command == "campaign":
         from workbench.src.run.campaign_runner import record_paper_shadow, record_sim_shadow, run_campaign

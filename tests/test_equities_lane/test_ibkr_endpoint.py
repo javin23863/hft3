@@ -409,3 +409,146 @@ def test_endpoint_status_probe_error_yields_not_ready(
 
     assert status["ready"] is False
     assert "error" in status["probes"]["auth_status"]
+
+
+# ---------------------------------------------------------------------------
+# _build_real_transport — oauth vs gateway branch
+# ---------------------------------------------------------------------------
+
+
+def test_build_real_transport_oauth_sends_authorization_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """oauth branch: OAuthAuth is constructed lazily; Authorization header forwarded."""
+    import types
+    import sys
+
+    recorded: dict[str, list] = {"get_headers": [], "post_headers": []}
+
+    class _FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self) -> None:
+            pass
+
+        def json(self) -> dict:
+            return {}
+
+    class _FakeSession:
+        def get(self, url: str, **kwargs: Any) -> _FakeResponse:
+            recorded["get_headers"].append(kwargs.get("headers", {}))
+            return _FakeResponse()
+
+        def post(self, url: str, **kwargs: Any) -> _FakeResponse:
+            recorded["post_headers"].append(kwargs.get("headers", {}))
+            return _FakeResponse()
+
+    # Build a minimal fake ibkr_web_client module with OAuthAuth patched.
+    fake_mod = types.ModuleType("equities_lane.src.execution.ibkr_web_client")
+
+    class _FakeOAuthAuth:
+        def __init__(self, base_url: str = "") -> None:
+            self.base_url = base_url
+            self._fake_sess = _FakeSession()
+
+        def _signed_headers(self, method: str, url: str) -> dict:
+            return {"Authorization": "OAuth test"}
+
+        def get(self, url: str, **kwargs: Any) -> Any:
+            headers = self._signed_headers("GET", url)
+            kwargs.setdefault("headers", {}).update(headers)
+            resp = self._fake_sess.get(url, **kwargs)
+            resp.raise_for_status()
+            return resp.json()
+
+        def post(self, url: str, **kwargs: Any) -> Any:
+            headers = self._signed_headers("POST", url)
+            kwargs.setdefault("headers", {}).update(headers)
+            resp = self._fake_sess.post(url, **kwargs)
+            resp.raise_for_status()
+            return resp.json()
+
+    fake_mod.OAuthAuth = _FakeOAuthAuth  # type: ignore[attr-defined]
+
+    # Patch _require_cryptography on the real module if already imported.
+    exec_mod_name = "equities_lane.src.execution.ibkr_web_client"
+    if exec_mod_name in sys.modules:
+        monkeypatch.setattr(sys.modules[exec_mod_name], "_require_cryptography", lambda: None)
+
+    monkeypatch.setitem(sys.modules, exec_mod_name, fake_mod)
+
+    from equities_lane.src.ibkr_endpoint import ResolvedIbkrEndpoint, _build_real_transport
+
+    ep = ResolvedIbkrEndpoint(
+        provider="interactive_brokers",
+        transport="web_api",
+        mode="paper",
+        auth_mode="oauth",
+        base_url="https://api.ibkr.com/v1/api",
+        paper_account_env="IBKR_ACCOUNT_ID_PAPER",
+        paper_account_present=False,
+        config_path="",
+    )
+
+    http_get, http_post = _build_real_transport(ep)
+    http_get("https://api.ibkr.com/v1/api/iserver/auth/status")
+    http_post("https://api.ibkr.com/v1/api/tickle")
+
+    assert recorded["get_headers"], "no GET recorded"
+    assert recorded["post_headers"], "no POST recorded"
+    assert "Authorization" in recorded["get_headers"][0], "Authorization missing from GET"
+    assert "Authorization" in recorded["post_headers"][0], "Authorization missing from POST"
+
+
+def test_build_real_transport_gateway_no_authorization_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """gateway branch: plain requests.Session; no Authorization header emitted."""
+    import sys
+    import types
+
+    recorded: dict[str, list] = {"get_headers": [], "post_headers": []}
+
+    class _FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self) -> None:
+            pass
+
+        def json(self) -> dict:
+            return {}
+
+    class _FakeSession:
+        def get(self, url: str, **kwargs: Any) -> _FakeResponse:
+            recorded["get_headers"].append(kwargs.get("headers", {}))
+            return _FakeResponse()
+
+        def post(self, url: str, **kwargs: Any) -> _FakeResponse:
+            recorded["post_headers"].append(kwargs.get("headers", {}))
+            return _FakeResponse()
+
+    fake_requests = types.ModuleType("requests")
+    fake_requests.Session = _FakeSession  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "requests", fake_requests)
+
+    from equities_lane.src.ibkr_endpoint import ResolvedIbkrEndpoint, _build_real_transport
+
+    ep = ResolvedIbkrEndpoint(
+        provider="interactive_brokers",
+        transport="web_api",
+        mode="paper",
+        auth_mode="gateway",
+        base_url="https://localhost:5000/v1/api",
+        paper_account_env="IBKR_ACCOUNT_ID_PAPER",
+        paper_account_present=False,
+        config_path="",
+    )
+
+    http_get, http_post = _build_real_transport(ep)
+    http_get("https://localhost:5000/v1/api/iserver/auth/status")
+    http_post("https://localhost:5000/v1/api/tickle")
+
+    get_hdrs = recorded["get_headers"][0] if recorded["get_headers"] else {}
+    post_hdrs = recorded["post_headers"][0] if recorded["post_headers"] else {}
+    assert "Authorization" not in get_hdrs, "Authorization must not appear in gateway GET"
+    assert "Authorization" not in post_hdrs, "Authorization must not appear in gateway POST"

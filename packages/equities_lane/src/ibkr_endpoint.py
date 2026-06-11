@@ -439,25 +439,50 @@ def endpoint_status(
 
 
 def _build_real_transport(endpoint: ResolvedIbkrEndpoint) -> tuple[HttpGet, HttpPost]:
-    """Build a requests.Session-backed transport.  Called only at runtime, not at import."""
-    import requests  # type: ignore
+    """Build transport callables.  Called only at runtime, not at import.
 
-    session = requests.Session()
-    verify: bool | str = True
-    if "localhost" in endpoint.base_url or "127.0.0.1" in endpoint.base_url:
-        verify = False
+    oauth mode: lazily constructs OAuthAuth (from equities_lane.src.execution.ibkr_web_client)
+    inside each closure; construction errors surface inside _get/_post where probe helpers
+    catch them as failure-as-data.  The constructed instance is cached across calls.
 
-    def _get(url: str) -> Any:
-        resp = session.get(url, verify=verify, timeout=10)
-        resp.raise_for_status()
-        return resp.json()
+    gateway/any other mode: plain requests.Session with TLS verify=False for localhost/127.0.0.1.
+    """
+    if endpoint.auth_mode == "oauth":
+        _cache: dict[str, Any] = {}
 
-    def _post(url: str) -> Any:
-        resp = session.post(url, verify=verify, timeout=10)
-        resp.raise_for_status()
-        try:
+        def _get_oauth_auth() -> Any:
+            if "inst" not in _cache:
+                from equities_lane.src.execution.ibkr_web_client import OAuthAuth  # noqa: PLC0415
+                _cache["inst"] = OAuthAuth(base_url=endpoint.base_url)
+            return _cache["inst"]
+
+        def _get(url: str) -> Any:
+            return _get_oauth_auth().get(url, timeout=10)
+
+        def _post(url: str) -> Any:
+            return _get_oauth_auth().post(url, timeout=10)
+
+        return _get, _post
+
+    else:
+        import requests  # type: ignore
+
+        session = requests.Session()
+        verify: bool | str = True
+        if "localhost" in endpoint.base_url or "127.0.0.1" in endpoint.base_url:
+            verify = False
+
+        def _get(url: str) -> Any:  # type: ignore[misc]
+            resp = session.get(url, verify=verify, timeout=10)
+            resp.raise_for_status()
             return resp.json()
-        except Exception:
-            return {"status": resp.status_code}
 
-    return _get, _post
+        def _post(url: str) -> Any:  # type: ignore[misc]
+            resp = session.post(url, verify=verify, timeout=10)
+            resp.raise_for_status()
+            try:
+                return resp.json()
+            except Exception:
+                return {"status": resp.status_code}
+
+        return _get, _post
