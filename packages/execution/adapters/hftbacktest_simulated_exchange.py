@@ -229,13 +229,27 @@ class HftBacktestSimulatedExchangeAdapter:
         self._pending_drain.clear()
         return out
 
-    def after_elapse(self, replay_time_ns: int) -> None:
-        # Called after every loop wake: feed event (wait_next_feed ret=2),
-        # order response (ret=3), or timeout (ret=0).  With event-driven
-        # stepping (the default) this replaces the 100us grid; the numba
-        # boxing cost is paid only when fills actually arrive.
-        # Fast path: no live orders means no fills possible.
+    def after_elapse(self, replay_time_ns: int, wake_reason: int = -1) -> None:
+        # Called after every loop wake.
+        #
+        # wake_reason codes (match wait_next_feed return values):
+        #   -1 (default) = unknown / legacy caller → full scan (safe fallback)
+        #    0 = timeout  → full scan (expiry possible)
+        #    2 = feed only (ret=2 from wait_next_feed with include_order_resp=True)
+        #        hftbacktest guarantee: order state CANNOT change on a pure feed
+        #        wake — every fill/partial-fill/expiry/reject produces a ret=3.
+        #        Skip the expensive orders() scan on this path.
+        #    3 = order response → full scan (fill/partial/cancel/expire/reject)
+        #
+        # Fast path: no live orders means no fills possible regardless of reason.
         if not self._open_orders:
+            return
+
+        # OPT 1: on a pure feed wake (ret=2) order state cannot change — skip
+        # the numba-boxed orders()/state_values() scan entirely.  Only the
+        # order-free exit above and this guard are needed; all other bookkeeping
+        # (market-state, MDA sync) is driven by the replay loop, not here.
+        if wake_reason == 2:
             return
 
         state = self._hbt.state_values(self._asset_no)

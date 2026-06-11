@@ -230,7 +230,11 @@ class ReplaySession:
                 self.clock.advance_to(ts)
                 # Adapter observes terminal order states and clears inactive
                 # orders itself; clearing here first would hide fills from it.
-                adapter.after_elapse(ts)
+                # Pass wake_reason so after_elapse can skip the orders() scan on
+                # pure feed wakes (ret=2): hftbacktest guarantees that order state
+                # cannot change without a ret=3 order-response wake.
+                # Grid mode passes result=0 always (elapse never returns 2/3).
+                adapter.after_elapse(ts, wake_reason=result)
 
                 depth = hbt.depth(0)
                 book_one_sided = depth.best_bid <= 0 or depth.best_ask <= 0

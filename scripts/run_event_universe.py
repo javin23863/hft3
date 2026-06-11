@@ -872,6 +872,22 @@ def main(argv: list[str] | None = None) -> int:
             f"Shard {shard_i}/{shard_n}: {len(work_units)} of {total_before_shard} units assigned to this shard",
             flush=True,
         )
+
+    # OPT 2: sort work units smallest-first by NPZ file size.
+    # Rationale: cheap units complete early → first progress signal arrives
+    # sooner; with imap_unordered the last worker to finish sets wall-clock, so
+    # starting large files early reduces tail packing.
+    # Stable tiebreak by (event_id, symbol, latency_ms) preserves determinism.
+    def _unit_sort_key(u: dict) -> tuple:
+        npz = u.get("npz_path", "")
+        try:
+            sz = os.path.getsize(npz) if npz else 0
+        except OSError:
+            sz = 0
+        return (sz, u["event_id"], u["symbol"], float(u["latency_ms"]))
+
+    work_units = sorted(work_units, key=_unit_sort_key)
+
     print(f"Work units: {len(work_units)}  skipped: {len(skipped)}", flush=True)
     if not work_units:
         print("No work units — check --symbols, --event-type, and data/npz/ contents.", flush=True)

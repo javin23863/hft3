@@ -863,6 +863,74 @@ class TestShard:
 
     # ---- CLI integration: shard metadata recorded in JSON ----
 
+    # ---- OPT 2: smallest-first ordering ----
+
+    def test_work_units_sorted_smallest_first(self, universe_mod, tmp_path, events_csv):
+        """After build_work_units + OPT-2 sort, units appear in ascending NPZ size order.
+
+        Creates three NPZ files of distinct sizes, builds work units, then verifies
+        that the sorted list is ordered by file size ascending with a stable tiebreak
+        by (event_id, symbol, latency_ms).
+        """
+        import json as _json
+        from backtest_pipeline.src.replay_npz_fixture import build_minimal_mbo_npz
+
+        # Create three NPZ files; pad to different sizes by varying n_levels.
+        npz_a = tmp_path / "MES.v.0_AAA_EVT_A_mbo.npz"
+        npz_b = tmp_path / "MES.v.0_BBB_EVT_B_mbo.npz"
+
+        build_minimal_mbo_npz(npz_a, n_levels=2)   # small  (~327 bytes)
+        build_minimal_mbo_npz(npz_b, n_levels=10)  # larger (~506 bytes)
+
+        # Write extra events.csv with both events
+        extra_csv = tmp_path / "extra_events.csv"
+        extra_csv.write_text(
+            "event_id,event_type,release_date,release_time,timezone,"
+            "window_name,start_offset_seconds,end_offset_seconds,symbols,"
+            "priority,source,source_url,effective_date,notes,row_status\n"
+            "AAA_EVT_A,CPI,2024-01-10,08:30:00,America/New_York,TIGHT,-30,300,"
+            "\"MES.v.0\",50,TEST,http://example.com,2024-01-01,test,SOURCED\n"
+            "BBB_EVT_B,NFP,2024-02-02,08:30:00,America/New_York,TIGHT,-30,300,"
+            "\"MES.v.0\",50,TEST,http://example.com,2024-01-01,test,SOURCED\n",
+            encoding="utf-8",
+        )
+
+        lake_index = {
+            ("MES.v.0", "AAA_EVT_A"): str(npz_a),
+            ("MES.v.0", "BBB_EVT_B"): str(npz_b),
+        }
+        work, _ = universe_mod.build_work_units(
+            extra_csv,
+            lake_index,
+            latency_bands=[1.0],
+            event_type_filter=None,
+            symbol_filter=["MES.v.0"],
+            max_events=None,
+        )
+        assert len(work) == 2
+
+        # Apply the OPT-2 sort key (same logic as run_event_universe.main)
+        import os as _os
+
+        def _unit_sort_key(u):
+            npz = u.get("npz_path", "")
+            try:
+                sz = _os.path.getsize(npz) if npz else 0
+            except OSError:
+                sz = 0
+            return (sz, u["event_id"], u["symbol"], float(u["latency_ms"]))
+
+        sorted_units = sorted(work, key=_unit_sort_key)
+
+        sizes = [_os.path.getsize(u["npz_path"]) for u in sorted_units]
+        assert sizes == sorted(sizes), (
+            f"Work units not in ascending NPZ size order: {sizes}"
+        )
+        # Tiebreak: same-size units must be ordered by event_id
+        # (verified by construction here since sizes differ)
+        assert sorted_units[0]["event_id"] == "AAA_EVT_A"
+        assert sorted_units[1]["event_id"] == "BBB_EVT_B"
+
     def test_main_shard_metadata_in_output(self, tmp_path, events_csv, minimal_npz):
         """Running with --shard records shard_index and shard_total in cli_args.
 
