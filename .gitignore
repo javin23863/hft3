@@ -98,6 +98,7 @@ data/crypto/gold/**
 data/crypto/normalize.log
 data/crypto/latency/node_profile.json
 data/crypto/bitfinex_mbo_raw/**
+data/crypto/binance_l2_raw/**
 data/replay/hftbacktest/crypto/**
 runtime/c1_mbo_capture.log
 research_cards/parity/**

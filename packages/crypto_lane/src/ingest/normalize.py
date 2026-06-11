@@ -18,7 +18,8 @@ from crypto_lane.src.ingest.bronze_reader import (
 )
 from crypto_lane.src.align.latency_profile import default_venue_from_backtest, resolve_node_latency, resolve_theta_exch
 from crypto_lane.src.ingest.mempool_pull import load_mempool_bronze
-from crypto_lane.src.ingest.paths import ensure_data_dirs, normalized_dir
+from crypto_lane.src.ingest.binance_l2_aggregate import load_l2_aggregate
+from crypto_lane.src.ingest.paths import data_root, ensure_data_dirs, normalized_dir
 from crypto_lane.src.types import repo_root_from_lane
 
 DEFAULT_BACKTEST_LATENCY = {
@@ -72,8 +73,8 @@ def _mid_from_klines(df: pl.DataFrame, prefix: str) -> pl.DataFrame:
     return out.select(["exchange_timestamp", f"{prefix}_mid"])
 
 
-def build_spot_perp_ticks(start: str, end: str) -> pl.DataFrame:
-    """Build spot/perp ticks; `l2_data_quality_flag` is 0 here (L2 wiring is future work)."""
+def build_spot_perp_ticks(start: str, end: str, *, l2_aggregate: pl.DataFrame | None = None) -> pl.DataFrame:
+    """Build spot/perp ticks; joins L2 microstructure when l2_aggregate is provided."""
     sym = _symbol_map()
     start_d = _parse_date(start)
     end_d = _parse_date(end)
@@ -141,12 +142,53 @@ def build_spot_perp_ticks(start: str, end: str) -> pl.DataFrame:
         pl.lit(0.0).alias("bid_ask_spread"),
         pl.lit(0.0).alias("depth_btc"),
         pl.lit(0.0).alias("order_imbalance"),
-        # l2_data_quality_flag default 0: no L2 source is wired into normalize_all
-        # yet. When binance_l2_recorder output is joined here, set this to 1
-        # downstream so the feature_matrix null-gate releases spread/depth.
+        # l2_data_quality_flag: 0 = no L2 data; 1 = joined from binance_l2_aggregate.
+        # L2 join wired below after with_columns; literals are overwritten when
+        # l2_aggregate is non-empty. feature_matrix null-gates spread/depth/imbalance
+        # on flag=0 rows.
         pl.lit(0).alias("l2_data_quality_flag"),
         pl.lit(1 if perp_is_real else 0).alias("perp_data_quality_flag"),
     ])
+
+    # L2 join seam: left-join per-hour L2 aggregates onto ticks.
+    # Tick exchange_timestamp is the kline open ms (hour-bucket-aligned).
+    # L2 aggregate exchange_timestamp is also ts//3_600_000*3_600_000.
+    # We floor-align via ts_hour to guard against any kline-close convention.
+    if l2_aggregate is not None and not l2_aggregate.is_empty():
+        l2_cols = l2_aggregate.select(["exchange_timestamp", "bid_ask_spread", "depth_btc", "order_imbalance"])
+        # Dedup hour key; prefer row with highest l2_sample_count when available, else first.
+        if "l2_sample_count" in l2_aggregate.columns:
+            l2_cols = l2_cols.with_columns(l2_aggregate["l2_sample_count"]).sort("l2_sample_count", descending=True).unique(subset=["exchange_timestamp"], keep="first").drop("l2_sample_count")
+        else:
+            l2_cols = l2_cols.unique(subset=["exchange_timestamp"], keep="first")
+        out = out.with_columns(
+            (pl.col("exchange_timestamp") // 3_600_000 * 3_600_000).alias("ts_hour")
+        )
+        out = out.join(
+            l2_cols.rename({"exchange_timestamp": "ts_hour"}),
+            on="ts_hour",
+            how="left",
+            suffix="_l2",
+        ).drop("ts_hour")
+        out = out.with_columns([
+            pl.when(pl.col("bid_ask_spread_l2").is_not_null())
+              .then(pl.col("bid_ask_spread_l2"))
+              .otherwise(pl.lit(0.0))
+              .alias("bid_ask_spread"),
+            pl.when(pl.col("depth_btc_l2").is_not_null())
+              .then(pl.col("depth_btc_l2"))
+              .otherwise(pl.lit(0.0))
+              .alias("depth_btc"),
+            pl.when(pl.col("order_imbalance_l2").is_not_null())
+              .then(pl.col("order_imbalance_l2"))
+              .otherwise(pl.lit(0.0))
+              .alias("order_imbalance"),
+            pl.when(pl.col("bid_ask_spread_l2").is_not_null())
+              .then(pl.lit(1))
+              .otherwise(pl.lit(0))
+              .alias("l2_data_quality_flag"),
+        ]).drop(["bid_ask_spread_l2", "depth_btc_l2", "order_imbalance_l2"])
+
     out = _assign_validation_periods(out.sort("exchange_timestamp"))
     cols = [
         "exchange_timestamp", "validation_period", "spot_mid", "perp_mid",
@@ -323,7 +365,13 @@ def build_mempool_snapshots(start: str, end: str, spot_ticks: pl.DataFrame) -> p
 def normalize_all(*, start: str, end: str) -> dict[str, Path]:
     ensure_data_dirs()
     out_dir = normalized_dir()
-    spot = build_spot_perp_ticks(start, end)
+    raw_dir = data_root() / "binance_l2_raw"
+    l2 = load_l2_aggregate(raw_dir)
+    if l2.is_empty():
+        print("normalize_all: no L2 capture found — l2_data_quality_flag stays 0")
+    else:
+        print(f"normalize_all: {l2.height} L2-covered hour buckets loaded")
+    spot = build_spot_perp_ticks(start, end, l2_aggregate=l2)
     if spot.is_empty():
         raise RuntimeError(
             f"No spot/perp bronze for {start}..{end}. Run: python -m crypto_lane.pipeline pull-bronze --start {start} --end {end}"

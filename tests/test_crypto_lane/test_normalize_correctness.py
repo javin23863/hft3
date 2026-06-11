@@ -123,6 +123,120 @@ def test_is_pit_safe_false_on_empty_pit_col():
     assert is_pit_safe_all is False
 
 
+def _make_minimal_frames(base_ms: int) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
+    """Three-row spot/perp/funding frames at base_ms, base_ms+1h, base_ms+2h."""
+    HOUR = 3_600_000
+    timestamps = [
+        datetime.fromtimestamp(base_ms / 1000, tz=UTC),
+        datetime.fromtimestamp((base_ms + HOUR) / 1000, tz=UTC),
+        datetime.fromtimestamp((base_ms + 2 * HOUR) / 1000, tz=UTC),
+    ]
+    spot = pl.DataFrame([
+        {"timestamp": t, "open": 50000.0, "high": 50000.0, "low": 50000.0, "close": 50000.0, "volume": 0.0}
+        for t in timestamps
+    ])
+    perp = pl.DataFrame([
+        {"timestamp": t, "open": 50010.0, "high": 50010.0, "low": 50010.0, "close": 50010.0, "volume": 0.0}
+        for t in timestamps
+    ])
+    funding = pl.DataFrame([
+        {"fundingTime": t, "fundingRate": 0.0001}
+        for t in timestamps
+    ])
+    return spot, perp, funding
+
+
+def test_l2_join_sets_flag_on_covered_hours(monkeypatch):
+    from crypto_lane.src.ingest import normalize as norm
+
+    HOUR = 3_600_000
+    base_ms = 1_704_067_200_000  # 2024-01-01 00:00:00 UTC
+
+    spot_df, perp_df, funding_df = _make_minimal_frames(base_ms)
+
+    def _fake_read_klines(source, symbol, start, end, granularity):
+        if "funding" in granularity:
+            return funding_df
+        if "perp" in granularity:
+            return perp_df
+        return spot_df
+
+    monkeypatch.setattr(norm, "_read_klines", _fake_read_klines)
+    monkeypatch.setattr(norm, "_symbol_map", lambda: {
+        "binance_spot": "BTCUSDT",
+        "binance_perp": "BTCUSDT-PERP",
+        "deribit_options_prefix": "BTC",
+        "bitcoind": "bitcoin",
+    })
+
+    # L2 aggregate covers only the middle hour bucket
+    middle_ts = base_ms + HOUR
+    l2_agg = pl.DataFrame({
+        "exchange_timestamp": [middle_ts],
+        "bid_ask_spread": [12.5],
+        "depth_btc": [3.7],
+        "order_imbalance": [0.12],
+        "l2_sample_count": [100],
+        "l2_crossed_skips": [0],
+    }, schema={
+        "exchange_timestamp": pl.Int64,
+        "bid_ask_spread": pl.Float64,
+        "depth_btc": pl.Float64,
+        "order_imbalance": pl.Float64,
+        "l2_sample_count": pl.Int64,
+        "l2_crossed_skips": pl.Int64,
+    })
+
+    result = norm.build_spot_perp_ticks("2024-01-01", "2024-01-01", l2_aggregate=l2_agg)
+
+    assert "l2_data_quality_flag" in result.columns
+    assert result.height == 3
+
+    mid_row = result.filter(pl.col("exchange_timestamp") == middle_ts)
+    assert mid_row.height == 1
+    assert int(mid_row["l2_data_quality_flag"][0]) == 1
+    assert abs(float(mid_row["bid_ask_spread"][0]) - 12.5) < 1e-9
+    assert abs(float(mid_row["depth_btc"][0]) - 3.7) < 1e-9
+    assert abs(float(mid_row["order_imbalance"][0]) - 0.12) < 1e-9
+
+    outer_rows = result.filter(pl.col("exchange_timestamp") != middle_ts)
+    assert (outer_rows["l2_data_quality_flag"] == 0).all()
+    assert (outer_rows["bid_ask_spread"] == 0.0).all()
+    assert (outer_rows["depth_btc"] == 0.0).all()
+    assert (outer_rows["order_imbalance"] == 0.0).all()
+
+
+def test_l2_aggregate_none_keeps_legacy(monkeypatch):
+    from crypto_lane.src.ingest import normalize as norm
+
+    base_ms = 1_704_067_200_000  # 2024-01-01 00:00:00 UTC
+
+    spot_df, perp_df, funding_df = _make_minimal_frames(base_ms)
+
+    def _fake_read_klines(source, symbol, start, end, granularity):
+        if "funding" in granularity:
+            return funding_df
+        if "perp" in granularity:
+            return perp_df
+        return spot_df
+
+    monkeypatch.setattr(norm, "_read_klines", _fake_read_klines)
+    monkeypatch.setattr(norm, "_symbol_map", lambda: {
+        "binance_spot": "BTCUSDT",
+        "binance_perp": "BTCUSDT-PERP",
+        "deribit_options_prefix": "BTC",
+        "bitcoind": "bitcoin",
+    })
+
+    result = norm.build_spot_perp_ticks("2024-01-01", "2024-01-01", l2_aggregate=None)
+
+    assert result.height == 3
+    assert (result["l2_data_quality_flag"] == 0).all()
+    assert (result["bid_ask_spread"] == 0.0).all()
+    assert (result["depth_btc"] == 0.0).all()
+    assert (result["order_imbalance"] == 0.0).all()
+
+
 def test_worst_staleness_ms_is_max():
     from crypto_lane.src.features import feature_matrix as fm
     import inspect
