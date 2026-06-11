@@ -21,8 +21,7 @@ from pathlib import Path
 _SCRIPT_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _SCRIPT_DIR.parent
 _PACKAGES = _REPO_ROOT / "packages"
-for _pkg in ("execution", "backtest_pipeline/src"):
-    _p = str(_PACKAGES / _pkg)
+for _p in (str(_PACKAGES), str(_PACKAGES / "execution"), str(_PACKAGES / "backtest_pipeline" / "src")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 

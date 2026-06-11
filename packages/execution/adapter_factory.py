@@ -12,7 +12,6 @@ import os
 from typing import Any, Optional
 
 from execution import safety
-from execution.adapters.hftbacktest_simulated_exchange import HftBacktestSimulatedExchangeAdapter
 from execution.adapters.live_broker import LiveBrokerAdapter
 from execution.adapters.paper_broker import PaperBrokerAdapter
 from execution.interfaces import ExecutionAdapter
@@ -37,6 +36,8 @@ def create_adapter(
     if mode == "REPLAY":
         if hbt is None:
             raise ValueError("REPLAY mode requires hbt handle for HftBacktestSimulatedExchangeAdapter")
+        # Lazy import: hftbacktest is a replay-only dependency; PAPER/LIVE hosts run without it.
+        from execution.adapters.hftbacktest_simulated_exchange import HftBacktestSimulatedExchangeAdapter
         adapter = HftBacktestSimulatedExchangeAdapter(
             hbt,
             run_id=run_id,
