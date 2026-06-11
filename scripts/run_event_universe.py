@@ -71,6 +71,7 @@ DEFAULT_EVENTS_CSV = _REPO / "packages" / "data_system" / "config" / "events.csv
 DEFAULT_NPZ_DIR = _REPO / "data" / "npz"
 DEFAULT_SYMBOL = "MES.v.0"
 NPZ_PATTERN = re.compile(r"^(?P<symbol>.+?)_(?P<event_id>.+)_mbo\.npz$")
+RESEARCH_EMBARGO_START = "2026-01-01"  # ALPHA_CME.md §4 / DEPLOYMENT.md §4.2: research sweeps must never read data >= this date; first 2026 touch is the M9 paper-shadow bundle.
 
 
 # ---------------------------------------------------------------------------
@@ -180,6 +181,18 @@ def build_work_units(
         if not candidate_symbols:
             candidate_symbols = [DEFAULT_SYMBOL]
 
+        release_date = row.get("release_date", "")
+        if release_date >= RESEARCH_EMBARGO_START:
+            for symbol in sorted(candidate_symbols):
+                for band in sorted(latency_bands):
+                    skipped.append({
+                        "event_id": event_id,
+                        "symbol": symbol,
+                        "latency_ms": band,
+                        "reason": "embargo_2026",
+                    })
+            continue
+
         has_any_npz = any(
             lake_index.get((symbol, event_id)) is not None
             for symbol in candidate_symbols
@@ -209,7 +222,7 @@ def build_work_units(
                         "npz_path": npz_path,
                         "latency_ms": band,
                         "event_type": etype,
-                        "release_date": row.get("release_date", ""),
+                        "release_date": release_date,
                     })
                     events_with_work.add(event_id)
 
@@ -531,6 +544,7 @@ def write_universe_result(
     total_elapsed_s: float,
 ) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
+    units_skipped_embargo = sum(1 for s in skipped if s.get("reason") == "embargo_2026")
     payload = {
         "schema": "universe_result_v1",
         "run_start_utc": run_start_utc,
@@ -542,6 +556,10 @@ def write_universe_result(
         "units_run": len(unit_results),
         "units_skipped": len(skipped),
         "units_errored": sum(1 for u in unit_results if u.get("error")),
+        "embargo": {
+            "start": RESEARCH_EMBARGO_START,
+            "units_skipped_embargo": units_skipped_embargo,
+        },
         "skipped": sorted(skipped, key=lambda s: (s["event_id"], s["symbol"], s["latency_ms"])),
         "certification_stamp": stamp,
         "certification_footer": format_stamp_footer(stamp),
@@ -597,6 +615,8 @@ def write_universe_report(
     for etype in event_types:
         n_events = len(run_by_etype.get(etype, set()))
         lines.append(f"| {etype} | {n_events} | — |")
+    units_skipped_embargo = sum(1 for s in skipped if s.get("reason") == "embargo_2026")
+    lines.append(f"\nEmbargoed (>= 2026-01-01): {units_skipped_embargo} units skipped")
     lines.append("")
 
     # --- Survivors per event_type × band (Holm) ---
@@ -789,6 +809,7 @@ def main(argv: list[str] | None = None) -> int:
             data_version="databento_mbo",
         )
         out_dir.mkdir(parents=True, exist_ok=True)
+        _early_embargo = sum(1 for s in skipped if s.get("reason") == "embargo_2026")
         payload = {
             "schema": "universe_result_v1",
             "run_start_utc": utcstamp,
@@ -797,6 +818,10 @@ def main(argv: list[str] | None = None) -> int:
             "git_commit": _git_commit(_REPO),
             "units_run": 0,
             "units_skipped": len(skipped),
+            "embargo": {
+                "start": RESEARCH_EMBARGO_START,
+                "units_skipped_embargo": _early_embargo,
+            },
             "skipped": skipped,
             "certification_stamp": stamp,
         }
