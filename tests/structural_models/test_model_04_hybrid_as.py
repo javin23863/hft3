@@ -1,5 +1,7 @@
 """Tests for PDF_MODEL_4 hybrid Avellaneda-Stoikov execution."""
 
+import math
+
 from features_engine.src.structural_models.model_04_hybrid_execution import (
     HybridExecutionModel,
     as_optimal_spread,
@@ -15,8 +17,35 @@ def test_as_reservation_price():
 
 
 def test_as_spread_positive():
-    spread = as_optimal_spread(gamma=0.1, kappa=1.5)
+    spread = as_optimal_spread(gamma=0.1, kappa=1.5, sigma=0.02, time_remaining=3600.0)
     assert spread > 0.0
+
+
+def test_spread_matches_as2008_closed_form():
+    gamma, kappa, sigma, t = 0.1, 1.5, 2.0, 0.5
+    expected = gamma * sigma ** 2 * t + (2.0 / gamma) * math.log(1.0 + gamma / kappa)
+    result = as_optimal_spread(gamma=gamma, kappa=kappa, sigma=sigma, time_remaining=t)
+    assert math.isclose(result, expected, rel_tol=1e-12)
+
+
+def test_spread_widens_with_volatility():
+    kwargs = dict(gamma=0.1, kappa=1.5, time_remaining=0.5)
+    s0 = as_optimal_spread(sigma=0.0, **kwargs)
+    s1 = as_optimal_spread(sigma=1.0, **kwargs)
+    s3 = as_optimal_spread(sigma=3.0, **kwargs)
+    assert s3 > s1 > s0
+
+
+def test_sigma_zero_reduces_to_pure_glft_term():
+    gamma, kappa = 0.1, 1.5
+    expected = (2.0 / gamma) * math.log(1.0 + gamma / kappa)
+    result = as_optimal_spread(gamma=gamma, kappa=kappa, sigma=0.0, time_remaining=0.5)
+    assert math.isclose(result, expected, rel_tol=1e-12)
+
+
+def test_time_remaining_clamped():
+    kwargs = dict(gamma=0.1, kappa=1.5, sigma=2.0)
+    assert as_optimal_spread(time_remaining=-5.0, **kwargs) == as_optimal_spread(time_remaining=0.0, **kwargs)
 
 
 def test_hybrid_adds_ofi_drift():
