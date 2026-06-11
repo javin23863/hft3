@@ -12,7 +12,7 @@ DEFAULT_CHI404_SUMMARY = _REPO / "runtime" / "latency_reports" / "latency_summar
 PAPER_ORDER_MIN_PAIRED = 1000
 
 BACKTEST_LATENCY_NOTE_MEASURED = (
-    "Paper order submit→ack p99 from R|Trader log bridge (CHI404 colo)"
+    "Paper order submit→ack p99 from native C++ rithmic_latency_probe on CHI404 colo"
 )
 BACKTEST_LATENCY_NOTE_UNMEASURED = (
     "Paper order submit→ack not measured; pass --latency-ms or run "

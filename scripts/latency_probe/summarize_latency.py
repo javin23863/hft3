@@ -16,6 +16,7 @@ if str(_PROBE_DIR) not in sys.path:
     sys.path.insert(0, str(_PROBE_DIR))
 from trial_profile import latest_latency_profile
 from report_format import build_report_card, render_console, render_markdown
+from native_probe_orders import collect_native_probe_orders
 
 PASS_CRITERIA_REL = Path("infrastructure") / "chi404" / "PASS_CRITERIA.json"
 REPORT_ROOT_REL = Path("runtime") / "latency_reports"
@@ -28,7 +29,8 @@ LANE_THRESHOLDS_MS = {
 }
 PAPER_ORDER_MIN_PAIRED = 1000
 ORDER_ACK_BLOCKED_NOTE = (
-    "Paper order submit→ack not measured; run scripts/chi404_run_paper_latency_sweep.sh on CHI404"
+    "Paper order submit→ack not measured; run bash scripts/chi404_run_paper_latency_sweep.sh "
+    "(native C++ rithmic_latency_probe campaign) on CHI404"
 )
 TRIAL_APPENDIX_LIMITATIONS = [
     "R|Trader VM log bridge; monotonic timestamps at ingest",
@@ -423,21 +425,53 @@ def build_summary(
         "measurement_tier": "log_bridge",
     }
 
-    if trial_appendix.get("status") == "ok" and trial_appendix.get("authoritative"):
-        stats = trial_appendix.get("order_submit_to_ack_us") or {}
-        p99_us = stats.get("p99_us")
-        count = int(trial_appendix.get("paired_count") or stats.get("count") or 0)
-        if isinstance(p99_us, (int, float)):
-            order_ack_p99_ms = float(p99_us) / 1000.0
-            order_ack_blocked = False
-            paper_order_latency = {
-                "measured": True,
-                "authoritative": True,
-                "paired_count": count,
-                "source": "rithmic_trial_rtrader",
-                "measurement_tier": "log_bridge",
-                "profile_path": trial_appendix.get("profile_path"),
-            }
+    native_probe = collect_native_probe_orders(repo_root)
+    native_count = native_probe.get("paired_count") or 0
+    native_stats = native_probe.get("order_submit_to_ack_us") or {}
+    native_p99_us = native_stats.get("p99_us")
+
+    if native_count >= PAPER_ORDER_MIN_PAIRED and native_p99_us is not None and isinstance(native_p99_us, (int, float)):
+        order_ack_p99_ms = float(native_p99_us) / 1000.0
+        order_ack_blocked = False
+        paper_order_latency = {
+            "measured": True,
+            "authoritative": True,
+            "paired_count": native_count,
+            "source": "rithmic_latency_probe_native_cpp",
+            "measurement_tier": "native_cpp_probe",
+            "hot_path_language": "c++",
+            "wrapper": "none",
+            "sample_files": native_probe.get("sample_files") or [],
+            "runs": native_probe.get("runs") or [],
+        }
+    elif 0 < native_count < PAPER_ORDER_MIN_PAIRED:
+        paper_order_latency = {
+            "measured": False,
+            "authoritative": False,
+            "paired_count": native_count,
+            "source": "rithmic_trial_rtrader",
+            "measurement_tier": "log_bridge",
+            "native_probe_partial": {
+                "paired_count": native_count,
+                "p99_us": native_p99_us,
+            },
+        }
+    else:
+        if trial_appendix.get("status") == "ok" and trial_appendix.get("authoritative"):
+            stats = trial_appendix.get("order_submit_to_ack_us") or {}
+            p99_us = stats.get("p99_us")
+            count = int(trial_appendix.get("paired_count") or stats.get("count") or 0)
+            if isinstance(p99_us, (int, float)):
+                order_ack_p99_ms = float(p99_us) / 1000.0
+                order_ack_blocked = False
+                paper_order_latency = {
+                    "measured": True,
+                    "authoritative": True,
+                    "paired_count": count,
+                    "source": "rithmic_trial_rtrader",
+                    "measurement_tier": "log_bridge",
+                    "profile_path": trial_appendix.get("profile_path"),
+                }
 
     if network and isinstance(network.get("rithmic_tcp_65000"), dict):
         network["rithmic_tcp_65000"]["network_health_only"] = True
@@ -480,13 +514,14 @@ def build_summary(
         "rithmic_app_latency": {
             "status": "BLOCKED" if order_ack_blocked else "ok",
             "reason": ORDER_ACK_BLOCKED_NOTE if order_ack_blocked else "paper order submit→ack measured",
-            "probe": "data_system/rithmic_trial/latency/paper_latency_daemon.py",
+            "probe": "rithmic_gateway/tools/rithmic_latency_probe.cpp",
         },
         "e2e_harness": {
             "status": "BLOCKED" if order_ack_blocked else "ok",
             "reason": ORDER_ACK_BLOCKED_NOTE if order_ack_blocked else "paper waterfall available",
             "spec": "scripts/latency_probe/build_waterfall_report.py",
         },
+        "native_probe_orders": native_probe,
         "trial_order_ack_appendix": trial_appendix,
         "paper_order_latency": paper_order_latency,
         "order_ack_p99_ms": order_ack_p99_ms,
