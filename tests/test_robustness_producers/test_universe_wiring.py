@@ -129,8 +129,9 @@ class TestRobustnessBlockPresent:
             f"Expected 'robustness' key in universe_result.json; got keys: {list(payload.keys())}"
         )
         robustness = payload["robustness"]
-        assert robustness.get("producer_version") == "rp_v1", (
-            f"Expected producer_version='rp_v1', got: {robustness.get('producer_version')}"
+        # rp_v2 adds R6 fee/slippage stress; rp_v1 is the baseline DSR/PBO/bootstrap
+        assert robustness.get("producer_version") in ("rp_v1", "rp_v2"), (
+            f"Expected producer_version in ('rp_v1','rp_v2'), got: {robustness.get('producer_version')}"
         )
 
     def test_robustness_block_has_required_sub_keys(self, tmp_path, events_csv, minimal_npz):

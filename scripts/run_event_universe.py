@@ -294,6 +294,19 @@ def _worker(unit: dict[str, Any]) -> dict[str, Any]:
             hyps, npz_path, latency_ms=latency_ms, sensor_feature_npz=sensor_feature_npz
         )
         hyp_name_map = {h.hyp_id: h.name for h in hyps}
+        # Derive fee_per_round_trip_usd from FeeModel for R6 fee-stress (post-hoc).
+        # Uses the same product resolution as replay_matrix / stage_a_screen.
+        # tick_value_usd is needed for per-trade slippage adder arithmetic.
+        # Both fields are additive (never present in old records) — stress only
+        # applies to runs produced after this commit (rp_v1 → rp_v2 upgrade path).
+        from backtest_pipeline.src.fee_model import FeeModel as _FeeModel
+
+        _tick_val_map = {"ES": 12.50, "NQ": 5.00, "MES": 1.25, "MNQ": 0.50}
+        _sym_base = symbol.split(".")[0]
+        _tick_val_usd = _tick_val_map.get(_sym_base, 1.25)
+        _fm = _FeeModel(product=_sym_base if _sym_base in _FeeModel.TICK_VALUES else "MES")
+        _fee_per_rt = _fm.get_fee_per_contract() * 2.0  # both legs, 1 contract
+
         serialized: list[dict[str, Any]] = []
         for hyp_id in sorted(results):
             res = results[hyp_id]
@@ -306,6 +319,12 @@ def _worker(unit: dict[str, Any]) -> dict[str, Any]:
                 "expectancy_usd": round(float(res.expectancy), 6),
                 "adverse_selection_ticks": round(float(res.adverse_selection_ticks), 6),
                 "tail_loss_usd": round(float(res.tail_loss), 6),
+                # R6 fee-stress decomposition fields (additive, rp_v2+):
+                # fee_per_round_trip_usd = FeeModel(product, non_member) * 2 legs
+                # tick_value_usd = 1 tick move in USD for this product (1 contract)
+                # gross_expectancy = expectancy_usd + fee_per_round_trip_usd
+                "fee_per_round_trip_usd": round(_fee_per_rt, 6),
+                "tick_value_usd": round(_tick_val_usd, 6),
             })
         elapsed = time.monotonic() - t0
         return {
@@ -666,6 +685,7 @@ def _compute_robustness(
             bootstrap_ci,
             cscv_pbo,
             deflated_sharpe_for_cell,
+            fee_stress_for_cell,
         )
     except Exception as exc:  # noqa: BLE001
         return {"error": f"robustness_producers import failed: {exc}", "producer_version": "rp_v1"}
@@ -687,14 +707,47 @@ def _compute_robustness(
     # If no stage_a_tested_cells supplied, use count of live cells as n_trials
     n_trials_effective = n_trials_total if n_trials_total is not None else len(cell_data)
 
-    # --- Per-cell DSR and bootstrap ---
+    # --- Per-cell DSR, bootstrap, and R6 fee stress ---
     dsr_by_cell: dict[str, Any] = {}
     bootstrap_by_cell: dict[str, Any] = {}
+    fee_stress_by_cell: dict[str, Any] = {}
+
+    # Build a lookup: (hyp_id, etype, band) → per-event decomposition lists
+    # for R6 fee stress.  Keys added in rp_v2; old records return 0.0 →
+    # fee_stress_for_cell detects this and sets stress_data_available=False.
+    _fee_decomp: dict[tuple[int, str, float], dict[str, list]] = {}
+    for ur in unit_results:
+        if ur.get("error"):
+            continue
+        ur_etype = ur.get("event_type", "")
+        ur_band  = float(ur.get("latency_ms", 0.0))
+        for hrow in ur.get("hypotheses", []):
+            _key = (int(hrow["hypothesis_id"]), ur_etype, ur_band)
+            if _key not in _fee_decomp:
+                _fee_decomp[_key] = {
+                    "n_trades":       [],
+                    "fee_per_rt":     [],
+                    "tick_value":     [],
+                }
+            _d = _fee_decomp[_key]
+            _d["n_trades"].append(int(hrow.get("num_trades", 0)))
+            _d["fee_per_rt"].append(float(hrow.get("fee_per_round_trip_usd", 0.0)))
+            _d["tick_value"].append(float(hrow.get("tick_value_usd", 0.0)))
 
     for slug, hyp_id, etype, band, expecs in cell_data:
         cell_slug = f"{slug}_{etype}"
-        dsr_by_cell[cell_slug] = deflated_sharpe_for_cell(expecs, n_trials=n_trials_effective)
+        dsr_by_cell[cell_slug]       = deflated_sharpe_for_cell(expecs, n_trials=n_trials_effective)
         bootstrap_by_cell[cell_slug] = bootstrap_ci(expecs)
+
+        # R6: collect decomposition arrays for this cell
+        _dk = (hyp_id, etype, band)
+        _decomp = _fee_decomp.get(_dk, {})
+        fee_stress_by_cell[cell_slug] = fee_stress_for_cell(
+            per_event_expectancies=expecs,
+            per_event_n_trades=_decomp.get("n_trades", []),
+            per_event_fee_per_rt=_decomp.get("fee_per_rt", []),
+            per_event_tick_value=_decomp.get("tick_value", []),
+        )
 
     # --- CSCV PBO matrix ---
     # Build date-ordered event list from non-errored unit_results
@@ -760,7 +813,14 @@ def _compute_robustness(
         "dsr_by_cell": dsr_by_cell,
         "bootstrap_by_cell": bootstrap_by_cell,
         "pbo": pbo_result,
-        "producer_version": "rp_v1",
+        "fee_stress_by_cell": fee_stress_by_cell,
+        "producer_version": "rp_v2",
+        "producer_version_note": (
+            "rp_v2 adds R6 fee/slippage stress (fee_stress_by_cell). "
+            "stress_pass = fee_x2_pass is a REPORTED gate consumed at CC5/CC7 "
+            "promotion time — does NOT mutate Holm/BH survivor logic. "
+            "Records from pre-rp_v2 runs will show stress_data_available=False."
+        ),
     }
 
 

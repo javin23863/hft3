@@ -1,12 +1,15 @@
 """Robustness metric producers for the CME event-universe Stage B pipeline.
 
-Produces deflated_sharpe_ratio / PBO / bootstrap_ci that the scorecard
-(packages/model_metrics/scorecard.py:147-152) consumes via the
+Produces deflated_sharpe_ratio / PBO / bootstrap_ci / fee_stress that the
+scorecard (packages/model_metrics/scorecard.py:147-152) consumes via the
 robustness_stability category (thresholds: minimum_deflated_sharpe, maximum_pbo).
 
-All three functions are pure / deterministic (no global state, fixed seeds).
+All functions are pure / deterministic (no global state, fixed seeds).
 
-producer_version: rp_v1
+producer_version: rp_v2
+  rp_v1: DSR (deflated_sharpe_for_cell), CSCV-PBO (cscv_pbo), bootstrap CI (bootstrap_ci)
+  rp_v2: adds R6 fee/slippage stress (fee_stress_for_cell); backward-compatible additive.
+         Records from pre-rp_v2 runs will show stress_data_available=False.
 """
 from __future__ import annotations
 
@@ -300,6 +303,142 @@ def cscv_pbo(
         "n_partitions": n_partitions,
         "n_excluded": n_excluded,
         "reason": None,
+    }
+
+
+def fee_stress_for_cell(
+    per_event_expectancies: list[float],
+    per_event_n_trades: list[int],
+    per_event_fee_per_rt: list[float],
+    per_event_tick_value: list[float],
+) -> dict[str, Any]:
+    """R6 — Fee/slippage stress test (post-hoc, no re-replay).
+
+    Analytically recomputes per-cell net expectancy under stress scenarios by
+    recovering gross expectancy per event and subtracting stressed costs.
+
+    Design constraint
+    -----------------
+    Does NOT re-run ReplaySession.  Uses the decomposition fields added to
+    _worker's per-event output (fee_per_round_trip_usd, tick_value_usd) to
+    derive gross expectancy, then applies multipliers / adders analytically.
+    Runs produced BEFORE this commit lack these fields; for those records
+    the function returns ``{"stress_data_available": False, ...}`` with null
+    stress values rather than silently computing incorrect numbers.
+
+    Parameters
+    ----------
+    per_event_expectancies:
+        List of per-event net expectancy values (net = gross - fee_per_rt).
+    per_event_n_trades:
+        Number of round-trip trades per event (used for slippage total).
+    per_event_fee_per_rt:
+        Fee per round trip (USD) for each event's product/tier.
+        Must be non-empty and > 0 for stress to be meaningful.
+        If all values are 0.0 (old records lacking this field) returns
+        stress_data_available=False.
+    per_event_tick_value:
+        Tick value in USD per contract for each event.
+        Used to convert slip adder (in ticks) to USD per round trip.
+
+    Stress scenarios
+    ----------------
+    * fee_x1_5: fees × 1.5  (50 % higher exchange costs / tier downgrade)
+    * fee_x2  : fees × 2.0  (2x kill criterion — documented CC5/CC7 gate)
+    * fee_x3  : fees × 3.0  (extreme fee scenario)
+    * slip_p5t: +0.5 tick per round trip slippage adder
+    * slip_1t : +1.0 tick per round trip slippage adder
+
+    stress_pass = fee_x2_pass (2x-fee kill criterion; consumed at CC5/CC7
+    promotion gate — does NOT mutate Holm/BH survivor logic).
+
+    Returns
+    -------
+    Dict with keys:
+        stress_data_available  – bool; False when fee decomposition missing.
+        fee_x1_5_expectancy    – mean cell expectancy at 1.5× fees.
+        fee_x2_expectancy      – mean cell expectancy at 2× fees.
+        fee_x2_pass            – bool: fee_x2_expectancy > 0.
+        fee_x3_expectancy      – mean cell expectancy at 3× fees.
+        slip_p5t_expectancy    – mean cell expectancy with +0.5 tick slippage.
+        slip_1t_expectancy     – mean cell expectancy with +1.0 tick slippage.
+        stress_pass            – alias for fee_x2_pass (2x kill criterion).
+        n_events               – number of events used.
+        base_mean_expectancy   – mean of per_event_expectancies (echoed).
+        reason                 – None on success; human-readable on guard.
+    """
+    n = len(per_event_expectancies)
+    base_mean = float(np.mean(per_event_expectancies)) if n > 0 else 0.0
+
+    # Guard: if fee decomposition fields are absent (old records),
+    # all fee_per_rt will be 0.0 — stress arithmetic is meaningless.
+    if not per_event_fee_per_rt or all(v == 0.0 for v in per_event_fee_per_rt):
+        return {
+            "stress_data_available": False,
+            "fee_x1_5_expectancy": None,
+            "fee_x2_expectancy": None,
+            "fee_x2_pass": None,
+            "fee_x3_expectancy": None,
+            "slip_p5t_expectancy": None,
+            "slip_1t_expectancy": None,
+            "stress_pass": None,
+            "n_events": n,
+            "base_mean_expectancy": round(base_mean, 8),
+            "reason": "fee_decomposition_unavailable: records predate rp_v2 decomposition fields",
+        }
+
+    if n == 0:
+        return {
+            "stress_data_available": False,
+            "fee_x1_5_expectancy": None,
+            "fee_x2_expectancy": None,
+            "fee_x2_pass": None,
+            "fee_x3_expectancy": None,
+            "slip_p5t_expectancy": None,
+            "slip_1t_expectancy": None,
+            "stress_pass": None,
+            "n_events": 0,
+            "base_mean_expectancy": None,
+            "reason": "no_events",
+        }
+
+    arr_exp = np.array(per_event_expectancies, dtype=float)
+    arr_fee = np.array(per_event_fee_per_rt, dtype=float)
+    arr_tv  = np.array(per_event_tick_value, dtype=float)
+
+    # Recover per-event gross expectancy: gross = net + fee_per_round_trip
+    arr_gross = arr_exp + arr_fee
+
+    # Fee multiplier scenarios: net_exp_at_m = gross - fee * m
+    def _stressed_mean(multiplier: float) -> float:
+        return float(np.mean(arr_gross - arr_fee * multiplier))
+
+    fee_x1_5 = _stressed_mean(1.5)
+    fee_x2   = _stressed_mean(2.0)
+    fee_x3   = _stressed_mean(3.0)
+
+    # Slippage adder scenarios: penalty per round trip = tick_value * adder_ticks
+    # net_exp_at_slip = gross - fee - tick_value * adder_ticks
+    def _slip_mean(adder_ticks: float) -> float:
+        return float(np.mean(arr_gross - arr_fee - arr_tv * adder_ticks))
+
+    slip_p5t = _slip_mean(0.5)
+    slip_1t  = _slip_mean(1.0)
+
+    fee_x2_pass = bool(fee_x2 > 0.0)
+
+    return {
+        "stress_data_available": True,
+        "fee_x1_5_expectancy": round(fee_x1_5, 8),
+        "fee_x2_expectancy":   round(fee_x2,   8),
+        "fee_x2_pass":         fee_x2_pass,
+        "fee_x3_expectancy":   round(fee_x3,   8),
+        "slip_p5t_expectancy": round(slip_p5t, 8),
+        "slip_1t_expectancy":  round(slip_1t,  8),
+        "stress_pass":         fee_x2_pass,
+        "n_events":            n,
+        "base_mean_expectancy": round(base_mean, 8),
+        "reason":              None,
     }
 
 

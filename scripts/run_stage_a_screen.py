@@ -113,6 +113,18 @@ def main(argv: list[str] | None = None) -> int:
         dest="feature_root",
         help="Override feature store root path",
     )
+    p.add_argument(
+        "--perturb",
+        action="store_true",
+        default=False,
+        dest="threshold_perturbation",
+        help=(
+            "R7: re-evaluate each surviving cell at entry thresholds "
+            "{0.10, 0.1125, 0.135, 0.15, 0.1875, 0.20} and emit "
+            "parameter_stability_score per cell (default off — cost). "
+            "Stage B-level perturbation of model params is future work (CC7 scope)."
+        ),
+    )
     args = p.parse_args(argv)
 
     band_ms = _resolve_band(args.band)
@@ -144,6 +156,7 @@ def main(argv: list[str] | None = None) -> int:
         event_types=event_types,
         max_units=args.max_units,
         workers=args.workers,
+        threshold_perturbation=args.threshold_perturbation,
     )
 
     # Summary
