@@ -120,6 +120,39 @@ Rithmic paper broker from CHI404 (no kernel bypass, no co-location fiber).
 TCP connect-time (4.09 ms p99) is a network health metric only — it is not
 used as an execution latency proxy anywhere in the pipeline.
 
+### 5.1 Component decomposition (CC-1 Latency Truth, 2026-06-11)
+
+Artifact: `runtime/latency_reports/latency_truth.json` (CHI404 campaign).
+Four clocks, never conflated:
+
+| Component | Measured | Tool |
+|---|---|---|
+| `evaluate_actions` | p50 **40 ns** (1M iters) | `rithmic_gateway/tools/bench_decision.cpp` |
+| SPSC push+pop round-trip | p50 **20 ns** (1M iters) | `rithmic_gateway/tools/bench_spsc.cpp` |
+| Full engine loop tick→decision | **15.3 µs/event** (~65–67k events/s sustained; within the 18 µs §7 budget) | `hft3_engine` REPLAY, 500k events, core-pinned |
+| Kernel jitter (loaded) | cyclictest p99 10 µs | run `20260611T074546Z` |
+| Wire to CHI404 upstream gateway | ping p50 90 µs / p99 180 µs | same run |
+| Wire to real paper order endpoint `ritpz04031.04.theomne.net` (38.98.144.227) | TCP RTT p50 3.69 ms / p99 4.14 ms | CC-1 `ss -tnp` endpoint discovery + 30-sample probe |
+| Paper order ack (MESU6 fresh n=200) | p50 4.19 ms / p99 13.69 ms | `rithmic_latency_probe` |
+
+**Key reading**: paper ack p50 (3.5–4.2 ms) ≈ paper-endpoint TCP RTT p50
+(3.7 ms) — the measured ack latency is dominated by **distance/handling to
+Rithmic's paper cluster**, not engine or simulator compute. The paper p99
+remains the conservative injection value for research (§4 rung 2 unchanged).
+Live offensive capability is engine 15.3 µs + live-endpoint wire — bounded
+below by ~100–250 µs IF live order infrastructure is Aurora-local; this stays
+`live_unknown` until a live session measures it (CONTINUOUS_CME CC-1 follow-up).
+
+**Probe-target defect (fixed in truth artifact, gate code fix pending)**: the
+§5 `network_pass=false` verdict came from pinging `rituz00100.00.rithmic.com`
+(37.5 ms — US East host NOT in the order path). Real endpoint RTT is 3.7 ms
+p50. The network gate must re-point at the discovered live endpoint before the
+verdict is meaningful.
+
+**Defensive capacity note**: engine ceiling ~67k events/s; CME burst rates can
+exceed this during shocks — queue-depth instrumentation and headroom check is
+CC4 scope (CONTINUOUS_CME).
+
 ---
 
 ## 6. Feature Clock

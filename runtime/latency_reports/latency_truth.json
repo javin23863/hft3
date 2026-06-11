@@ -1,0 +1,82 @@
+{
+  "campaign": "CC-1 Latency Truth",
+  "generated_utc": "2026-06-11T15:00:00Z",
+  "run_host": "CHI404",
+  "compute": {
+    "tick_to_decision_ns": 15300,
+    "tick_to_decision_source": "hft3_engine REPLAY 500k events: 65466 events/s = 15.3us/event (taskset -c 2, -O3 -march=native)",
+    "tick_to_decision_probe_ns": 16841,
+    "tick_to_decision_probe_source": "rithmic_latency_probe MESU6 n=200: decision_to_send_trigger p50=16.841us",
+    "evaluate_actions_ns": {
+      "p50": 40.0,
+      "p99": 41.0,
+      "p999": 41.0,
+      "n": 1000000
+    },
+    "spsc_ns": {
+      "p50": 20.0,
+      "p99": 21.0,
+      "p999": 21.0,
+      "n": 1000000
+    },
+    "cyclictest_p99_us": 10
+  },
+  "wire": {
+    "gateway_rtt_us": {
+      "p50": 90,
+      "p99": 180,
+      "host": "64.44.98.129",
+      "n": 100
+    },
+    "order_endpoint_rtt_us": {
+      "p50": 3687,
+      "p99": 4144,
+      "min": 3073,
+      "host": "ritpz04031.04.theomne.net",
+      "ip": "38.98.144.227",
+      "n": 30
+    },
+    "md_wire_to_callback_us": null,
+    "md_wire_note": "NOT MEASURABLE TODAY: adapter records iSsboe+iUsecs vs callback_monotonic_ns but probe does not log this delta."
+  },
+  "paper_ack": {
+    "symbol": "MESU6",
+    "p50_ms": 4.192,
+    "p99_ms": 13.687,
+    "p999_ms": 19.706,
+    "n": 200,
+    "run_id": "latency_truth_submit_MESU6_20260611",
+    "note": "paper-system processing artifact. MESM6 expired; MESU6 used. MESM6 1000-sample ref: p50=3.483ms p99=6.356ms"
+  },
+  "live_unknown": {
+    "what_remains": [
+      "MD wire-to-callback (iSsboe+iUsecs vs callback_monotonic_ns)",
+      "Cancel-ack: paper simulator does not return cancel-ack for far-from-market orders",
+      "Live order-to-fill not measurable on paper",
+      "CHI404-to-CME-Globex propagation needs exchange loopback"
+    ],
+    "how_to_close": {
+      "md_wire": "Instrument AlertBidData/AlertAskData in rithmic_adapter, 10-min subscription, clock-offset cal",
+      "cancel_ack": "Retry with at-market price or investigate paper simulator cancel event types",
+      "live_fill": "Requires live or SIM co-located account"
+    }
+  },
+  "burst": {
+    "max_events_per_s": 67133,
+    "ns_per_event_p50": 14896,
+    "source_npz": "/tmp/engine_feed_burst.bin (200k synthetic, 500ns-spacing)",
+    "consistent_range_note": "65k-67k events/s across 100k/200k/500k feeds",
+    "submits": 0,
+    "note": "submits=0: synthetic EV<0 so NO_TRADE always wins. Real FOMC at >67k/s would queue-drop."
+  },
+  "probe_bug_fix": {
+    "old_host": "rituz00100.00.rithmic.com",
+    "old_rtt_p99_ms": 37.5,
+    "old_note": "US East Coast Rithmic test server, NOT in Chicago paper order path",
+    "real_endpoint": "ritpz04031.04.theomne.net",
+    "real_ip": "38.98.144.227",
+    "real_rtt_p50_ms": 3.687,
+    "real_rtt_p99_ms": 4.144,
+    "identification": "ss -tnp during live probe run"
+  }
+}
