@@ -403,17 +403,35 @@ class _CryptoBrokerBase:
             "missing_locally": missing_locally,
         }
 
+    def cancel_all_open(self) -> bool:
+        """Cancel all open orders via transport cancel_all. Returns True on success.
+
+        Kill-sequence callers must use cancel_all_open directly and check the bool;
+        close is best-effort teardown only.
+        """
+        import sys
+        try:
+            self._transport.cancel_all()
+            return True
+        except CryptoRateLimitError as exc:
+            print(f"[{self.source_adapter}] cancel_all_open: {type(exc).__name__}", file=sys.stderr)
+            return False
+        except CryptoTransportError as exc:
+            print(f"[{self.source_adapter}] cancel_all_open: {type(exc).__name__}", file=sys.stderr)
+            return False
+        except Exception as exc:
+            print(f"[{self.source_adapter}] cancel_all_open: {type(exc).__name__}", file=sys.stderr)
+            return False
+
     def close(self) -> None:
         """Best-effort cancel-all on disconnect.
 
         REST has no dead-man switch; WebSocket DMS lands with the C8 order channel.
         This is the cancel-on-disconnect complement for REST sessions only.
+        Kill-sequence callers must use cancel_all_open directly and check the bool;
+        close is best-effort teardown only.
         """
-        try:
-            self._transport.cancel_all()
-        except Exception as exc:
-            import sys
-            print(f"[{self.source_adapter}] close: cancel_all swallowed: {type(exc).__name__}", file=sys.stderr)
+        self.cancel_all_open()  # result intentionally ignored at close
 
 
 # ---------------------------------------------------------------------------

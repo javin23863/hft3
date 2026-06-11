@@ -1,6 +1,7 @@
 """K1 submission-gate tests — CRYPTO_LIVE.md §8 row K1."""
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import pytest
@@ -52,11 +53,11 @@ class FakeTransport:
 # Helper
 # ---------------------------------------------------------------------------
 
-def _intent(intent_id: str | None = None) -> OrderIntent:
+def _intent(intent_id: str | None = None, timestamp_ns: int | None = None) -> OrderIntent:
     return OrderIntent(
         intent_id=intent_id or new_intent_id(),
         run_id="test",
-        timestamp_ns=1_000_000,
+        timestamp_ns=time.time_ns() if timestamp_ns is None else timestamp_ns,
         strategy_id="s",
         model_id="m",
         symbol="BTCUSDT",

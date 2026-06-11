@@ -1,4 +1,4 @@
-"""Factory for mode-aware execution adapters.
+"""Factory for mode-aware execution adapters; crypto branches auto-wire CryptoKillSwitch + TradeManagerRiskLayer via crypto_risk.build_crypto_risk_check when risk_check is None.
 
 venue param selects the broker back-end for PAPER/LIVE modes.
 venue="crypto" routes to CryptoPaperBrokerAdapter / CryptoLiveBrokerAdapter (Bitfinex).
@@ -52,6 +52,10 @@ def create_adapter(
             # Lazy import: keeps urllib/hmac out of every replay import path.
             from execution.adapters.crypto_broker import CryptoPaperBrokerAdapter
             adapter = CryptoPaperBrokerAdapter(run_id=run_id, transport=transport, risk_check=risk_check)
+            if risk_check is None:
+                # PAPER runs pre-trade risk identically to LIVE per PIPELINE.md §7.
+                from execution.crypto_risk import CryptoKillSwitch, build_crypto_risk_check
+                adapter._risk_check = build_crypto_risk_check(adapter, kill_switch=CryptoKillSwitch(), execution_mode=mode)
             safety.assert_paper_safe(adapter, declared_mode=mode)
             return adapter
         adapter = PaperBrokerAdapter(run_id=run_id)
@@ -64,7 +68,11 @@ def create_adapter(
             safety.assert_live_config(declared_mode=mode)
             # Lazy import: keeps urllib/hmac out of every replay import path.
             from execution.adapters.crypto_broker import CryptoLiveBrokerAdapter
-            return CryptoLiveBrokerAdapter(run_id=run_id, transport=transport, risk_check=risk_check)
+            adapter = CryptoLiveBrokerAdapter(run_id=run_id, transport=transport, risk_check=risk_check)
+            if risk_check is None:
+                from execution.crypto_risk import CryptoKillSwitch, build_crypto_risk_check
+                adapter._risk_check = build_crypto_risk_check(adapter, kill_switch=CryptoKillSwitch(), execution_mode=mode)
+            return adapter
         safety.assert_live_config(declared_mode=mode)
         return LiveBrokerAdapter(run_id=run_id)
 
