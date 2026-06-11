@@ -91,6 +91,7 @@ def run_hypothesis_replay(
     events: Optional[np.ndarray] = None,
     tick_size: float = 0.25,
     cross_asset_npz: Optional[Dict[str, str]] = None,
+    sensor_feature_npz: Optional[Dict[str, str]] = None,
 ) -> BacktestResult:
     strategy = HypothesisReplayStrategy(hypothesis, signal_threshold=signal_threshold)
     cfg = ReplaySessionConfig(
@@ -100,6 +101,7 @@ def run_hypothesis_replay(
         max_steps=max_steps,
         tick_size=tick_size,
         cross_asset_npz=cross_asset_npz or {},
+        sensor_feature_npz=sensor_feature_npz or {},
     )
     result = ReplaySession(cfg, strategy).run()
     if result.get("error"):
@@ -154,6 +156,7 @@ def run_all_hypotheses_replay(
     signal_threshold: float = 0.15,
     events: Optional[np.ndarray] = None,
     cross_asset_npz: Optional[Dict[str, str]] = None,
+    sensor_feature_npz: Optional[Dict[str, str]] = None,
 ) -> Dict[int, BacktestResult]:
     return {
         h.hyp_id: run_hypothesis_replay(
@@ -163,6 +166,7 @@ def run_all_hypotheses_replay(
             signal_threshold=signal_threshold,
             events=events,
             cross_asset_npz=cross_asset_npz,
+            sensor_feature_npz=sensor_feature_npz,
         )
         for h in hypotheses
     }
@@ -173,10 +177,12 @@ def run_latency_matrix_replay(
     npz_path: str,
     latency_bands: List[float],
     signal_threshold: float = 0.15,
+    sensor_feature_npz: Optional[Dict[str, str]] = None,
 ) -> Dict[float, Dict[int, BacktestResult]]:
     return {
         lat: run_all_hypotheses_replay(
-            hypotheses, npz_path, latency_ms=lat, signal_threshold=signal_threshold
+            hypotheses, npz_path, latency_ms=lat, signal_threshold=signal_threshold,
+            sensor_feature_npz=sensor_feature_npz,
         )
         for lat in latency_bands
     }
