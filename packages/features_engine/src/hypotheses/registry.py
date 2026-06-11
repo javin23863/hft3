@@ -12,8 +12,13 @@ from .modules import (
     ProfitLockBehavior, PropResetReopenWindow, FridayWeekendDerisking, EconomicEventRestrictionFlattening,
     QuotePullBeforeVolatility, RequoteRaceAfterShock, GhostRoute
 )
+from .vix_modules import (
+    VixSpikeEventFade, VixQuotePullLiquidityVacuum, VixImpliedRealizedGap,
+    VixDepthImbalanceDirection, VixLevelConditionedContinuation
+)
 
 CROSS_ASSET_HYP_IDS = frozenset({16, 17, 18, 19, 20})
+VIX_HYP_IDS = frozenset({46, 47, 48, 49, 50})
 
 
 def get_active_hypotheses() -> List[BaseHypothesis]:
@@ -62,10 +67,16 @@ def get_active_hypotheses() -> List[BaseHypothesis]:
         EconomicEventRestrictionFlattening(),
         QuotePullBeforeVolatility(),
         RequoteRaceAfterShock(),
-        GhostRoute()
+        GhostRoute(),
+        VixSpikeEventFade(),
+        VixQuotePullLiquidityVacuum(),
+        VixImpliedRealizedGap(),
+        VixDepthImbalanceDirection(),
+        VixLevelConditionedContinuation(),
     ]
     if os.environ.get("HFT3_CROSS_ASSET", "").lower() in ("0", "false", "no"):
         hyps = [h for h in hyps if h.hyp_id not in CROSS_ASSET_HYP_IDS]
+        hyps = [h for h in hyps if h.hyp_id not in VIX_HYP_IDS]
     return hyps
 
 class HypothesisRegistry:
@@ -122,7 +133,12 @@ class HypothesisRegistry:
             42: "Passive trap fill",
             43: "Rebate trap avoidance",
             44: "Spread regime change",
-            45: "Ghost Route MBO queue-decay"
+            45: "Ghost Route MBO queue-decay",
+            46: "VIX spike event fade",
+            47: "VIX quote-pull liquidity vacuum",
+            48: "VIX implied-realized vol gap",
+            49: "VIX depth imbalance direction",
+            50: "VIX level-conditioned continuation",
         }
         
     def get_hypothesis_name(self, id: int) -> str:
