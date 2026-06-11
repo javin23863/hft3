@@ -252,6 +252,7 @@ def test_phase15_signal_ingress_does_not_route_paper_live_or_rithmic_orders(
 
     assert not isinstance(signal, OrderIntent)
     assert safety.counter_snapshot() == {
+        "crypto_order_call_count": 0,
         "live_broker_call_count": 0,
         "rithmic_order_call_count": 0,
     }

@@ -151,6 +151,7 @@ def test_phase14_trade_manager_does_not_route_live_or_rithmic_orders(
     TradeManager(tmp_path).activate_model("HYP_5")
 
     assert safety.counter_snapshot() == {
+        "crypto_order_call_count": 0,
         "live_broker_call_count": 0,
         "rithmic_order_call_count": 0,
     }
