@@ -1,6 +1,6 @@
 # LATENCY.md — No-Fixed-Latency Policy and Budget
 
-Version: 2026-06-10.
+Version: 2026-06-11.
 
 ---
 
@@ -86,25 +86,37 @@ Summary file: `runtime/latency_reports/latency_summary.json`.
 ## 5. Current CHI404 Measured State
 
 Source: `runtime/latency_reports/latency_summary.json`
-(run_id: `20260530T031754Z`).
+(run_id: `20260611T074546Z`).
 
 | Metric | Value | Status |
 |--------|-------|--------|
 | cyclictest p99 (loaded) | 11 µs | PASS (limit 20 µs) |
 | Rithmic TCP p99 (port 65000) | 4.09 ms | recorded |
-| Order-ack p99 | UNMEASURED | R\|API+ not wired |
-| `paper_order_latency.measured` | false | |
-| `trial_order_ack_appendix.authoritative` | false (n=12, need ≥1000) | |
+| Order-ack p99 | 6.256 ms | MEASURED — authoritative |
+| Order-ack p50 | 3.483 ms | |
+| Order-ack p90 | 3.753 ms | |
+| Order-ack p99.9 | 13.768 ms | |
+| `paper_order_latency.measured` | true (as of 2026-06-11) | |
+| `trial_order_ack_appendix.authoritative` | superseded — see §9.3 | |
 
-`rithmic_app_latency.status = "BLOCKED"` —
-reason: "R|API+ not wired; order ack p99 unavailable".
+Campaign: `order_ack_campaign_20260611T072116Z`. Venue: Rithmic paper / Chicago.
+Symbol: MESM6. Samples: 1002 paired submit→ack, reject=0. Measurement tool:
+`rithmic_latency_probe` (native C++; `measurement_tier: native_cpp_probe`,
+`hot_path_language: c++`, `wrapper: none`). Orchestrator:
+`scripts/chi404_run_paper_latency_sweep.sh`.
+
+`rithmic_app_latency.status = "OK"` — order-ack p99 measured via native probe.
 
 `network_pass = false` — rithmic_tcp_65000 p99 4094 µs exceeds 500 µs network
 limit used by lane_1 criteria.
 
-**Honest floor**: Today's realistic CME lane order-ack is 2–10 ms via retail
-Rithmic (no kernel bypass, no co-location fiber). The CHI404 colo hardware
-passes cyclictest but order-ack is unmeasured because R|API+ is not yet wired.
+**Resolver rung 2** (`paper_order_latency.measured=true`, `order_ack_p99_ms`
+present) now returns **6.256 ms** as the authoritative latency for replay runs.
+Value is within the [0.5, 10] ms validation band accepted by
+`validate_replay_latency_ms()`.
+
+**Honest floor**: CME lane order-ack measured at p99 6.256 ms via retail
+Rithmic paper broker from CHI404 (no kernel bypass, no co-location fiber).
 TCP connect-time (4.09 ms p99) is a network health metric only — it is not
 used as an execution latency proxy anywhere in the pipeline.
 
@@ -192,11 +204,17 @@ actual Rithmic paper-broker sessions on CHI404 (not simulated). The resolver
 additionally requires `order_ack_p99_ms` to be present in the summary
 (§4 rung 2).
 
-The existing `trial_order_ack_appendix` in `latency_summary.json` currently
-holds n=12 (status: not authoritative; source: `runtime/latency_reports/
-latency_summary.json` run_id `20260530T031754Z`). A dedicated measurement
-session on CHI404 with R|API+ wired is required to accumulate the remaining
-samples.
+The n ≥ 1000 requirement is now satisfied. Campaign
+`order_ack_campaign_20260611T072116Z` collected 1002 paired submit→ack samples
+(reject=0) via `rithmic_latency_probe` (native C++) on Rithmic paper / Chicago,
+symbol MESM6, run 2026-06-11. `paper_order_latency.measured` was set to `true`
+in `runtime/latency_reports/latency_summary.json` (run_id `20260611T074546Z`).
+
+The prior `trial_order_ack_appendix` (n=12, run_id `20260530T031754Z`) is
+superseded by the native-probe campaign. That appendix is retained as
+non-authoritative fallback history only; the `rtrader` log-bridge tier from
+which it was sourced remains a non-authoritative fallback and must not be used
+for promotion-grade latency resolution.
 
 ### 9.4 Campaign Unblock
 

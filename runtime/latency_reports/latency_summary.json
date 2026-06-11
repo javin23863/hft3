@@ -1,45 +1,45 @@
 {
-  "run_id": "20260530T031754Z",
-  "timestamp_utc": "2026-05-30T03:23:46.374366+00:00",
+  "run_id": "20260611T074546Z",
+  "timestamp_utc": "2026-06-11T07:55:58.466633+00:00",
   "authoritative_source": "chi404_bare_metal_only",
   "pass_criteria_path": "infrastructure/chi404/PASS_CRITERIA.json",
-  "raw_dir": "runtime/latency_reports/raw/20260530T031754Z",
+  "raw_dir": "runtime/latency_reports/raw/20260611T074546Z",
   "cyclictest": {
     "by_run": {
       "cyclictest_idle_cpu11": {
-        "p50_us": 1,
-        "p95_us": 11,
-        "p99_us": 11,
-        "p999_us": 11,
+        "p50_us": 10,
+        "p95_us": 10,
+        "p99_us": 10,
+        "p999_us": 10,
         "max_us": 999999,
-        "samples": 60000
+        "samples": 120000
       },
       "cyclictest_idle_cpu2": {
-        "p50_us": 1,
+        "p50_us": 10,
         "p95_us": 10,
-        "p99_us": 11,
-        "p999_us": 11,
+        "p99_us": 10,
+        "p999_us": 10,
         "max_us": 999999,
-        "samples": 60000
+        "samples": 120000
       },
       "cyclictest_loaded_cpu11": {
-        "p50_us": 1,
+        "p50_us": 10,
         "p95_us": 10,
-        "p99_us": 11,
-        "p999_us": 11,
+        "p99_us": 10,
+        "p999_us": 10,
         "max_us": 999999,
-        "samples": 60000
+        "samples": 120000
       },
       "cyclictest_loaded_cpu2": {
-        "p50_us": 1,
+        "p50_us": 9,
         "p95_us": 10,
-        "p99_us": 11,
-        "p999_us": 11,
+        "p99_us": 10,
+        "p999_us": 10,
         "max_us": 999999,
-        "samples": 60000
+        "samples": 120000
       }
     },
-    "max_p99_us": 11,
+    "max_p99_us": 10,
     "gate_mode": "loaded_only",
     "loaded_runs": 2,
     "limit_us": 20,
@@ -47,12 +47,12 @@
   },
   "loopback_tcp": {
     "samples": 100,
-    "p50_us": 9.959003364201635,
-    "p95_us": 11.201002052985132,
-    "p99_us": 16.12099731573835,
-    "p999_us": 16.12099731573835,
-    "max_us": 447.77900620829314,
-    "avg_us": 14.474100389634259,
+    "p50_us": 9.8090386018157,
+    "p95_us": 11.221040040254593,
+    "p99_us": 16.82201400399208,
+    "p999_us": 16.82201400399208,
+    "max_us": 445.00501826405525,
+    "avg_us": 14.317412860691547,
     "errors": []
   },
   "network": {
@@ -63,34 +63,40 @@
       "loss_pct": 0.0,
       "samples": 100,
       "p50_ms": 0.09,
-      "p95_ms": 0.114,
-      "p99_ms": 0.166,
-      "p999_ms": 0.166,
-      "max_ms": 0.167,
-      "avg_ms": 0.09382,
-      "jitter_ms": 0.013925070915438816,
+      "p95_ms": 0.125,
+      "p99_ms": 0.18,
+      "p999_ms": 0.18,
+      "max_ms": 0.221,
+      "avg_ms": 0.09562,
+      "jitter_ms": 0.01887473443521789,
       "ping_summary": {
-        "min_ms": 0.071,
-        "avg_ms": 0.093,
-        "max_ms": 0.167,
-        "mdev_ms": 0.013
+        "min_ms": 0.079,
+        "avg_ms": 0.095,
+        "max_ms": 0.221,
+        "mdev_ms": 0.018
       },
       "status": "ok"
     },
     "rithmic_ping": {
-      "host": "ritpz04063.04.rithmic.com",
+      "host": "rituz00100.00.rithmic.com",
       "transmitted": 100,
-      "received": 0,
-      "loss_pct": 100.0,
-      "samples": 0,
-      "p50_ms": null,
-      "p95_ms": null,
-      "p99_ms": null,
-      "p999_ms": null,
-      "max_ms": null,
-      "avg_ms": null,
-      "jitter_ms": null,
-      "status": "icmp_blocked_or_unreachable"
+      "received": 100,
+      "loss_pct": 0.0,
+      "samples": 100,
+      "p50_ms": 37.3,
+      "p95_ms": 37.4,
+      "p99_ms": 37.5,
+      "p999_ms": 37.5,
+      "max_ms": 37.6,
+      "avg_ms": 37.32,
+      "jitter_ms": 0.04898979485566426,
+      "ping_summary": {
+        "min_ms": 37.272,
+        "avg_ms": 37.322,
+        "max_ms": 37.551,
+        "mdev_ms": 0.038
+      },
+      "status": "ok"
     },
     "gateway_tcp_443": {
       "host": "64.44.98.129",
@@ -110,31 +116,32 @@
       "status": "failed"
     },
     "rithmic_tcp_65000": {
-      "host": "ritpz04063.04.rithmic.com",
+      "host": "rituz00100.00.rithmic.com",
       "port": 65000,
       "samples": 30,
-      "p50_ms": 3.61147899820935,
-      "p95_ms": 4.071451003255788,
-      "p99_ms": 4.094202995474916,
-      "p999_ms": 4.094202995474916,
-      "max_ms": 4.327611000917386,
-      "avg_ms": 3.6213491674667844,
+      "p50_ms": 37.03409095760435,
+      "p95_ms": 37.52683603670448,
+      "p99_ms": 37.543877959251404,
+      "p999_ms": 37.543877959251404,
+      "max_ms": 37.5542480032891,
+      "avg_ms": 37.07385897093142,
       "errors": null,
-      "status": "ok"
+      "status": "ok",
+      "network_health_only": true
     }
   },
-  "network_p99_us": 4094.202995474916,
+  "network_p99_us": 37543.877959251404,
   "network_p99_worst_source": "rithmic_tcp_65000",
   "network_limit_us": 500,
   "network_pass": false,
   "clock_discipline": {
     "status": "ok",
-    "tracking_text": "Reference ID    : 81FA23FB (y.ns.gin.ntt.net)\nStratum         : 3\nRef time (UTC)  : Sat May 30 03:23:28 2026\nSystem time     : 0.000408564 seconds slow of NTP time\nLast offset     : +0.000017082 seconds\nRMS offset      : 0.000047485 seconds\nFrequency       : 5.488 ppm fast\nResidual freq   : -0.000 ppm\nSkew            : 0.028 ppm\nRoot delay      : 0.054642525 seconds\nRoot dispersion : 0.009627052 seconds\nUpdate interval : 64.3 seconds\nLeap status     : Normal",
-    "sources_text": ".-- Source mode  '^' = server, '=' = peer, '#' = local clock.\n / .- Source state '*' = current best, '+' = combined, '-' = not combined,\n| /             'x' = may be in error, '~' = too variable, '?' = unusable.\n||                                                 .- xxxx [ yyyy ] +/- zzzz\n||      Reachability register (octal) -.           |  xxxx = adjusted offset,\n||      Log2(Polling interval) --.      |          |  yyyy = measured offset,\n||                                \\     |          |  zzzz = estimated error.\n||                                 |    |           \\\nMS Name/IP address         Stratum Poll Reach LastRx Last sample               \n===============================================================================\n^+ 23.186.168.133                2   6   377    91   +913us[ +899us] +/-   43ms\n^+ 172-232-15-202.ip.linode>     2   6   377    13  +1065us[+1065us] +/-   59ms\n^+ ntp.maxhost.io                2   6   377    94   +460us[ +446us] +/-   44ms\n^* y.ns.gin.ntt.net              2   6   377    18  -1971us[-1954us] +/-   43ms",
+    "tracking_text": "Reference ID    : 481E2358 (t2.time.bf1.yahoo.com)\nStratum         : 3\nRef time (UTC)  : Thu Jun 11 07:54:59 2026\nSystem time     : 0.000021912 seconds fast of NTP time\nLast offset     : +0.000000891 seconds\nRMS offset      : 0.000014251 seconds\nFrequency       : 1.104 ppm fast\nResidual freq   : -0.000 ppm\nSkew            : 0.013 ppm\nRoot delay      : 0.014069629 seconds\nRoot dispersion : 0.001242919 seconds\nUpdate interval : 323.7 seconds\nLeap status     : Normal",
+    "sources_text": ".-- Source mode  '^' = server, '=' = peer, '#' = local clock.\n / .- Source state '*' = current best, '+' = combined, '-' = not combined,\n| /             'x' = may be in error, '~' = too variable, '?' = unusable.\n||                                                 .- xxxx [ yyyy ] +/- zzzz\n||      Reachability register (octal) -.           |  xxxx = adjusted offset,\n||      Log2(Polling interval) --.      |          |  yyyy = measured offset,\n||                                \\     |          |  zzzz = estimated error.\n||                                 |    |           \\\nMS Name/IP address         Stratum Poll Reach LastRx Last sample               \n===============================================================================\n^+ 38.28.93.135                  1   6   377     9   -382us[ -382us] +/-   19ms\n^- 198-12-95-197-host.coloc>     3   6   377   79m  +8843us[+8844us] +/-   58ms\n^- 44.190.5.123                  2   6   377   176  -1332us[-1331us] +/-   25ms\n^* t2.time.bf1.yahoo.com         2   6   377    59    +67us[  +67us] +/- 8729us",
     "parsed": {
       "synchronised": true,
-      "last_offset_us": 17.082,
-      "rms_offset_us": 47.485,
+      "last_offset_us": 0.891,
+      "rms_offset_us": 14.251,
       "limits_us": {
         "last_offset_halt": 500,
         "rms_halt": 5000
@@ -142,41 +149,91 @@
       "warnings": []
     }
   },
+  "network_health": {
+    "rithmic_tcp_65000_p99_ms": 37.543877959251404,
+    "network_health_only": true,
+    "note": "TCP connect probes are network health telemetry; excluded from order_ack and backtest_latency_ms"
+  },
   "rithmic_app_latency": {
-    "status": "BLOCKED",
-    "reason": "R|API+ not wired; order ack p99 unavailable",
-    "probe": "scripts/latency_probe/rithmic_latency_probe.cpp"
+    "status": "ok",
+    "reason": "paper order submit\u2192ack measured",
+    "probe": "rithmic_gateway/tools/rithmic_latency_probe.cpp"
   },
   "e2e_harness": {
-    "status": "BLOCKED",
-    "reason": "R|API+ not wired; order ack p99 unavailable",
-    "spec": "scripts/latency_probe/e2e_harness/README.md"
+    "status": "ok",
+    "reason": "paper waterfall available",
+    "spec": "scripts/latency_probe/build_waterfall_report.py"
+  },
+  "native_probe_orders": {
+    "paired_count": 1002,
+    "order_submit_to_ack_us": {
+      "count": 1002,
+      "p50_us": 3482.5865,
+      "p90_us": 3752.9379999999996,
+      "p99_us": 6255.764360000003,
+      "p999_us": 13768.18328300001
+    },
+    "sample_files": [
+      "data/latency_baselines/2026-06-11/order_ack_campaign_20260611T071952Z.jsonl",
+      "data/latency_baselines/2026-06-11/order_ack_campaign_20260611T072116Z.jsonl",
+      "data/latency_baselines/2026-06-11/rithmic-cpp-paper-baseline-20260611T071924Z.jsonl"
+    ],
+    "runs": [
+      "order_ack_campaign_20260611T071952Z",
+      "order_ack_campaign_20260611T072116Z",
+      "rithmic-cpp-paper-baseline-20260611T071924Z"
+    ],
+    "symbols": [
+      "MESM6"
+    ],
+    "skipped_lines": 2
   },
   "trial_order_ack_appendix": {
-    "status": "ok",
-    "source": "chi404_paper_latency_daemon",
-    "run_id": "20260601T180202Z",
-    "date": "2026-06-01",
-    "paired_count": 12,
     "authoritative": false,
-    "order_ack_p99_us": 2.044,
-    "order_ack_p50_us": 1.482,
-    "order_ack_measured": false
+    "source": "rithmic_trial_rtrader",
+    "note": "Does not affect colo recommended_lane",
+    "limitations": [
+      "R|Trader VM log bridge; monotonic timestamps at ingest",
+      "Promoted to authoritative when paired_count>=1000"
+    ],
+    "status": "missing",
+    "reason": "no reports/rithmic_trial/.../latency_profile.json",
+    "populate_hint": "Send paper orders in R|Trader VM, then bash scripts/chi404_run_trial_live.sh"
   },
-  "order_ack_p99_ms": null,
+  "paper_order_latency": {
+    "measured": true,
+    "authoritative": true,
+    "paired_count": 1002,
+    "source": "rithmic_latency_probe_native_cpp",
+    "measurement_tier": "native_cpp_probe",
+    "hot_path_language": "c++",
+    "wrapper": "none",
+    "sample_files": [
+      "data/latency_baselines/2026-06-11/order_ack_campaign_20260611T071952Z.jsonl",
+      "data/latency_baselines/2026-06-11/order_ack_campaign_20260611T072116Z.jsonl",
+      "data/latency_baselines/2026-06-11/rithmic-cpp-paper-baseline-20260611T071924Z.jsonl"
+    ],
+    "runs": [
+      "order_ack_campaign_20260611T071952Z",
+      "order_ack_campaign_20260611T072116Z",
+      "rithmic-cpp-paper-baseline-20260611T071924Z"
+    ]
+  },
+  "order_ack_p99_ms": 6.255764360000003,
+  "order_ack_measured": true,
   "gates": {
     "cyclictest_pass": true,
     "network_pass": false,
-    "order_ack_pass": null
+    "order_ack_pass": true
   },
   "recommended_lane": {
-    "lane": null,
-    "lane_name": "undetermined",
-    "partial": true,
+    "lane": 2,
+    "lane_name": "lane_2_low_latency",
+    "partial": false,
     "infrastructure_meets_lane_1": false,
-    "order_ack_lane": null,
-    "order_ack_blocked": true,
-    "note": "R|API+ not wired; order ack p99 unavailable",
+    "order_ack_lane": 2,
+    "order_ack_blocked": false,
+    "note": null,
     "criteria": {
       "lane_1": {
         "cyclictest_p99_max_us": 20,
@@ -188,20 +245,107 @@
       "lane_4_order_ack_ms": "50+"
     }
   },
-  "dominant_bottleneck": "network_path (worst p99 4094 us)",
+  "dominant_bottleneck": "network_path (worst p99 37544 us)",
   "strategy_guidance": {
     "realistic": [
-      "Diagnose gateway/Rithmic path before colo execution assumptions.",
-      "See trial_order_ack_appendix for R|Trader VM order round-trip (non-production)."
+      "Low-latency scalping backtests at 2-10 ms bands."
     ],
     "unrealistic": [
-      "Tier-0.5 ms production tier with worst network p99 above PASS limit."
+      "Sub-2 ms order ack assumptions in live execution."
     ]
   },
-  "paper_order_latency": {
-    "measured": false,
-    "paired_count": 12,
-    "source": "chi404_paper_latency_daemon",
-    "run_id": "20260601T180202Z"
+  "report_card": {
+    "schema_version": "1",
+    "header": {
+      "run_id": "20260611T074546Z",
+      "timestamp_utc": "2026-06-11T07:55:58.466633+00:00",
+      "authoritative_source": "chi404_bare_metal_only",
+      "raw_dir": "runtime/latency_reports/raw/20260611T074546Z",
+      "pass_criteria_path": "infrastructure/chi404/PASS_CRITERIA.json"
+    },
+    "verdict": {
+      "overall": "FAIL",
+      "dominant_bottleneck": "network_path (worst p99 37544 us)",
+      "infra_pass": false,
+      "probe_exit_nonzero": true
+    },
+    "colo_gates": [
+      {
+        "id": "cyclictest_loaded",
+        "label": "CPU jitter (loaded cyclictest p99)",
+        "status": "PASS",
+        "value": "10 us",
+        "limit": "20 us",
+        "detail": "loaded_runs=2 gate=loaded_only"
+      },
+      {
+        "id": "network_worst",
+        "label": "Network worst p99",
+        "status": "FAIL",
+        "value": "37544 us",
+        "limit": "500 us",
+        "detail": "source=rithmic_tcp_65000"
+      },
+      {
+        "id": "order_ack_rapi",
+        "label": "Order ack (R|API+ authoritative)",
+        "status": "BLOCKED",
+        "value": "not measured",
+        "limit": "< 2 ms p99",
+        "detail": "paper order submit\u2192ack measured"
+      }
+    ],
+    "colo_lane": {
+      "lane": 2,
+      "lane_name": "lane_2_low_latency",
+      "partial": false,
+      "infrastructure_meets_lane_1": false,
+      "note": null
+    },
+    "network_probes": [
+      {
+        "probe": "gateway_ping",
+        "host": "64.44.98.129",
+        "status": "ok",
+        "p99": "0.180 ms",
+        "loss_pct": 0.0
+      },
+      {
+        "probe": "rithmic_tcp_65000",
+        "host": "rituz00100.00.rithmic.com",
+        "status": "ok",
+        "p99": "37.544 ms",
+        "loss_pct": null
+      }
+    ],
+    "trial_appendix": {
+      "label": "Trial order ack (R|Trader VM, non-production)",
+      "status": "MISSING",
+      "value": "not measured",
+      "profile_path": null,
+      "reason": "no reports/rithmic_trial/.../latency_profile.json",
+      "populate_hint": "Send paper orders in R|Trader VM, then bash scripts/chi404_run_trial_live.sh",
+      "note": "Does not affect colo recommended_lane"
+    },
+    "blocked": [
+      {
+        "id": "rithmic_app_latency",
+        "status": "ok",
+        "reason": "paper order submit\u2192ack measured"
+      },
+      {
+        "id": "e2e_harness",
+        "status": "ok",
+        "reason": "paper waterfall available"
+      }
+    ],
+    "strategy": {
+      "realistic": [
+        "Low-latency scalping backtests at 2-10 ms bands."
+      ],
+      "unrealistic": [
+        "Sub-2 ms order ack assumptions in live execution."
+      ]
+    }
   }
 }
