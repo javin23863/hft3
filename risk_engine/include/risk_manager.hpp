@@ -129,6 +129,7 @@ public:
     void reset_rate_counters() noexcept;
 
     bool is_halted() const noexcept { return state_.halted.load(std::memory_order_acquire); }
+    bool is_flatten_active() const noexcept { return state_.flatten_active.load(std::memory_order_acquire); }
 
 private:
     RiskLimits limits_;

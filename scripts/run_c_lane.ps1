@@ -56,6 +56,25 @@ if (-not (Test-Path $PYD)) {
 }
 
 # ---------------------------------------------------------------------------
+# Staleness check: .pyd must not be older than any C++ source file
+# Rebuild command: cmake --build build (MinGW: cmake --build build --config Release)
+# ---------------------------------------------------------------------------
+Log-Section "Staleness: .pyd vs C++ sources"
+if (Test-Path $PYD) {
+    $pydMtime = (Get-Item $PYD).LastWriteTimeUtc
+    $CPP_ROOT = Join-Path $REPO "packages\features_engine\cpp"
+    $staleSrc = Get-ChildItem -Path $CPP_ROOT -Include "*.cpp","*.hpp" -Recurse -ErrorAction SilentlyContinue |
+                Where-Object { $_.LastWriteTimeUtc -gt $pydMtime } |
+                Select-Object -First 1
+    if ($staleSrc) {
+        Fail ("C-lane HARD FAIL: $($staleSrc.Name) is newer than hft3_features_cpp.pyd. " +
+              "Rebuild required: run 'cmake --build build' from $REPO")
+    } else {
+        Pass ".pyd is current (no C++ source newer than pyd)"
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Row 3: 64-slot parity via verify_cpp_parity.py
 # ---------------------------------------------------------------------------
 Log-Section "Row 3: 64-slot parity (verify_cpp_parity.py)"

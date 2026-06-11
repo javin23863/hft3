@@ -103,6 +103,9 @@ class MarketStatePipeline:
     _cpp_backend_active: bool = field(default=False, init=False, repr=False)
     _cpp_last_event_ctx: Optional[str] = field(default=None, init=False, repr=False)
 
+    # --- backend provenance (read by callers / run metadata) ---
+    feature_backend: str = field(default="python", init=False, repr=True)
+
     def __post_init__(self) -> None:
         self.extractor.tick_size = self.tick_size
         if self.event_engine is None:
@@ -119,6 +122,7 @@ class MarketStatePipeline:
                     self.extractor.rolling_window_ns,
                 )
                 self._cpp_backend_active = True
+                self.feature_backend = "cpp"
                 _log.debug("MarketStatePipeline: using C++ backend")
             elif backend == "cpp":
                 raise RuntimeError(
@@ -126,9 +130,12 @@ class MarketStatePipeline:
                     "Build it with cmake --build build first."
                 )
             else:
-                _log.warning(
-                    "MarketStatePipeline: C++ module not available, falling back to Python backend"
+                warnings.warn(
+                    "hft3_features_cpp not found — python extractor fallback; "
+                    "research numbers will be python-path",
+                    stacklevel=2,
                 )
+                self.feature_backend = "python"
         # backend == "python": stay with pure-Python extractor (default)
 
     def reset_session(self) -> None:
@@ -189,13 +196,21 @@ class MarketStatePipeline:
 
         return dist_vwap, ss_elevated, session_break, dist_round
 
-    def _cpp_process_event_get_vec(self, event: MBOEvent, event_ctx: str) -> np.ndarray:
-        """Feed event into C++ extractor, push event_ctx when it changes, return vec copy."""
+    def _cpp_process_event_get_vec(self, event: MBOEvent, event_ctx: Optional[str]) -> np.ndarray:
+        """Feed event into C++ extractor, push event_ctx when it changes, return vec copy.
+
+        event_ctx may be None when resolve_ns() returns outside a known window (treated
+        as "NORMAL" — matching what EventContextEngineCpp expects for no active window).
+        We never pass None to the C++ binding.
+        """
         assert self._cpp_extractor is not None
-        # Forward event context only on change (cheap guard)
-        if event_ctx != self._cpp_last_event_ctx:
-            self._cpp_extractor.set_event_context(event_ctx)
-            self._cpp_last_event_ctx = event_ctx
+        # Normalise None → "NORMAL" so the C++ binding never receives a null string.
+        safe_ctx: str = event_ctx if event_ctx is not None else "NORMAL"
+        # Forward event context only on change (cheap guard; also fires on first call
+        # because _cpp_last_event_ctx starts as None and safe_ctx is always a str).
+        if safe_ctx != self._cpp_last_event_ctx:
+            self._cpp_extractor.set_event_context(safe_ctx)
+            self._cpp_last_event_ctx = safe_ctx
         self._cpp_extractor.process_event(
             event.timestamp_ns,
             event.order_id,
@@ -204,7 +219,8 @@ class MarketStatePipeline:
             event.price,
             event.size,
         )
-        return self._cpp_extractor.extract()  # returns a fresh ndarray
+        # extract() allocates a fresh (64,) float64 ndarray per call (no persistent buffer).
+        return self._cpp_extractor.extract()
 
     def process_event(self, event: MBOEvent) -> MarketState:
         """Fully eager path — returns a complete MarketState. Used by direct callers / tests."""

@@ -147,15 +147,22 @@ public:
         order_queue_ = order;
     }
 
+    // Set the current replay event time (called by EngineLoop before submit_gate).
+    // This is the exchange-ns timestamp of the MBO event that triggered the submission.
+    // Must be called before send_prepared_limit_order to keep ack timestamps in
+    // pure event-time (no wall clock in REPLAY ack path).
+    void set_current_event_ts(uint64_t ts_ns) noexcept {
+        current_event_ts_ns_ = static_cast<int64_t>(ts_ns);
+    }
+
     // submit_hook — called by submit_gate().
-    // Pushes a synthetic ack onto the order_queue_ (ack_ts = submit_ts + latency_ns).
+    // Pushes a synthetic ack onto the order_queue_ (ack_ts = current_event_ts + latency_ns).
     // This is the ONLY place an order submission happens in REPLAY mode.
     bool send_prepared_limit_order(void* /*prepared*/, char side,
                                    int32_t qty, double price,
                                    const char* /*user_msg*/ = nullptr) {
-        // Record submission timestamp.
-        const int64_t submit_ts = std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::steady_clock::now().time_since_epoch()).count();
+        // Use current replay event timestamp (pure event-time, no wall clock).
+        const int64_t submit_ts = current_event_ts_ns_;
 
         // Synthetic ack on the order queue.
         OrderEvent ack{};
@@ -210,6 +217,7 @@ private:
     std::atomic<int64_t>               submit_counter_;
     std::vector<FeedRecord>            feed_records_;  // all records in memory
     int64_t                            feed_cursor_{0}; // next record to inject
+    int64_t                            current_event_ts_ns_{0}; // set by EngineLoop before submit (event-time ack)
 };
 
 } // namespace engine

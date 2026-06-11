@@ -61,3 +61,53 @@ def test_deterministic_replay():
     a = _run_sequence()
     b = _run_sequence()
     np.testing.assert_allclose(a, b, rtol=0, atol=1e-12)
+
+
+def test_iceberg_absorption_cleared_on_window_gap():
+    """Rolling-window gap must flush _trade_at_level and _reload_at_level.
+
+    Pins the FIXED semantics for ICEBERG_RELOAD_SCORE (slot 22) and
+    ABSORPTION_SCORE (slot 21): after a gap wider than rolling_window_ns,
+    both slots must reflect a clean accumulator (no carries from the prior
+    window).
+
+    Sequence:
+      Phase 1 (t=0..300): ADD + TRADE at same level → _reload_at_level and
+        _trade_at_level both non-empty; ICEBERG_RELOAD_SCORE > 0.
+      Gap: jump > rolling_window_ns.
+      Phase 2 (t=gap..): single ADD at a new level → no trades in fresh window,
+        so ICEBERG_RELOAD_SCORE == 0 (tanh(0) == 0) and ABSORPTION_SCORE == 0
+        (no agg vol in fresh window).
+    """
+    tick = 0.25
+    window_ns = 1_000
+    ex = MBOFeatureExtractor(tick_size=tick, rolling_window_ns=window_ns)
+
+    # Phase 1: build up iceberg / absorption signal
+    ex.process_event(MBOEvent(0,   1, "ADD",   "B", 5500.0, 20))
+    ex.process_event(MBOEvent(50,  2, "TRADE", "B", 5500.0, 5))
+    ex.process_event(MBOEvent(100, 3, "ADD",   "B", 5500.0, 20))   # reload at same level
+    ex.process_event(MBOEvent(150, 4, "TRADE", "B", 5500.0, 5))
+    ex.process_event(MBOEvent(200, 5, "ADD",   "B", 5500.0, 20))   # second reload
+    v_pre = ex.process_event(MBOEvent(300, 6, "TRADE", "A", 5500.25, 1))
+
+    # ICEBERG_RELOAD_SCORE should be non-zero (2 reloads + trades at same level)
+    assert v_pre[FeatureIndex.ICEBERG_RELOAD_SCORE] != 0.0, (
+        "Expected non-zero ICEBERG_RELOAD_SCORE before gap"
+    )
+
+    # Phase 2 (gap > rolling_window_ns): window must flush
+    t_gap = 300 + window_ns + 1
+    ex.process_event(MBOEvent(t_gap,     7, "ADD", "A", 5500.50, 10))
+    ex.process_event(MBOEvent(t_gap + 1, 8, "ADD", "B", 5499.75, 10))
+    v_post = ex.process_event(MBOEvent(t_gap + 2, 9, "ADD", "A", 5500.25, 5))
+
+    # After gap: no trades, no reloads-with-trades → scores must be zero
+    assert v_post[FeatureIndex.ICEBERG_RELOAD_SCORE] == 0.0, (
+        f"ICEBERG_RELOAD_SCORE not cleared after window gap: "
+        f"{v_post[FeatureIndex.ICEBERG_RELOAD_SCORE]}"
+    )
+    assert v_post[FeatureIndex.ABSORPTION_SCORE] == 0.0, (
+        f"ABSORPTION_SCORE not cleared after window gap: "
+        f"{v_post[FeatureIndex.ABSORPTION_SCORE]}"
+    )
