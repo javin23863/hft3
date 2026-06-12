@@ -7,8 +7,10 @@ The dev workstation is **not** in the trade path. CHI404 is the only host that t
 ## Lane
 
 ```
-events.csv → Databento GLBX.MDP3 MBO → data/npz/ → workbench / run_event_replay.py
+events.csv → Databento GLBX.MDP3 MBO → <npz_root> → workbench / run_event_replay.py
 ```
+
+Since 2026-06-12 the NPZ lake lives at **`C:\hft3-lake\npz`** (env `HFT3_NPZ_ROOT`; repo-relative `data/npz/` is only the unset-env fallback and is empty). All `data/npz/...` paths in this note resolve through `npz_resolver.npz_root()`. Full layout + automation: [DATA_LAKE_3TIER.md](DATA_LAKE_3TIER.md).
 
 **Not this lane:** Rithmic trial NPZ under `data/replay/hftbacktest/rithmic_trial/` (CHI404 quarantine only). The dev workstation does not run `hft3-rithmic-trial.service`, has no `/root/hft3/rtrader_watch` SMB share, and never sees a R|API+ login. Live/paper trade data lives only on CHI404 (see [CHI404_CANONICAL_ENTRYPOINTS.md](CHI404_CANONICAL_ENTRYPOINTS.md)).
 

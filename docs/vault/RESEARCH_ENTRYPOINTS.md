@@ -233,9 +233,9 @@ python -m pytest tests/test_rithmic_trial_pipeline.py -q
 
 | Layer | Source | Path |
 |-------|--------|------|
-| Macro MBO replay body | Databento | `data/npz/<symbol>_<event_id>_mbo.npz` |
+| Macro MBO replay body | Databento | `<npz_root>/<symbol>_<event_id>_mbo.npz` — `C:\hft3-lake\npz` via `HFT3_NPZ_ROOT` since 2026-06-12 (see [DATA_LAKE_3TIER.md](DATA_LAKE_3TIER.md)) |
 | Colo latency | CHI404 probe | `runtime/latency_reports/latency_summary.json` |
-| Rithmic live tape | CHI404 capture | `data/raw/rithmic_trial_live_capture/` (forward-only) |
+| Rithmic live tape | CHI404 capture | `data/raw/rithmic_trial_live_capture/` (forward-only); CC2 `.cap` archive to B2 nightly, 30-day local retention |
 
 No historical Rithmic download for past CPI dates.
 
