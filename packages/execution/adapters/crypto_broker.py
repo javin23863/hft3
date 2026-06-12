@@ -191,9 +191,14 @@ class _CryptoBrokerBase:
         self._position: float = 0.0
         self._cids_sent: set = set()
         self._order_cid_map: Dict[str, Dict[str, Any]] = {}  # order_id -> {cid, cid_date}
+        self._reject_reasons: List[str] = []
 
     def _map_symbol(self, symbol: str) -> str:
         return self._symbol_map.get(symbol, f"t{symbol}")
+
+    @property
+    def reject_reasons(self) -> List[str]:
+        return list(self._reject_reasons)
 
     # K1 single-submission-gate — THE one and only place self._transport.order_new is called.
     # grep-enforced: no other site in this module may call self._transport.order_new.
@@ -322,6 +327,8 @@ class _CryptoBrokerBase:
                 accepted=False,
             )
             self._latency_samples.append(sample)
+            rejection_reason = f"{type(exc).__name__}: {exc}"[:240]
+            self._reject_reasons.append(rejection_reason)
             rej_ev = OrderEvent(
                 order_id=f"CRYPTO-{cid}",
                 intent_id=order_intent.intent_id,
@@ -333,7 +340,7 @@ class _CryptoBrokerBase:
                 side=order_intent.side,
                 price=order_intent.price,
                 quantity=order_intent.quantity,
-                rejection_reason=type(exc).__name__,
+                rejection_reason=rejection_reason,
                 source_adapter=self.source_adapter,
             )
             self._events.append(rej_ev)
