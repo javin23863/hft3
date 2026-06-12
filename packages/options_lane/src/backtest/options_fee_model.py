@@ -5,7 +5,7 @@ from options_lane.src.models import ParityGroup
 
 
 class OptionsFeeModel:
-    """Per-leg fees keyed by group tick_size / leg count — no hardcoded products."""
+    """Per-leg fees keyed by group.id lookup in optional fee_table; defaults to fee_per_contract."""
 
     def __init__(self, fee_per_contract: float | None = None, fee_table: dict[str, float] | None = None):
         self._default = fee_per_contract if fee_per_contract is not None else 0.65
