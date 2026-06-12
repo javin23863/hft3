@@ -27,8 +27,11 @@
     2. SCP per-symbol manifests from CHI404 into the local manifest tree.
     3. Run `python -m llm_slow_tier nightly-label --date $date`.
     4. Run `python -m llm_slow_tier morning-brief --date $date`.
-    5. Log all output to runtime/slow_tier/nightly_{DATE}.log.
-    6. Non-zero exits are logged but do NOT abort subsequent steps.
+    5. Run `python -m llm_slow_tier status` (problem-only health check).
+       If problems are detected, copy problems_latest.json to
+       runtime/slow_tier/ATTENTION_{DATE}.json for glanceable detection.
+    6. Log all output to runtime/slow_tier/nightly_{DATE}.log.
+    7. Non-zero exits are logged but do NOT abort subsequent steps.
 
     CREDENTIALS: never echoed.  SSH key must be configured for the chi404
     user in the calling shell's ssh-agent or ~/.ssh/config.
@@ -152,6 +155,30 @@ if (-not $DryRun) {
     }
 } else {
     Write-Log "  [DRY RUN] would run: $BriefCmd"
+}
+
+# ---------------------------------------------------------------------------
+# Step 4: Run status health check
+# ---------------------------------------------------------------------------
+Write-Log "--- status ---"
+$StatusCmd = "python -m llm_slow_tier status"
+Write-Log "CMD: $StatusCmd"
+if (-not $DryRun) {
+    $StatusOutput = & python -m llm_slow_tier status 2>&1
+    $StatusExit = $LASTEXITCODE
+    $StatusOutput | ForEach-Object { Write-Log "  status: $_" }
+    if ($StatusExit -ne 0) {
+        Write-Log "PROBLEMS DETECTED — see runtime/slow_tier/problems_latest.json"
+        # Copy problems_latest.json to a date-stamped ATTENTION file
+        $ProblemsLatest = Join-Path $LogDir "problems_latest.json"
+        $AttentionFile  = Join-Path $LogDir "ATTENTION_${Date}.json"
+        if (Test-Path $ProblemsLatest) {
+            Copy-Item -Path $ProblemsLatest -Destination $AttentionFile -Force
+            Write-Log "Copied problems_latest.json -> ATTENTION_${Date}.json"
+        }
+    }
+} else {
+    Write-Log "  [DRY RUN] would run: $StatusCmd"
 }
 
 Write-Log "=== slow_tier_nightly END  date=$Date ==="

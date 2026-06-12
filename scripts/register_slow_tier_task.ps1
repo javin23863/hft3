@@ -115,12 +115,12 @@ $settings = New-ScheduledTaskSettingsSet `
     -StartWhenAvailable `
     -MultipleInstances IgnoreNew
 
-# Run as the current user (credentials stored in Windows Credential Manager
-# by the task scheduler; no plaintext password in this script).
+# Run as the current user. RunLevel Limited so registration does not require
+# an elevated shell (the nightly job needs no admin rights: scp, python, ollama).
 $principal = New-ScheduledTaskPrincipal `
     -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) `
     -LogonType Interactive `
-    -RunLevel Highest
+    -RunLevel Limited
 
 Register-ScheduledTask `
     -TaskName $TaskName `

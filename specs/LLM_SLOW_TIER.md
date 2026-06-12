@@ -297,6 +297,46 @@ Every verifier rejection and human correction is logged to
 training data if the base model proves too inaccurate (fine-tuning is OUT OF
 SCOPE for P1–P3).
 
+### 7.5 Auto-Seeding Rules
+
+After each accepted nightly label, code automatically attempts to corroborate
+the label from deterministic evidence in the digest and sources only.  The
+model's say-so is never the deciding factor (anti-circularity).
+
+**Corroboration rules:**
+
+| Rule | Condition | Result |
+|---|---|---|
+| (a) | `label == macro_event` AND `len(calendar_hits) >= 1` | Corroborated |
+| (b) | `label == war_escalation` AND any symbol `z >= z_stress` AND `len(gdelt_top_events) >= 1` | Corroborated |
+| (c) | `label == calm` AND all symbol z ∈ [-z_quiet, +z_quiet] AND `total_gap_flags == 0` AND `total_reconnects == 0` AND `len(insufficient_baseline) <= n_symbols / 2` | Corroborated |
+| (d) | All other labels (mixed, conflict_review, uncorroborated accept) | NOT corroborated |
+
+**Actions:**
+
+- `verdict == accept` AND corroborated by (a)/(b)/(c):
+  write `golden/{date}.json` with `{"date": ..., "label": ..., "source": "auto_corroborated", "evidence": [...]}`.
+- `verdict == conflict_review` (regardless of corroboration):
+  append `golden/review_queue.jsonl` with `{"date": ..., "model_label": ..., "verifier_reasons": [...], "generated_utc": ...}`.
+- All other cases: no file written.
+
+**Seniority rule (human files are senior):**
+Auto-seeding MUST NEVER overwrite an existing golden file whose `"source"` field is
+absent or contains any value other than `"auto_corroborated"`.  Such files were
+authored by a human and take permanent precedence.  Auto-seed only skips with a
+log message; it does NOT raise an error.
+
+**Honesty caveat:**
+Auto-corroborated golden entries are labeled as such (`source: "auto_corroborated"`).
+They are accepted for the eval gate but carry lower epistemic weight than human
+labels.  The `eval` artifact reports composition: `{n_human, n_auto}`.
+
+### 7.6 Eval Artifact Composition
+
+The `slow_tier_eval.json` artifact includes a composition breakdown:
+- `n_human`: golden entries from human-authored files (no `source` field or `source != "auto_corroborated"`)
+- `n_auto`: golden entries from auto-corroborated files (`source == "auto_corroborated"`)
+
 ### 7.3 Eval Artifact
 
 `runtime/validation/slow_tier_eval.json` — produced by `eval` subcommand:
@@ -306,6 +346,8 @@ SCOPE for P1–P3).
   "generated_utc": "ISO-8601",
   "model": "string",
   "n_golden": 0,
+  "n_human": 0,
+  "n_auto": 0,
   "agreement": 0.0,
   "conflict_rate": 0.0,
   "gate_pass": false,
@@ -354,8 +396,58 @@ The following are explicitly forbidden in P1, P2, and P3:
 |---|---|---|---|
 | `artifacts/research_cards/slow_tier/session_labels.jsonl` | One record per labeled trade date | `nightly-label` CLI | Nightly (post-market) |
 | `artifacts/research_cards/slow_tier/manifests/{date}/{symbol}.manifest.json` | Raw capture manifests (scp'd from CHI404) | Manual / scheduled scp | Per capture session |
-| `artifacts/research_cards/slow_tier/golden/{date}.json` | Hand-labeled golden sessions | Human | One-time seed + ongoing corrections |
+| `artifacts/research_cards/slow_tier/golden/{date}.json` | Hand-labeled or auto-corroborated golden sessions | Human / auto-seed | One-time seed + ongoing corrections |
 | `artifacts/research_cards/slow_tier/golden/corrections.jsonl` | Verifier rejections + human corrections | `verify.py` + human | As corrections occur |
+| `artifacts/research_cards/slow_tier/golden/review_queue.jsonl` | Conflict-review sessions queued for human inspection | `nightly-label` auto-seed | Nightly (on conflict_review) |
 | `artifacts/research_cards/slow_tier/morning_brief_{date}.md` | Morning brief markdown (P2) | `morning-brief` CLI | Nightly (P2) |
-| `runtime/validation/slow_tier_eval.json` | Eval gate result | `eval` CLI | On demand |
+| `runtime/validation/slow_tier_eval.json` | Eval gate result (includes n_human/n_auto composition) | `eval` CLI | On demand |
+| `runtime/slow_tier/problems_latest.json` | Most-recent problem report (written only when problems exist) | `status` CLI | Nightly |
+| `runtime/slow_tier/problems_history.jsonl` | Appended problem reports over time | `status` CLI | Nightly (when problems exist) |
+| `runtime/slow_tier/ATTENTION_{date}.json` | Copy of problems_latest.json for glanceable detection | `slow_tier_nightly.ps1` | Nightly (when problems exist) |
 | `apps/llm_slow_tier/config/slow_tier.yaml` | Model + threshold + path config | Static config | At deploy / change |
+
+---
+
+## 10. Problem Tracking
+
+### 10.1 Purpose
+
+The `status` subcommand implements a problem-only health report.  It emits
+output ONLY when something is wrong; a clean run prints exactly `"OK"` and
+exits 0.  Operators are not expected to monitor normal-run logs.
+
+### 10.2 Trailing Window
+
+Default: 7 calendar days ending today (UTC).  Override: `--days N`.
+
+### 10.3 Problem Checks
+
+| Check | Condition | Problem text prefix |
+|---|---|---|
+| Missing label | Weekday in window has a manifest directory but no record in session_labels.jsonl | `missing_label:` |
+| Conflict review | Any session in window has `verifier_verdict == "conflict_review"` | `conflict_review:` |
+| Capture gap flags | Most-recent manifest dir has `total_gap_flags > 0` | `capture_gap_flags:` |
+| Capture MD drops | Most-recent manifest dir has `total_md_drops > 0` | `capture_md_drops:` |
+| Capture reconnects | Most-recent manifest dir has `total_reconnects > 2` | `capture_reconnects:` |
+| Capture unknown drops | Most-recent manifest dir has `total_unknown_drops > 0` | `capture_unknown_drops:` |
+| Stale capture | Most-recent manifest dir is older than 2 calendar days | `stale_capture:` |
+| GDELT persistent | `gdelt_error` present in ALL of the last 3 session records | `gdelt_persistent_failure:` |
+| Intake quota | `>= weekly_quota` candidates submitted this week (informational) | `intake_quota:` |
+| Review queue | `golden/review_queue.jsonl` has unreviewed entries | `review_queue:` |
+
+### 10.4 Output Contract
+
+- Zero problems → print exactly `OK` to stdout, exit 0, write nothing.
+- One or more problems → print one problem line per problem to stdout, exit 1,
+  write `runtime/slow_tier/problems_latest.json` (overwrite), append to
+  `runtime/slow_tier/problems_history.jsonl`.
+
+### 10.5 Nightly Integration
+
+`slow_tier_nightly.ps1` runs `python -m llm_slow_tier status` as a final step.
+If the exit code is non-zero, the script:
+1. Logs `PROBLEMS DETECTED — see runtime/slow_tier/problems_latest.json`.
+2. Copies `problems_latest.json` to `runtime/slow_tier/ATTENTION_{date}.json`.
+
+The presence of an `ATTENTION_*.json` file is the glanceable indicator that
+operator attention is required.

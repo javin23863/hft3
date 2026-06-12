@@ -1,9 +1,10 @@
 """CLI entry point for the LLM slow-tier lane.
 
 Subcommands:
-  nightly-label   F1: classify a trade date into a market-regime label.
-  eval            Run the eval harness against the golden set.
-  morning-brief   F2: generate morning brief (P2, not yet implemented).
+  nightly-label      F1: classify a trade date into a market-regime label.
+  eval               Run the eval harness against the golden set.
+  status             Problem-only health report (exit 0 = OK, exit 1 = problems).
+  morning-brief      F2: generate morning brief (P2, not yet implemented).
   hypothesis-intake  F3: template-fill hypothesis candidates (P3, not yet implemented).
 
 All structured output goes to disk artifacts; progress / errors are logged as
@@ -137,6 +138,23 @@ def _cmd_nightly_label(args: argparse.Namespace) -> int:
         return 1
 
     log.info(json.dumps({"written": str(out_path)}))
+
+    # Auto-seed golden set (non-fatal: errors are logged but do not abort)
+    try:
+        from .src.golden import maybe_auto_seed_golden
+        seed_status = maybe_auto_seed_golden(
+            trade_date=trade_date,
+            label=verifier_result.final_label,
+            verifier_verdict=verifier_result.verdict,
+            verifier_reasons=verifier_result.reasons,
+            digest=digest,
+            sources_summary=sources_summary,
+            cfg=cfg,
+        )
+        log.info(json.dumps({"auto_seed_status": seed_status, "trade_date": trade_date}))
+    except Exception as exc:
+        log.warning(f"auto-seed failed (non-fatal): {exc}")
+
     return 0
 
 
@@ -169,6 +187,37 @@ def _cmd_eval(args: argparse.Namespace) -> int:
         "gate_pass": result["gate_pass"],
     }))
     return 0
+
+
+def _cmd_status(args: argparse.Namespace) -> int:
+    """Problem-only health report.
+
+    Prints "OK" and exits 0 if no problems are detected.
+    Prints one line per problem and exits 1 if any are found.
+    """
+    import logging
+
+    log = logging.getLogger("llm_slow_tier.status")
+
+    from .src.config import load_config
+    from .src.status import run_status
+
+    cfg = load_config()
+    days: int = getattr(args, "days", 7) or 7
+
+    try:
+        problems, exit_code = run_status(cfg, days=days)
+    except Exception as exc:
+        log.error(f"status check failed: {exc}")
+        return 1
+
+    if exit_code == 0:
+        print("OK")
+        return 0
+
+    for problem in problems:
+        print(problem)
+    return 1
 
 
 def _cmd_morning_brief(args: argparse.Namespace) -> int:
@@ -340,6 +389,19 @@ def main(argv: list[str] | None = None) -> int:
         help="Override golden directory (default: config artifact_root/golden_subdir)",
     )
 
+    # status
+    st = sub.add_parser(
+        "status",
+        help="Problem-only health report (exit 0 = OK, exit 1 = problems detected)",
+    )
+    st.add_argument(
+        "--days",
+        type=int,
+        default=7,
+        metavar="N",
+        help="Trailing window in calendar days to check (default: 7)",
+    )
+
     # morning-brief (F2)
     mb = sub.add_parser("morning-brief", help="F2: generate morning brief for a trade date")
     mb.add_argument(
@@ -395,6 +457,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_nightly_label(args)
     if args.command == "eval":
         return _cmd_eval(args)
+    if args.command == "status":
+        return _cmd_status(args)
     if args.command == "morning-brief":
         return _cmd_morning_brief(args)
     if args.command == "hypothesis-intake":
