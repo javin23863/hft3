@@ -76,7 +76,16 @@ def _record_to_event(
     raw_msg = {}
     for attr in ("rtype", "publisher_id", "flags", "channel_id", "action", "side"):
         if hasattr(rec, attr):
-            raw_msg[attr] = getattr(rec, attr)
+            val = getattr(rec, attr)
+            # Historical slots serialized rtype as its wire integer (e.g. 160);
+            # newer databento returns an enum that str()s to "mbo". Pin the
+            # integer form so re-derived events.jsonl stays byte-identical.
+            if attr == "rtype" and not isinstance(val, (int, str)):
+                try:
+                    val = int(val)
+                except (TypeError, ValueError):
+                    pass
+            raw_msg[attr] = val
 
     return {
         "release_id": release_id,

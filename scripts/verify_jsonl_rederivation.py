@@ -17,7 +17,6 @@ import argparse
 import json
 import random
 import sys
-import tempfile
 from pathlib import Path
 
 _REPO = Path(__file__).resolve().parents[1]
@@ -25,9 +24,24 @@ for _p in [str(_REPO), str(_REPO / "packages")]:
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+import hashlib  # noqa: E402
+
 from mbo_release_lane.databento_mbo_parser import parse_databento_mbo_file  # noqa: E402
 from mbo_release_lane.hashing import sha256_file  # noqa: E402
-from mbo_release_lane.storage import mbo_release_root, write_events_jsonl  # noqa: E402
+from mbo_release_lane.storage import mbo_release_root  # noqa: E402
+
+
+def _hashes_both_newlines(events: list[dict]) -> tuple[str, str]:
+    """sha256 of the serialized jsonl under LF and CRLF conventions.
+
+    The lake mixes line endings: slots imported on Linux carry bare LF,
+    Windows-imported slots carry CRLF. Content equality under either
+    convention proves re-derivability.
+    """
+    lines = [json.dumps(ev, sort_keys=True) for ev in events]
+    lf = ("\n".join(lines) + "\n").encode("utf-8")
+    crlf = ("\r\n".join(lines) + "\r\n").encode("utf-8")
+    return hashlib.sha256(lf).hexdigest(), hashlib.sha256(crlf).hexdigest()
 
 
 def main() -> int:
@@ -66,11 +80,8 @@ def main() -> int:
             symbol=meta["symbol"],
             dataset_id=meta["dataset_id"],
         )
-        with tempfile.TemporaryDirectory() as td:
-            tmp = Path(td) / "events.jsonl"
-            write_events_jsonl(events, tmp)
-            rederived = sha256_file(tmp)
-        rederive_ok = rederived == recorded
+        lf_hash, crlf_hash = _hashes_both_newlines(events)
+        rederive_ok = recorded in (lf_hash, crlf_hash)
 
         status = "OK" if (disk_ok and rederive_ok) else "MISMATCH"
         if status != "OK":

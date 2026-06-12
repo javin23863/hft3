@@ -45,7 +45,9 @@ def hashes_path(slot_dir: Path) -> Path:
 
 def write_events_jsonl(events: list[dict[str, Any]], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as f:
+    # newline="\n" pins LF on every platform so slot hashes are reproducible
+    # regardless of where the import ran (lake has both LF and CRLF history).
+    with path.open("w", encoding="utf-8", newline="\n") as f:
         for ev in events:
             f.write(json.dumps(ev, sort_keys=True) + "\n")
 
