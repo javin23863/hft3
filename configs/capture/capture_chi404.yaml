@@ -58,6 +58,15 @@ roots:
   - root: CL
     exchange: NYMEX
     cycle: monthly_energy
+  # Full-size equity index leaders — record the leg the prop cohort does NOT
+  # trade, so micro-vs-full-size flow divergence (PROP_COHORT PC3) works in the
+  # continuous lane. 7 roots x 2 contracts = 14 <= 16 registry cap.
+  - root: ES
+    exchange: CME
+    cycle: quarterly_equity
+  - root: NQ
+    exchange: CME
+    cycle: quarterly_equity
 
 contracts_per_root: 2
 

@@ -19,6 +19,10 @@ from .vix_modules import (
 
 CROSS_ASSET_HYP_IDS = frozenset({16, 17, 18, 19, 20})
 VIX_HYP_IDS = frozenset({46, 47, 48, 49, 50})
+# Prop-cohort hypotheses with confirmed structural defects (no feature producer / no context / hardcoded 0).
+# M6 Stage B scores these as num_trades=0 FAIL; that means "never alive", not "tested and rejected".
+# Revived in PROP_COHORT plan PC2-PC4. See specs/CORRECTNESS.md §3 rows prop-i..prop-iv.
+PROP_STRUCTURALLY_DEAD_HYP_IDS = frozenset({20, 30, 32, 35, 36, 38})  # revived in PROP_COHORT plan PC2-PC4
 
 
 def get_active_hypotheses() -> List[BaseHypothesis]:
@@ -108,7 +112,7 @@ class HypothesisRegistry:
             17: "NQ -> MNQ lead-lag",
             18: "ES/NQ divergence snapback",
             19: "ZN/ZB -> ES/NQ macro impulse",
-            20: "Micro contract retail lag",
+            20: "Micro contract retail lag",  # STRUCTURALLY_DEAD (see CORRECTNESS prop-i, prop-iv)
             21: "Round-number stop sweep",
             22: "Prior high/low breakout trap",
             23: "Opening candle chase",
@@ -118,15 +122,15 @@ class HypothesisRegistry:
             27: "Stop-loss cascade continuation",
             28: "Panic market-order spread tax",
             29: "End-of-day forced flatten flow",
-            30: "Cutoff panic exits",
+            30: "Cutoff panic exits",  # STRUCTURALLY_DEAD (see CORRECTNESS prop-i, prop-ii)
             31: "No-overnight inventory squeeze",
-            32: "Daily loss-limit defense",
+            32: "Daily loss-limit defense",  # STRUCTURALLY_DEAD (see CORRECTNESS prop-iii)
             33: "Trailing drawdown pressure",
             34: "Profit-lock behavior",
-            35: "Max-contract crowding in micros",
-            36: "Prop reset/reopen window",
+            35: "Max-contract crowding in micros",  # STRUCTURALLY_DEAD (see CORRECTNESS prop-i)
+            36: "Prop reset/reopen window",  # STRUCTURALLY_DEAD (see CORRECTNESS prop-i)
             37: "Friday/weekend de-risking",
-            38: "Economic-event restriction flattening",
+            38: "Economic-event restriction flattening",  # STRUCTURALLY_DEAD (see CORRECTNESS prop-i, prop-ii)
             39: "Quote pull before volatility",
             40: "Re-quote race after shock",
             41: "Thin-book continuation",
