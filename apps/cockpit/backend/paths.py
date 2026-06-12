@@ -37,7 +37,11 @@ SLOW_TIER_PROBLEMS = _p("runtime", "slow_tier", "problems_latest.json")
 SLOW_TIER_EVAL = _p("runtime", "validation", "slow_tier_eval.json")
 SLOW_TIER_BRIEF_DIR = _p("artifacts", "research_cards", "slow_tier")
 CERT_REGISTRY = _p("runtime", "validation", "certification_registry.json")
-DATABENTO_MANIFEST = _p("data", "manifest.parquet")
+DATABENTO_MANIFEST = (
+    Path(os.environ["HFT3_MANIFEST_PATH"])
+    if os.environ.get("HFT3_MANIFEST_PATH")
+    else _p("data", "manifest.parquet")
+)
 DATABENTO_RECEIPT = _p("runtime", "databento", "prop_reopen_download_receipt.json")
 
 # --- Models zone ------------------------------------------------------------

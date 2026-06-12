@@ -43,7 +43,9 @@ import numpy as np
 
 from features_engine.src.features.feature_index import FeatureIndex
 
-DEFAULT_FEATURES_DIR = Path(r"C:\Users\MSI\Documents\GitHub\hft3\data\features\MES.v.0")
+from data_system.src.feature_store import feature_store_root  # noqa: E402
+
+DEFAULT_FEATURES_DIR = feature_store_root(_REPO) / "MES.v.0"
 
 PROP_SLOTS: list[tuple[int, str]] = [
     (int(FeatureIndex.CUTOFF_PRESSURE_SCORE),           "cutoff_pressure_score"),
