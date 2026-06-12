@@ -664,6 +664,7 @@ def test_phase17_risk_evaluation_does_not_create_adapters_or_route_orders(
 
     assert decision.allowed is True
     assert safety.counter_snapshot() == {
+        "crypto_order_call_count": 0,
         "live_broker_call_count": 0,
         "rithmic_order_call_count": 0,
     }

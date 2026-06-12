@@ -56,12 +56,16 @@ def generate(
     timeout_s: float = DEFAULT_TIMEOUT_S,
     num_predict: int = 2048,
     format_json: bool = False,
+    options: Optional[Dict[str, Any]] = None,
 ) -> GenerateResult:
     import time
 
     resolved = resolve_model(host, model)
     if resolved is None:
         return GenerateResult(None, error="model not found in ollama list", model=model, elapsed_s=0.0)
+    merged_options: Dict[str, Any] = {"num_predict": num_predict, "temperature": 0.3}
+    if options:
+        merged_options.update(options)
     payload: Dict[str, Any] = {
         "model": resolved,
         "stream": False,
@@ -69,7 +73,7 @@ def generate(
             {"role": "system", "content": system},
             {"role": "user", "content": user},
         ],
-        "options": {"num_predict": num_predict, "temperature": 0.3},
+        "options": merged_options,
     }
     if format_json:
         payload["format"] = "json"

@@ -6,7 +6,7 @@ ENV_FILE="${HFT3_ENV_FILE:-/root/hft3/.env}"
 [[ -f "$ENV_FILE" ]] && set -a && source "$ENV_FILE" && set +a
 
 REPO_DIR="${HFT3_REPO_DIR:-/root/hft3/repo}"
-TRIAL_CONFIG="${RITHMIC_TRIAL_CONFIG:-data_system/config/rithmic_trial.yaml}"
+TRIAL_CONFIG="${RITHMIC_TRIAL_CONFIG:-packages/data_system/config/rithmic_trial.yaml}"
 LOG_DIR="/root/hft3/logs/paper_latency"
 mkdir -p "$LOG_DIR"
 
@@ -21,6 +21,8 @@ Requires=hft3-rithmic-trial.service
 Type=simple
 User=root
 WorkingDirectory=${REPO_DIR}
+Environment=PYTHONPATH=${REPO_DIR}/packages
+Environment=HFT3_RITHMIC_GATEWAY_SO=${REPO_DIR}/build/rithmic_gateway/librithmic_gateway_shared.so
 EnvironmentFile=${ENV_FILE}
 ExecStart=/usr/bin/python3 -m data_system.rithmic_trial.pipeline paper-latency-daemon --config ${TRIAL_CONFIG}
 Restart=on-failure

@@ -19,6 +19,8 @@ The `rtrader_bridge` connector (`RTraderBridgeConnector`) is **defensive legacy*
 
 ## Capture Daemon
 
+> **Measured state 2026-06-12:** `hft3-capture.service` (CC2 binary capture → `/root/hft3/data/capture/{CONTRACT}/`, 40-byte records, trades+BBO only) is **active**; `hft3-rithmic-trial.service` is **inactive**. Observed volume ~1–2 GB/week across 14 contracts. Capture archival + retention is handled from the workstation (see below) — CHI404 stores no cloud credentials.
+
 The R|API+ market-data capture daemon is a single systemd unit on CHI404:
 
 ```bash
@@ -27,6 +29,10 @@ journalctl -u hft3-rithmic-trial.service -n 50 --no-pager
 ls -la /root/hft3/repo/runtime/rithmic_trial/rithmic_api.log
 ls -la /root/hft3/repo/logs/rithmic_trial/unattended.log
 ```
+
+## Capture archival + retention (2026-06-12)
+
+Replaces "retain indefinitely, operator rotates": the workstation's nightly task `hft3-lake-nightly` runs `scripts/archive_chi404_capture.ps1`, which sftp-pulls closed-trade-date `.cap` files, zstd-compresses, uploads to B2 `Hft3repo/capture/rithmic/{CONTRACT}/`, size-verifies, and prunes CHI404 copies older than 30 days only after B2 confirmation. Open trade-date files are never touched. Push-based systemd variant (`infrastructure/chi404/30_capture_archival_systemd.sh`) exists but is unused — it would require B2 credentials on the box. Details: [DATA_LAKE_3TIER.md](DATA_LAKE_3TIER.md).
 
 Config (in `/root/hft3/.env`):
 

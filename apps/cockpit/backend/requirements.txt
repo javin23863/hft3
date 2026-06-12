@@ -1,0 +1,8 @@
+# HFT3 Cockpit backend — aggregation service deps.
+# Pure read layer; pandas/pyarrow are optional (Databento budget degrades gracefully without them).
+fastapi>=0.110
+uvicorn[standard]>=0.29
+watchdog>=4.0
+websockets>=12.0
+pydantic>=2.6
+httpx>=0.27          # test client + outbound notify (W4)

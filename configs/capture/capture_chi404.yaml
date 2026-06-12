@@ -1,0 +1,88 @@
+# capture_chi404.yaml — CC2 market-data capture daemon configuration for CHI404.
+#
+# Rithmic connection parameters are inherited from environment variables
+# (RITHMIC_USERNAME, RITHMIC_PASSWORD, RITHMIC_ENVIRONMENT, etc.) and from
+# the MML_* block below, exactly as in rithmic_latency_probe.
+#
+# IMPORTANT: credential values must NEVER appear here.  Use the EnvironmentFile
+# (/root/hft3/.env) loaded by the systemd unit.
+
+# ---------------------------------------------------------------------------
+# Rithmic connection
+# ---------------------------------------------------------------------------
+# Paper/Chicago profile — same cluster the CC-1 ack campaigns ran on.
+# MML_* endpoint params load from packages/data_system/config/rithmic_api_paper.yaml
+# (the daemon's default RITHMIC_CONFIG_PATH).
+system: Rithmic Paper Trading
+
+engine_params:
+  app_name: HFT3
+  app_version: "1.0"
+
+repository_login:
+  sCnnctPt: login_agent_repositoryc
+
+login_params:
+  sMdCnnctPt: login_agent_tp_agg_paperc
+  sTsCnnctPt: login_agent_op_paperc
+  sPnlCnnctPt: login_agent_pnl_paperc
+  sIhCnnctPt: login_agent_history_paperc
+
+# MML_* env pairs — loaded by the same load_mml_env_vars() used in the latency probe.
+# Values must be provided at deployment time and are NOT committed here.
+# Example (fill in real values in .env or override per-host):
+# MML_DMN_SRVR_ADDR: <omit — set in .env>
+
+# ---------------------------------------------------------------------------
+# Contract roots — the daemon derives front-month contracts automatically and
+# rolls them at the daily 17:00 CT rotation.  Two nearest eligible contracts
+# per root are captured so roll week is recorded from both sides.
+#
+# If an explicit `symbols:` list is also present (or added below), those
+# entries are merged in as a union; explicit symbols never auto-roll and
+# remain subscribed for the lifetime of the process.
+# ---------------------------------------------------------------------------
+roots:
+  - root: MES
+    exchange: CME
+    cycle: quarterly_equity
+  - root: MGC
+    exchange: COMEX
+    cycle: gold
+  - root: GC
+    exchange: COMEX
+    cycle: gold
+  - root: MCL
+    exchange: NYMEX
+    cycle: monthly_energy
+  - root: CL
+    exchange: NYMEX
+    cycle: monthly_energy
+  # Full-size equity index leaders — record the leg the prop cohort does NOT
+  # trade, so micro-vs-full-size flow divergence (PROP_COHORT PC3) works in the
+  # continuous lane. 7 roots x 2 contracts = 14 <= 16 registry cap.
+  - root: ES
+    exchange: CME
+    cycle: quarterly_equity
+  - root: NQ
+    exchange: CME
+    cycle: quarterly_equity
+
+contracts_per_root: 2
+
+# ---------------------------------------------------------------------------
+# Capture output
+# ---------------------------------------------------------------------------
+output_root: /root/hft3/data/capture
+
+# How often to fflush the binary capture file (seconds).
+flush_interval_sec: 5
+
+# How often to fdatasync the binary capture file (seconds).
+fsync_interval_sec: 30
+
+# How often to rewrite the per-symbol manifest JSON (seconds).
+manifest_interval_sec: 60
+
+# Seconds of silence during an active trading window before triggering reconnect.
+stale_threshold_sec: 180

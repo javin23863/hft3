@@ -160,6 +160,18 @@ class MBOFeatureExtractor:
         self._ret_sum: float = 0.0
         self._ret_sumsq: float = 0.0
 
+        # --- Accumulators for slots 31-34 ---
+        # Slot 34 (MAX_CONTRACT_TRADE_IMBALANCE): size^2-weighted aggressor imbalance.
+        # signed_size_sq = sum(sign * size^2); total_size_sq = sum(size^2)
+        self._signed_size_sq: float = 0.0
+        self._total_size_sq: float = 0.0
+
+        # Slot 32 (PROP_REENTRY_SCORE): trade-rate acceleration x directional conviction.
+        # We track trade count in the current window; prev_trade_count carries the
+        # count from the previous window so we can compute acceleration at reset.
+        self._curr_trade_count: int = 0
+        self._prev_trade_count: int = 0
+
     def _maybe_reset_window(self, ts_ns: int) -> None:
         if self.last_ts_ns and (ts_ns - self.last_ts_ns) > self.rolling_window_ns:
             self.buy_agg_vol = 0
@@ -177,6 +189,12 @@ class MBOFeatureExtractor:
             self._ret_sum = 0.0
             self._ret_sumsq = 0.0
             self._prev_mid = 0.0
+            # Slots 31-34: carry trade count into prev for acceleration signal,
+            # then zero out all per-window state for the new window.
+            self._prev_trade_count = self._curr_trade_count
+            self._curr_trade_count = 0
+            self._signed_size_sq = 0.0
+            self._total_size_sq = 0.0
         self.last_ts_ns = ts_ns
 
     def process_event(self, event: MBOEvent) -> np.ndarray:
@@ -188,8 +206,15 @@ class MBOFeatureExtractor:
         if event.action == "TRADE":
             if event.side == "A":
                 self.buy_agg_vol += event.size
+                # Slot 34: buy-aggressor → positive sign
+                self._signed_size_sq += float(event.size) * float(event.size)
             else:
                 self.sell_agg_vol += event.size
+                # Slot 34: sell-aggressor → negative sign
+                self._signed_size_sq -= float(event.size) * float(event.size)
+            self._total_size_sq += float(event.size) * float(event.size)
+            # Slot 32: count every trade in current window for rate-acceleration
+            self._curr_trade_count += 1
             key = (event.side, event.price)
             self._trade_at_level[key] = self._trade_at_level.get(key, 0) + event.size
         elif event.action == "ADD":
@@ -336,5 +361,68 @@ class MBOFeatureExtractor:
         v[FeatureIndex.ABSORPTION_SCORE] = (
             hit_vol / (total_agg + 1e-9) if total_agg > 0 else 0.0
         ) * (1.0 - abs(curr_slope))
+
+        # --- Slot 34: MAX_CONTRACT_TRADE_IMBALANCE ---
+        # Size-squared-weighted aggressor imbalance: emphasises block prints.
+        # sum(sign * size^2) / sum(size^2), range [-1, 1].  Distinct from slot 0
+        # (which is volume-weighted) because squaring the size gives large trades
+        # disproportionate weight — one block print dominates many small clips.
+        # Zero when no trades have occurred in this window.
+        v[FeatureIndex.MAX_CONTRACT_TRADE_IMBALANCE] = (
+            self._signed_size_sq / self._total_size_sq
+            if self._total_size_sq > 0.0
+            else 0.0
+        )
+
+        # --- Slot 32: PROP_REENTRY_SCORE ---
+        # Trade-rate acceleration × directional conviction.
+        # Captures a re-entry burst: flow surging back in with a clear side.
+        # trade_rate_accel = (curr_count - prev_count) / (prev_count + 1)
+        # reentry = tanh(accel) * aggressor_imbalance
+        # Zero when trade counts are flat or there is no directional conviction.
+        trade_rate_accel = (self._curr_trade_count - self._prev_trade_count) / (
+            self._prev_trade_count + 1
+        )
+        aggressor_imbalance = v[FeatureIndex.AGGRESSOR_VOLUME_IMBALANCE]
+        v[FeatureIndex.PROP_REENTRY_SCORE] = math.tanh(trade_rate_accel) * aggressor_imbalance
+
+        # --- Slot 31: CUTOFF_PRESSURE_SCORE ---
+        # One-sided forced-exit pressure = directional persistence × intensity.
+        # one_sidedness = |buy - sell| / total  (always in [0, 1])
+        # intensity     = tanh(total_agg / window_norm)  (bounded squeeze)
+        # score         = sign(dominant_side) * one_sidedness * intensity
+        # High when flow is both one-sided AND heavy; low when balanced or thin.
+        # Distinct from slot 0: multiplies one-sidedness by absolute magnitude,
+        # so moderate imbalance at high volume reads differently than at thin volume.
+        # Zero when no aggressor flow.
+        _WINDOW_NORM = 100.0
+        if total_agg > 0:
+            one_sidedness = abs(self.buy_agg_vol - self.sell_agg_vol) / total_agg
+            intensity = math.tanh(total_agg / _WINDOW_NORM)
+            dominant_sign = 1.0 if self.buy_agg_vol >= self.sell_agg_vol else -1.0
+            v[FeatureIndex.CUTOFF_PRESSURE_SCORE] = dominant_sign * one_sidedness * intensity
+        else:
+            v[FeatureIndex.CUTOFF_PRESSURE_SCORE] = 0.0
+
+        # --- Slot 33: NEWS_RESTRICTION_FLATTEN_SCORE ---
+        # Forced-flat unwind signature: one-sided aggressor exits coupled with
+        # passive-quote pulls at the near touch.
+        # cancel_pressure = tanh(near_touch_cancel_pressure)  (reuses slot 4 input)
+        # score = sign(buy - sell) * (|buy - sell| / total) * cancel_pressure
+        # Non-zero only when flow is one-sided AND near-touch cancels are present,
+        # capturing simultaneous market exits + passive pull (news-restriction flatten).
+        # Zero when no aggressor flow or no near-touch cancels.
+        if total_agg > 0 and self.near_touch_cancel_vol > 0:
+            raw_cancel_pressure = (
+                self.near_touch_cancel_vol / self.add_vol if self.add_vol > 0 else 1.0
+            )
+            cancel_pressure = math.tanh(raw_cancel_pressure)
+            side_sign = 1.0 if self.buy_agg_vol >= self.sell_agg_vol else -1.0
+            one_sided_frac = abs(self.buy_agg_vol - self.sell_agg_vol) / total_agg
+            v[FeatureIndex.NEWS_RESTRICTION_FLATTEN_SCORE] = (
+                side_sign * one_sided_frac * cancel_pressure
+            )
+        else:
+            v[FeatureIndex.NEWS_RESTRICTION_FLATTEN_SCORE] = 0.0
 
         return v

@@ -1,4 +1,8 @@
-"""CHI404 paper order latency daemon — monotonic waterfall audit (colo only)."""
+"""CHI404 paper order latency daemon — monotonic waterfall audit (colo only).
+
+Timestamps sourced from connector callback monotonics only.
+No synthetic timing is fabricated at any stage.
+"""
 
 from __future__ import annotations
 
@@ -49,14 +53,6 @@ def _read_manifest(watch_dirs: list[Path]) -> dict[str, Any]:
     return {}
 
 
-def _shadow_probe_mono_ns() -> tuple[int | None, int | None, int | None, int | None]:
-    """Lightweight colo shadow timing slices (synthetic; not order-causal)."""
-    t0 = time.perf_counter_ns()
-    t1 = t0 + 1000
-    t2 = t1 + 500
-    t3 = t2 + 500
-    return t0, t1, t2, t3
-
 
 class PaperLatencyDaemon:
     def __init__(self, cfg: TrialConfig, *, run_id: str | None = None) -> None:
@@ -95,17 +91,11 @@ class PaperLatencyDaemon:
         if mono is None:
             return
         self._last_tick_mono = int(mono)
-        feat, dec_end, construct, risk = _shadow_probe_mono_ns()
         self._shadow = {
             "tick_receive_mono_ns": int(mono),
-            "feature_done_mono_ns": feat,
-            "decision_start_mono_ns": feat,
-            "decision_end_mono_ns": dec_end,
-            "order_construct_mono_ns": construct,
-            "risk_check_mono_ns": risk,
             "market_state": manifest.get("market_state") or os.environ.get("PAPER_LATENCY_MARKET_STATE", "quiet"),
             "session_tag": manifest.get("session") or "regular",
-            "shadow_synthetic": True,
+            "timestamps_source": "connector_callback_mono",
         }
 
     def _handle_order_event(self, ev: dict[str, Any], manifest: dict[str, Any]) -> None:
@@ -131,11 +121,6 @@ class PaperLatencyDaemon:
                 market_state=market_state,
                 wall_utc=_utc_now(),
                 tick_receive_mono_ns=shadow.get("tick_receive_mono_ns") or self._last_tick_mono,
-                feature_done_mono_ns=shadow.get("feature_done_mono_ns"),
-                decision_start_mono_ns=shadow.get("decision_start_mono_ns"),
-                decision_end_mono_ns=shadow.get("decision_end_mono_ns"),
-                order_construct_mono_ns=shadow.get("order_construct_mono_ns"),
-                risk_check_mono_ns=shadow.get("risk_check_mono_ns"),
                 rithmic_submit_mono_ns=mono_i,
                 raw_log_line=str(ev.get("raw_line") or "")[:2000],
             )
@@ -194,7 +179,7 @@ class PaperLatencyDaemon:
         self._write_status({"state": "running"})
 
         while not _STOP:
-            manifest = _read_manifest(self.connector.watch_dirs)
+            manifest = _read_manifest(getattr(self.connector, "watch_dirs", []))
             events = self.connector.poll_events()
             for ev in events:
                 et = str(ev.get("event_type", ""))
@@ -230,7 +215,7 @@ def main(argv: list[str] | None = None) -> int:
     import argparse
 
     parser = argparse.ArgumentParser(description="CHI404 paper order latency daemon")
-    parser.add_argument("--config", default="data_system/config/rithmic_trial.yaml")
+    parser.add_argument("--config", default="packages/data_system/config/rithmic_trial.yaml")
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--poll-interval-sec", type=float, default=0.25)
     args = parser.parse_args(argv)

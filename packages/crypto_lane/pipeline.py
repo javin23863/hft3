@@ -182,6 +182,35 @@ def cmd_convert_coinbase_mbo(args: argparse.Namespace) -> int:
     return cmd_convert_coinbase_mbo(args)
 
 
+def cmd_calibrate_slippage(args: argparse.Namespace) -> int:
+    from crypto_lane.src.validation.slippage_calibration import (
+        calibrate_slippage,
+        default_artifact_path,
+        write_calibration_artifact,
+    )
+    from crypto_lane.src.ml.candidate_registry import discover_candidates
+    from crypto_lane.src.types import repo_root_from_lane
+
+    candidates = discover_candidates()
+    target = [c for c in candidates if c["candidate_id"] == args.candidate_id]
+    if not target:
+        print(f"Candidate not found: {args.candidate_id}", file=sys.stderr)
+        return 1
+    repo_root = repo_root_from_lane()
+    candidate = _candidate_model_from_yaml(target[0])
+    artifact = calibrate_slippage(
+        repo_root,
+        [candidate],
+        latency_ms=args.latency_ms,
+        max_steps=args.max_steps,
+        signal_period=args.signal_period,
+    )
+    out_path = Path(args.output) if args.output else default_artifact_path(repo_root)
+    write_calibration_artifact(artifact, out_path)
+    print(json.dumps(artifact, indent=2, sort_keys=True, default=str))
+    return 0
+
+
 def cmd_validate_crypto(args: argparse.Namespace) -> int:
     ensure_crypto_env()
     from crypto_lane.src.validation.crypto_validation_workflow import validate_crypto_candidate
@@ -195,7 +224,7 @@ def cmd_validate_crypto(args: argparse.Namespace) -> int:
     from crypto_lane.src.types import repo_root_from_lane
     catalog = repo_root_from_lane()
     candidate = _candidate_model_from_yaml(target[0])
-    report = validate_crypto_candidate(candidate, catalog)
+    report = validate_crypto_candidate(candidate, catalog, max_steps=args.max_steps)
     classification = report.result.execution_classification if report.result.error == "" else "NO_EXECUTION"
     report.result.execution_classification = classification
     set_execution_classification(args.candidate_id, classification)
@@ -341,7 +370,16 @@ def main(argv: list[str] | None = None) -> int:
 
     p_val = sub.add_parser("validate", help="Run crypto execution validation for a candidate")
     p_val.add_argument("candidate_id", type=str, help="Candidate model ID")
+    p_val.add_argument("--max-steps", type=int, default=None)
     p_val.set_defaults(func=cmd_validate_crypto)
+
+    p_slip = sub.add_parser("calibrate-slippage", help="Fit slippage distribution from Bitfinex L3 MBO replay")
+    p_slip.add_argument("candidate_id", type=str, help="Candidate model ID")
+    p_slip.add_argument("--latency-ms", type=float, default=50.0)
+    p_slip.add_argument("--max-steps", type=int, default=20000)
+    p_slip.add_argument("--signal-period", type=int, default=50)
+    p_slip.add_argument("--output", default=None, help="Override artifact output path")
+    p_slip.set_defaults(func=cmd_calibrate_slippage)
 
     p_probe = sub.add_parser("probe-ws-rtt", help="Deprecated alias for calibrate-ws-rtt")
     p_probe.add_argument("--venue", default="binance_perp")

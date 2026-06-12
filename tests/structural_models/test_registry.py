@@ -29,7 +29,7 @@ def test_dependency_map():
 
 def test_hypothesis_count():
     reg = HypothesisRegistry()
-    assert len(reg.families) == 45
+    assert len(reg.families) == 50
 
 
 def test_active_hypotheses_not_including_pdf():

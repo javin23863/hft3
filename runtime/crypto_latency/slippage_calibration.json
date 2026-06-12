@@ -1,0 +1,34 @@
+{
+  "calibration_version": 1,
+  "fit_epoch": 1781133187.1999617,
+  "fit_utc": "2026-06-10T23:13:07.199961+00:00",
+  "newest_capture_mtime_epoch": 1781109871.8283336,
+  "newest_capture_mtime_utc": "2026-06-10T16:44:31.828334+00:00",
+  "results": [
+    {
+      "acceptance": "OK",
+      "envelope_basis": "slippage_vs_mid_bps",
+      "execution_classification": "L3_VALIDATED",
+      "fill_rate": 0.98875,
+      "latency_ms": 50.0,
+      "mean_slippage_bps": 0.006041981723573245,
+      "num_fills": 197750,
+      "num_fills_with_mid": 197750,
+      "num_intents": 200000,
+      "queue_model": "L3FifoQueueModel",
+      "slippage_bps_p95": 0.16015887760658573,
+      "slippage_bps_std": 0.14558659150413647,
+      "slippage_vs_mid_bps": 1.145973940988213,
+      "slippage_vs_mid_bps_p95": 1.6017940092904053,
+      "slippage_vs_mid_bps_std": 0.2803613567189944,
+      "symbol": "BTCUSDT"
+    }
+  ],
+  "sessions": [
+    "bitfinex_mbo_BTCUSD_20260610_154431.ndjson",
+    "bitfinex_mbo_ETHUSD_20260610_154431.ndjson",
+    "bitfinex_mbo_SOLUSD_20260610_154431.ndjson"
+  ],
+  "signal_profile": "alternating +/-1.0 blocks, period 50, max_steps 200000",
+  "slippage_std_ddof": 0
+}

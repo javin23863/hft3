@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: dark; }
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background: radial-gradient(1200px 600px at 70% -10%, #131a2b 0%, #0a0d14 55%);
+  color: theme(colors.ink.DEFAULT);
+  font-family: theme(fontFamily.sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer components {
+  .panel {
+    @apply rounded-xl2 border border-line bg-bg-panel shadow-panel;
+  }
+  .panel-h {
+    @apply flex items-center gap-2 px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-ink-dim border-b border-line;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-[11px] text-ink-dim;
+  }
+  .mono { font-family: theme(fontFamily.mono); font-variant-numeric: tabular-nums; }
+  .kpi-v { @apply font-mono text-2xl font-bold tracking-tight; }
+  .navlink {
+    @apply flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-ink-dim hover:bg-bg-elev hover:text-ink transition-colors;
+  }
+  .navlink-active { @apply bg-bg-elev text-ink; }
+  .th { @apply text-left px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-ink-faint; }
+  .td { @apply px-3 py-2 border-t border-line/60 whitespace-nowrap; }
+  .scroll-area { scrollbar-width: thin; scrollbar-color: #2a3447 transparent; }
+}
+
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-thumb { background: #2a3447; border-radius: 6px; }
+::-webkit-scrollbar-track { background: transparent; }

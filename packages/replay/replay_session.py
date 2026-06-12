@@ -22,6 +22,7 @@ from execution.interfaces import (
     ReplaceIntent,
 )
 from replay.market_data_adapter import HistoricalReplayMarketDataAdapter
+from replay.sensor_feature_adapter import PrecomputedFeatureAdapter
 from replay.replay_clock import ReplayClock, deterministic_run_id
 from hft3.validation.research_stamp import build_certification_stamp, format_stamp_footer
 from features_engine.src.hypotheses.modules import MarketState
@@ -90,6 +91,10 @@ class ReplaySessionConfig:
     # Pre-loaded event arrays for cross-asset symbols (symbol → np.ndarray).
     # Takes priority over cross_asset_npz when both are supplied for a symbol.
     cross_asset_events: Dict[str, np.ndarray] = field(default_factory=dict)
+    # Precomputed sensor feature files injected into MarketState.cross_asset_features
+    # by key. PIT clock = the file's own availability timestamps, observed with the
+    # same feature-latency shift as primary features.
+    sensor_feature_npz: Dict[str, str] = field(default_factory=dict)
     # Stepping mode.
     #
     # "event" (canonical): while no orders are live, jump straight to the next
@@ -179,6 +184,13 @@ class ReplaySession:
                     tick_size=cfg.tick_size,
                     latency_ms=cfg.latency_ms,
                 )
+            # Build sensor feature adapters (precomputed npz, e.g. VIX options).
+            # Zero overhead when sensor_feature_npz is empty.
+            sensor_adapters: Dict[str, PrecomputedFeatureAdapter] = {
+                k: PrecomputedFeatureAdapter(p)
+                for k, p in cfg.sensor_feature_npz.items()
+            }
+
             # Also wire any symbols provided only via cross_asset_events (no npz).
             for sym, sec_events in cfg.cross_asset_events.items():
                 if sym not in secondary_mdas:
@@ -229,13 +241,18 @@ class ReplaySession:
                 state = mda.current_market_state(cfg.symbol)
 
                 # Inject cross-asset features when secondary adapters exist.
-                if secondary_mdas and state is not None:
+                if (secondary_mdas or sensor_adapters) and state is not None:
                     cross: Dict[str, Dict[str, float]] = {}
                     for sym, sec_mda in secondary_mdas.items():
                         sec_mda.sync_to_timestamp(feature_ts)
                         sec_state = sec_mda.current_market_state(sym)
                         if sec_state is not None:
                             cross[sym] = sec_state.primary_features
+                    for k, ad in sensor_adapters.items():
+                        ad.sync_to_timestamp(feature_ts)
+                        feats = ad.current_features()
+                        if feats is not None:
+                            cross[k] = feats
                     if cross:
                         state = MarketState(
                             feature_vector=state.feature_vector,

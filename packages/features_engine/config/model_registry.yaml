@@ -317,6 +317,41 @@ models:
     display_name: Ghost Route MBO queue-decay
     class: GhostRoute
 
+  VIX_SPIKE_EVENT_FADE:
+    kind: hypothesis
+    hyp_id: 46
+    legacy_id: HYP_46
+    display_name: VIX spike event fade
+    class: VixSpikeEventFade
+
+  VIX_QUOTE_PULL_LIQUIDITY_VACUUM:
+    kind: hypothesis
+    hyp_id: 47
+    legacy_id: HYP_47
+    display_name: VIX quote-pull liquidity vacuum
+    class: VixQuotePullLiquidityVacuum
+
+  VIX_IMPLIED_REALIZED_GAP:
+    kind: hypothesis
+    hyp_id: 48
+    legacy_id: HYP_48
+    display_name: VIX implied-realized vol gap
+    class: VixImpliedRealizedGap
+
+  VIX_DEPTH_IMBALANCE_DIRECTION:
+    kind: hypothesis
+    hyp_id: 49
+    legacy_id: HYP_49
+    display_name: VIX depth imbalance direction
+    class: VixDepthImbalanceDirection
+
+  VIX_LEVEL_CONDITIONED_CONTINUATION:
+    kind: hypothesis
+    hyp_id: 50
+    legacy_id: HYP_50
+    display_name: VIX level-conditioned continuation
+    class: VixLevelConditionedContinuation
+
   BOOK_PRESSURE:
     kind: pdf_structural
     legacy_id: PDF_MODEL_1

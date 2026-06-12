@@ -14,7 +14,7 @@ def npz_root(repo_root: Path) -> Path:
     """Resolve the NPZ lake root.
 
     HFT3_NPZ_ROOT overrides the default <repo>/data/npz so the multi-gigabyte
-    event lake can live outside the working clone (e.g. the paid-data mirror)
+    event lake can live outside the working clone (e.g. C:\\hft3-lake\\npz)
     without copying it into every checkout.
     """
     override = os.environ.get("HFT3_NPZ_ROOT", "").strip()
@@ -23,8 +23,26 @@ def npz_root(repo_root: Path) -> Path:
     return repo_root / "data" / "npz"
 
 
+def lake_root(repo_root: Path) -> Path:
+    """Resolve the data-lake root (parent of npz/, mbo_release/, sensors/, ...).
+
+    When HFT3_NPZ_ROOT is set, the lake root is its parent directory
+    (e.g. HFT3_NPZ_ROOT=C:\\hft3-lake\\npz -> lake root C:\\hft3-lake).
+    Falls back to <repo>/data so a bare clone keeps working.
+    """
+    override = os.environ.get("HFT3_NPZ_ROOT", "").strip()
+    if override:
+        return Path(override).parent
+    return repo_root / "data"
+
+
+def npz_filename(symbol: str, event_id: str) -> str:
+    """Canonical NPZ file name: {symbol}_{event_id}_mbo.npz."""
+    return f"{symbol}_{event_id}_mbo.npz"
+
+
 def npz_path_for(repo_root: Path, event_id: str, symbol: str) -> Path:
-    return npz_root(repo_root) / f"{symbol}_{event_id}_mbo.npz"
+    return npz_root(repo_root) / npz_filename(symbol, event_id)
 
 
 def candidate_npz_symbols(requested_symbol: str, parsed_symbols: tuple[str, ...]) -> List[str]:

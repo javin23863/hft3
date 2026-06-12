@@ -1,6 +1,6 @@
 # LATENCY.md — No-Fixed-Latency Policy and Budget
 
-Version: 2026-06-10.
+Version: 2026-06-11.
 
 ---
 
@@ -32,13 +32,34 @@ using `constant_order_latency` (hftbacktest 2.4+) or `constant_latency`
 
 Source: `packages/backtest_pipeline/src/crypto_hft_builder.py`
 
-Default `latency_ms=50.0` for all four exchange builders. The system brief
-specifies `[5, 50, 200]` ms sweep; the builder functions accept any value.
+Default `latency_ms=50.0` for all four exchange builders
+(`build_binance_hftbacktest`, `build_kraken_hftbacktest`,
+`build_bitfinex_hftbacktest`, `build_coinbase_hftbacktest`).
 
-TODO: a matrix sweep list analogous to `LATENCY_BANDS_MS` for crypto is not
-explicitly defined in `crypto_hft_builder.py`. Treat `[5, 50, 200]` ms as the
-intended sweep but verify this against any crypto sweep runner script before
-use.
+**Contract** (resolves the former TODO):
+
+```python
+CRYPTO_LATENCY_BANDS_MS = [5.0, 50.0, 200.0]
+```
+
+To be defined as a named constant in `crypto_hft_builder.py`
+(ALPHA_CRYPTO.md campaign deliverable); until the constant lands, `[5, 50,
+200]` ms is the binding sweep list for any crypto sweep runner.
+
+**Crypto latency resolution** (analog of §4, promotion-grade replay):
+
+1. CLI `--latency-ms` if provided.
+2. `runtime/crypto_latency/latency_summary.json` with
+   `paper_order_latency.measured=true` AND `order_ack_p99_ms` present
+   (see §10).
+3. Neither → raise `ValueError` (UNMEASURED). TCP connect-time and WS
+   ping/pong RTT are never silent fallbacks for order-ack latency.
+
+**Venue RTT source labels** (`venue_profiles.json`, written by
+`packages/crypto_lane/src/align/latency_profile.py`): only
+`live_measured:<venue>` and `ws_rtt:*` sources are promotion-eligible;
+`synthetic_calibrated:*` profiles are research-only and must hard-fail the
+promotion path (CRYPTO_LIVE.md §8 row K7).
 
 ---
 
@@ -65,27 +86,77 @@ Summary file: `runtime/latency_reports/latency_summary.json`.
 ## 5. Current CHI404 Measured State
 
 Source: `runtime/latency_reports/latency_summary.json`
-(run_id: `20260530T031754Z`).
+(run_id: `20260611T074546Z`).
 
 | Metric | Value | Status |
 |--------|-------|--------|
 | cyclictest p99 (loaded) | 11 µs | PASS (limit 20 µs) |
 | Rithmic TCP p99 (port 65000) | 4.09 ms | recorded |
-| Order-ack p99 | UNMEASURED | R\|API+ not wired |
-| `paper_order_latency.measured` | false | |
-| `trial_order_ack_appendix.authoritative` | false (n=12, need ≥1000) | |
+| Order-ack p99 | 6.256 ms | MEASURED — authoritative |
+| Order-ack p50 | 3.483 ms | |
+| Order-ack p90 | 3.753 ms | |
+| Order-ack p99.9 | 13.768 ms | |
+| `paper_order_latency.measured` | true (as of 2026-06-11) | |
+| `trial_order_ack_appendix.authoritative` | superseded — see §9.3 | |
 
-`rithmic_app_latency.status = "BLOCKED"` —
-reason: "R|API+ not wired; order ack p99 unavailable".
+Campaign: `order_ack_campaign_20260611T072116Z`. Venue: Rithmic paper / Chicago.
+Symbol: MESM6. Samples: 1002 paired submit→ack, reject=0. Measurement tool:
+`rithmic_latency_probe` (native C++; `measurement_tier: native_cpp_probe`,
+`hot_path_language: c++`, `wrapper: none`). Orchestrator:
+`scripts/chi404_run_paper_latency_sweep.sh`.
+
+`rithmic_app_latency.status = "OK"` — order-ack p99 measured via native probe.
 
 `network_pass = false` — rithmic_tcp_65000 p99 4094 µs exceeds 500 µs network
 limit used by lane_1 criteria.
 
-**Honest floor**: Today's realistic CME lane order-ack is 2–10 ms via retail
-Rithmic (no kernel bypass, no co-location fiber). The CHI404 colo hardware
-passes cyclictest but order-ack is unmeasured because R|API+ is not yet wired.
+**Resolver rung 2** (`paper_order_latency.measured=true`, `order_ack_p99_ms`
+present) now returns **6.256 ms** as the authoritative latency for replay runs.
+Value is within the [0.5, 10] ms validation band accepted by
+`validate_replay_latency_ms()`.
+
+**Honest floor**: CME lane order-ack measured at p99 6.256 ms via retail
+Rithmic paper broker from CHI404 (no kernel bypass, no co-location fiber).
 TCP connect-time (4.09 ms p99) is a network health metric only — it is not
 used as an execution latency proxy anywhere in the pipeline.
+
+### 5.1 Component decomposition (CC-1 Latency Truth, 2026-06-11)
+
+Artifact: `runtime/latency_reports/latency_truth.json` (CHI404 campaign).
+Four clocks, never conflated:
+
+| Component | Measured | Tool |
+|---|---|---|
+| `evaluate_actions` | p50 **40 ns** (1M iters) | `rithmic_gateway/tools/bench_decision.cpp` |
+| SPSC push+pop round-trip | p50 **20 ns** (1M iters) | `rithmic_gateway/tools/bench_spsc.cpp` |
+| Full engine loop tick→decision | **15.3 µs/event** (~65–67k events/s sustained; within the 18 µs §7 budget) | `hft3_engine` REPLAY, 500k events, core-pinned |
+| Kernel jitter (loaded) | cyclictest p99 10 µs | run `20260611T074546Z` |
+| Wire to CHI404 upstream gateway | ping p50 90 µs / p99 180 µs | same run |
+| Wire to real paper order endpoint `ritpz04031.04.theomne.net` (38.98.144.227) | TCP RTT p50 3.69 ms / p99 4.14 ms | CC-1 `ss -tnp` endpoint discovery + 30-sample probe |
+| Paper order ack (MESU6 fresh n=200) | p50 4.19 ms / p99 13.69 ms | `rithmic_latency_probe` |
+
+**Key reading**: paper ack p50 (3.5–4.2 ms) ≈ paper-endpoint TCP RTT p50
+(3.7 ms) — the measured ack latency is dominated by **distance/handling to
+Rithmic's paper cluster**, not engine or simulator compute. The paper p99
+remains the conservative injection value for research (§4 rung 2 unchanged).
+Live offensive capability is engine 15.3 µs + live-endpoint wire. Wire survey
+(CC-1 follow-up, 2026-06-11): trial SDK ships NO "Rithmic 01" live connection
+params (distributed by Rithmic ops only, post-conformance); nearest measured
+Rithmic-operated paper-infra node `ritpz01004.01.theomne.net` is 1.02 ms TCP
+p50 from CHI404; live wire bound stays **OPEN** with labeled inference ~1–4 ms
+from paper topology. Closing it requires: funded Rithmic 01 account + exchange
+data agreements + API conformance (rapi@rithmic.com) + the resulting
+connection_params.txt, then the existing probe with live guards.
+
+**Probe-target defect (fixed in truth artifact, gate code fix pending)**: the
+§5 `network_pass=false` verdict came from pinging `rituz00100.00.rithmic.com`
+(37.5 ms — US East host NOT in the order path). Real endpoint RTT is 3.7 ms
+p50. The network gate must re-point at the discovered live endpoint before the
+verdict is meaningful.
+
+**Defensive capacity note**: engine ceiling ~67k events/s; CME burst rates can
+exceed this during shocks — queue-depth instrumentation and headroom check is
+CC4 scope (CONTINUOUS_CME).
 
 ---
 
@@ -171,11 +242,17 @@ actual Rithmic paper-broker sessions on CHI404 (not simulated). The resolver
 additionally requires `order_ack_p99_ms` to be present in the summary
 (§4 rung 2).
 
-The existing `trial_order_ack_appendix` in `latency_summary.json` currently
-holds n=12 (status: not authoritative; source: `runtime/latency_reports/
-latency_summary.json` run_id `20260530T031754Z`). A dedicated measurement
-session on CHI404 with R|API+ wired is required to accumulate the remaining
-samples.
+The n ≥ 1000 requirement is now satisfied. Campaign
+`order_ack_campaign_20260611T072116Z` collected 1002 paired submit→ack samples
+(reject=0) via `rithmic_latency_probe` (native C++) on Rithmic paper / Chicago,
+symbol MESM6, run 2026-06-11. `paper_order_latency.measured` was set to `true`
+in `runtime/latency_reports/latency_summary.json` (run_id `20260611T074546Z`).
+
+The prior `trial_order_ack_appendix` (n=12, run_id `20260530T031754Z`) is
+superseded by the native-probe campaign. That appendix is retained as
+non-authoritative fallback history only; the `rtrader` log-bridge tier from
+which it was sourced remains a non-authoritative fallback and must not be used
+for promotion-grade latency resolution.
 
 ### 9.4 Campaign Unblock
 
@@ -189,3 +266,49 @@ unblocks:
 
 Until this campaign completes, every replay invocation and every promotion
 bundle construction requires `--latency-ms` explicitly (§4 rung 1).
+
+---
+
+## 10. Crypto Order-Ack Measurement Campaign
+
+Crypto analog of §9. Lane-scoped artifact:
+`runtime/crypto_latency/latency_summary.json` (separate from the CME
+`runtime/latency_reports/latency_summary.json`).
+
+### 10.1 Requirement
+
+`paper_order_latency.measured` in `runtime/crypto_latency/latency_summary.json`
+must flip to `true` before the crypto resolution rung 2 (§3) can supply
+`order_ack_p99_ms` to replay runs and crypto bundle construction
+(CRYPTO_LIVE.md §7 `latency_ms_at_promotion`). Until then, every crypto
+replay and bundle build requires an explicit `--latency-ms` argument.
+
+### 10.2 Timestamp Protocol
+
+§9.2 applies verbatim with venue substitutions:
+
+- **submit_ns**: `time.perf_counter_ns()` captured immediately before the
+  Bitfinex order-new wire call in the crypto adapter.
+- **ack_ns**: captured on entry of the venue order-ack WebSocket callback,
+  before any processing.
+
+No synthetic or derived timestamps in paired records; synthetic records must
+carry `shadow_synthetic: true` and never populate the authoritative
+`paper_order_latency` section.
+
+### 10.3 Sample Size Gate
+
+Minimum **n ≥ 1000** paired submit→ack samples, collected from Bitfinex paper
+sub-account sessions running on the crypto live host (Contabo VPS,
+CRYPTO_LIVE.md §2) — not from the workstation, and not simulated.
+
+### 10.4 Campaign Unblock
+
+Setting `paper_order_latency.measured = true` (with valid `order_ack_p99_ms`)
+unblocks:
+
+1. §3 crypto resolution rung 2 — automated latency injection for crypto
+   replay runs.
+2. ALPHA_CRYPTO.md C9 gate — the C10 sweep at measured p99 may begin.
+3. CRYPTO_LIVE.md §7 — `latency_ms_at_promotion` may be drawn from the
+   measured value rather than requiring an explicit CLI override.

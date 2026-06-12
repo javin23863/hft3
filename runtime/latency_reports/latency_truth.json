@@ -1,0 +1,159 @@
+{
+  "campaign": "CC-1 Latency Truth",
+  "generated_utc": "2026-06-11T15:00:00Z",
+  "run_host": "CHI404",
+  "compute": {
+    "tick_to_decision_ns": 15300,
+    "tick_to_decision_source": "hft3_engine REPLAY 500k events: 65466 events/s = 15.3us/event (taskset -c 2, -O3 -march=native)",
+    "tick_to_decision_probe_ns": 16841,
+    "tick_to_decision_probe_source": "rithmic_latency_probe MESU6 n=200: decision_to_send_trigger p50=16.841us",
+    "evaluate_actions_ns": {
+      "p50": 40.0,
+      "p99": 41.0,
+      "p999": 41.0,
+      "n": 1000000
+    },
+    "spsc_ns": {
+      "p50": 20.0,
+      "p99": 21.0,
+      "p999": 21.0,
+      "n": 1000000
+    },
+    "cyclictest_p99_us": 10
+  },
+  "wire": {
+    "gateway_rtt_us": {
+      "p50": 90,
+      "p99": 180,
+      "host": "64.44.98.129",
+      "n": 100
+    },
+    "order_endpoint_rtt_us": {
+      "p50": 3687,
+      "p99": 4144,
+      "min": 3073,
+      "host": "ritpz04031.04.theomne.net",
+      "ip": "38.98.144.227",
+      "n": 30
+    },
+    "md_wire_to_callback_us": null,
+    "md_wire_note": "NOT MEASURABLE TODAY: adapter records iSsboe+iUsecs vs callback_monotonic_ns but probe does not log this delta."
+  },
+  "paper_ack": {
+    "symbol": "MESU6",
+    "p50_ms": 4.192,
+    "p99_ms": 13.687,
+    "p999_ms": 19.706,
+    "n": 200,
+    "run_id": "latency_truth_submit_MESU6_20260611",
+    "note": "paper-system processing artifact. MESM6 expired; MESU6 used. MESM6 1000-sample ref: p50=3.483ms p99=6.356ms"
+  },
+  "live_unknown": {
+    "sdk_finding": "Trial R|API+ SDK v13.7.0.0 ships NO Rithmic 01 (live) connection_params.txt. SDK docs state these are distributed by the Rithmic operations team after conformance testing. Rithmic 01 params require accepted user agreements and completed conformance test (rapi@rithmic.com). Hostname prefix for live system is not published in the trial SDK.",
+    "paper_system_wire_survey": {
+      "note": "All Rithmic Paper Trading (ritpz-cluster) hosts from rithmic_api_paper.yaml measured from CHI404. CHI cluster 01 node 184.105.22.229 shows ~1ms TCP RTT, indicating co-located or same-datacenter Rithmic infra. Port used: 64100 (MML_LOC_BROK_ADDR). Only 38.98.144.227 (ritpz04031) responds to ICMP.",
+      "measured_utc": "2026-06-11",
+      "all_candidates": [
+        {
+          "host": "ritpz01004.01.theomne.net",
+          "ip": "184.105.22.229",
+          "system": "Rithmic Paper Trading",
+          "role": "DMN/LIC cluster 01 CHI",
+          "tcp_p50_us": 1023,
+          "tcp_p99_us": 1173,
+          "tcp_min_us": 971,
+          "port": 64100,
+          "icmp": "filtered",
+          "n": 20
+        },
+        {
+          "host": "ritpz01000.01.theomne.net",
+          "ip": "38.65.210.71",
+          "system": "Rithmic Paper Trading",
+          "role": "LIC cluster 01 CHI",
+          "tcp_p50_us": 2530,
+          "tcp_p99_us": 2662,
+          "tcp_min_us": 1721,
+          "port": 64100,
+          "icmp": "filtered",
+          "n": 20
+        },
+        {
+          "host": "ritpz01001.01.theomne.net",
+          "ip": "38.65.202.197",
+          "system": "Rithmic Paper Trading",
+          "role": "LIC cluster 01 CHI",
+          "tcp_p50_us": 3392,
+          "tcp_p99_us": 4019,
+          "tcp_min_us": 2647,
+          "port": 64100,
+          "icmp": "filtered",
+          "n": 20
+        },
+        {
+          "host": "ritpz04031.04.theomne.net",
+          "ip": "38.98.144.227",
+          "system": "Rithmic Paper Trading",
+          "role": "TS/OP cluster 04 CHI (active paper order endpoint)",
+          "tcp_p50_us": 3500,
+          "tcp_p99_us": 4110,
+          "tcp_min_us": 3058,
+          "port": 64100,
+          "icmp_p50_ms": 4.027,
+          "icmp_p99_ms": 4.095,
+          "icmp_min_ms": 3.999,
+          "icmp_n": 50,
+          "n": 20
+        },
+        {
+          "host": "ritpz04063.04.theomne.net",
+          "ip": "38.65.202.203",
+          "system": "Rithmic Paper Trading",
+          "role": "LOC_BROK/DMN cluster 04 CHI",
+          "tcp_p50_us": 3499,
+          "tcp_p99_us": 4098,
+          "tcp_min_us": 3046,
+          "port": 64100,
+          "icmp": "filtered",
+          "n": 20
+        }
+      ]
+    },
+    "live_wire_bound": {
+      "status": "OPEN - not closeable without live Rithmic 01 credentials",
+      "lower_bound_inference": "ritpz01004.01.theomne.net (184.105.22.229, ~1ms TCP from CHI404) shows a co-located Paper Trading cluster node reachable at ~1ms. If Rithmic 01 live TS uses an equivalent co-located cluster in the same datacenter, wire RTT could be in the 1-4ms range. This is an inference from Paper Trading infrastructure topology only - NOT a Rithmic 01 live measurement.",
+      "remaining_unknown": "Rithmic 01 live system connection_params.txt not available in trial SDK. Closing this requires: funded live account, accepted exchange data agreements, completed API conformance testing with Omnesys/Rithmic ops. Also unknown: live order-server processing time, fill path through CME Globex, cancel-ack round-trip for live orders."
+    },
+    "what_remains": [
+      "MD wire-to-callback (iSsboe+iUsecs vs callback_monotonic_ns) - instrument AlertBidData/AlertAskData",
+      "Cancel-ack: paper simulator does not return cancel-ack for far-from-market orders",
+      "Live order-to-fill: not measurable on paper",
+      "CHI404-to-CME-Globex propagation: needs exchange loopback",
+      "Rithmic 01 live gateway TCP RTT: gated behind conformance testing (rapi@rithmic.com)"
+    ],
+    "how_to_close": {
+      "md_wire": "Instrument AlertBidData/AlertAskData in rithmic_adapter, 10-min subscription, clock-offset cal",
+      "cancel_ack": "Retry with at-market price or investigate paper simulator cancel event types",
+      "live_fill": "Requires live or SIM co-located account",
+      "live_wire": "Obtain Rithmic 01 connection_params.txt after conformance testing; run same TCP RTT probe against live TS endpoint"
+    }
+  },
+  "burst": {
+    "max_events_per_s": 67133,
+    "ns_per_event_p50": 14896,
+    "source_npz": "/tmp/engine_feed_burst.bin (200k synthetic, 500ns-spacing)",
+    "consistent_range_note": "65k-67k events/s across 100k/200k/500k feeds",
+    "submits": 0,
+    "note": "submits=0: synthetic EV<0 so NO_TRADE always wins. Real FOMC at >67k/s would queue-drop."
+  },
+  "probe_bug_fix": {
+    "old_host": "rituz00100.00.rithmic.com",
+    "old_rtt_p99_ms": 37.5,
+    "old_note": "US East Coast Rithmic test server, NOT in Chicago paper order path",
+    "real_endpoint": "ritpz04031.04.theomne.net",
+    "real_ip": "38.98.144.227",
+    "real_rtt_p50_ms": 3.687,
+    "real_rtt_p99_ms": 4.144,
+    "identification": "ss -tnp during live probe run"
+  }
+}

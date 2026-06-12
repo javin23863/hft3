@@ -171,3 +171,32 @@ if(NOT MSVC)
     )
     target_compile_definitions(rithmic_latency_probe PRIVATE LINUX _REENTRANT)
 endif()
+
+# ---------------------------------------------------------------------------
+# capture_daemon — CC2 binary market-data capture daemon.
+# Targeted at Linux/colo (CHI404).  Uses clock_gettime(CLOCK_REALTIME) and
+# fdatasync() which are POSIX; timegm() is glibc/BSD (define _DEFAULT_SOURCE).
+# The code compiles on all platforms but fsync/clock_gettime paths are guarded
+# with #if !defined(_WIN32).
+# ---------------------------------------------------------------------------
+add_executable(capture_daemon
+    tools/capture_daemon.cpp
+)
+target_include_directories(capture_daemon PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${RAPIPLUS_ROOT}/include
+)
+target_link_libraries(capture_daemon PRIVATE rithmic_gateway)
+target_compile_features(capture_daemon PRIVATE cxx_std_17)
+configure_rapiplus_msvc_runtime(capture_daemon)
+configure_hft_release_latency(capture_daemon)
+if(NOT MSVC)
+    target_compile_options(capture_daemon PRIVATE
+        -Wall -Wextra -Wno-sign-compare -Wno-write-strings
+        -Wpointer-arith -Winline -Wno-deprecated
+        -fno-strict-aliasing
+    )
+    # _DEFAULT_SOURCE exposes timegm() on glibc.
+    target_compile_definitions(capture_daemon PRIVATE LINUX _REENTRANT _DEFAULT_SOURCE)
+    target_link_libraries(capture_daemon PRIVATE pthread)
+endif()

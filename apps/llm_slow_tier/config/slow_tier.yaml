@@ -1,0 +1,46 @@
+# LLM slow-tier configuration.
+# All paths are relative to the repository root unless they are absolute.
+# Override model via HFT3_SLOW_TIER_MODEL env var or --model CLI flag.
+
+# --- Model ---
+model: "hf.co/unsloth/gemma-4-12B-it-qat-GGUF:UD-Q4_K_XL"
+host: "http://127.0.0.1:11434"
+timeout_s: 300
+num_predict: 1024
+
+# --- Verifier thresholds ---
+# Calm label is overridden to conflict_review if any z-score exceeds z_stress.
+z_stress: 3.0
+# Stress labels (war_escalation, macro_event) are challenged if all z < z_quiet
+# AND no calendar hits AND GDELT is empty.
+z_quiet: 1.0
+
+# --- Artifact paths (relative to repo root) ---
+artifact_root: "artifacts/research_cards/slow_tier"
+manifest_subdir: "manifests"    # manifests/{date}/{symbol}.manifest.json
+golden_subdir: "golden"         # golden/{date}.json
+
+# --- GDELT ---
+gdelt:
+  max_records: 20
+  timeout_s: 30
+  # Article-search query sent to the GDELT DOC 2.0 API.  The default covers
+  # the macro / geopolitical drivers most relevant to US futures.
+  query: "(oil OR gold OR crude OR opec OR iran OR fed OR inflation OR tariff) sourcelang:eng"
+
+# --- Verifier ---
+verify:
+  # Fraction of symbols whose insufficient_baseline flag must be set before the
+  # insufficient-evidence rule can fire.  Default: more than half (> 0.5).
+  insufficient_baseline_fraction: 0.5
+
+# --- F3 Hypothesis Intake ---
+# intake.enabled must be explicitly set to true to enable the F3 flow.
+# Rationale: every candidate inflates n_trials in the DSR/Holm family
+# correction; spam weakens the whole family's statistical power.
+intake:
+  enabled: true         # F3 proposer ON (autonomous-loop tweak proposer); output stays quarantined, never auto-registered
+  weekly_quota: 5       # max candidates per trailing 7-day window (keeps DSR/Holm n_trials bounded)
+
+# --- Defaults ---
+offline: false

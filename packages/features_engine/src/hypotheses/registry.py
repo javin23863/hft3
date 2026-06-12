@@ -12,8 +12,17 @@ from .modules import (
     ProfitLockBehavior, PropResetReopenWindow, FridayWeekendDerisking, EconomicEventRestrictionFlattening,
     QuotePullBeforeVolatility, RequoteRaceAfterShock, GhostRoute
 )
+from .vix_modules import (
+    VixSpikeEventFade, VixQuotePullLiquidityVacuum, VixImpliedRealizedGap,
+    VixDepthImbalanceDirection, VixLevelConditionedContinuation
+)
 
 CROSS_ASSET_HYP_IDS = frozenset({16, 17, 18, 19, 20})
+VIX_HYP_IDS = frozenset({46, 47, 48, 49, 50})
+# Prop-cohort hypotheses with confirmed structural defects (no feature producer / no context / hardcoded 0).
+# M6 Stage B scores these as num_trades=0 FAIL; that means "never alive", not "tested and rejected".
+# Revived in PROP_COHORT plan PC2-PC4. See specs/CORRECTNESS.md §3 rows prop-i..prop-iv.
+PROP_STRUCTURALLY_DEAD_HYP_IDS = frozenset({20, 30, 32, 35, 36, 38})  # revived in PROP_COHORT plan PC2-PC4
 
 
 def get_active_hypotheses() -> List[BaseHypothesis]:
@@ -62,10 +71,35 @@ def get_active_hypotheses() -> List[BaseHypothesis]:
         EconomicEventRestrictionFlattening(),
         QuotePullBeforeVolatility(),
         RequoteRaceAfterShock(),
-        GhostRoute()
+        GhostRoute(),
+        VixSpikeEventFade(),
+        VixQuotePullLiquidityVacuum(),
+        VixImpliedRealizedGap(),
+        VixDepthImbalanceDirection(),
+        VixLevelConditionedContinuation(),
     ]
     if os.environ.get("HFT3_CROSS_ASSET", "").lower() in ("0", "false", "no"):
         hyps = [h for h in hyps if h.hyp_id not in CROSS_ASSET_HYP_IDS]
+        hyps = [h for h in hyps if h.hyp_id not in VIX_HYP_IDS]
+
+    # Autonomous-loop scratch registry (lifecycle_orchestrator quarantine bridge).
+    # Off by default => production set is exactly the 50 above. Only when
+    # HFT3_SCRATCH_HYP_REGISTRY points at a module exposing get_scratch_hypotheses()
+    # are auto-proposed variants (reserved ids >= 900) unioned in — for an
+    # isolated re-screen, never the production build. Fail-open to production.
+    scratch = os.environ.get("HFT3_SCRATCH_HYP_REGISTRY", "").strip()
+    if scratch:
+        try:
+            import importlib.util
+
+            spec = importlib.util.spec_from_file_location("hft3_scratch_hyps", scratch)
+            if spec and spec.loader:
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+                extra = list(mod.get_scratch_hypotheses())
+                hyps = hyps + [h for h in extra if getattr(h, "hyp_id", 0) >= 900]
+        except Exception:
+            pass  # never let a bad scratch module break the production registry
     return hyps
 
 class HypothesisRegistry:
@@ -97,7 +131,7 @@ class HypothesisRegistry:
             17: "NQ -> MNQ lead-lag",
             18: "ES/NQ divergence snapback",
             19: "ZN/ZB -> ES/NQ macro impulse",
-            20: "Micro contract retail lag",
+            20: "Micro contract retail lag",  # STRUCTURALLY_DEAD (see CORRECTNESS prop-i, prop-iv)
             21: "Round-number stop sweep",
             22: "Prior high/low breakout trap",
             23: "Opening candle chase",
@@ -107,22 +141,27 @@ class HypothesisRegistry:
             27: "Stop-loss cascade continuation",
             28: "Panic market-order spread tax",
             29: "End-of-day forced flatten flow",
-            30: "Cutoff panic exits",
+            30: "Cutoff panic exits",  # STRUCTURALLY_DEAD (see CORRECTNESS prop-i, prop-ii)
             31: "No-overnight inventory squeeze",
-            32: "Daily loss-limit defense",
+            32: "Daily loss-limit defense",  # STRUCTURALLY_DEAD (see CORRECTNESS prop-iii)
             33: "Trailing drawdown pressure",
             34: "Profit-lock behavior",
-            35: "Max-contract crowding in micros",
-            36: "Prop reset/reopen window",
+            35: "Max-contract crowding in micros",  # STRUCTURALLY_DEAD (see CORRECTNESS prop-i)
+            36: "Prop reset/reopen window",  # STRUCTURALLY_DEAD (see CORRECTNESS prop-i)
             37: "Friday/weekend de-risking",
-            38: "Economic-event restriction flattening",
+            38: "Economic-event restriction flattening",  # STRUCTURALLY_DEAD (see CORRECTNESS prop-i, prop-ii)
             39: "Quote pull before volatility",
             40: "Re-quote race after shock",
             41: "Thin-book continuation",
             42: "Passive trap fill",
             43: "Rebate trap avoidance",
             44: "Spread regime change",
-            45: "Ghost Route MBO queue-decay"
+            45: "Ghost Route MBO queue-decay",
+            46: "VIX spike event fade",
+            47: "VIX quote-pull liquidity vacuum",
+            48: "VIX implied-realized vol gap",
+            49: "VIX depth imbalance direction",
+            50: "VIX level-conditioned continuation",
         }
         
     def get_hypothesis_name(self, id: int) -> str:

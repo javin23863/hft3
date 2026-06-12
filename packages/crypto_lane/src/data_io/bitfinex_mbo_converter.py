@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 from hftbacktest.types import (
@@ -35,10 +36,37 @@ def _side_flag(amount: float) -> int:
     return BUY_EVENT if amount > 0 else SELL_EVENT
 
 
-def _parse_events_from_ndjson(ndjson_path: Path, start_time_ns: int) -> List[Tuple]:
+def _parse_local_ts_ns(raw: str) -> Optional[int]:
+    """Return epoch-ns from ISO-8601 string, or None on any failure."""
+    try:
+        dt = datetime.fromisoformat(raw)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        # Exact integer arithmetic: float64 multiply at 2026 epochs has ~256 ns ULP.
+        epoch_s = int(dt.replace(microsecond=0).timestamp())
+        return epoch_s * 1_000_000_000 + dt.microsecond * 1_000
+    except Exception:
+        return None
+
+
+def _parse_events_from_ndjson(
+    ndjson_path: Path,
+    start_time_ns: int,
+    open_orders: Dict[int, int] | None = None,
+) -> Tuple[List[Tuple], bool]:
     events: List[Tuple] = []
-    seen_open: set[int] = set()
-    idx = 0
+    if open_orders is None:
+        open_orders = {}
+    event_counter = 0
+
+    def _next_ts() -> int:
+        nonlocal event_counter
+        event_counter += 1
+        return start_time_ns + event_counter
+
+    # Real-ts tracking
+    use_real_ts: Optional[bool] = None  # None = not yet decided
+    last_real_ns: int = 0
 
     with open(ndjson_path, "r", encoding="utf-8") as f:
         for line in f:
@@ -46,19 +74,62 @@ def _parse_events_from_ndjson(ndjson_path: Path, start_time_ns: int) -> List[Tup
             if not line:
                 continue
             msg = json.loads(line)
-            idx += 1
-            ts_ns = start_time_ns + idx
+
+            # Resolve timestamp for this line
+            raw_ts = msg.get("_local_ts_utc")
+            if raw_ts is not None:
+                parsed = _parse_local_ts_ns(str(raw_ts))
+            else:
+                parsed = None
+
+            if use_real_ts is None:
+                # First line determines mode
+                if parsed is not None:
+                    use_real_ts = True
+                    last_real_ns = parsed
+                else:
+                    use_real_ts = False
+                    print(
+                        f"WARNING: {ndjson_path}: first line has no parseable _local_ts_utc; "
+                        "falling back to synthetic counter timestamps",
+                        file=sys.stderr,
+                    )
+
+            if use_real_ts:
+                if parsed is not None and parsed >= last_real_ns:
+                    last_real_ns = parsed
+                # else: parsed is None or went backward — reuse last_real_ns (never go backward)
+                line_ts_ns = last_real_ns
+            else:
+                line_ts_ns = None  # signal to use _next_ts()
+
+            def _ts_for_event(_lts=line_ts_ns) -> int:
+                # Default-arg capture: binds line_ts_ns at definition time,
+                # safe against any future deferred/async call pattern.
+                if _lts is not None:
+                    return _lts
+                return _next_ts()
 
             if msg.get("type") == "snapshot":
+                if open_orders:
+                    for oid, side in list(open_orders.items()):
+                        ts_ns = _ts_for_event()
+                        events.append(
+                            (CANCEL_ORDER_EVENT | side | EXCH_EVENT | LOCAL_EVENT, ts_ns, ts_ns, 0.0, 0.0, oid, 0, 0.0)
+                        )
+                    open_orders.clear()
                 for row in msg.get("orders") or []:
                     if not isinstance(row, list) or len(row) != 3:
                         continue
                     oid, price, amount = int(row[0]), float(row[1]), float(row[2])
                     if price == 0 or amount == 0:
                         continue
+                    if oid in open_orders:
+                        continue
                     qty = abs(amount)
                     side = _side_flag(amount)
-                    seen_open.add(oid)
+                    open_orders[oid] = side
+                    ts_ns = _ts_for_event()
                     events.append(
                         (ADD_ORDER_EVENT | side | EXCH_EVENT | LOCAL_EVENT, ts_ns, ts_ns, price, qty, oid, 0, 0.0)
                     )
@@ -70,24 +141,25 @@ def _parse_events_from_ndjson(ndjson_path: Path, start_time_ns: int) -> List[Tup
             oid = int(msg["order_id"])
             price = float(msg["price"])
             amount = float(msg["amount"])
+            ts_ns = _ts_for_event()
 
             if price == 0:
-                if oid in seen_open:
-                    side = BUY_EVENT if amount > 0 else SELL_EVENT
+                if oid in open_orders:
+                    side = open_orders.pop(oid)
                     events.append(
                         (CANCEL_ORDER_EVENT | side | EXCH_EVENT | LOCAL_EVENT, ts_ns, ts_ns, 0.0, 0.0, oid, 0, 0.0)
                     )
-                    seen_open.discard(oid)
                 continue
 
             qty = abs(amount)
             side = _side_flag(amount)
-            if oid not in seen_open:
-                seen_open.add(oid)
+            if oid not in open_orders:
+                open_orders[oid] = side
                 events.append(
                     (ADD_ORDER_EVENT | side | EXCH_EVENT | LOCAL_EVENT, ts_ns, ts_ns, price, qty, oid, 0, 0.0)
                 )
             else:
+                open_orders[oid] = side
                 events.append(
                     (
                         MODIFY_ORDER_EVENT | side | EXCH_EVENT | LOCAL_EVENT,
@@ -101,11 +173,16 @@ def _parse_events_from_ndjson(ndjson_path: Path, start_time_ns: int) -> List[Tup
                     )
                 )
 
-    return events
+    return events, bool(use_real_ts)
 
 
 def _normalize_replay_clock(events: List[Tuple], start_time_ns: int) -> List[Tuple]:
-    events = sorted(events, key=lambda row: (int(row[2]), int(row[1]), int(row[0])))
+    # Sort by (local_ts, exch_ts) only — ev must NEVER be in this key.
+    # CANCEL_ORDER_EVENT (0x...0b) > ADD_ORDER_EVENT (0x...0a): including ev would order ADD before
+    # CANCEL for same-ts events, inverting the snapshot-boundary cancel-before-readd invariant.
+    # Python's sort is stable: equal-ts events keep their parse order (cancels emitted before re-adds).
+    # Stable sort + parse order is the contract.
+    events = sorted(events, key=lambda row: (int(row[2]), int(row[1])))
     if not events:
         return []
     base_local = int(events[0][2])
@@ -135,8 +212,21 @@ def convert_ndjson_to_npz(
 
     events: List[Tuple] = []
     clock = start_time_ns
+    shared_open_orders: Dict[int, int] = {}
+    file_mode: Optional[bool] = None  # True = real-ts, False = counter; None = not yet set
     for path in paths:
-        chunk = _parse_events_from_ndjson(path, clock)
+        # clock advances _next_ts() offsets per-file; normalization re-bases all events globally.
+        chunk, mode = _parse_events_from_ndjson(path, clock, open_orders=shared_open_orders)
+        if file_mode is None:
+            file_mode = mode
+        elif mode != file_mode:
+            raise ValueError(
+                f"Mixed timestamp modes across input files: {path} uses "
+                f"{'real-ts' if mode else 'counter'} but earlier file(s) used "
+                f"{'real-ts' if file_mode else 'counter'}. "
+                "Merging real-epoch (~1.78e18 ns) with counter (~1e9) timestamps would "
+                "sort all counter-mode events before all real-ts events."
+            )
         if not chunk:
             continue
         events.extend(chunk)

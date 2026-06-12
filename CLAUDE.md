@@ -27,7 +27,7 @@ Consult the vault before re-deriving architecture or re-litigating decisions; wr
 ## Hard rules (from AGENTS.md / BLUEPRINT.md — see those for full charter)
 
 - Filtration F_t: no lookahead in features/signals.
-- Live/paper paths run on CHI404 only; this workstation is offline research only.
+- Live/paper paths are lane-scoped: CME on CHI404 only, crypto on the Contabo BTC-node VPS only (specs/CRYPTO_LIVE.md §2); this workstation is offline research only for every lane.
 - Rithmic trial data is quarantined; never write to `data/npz/`.
 - T0 gate before merge: `python -m pytest tests/backtester_validation/fast -q`.
 - Use `workbench.src.artifacts.paths` helpers; never hardcode artifact paths.

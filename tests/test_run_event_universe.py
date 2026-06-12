@@ -748,3 +748,120 @@ class TestNpzResolverRoot:
 
         path = npz_path_for(tmp_path, "CPI_2024_09_11_TIGHT", "MES.v.0")
         assert path == external / "MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz"
+
+
+# ---------------------------------------------------------------------------
+# 8. 2026 embargo enforcement
+# ---------------------------------------------------------------------------
+
+_EVENTS_CSV_WITH_2026 = """\
+event_id,event_type,release_date,release_time,timezone,window_name,start_offset_seconds,end_offset_seconds,symbols,priority,source,source_url,effective_date,notes,row_status
+EMBARGO_EVT,CPI,2026-01-15,08:30:00,America/New_York,TIGHT,-30,300,"MES.v.0",50,TEST,http://example.com,2026-01-01,test,SOURCED
+PRE_EVT,CPI,2025-12-31,08:30:00,America/New_York,TIGHT,-30,300,"MES.v.0",50,TEST,http://example.com,2025-12-01,test,SOURCED
+"""
+
+
+class TestEmbargoEnforcement:
+    @pytest.fixture()
+    def embargo_events_csv(self, tmp_path: Path) -> Path:
+        p = tmp_path / "embargo_events.csv"
+        p.write_text(_EVENTS_CSV_WITH_2026, encoding="utf-8")
+        return p
+
+    @pytest.fixture()
+    def embargo_npz(self, tmp_path: Path) -> Path:
+        """NPZ for the embargoed event — guard must fire BEFORE this is read."""
+        from backtest_pipeline.src.replay_npz_fixture import build_minimal_mbo_npz
+
+        npz = tmp_path / "MES.v.0_EMBARGO_EVT_mbo.npz"
+        build_minimal_mbo_npz(npz)
+        return npz
+
+    @pytest.fixture()
+    def pre_npz(self, tmp_path: Path) -> Path:
+        """NPZ for the pre-embargo event."""
+        from backtest_pipeline.src.replay_npz_fixture import build_minimal_mbo_npz
+
+        npz = tmp_path / "MES.v.0_PRE_EVT_mbo.npz"
+        build_minimal_mbo_npz(npz)
+        return npz
+
+    def test_2026_row_skipped_with_embargo_reason_even_when_npz_exists(
+        self, universe_mod, embargo_events_csv, embargo_npz, pre_npz
+    ):
+        """release_date 2026-01-15 → skipped reason=embargo_2026; NOT in work units."""
+        lake_index = {
+            ("MES.v.0", "EMBARGO_EVT"): str(embargo_npz),
+            ("MES.v.0", "PRE_EVT"): str(pre_npz),
+        }
+        work, skipped = universe_mod.build_work_units(
+            embargo_events_csv,
+            lake_index,
+            latency_bands=[1.0],
+            event_type_filter=None,
+            symbol_filter=["MES.v.0"],
+            max_events=None,
+        )
+        work_ids = {u["event_id"] for u in work}
+        skipped_ids = {s["event_id"] for s in skipped}
+        assert "EMBARGO_EVT" not in work_ids, "embargoed event must not appear in work units"
+        assert "EMBARGO_EVT" in skipped_ids, "embargoed event must appear in skipped"
+        embargo_entries = [s for s in skipped if s["event_id"] == "EMBARGO_EVT"]
+        assert all(s["reason"] == "embargo_2026" for s in embargo_entries)
+
+    def test_2025_12_31_row_not_embargo_skipped(
+        self, universe_mod, embargo_events_csv, pre_npz
+    ):
+        """release_date 2025-12-31 is before embargo start → not embargo-skipped."""
+        lake_index = {("MES.v.0", "PRE_EVT"): str(pre_npz)}
+        work, skipped = universe_mod.build_work_units(
+            embargo_events_csv,
+            lake_index,
+            latency_bands=[1.0],
+            event_type_filter=None,
+            symbol_filter=["MES.v.0"],
+            max_events=None,
+        )
+        work_ids = {u["event_id"] for u in work}
+        assert "PRE_EVT" in work_ids, "2025-12-31 event must not be embargo-skipped"
+        embargo_skipped_ids = {s["event_id"] for s in skipped if s["reason"] == "embargo_2026"}
+        assert "PRE_EVT" not in embargo_skipped_ids
+
+    def test_universe_result_json_contains_embargo_block(
+        self, tmp_path, embargo_events_csv, embargo_npz, pre_npz
+    ):
+        """universe_result.json must contain embargo block with correct count."""
+        import backtest_pipeline.src.replay_matrix as _rm
+
+        _orig_fn = _rm.run_all_hypotheses_replay
+        out_dir = tmp_path / "embargo_out"
+        mod = _load_fresh_universe_mod("run_event_universe_embargo")
+        mod.load_lake_index = lambda _, rescan=False: {
+            ("MES.v.0", "EMBARGO_EVT"): str(embargo_npz),
+            ("MES.v.0", "PRE_EVT"): str(pre_npz),
+        }
+
+        try:
+            _rm.run_all_hypotheses_replay = _fake_hyp_results_for  # type: ignore[assignment]
+            rc = mod.main([
+                "--events-csv", str(embargo_events_csv),
+                "--symbols", "MES.v.0",
+                "--out", str(out_dir),
+                "--workers", "1",
+                "--bands", "1.0",
+            ])
+        finally:
+            _rm.run_all_hypotheses_replay = _orig_fn
+
+        assert rc == 0
+        result_path = out_dir / "universe_result.json"
+        assert result_path.exists()
+        payload = json.loads(result_path.read_text(encoding="utf-8"))
+        assert "embargo" in payload, "universe_result.json must contain 'embargo' key"
+        embargo_block = payload["embargo"]
+        assert embargo_block["start"] == "2026-01-01"
+        # 1 embargoed event × N bands = N skipped units (runner appends CHI404 measured band)
+        assert embargo_block["units_skipped_embargo"] == len(payload["latency_bands_ms"])
+        # EMBARGO_EVT must not appear in unit_results
+        run_ids = {u["event_id"] for u in payload.get("unit_results", [])}
+        assert "EMBARGO_EVT" not in run_ids

@@ -213,6 +213,18 @@ class TradeManagerRiskLayer:
         cfg = self.config
         if str(cfg.kill_switch_status).lower() != "armed":
             return _reject(intent, "KILL_SWITCH_NOT_ARMED", {"kill_switch_status": cfg.kill_switch_status})
+        # Model-lifecycle submit gate: a model the lifecycle registry has taken
+        # offline (DEGRADED-RED / QUARANTINED / PAUSED / RETIRED) may not trade.
+        # Untracked models pass through unchanged; any error fails open so this
+        # never breaks the existing path.
+        try:
+            from model_metrics.submit_gate import model_submit_decision
+
+            allowed, _size, reason = model_submit_decision(intent.model_id)
+            if not allowed:
+                return _reject(intent, "LIFECYCLE_STATE_BLOCKS_TRADE", {"reason": reason})
+        except Exception:
+            pass
         if cfg.model_eligibility and intent.model_id not in cfg.model_eligibility:
             return _reject(intent, "MODEL_NOT_ELIGIBLE", {"model_eligibility": list(cfg.model_eligibility)})
         if cfg.symbol_eligibility and intent.symbol not in cfg.symbol_eligibility:

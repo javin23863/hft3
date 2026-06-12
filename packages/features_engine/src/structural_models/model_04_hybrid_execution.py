@@ -21,11 +21,13 @@ def as_reservation_price(
     return mid - inventory * gamma * (sigma ** 2) * time_remaining
 
 
-def as_optimal_spread(gamma: float, kappa: float) -> float:
-    """delta_a + delta_b = (2/gamma) * ln(1 + gamma/kappa)."""
+def as_optimal_spread(gamma: float, kappa: float, sigma: float, time_remaining: float) -> float:
+    """delta_a + delta_b = gamma*sigma^2*(T-t) + (2/gamma) * ln(1 + gamma/kappa)."""
     if gamma <= 0 or kappa <= 0:
         return 0.0
-    return (2.0 / gamma) * math.log(1.0 + gamma / kappa)
+    time_remaining = max(time_remaining, 0.0)
+    sigma = max(sigma, 0.0)
+    return gamma * sigma ** 2 * time_remaining + (2.0 / gamma) * math.log(1.0 + gamma / kappa)
 
 
 def hybrid_reservation(
@@ -65,7 +67,7 @@ class HybridExecutionModel(BaseStructuralModel[HybridExecutionOutput]):
         vpin_value = float(kwargs.get("vpin_value", vpin_out.VPIN_value if vpin_out else 0.0))
 
         reservation = as_reservation_price(mid, inventory, self.gamma, sigma, time_remaining)
-        spread = as_optimal_spread(self.gamma, self.kappa)
+        spread = as_optimal_spread(self.gamma, self.kappa, sigma, time_remaining)
         hybrid, drift, vpin_mult = hybrid_reservation(
             reservation, ofi_smooth, vpin_value, self.vpin_lambda_scale
         )

@@ -71,6 +71,7 @@ DEFAULT_EVENTS_CSV = _REPO / "packages" / "data_system" / "config" / "events.csv
 DEFAULT_NPZ_DIR = _REPO / "data" / "npz"
 DEFAULT_SYMBOL = "MES.v.0"
 NPZ_PATTERN = re.compile(r"^(?P<symbol>.+?)_(?P<event_id>.+)_mbo\.npz$")
+RESEARCH_EMBARGO_START = "2026-01-01"  # ALPHA_CME.md §4 / DEPLOYMENT.md §4.2: research sweeps must never read data >= this date; first 2026 touch is the M9 paper-shadow bundle.
 
 
 # ---------------------------------------------------------------------------
@@ -163,6 +164,7 @@ def build_work_units(
 
     work: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
+    _empty_cache: dict[str, bool] = {}  # npz_path -> is-empty (built-time skip)
     # max_events caps events that actually produce work units — truncating
     # the raw rows first would just select the alphabetically-first events
     # regardless of whether their NPZ exists.
@@ -179,6 +181,18 @@ def build_work_units(
             candidate_symbols = [s for s in candidate_symbols if s in symbol_filter]
         if not candidate_symbols:
             candidate_symbols = [DEFAULT_SYMBOL]
+
+        release_date = row.get("release_date", "")
+        if release_date >= RESEARCH_EMBARGO_START:
+            for symbol in sorted(candidate_symbols):
+                for band in sorted(latency_bands):
+                    skipped.append({
+                        "event_id": event_id,
+                        "symbol": symbol,
+                        "latency_ms": band,
+                        "reason": "embargo_2026",
+                    })
+            continue
 
         has_any_npz = any(
             lake_index.get((symbol, event_id)) is not None
@@ -202,6 +216,16 @@ def build_work_units(
                         "latency_ms": band,
                         "reason": "npz_missing",
                     })
+                elif _is_empty_npz(npz_path, _empty_cache):
+                    # Present-but-empty NPZ: skip at BUILD time so it never spawns
+                    # a worker (which would pay ~6s of replay setup just to discover
+                    # zero events). This is what keeps the run from grinding.
+                    skipped.append({
+                        "event_id": event_id,
+                        "symbol": symbol,
+                        "latency_ms": band,
+                        "reason": "empty_npz",
+                    })
                 else:
                     work.append({
                         "event_id": event_id,
@@ -209,11 +233,54 @@ def build_work_units(
                         "npz_path": npz_path,
                         "latency_ms": band,
                         "event_type": etype,
-                        "release_date": row.get("release_date", ""),
+                        "release_date": release_date,
                     })
                     events_with_work.add(event_id)
 
     return work, skipped
+
+
+# Real-data NPZ are large (hundreds of KB+); a zero-event shell is ~263 bytes.
+# Only sub-threshold files are actually opened to confirm; big files are never
+# loaded here (assumed non-empty — the worker handles them).
+_EMPTY_NPZ_MAX_BYTES = 4096
+
+
+def _is_empty_npz(path: str, cache: dict[str, bool]) -> bool:
+    if path in cache:
+        return cache[path]
+    empty = False
+    try:
+        if os.path.getsize(path) < _EMPTY_NPZ_MAX_BYTES:
+            import numpy as np
+
+            with np.load(path, allow_pickle=True) as d:
+                arr = d["data"] if "data" in getattr(d, "files", []) else None
+                empty = arr is not None and arr.shape[0] == 0
+    except Exception:
+        empty = False  # uncertain -> don't skip; let the worker decide
+    cache[path] = empty
+    return empty
+
+
+# ---------------------------------------------------------------------------
+# VIX feature helpers
+# ---------------------------------------------------------------------------
+
+def _vix_feature_path(event_id: str) -> Path | None:
+    """Return path to VIX precomputed feature npz if it exists, else None.
+
+    Checks <feature_store_root>/VIX.OPT/VIX.OPT_<event_id>_features_v1.npz.
+    Honours HFT3_FEATURE_ROOT env var via feature_store_root().
+    Returns None if the feature_store module is absent or the file does not exist.
+    """
+    try:
+        from data_system.src.feature_store import feature_store_root  # type: ignore[import]
+        froot = feature_store_root(_REPO)
+        candidate = froot / "VIX.OPT" / f"VIX.OPT_{event_id}_features_v1.npz"
+        return candidate if candidate.is_file() else None
+    except Exception:
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -243,14 +310,37 @@ def _worker(unit: dict[str, Any]) -> dict[str, Any]:
     symbol: str = unit["symbol"]
     npz_path: str = unit["npz_path"]
     latency_ms: float = float(unit["latency_ms"])
+    hyp_ids_filter: list[int] | None = unit.get("hyp_ids")
 
     run_id = _det_id(npz_path, latency_ms, "LogProbQueueModel2")
+
+    vix_path = _vix_feature_path(event_id)
+    sensor_feature_npz: dict[str, str] | None = (
+        {"VIX": str(vix_path)} if vix_path is not None else None
+    )
 
     t0 = time.monotonic()
     try:
         hyps = get_active_hypotheses()
-        results = run_all_hypotheses_replay(hyps, npz_path, latency_ms=latency_ms)
+        if hyp_ids_filter is not None:
+            hyps = [h for h in hyps if h.hyp_id in hyp_ids_filter]
+        results = run_all_hypotheses_replay(
+            hyps, npz_path, latency_ms=latency_ms, sensor_feature_npz=sensor_feature_npz
+        )
         hyp_name_map = {h.hyp_id: h.name for h in hyps}
+        # Derive fee_per_round_trip_usd from FeeModel for R6 fee-stress (post-hoc).
+        # Uses the same product resolution as replay_matrix / stage_a_screen.
+        # tick_value_usd is needed for per-trade slippage adder arithmetic.
+        # Both fields are additive (never present in old records) — stress only
+        # applies to runs produced after this commit (rp_v1 → rp_v2 upgrade path).
+        from backtest_pipeline.src.fee_model import FeeModel as _FeeModel
+
+        _tick_val_map = {"ES": 12.50, "NQ": 5.00, "MES": 1.25, "MNQ": 0.50}
+        _sym_base = symbol.split(".")[0]
+        _tick_val_usd = _tick_val_map.get(_sym_base, 1.25)
+        _fm = _FeeModel(product=_sym_base if _sym_base in _FeeModel.TICK_VALUES else "MES")
+        _fee_per_rt = _fm.get_fee_per_contract() * 2.0  # both legs, 1 contract
+
         serialized: list[dict[str, Any]] = []
         for hyp_id in sorted(results):
             res = results[hyp_id]
@@ -263,6 +353,12 @@ def _worker(unit: dict[str, Any]) -> dict[str, Any]:
                 "expectancy_usd": round(float(res.expectancy), 6),
                 "adverse_selection_ticks": round(float(res.adverse_selection_ticks), 6),
                 "tail_loss_usd": round(float(res.tail_loss), 6),
+                # R6 fee-stress decomposition fields (additive, rp_v2+):
+                # fee_per_round_trip_usd = FeeModel(product, non_member) * 2 legs
+                # tick_value_usd = 1 tick move in USD for this product (1 contract)
+                # gross_expectancy = expectancy_usd + fee_per_round_trip_usd
+                "fee_per_round_trip_usd": round(_fee_per_rt, 6),
+                "tick_value_usd": round(_tick_val_usd, 6),
             })
         elapsed = time.monotonic() - t0
         return {
@@ -279,6 +375,11 @@ def _worker(unit: dict[str, Any]) -> dict[str, Any]:
         }
     except Exception as exc:  # noqa: BLE001
         elapsed = time.monotonic() - t0
+        msg = str(exc)
+        # An empty NPZ (present file, zero events) is NOT a code error — it is
+        # missing data. Mark it a SKIP so it never counts as an ERROR (which is
+        # what made a whole run look broken / grind on bad data).
+        is_empty = "zero events" in msg
         return {
             "run_id": run_id,
             "event_id": event_id,
@@ -288,7 +389,8 @@ def _worker(unit: dict[str, Any]) -> dict[str, Any]:
             "event_type": unit.get("event_type", ""),
             "release_date": unit.get("release_date", ""),
             "elapsed_s": round(elapsed, 3),
-            "error": str(exc),
+            "error": None if is_empty else msg,
+            "skip_reason": "empty_npz" if is_empty else None,
             "hypotheses": [],
         }
 
@@ -394,10 +496,20 @@ def _derive_p_value(per_event_expectancies: list[float]) -> float:
 
 def _apply_corrections(
     aggregated: dict[str, dict[str, dict[float, dict[str, Any]]]],
+    *,
+    stage_a_tested_cells: list[dict[str, Any]] | None = None,
+    stage_a_filter: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Apply Holm and BH corrections per event_type across all (hypothesis, band) cells.
 
     Returns {event_type: {method: ChampionReport_dict}}
+
+    When stage_a_tested_cells is provided (stage-B selective run), every cell in the
+    original stage-A family that was NOT re-run in this sweep receives a placeholder
+    HypothesisTestResult(p_value=1.0, metric_value=0.0, num_trades=0) before
+    apply_correction.  This keeps Holm n = full original family so adjusted alphas are
+    identical to a full run where screened-out cells failed; conservative FWER,
+    no multiplicity laundering.
     """
     from decision_engine.python.src.multiple_testing_correction import (  # type: ignore[import]
         HypothesisTestResult,
@@ -412,11 +524,76 @@ def _apply_corrections(
                 entry = {**cell, "band": band}
                 by_etype.setdefault(etype, []).append(entry)
 
+    # Build set of (hyp_id, event_type, band) actually run in this sweep
+    rerun_keys: set[tuple[int, str, float]] = set()
+    for hyp_key, etype_map in aggregated.items():
+        for etype, band_map in etype_map.items():
+            for band in band_map:
+                rerun_keys.add((int(hyp_key), etype, float(band)))
+
+    # Derive placeholder slugs from stage_a_tested_cells not in rerun_keys
+    # tested_cells entries expected: {hyp_id, event_type, band, slug (optional)}
+    placeholder_slugs: list[str] = []
+    placeholder_results_by_etype: dict[str, list[HypothesisTestResult]] = {}
+    # index of (hyp_id, etype) pairs present in rerun_keys (band-agnostic)
+    rerun_keys_no_band: set[tuple[int, str]] = {(h, e) for h, e, _ in rerun_keys}
+    placeholders_matched = 0
+    if stage_a_tested_cells:
+        for tc in stage_a_tested_cells:
+            tc_hyp = int(tc.get("hyp_id", tc.get("hypothesis_id", 0)))
+            tc_etype = str(tc.get("event_type", ""))
+            raw_band = tc.get("band_ms", tc.get("band", tc.get("latency_ms")))
+            if raw_band is not None:
+                tc_band: float | None = float(raw_band)
+            else:
+                tc_band = None
+
+            if tc_band is not None and (tc_hyp, tc_etype, tc_band) in rerun_keys:
+                placeholders_matched += 1
+                continue
+            if tc_band is None and (tc_hyp, tc_etype) in rerun_keys_no_band:
+                placeholders_matched += 1
+                continue
+
+            slug = tc.get("slug") or f"hyp_{tc_hyp}_band_{tc_band}"
+            placeholder_slugs.append(slug)
+            placeholder_results_by_etype.setdefault(tc_etype, []).append(
+                # selective-inference guard — adjusted alphas identical to a full
+                # run where screened-out cells failed; conservative FWER,
+                # no multiplicity laundering.
+                HypothesisTestResult(
+                    slug=slug,
+                    legacy_id=f"HYP_{tc_hyp}",
+                    metric_name="mean_expectancy_usd",
+                    metric_value=0.0,
+                    p_value=1.0,
+                    t_statistic=0.0,
+                    num_trades=0,
+                )
+            )
+
+        family_accounted = len(placeholder_slugs) + placeholders_matched
+        if family_accounted != len(stage_a_tested_cells):
+            print(
+                f"WARNING _apply_corrections: family size mismatch — "
+                f"tested_cells={len(stage_a_tested_cells)}, "
+                f"placeholders={len(placeholder_slugs)}, "
+                f"rerun_matched={placeholders_matched}, "
+                f"accounted={family_accounted}",
+                flush=True,
+            )
+
+    if stage_a_filter is not None:
+        stage_a_filter["placeholders_added"] = len(placeholder_slugs)
+
     corrections: dict[str, Any] = {}
     gate = MultipleTestingGate(alpha=0.05)
 
-    for etype in sorted(by_etype):
-        cells = sorted(by_etype[etype], key=lambda c: (c["hypothesis_id"], c["band"]))
+    # Union of etypes: those we ran + those that only appear in placeholders
+    all_etypes = sorted(set(by_etype.keys()) | set(placeholder_results_by_etype.keys()))
+
+    for etype in all_etypes:
+        cells = sorted(by_etype.get(etype, []), key=lambda c: (c["hypothesis_id"], c["band"]))
         test_results: list[HypothesisTestResult] = []
         for cell in cells:
             p_val = _derive_p_value(cell["per_event_expectancies"])
@@ -438,6 +615,8 @@ def _apply_corrections(
                 t_statistic=t_stat,
                 num_trades=cell["total_trades"],
             ))
+        # Append placeholders for cells not re-run (Holm family honesty)
+        test_results.extend(placeholder_results_by_etype.get(etype, []))
 
         holm_report = gate.apply_correction(test_results, method="holm")
         # BH requires fresh HypothesisTestResult objects (is_significant written in-place)
@@ -460,6 +639,7 @@ def _apply_corrections(
                 t_statistic=t2,
                 num_trades=cell["total_trades"],
             ))
+        test_results_bh.extend(placeholder_results_by_etype.get(etype, []))
         bh_report = gate.apply_correction(test_results_bh, method="benjamini_hochberg")
 
         def _report_to_dict(rpt: Any) -> dict[str, Any]:
@@ -484,6 +664,7 @@ def _apply_corrections(
                 ],
             }
 
+        etype_placeholders = [r.slug for r in placeholder_results_by_etype.get(etype, [])]
         corrections[etype] = {
             "holm": _report_to_dict(holm_report),
             "benjamini_hochberg": _report_to_dict(bh_report),
@@ -491,8 +672,196 @@ def _apply_corrections(
                 "scipy.stats.ttest_1samp(per_event_expectancies, popmean=0.0), "
                 "two-sided; p=1.0 when n_events < 3"
             ),
+            **({"not_rerun_stage_b": etype_placeholders} if etype_placeholders else {}),
         }
     return corrections
+
+
+# ---------------------------------------------------------------------------
+# Robustness producers (additive block — does NOT alter Holm/BH logic above)
+# ---------------------------------------------------------------------------
+
+def _compute_robustness(
+    aggregated: dict[str, dict[str, dict[float, dict[str, Any]]]],
+    unit_results: list[dict[str, Any]],
+    stage_a_tested_cells: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Compute DSR, CSCV-PBO, and bootstrap CI for all cells in the aggregated pool.
+
+    Called AFTER _apply_corrections, BEFORE write_universe_result.
+    Does NOT touch Holm/BH logic, placeholders, or walk-forward sections.
+
+    n_trials convention
+    -------------------
+    n_trials for DSR = len(stage_a_tested_cells), the FULL family including
+    Stage-B placeholders (cells that were in Stage A but not re-run).
+    When stage_a_tested_cells is empty (standalone Stage-B run without --from-stage-a),
+    n_trials defaults to the count of cells actually aggregated in this run.
+    This is conservative: omitting the stage-A family understates the DSR penalty.
+    The n_trials value is echoed in every dsr_by_cell entry for audit.
+
+    CSCV matrix
+    -----------
+    Rows = date blocks formed by splitting unit_results events (sorted by
+    release_date, then event_id for ties) into n_splits=8 equal-ish blocks.
+    Cols = non-placeholder tested cells (hyp_id × event_type × band triples
+    that have per_event_expectancies in the aggregated pool).
+    Value = per-block mean expectancy of that cell.
+    Cells with no events in a block get NaN; cells with any NaN block are
+    excluded from the CSCV matrix (n_excluded is recorded).
+
+    Returns
+    -------
+    Dict matching the JSON shape:
+        {
+          "dsr_by_cell":      {slug: {...}},
+          "bootstrap_by_cell": {slug: {...}},
+          "pbo":              {...},
+          "producer_version": "rp_v1",
+        }
+    """
+    try:
+        from research_pipeline.src.robustness_producers import (  # type: ignore[import]
+            bootstrap_ci,
+            cscv_pbo,
+            deflated_sharpe_for_cell,
+            fee_stress_for_cell,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"robustness_producers import failed: {exc}", "producer_version": "rp_v1"}
+
+    # n_trials = full family including placeholders; fall back to live cell count
+    n_trials_total = len(stage_a_tested_cells) if stage_a_tested_cells else None
+
+    # Flatten aggregated cells to a list of (slug, per_event_expectancies)
+    # collecting only cells that actually have data (not placeholders)
+    cell_data: list[tuple[str, int, str, float, list[float]]] = []
+    # cell_data: [(slug, hyp_id, event_type, band, per_event_expectancies)]
+    for hyp_key, etype_map in aggregated.items():
+        for etype, band_map in etype_map.items():
+            for band, cell in band_map.items():
+                slug = f"hyp_{cell['hypothesis_id']}_band_{band}"
+                expecs = cell.get("per_event_expectancies", [])
+                cell_data.append((slug, int(cell["hypothesis_id"]), etype, float(band), expecs))
+
+    # If no stage_a_tested_cells supplied, use count of live cells as n_trials
+    n_trials_effective = n_trials_total if n_trials_total is not None else len(cell_data)
+
+    # --- Per-cell DSR, bootstrap, and R6 fee stress ---
+    dsr_by_cell: dict[str, Any] = {}
+    bootstrap_by_cell: dict[str, Any] = {}
+    fee_stress_by_cell: dict[str, Any] = {}
+
+    # Build a lookup: (hyp_id, etype, band) → per-event decomposition lists
+    # for R6 fee stress.  Keys added in rp_v2; old records return 0.0 →
+    # fee_stress_for_cell detects this and sets stress_data_available=False.
+    _fee_decomp: dict[tuple[int, str, float], dict[str, list]] = {}
+    for ur in unit_results:
+        if ur.get("error"):
+            continue
+        ur_etype = ur.get("event_type", "")
+        ur_band  = float(ur.get("latency_ms", 0.0))
+        for hrow in ur.get("hypotheses", []):
+            _key = (int(hrow["hypothesis_id"]), ur_etype, ur_band)
+            if _key not in _fee_decomp:
+                _fee_decomp[_key] = {
+                    "n_trades":       [],
+                    "fee_per_rt":     [],
+                    "tick_value":     [],
+                }
+            _d = _fee_decomp[_key]
+            _d["n_trades"].append(int(hrow.get("num_trades", 0)))
+            _d["fee_per_rt"].append(float(hrow.get("fee_per_round_trip_usd", 0.0)))
+            _d["tick_value"].append(float(hrow.get("tick_value_usd", 0.0)))
+
+    for slug, hyp_id, etype, band, expecs in cell_data:
+        cell_slug = f"{slug}_{etype}"
+        dsr_by_cell[cell_slug]       = deflated_sharpe_for_cell(expecs, n_trials=n_trials_effective)
+        bootstrap_by_cell[cell_slug] = bootstrap_ci(expecs)
+
+        # R6: collect decomposition arrays for this cell
+        _dk = (hyp_id, etype, band)
+        _decomp = _fee_decomp.get(_dk, {})
+        fee_stress_by_cell[cell_slug] = fee_stress_for_cell(
+            per_event_expectancies=expecs,
+            per_event_n_trades=_decomp.get("n_trades", []),
+            per_event_fee_per_rt=_decomp.get("fee_per_rt", []),
+            per_event_tick_value=_decomp.get("tick_value", []),
+        )
+
+    # --- CSCV PBO matrix ---
+    # Build date-ordered event list from non-errored unit_results
+    events_ordered: list[str] = []
+    seen_events: set[str] = set()
+    for ur in sorted(unit_results, key=lambda u: (u.get("release_date", ""), u["event_id"])):
+        if not ur.get("error") and ur["event_id"] not in seen_events:
+            events_ordered.append(ur["event_id"])
+            seen_events.add(ur["event_id"])
+
+    pbo_result: dict[str, Any]
+    N_SPLITS = 8
+
+    if len(events_ordered) < N_SPLITS:
+        pbo_result = {
+            "pbo": None,
+            "n_splits": N_SPLITS,
+            "n_configs": len(cell_data),
+            "n_partitions": 0,
+            "n_excluded": 0,
+            "reason": f"insufficient_events_for_cscv: {len(events_ordered)} < {N_SPLITS}",
+        }
+    else:
+        # Assign each event to one of N_SPLITS blocks (as equal as possible)
+        block_size = len(events_ordered) / N_SPLITS
+        event_to_block: dict[str, int] = {}
+        for i, eid in enumerate(events_ordered):
+            event_to_block[eid] = min(int(i / block_size), N_SPLITS - 1)
+
+        # Build matrix: rows=blocks, cols=cells
+        # cell_data already excludes placeholders (they have no per_event_expectancies)
+        n_cells = len(cell_data)
+        mat = np.full((N_SPLITS, n_cells), np.nan)
+
+        for col_idx, (slug, hyp_id, etype, band, _) in enumerate(cell_data):
+            # Collect per-event expectancies keyed by event_id for this cell
+            # We need to look up per-event values from unit_results
+            event_expec: dict[str, float] = {}
+            for ur in unit_results:
+                if ur.get("error") or ur.get("event_type", "") != etype:
+                    continue
+                for hrow in ur.get("hypotheses", []):
+                    if int(hrow["hypothesis_id"]) == hyp_id and float(ur["latency_ms"]) == band:
+                        event_expec[ur["event_id"]] = float(hrow["expectancy_usd"])
+                        break
+
+            # Accumulate block-level means
+            block_sums: dict[int, list[float]] = {b: [] for b in range(N_SPLITS)}
+            for eid, val in event_expec.items():
+                blk = event_to_block.get(eid)
+                if blk is not None:
+                    block_sums[blk].append(val)
+
+            for blk in range(N_SPLITS):
+                vals = block_sums[blk]
+                if vals:
+                    mat[blk, col_idx] = float(np.mean(vals))
+                # else stays NaN → cell excluded from CSCV
+
+        pbo_result = cscv_pbo(mat, n_splits=N_SPLITS)
+
+    return {
+        "dsr_by_cell": dsr_by_cell,
+        "bootstrap_by_cell": bootstrap_by_cell,
+        "pbo": pbo_result,
+        "fee_stress_by_cell": fee_stress_by_cell,
+        "producer_version": "rp_v2",
+        "producer_version_note": (
+            "rp_v2 adds R6 fee/slippage stress (fee_stress_by_cell). "
+            "stress_pass = fee_x2_pass is a REPORTED gate consumed at CC5/CC7 "
+            "promotion time — does NOT mutate Holm/BH survivor logic. "
+            "Records from pre-rp_v2 runs will show stress_data_available=False."
+        ),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -523,14 +892,17 @@ def write_universe_result(
     skipped: list[dict[str, Any]],
     aggregated: dict[str, Any],
     corrections: dict[str, Any],
+    robustness: dict[str, Any] | None = None,
     latency_bands: list[float],
     cli_args: dict[str, Any],
     stamp: dict[str, Any],
     run_start_utc: str,
     run_end_utc: str,
     total_elapsed_s: float,
+    stage_a_filter: dict[str, Any] | None = None,
 ) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
+    units_skipped_embargo = sum(1 for s in skipped if s.get("reason") == "embargo_2026")
     payload = {
         "schema": "universe_result_v1",
         "run_start_utc": run_start_utc,
@@ -542,11 +914,17 @@ def write_universe_result(
         "units_run": len(unit_results),
         "units_skipped": len(skipped),
         "units_errored": sum(1 for u in unit_results if u.get("error")),
+        "embargo": {
+            "start": RESEARCH_EMBARGO_START,
+            "units_skipped_embargo": units_skipped_embargo,
+        },
+        **({"stage_a_filter": stage_a_filter} if stage_a_filter is not None else {}),
         "skipped": sorted(skipped, key=lambda s: (s["event_id"], s["symbol"], s["latency_ms"])),
         "certification_stamp": stamp,
         "certification_footer": format_stamp_footer(stamp),
         "aggregated": aggregated,
         "corrections": corrections,
+        **({"robustness": robustness} if robustness is not None else {}),
         "unit_results": unit_results,
     }
     path = out_dir / "universe_result.json"
@@ -597,6 +975,8 @@ def write_universe_report(
     for etype in event_types:
         n_events = len(run_by_etype.get(etype, set()))
         lines.append(f"| {etype} | {n_events} | — |")
+    units_skipped_embargo = sum(1 for s in skipped if s.get("reason") == "embargo_2026")
+    lines.append(f"\nEmbargoed (>= 2026-01-01): {units_skipped_embargo} units skipped")
     lines.append("")
 
     # --- Survivors per event_type × band (Holm) ---
@@ -753,7 +1133,68 @@ def main(argv: list[str] | None = None) -> int:
                    help="Limit events processed (smoke runs)")
     p.add_argument("--rescan", action="store_true", default=False,
                    help="Skip manifest cache and scan NPZ dir directly (useful when manifest is stale)")
+    p.add_argument("--from-stage-a", default=None, dest="from_stage_a", metavar="SURVIVORS_JSON",
+                   help="Path to stage-A survivors JSON. Restricts hypotheses/event_types run.")
+    p.add_argument("--cells", default=None,
+                   help='Explicit cell override e.g. "46:CPI,12:NFP" (hyp_id:event_type pairs).')
     args = p.parse_args(argv)
+
+    # ---------------------------------------------------------------------------
+    # Stage-A filtering: parse survivors + cells; build allowed set
+    # ---------------------------------------------------------------------------
+    stage_a_filter: dict[str, Any] | None = None
+    # allowed_cells: {(hyp_id, event_type)} union of stage-A survivors + pass_through
+    allowed_cells: set[tuple[int, str]] | None = None
+    # per_etype_hyp_ids: {event_type: set[hyp_id]} for _worker hyp_ids filter
+    per_etype_hyp_ids: dict[str, set[int]] | None = None
+    # tested_cells from the stage-A report (full family for Holm honesty)
+    stage_a_tested_cells: list[dict[str, Any]] = []
+
+    if args.from_stage_a:
+        sa_path = Path(args.from_stage_a)
+        sa_data = json.loads(sa_path.read_text(encoding="utf-8"))
+        survivors: list[dict[str, Any]] = sa_data.get("survivors", [])
+        pass_through: list[Any] = sa_data.get("pass_through", [])
+        stage_a_tested_cells = sa_data.get("tested_cells", [])
+
+        # Full set of event_types present in the original stage-A family
+        tested_etypes: set[str] = {tc["event_type"] for tc in stage_a_tested_cells if "event_type" in tc}
+        # Surviving event_types (from survivors list) — used for work-unit restriction below
+        surviving_etypes: set[str] = {s["event_type"] for s in survivors if "event_type" in s}
+
+        allowed_cells = set()
+        for s in survivors:
+            if "hyp_id" in s and "event_type" in s:
+                allowed_cells.add((int(s["hyp_id"]), s["event_type"]))
+        # pass_through hyps advance for ALL event_types in the original tested family
+        for pt in pass_through:
+            pt_id = int(pt) if isinstance(pt, (int, str)) else int(pt.get("hyp_id", pt))
+            for etype in tested_etypes:
+                allowed_cells.add((pt_id, etype))
+
+        # Explicit --cells override adds additional cells
+        if args.cells:
+            for token in args.cells.split(","):
+                token = token.strip()
+                if ":" in token:
+                    hid_str, et = token.split(":", 1)
+                    allowed_cells.add((int(hid_str.strip()), et.strip()))
+
+        # Build per-event_type hyp_id sets for _worker filtering
+        per_etype_hyp_ids = {}
+        for hyp_id, etype in allowed_cells:
+            per_etype_hyp_ids.setdefault(etype, set()).add(hyp_id)
+
+        allowed_cells_count = len(allowed_cells)
+        stage_a_filter = {
+            "survivors_file": str(sa_path),
+            "allowed_cells_count": allowed_cells_count,
+            "placeholders_added": 0,  # filled in by _apply_corrections
+        }
+        print(
+            f"Stage-A filter active: {allowed_cells_count} allowed cells from {sa_path.name}",
+            flush=True,
+        )
 
     utcstamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     out_dir = args.out or (_REPO / "research_cards" / f"universe_{utcstamp}")
@@ -780,6 +1221,17 @@ def main(argv: list[str] | None = None) -> int:
         symbol_filter=symbol_filter,
         max_events=args.max_events,
     )
+
+    # Stage-A: restrict work units to event_types with >=1 allowed cell;
+    # stamp each unit with the hyp_ids to run for that event_type.
+    if per_etype_hyp_ids is not None:
+        allowed_etypes = set(per_etype_hyp_ids.keys())
+        work_units = [
+            {**u, "hyp_ids": sorted(per_etype_hyp_ids[u["event_type"]])}
+            for u in work_units
+            if u.get("event_type") in allowed_etypes
+        ]
+
     print(f"Work units: {len(work_units)}  skipped: {len(skipped)}", flush=True)
     if not work_units:
         print("No work units — check --symbols, --event-type, and data/npz/ contents.", flush=True)
@@ -789,6 +1241,7 @@ def main(argv: list[str] | None = None) -> int:
             data_version="databento_mbo",
         )
         out_dir.mkdir(parents=True, exist_ok=True)
+        _early_embargo = sum(1 for s in skipped if s.get("reason") == "embargo_2026")
         payload = {
             "schema": "universe_result_v1",
             "run_start_utc": utcstamp,
@@ -797,6 +1250,10 @@ def main(argv: list[str] | None = None) -> int:
             "git_commit": _git_commit(_REPO),
             "units_run": 0,
             "units_skipped": len(skipped),
+            "embargo": {
+                "start": RESEARCH_EMBARGO_START,
+                "units_skipped_embargo": _early_embargo,
+            },
             "skipped": skipped,
             "certification_stamp": stamp,
         }
@@ -812,30 +1269,84 @@ def main(argv: list[str] | None = None) -> int:
         "events_csv": str(args.events_csv),
         "workers": args.workers,
         "max_events": args.max_events,
+        "from_stage_a": args.from_stage_a,
+        "cells": args.cells,
     }
 
     run_start_utc = datetime.now(timezone.utc).isoformat()
     t_start = time.monotonic()
 
+    def _unit_status(r: dict[str, Any]) -> str:
+        if r.get("skip_reason"):
+            return "SKIP"
+        if r.get("error"):
+            return "ERROR"
+        return "ok"
+
+    # Fail-fast: never grind a whole universe when the CODE is broken. Empty NPZ
+    # now SKIP instantly (no 12h grind), so only a pile of real ERRORs with zero
+    # OK indicates a broken run — abort on that. Skips never trigger this (an
+    # all-empty slice just finishes fast). Error-based ⇒ it also never fires on a
+    # healthy run, so the pool is never torn down mid-flight.
+    failfast_errors = int(os.environ.get("HFT3_UNIVERSE_FAILFAST_ERRORS", "100"))
+    ok_count = 0
+    err_count = 0
+    aborted = False
+
+    def _should_abort() -> bool:
+        return err_count >= failfast_errors and ok_count == 0
+
+    unit_results: list[dict[str, Any]] = []
     if args.workers == 1:
         # Sequential path — avoids spawn overhead in tests and single-core envs
-        unit_results: list[dict[str, Any]] = []
         for i, unit in enumerate(work_units, 1):
-            print(f"  [{i}/{len(work_units)}] {unit['event_id']} {unit['symbol']} {unit['latency_ms']}ms", flush=True)
-            unit_results.append(_worker(unit))
+            r = _worker(unit)
+            st = _unit_status(r)
+            ok_count += st == "ok"
+            err_count += st == "ERROR"
+            print(f"  [{i}/{len(work_units)}] {unit['event_id']} {unit['symbol']} {unit['latency_ms']}ms {st}", flush=True)
+            unit_results.append(r)
+            if _should_abort():
+                aborted = True
+                break
     else:
         ctx = mp.get_context("spawn")
         with ctx.Pool(processes=args.workers) as pool:
-            unit_results = []
             for i, result in enumerate(pool.imap_unordered(_worker, work_units), 1):
-                status = "ERROR" if result.get("error") else "ok"
+                st = _unit_status(result)
+                ok_count += st == "ok"
+                err_count += st == "ERROR"
                 print(
                     f"  [{i}/{len(work_units)}] {result['event_id']} "
                     f"{result['symbol']} {result['latency_ms']}ms "
-                    f"elapsed={result['elapsed_s']}s {status}",
+                    f"elapsed={result['elapsed_s']}s {st}",
                     flush=True,
                 )
                 unit_results.append(result)
+                if _should_abort():
+                    aborted = True
+                    break  # context-manager __exit__ tears the pool down safely
+
+    if aborted:
+        n = len(unit_results)
+        n_err = sum(1 for u in unit_results if u.get("error"))
+        n_skip = sum(1 for u in unit_results if u.get("skip_reason"))
+        msg = (f"FAIL-FAST ABORT: {n_err} errors with 0 OK after {n} units. "
+               f"The replay path is broken (not empty data — empties skip). "
+               f"Not grinding the remaining {len(work_units) - n} units. "
+               f"Check the traceback above / HFT3_NPZ_ROOT.")
+        print("\n" + "=" * 80 + f"\n{msg}\n" + "=" * 80, flush=True)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "universe_result.json").write_text(json.dumps({
+            "schema": "universe_result_v1",
+            "status": "ABORTED_NO_PROGRESS",
+            "abort_reason": msg,
+            "run_end_utc": datetime.now(timezone.utc).isoformat(),
+            "units_processed": n, "units_ok": 0, "units_errored": n_err, "units_skipped": n_skip,
+            "npz_root": os.environ.get("HFT3_NPZ_ROOT", "(default repo/data/npz)"),
+        }, indent=2), encoding="utf-8")
+        print(f"Wrote {out_dir / 'universe_result.json'} (status ABORTED_NO_PROGRESS)")
+        return 2
 
     total_elapsed = time.monotonic() - t_start
     run_end_utc = datetime.now(timezone.utc).isoformat()
@@ -844,7 +1355,18 @@ def main(argv: list[str] | None = None) -> int:
     unit_results.sort(key=lambda u: (u["event_id"], u["symbol"], float(u["latency_ms"])))
 
     aggregated = _aggregate_results(unit_results)
-    corrections = _apply_corrections(aggregated)
+    corrections = _apply_corrections(
+        aggregated,
+        stage_a_tested_cells=stage_a_tested_cells if stage_a_filter else None,
+        stage_a_filter=stage_a_filter,
+    )
+
+    # --- Robustness producers (additive; does not alter Holm/BH/placeholders) ---
+    robustness = _compute_robustness(
+        aggregated,
+        unit_results=unit_results,
+        stage_a_tested_cells=stage_a_tested_cells,
+    )
 
     stamp = build_certification_stamp(
         execution_mode="UNIVERSE_REPLAY",
@@ -860,12 +1382,14 @@ def main(argv: list[str] | None = None) -> int:
         skipped=skipped,
         aggregated=aggregated,
         corrections=corrections,
+        robustness=robustness,
         latency_bands=all_bands,
         cli_args=cli_args,
         stamp=stamp,
         run_start_utc=run_start_utc,
         run_end_utc=run_end_utc,
         total_elapsed_s=total_elapsed,
+        stage_a_filter=stage_a_filter,
     )
     report_path = write_universe_report(
         out_dir,
