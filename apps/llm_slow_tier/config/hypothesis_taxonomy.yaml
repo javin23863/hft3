@@ -1,0 +1,145 @@
+# Hypothesis taxonomy for F3 slow-tier intake.
+#
+# Six fixed families, grounded in the campaign strategy classes
+# (CONTINUOUS_CME roadmap, vault doctrine).
+#
+# Each family has:
+#   description           — what the family tests
+#   allowed_feature_inputs — exhaustive list of feature slugs the model MAY
+#                            reference; anything outside this list is forbidden
+#   forbidden             — explicit exclusions / disqualifying behaviours
+#   template_slots        — the JSON keys the model must fill when proposing a
+#                           candidate; maps directly to TestableHypothesis fields
+#
+# PROMOTION IS HUMAN-ONLY.  The intake flow writes candidates to the quarantine
+# zone (research_inputs/slow_tier/).  Promotion into
+# features_engine/src/hypotheses/registry.py happens through the normal gauntlet
+# and requires a human decision.  NO auto-registration ever.
+
+families:
+
+  queue_position_mm:
+    description: >
+      Tests whether queue position (ahead-of-fill priority) predicts short-horizon
+      fill probability, adverse selection cost, and net P&L per liquidity provision
+      cycle.  Focused on micro-structure of a single product's LOB.
+    allowed_feature_inputs:
+      - queue_position_frac
+      - queue_ahead_volume
+      - queue_behind_volume
+      - bid_ask_spread_ticks
+      - top_of_book_imbalance
+      - time_at_top_ms
+    forbidden:
+      - first-wave race conditions
+      - manipulation signals
+      - cross-product features (use cross_product_lead_lag family instead)
+    template_slots:
+      threshold_range: "numeric range for queue position fraction, e.g. [0.0, 0.25]"
+      horizon_range: "hold horizon in seconds, e.g. [1, 30]"
+      products: "list of CME futures symbols to test on"
+
+  second_wave_ofi_momentum:
+    description: >
+      Tests whether a second-wave (non-first-wave) order-flow imbalance signal
+      predicts short-horizon price momentum after the initial aggressive order
+      sequence has been absorbed.  Excludes any first-wave race or co-location
+      latency advantage.
+    allowed_feature_inputs:
+      - ofi_second_wave
+      - ofi_cumulative_10s
+      - ofi_cumulative_30s
+      - trade_side_imbalance
+      - volume_weighted_delta
+      - bid_ask_spread_ticks
+    forbidden:
+      - first-wave race
+      - co-location latency exploitation
+      - manipulation
+    template_slots:
+      threshold_range: "OFI magnitude threshold, e.g. [500, 5000] lots"
+      horizon_range: "prediction horizon in seconds, e.g. [5, 60]"
+      products: "list of CME futures symbols"
+
+  cross_product_lead_lag:
+    description: >
+      Tests whether the price or order-flow of a lead product (e.g. ES) predicts
+      near-term price movement in a lag product (e.g. NQ or RTY) within a defined
+      latency window accessible to a normal co-located participant.
+    allowed_feature_inputs:
+      - lead_product_mid_change_bps
+      - lead_product_ofi
+      - lead_product_trade_side
+      - lag_product_spread_ticks
+      - cross_product_correlation_20s
+    forbidden:
+      - first-wave race
+      - manipulation
+      - latency below 100 microseconds (hardware-latency dependent, out of scope)
+    template_slots:
+      threshold_range: "lead-product move threshold in bps, e.g. [0.5, 5.0]"
+      horizon_range: "lag window in milliseconds, e.g. [50, 500]"
+      products: "lead and lag product symbols, e.g. ['ES', 'NQ']"
+
+  toxicity_provision_overlay:
+    description: >
+      Tests whether a real-time toxicity score (estimated adverse selection rate)
+      can be used as an overlay to pause or reduce liquidity provision, improving
+      net P&L during toxic flow regimes.
+    allowed_feature_inputs:
+      - toxicity_score_10s
+      - adverse_selection_rate_30s
+      - trade_side_imbalance
+      - fill_rate_rolling_10
+      - bid_ask_spread_ticks
+    forbidden:
+      - first-wave race
+      - manipulation
+      - model-generated toxicity scores fed back into the order path in real-time
+        (slow-tier models are advisory only)
+    template_slots:
+      threshold_range: "toxicity score cutoff, e.g. [0.6, 0.9]"
+      horizon_range: "pause duration in seconds, e.g. [5, 120]"
+      products: "list of CME futures symbols"
+
+  hawkes_cascade_triggers:
+    description: >
+      Tests whether a Hawkes-process intensity estimate (self-exciting order
+      arrival) can predict short-horizon volatility bursts and whether those
+      bursts justify adjusting quote width or skew.
+    allowed_feature_inputs:
+      - hawkes_intensity_10s
+      - hawkes_decay_param
+      - trade_arrival_rate_1s
+      - volatility_realised_10s
+      - bid_ask_spread_ticks
+    forbidden:
+      - first-wave race
+      - manipulation
+      - continuous parameter estimation inside the engine hot path
+    template_slots:
+      threshold_range: "Hawkes intensity trigger threshold, e.g. [2.0, 10.0]"
+      horizon_range: "volatility window in seconds, e.g. [5, 60]"
+      products: "list of CME futures symbols"
+
+  gex_dealer_gamma_overlay:
+    description: >
+      Tests whether a dealer gamma-exposure (GEX) estimate for equity index
+      options — computed from publicly available CBOE data — can be used as a
+      daily-frequency regime overlay to adjust MM aggression or skew in the
+      corresponding futures product.
+    allowed_feature_inputs:
+      - gex_net_gamma_estimate
+      - gex_flip_level_proximity
+      - vix_spot
+      - spx_atm_iv
+      - futures_realised_vol_20d
+    forbidden:
+      - first-wave race
+      - manipulation
+      - intraday GEX estimation (daily frequency only; real-time options feed
+        not available)
+    template_slots:
+      threshold_range: "GEX magnitude threshold, e.g. [-5e9, 5e9] USD"
+      horizon_range: "effect horizon in trading days, e.g. [1, 5]"
+      products: "futures symbols that correspond to the options underlyings, e.g. ['ES', 'NQ']"

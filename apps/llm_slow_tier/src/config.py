@@ -24,6 +24,13 @@ class GdeltConfig:
 
 
 @dataclass
+class IntakeConfig:
+    """Configuration for the F3 hypothesis intake flow."""
+    enabled: bool = False  # gate: must be explicitly true to enable F3
+    weekly_quota: int = 5  # max candidates per trailing 7-day window
+
+
+@dataclass
 class SlowTierConfig:
     model: str = "hf.co/unsloth/gemma-4-12B-it-qat-GGUF:UD-Q4_K_XL"
     host: str = "http://127.0.0.1:11434"
@@ -44,6 +51,9 @@ class SlowTierConfig:
 
     # GDELT sub-config
     gdelt: GdeltConfig = field(default_factory=GdeltConfig)
+
+    # Intake (F3) sub-config
+    intake: IntakeConfig = field(default_factory=IntakeConfig)
 
     # Offline mode
     offline: bool = False
@@ -79,6 +89,11 @@ def load_config(path: Optional[Path] = None) -> SlowTierConfig:
     )
 
     verify_raw = raw.get("verify") or {}
+    intake_raw = raw.get("intake") or {}
+    intake = IntakeConfig(
+        enabled=bool(intake_raw.get("enabled", False)),
+        weekly_quota=int(intake_raw.get("weekly_quota", 5)),
+    )
 
     return SlowTierConfig(
         model=str(raw.get("model", SlowTierConfig.model)),
@@ -97,5 +112,6 @@ def load_config(path: Optional[Path] = None) -> SlowTierConfig:
         manifest_subdir=str(raw.get("manifest_subdir", SlowTierConfig.manifest_subdir)),
         golden_subdir=str(raw.get("golden_subdir", SlowTierConfig.golden_subdir)),
         gdelt=gdelt,
+        intake=intake,
         offline=bool(raw.get("offline", False)),
     )

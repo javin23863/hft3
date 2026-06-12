@@ -171,22 +171,133 @@ def _cmd_eval(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_morning_brief(_args: argparse.Namespace) -> int:
-    """F2 morning brief — not implemented in P1."""
-    print(
-        "morning-brief: not implemented in P1 (scheduled for P2)",
-        file=sys.stderr,
+def _cmd_morning_brief(args: argparse.Namespace) -> int:
+    """F2: generate the morning brief for a trade date."""
+    import logging
+    import os
+
+    log = logging.getLogger("llm_slow_tier.morning_brief")
+
+    from .src.config import load_config
+    from .src.sources import load_calendar_hits, load_gdelt_summary
+    from .src.brief import generate_brief, write_brief, verify_brief
+
+    cfg = load_config()
+
+    # Resolve date (default: today UTC)
+    trade_date: str = getattr(args, "date", None) or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    offline: bool = getattr(args, "offline", False) or cfg.offline
+    model_override: Optional[str] = getattr(args, "model", None)
+
+    model = (
+        model_override
+        or os.environ.get("HFT3_SLOW_TIER_MODEL")
+        or cfg.model
     )
-    return 2
+
+    log.info(json.dumps({"cmd": "morning-brief", "trade_date": trade_date, "model": model, "offline": offline}))
+
+    # Load sources
+    calendar_hits = load_calendar_hits(trade_date, cfg)
+
+    if offline:
+        gdelt_records: list = []
+        gdelt_error: Optional[str] = "offline mode"
+    else:
+        gdelt_records, gdelt_error = load_gdelt_summary(trade_date, cfg)
+        if gdelt_error:
+            log.warning("GDELT error: %s", gdelt_error)
+
+    # Manifest dir for capture health
+    from pathlib import Path
+    manifest_dir = Path(cfg.artifact_root) / cfg.manifest_subdir / trade_date
+    labels_path = Path(cfg.artifact_root) / "session_labels.jsonl"
+
+    # Generate brief
+    try:
+        brief_text, model_used = generate_brief(
+            trade_date=trade_date,
+            gdelt_records=gdelt_records,
+            gdelt_error=gdelt_error,
+            calendar_hits=calendar_hits,
+            manifest_dir=manifest_dir,
+            labels_path=labels_path,
+            model=model,
+            cfg=cfg,
+        )
+    except Exception as exc:
+        log.error("brief generation failed: %s", exc)
+        return 1
+
+    # Verify headings
+    missing = verify_brief(brief_text)
+    if missing:
+        log.error("brief missing section headings: %s", missing)
+        return 1
+
+    # Write artifacts
+    try:
+        brief_path, log_path = write_brief(
+            brief_text=brief_text,
+            trade_date=trade_date,
+            artifact_root=cfg.artifact_root,
+            model=model,
+            gdelt_n=len(gdelt_records),
+            calendar_n=len(calendar_hits),
+            model_used=model_used,
+        )
+    except Exception as exc:
+        log.error("write failed: %s", exc)
+        return 1
+
+    log.info(json.dumps({"written": str(brief_path), "model_used": model_used}))
+    print(f"Morning brief written: {brief_path}", file=sys.stderr)
+    return 0
 
 
-def _cmd_hypothesis_intake(_args: argparse.Namespace) -> int:
-    """F3 hypothesis intake — not implemented in P1."""
-    print(
-        "hypothesis-intake: not implemented in P1 (scheduled for P3)",
-        file=sys.stderr,
+def _cmd_hypothesis_intake(args: argparse.Namespace) -> int:
+    """F3: template-fill a hypothesis candidate from the taxonomy."""
+    import logging
+    import os
+
+    log = logging.getLogger("llm_slow_tier.hypothesis_intake")
+
+    from .src.config import load_config
+    from .src.intake import run_intake
+
+    cfg = load_config()
+
+    family: str = getattr(args, "family", "")
+    model_override: Optional[str] = getattr(args, "model", None)
+    trade_date: str = getattr(args, "date", None) or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    model = (
+        model_override
+        or os.environ.get("HFT3_SLOW_TIER_MODEL")
+        or cfg.model
     )
-    return 2
+
+    log.info(json.dumps({"cmd": "hypothesis-intake", "family": family, "trade_date": trade_date, "model": model}))
+
+    exit_code, message = run_intake(
+        family_name=family,
+        trade_date=trade_date,
+        model=model,
+        cfg=cfg,
+    )
+
+    if exit_code == 3:
+        print(message, file=sys.stderr)
+    elif exit_code == 4:
+        print(message, file=sys.stderr)
+    elif exit_code != 0:
+        log.error(message)
+        print(f"Error: {message}", file=sys.stderr)
+    else:
+        print(message)
+        log.info(json.dumps({"intake_status": "success", "family": family}))
+
+    return exit_code
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -229,11 +340,54 @@ def main(argv: list[str] | None = None) -> int:
         help="Override golden directory (default: config artifact_root/golden_subdir)",
     )
 
-    # morning-brief (P2 stub)
-    sub.add_parser("morning-brief", help="F2: morning brief (P2 — not yet implemented)")
+    # morning-brief (F2)
+    mb = sub.add_parser("morning-brief", help="F2: generate morning brief for a trade date")
+    mb.add_argument(
+        "--date",
+        default=None,
+        metavar="YYYY-MM-DD",
+        help="Trade date (default: today UTC)",
+    )
+    mb.add_argument(
+        "--offline",
+        action="store_true",
+        default=False,
+        help="Skip GDELT network call",
+    )
+    mb.add_argument(
+        "--model",
+        default=None,
+        metavar="NAME",
+        help="Override ollama model name",
+    )
 
-    # hypothesis-intake (P3 stub)
-    sub.add_parser("hypothesis-intake", help="F3: hypothesis intake (P3 — not yet implemented)")
+    # hypothesis-intake (F3)
+    hi = sub.add_parser(
+        "hypothesis-intake",
+        help="F3: template-fill a hypothesis candidate (requires intake.enabled=true in config)",
+    )
+    hi.add_argument(
+        "--family",
+        required=True,
+        metavar="FAMILY",
+        help=(
+            "Taxonomy family name: queue_position_mm, second_wave_ofi_momentum, "
+            "cross_product_lead_lag, toxicity_provision_overlay, "
+            "hawkes_cascade_triggers, gex_dealer_gamma_overlay"
+        ),
+    )
+    hi.add_argument(
+        "--date",
+        default=None,
+        metavar="YYYY-MM-DD",
+        help="Trade date for hypothesis_id prefix (default: today UTC)",
+    )
+    hi.add_argument(
+        "--model",
+        default=None,
+        metavar="NAME",
+        help="Override ollama model name",
+    )
 
     args = parser.parse_args(argv)
 

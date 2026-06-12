@@ -250,46 +250,33 @@ def run_labeler(
 
     Returns None only if ollama itself is unreachable (not on parse errors —
     those produce a conflict_review LabelResult with parse_error set).
+
+    The GPU->CPU retry is handled by the shared ``ollama_call`` helper in
+    ``src/llm_call.py``; this function delegates to it rather than repeating
+    the retry logic inline.
     """
-    from data_layer.llm.ollama_client import generate as ollama_generate
+    from .llm_call import ollama_call
 
     system_text, user_text = build_prompt(digest, sources_summary)
 
     log.info("calling ollama model=%s", model)
-    result = ollama_generate(
+    text, error = ollama_call(
         system_text,
         user_text,
         model=model,
-        host=cfg.host,
-        timeout_s=cfg.timeout_s,
-        num_predict=cfg.num_predict,
+        cfg=cfg,
         format_json=True,
     )
 
-    if result.error and "CUDA" in result.error:
-        # Laptop GPUs wedge under tight VRAM; the nightly batch does not need
-        # GPU speed.  Retry once on CPU (num_gpu=0) before giving up.
-        log.warning("ollama GPU runner failed (%s); retrying on CPU", result.error[:120])
-        result = ollama_generate(
-            system_text,
-            user_text,
-            model=model,
-            host=cfg.host,
-            timeout_s=max(cfg.timeout_s, 900.0),
-            num_predict=cfg.num_predict,
-            format_json=True,
-            options={"num_gpu": 0},
-        )
-
-    if result.error:
-        log.error("ollama generate error: %s", result.error)
+    if error:
+        log.error("ollama generate error: %s", error)
         return None
 
-    if not result.text:
+    if not text:
         log.error("ollama returned empty text")
         return None
 
-    label_result = _parse_label_json(result.text)
+    label_result = _parse_label_json(text)
     if label_result.parse_error:
         log.warning("label parse error: %s", label_result.parse_error)
 

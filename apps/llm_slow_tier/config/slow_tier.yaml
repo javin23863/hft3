@@ -34,5 +34,13 @@ verify:
   # insufficient-evidence rule can fire.  Default: more than half (> 0.5).
   insufficient_baseline_fraction: 0.5
 
+# --- F3 Hypothesis Intake ---
+# intake.enabled must be explicitly set to true to enable the F3 flow.
+# Rationale: every candidate inflates n_trials in the DSR/Holm family
+# correction; spam weakens the whole family's statistical power.
+intake:
+  enabled: false        # gate: must be true to run hypothesis-intake
+  weekly_quota: 5       # max candidates per trailing 7-day window
+
 # --- Defaults ---
 offline: false
