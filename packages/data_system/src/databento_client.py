@@ -47,10 +47,22 @@ class DatabentoResearchClient:
             raise ValueError("DATABENTO_API_KEY must be set")
 
         self.client = db.Historical(self.api_key)
-        # HFT3_MANIFEST_PATH points at the canonical lake ledger so spend
-        # accounting survives cwd changes and multiple checkouts.
-        self.manifest_path = os.environ.get("HFT3_MANIFEST_PATH", "data/manifest.parquet")
+        # Canonical lake ledger: HFT3_MANIFEST_PATH wins; else <lake>/manifest.parquet
+        # when HFT3_NPZ_ROOT places the lake outside the repo; else the legacy
+        # cwd-relative path. Spend accounting must not depend on cwd.
+        self.manifest_path = os.environ.get("HFT3_MANIFEST_PATH") or self._default_manifest_path()
         self.budget = BudgetManager(self.manifest_path)
+
+    @staticmethod
+    def _default_manifest_path() -> str:
+        if os.environ.get("HFT3_NPZ_ROOT", "").strip():
+            from pathlib import Path
+
+            from .npz_resolver import lake_root
+
+            repo_root = Path(__file__).resolve().parents[3]
+            return str(lake_root(repo_root) / "manifest.parquet")
+        return "data/manifest.parquet"
 
     # ------------------------------------------------------------------
     # Internal validation helpers

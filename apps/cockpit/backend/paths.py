@@ -43,6 +43,7 @@ DATABENTO_MANIFEST = (
     else _p("data", "manifest.parquet")
 )
 DATABENTO_RECEIPT = _p("runtime", "databento", "prop_reopen_download_receipt.json")
+DATA_DOCTOR_REPORT = _p("runtime", "data_doctor_report.json")
 
 # --- Models zone ------------------------------------------------------------
 RESEARCH_INDEX = _p("research_cards", "all_hypotheses.json")

@@ -67,6 +67,16 @@ def collect() -> list[dict]:
                 out.append(_alert(f"lifecycle-deg-{mid}", schemas.SEV_WARN, "lifecycle",
                                   f"{mid} {state} -> {route}".strip(), since))
 
+    # data lake health (scripts/data_doctor.py nightly report) — problem-only
+    doc = paths.read_json(paths.DATA_DOCTOR_REPORT)
+    if isinstance(doc, dict):
+        ts = doc.get("run_utc")
+        for c in doc.get("checks", []) or []:
+            if c.get("status") == "FAIL":
+                sev = schemas.SEV_CRIT if c.get("name") == "disk-free" else schemas.SEV_WARN
+                out.append(_alert(f"lake-{c.get('name')}", sev, "data_lake",
+                                  f"lake check {c.get('name')} FAIL: {c.get('detail', '')}", ts))
+
     # autonomy — frozen breaker or tampered audit chain
     try:
         from autonomy.status import snapshot
