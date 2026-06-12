@@ -10,6 +10,14 @@ class DatabentoResearchClient:
     Records metadata in manifest.parquet.
     """
     def __init__(self, api_key: str = None):
+        # Pull from the single master keys store (Desktop keys.env + repo .env)
+        # so credentials live in one place. Already-exported env vars still win.
+        if not api_key and not os.getenv("DATABENTO_API_KEY"):
+            try:
+                from .keystore import load_keys
+                load_keys()
+            except Exception:
+                pass
         self.api_key = api_key or os.getenv("DATABENTO_API_KEY")
         if not self.api_key:
             raise ValueError("DATABENTO_API_KEY must be set")

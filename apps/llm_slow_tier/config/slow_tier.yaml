@@ -39,8 +39,8 @@ verify:
 # Rationale: every candidate inflates n_trials in the DSR/Holm family
 # correction; spam weakens the whole family's statistical power.
 intake:
-  enabled: false        # gate: must be true to run hypothesis-intake
-  weekly_quota: 5       # max candidates per trailing 7-day window
+  enabled: true         # F3 proposer ON (autonomous-loop tweak proposer); output stays quarantined, never auto-registered
+  weekly_quota: 5       # max candidates per trailing 7-day window (keeps DSR/Holm n_trials bounded)
 
 # --- Defaults ---
 offline: false

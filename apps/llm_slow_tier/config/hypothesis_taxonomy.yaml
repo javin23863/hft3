@@ -143,3 +143,32 @@ families:
       threshold_range: "GEX magnitude threshold, e.g. [-5e9, 5e9] USD"
       horizon_range: "effect horizon in trading days, e.g. [1, 5]"
       products: "futures symbols that correspond to the options underlyings, e.g. ['ES', 'NQ']"
+
+# ---------------------------------------------------------------------------
+# param_families — the param-tweak route (ML7). These re-optimize an EXISTING
+# certified hypothesis's parameters within bounded ranges; they propose NO new
+# claim and NO new code. The deterministic param_proposer enumerates the grid
+# and clamps every combo to the model's certified envelope bounds
+# (envelope_source: certified). The LM (F3 families above) is reserved for
+# genuinely novel hypothesis variants. A re-optimized candidate still earns
+# CERTIFIED only by re-passing the full gauntlet — promotion stays gated.
+# ---------------------------------------------------------------------------
+param_families:
+
+  prop_flow_params:
+    description: Re-tune entry threshold / holding horizon for prop-cohort forced-flow hyps.
+    target_hyp_ids: [29, 30, 33, 34, 37]
+    envelope_source: certified
+    sweep:
+      entry_threshold: {min: 0.10, max: 0.30, grid: [0.10, 0.15, 0.20, 0.25, 0.30]}
+      holding_horizon_s: {min: 1, max: 60, grid: [1, 5, 15, 30, 60]}
+    forbidden: [first-wave race, manipulation, momentum ignition]
+
+  second_wave_params:
+    description: Re-tune OFI magnitude / prediction horizon for the second-wave family.
+    target_hyp_ids: [1, 9]
+    envelope_source: certified
+    sweep:
+      ofi_threshold: {min: 500, max: 5000, grid: [500, 1500, 3000, 5000]}
+      horizon_s: {min: 5, max: 60, grid: [5, 15, 30, 60]}
+    forbidden: [first-wave race, co-location latency exploitation, manipulation]

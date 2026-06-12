@@ -81,6 +81,25 @@ def get_active_hypotheses() -> List[BaseHypothesis]:
     if os.environ.get("HFT3_CROSS_ASSET", "").lower() in ("0", "false", "no"):
         hyps = [h for h in hyps if h.hyp_id not in CROSS_ASSET_HYP_IDS]
         hyps = [h for h in hyps if h.hyp_id not in VIX_HYP_IDS]
+
+    # Autonomous-loop scratch registry (lifecycle_orchestrator quarantine bridge).
+    # Off by default => production set is exactly the 50 above. Only when
+    # HFT3_SCRATCH_HYP_REGISTRY points at a module exposing get_scratch_hypotheses()
+    # are auto-proposed variants (reserved ids >= 900) unioned in — for an
+    # isolated re-screen, never the production build. Fail-open to production.
+    scratch = os.environ.get("HFT3_SCRATCH_HYP_REGISTRY", "").strip()
+    if scratch:
+        try:
+            import importlib.util
+
+            spec = importlib.util.spec_from_file_location("hft3_scratch_hyps", scratch)
+            if spec and spec.loader:
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+                extra = list(mod.get_scratch_hypotheses())
+                hyps = hyps + [h for h in extra if getattr(h, "hyp_id", 0) >= 900]
+        except Exception:
+            pass  # never let a bad scratch module break the production registry
     return hyps
 
 class HypothesisRegistry:

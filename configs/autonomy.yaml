@@ -1,0 +1,24 @@
+# Autonomy master config — DISABLED by default (two-key: also needs env HFT3_AUTONOMY_ENABLED=1).
+# Every flag here defaults to the safe (off) value. Turning autonomy on is a
+# deliberate, audited act. arm-to-live additionally requires rearm.allow_live: true
+# AND an empty defect ledger AND a passing shadow + the full gate chain.
+enabled: false
+
+actions:
+  demote: false      # auto take a degraded model offline
+  retest: false      # auto re-run the gauntlet on a degraded model
+  repromote: false   # auto promote a re-validated candidate
+  rearm: false       # auto re-arm a model to LIVE (most dangerous)
+
+rearm:
+  allow_live: false  # hard sub-flag for live arm
+
+scope_models: []     # empty = all models; else restrict autonomy to these ids
+
+circuit_breaker:
+  max_failed_arms_in_window: 2     # N failed/killed arms => freeze
+  window_hours: 72
+  max_arm_cycles_per_model: 2      # demote<->rearm thrash => freeze
+  thrash_window_hours: 24
+  max_simultaneous_demotions: 2    # correlated mass-demotion => freeze re-promotion
+  correlation_window_minutes: 30

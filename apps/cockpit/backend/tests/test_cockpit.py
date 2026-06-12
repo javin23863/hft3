@@ -1,0 +1,175 @@
+"""Cockpit backend tests — aggregator shape, graceful-missing, API auth.
+
+Run from repo root:  python -m pytest apps/cockpit/backend/tests -q
+"""
+import json
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+from apps.cockpit.backend import loaders, paths
+from apps.cockpit.backend.aggregate import ZONES
+from apps.cockpit.backend.main import app
+
+VIEW_KEYS = {"zone", "generated_utc", "health"}
+
+
+def _json_roundtrip(obj):
+    # Every zone payload must be JSON-serializable (FastAPI ships it as-is).
+    return json.loads(json.dumps(obj))
+
+
+@pytest.mark.parametrize("name", list(ZONES))
+def test_zone_shape(name):
+    payload = ZONES[name]()
+    assert VIEW_KEYS.issubset(payload), f"{name} missing base keys: {payload.keys()}"
+    assert payload["zone"] == name
+    _json_roundtrip(payload)  # raises if non-serializable
+
+
+def test_pipeline_has_six_stages():
+    p = ZONES["pipeline"]()
+    ids = [s["id"] for s in p["stages"]]
+    assert ids == ["capture", "feature_build", "stage_a", "gauntlet_b", "m6_gate", "promote"]
+    for s in p["stages"]:
+        assert {"id", "label", "status"}.issubset(s)
+
+
+def test_models_registry_and_silent_zero():
+    m = ZONES["models"]()
+    assert m["registry_total"] == 50
+    assert len(m["rows"]) == 50
+    # The six structurally-dead prop hyps must be surfaced as silent-zero.
+    assert m["silent_zero"]["count"] == 6
+    dead_ids = {h["id"] for h in m["silent_zero"]["hypotheses"]}
+    assert dead_ids == {20, 30, 32, 35, 36, 38}
+    for row in m["rows"]:
+        if row["id"] in dead_ids:
+            assert row["structurally_dead"] is True
+            assert row["status"] == "structurally_dead"
+
+
+def test_portfolio_live_session_flag(monkeypatch):
+    monkeypatch.setenv("EXECUTION_MODE", "REPLAY")
+    p = ZONES["portfolio"]()
+    assert p["live_session"] is False
+    assert p["banner"] and "No live session" in p["banner"]
+
+
+def test_missing_artifact_is_graceful(monkeypatch, tmp_path):
+    # Point Stage A at a nonexistent file; pipeline must render MISSING, not crash.
+    monkeypatch.setattr(paths, "STAGE_A_RESULT", tmp_path / "nope.json")
+    loaders._cache.clear()
+    p = ZONES["pipeline"]()
+    stage_a = next(s for s in p["stages"] if s["id"] == "stage_a")
+    assert stage_a["status"] == "missing"
+
+
+def test_alerts_quiet_when_healthy(monkeypatch, tmp_path):
+    # Repoint every alert source at empty/missing → alert feed must be quiet.
+    for attr in ("SLOW_TIER_PROBLEMS", "CERT_REGISTRY", "LATENCY_SUMMARY", "CAPTURE_BASELINE"):
+        monkeypatch.setattr(paths, attr, tmp_path / f"{attr}.json")
+    a = ZONES["alerts"]()
+    assert a["count"] == 0
+    assert a["health"] == "green"
+
+
+# --- API + auth -------------------------------------------------------------
+
+def test_api_requires_token_when_configured(monkeypatch):
+    monkeypatch.setenv("COCKPIT_VIEW_TOKEN", "secret-view")
+    monkeypatch.delenv("COCKPIT_CONTROL_TOKEN", raising=False)
+    client = TestClient(app)  # no context => watcher/lifespan not started
+    # No token from non-loopback testclient → 401.
+    assert client.get("/api/pipeline").status_code == 401
+    # Correct bearer → 200.
+    r = client.get("/api/pipeline", headers={"Authorization": "Bearer secret-view"})
+    assert r.status_code == 200
+    assert r.json()["zone"] == "pipeline"
+
+
+def test_health_open():
+    client = TestClient(app)
+    r = client.get("/api/health")
+    assert r.status_code == 200
+    assert r.json()["status"] == "ok"
+
+
+def test_control_rejects_remote_origin():
+    # TestClient origin is non-loopback ("testclient") → control forbidden.
+    client = TestClient(app)
+    r = client.post("/api/control/job", json={"name": "feature_rebuild", "confirm": True})
+    assert r.status_code == 403
+
+
+# --- notifier (push) --------------------------------------------------------
+
+def test_push_notifies_only_on_new_problem(monkeypatch, tmp_path):
+    from apps.cockpit.backend import push
+
+    monkeypatch.setattr(paths, "ALERT_STATE", tmp_path / "alert_state.json")
+    # No channel configured → notify is a no-op but diff/persist still works.
+    monkeypatch.delenv("NTFY_URL", raising=False)
+    monkeypatch.delenv("COCKPIT_NOTIFY_WEBHOOK", raising=False)
+
+    zone = {"alerts": [{"id": "cert-red", "severity": "crit", "source": "certification", "message": "RED"}]}
+    first = push.process_alerts(zone)
+    assert first == ["cert-red"]          # new problem detected
+    second = push.process_alerts(zone)
+    assert second == []                    # same standing problem → no re-notify
+    # Cleared then recurs → notifies again.
+    push.process_alerts({"alerts": []})
+    third = push.process_alerts(zone)
+    assert third == ["cert-red"]
+
+
+def test_lifecycle_zone_empty(monkeypatch, tmp_path):
+    monkeypatch.setattr(paths, "MODEL_LIFECYCLE", tmp_path / "absent.json")
+    z = ZONES["lifecycle"]()
+    assert z["registered"] is False
+    assert z["health"] == "green"
+    assert z["total_models"] == 0
+
+
+def test_lifecycle_zone_populated_and_alerts(monkeypatch, tmp_path):
+    import json
+    reg = tmp_path / "model_lifecycle.json"
+    reg.write_text(json.dumps({
+        "models": {
+            "MES_X": {"current_state": "LIVE", "hypothesis_id": 1, "symbol": "MES", "current_state_since": "2026-06-12T00:00:00+00:00"},
+            "MGC_Y": {"current_state": "QUARANTINED", "hypothesis_id": 35, "symbol": "MGC",
+                       "demotion": {"reason": "feature_training_domain"}, "current_state_since": "2026-06-12T01:00:00+00:00"},
+            "MCL_Z": {"current_state": "DEGRADED", "hypothesis_id": 7, "symbol": "MCL",
+                       "reentry_routing": {"route": "param_tweak"}, "current_state_since": "2026-06-12T02:00:00+00:00"},
+        }
+    }))
+    monkeypatch.setattr(paths, "MODEL_LIFECYCLE", reg)
+    z = ZONES["lifecycle"]()
+    assert z["total_models"] == 3 and z["live"] == 1
+    assert z["funnel"]["QUARANTINED"] == 1 and z["funnel"]["DEGRADED"] == 1
+    assert z["health"] == "red"  # a QUARANTINED model
+    # alerts feed surfaces the quarantine (crit) + degraded (warn)
+    a = ZONES["alerts"]()
+    ids = {al["id"] for al in a["alerts"]}
+    assert "lifecycle-quar-MGC_Y" in ids
+    assert any(al["severity"] == "crit" and al["source"] == "lifecycle" for al in a["alerts"])
+
+
+def test_autonomy_zone_disabled_by_default(monkeypatch):
+    monkeypatch.delenv("HFT3_AUTONOMY_ENABLED", raising=False)
+    monkeypatch.delenv("HFT3_AUTONOMY_KILL", raising=False)
+    z = ZONES["autonomy"]()
+    assert z["available"] is True
+    assert z["master_enabled"] is False     # two-key OFF by default
+    assert z["can_arm_live"] is False
+    assert z["health"] in ("green", "amber")  # green when unfrozen + chain ok
+
+
+def test_push_no_channel_returns_false(monkeypatch):
+    from apps.cockpit.backend import push
+
+    monkeypatch.delenv("NTFY_URL", raising=False)
+    monkeypatch.delenv("COCKPIT_NOTIFY_WEBHOOK", raising=False)
+    assert push.channel() is None
+    assert push.notify("t", "m") is False
