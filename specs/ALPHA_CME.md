@@ -79,7 +79,25 @@ runner that reads NPZ dated ≥ 2026-01-01 during M6–M7 constitutes a violatio
 
 ---
 
-## 5. Kill Criteria
+## 5. Prop-Cohort Family Revival Notes (PC3 + PC4)
+
+The following hypotheses were structurally dead in the M6 run and have been
+revived as part of PC3/PC4:
+
+| HYP | Name | Change |
+|-----|------|--------|
+| 20 | MicroContractRetailLag | Repointed off `cross_asset['ES']['institutional_flow_score']` (no producer). The ES leader's own `aggressor_volume_imbalance` is the institutional-flow proxy. New signal: `tanh(es_imb*2) * (1 - tanh(|divergence|))` — follow the leader, strongest when micro has not yet caught up. |
+| 30 | CutoffPanicExits | Context gate repointed from non-existent `TPT_FLATTEN`/`APEX_FLATTEN` to real contexts `PROP_FLATTEN_TOPSTEP` and `FRIDAY_CLOSE`. `cutoff_pressure_score` (slot 31, live after PC2) unchanged. |
+| 32 | DailyLossLimitDefense | Was `return 0.0` on every path (no-op). Replaced with real loss-limit-defense logic: fade the forced one-sided exit when `prop_cohort_active()` and `cutoff_pressure_score` is non-zero. Signal: `-tanh(cutoff*2)`. |
+| 38 | EconomicEventRestrictionFlattening | `NEWS_RESTRICTION` context never created. Repointed to fire when `event_context.endswith('_TIGHT')` — the macro-release [-60s, +10s] windows are exactly the prop news-ban interval. `news_restriction_flatten_score` (slot 33, live after PC2) unchanged. Adding a NEWS_RESTRICTION sub-window derivation to event_context.py was evaluated and deferred (non-trivial schema extension; `_TIGHT` gate is equivalent and zero-schema-change). |
+
+New module-level helpers added to modules.py: `micro_leader_divergence()` and
+`prop_cohort_active()` (PC3 divergence signal, used by HYP 32 and available
+to all future cohort hypotheses).
+
+---
+
+## 6. Kill Criteria
 
 Any of the following conditions halts the campaign at the current milestone and
 requires root-cause resolution before proceeding:

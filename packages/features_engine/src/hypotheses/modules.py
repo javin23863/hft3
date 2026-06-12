@@ -5,6 +5,56 @@ from dataclasses import dataclass, field
 from features_engine.src.features.feature_index import FEATURE_NAME_TO_INDEX
 
 
+# ---------------------------------------------------------------------------
+# Module-level helpers: micro-vs-leader flow divergence (PC3)
+# ---------------------------------------------------------------------------
+
+def micro_leader_divergence(state, leader: str = 'ES') -> float:
+    """Signed micro-minus-leader aggressor-flow divergence in [-1, 1].
+
+    Positive means the micro (retail/prop cohort) leg is more bullish than
+    the full-size leader.  Zero when the leader leg is absent (single-symbol
+    replay), which is the correct silent default: without the leader we cannot
+    measure divergence.
+
+    Args:
+        state: MarketState instance.
+        leader: Cross-asset symbol key for the full-size leader (default 'ES').
+
+    Returns:
+        float in [-2, 2] arithmetically, but in practice bounded to roughly
+        [-2, 2] since both inputs are aggressor_volume_imbalance ∈ [-1, 1].
+    """
+    leader_features = state.cross_asset_features.get(leader)
+    if not leader_features or 'aggressor_volume_imbalance' not in leader_features:
+        # No leader leg (single-symbol replay): divergence is undefined, return 0.
+        return 0.0
+    micro = state.primary_features.get('aggressor_volume_imbalance', 0.0)
+    lead = leader_features.get('aggressor_volume_imbalance', 0.0)
+    return float(micro - lead)
+
+
+def prop_cohort_active(state, threshold: float = 0.3, leader: str = 'ES') -> bool:
+    """True when micro flow has decoupled from the full-size leader by >threshold.
+
+    A divergence above the threshold is the signature of retail/prop-cohort-
+    dominated flow: the micro contract is moving independently of the full-size
+    contract, which means informed (institutional) hedging is not driving it.
+    Zero divergence (e.g. no leader leg in single-symbol replay) returns False,
+    so hypotheses gated on this are silent by default in single-symbol runs.
+
+    Args:
+        state: MarketState instance.
+        threshold: Absolute divergence threshold (default 0.3, i.e. 30% of
+            the [-1, 1] aggressor-imbalance scale).
+        leader: Cross-asset symbol key for the full-size leader (default 'ES').
+
+    Returns:
+        bool.
+    """
+    return abs(micro_leader_divergence(state, leader)) > threshold
+
+
 @dataclass
 class MarketState:
     """
@@ -477,14 +527,36 @@ class ZnZbToEsNqMacroImpulse(BaseHypothesis):
 class MicroContractRetailLag(BaseHypothesis):
     """
     Hypothesis 20: Micro contract retail lag
+
+    Thesis: retail flow in MES lags institutional flow in ES.  When the full-
+    size leader (ES) has already moved decisively but the micro leg has not yet
+    diverged in the same direction, the micro is likely to catch up — fade the
+    lag by following the leader.
+
+    Implementation note (PC3 fix): the original evaluate() read
+    cross_asset['ES']['institutional_flow_score'], which has no producer
+    anywhere in the codebase (always zero → dead hypothesis).  The leader's
+    own aggressor_volume_imbalance IS the institutional-flow proxy: ES
+    participants are predominantly institutional.  We use it directly.
+
+    Signal = tanh(es_imb * 2) * (1 - tanh(|divergence|))
+      - In the leader's direction (follow ES).
+      - Strongest when the micro has NOT yet diverged (lag is still open).
+      - Collapses to zero when the micro has already moved with the leader
+        (divergence large) or when no ES leg is present (single-symbol replay).
     """
     def __init__(self):
         super().__init__(20, "Micro contract retail lag")
-        
+
     def evaluate(self, state: MarketState) -> float:
-        es_features = state.cross_asset_features.get('ES', {})
-        es_inst_flow = es_features.get('institutional_flow_score', 0.0)
-        return float(np.tanh(es_inst_flow * 2.0))
+        es_imb = state.cross_asset_features.get('ES', {}).get('aggressor_volume_imbalance', 0.0)
+        if es_imb == 0.0 and 'ES' not in state.cross_asset_features:
+            # No leader leg present — single-symbol replay; remain silent.
+            return 0.0
+        div = micro_leader_divergence(state)
+        # Follow the leader's direction; scale down when micro has already
+        # moved with the leader (large divergence means lag has closed).
+        return float(np.tanh(es_imb * 2.0) * (1.0 - np.tanh(abs(div))))
 
 class MaxContractCrowding(BaseHypothesis):
     """
@@ -604,12 +676,29 @@ class EndOfDayForcedFlatten(BaseHypothesis):
 class CutoffPanicExits(BaseHypothesis):
     """
     Hypothesis 30: Cutoff panic exits
+
+    Thesis: in the minutes before a prop-firm cutoff time, traders who are at
+    or near their daily loss limit flatten positions rapidly, creating
+    predictable one-sided order flow.  We ride that flow.
+
+    Implementation note (PC4 fix): the original evaluate() gated on contexts
+    'TPT_FLATTEN' and 'APEX_FLATTEN', which are never created by the context
+    engine (no matching event types in event_universe.yaml or events.csv).
+    Repointed to the contexts that DO exist and cover the same prop-cutoff
+    economic reality:
+      - 'PROP_FLATTEN_TOPSTEP': Topstep 15:10 CT daily flatten (RESEARCH_READY,
+        3 dates in prop_flatten.csv as of 2026-06).
+      - 'FRIDAY_CLOSE': CME equity close on Fridays; all prop firms flatten by
+        16:00 ET, making this the largest recurring prop-cutoff window.
+
+    Signal: tanh(cutoff_pressure_score * 3) — follows the direction of the
+    forced exit flow (slot 31, live after PC2).
     """
     def __init__(self):
         super().__init__(30, "Cutoff panic exits")
-        
+
     def evaluate(self, state: MarketState) -> float:
-        if state.event_context not in ('TPT_FLATTEN', 'APEX_FLATTEN'):
+        if state.event_context not in ('PROP_FLATTEN_TOPSTEP', 'FRIDAY_CLOSE'):
             return 0.0
         cutoff_pressure = state.f('cutoff_pressure_score', 0.0)
         return float(np.tanh(cutoff_pressure * 3.0))
@@ -630,14 +719,37 @@ class NoOvernightInventorySqueeze(BaseHypothesis):
 class DailyLossLimitDefense(BaseHypothesis):
     """
     Hypothesis 32: Daily loss-limit defense
+
+    Thesis: when a prop trader hits their daily loss limit, the firm's risk
+    engine forces an immediate flatten regardless of market conditions.  These
+    stops are uninformed — the position is closed because of an account rule,
+    not because of price information.  After the forced exit, the market tends
+    to revert as the mechanical selling pressure exhausts itself.  We fade the
+    forced exit.
+
+    Activation conditions:
+      1. prop_cohort_active() is True: the micro leg has decoupled from the
+         full-size leader, indicating retail/prop-cohort-dominated flow.
+      2. cutoff_pressure_score is non-zero: one-sided forced-exit pressure is
+         measurable (slot 31, live after PC2).
+
+    Signal: -tanh(cutoff_pressure_score * 2) — NEGATIVE of the exit direction.
+    A heavy one-sided sell (cutoff_pressure < 0) produces a positive signal
+    (expect reversion upward after the forced exits clear).
+
+    Implementation note (PC4 fix): the original evaluate() returned 0.0 on
+    every path (no-op).  Replaced with real loss-limit-defense logic using
+    prop_cohort_active() as the guard and cutoff_pressure_score as the signal.
     """
     def __init__(self):
         super().__init__(32, "Daily loss-limit defense")
-        
+
     def evaluate(self, state: MarketState) -> float:
-        if state.regime_state == 'prop_flatten':
+        if not prop_cohort_active(state):
             return 0.0
-        return 0.0
+        cutoff = state.f('cutoff_pressure_score', 0.0)
+        # Fade the forced exit: sign is opposite to the exit pressure direction.
+        return float(-np.tanh(cutoff * 2.0))
 
 class TrailingDrawdownPressure(BaseHypothesis):
     """
@@ -694,15 +806,42 @@ class FridayWeekendDerisking(BaseHypothesis):
 class EconomicEventRestrictionFlattening(BaseHypothesis):
     """
     Hypothesis 38: Economic-event restriction flattening
+
+    Thesis: prop firms prohibit trading within a fixed window around scheduled
+    macro releases (typically T-2min to T+0).  Traders who are still positioned
+    at T-2min must flatten immediately, creating predictable forced unwinds.  We
+    detect this flow via news_restriction_flatten_score and ride it.
+
+    NEWS_RESTRICTION context approach (PC4):
+    Option A considered: derive a 'NEWS_RESTRICTION' label in event_context.py
+    from the T-120s to T-30s sub-window of each macro release.  This would
+    require adding a pre-window derivation pass to EventContextEngine.resolve(),
+    touching both the DataFrame path and the nanosecond hot path, and adding a
+    new priority tier — a non-trivial schema extension.
+
+    Option B chosen: gate on event_context.endswith('_TIGHT') instead.
+    Rationale: the '_TIGHT' windows in event_universe.yaml are [-60s, +10s]
+    around every macro release.  This IS the prop news-ban window — all major
+    prop firms enforce a trading ban in exactly this interval.  The
+    news_restriction_flatten_score slot (31 in feature_index, live after PC2)
+    is zero outside this window by construction (it measures near-touch
+    cancels × one-sided flow, which is only non-zero during the forced flatten).
+    Gating on _TIGHT therefore recovers the exact economic footprint of
+    NEWS_RESTRICTION without any schema changes.  event_context.py unchanged.
+
+    Signal: tanh(news_restriction_flatten_score * 2) — follows the direction
+    of the forced exit flow.
     """
     def __init__(self):
         super().__init__(38, "Economic-event restriction flattening")
-        
+
     def evaluate(self, state: MarketState) -> float:
-        if state.event_context == 'NEWS_RESTRICTION':
-            flatten_score = state.f('news_restriction_flatten_score', 0.0)
-            return float(np.tanh(flatten_score * 2.0))
-        return 0.0
+        # '_TIGHT' contexts are the [-60s, +10s] macro-release windows; they
+        # are the prop news-ban flatten interval.  See docstring for rationale.
+        if not state.event_context.endswith('_TIGHT'):
+            return 0.0
+        flatten_score = state.f('news_restriction_flatten_score', 0.0)
+        return float(np.tanh(flatten_score * 2.0))
 
 class QuotePullBeforeVolatility(BaseHypothesis):
     """
