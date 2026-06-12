@@ -80,6 +80,12 @@ class TestFeatureLatencyApplied:
         from replay.replay_session import ReplaySession
         from unittest.mock import MagicMock
 
+        # This harness fakes hbt.elapse(); the event-driven default
+        # (step_mode="event") calls hbt.wait_next_feed() instead and would
+        # bypass the fake. Pin grid stepping — these tests cover feature
+        # latency math, not stepping mode.
+        cfg.step_mode = "grid"
+
         mda = _RecordingMDA()
         depth_mock = MagicMock()
         depth_mock.best_bid = 5000.0

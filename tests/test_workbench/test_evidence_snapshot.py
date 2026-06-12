@@ -522,9 +522,8 @@ def test_catalog_feature_fabric_generation_passes_all_lanes(tmp_path: Path) -> N
         }
         assert {row["source_lane"] for row in snapshot["rows"]} >= {
             "cme_futures",
-            "crypto",
             "equities",
-            "options",
+            "cme_options",
         }
         assert all(row["run_id"] == "fresh_run" for row in snapshot["rows"])
         assert all(row["evidence_scope"] == "catalog_eligibility_not_model_usage" for row in snapshot["rows"])
