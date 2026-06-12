@@ -14,6 +14,20 @@
 //     final manifests, exit 0.
 //   - Credentials are never logged.  Only env variable names appear in output.
 //
+// Roll logic overview:
+//   - The `roots:` YAML block declares root/exchange/cycle tuples.  At each
+//     17:00 CT daily rotation, compute_desired() re-derives the front-month
+//     contracts from the contract calendar.  Contracts that fall off the
+//     eligible set are closed (ROLL_DROP); new ones are subscribed live
+//     (ROLL_ADD), subject to the 16-slot adapter registry ceiling.
+//   - If adding new contracts would exceed the 16-slot limit, the daemon
+//     logs ROLL_RESTART and exits 0 so systemd relaunches it cleanly.
+//   - Explicit `symbols:` entries (if present in the YAML) are never
+//     auto-rolled; they persist for the process lifetime.
+//   - SymbolState objects live in a std::deque so that push_back never
+//     invalidates existing pointers.  The id_to_state[16] lookup array is
+//     rebuilt after every subscription round.
+//
 // Trade-date convention: see capture_format.hpp for full documentation.
 // TZ handling: we use gmtime_r + explicit CT UTC-offset arithmetic (see
 // ct_utc_offset() in capture_format.hpp).  We deliberately do NOT call
@@ -22,6 +36,7 @@
 #include "rithmic_adapter.hpp"
 #include "spsc_queue.hpp"
 #include "capture_format.hpp"
+#include "contract_calendar.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -33,6 +48,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <deque>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -381,6 +397,107 @@ static std::vector<SymbolConfig> load_symbols(const std::string& path) {
 }
 
 // ---------------------------------------------------------------------------
+// Root config (auto-roll) — parsed from the `roots:` YAML list.
+// ---------------------------------------------------------------------------
+
+struct RootConfig {
+    std::string root;
+    std::string exchange;
+    RollCycle   cycle = RollCycle::QuarterlyEquity;
+};
+
+// Parse the roots list from a YAML file.
+// Expects the structure:
+//   roots:
+//     - root: MES
+//       exchange: CME
+//       cycle: quarterly_equity
+static std::vector<RootConfig> load_roots(const std::string& path) {
+    std::vector<RootConfig> result;
+    std::ifstream f(path);
+    if (!f.is_open()) return result;
+
+    std::string line;
+    bool in_roots = false;
+    RootConfig current;
+    bool has_root     = false;
+    bool has_exchange = false;
+    bool has_cycle    = false;
+
+    while (std::getline(f, line)) {
+        std::string stripped = line;
+        trim(stripped);
+        if (stripped.empty() || stripped[0] == '#') continue;
+
+        size_t indent = leading_spaces(line);
+
+        if (!in_roots) {
+            if (stripped == "roots:") {
+                in_roots = true;
+            }
+            continue;
+        }
+
+        // A top-level key at indent 0 ends the roots block.
+        if (indent == 0 && !stripped.empty() && stripped[0] != '-' && stripped.back() == ':') {
+            if (has_root) {
+                if (!has_exchange) current.exchange = "CME";
+                result.push_back(current);
+            }
+            break;
+        }
+
+        // New list entry.
+        if (stripped[0] == '-') {
+            if (has_root) {
+                if (!has_exchange) current.exchange = "CME";
+                result.push_back(current);
+            }
+            current  = {};
+            has_root     = false;
+            has_exchange = false;
+            has_cycle    = false;
+            // The rest of the line after '-' might have an inline key.
+            std::string rest = stripped.substr(1);
+            trim(rest);
+            if (!rest.empty()) {
+                std::string val;
+                if (yaml_scalar_at(rest, "root", val)) {
+                    current.root = val;
+                    has_root = true;
+                } else if (yaml_scalar_at(rest, "exchange", val)) {
+                    current.exchange = val;
+                    has_exchange = true;
+                } else if (yaml_scalar_at(rest, "cycle", val)) {
+                    if (parse_roll_cycle(val, current.cycle)) has_cycle = true;
+                }
+            }
+            continue;
+        }
+
+        // Key inside a list entry.
+        std::string val;
+        if (yaml_scalar_at(stripped, "root", val)) {
+            current.root = val;
+            has_root = true;
+        } else if (yaml_scalar_at(stripped, "exchange", val)) {
+            current.exchange = val;
+            has_exchange = true;
+        } else if (yaml_scalar_at(stripped, "cycle", val)) {
+            if (parse_roll_cycle(val, current.cycle)) has_cycle = true;
+        }
+    }
+
+    if (has_root) {
+        if (!has_exchange) current.exchange = "CME";
+        result.push_back(current);
+    }
+
+    (void)has_cycle;  // silences unused-variable warning; default already set in RootConfig
+    return result;
+}
+
+// ---------------------------------------------------------------------------
 // Per-symbol capture state
 // ---------------------------------------------------------------------------
 
@@ -388,6 +505,11 @@ struct SymbolState {
     std::string symbol;
     std::string exchange;
     uint16_t    symbol_id    = 0xFFFF;
+
+    // Roll metadata.
+    bool        active      = true;   // false once rolled off; file is closed
+    bool        is_explicit = false;  // explicit-symbols entry; never auto-rolled
+    std::string root;                 // empty for explicit-symbol entries
 
     // Current capture file.
     FILE*       fp           = nullptr;
@@ -518,10 +640,13 @@ static void close_capture_file(SymbolState& st) {
 }
 
 // Write the manifest JSON for a symbol.
+// unknown_symbol_drops is the process-lifetime count of events dropped because
+// their symbol_id was not in the id_to_state map or their state was inactive.
 static void write_manifest(const SymbolState& st,
                            const std::string& output_root,
                            uint64_t md_drops_total,
-                           uint64_t wall_ns_now) {
+                           uint64_t wall_ns_now,
+                           uint64_t unknown_symbol_drops) {
     std::string path = make_manifest_path(output_root, st.symbol, st.trade_date);
     // Write to a temp file then rename for atomic update.
     std::string tmp = path + ".tmp";
@@ -542,6 +667,7 @@ static void write_manifest(const SymbolState& st,
         "  \"md_drops_total\": %llu,\n"
         "  \"reconnects\": %llu,\n"
         "  \"file_bytes\": %llu,\n"
+        "  \"unknown_symbol_drops\": %llu,\n"
         "  \"updated_wall_ns\": %llu\n"
         "}\n",
         json_escape(st.symbol).c_str(),
@@ -556,6 +682,7 @@ static void write_manifest(const SymbolState& st,
         static_cast<unsigned long long>(md_drops_total),
         static_cast<unsigned long long>(st.reconnects),
         static_cast<unsigned long long>(st.file_bytes),
+        static_cast<unsigned long long>(unknown_symbol_drops),
         static_cast<unsigned long long>(wall_ns_now)
     );
     std::fclose(f);
@@ -576,7 +703,13 @@ struct CaptureConfig {
     int                    fsync_interval_sec    = 30;
     int                    manifest_interval_sec = 60;
     int                    stale_threshold_sec   = 180;
+
+    // Explicit per-contract overrides (optional; never auto-rolled).
     std::vector<SymbolConfig> symbols;
+
+    // Auto-roll root specifications.
+    std::vector<RootConfig> roots;
+    int                    contracts_per_root    = 2;
 
     // Rithmic connection.
     hft::ConnectionConfig  conn;
@@ -677,13 +810,76 @@ static bool load_config(const std::string& yaml_path, CaptureConfig& out) {
         load_yaml_int(yaml_path, "", "stale_threshold_sec", 180)
     );
 
+    // Explicit symbol overrides (optional).
     out.symbols = load_symbols(yaml_path);
-    if (out.symbols.empty()) {
-        std::fprintf(stderr, "FAIL: no symbols configured in %s\n", yaml_path.c_str());
+
+    // Auto-roll root specifications.
+    out.roots             = load_roots(yaml_path);
+    out.contracts_per_root = load_yaml_int(yaml_path, "", "contracts_per_root", 2);
+
+    if (out.symbols.empty() && out.roots.empty()) {
+        std::fprintf(stderr,
+            "FAIL: config %s has neither `symbols:` nor `roots:` entries\n",
+            yaml_path.c_str());
         return false;
     }
 
     return true;
+}
+
+// ---------------------------------------------------------------------------
+// compute_desired — derive the full desired symbol set for a given CT date.
+//
+// Returns one SymbolConfig per desired contract.  The caller uses this to
+// reconcile against the current active SymbolState set at each daily rotation.
+// ---------------------------------------------------------------------------
+
+// Extended SymbolConfig carrying roll-origin information for state construction.
+struct DesiredSymbol {
+    std::string symbol;
+    std::string exchange;
+    bool        is_explicit = false;  // true for entries from the explicit symbols: list
+    std::string root;                 // empty for explicit entries
+};
+
+static std::vector<DesiredSymbol> compute_desired(const CaptureConfig& cfg,
+                                                  const CtDateTime& ct) {
+    std::vector<DesiredSymbol> result;
+
+    // Explicit symbols always appear in the desired set.
+    for (const auto& sc : cfg.symbols) {
+        DesiredSymbol ds;
+        ds.symbol      = sc.symbol;
+        ds.exchange    = sc.exchange;
+        ds.is_explicit = true;
+        result.push_back(std::move(ds));
+    }
+
+    // Derive contracts from each root using the calendar.
+    for (const auto& rc : cfg.roots) {
+        std::vector<std::string> codes = eligible_contracts(
+            rc.root, rc.cycle,
+            ct.year, ct.month, ct.mday,
+            cfg.contracts_per_root
+        );
+        for (auto& code : codes) {
+            // Deduplicate: an explicit entry with the same symbol wins.
+            bool already = false;
+            for (const auto& ex : result) {
+                if (ex.symbol == code) { already = true; break; }
+            }
+            if (!already) {
+                DesiredSymbol ds;
+                ds.symbol      = std::move(code);
+                ds.exchange    = rc.exchange;
+                ds.is_explicit = false;
+                ds.root        = rc.root;
+                result.push_back(std::move(ds));
+            }
+        }
+    }
+
+    return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -696,12 +892,36 @@ struct AdapterBundle {
     std::unique_ptr<hft::RithmicAdapter>                        adapter;
 };
 
-// Build and connect a fresh adapter, subscribe all symbols.
+// Maximum number of simultaneously-subscribed symbols.  The Rithmic adapter
+// registry assigns contiguous ids starting at 0, so this is both the slot
+// count and the upper bound on symbol_id values we ever expect to see.
+static constexpr int kMaxSymbols = 16;
+
+// Rebuild the id → SymbolState* dispatch table.
+// Entries outside [0, kMaxSymbols) or for inactive states are set to nullptr.
+static void rebuild_id_map(std::deque<SymbolState>& states,
+                           SymbolState* id_to_state[kMaxSymbols]) {
+    for (int i = 0; i < kMaxSymbols; ++i) id_to_state[i] = nullptr;
+    for (auto& st : states) {
+        if (!st.active) continue;
+        if (st.symbol_id < kMaxSymbols) {
+            id_to_state[st.symbol_id] = &st;
+        }
+    }
+}
+
+// Build and connect a fresh adapter, subscribe all active states.
 // Returns nullptr on unrecoverable login failure (caller should exit nonzero).
-// Returns nullptr with recoverable=true if connect/subscribe failed but retry is warranted.
+// Returns nullptr with recoverable=true if connect/subscribe failed but retry
+// is warranted.
+//
+// adapter_subscribe_count is set to the number of successful subscribe_mbo
+// calls so callers can track registry utilization.
 static std::unique_ptr<AdapterBundle> make_adapter(
     const CaptureConfig& config,
-    std::vector<SymbolState>& states,
+    std::deque<SymbolState>& states,
+    SymbolState* id_to_state[kMaxSymbols],
+    int& adapter_subscribe_count,
     bool& unrecoverable)
 {
     unrecoverable = false;
@@ -735,12 +955,15 @@ static std::unique_ptr<AdapterBundle> make_adapter(
     }
     log_eventf("CONNECT ok env_key=%s", adapter.cached_env_key());
 
+    adapter_subscribe_count = 0;
     for (auto& st : states) {
+        if (!st.active) continue;
         if (!adapter.subscribe_mbo(st.symbol, st.exchange)) {
             log_eventf("WARN subscribe_mbo failed symbol=%s exchange=%s",
                        st.symbol.c_str(), st.exchange.c_str());
             // Non-fatal: continue with remaining symbols.
         } else {
+            ++adapter_subscribe_count;
             st.symbol_id = adapter.lookup_symbol_id(
                 st.symbol.c_str(), static_cast<int>(st.symbol.size()));
             log_eventf("SUBSCRIBE symbol=%s exchange=%s symbol_id=%u",
@@ -749,6 +972,7 @@ static std::unique_ptr<AdapterBundle> make_adapter(
         }
     }
 
+    rebuild_id_map(states, id_to_state);
     return bundle;
 }
 
@@ -757,19 +981,39 @@ static std::unique_ptr<AdapterBundle> make_adapter(
 // ---------------------------------------------------------------------------
 
 static int run_capture(const CaptureConfig& config) {
-    // Build per-symbol state.
-    std::vector<SymbolState> states;
-    states.reserve(config.symbols.size());
-    for (const auto& sc : config.symbols) {
+    // Derive the initial desired symbol set from the current CT date.
+    CtDateTime initial_ct = utc_to_ct(wall_now_sec());
+    std::vector<DesiredSymbol> desired = compute_desired(config, initial_ct);
+
+    // SymbolState lives in a std::deque so that push_back never invalidates
+    // existing pointers (used by id_to_state).  We still use indices for
+    // iteration but all pointer-taking code goes through the deque reference.
+    std::deque<SymbolState> states;
+    for (const auto& ds : desired) {
         SymbolState st;
-        st.symbol   = sc.symbol;
-        st.exchange = sc.exchange;
+        st.symbol      = ds.symbol;
+        st.exchange    = ds.exchange;
+        st.is_explicit = ds.is_explicit;
+        st.root        = ds.root;
+        st.active      = true;
         states.push_back(std::move(st));
     }
 
+    // id → SymbolState* dispatch table (rebuilt after every subscription round).
+    SymbolState* id_to_state[kMaxSymbols] = {};
+
+    // Process-lifetime counter for events whose symbol_id is not in the map
+    // or whose mapped state is inactive.
+    uint64_t unknown_symbol_drops = 0;
+
+    // Tracks how many subscribe_mbo calls have been made in the current adapter
+    // lifetime.  Reset to the subscription count each time make_adapter runs.
+    int adapter_subscribe_count = 0;
+
     // Initial connect.
     bool unrecoverable = false;
-    auto bundle = make_adapter(config, states, unrecoverable);
+    auto bundle = make_adapter(config, states, id_to_state,
+                               adapter_subscribe_count, unrecoverable);
     if (!bundle) {
         if (unrecoverable) {
             log_event("FATAL unrecoverable login failure");
@@ -796,7 +1040,9 @@ static int run_capture(const CaptureConfig& config) {
         uint64_t w = wall_now_ns();
         uint64_t m = mono_now_ns();
         for (auto& st : states) {
-            open_capture_file(st, config.output_root, current_td, w, m);
+            if (st.active) {
+                open_capture_file(st, config.output_root, current_td, w, m);
+            }
         }
     }
 
@@ -812,17 +1058,18 @@ static int run_capture(const CaptureConfig& config) {
             }
             if (g_shutdown.load(std::memory_order_relaxed)) break;
 
-            bundle = make_adapter(config, states, unrecoverable);
+            bundle = make_adapter(config, states, id_to_state,
+                                  adapter_subscribe_count, unrecoverable);
             if (!bundle) {
                 if (unrecoverable) {
                     log_event("FATAL unrecoverable login failure during reconnect");
                     goto shutdown;
                 }
-                for (auto& st : states) ++st.reconnects;
+                for (auto& st : states) { if (st.active) ++st.reconnects; }
                 continue;
             }
             last_event_mono_ns = mono_now_ns();
-            for (auto& st : states) ++st.reconnects;
+            for (auto& st : states) { if (st.active) ++st.reconnects; }
         }
 
         hft::RithmicAdapter& adapter = *bundle->adapter;
@@ -836,20 +1083,17 @@ static int run_capture(const CaptureConfig& config) {
             ++drained;
             last_event_mono_ns = mono_now_ns();
 
-            // Find the symbol state by symbol_id first (O(1) by index), then
-            // fall back to scan if id is 0xFFFF.
+            // Dispatch via the id_to_state lookup table.
             SymbolState* st = nullptr;
-            if (ev.symbol_id < states.size()) {
-                st = &states[ev.symbol_id];
-            } else {
-                // Unknown id — scan by subscription order.
-                // This path should rarely be hit (only if a callback fires before
-                // subscribe_mbo returns and registers the ticker).
-                for (auto& s : states) {
-                    if (s.symbol_id == ev.symbol_id) { st = &s; break; }
-                }
+            if (ev.symbol_id < kMaxSymbols) {
+                st = id_to_state[ev.symbol_id];
             }
-            if (!st || !st->fp) continue;
+
+            // Drop events from unknown, unmapped, or inactive states.
+            if (!st || !st->active || !st->fp) {
+                ++unknown_symbol_drops;
+                continue;
+            }
 
             // Build and write the record.
             CaptureRecord rec{};
@@ -877,7 +1121,7 @@ static int run_capture(const CaptureConfig& config) {
             }
         }
 
-        uint64_t now_mono = mono_now_ns();
+        uint64_t now_mono    = mono_now_ns();
         uint64_t now_wall_ns = wall_now_ns();
 
         // Trade-date rotation check: at most once per second.
@@ -886,15 +1130,113 @@ static int run_capture(const CaptureConfig& config) {
             char new_td[12] = {};
             cme_trade_date(static_cast<time_t>(now_wall_ns / 1000000000ULL), new_td);
             if (std::memcmp(new_td, current_td, 10) != 0) {
+                // --- Roll logic begins here ---
+                //
+                // 1. Write final manifests and close files for all currently
+                //    active states (we will reopen them with the new trade date
+                //    below, unless a state is being rolled off).
+                uint64_t md_drops_now = bundle ? adapter.md_drops() : 0;
                 for (auto& st : states) {
-                    if (!st.fp) continue;
-                    write_manifest(st, config.output_root,
-                                   bundle ? adapter.md_drops() : 0,
-                                   now_wall_ns);
+                    if (!st.active || !st.fp) continue;
+                    write_manifest(st, config.output_root, md_drops_now,
+                                   now_wall_ns, unknown_symbol_drops);
                     close_capture_file(st);
+                }
+
+                // 2. Recompute the desired symbol set for the new trade date.
+                time_t new_wall_sec = static_cast<time_t>(now_wall_ns / 1000000000ULL);
+                CtDateTime new_ct   = utc_to_ct(new_wall_sec);
+                std::vector<DesiredSymbol> new_desired = compute_desired(config, new_ct);
+
+                // 3. Mark active non-explicit states that are no longer in the
+                //    desired set as inactive (ROLL_DROP).
+                for (auto& st : states) {
+                    if (!st.active || st.is_explicit) continue;
+                    bool still_wanted = false;
+                    for (const auto& ds : new_desired) {
+                        if (ds.symbol == st.symbol) { still_wanted = true; break; }
+                    }
+                    if (!still_wanted) {
+                        st.active = false;
+                        log_eventf("ROLL_DROP symbol=%s", st.symbol.c_str());
+                    }
+                }
+
+                // 4. Identify newly desired symbols that have no active state.
+                //    Count how many we need to add.
+                std::vector<const DesiredSymbol*> to_add;
+                for (const auto& ds : new_desired) {
+                    bool have = false;
+                    for (const auto& st : states) {
+                        if (st.active && st.symbol == ds.symbol) { have = true; break; }
+                    }
+                    if (!have) to_add.push_back(&ds);
+                }
+
+                // 5. Check registry capacity.  If adding all new symbols would
+                //    exceed kMaxSymbols, the safe path is a clean restart.
+                if (adapter_subscribe_count + static_cast<int>(to_add.size()) > kMaxSymbols) {
+                    log_eventf(
+                        "ROLL_RESTART registry exhausted (subscribed=%d, want_add=%zu, limit=%d)"
+                        " — clean exit for systemd relaunch",
+                        adapter_subscribe_count,
+                        to_add.size(),
+                        kMaxSymbols
+                    );
+                    // Flush and fsync everything open, write manifests, then exit cleanly
+                    // so systemd restarts us with a fresh adapter registry.
+                    for (auto& st : states) {
+                        if (!st.fp) continue;
+                        std::fflush(st.fp);
+#if !defined(_WIN32)
+                        fdatasync(fileno(st.fp));
+#endif
+                        write_manifest(st, config.output_root, md_drops_now,
+                                       now_wall_ns, unknown_symbol_drops);
+                        close_capture_file(st);
+                    }
+                    if (bundle) bundle->adapter->disconnect();
+                    log_event("SHUTDOWN complete");
+                    return 0;
+                }
+
+                // 6. Subscribe and open files for new symbols.  push_back into
+                //    the deque before rebuilding the id map (std::deque never
+                //    invalidates existing references on push_back).
+                for (const DesiredSymbol* ds : to_add) {
+                    SymbolState new_st;
+                    new_st.symbol      = ds->symbol;
+                    new_st.exchange    = ds->exchange;
+                    new_st.is_explicit = ds->is_explicit;
+                    new_st.root        = ds->root;
+                    new_st.active      = true;
+                    states.push_back(std::move(new_st));
+
+                    SymbolState& st = states.back();
+
+                    if (!adapter.subscribe_mbo(st.symbol, st.exchange)) {
+                        log_eventf("WARN ROLL_ADD subscribe_mbo failed symbol=%s",
+                                   st.symbol.c_str());
+                    } else {
+                        ++adapter_subscribe_count;
+                        st.symbol_id = adapter.lookup_symbol_id(
+                            st.symbol.c_str(), static_cast<int>(st.symbol.size()));
+                        open_capture_file(st, config.output_root, new_td, now_wall_ns, now_mono);
+                        log_eventf("ROLL_ADD symbol=%s symbol_id=%u",
+                                   st.symbol.c_str(),
+                                   static_cast<unsigned>(st.symbol_id));
+                    }
+                }
+
+                // 7. Reopen files for states that survived the roll.
+                for (auto& st : states) {
+                    if (!st.active || st.fp) continue;  // skip inactive or already opened
                     open_capture_file(st, config.output_root, new_td, now_wall_ns, now_mono);
                     log_eventf("ROTATE symbol=%s new_date=%s", st.symbol.c_str(), new_td);
                 }
+
+                // 8. Rebuild the dispatch table after all push_backs are done.
+                rebuild_id_map(states, id_to_state);
                 std::memcpy(current_td, new_td, 12);
             }
         }
@@ -902,7 +1244,7 @@ static int run_capture(const CaptureConfig& config) {
         // Periodic flush.
         if (now_mono - last_flush_mono_ns >= flush_interval_ns) {
             for (auto& st : states) {
-                if (st.fp) std::fflush(st.fp);
+                if (st.active && st.fp) std::fflush(st.fp);
             }
             last_flush_mono_ns = now_mono;
         }
@@ -910,7 +1252,7 @@ static int run_capture(const CaptureConfig& config) {
         // Periodic fdatasync.
         if (now_mono - last_fsync_mono_ns >= fsync_interval_ns) {
             for (auto& st : states) {
-                if (st.fp) {
+                if (st.active && st.fp) {
 #if !defined(_WIN32)
                     fdatasync(fileno(st.fp));
 #endif
@@ -921,10 +1263,12 @@ static int run_capture(const CaptureConfig& config) {
 
         // Periodic manifest rewrite.
         for (auto& st : states) {
+            if (!st.active || !st.fp) continue;
             if (now_mono - st.last_manifest_mono_ns >= manifest_interval_ns) {
                 write_manifest(st, config.output_root,
                                bundle ? adapter.md_drops() : 0,
-                               now_wall_ns);
+                               now_wall_ns,
+                               unknown_symbol_drops);
                 st.last_manifest_mono_ns = now_mono;
             }
         }
@@ -936,7 +1280,7 @@ static int run_capture(const CaptureConfig& config) {
             // and continue capturing — the staleness check below remains the
             // only reconnect trigger.
             if (adapter.md_data_gap()) {
-                for (auto& st : states) ++st.md_gap_flags;
+                for (auto& st : states) { if (st.active) ++st.md_gap_flags; }
                 adapter.clear_md_data_gap();
                 log_eventf("WARN md_data_gap fired; gap_count=%llu; continuing capture",
                     static_cast<unsigned long long>(states.empty() ? 0 : states[0].md_gap_flags));
@@ -971,25 +1315,29 @@ shutdown:
     if (bundle) {
         hft::MarketDataEvent ev;
         while (bundle->mbo_queue->pop(ev)) {
-            if (ev.symbol_id < states.size()) {
-                SymbolState& st = states[ev.symbol_id];
-                if (!st.fp) continue;
-                CaptureRecord rec{};
-                rec.ts_exch_ns      = ev.timestamp_ns;
-                rec.ts_recv_mono_ns = ev.callback_monotonic_ns;
-                rec.order_id        = ev.order_id;
-                rec.price           = ev.price;
-                rec.size            = ev.size;
-                rec.symbol_id       = ev.symbol_id;
-                rec.action          = ev.action;
-                rec.side            = ev.side;
-                if (std::fwrite(&rec, sizeof(rec), 1, st.fp) == 1) {
-                    ++st.records;
-                    st.file_bytes += sizeof(rec);
-                    if (ev.action == 'T') ++st.trades; else ++st.quotes;
-                    if (st.first_ts_exch_ns == 0) st.first_ts_exch_ns = ev.timestamp_ns;
-                    st.last_ts_exch_ns = ev.timestamp_ns;
-                }
+            SymbolState* st = nullptr;
+            if (ev.symbol_id < kMaxSymbols) {
+                st = id_to_state[ev.symbol_id];
+            }
+            if (!st || !st->active || !st->fp) {
+                ++unknown_symbol_drops;
+                continue;
+            }
+            CaptureRecord rec{};
+            rec.ts_exch_ns      = ev.timestamp_ns;
+            rec.ts_recv_mono_ns = ev.callback_monotonic_ns;
+            rec.order_id        = ev.order_id;
+            rec.price           = ev.price;
+            rec.size            = ev.size;
+            rec.symbol_id       = ev.symbol_id;
+            rec.action          = ev.action;
+            rec.side            = ev.side;
+            if (std::fwrite(&rec, sizeof(rec), 1, st->fp) == 1) {
+                ++st->records;
+                st->file_bytes += sizeof(rec);
+                if (ev.action == 'T') ++st->trades; else ++st->quotes;
+                if (st->first_ts_exch_ns == 0) st->first_ts_exch_ns = ev.timestamp_ns;
+                st->last_ts_exch_ns = ev.timestamp_ns;
             }
         }
         bundle->adapter->disconnect();
@@ -998,6 +1346,7 @@ shutdown:
     // Final flush, fsync, manifests.
     uint64_t final_wall_ns = wall_now_ns();
     for (auto& st : states) {
+        if (!st.active) continue;
         if (st.fp) {
             std::fflush(st.fp);
 #if !defined(_WIN32)
@@ -1006,7 +1355,8 @@ shutdown:
         }
         write_manifest(st, config.output_root,
                        bundle ? bundle->adapter->md_drops() : 0,
-                       final_wall_ns);
+                       final_wall_ns,
+                       unknown_symbol_drops);
         close_capture_file(st);
     }
 
@@ -1039,16 +1389,26 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    log_eventf("CONFIG output_root=%s symbols=%zu flush=%ds fsync=%ds manifest=%ds stale=%ds",
+    log_eventf("CONFIG output_root=%s explicit_symbols=%zu roots=%zu"
+               " contracts_per_root=%d flush=%ds fsync=%ds manifest=%ds stale=%ds",
                config.output_root.c_str(),
                config.symbols.size(),
+               config.roots.size(),
+               config.contracts_per_root,
                config.flush_interval_sec,
                config.fsync_interval_sec,
                config.manifest_interval_sec,
                config.stale_threshold_sec);
-    // Log symbol names (not credentials).
+
+    // Log explicit symbols (not credentials).
     for (const auto& sc : config.symbols) {
-        log_eventf("CONFIG symbol=%s exchange=%s", sc.symbol.c_str(), sc.exchange.c_str());
+        log_eventf("CONFIG explicit_symbol=%s exchange=%s",
+                   sc.symbol.c_str(), sc.exchange.c_str());
+    }
+    // Log roots (not credentials).
+    for (const auto& rc : config.roots) {
+        log_eventf("CONFIG root=%s exchange=%s cycle=%s",
+                   rc.root.c_str(), rc.exchange.c_str(), roll_cycle_name(rc.cycle));
     }
     log_eventf("CONFIG rithmic_env=%s app=%s (credentials: names only, never values)",
                config.conn.environment.c_str(),

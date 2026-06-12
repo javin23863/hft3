@@ -34,19 +34,32 @@ login_params:
 # MML_DMN_SRVR_ADDR: <omit — set in .env>
 
 # ---------------------------------------------------------------------------
-# Symbols to subscribe (CME Group front-month contracts, June 2026 roll)
+# Contract roots — the daemon derives front-month contracts automatically and
+# rolls them at the daily 17:00 CT rotation.  Two nearest eligible contracts
+# per root are captured so roll week is recorded from both sides.
+#
+# If an explicit `symbols:` list is also present (or added below), those
+# entries are merged in as a union; explicit symbols never auto-roll and
+# remain subscribed for the lifetime of the process.
 # ---------------------------------------------------------------------------
-symbols:
-  - symbol: MESU6
+roots:
+  - root: MES
     exchange: CME
-  - symbol: MGCQ6
+    cycle: quarterly_equity
+  - root: MGC
     exchange: COMEX
-  - symbol: GCQ6
+    cycle: gold
+  - root: GC
     exchange: COMEX
-  - symbol: MCLN6
+    cycle: gold
+  - root: MCL
     exchange: NYMEX
-  - symbol: CLN6
+    cycle: monthly_energy
+  - root: CL
     exchange: NYMEX
+    cycle: monthly_energy
+
+contracts_per_root: 2
 
 # ---------------------------------------------------------------------------
 # Capture output
