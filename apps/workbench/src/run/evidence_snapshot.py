@@ -535,76 +535,6 @@ def _rithmic_endpoint_status(repo: Path, *, force_paper: bool = False) -> dict[s
     return endpoint_status_from_config(config_path, repo_root=repo)
 
 
-def _ibkr_endpoint_status(repo: Path, *, connect: bool = True) -> dict[str, Any]:
-    try:
-        from equities_lane.src.ibkr_endpoint import default_config_path, endpoint_status
-
-        env_config = os.environ.get("IBKR_ENDPOINT_CONFIG", "").strip()
-        config_path = Path(env_config) if env_config else default_config_path(repo)
-        if not config_path.is_absolute():
-            config_path = repo / config_path
-        timeout = float(os.environ.get("IBKR_ENDPOINT_TIMEOUT_SEC", "0.35") or "0.35")
-        return endpoint_status(
-            repo,
-            config_path=config_path,
-            connect=connect,
-            timeout_sec=timeout,
-            write_status=True,
-        )
-    except Exception as exc:
-        runtime_status = repo / "runtime" / "equities_lane" / "ibkr_endpoint_status.json"
-        return {
-            "schema_version": "ibkr_endpoint_status_v1",
-            "generated_at_utc": datetime.now().astimezone().isoformat(),
-            "status": "BLOCKING",
-            "reason_code": "IBKR_ENDPOINT_STATUS_ERROR",
-            "profile": "ibkr_paper_socket",
-            "provider": "interactive_brokers",
-            "transport": "tws_socket",
-            "mode": os.environ.get("IBKR_SOCKET_MODE", "paper"),
-            "system": "IBKR Paper Trading",
-            "gateway": "TWS or IB Gateway headless socket",
-            "credentials": {"account_id_set": False, "redacted": True},
-            "secret_exposed": False,
-            "runtime_status_path": str(runtime_status),
-            "blocking_gates": [
-                {
-                    "gate": "ibkr_endpoint_status",
-                    "status": "BLOCKING",
-                    "reason": str(exc),
-                }
-            ],
-        }
-
-
-def _decorate_ibkr_endpoint_for_pipeline(endpoint: dict[str, Any]) -> dict[str, Any]:
-    """Separate model-pipeline readiness from broker live-routing readiness."""
-
-    if not endpoint:
-        return {}
-    decorated = dict(endpoint)
-    reason_code = str(decorated.get("reason_code") or "").upper()
-    status = str(decorated.get("status") or "").upper()
-    routing_ready = status == "CONNECTED"
-    hard_pipeline_blockers = {
-        "IBKR_ENDPOINT_STATUS_ERROR",
-        "IBKR_SOCKET",
-        "IBKR_API_PACKAGE",
-    }
-    pipeline_blocking = reason_code in hard_pipeline_blockers
-    decorated["routing_ready"] = routing_ready
-    decorated["pipeline_blocking"] = pipeline_blocking
-    decorated["pipeline_gate_status"] = "BLOCKING" if pipeline_blocking else "PASS"
-    decorated["live_routing_gate_status"] = "PASS" if routing_ready else "ROUTING_BLOCKED"
-    decorated["routing_blocking_gates"] = decorated.get("blocking_gates", [])
-    if not routing_ready and not pipeline_blocking:
-        decorated["pipeline_note"] = (
-            "Equities/options research pipeline is allowed to continue. "
-            "IBKR live routing remains gated until the headless API session is connected."
-        )
-    return decorated
-
-
 def _same_path(left: str | Path | None, right: str | Path | None) -> bool:
     if not left or not right:
         return False
@@ -1960,9 +1890,8 @@ def _crypto_pipeline_coverage(
     )
     vectorbt_upstream_unproven = not vectorbt_observed
     hft_paths = [
-        repo / "packages" / "crypto_lane" / "src" / "validation" / "crypto_validation_workflow.py",
-        repo / "packages" / "crypto_lane" / "src" / "validation" / "crypto_execution_validator.py",
-        repo / "packages" / "backtest_pipeline" / "src" / "crypto_hft_builder.py",
+        repo / "packages" / "backtest_pipeline" / "src" / "hft_backtest_builder.py",
+        repo / "packages" / "backtest_pipeline" / "src" / "signal_backtester.py",
     ]
     robustness_pack_present = (repo / "apps" / "workbench" / "src" / "robustness" / "pack.py").is_file()
     double_wf_present = (repo / "apps" / "workbench" / "src" / "robustness" / "wfc" / "double_wf.py").is_file()
@@ -2068,7 +1997,7 @@ def _crypto_pipeline_coverage(
             "Candidates come from the tracked crypto registry.",
             authority="crypto registry",
             role="source_inventory",
-            artifact_contract="packages/crypto_lane/config/candidates/*.yaml",
+            artifact_contract="crypto candidate registry yaml (lane moved to hft3-crypto-lane)",
         ),
         _coverage_row(
             "vectorbt_filter",
@@ -2247,355 +2176,6 @@ def _crypto_pipeline_coverage(
     return rows
 
 
-def _crypto_snapshot(repo: Path) -> RunEvidenceSnapshot:
-    from crypto_lane.src.align.latency_profile import load_venue_profiles, node_profile_path, resolve_node_latency
-    from crypto_lane.src.config_loader import load_hypotheses, load_manifest, load_universe
-    from crypto_lane.src.config_loader import list_candidate_paths, list_backtest_config_paths
-    from crypto_lane.src.ingest.edge_status import load_edge_packet_status
-    from crypto_lane.src.ml.candidate_registry import discover_backtest_configs, discover_candidates
-    from workbench.src.run.crypto_smoke_runner import latest_status_path
-
-    status_path = latest_status_path(repo)
-    status = read_json(status_path)
-    run_dir = status_path.parent / str(status.get("run_id", ""))
-    selected_run_dir = run_dir if run_dir.is_dir() else None
-    reports = _crypto_reports(repo, run_dir if run_dir.is_dir() else None)
-    validation_reports = _crypto_validation_reports(repo, run_dir if run_dir.is_dir() else None)
-    robustness_summary = _crypto_robustness_summary(selected_run_dir)
-    vectorbt_summary = _crypto_vectorbt_summary(selected_run_dir)
-    after_action = _crypto_after_action(selected_run_dir)
-    relationships = _crypto_relationships(selected_run_dir)
-    candidates = discover_candidates()
-    backtests = discover_backtest_configs()
-    candidate_rows = []
-    source_candidates = status.get("candidates") or []
-    if not source_candidates:
-        source_candidates = [
-            {
-                "candidate_id": r.get("candidate_id", ""),
-                "hypothesis_id": r.get("hypothesis_id", ""),
-                "status": "done",
-                "pass_fail": r.get("pass_fail", ""),
-                "holdout_status": (r.get("holdout_gate") or {}).get("status", ""),
-                "negative_controls_ok": all(
-                    bool((r.get("negative_controls") or {}).get(k))
-                    for k in ("shuffled_degraded", "shifted_degraded")
-                ),
-                "order_ack_status": r.get("execution_ack_status", ""),
-                "execution_ack_scope": r.get("execution_ack_scope", ""),
-                "btc_node_evidence_scope": r.get("btc_node_evidence_scope", ""),
-                "oos_ic": _primary_run(r).get("oos_ic_baseline_mean"),
-                "n_rows": _primary_run(r).get("n_rows"),
-                "n_folds": _primary_run(r).get("n_folds"),
-                "purged_splits": _primary_run(r).get("n_splits"),
-            }
-            for r in reports
-        ]
-    for row in source_candidates:
-        candidate_rows.append(dict(row))
-
-    universe = load_universe()
-    manifest = load_manifest()
-    fixture_dir = repo / "packages" / "crypto_lane" / "fixtures"
-    data_files = [
-        {"path": str(path), "exists": path.is_file(), "bytes": path.stat().st_size if path.is_file() else 0}
-        for path in (
-            fixture_dir / "spot_perp_ticks.csv",
-            fixture_dir / "deribit_surface.csv",
-            fixture_dir / "mempool_snapshots.csv",
-        )
-    ]
-    venue_profiles = {k: v.__dict__ for k, v in load_venue_profiles().items()}
-    node_profile = resolve_node_latency().__dict__
-    node_path = node_profile_path()
-    edge_packets = load_edge_packet_status(repo)
-
-    backtest_rows = []
-    hft_validation_rows = []
-    proxy_leaderboard = []
-    equity_curves: dict[str, list[dict[str, Any]]] = {}
-    holdout_stage_rows = []
-    negative_control_rows = []
-    robustness_rows = []
-    feature_rows = []
-    for report in reports:
-        primary = _primary_run(report)
-        proxy = report.get("research_pnl_proxy") or {}
-        proxy_summary = proxy.get("summary") or {}
-        candidate_id = report.get("candidate_id", "")
-        backtest_rows.append({
-            "candidate_id": candidate_id,
-            "hypothesis_id": report.get("hypothesis_id", ""),
-            "target": report.get("target", ""),
-            "pass_fail": report.get("pass_fail", ""),
-            "smoke_mode": report.get("smoke_mode"),
-            "oos_ic": primary.get("oos_ic_baseline_mean"),
-            "rows": primary.get("n_rows"),
-            "folds": primary.get("n_folds"),
-            "holdout": (report.get("holdout_gate") or {}).get("status", ""),
-            "proxy_net_pnl_bps": proxy_summary.get("net_pnl_bps"),
-            "proxy_trades": proxy_summary.get("num_trades"),
-            "proxy_hit_rate": proxy_summary.get("hit_rate"),
-            "proxy_profit_factor": proxy_summary.get("profit_factor"),
-            "proxy_max_drawdown_bps": proxy_summary.get("max_drawdown_bps"),
-            "proxy_sharpe": proxy_summary.get("sharpe_proxy"),
-        })
-        proxy_leaderboard.append({
-            "candidate_id": candidate_id,
-            "target": report.get("target", ""),
-            "oos_ic": primary.get("oos_ic_baseline_mean"),
-            "proxy_net_pnl_bps": proxy_summary.get("net_pnl_bps"),
-            "proxy_trades": proxy_summary.get("num_trades"),
-            "proxy_hit_rate": proxy_summary.get("hit_rate"),
-            "proxy_profit_factor": proxy_summary.get("profit_factor"),
-            "proxy_max_drawdown_bps": proxy_summary.get("max_drawdown_bps"),
-            "proxy_sharpe": proxy_summary.get("sharpe_proxy"),
-            "proxy_status": proxy.get("status", ""),
-            "promotion_gate": proxy.get("promotion_gate"),
-        })
-        equity_curves[candidate_id] = list(proxy.get("equity_curve") or [])
-        for stage_name, stage in ((report.get("holdout_gate") or {}).get("stages") or {}).items():
-            holdout_stage_rows.append({
-                "candidate_id": candidate_id,
-                "stage": stage_name,
-                "mode": stage.get("mode"),
-                "ic": stage.get("ic"),
-                "n_rows": stage.get("n_rows"),
-                "status": stage.get("status"),
-            })
-        controls = report.get("negative_controls") or {}
-        negative_control_rows.append({
-            "candidate_id": candidate_id,
-            "real_oos_ic": controls.get("real_oos_ic"),
-            "shuffled_labels_ic": controls.get("shuffled_labels_ic"),
-            "shifted_features_ic": controls.get("shifted_features_ic"),
-            "shuffled_degraded": controls.get("shuffled_degraded"),
-            "shifted_degraded": controls.get("shifted_degraded"),
-        })
-        robustness_rows.append({
-            "candidate_id": candidate_id,
-            "purged_cv": report.get("purged_cv_implemented"),
-            "purged_splits": primary.get("n_splits"),
-            "holdout": (report.get("holdout_gate") or {}).get("status", ""),
-            "shuffled_degraded": (report.get("negative_controls") or {}).get("shuffled_degraded"),
-            "shifted_degraded": (report.get("negative_controls") or {}).get("shifted_degraded"),
-            "randomized_degraded": (report.get("negative_controls") or {}).get("randomized_degraded"),
-        })
-    for candidate in candidates:
-        feature_rows.append({
-            "candidate_id": candidate.get("candidate_id", ""),
-            "hypothesis_id": candidate.get("hypothesis_id", ""),
-            "target": candidate.get("target", ""),
-            "features": ", ".join(candidate.get("features") or []),
-            "btc_node_required": candidate.get("btc_node_required"),
-            "ablation": candidate.get("ablation", {}),
-        })
-    for report in validation_reports:
-        result = report.get("result") or {}
-        hft_validation_rows.append({
-            "candidate_id": report.get("candidate_id", ""),
-            "model_id": report.get("model_id", ""),
-            "classification": report.get("execution_classification", ""),
-            "validation_path": str(report.get("validation_path", "")),
-            "npz_path": report.get("npz_path", ""),
-            "net_pnl": result.get("net_pnl"),
-            "gross_pnl": result.get("gross_pnl"),
-            "num_trades": result.get("num_trades"),
-            "num_intents": result.get("num_intents"),
-            "fill_rate": result.get("fill_rate"),
-            "slippage_bps": result.get("slippage_bps"),
-            "adverse_selection_cost": result.get("adverse_selection_cost"),
-            "tail_loss": result.get("tail_loss"),
-            "sharpe_ratio": result.get("sharpe_ratio"),
-            "error": result.get("error", ""),
-            "report_path": report.get("_path", ""),
-        })
-
-    decision = dict(status.get("decision") or {
-        "action": "NO_RUN",
-        "reason": "No crypto candidate loop status observed.",
-        "top_smoke_candidate": "",
-        "live_registry_ready": False,
-    })
-    decision_action = str(decision.get("action") or "").upper()
-    blocking_gates = [
-        gate
-        for gate in (decision.get("blocking_gates") or [])
-        if not (isinstance(gate, dict) and gate.get("gate") == "bitcoin_edge_packets")
-    ]
-    if after_action and not after_action.get("passed"):
-        blocking_gates.append(
-            {
-                "gate": "after_action_gpt55_xhigh",
-                "status": after_action.get("gate_status") or "FAIL",
-                "reason": after_action.get("blocking_reason") or "GPT-5.5 xhigh after-action is required and did not pass.",
-            }
-        )
-    if decision_action == "REJECT":
-        decision["failed_gates"] = blocking_gates
-    if not edge_packets.get("observed") and decision_action != "REJECT":
-        blocking_gates.append(
-            {
-                "gate": "bitcoin_edge_packets",
-                "status": edge_packets.get("status"),
-                "reason": edge_packets.get("reason"),
-            }
-        )
-    pipeline_coverage = _crypto_pipeline_coverage(
-        repo,
-        reports,
-        validation_reports,
-        candidate_rows,
-        edge_packets,
-        robustness_summary,
-        vectorbt_summary,
-    )
-    run_smoke_reports = run_dir / "smoke_reports"
-    legacy_smoke_reports = (repo / "research_cards" / "crypto").resolve()
-    robustness_explanation = _crypto_robustness_explanation(robustness_summary, candidate_rows)
-    self_learning_loop = _crypto_self_learning_loop(status, after_action, relationships, robustness_explanation)
-    provider_status = _provider_status(repo)
-    institutional_metrics = _model_metrics_artifacts(selected_run_dir)
-    return RunEvidenceSnapshot(
-        source="crypto_lane",
-        run_id=str(status.get("run_id", "crypto_lane")),
-        state=str(status.get("state", "idle")),
-        current_stage=str(status.get("current_stage", "")),
-        started_at=str(status.get("started_at", "")),
-        finished_at=str(status.get("finished_at", "")),
-        root=str(status_path.parent),
-        stages=list(status.get("stages") or []),
-        artifacts={
-            "latest_status": str(status_path),
-            "candidate_registry": str((repo / "packages" / "crypto_lane" / "config" / "candidates").resolve()),
-            "smoke_reports": str(run_smoke_reports) if run_smoke_reports.is_dir() else "",
-            "legacy_smoke_reports": str(legacy_smoke_reports) if legacy_smoke_reports.is_dir() else "",
-            "robustness_summary": str(run_dir / "robustness_summary.json") if (run_dir / "robustness_summary.json").is_file() else "",
-            "vectorbt_summary": str(run_dir / "vectorbt_summary.json") if (run_dir / "vectorbt_summary.json").is_file() else "",
-            "after_action_meta": str(run_dir / "after_action_meta.json") if (run_dir / "after_action_meta.json").is_file() else "",
-            "after_action_packet": str(run_dir / "after_action_packet.json") if (run_dir / "after_action_packet.json").is_file() else "",
-            "after_action_symbolic": str(run_dir / "after_action_symbolic.json") if (run_dir / "after_action_symbolic.json").is_file() else "",
-            "kg_slice": str(run_dir / "kg_slice.json") if (run_dir / "kg_slice.json").is_file() else "",
-            "relationship_candidates": str(run_dir / "relationship_candidates.json") if (run_dir / "relationship_candidates.json").is_file() else "",
-            "relationship_summary": str(run_dir / "relationship_summary.json") if (run_dir / "relationship_summary.json").is_file() else "",
-            "model_scorecard": (institutional_metrics.get("paths") or {}).get("model_scorecard", ""),
-            "model_behavior_envelope": (institutional_metrics.get("paths") or {}).get("model_behavior_envelope", ""),
-        },
-        registry={
-            "hypotheses": [h.get("hypothesis_id", "") for h in load_hypotheses()],
-            "candidates": [c.get("candidate_id", "") for c in candidates],
-            "candidate_paths": [str(p) for p in list_candidate_paths()],
-            "backtests": [b.get("config_id", "") for b in backtests],
-            "backtest_paths": [str(p) for p in list_backtest_config_paths()],
-            "manifest": manifest,
-        },
-        data={
-            "universe": universe,
-            "data_files": data_files,
-            "missing": [f for f in data_files if not f["exists"]],
-            "btc_node": {"profile": node_profile, "profile_path": str(node_path), "profile_exists": node_path.is_file()},
-            "bitcoin_edge_packets": edge_packets,
-        },
-        backtest={
-            "rows": backtest_rows,
-            "reports": reports,
-            "hft_validation_rows": hft_validation_rows,
-            "proxy_leaderboard": sorted(
-                proxy_leaderboard,
-                key=lambda r: float(r.get("proxy_net_pnl_bps") or 0.0),
-                reverse=True,
-            ),
-            "equity_curves": equity_curves,
-            "holdout_stage_rows": holdout_stage_rows,
-            "negative_control_rows": negative_control_rows,
-            "vectorbt_summary": vectorbt_summary,
-        },
-        latency={
-            "venue_profiles": venue_profiles,
-            "node_profile": node_profile,
-            "bitcoin_edge_packets": edge_packets,
-            "edge_packet_history": edge_packets.get("packet_history", []),
-            "execution_ack_rows": [
-                {
-                    "candidate_id": c.get("candidate_id", ""),
-                    "scope": c.get("execution_ack_scope") or "crypto_venue_submit_ack",
-                    "measured": bool(c.get("execution_ack_measured")),
-                    "status": c.get("order_ack_status") or c.get("execution_ack_status", ""),
-                    "btc_node_scope": c.get("btc_node_evidence_scope", ""),
-                }
-                for c in candidate_rows
-            ],
-        },
-        diagnostics={
-            "feature_rows": feature_rows,
-            "feature_builders": manifest.get("feature_builders", []),
-            "align_modules": manifest.get("align_modules", []),
-            "edge_packet_schema": edge_packets.get("schema", []),
-        },
-        robustness={
-            "rows": robustness_rows,
-            "crypto_robustness_summary": robustness_summary,
-            "robustness_pack": robustness_summary.get("robustness_pack", {}),
-            "double_walk_forward": robustness_summary.get("double_walk_forward", {}),
-            "pending": (robustness_summary.get("robustness_pack") or {}).get("pending", []),
-            "failed": (robustness_summary.get("robustness_pack") or {}).get("failed", []),
-            "explanation": robustness_explanation,
-            "artifact_links": {
-                "robustness_summary": str(run_dir / "robustness_summary.json")
-                if (run_dir / "robustness_summary.json").is_file()
-                else "",
-                "replay_wf1_matrix": str(run_dir / "replay_wf1_matrix.json")
-                if (run_dir / "replay_wf1_matrix.json").is_file()
-                else "",
-                "replay_wf2_matrix": str(run_dir / "replay_wf2_matrix.json")
-                if (run_dir / "replay_wf2_matrix.json").is_file()
-                else "",
-                "walk_forward_correlation": str(run_dir / "walk_forward_correlation.json")
-                if (run_dir / "walk_forward_correlation.json").is_file()
-                else "",
-            },
-        },
-        decision={
-            **decision,
-            "smoke_triage_order": status.get("smoke_triage_order", status.get("ranking", [])),
-            "vectorbt_promoted_order": status.get("vectorbt_promoted_order", []),
-            "smoke_pass_count": sum(1 for c in candidate_rows if str(c.get("pass_fail", "")).lower() == "pass"),
-            "economic_diagnostic_pass_count": _positive_proxy_pnl_count(candidate_rows),
-            "live_registry_ready": bool(decision.get("live_registry_ready")) and bool(edge_packets.get("observed")),
-            "bitcoin_edge_packet_status": edge_packets.get("status"),
-            "blocking_gates": blocking_gates,
-            "institutional_metrics": institutional_metrics,
-        },
-        reports={
-            "smoke_reports": [r.get("_path", "") for r in reports],
-            "validation_reports": [r.get("_path", "") for r in validation_reports],
-            "robustness_summary": str(run_dir / "robustness_summary.json") if (run_dir / "robustness_summary.json").is_file() else "",
-            "vectorbt_summary": str(run_dir / "vectorbt_summary.json") if (run_dir / "vectorbt_summary.json").is_file() else "",
-            "after_action_report": (after_action.get("paths") or {}).get("report", ""),
-            "after_action_meta": (after_action.get("paths") or {}).get("meta", ""),
-            "after_action_packet": (after_action.get("paths") or {}).get("packet", ""),
-            "after_action_symbolic": (after_action.get("paths") or {}).get("symbolic", ""),
-            "kg_slice": (after_action.get("paths") or {}).get("kg_slice", ""),
-            "relationship_candidates": (relationships.get("paths") or {}).get("relationship_candidates", ""),
-            "relationship_summary": (relationships.get("paths") or {}).get("relationship_summary", ""),
-            "model_scorecard": (institutional_metrics.get("paths") or {}).get("model_scorecard", ""),
-            "model_behavior_envelope": (institutional_metrics.get("paths") or {}).get("model_behavior_envelope", ""),
-        },
-        after_action=after_action,
-        relationships=relationships,
-        self_learning_loop=self_learning_loop,
-        system={
-            "status": status,
-            "manifest": manifest,
-            "runtime_path": str(status_path),
-            "bitcoin_edge_packets": edge_packets,
-            "pipeline_coverage": pipeline_coverage,
-            "llm_providers": provider_status,
-            "institutional_metrics": institutional_metrics,
-        },
-    )
-
-
 def _workbench_snapshot(repo: Path, campaign_id: str = "") -> RunEvidenceSnapshot:
     root = workbench_runs_dir_for(repo)
     if not campaign_id:
@@ -2708,13 +2288,7 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
     lane_row = (lane_registry.get("by_lane") or {}).get(lane, {})
     config = lane_row.get("config") or {}
     is_cme = lane == "cme_futures"
-    is_ibkr_lane = lane == "equities"
     rithmic_endpoint = _rithmic_endpoint_status(repo, force_paper=is_cme) if is_cme else {}
-    ibkr_endpoint = (
-        _decorate_ibkr_endpoint_for_pipeline(_ibkr_endpoint_status(repo, connect=True))
-        if is_ibkr_lane
-        else {}
-    )
     rithmic_trial = _latest_rithmic_trial_bundle(repo) if is_cme else {}
     latency_baseline = _latest_latency_baseline_summary(
         repo,
@@ -2724,8 +2298,6 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
     endpoint_status = str(rithmic_endpoint.get("status") or "").upper()
     endpoint_ready = (not is_cme) or endpoint_status in {"READY_TO_CONNECT", "CONNECTED"}
     endpoint_blocked = is_cme and not endpoint_ready
-    ibkr_endpoint_status = str(ibkr_endpoint.get("status") or "").upper()
-    ibkr_endpoint_blocked = is_ibkr_lane and bool(ibkr_endpoint.get("pipeline_blocking"))
     active_run_id, active_run_dir = _active_all_lanes_run_dir(repo)
     feature_root = active_run_dir / "feature_fabric" / lane if active_run_dir else None
     feature_fabric_root = _ensure_catalog_feature_fabric(
@@ -2756,14 +2328,13 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
         if has_rithmic_trial
         and (
             endpoint_blocked
-            or ibkr_endpoint_blocked
             or lane_registry_blocked
             or feature_fabric_blocked
             or report_binding_blocked
             or not order_ack_measured
         )
         else "blocked"
-        if endpoint_blocked or ibkr_endpoint_blocked or lane_registry_blocked or feature_fabric_blocked
+        if endpoint_blocked or lane_registry_blocked or feature_fabric_blocked
         else "catalogued"
     )
     if report_binding_blocked:
@@ -2795,23 +2366,6 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
             reason = "Rithmic C++ gateway library is not built or not pointed to by HFT3_RITHMIC_GATEWAY_SO."
         else:
             reason = f"Rithmic endpoint is not ready: {reason_code}."
-    elif ibkr_endpoint_blocked:
-        current_stage = "ibkr_endpoint_not_ready"
-        reason_code = str(ibkr_endpoint.get("reason_code") or ibkr_endpoint_status or "IBKR_ENDPOINT_NOT_READY")
-        if reason_code == "IBKR_SOCKET":
-            reason = "IBKR TWS/Gateway socket is not reachable for the equities lane."
-        elif reason_code == "IBKR_API_PACKAGE":
-            reason = "IBKR API package is missing, so a headless API handshake cannot run."
-        elif reason_code == "IBKR_PAPER_DISCLAIMER":
-            reason = (
-                "IBKR rejected the headless API handshake because the paper trading disclaimer is pending."
-            )
-        elif reason_code == "IBKR_API_HANDSHAKE":
-            reason = "IBKR socket is reachable, but the headless API handshake did not complete."
-        elif reason_code == "IBKR_ACCOUNT":
-            reason = "IBKR account ID is not loaded into the runtime environment."
-        else:
-            reason = f"IBKR endpoint is not ready: {reason_code}."
     elif lane_registry_blocked:
         current_stage = "lane_registry_blocked"
         reason = "Lane registry failed to load cleanly."
@@ -2825,8 +2379,6 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
         {
             "gate": "rithmic_paper_endpoint"
             if endpoint_blocked
-            else "ibkr_equities_endpoint"
-            if ibkr_endpoint_blocked
             else "rithmic_report_binding"
             if report_binding_blocked
             else "rithmic_order_ack"
@@ -2834,8 +2386,6 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
             else "observed_lane_run",
             "status": rithmic_endpoint.get("status", "PENDING")
             if endpoint_blocked
-            else ibkr_endpoint.get("status", "PENDING")
-            if ibkr_endpoint_blocked
             else "BLOCKING"
             if report_binding_blocked
             else "INSUFFICIENT_ORDER_ACK_EVIDENCE"
@@ -2843,13 +2393,9 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
             else "PENDING",
             "reason": rithmic_endpoint.get("reason_code", reason)
             if endpoint_blocked
-            else ibkr_endpoint.get("reason_code", reason)
-            if ibkr_endpoint_blocked
             else reason,
         }
     ]
-    if ibkr_endpoint_blocked:
-        blocking_gates.extend(ibkr_endpoint.get("blocking_gates") or [])
     blocking_gates.extend(_shared_blocking_gates(lane_registry, feature_fabric))
     rithmic_reports = rithmic_trial.get("reports") or {}
     data_quality = rithmic_reports.get("data_quality") or {}
@@ -2938,12 +2484,6 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
                 "status": rithmic_endpoint.get("status", "not_applicable") if is_cme else "not_applicable",
             },
             {
-                "name": "ibkr_equities_endpoint",
-                "status": ibkr_endpoint.get("pipeline_gate_status", "not_applicable")
-                if is_ibkr_lane
-                else "not_applicable",
-            },
-            {
                 "name": "paper_market_data_capture",
                 "status": "observed" if has_rithmic_trial else "missing",
             },
@@ -2974,8 +2514,6 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
             "rithmic_endpoint_status": rithmic_endpoint.get("runtime_status_path", "") if is_cme else "",
             "rithmic_latency_baseline_summary": latency_baseline.get("_path", "") if is_cme else "",
             "rithmic_latency_baseline_samples": latency_baseline.get("_sample_path", "") if is_cme else "",
-            "ibkr_endpoint_config": ibkr_endpoint.get("config_path", "") if is_ibkr_lane else "",
-            "ibkr_endpoint_status": ibkr_endpoint.get("runtime_status_path", "") if is_ibkr_lane else "",
             **trial_artifacts,
         },
         registry={
@@ -3055,7 +2593,6 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
             },
             "rithmic_endpoint": rithmic_endpoint,
             "rithmic_capture_endpoint": rithmic_trial.get("capture_endpoint", {}),
-            "ibkr_endpoint": ibkr_endpoint,
             "latency_baseline": latency_baseline,
             "latency_profile": latency_profile,
             "feed_latency_us": latency_profile.get("feed_latency_us", {}),
@@ -3096,7 +2633,6 @@ def _lane_source_snapshot(repo: Path, source: str) -> RunEvidenceSnapshot:
         system={
             "lane_registry": lane_registry,
             "rithmic_endpoint": rithmic_endpoint,
-            "ibkr_endpoint": ibkr_endpoint,
             "rithmic_trial": rithmic_trial,
             "latency_baseline": latency_baseline,
             "rithmic_report_binding": rithmic_trial.get("report_binding", {}),
@@ -3442,15 +2978,9 @@ def load_run_evidence(repo: Path, source: str, *, campaign_id: str = "") -> RunE
             selected_run_id=snapshot.run_id,
         )
     is_cme_lane = lane == "cme_futures"
-    is_ibkr_lane = lane == "equities"
     rithmic_endpoint = (snapshot.system or {}).get("rithmic_endpoint") or (
         _rithmic_endpoint_status(repo, force_paper=True) if is_cme_lane else {}
     )
-    ibkr_endpoint = (snapshot.system or {}).get("ibkr_endpoint") or (
-        _ibkr_endpoint_status(repo, connect=True) if is_ibkr_lane else {}
-    )
-    if is_ibkr_lane:
-        ibkr_endpoint = _decorate_ibkr_endpoint_for_pipeline(ibkr_endpoint)
     event_universe = _event_universe_snapshot(repo)
     snapshot.registry = {
         **(snapshot.registry or {}),
@@ -3481,8 +3011,6 @@ def load_run_evidence(repo: Path, source: str, *, campaign_id: str = "") -> RunE
                 "endpoint_profile": rithmic_endpoint.get("profile", ""),
             },
         )
-    if is_ibkr_lane:
-        latency_payload["ibkr_endpoint"] = ibkr_endpoint
     snapshot.latency = latency_payload
     snapshot.trade_manager = _trade_manager_snapshot(
         repo,
@@ -3498,8 +3026,6 @@ def load_run_evidence(repo: Path, source: str, *, campaign_id: str = "") -> RunE
     }
     if is_cme_lane:
         system_payload["rithmic_endpoint"] = rithmic_endpoint
-    if is_ibkr_lane:
-        system_payload["ibkr_endpoint"] = ibkr_endpoint
     snapshot.system = system_payload
     _append_decision_blocking_gates(
         snapshot,

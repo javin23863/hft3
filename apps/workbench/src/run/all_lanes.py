@@ -70,15 +70,6 @@ def build_all_lanes_plan(repo: Path, run_id: str) -> dict[str, Any]:
             }
         )
 
-    # Check IBKR endpoint readiness once for the equities lane.
-    _ibkr_status_path = repo / "runtime" / "equities_lane" / "ibkr_endpoint_status.json"
-    _ibkr_ready: bool = False
-    try:
-        _ibkr_payload = json.loads(_ibkr_status_path.read_text(encoding="utf-8"))
-        _ibkr_ready = bool(_ibkr_payload.get("ready"))
-    except (FileNotFoundError, json.JSONDecodeError):
-        _ibkr_ready = False
-
     models: list[dict[str, Any]] = []
     for model_id in list_models():
         lane = registry.resolve_lane(model_id).value
@@ -88,12 +79,6 @@ def build_all_lanes_plan(repo: Path, run_id: str) -> dict[str, Any]:
         if lane in lane_config_errors:
             terminal_state = "BLOCKED_VALIDATION"
             reason = f"Lane config failed to load: {lane_config_errors[lane]}"
-        elif lane == "equities" and not _ibkr_ready:
-            terminal_state = "BLOCKED_ENDPOINT"
-            reason = (
-                "IBKR Web API endpoint not ready (no-GUI Web API lane); "
-                "run the equities endpoint readiness check."
-            )
         models.append(
             {
                 "run_id": run_id,

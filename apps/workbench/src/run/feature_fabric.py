@@ -12,7 +12,6 @@ import yaml
 
 SOURCE_TO_LANE = {
     "all_lanes": "all_lanes",
-    "crypto_lane": "crypto",
     "cme_rithmic": "cme_futures",
     "equities": "equities",
     "options": "equities",
@@ -131,48 +130,6 @@ def _lane_config_rows(
                 run_id=run_id,
             )
         )
-    return rows
-
-
-def _crypto_candidate_rows(
-    repo: Path,
-    *,
-    generated_at: str,
-    consumer_lane: str,
-    run_id: str = "",
-) -> list[dict[str, Any]]:
-    root = repo / "packages" / "crypto_lane" / "config" / "candidates"
-    rows: list[dict[str, Any]] = []
-    if not root.is_dir():
-        return rows
-    for path in sorted(root.glob("*.yaml")):
-        try:
-            payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        except (OSError, yaml.YAMLError):
-            continue
-        if not isinstance(payload, dict):
-            continue
-        candidate_id = str(payload.get("candidate_id") or path.stem)
-        symbols = [str(symbol) for symbol in (payload.get("universe") or []) if str(symbol).strip()]
-        features = [str(feature) for feature in (payload.get("features") or []) if str(feature).strip()]
-        if not symbols:
-            symbols = ["crypto_catalog"]
-        if not features:
-            features = [f"{candidate_id}_catalog_feature"]
-        for symbol in symbols:
-            for feature in features:
-                rows.append(
-                    _safe_row(
-                        generated_at=generated_at,
-                        consumer_lane=consumer_lane,
-                        source_lane="crypto",
-                        asset=symbol,
-                        source_symbol=symbol,
-                        feature=feature,
-                        evidence_source=str(path.relative_to(repo)) if path.is_relative_to(repo) else str(path),
-                        run_id=run_id,
-                    )
-                )
     return rows
 
 
@@ -339,23 +296,6 @@ def ensure_catalog_feature_fabric(
             safe, rejected = _cme_rows(repo, generated_at=generated_at, consumer_lane=consumer_lane, run_id=run_id)
             lineage_rows.extend(safe)
             rejected_rows.extend(rejected)
-        elif source_lane == "crypto":
-            crypto_rows = _crypto_candidate_rows(
-                repo,
-                generated_at=generated_at,
-                consumer_lane=consumer_lane,
-                run_id=run_id,
-            )
-            lineage_rows.extend(
-                crypto_rows
-                or _lane_config_rows(
-                    generated_at=generated_at,
-                    consumer_lane=consumer_lane,
-                    source_lane=source_lane,
-                    config=config,
-                    run_id=run_id,
-                )
-            )
         else:
             lineage_rows.extend(
                 _lane_config_rows(

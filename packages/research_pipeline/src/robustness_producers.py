@@ -20,22 +20,13 @@ from typing import Any
 import numpy as np
 
 # ---------------------------------------------------------------------------
-# DSR: import the canonical implementation from crypto_lane; copy inline with
-# attribution if path not available (e.g. import fails in a minimal test env).
+# DSR: canonical inline implementation (formerly shared with the crypto lane,
+# which moved to the hft3-crypto-lane repo).
 # ---------------------------------------------------------------------------
 
 def _get_deflated_sharpe_cdf():
-    """Return the deflated_sharpe_cdf callable.
-
-    Tries to import from packages/crypto_lane/src/ml/walk_forward_runner.py
-    (the authoritative implementation, Bailey & Lopez de Prado 2014).
-    Falls back to the inline copy (identical logic, preserved for portability).
-    """
-    try:
-        from crypto_lane.src.ml.walk_forward_runner import deflated_sharpe_cdf  # type: ignore[import]
-        return deflated_sharpe_cdf
-    except Exception:  # noqa: BLE001
-        return _deflated_sharpe_cdf_inline
+    """Return the deflated_sharpe_cdf callable (the inline implementation)."""
+    return _deflated_sharpe_cdf_inline
 
 
 def _deflated_sharpe_cdf_inline(
@@ -45,13 +36,10 @@ def _deflated_sharpe_cdf_inline(
     skew: float = 0.0,
     kurt: float = 3.0,
 ) -> float:
-    """Inline copy of deflated_sharpe_cdf from crypto_lane.src.ml.walk_forward_runner.
+    """Deflated Sharpe ratio CDF.
 
     Attribution: Bailey & Lopez de Prado (2014), "The Deflated Sharpe Ratio:
     Correcting for Selection Bias, Backtest Overfitting and Non-Normality".
-    Copied verbatim (modulo this docstring) from
-    packages/crypto_lane/src/ml/walk_forward_runner.py::deflated_sharpe_cdf
-    to avoid a hard cross-package dependency at import time.
 
     Returns the normal CDF in [0, 1]; higher = more extreme.
     To convert to a one-sided p-value use ``1 - deflated_sharpe_cdf(...)``.

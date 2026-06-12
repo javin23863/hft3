@@ -845,63 +845,6 @@ def render_latency_evidence(snapshot: RunEvidenceSnapshot) -> None:
                     "secret_exposed": "Secret exposed",
                 },
             )
-    ibkr_endpoint = latency.get("ibkr_endpoint") or {}
-    if ibkr_endpoint:
-        st.subheader("IBKR Equities Endpoint")
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Profile", ibkr_endpoint.get("profile", "unknown"))
-        c2.metric("Transport", ibkr_endpoint.get("transport", ""))
-        c3.metric("Socket", f"{ibkr_endpoint.get('host', '')}:{ibkr_endpoint.get('port', '')}")
-        c4.metric("Status", ibkr_endpoint.get("status", "UNKNOWN"))
-        api = ibkr_endpoint.get("api") or {}
-        socket_state = ibkr_endpoint.get("socket") or {}
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Socket reachable", bool(socket_state.get("reachable")))
-        c2.metric("API package", bool(api.get("api_package_present")))
-        c3.metric("Headless handshake", api.get("api_client_status", "not_checked"))
-        c4.metric("Account env set", bool((ibkr_endpoint.get("credentials") or {}).get("account_id_set")))
-        c1, c2 = st.columns(2)
-        c1.metric("Pipeline gate", ibkr_endpoint.get("pipeline_gate_status", "UNKNOWN"))
-        c2.metric("Live routing gate", ibkr_endpoint.get("live_routing_gate_status", "UNKNOWN"))
-        if ibkr_endpoint.get("pipeline_note"):
-            st.info(str(ibkr_endpoint.get("pipeline_note")))
-        if ibkr_endpoint.get("headless_handshake_required"):
-            st.caption("Headless API handshake is required for this Workbench lane gate.")
-        if api.get("api_client_status") == "PAPER_DISCLAIMER_PENDING":
-            st.warning(
-                "IBKR rejected the headless API handshake with paper-disclaimer error 10141. "
-                "Live routing remains gated, but this no longer blocks the equities/options research pipeline."
-            )
-            errors = api.get("errors") or []
-            if errors:
-                _display_df(
-                    errors,
-                    {
-                        "code": "Code",
-                        "message": "Message",
-                    },
-                )
-        if ibkr_endpoint.get("blocking_gates"):
-            if ibkr_endpoint.get("pipeline_blocking"):
-                st.error(
-                    "IBKR equities endpoint has an infrastructure blocker for this lane."
-                )
-            else:
-                st.warning(
-                    "IBKR equities live routing is gated. Model production, backtest, robustness, and registry work can continue."
-                )
-            _display_df(
-                ibkr_endpoint["blocking_gates"],
-                {
-                    "gate": "Gate",
-                    "status": "Status",
-                    "reason": "Reason",
-                },
-            )
-        st.caption(
-            "QuantX reference: TWS/IB Gateway socket path, paper port 7497, live port 7496. "
-            "Client Portal is not the default equities lane endpoint."
-        )
     latency_baseline = latency.get("latency_baseline") or {}
     if latency_baseline:
         metrics = latency_baseline.get("metrics") or {}
@@ -1777,39 +1720,6 @@ def render_system(snapshot: RunEvidenceSnapshot, repo: Path) -> None:
             }
         ]
         _df(endpoint_rows)
-    ibkr_endpoint = (snapshot.system or {}).get("ibkr_endpoint") or {}
-    if ibkr_endpoint:
-        st.subheader("IBKR Endpoint Status")
-        endpoint_rows = [
-            {
-                "profile": ibkr_endpoint.get("profile"),
-                "provider": ibkr_endpoint.get("provider"),
-                "transport": ibkr_endpoint.get("transport"),
-                "mode": ibkr_endpoint.get("mode"),
-                "host": ibkr_endpoint.get("host"),
-                "port": ibkr_endpoint.get("port"),
-                "status": ibkr_endpoint.get("status"),
-                "reason": ibkr_endpoint.get("reason_code"),
-                "headless_required": ibkr_endpoint.get("headless_handshake_required"),
-                "api_status": (ibkr_endpoint.get("api") or {}).get("api_client_status"),
-                "pipeline_gate": ibkr_endpoint.get("pipeline_gate_status"),
-                "live_routing_gate": ibkr_endpoint.get("live_routing_gate_status"),
-                "account_id_set": (ibkr_endpoint.get("credentials") or {}).get("account_id_set"),
-                "secret_exposed": ibkr_endpoint.get("secret_exposed", False),
-                "config_path": ibkr_endpoint.get("config_path"),
-                "runtime_status_path": ibkr_endpoint.get("runtime_status_path"),
-            }
-        ]
-        _df(endpoint_rows)
-        if ibkr_endpoint.get("blocking_gates"):
-            _display_df(
-                ibkr_endpoint["blocking_gates"],
-                {
-                    "gate": "Gate",
-                    "status": "Status",
-                    "reason": "Reason",
-                },
-            )
     lane_rows = ((snapshot.system or {}).get("lane_registry") or {}).get("rows") or []
     lane_registry = (snapshot.system or {}).get("lane_registry") or {}
     if lane_registry.get("status") == "BLOCKING":

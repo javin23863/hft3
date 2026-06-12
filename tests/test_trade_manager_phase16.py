@@ -313,7 +313,6 @@ def test_phase16_order_intent_creation_does_not_call_risk_or_execution_adapters(
     assert isinstance(intent, TradeManagerOrderIntent)
     assert not isinstance(intent, ExecutionOrderIntent)
     assert safety.counter_snapshot() == {
-        "crypto_order_call_count": 0,
         "live_broker_call_count": 0,
         "rithmic_order_call_count": 0,
     }

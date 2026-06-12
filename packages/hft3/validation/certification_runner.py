@@ -1,11 +1,11 @@
 """T2 full backtester certification orchestrator.
 
 Phase 38+ lane-aware extension: the T2 certification tier now runs the
-lane-aware unified certification runner for non-CME lanes (crypto,
-equities, options) in addition to the legacy CME T0 fast gate and T2
-full suite. The CME core (T0+T2) is not duplicated — the lane-aware
-runner is invoked with `lanes=[CRYPTO, EQUITIES, OPTIONS]` so the
-backtester_validation/{fast,full} tests run only once per tier.
+lane-aware unified certification runner for non-CME lanes (the
+options/parity lane, registered as EQUITIES) in addition to the legacy
+CME T0 fast gate and T2 full suite. The CME core (T0+T2) is not
+duplicated — the lane-aware runner is invoked with `lanes=[EQUITIES]`
+so the backtester_validation/{fast,full} tests run only once per tier.
 
 The scorecard aggregates per-lane coverage and pass/fail. Status
 decisions:
@@ -141,7 +141,7 @@ def _write_scorecard_md(payload: dict[str, Any]) -> str:
 
 
 def _aggregate_lane_coverage(lane_card: LaneScorecard) -> dict[str, list[Any]]:
-    """Union symbols, event_types, latency_bands across all 4 lanes."""
+    """Union symbols, event_types, latency_bands across all lanes."""
     symbols: set[str] = set()
     event_types: set[str] = set()
     latency_bands: set[float] = set()
@@ -158,10 +158,8 @@ def _aggregate_lane_coverage(lane_card: LaneScorecard) -> dict[str, list[Any]]:
                 pass
         if lane_value == "cme_futures":
             modules.update(["backtest_pipeline", "execution", "replay", "features_engine", "workbench"])
-        elif lane_value == "crypto":
-            modules.add("crypto_lane")
         elif lane_value == "equities":
-            modules.add("equities_lane")
+            modules.add("options_lane")
     return {
         "covered_modules": sorted(modules),
         "covered_symbols": sorted(symbols),
@@ -204,14 +202,14 @@ def run_full_certification(
         blocking.append("T2 full certification suite failed")
 
     # Step 3: Lane-aware certification (Phase 38+)
-    # Run non-CME lanes (CRYPTO, EQUITIES). CME core is already
-    # covered by T0/T2; running it again would duplicate ~28 tests.
+    # Run non-CME lanes (EQUITIES, i.e. the options/parity lane). CME core
+    # is already covered by T0/T2; running it again would duplicate ~28 tests.
     lane_card: LaneScorecard | None = None
     if not skip_lane_pytest:
         try:
             lane_card = run_unified_certification(
                 root=root,
-                lanes=[Lane.CRYPTO, Lane.EQUITIES],
+                lanes=[Lane.EQUITIES],
                 skip_pytest=False,
                 pytest_timeout=300.0,
             )

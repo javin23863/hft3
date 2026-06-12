@@ -75,7 +75,7 @@ When blocked, state **what ran**, **what was skipped**, and **what unblocks** �
 - **Subset pytest is not scope-green.** A targeted pass (e.g. 10/10 on one file) while the scope test directory fails does not satisfy the Tests gate.
 - **User-waived verify is not done.** If the user says "don't test" or "code only", report `verify-run: WAIVED (user)` and **`merge-ready: no`**. Verify-gated plan todos stay **`pending`** or **`waived-not-verified`** — never **`completed`**.
 - **Plan todo theater is forbidden.** Frontmatter `status: completed` on verify todos requires pasted green output from the verify command, or an explicit user acceptance of waiver in the thread.
-- **All handoffs** must include the status block in [docs/VALIDATION_HONESTY.md](docs/VALIDATION_HONESTY.md) (`merge-ready`, `scope-green`, `scope`, `verify-run`, `data-mode`, `known-gaps`). Lane addenda (e.g. crypto PIT gaps) supplement but do not replace the repo-wide charter.
+- **All handoffs** must include the status block in [docs/VALIDATION_HONESTY.md](docs/VALIDATION_HONESTY.md) (`merge-ready`, `scope-green`, `scope`, `verify-run`, `data-mode`, `known-gaps`). Lane addenda (e.g. options-lane PIT gaps) supplement but do not replace the repo-wide charter.
 
 ## Shell execution (time-bounded — mandatory)
 
@@ -147,13 +147,12 @@ Do not assume local Windows paths apply on CHI404.
 
 ### Topology: lane-scoped live hosts (BLUEPRINT §4)
 
-Per [BLUEPRINT.md §4 Live Architecture](BLUEPRINT.md#4-live-architecture): the CME production live path is **CHI404 bare metal** with a **dedicated route to Rithmic Chicago/Aurora**. The crypto lane live path is the **Contabo BTC-node VPS** per [specs/CRYPTO_LIVE.md §2](specs/CRYPTO_LIVE.md) (decision: vault `decisions/2026-06-10 Crypto production spec set.md`). Milliseconds matter — nothing else belongs in either hot loop.
+Per [BLUEPRINT.md §4 Live Architecture](BLUEPRINT.md#4-live-architecture): the CME production live path is **CHI404 bare metal** with a **dedicated route to Rithmic Chicago/Aurora**. Milliseconds matter — nothing else belongs in the hot loop.
 
 | Host | Role |
 |------|------|
 | **CHI404** | CME lane: live/paper market data, order submit, capture, tuning, PASS gates, Rithmic trial lane |
-| **Contabo VPS** | Crypto lane: Bitcoin Core + edge daemon; crypto live/paper execution, order-ack measurement, live RTT authority (CRYPTO_LIVE.md §2) |
-| **Dev workstation** | Offline research (Databento replay, crypto MBO capture/sweep), pytest, git, SSH/sync, docs — **never** live capture or orders for any lane |
+| **Dev workstation** | Offline research (Databento replay), pytest, git, SSH/sync, docs — **never** live capture or orders for any lane |
 
 **Forbidden** (unless the user explicitly requests an exception in the task):
 
@@ -161,7 +160,6 @@ Per [BLUEPRINT.md §4 Live Architecture](BLUEPRINT.md#4-live-architecture): the 
 - File-bridge or API loop that routes live/paper data or orders through a host outside the lane's designated live host
 - Setup scripts that auto-start capture on the workstation
 - Treating workstation RTT as an operational dependency for execution or capture
-- Routing crypto live/paper orders through CHI404 or CME live/paper orders through the Contabo VPS — lane live hosts do not cross
 
 **Before any Rithmic trial, infra, or latency work:** read BLUEPRINT §4 and [docs/rithmic_trial/README.md](docs/rithmic_trial/README.md). Live capture code must refuse to run on Windows (see `data_system/rithmic_trial/pipeline.py`).
 
@@ -208,16 +206,9 @@ Options parity research is isolated from trusted production data (`data/npz/` fr
 
 Do not write options raw into production NPZ paths or bypass quarantine without explicit approval.
 
-### Low-float equities lane (quarantined)
+### Crypto and equities lanes (moved out)
 
-Low-float momentum research is isolated from trusted production CME data (`data/npz/`).
-
-- Code: `packages/equities_lane/`
-- Data: `data/equities/`, `data/replay/equities/`, `research_cards/equities/`
-- Config: `packages/equities_lane/config/universe.yaml`
-- Docs: [docs/research/LOW_FLOAT_RUNNER.md](docs/research/LOW_FLOAT_RUNNER.md)
-
-Do not write equities raw into production NPZ paths or bypass quarantine without explicit approval.
+The crypto lane and the low-float equities lane moved to the **hft3-crypto-lane** and **hft3-equities-lane** repos (split tag `pre-lane-split-20260612`). `packages/options_lane/` (CME futures options) remains in this repo.
 
 ### Secrets
 

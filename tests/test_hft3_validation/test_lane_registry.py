@@ -18,27 +18,12 @@ def _reset_registry():
 
 def test_lane_enum_values():
     assert Lane.CME_FUTURES.value == "cme_futures"
-    assert Lane.CRYPTO.value == "crypto"
     assert Lane.EQUITIES.value == "equities"
 
 
 def test_lane_enum_no_options_member():
+    # EQUITIES is the historical name of the options/parity lane.
     assert not hasattr(Lane, "OPTIONS")
-
-
-def test_lane_from_model_id_crypto():
-    assert Lane.from_model_id("CRYPTO_H1") == Lane.CRYPTO
-
-
-def test_lane_from_model_id_does_not_infer_crypto_from_tickers():
-    assert Lane.from_model_id("BTC_FEE_SPIKE") == Lane.CME_FUTURES
-    assert Lane.from_model_id("ETH_BASIS") == Lane.CME_FUTURES
-    assert Lane.from_model_id("SOL_VOLATILITY") == Lane.CME_FUTURES
-
-
-def test_lane_from_model_id_equities():
-    assert Lane.from_model_id("EQUITY_RUNNER") == Lane.EQUITIES
-    assert Lane.from_model_id("LOW_FLOAT_BREAKOUT") == Lane.EQUITIES
 
 
 def test_lane_from_model_id_options_merged_to_equities():
@@ -52,28 +37,26 @@ def test_lane_from_model_id_cme_default():
     assert Lane.from_model_id("") == Lane.CME_FUTURES
 
 
-def test_registry_has_three_lanes():
+def test_registry_has_two_lanes():
     reg = LaneRegistry.instance()
     lanes = reg.all_lanes()
-    assert len(lanes) == 3
+    assert len(lanes) == 2
     assert Lane.CME_FUTURES in lanes
-    assert Lane.CRYPTO in lanes
     assert Lane.EQUITIES in lanes
 
 
 def test_registry_get_returns_registration():
     reg = LaneRegistry.instance()
-    reg_crypto = reg.get(Lane.CRYPTO)
-    assert reg_crypto is not None
-    assert isinstance(reg_crypto, LaneRegistration)
-    assert reg_crypto.lane == Lane.CRYPTO
-    assert "tests/test_crypto_lane" in reg_crypto.test_paths
+    reg_equities = reg.get(Lane.EQUITIES)
+    assert reg_equities is not None
+    assert isinstance(reg_equities, LaneRegistration)
+    assert reg_equities.lane == Lane.EQUITIES
+    assert "tests/test_workbench/test_options_lane_campaign.py" in reg_equities.test_paths
 
 
 def test_registry_resolve_lane_via_prefix():
     reg = LaneRegistry.instance()
-    assert reg.resolve_lane("CRYPTO_H7") == Lane.CRYPTO
-    assert reg.resolve_lane("EQUITY_LOW_FLOAT") == Lane.EQUITIES
+    assert reg.resolve_lane("PARITY_LEG") == Lane.EQUITIES
     assert reg.resolve_lane("OPTIONS_PUT") == Lane.EQUITIES
 
 

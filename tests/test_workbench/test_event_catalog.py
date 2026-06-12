@@ -81,10 +81,10 @@ def test_full_universe_view_is_not_limited_to_generated_campaign_csv():
     assert len(types) > 20
 
 
-def test_pdf_model_5_equities_lane():
-    # DEALER_HEDGING (PDF_MODEL_5) migrated to equities_lane; options_lane is a back-compat alias.
+def test_pdf_model_5_options_lane():
+    # DEALER_HEDGING (PDF_MODEL_5) runs in the options lane.
     binding = load_model_binding(REPO, "PDF_MODEL_5")
-    assert binding["campaign_mode"] in ("equities_lane", "options_lane")
+    assert binding["campaign_mode"] == "options_lane"
     assert "options_chain" in binding["required_datasets"]
 
 

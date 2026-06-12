@@ -19,7 +19,7 @@ from research_pipeline.review_memory import (
 )
 from research_pipeline.types import CandidateModel, EvaluationResult, ParsedHypothesis
 
-ALLOWED_LANE_CODES = ["cme", "crypto", "options", "equities"]
+ALLOWED_LANE_CODES = ["cme", "options", "equities"]
 IDEA_STATUSES = {
     "proposed",
     "schema_reject",

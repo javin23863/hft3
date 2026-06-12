@@ -38,7 +38,7 @@ from hft3.validation.promotion_gate import (
     write_robustness_gates_for_promotion,
 )
 from hft3.validation.certification_registry import CertificationRecord, save_registry
-from hft3.validation.lanes import CME_TRUE_HFT_DMA_PROFILE, CRYPTO_NODE_DIRECT_HFT_PROFILE
+from hft3.validation.lanes import CME_TRUE_HFT_DMA_PROFILE
 
 
 def _write_scorecard(root: Path, payload: dict) -> Path:
@@ -46,27 +46,6 @@ def _write_scorecard(root: Path, payload: dict) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload), encoding="utf-8")
     return path
-
-
-def _crypto_lane_scorecard(*, node_direct: bool = True) -> dict:
-    profile = CRYPTO_NODE_DIRECT_HFT_PROFILE.to_dict()
-    profile["node_direct"] = node_direct
-    return {
-        "status": "GREEN",
-        "lane_coverage": {
-            "crypto": {
-                "symbols": [],
-                "event_types": ["crypto_l2", "crypto_l3"],
-                "latency_bands_ms": [50.0],
-                "test_paths": ["tests/test_crypto_lane"],
-                "data_environment": "btc_computer_validated_crypto_data_environment",
-                "instrument_coverage": "validated_crypto_data_environment",
-                "environment_validated": True,
-                "environment_source_ref": "config://btc-computer/crypto-data-environment.yaml",
-                "capability_profile": profile,
-            }
-        },
-    }
 
 
 def _cme_lane_scorecard() -> dict:
@@ -371,51 +350,6 @@ def test_promotion_gate_threshold_config_driven(tmp_path: Path, monkeypatch) -> 
     )
     # Latency in covered band → no failure for coverage
     assert "not in covered" not in " ".join(result.failures)
-
-
-def test_promotion_gate_uses_lane_scorecard_for_crypto(tmp_path: Path) -> None:
-    save_registry(
-        CertificationRecord(
-            latest_certification_status="GREEN",
-            latest_certification_commit="abc",
-            covered_symbols=["ES"],
-            covered_event_types=["macro"],
-            covered_latency_bands=[1.0],
-        ),
-        tmp_path,
-    )
-    _write_scorecard(tmp_path, _crypto_lane_scorecard())
-    result = evaluate_promotion_gate(
-        model_id="CRYPTO_H1",
-        event_id="CRYPTO_L2_test",
-        symbol="DOGEUSDT",
-        latency_ms=50.0,
-        root=tmp_path,
-        skip_t0_rerun=True,
-    )
-    lane_gate = next(g for g in result.gates if g.gate_name == "lane_scorecard_covers")
-    assert lane_gate.pass_fail is True
-    assert lane_gate.extra["lane"] == "crypto"
-
-
-def test_promotion_gate_blocks_crypto_without_node_direct_profile(tmp_path: Path) -> None:
-    save_registry(
-        CertificationRecord(latest_certification_status="GREEN", latest_certification_commit="abc"),
-        tmp_path,
-    )
-    _write_scorecard(tmp_path, _crypto_lane_scorecard(node_direct=False))
-    result = evaluate_promotion_gate(
-        model_id="CRYPTO_H1",
-        event_id="CRYPTO_L2_test",
-        symbol="DOGEUSDT",
-        latency_ms=50.0,
-        root=tmp_path,
-        skip_t0_rerun=True,
-    )
-    lane_gate = next(g for g in result.gates if g.gate_name == "lane_scorecard_covers")
-    assert lane_gate.pass_fail is False
-    assert lane_gate.reason_code == "LANE_SCORECARD_NOT_COVERED"
-    assert "crypto lane requires node-direct HFT" in lane_gate.extra["failure_reasons"][0]
 
 
 def test_promotion_gate_lane_scorecard_checks_queue_model(tmp_path: Path) -> None:

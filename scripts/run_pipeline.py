@@ -312,40 +312,6 @@ def main() -> int:
             print(json.dumps(payload, indent=2))
             return 0 if candidates else 1
 
-    # === Crypto execution validation for promoted candidates ===
-    if args.vectorbt and not args.vectorbt_only:
-        crypto_data = repo_root / "data" / "crypto"
-        for cand in candidates:
-            ac = cand.metadata.get("asset_class", "").upper()
-            if ac in ("CRYPTO",):
-                try:
-                    from crypto_lane.src.validation.crypto_validation_workflow import validate_crypto_candidate  # noqa: F811
-                    from backtest_pipeline.src.promotion_gate import set_execution_classification  # noqa: F811
-
-                    print(f"  Validating crypto execution for {cand.candidate_id}...")
-                    report = validate_crypto_candidate(cand, crypto_data)
-                    error = report.result.error
-                    classification = report.result.execution_classification if not error else "NO_EXECUTION"
-                    cand.metadata["execution_classification"] = classification
-                    cand.metadata["execution_quality"] = {
-                        "mean_jump_bps": report.result.mean_jump_bps,
-                        "mean_qqe": report.result.mean_qqe,
-                        "total_fills": report.result.total_fills,
-                        "error": error,
-                    }
-                    set_execution_classification(cand.candidate_id, classification)
-                    print(f"    {cand.candidate_id}: {classification}, "
-                          f"fills={report.result.total_fills}, "
-                          f"jump={report.result.mean_jump_bps:.2f}bps, "
-                          f"qqe={report.result.mean_qqe:.2f}")
-                except ImportError:
-                    print(f"  Skipping crypto validation for {cand.candidate_id}: crypto_lane not installed", file=sys.stderr)
-                    cand.metadata["execution_classification"] = "NO_EXECUTION"
-                except Exception as exc:
-                    print(f"  Crypto validation failed for {cand.candidate_id}: {exc}", file=sys.stderr)
-                    cand.metadata["execution_classification"] = "NO_EXECUTION"
-                    cand.metadata["execution_quality"] = {"error": str(exc)}
-
     if args.dry_run:
         idea_summary = (
             summarize_ideas(idea_packet, candidates_from_ideas_count=idea_candidates_count)

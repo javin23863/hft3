@@ -1,88 +1,31 @@
 {
   "tier": "T2",
   "status": "GREEN",
-  "run_id": "CERT-20260611T144327Z-4efd5650",
-  "git_sha": "8887a917b7062d7d745c25f08fd63b414174772a",
-  "timestamp_utc": "2026-06-11T14:46:35.662155+00:00",
+  "run_id": "CERT-20260612T181144Z-0dc86bf9",
+  "git_sha": "66a734256e5db117d65d6a0457aea1e34db512a7",
+  "timestamp_utc": "2026-06-12T18:12:17.901553+00:00",
   "t0_passed": true,
   "full_passed": true,
   "t0_test_count": 21,
   "full_test_count": 9,
   "blocking_failures": [],
   "warnings": [],
-  "lane_results": {
-    "crypto": {
-      "lane": "crypto",
-      "passed": true,
-      "returncode": 0,
-      "output_tail": "=== tests/test_crypto_lane (rc=0) ===\n).sort(\"exchange_timestamp\")\n\ntests/test_crypto_lane/test_smoke_all_candidates.py: 29 warnings\ntests/test_crypto_lane/test_validation_honesty.py: 29 warnings\n  C:\\Users\\MSI\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\sklearn\\utils\\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMRegressor was fitted with feature names\n    warnings.warn(\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n177 passed, 1 skipped, 62 warnings in 28.28s\n",
-      "test_paths": [
-        "tests/test_crypto_lane"
-      ],
-      "failure_notes": []
-    },
-    "equities": {
-      "lane": "equities",
-      "passed": true,
-      "returncode": 0,
-      "output_tail": "=== tests/test_equities_lane (rc=0) ===\n........................................................................ [ 43%]\n........................................................................ [ 87%]\n....................                                                     [100%]\n164 passed in 11.78s\n=== tests/test_workbench/test_options_lane_campaign.py (rc=0) ===\nPDF_MODEL_5' is deprecated; use slug 'DEALER_HEDGING'\n    slug = resolve_model_id(model_id)\n\ntests/test_workbench/test_options_lane_campaign.py::test_pdf_model_5_dry_run_campaign\n  C:\\Users\\MSI\\repos\\hft3\\apps\\workbench\\src\\run\\campaign_runner.py:775: DeprecationWarning: legacy model id 'PDF_MODEL_5' is deprecated; use slug 'DEALER_HEDGING'\n    model_id = resolve_model_id(model_id)\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n5 passed, 2 warnings in 117.28s (0:01:57)\n",
-      "test_paths": [
-        "tests/test_equities_lane",
-        "tests/test_workbench/test_options_lane_campaign.py"
-      ],
-      "failure_notes": []
-    },
-    "cme_futures": {
-      "lane": "cme_futures",
-      "passed": true,
-      "returncode": 0,
-      "test_paths": [
-        "tests/backtester_validation/fast",
-        "tests/backtester_validation/full"
-      ],
-      "failure_notes": [],
-      "covered_by": "T0 fast gate + T2 full suite (CME core)"
-    }
-  },
+  "lane_results": {},
   "lane_failures": [],
-  "backtester_version": "8887a91-dirty",
+  "backtester_version": "66a7342-dirty",
   "covered_modules": [
     "backtest_pipeline",
-    "crypto_lane",
-    "equities_lane",
     "execution",
-    "features_engine",
     "replay",
+    "features_engine",
     "workbench"
   ],
   "covered_symbols": [
-    "CL",
     "ES",
-    "GC",
-    "HG",
-    "LOW_FLOAT",
-    "MES",
-    "MNQ",
-    "NQ",
-    "OPTIONS",
-    "PARITY",
-    "RTY",
-    "RUNNER",
-    "SI",
-    "YM",
-    "ZB",
-    "ZN"
+    "MES"
   ],
   "covered_event_types": [
-    "crypto_l2",
-    "crypto_l2_depth",
-    "crypto_l3",
-    "crypto_shock_event",
-    "equities_low_float",
-    "equities_runner_event",
     "macro",
-    "options_parity",
-    "parity",
     "synthetic"
   ],
   "covered_latency_bands": [
@@ -90,9 +33,7 @@
     1.0,
     2.0,
     5.0,
-    10.0,
-    50.0,
-    200.0
+    10.0
   ],
   "covered_queue_models": [
     "LogProbQueueModel2",
@@ -100,190 +41,5 @@
   ],
   "covered_execution_modes": [
     "REPLAY"
-  ],
-  "lane_coverage": {
-    "cme_futures": {
-      "symbols": [
-        "ES",
-        "MES",
-        "NQ",
-        "MNQ",
-        "ZN",
-        "ZB",
-        "YM",
-        "CL",
-        "GC",
-        "SI",
-        "HG",
-        "RTY"
-      ],
-      "event_types": [
-        "macro",
-        "synthetic"
-      ],
-      "latency_bands_ms": [
-        0.5,
-        1.0,
-        2.0,
-        5.0,
-        10.0
-      ],
-      "test_paths": [
-        "tests/backtester_validation/fast",
-        "tests/backtester_validation/full"
-      ],
-      "queue_models": [
-        "LogProbQueueModel2",
-        "SquareProbQueueModel"
-      ],
-      "capability_profile": {
-        "name": "true_hft_dma",
-        "is_hft": true,
-        "dma": true,
-        "node_direct": false,
-        "speed_advantage": true,
-        "research_only": false,
-        "hft_proof_required": true,
-        "description": "CME futures lane: true HFT with direct market access requirements."
-      }
-    },
-    "crypto": {
-      "symbols": [],
-      "event_types": [
-        "crypto_l2",
-        "crypto_l2_depth",
-        "crypto_l3",
-        "crypto_shock_event"
-      ],
-      "latency_bands_ms": [
-        5.0,
-        50.0,
-        200.0
-      ],
-      "test_paths": [
-        "tests/test_crypto_lane"
-      ],
-      "venues": [
-        "binance_spot",
-        "binance_perp",
-        "deribit",
-        "kraken"
-      ],
-      "candidate_id": "",
-      "hypothesis_id": "",
-      "data_environment": "",
-      "instrument_coverage": "candidate_config",
-      "environment_validated": false,
-      "environment_source_ref": "",
-      "capability_profile": {
-        "name": "node_direct_hft",
-        "is_hft": true,
-        "dma": false,
-        "node_direct": true,
-        "speed_advantage": true,
-        "research_only": false,
-        "hft_proof_required": true,
-        "description": "Crypto lane: node-direct HFT for instruments covered by validated crypto data environment."
-      },
-      "run_result": {
-        "lane": "crypto",
-        "passed": true,
-        "returncode": 0,
-        "output_tail": "=== tests/test_crypto_lane (rc=0) ===\n).sort(\"exchange_timestamp\")\n\ntests/test_crypto_lane/test_smoke_all_candidates.py: 29 warnings\ntests/test_crypto_lane/test_validation_honesty.py: 29 warnings\n  C:\\Users\\MSI\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\sklearn\\utils\\validation.py:2691: UserWarning: X does not have valid feature names, but LGBMRegressor was fitted with feature names\n    warnings.warn(\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n177 passed, 1 skipped, 62 warnings in 28.28s\n",
-        "test_paths": [
-          "tests/test_crypto_lane"
-        ],
-        "failure_notes": []
-      }
-    },
-    "equities": {
-      "symbols": [
-        "RUNNER",
-        "LOW_FLOAT",
-        "OPTIONS",
-        "PARITY"
-      ],
-      "event_types": [
-        "equities_low_float",
-        "equities_runner_event",
-        "options_parity",
-        "parity"
-      ],
-      "latency_bands_ms": [
-        5.0
-      ],
-      "test_paths": [
-        "tests/test_equities_lane"
-      ],
-      "walk_forward": {
-        "train_days": 60,
-        "val_days": 20,
-        "test_days": 20,
-        "step_days": 20
-      },
-      "latency_floor_ms": 5.0,
-      "capability_profile": {
-        "name": "speed_advantage_non_dma",
-        "is_hft": false,
-        "dma": false,
-        "node_direct": false,
-        "speed_advantage": true,
-        "research_only": false,
-        "hft_proof_required": false,
-        "description": "Equities lane: US stocks + options via IBKR Web API, speed-advantage non-DMA (better-than-retail; no true HFT/DMA claim)."
-      },
-      "run_result": {
-        "lane": "equities",
-        "passed": true,
-        "returncode": 0,
-        "output_tail": "=== tests/test_equities_lane (rc=0) ===\n........................................................................ [ 43%]\n........................................................................ [ 87%]\n....................                                                     [100%]\n164 passed in 11.78s\n=== tests/test_workbench/test_options_lane_campaign.py (rc=0) ===\nPDF_MODEL_5' is deprecated; use slug 'DEALER_HEDGING'\n    slug = resolve_model_id(model_id)\n\ntests/test_workbench/test_options_lane_campaign.py::test_pdf_model_5_dry_run_campaign\n  C:\\Users\\MSI\\repos\\hft3\\apps\\workbench\\src\\run\\campaign_runner.py:775: DeprecationWarning: legacy model id 'PDF_MODEL_5' is deprecated; use slug 'DEALER_HEDGING'\n    model_id = resolve_model_id(model_id)\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n5 passed, 2 warnings in 117.28s (0:01:57)\n",
-        "test_paths": [
-          "tests/test_equities_lane",
-          "tests/test_workbench/test_options_lane_campaign.py"
-        ],
-        "failure_notes": []
-      }
-    }
-  },
-  "legacy_cme_fields": {
-    "covered_modules": [
-      "backtest_pipeline",
-      "execution",
-      "replay",
-      "features_engine",
-      "workbench"
-    ],
-    "covered_symbols": [
-      "ES",
-      "MES",
-      "NQ",
-      "MNQ",
-      "ZN",
-      "ZB",
-      "YM",
-      "CL",
-      "GC",
-      "SI",
-      "HG",
-      "RTY"
-    ],
-    "covered_event_types": [
-      "macro",
-      "synthetic"
-    ],
-    "covered_latency_bands": [
-      0.5,
-      1.0,
-      2.0,
-      5.0,
-      10.0
-    ],
-    "covered_queue_models": [
-      "LogProbQueueModel2",
-      "SquareProbQueueModel"
-    ],
-    "covered_execution_modes": [
-      "REPLAY"
-    ]
-  }
+  ]
 }

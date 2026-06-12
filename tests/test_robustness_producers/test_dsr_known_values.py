@@ -3,8 +3,8 @@
 Covers:
   - monotone: higher observed Sharpe → higher dsr_cdf
   - multiplicity: n_trials↑ → dsr_cdf↓ (stiffer penalty for more trials)
-  - exact match: output matches crypto_lane.src.ml.walk_forward_runner.deflated_sharpe_cdf
-    on a fixed vector (both import paths, compare)
+  - exact match: output matches the inline deflated_sharpe_cdf implementation
+    on a fixed vector
   - guard: n < 3 returns None fields with reason
   - dsr_pass flag and one_sided_p semantics
 """
@@ -75,15 +75,9 @@ class TestDSRNTrials:
 
 
 class TestDSRExactMatch:
-    """Output of deflated_sharpe_for_cell must match crypto_lane implementation exactly."""
+    """Output of deflated_sharpe_for_cell must match the inline implementation exactly."""
 
-    def test_matches_crypto_lane_implementation(self):
-        # Import both: the canonical crypto_lane version and our producer
-        try:
-            from crypto_lane.src.ml.walk_forward_runner import deflated_sharpe_cdf as crypto_dsr
-        except Exception as exc:
-            pytest.skip(f"crypto_lane not importable: {exc}")
-
+    def test_matches_inline_implementation(self):
         expecs = _make_expecs(25, mean=1.5, std=0.8, seed=99)
         n_trials = 30
 
@@ -95,7 +89,7 @@ class TestDSRExactMatch:
         skew = float(np.mean((arr - np.mean(arr)) ** 3) / np.std(arr, ddof=1) ** 3)
         kurt = float(np.mean((arr - np.mean(arr)) ** 4) / np.std(arr, ddof=1) ** 4)
 
-        expected_cdf = crypto_dsr(
+        expected_cdf = _deflated_sharpe_cdf_inline(
             observed_sharpe=sharpe,
             n_trials=n_trials,
             n_obs=len(expecs),
@@ -105,27 +99,8 @@ class TestDSRExactMatch:
 
         # dsr_cdf is rounded to 8 decimal places before storage; allow 5e-9 tolerance
         assert abs(result["dsr_cdf"] - expected_cdf) < 5e-9, (
-            f"dsr_cdf mismatch: producer={result['dsr_cdf']:.12f} vs crypto={expected_cdf:.12f}"
+            f"dsr_cdf mismatch: producer={result['dsr_cdf']:.12f} vs inline={expected_cdf:.12f}"
         )
-
-    def test_inline_copy_matches_crypto_lane(self):
-        """The inline fallback copy must be numerically identical to crypto_lane."""
-        try:
-            from crypto_lane.src.ml.walk_forward_runner import deflated_sharpe_cdf as crypto_dsr
-        except Exception as exc:
-            pytest.skip(f"crypto_lane not importable: {exc}")
-
-        for obs_sharpe, n_trials, n_obs, skew, kurt in [
-            (1.5, 20, 50, 0.0, 3.0),
-            (0.5, 100, 30, -0.3, 4.0),
-            (3.0, 5, 200, 0.1, 3.5),
-            (0.0, 10, 10, 0.0, 3.0),
-        ]:
-            expected = crypto_dsr(obs_sharpe, n_trials, n_obs, skew, kurt)
-            got = _deflated_sharpe_cdf_inline(obs_sharpe, n_trials, n_obs, skew, kurt)
-            assert abs(expected - got) < 1e-12, (
-                f"inline copy mismatch at sharpe={obs_sharpe}: expected={expected} got={got}"
-            )
 
 
 class TestDSRGuards:

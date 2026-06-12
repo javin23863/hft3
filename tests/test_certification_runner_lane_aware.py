@@ -13,13 +13,11 @@ from hft3.validation.certification_runner import run_full_certification
 def certification_result(tmp_path_factory):
     """Run the lane-aware certification once for the test module.
 
-    Marked as slow; skips if the crypto_lane or equities_lane test
-    directories are not present (e.g. partial checkout).
+    Marked as slow; skips if the options-lane campaign test or the
+    backtester validation suites are not present (e.g. partial checkout).
     """
-    if not Path("tests/test_crypto_lane").exists():
-        pytest.skip("tests/test_crypto_lane not present")
-    if not Path("tests/test_equities_lane").exists():
-        pytest.skip("tests/test_equities_lane not present")
+    if not Path("tests/test_workbench/test_options_lane_campaign.py").exists():
+        pytest.skip("tests/test_workbench/test_options_lane_campaign.py not present")
     if not Path("tests/backtester_validation/fast").exists():
         pytest.skip("tests/backtester_validation/fast not present")
     return run_full_certification(Path("."))
@@ -28,8 +26,8 @@ def certification_result(tmp_path_factory):
 def test_certification_status_includes_lane_results(certification_result):
     assert certification_result.status in {"GREEN", "YELLOW", "RED"}
     assert "cme_futures" in certification_result.lane_results
-    assert "crypto" in certification_result.lane_results
     assert "equities" in certification_result.lane_results
+    assert "crypto" not in certification_result.lane_results
     assert "options" not in certification_result.lane_results
 
 
@@ -44,18 +42,11 @@ def test_cme_lane_marked_covered_by_t0_t2(certification_result):
     ]
 
 
-def test_crypto_lane_ran_pytest(certification_result):
-    crypto = certification_result.lane_results["crypto"]
-    assert crypto.get("passed") is True
-    assert crypto.get("returncode") == 0
-    assert "tests/test_crypto_lane" in crypto.get("test_paths", [])
-
-
 def test_equities_lane_ran_pytest(certification_result):
     equities = certification_result.lane_results["equities"]
     assert equities.get("passed") is True
     assert equities.get("returncode") == 0
-    assert "tests/test_equities_lane" in equities.get("test_paths", [])
+    assert "tests/test_workbench/test_options_lane_campaign.py" in equities.get("test_paths", [])
 
 
 def test_equities_lane_dict_contains_latency_floor(certification_result):
@@ -94,18 +85,14 @@ def test_coverage_union_across_lanes(certification_result):
     modules = data["covered_modules"]
     bands = data["covered_latency_bands"]
     assert "ES" in symbols
-    assert "RUNNER" in symbols
+    assert "OPTIONS" in symbols
     assert "macro" in event_types
-    assert "crypto_l2" in event_types
-    assert "equities_low_float" in event_types
+    assert "options_parity" in event_types
     assert "backtest_pipeline" in modules
-    assert "crypto_lane" in modules
-    assert "equities_lane" in modules
+    assert "options_lane" in modules
     assert 0.5 in bands
     assert 50.0 in bands
-    assert 200.0 in bands
-    assert data["lane_coverage"]["crypto"]["instrument_coverage"] == "candidate_config"
-    assert data["lane_coverage"]["crypto"]["environment_validated"] is False
+    assert 250.0 in bands
 
 
 def test_lane_aware_payload_omitted_when_skip_lane_pytest(tmp_path):

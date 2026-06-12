@@ -8,8 +8,8 @@ def test_valid_partial_handoff():
     text = """
 merge-ready:     no
 scope-green:     no (5 failed)
-scope:           packages/crypto_lane/
-verify-run:      python -m pytest tests/test_crypto_lane/ -q → exit 1
+scope:           packages/options_lane/
+verify-run:      python -m pytest tests/test_workbench/test_options_lane_campaign.py -q → exit 1
 data-mode:       fixture
 known-gaps:      PIT join audit pending
 """

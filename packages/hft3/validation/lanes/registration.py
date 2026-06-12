@@ -1,32 +1,123 @@
 """Register all lane adapters with the LaneRegistry.
 
-Importing this module populates the LaneRegistry singleton with all three
+Importing this module populates the LaneRegistry singleton with all
 lanes. The unified certification runner and promotion gate depend on
 this registration.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+from typing import Any
+
 from .adapters.cme_adapter import CMEBacktester, CMEConfig, load_cme_config
-from .adapters.crypto_adapter import CryptoBacktester, CryptoConfig, load_crypto_config
-from .adapters.equities_adapter import EquitiesBacktester, EquitiesConfig, load_equities_config
-from .lane import Lane
+from .backtester_protocol import validate_lane_config
+from .lane import (
+    EQUITIES_SPEED_ADVANTAGE_PROFILE,
+    GenericBacktestResult,
+    HorizonConfig,
+    Lane,
+    LaneCapabilityProfile,
+    WindowConfig,
+)
 from .lane_registry import LaneRegistry, register_lane
+
+# Lane.EQUITIES is the historical name of the options/parity lane
+# (CME futures options via packages/options_lane). The dedicated
+# equities/crypto lane adapters moved out with their lanes; the
+# registration is kept here with a minimal structural config/backtester
+# (same shim pattern as CMEBacktester: real validation happens via
+# pytest on test_paths) so promotion-gate coverage for OPTIONS_/PARITY_
+# models keeps working.
+
+OPTIONS_LANE_SYMBOLS = ["OPTIONS", "PARITY"]
+# Bands are reporting/sweep documentation only for this lane; gating is floor-based.
+OPTIONS_LANE_LATENCY_BANDS_MS = [5.0, 10.0, 50.0, 100.0, 250.0]
+OPTIONS_LANE_EVENT_TYPES = ["options_parity", "parity"]
+
+
+@dataclass
+class OptionsLaneConfig:
+    """Options/parity lane LaneConfig (registered under Lane.EQUITIES)."""
+
+    lane: Lane = Lane.EQUITIES
+    symbols: list[str] = field(default_factory=lambda: list(OPTIONS_LANE_SYMBOLS))
+    windows: WindowConfig = field(default_factory=WindowConfig)
+    horizons: HorizonConfig = field(default_factory=HorizonConfig)
+    latency_bands_ms: list[float] = field(default_factory=lambda: list(OPTIONS_LANE_LATENCY_BANDS_MS))
+    tick_size: float = 0.25
+    lot_size: float = 1.0
+    test_paths: list[str] = field(
+        default_factory=lambda: ["tests/test_workbench/test_options_lane_campaign.py"]
+    )
+    event_types: list[str] = field(default_factory=lambda: list(OPTIONS_LANE_EVENT_TYPES))
+    latency_floor_ms: float = 5.0
+    capability_profile: LaneCapabilityProfile = EQUITIES_SPEED_ADVANTAGE_PROFILE
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "lane": self.lane.value,
+            "symbols": list(self.symbols),
+            "windows": {
+                "training_window_days": self.windows.training_window_days,
+                "test_window_days": self.windows.test_window_days,
+            },
+            "horizons": {
+                "horizons": list(self.horizons.horizons),
+                "lookback_days": self.horizons.lookback_days,
+            },
+            "latency_bands_ms": list(self.latency_bands_ms),
+            "tick_size": self.tick_size,
+            "lot_size": self.lot_size,
+            "test_paths": list(self.test_paths),
+            "event_types": list(self.event_types),
+            "latency_floor_ms": self.latency_floor_ms,
+            "capability_profile": self.capability_profile.to_dict(),
+        }
+
+
+def load_options_lane_config() -> OptionsLaneConfig:
+    """Load the options/parity lane config (static; no external file)."""
+    return OptionsLaneConfig()
+
+
+class OptionsLaneBacktester:
+    """Backtester Protocol implementation for the options/parity lane.
+
+    run() does not execute a real backtest (the real options-lane
+    validation happens in tests/test_workbench/test_options_lane_campaign.py
+    and packages/options_lane); it returns a structural result so the
+    unified certification runner can verify config and coverage.
+    """
+
+    def __init__(self, config: OptionsLaneConfig) -> None:
+        self.config = config
+
+    def run(self, target: str | None = None) -> GenericBacktestResult:
+        return GenericBacktestResult(
+            lane=self.config.lane,
+            net_pnl=0.0,
+            num_trades=0,
+            max_drawdown=0.0,
+            turnover=0.0,
+            degraded=False,
+            failure_notes=[],
+            extra={"target": target} if target else {},
+        )
+
+    def validate_config(self) -> list[str]:
+        return validate_lane_config(self.config)
 
 
 def _cme_validator() -> "CMEBacktester":
     return CMEBacktester(load_cme_config())
 
 
-def _crypto_validator() -> "CryptoBacktester":
-    return CryptoBacktester(load_crypto_config())
-
-
-def _equities_validator() -> "EquitiesBacktester":
-    return EquitiesBacktester(load_equities_config())
+def _options_lane_validator() -> "OptionsLaneBacktester":
+    return OptionsLaneBacktester(load_options_lane_config())
 
 
 def register_all_lanes() -> None:
-    """Register all three lanes. Idempotent: safe to call multiple times."""
+    """Register all lanes. Idempotent: safe to call multiple times."""
     reg = LaneRegistry.instance()
     if reg.get(Lane.CME_FUTURES) is None:
         register_lane(
@@ -37,23 +128,14 @@ def register_all_lanes() -> None:
             test_paths=["tests/backtester_validation/fast", "tests/backtester_validation/full"],
             model_id_prefixes=(),
         )
-    if reg.get(Lane.CRYPTO) is None:
-        register_lane(
-            lane=Lane.CRYPTO,
-            adapter_factory=lambda: CryptoBacktester(load_crypto_config()),
-            config_loader=load_crypto_config,
-            validator=_crypto_validator,
-            test_paths=["tests/test_crypto_lane"],
-            model_id_prefixes=("CRYPTO_",),
-        )
     if reg.get(Lane.EQUITIES) is None:
         register_lane(
             lane=Lane.EQUITIES,
-            adapter_factory=lambda: EquitiesBacktester(load_equities_config()),
-            config_loader=load_equities_config,
-            validator=_equities_validator,
-            test_paths=["tests/test_equities_lane", "tests/test_workbench/test_options_lane_campaign.py"],
-            model_id_prefixes=("EQUITY_", "LOW_FLOAT_", "OPTIONS_", "PARITY_"),
+            adapter_factory=lambda: OptionsLaneBacktester(load_options_lane_config()),
+            config_loader=load_options_lane_config,
+            validator=_options_lane_validator,
+            test_paths=["tests/test_workbench/test_options_lane_campaign.py"],
+            model_id_prefixes=("OPTIONS_", "PARITY_"),
         )
 
 

@@ -182,12 +182,8 @@ def _normalize_asset_class(value: Any) -> str:
         return ""
     aliases = {
         "CRYPTO_AUTONOMOUS_SMOKE": "CRYPTO",
-        "CRYPTO_LANE": "CRYPTO",
         "DIGITAL_ASSET": "CRYPTO",
         "DIGITAL_ASSETS": "CRYPTO",
-        "EQUITY": "EQUITIES",
-        "STOCK": "EQUITIES",
-        "STOCKS": "EQUITIES",
         "CME_FUTURES": "FUTURES",
         "RATES": "FUTURES",
         "RATE_FUTURES": "FUTURES",

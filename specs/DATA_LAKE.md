@@ -187,20 +187,14 @@ slot or NPZ in the lake.
 
 ## 7. Acquisition: Side Lanes
 
-Crypto, in `packages/crypto_lane/src/data_io/`:
+The crypto and equities lane acquisition code moved to the
+**hft3-crypto-lane** and **hft3-equities-lane** repos (split tag
+`pre-lane-split-20260612`); their existing data lanes in `<lake>` are
+unchanged and remain where they are.
 
-| Exchange | Recorder | Converter | Data type |
-|----------|----------|-----------|-----------|
-| Kraken | `kraken_l3_recorder.py` | `kraken_l3_converter.py` | L3 (true MBO) |
-| Coinbase | `coinbase_mbo_recorder.py` | `coinbase_mbo_converter.py` | MBO |
-| Bitfinex | `bitfinex_mbo_recorder.py` | `bitfinex_mbo_converter.py` | MBO (R0) |
-| Binance | `binance_l2_recorder.py` | `binance_l2_converter.py` | L2 aggregate — NOT MBO |
-
-Binance is L2 aggregate only — not an MBO source, not used for true-MBO replay.
-
-Equities (`packages/equities_lane/`) and options (`packages/options_lane/`)
-write into their respective `<lake>` side dirs; CHI404 capture lands as zstd
-batches that are archived to B2 and selectively mirrored locally.
+Options (`packages/options_lane/`, CME futures options — stays in this repo)
+writes into its `<lake>` side dir; CHI404 capture lands as zstd batches that
+are archived to B2 and selectively mirrored locally.
 
 ---
 

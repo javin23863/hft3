@@ -460,7 +460,6 @@ def test_phase18_sent_to_execution_state_is_inert_vocabulary(
 
     assert transition.state == TradeManagerOrderState.SENT_TO_EXECUTION
     assert safety.counter_snapshot() == {
-        "crypto_order_call_count": 0,
         "live_broker_call_count": 0,
         "rithmic_order_call_count": 0,
     }
@@ -554,7 +553,6 @@ def test_phase18_order_state_does_not_create_adapters_or_route_orders(
 
     assert _states(manager)[-1] == TradeManagerOrderState.RISK_APPROVED
     assert safety.counter_snapshot() == {
-        "crypto_order_call_count": 0,
         "live_broker_call_count": 0,
         "rithmic_order_call_count": 0,
     }

@@ -32,43 +32,12 @@ from workbench.src.run.feature_fabric import ensure_catalog_feature_fabric
 REPO = Path(__file__).resolve().parents[2]
 
 
-def _fake_ibkr_endpoint_status(status: str = "CONNECTED", api_status: str = "CONNECTED") -> dict[str, object]:
-    return {
-        "schema_version": "ibkr_endpoint_status_v1",
-        "status": status,
-        "reason_code": "" if status == "CONNECTED" else "IBKR_API_HANDSHAKE",
-        "profile": "ibkr_paper_socket",
-        "provider": "interactive_brokers",
-        "transport": "tws_socket",
-        "mode": "paper",
-        "system": "IBKR Paper Trading",
-        "gateway": "TWS or IB Gateway headless socket",
-        "host": "127.0.0.1",
-        "port": 7497,
-        "credentials": {"account_id_set": True, "redacted": True},
-        "secret_exposed": False,
-        "headless_handshake_required": True,
-        "socket": {"reachable": True},
-        "api": {
-            "api_client_status": api_status,
-            "api_package_present": True,
-            "connected": status == "CONNECTED",
-        },
-        "blocking_gates": []
-        if status == "CONNECTED"
-        else [{"gate": "ibkr_api_handshake", "status": "BLOCKING", "reason": api_status}],
-        "runtime_status_path": "",
-        "config_path": str(REPO / "packages" / "equities_lane" / "config" / "ibkr_endpoint.yaml"),
-    }
-
-
 def test_crypto_lane_source_is_blocked_inside_active_all_lane_boundary() -> None:
     snapshot = load_run_evidence(REPO, "crypto_lane")
 
-    assert snapshot.current_stage == "stale_source_blocked"
+    assert snapshot.current_stage == "legacy_source_disabled"
     assert snapshot.decision["action"] == "BLOCKED"
-    assert snapshot.diagnostics["leakage_boundary"]["blocked_source"] == "crypto_lane"
-    assert any(gate["gate"] == "stale_artifact_source" for gate in snapshot.decision["blocking_gates"])
+    assert any(gate["gate"] == "legacy_source_disabled" for gate in snapshot.decision["blocking_gates"])
 
 
 def test_workbench_run_sources_cover_registered_model_lanes() -> None:
@@ -502,80 +471,16 @@ def test_latest_rithmic_trial_bundle_blocks_stale_reports(tmp_path: Path) -> Non
     assert "replay_output_mismatch" in issues
 
 
-def test_equities_and_options_sources_are_lane_registry_backed(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(evidence_snapshot, "_ibkr_endpoint_status", lambda _repo, connect=True: _fake_ibkr_endpoint_status())
-
+def test_equities_and_options_sources_are_lane_registry_backed() -> None:
+    # Post lane-split: "equities" is the historical registry name of the
+    # CME options/parity lane; the "options" source resolves to it.
     equities = load_run_evidence(REPO, "equities")
     options = load_run_evidence(REPO, "options")
 
     assert equities.registry["selected_lane"] == "equities"
-    assert options.registry["selected_lane"] == "options"
+    assert options.registry["selected_lane"] == "equities"
     assert equities.diagnostics["feature_fabric"]["consumer_lane"] == "equities"
-    assert options.diagnostics["feature_fabric"]["consumer_lane"] == "options"
-
-
-def test_equities_snapshot_surfaces_ibkr_endpoint_readiness(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[bool] = []
-
-    def fake_status(_repo: Path, *, connect: bool = True) -> dict[str, object]:
-        calls.append(connect)
-        return _fake_ibkr_endpoint_status()
-
-    monkeypatch.setattr(evidence_snapshot, "_ibkr_endpoint_status", fake_status)
-
-    snapshot = load_run_evidence(REPO, "equities")
-
-    endpoint = snapshot.system["ibkr_endpoint"]
-    stages = {row["name"]: row["status"] for row in snapshot.stages}
-
-    assert endpoint["profile"] == "ibkr_paper_socket"
-    assert endpoint["provider"] == "interactive_brokers"
-    assert endpoint["transport"] == "tws_socket"
-    assert endpoint["mode"] in {"paper", "live"}
-    assert int(endpoint["port"]) > 0
-    assert endpoint["credentials"]["redacted"] is True
-    assert endpoint["secret_exposed"] is False
-    assert endpoint["headless_handshake_required"] is True
-    assert endpoint["api"]["api_client_status"] == "CONNECTED"
-    assert "account_id" not in endpoint
-    assert "ibkr_equities_endpoint" in stages
-    assert snapshot.latency["ibkr_endpoint"]["profile"] == "ibkr_paper_socket"
-    assert calls and all(calls)
-    if endpoint["status"] == "BLOCKING":
-        assert any(gate["gate"].startswith("ibkr_") for gate in endpoint["blocking_gates"])
-
-
-def test_equities_snapshot_allows_pipeline_when_live_routing_handshake_fails(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        evidence_snapshot,
-        "_ibkr_endpoint_status",
-        lambda _repo, connect=True: {
-            **_fake_ibkr_endpoint_status("BLOCKING", "PAPER_DISCLAIMER_PENDING"),
-            "reason_code": "IBKR_PAPER_DISCLAIMER",
-            "blocking_gates": [
-                {
-                    "gate": "ibkr_paper_disclaimer",
-                    "status": "BLOCKING",
-                    "reason": "Paper trading disclaimer must be accepted before IBKR allows API connections.",
-                }
-            ],
-        },
-    )
-
-    snapshot = load_run_evidence(REPO, "equities")
-
-    endpoint = snapshot.system["ibkr_endpoint"]
-    stages = {row["name"]: row["status"] for row in snapshot.stages}
-
-    assert snapshot.state == "catalogued"
-    assert snapshot.current_stage == "lane_catalogued"
-    assert stages["ibkr_equities_endpoint"] == "PASS"
-    assert endpoint["pipeline_gate_status"] == "PASS"
-    assert endpoint["live_routing_gate_status"] == "ROUTING_BLOCKED"
-    assert endpoint["pipeline_blocking"] is False
-    assert endpoint["routing_ready"] is False
-    assert snapshot.system["ibkr_endpoint"]["api"]["api_client_status"] == "PAPER_DISCLAIMER_PENDING"
-    assert not any(gate["gate"] == "ibkr_equities_endpoint" for gate in snapshot.decision["blocking_gates"])
+    assert options.diagnostics["feature_fabric"]["consumer_lane"] == "equities"
 
 
 def test_feature_fabric_blocks_when_artifacts_are_missing(tmp_path: Path) -> None:
@@ -590,7 +495,8 @@ def test_feature_fabric_blocks_when_artifacts_are_missing(tmp_path: Path) -> Non
 
 
 def test_catalog_feature_fabric_generation_passes_all_lanes(tmp_path: Path) -> None:
-    for lane in ("cme_futures", "crypto", "equities", "options"):
+    # Post lane-split: crypto removed; "equities" is the options/parity lane.
+    for lane in ("cme_futures", "equities", "options"):
         root = tmp_path / lane
         result = ensure_catalog_feature_fabric(REPO, lane, output_root=root, run_id="fresh_run")
         snapshot = _feature_fabric_snapshot(
@@ -817,9 +723,8 @@ def test_lane_registry_errors_are_workbench_blockers(monkeypatch) -> None:
 def test_crypto_pipeline_coverage_does_not_overclaim_unwired_replay(tmp_path: Path) -> None:
     for rel in (
         "packages/backtest_pipeline/src/vectorbt_adapter.py",
-        "packages/crypto_lane/src/validation/crypto_validation_workflow.py",
-        "packages/crypto_lane/src/validation/crypto_execution_validator.py",
-        "packages/backtest_pipeline/src/crypto_hft_builder.py",
+        "packages/backtest_pipeline/src/hft_backtest_builder.py",
+        "packages/backtest_pipeline/src/signal_backtester.py",
         "apps/workbench/src/robustness/pack.py",
         "apps/workbench/src/robustness/wfc/double_wf.py",
     ):
@@ -1150,9 +1055,8 @@ def test_crypto_reports_prefers_selected_run_local_smoke_reports(tmp_path: Path)
 def test_crypto_pipeline_coverage_blocks_validation_report_without_vectorbt(tmp_path: Path) -> None:
     for rel in (
         "packages/backtest_pipeline/src/vectorbt_adapter.py",
-        "packages/crypto_lane/src/validation/crypto_validation_workflow.py",
-        "packages/crypto_lane/src/validation/crypto_execution_validator.py",
-        "packages/backtest_pipeline/src/crypto_hft_builder.py",
+        "packages/backtest_pipeline/src/hft_backtest_builder.py",
+        "packages/backtest_pipeline/src/signal_backtester.py",
         "apps/workbench/src/robustness/pack.py",
         "apps/workbench/src/robustness/wfc/double_wf.py",
     ):
@@ -1204,9 +1108,8 @@ def test_crypto_pipeline_coverage_blocks_validation_report_without_vectorbt(tmp_
 def test_crypto_pipeline_coverage_l2_proxy_does_not_complete_execution_realism(tmp_path: Path) -> None:
     for rel in (
         "packages/backtest_pipeline/src/vectorbt_adapter.py",
-        "packages/crypto_lane/src/validation/crypto_validation_workflow.py",
-        "packages/crypto_lane/src/validation/crypto_execution_validator.py",
-        "packages/backtest_pipeline/src/crypto_hft_builder.py",
+        "packages/backtest_pipeline/src/hft_backtest_builder.py",
+        "packages/backtest_pipeline/src/signal_backtester.py",
     ):
         path = tmp_path / rel
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -1242,9 +1145,8 @@ def test_crypto_pipeline_coverage_l2_proxy_does_not_complete_execution_realism(t
 
 def test_crypto_pipeline_coverage_l3_plus_ack_completes_execution_realism(tmp_path: Path) -> None:
     for rel in (
-        "packages/crypto_lane/src/validation/crypto_validation_workflow.py",
-        "packages/crypto_lane/src/validation/crypto_execution_validator.py",
-        "packages/backtest_pipeline/src/crypto_hft_builder.py",
+        "packages/backtest_pipeline/src/hft_backtest_builder.py",
+        "packages/backtest_pipeline/src/signal_backtester.py",
     ):
         path = tmp_path / rel
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -1311,9 +1213,8 @@ def test_crypto_validation_reports_ignore_global_when_selected_run_has_no_valida
 
 def test_crypto_pipeline_coverage_blocks_failed_validation_attempt(tmp_path: Path) -> None:
     for rel in (
-        "packages/crypto_lane/src/validation/crypto_validation_workflow.py",
-        "packages/crypto_lane/src/validation/crypto_execution_validator.py",
-        "packages/backtest_pipeline/src/crypto_hft_builder.py",
+        "packages/backtest_pipeline/src/hft_backtest_builder.py",
+        "packages/backtest_pipeline/src/signal_backtester.py",
     ):
         path = tmp_path / rel
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -1348,9 +1249,8 @@ def test_crypto_pipeline_coverage_blocks_failed_validation_attempt(tmp_path: Pat
 def test_crypto_pipeline_coverage_blocks_failed_vectorbt_stage(tmp_path: Path) -> None:
     for rel in (
         "packages/backtest_pipeline/src/vectorbt_adapter.py",
-        "packages/crypto_lane/src/validation/crypto_validation_workflow.py",
-        "packages/crypto_lane/src/validation/crypto_execution_validator.py",
-        "packages/backtest_pipeline/src/crypto_hft_builder.py",
+        "packages/backtest_pipeline/src/hft_backtest_builder.py",
+        "packages/backtest_pipeline/src/signal_backtester.py",
         "apps/workbench/src/robustness/pack.py",
         "apps/workbench/src/robustness/wfc/double_wf.py",
     ):
@@ -1401,9 +1301,8 @@ def test_crypto_pipeline_coverage_blocks_failed_vectorbt_stage(tmp_path: Path) -
 def test_crypto_pipeline_coverage_blocks_hft_when_vectorbt_blocks_before_replay(tmp_path: Path) -> None:
     for rel in (
         "packages/backtest_pipeline/src/vectorbt_adapter.py",
-        "packages/crypto_lane/src/validation/crypto_validation_workflow.py",
-        "packages/crypto_lane/src/validation/crypto_execution_validator.py",
-        "packages/backtest_pipeline/src/crypto_hft_builder.py",
+        "packages/backtest_pipeline/src/hft_backtest_builder.py",
+        "packages/backtest_pipeline/src/signal_backtester.py",
     ):
         path = tmp_path / rel
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -1432,9 +1331,8 @@ def test_crypto_pipeline_coverage_blocks_hft_when_vectorbt_blocks_before_replay(
 def test_crypto_pipeline_coverage_full_readiness_requires_observed_vectorbt(tmp_path: Path) -> None:
     for rel in (
         "packages/backtest_pipeline/src/vectorbt_adapter.py",
-        "packages/crypto_lane/src/validation/crypto_validation_workflow.py",
-        "packages/crypto_lane/src/validation/crypto_execution_validator.py",
-        "packages/backtest_pipeline/src/crypto_hft_builder.py",
+        "packages/backtest_pipeline/src/hft_backtest_builder.py",
+        "packages/backtest_pipeline/src/signal_backtester.py",
         "apps/workbench/src/robustness/pack.py",
         "apps/workbench/src/robustness/wfc/double_wf.py",
     ):
@@ -1495,9 +1393,8 @@ def test_crypto_pipeline_coverage_full_readiness_requires_observed_vectorbt(tmp_
 def test_crypto_pipeline_coverage_blocks_cross_candidate_readiness(tmp_path: Path) -> None:
     for rel in (
         "packages/backtest_pipeline/src/vectorbt_adapter.py",
-        "packages/crypto_lane/src/validation/crypto_validation_workflow.py",
-        "packages/crypto_lane/src/validation/crypto_execution_validator.py",
-        "packages/backtest_pipeline/src/crypto_hft_builder.py",
+        "packages/backtest_pipeline/src/hft_backtest_builder.py",
+        "packages/backtest_pipeline/src/signal_backtester.py",
         "apps/workbench/src/robustness/pack.py",
         "apps/workbench/src/robustness/wfc/double_wf.py",
     ):

@@ -355,7 +355,6 @@ def test_phase19_execution_boundary_does_not_route_or_increment_counters(
     manager.prepare_execution_boundary("HYP_5", intent, load_execution_config(Path("configs/execution/adapter.yaml")))
 
     assert safety.counter_snapshot() == {
-        "crypto_order_call_count": 0,
         "live_broker_call_count": 0,
         "rithmic_order_call_count": 0,
     }

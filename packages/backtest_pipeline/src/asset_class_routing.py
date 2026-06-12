@@ -2,8 +2,6 @@
 
 Rules from integration spec:
 - CME futures with MBO NPZ → VectorBT filter → HftBacktest execution gate
-- Crypto with normalized OHLCV → VectorBT filter → L2 proxy or L3 execution gate
-- Equities with bar data → VectorBT filter → no_execution (mark)
 - Options lane → VectorBT filter → no_execution (mark)
 - Any lane missing tick/book data → no_execution (mark, not pretend-pass)
 """
@@ -20,7 +18,7 @@ from research_pipeline.types import CandidateModel
 class ExecutionCapability(Enum):
     FULL_EXECUTION = auto()
     L3_VALIDATED = auto()  # True order-level MBO replay only
-    L2_DEPTH_VALIDATION = auto()  # Kraken WS aggregated book depth (not order-level)
+    L2_DEPTH_VALIDATION = auto()  # Aggregated book depth (not order-level)
     L2_PROXY_VALIDATION = auto()
     NO_EXECUTION_VALIDATION = auto()
 
@@ -49,59 +47,11 @@ SUPPORTED_CME_SYMBOLS = {
     "MES.v.0", "ES.v.0", "NQ.v.0", "MNQ.v.0", "ZN.v.0", "ZB.v.0",
 }
 
-CRYPTO_LANE_MODEL_PREFIXES = ("CRYPTO_", "BTC_", "ETH_")
-
-# Crypto symbols that may have Binance L2 depth data
-CRYPTO_BINANCE_L2_SYMBOLS = {"BTCUSDT", "ETHUSDT", "SOLUSDT"}
-
-# Kraken spot symbols with WS book-depth replay NPZ (aggregated levels, not true MBO)
-CRYPTO_KRAKEN_DEPTH_SYMBOLS = {"BTC/USD", "ETH/USD", "SOL/USD"}
-CRYPTO_KRAKEN_L3_SYMBOLS = CRYPTO_KRAKEN_DEPTH_SYMBOLS  # deprecated alias
-
-# Mapping from perp symbol (as used by hypotheses) to Binance L2 symbol
-CRYPTO_PERP_TO_L2 = {
-    "BTCUSDT": "BTCUSDT",
-    "ETHUSDT": "ETHUSDT",
-    "SOLUSDT": "SOLUSDT",
-}
-
-# Mapping from perp symbol to Kraken spot symbol for L2 depth replay
-CRYPTO_PERP_TO_KRAKEN_SPOT = {
-    "BTCUSDT": "BTC/USD",
-    "ETHUSDT": "ETH/USD",
-    "SOLUSDT": "SOL/USD",
-}
-
-# Mapping from perp symbol to Bitfinex symbol for true MBO (R0 raw book, public)
-CRYPTO_PERP_TO_BITFINEX = {
-    "BTCUSDT": "tBTCUSD",
-    "ETHUSDT": "tETHUSD",
-    "SOLUSDT": "tSOLUSD",
-}
-
-BITFINEX_MBO_SYMBOLS = set(CRYPTO_PERP_TO_BITFINEX.values())
-
-# Mapping from perp symbol to Coinbase Exchange product id (requires WS auth since 2024)
-CRYPTO_PERP_TO_COINBASE = {
-    "BTCUSDT": "BTC-USD",
-    "ETHUSDT": "ETH-USD",
-    "SOLUSDT": "SOL-USD",
-}
-
-COINBASE_MBO_SYMBOLS = set(CRYPTO_PERP_TO_COINBASE.values())
-
-EQUITIES_LANE_MODEL_PREFIXES = ("EQUITY_", "LOW_FLOAT_")
 OPTIONS_LANE_MODEL_PREFIXES = ("OPTIONS_", "PARITY_")
 
 
 def resolve_asset_class(candidate: CandidateModel) -> str:
     model_id = candidate.model_id.upper()
-    for prefix in CRYPTO_LANE_MODEL_PREFIXES:
-        if model_id.startswith(prefix):
-            return "CRYPTO"
-    for prefix in EQUITIES_LANE_MODEL_PREFIXES:
-        if model_id.startswith(prefix):
-            return "EQUITIES"
     for prefix in OPTIONS_LANE_MODEL_PREFIXES:
         if model_id.startswith(prefix):
             return "OPTIONS"
@@ -112,24 +62,6 @@ def resolve_asset_class(candidate: CandidateModel) -> str:
 
 def resolve_symbol(candidate: CandidateModel) -> str:
     return candidate.metadata.get("symbol", "MES")
-
-
-def _crypto_l2_npz_path(data_catalog_root: Path, symbol: str) -> Path:
-    return data_catalog_root / "data" / "replay" / "hftbacktest" / "crypto" / "binance" / symbol.lower()
-
-
-def _crypto_kraken_depth_npz_path(data_catalog_root: Path, symbol: str) -> Path:
-    return data_catalog_root / "data" / "replay" / "hftbacktest" / "crypto" / "kraken" / symbol.replace("/", "_")
-
-
-def _crypto_bitfinex_mbo_npz_path(data_catalog_root: Path, routing_symbol: str) -> Path:
-    safe = routing_symbol.replace("-", "_").replace("/", "_")
-    return data_catalog_root / "data" / "replay" / "hftbacktest" / "crypto" / "bitfinex" / safe
-
-
-def _crypto_coinbase_mbo_npz_path(data_catalog_root: Path, product_id: str) -> Path:
-    safe = product_id.replace("-", "_")
-    return data_catalog_root / "data" / "replay" / "hftbacktest" / "crypto" / "coinbase" / safe
 
 
 def _read_replay_meta_data_class(npz_path: Path) -> str | None:
@@ -143,56 +75,6 @@ def _read_replay_meta_data_class(npz_path: Path) -> str | None:
         return str(meta.get("data_class") or "")
     except (OSError, ValueError, TypeError):
         return None
-
-
-def _crypto_l3_mbo_npz_exists(data_catalog_root: Optional[Path], routing_symbol: str) -> bool:
-    if not data_catalog_root:
-        return False
-    npz_dir = _crypto_bitfinex_mbo_npz_path(data_catalog_root, routing_symbol)
-    for npz in npz_dir.glob("*.npz"):
-        data_class = _read_replay_meta_data_class(npz)
-        if data_class == "L3_MBO" or npz.name.endswith("_mbo.npz"):
-            return True
-    return False
-
-
-def _crypto_mbo_npz_exists(data_catalog_root: Optional[Path], product_id: str) -> bool:
-    if not data_catalog_root:
-        return False
-    npz_dir = _crypto_coinbase_mbo_npz_path(data_catalog_root, product_id)
-    for npz in npz_dir.glob("*.npz"):
-        data_class = _read_replay_meta_data_class(npz)
-        if data_class == "L3_MBO" or npz.name.endswith("_mbo.npz"):
-            return True
-    return False
-
-
-_crypto_l3_npz_path = _crypto_kraken_depth_npz_path  # deprecated alias
-
-
-def _crypto_l2_npz_exists(data_catalog_root: Optional[Path], symbol: str) -> bool:
-    if not data_catalog_root:
-        return False
-    npz_dir = _crypto_l2_npz_path(data_catalog_root, symbol)
-    return npz_dir.exists() and any(npz_dir.glob("*.npz"))
-
-
-def _crypto_kraken_depth_npz_exists(data_catalog_root: Optional[Path], symbol: str) -> bool:
-    if not data_catalog_root:
-        return False
-    npz_dir = _crypto_kraken_depth_npz_path(data_catalog_root, symbol)
-    return npz_dir.exists() and any(npz_dir.glob("*.npz"))
-
-
-_crypto_l3_npz_exists = _crypto_kraken_depth_npz_exists  # deprecated alias
-
-
-# Bitfinex routing dir uses BTC_USD style keys
-CRYPTO_PERP_TO_BITFINEX_ROUTING = {
-    "BTCUSDT": "BTC_USD",
-    "ETHUSDT": "ETH_USD",
-    "SOLUSDT": "SOL_USD",
-}
 
 
 def resolve_validation_path(
@@ -216,56 +98,6 @@ def resolve_validation_path(
         else:
             exec_cap = ExecutionCapability.NO_EXECUTION_VALIDATION
             notes.append(f"No tick/order-book data for {symbol}")
-
-    elif asset_class == "CRYPTO":
-        has_order_book = False
-        has_tick = False
-        perp_symbol = symbol.upper()
-        l2_sym = CRYPTO_PERP_TO_L2.get(perp_symbol)
-        bitfinex_sym = CRYPTO_PERP_TO_BITFINEX.get(perp_symbol)
-        bitfinex_route = CRYPTO_PERP_TO_BITFINEX_ROUTING.get(perp_symbol)
-        kraken_sym = CRYPTO_PERP_TO_KRAKEN_SPOT.get(perp_symbol)
-        coinbase_sym = CRYPTO_PERP_TO_COINBASE.get(perp_symbol)
-
-        if bitfinex_route and _crypto_l3_mbo_npz_exists(data_catalog_root, bitfinex_route):
-            has_order_book = True
-            has_tick = True
-            exec_cap = ExecutionCapability.L3_VALIDATED
-            notes.append(
-                f"Bitfinex R0 MBO NPZ found for {bitfinex_route}; "
-                f"{EXEC_CLASS_L3_VALIDATED} (order-level, native order IDs)"
-            )
-        elif coinbase_sym and _crypto_mbo_npz_exists(data_catalog_root, coinbase_sym):
-            has_order_book = True
-            has_tick = True
-            exec_cap = ExecutionCapability.L3_VALIDATED
-            notes.append(
-                f"Coinbase Exchange MBO NPZ found for {coinbase_sym}; "
-                f"{EXEC_CLASS_L3_VALIDATED} (order-level full channel)"
-            )
-        elif kraken_sym and _crypto_kraken_depth_npz_exists(data_catalog_root, kraken_sym):
-            has_order_book = True
-            has_tick = True
-            exec_cap = ExecutionCapability.L2_DEPTH_VALIDATION
-            notes.append(
-                f"Kraken WS book-depth replay NPZ found for {kraken_sym}; "
-                f"{EXEC_CLASS_L2_DEPTH_VALIDATED} (aggregated depth, not order-level MBO)"
-            )
-        elif l2_sym and _crypto_l2_npz_exists(data_catalog_root, l2_sym):
-            has_order_book = True
-            has_tick = True
-            exec_cap = ExecutionCapability.L2_PROXY_VALIDATION
-            notes.append(f"Binance L2 depth NPZ found for {l2_sym}; L2_PROXY_VALIDATION")
-        else:
-            exec_cap = ExecutionCapability.NO_EXECUTION_VALIDATION
-            if data_catalog_root and (data_catalog_root / "data" / "crypto" / "normalized").exists():
-                notes.append("Crypto: normalized data exists but no L2/L3 NPZ; marking NO_EXECUTION_VALIDATION")
-            else:
-                notes.append("Crypto: no order-book NPZ; marking NO_EXECUTION_VALIDATION")
-
-    elif asset_class == "EQUITIES":
-        exec_cap = ExecutionCapability.NO_EXECUTION_VALIDATION
-        notes.append("Equities: no order-book NPZ; marking NO_EXECUTION_VALIDATION")
 
     elif asset_class == "OPTIONS":
         exec_cap = ExecutionCapability.NO_EXECUTION_VALIDATION

@@ -9,14 +9,12 @@ if TYPE_CHECKING:
 
 live_broker_call_count: int = 0
 rithmic_order_call_count: int = 0
-crypto_order_call_count: int = 0
 
 
 def reset_counters() -> None:
-    global live_broker_call_count, rithmic_order_call_count, crypto_order_call_count
+    global live_broker_call_count, rithmic_order_call_count
     live_broker_call_count = 0
     rithmic_order_call_count = 0
-    crypto_order_call_count = 0
 
 
 def record_live_broker_call() -> None:
@@ -27,11 +25,6 @@ def record_live_broker_call() -> None:
 def record_rithmic_order_call() -> None:
     global rithmic_order_call_count
     rithmic_order_call_count += 1
-
-
-def record_crypto_order_call() -> None:
-    global crypto_order_call_count
-    crypto_order_call_count += 1
 
 
 def execution_mode() -> str:
@@ -50,7 +43,7 @@ def assert_replay_safe(adapter: ExecutionAdapter, declared_mode: str | None = No
     if mode != "REPLAY":
         return
     name = type(adapter).__name__
-    forbidden = ("PaperBrokerAdapter", "LiveBrokerAdapter", "RithmicApiConnector", "CryptoPaperBrokerAdapter", "CryptoLiveBrokerAdapter")
+    forbidden = ("PaperBrokerAdapter", "LiveBrokerAdapter", "RithmicApiConnector")
     if any(x in name for x in forbidden):
         raise RuntimeError(f"REPLAY mode cannot use adapter {name}")
 
@@ -64,7 +57,7 @@ def assert_paper_safe(adapter: ExecutionAdapter, declared_mode: str | None = Non
     the env fallback exists only for legacy call sites.
     """
     mode = (declared_mode or execution_mode()).upper()
-    if mode == "PAPER" and type(adapter).__name__ in ("LiveBrokerAdapter", "CryptoLiveBrokerAdapter"):
+    if mode == "PAPER" and type(adapter).__name__ in ("LiveBrokerAdapter",):
         raise RuntimeError(f"PAPER mode cannot use {type(adapter).__name__}")
 
 
@@ -94,5 +87,4 @@ def counter_snapshot() -> dict[str, int]:
     return {
         "live_broker_call_count": live_broker_call_count,
         "rithmic_order_call_count": rithmic_order_call_count,
-        "crypto_order_call_count": crypto_order_call_count,
     }

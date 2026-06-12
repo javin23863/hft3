@@ -15,7 +15,8 @@ class Lane(str, Enum):
     """Asset class / execution lane."""
 
     CME_FUTURES = "cme_futures"
-    CRYPTO = "crypto"
+    # EQUITIES is the historical name of the options/parity lane
+    # (CME futures options via packages/options_lane).
     EQUITIES = "equities"
 
     @classmethod
@@ -23,15 +24,11 @@ class Lane(str, Enum):
         """Resolve a Lane from a model_id prefix.
 
         Recognized prefixes:
-          - CRYPTO_                              -> CRYPTO
-          - EQUITY_, LOW_FLOAT_                  -> EQUITIES
-          - OPTIONS_, PARITY_                    -> EQUITIES (merged lane)
+          - OPTIONS_, PARITY_                    -> EQUITIES (options/parity lane)
           - everything else                      -> CME_FUTURES
         """
         upper = (model_id or "").upper()
-        if upper.startswith("CRYPTO_"):
-            return cls.CRYPTO
-        if upper.startswith(("EQUITY_", "LOW_FLOAT_", "OPTIONS_", "PARITY_")):
+        if upper.startswith(("OPTIONS_", "PARITY_")):
             return cls.EQUITIES
         return cls.CME_FUTURES
 
@@ -41,8 +38,7 @@ class LaneCapabilityProfile:
     """Execution capability profile for a lane.
 
     This separates what a lane can prove operationally from the asset class
-    identity. Equities can be fast without being true DMA HFT; crypto can be
-    node-direct HFT without being futures/equities DMA.
+    identity. The options/parity lane can be fast without being true DMA HFT.
     """
 
     name: str
@@ -69,17 +65,6 @@ CME_TRUE_HFT_DMA_PROFILE = LaneCapabilityProfile(
     description="CME futures lane: true HFT with direct market access requirements.",
 )
 
-CRYPTO_NODE_DIRECT_HFT_PROFILE = LaneCapabilityProfile(
-    name="node_direct_hft",
-    is_hft=True,
-    dma=False,
-    node_direct=True,
-    speed_advantage=True,
-    research_only=False,
-    hft_proof_required=True,
-    description="Crypto lane: node-direct HFT for instruments covered by validated crypto data environment.",
-)
-
 EQUITIES_SPEED_ADVANTAGE_PROFILE = LaneCapabilityProfile(
     name="speed_advantage_non_dma",
     is_hft=False,
@@ -88,7 +73,7 @@ EQUITIES_SPEED_ADVANTAGE_PROFILE = LaneCapabilityProfile(
     speed_advantage=True,
     research_only=False,
     hft_proof_required=False,
-    description="Equities lane: US stocks + options via IBKR Web API, speed-advantage non-DMA (better-than-retail; no true HFT/DMA claim).",
+    description="Options/parity lane (historical name: equities): CME futures options via packages/options_lane, speed-advantage non-DMA (better-than-retail; no true HFT/DMA claim).",
 )
 
 
@@ -113,8 +98,7 @@ class WindowConfig:
 class HorizonConfig:
     """Prediction horizons and lookback windows.
 
-    horizons is a list of either int (days for equities, ms for crypto)
-    or str (e.g. "30s", "5m", "1h", "8h" for crypto).
+    horizons is a list of either int (days) or str (e.g. "30s", "5m", "1h").
     """
 
     horizons: list[int | str] = field(default_factory=list)

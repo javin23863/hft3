@@ -147,8 +147,7 @@ def get_model_by_id(model_id: str):
     legacy = legacy_to_slug().get(slug, slug)
     pdf_cfg = binding_raw.get("pdf", {}).get(slug) or binding_raw.get("pdf", {}).get(legacy, {})
     hyp_cfg = binding_raw.get("hypothesis", {}).get(slug) or binding_raw.get("hypothesis", {}).get(legacy, {})
-    if pdf_cfg.get("campaign_mode") in ("equities_lane", "options_lane"):
-        # "options_lane" is the back-compat alias; both use OptionsLaneAdapter for parity models.
+    if pdf_cfg.get("campaign_mode") == "options_lane":
         from workbench.src.adapters.options_lane_adapter import OptionsLaneAdapter
 
         adapter = OptionsLaneAdapter(cfg)

@@ -1,8 +1,8 @@
 """Per-lane staleness paths.
 
 Each lane registers its own critical file paths. The unified staleness
-check consults this registry so changes in crypto/equities lane
-packages invalidate a GREEN certification, not just CME paths.
+check consults this registry so changes in non-CME lane packages
+(options/parity lane) invalidate a GREEN certification, not just CME paths.
 """
 from __future__ import annotations
 
@@ -26,21 +26,7 @@ DEFAULT_LANE_PATHS: dict[str, list[str]] = {
         "packages/hft3/validation",
         "scripts/run_event_replay.py",
     ],
-    Lane.CRYPTO.value: [
-        "packages/crypto_lane/src",
-        "packages/crypto_lane/config",
-        "backtests/configs/crypto_hypotheses",
-        "models/candidates/crypto_h1_basis_compression.yaml",
-        "models/candidates/crypto_h2_funding_capture.yaml",
-        "models/candidates/crypto_h3_iv_rv_convergence.yaml",
-        "models/candidates/crypto_h4_mempool_fee_regime.yaml",
-        "models/candidates/crypto_h5_blockspace_stress.yaml",
-        "models/candidates/crypto_h6_mempool_clear_reversion.yaml",
-        "models/candidates/crypto_h7_congestion_event_study.yaml",
-    ],
     Lane.EQUITIES.value: [
-        "packages/equities_lane/src",
-        "packages/equities_lane/config",
         "packages/options_lane/src",
         "packages/options_lane/config",
     ],

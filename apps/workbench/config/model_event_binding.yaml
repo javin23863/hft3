@@ -14,8 +14,8 @@ hypothesis:
     event_context_policy: catalog_all_contexts
   CUTOFF_PANIC_EXITS:
     required_event_contexts:
-    - APEX_FLATTEN
-    - TPT_FLATTEN
+    - FRIDAY_CLOSE
+    - PROP_FLATTEN_TOPSTEP
   DAILY_LOSS_LIMIT_DEFENSE:
     event_context_policy: catalog_all_contexts
   DEPTH_REFILL_IMBALANCE:
@@ -24,7 +24,7 @@ hypothesis:
     event_context_policy: catalog_all_contexts
   ECONOMIC_EVENT_RESTRICTION_FLATTENING:
     required_event_contexts:
-    - NEWS_RESTRICTION
+    - _TIGHT
   END_OF_DAY_FORCED_FLATTEN_FLOW:
     required_event_contexts:
     - FRIDAY_CLOSE
@@ -103,6 +103,16 @@ hypothesis:
     event_context_policy: catalog_all_contexts
   TRAILING_DRAWDOWN_PRESSURE:
     event_context_policy: catalog_all_contexts
+  VIX_DEPTH_IMBALANCE_DIRECTION:
+    event_context_policy: catalog_all_contexts
+  VIX_IMPLIED_REALIZED_GAP:
+    event_context_policy: catalog_all_contexts
+  VIX_LEVEL_CONDITIONED_CONTINUATION:
+    event_context_policy: catalog_all_contexts
+  VIX_QUOTE_PULL_LIQUIDITY_VACUUM:
+    event_context_policy: catalog_all_contexts
+  VIX_SPIKE_EVENT_FADE:
+    event_context_policy: catalog_all_contexts
   VWAP_DEFENSE_BREAK:
     event_context_policy: catalog_all_contexts
   ZN_ZB_ES_NQ_MACRO_IMPULSE:
@@ -120,7 +130,7 @@ pdf:
     required_datasets:
     - options_chain
     latency_lane: 10_250ms
-    campaign_mode: equities_lane
+    campaign_mode: options_lane
   DOW_YM_INDEX:
     event_context_policy: catalog_all_contexts
   TREASURY_CTD:

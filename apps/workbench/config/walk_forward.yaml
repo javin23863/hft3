@@ -32,7 +32,7 @@ personal_sandbox:
   default_locked: true
   artifact_root: research_cards/workbench_personal/
 
-equities_paper_shadow:
-  ibkr_days: 60
-  account_type: IBKR_PAPER
-  lane: equities
+options_paper_shadow:
+  days: 60
+  account_type: PAPER
+  lane: options

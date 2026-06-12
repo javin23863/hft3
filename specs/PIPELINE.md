@@ -25,8 +25,8 @@ Source: Databento GLBX.MDP3 MBO schema, accessed via
   `PDF_PRIMARY_FALLBACK_ORDER = ("ES.v.0", "MNQ.v.0", "NQ.v.0")` when the
   requested symbol file is absent.
 
-Crypto ingest path: see DATA_LAKE.md §4. Converts via the crypto_lane pipeline;
-same `.npz` format, same resolver conventions.
+Crypto ingest moved to the hft3-crypto-lane repo (same `.npz` format, same
+resolver conventions); the data lanes in the lake are unchanged.
 
 ---
 
@@ -59,8 +59,6 @@ Source: `packages/backtest_pipeline/src/replay_matrix.py`.
   `HashMapMarketDepthBacktest`.
 - CME latency bands: `LATENCY_BANDS_MS = [0.5, 1.0, 2.0, 5.0, 10.0]` (defined
   in `packages/backtest_pipeline/src/hft_backtest_builder.py`).
-- Crypto latency bands: `[5, 50, 200]` ms defaults (per builder functions in
-  `packages/backtest_pipeline/src/crypto_hft_builder.py`).
 - Events corpus: `packages/data_system/config/events.csv` (55 rows: 33 NFP +
   19 CPI + 3 PROP_FLATTEN_TOPSTEP).
 
@@ -172,18 +170,16 @@ complete before any downstream stage runs. Partial pipelines are not supported.
 
 ## Lanes
 
-Stocks and options are one lane (equities); they share a single IBKR Web API
-access path, the same latency floor, and the same promotion requirement. The
-lane competes better-than-retail: IBKR provides no DMA, so latency is modelled
-honestly against the Web API round-trip floor — slower results never block
-alpha, but claims below the floor are rejected. The floor is max(5 ms, measured
-Web API RTT from `runtime/equities_lane/ibkr_endpoint_status.json`); sim
-latency is clamped to the floor at load time and point of use. Promotion
-requires a shadow run on an IBKR paper account via the Web API paper endpoint;
-no TWS or IB Gateway GUI is present anywhere in the lane.
+The crypto lane and the stocks (low-float equities) lane moved to the
+**hft3-crypto-lane** and **hft3-equities-lane** repos (split tag
+`pre-lane-split-20260612`). The options/parity lane (`packages/options_lane/`,
+CME futures options) remains in this repo, registered under the historical
+lane name `equities`. It competes better-than-retail (no DMA claim): latency
+is modelled against a 5 ms floor — slower results never block alpha, but
+claims below the floor are rejected; sim latency is clamped to the floor.
+Promotion requires a paper shadow run.
 
 | Lane | Access | Capability | Latency policy | Promotion |
 |---|---|---|---|---|
 | cme_futures | Rithmic/DMA path | true HFT (proof required) | exact swept bands + measured ack | sim shadow CHI404 |
-| crypto | node-direct (Bitfinex execution; live host = Contabo BTC-node VPS per CRYPTO_LIVE.md §2) | true HFT (proof required) | exact swept bands + measured ack (LATENCY.md §3, §10) | sim shadow + Bitfinex paper shadow per CRYPTO_LIVE.md §5/§7; campaign: ALPHA_CRYPTO.md |
-| equities (stocks+options) | IBKR Web API (OAuth headless / clientportal.gw), no DMA, no GUI | better-than-retail speed advantage | floor = max(5 ms, measured Web API RTT from endpoint status artifact); sim latency clamped to floor; slower never blocks; claims below floor rejected | IBKR paper shadow via Web API paper account |
+| equities (options/parity, historical name) | CME futures options via `packages/options_lane/`, no DMA | better-than-retail speed advantage | floor = 5 ms; sim latency clamped to floor; slower never blocks; claims below floor rejected | paper shadow |

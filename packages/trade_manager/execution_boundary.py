@@ -14,7 +14,7 @@ from trade_manager.risk_layer import TradeManagerRiskDecision
 
 
 EXECUTION_MODES = frozenset({"REPLAY", "PAPER", "LIVE"})
-EXECUTION_ADAPTERS = frozenset({"hftbacktest_simulated_exchange", "paper_broker", "live_broker", "crypto_broker"})
+EXECUTION_ADAPTERS = frozenset({"hftbacktest_simulated_exchange", "paper_broker", "live_broker"})
 ORDER_ROUTING_MODES = frozenset({"direct", "aggregated"})
 RECONNECT_HANDLING_MODES = frozenset({"automatic", "manual"})
 
@@ -96,12 +96,12 @@ class TradeManagerExecutionConfig:
             invalid.append("heartbeat_interval_sec")
         expected_adapters = {
             "REPLAY": {"hftbacktest_simulated_exchange"},
-            "PAPER": {"paper_broker", "crypto_broker"},
-            "LIVE": {"live_broker", "crypto_broker"},
+            "PAPER": {"paper_broker"},
+            "LIVE": {"live_broker"},
         }.get(mode)
         if expected_adapters is not None and adapter not in expected_adapters:
             invalid.append("adapter")
-        if mode == "LIVE" and adapter != "crypto_broker" and self.live_broker != "rithmic":
+        if mode == "LIVE" and self.live_broker != "rithmic":
             invalid.append("live_broker")
         if mode != "LIVE" and self.live_broker:
             invalid.append("live_broker")

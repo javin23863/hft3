@@ -30,11 +30,6 @@ class RelationshipStatus(str, Enum):
 class RelationshipDataSource(str, Enum):
     DATABENTO_CME_MBO_NPZ = "databento_cme_mbo_npz"
     MICROSTRUCTURE_PDF_MANIFEST = "microstructure_pdf_manifest"
-    CRYPTO_SMOKE_REPORT = "crypto_smoke_report"
-    CRYPTO_VALIDATION_REPORT = "crypto_validation_report"
-    CRYPTO_ROBUSTNESS_SUMMARY = "crypto_robustness_summary"
-    CRYPTO_EDGE_PACKET_STATUS = "crypto_edge_packet_status"
-    CRYPTO_DOUBLE_WF_ARTIFACT = "crypto_double_wf_artifact"
     ECONOMIC_EVENT_UNIVERSE = "economic_event_universe"
     SOURCED_RELEASE_CALENDAR = "sourced_release_calendar"
     DATA_SYSTEM_EVENTS_CSV = "data_system_events_csv"
@@ -77,46 +72,6 @@ SOURCE_DEFINITIONS = {
         authority="Citation authority for microstructure concepts, not raw observations.",
         notes="Grounds terms such as marked events, queue estimates, latency chains, and event context.",
         empirical=False,
-    ),
-    RelationshipDataSource.CRYPTO_SMOKE_REPORT: RelationshipSourceDefinition(
-        source_type=RelationshipDataSource.CRYPTO_SMOKE_REPORT,
-        contexts=(RelationshipContext.MICRO, RelationshipContext.REGIME),
-        path="runtime/workbench/crypto_smoke/<run_id>/smoke_reports/<candidate_id>.json",
-        authority="Run-local crypto smoke report from the autonomous Workbench candidate loop.",
-        notes="Review source for smoke/OOS diagnostics only; it does not confer promotion authority.",
-        empirical=True,
-    ),
-    RelationshipDataSource.CRYPTO_VALIDATION_REPORT: RelationshipSourceDefinition(
-        source_type=RelationshipDataSource.CRYPTO_VALIDATION_REPORT,
-        contexts=(RelationshipContext.MICRO,),
-        path="runtime/workbench/crypto_smoke/<run_id>/validation_reports/<candidate_id>.json",
-        authority="Run-local crypto execution replay validation artifact.",
-        notes="Review source for L2/L3/full execution replay evidence and replay P&L diagnostics.",
-        empirical=True,
-    ),
-    RelationshipDataSource.CRYPTO_ROBUSTNESS_SUMMARY: RelationshipSourceDefinition(
-        source_type=RelationshipDataSource.CRYPTO_ROBUSTNESS_SUMMARY,
-        contexts=(RelationshipContext.MICRO, RelationshipContext.REGIME),
-        path="runtime/workbench/crypto_smoke/<run_id>/robustness_summary.json:<check>",
-        authority="Run-local robustness pack and required-gate summary.",
-        notes="Review source for failed/pending/pass robustness checks; not a candidate promotion decision.",
-        empirical=True,
-    ),
-    RelationshipDataSource.CRYPTO_EDGE_PACKET_STATUS: RelationshipSourceDefinition(
-        source_type=RelationshipDataSource.CRYPTO_EDGE_PACKET_STATUS,
-        contexts=(RelationshipContext.MICRO, RelationshipContext.REGIME),
-        path="runtime/workbench/crypto_smoke/<run_id>/status.json:bitcoin_edge_packets",
-        authority="Run-local Bitcoin node edge packet status captured by the Workbench.",
-        notes="Market-state/PIT feature timing evidence only; not venue submit-to-ack execution evidence.",
-        empirical=True,
-    ),
-    RelationshipDataSource.CRYPTO_DOUBLE_WF_ARTIFACT: RelationshipSourceDefinition(
-        source_type=RelationshipDataSource.CRYPTO_DOUBLE_WF_ARTIFACT,
-        contexts=(RelationshipContext.MICRO, RelationshipContext.REGIME),
-        path="runtime/workbench/crypto_smoke/<run_id>/<replay_wf1_matrix.json|replay_wf2_matrix.json|walk_forward_correlation.json>",
-        authority="Run-local double walk-forward replay artifacts.",
-        notes="Review source for independent replay matrix agreement/correlation diagnostics.",
-        empirical=True,
     ),
     RelationshipDataSource.ECONOMIC_EVENT_UNIVERSE: RelationshipSourceDefinition(
         source_type=RelationshipDataSource.ECONOMIC_EVENT_UNIVERSE,
@@ -303,46 +258,6 @@ def _source_ref_errors(
         if not re.fullmatch(r"docs/references/MANIFEST\.md:[A-Za-z0-9_.-]+", source_ref):
             return [f"evidence[{index}].source_ref must start with docs/references/MANIFEST.md:"]
         return []
-    if source_type == RelationshipDataSource.CRYPTO_SMOKE_REPORT:
-        return _crypto_source_ref_errors(
-            index,
-            source_ref,
-            r"runtime/workbench/crypto_smoke/[^/\s]+/smoke_reports/[^/\s]+\.json",
-            repo_root,
-            "runtime/workbench/crypto_smoke/<run_id>/smoke_reports/<candidate_id>.json",
-        )
-    if source_type == RelationshipDataSource.CRYPTO_VALIDATION_REPORT:
-        return _crypto_source_ref_errors(
-            index,
-            source_ref,
-            r"runtime/workbench/crypto_smoke/[^/\s]+/validation_reports/[^/\s]+\.json",
-            repo_root,
-            "runtime/workbench/crypto_smoke/<run_id>/validation_reports/<candidate_id>.json",
-        )
-    if source_type == RelationshipDataSource.CRYPTO_ROBUSTNESS_SUMMARY:
-        return _crypto_source_ref_errors(
-            index,
-            source_ref,
-            r"runtime/workbench/crypto_smoke/[^/\s]+/robustness_summary\.json:[A-Za-z0-9_.=-]+",
-            repo_root,
-            "runtime/workbench/crypto_smoke/<run_id>/robustness_summary.json:<check>",
-        )
-    if source_type == RelationshipDataSource.CRYPTO_EDGE_PACKET_STATUS:
-        return _crypto_source_ref_errors(
-            index,
-            source_ref,
-            r"runtime/workbench/crypto_smoke/[^/\s]+/status\.json:bitcoin_edge_packets",
-            repo_root,
-            "runtime/workbench/crypto_smoke/<run_id>/status.json:bitcoin_edge_packets",
-        )
-    if source_type == RelationshipDataSource.CRYPTO_DOUBLE_WF_ARTIFACT:
-        return _crypto_source_ref_errors(
-            index,
-            source_ref,
-            r"runtime/workbench/crypto_smoke/[^/\s]+/(replay_wf1_matrix|replay_wf2_matrix|walk_forward_correlation)\.json",
-            repo_root,
-            "runtime/workbench/crypto_smoke/<run_id>/<double-wf-artifact>.json",
-        )
     if source_type == RelationshipDataSource.ECONOMIC_EVENT_UNIVERSE:
         if not re.fullmatch(
             r"packages/economic_event_universe/config/event_universe\.yaml:[A-Z0-9_]+",
@@ -407,23 +322,6 @@ def _source_ref_errors(
             return [f"evidence[{index}].source_ref cache file is missing"]
         return _gdelt_cache_record_errors(index, cache_path, event_id)
     return [f"evidence[{index}].source_type has no source_ref rule"]
-
-
-def _crypto_source_ref_errors(
-    index: int,
-    source_ref: str,
-    pattern: str,
-    repo_root: Path | None,
-    expected: str,
-) -> list[str]:
-    if not re.fullmatch(pattern, source_ref):
-        return [f"evidence[{index}].source_ref must match {expected}"]
-    if repo_root is None:
-        return []
-    rel_path = source_ref.split(":", 1)[0]
-    if not (repo_root / rel_path).is_file():
-        return [f"evidence[{index}].source_ref file is missing"]
-    return []
 
 
 def _gdelt_cache_record_errors(index: int, cache_path: Path, event_id: str) -> list[str]:
