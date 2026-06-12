@@ -17,6 +17,8 @@ Log "=== nightly start"
 Log "catalog rc=$LASTEXITCODE"
 & pwsh -NoProfile -File (Join-Path $repo "scripts\sync_lake_b2.ps1") -Stage all *>> $log
 Log "sync rc=$LASTEXITCODE"
+& pwsh -NoProfile -File (Join-Path $repo "scripts\archive_chi404_capture.ps1") *>> $log
+Log "capture-archive rc=$LASTEXITCODE"
 & $py (Join-Path $repo "scripts\data_doctor.py") *>> $log
 Log "doctor rc=$LASTEXITCODE"
 Log "=== nightly done"
