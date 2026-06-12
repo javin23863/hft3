@@ -44,6 +44,7 @@ from options_lane.studies.fixing_window_study import (
     _pa_last_price,
     _pa_first_price,
     _pa_imbalance,
+    _date_from_dbn_name,
     measure_file_from_arrays,
     run_measure_dbn,
     load_expiry_oi,
@@ -793,6 +794,39 @@ class TestMeasureFileFromArrays:
         # markout_5m uses last trade in [fix_end, mark_5m] = 5015
         assert rec["markout_5m"] is not None
         assert abs(rec["markout_5m"] - (5015.0 - 5000.0)) < 1e-6
+
+
+# ---------------------------------------------------------------------------
+# Unit tests: DBN filename parsing + dedupe
+# ---------------------------------------------------------------------------
+
+class TestDbnFilenameParsing:
+    def test_mbo_pattern(self) -> None:
+        assert _date_from_dbn_name("ES_fixing_2024-06-12.dbn.zst") == "2024-06-12"
+
+    def test_trades_pattern(self) -> None:
+        assert _date_from_dbn_name("ES_fixing_trades_2024-06-12.dbn.zst") == "2024-06-12"
+
+    def test_unparseable_returns_none(self) -> None:
+        assert _date_from_dbn_name("ES_fixing_garbage.dbn.zst") is None
+
+    def test_dedupe_same_date_processed_once(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """MBO + trades file for same date → only one record (first file wins)."""
+        date = "2024-06-12"
+        (tmp_path / f"ES_fixing_{date}.dbn.zst").write_bytes(b"")
+        (tmp_path / f"ES_fixing_trades_{date}.dbn.zst").write_bytes(b"")
+
+        fix_start = _ns_on_date(date, 14, 59, 30)
+        arrays = _make_arrays([
+            {"ts_ns": fix_start + 1_000_000_000, "price": 5000.0, "size": 1.0, "aggressor_sign": 1},
+        ])
+
+        import options_lane.studies.dbn_trades as dbn_trades
+        monkeypatch.setattr(dbn_trades, "load_trades_from_dbn", lambda _p: arrays)
+
+        results = run_measure_dbn(dbn_dir=tmp_path, out_path=None)
+        assert len(results) == 1
+        assert results[0]["date"] == date
 
 
 # ---------------------------------------------------------------------------
