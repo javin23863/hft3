@@ -164,6 +164,7 @@ def build_work_units(
 
     work: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
+    _empty_cache: dict[str, bool] = {}  # npz_path -> is-empty (built-time skip)
     # max_events caps events that actually produce work units — truncating
     # the raw rows first would just select the alphabetically-first events
     # regardless of whether their NPZ exists.
@@ -215,6 +216,16 @@ def build_work_units(
                         "latency_ms": band,
                         "reason": "npz_missing",
                     })
+                elif _is_empty_npz(npz_path, _empty_cache):
+                    # Present-but-empty NPZ: skip at BUILD time so it never spawns
+                    # a worker (which would pay ~6s of replay setup just to discover
+                    # zero events). This is what keeps the run from grinding.
+                    skipped.append({
+                        "event_id": event_id,
+                        "symbol": symbol,
+                        "latency_ms": band,
+                        "reason": "empty_npz",
+                    })
                 else:
                     work.append({
                         "event_id": event_id,
@@ -227,6 +238,29 @@ def build_work_units(
                     events_with_work.add(event_id)
 
     return work, skipped
+
+
+# Real-data NPZ are large (hundreds of KB+); a zero-event shell is ~263 bytes.
+# Only sub-threshold files are actually opened to confirm; big files are never
+# loaded here (assumed non-empty — the worker handles them).
+_EMPTY_NPZ_MAX_BYTES = 4096
+
+
+def _is_empty_npz(path: str, cache: dict[str, bool]) -> bool:
+    if path in cache:
+        return cache[path]
+    empty = False
+    try:
+        if os.path.getsize(path) < _EMPTY_NPZ_MAX_BYTES:
+            import numpy as np
+
+            with np.load(path, allow_pickle=True) as d:
+                arr = d["data"] if "data" in getattr(d, "files", []) else None
+                empty = arr is not None and arr.shape[0] == 0
+    except Exception:
+        empty = False  # uncertain -> don't skip; let the worker decide
+    cache[path] = empty
+    return empty
 
 
 # ---------------------------------------------------------------------------
@@ -341,6 +375,11 @@ def _worker(unit: dict[str, Any]) -> dict[str, Any]:
         }
     except Exception as exc:  # noqa: BLE001
         elapsed = time.monotonic() - t0
+        msg = str(exc)
+        # An empty NPZ (present file, zero events) is NOT a code error — it is
+        # missing data. Mark it a SKIP so it never counts as an ERROR (which is
+        # what made a whole run look broken / grind on bad data).
+        is_empty = "zero events" in msg
         return {
             "run_id": run_id,
             "event_id": event_id,
@@ -350,7 +389,8 @@ def _worker(unit: dict[str, Any]) -> dict[str, Any]:
             "event_type": unit.get("event_type", ""),
             "release_date": unit.get("release_date", ""),
             "elapsed_s": round(elapsed, 3),
-            "error": str(exc),
+            "error": None if is_empty else msg,
+            "skip_reason": "empty_npz" if is_empty else None,
             "hypotheses": [],
         }
 
@@ -1236,25 +1276,77 @@ def main(argv: list[str] | None = None) -> int:
     run_start_utc = datetime.now(timezone.utc).isoformat()
     t_start = time.monotonic()
 
+    def _unit_status(r: dict[str, Any]) -> str:
+        if r.get("skip_reason"):
+            return "SKIP"
+        if r.get("error"):
+            return "ERROR"
+        return "ok"
+
+    # Fail-fast: never grind a whole universe when the CODE is broken. Empty NPZ
+    # now SKIP instantly (no 12h grind), so only a pile of real ERRORs with zero
+    # OK indicates a broken run — abort on that. Skips never trigger this (an
+    # all-empty slice just finishes fast). Error-based ⇒ it also never fires on a
+    # healthy run, so the pool is never torn down mid-flight.
+    failfast_errors = int(os.environ.get("HFT3_UNIVERSE_FAILFAST_ERRORS", "100"))
+    ok_count = 0
+    err_count = 0
+    aborted = False
+
+    def _should_abort() -> bool:
+        return err_count >= failfast_errors and ok_count == 0
+
+    unit_results: list[dict[str, Any]] = []
     if args.workers == 1:
         # Sequential path — avoids spawn overhead in tests and single-core envs
-        unit_results: list[dict[str, Any]] = []
         for i, unit in enumerate(work_units, 1):
-            print(f"  [{i}/{len(work_units)}] {unit['event_id']} {unit['symbol']} {unit['latency_ms']}ms", flush=True)
-            unit_results.append(_worker(unit))
+            r = _worker(unit)
+            st = _unit_status(r)
+            ok_count += st == "ok"
+            err_count += st == "ERROR"
+            print(f"  [{i}/{len(work_units)}] {unit['event_id']} {unit['symbol']} {unit['latency_ms']}ms {st}", flush=True)
+            unit_results.append(r)
+            if _should_abort():
+                aborted = True
+                break
     else:
         ctx = mp.get_context("spawn")
         with ctx.Pool(processes=args.workers) as pool:
-            unit_results = []
             for i, result in enumerate(pool.imap_unordered(_worker, work_units), 1):
-                status = "ERROR" if result.get("error") else "ok"
+                st = _unit_status(result)
+                ok_count += st == "ok"
+                err_count += st == "ERROR"
                 print(
                     f"  [{i}/{len(work_units)}] {result['event_id']} "
                     f"{result['symbol']} {result['latency_ms']}ms "
-                    f"elapsed={result['elapsed_s']}s {status}",
+                    f"elapsed={result['elapsed_s']}s {st}",
                     flush=True,
                 )
                 unit_results.append(result)
+                if _should_abort():
+                    aborted = True
+                    break  # context-manager __exit__ tears the pool down safely
+
+    if aborted:
+        n = len(unit_results)
+        n_err = sum(1 for u in unit_results if u.get("error"))
+        n_skip = sum(1 for u in unit_results if u.get("skip_reason"))
+        msg = (f"FAIL-FAST ABORT: {n_err} errors with 0 OK after {n} units. "
+               f"The replay path is broken (not empty data — empties skip). "
+               f"Not grinding the remaining {len(work_units) - n} units. "
+               f"Check the traceback above / HFT3_NPZ_ROOT.")
+        print("\n" + "=" * 80 + f"\n{msg}\n" + "=" * 80, flush=True)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "universe_result.json").write_text(json.dumps({
+            "schema": "universe_result_v1",
+            "status": "ABORTED_NO_PROGRESS",
+            "abort_reason": msg,
+            "run_end_utc": datetime.now(timezone.utc).isoformat(),
+            "units_processed": n, "units_ok": 0, "units_errored": n_err, "units_skipped": n_skip,
+            "npz_root": os.environ.get("HFT3_NPZ_ROOT", "(default repo/data/npz)"),
+        }, indent=2), encoding="utf-8")
+        print(f"Wrote {out_dir / 'universe_result.json'} (status ABORTED_NO_PROGRESS)")
+        return 2
 
     total_elapsed = time.monotonic() - t_start
     run_end_utc = datetime.now(timezone.utc).isoformat()
