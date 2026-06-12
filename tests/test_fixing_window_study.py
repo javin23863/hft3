@@ -5,6 +5,8 @@ Conventions:
 - Synthetic NPZ files are built with a minimal structured array that satisfies
   the field requirements of npz_feed.py: {ev, local_ts, px, qty, order_id}
 - HFT3_NPZ_ROOT is pointed to tmp_path so tests never touch data/npz/
+- DBN integration tests skip when real files are absent from
+  C:/hft3-lake/options/fixing_mbo/
 """
 
 from __future__ import annotations
@@ -38,6 +40,12 @@ from options_lane.studies.fixing_window_study import (
     _is_trade,
     _last_trade_price,
     _window_bounds_ns,
+    _pa_vwap,
+    _pa_last_price,
+    _pa_first_price,
+    _pa_imbalance,
+    measure_file_from_arrays,
+    run_measure_dbn,
     load_expiry_oi,
     measure_file,
     run_inventory,
@@ -583,3 +591,303 @@ def test_output_not_under_data_npz(tmp_path: Path) -> None:
     # Both should be under research_cards/
     assert "research_cards" in str(inv_path)
     assert "research_cards" in str(meas_path)
+
+
+# ---------------------------------------------------------------------------
+# Helpers for plain-array tests
+# ---------------------------------------------------------------------------
+
+def _make_arrays(rows: list[dict]) -> dict:
+    """Build plain-array dict (same shape as dbn_trades.load_trades_from_dbn output)."""
+    n = len(rows)
+    arrays = {
+        "ts_ns": np.zeros(n, dtype=np.int64),
+        "price": np.zeros(n, dtype=np.float64),
+        "size": np.zeros(n, dtype=np.float64),
+        "aggressor_sign": np.zeros(n, dtype=np.int8),
+    }
+    for i, r in enumerate(rows):
+        arrays["ts_ns"][i] = r["ts_ns"]
+        arrays["price"][i] = r["price"]
+        arrays["size"][i] = r.get("size", 1.0)
+        arrays["aggressor_sign"][i] = r.get("aggressor_sign", 0)
+    return arrays
+
+
+# ---------------------------------------------------------------------------
+# Unit tests: pure plain-array helpers (_pa_*)
+# ---------------------------------------------------------------------------
+
+class TestPaVwap:
+    def test_simple(self) -> None:
+        date = "2024-03-15"
+        fix_start = _ns_on_date(date, 14, 59, 30)
+        fix_end = _ns_on_date(date, 15, 0, 0)
+        arrays = _make_arrays([
+            {"ts_ns": fix_start + 0, "price": 5000.0, "size": 100.0, "aggressor_sign": 1},
+            {"ts_ns": fix_start + 1_000_000_000, "price": 5010.0, "size": 200.0, "aggressor_sign": 1},
+        ])
+        vwap = _pa_vwap(arrays, fix_start, fix_end)
+        expected = (100 * 5000 + 200 * 5010) / 300
+        assert abs(vwap - expected) < 1e-6
+
+    def test_empty_window_is_nan(self) -> None:
+        arrays = _make_arrays([
+            {"ts_ns": 1_000, "price": 5000.0, "size": 1.0},
+        ])
+        vwap = _pa_vwap(arrays, 2_000, 3_000)
+        assert math.isnan(vwap)
+
+    def test_outside_excluded(self) -> None:
+        date = "2024-03-15"
+        fix_start = _ns_on_date(date, 14, 59, 30)
+        fix_end = _ns_on_date(date, 15, 0, 0)
+        arrays = _make_arrays([
+            {"ts_ns": fix_start + 1, "price": 5100.0, "size": 1.0},
+            {"ts_ns": fix_end + 1, "price": 9999.0, "size": 1.0},  # outside
+        ])
+        vwap = _pa_vwap(arrays, fix_start, fix_end)
+        assert abs(vwap - 5100.0) < 1e-9
+
+
+class TestPaImbalance:
+    def test_all_buy(self) -> None:
+        date = "2024-06-12"
+        scan_start = _ns_on_date(date, 14, 55, 0)
+        scan_end = _ns_on_date(date, 15, 5, 0)
+        arrays = _make_arrays([
+            {"ts_ns": scan_start + i * 1_000_000_000, "price": 5000.0, "size": 10.0, "aggressor_sign": 1}
+            for i in range(3)
+        ])
+        imb, count, vol = _pa_imbalance(arrays, scan_start, scan_end)
+        assert abs(imb - 1.0) < 1e-9
+        assert count == 3
+        assert vol == 30.0
+
+    def test_all_sell(self) -> None:
+        date = "2024-06-12"
+        scan_start = _ns_on_date(date, 14, 55, 0)
+        scan_end = _ns_on_date(date, 15, 5, 0)
+        arrays = _make_arrays([
+            {"ts_ns": scan_start + i * 1_000_000_000, "price": 5000.0, "size": 10.0, "aggressor_sign": -1}
+            for i in range(3)
+        ])
+        imb, count, vol = _pa_imbalance(arrays, scan_start, scan_end)
+        assert abs(imb - (-1.0)) < 1e-9
+
+    def test_balanced(self) -> None:
+        date = "2024-06-12"
+        scan_start = _ns_on_date(date, 14, 55, 0)
+        scan_end = _ns_on_date(date, 15, 5, 0)
+        arrays = _make_arrays([
+            {"ts_ns": scan_start + i * 1_000_000_000, "price": 5000.0, "size": 10.0,
+             "aggressor_sign": (1 if i % 2 == 0 else -1)}
+            for i in range(4)
+        ])
+        imb, count, vol = _pa_imbalance(arrays, scan_start, scan_end)
+        assert abs(imb) < 1e-9
+
+    def test_empty_is_nan(self) -> None:
+        arrays = _make_arrays([])
+        imb, count, vol = _pa_imbalance(arrays, 0, 10_000_000_000)
+        assert math.isnan(imb)
+        assert count == 0
+        assert vol == 0.0
+
+
+class TestPaLastFirst:
+    def test_last_price(self) -> None:
+        arrays = _make_arrays([
+            {"ts_ns": 100, "price": 5000.0},
+            {"ts_ns": 200, "price": 5010.0},
+            {"ts_ns": 300, "price": 5020.0},
+        ])
+        assert abs(_pa_last_price(arrays, 0, 200) - 5010.0) < 1e-9
+        assert abs(_pa_last_price(arrays, 0, 300) - 5020.0) < 1e-9
+
+    def test_first_price(self) -> None:
+        arrays = _make_arrays([
+            {"ts_ns": 100, "price": 5000.0},
+            {"ts_ns": 200, "price": 5010.0},
+        ])
+        assert abs(_pa_first_price(arrays, 0, 300) - 5000.0) < 1e-9
+
+    def test_no_match_is_nan(self) -> None:
+        arrays = _make_arrays([{"ts_ns": 1000, "price": 5000.0}])
+        assert math.isnan(_pa_last_price(arrays, 2000, 3000))
+        assert math.isnan(_pa_first_price(arrays, 2000, 3000))
+
+
+class TestMeasureFileFromArrays:
+    def test_vwap_and_markout(self) -> None:
+        date = "2024-06-12"
+        fix_start = _ns_on_date(date, 14, 59, 30)
+        fix_end = _ns_on_date(date, 15, 0, 0)
+        scan_start = _ns_on_date(date, 14, 55, 0)
+
+        arrays = _make_arrays([
+            # pre-window
+            {"ts_ns": scan_start + 1_000_000_000, "price": 4995.0, "size": 1.0, "aggressor_sign": 1},
+            # fix window
+            {"ts_ns": fix_start + 5_000_000_000, "price": 5000.0, "size": 2.0, "aggressor_sign": 1},
+            {"ts_ns": fix_start + 10_000_000_000, "price": 5002.0, "size": 1.0, "aggressor_sign": -1},
+            # post-window +1min
+            {"ts_ns": fix_end + 60_000_000_000, "price": 5004.0, "size": 1.0, "aggressor_sign": 1},
+        ])
+
+        file_date_utc = datetime(2024, 6, 12, tzinfo=timezone.utc)
+        rec = measure_file_from_arrays(arrays, "ES.v.0", "2024-06-12", file_date_utc)
+
+        expected_vwap = (2 * 5000 + 1 * 5002) / 3
+        assert rec["vwap_30s"] is not None
+        assert abs(rec["vwap_30s"] - expected_vwap) < 1e-6
+
+        # markout_2m: last trade in [fix_end, fix_end+120s] = 5004
+        assert rec["markout_2m"] is not None
+        assert abs(rec["markout_2m"] - (5004.0 - expected_vwap)) < 1e-6
+
+        assert rec["oi"] is None
+        assert rec["source"] == "dbn"
+
+    def test_no_post_window_markouts_are_none(self) -> None:
+        date = "2024-06-12"
+        fix_start = _ns_on_date(date, 14, 59, 30)
+        arrays = _make_arrays([
+            {"ts_ns": fix_start + 5_000_000_000, "price": 5050.0, "size": 1.0, "aggressor_sign": 1},
+            {"ts_ns": fix_start + 10_000_000_000, "price": 5060.0, "size": 1.0, "aggressor_sign": 1},
+        ])
+        file_date_utc = datetime(2024, 6, 12, tzinfo=timezone.utc)
+        rec = measure_file_from_arrays(arrays, "ES.v.0", "2024-06-12", file_date_utc)
+        assert rec["vwap_30s"] is not None
+        assert rec["markout_30s"] is None
+        assert rec["markout_2m"] is None
+        assert rec["markout_5m"] is None
+
+    def test_pre_drift_computed(self) -> None:
+        date = "2024-06-12"
+        scan_start = _ns_on_date(date, 14, 55, 0)
+        fix_start = _ns_on_date(date, 14, 59, 30)
+        arrays = _make_arrays([
+            {"ts_ns": scan_start + 1_000_000_000, "price": 5000.0, "size": 1.0, "aggressor_sign": 1},
+            {"ts_ns": scan_start + 200_000_000_000, "price": 5010.0, "size": 1.0, "aggressor_sign": 1},
+        ])
+        file_date_utc = datetime(2024, 6, 12, tzinfo=timezone.utc)
+        rec = measure_file_from_arrays(arrays, "ES.v.0", "2024-06-12", file_date_utc)
+        assert rec["pre_window_drift"] is not None
+        assert abs(rec["pre_window_drift"] - 10.0) < 1e-9
+
+    def test_forward_fill_markout_5m(self) -> None:
+        """When last trade < mark_5m endpoint, use last trade (forward-fill)."""
+        date = "2024-06-12"
+        fix_start = _ns_on_date(date, 14, 59, 30)
+        fix_end = _ns_on_date(date, 15, 0, 0)
+        mark_5m = _ns_on_date(date, 15, 5, 0)
+        # Place a trade 2 minutes after fix_end, well before 15:05
+        trade_ts = fix_end + 120_000_000_000  # +2min
+        arrays = _make_arrays([
+            {"ts_ns": fix_start + 1_000_000_000, "price": 5000.0, "size": 1.0, "aggressor_sign": 1},
+            {"ts_ns": trade_ts, "price": 5015.0, "size": 1.0, "aggressor_sign": 1},
+        ])
+        file_date_utc = datetime(2024, 6, 12, tzinfo=timezone.utc)
+        rec = measure_file_from_arrays(arrays, "ES.v.0", "2024-06-12", file_date_utc)
+        # markout_5m uses last trade in [fix_end, mark_5m] = 5015
+        assert rec["markout_5m"] is not None
+        assert abs(rec["markout_5m"] - (5015.0 - 5000.0)) < 1e-6
+
+
+# ---------------------------------------------------------------------------
+# Integration tests: real DBN files
+# ---------------------------------------------------------------------------
+
+_DBN_DIR = Path(r"C:\hft3-lake\options\fixing_mbo")
+_DBN_FILES = sorted(_DBN_DIR.glob("ES_fixing_*.dbn.zst")) if _DBN_DIR.exists() else []
+_HAS_DBN = len(_DBN_FILES) > 0
+
+_skip_no_dbn = pytest.mark.skipif(
+    not _HAS_DBN,
+    reason="Real DBN files absent from C:/hft3-lake/options/fixing_mbo/",
+)
+
+
+class TestDbnTradesIntegration:
+    @_skip_no_dbn
+    def test_load_nonempty(self) -> None:
+        """load_trades_from_dbn returns nonempty arrays for a real file."""
+        from options_lane.studies.dbn_trades import load_trades_from_dbn
+        arrays = load_trades_from_dbn(_DBN_FILES[0])
+        assert len(arrays["ts_ns"]) > 0
+        assert len(arrays["price"]) == len(arrays["ts_ns"])
+        assert len(arrays["size"]) == len(arrays["ts_ns"])
+        assert len(arrays["aggressor_sign"]) == len(arrays["ts_ns"])
+
+    @_skip_no_dbn
+    def test_prices_in_es_range(self) -> None:
+        """Trade prices must be in plausible ES index range (1000 < p < 20000)."""
+        from options_lane.studies.dbn_trades import load_trades_from_dbn
+        arrays = load_trades_from_dbn(_DBN_FILES[0])
+        px = arrays["price"]
+        assert (px > 1000).all(), f"Min price {px.min()} below ES floor"
+        assert (px < 20000).all(), f"Max price {px.max()} above ES ceiling"
+
+    @_skip_no_dbn
+    def test_timestamps_in_expected_utc_window(self) -> None:
+        """ts_ns values must fall within the 14:55–15:05 CT UTC window for the file date."""
+        from options_lane.studies.dbn_trades import load_trades_from_dbn
+        # Use the first file and derive its expected window
+        fpath = _DBN_FILES[0]
+        date_part = fpath.name.removeprefix("ES_fixing_").removesuffix(".dbn.zst")
+        file_date = datetime.strptime(date_part, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        scan_start, _, _, _, _, mark_5m = _window_bounds_ns(file_date)
+
+        arrays = load_trades_from_dbn(fpath)
+        ts = arrays["ts_ns"]
+        assert ts.min() >= scan_start, f"ts_ns min {ts.min()} < scan_start {scan_start}"
+        assert ts.max() <= mark_5m, f"ts_ns max {ts.max()} > mark_5m {mark_5m}"
+
+    @_skip_no_dbn
+    def test_aggressor_signs_valid(self) -> None:
+        """aggressor_sign values are in {-1, 0, +1}."""
+        from options_lane.studies.dbn_trades import load_trades_from_dbn
+        arrays = load_trades_from_dbn(_DBN_FILES[0])
+        signs = set(arrays["aggressor_sign"].tolist())
+        assert signs <= {-1, 0, 1}, f"Unexpected sign values: {signs}"
+
+    @_skip_no_dbn
+    def test_vwap_finite_for_real_file(self) -> None:
+        """VWAP over the 30-second fix window is finite for a real file."""
+        from options_lane.studies.dbn_trades import load_trades_from_dbn
+        fpath = _DBN_FILES[0]
+        date_part = fpath.name.removeprefix("ES_fixing_").removesuffix(".dbn.zst")
+        file_date = datetime.strptime(date_part, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        _, fix_start, fix_end, _, _, _ = _window_bounds_ns(file_date)
+
+        arrays = load_trades_from_dbn(fpath)
+        vwap = _pa_vwap(arrays, fix_start, fix_end)
+        assert math.isfinite(vwap), f"VWAP is not finite: {vwap}"
+        assert 1000 < vwap < 20000, f"VWAP {vwap} outside ES range"
+
+
+class TestMeasureDbnIntegration:
+    @_skip_no_dbn
+    def test_measure_dbn_produces_output_file(self, tmp_path: Path) -> None:
+        """run_measure_dbn with max_files=3 writes an NDJSON output file with >=1 record."""
+        out_path = tmp_path / "dbn_measure_test.ndjson"
+        results = run_measure_dbn(dbn_dir=_DBN_DIR, out_path=out_path, max_files=3)
+        assert len(results) >= 1, "Expected at least one measurement record"
+        assert out_path.exists(), "Output file not created"
+        lines = [l for l in out_path.read_text(encoding="utf-8").splitlines() if l.strip()]
+        assert len(lines) >= 1, "Output file has no lines"
+        # Each line must be valid JSON with expected fields
+        rec = json.loads(lines[0])
+        assert "vwap_30s" in rec
+        assert "imbalance_signed" in rec
+        assert "date" in rec
+        assert rec["source"] == "dbn"
+
+    @_skip_no_dbn
+    def test_measure_dbn_vwap_finite(self, tmp_path: Path) -> None:
+        """All records from run_measure_dbn have finite vwap_30s."""
+        results = run_measure_dbn(dbn_dir=_DBN_DIR, out_path=None, max_files=3)
+        for rec in results:
+            assert rec["vwap_30s"] is not None, f"vwap_30s is None for {rec['date']}"
+            assert math.isfinite(rec["vwap_30s"]), f"vwap_30s not finite for {rec['date']}"

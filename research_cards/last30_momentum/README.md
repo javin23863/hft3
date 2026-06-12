@@ -1,6 +1,37 @@
 # Last-30-min momentum study (WS-1.3, Baltussen revalidation) — run log
 
-Stage: harness validated; **question not answerable from owned lake**.
+## GATE VERDICT 2026-06-13: **FAIL — dead permanently** (per plan WS-1.3 rule)
+
+Full-sample run on purchased ES ohlcv-1m (`measure-ohlcv`, 2021-01-01 → 2026-06-12,
+1,356 trading days, 339 skipped (Sundays/holidays/missing boundary bars), 1.3-tick
+round-trip cost): `last30_momentum_measure_ohlcv_20260612T195000Z.json`
+
+| Year | n | hit rate | mean net ticks/day | t (screening) |
+|---|---|---|---|---|
+| 2021 | 251 | 0.482 | −0.09 | −0.04 |
+| 2022 | 250 | 0.516 | **+6.51** | +1.70 |
+| 2023 | 248 | 0.476 | −1.98 | −0.87 |
+| 2024 | 249 | 0.490 | −5.48 | −1.74 |
+| 2025 | 247 | 0.393 | −8.17 | −2.23 |
+| 2026 | 111 | 0.441 | −4.67 | −1.07 |
+| **All** | **1,356** | **0.469** | **−2.06** | **−1.53** |
+
+Sign-of-day momentum into the last 30 minutes has NEGATIVE expectancy net of a
+1.3-tick cost over the revalidation window; only 2022 was positive, and the
+effect has been inverted since 2023. Consequences:
+- **WS-1.3 closed: FAIL.** Plan rule: "Fail ⇒ dead permanently."
+- **WS-3.2 (last-30-min momentum overlay on the futures lane) is dead** — it was
+  conditional on this gate.
+- Observation (NOT a licensed hypothesis — post-hoc, would need its own
+  pre-registered card): 2025's 39.3% hit rate suggests reversal, not momentum,
+  in the recent regime. Recorded for completeness only.
+
+Screening t-stat only (sqrt-n, no DSR/PBO); a negative-mean result needs no
+gauntlet to fail the gate.
+
+---
+
+Earlier stage notes (2026-06-12): harness validated; question was not answerable from owned lake.
 
 ## Run 2026-06-12
 

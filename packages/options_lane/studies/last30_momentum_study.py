@@ -632,14 +632,297 @@ def _default_out(subcommand: str, repo_root: Path) -> Path:
     return repo_root / "research_cards" / "last30_momentum" / filename
 
 
+def _resolve_root(args: argparse.Namespace) -> Path:
+    if args.root:
+        return Path(args.root)
+    return npz_root(_REPO_ROOT)
+
+
+def _cmd_inventory(args: argparse.Namespace) -> int:
+    out_path = Path(args.out) if args.out else _default_out("inventory", _REPO_ROOT)
+    run_inventory(_REPO_ROOT, out_path=out_path)
+    return 0
+
+
+def _cmd_measure(args: argparse.Namespace) -> int:
+    cost = getattr(args, "cost_ticks", _DEFAULT_COST_TICKS)
+    out_path = Path(args.out) if args.out else _default_out("measure", _REPO_ROOT)
+    run_measure(_REPO_ROOT, out_path=out_path, cost_ticks=cost)
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# OHLCV path — measure-ohlcv subcommand
+# ---------------------------------------------------------------------------
+
+_DEFAULT_OHLCV_PATH = Path(
+    r"C:\hft3-lake\options\ohlcv\ES_v0_ohlcv1m_20210101_20260612.dbn.zst"
+)
+
+# Bar OPEN timestamp convention (verified from databento_dbn 0.79.0):
+# OHLCVMsg.ts_event = bar OPEN time in UTC ns.
+# A bar with ts_event=T opens at T and closes at T+60s.
+# Therefore:
+#   signal boundary 08:30 CT: bar ts_event=08:29 CT (opens 08:29, closes 08:30)
+#   signal boundary 14:30 CT: bar ts_event=14:29 CT (opens 14:29, closes 14:30)
+#   target boundary 15:00 CT: bar ts_event=14:59 CT (opens 14:59, closes 15:00)
+#
+# The close of the 14:29 CT bar == last trade at or before 14:30 CT.
+# This matches the NPZ forward-fill convention (last trade AT OR BEFORE boundary).
+# The close of the 08:29 CT bar == last trade at or before 08:30 CT.
+# The close of the 14:59 CT bar == last trade at or before 15:00 CT.
+# No off-by-one: selecting bar by OPEN time, reading its close gives the
+# correct boundary price consistent with forward-fill semantics.
+
+_SIGNAL_OPEN_BAR_H = 8   # bar ts_event = 08:29 CT
+_SIGNAL_OPEN_BAR_M = 29
+_SIGNAL_END_BAR_H = 14   # bar ts_event = 14:29 CT
+_SIGNAL_END_BAR_M = 29
+_TARGET_END_BAR_H = 14   # bar ts_event = 14:59 CT
+_TARGET_END_BAR_M = 59
+
+
+def _split_bars_by_day(
+    ts_ns: np.ndarray,
+    start_date_str: str | None = None,
+    end_date_str: str | None = None,
+) -> dict[str, tuple[int, int]]:
+    """Split bar array indices by CME trading day (date of bar in CT).
+
+    Returns a dict mapping date string (ISO) -> (lo_idx, hi_idx) where
+    ts_ns[lo_idx:hi_idx] contains all bars whose CT date equals that date.
+    Bars are assigned to CT date by converting ts_ns to America/Chicago.
+
+    start_date_str / end_date_str are inclusive ISO date filters (CT date).
+    None means no bound on that side.
+    """
+    from datetime import date as _date
+
+    if len(ts_ns) == 0:
+        return {}
+
+    # Vectorised conversion: ts_ns (UTC) -> CT wall-clock dates
+    # We compute UTC offset (in hours) for each bar using DST rules.
+    # Strategy: convert each ts_ns to a Python datetime in CT to get CT date.
+    # For 1.9M bars this loops; use numpy for the UTC->seconds part then
+    # batch-convert to avoid per-row Python datetime overhead.
+    seconds = ts_ns / 1_000_000_000  # float64 UTC seconds
+    # For DST determination we need to call into zoneinfo per unique date.
+    # The bar array is sorted by ts_event so we can batch by day boundary changes.
+
+    # Map each element to its CT date string using vectorised approach:
+    # Convert to pandas for tz-aware grouping (pandas already imported via databento,
+    # but we should not assume it's always there). Use a lightweight manual approach.
+    #
+    # We exploit that for any bar, its UTC hour is between 0 and 23 (minute bar),
+    # and CT is UTC-5 (CDT) or UTC-6 (CST).  We compute the floor(day) boundary
+    # changes by checking DST offset only when the UTC hour crosses midnight±7h.
+
+    _tz = _TZ_CT
+    prev_date_str = None
+    day_starts: list[tuple[str, int]] = []  # (date_str, start_idx)
+
+    for i, ts in enumerate(ts_ns):
+        # Convert ts_ns to CT wall-clock date
+        dt_utc = datetime.fromtimestamp(float(ts) / 1_000_000_000, tz=timezone.utc)
+        dt_ct = dt_utc.astimezone(_tz)
+        ds = dt_ct.date().isoformat()
+        if ds != prev_date_str:
+            day_starts.append((ds, i))
+            prev_date_str = ds
+
+    # Build ranges
+    result: dict[str, tuple[int, int]] = {}
+    n = len(ts_ns)
+    for k, (ds, lo) in enumerate(day_starts):
+        hi = day_starts[k + 1][1] if k + 1 < len(day_starts) else n
+        # Apply date filter
+        if start_date_str is not None and ds < start_date_str:
+            continue
+        if end_date_str is not None and ds > end_date_str:
+            continue
+        result[ds] = (lo, hi)
+
+    return result
+
+
+def _find_bar_close(
+    ts_ns: np.ndarray,
+    close: np.ndarray,
+    lo_idx: int,
+    hi_idx: int,
+    bar_h: int,
+    bar_m: int,
+    date_str: str,
+) -> float:
+    """Return close price of the bar with ts_event == (bar_h, bar_m) CT on date_str.
+
+    Returns nan when the bar is absent (holiday, half-day, gap).
+
+    The bar is found by exact match of CT hour/minute on ts_ns values in
+    ts_ns[lo_idx:hi_idx].  At most one bar should match per minute.
+    """
+    from datetime import date as _date
+
+    _tz = _TZ_CT
+    y, mo, d = map(int, date_str.split("-"))
+    naive_target = datetime(y, mo, d, bar_h, bar_m, 0)
+    aware_target = naive_target.replace(tzinfo=_tz)
+    target_ns = int(aware_target.timestamp() * 1_000_000_000)
+
+    for i in range(lo_idx, hi_idx):
+        if ts_ns[i] == target_ns:
+            return float(close[i])
+
+    return float("nan")
+
+
+def measure_day_ohlcv(
+    ts_ns: np.ndarray,
+    close: np.ndarray,
+    date_str: str,
+    lo_idx: int,
+    hi_idx: int,
+    cost_ticks: float = _DEFAULT_COST_TICKS,
+) -> dict[str, Any]:
+    """Compute momentum signal and target return for one trading day from bar arrays.
+
+    Bar selection (verified ts_event = bar OPEN time convention):
+      signal_open_px : close of bar ts_event=08:29 CT (bar closes at 08:30 CT)
+      signal_end_px  : close of bar ts_event=14:29 CT (bar closes at 14:30 CT)
+      target_end_px  : close of bar ts_event=14:59 CT (bar closes at 15:00 CT)
+
+    signal_ret = log(signal_end_px / signal_open_px)
+    direction  = sign(signal_ret); 0 when signal_ret == 0
+    gross_ticks = direction * (target_end_px - signal_end_px) / 0.25
+    net_ticks   = gross_ticks - cost_ticks  (0 when direction == 0)
+
+    has_signal_coverage: True when both 08:29 and 14:29 bars present
+    has_target_coverage: True when 14:59 bar present
+
+    Returns flat dict suitable for NDJSON and _aggregate.
+    """
+    signal_open_px = _find_bar_close(
+        ts_ns, close, lo_idx, hi_idx, _SIGNAL_OPEN_BAR_H, _SIGNAL_OPEN_BAR_M, date_str
+    )
+    signal_end_px = _find_bar_close(
+        ts_ns, close, lo_idx, hi_idx, _SIGNAL_END_BAR_H, _SIGNAL_END_BAR_M, date_str
+    )
+    target_end_px = _find_bar_close(
+        ts_ns, close, lo_idx, hi_idx, _TARGET_END_BAR_H, _TARGET_END_BAR_M, date_str
+    )
+
+    has_signal = not (math.isnan(signal_open_px) or math.isnan(signal_end_px))
+    has_target = not math.isnan(target_end_px)
+
+    signal_ret: float | None = None
+    gross_ticks: float | None = None
+    net_ticks: float | None = None
+
+    if has_signal and has_target and signal_open_px > 0 and signal_end_px > 0 and target_end_px > 0:
+        signal_ret = math.log(signal_end_px / signal_open_px)
+        direction = math.copysign(1.0, signal_ret) if signal_ret != 0.0 else 0.0
+        gross_ticks = direction * (target_end_px - signal_end_px) / _ES_TICK_SIZE
+        net_ticks = gross_ticks - cost_ticks if direction != 0.0 else 0.0
+
+    return {
+        "date": date_str,
+        "symbol": "ES.v.0",
+        "signal_open_px": None if math.isnan(signal_open_px) else signal_open_px,
+        "signal_end_px": None if math.isnan(signal_end_px) else signal_end_px,
+        "target_end_px": None if math.isnan(target_end_px) else target_end_px,
+        "signal_ret": signal_ret,
+        "gross_ticks": gross_ticks,
+        "net_ticks": net_ticks,
+        "has_signal_coverage": has_signal,
+        "has_target_coverage": has_target,
+    }
+
+
+def run_measure_ohlcv(
+    dbn_file: Path,
+    out_path: Path | None = None,
+    cost_ticks: float = _DEFAULT_COST_TICKS,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> dict[str, Any]:
+    """Measure last-30-min momentum from the continuous ohlcv-1m DBN file.
+
+    Parameters
+    ----------
+    dbn_file    : path to the ohlcv-1m .dbn.zst file
+    out_path    : NDJSON output path (research_cards/last30_momentum/); summary JSON appended
+    cost_ticks  : round-trip cost default 1.3
+    start_date  : ISO date string inclusive filter on CT date (e.g. '2024-01-01')
+    end_date    : ISO date string inclusive filter on CT date (e.g. '2024-03-31')
+
+    Returns summary dict with keys: n_days, skipped_days, records, aggregate.
+    """
+    from options_lane.studies.dbn_ohlcv import load_ohlcv_from_dbn
+
+    print(f"Loading OHLCV bars from: {dbn_file}")
+    arrays = load_ohlcv_from_dbn(dbn_file)
+    ts_ns = arrays["ts_ns"]
+    close = arrays["close"]
+    print(f"  Loaded {len(ts_ns):,} bars")
+
+    day_ranges = _split_bars_by_day(ts_ns, start_date, end_date)
+    print(f"  Trading days in range: {len(day_ranges)}")
+
+    results: list[dict[str, Any]] = []
+    skipped = 0
+
+    for date_str, (lo, hi) in sorted(day_ranges.items()):
+        rec = measure_day_ohlcv(ts_ns, close, date_str, lo, hi, cost_ticks=cost_ticks)
+        if not rec["has_signal_coverage"] or not rec["has_target_coverage"]:
+            skipped += 1
+        results.append(rec)
+        print(json.dumps(rec))
+
+    agg = _aggregate(results)
+    summary = {
+        "source": str(dbn_file),
+        "start_date": start_date,
+        "end_date": end_date,
+        "cost_ticks": cost_ticks,
+        "n_days_total": len(results),
+        "skipped_days": skipped,
+        "aggregate": agg,
+    }
+
+    print(f"\n# Skipped days (missing boundary bar): {skipped}")
+    print("\n# Aggregate statistics:")
+    print(json.dumps(agg, indent=2))
+
+    if out_path is not None:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with out_path.open("w", encoding="utf-8") as fh:
+            for rec in results:
+                fh.write(json.dumps(rec) + "\n")
+            fh.write("# " + json.dumps(summary) + "\n")
+        print(f"\nMeasurements written to: {out_path}")
+
+    return summary
+
+
+def _cmd_measure_ohlcv(args: argparse.Namespace) -> int:
+    dbn_file = Path(args.dbn_file)
+    cost = getattr(args, "cost_ticks", _DEFAULT_COST_TICKS)
+    start = getattr(args, "start", None)
+    end = getattr(args, "end", None)
+    out_path = Path(args.out) if args.out else _default_out("measure_ohlcv", _REPO_ROOT)
+    run_measure_ohlcv(dbn_file, out_path=out_path, cost_ticks=cost, start_date=start, end_date=end)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="options_lane.studies.last30_momentum_study",
         description=(
             "Baltussen et al. last-30-min ES momentum revalidation harness. "
             "Gate: does 08:30-14:30 CT return predict 14:30-15:00 CT return "
-            "net of ~1.3 ticks RT cost? Fail → dead permanently. "
-            "NOTE: almost no NPZ files cover both windows — run 'inventory' first."
+            "net of ~1.3 ticks RT cost? Fail -> dead permanently. "
+            "NOTE: almost no NPZ files cover both windows -- run 'inventory' first."
         ),
     )
     parser.add_argument(
@@ -673,27 +956,35 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_meas.set_defaults(func=_cmd_measure)
 
+    p_ohlcv = sub.add_parser(
+        "measure-ohlcv",
+        help="Compute momentum returns from continuous ohlcv-1m DBN file",
+    )
+    p_ohlcv.add_argument(
+        "--dbn-file",
+        default=str(_DEFAULT_OHLCV_PATH),
+        help="Path to ohlcv-1m .dbn.zst file",
+    )
+    p_ohlcv.add_argument(
+        "--cost-ticks",
+        type=float,
+        default=_DEFAULT_COST_TICKS,
+        help=f"Round-trip cost in ES ticks (default: {_DEFAULT_COST_TICKS})",
+    )
+    p_ohlcv.add_argument(
+        "--start",
+        default=None,
+        help="Start date inclusive, ISO format (CT date), e.g. 2024-01-01",
+    )
+    p_ohlcv.add_argument(
+        "--end",
+        default=None,
+        help="End date inclusive, ISO format (CT date), e.g. 2024-03-31",
+    )
+    p_ohlcv.set_defaults(func=_cmd_measure_ohlcv)
+
     args = parser.parse_args(argv)
     return args.func(args)
-
-
-def _resolve_root(args: argparse.Namespace) -> Path:
-    if args.root:
-        return Path(args.root)
-    return npz_root(_REPO_ROOT)
-
-
-def _cmd_inventory(args: argparse.Namespace) -> int:
-    out_path = Path(args.out) if args.out else _default_out("inventory", _REPO_ROOT)
-    run_inventory(_REPO_ROOT, out_path=out_path)
-    return 0
-
-
-def _cmd_measure(args: argparse.Namespace) -> int:
-    cost = getattr(args, "cost_ticks", _DEFAULT_COST_TICKS)
-    out_path = Path(args.out) if args.out else _default_out("measure", _REPO_ROOT)
-    run_measure(_REPO_ROOT, out_path=out_path, cost_ticks=cost)
-    return 0
 
 
 if __name__ == "__main__":

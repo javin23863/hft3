@@ -14,8 +14,11 @@ assume coverage.
 
 Usage
 -----
-    python -m options_lane.studies.fixing_window_study inventory [--root PATH] [--out PATH]
-    python -m options_lane.studies.fixing_window_study measure   [--root PATH] [--out PATH]
+    python -m options_lane.studies.fixing_window_study inventory   [--root PATH] [--out PATH]
+    python -m options_lane.studies.fixing_window_study measure     [--root PATH] [--out PATH]
+    python -m options_lane.studies.fixing_window_study measure-dbn [--dbn-dir PATH]
+                                                                    [--out PATH]
+                                                                    [--max-files N]
 
 HFT3_NPZ_ROOT env var overrides the default lake root (see npz_resolver.py).
 """
@@ -516,6 +519,184 @@ def run_measure(
 
 
 # ---------------------------------------------------------------------------
+# Pure-array helpers — operate on plain numpy arrays (DBN path)
+#
+# These accept the dict produced by dbn_trades.load_trades_from_dbn:
+#   ts_ns (int64), price (float64), size (float64), aggressor_sign (int8)
+#
+# The computation is identical to the NPZ helpers above; only the input shape
+# differs (plain arrays instead of structured array fields).
+# ---------------------------------------------------------------------------
+
+def _pa_vwap(arrays: dict, ts_lo: int, ts_hi: int) -> float:
+    """Volume-weighted average price over trades with ts_ns in [ts_lo, ts_hi]."""
+    ts = arrays["ts_ns"]
+    mask = (ts >= ts_lo) & (ts <= ts_hi)
+    px = arrays["price"][mask]
+    sz = arrays["size"][mask]
+    total_sz = sz.sum()
+    if total_sz == 0.0 or len(px) == 0:
+        return float("nan")
+    return float((px * sz).sum() / total_sz)
+
+
+def _pa_last_price(arrays: dict, ts_lo: int, ts_hi: int) -> float:
+    """Price of the last trade with ts_ns in [ts_lo, ts_hi]; nan when none."""
+    ts = arrays["ts_ns"]
+    mask = (ts >= ts_lo) & (ts <= ts_hi)
+    if not mask.any():
+        return float("nan")
+    # argmax on masked ts returns the position of the maximum ts in the window
+    masked_ts = ts[mask]
+    return float(arrays["price"][mask][masked_ts.argmax()])
+
+
+def _pa_first_price(arrays: dict, ts_lo: int, ts_hi: int) -> float:
+    """Price of the first trade with ts_ns in [ts_lo, ts_hi]; nan when none."""
+    ts = arrays["ts_ns"]
+    mask = (ts >= ts_lo) & (ts <= ts_hi)
+    if not mask.any():
+        return float("nan")
+    masked_ts = ts[mask]
+    return float(arrays["price"][mask][masked_ts.argmin()])
+
+
+def _pa_imbalance(arrays: dict, ts_lo: int, ts_hi: int) -> tuple[float, int, float]:
+    """Signed aggressor imbalance for trades with ts_ns in [ts_lo, ts_hi].
+
+    Returns (imbalance, trade_count, total_volume).
+    imbalance = sum(sign * size) / sum(size); nan when total_volume == 0.
+    """
+    ts = arrays["ts_ns"]
+    mask = (ts >= ts_lo) & (ts <= ts_hi)
+    sz = arrays["size"][mask]
+    sign = arrays["aggressor_sign"][mask].astype(np.float64)
+    total_sz = sz.sum()
+    trade_count = int(mask.sum())
+    if total_sz == 0.0:
+        return float("nan"), trade_count, 0.0
+    return float((sign * sz).sum() / total_sz), trade_count, float(total_sz)
+
+
+def measure_file_from_arrays(
+    arrays: dict,
+    symbol: str,
+    date_str: str,
+    file_date_utc: datetime,
+) -> dict[str, Any]:
+    """Compute all fixing-window statistics from plain numpy arrays.
+
+    Identical statistics to measure_file() but consumes the dict produced by
+    dbn_trades.load_trades_from_dbn rather than a structured NPZ array.
+
+    Markout boundary handling:
+        markout_5m endpoint is exactly 15:05:00 CT (= scan_end = file end).
+        If the last trade's ts_ns < endpoint, the last trade's price is used
+        (forward-fill semantics, consistent with the NPZ path which uses
+        _last_trade_price with ts_hi = mark_5m).
+    """
+    bounds = _window_bounds_ns(file_date_utc)
+    scan_start, fix_start, fix_end, mark_30s, mark_2m, mark_5m = bounds
+
+    pre_start_px = _pa_first_price(arrays, scan_start, fix_start)
+    pre_end_px = _pa_last_price(arrays, scan_start, fix_start)
+    pre_drift = (
+        pre_end_px - pre_start_px
+        if not (math.isnan(pre_start_px) or math.isnan(pre_end_px))
+        else float("nan")
+    )
+
+    vwap_30s = _pa_vwap(arrays, fix_start, fix_end)
+
+    imbalance, trade_count, total_volume = _pa_imbalance(arrays, scan_start, mark_5m)
+
+    def _markout(ts_end: int) -> float:
+        last = _pa_last_price(arrays, fix_end, ts_end)
+        if math.isnan(last) or math.isnan(vwap_30s):
+            return float("nan")
+        return last - vwap_30s
+
+    markout_30s = _markout(mark_30s)
+    markout_2m = _markout(mark_2m)
+    markout_5m_val = _markout(mark_5m)
+
+    return {
+        "symbol": symbol,
+        "event_id": date_str,  # date string doubles as event_id for DBN records
+        "date": date_str,
+        "trade_count_scan": trade_count,
+        "volume_scan": total_volume,
+        "imbalance_signed": None if math.isnan(imbalance) else imbalance,
+        "vwap_30s": None if math.isnan(vwap_30s) else vwap_30s,
+        "pre_window_drift": None if math.isnan(pre_drift) else pre_drift,
+        "markout_30s": None if math.isnan(markout_30s) else markout_30s,
+        "markout_2m": None if math.isnan(markout_2m) else markout_2m,
+        "markout_5m": None if math.isnan(markout_5m_val) else markout_5m_val,
+        "oi": None,  # WS-0.4a pending
+        "source": "dbn",
+    }
+
+
+_DBN_DEFAULT_DIR = Path(r"C:\hft3-lake\options\fixing_mbo")
+
+
+def run_measure_dbn(
+    dbn_dir: Path = _DBN_DEFAULT_DIR,
+    out_path: Path | None = None,
+    max_files: int | None = None,
+) -> list[dict[str, Any]]:
+    """Measure fixing-window statistics from ES_fixing_<date>.dbn.zst files.
+
+    Scans dbn_dir for files matching ES_fixing_*.dbn.zst, extracts the date
+    from the filename, loads trade arrays via dbn_trades.load_trades_from_dbn,
+    and computes the same statistics as the NPZ measure path.
+
+    max_files: when set, process at most this many files (for testing).
+
+    Output: NDJSON + summary written to out_path (same schema as NPZ measure).
+    """
+    from options_lane.studies.dbn_trades import load_trades_from_dbn
+
+    files = sorted(dbn_dir.glob("ES_fixing_*.dbn.zst"))
+    if max_files is not None:
+        files = files[:max_files]
+
+    if not files:
+        print(f"No ES_fixing_*.dbn.zst files found in {dbn_dir}")
+        return []
+
+    results: list[dict[str, Any]] = []
+    for fpath in files:
+        # Derive date from filename: ES_fixing_YYYY-MM-DD.dbn.zst
+        stem = fpath.name  # e.g. ES_fixing_2023-05-01.dbn.zst
+        # Extract date portion between "ES_fixing_" and ".dbn.zst"
+        date_part = stem.removeprefix("ES_fixing_").removesuffix(".dbn.zst")
+        try:
+            file_date = datetime.strptime(date_part, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        except ValueError:
+            print(f"Skipping {fpath.name}: cannot parse date from filename")
+            continue
+
+        arrays = load_trades_from_dbn(fpath)
+        if len(arrays["ts_ns"]) == 0:
+            print(f"Skipping {fpath.name}: no trade records")
+            continue
+
+        rec = measure_file_from_arrays(arrays, "ES.v.0", date_part, file_date)
+        results.append(rec)
+        print(json.dumps(rec))
+
+    if out_path is not None:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with out_path.open("w", encoding="utf-8") as fh:
+            for rec in results:
+                fh.write(json.dumps(rec) + "\n")
+        print(f"\nDBN measurements written to: {out_path}")
+
+    return results
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -561,6 +742,23 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_meas.set_defaults(func=_cmd_measure)
 
+    p_dbn = sub.add_parser(
+        "measure-dbn",
+        help="Compute fixing-window statistics from DBN MBO files in --dbn-dir",
+    )
+    p_dbn.add_argument(
+        "--dbn-dir",
+        default=str(_DBN_DEFAULT_DIR),
+        help=f"Directory containing ES_fixing_*.dbn.zst files (default: {_DBN_DEFAULT_DIR})",
+    )
+    p_dbn.add_argument(
+        "--max-files",
+        type=int,
+        default=None,
+        help="Process at most N files (for testing/preview)",
+    )
+    p_dbn.set_defaults(func=_cmd_measure_dbn)
+
     args = parser.parse_args(argv)
     return args.func(args)
 
@@ -582,6 +780,14 @@ def _cmd_inventory(args: argparse.Namespace) -> int:
 def _cmd_measure(args: argparse.Namespace) -> int:
     out_path = Path(args.out) if args.out else _default_out("measure", _REPO_ROOT)
     run_measure(_REPO_ROOT, out_path=out_path)
+    return 0
+
+
+def _cmd_measure_dbn(args: argparse.Namespace) -> int:
+    dbn_dir = Path(args.dbn_dir)
+    out_path = Path(args.out) if args.out else _default_out("measure_dbn", _REPO_ROOT)
+    max_files = getattr(args, "max_files", None)
+    run_measure_dbn(dbn_dir=dbn_dir, out_path=out_path, max_files=max_files)
     return 0
 
 
