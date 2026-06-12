@@ -4,10 +4,34 @@ from .budget_manager import BudgetManager
 import pandas as pd
 from datetime import datetime, timezone
 
+# Schemas supported for cost estimation and download.
+# Fail-closed: any value not in this set is rejected before touching the API.
+_SUPPORTED_SCHEMAS = frozenset({
+    "mbo", "mbp-1", "mbp-10", "trades",
+    "ohlcv-1s", "ohlcv-1m", "ohlcv-1h", "ohlcv-1d",
+    "definition", "statistics",
+})
+
+# stype_in values accepted.  "parent" enables options-on-futures symbology
+# (e.g. ES.OPT, NQ.OPT); "continuous" is the legacy default.
+_SUPPORTED_STYPES = frozenset({"continuous", "parent", "raw_symbol", "instrument_id"})
+
 class DatabentoResearchClient:
     """
     Controlled Databento downloader using metadata.get_cost for budget gating.
     Records metadata in manifest.parquet.
+
+    Schema support
+    --------------
+    ``schema`` accepts any value in ``_SUPPORTED_SCHEMAS``.  The options-on-futures
+    workflow uses ``"definition"`` (instrument reference data) and ``"statistics"``
+    (daily open-interest / settlement) in addition to the existing ``"mbo"`` path.
+
+    stype_in support
+    ----------------
+    ``stype_in`` accepts ``"parent"`` (e.g. ``ES.OPT``, ``NQ.OPT``) in addition to
+    the existing ``"continuous"`` default.  Unknown values are rejected before any
+    API call is made (fail-closed).
     """
     def __init__(self, api_key: str = None):
         # Pull from the single master keys store (Desktop keys.env + repo .env)
@@ -23,9 +47,37 @@ class DatabentoResearchClient:
             raise ValueError("DATABENTO_API_KEY must be set")
             
         self.client = db.Historical(self.api_key)
-        self.manifest_path = "data/manifest.parquet"
+        # HFT3_MANIFEST_PATH points at the canonical lake ledger so spend
+        # accounting survives cwd changes and multiple checkouts.
+        self.manifest_path = os.environ.get("HFT3_MANIFEST_PATH", "data/manifest.parquet")
         self.budget = BudgetManager(self.manifest_path)
-        
+
+    # ------------------------------------------------------------------
+    # Internal validation helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _validate_schema(schema: str) -> None:
+        """Raise ValueError for any schema not in the supported set."""
+        if schema not in _SUPPORTED_SCHEMAS:
+            raise ValueError(
+                f"Unknown schema {schema!r}. "
+                f"Supported schemas: {sorted(_SUPPORTED_SCHEMAS)}"
+            )
+
+    @staticmethod
+    def _validate_stype(stype_in: str) -> None:
+        """Raise ValueError for any stype_in not in the supported set."""
+        if stype_in not in _SUPPORTED_STYPES:
+            raise ValueError(
+                f"Unknown stype_in {stype_in!r}. "
+                f"Supported stype_in values: {sorted(_SUPPORTED_STYPES)}"
+            )
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
     def estimate_cost(
         self,
         symbols: list,
@@ -35,6 +87,11 @@ class DatabentoResearchClient:
         schema="mbo",
         stype_in: str = "continuous",
     ) -> float:
+        """Return the Databento cost estimate in USD for the requested pull.
+        Validates ``schema`` and ``stype_in`` against the supported sets and raises
+        ``ValueError`` for unknown values before touching the API."""
+        self._validate_schema(schema)
+        self._validate_stype(stype_in)
         return float(
             self.client.metadata.get_cost(
                 dataset=dataset,
@@ -59,10 +116,14 @@ class DatabentoResearchClient:
         output_path: str | None = None,
         override_hard_limit: bool = False,
         override_operating_cap: bool = False,
-    ):
-        """
-        Calculates exact cost per Section 11 math, checks budget, and downloads if approved.
-        """
+    ) -> str:
+        """Cost-estimate, budget-gate, and download one time-series window.
+        Validates ``schema`` and ``stype_in`` before any API call.
+        All budget paths (hard limit, operating cap) are preserved exactly as before.
+        Returns the local path to the downloaded file."""
+        # Fail closed: validate before cost estimation or download.
+        self._validate_schema(schema)
+        self._validate_stype(stype_in)
         cost_estimate = self.estimate_cost(
             symbols, start_utc, end_utc, dataset, schema, stype_in
         )
@@ -107,13 +168,14 @@ class DatabentoResearchClient:
             "output_path": dest,
             "dataset": dataset,
             "schema": schema,
+            "stype_in": stype_in,
             "download_time": datetime.now(timezone.utc),
         }
 
         self._record_manifest(record)
         return dest
         
-    def _record_manifest(self, record: dict):
+    def _record_manifest(self, record: dict) -> None:
         df_new = pd.DataFrame([record])
         if os.path.exists(self.manifest_path):
             df_existing = pd.read_parquet(self.manifest_path)
