@@ -1,47 +1,39 @@
+import { Routes, Route } from "react-router-dom";
 import { useCockpit } from "./api";
-import { AlertCenter } from "./components/AlertCenter";
-import { PipelineRibbon } from "./components/PipelineRibbon";
-import { PortfolioPanel } from "./components/PortfolioPanel";
-import { ModelGrid } from "./components/ModelGrid";
-import { SystemPanel } from "./components/SystemPanel";
-import { LifecyclePanel } from "./components/LifecyclePanel";
-import { AutonomyPanel } from "./components/AutonomyPanel";
-import { StatusDot } from "./components/StatusDot";
+import { ZonesCtx } from "./zonesContext";
+import { Sidebar } from "./components/Sidebar";
+import { TopBar } from "./components/TopBar";
+import { Overview } from "./views/Overview";
+import { PipelineView } from "./views/PipelineView";
+import { ModelsView } from "./views/ModelsView";
+import { LifecycleView } from "./views/LifecycleView";
+import { AutonomyView } from "./views/AutonomyView";
+import { SystemView } from "./views/SystemView";
+import { PortfolioView } from "./views/PortfolioView";
+import { ChatView } from "./views/ChatView";
 
 export default function App() {
   const { zones, connected, lastUpdate } = useCockpit();
-  const mode = zones.system?.execution?.execution_mode as string | undefined;
   return (
-    <div className="app">
-      <div className="topbar">
-        <span className="title">HFT3 COCKPIT</span>
-        {mode && <span className="badge">{mode}</span>}
-        <span className="spacer" />
-        <span className="conn">
-          <StatusDot status={connected ? "ok" : "fail"} />
-          {connected ? "live" : "reconnecting…"}
-          {lastUpdate && <span className="muted"> · {new Date(lastUpdate).toLocaleTimeString()}</span>}
-        </span>
+    <ZonesCtx.Provider value={zones}>
+      <div className="flex h-screen overflow-hidden">
+        <Sidebar />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <TopBar connected={connected} lastUpdate={lastUpdate} />
+          <main className="scroll-area min-w-0 flex-1 overflow-auto px-5 py-5">
+            <Routes>
+              <Route path="/" element={<Overview />} />
+              <Route path="/pipeline" element={<PipelineView />} />
+              <Route path="/models" element={<ModelsView />} />
+              <Route path="/lifecycle" element={<LifecycleView />} />
+              <Route path="/autonomy" element={<AutonomyView />} />
+              <Route path="/system" element={<SystemView />} />
+              <Route path="/portfolio" element={<PortfolioView />} />
+              <Route path="/chat" element={<ChatView />} />
+            </Routes>
+          </main>
+        </div>
       </div>
-
-      <AlertCenter z={zones.alerts} />
-      <PipelineRibbon z={zones.pipeline} />
-
-      <div className="grid2">
-        <PortfolioPanel z={zones.portfolio} />
-        <SystemPanel z={zones.system} />
-      </div>
-
-      <ModelGrid z={zones.models} />
-
-      <div className="grid2">
-        <LifecyclePanel z={zones.lifecycle} />
-        <AutonomyPanel z={zones.autonomy} />
-      </div>
-
-      <div className="muted" style={{ fontSize: 11, textAlign: "center", padding: "8px 0 20px" }}>
-        read-only aggregation · detect-only doctrine · control plane is local-origin only
-      </div>
-    </div>
+    </ZonesCtx.Provider>
   );
 }

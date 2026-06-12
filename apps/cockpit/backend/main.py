@@ -108,6 +108,31 @@ def all_zones(_: str = Depends(require_view)) -> dict:
     return {name: _zone(name) for name in ZONES}
 
 
+@app.get("/api/model/{hyp_id}")
+def model_detail(hyp_id: int, _: str = Depends(require_view)) -> dict:
+    from apps.cockpit.backend.aggregate import model_detail as md
+
+    try:
+        return md.build(hyp_id)
+    except Exception as exc:
+        return {"id": hyp_id, "error": str(exc), "generated_utc": paths.now_iso()}
+
+
+from fastapi import Body  # noqa: E402
+from fastapi.responses import StreamingResponse  # noqa: E402
+
+
+@app.post("/api/chat")
+async def chat(payload: dict = Body(...), _: str = Depends(require_view)):
+    """Read-only advisory chat with the local Gemma model. SSE token stream."""
+    from apps.cockpit.backend import chat as chat_mod
+
+    query = str((payload or {}).get("query", "")).strip()
+    if not query:
+        return {"error": "query required"}
+    return StreamingResponse(chat_mod.stream_chat(query), media_type="text/event-stream")
+
+
 @app.websocket("/ws")
 async def ws(websocket: WebSocket) -> None:
     # WS auth: token via ?token= query (browsers can't set WS headers easily).
@@ -142,10 +167,37 @@ async def ws(websocket: WebSocket) -> None:
         await hub.disconnect(websocket)
 
 
-# Serve the built SPA (single origin) if it has been built. Mounted LAST so it
-# never shadows the /api or /ws routes above.
+# Serve the built SPA (single origin) if built. Hashed assets are served from
+# /assets; every other non-API path falls back to index.html so client-side
+# routes (/models, /chat, ...) work on deep-link + refresh (the catch-all is
+# added LAST, so the explicit /api and /ws routes always win).
 _DIST = _REPO / "apps" / "cockpit" / "frontend" / "dist"
-if _DIST.is_dir():
+_INDEX = _DIST / "index.html"
+if _DIST.is_dir() and _INDEX.is_file():
+    from fastapi import HTTPException  # noqa: E402
     from fastapi.staticfiles import StaticFiles  # noqa: E402
+    from fastapi.responses import FileResponse  # noqa: E402
 
-    app.mount("/", StaticFiles(directory=str(_DIST), html=True), name="spa")
+    _DIST_ROOT = _DIST.resolve()
+
+    if (_DIST / "assets").is_dir():
+        app.mount("/assets", StaticFiles(directory=str(_DIST / "assets")), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def spa(full_path: str):
+        # Serve a real static file ONLY if it resolves INSIDE dist. The resolve()
+        # + parents containment check rejects `../` traversal (incl. URL-encoded
+        # %2e%2e%2f) and absolute/drive-letter inputs, so this unauthenticated
+        # route cannot leak backend source or any other process-readable file
+        # (e.g. a .env with credentials). Otherwise fall back to the SPA
+        # entrypoint so client-side routes work on deep-link/refresh.
+        if full_path:
+            try:
+                candidate = (_DIST_ROOT / full_path).resolve()
+            except (OSError, ValueError):
+                candidate = None
+            if candidate is not None and candidate.is_file() and _DIST_ROOT in candidate.parents:
+                return FileResponse(candidate)
+        if _INDEX.is_file():
+            return FileResponse(_INDEX)
+        raise HTTPException(status_code=404)

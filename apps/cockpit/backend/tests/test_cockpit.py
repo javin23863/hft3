@@ -96,6 +96,43 @@ def test_health_open():
     assert r.json()["status"] == "ok"
 
 
+def test_spa_fallback_for_client_routes():
+    client = TestClient(app)
+    for route in ("/chat", "/models", "/lifecycle"):
+        r = client.get(route)
+        assert r.status_code == 200, route
+        assert "text/html" in r.headers.get("content-type", ""), route
+        assert '<div id="root">' in r.text, route
+    # API + WS routes are NOT shadowed by the SPA catch-all
+    h = client.get("/api/health")
+    assert h.status_code == 200 and h.json()["status"] == "ok"
+    # The GET-only catch-all must not capture the POST /api/chat route either
+    # (no view token configured here → require_view 401, never an HTML body).
+    chat = client.post("/api/chat", json={"query": "x"})
+    assert "text/html" not in chat.headers.get("content-type", "")
+
+
+def test_spa_catch_all_blocks_path_traversal():
+    # The SPA fallback must never serve a file outside dist. URL-encoded `../`
+    # is NOT normalized by the client, so it reaches the handler verbatim — the
+    # resolve()+containment guard must reject it (else: arbitrary file read of
+    # backend source / a .env with credentials).
+    client = TestClient(app)
+    evil = [
+        "/..%2f..%2fbackend%2fvault_rag.py",
+        "/..%2f..%2fbackend%2fmain.py",
+        "/..%2f..%2f..%2f..%2f.env",
+    ]
+    for path in evil:
+        r = client.get(path)
+        # Either a clean 404 (no dist) or the index.html SPA fallback — never
+        # the contents of a backend source / secrets file.
+        assert "Keyword retrieval over the Obsidian vault" not in r.text, path
+        assert "FastAPI aggregation service" not in r.text, path
+        if r.status_code == 200:
+            assert "text/html" in r.headers.get("content-type", ""), path
+
+
 def test_control_rejects_remote_origin():
     # TestClient origin is non-loopback ("testclient") → control forbidden.
     client = TestClient(app)

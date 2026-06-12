@@ -42,7 +42,15 @@ DATABENTO_RECEIPT = _p("runtime", "databento", "prop_reopen_download_receipt.jso
 
 # --- Models zone ------------------------------------------------------------
 RESEARCH_INDEX = _p("research_cards", "all_hypotheses.json")
+ALL_HYPOTHESES = _p("artifacts", "research_cards", "all_hypotheses.json")
 FILLS_CSV = _p("research_cards", "fills.csv")
+
+# --- Vault (chat RAG, V2) ---------------------------------------------------
+def vault_dir() -> Path:
+    override = os.environ.get("HFT3_VAULT_DIR", "").strip()
+    if override:
+        return Path(override)
+    return Path.home() / "Desktop" / "Obsidian Vault From VPS" / "hft3"
 
 # --- Lifecycle zone (ML1/ML4) ----------------------------------------------
 MODEL_LIFECYCLE = _p("runtime", "lifecycle", "model_lifecycle.json")
