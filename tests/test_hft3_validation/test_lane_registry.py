@@ -19,10 +19,12 @@ def _reset_registry():
 def test_lane_enum_values():
     assert Lane.CME_FUTURES.value == "cme_futures"
     assert Lane.EQUITIES.value == "equities"
+    assert Lane.CME_OPTIONS.value == "cme_options"
 
 
 def test_lane_enum_no_options_member():
     # EQUITIES is the historical name of the options/parity lane.
+    # OPTIONS_ is a legacy prefix, not a Lane member; CME_OPTIONS is the member.
     assert not hasattr(Lane, "OPTIONS")
 
 
@@ -37,12 +39,13 @@ def test_lane_from_model_id_cme_default():
     assert Lane.from_model_id("") == Lane.CME_FUTURES
 
 
-def test_registry_has_two_lanes():
+def test_registry_has_three_lanes():
     reg = LaneRegistry.instance()
     lanes = reg.all_lanes()
-    assert len(lanes) == 2
+    assert len(lanes) == 3
     assert Lane.CME_FUTURES in lanes
     assert Lane.EQUITIES in lanes
+    assert Lane.CME_OPTIONS in lanes
 
 
 def test_registry_get_returns_registration():
@@ -74,3 +77,13 @@ def test_resolve_lane_options_put_routes_to_equities():
 def test_resolve_lane_parity_routes_to_equities():
     reg = LaneRegistry.instance()
     assert reg.resolve_lane("PARITY_LEG") == Lane.EQUITIES
+
+
+def test_resolve_lane_fopt_routes_to_cme_options():
+    reg = LaneRegistry.instance()
+    assert reg.resolve_lane("FOPT_ES_CALL") == Lane.CME_OPTIONS
+
+
+def test_lane_from_model_id_fopt_routes_to_cme_options():
+    assert Lane.from_model_id("FOPT_ES_CALL") == Lane.CME_OPTIONS
+    assert Lane.from_model_id("FOPT_NQ_PUT_SPREAD") == Lane.CME_OPTIONS

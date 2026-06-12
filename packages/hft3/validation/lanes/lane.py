@@ -18,16 +18,21 @@ class Lane(str, Enum):
     # EQUITIES is the historical name of the options/parity lane
     # (CME futures options via packages/options_lane).
     EQUITIES = "equities"
+    CME_OPTIONS = "cme_options"
 
     @classmethod
     def from_model_id(cls, model_id: str) -> "Lane":
         """Resolve a Lane from a model_id prefix.
 
         Recognized prefixes:
-          - OPTIONS_, PARITY_                    -> EQUITIES (options/parity lane)
+          - FOPT_                                -> CME_OPTIONS (canonical CME options prefix)
+          - OPTIONS_, PARITY_                    -> EQUITIES (legacy options/parity lane;
+                                                   new CME options models use FOPT_)
           - everything else                      -> CME_FUTURES
         """
         upper = (model_id or "").upper()
+        if upper.startswith("FOPT_"):
+            return cls.CME_OPTIONS
         if upper.startswith(("OPTIONS_", "PARITY_")):
             return cls.EQUITIES
         return cls.CME_FUTURES
@@ -74,6 +79,23 @@ EQUITIES_SPEED_ADVANTAGE_PROFILE = LaneCapabilityProfile(
     research_only=False,
     hft_proof_required=False,
     description="Options/parity lane (historical name: equities): CME futures options via packages/options_lane, speed-advantage non-DMA (better-than-retail; no true HFT/DMA claim).",
+)
+
+# CME options lane: futures DMA exists; options execution is Phase 2 only.
+# research_only=True until Phase 2 gate is passed; profile flips at that gate.
+CME_OPTIONS_RESEARCH_PROFILE = LaneCapabilityProfile(
+    name="cme_options_research",
+    is_hft=False,
+    dma=True,
+    node_direct=False,
+    speed_advantage=False,
+    research_only=True,
+    hft_proof_required=False,
+    description=(
+        "CME options lane (Phases 0-1): research-only. "
+        "Futures DMA infrastructure exists (CHI404); options execution is Phase 2. "
+        "research_only flips to False at the Phase 2 gate — do not claim execution edge here."
+    ),
 )
 
 

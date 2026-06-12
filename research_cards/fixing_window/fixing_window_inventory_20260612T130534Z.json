@@ -1,0 +1,3161 @@
+{
+  "files_total": 315,
+  "files_covering": 3,
+  "files_missing": 3,
+  "files_non_covering": 312,
+  "dates_covered": {
+    "MES.v.0": [
+      "2023-09-15",
+      "2024-09-18",
+      "2025-06-20"
+    ]
+  },
+  "covering_entries": [
+    {
+      "symbol": "MES.v.0",
+      "event_id": "PROP_FLATTEN_TOPSTEP_2023_09_15_MAIN",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_PROP_FLATTEN_TOPSTEP_2023_09_15_MAIN_mbo.npz",
+      "covers_window": true,
+      "date": "2023-09-15",
+      "ts_min_utc": "2023-09-15T19:45:00.000899+00:00",
+      "ts_max_utc": "2023-09-15T20:19:59.953115+00:00"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "PROP_FLATTEN_TOPSTEP_2024_09_18_MAIN",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_PROP_FLATTEN_TOPSTEP_2024_09_18_MAIN_mbo.npz",
+      "covers_window": true,
+      "date": "2024-09-18",
+      "ts_min_utc": "2024-09-18T19:45:00.001478+00:00",
+      "ts_max_utc": "2024-09-18T20:19:59.958253+00:00"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "PROP_FLATTEN_TOPSTEP_2025_06_20_MAIN",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_PROP_FLATTEN_TOPSTEP_2025_06_20_MAIN_mbo.npz",
+      "covers_window": true,
+      "date": "2025-06-20",
+      "ts_min_utc": "2025-06-20T19:45:00.001379+00:00",
+      "ts_max_utc": "2025-06-20T20:19:59.982855+00:00"
+    }
+  ],
+  "non_covering_entries": [
+    {
+      "symbol": "MES.v.0",
+      "event_id": "CPI_2020_03_11_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_CPI_2020_03_11_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2020-03-11",
+      "ts_min_utc": "2020-03-11T12:29:30.076195+00:00",
+      "ts_max_utc": "2020-03-11T12:34:59.944834+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "CPI_2021_04_13_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_CPI_2021_04_13_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2021-04-13",
+      "ts_min_utc": "2021-04-13T12:29:30.000501+00:00",
+      "ts_max_utc": "2021-04-13T12:34:59.984982+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "CPI_2022_05_11_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_CPI_2022_05_11_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2022-05-11",
+      "ts_min_utc": "2022-05-11T12:29:30.072038+00:00",
+      "ts_max_utc": "2022-05-11T12:34:59.995484+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "CPI_2023_06_13_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_CPI_2023_06_13_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-06-13",
+      "ts_min_utc": "2023-06-13T12:29:30.008722+00:00",
+      "ts_max_utc": "2023-06-13T12:34:59.870373+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "CPI_2024_09_11_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz",
+      "reason": "missing_or_unreadable",
+      "covers_window": false,
+      "ts_min_utc": null,
+      "ts_max_utc": null
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "CPI_2025_01_15_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_CPI_2025_01_15_TIGHT_mbo.npz",
+      "reason": "missing_or_unreadable",
+      "covers_window": false,
+      "ts_min_utc": null,
+      "ts_max_utc": null
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "CPI_2025_02_12_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_CPI_2025_02_12_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-02-12",
+      "ts_min_utc": "2025-02-12T13:29:30.119518+00:00",
+      "ts_max_utc": "2025-02-12T13:34:59.999866+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "CPI_2025_03_12_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_CPI_2025_03_12_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-03-12",
+      "ts_min_utc": "2025-03-12T12:29:30.035507+00:00",
+      "ts_max_utc": "2025-03-12T12:34:59.999855+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "CPI_2025_04_10_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_CPI_2025_04_10_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-04-10",
+      "ts_min_utc": "2025-04-10T12:29:30.001439+00:00",
+      "ts_max_utc": "2025-04-10T12:34:59.977887+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "CPI_2025_05_13_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_CPI_2025_05_13_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-05-13",
+      "ts_min_utc": "2025-05-13T12:29:30.075224+00:00",
+      "ts_max_utc": "2025-05-13T12:34:59.890782+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "CPI_2025_06_11_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_CPI_2025_06_11_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-06-11",
+      "ts_min_utc": "2025-06-11T12:29:30.051802+00:00",
+      "ts_max_utc": "2025-06-11T12:34:59.998433+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "CPI_2025_07_11_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_CPI_2025_07_11_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-07-11",
+      "ts_min_utc": "2025-07-11T12:29:30.006666+00:00",
+      "ts_max_utc": "2025-07-11T12:34:59.915556+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "CPI_2025_08_12_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_CPI_2025_08_12_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-08-12",
+      "ts_min_utc": "2025-08-12T12:29:30.069884+00:00",
+      "ts_max_utc": "2025-08-12T12:34:59.972160+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "CPI_2025_09_11_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_CPI_2025_09_11_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-09-11",
+      "ts_min_utc": "2025-09-11T12:29:30.021411+00:00",
+      "ts_max_utc": "2025-09-11T12:34:59.995343+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "CPI_2025_10_15_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_CPI_2025_10_15_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-10-15",
+      "ts_min_utc": "2025-10-15T12:29:30.233883+00:00",
+      "ts_max_utc": "2025-10-15T12:34:59.948318+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "CPI_2025_11_13_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_CPI_2025_11_13_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-11-13",
+      "ts_min_utc": "2025-11-13T13:29:30.188781+00:00",
+      "ts_max_utc": "2025-11-13T13:34:59.904033+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "CPI_2025_12_11_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_CPI_2025_12_11_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-12-11",
+      "ts_min_utc": "2025-12-11T13:29:30.001523+00:00",
+      "ts_max_utc": "2025-12-11T13:34:59.957077+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2023_06_07_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2023_06_07_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-06-07",
+      "ts_min_utc": "2023-06-07T14:29:30.012388+00:00",
+      "ts_max_utc": "2023-06-07T14:34:59.994315+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2023_06_14_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2023_06_14_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-06-14",
+      "ts_min_utc": "2023-06-14T14:29:30.015759+00:00",
+      "ts_max_utc": "2023-06-14T14:34:59.981670+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2023_06_21_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2023_06_21_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-06-21",
+      "ts_min_utc": "2023-06-21T14:29:30.000779+00:00",
+      "ts_max_utc": "2023-06-21T14:34:59.944283+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2023_06_28_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2023_06_28_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-06-28",
+      "ts_min_utc": "2023-06-28T14:29:30.008744+00:00",
+      "ts_max_utc": "2023-06-28T14:34:59.969975+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2023_07_05_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2023_07_05_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-07-05",
+      "ts_min_utc": "2023-07-05T14:29:30.070875+00:00",
+      "ts_max_utc": "2023-07-05T14:35:00.034137+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2023_07_12_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2023_07_12_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-07-12",
+      "ts_min_utc": "2023-07-12T14:29:30.017848+00:00",
+      "ts_max_utc": "2023-07-12T14:34:59.990346+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2023_07_19_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2023_07_19_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-07-19",
+      "ts_min_utc": "2023-07-19T14:29:30.002083+00:00",
+      "ts_max_utc": "2023-07-19T14:34:59.998305+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2023_07_26_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2023_07_26_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-07-26",
+      "ts_min_utc": "2023-07-26T14:29:30.000664+00:00",
+      "ts_max_utc": "2023-07-26T14:34:59.958932+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2023_08_02_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2023_08_02_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-08-02",
+      "ts_min_utc": "2023-08-02T14:29:30.005526+00:00",
+      "ts_max_utc": "2023-08-02T14:34:59.993016+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2023_08_09_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2023_08_09_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-08-09",
+      "ts_min_utc": "2023-08-09T14:29:30.011281+00:00",
+      "ts_max_utc": "2023-08-09T14:34:59.985612+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2023_08_16_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2023_08_16_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-08-16",
+      "ts_min_utc": "2023-08-16T14:29:30.000149+00:00",
+      "ts_max_utc": "2023-08-16T14:34:59.999659+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2023_08_23_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2023_08_23_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-08-23",
+      "ts_min_utc": "2023-08-23T14:29:30.019911+00:00",
+      "ts_max_utc": "2023-08-23T14:34:59.955436+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2023_08_30_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2023_08_30_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-08-30",
+      "ts_min_utc": "2023-08-30T14:29:30.011203+00:00",
+      "ts_max_utc": "2023-08-30T14:34:59.998652+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2023_09_06_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2023_09_06_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-09-06",
+      "ts_min_utc": "2023-09-06T14:29:30.000026+00:00",
+      "ts_max_utc": "2023-09-06T14:34:59.977461+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2023_09_13_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2023_09_13_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-09-13",
+      "ts_min_utc": "2023-09-13T14:29:30.009853+00:00",
+      "ts_max_utc": "2023-09-13T14:34:59.989825+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2023_09_20_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2023_09_20_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-09-20",
+      "ts_min_utc": "2023-09-20T14:29:30.027286+00:00",
+      "ts_max_utc": "2023-09-20T14:34:59.992845+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2023_09_27_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2023_09_27_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-09-27",
+      "ts_min_utc": "2023-09-27T14:29:30.007010+00:00",
+      "ts_max_utc": "2023-09-27T14:34:59.999148+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2023_10_04_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2023_10_04_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-10-04",
+      "ts_min_utc": "2023-10-04T14:29:30.010193+00:00",
+      "ts_max_utc": "2023-10-04T14:34:59.991141+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2023_10_11_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2023_10_11_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-10-11",
+      "ts_min_utc": "2023-10-11T14:29:30.013390+00:00",
+      "ts_max_utc": "2023-10-11T14:34:59.943642+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2023_10_18_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2023_10_18_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-10-18",
+      "ts_min_utc": "2023-10-18T14:29:30.004733+00:00",
+      "ts_max_utc": "2023-10-18T14:34:59.992412+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2023_10_25_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2023_10_25_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-10-25",
+      "ts_min_utc": "2023-10-25T14:29:30.005861+00:00",
+      "ts_max_utc": "2023-10-25T14:34:59.985696+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2023_11_01_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2023_11_01_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-11-01",
+      "ts_min_utc": "2023-11-01T14:29:30.007916+00:00",
+      "ts_max_utc": "2023-11-01T14:34:59.996078+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2023_11_08_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2023_11_08_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-11-08",
+      "ts_min_utc": "2023-11-08T15:29:30.003228+00:00",
+      "ts_max_utc": "2023-11-08T15:34:59.993606+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2023_11_15_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2023_11_15_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-11-15",
+      "ts_min_utc": "2023-11-15T15:29:30.001182+00:00",
+      "ts_max_utc": "2023-11-15T15:34:59.969759+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2023_11_22_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2023_11_22_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-11-22",
+      "ts_min_utc": "2023-11-22T15:29:30.008479+00:00",
+      "ts_max_utc": "2023-11-22T15:34:59.977853+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2023_11_29_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2023_11_29_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-11-29",
+      "ts_min_utc": "2023-11-29T15:29:30.000830+00:00",
+      "ts_max_utc": "2023-11-29T15:34:59.988095+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2023_12_06_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2023_12_06_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-12-06",
+      "ts_min_utc": "2023-12-06T15:29:30.005988+00:00",
+      "ts_max_utc": "2023-12-06T15:34:59.930208+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2023_12_13_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2023_12_13_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-12-13",
+      "ts_min_utc": "2023-12-13T15:29:30.009902+00:00",
+      "ts_max_utc": "2023-12-13T15:34:59.971017+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2023_12_20_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2023_12_20_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-12-20",
+      "ts_min_utc": "2023-12-20T15:29:30.008200+00:00",
+      "ts_max_utc": "2023-12-20T15:34:59.993960+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2023_12_27_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2023_12_27_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-12-27",
+      "ts_min_utc": "2023-12-27T15:29:30.008297+00:00",
+      "ts_max_utc": "2023-12-27T15:34:59.999936+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_01_03_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_01_03_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-01-03",
+      "ts_min_utc": "2024-01-03T15:29:30.002983+00:00",
+      "ts_max_utc": "2024-01-03T15:34:59.994011+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_01_10_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_01_10_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-01-10",
+      "ts_min_utc": "2024-01-10T15:29:30.019214+00:00",
+      "ts_max_utc": "2024-01-10T15:34:59.991215+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_01_17_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_01_17_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-01-17",
+      "ts_min_utc": "2024-01-17T15:29:30.009015+00:00",
+      "ts_max_utc": "2024-01-17T15:34:59.980477+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_01_24_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_01_24_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-01-24",
+      "ts_min_utc": "2024-01-24T15:29:30.004833+00:00",
+      "ts_max_utc": "2024-01-24T15:34:59.995163+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_01_31_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_01_31_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-01-31",
+      "ts_min_utc": "2024-01-31T15:29:30.022849+00:00",
+      "ts_max_utc": "2024-01-31T15:34:59.998058+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_02_07_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_02_07_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-02-07",
+      "ts_min_utc": "2024-02-07T15:29:30.007167+00:00",
+      "ts_max_utc": "2024-02-07T15:34:59.984206+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_02_14_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_02_14_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-02-14",
+      "ts_min_utc": "2024-02-14T15:29:30.000766+00:00",
+      "ts_max_utc": "2024-02-14T15:34:59.991033+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_02_21_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_02_21_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-02-21",
+      "ts_min_utc": "2024-02-21T15:29:30.001786+00:00",
+      "ts_max_utc": "2024-02-21T15:34:59.979540+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_02_28_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_02_28_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-02-28",
+      "ts_min_utc": "2024-02-28T15:29:30.006403+00:00",
+      "ts_max_utc": "2024-02-28T15:34:59.951077+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_03_06_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_03_06_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-03-06",
+      "ts_min_utc": "2024-03-06T15:29:30.010128+00:00",
+      "ts_max_utc": "2024-03-06T15:34:59.990840+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_03_13_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_03_13_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-03-13",
+      "ts_min_utc": "2024-03-13T14:29:30.007524+00:00",
+      "ts_max_utc": "2024-03-13T14:34:59.993305+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_03_20_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_03_20_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-03-20",
+      "ts_min_utc": "2024-03-20T14:29:30.000944+00:00",
+      "ts_max_utc": "2024-03-20T14:34:59.908779+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_03_27_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_03_27_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-03-27",
+      "ts_min_utc": "2024-03-27T14:29:30.000007+00:00",
+      "ts_max_utc": "2024-03-27T14:34:59.925002+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_04_03_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_04_03_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-04-03",
+      "ts_min_utc": "2024-04-03T14:29:30.003973+00:00",
+      "ts_max_utc": "2024-04-03T14:34:59.976981+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_04_10_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_04_10_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-04-10",
+      "ts_min_utc": "2024-04-10T14:29:30.016097+00:00",
+      "ts_max_utc": "2024-04-10T14:34:59.989945+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_04_17_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_04_17_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-04-17",
+      "ts_min_utc": "2024-04-17T14:29:30.002967+00:00",
+      "ts_max_utc": "2024-04-17T14:34:59.937136+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_04_24_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_04_24_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-04-24",
+      "ts_min_utc": "2024-04-24T14:29:30.012174+00:00",
+      "ts_max_utc": "2024-04-24T14:34:59.990921+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_05_01_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_05_01_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-05-01",
+      "ts_min_utc": "2024-05-01T14:29:30.002998+00:00",
+      "ts_max_utc": "2024-05-01T14:34:59.999942+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_05_08_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_05_08_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-05-08",
+      "ts_min_utc": "2024-05-08T14:29:30.005380+00:00",
+      "ts_max_utc": "2024-05-08T14:34:59.959071+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_05_15_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_05_15_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-05-15",
+      "ts_min_utc": "2024-05-15T14:29:30.012836+00:00",
+      "ts_max_utc": "2024-05-15T14:34:59.991989+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_05_22_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_05_22_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-05-22",
+      "ts_min_utc": "2024-05-22T14:29:30.005270+00:00",
+      "ts_max_utc": "2024-05-22T14:34:59.971247+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_05_29_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_05_29_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-05-29",
+      "ts_min_utc": "2024-05-29T14:29:30.024822+00:00",
+      "ts_max_utc": "2024-05-29T14:34:59.993056+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_06_05_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_06_05_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-06-05",
+      "ts_min_utc": "2024-06-05T14:29:30.006546+00:00",
+      "ts_max_utc": "2024-06-05T14:34:59.990132+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_06_12_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_06_12_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-06-12",
+      "ts_min_utc": "2024-06-12T14:29:30.008588+00:00",
+      "ts_max_utc": "2024-06-12T14:34:59.996166+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_06_19_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_06_19_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-06-19",
+      "ts_min_utc": "2024-06-19T14:29:31.337220+00:00",
+      "ts_max_utc": "2024-06-19T14:34:59.916352+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_06_26_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_06_26_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-06-26",
+      "ts_min_utc": "2024-06-26T14:29:30.000570+00:00",
+      "ts_max_utc": "2024-06-26T14:34:59.989359+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_07_03_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_07_03_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-07-03",
+      "ts_min_utc": "2024-07-03T14:29:30.001849+00:00",
+      "ts_max_utc": "2024-07-03T14:34:59.996574+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_07_10_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_07_10_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-07-10",
+      "ts_min_utc": "2024-07-10T14:29:30.002090+00:00",
+      "ts_max_utc": "2024-07-10T14:34:59.970844+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_07_17_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_07_17_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-07-17",
+      "ts_min_utc": "2024-07-17T14:29:30.000602+00:00",
+      "ts_max_utc": "2024-07-17T14:34:59.998346+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_07_24_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_07_24_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-07-24",
+      "ts_min_utc": "2024-07-24T14:29:30.023132+00:00",
+      "ts_max_utc": "2024-07-24T14:34:59.998259+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_07_31_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_07_31_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-07-31",
+      "ts_min_utc": "2024-07-31T14:29:30.002789+00:00",
+      "ts_max_utc": "2024-07-31T14:34:59.998303+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_08_07_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_08_07_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-08-07",
+      "ts_min_utc": "2024-08-07T14:29:30.000747+00:00",
+      "ts_max_utc": "2024-08-07T14:34:59.984174+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_08_14_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_08_14_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-08-14",
+      "ts_min_utc": "2024-08-14T14:29:30.020014+00:00",
+      "ts_max_utc": "2024-08-14T14:34:59.995117+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_08_21_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_08_21_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-08-21",
+      "ts_min_utc": "2024-08-21T14:29:30.002832+00:00",
+      "ts_max_utc": "2024-08-21T14:34:59.989444+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_08_28_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_08_28_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-08-28",
+      "ts_min_utc": "2024-08-28T14:29:30.000033+00:00",
+      "ts_max_utc": "2024-08-28T14:34:59.990932+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_09_04_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_09_04_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-09-04",
+      "ts_min_utc": "2024-09-04T14:29:30.006440+00:00",
+      "ts_max_utc": "2024-09-04T14:34:59.995757+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_09_11_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_09_11_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-09-11",
+      "ts_min_utc": "2024-09-11T14:29:30.001598+00:00",
+      "ts_max_utc": "2024-09-11T14:34:59.986321+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_09_18_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_09_18_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-09-18",
+      "ts_min_utc": "2024-09-18T14:29:30.007436+00:00",
+      "ts_max_utc": "2024-09-18T14:34:59.981559+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_09_25_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_09_25_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-09-25",
+      "ts_min_utc": "2024-09-25T14:29:30.011583+00:00",
+      "ts_max_utc": "2024-09-25T14:34:59.995959+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_10_02_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_10_02_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-10-02",
+      "ts_min_utc": "2024-10-02T14:29:30.001898+00:00",
+      "ts_max_utc": "2024-10-02T14:34:59.986233+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_10_09_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_10_09_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-10-09",
+      "ts_min_utc": "2024-10-09T14:29:30.025101+00:00",
+      "ts_max_utc": "2024-10-09T14:34:59.991359+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_10_16_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_10_16_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-10-16",
+      "ts_min_utc": "2024-10-16T14:29:30.001456+00:00",
+      "ts_max_utc": "2024-10-16T14:34:59.986818+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_10_23_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_10_23_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-10-23",
+      "ts_min_utc": "2024-10-23T14:29:30.007638+00:00",
+      "ts_max_utc": "2024-10-23T14:34:59.987713+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_10_30_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_10_30_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-10-30",
+      "ts_min_utc": "2024-10-30T14:29:30.007814+00:00",
+      "ts_max_utc": "2024-10-30T14:34:59.998980+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_11_06_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_11_06_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-11-06",
+      "ts_min_utc": "2024-11-06T15:29:30.006453+00:00",
+      "ts_max_utc": "2024-11-06T15:34:59.983543+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_11_13_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_11_13_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-11-13",
+      "ts_min_utc": "2024-11-13T15:29:30.014190+00:00",
+      "ts_max_utc": "2024-11-13T15:34:59.929037+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_11_20_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_11_20_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-11-20",
+      "ts_min_utc": "2024-11-20T15:29:30.002849+00:00",
+      "ts_max_utc": "2024-11-20T15:34:59.999794+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_11_27_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_11_27_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-11-27",
+      "ts_min_utc": "2024-11-27T15:29:30.021141+00:00",
+      "ts_max_utc": "2024-11-27T15:34:59.971750+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_12_04_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_12_04_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-12-04",
+      "ts_min_utc": "2024-12-04T15:29:30.004650+00:00",
+      "ts_max_utc": "2024-12-04T15:34:59.966327+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_12_11_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_12_11_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-12-11",
+      "ts_min_utc": "2024-12-11T15:29:30.010890+00:00",
+      "ts_max_utc": "2024-12-11T15:34:59.999893+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2024_12_18_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2024_12_18_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-12-18",
+      "ts_min_utc": "2024-12-18T15:29:30.019734+00:00",
+      "ts_max_utc": "2024-12-18T15:34:59.890536+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_01_08_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_01_08_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-01-08",
+      "ts_min_utc": "2025-01-08T15:29:30.001883+00:00",
+      "ts_max_utc": "2025-01-08T15:34:59.997300+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_01_15_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_01_15_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-01-15",
+      "ts_min_utc": "2025-01-15T15:29:30.004371+00:00",
+      "ts_max_utc": "2025-01-15T15:34:59.988215+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_01_22_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_01_22_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-01-22",
+      "ts_min_utc": "2025-01-22T15:29:30.005912+00:00",
+      "ts_max_utc": "2025-01-22T15:34:59.999107+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_01_29_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_01_29_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-01-29",
+      "ts_min_utc": "2025-01-29T15:29:30.014483+00:00",
+      "ts_max_utc": "2025-01-29T15:34:59.994908+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_02_05_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_02_05_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-02-05",
+      "ts_min_utc": "2025-02-05T15:29:30.008169+00:00",
+      "ts_max_utc": "2025-02-05T15:34:59.990560+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_02_12_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_02_12_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-02-12",
+      "ts_min_utc": "2025-02-12T15:29:30.005909+00:00",
+      "ts_max_utc": "2025-02-12T15:34:59.963266+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_02_19_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_02_19_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-02-19",
+      "ts_min_utc": "2025-02-19T15:29:30.022076+00:00",
+      "ts_max_utc": "2025-02-19T15:34:59.984535+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_02_26_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_02_26_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-02-26",
+      "ts_min_utc": "2025-02-26T15:29:30.002769+00:00",
+      "ts_max_utc": "2025-02-26T15:34:59.967821+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_03_05_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_03_05_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-03-05",
+      "ts_min_utc": "2025-03-05T15:29:30.007554+00:00",
+      "ts_max_utc": "2025-03-05T15:34:59.970399+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_03_12_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_03_12_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-03-12",
+      "ts_min_utc": "2025-03-12T14:29:30.008736+00:00",
+      "ts_max_utc": "2025-03-12T14:34:59.999269+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_03_19_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_03_19_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-03-19",
+      "ts_min_utc": "2025-03-19T14:29:30.010969+00:00",
+      "ts_max_utc": "2025-03-19T14:34:59.992527+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_03_26_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_03_26_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-03-26",
+      "ts_min_utc": "2025-03-26T14:29:30.024063+00:00",
+      "ts_max_utc": "2025-03-26T14:34:59.985519+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_04_02_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_04_02_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-04-02",
+      "ts_min_utc": "2025-04-02T14:29:30.004159+00:00",
+      "ts_max_utc": "2025-04-02T14:34:59.978434+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_04_09_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_04_09_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-04-09",
+      "ts_min_utc": "2025-04-09T14:29:30.004954+00:00",
+      "ts_max_utc": "2025-04-09T14:34:59.993334+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_04_16_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_04_16_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-04-16",
+      "ts_min_utc": "2025-04-16T14:29:30.001693+00:00",
+      "ts_max_utc": "2025-04-16T14:34:59.998578+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_04_23_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_04_23_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-04-23",
+      "ts_min_utc": "2025-04-23T14:29:30.022061+00:00",
+      "ts_max_utc": "2025-04-23T14:34:59.980383+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_04_30_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_04_30_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-04-30",
+      "ts_min_utc": "2025-04-30T14:29:30.000936+00:00",
+      "ts_max_utc": "2025-04-30T14:34:59.999858+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_05_07_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_05_07_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-05-07",
+      "ts_min_utc": "2025-05-07T14:29:30.015177+00:00",
+      "ts_max_utc": "2025-05-07T14:34:59.996543+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_05_14_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_05_14_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-05-14",
+      "ts_min_utc": "2025-05-14T14:29:30.008175+00:00",
+      "ts_max_utc": "2025-05-14T14:34:59.996615+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_05_21_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_05_21_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-05-21",
+      "ts_min_utc": "2025-05-21T14:29:30.056861+00:00",
+      "ts_max_utc": "2025-05-21T14:34:59.995544+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_05_28_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_05_28_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-05-28",
+      "ts_min_utc": "2025-05-28T14:29:30.008351+00:00",
+      "ts_max_utc": "2025-05-28T14:34:59.985304+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_06_04_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_06_04_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-06-04",
+      "ts_min_utc": "2025-06-04T14:29:30.001264+00:00",
+      "ts_max_utc": "2025-06-04T14:34:59.990344+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_06_11_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_06_11_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-06-11",
+      "ts_min_utc": "2025-06-11T14:29:30.016526+00:00",
+      "ts_max_utc": "2025-06-11T14:34:59.979497+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_06_18_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_06_18_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-06-18",
+      "ts_min_utc": "2025-06-18T14:29:30.001541+00:00",
+      "ts_max_utc": "2025-06-18T14:34:59.984812+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_06_25_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_06_25_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-06-25",
+      "ts_min_utc": "2025-06-25T14:29:30.019101+00:00",
+      "ts_max_utc": "2025-06-25T14:34:59.995893+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_07_02_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_07_02_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-07-02",
+      "ts_min_utc": "2025-07-02T14:29:30.021171+00:00",
+      "ts_max_utc": "2025-07-02T14:34:59.990277+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_07_09_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_07_09_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-07-09",
+      "ts_min_utc": "2025-07-09T14:29:30.007019+00:00",
+      "ts_max_utc": "2025-07-09T14:34:59.985284+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_07_16_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_07_16_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-07-16",
+      "ts_min_utc": "2025-07-16T14:29:30.001487+00:00",
+      "ts_max_utc": "2025-07-16T14:34:59.959414+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_07_23_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_07_23_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-07-23",
+      "ts_min_utc": "2025-07-23T14:29:30.001422+00:00",
+      "ts_max_utc": "2025-07-23T14:34:59.997982+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_07_30_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_07_30_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-07-30",
+      "ts_min_utc": "2025-07-30T14:29:30.018434+00:00",
+      "ts_max_utc": "2025-07-30T14:34:59.964382+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_08_06_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_08_06_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-08-06",
+      "ts_min_utc": "2025-08-06T14:29:30.007428+00:00",
+      "ts_max_utc": "2025-08-06T14:34:59.995303+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_08_13_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_08_13_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-08-13",
+      "ts_min_utc": "2025-08-13T14:29:30.001441+00:00",
+      "ts_max_utc": "2025-08-13T14:34:59.997462+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_08_20_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_08_20_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-08-20",
+      "ts_min_utc": "2025-08-20T14:29:30.010904+00:00",
+      "ts_max_utc": "2025-08-20T14:34:59.986584+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_08_27_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_08_27_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-08-27",
+      "ts_min_utc": "2025-08-27T14:29:30.026300+00:00",
+      "ts_max_utc": "2025-08-27T14:34:59.927908+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_09_03_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_09_03_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-09-03",
+      "ts_min_utc": "2025-09-03T14:29:30.011127+00:00",
+      "ts_max_utc": "2025-09-03T14:34:59.979846+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_09_10_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_09_10_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-09-10",
+      "ts_min_utc": "2025-09-10T14:29:30.018515+00:00",
+      "ts_max_utc": "2025-09-10T14:34:59.938201+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_09_17_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_09_17_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-09-17",
+      "ts_min_utc": "2025-09-17T14:29:30.004876+00:00",
+      "ts_max_utc": "2025-09-17T14:34:59.978721+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_09_24_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_09_24_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-09-24",
+      "ts_min_utc": "2025-09-24T14:29:30.019721+00:00",
+      "ts_max_utc": "2025-09-24T14:34:59.928905+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_10_01_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_10_01_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-10-01",
+      "ts_min_utc": "2025-10-01T14:29:30.002437+00:00",
+      "ts_max_utc": "2025-10-01T14:34:59.989297+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_10_08_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_10_08_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-10-08",
+      "ts_min_utc": "2025-10-08T14:29:30.001208+00:00",
+      "ts_max_utc": "2025-10-08T14:34:59.975498+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_10_15_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_10_15_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-10-15",
+      "ts_min_utc": "2025-10-15T14:29:30.001302+00:00",
+      "ts_max_utc": "2025-10-15T14:34:59.998432+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_10_22_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_10_22_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-10-22",
+      "ts_min_utc": "2025-10-22T14:29:30.002352+00:00",
+      "ts_max_utc": "2025-10-22T14:34:59.997555+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_10_29_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_10_29_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-10-29",
+      "ts_min_utc": "2025-10-29T14:29:30.030805+00:00",
+      "ts_max_utc": "2025-10-29T14:34:59.996902+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_11_05_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_11_05_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-11-05",
+      "ts_min_utc": "2025-11-05T15:29:30.004597+00:00",
+      "ts_max_utc": "2025-11-05T15:34:59.987523+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_11_12_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_11_12_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-11-12",
+      "ts_min_utc": "2025-11-12T15:29:30.004622+00:00",
+      "ts_max_utc": "2025-11-12T15:34:59.969006+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_11_19_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_11_19_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-11-19",
+      "ts_min_utc": "2025-11-19T15:29:30.005604+00:00",
+      "ts_max_utc": "2025-11-19T15:34:59.987922+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_11_26_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_11_26_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-11-26",
+      "ts_min_utc": "2025-11-26T15:29:30.000170+00:00",
+      "ts_max_utc": "2025-11-26T15:34:59.998763+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_12_03_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_12_03_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-12-03",
+      "ts_min_utc": "2025-12-03T15:29:30.001185+00:00",
+      "ts_max_utc": "2025-12-03T15:34:59.997879+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_12_10_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_12_10_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-12-10",
+      "ts_min_utc": "2025-12-10T15:29:30.031912+00:00",
+      "ts_max_utc": "2025-12-10T15:34:59.999297+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_12_17_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_12_17_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-12-17",
+      "ts_min_utc": "2025-12-17T15:29:30.012328+00:00",
+      "ts_max_utc": "2025-12-17T15:34:59.978150+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_12_24_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_12_24_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-12-24",
+      "ts_min_utc": "2025-12-24T15:29:30.001354+00:00",
+      "ts_max_utc": "2025-12-24T15:34:59.981858+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "EIA_CRUDE_2025_12_31_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_EIA_CRUDE_2025_12_31_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-12-31",
+      "ts_min_utc": "2025-12-31T15:29:30.019230+00:00",
+      "ts_max_utc": "2025-12-31T15:34:59.955884+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "NFP_2020_01_10_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_NFP_2020_01_10_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2020-01-10",
+      "ts_min_utc": "2020-01-10T13:29:30.000511+00:00",
+      "ts_max_utc": "2020-01-10T13:34:59.981393+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "NFP_2020_02_07_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_NFP_2020_02_07_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2020-02-07",
+      "ts_min_utc": "2020-02-07T13:29:30.136138+00:00",
+      "ts_max_utc": "2020-02-07T13:34:59.619401+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "NFP_2020_03_06_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_NFP_2020_03_06_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2020-03-06",
+      "ts_min_utc": "2020-03-06T13:29:30.098226+00:00",
+      "ts_max_utc": "2020-03-06T13:34:59.940970+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "NFP_2021_01_08_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_NFP_2021_01_08_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2021-01-08",
+      "ts_min_utc": "2021-01-08T13:29:30.548404+00:00",
+      "ts_max_utc": "2021-01-08T13:34:59.990594+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "NFP_2021_02_05_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_NFP_2021_02_05_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2021-02-05",
+      "ts_min_utc": "2021-02-05T13:29:30.109616+00:00",
+      "ts_max_utc": "2021-02-05T13:34:59.929204+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "NFP_2021_03_05_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_NFP_2021_03_05_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2021-03-05",
+      "ts_min_utc": "2021-03-05T13:29:30.037533+00:00",
+      "ts_max_utc": "2021-03-05T13:34:59.999857+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "NFP_2022_01_07_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_NFP_2022_01_07_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2022-01-07",
+      "ts_min_utc": "2022-01-07T13:29:30.104933+00:00",
+      "ts_max_utc": "2022-01-07T13:34:59.990113+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "NFP_2022_02_04_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_NFP_2022_02_04_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2022-02-04",
+      "ts_min_utc": "2022-02-04T13:29:30.225757+00:00",
+      "ts_max_utc": "2022-02-04T13:34:59.985459+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "NFP_2022_03_04_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_NFP_2022_03_04_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2022-03-04",
+      "ts_min_utc": "2022-03-04T13:29:30.360270+00:00",
+      "ts_max_utc": "2022-03-04T13:34:59.999249+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "NFP_2023_01_06_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_NFP_2023_01_06_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-01-06",
+      "ts_min_utc": "2023-01-06T13:29:30.005919+00:00",
+      "ts_max_utc": "2023-01-06T13:34:59.977374+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "NFP_2023_02_03_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_NFP_2023_02_03_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-02-03",
+      "ts_min_utc": "2023-02-03T13:29:30.022345+00:00",
+      "ts_max_utc": "2023-02-03T13:34:59.989093+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "NFP_2023_03_10_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_NFP_2023_03_10_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-03-10",
+      "ts_min_utc": "2023-03-10T13:29:30.020349+00:00",
+      "ts_max_utc": "2023-03-10T13:34:59.997777+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "NFP_2024_01_05_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_NFP_2024_01_05_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-01-05",
+      "ts_min_utc": "2024-01-05T13:29:30.103756+00:00",
+      "ts_max_utc": "2024-01-05T13:34:59.809015+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "NFP_2024_02_02_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_NFP_2024_02_02_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-02-02",
+      "ts_min_utc": "2024-02-02T13:29:30.050729+00:00",
+      "ts_max_utc": "2024-02-02T13:34:59.999839+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "NFP_2024_03_08_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_NFP_2024_03_08_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-03-08",
+      "ts_min_utc": "2024-03-08T13:29:30.059523+00:00",
+      "ts_max_utc": "2024-03-08T13:34:59.999994+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "NFP_2025_01_10_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_NFP_2025_01_10_TIGHT_mbo.npz",
+      "reason": "missing_or_unreadable",
+      "covers_window": false,
+      "ts_min_utc": null,
+      "ts_max_utc": null
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "NFP_2025_02_07_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_NFP_2025_02_07_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-02-07",
+      "ts_min_utc": "2025-02-07T13:29:30.059380+00:00",
+      "ts_max_utc": "2025-02-07T13:34:59.993986+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "NFP_2025_03_07_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_NFP_2025_03_07_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-03-07",
+      "ts_min_utc": "2025-03-07T13:29:30.001029+00:00",
+      "ts_max_utc": "2025-03-07T13:34:59.971039+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "NFP_2025_04_04_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_NFP_2025_04_04_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-04-04",
+      "ts_min_utc": "2025-04-04T12:29:30.005316+00:00",
+      "ts_max_utc": "2025-04-04T12:34:59.886433+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "NFP_2025_05_02_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_NFP_2025_05_02_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-05-02",
+      "ts_min_utc": "2025-05-02T12:29:30.106576+00:00",
+      "ts_max_utc": "2025-05-02T12:34:59.993952+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "NFP_2025_06_06_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_NFP_2025_06_06_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-06-06",
+      "ts_min_utc": "2025-06-06T12:29:30.217237+00:00",
+      "ts_max_utc": "2025-06-06T12:34:59.995273+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "NFP_2025_07_03_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_NFP_2025_07_03_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-07-03",
+      "ts_min_utc": "2025-07-03T12:29:30.107841+00:00",
+      "ts_max_utc": "2025-07-03T12:34:59.988013+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "NFP_2025_08_01_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_NFP_2025_08_01_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-08-01",
+      "ts_min_utc": "2025-08-01T12:29:30.089022+00:00",
+      "ts_max_utc": "2025-08-01T12:34:59.995939+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "NFP_2025_09_05_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_NFP_2025_09_05_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-09-05",
+      "ts_min_utc": "2025-09-05T12:29:30.063063+00:00",
+      "ts_max_utc": "2025-09-05T12:34:59.992296+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "NFP_2025_10_03_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_NFP_2025_10_03_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-10-03",
+      "ts_min_utc": "2025-10-03T12:29:30.008512+00:00",
+      "ts_max_utc": "2025-10-03T12:34:59.976693+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "NFP_2025_11_07_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_NFP_2025_11_07_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-11-07",
+      "ts_min_utc": "2025-11-07T13:29:30.004938+00:00",
+      "ts_max_utc": "2025-11-07T13:34:59.841863+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "NFP_2025_12_05_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_NFP_2025_12_05_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-12-05",
+      "ts_min_utc": "2025-12-05T13:29:30.008683+00:00",
+      "ts_max_utc": "2025-12-05T13:34:59.805917+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2023_06_08_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2023_06_08_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-06-08",
+      "ts_min_utc": "2023-06-08T12:29:45.000191+00:00",
+      "ts_max_utc": "2023-06-08T12:31:59.991569+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2023_06_15_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2023_06_15_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-06-15",
+      "ts_min_utc": "2023-06-15T12:29:45.000218+00:00",
+      "ts_max_utc": "2023-06-15T12:31:59.952504+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2023_06_22_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2023_06_22_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-06-22",
+      "ts_min_utc": "2023-06-22T12:29:45.000227+00:00",
+      "ts_max_utc": "2023-06-22T12:31:59.989443+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2023_06_29_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2023_06_29_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-06-29",
+      "ts_min_utc": "2023-06-29T12:29:45.000210+00:00",
+      "ts_max_utc": "2023-06-29T12:31:59.950723+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2023_07_06_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2023_07_06_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-07-06",
+      "ts_min_utc": "2023-07-06T12:29:45.000177+00:00",
+      "ts_max_utc": "2023-07-06T12:31:59.985012+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2023_07_13_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2023_07_13_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-07-13",
+      "ts_min_utc": "2023-07-13T12:29:45.000239+00:00",
+      "ts_max_utc": "2023-07-13T12:31:59.986626+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2023_07_20_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2023_07_20_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-07-20",
+      "ts_min_utc": "2023-07-20T12:29:45.087324+00:00",
+      "ts_max_utc": "2023-07-20T12:31:59.907600+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2023_07_27_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2023_07_27_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-07-27",
+      "ts_min_utc": "2023-07-27T12:29:45.038782+00:00",
+      "ts_max_utc": "2023-07-27T12:31:59.982878+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2023_08_03_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2023_08_03_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-08-03",
+      "ts_min_utc": "2023-08-03T12:29:45.000261+00:00",
+      "ts_max_utc": "2023-08-03T12:31:59.980204+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2023_08_10_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2023_08_10_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-08-10",
+      "ts_min_utc": "2023-08-10T12:29:45.011015+00:00",
+      "ts_max_utc": "2023-08-10T12:31:59.994955+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2023_08_17_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2023_08_17_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-08-17",
+      "ts_min_utc": "2023-08-17T12:29:45.000136+00:00",
+      "ts_max_utc": "2023-08-17T12:31:59.887643+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2023_08_24_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2023_08_24_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-08-24",
+      "ts_min_utc": "2023-08-24T12:29:45.000281+00:00",
+      "ts_max_utc": "2023-08-24T12:31:59.909026+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2023_08_31_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2023_08_31_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-08-31",
+      "ts_min_utc": "2023-08-31T12:29:45.000213+00:00",
+      "ts_max_utc": "2023-08-31T12:31:59.976856+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2023_09_07_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2023_09_07_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-09-07",
+      "ts_min_utc": "2023-09-07T12:29:45.000171+00:00",
+      "ts_max_utc": "2023-09-07T12:31:59.967986+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2023_09_14_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2023_09_14_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-09-14",
+      "ts_min_utc": "2023-09-14T12:29:45.000272+00:00",
+      "ts_max_utc": "2023-09-14T12:31:59.998526+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2023_09_21_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2023_09_21_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-09-21",
+      "ts_min_utc": "2023-09-21T12:29:45.000234+00:00",
+      "ts_max_utc": "2023-09-21T12:31:59.896920+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2023_09_28_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2023_09_28_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-09-28",
+      "ts_min_utc": "2023-09-28T12:29:45.000214+00:00",
+      "ts_max_utc": "2023-09-28T12:31:59.984155+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2023_10_05_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2023_10_05_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-10-05",
+      "ts_min_utc": "2023-10-05T12:29:45.000233+00:00",
+      "ts_max_utc": "2023-10-05T12:31:59.965286+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2023_10_12_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2023_10_12_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-10-12",
+      "ts_min_utc": "2023-10-12T12:29:45.018843+00:00",
+      "ts_max_utc": "2023-10-12T12:31:59.997691+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2023_10_19_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2023_10_19_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-10-19",
+      "ts_min_utc": "2023-10-19T12:29:45.000193+00:00",
+      "ts_max_utc": "2023-10-19T12:31:59.972956+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2023_10_26_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2023_10_26_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-10-26",
+      "ts_min_utc": "2023-10-26T12:29:45.002797+00:00",
+      "ts_max_utc": "2023-10-26T12:31:59.961222+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2023_11_02_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2023_11_02_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-11-02",
+      "ts_min_utc": "2023-11-02T12:29:45.000196+00:00",
+      "ts_max_utc": "2023-11-02T12:31:59.964813+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2023_11_09_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2023_11_09_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-11-09",
+      "ts_min_utc": "2023-11-09T13:29:45.000210+00:00",
+      "ts_max_utc": "2023-11-09T13:31:59.903032+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2023_11_16_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2023_11_16_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-11-16",
+      "ts_min_utc": "2023-11-16T13:29:45.000235+00:00",
+      "ts_max_utc": "2023-11-16T13:31:59.974079+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2023_11_22_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2023_11_22_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-11-22",
+      "ts_min_utc": "2023-11-22T13:29:45.000221+00:00",
+      "ts_max_utc": "2023-11-22T13:31:59.878084+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2023_11_30_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2023_11_30_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-11-30",
+      "ts_min_utc": "2023-11-30T13:29:45.000206+00:00",
+      "ts_max_utc": "2023-11-30T13:31:59.966420+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2023_12_07_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2023_12_07_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-12-07",
+      "ts_min_utc": "2023-12-07T13:29:45.000184+00:00",
+      "ts_max_utc": "2023-12-07T13:31:59.977684+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2023_12_14_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2023_12_14_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-12-14",
+      "ts_min_utc": "2023-12-14T13:29:45.000231+00:00",
+      "ts_max_utc": "2023-12-14T13:31:59.958156+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2023_12_21_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2023_12_21_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-12-21",
+      "ts_min_utc": "2023-12-21T13:29:45.000185+00:00",
+      "ts_max_utc": "2023-12-21T13:31:59.882578+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2023_12_28_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2023_12_28_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2023-12-28",
+      "ts_min_utc": "2023-12-28T13:29:45.001027+00:00",
+      "ts_max_utc": "2023-12-28T13:31:59.996109+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_01_04_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_01_04_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-01-04",
+      "ts_min_utc": "2024-01-04T13:29:45.011199+00:00",
+      "ts_max_utc": "2024-01-04T13:31:59.908863+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_01_11_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_01_11_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-01-11",
+      "ts_min_utc": "2024-01-11T13:29:45.000199+00:00",
+      "ts_max_utc": "2024-01-11T13:31:59.974712+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_01_18_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_01_18_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-01-18",
+      "ts_min_utc": "2024-01-18T13:29:45.004334+00:00",
+      "ts_max_utc": "2024-01-18T13:31:59.912310+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_01_25_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_01_25_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-01-25",
+      "ts_min_utc": "2024-01-25T13:29:45.008430+00:00",
+      "ts_max_utc": "2024-01-25T13:31:59.985388+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_02_01_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_02_01_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-02-01",
+      "ts_min_utc": "2024-02-01T13:29:45.004544+00:00",
+      "ts_max_utc": "2024-02-01T13:31:59.934161+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_02_08_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_02_08_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-02-08",
+      "ts_min_utc": "2024-02-08T13:29:45.043514+00:00",
+      "ts_max_utc": "2024-02-08T13:31:59.643730+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_02_15_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_02_15_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-02-15",
+      "ts_min_utc": "2024-02-15T13:29:45.077668+00:00",
+      "ts_max_utc": "2024-02-15T13:31:59.986021+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_02_22_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_02_22_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-02-22",
+      "ts_min_utc": "2024-02-22T13:29:45.031230+00:00",
+      "ts_max_utc": "2024-02-22T13:31:59.963590+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_02_29_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_02_29_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-02-29",
+      "ts_min_utc": "2024-02-29T13:29:45.007782+00:00",
+      "ts_max_utc": "2024-02-29T13:31:59.994171+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_03_07_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_03_07_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-03-07",
+      "ts_min_utc": "2024-03-07T13:29:45.000268+00:00",
+      "ts_max_utc": "2024-03-07T13:31:59.928254+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_03_14_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_03_14_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-03-14",
+      "ts_min_utc": "2024-03-14T12:29:45.009871+00:00",
+      "ts_max_utc": "2024-03-14T12:31:59.985796+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_03_21_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_03_21_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-03-21",
+      "ts_min_utc": "2024-03-21T12:29:45.000671+00:00",
+      "ts_max_utc": "2024-03-21T12:31:59.954083+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_03_28_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_03_28_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-03-28",
+      "ts_min_utc": "2024-03-28T12:29:45.000270+00:00",
+      "ts_max_utc": "2024-03-28T12:31:59.952602+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_04_04_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_04_04_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-04-04",
+      "ts_min_utc": "2024-04-04T12:29:45.014463+00:00",
+      "ts_max_utc": "2024-04-04T12:31:59.938378+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_04_11_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_04_11_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-04-11",
+      "ts_min_utc": "2024-04-11T12:29:45.005585+00:00",
+      "ts_max_utc": "2024-04-11T12:31:59.997826+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_04_18_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_04_18_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-04-18",
+      "ts_min_utc": "2024-04-18T12:29:45.000271+00:00",
+      "ts_max_utc": "2024-04-18T12:31:59.993317+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_04_25_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_04_25_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-04-25",
+      "ts_min_utc": "2024-04-25T12:29:45.000004+00:00",
+      "ts_max_utc": "2024-04-25T12:31:59.999068+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_05_02_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_05_02_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-05-02",
+      "ts_min_utc": "2024-05-02T12:29:45.086602+00:00",
+      "ts_max_utc": "2024-05-02T12:31:59.901466+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_05_09_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_05_09_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-05-09",
+      "ts_min_utc": "2024-05-09T12:29:45.005342+00:00",
+      "ts_max_utc": "2024-05-09T12:31:59.987597+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_05_16_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_05_16_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-05-16",
+      "ts_min_utc": "2024-05-16T12:29:45.000284+00:00",
+      "ts_max_utc": "2024-05-16T12:31:59.984890+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_05_23_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_05_23_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-05-23",
+      "ts_min_utc": "2024-05-23T12:29:45.092719+00:00",
+      "ts_max_utc": "2024-05-23T12:31:59.801379+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_05_30_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_05_30_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-05-30",
+      "ts_min_utc": "2024-05-30T12:29:45.010769+00:00",
+      "ts_max_utc": "2024-05-30T12:31:59.996338+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_06_06_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_06_06_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-06-06",
+      "ts_min_utc": "2024-06-06T12:29:45.037859+00:00",
+      "ts_max_utc": "2024-06-06T12:31:59.980188+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_06_13_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_06_13_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-06-13",
+      "ts_min_utc": "2024-06-13T12:29:45.044016+00:00",
+      "ts_max_utc": "2024-06-13T12:31:59.981751+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_06_20_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_06_20_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-06-20",
+      "ts_min_utc": "2024-06-20T12:29:45.000575+00:00",
+      "ts_max_utc": "2024-06-20T12:31:59.982415+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_06_27_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_06_27_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-06-27",
+      "ts_min_utc": "2024-06-27T12:29:45.001655+00:00",
+      "ts_max_utc": "2024-06-27T12:31:59.963786+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_07_03_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_07_03_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-07-03",
+      "ts_min_utc": "2024-07-03T12:29:45.000195+00:00",
+      "ts_max_utc": "2024-07-03T12:31:59.915226+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_07_11_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_07_11_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-07-11",
+      "ts_min_utc": "2024-07-11T12:29:45.046751+00:00",
+      "ts_max_utc": "2024-07-11T12:31:59.987243+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_07_18_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_07_18_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-07-18",
+      "ts_min_utc": "2024-07-18T12:29:45.001321+00:00",
+      "ts_max_utc": "2024-07-18T12:31:59.971821+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_07_25_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_07_25_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-07-25",
+      "ts_min_utc": "2024-07-25T12:29:45.001625+00:00",
+      "ts_max_utc": "2024-07-25T12:31:59.882983+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_08_01_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_08_01_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-08-01",
+      "ts_min_utc": "2024-08-01T12:29:45.000622+00:00",
+      "ts_max_utc": "2024-08-01T12:31:59.975729+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_08_08_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_08_08_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-08-08",
+      "ts_min_utc": "2024-08-08T12:29:45.000245+00:00",
+      "ts_max_utc": "2024-08-08T12:31:59.995785+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_08_15_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_08_15_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-08-15",
+      "ts_min_utc": "2024-08-15T12:29:45.015829+00:00",
+      "ts_max_utc": "2024-08-15T12:31:59.986151+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_08_22_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_08_22_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-08-22",
+      "ts_min_utc": "2024-08-22T12:29:45.000170+00:00",
+      "ts_max_utc": "2024-08-22T12:31:59.916086+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_08_29_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_08_29_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-08-29",
+      "ts_min_utc": "2024-08-29T12:29:45.001001+00:00",
+      "ts_max_utc": "2024-08-29T12:31:59.991497+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_09_05_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_09_05_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-09-05",
+      "ts_min_utc": "2024-09-05T12:29:45.002539+00:00",
+      "ts_max_utc": "2024-09-05T12:31:59.985439+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_09_12_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_09_12_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-09-12",
+      "ts_min_utc": "2024-09-12T12:29:45.008305+00:00",
+      "ts_max_utc": "2024-09-12T12:31:59.950562+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_09_19_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_09_19_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-09-19",
+      "ts_min_utc": "2024-09-19T12:29:45.000332+00:00",
+      "ts_max_utc": "2024-09-19T12:31:59.980002+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_09_26_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_09_26_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-09-26",
+      "ts_min_utc": "2024-09-26T12:29:45.000341+00:00",
+      "ts_max_utc": "2024-09-26T12:31:59.936411+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_10_03_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_10_03_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-10-03",
+      "ts_min_utc": "2024-10-03T12:29:45.043748+00:00",
+      "ts_max_utc": "2024-10-03T12:31:59.998125+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_10_10_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_10_10_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-10-10",
+      "ts_min_utc": "2024-10-10T12:29:45.016978+00:00",
+      "ts_max_utc": "2024-10-10T12:31:59.993601+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_10_17_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_10_17_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-10-17",
+      "ts_min_utc": "2024-10-17T12:29:45.018355+00:00",
+      "ts_max_utc": "2024-10-17T12:31:59.820401+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_10_24_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_10_24_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-10-24",
+      "ts_min_utc": "2024-10-24T12:29:45.004164+00:00",
+      "ts_max_utc": "2024-10-24T12:31:59.760910+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_10_31_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_10_31_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-10-31",
+      "ts_min_utc": "2024-10-31T12:29:45.004871+00:00",
+      "ts_max_utc": "2024-10-31T12:31:59.998961+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_11_07_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_11_07_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-11-07",
+      "ts_min_utc": "2024-11-07T13:29:45.064646+00:00",
+      "ts_max_utc": "2024-11-07T13:31:59.898050+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_11_14_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_11_14_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-11-14",
+      "ts_min_utc": "2024-11-14T13:29:45.046494+00:00",
+      "ts_max_utc": "2024-11-14T13:31:59.994475+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_11_21_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_11_21_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-11-21",
+      "ts_min_utc": "2024-11-21T13:29:45.094219+00:00",
+      "ts_max_utc": "2024-11-21T13:31:59.996718+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_11_27_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_11_27_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-11-27",
+      "ts_min_utc": "2024-11-27T13:29:45.012421+00:00",
+      "ts_max_utc": "2024-11-27T13:31:59.877653+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_12_05_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_12_05_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-12-05",
+      "ts_min_utc": "2024-12-05T13:29:45.022365+00:00",
+      "ts_max_utc": "2024-12-05T13:31:59.956816+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_12_12_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_12_12_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-12-12",
+      "ts_min_utc": "2024-12-12T13:29:45.018307+00:00",
+      "ts_max_utc": "2024-12-12T13:31:59.910966+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_12_19_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_12_19_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-12-19",
+      "ts_min_utc": "2024-12-19T13:29:45.095406+00:00",
+      "ts_max_utc": "2024-12-19T13:31:59.992944+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2024_12_26_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2024_12_26_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2024-12-26",
+      "ts_min_utc": "2024-12-26T13:29:45.000537+00:00",
+      "ts_max_utc": "2024-12-26T13:31:59.903345+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_01_02_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_01_02_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-01-02",
+      "ts_min_utc": "2025-01-02T13:29:45.061071+00:00",
+      "ts_max_utc": "2025-01-02T13:31:59.890852+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_01_09_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_01_09_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-01-09",
+      "ts_min_utc": "2025-01-09T13:29:45.121863+00:00",
+      "ts_max_utc": "2025-01-09T13:31:59.841483+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_01_16_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_01_16_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-01-16",
+      "ts_min_utc": "2025-01-16T13:29:45.039688+00:00",
+      "ts_max_utc": "2025-01-16T13:31:59.996141+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_01_23_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_01_23_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-01-23",
+      "ts_min_utc": "2025-01-23T13:29:45.000469+00:00",
+      "ts_max_utc": "2025-01-23T13:31:59.987347+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_01_30_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_01_30_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-01-30",
+      "ts_min_utc": "2025-01-30T13:29:45.000593+00:00",
+      "ts_max_utc": "2025-01-30T13:31:59.981042+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_02_06_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_02_06_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-02-06",
+      "ts_min_utc": "2025-02-06T13:29:45.002491+00:00",
+      "ts_max_utc": "2025-02-06T13:31:59.985003+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_02_13_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_02_13_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-02-13",
+      "ts_min_utc": "2025-02-13T13:29:45.001877+00:00",
+      "ts_max_utc": "2025-02-13T13:31:59.987674+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_02_20_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_02_20_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-02-20",
+      "ts_min_utc": "2025-02-20T13:29:45.000285+00:00",
+      "ts_max_utc": "2025-02-20T13:31:59.992216+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_02_27_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_02_27_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-02-27",
+      "ts_min_utc": "2025-02-27T13:29:45.002600+00:00",
+      "ts_max_utc": "2025-02-27T13:31:59.990524+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_03_06_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_03_06_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-03-06",
+      "ts_min_utc": "2025-03-06T13:29:45.023589+00:00",
+      "ts_max_utc": "2025-03-06T13:31:59.933472+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_03_13_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_03_13_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-03-13",
+      "ts_min_utc": "2025-03-13T12:29:45.018574+00:00",
+      "ts_max_utc": "2025-03-13T12:31:59.979197+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_03_20_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_03_20_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-03-20",
+      "ts_min_utc": "2025-03-20T12:29:45.009199+00:00",
+      "ts_max_utc": "2025-03-20T12:31:59.965052+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_03_27_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_03_27_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-03-27",
+      "ts_min_utc": "2025-03-27T12:29:45.119097+00:00",
+      "ts_max_utc": "2025-03-27T12:31:59.999416+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_04_03_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_04_03_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-04-03",
+      "ts_min_utc": "2025-04-03T12:29:45.056359+00:00",
+      "ts_max_utc": "2025-04-03T12:31:59.947135+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_04_10_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_04_10_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-04-10",
+      "ts_min_utc": "2025-04-10T12:29:45.069055+00:00",
+      "ts_max_utc": "2025-04-10T12:31:59.992931+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_04_17_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_04_17_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-04-17",
+      "ts_min_utc": "2025-04-17T12:29:45.084324+00:00",
+      "ts_max_utc": "2025-04-17T12:31:59.901132+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_04_24_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_04_24_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-04-24",
+      "ts_min_utc": "2025-04-24T12:29:45.004796+00:00",
+      "ts_max_utc": "2025-04-24T12:31:59.970757+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_05_01_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_05_01_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-05-01",
+      "ts_min_utc": "2025-05-01T12:29:45.048713+00:00",
+      "ts_max_utc": "2025-05-01T12:31:59.999043+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_05_08_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_05_08_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-05-08",
+      "ts_min_utc": "2025-05-08T12:29:45.004550+00:00",
+      "ts_max_utc": "2025-05-08T12:31:59.974355+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_05_15_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_05_15_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-05-15",
+      "ts_min_utc": "2025-05-15T12:29:45.089055+00:00",
+      "ts_max_utc": "2025-05-15T12:31:59.995614+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_05_22_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_05_22_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-05-22",
+      "ts_min_utc": "2025-05-22T12:29:45.007048+00:00",
+      "ts_max_utc": "2025-05-22T12:31:59.990830+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_05_29_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_05_29_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-05-29",
+      "ts_min_utc": "2025-05-29T12:29:45.066833+00:00",
+      "ts_max_utc": "2025-05-29T12:31:59.940754+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_06_05_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_06_05_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-06-05",
+      "ts_min_utc": "2025-06-05T12:29:45.059907+00:00",
+      "ts_max_utc": "2025-06-05T12:31:59.956949+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_06_12_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_06_12_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-06-12",
+      "ts_min_utc": "2025-06-12T12:29:45.005699+00:00",
+      "ts_max_utc": "2025-06-12T12:31:59.951715+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_06_18_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_06_18_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-06-18",
+      "ts_min_utc": "2025-06-18T12:29:45.082420+00:00",
+      "ts_max_utc": "2025-06-18T12:31:59.990570+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_06_26_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_06_26_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-06-26",
+      "ts_min_utc": "2025-06-26T12:29:45.061835+00:00",
+      "ts_max_utc": "2025-06-26T12:31:59.996833+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_07_03_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_07_03_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-07-03",
+      "ts_min_utc": "2025-07-03T12:29:45.122500+00:00",
+      "ts_max_utc": "2025-07-03T12:31:59.989303+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_07_10_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_07_10_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-07-10",
+      "ts_min_utc": "2025-07-10T12:29:45.075931+00:00",
+      "ts_max_utc": "2025-07-10T12:31:59.966241+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_07_17_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_07_17_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-07-17",
+      "ts_min_utc": "2025-07-17T12:29:45.059740+00:00",
+      "ts_max_utc": "2025-07-17T12:31:59.950610+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_07_24_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_07_24_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-07-24",
+      "ts_min_utc": "2025-07-24T12:29:45.036280+00:00",
+      "ts_max_utc": "2025-07-24T12:31:59.906488+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_07_31_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_07_31_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-07-31",
+      "ts_min_utc": "2025-07-31T12:29:45.080083+00:00",
+      "ts_max_utc": "2025-07-31T12:31:59.960319+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_08_07_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_08_07_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-08-07",
+      "ts_min_utc": "2025-08-07T12:29:45.060675+00:00",
+      "ts_max_utc": "2025-08-07T12:31:59.981209+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_08_14_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_08_14_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-08-14",
+      "ts_min_utc": "2025-08-14T12:29:45.058363+00:00",
+      "ts_max_utc": "2025-08-14T12:31:59.999317+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_08_21_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_08_21_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-08-21",
+      "ts_min_utc": "2025-08-21T12:29:45.020124+00:00",
+      "ts_max_utc": "2025-08-21T12:31:59.992990+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_08_28_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_08_28_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-08-28",
+      "ts_min_utc": "2025-08-28T12:29:45.057230+00:00",
+      "ts_max_utc": "2025-08-28T12:31:59.960769+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_09_04_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_09_04_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-09-04",
+      "ts_min_utc": "2025-09-04T12:29:45.001725+00:00",
+      "ts_max_utc": "2025-09-04T12:31:59.923052+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_09_11_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_09_11_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-09-11",
+      "ts_min_utc": "2025-09-11T12:29:45.002299+00:00",
+      "ts_max_utc": "2025-09-11T12:31:59.986538+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_09_18_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_09_18_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-09-18",
+      "ts_min_utc": "2025-09-18T12:29:45.095817+00:00",
+      "ts_max_utc": "2025-09-18T12:31:59.924676+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_09_25_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_09_25_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-09-25",
+      "ts_min_utc": "2025-09-25T12:29:45.000256+00:00",
+      "ts_max_utc": "2025-09-25T12:31:59.882782+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_10_02_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_10_02_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-10-02",
+      "ts_min_utc": "2025-10-02T12:29:45.134132+00:00",
+      "ts_max_utc": "2025-10-02T12:31:59.685677+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_10_09_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_10_09_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-10-09",
+      "ts_min_utc": "2025-10-09T12:29:45.053433+00:00",
+      "ts_max_utc": "2025-10-09T12:31:59.773442+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_10_16_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_10_16_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-10-16",
+      "ts_min_utc": "2025-10-16T12:29:45.114180+00:00",
+      "ts_max_utc": "2025-10-16T12:31:59.976843+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_10_23_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_10_23_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-10-23",
+      "ts_min_utc": "2025-10-23T12:29:45.005961+00:00",
+      "ts_max_utc": "2025-10-23T12:31:59.943999+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_10_30_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_10_30_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-10-30",
+      "ts_min_utc": "2025-10-30T12:29:45.027310+00:00",
+      "ts_max_utc": "2025-10-30T12:31:59.990468+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_11_06_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_11_06_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-11-06",
+      "ts_min_utc": "2025-11-06T13:29:45.056966+00:00",
+      "ts_max_utc": "2025-11-06T13:31:59.960994+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_11_13_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_11_13_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-11-13",
+      "ts_min_utc": "2025-11-13T13:29:45.042843+00:00",
+      "ts_max_utc": "2025-11-13T13:31:59.911772+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_11_20_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_11_20_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-11-20",
+      "ts_min_utc": "2025-11-20T13:29:45.086226+00:00",
+      "ts_max_utc": "2025-11-20T13:31:59.994521+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_11_26_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_11_26_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-11-26",
+      "ts_min_utc": "2025-11-26T13:29:45.060005+00:00",
+      "ts_max_utc": "2025-11-26T13:31:59.934379+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_12_04_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_12_04_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-12-04",
+      "ts_min_utc": "2025-12-04T13:29:45.000508+00:00",
+      "ts_max_utc": "2025-12-04T13:31:59.991026+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_12_11_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_12_11_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-12-11",
+      "ts_min_utc": "2025-12-11T13:29:45.051172+00:00",
+      "ts_max_utc": "2025-12-11T13:31:59.969802+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_12_18_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_12_18_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-12-18",
+      "ts_min_utc": "2025-12-18T13:29:45.048050+00:00",
+      "ts_max_utc": "2025-12-18T13:31:59.998749+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_12_24_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_12_24_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-12-24",
+      "ts_min_utc": "2025-12-24T13:29:45.042417+00:00",
+      "ts_max_utc": "2025-12-24T13:31:59.963999+00:00",
+      "reason": "outside_window"
+    },
+    {
+      "symbol": "MES.v.0",
+      "event_id": "UNEMPLOYMENT_CLAIMS_2025_12_31_TIGHT",
+      "npz_path": "C:\\Users\\MSI\\Documents\\New project\\data\\npz\\MES.v.0_UNEMPLOYMENT_CLAIMS_2025_12_31_TIGHT_mbo.npz",
+      "covers_window": false,
+      "date": "2025-12-31",
+      "ts_min_utc": "2025-12-31T13:29:45.069318+00:00",
+      "ts_max_utc": "2025-12-31T13:31:59.826590+00:00",
+      "reason": "outside_window"
+    }
+  ]
+}

@@ -18,8 +18,8 @@ from hft3.validation.lanes.unified_staleness import (
 
 def test_unified_certification_runs_all_lanes():
     card = run_unified_certification(skip_pytest=True)
-    assert len(card.covered_lanes) == 2
-    for lane_value in ("cme_futures", "equities"):
+    assert len(card.covered_lanes) == 3
+    for lane_value in ("cme_futures", "equities", "cme_options"):
         assert lane_value in card.lane_coverage
         run_result = card.lane_coverage[lane_value].get("run_result")
         assert run_result is not None
@@ -55,6 +55,7 @@ def test_staleness_paths_cover_all_active_lanes():
     paths = get_lane_staleness_paths()
     assert "cme_futures" in paths.paths_by_lane
     assert "equities" in paths.paths_by_lane
+    assert "cme_options" in paths.paths_by_lane
     assert "crypto" not in paths.paths_by_lane
     assert "options" not in paths.paths_by_lane
 

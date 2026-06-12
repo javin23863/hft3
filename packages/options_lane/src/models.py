@@ -101,3 +101,64 @@ class Violation:
     observed_spread: float
     theoretical_spread: float
     underlying_eff: float
+
+
+@dataclass
+class BandViolation:
+    """
+    No-arbitrage band violation for style-aware parity detection.
+
+    For European futures options: C - P = df*(F - K) is exact (zero-width band).
+    For American futures options: C - P must lie in [df*F - K, F - df*K].
+      Derivation: early exercise gives C >= max(F-K, 0) and P >= max(K-F, 0), so
+        C - P <= F - df*K  (sell call, buy put, sell future at F, invest K at r)
+        C - P >= df*F - K  (buy call, sell put, buy future at F, borrow K at r)
+      Band width = (F + K)*(1 - df).  A mid/executable spread STRICTLY INSIDE the
+      band is NOT a violation — eliminating false positives for American quarterlies.
+
+    Fields:
+      band_lo, band_hi  — no-arb band endpoints (equal for European)
+      excess            — signed excess beyond violated boundary (0.0 if inside band)
+      executable        — True if violation persists on executable (bid/ask) prices
+      degraded          — True when bid/ask unavailable and mid was used as fallback
+      actionable        — True if excess clears round-trip fees on executable prices
+      fee_total         — exact fee charge used (from OptionsFeeModel or fallback)
+    """
+
+    group_id: str
+    timestamp_ns: int
+    observed_spread: float
+    theoretical_spread: float
+    band_lo: float
+    band_hi: float
+    excess: float
+    executable: bool
+    degraded: bool
+    actionable: bool
+    fee_total: float
+    legs_used: list[str]
+    underlying_eff: float
+
+
+@dataclass
+class CalendarViolation:
+    """
+    Calendar monotonicity violation: C(T2) < df(T1->T2) * C(T1) within costs.
+
+    Caveat: ES quarterly options reference DIFFERENT underlying futures contracts
+    per expiry — this check applies cleanly only to same-underlying chains
+    (dailies/weeklies on the same quarterly future).  The caller MUST pass
+    same_underlying=True to enable the check; otherwise this record is not produced.
+    """
+
+    symbol: str
+    strike: float
+    t1_expiry_years: float
+    t2_expiry_years: float
+    c_t1: float
+    c_t2: float
+    df_forward: float
+    required_c_t2: float
+    excess: float
+    actionable: bool
+    same_underlying: bool

@@ -10,6 +10,10 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .adapters.cme_adapter import CMEBacktester, CMEConfig, load_cme_config
+from .adapters.cme_options_adapter import (
+    CMEOptionsBacktester,
+    load_cme_options_config,
+)
 from .backtester_protocol import validate_lane_config
 from .lane import (
     EQUITIES_SPEED_ADVANTAGE_PROFILE,
@@ -116,6 +120,10 @@ def _options_lane_validator() -> "OptionsLaneBacktester":
     return OptionsLaneBacktester(load_options_lane_config())
 
 
+def _cme_options_validator() -> "CMEOptionsBacktester":
+    return CMEOptionsBacktester(load_cme_options_config())
+
+
 def register_all_lanes() -> None:
     """Register all lanes. Idempotent: safe to call multiple times."""
     reg = LaneRegistry.instance()
@@ -136,6 +144,15 @@ def register_all_lanes() -> None:
             validator=_options_lane_validator,
             test_paths=["tests/test_workbench/test_options_lane_campaign.py"],
             model_id_prefixes=("OPTIONS_", "PARITY_"),
+        )
+    if reg.get(Lane.CME_OPTIONS) is None:
+        register_lane(
+            lane=Lane.CME_OPTIONS,
+            adapter_factory=lambda: CMEOptionsBacktester(load_cme_options_config()),
+            config_loader=load_cme_options_config,
+            validator=_cme_options_validator,
+            test_paths=["tests/test_lanes_cme_options"],
+            model_id_prefixes=("FOPT_",),
         )
 
 

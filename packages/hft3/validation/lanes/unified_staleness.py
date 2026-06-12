@@ -30,6 +30,12 @@ DEFAULT_LANE_PATHS: dict[str, list[str]] = {
         "packages/options_lane/src",
         "packages/options_lane/config",
     ],
+    Lane.CME_OPTIONS.value: [
+        "packages/options_pricing",
+        "packages/options_risk",
+        "packages/hft3/validation/lanes/adapters/cme_options_adapter.py",
+        "tests/test_lanes_cme_options",
+    ],
 }
 
 
