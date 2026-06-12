@@ -30,36 +30,11 @@ using `constant_order_latency` (hftbacktest 2.4+) or `constant_latency`
 
 ## 3. Crypto Lane: Research Sweep Bands
 
-Source: `packages/backtest_pipeline/src/crypto_hft_builder.py`
-
-Default `latency_ms=50.0` for all four exchange builders
-(`build_binance_hftbacktest`, `build_kraken_hftbacktest`,
-`build_bitfinex_hftbacktest`, `build_coinbase_hftbacktest`).
-
-**Contract** (resolves the former TODO):
-
-```python
-CRYPTO_LATENCY_BANDS_MS = [5.0, 50.0, 200.0]
-```
-
-To be defined as a named constant in `crypto_hft_builder.py`
-(ALPHA_CRYPTO.md campaign deliverable); until the constant lands, `[5, 50,
-200]` ms is the binding sweep list for any crypto sweep runner.
-
-**Crypto latency resolution** (analog of §4, promotion-grade replay):
-
-1. CLI `--latency-ms` if provided.
-2. `runtime/crypto_latency/latency_summary.json` with
-   `paper_order_latency.measured=true` AND `order_ack_p99_ms` present
-   (see §10).
-3. Neither → raise `ValueError` (UNMEASURED). TCP connect-time and WS
-   ping/pong RTT are never silent fallbacks for order-ack latency.
-
-**Venue RTT source labels** (`venue_profiles.json`, written by
-`packages/crypto_lane/src/align/latency_profile.py`): only
-`live_measured:<venue>` and `ws_rtt:*` sources are promotion-eligible;
-`synthetic_calibrated:*` profiles are research-only and must hard-fail the
-promotion path (CRYPTO_LIVE.md §8 row K7).
+Moved with the crypto lane to the `hft3-crypto-lane` repo (split tag
+`pre-lane-split-20260612`). Historical contract for archaeology:
+`CRYPTO_LATENCY_BANDS_MS = [5.0, 50.0, 200.0]`, promotion-grade resolution
+required `runtime/crypto_latency/latency_summary.json` with
+`paper_order_latency.measured=true`.
 
 ---
 
@@ -271,44 +246,5 @@ bundle construction requires `--latency-ms` explicitly (§4 rung 1).
 
 ## 10. Crypto Order-Ack Measurement Campaign
 
-Crypto analog of §9. Lane-scoped artifact:
-`runtime/crypto_latency/latency_summary.json` (separate from the CME
-`runtime/latency_reports/latency_summary.json`).
+Moved with the crypto lane to the `hft3-crypto-lane` repo (split tag `pre-lane-split-20260612`).
 
-### 10.1 Requirement
-
-`paper_order_latency.measured` in `runtime/crypto_latency/latency_summary.json`
-must flip to `true` before the crypto resolution rung 2 (§3) can supply
-`order_ack_p99_ms` to replay runs and crypto bundle construction
-(CRYPTO_LIVE.md §7 `latency_ms_at_promotion`). Until then, every crypto
-replay and bundle build requires an explicit `--latency-ms` argument.
-
-### 10.2 Timestamp Protocol
-
-§9.2 applies verbatim with venue substitutions:
-
-- **submit_ns**: `time.perf_counter_ns()` captured immediately before the
-  Bitfinex order-new wire call in the crypto adapter.
-- **ack_ns**: captured on entry of the venue order-ack WebSocket callback,
-  before any processing.
-
-No synthetic or derived timestamps in paired records; synthetic records must
-carry `shadow_synthetic: true` and never populate the authoritative
-`paper_order_latency` section.
-
-### 10.3 Sample Size Gate
-
-Minimum **n ≥ 1000** paired submit→ack samples, collected from Bitfinex paper
-sub-account sessions running on the crypto live host (Contabo VPS,
-CRYPTO_LIVE.md §2) — not from the workstation, and not simulated.
-
-### 10.4 Campaign Unblock
-
-Setting `paper_order_latency.measured = true` (with valid `order_ack_p99_ms`)
-unblocks:
-
-1. §3 crypto resolution rung 2 — automated latency injection for crypto
-   replay runs.
-2. ALPHA_CRYPTO.md C9 gate — the C10 sweep at measured p99 may begin.
-3. CRYPTO_LIVE.md §7 — `latency_ms_at_promotion` may be drawn from the
-   measured value rather than requiring an explicit CLI override.

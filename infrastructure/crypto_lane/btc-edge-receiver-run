@@ -1,9 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-
-cd /root/hft3/repo
-export PYTHONPATH=/root/hft3/repo/packages
-export PYTHONDONTWRITEBYTECODE=1
-export PYTHONUNBUFFERED=1
-
-exec /usr/bin/python3 -c 'from crypto_lane.src.ingest.edge_receiver import run_receiver; run_receiver("0.0.0.0", 9876)'
