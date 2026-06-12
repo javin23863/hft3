@@ -17,6 +17,7 @@ dependencies = [
 workbench = "workbench.__main__:main"
 economic-event-universe = "economic_event_universe.cli:main"
 crypto-lane = "crypto_lane.pipeline:main"
+llm-slow-tier = "llm_slow_tier.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["apps", "packages", "."]
