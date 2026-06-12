@@ -1,0 +1,187 @@
+# configs/risk/options_kill_switch.yaml
+#
+# Options-lane kill-switch triggers.
+#
+# DELIBERATE DEVIATION FROM PLAN
+# --------------------------------
+# The plan spec calls for 9 new triggers inside configs/risk/kill_switch.yaml.
+# They are placed here in a SEPARATE FILE instead because:
+#   1. The live-futures kill_switch.yaml is parsed by a C++ runtime whose
+#      unknown-key strictness cannot be verified offline (strict YAML parsers
+#      reject unrecognised keys).  Injecting options keys risks silently
+#      breaking the live futures lane.
+#   2. This file uses the IDENTICAL schema (thresholds + trigger_actions) so
+#      a future merge into kill_switch.yaml is purely mechanical — copy the
+#      blocks, run the live-parser smoke-test, delete this file.
+#
+# MERGE PATH (Phase 2)
+#   a. Verify live C++ parser accepts unknown keys under trigger_actions (or
+#      add options lane section in parser).
+#   b. Append thresholds block values to kill_switch.yaml thresholds section.
+#   c. Append each trigger_actions entry to kill_switch.yaml trigger_actions.
+#   d. Add halt_options_lane action wiring in risk_engine (Phase 2 C++ change;
+#      see action vocabulary note below).
+#   e. Remove this file.
+#
+# ACTION VOCABULARY
+# -----------------
+# Reuses the following actions defined in kill_switch.yaml:
+#   stop_new_orders, cancel_open_orders, flatten_positions_if_configured,
+#   log_event, create_incident_report, update_observer_state
+#
+# New action added here:
+#   halt_options_lane
+#     Lane-scoped halt of the options lane only, leaving the CME futures lane
+#     (CHI404) running.  Requires a Phase 2 risk_engine C++ change:
+#       - Add a lane-scope bitmask to the halt signal so the CME futures lane
+#         is unaffected.
+#       - Implement hedge_for_options carve-out: any existing futures hedge
+#         legs attached to options positions are NOT flattened on halt.
+#     Until Phase 2 is implemented, halt_options_lane degrades gracefully to
+#     stop_new_orders + cancel_open_orders on the options instruments only.
+#
+# THRESHOLD PHILOSOPHY
+# --------------------
+# All numeric thresholds below are OPERATIONAL STARTING POINTS, not
+# statistically calibrated values.  They must be reviewed against:
+#   - Historical vol-of-vol and gamma distributions for the target instruments.
+#   - FCM margin parameter files (nightly).
+#   - Observed surface update latency during RTH for the data vendor.
+# Label: PLACEHOLDER — replace before production.
+
+thresholds:
+  # vega_spike: absolute change in portfolio vega (in $ per vol point)
+  # over a 60-second rolling window that triggers a halt.
+  # PLACEHOLDER — set to observed 2σ daily vega move * safety_factor.
+  vega_spike_abs_usd_per_vol_pt: 50000.0    # PLACEHOLDER
+
+  # gamma_flip: minimum |portfolio gamma| (in $ per underlying² per contract)
+  # required for a sign flip to be considered material.
+  # PLACEHOLDER — below this level the flip is noise-level.
+  gamma_flip_min_abs_usd: 5000.0            # PLACEHOLDER
+
+  # iv_dislocation: ATM IV move (vol points, absolute) in 60s that is NOT
+  # explained by an underlying move above underlying_move_threshold.
+  iv_dislocation_atm_vol_pts: 0.05          # PLACEHOLDER (5 vol points)
+  iv_dislocation_underlying_move_pct: 0.01  # PLACEHOLDER (1% underlying move)
+
+  # stale_surface: maximum age (seconds) of the volatility surface during
+  # Regular Trading Hours before data is considered stale.
+  stale_surface_max_age_s: 30.0             # PLACEHOLDER
+
+  # stress_grid_breach: worst stress-grid cell loss threshold (USD, positive).
+  # Fires when worst_cell < -stress_grid_breach_usd.
+  stress_grid_breach_usd: 25000.0           # PLACEHOLDER
+
+  # naked_short_without_hedge: maximum seconds a naked short option leg
+  # may exist without a covering hedge order/position before halting.
+  naked_short_max_unhedged_s: 5.0           # PLACEHOLDER
+
+  # margin_utilization_breach: hard utilisation fraction above which the
+  # options lane halts.  Distinct from the soft limit (defined in limits.yaml).
+  # PLACEHOLDER — coordinate with FCM margin file hard cap.
+  margin_utilization_hard_limit: 0.90       # PLACEHOLDER (90%)
+
+  # expiring_position_unmanaged: time-of-day cutoff (Chicago time, 24h HH:MM)
+  # after which an open position in an expiring instrument with no management
+  # order is considered unmanaged and triggers a halt.
+  expiring_position_cutoff_ct: "15:00"      # PLACEHOLDER (15:00 CT)
+
+  # assignment_uncertainty: used for hard-halt on post-expiry ledger mismatch.
+  # No numeric threshold — the condition is boolean (mismatch exists or not).
+  # This entry is kept for symmetry; the trigger fires on any mismatch.
+  assignment_uncertainty_any_mismatch: true
+
+trigger_actions:
+  # 1. Vega spike: large, rapid vega change suggests surface re-pricing event
+  #    or model error.  Halt new orders; do not flatten (hedge may be needed).
+  vega_spike:
+    - stop_new_orders
+    - cancel_open_orders
+    - halt_options_lane      # Phase 2: lane-scoped; see action vocabulary above
+    - log_event
+    - create_incident_report
+    - update_observer_state
+
+  # 2. Gamma flip: portfolio gamma crosses zero with material magnitude.
+  #    Convexity has reversed; existing delta hedges are now directionally wrong.
+  gamma_flip:
+    - stop_new_orders
+    - cancel_open_orders
+    - halt_options_lane
+    - log_event
+    - create_incident_report
+    - update_observer_state
+
+  # 3. IV dislocation: ATM vol moves sharply without underlying move —
+  #    possible data feed error, exchange halt, or sudden demand imbalance.
+  iv_dislocation:
+    - stop_new_orders
+    - cancel_open_orders
+    - halt_options_lane
+    - log_event
+    - create_incident_report
+    - update_observer_state
+
+  # 4. Stale surface: surface age exceeds threshold during RTH.
+  #    Trading on a stale surface means all greeks and stress values are stale.
+  stale_surface:
+    - stop_new_orders
+    - log_event
+    - update_observer_state
+
+  # 5. Stress grid breach: worst scenario cell exceeds loss hard limit.
+  #    Immediate halt; do not flatten automatically (may worsen position).
+  stress_grid_breach:
+    - stop_new_orders
+    - cancel_open_orders
+    - halt_options_lane
+    - log_event
+    - create_incident_report
+    - update_observer_state
+
+  # 6. Naked short without hedge: hedge invariant violated for > threshold.
+  #    Flatten the offending position to restore hedge cover.
+  naked_short_without_hedge:
+    - stop_new_orders
+    - cancel_open_orders
+    - flatten_positions_if_configured
+    - halt_options_lane
+    - log_event
+    - create_incident_report
+    - update_observer_state
+
+  # 7. Margin utilisation breach: hard limit exceeded.
+  #    Halt and reduce positions to restore margin headroom.
+  margin_utilization_breach:
+    - stop_new_orders
+    - cancel_open_orders
+    - flatten_positions_if_configured
+    - halt_options_lane
+    - log_event
+    - create_incident_report
+    - update_observer_state
+
+  # 8. Expiring position unmanaged: open position in expiring contract
+  #    after cutoff with no management order.  Hard halt to avoid
+  #    uncontrolled assignment or delivery.
+  expiring_position_unmanaged:
+    - stop_new_orders
+    - cancel_open_orders
+    - halt_options_lane
+    - log_event
+    - create_incident_report
+    - update_observer_state
+
+  # 9. Assignment uncertainty: post-expiry expected-delivery ledger mismatch.
+  #    HARD HALT — all options activity ceases; incident mandatory.
+  #    This is the only trigger that ALSO fires flatten_positions_if_configured
+  #    because an unreconciled ledger represents unknown exposure.
+  assignment_uncertainty:
+    - stop_new_orders
+    - cancel_open_orders
+    - flatten_positions_if_configured
+    - halt_options_lane
+    - log_event
+    - create_incident_report
+    - update_observer_state
