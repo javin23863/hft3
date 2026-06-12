@@ -8,11 +8,13 @@ from hft3.validation.lanes.scorecard import (
 )
 
 
-def test_scorecard_contains_three_lanes():
+def test_scorecard_contains_all_lanes():
     card = build_lane_scorecard()
     assert "cme_futures" in card.covered_lanes
     assert "crypto" in card.covered_lanes
     assert "equities" in card.covered_lanes
+    assert "cme_options" in card.covered_lanes
+    # "options" is not a lane name; legacy OPTIONS_ prefix routes to equities.
     assert "options" not in card.covered_lanes
 
 
@@ -81,7 +83,7 @@ def test_scorecard_to_dict_round_trip():
     assert d["git_sha"] == "abc123"
     assert d["timestamp_utc"] == "2026-06-03T00:00:00Z"
     assert d["schema_version"] == 1
-    assert len(d["covered_lanes"]) == 3
+    assert len(d["covered_lanes"]) == 4
 
 
 def test_legacy_cme_fields_extracted():

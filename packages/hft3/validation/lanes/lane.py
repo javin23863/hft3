@@ -17,6 +17,7 @@ class Lane(str, Enum):
     CME_FUTURES = "cme_futures"
     CRYPTO = "crypto"
     EQUITIES = "equities"
+    CME_OPTIONS = "cme_options"
 
     @classmethod
     def from_model_id(cls, model_id: str) -> "Lane":
@@ -25,12 +26,17 @@ class Lane(str, Enum):
         Recognized prefixes:
           - CRYPTO_                              -> CRYPTO
           - EQUITY_, LOW_FLOAT_                  -> EQUITIES
-          - OPTIONS_, PARITY_                    -> EQUITIES (merged lane)
+          - OPTIONS_, PARITY_                    -> EQUITIES (legacy merged lane;
+                                                   OPTIONS_ is a legacy equities-parity
+                                                   prefix — new CME options models use FOPT_)
+          - FOPT_                                -> CME_OPTIONS (canonical CME options prefix)
           - everything else                      -> CME_FUTURES
         """
         upper = (model_id or "").upper()
         if upper.startswith("CRYPTO_"):
             return cls.CRYPTO
+        if upper.startswith("FOPT_"):
+            return cls.CME_OPTIONS
         if upper.startswith(("EQUITY_", "LOW_FLOAT_", "OPTIONS_", "PARITY_")):
             return cls.EQUITIES
         return cls.CME_FUTURES
@@ -89,6 +95,23 @@ EQUITIES_SPEED_ADVANTAGE_PROFILE = LaneCapabilityProfile(
     research_only=False,
     hft_proof_required=False,
     description="Equities lane: US stocks + options via IBKR Web API, speed-advantage non-DMA (better-than-retail; no true HFT/DMA claim).",
+)
+
+# CME options lane: futures DMA exists; options execution is Phase 2 only.
+# research_only=True until Phase 2 gate is passed; profile flips at that gate.
+CME_OPTIONS_RESEARCH_PROFILE = LaneCapabilityProfile(
+    name="cme_options_research",
+    is_hft=False,
+    dma=True,
+    node_direct=False,
+    speed_advantage=False,
+    research_only=True,
+    hft_proof_required=False,
+    description=(
+        "CME options lane (Phases 0-1): research-only. "
+        "Futures DMA infrastructure exists (CHI404); options execution is Phase 2. "
+        "research_only flips to False at the Phase 2 gate — do not claim execution edge here."
+    ),
 )
 
 

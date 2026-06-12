@@ -3,6 +3,7 @@
 from .backtester_protocol import Backtester, validate_lane_config
 from .lane import (
     BacktestResult,
+    CME_OPTIONS_RESEARCH_PROFILE,
     CME_TRUE_HFT_DMA_PROFILE,
     CRYPTO_NODE_DIRECT_HFT_PROFILE,
     EQUITIES_SPEED_ADVANTAGE_PROFILE,
@@ -19,6 +20,7 @@ from .registration import register_all_lanes
 __all__ = [
     "Backtester",
     "BacktestResult",
+    "CME_OPTIONS_RESEARCH_PROFILE",
     "CME_TRUE_HFT_DMA_PROFILE",
     "CRYPTO_NODE_DIRECT_HFT_PROFILE",
     "EQUITIES_SPEED_ADVANTAGE_PROFILE",
