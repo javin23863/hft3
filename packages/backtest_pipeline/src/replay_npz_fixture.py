@@ -55,6 +55,9 @@ def build_minimal_mbo_npz(path: Path, *, n_levels: int = 5) -> Path:
     data = np.array(rows, dtype=event_dtype)
     np.savez_compressed(path, data=data)
 
+    # This fixture uses ADD_ORDER_EVENT (L3/MBO) rows — validate with the L3
+    # queue model so the book forms correctly (L2 log_prob_queue_model2 ignores
+    # ADD_ORDER_EVENT and produces a permanently-empty book).
     asset = BacktestAsset()
     asset.data(str(path))
     asset.tick_size(tick)
@@ -62,7 +65,7 @@ def build_minimal_mbo_npz(path: Path, *, n_levels: int = 5) -> Path:
     from backtest_pipeline.src.hft_backtest_builder import _apply_constant_latency
     _apply_constant_latency(asset, 1_000_000, 1_000_000)
     asset.no_partial_fill_exchange()
-    asset.log_prob_queue_model2()
+    asset.l3_fifo_queue_model()
     hbt = HashMapMarketDepthBacktest([asset])
     for _ in range(100):
         if hbt.elapse(100_000) == 1:

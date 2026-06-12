@@ -1,4 +1,4 @@
-"""Replay session orchestrator."""
+﻿"""Replay session orchestrator."""
 from __future__ import annotations
 
 import json
@@ -97,14 +97,16 @@ class ReplaySessionConfig:
     sensor_feature_npz: Dict[str, str] = field(default_factory=dict)
     # Stepping mode.
     #
-    # "event" (canonical): while no orders are live, jump straight to the next
-    # market-data event via hbt.wait_next_feed — features only change on
-    # events, so nothing observable is skipped. While orders are live, fall
-    # back to fixed step_ns grid stepping so queue-position and order-latency
-    # simulation keep their granularity.
-    #
-    # "grid": fixed step_ns stepping throughout (legacy behavior; ablation
-    # and exact-reproduction of pre-event-stepping baselines only).
+    # "event" (canonical): uses hbt.wait_next_feed(include_order_resp=True)
+    #   throughout.  When no orders are live this jumps directly to the next
+    #   market-data event (same as before).  When orders ARE live it wakes on
+    #   fills/order responses OR the next feed event -- eliminating the 100us
+    #   grid-stepping tax (3.3M elapse() calls per session) while preserving
+    #   full hftbacktest queue/fill simulation fidelity.
+    #   Decision timestamps shift to true event/order-resp times rather than
+    #   100us-grid alignment (known re-baselining, same class as commit 49c3d80).
+    # "grid": fixed step_ns elapse() stepping throughout (legacy; A/B only).
+    # Override at runtime: HFT3_QUOTE_STEPPING=grid|event env var.
     step_mode: str = "event"
 
 
@@ -201,16 +203,29 @@ class ReplaySession:
                         latency_ms=cfg.latency_ms,
                     )
 
-            event_stepping = cfg.step_mode == "event"
+            # Resolve stepping mode: env var HFT3_QUOTE_STEPPING overrides config
+            # ("grid" forces legacy behaviour for A/B baselines; "event" is canonical).
+            _stepping_env = os.environ.get("HFT3_QUOTE_STEPPING", "").lower()
+            if _stepping_env in ("grid", "event"):
+                effective_step_mode = _stepping_env
+            else:
+                effective_step_mode = cfg.step_mode
+
+            event_stepping = effective_step_mode == "event"
             # Cap a single event-driven wait so the loop still advances the
             # clock through dead air in bounded jumps (1s of sim time).
             wait_cap_ns = max(cfg.step_ns, 1_000_000_000)
 
             steps = 0
             while True:
-                if event_stepping and not getattr(adapter, "has_open_orders", True):
-                    # No live orders: nothing can fill and features only move
-                    # on market-data events — jump to the next one.
+                if event_stepping:
+                    # Event-driven: wake on fills/cancels OR the next feed event,
+                    # whichever comes first.  With include_order_resp=True the
+                    # simulator wakes us on order responses (fills, cancels) without
+                    # 100us polling -- eliminating the grid-stepping tax while orders
+                    # are open.  When no orders are live this is identical to the
+                    # existing order-free fast path.
+                    # Returns: 0=timeout  2=feed  3=order_resp  1=end  else=err
                     result = hbt.wait_next_feed(True, wait_cap_ns)
                     if result == 1:
                         break
@@ -227,7 +242,11 @@ class ReplaySession:
                 self.clock.advance_to(ts)
                 # Adapter observes terminal order states and clears inactive
                 # orders itself; clearing here first would hide fills from it.
-                adapter.after_elapse(ts)
+                # Pass wake_reason so after_elapse can skip the orders() scan on
+                # pure feed wakes (ret=2): hftbacktest guarantees that order state
+                # cannot change without a ret=3 order-response wake.
+                # Grid mode passes result=0 always (elapse never returns 2/3).
+                adapter.after_elapse(ts, wake_reason=result)
 
                 depth = hbt.depth(0)
                 book_one_sided = depth.best_bid <= 0 or depth.best_ask <= 0

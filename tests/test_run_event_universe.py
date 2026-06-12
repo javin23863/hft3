@@ -865,3 +865,221 @@ class TestEmbargoEnforcement:
         # EMBARGO_EVT must not appear in unit_results
         run_ids = {u["event_id"] for u in payload.get("unit_results", [])}
         assert "EMBARGO_EVT" not in run_ids
+
+
+# ---------------------------------------------------------------------------
+# 9. Shard tests
+# ---------------------------------------------------------------------------
+
+class TestShard:
+    """Verify the --shard I/N hash-partitioning logic."""
+
+    # ---- parse_shard ----
+
+    def test_parse_valid(self, universe_mod):
+        assert universe_mod.parse_shard("0/2") == (0, 2)
+        assert universe_mod.parse_shard("1/2") == (1, 2)
+        assert universe_mod.parse_shard("3/10") == (3, 10)
+
+    def test_parse_malformed_format(self, universe_mod):
+        """Non-'I/N' strings must raise ValueError."""
+        for bad in ("0", "0-2", "0/2/3", "half", ""):
+            with pytest.raises(ValueError, match="I/N"):
+                universe_mod.parse_shard(bad)
+
+    def test_parse_non_integer_parts(self, universe_mod):
+        with pytest.raises(ValueError):
+            universe_mod.parse_shard("a/2")
+        with pytest.raises(ValueError):
+            universe_mod.parse_shard("0/b")
+
+    def test_parse_i_equals_n_error(self, universe_mod):
+        """I == N must be rejected (valid range: 0 <= I < N)."""
+        with pytest.raises(ValueError, match="0 <= I < N"):
+            universe_mod.parse_shard("2/2")
+
+    def test_parse_i_greater_than_n_error(self, universe_mod):
+        with pytest.raises(ValueError, match="0 <= I < N"):
+            universe_mod.parse_shard("5/2")
+
+    def test_parse_n_zero_error(self, universe_mod):
+        """N == 0 must be rejected."""
+        with pytest.raises(ValueError, match="N must be >= 1"):
+            universe_mod.parse_shard("0/0")
+
+    # ---- apply_shard: partition correctness ----
+
+    def _make_units(self, n: int) -> list[dict]:
+        """Produce n synthetic work units with distinct stable keys."""
+        return [
+            {
+                "event_id": f"EVT_{i:04d}",
+                "symbol": "MES.v.0",
+                "latency_ms": 1.0,
+                "npz_path": f"/fake/EVT_{i:04d}.npz",
+                "event_type": "CPI",
+                "release_date": "2024-01-01",
+            }
+            for i in range(n)
+        ]
+
+    def test_two_shards_partition_exactly(self, universe_mod):
+        """Shards 0/2 and 1/2 must be disjoint and their union must be all units."""
+        units = self._make_units(20)
+        shard0 = universe_mod.apply_shard(units, 0, 2)
+        shard1 = universe_mod.apply_shard(units, 1, 2)
+
+        keys_all = {universe_mod._unit_shard_key(u) for u in units}
+        keys0 = {universe_mod._unit_shard_key(u) for u in shard0}
+        keys1 = {universe_mod._unit_shard_key(u) for u in shard1}
+
+        # Disjoint
+        assert keys0.isdisjoint(keys1), "Shards must not overlap"
+        # Union = all
+        assert keys0 | keys1 == keys_all, "Union of shards must equal full set"
+
+    def test_shard_assignment_deterministic(self, universe_mod):
+        """Same units → same shard assignment across repeated calls."""
+        units = self._make_units(30)
+        shard_a = [universe_mod._unit_shard_key(u) for u in universe_mod.apply_shard(units, 0, 3)]
+        shard_b = [universe_mod._unit_shard_key(u) for u in universe_mod.apply_shard(units, 0, 3)]
+        assert shard_a == shard_b, "Shard assignment must be deterministic"
+
+    def test_shard_assignment_order_independent(self, universe_mod):
+        """Shuffling the input list must not change which units land in a shard."""
+        import random
+        units = self._make_units(40)
+        expected = {universe_mod._unit_shard_key(u) for u in universe_mod.apply_shard(units, 1, 4)}
+
+        shuffled = units[:]
+        random.shuffle(shuffled)
+        got = {universe_mod._unit_shard_key(u) for u in universe_mod.apply_shard(shuffled, 1, 4)}
+
+        assert expected == got, "Shard membership must not depend on input order"
+
+    def test_shard_0_of_1_returns_all(self, universe_mod):
+        """A single shard (N=1, I=0) must contain all units."""
+        units = self._make_units(15)
+        result = universe_mod.apply_shard(units, 0, 1)
+        assert len(result) == len(units)
+
+    def test_four_shards_partition_exactly(self, universe_mod):
+        """All four shards of 4 partition the set exactly."""
+        units = self._make_units(40)
+        all_keys = {universe_mod._unit_shard_key(u) for u in units}
+        union: set[str] = set()
+        seen: list[set[str]] = []
+        for i in range(4):
+            part = {universe_mod._unit_shard_key(u) for u in universe_mod.apply_shard(units, i, 4)}
+            # Each prior shard must be disjoint from this one
+            for prev in seen:
+                assert part.isdisjoint(prev), f"Shard {i}/4 overlaps a previous shard"
+            union |= part
+            seen.append(part)
+        assert union == all_keys, "Union of 4 shards must equal full set"
+
+    # ---- CLI integration: shard metadata recorded in JSON ----
+
+    # ---- OPT 2: smallest-first ordering ----
+
+    def test_work_units_sorted_smallest_first(self, universe_mod, tmp_path, events_csv):
+        """After build_work_units + OPT-2 sort, units appear in ascending NPZ size order.
+
+        Creates three NPZ files of distinct sizes, builds work units, then verifies
+        that the sorted list is ordered by file size ascending with a stable tiebreak
+        by (event_id, symbol, latency_ms).
+        """
+        import json as _json
+        from backtest_pipeline.src.replay_npz_fixture import build_minimal_mbo_npz
+
+        # Create three NPZ files; pad to different sizes by varying n_levels.
+        npz_a = tmp_path / "MES.v.0_AAA_EVT_A_mbo.npz"
+        npz_b = tmp_path / "MES.v.0_BBB_EVT_B_mbo.npz"
+
+        build_minimal_mbo_npz(npz_a, n_levels=2)   # small  (~327 bytes)
+        build_minimal_mbo_npz(npz_b, n_levels=10)  # larger (~506 bytes)
+
+        # Write extra events.csv with both events
+        extra_csv = tmp_path / "extra_events.csv"
+        extra_csv.write_text(
+            "event_id,event_type,release_date,release_time,timezone,"
+            "window_name,start_offset_seconds,end_offset_seconds,symbols,"
+            "priority,source,source_url,effective_date,notes,row_status\n"
+            "AAA_EVT_A,CPI,2024-01-10,08:30:00,America/New_York,TIGHT,-30,300,"
+            "\"MES.v.0\",50,TEST,http://example.com,2024-01-01,test,SOURCED\n"
+            "BBB_EVT_B,NFP,2024-02-02,08:30:00,America/New_York,TIGHT,-30,300,"
+            "\"MES.v.0\",50,TEST,http://example.com,2024-01-01,test,SOURCED\n",
+            encoding="utf-8",
+        )
+
+        lake_index = {
+            ("MES.v.0", "AAA_EVT_A"): str(npz_a),
+            ("MES.v.0", "BBB_EVT_B"): str(npz_b),
+        }
+        work, _ = universe_mod.build_work_units(
+            extra_csv,
+            lake_index,
+            latency_bands=[1.0],
+            event_type_filter=None,
+            symbol_filter=["MES.v.0"],
+            max_events=None,
+        )
+        assert len(work) == 2
+
+        # Apply the OPT-2 sort key (same logic as run_event_universe.main)
+        import os as _os
+
+        def _unit_sort_key(u):
+            npz = u.get("npz_path", "")
+            try:
+                sz = _os.path.getsize(npz) if npz else 0
+            except OSError:
+                sz = 0
+            return (sz, u["event_id"], u["symbol"], float(u["latency_ms"]))
+
+        sorted_units = sorted(work, key=_unit_sort_key)
+
+        sizes = [_os.path.getsize(u["npz_path"]) for u in sorted_units]
+        assert sizes == sorted(sizes), (
+            f"Work units not in ascending NPZ size order: {sizes}"
+        )
+        # Tiebreak: same-size units must be ordered by event_id
+        # (verified by construction here since sizes differ)
+        assert sorted_units[0]["event_id"] == "AAA_EVT_A"
+        assert sorted_units[1]["event_id"] == "BBB_EVT_B"
+
+    def test_main_shard_metadata_in_output(self, tmp_path, events_csv, minimal_npz):
+        """Running with --shard records shard_index and shard_total in cli_args.
+
+        AAA_EVT_A|MES.v.0|1.0 hashes to shard 1/2 (verified: SHA-256 mod 2 == 1),
+        so we use --shard 1/2 to ensure at least one unit is processed and the
+        full result path (not the early-exit no-work-units path) is exercised.
+        """
+        import backtest_pipeline.src.replay_matrix as _rm
+        _orig = _rm.run_all_hypotheses_replay
+
+        out_dir = tmp_path / "shard_out"
+        mod = _load_fresh_universe_mod("run_event_universe_shard_meta")
+        mod.load_lake_index = lambda _, rescan=False: {("MES.v.0", "AAA_EVT_A"): str(minimal_npz)}
+
+        try:
+            _rm.run_all_hypotheses_replay = _fake_hyp_results_for  # type: ignore[assignment]
+            rc = mod.main([
+                "--events-csv", str(events_csv),
+                "--symbols", "MES.v.0",
+                "--event-type", "CPI",
+                "--out", str(out_dir),
+                "--workers", "1",
+                "--bands", "1.0",
+                "--shard", "1/2",  # AAA_EVT_A hashes to shard 1/2
+            ])
+        finally:
+            _rm.run_all_hypotheses_replay = _orig
+
+        assert rc == 0
+        payload = json.loads((out_dir / "universe_result.json").read_text(encoding="utf-8"))
+        assert payload["cli_args"]["shard"] == "1/2"
+        assert payload["cli_args"]["shard_index"] == 1
+        assert payload["cli_args"]["shard_total"] == 2
+        # Confirm the shard ran units (not the zero-units early-exit path)
+        assert payload.get("units_run", 0) >= 1

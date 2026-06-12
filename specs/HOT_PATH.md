@@ -233,3 +233,14 @@ Use all available processing power, on the box whose job it is.
      may run matrix sweeps (server CPU, Linux, no thermal throttle, numba
      marginally better on Linux). Never concurrently with latency
      measurement or any paper/live session.
+3. **Two-machine shard procedure.**  Pass `--shard 0/2` on the laptop and
+   `--shard 1/2` on CHI404 (or any I/N split). Assignment is
+   `SHA-256(event_id|symbol|band_ms) % N == I` — deterministic across
+   machines and independent lake scans, so both boxes agree on the
+   partition without coordination.  Merge the two `universe_result.json`
+   outputs offline; do not attempt live aggregation across machines.
+4. **Service-check guard (CHI404 only).**  `scripts/chi404_run_universe_batch.sh`
+   refuses to start if `hft3-rithmic-trial.service` or
+   `hft3-paper-latency.service` is active, or if a `rithmic_latency_probe`
+   process is running.  Never bypass these checks; a batch sweep running
+   concurrently with latency probes invalidates the jitter measurements.
