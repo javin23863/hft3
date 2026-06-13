@@ -73,9 +73,10 @@ def collect() -> list[dict]:
         ts = doc.get("run_utc")
         for c in doc.get("checks", []) or []:
             if c.get("status") == "FAIL":
-                sev = schemas.SEV_CRIT if c.get("name") == "disk-free" else schemas.SEV_WARN
-                out.append(_alert(f"lake-{c.get('name')}", sev, "data_lake",
-                                  f"lake check {c.get('name')} FAIL: {c.get('detail', '')}", ts))
+                name = c.get("name")
+                sev = schemas.SEV_CRIT if name == "disk-free" else schemas.SEV_WARN
+                out.append(_alert(f"lake-{name}", sev, "data_lake",
+                                  f"lake check {name} FAIL: {c.get('detail', '')}", ts))
 
     # autonomy — frozen breaker or tampered audit chain
     try:

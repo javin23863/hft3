@@ -12,11 +12,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 _REPO = Path(__file__).resolve().parents[1]
@@ -25,11 +26,22 @@ for _p in [str(_REPO), str(_REPO / "packages")]:
         sys.path.insert(0, _p)
 
 from data_system.src.npz_resolver import npz_root, lake_root  # noqa: E402
+from options_data.src.expiry_calendar import expiries_between  # noqa: E402
 
 B2_REMOTE = os.environ.get("HFT3_B2_REMOTE", "hft3-b2:Hft3repo")
 MIN_FREE_FRACTION = 0.15
 MAX_CATALOG_AGE_H = 48
 MAX_SYNC_AGE_H = 48
+
+OPTIONS_FIXING_START = date(2023, 5, 1)
+# Expiry dates whose 14:55-15:05 CT window is covered by owned lake NPZ
+# (PROP_FLATTEN); see scripts/pull_fixing_windows.py ALREADY_COVERED +
+# research_cards/fixing_window/README.md. Literals to avoid importing
+# DatabentoResearchClient at module scope.
+OPTIONS_FIXING_COVERED_ELSEWHERE: frozenset[str] = frozenset({"2024-09-18", "2025-06-20"})
+OPTIONS_VENDOR_LAG_GRACE_DAYS = 5  # trailing gaps within this window WARN, not FAIL
+
+_FIXING_RE = re.compile(r"^ES_fixing_(trades_)?(\d{4}-\d{2}-\d{2})\.dbn\.zst$")
 
 checks: list[dict] = []
 
@@ -48,6 +60,127 @@ def _rclone() -> str | None:
         if cand and Path(cand).is_file():
             return cand
     return None
+
+
+def options_lane_checks(
+    lroot: Path,
+    today: date | None = None,
+    start: date = OPTIONS_FIXING_START,
+) -> dict | None:
+    """Run options-lane dataset checks and return a summary dict (or None)."""
+    if today is None:
+        today = date.today()
+
+    opt = lroot / "options"
+    if not opt.is_dir():
+        check("options-datasets", False, "options lane not provisioned under lake root", warn_only=True)
+        return None
+    check("options-datasets", True, str(opt))
+
+    # fixing_mbo: scan for quote and trades files
+    fixing_dir = opt / "fixing_mbo"
+    quote_files: list[str] = []
+    trades_files: list[str] = []
+    dates: set[str] = set()
+    if fixing_dir.is_dir():
+        for p in fixing_dir.iterdir():
+            m = _FIXING_RE.match(p.name)
+            if m:
+                is_trades = bool(m.group(1))
+                d_str = m.group(2)
+                dates.add(d_str)
+                if is_trades:
+                    trades_files.append(p.name)
+                else:
+                    quote_files.append(p.name)
+
+    first_date = min(dates) if dates else ""
+    last_date = max(dates) if dates else ""
+    check(
+        "options-fixing-mbo",
+        ok=len(dates) > 0,
+        detail=f"quotes={len(quote_files)} trades={len(trades_files)} dates={len(dates)} ({first_date}..{last_date})",
+    )
+
+    # coverage: expected expiry dates vs. what we have
+    expected = {d.isoformat() for d, _ in expiries_between(start, today)}
+    gaps = sorted(expected - dates - OPTIONS_FIXING_COVERED_ELSEWHERE)
+    stale_gaps = [g for g in gaps if (today - date.fromisoformat(g)).days > OPTIONS_VENDOR_LAG_GRACE_DAYS]
+    gap_sample = gaps[:10]
+    check(
+        "options-fixing-coverage",
+        ok=not gaps,
+        detail=(
+            f"gap_count={len(gaps)} stale={len(stale_gaps)} "
+            f"first_gaps={gap_sample}"
+        ),
+        warn_only=(not stale_gaps),
+    )
+
+    # ohlcv
+    ohlcv_dir = opt / "ohlcv"
+    ohlcv_files: list[str] = []
+    if ohlcv_dir.is_dir():
+        ohlcv_files = [p.name for p in ohlcv_dir.glob("*.dbn.zst")]
+    check("options-ohlcv", ok=len(ohlcv_files) > 0, detail=str(ohlcv_files))
+
+    # definitions
+    defs_dir = opt / "definitions"
+    def_files: list[Path] = []
+    if defs_dir.is_dir():
+        def_files = list(defs_dir.rglob("*.dbn.zst"))
+    batches = sorted({p.parent.name for p in def_files if p.parent != defs_dir})
+    check(
+        "options-definitions",
+        ok=len(def_files) > 0,
+        detail=f"files={len(def_files)} batches={batches}",
+    )
+
+    # statistics
+    stats_dir = opt / "statistics"
+    stat_files: list[Path] = []
+    if stats_dir.is_dir():
+        stat_files = [p for p in stats_dir.rglob("*") if p.is_file()]
+    stats_state: str
+    if len(stat_files) == 0:
+        stats_state = "pending_batch_delivery"
+        stats_detail = "pending Databento batch delivery (expected until WS-0.4 statistics job lands)"
+    else:
+        stats_state = "present"
+        stats_detail = f"files={len(stat_files)}"
+    check("options-statistics", ok=len(stat_files) > 0, detail=stats_detail, warn_only=True)
+
+    return {
+        "as_of_utc": datetime.now(timezone.utc).isoformat(),
+        "fixing_mbo": {
+            "quote_files": len(quote_files),
+            "trades_files": len(trades_files),
+            "dates_covered": len(dates),
+            "first_date": first_date,
+            "last_date": last_date,
+        },
+        "expiry_coverage": {
+            "expected_dates": len(expected),
+            "covered_elsewhere": sorted(OPTIONS_FIXING_COVERED_ELSEWHERE),
+            "gaps": len(gaps),
+            "gap_count": len(gaps),
+            "stale_gap_count": len(stale_gaps),
+            "grace_days": OPTIONS_VENDOR_LAG_GRACE_DAYS,
+            "calendar": "rule-based v0 (packages/options_data/src/expiry_calendar.py)",
+        },
+        "ohlcv": {
+            "files": len(ohlcv_files),
+            "names": ohlcv_files,
+        },
+        "definitions": {
+            "files": len(def_files),
+            "batches": batches,
+        },
+        "statistics": {
+            "files": len(stat_files),
+            "state": stats_state,
+        },
+    }
 
 
 def main() -> int:
@@ -112,12 +245,16 @@ def main() -> int:
         else:
             check("b2-sync-recent", False, "runtime/b2_sync.log missing")
 
+    opt_summary = options_lane_checks(lroot)
+
     report = {
         "run_utc": datetime.now(timezone.utc).isoformat(),
         "checks": checks,
         "failed": sum(1 for c in checks if c["status"] == "FAIL"),
         "warned": sum(1 for c in checks if c["status"] == "WARN"),
     }
+    if opt_summary is not None:
+        report["options_lane"] = opt_summary
     out_path = _REPO / "runtime" / "data_doctor_report.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(report, indent=2), encoding="utf-8")

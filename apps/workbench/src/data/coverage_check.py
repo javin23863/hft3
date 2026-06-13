@@ -111,6 +111,8 @@ def data_type_for_model(model_id: str, binding: dict[str, Any] | None = None) ->
     datasets = {str(v) for v in (binding.get("required_datasets") or [])}
     if "options_chain" in datasets:
         return "0DTE options and underlying intraday"
+    if {"fixing_mbo", "options_ohlcv", "options_definitions", "options_statistics"} & datasets:
+        return "CME options expiry-day datasets"
     if "cme_mdp3_mbo" in datasets or "mbo_npz" in datasets:
         return "CME MBO Level 3"
     if "l2_order_book" in datasets:
@@ -249,7 +251,12 @@ def _event_has_own_official_npz(repo_root: Path, event: EventSpec, requested_sym
 
 
 def _option_dates(repo_root: Path) -> set[date]:
+    from data_system.src.npz_resolver import lake_root
+
     option_roots = [repo_root / "data" / "options", repo_root / "packages" / "options_lane" / "fixtures"]
+    lake_options = lake_root(repo_root) / "options"
+    if lake_options not in option_roots:
+        option_roots.append(lake_options)
     dates: set[date] = set()
     for root in option_roots:
         if not root.is_dir():
@@ -411,7 +418,8 @@ def compute_model_coverage(repo_root: Path, model_id: str, symbol: str) -> Cover
             event_date = _parse_date(event.release_date)
             if event_date is not None:
                 missing_dates.add(event_date)
-    needs_option_dates = "options_chain" in {str(v) for v in (binding.get("required_datasets") or [])}
+    _options_dataset_triggers = {"options_chain", "fixing_mbo", "options_ohlcv", "options_definitions", "options_statistics"}
+    needs_option_dates = bool(_options_dataset_triggers & {str(v) for v in (binding.get("required_datasets") or [])})
     option_dates = _option_dates(repo_root) if needs_option_dates else None
     return build_coverage_summary_from_dates(
         model_name=slug,

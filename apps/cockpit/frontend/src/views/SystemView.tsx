@@ -27,10 +27,53 @@ function Card({ title, status, rows }: { title: string; status?: string; rows: [
   );
 }
 
+function LanesCard({ lanes }: { lanes: Record<string, unknown> | undefined }) {
+  const items = (lanes ? (lanes["items"] as Record<string, unknown>[] | undefined) : undefined) ?? [];
+  const status = lanes ? String(g(lanes, "status") ?? "unknown") : "missing";
+  const rows: [string, unknown][] = items.map((it) => {
+    const cp = it["capability_profile"] as Record<string, unknown> | undefined;
+    const profileName = cp ? String(cp["name"] ?? "—") : "—";
+    const researchOnly = cp && cp["research_only"] === true;
+    return [String(it["lane"] ?? "?"), profileName + (researchOnly ? " (research-only)" : "")];
+  });
+  if (rows.length === 0) rows.push(["registered", "—"]);
+  return <Card title="Lanes" status={status} rows={rows} />;
+}
+
+function OptionsDataCard({ cod }: { cod: Record<string, unknown> | undefined }) {
+  const status = cod ? String(g(cod, "status") ?? "unknown") : "missing";
+  const summary = cod ? (cod["summary"] as Record<string, unknown> | undefined) : undefined;
+  const checks = cod ? (cod["checks"] as Record<string, unknown>[] | undefined) ?? [] : [];
+  const fixingCheck = checks.find((c) => String(c["name"] ?? "").includes("fixing"));
+  const ohlcvCheck = checks.find((c) => String(c["name"] ?? "").includes("ohlcv"));
+  const defsCheck = checks.find((c) => String(c["name"] ?? "").includes("definition"));
+  const statsCheck = checks.find((c) => String(c["name"] ?? "").includes("statistic"));
+  const gapCheck = checks.find((c) => String(c["name"] ?? "").includes("gap"));
+  const fixingDetail = fixingCheck ? String(fixingCheck["detail"] ?? "—") : "—";
+  const ohlcvDetail = ohlcvCheck ? String(ohlcvCheck["detail"] ?? "—") : "—";
+  const defsDetail = defsCheck ? String(defsCheck["detail"] ?? "—") : "—";
+  const statsDetail = statsCheck ? String(statsCheck["detail"] ?? "—") : "—";
+  const gapsDetail = gapCheck ? String(gapCheck["detail"] ?? "none") : "none";
+  const summaryNote = summary ? String(summary["detail"] ?? s(g(summary, "status"))) : "—";
+  return (
+    <Card title="Options data (CME)" status={status} rows={[
+      ["fixing files", fixingDetail],
+      ["coverage", summaryNote],
+      ["gaps", gapsDetail],
+      ["ohlcv", ohlcvDetail],
+      ["definitions", defsDetail],
+      ["statistics", statsDetail],
+      ["report age", cod ? s(g(cod, "report_age")) : "—"],
+    ]} />
+  );
+}
+
 export function SystemView() {
   const sys = useZones().system as SystemZone | undefined;
   if (!sys) return <Panel title="System"><span className="text-ink-dim">loading…</span></Panel>;
   const lat = sys.latency, cert = sys.certification, slow = sys.slow_tier, db = sys.databento, cap = sys.capture, ex = sys.execution;
+  const lanes = sys.lanes as Record<string, unknown> | undefined;
+  const cod = lanes ? (lanes["cme_options_data"] as Record<string, unknown> | undefined) : undefined;
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       <Card title="Latency" status={String(g(lat, "status") ?? "unknown")} rows={[
@@ -59,6 +102,8 @@ export function SystemView() {
       <Card title="Execution" status={String(g(ex, "live")) === "true" ? "fail" : "ok"} rows={[
         ["mode", g(ex, "execution_mode")], ["kill switch", g(ex, "kill_switch")], ["live", String(g(ex, "live"))],
       ]} />
+      <LanesCard lanes={lanes} />
+      <OptionsDataCard cod={cod} />
     </div>
   );
 }

@@ -153,6 +153,81 @@ def _execution() -> dict:
     }
 
 
+def _options_data_readiness() -> dict:
+    data = paths.read_json(paths.DATA_DOCTOR_REPORT)
+    if not isinstance(data, dict):
+        return {"status": schemas.MISSING, "note": "run scripts/data_doctor.py"}
+    report_utc = data.get("run_utc")
+    all_checks = data.get("checks") or []
+    options_checks = [c for c in all_checks if isinstance(c, dict) and str(c.get("name", "")).startswith("options-")]
+    summary = data.get("options_lane")
+    if not options_checks and summary is None:
+        return {"status": schemas.MISSING, "note": "data_doctor report predates options checks"}
+    status = schemas.FAIL if any(c.get("status") == "FAIL" for c in options_checks) else schemas.OK
+    lake_root_path = paths.OPTIONS_LAKE_ROOT.parent
+    return {
+        "status": status,
+        "report_utc": report_utc,
+        "report_age": schemas.freshness(report_utc, stale_after_s=48 * 3600),
+        "checks": options_checks,
+        "summary": summary,
+        "lake_present": paths.OPTIONS_LAKE_ROOT.is_dir(),
+        "lake_root": str(lake_root_path),
+    }
+
+
+def _lanes() -> dict:
+    try:
+        from hft3.validation.lanes.lane_registry import LaneRegistry
+        from hft3.validation.lanes.registration import register_all_lanes
+        register_all_lanes()
+        reg = LaneRegistry.instance()
+        lane_cert = paths.read_json(paths.LANE_CERT_REPORT)
+        items = []
+        for lane_reg in reg.all_registrations():
+            value = lane_reg.lane.value
+            cert_lookup = (lane_cert or {}).get("lane_coverage", {}).get(value, {}).get("run_result")
+            cfg = None
+            try:
+                cfg = lane_reg.config_loader()
+            except Exception:
+                pass
+            cap_profile = {}
+            symbols: list = []
+            if cfg is not None:
+                try:
+                    cap_profile = cfg.capability_profile.to_dict()
+                except Exception:
+                    pass
+                try:
+                    symbols = list(cfg.symbols)
+                except Exception:
+                    pass
+            items.append({
+                "lane": value,
+                "capability_profile": cap_profile,
+                "model_id_prefixes": list(lane_reg.model_id_prefixes),
+                "symbols": symbols,
+                "test_paths": list(lane_reg.test_paths),
+                "certification": cert_lookup,
+            })
+        registered = [it["lane"] for it in items]
+        return {
+            "status": schemas.OK,
+            "registered": registered,
+            "items": items,
+            "cme_options_data": _options_data_readiness(),
+        }
+    except Exception as exc:
+        return {
+            "status": schemas.MISSING,
+            "registered": [],
+            "items": [],
+            "error": str(exc),
+            "cme_options_data": _options_data_readiness(),
+        }
+
+
 def build() -> dict:
     latency = _latency()
     slow = _slow_tier()
@@ -174,4 +249,5 @@ def build() -> dict:
         "databento": _databento(),
         "capture": _capture(),
         "execution": _execution(),
+        "lanes": _lanes(),
     }

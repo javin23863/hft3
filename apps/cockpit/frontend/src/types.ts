@@ -64,6 +64,7 @@ export interface SystemZone {
   databento: Record<string, unknown>;
   capture: Record<string, unknown>;
   execution: Record<string, unknown>;
+  lanes?: Record<string, unknown>;
 }
 
 export interface Alert {

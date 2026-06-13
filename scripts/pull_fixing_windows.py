@@ -35,19 +35,29 @@ def log(msg: str) -> None:
 
 
 def main() -> int:
+    # Schema choice (2026-06-13 lesson): "trades" is the default. The original
+    # MBO run was killed at 275/782 — every intraday-start streaming MBO request
+    # is billed with a synthetic full-book snapshot (~0.45 GB uncompressed) that
+    # metadata.get_cost does NOT include (~7x cost blowout). The fixing study
+    # consumes trades only; "trades" has no snapshot and bills as estimated
+    # (~$0.08/window measured).
+    schema = sys.argv[1] if len(sys.argv) > 1 else "trades"
     os.makedirs(OUT_DIR, exist_ok=True)
     windows = plan_fixing_windows(date(2023, 5, 1), date(2026, 6, 12))
     windows = [w for w in windows if w["date"] not in ALREADY_COVERED]
     c = DatabentoResearchClient()
-    log(f"START {len(windows)} windows, ledger=${c.budget._calculate_total_used():.2f}")
+    log(f"START {len(windows)} windows schema={schema}, ledger=${c.budget._calculate_total_used():.2f}")
 
     from datetime import datetime
 
     done = failed = skipped = 0
     for i, w in enumerate(windows):
         d = w["date"]
-        dest = os.path.join(OUT_DIR, f"ES_fixing_{d}.dbn.zst")
-        if os.path.exists(dest):
+        # An existing MBO window already contains the trades (adapter filters
+        # action==T), so either file satisfies the date.
+        mbo_dest = os.path.join(OUT_DIR, f"ES_fixing_{d}.dbn.zst")
+        dest = mbo_dest if schema == "mbo" else os.path.join(OUT_DIR, f"ES_fixing_trades_{d}.dbn.zst")
+        if os.path.exists(dest) or os.path.exists(mbo_dest):
             skipped += 1
             continue
         start = datetime.fromisoformat(w["start_utc"])
@@ -59,7 +69,7 @@ def main() -> int:
                     symbols=["ES.v.0"],
                     start_utc=start,
                     end_utc=end,
-                    schema="mbo",
+                    schema=schema,
                     stype_in="continuous",
                     output_path=dest,
                     override_operating_cap=True,

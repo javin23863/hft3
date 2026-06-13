@@ -9,9 +9,11 @@ from workbench.src.data.coverage_check import (
     OPTIONS_MIN_VALID_DAYS,
     TARGET_VALID_TRADING_DAYS,
     _event_has_own_official_npz,
+    _option_dates,
     _raw_backlog_dates_for_symbol,
     _runnable_npz_dates_for_symbol,
     build_coverage_summary_from_dates,
+    data_type_for_model,
     required_symbols_for_model,
 )
 from workbench.src.data.event_catalog import EventSpec
@@ -149,3 +151,24 @@ def test_catalog_fallback_npz_does_not_count_as_requested_symbol_coverage(tmp_pa
 
     assert not _event_has_own_official_npz(tmp_path, event, "MES.v.0")
     assert _event_has_own_official_npz(tmp_path, event, "ES.v.0")
+
+
+def test_data_type_for_model_fixing_mbo_returns_expiry_day_label():
+    assert data_type_for_model("DEALER_HEDGING", {"required_datasets": ["fixing_mbo"]}) == "CME options expiry-day datasets"
+
+
+def test_option_dates_includes_lake_root_options_and_both_filename_patterns(tmp_path, monkeypatch):
+    npz_dir = tmp_path / "npz"
+    npz_dir.mkdir()
+    monkeypatch.setenv("HFT3_NPZ_ROOT", str(npz_dir))
+
+    options_dir = tmp_path / "options" / "fixing_mbo"
+    options_dir.mkdir(parents=True)
+    (options_dir / "ES_fixing_2025-01-03.dbn.zst").write_bytes(b"x")
+    (options_dir / "ES_fixing_trades_2025-01-06.dbn.zst").write_bytes(b"x")
+
+    from datetime import date
+
+    found = _option_dates(tmp_path)
+    assert date(2025, 1, 3) in found
+    assert date(2025, 1, 6) in found

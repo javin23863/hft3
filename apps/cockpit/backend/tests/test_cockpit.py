@@ -210,3 +210,98 @@ def test_push_no_channel_returns_false(monkeypatch):
     monkeypatch.delenv("COCKPIT_NOTIFY_WEBHOOK", raising=False)
     assert push.channel() is None
     assert push.notify("t", "m") is False
+
+
+# --- Lanes block ------------------------------------------------------------
+
+def test_lanes_registered_contains_cme_options():
+    """system zone lanes.registered must include 'cme_options'; its capability profile
+    must be research_only and model_id_prefixes must contain a 'FOPT_' entry."""
+    z = ZONES["system"]()
+    lanes = z.get("lanes", {})
+    assert "cme_options" in lanes.get("registered", []), \
+        f"cme_options missing from registered: {lanes.get('registered')}"
+    items = {it["lane"]: it for it in lanes.get("items", [])}
+    cme_opts = items.get("cme_options", {})
+    cp = cme_opts.get("capability_profile", {})
+    assert cp.get("research_only") is True, f"cme_options research_only not True: {cp}"
+    prefixes = cme_opts.get("model_id_prefixes", [])
+    assert any("FOPT_" in p for p in prefixes), \
+        f"FOPT_ prefix not in model_id_prefixes: {prefixes}"
+
+
+def test_lanes_missing_data_doctor_report_is_graceful(monkeypatch, tmp_path):
+    """Pointing DATA_DOCTOR_REPORT at a nonexistent file -> cme_options_data.status==missing;
+    system zone health must remain unchanged (no crash, no health regression from lanes)."""
+    monkeypatch.setattr(paths, "DATA_DOCTOR_REPORT", tmp_path / "no_report.json")
+    z = ZONES["system"]()
+    lanes = z.get("lanes", {})
+    cod = lanes.get("cme_options_data", {})
+    from apps.cockpit.backend import schemas as sc
+    assert cod.get("status") == sc.MISSING, f"expected missing, got {cod.get('status')}"
+    # health is driven by latency/slow/cert only, not by lanes — verify zone serializable
+    _json_roundtrip(z)
+
+
+def test_lanes_synthetic_data_doctor_report(monkeypatch, tmp_path):
+    """A synthetic data_doctor report with options-* checks (incl. one FAIL) and an
+    options_lane summary -> cme_options_data status==fail, summary lifted, gap data visible."""
+    report_path = tmp_path / "data_doctor_report.json"
+    report = {
+        "run_utc": "2026-06-13T00:00:00+00:00",
+        "checks": [
+            {"name": "options-fixing-coverage", "status": "FAIL",
+             "detail": "10 quotes + 5 trades"},
+            {"name": "options-fixing-gaps", "status": "OK",
+             "detail": "gap1,gap2"},
+            {"name": "options-ohlcv", "status": "OK", "detail": "42 files"},
+        ],
+        "options_lane": {"name": "options_lane", "status": "OK", "detail": "options_lane summary"},
+        "failed": 1,
+        "warned": 0,
+    }
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    monkeypatch.setattr(paths, "DATA_DOCTOR_REPORT", report_path)
+    z = ZONES["system"]()
+    lanes = z.get("lanes", {})
+    cod = lanes.get("cme_options_data", {})
+    from apps.cockpit.backend import schemas as sc
+    assert cod.get("status") == sc.FAIL, f"expected fail, got {cod.get('status')}"
+    # summary block must be lifted
+    summary = cod.get("summary")
+    assert summary is not None and summary.get("name") == "options_lane", \
+        f"summary not lifted: {summary}"
+    # options- checks present
+    checks = cod.get("checks", [])
+    assert any(c["name"] == "options-fixing-coverage" for c in checks), \
+        f"options-fixing-coverage not in checks: {checks}"
+    # gap detail accessible
+    gap_check = next((c for c in checks if "gap" in c.get("name", "")), None)
+    assert gap_check is not None and "gap" in gap_check.get("detail", ""), \
+        f"gap check missing or no detail: {gap_check}"
+    _json_roundtrip(z)
+
+
+def test_alerts_options_fixing_coverage_alert(monkeypatch, tmp_path):
+    """alerts zone with a failing options-fixing-coverage check -> alert id
+    'lake-options-fixing-coverage' present in the alerts feed."""
+    report_path = tmp_path / "data_doctor_report.json"
+    report = {
+        "run_utc": "2026-06-13T00:00:00+00:00",
+        "checks": [
+            {"name": "options-fixing-coverage", "status": "FAIL",
+             "detail": "missing 3 expiry windows"},
+        ],
+        "failed": 1,
+        "warned": 0,
+    }
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    monkeypatch.setattr(paths, "DATA_DOCTOR_REPORT", report_path)
+    # silence unrelated alert sources
+    for attr in ("SLOW_TIER_PROBLEMS", "CERT_REGISTRY", "LATENCY_SUMMARY",
+                 "CAPTURE_BASELINE", "MODEL_LIFECYCLE"):
+        monkeypatch.setattr(paths, attr, tmp_path / f"{attr}.json")
+    a = ZONES["alerts"]()
+    ids = {al["id"] for al in a["alerts"]}
+    assert "lake-options-fixing-coverage" in ids, \
+        f"lake-options-fixing-coverage not in alert ids: {ids}"

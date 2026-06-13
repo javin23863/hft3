@@ -31,6 +31,26 @@ STAGE_B_RESULT = _p("research_cards", "universe_stageb_smoke", "universe_result.
 M6_RESULT = _p("research_cards", "universe_M6_smoke", "universe_result.json")
 ALPHA_CME_SPEC = _p("specs", "ALPHA_CME.md")
 
+# --- Options lake -----------------------------------------------------------
+def _lake_root() -> Path:
+    try:
+        from data_system.src.npz_resolver import lake_root
+        return lake_root(REPO)
+    except ImportError:
+        pass
+    env = os.environ.get("HFT3_NPZ_ROOT", "").strip()
+    if env:
+        return Path(env).parent
+    return REPO / "data"
+
+
+OPTIONS_LAKE_ROOT = _lake_root() / "options"
+OPTIONS_FIXING_MBO_DIR = OPTIONS_LAKE_ROOT / "fixing_mbo"
+OPTIONS_OHLCV_DIR = OPTIONS_LAKE_ROOT / "ohlcv"
+OPTIONS_DEFINITIONS_DIR = OPTIONS_LAKE_ROOT / "definitions"
+OPTIONS_STATISTICS_DIR = OPTIONS_LAKE_ROOT / "statistics"
+LANE_CERT_REPORT = _p("runtime", "validation", "lane_certification_report.json")
+
 # --- System zone ------------------------------------------------------------
 LATENCY_SUMMARY = _p("runtime", "latency_reports", "latency_summary.json")
 SLOW_TIER_PROBLEMS = _p("runtime", "slow_tier", "problems_latest.json")
