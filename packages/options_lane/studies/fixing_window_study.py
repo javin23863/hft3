@@ -640,6 +640,21 @@ def measure_file_from_arrays(
 _DBN_DEFAULT_DIR = Path(r"C:\hft3-lake\options\fixing_mbo")
 
 
+def _date_from_dbn_name(name: str) -> str | None:
+    """Extract YYYY-MM-DD from a fixing DBN filename, or None if unparseable.
+
+    Two patterns: ES_fixing_<YYYY-MM-DD>.dbn.zst (MBO) and
+    ES_fixing_trades_<YYYY-MM-DD>.dbn.zst (trades schema).
+    """
+    date_part = name.removeprefix("ES_fixing_").removesuffix(".dbn.zst")
+    date_part = date_part.removeprefix("trades_")
+    try:
+        datetime.strptime(date_part, "%Y-%m-%d")
+    except ValueError:
+        return None
+    return date_part
+
+
 def run_measure_dbn(
     dbn_dir: Path = _DBN_DEFAULT_DIR,
     out_path: Path | None = None,
@@ -666,16 +681,21 @@ def run_measure_dbn(
         return []
 
     results: list[dict[str, Any]] = []
+    seen_dates: set[str] = set()
     for fpath in files:
-        # Derive date from filename: ES_fixing_YYYY-MM-DD.dbn.zst
-        stem = fpath.name  # e.g. ES_fixing_2023-05-01.dbn.zst
-        # Extract date portion between "ES_fixing_" and ".dbn.zst"
-        date_part = stem.removeprefix("ES_fixing_").removesuffix(".dbn.zst")
-        try:
-            file_date = datetime.strptime(date_part, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-        except ValueError:
+        # Derive date from filename: ES_fixing_YYYY-MM-DD.dbn.zst (MBO) or
+        # ES_fixing_trades_YYYY-MM-DD.dbn.zst (trades schema)
+        date_part = _date_from_dbn_name(fpath.name)
+        if date_part is None:
             print(f"Skipping {fpath.name}: cannot parse date from filename")
             continue
+        # Dedupe: MBO and trades files for the same date contain the same trades;
+        # files are sorted so order is deterministic — keep the first, skip the rest.
+        if date_part in seen_dates:
+            print(f"Skipping {fpath.name}: date {date_part} already processed")
+            continue
+        seen_dates.add(date_part)
+        file_date = datetime.strptime(date_part, "%Y-%m-%d").replace(tzinfo=timezone.utc)
 
         arrays = load_trades_from_dbn(fpath)
         if len(arrays["ts_ns"]) == 0:
