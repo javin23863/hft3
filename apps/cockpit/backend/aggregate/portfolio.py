@@ -8,7 +8,7 @@ as the PnL/markout preview so the panel is never blank. Live positions plumbing
 from __future__ import annotations
 
 import csv
-from typing import Optional
+from typing import Any, Optional
 
 from .. import paths, schemas
 
@@ -61,11 +61,45 @@ def _markout() -> Optional[dict]:
         return None
 
 
+def _live_session_view() -> Optional[Any]:
+    """Latest trade_manager session report (positions + live PnL) via the observer
+    reader. None when no session has been written yet (no live/paper run). The
+    cockpit only READS the artifact — it never creates a session."""
+    root = paths.SESSIONS_ROOT
+    try:
+        if not root.is_dir():
+            return None
+        sessions = [d for d in root.iterdir() if d.is_dir()]
+        if not sessions:
+            return None
+        latest = max(sessions, key=lambda d: d.stat().st_mtime)
+        from observer.read_model import load_observer_view  # apps/observer
+
+        return load_observer_view(root, latest.name)
+    except Exception:
+        return None
+
+
 def build() -> dict:
     mode = paths.execution_mode()
     live = mode == "LIVE"
     recent, total, net_pnl, es = _load_fills()
     markout = _markout()
+    view = _live_session_view()
+
+    positions = list(view.positions) if view else []
+    realized = unrealized = total_pnl = None
+    if view and isinstance(view.pnl, dict):
+        realized = view.pnl.get("realized_pnl")
+        unrealized = view.pnl.get("unrealized_pnl")
+        total_pnl = view.pnl.get("total_pnl")
+
+    if view:
+        source = f"trade_manager session {view.session_id} (positions.jsonl)"
+        banner = None if live else f"EXECUTION_MODE={mode}; latest session positions shown alongside replay fills."
+    else:
+        source = "rithmic_pnl" if live else "research_cards/fills.csv"
+        banner = None if live else f"No live session — EXECUTION_MODE={mode}. Showing latest replay fills."
 
     return {
         "zone": "portfolio",
@@ -73,15 +107,16 @@ def build() -> dict:
         "health": schemas.GREEN,
         "live_session": live,
         "execution_mode": mode,
-        "banner": None if live else f"No live session — EXECUTION_MODE={mode}. Showing latest replay fills.",
-        "positions": [],  # populated from trade_manager.monitor PositionSnapshot when live
+        "banner": banner,
+        "session_id": view.session_id if view else None,
+        "positions": positions,  # real positions.jsonl when a session exists, else []
         "pnl": {
-            "net_pnl": net_pnl,
-            "realized": net_pnl if not live else None,
-            "unrealized": None,
+            "net_pnl": total_pnl if total_pnl is not None else net_pnl,
+            "realized": realized if realized is not None else (net_pnl if not live else None),
+            "unrealized": unrealized,
             "expected_shortfall_5pct": es,
         },
         "adverse_selection_ticks": markout,
         "fills": {"total": total, "recent": recent},
-        "source": "research_cards/fills.csv" if not live else "rithmic_pnl",
+        "source": source,
     }

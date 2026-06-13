@@ -53,6 +53,41 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- Rate limiting (dependency-free, in-process sliding window) --------------
+# Bounds /api/* against abuse when exposed via Caddy. /api/chat (the LLM SSE
+# stream) gets a tighter budget; /api/health is exempt so monitors aren't capped.
+import time as _time  # noqa: E402
+from collections import defaultdict, deque  # noqa: E402
+
+from fastapi.responses import JSONResponse  # noqa: E402
+
+_RL_WINDOW_S = 60.0
+_RL_MAX = int(os.environ.get("COCKPIT_RATE_LIMIT_PER_MIN", "120"))
+_RL_CHAT_MAX = int(os.environ.get("COCKPIT_CHAT_RATE_LIMIT_PER_MIN", "20"))
+_rl_hits: dict[str, deque] = defaultdict(deque)
+
+
+@app.middleware("http")
+async def _rate_limit(request, call_next):
+    path = request.url.path
+    if path.startswith("/api/") and path != "/api/health":
+        is_chat = path == "/api/chat"
+        ip = request.client.host if request.client else "?"
+        key = f"{ip}:{'chat' if is_chat else 'api'}"
+        limit = _RL_CHAT_MAX if is_chat else _RL_MAX
+        now = _time.monotonic()
+        dq = _rl_hits[key]
+        while dq and now - dq[0] > _RL_WINDOW_S:
+            dq.popleft()
+        if len(dq) >= limit:
+            return JSONResponse(
+                {"error": "rate limit exceeded", "limit_per_min": limit},
+                status_code=429,
+            )
+        dq.append(now)
+    return await call_next(request)
+
+
 app.include_router(control_router)
 
 
@@ -130,6 +165,8 @@ async def chat(payload: dict = Body(...), _: str = Depends(require_view)):
     query = str((payload or {}).get("query", "")).strip()
     if not query:
         return {"error": "query required"}
+    if len(query) > 4000:
+        return {"error": "query too long (max 4000 chars)"}
     return StreamingResponse(chat_mod.stream_chat(query), media_type="text/event-stream")
 
 

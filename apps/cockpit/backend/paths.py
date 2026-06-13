@@ -70,6 +70,11 @@ RESEARCH_INDEX = _p("research_cards", "all_hypotheses.json")
 ALL_HYPOTHESES = _p("artifacts", "research_cards", "all_hypotheses.json")
 FILLS_CSV = _p("research_cards", "fills.csv")
 
+# --- Portfolio zone (live session reports, Phase 23) ------------------------
+# Root the trade_manager session reporter writes to (matches the observer CLI
+# default). Each <session_id>/ holds positions.jsonl, pnl_timeseries.jsonl, ...
+SESSIONS_ROOT = _p("artifacts", "sessions")
+
 # --- Vault (chat RAG, V2) ---------------------------------------------------
 def vault_dir() -> Path:
     override = os.environ.get("HFT3_VAULT_DIR", "").strip()

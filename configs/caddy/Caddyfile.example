@@ -1,0 +1,25 @@
+# HFT3 Cockpit — Caddy reverse proxy (TLS termination for remote / mobile access).
+#
+# Caddy runs on the SAME host as the cockpit and reverse-proxies to the
+# loopback-bound backend (127.0.0.1:8080). Proxied requests carry an
+# X-Forwarded-For header, so the cockpit auth layer automatically grants them
+# the `view` scope ONLY — the control plane (/api/control/*) stays bound to
+# direct local calls and is never reachable through the proxy. No endpoint
+# places an order or flips EXECUTION_MODE.
+#
+# Set COCKPIT_VIEW_TOKEN in the backend's environment before exposing this;
+# clients pass it as a bearer token (HTTP) or ?token= (WebSocket). Caddy
+# obtains/renews the TLS cert automatically for a real domain.
+#
+# Usage:  caddy run --config configs/caddy/Caddyfile.example
+# (copy to ./Caddyfile and replace the domain first.)
+
+cockpit.your-domain.tld {
+    encode gzip
+
+    reverse_proxy 127.0.0.1:8080 {
+        # Disable response buffering so the WebSocket (/ws), the chat SSE stream
+        # (/api/chat), and the live job-log tail flush through immediately.
+        flush_interval -1
+    }
+}
