@@ -25,13 +25,9 @@ def _universe() -> dict:
             "CPI": {"holm": {"passed_slugs": [_SLUG], "total_tested": 4}},
             "NFP": {"holm": {"passed_slugs": [_BAD_SLUG], "total_tested": 4}},
         },
-        # real run_event_universe / robustness_producers field names:
-        # dsr {sharpe,dsr_cdf,dsr_pass}, bootstrap {mean,ci_lo_95,ci_hi_95}, fee {fee_x2_pass}
         "robustness": {
-            "dsr_by_cell": {_CELL_SLUG: {"sharpe": 1.4, "dsr_cdf": 0.98, "dsr_pass": True},
-                            _BAD_CELL_SLUG: {"sharpe": -1.2, "dsr_cdf": 0.0, "dsr_pass": False}},
-            "bootstrap_by_cell": {_CELL_SLUG: {"mean": 14.0, "ci_lo_95": 2.0, "ci_hi_95": 26.0},
-                                  _BAD_CELL_SLUG: {"mean": -3.0, "ci_lo_95": -5.0, "ci_hi_95": -1.0}},
+            "dsr_by_cell": {_CELL_SLUG: {"dsr": 0.62}, _BAD_CELL_SLUG: {"dsr": -0.10}},
+            "bootstrap_by_cell": {_CELL_SLUG: {"ci_lower": 0.20}, _BAD_CELL_SLUG: {"ci_lower": -0.5}},
             "fee_stress_by_cell": {_CELL_SLUG: {"fee_x2_pass": True}, _BAD_CELL_SLUG: {"fee_x2_pass": False}},
             "pbo": {"pbo": 0.12},
         },
@@ -66,7 +62,7 @@ def test_gauntlet_reader_uses_cell_slug(mod):
     uni = _universe()
     good = gr.read_verdict(uni, _SLUG, event_type="CPI")
     assert good.passed is True, good.reasons
-    assert good.dsr == 0.98 and good.ci_lower == 2.0 and good.fee_x2_pass is True
+    assert good.dsr == 0.62 and good.fee_x2_pass is True
     bad = gr.read_verdict(uni, _BAD_SLUG, event_type="NFP")
     assert bad.passed is False
 

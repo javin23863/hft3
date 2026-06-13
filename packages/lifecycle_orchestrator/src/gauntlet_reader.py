@@ -93,14 +93,7 @@ def read_verdict(universe: dict, slug: str, *, event_type: Optional[str] = None)
         return None
 
     dsr_cell = _rob_cell(rob.get("dsr_by_cell")) or {}
-    if isinstance(dsr_cell, dict):
-        # robustness_producers.deflated_sharpe_for_cell emits {sharpe, dsr_cdf,
-        # dsr_pass, ...}; older/synthetic artifacts use {dsr|deflated_sharpe|value}.
-        dsr_pass_flag = _dig(dsr_cell, "dsr_pass")
-        dsr = _f(_dig(dsr_cell, "dsr", "deflated_sharpe", "dsr_cdf", "sharpe", "value"))
-    else:
-        dsr_pass_flag = None
-        dsr = _f(dsr_cell)
+    dsr = _f(_dig(dsr_cell, "dsr", "deflated_sharpe", "value")) if isinstance(dsr_cell, dict) else _f(dsr_cell)
 
     pbo_block = rob.get("pbo")
     pbo = None
@@ -114,25 +107,18 @@ def read_verdict(universe: dict, slug: str, *, event_type: Optional[str] = None)
         pbo = _f(pbo_block)
 
     boot_cell = _rob_cell(rob.get("bootstrap_by_cell")) or {}
-    # robustness_producers.bootstrap_ci emits ci_lo_95; synthetic uses ci_lower/lower/ci_low.
-    ci_lower = _f(_dig(boot_cell, "ci_lo_95", "ci_lower", "lower", "ci_low")) if isinstance(boot_cell, dict) else None
+    ci_lower = _f(_dig(boot_cell, "ci_lower", "lower", "ci_low")) if isinstance(boot_cell, dict) else None
 
     fee_cell = _rob_cell(rob.get("fee_stress_by_cell")) or {}
     fee_x2 = bool(_dig(fee_cell, "fee_x2_pass", "fee_2x_pass", "passed")) if isinstance(fee_cell, dict) else False
 
     holm = _holm_survivor(universe, slug, event_type)
 
-    # DSR: honor the producer's own deflated-Sharpe pass flag when present, else
-    # fall back to a numeric threshold. Profitability is guarded separately by the
-    # bootstrap lower-CI gate (ci_lower > 0), so a passing dsr_pass on a losing
-    # cell still gets rejected there.
-    dsr_ok = bool(dsr_pass_flag) if isinstance(dsr_pass_flag, bool) else (dsr is not None and dsr > DSR_MIN)
-
     reasons = []
     if not holm:
         reasons.append("not holm survivor")
-    if not dsr_ok:
-        reasons.append(f"dsr fail (pass={dsr_pass_flag}, val={dsr})")
+    if dsr is None or dsr <= DSR_MIN:
+        reasons.append(f"dsr {dsr} <= {DSR_MIN}")
     if pbo is None or pbo >= PBO_MAX:
         reasons.append(f"pbo {pbo} >= {PBO_MAX}")
     if ci_lower is None or ci_lower <= CI_LOWER_MIN:
