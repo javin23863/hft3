@@ -130,15 +130,24 @@ def main() -> int:
                             log(f"EMPTY {schema} {root} {tag} (no listings)")
                             skipped += 1
                             break
-                        # Downloaded but the manifest append timed out on the shared lock
-                        # (fast-fail). Do NOT re-download -- databento refuses with
-                        # FileExistsError and we'd just churn. Accept; reconcile records it
-                        # from disk at END.
-                        if os.path.exists(dest) and os.path.getsize(dest) > 0:
+                        # ONLY the manifest-lock timeout means the download already
+                        # COMPLETED (get_range returns before the ledger append) — accept the
+                        # whole file and let reconcile record it from disk at END. Any other
+                        # exception (ReadTimeout/ConnectionError mid-download) may have left a
+                        # PARTIAL file; never accept it.
+                        lock_timeout = isinstance(e, TimeoutError) and "manifest lock" in msg
+                        if lock_timeout and os.path.exists(dest) and os.path.getsize(dest) > 0:
                             unrecorded += 1
-                            log(f"UNRECORDED {schema} {root} {tag}: {type(e).__name__} "
-                                f"(file present; ledger reconcile pending)")
+                            log(f"UNRECORDED {schema} {root} {tag} (file complete; "
+                                f"ledger reconcile pending)")
                             break
+                        # Network/other error: drop any partial so the retry re-downloads
+                        # cleanly (databento refuses to overwrite an existing file).
+                        try:
+                            if os.path.exists(dest):
+                                os.remove(dest)
+                        except OSError:
+                            pass
                         log(f"RETRY {schema} {root} {tag} a{attempt}: {type(e).__name__}: {msg[:120]}")
                         time.sleep(8 * attempt)
                 else:
