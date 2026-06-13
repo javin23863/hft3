@@ -30,6 +30,23 @@ from datetime import date, datetime, timezone
 
 from data_system.src.databento_client import DatabentoResearchClient
 
+# Fail-fast on manifest-lock contention. A concurrent multi-writer (the 6-shard
+# download_event_tape job) holds the shared manifest lock in sustained bursts; the
+# default 120s acquire wait makes every contended chunk crawl. 6s lets us skip the
+# ledger write and move on -- the chunk's DATA still lands on disk and is recorded
+# afterward by scripts/reconcile_pm_backfill_ledger.py (disk -> manifest). No clobber
+# risk (the lock is still exclusive); we just defer recording under contention.
+import data_system.src.manifest_io as _mio  # noqa: E402
+
+_LOCK_ORIG_INIT = _mio.ManifestFileLock.__init__
+
+
+def _fastfail_lock_init(self, manifest_path, *, timeout_s=6.0):
+    _LOCK_ORIG_INIT(self, manifest_path, timeout_s=timeout_s)
+
+
+_mio.ManifestFileLock.__init__ = _fastfail_lock_init
+
 LAKE = r"C:\hft3-lake\options"
 LOG = os.path.join(LAKE, "pm_backfill_log.txt")
 START = date(2023, 5, 1)
@@ -77,7 +94,7 @@ def main() -> int:
     log(f"START schemas={schemas} roots={len(roots)} months={len(months)} "
         f"ledger=${c.budget._calculate_total_used():.2f}")
 
-    done = failed = skipped = 0
+    done = failed = skipped = unrecorded = 0
     for schema in schemas:
         subdir, infix = _SCHEMA_DIR[schema]
         for root in roots:
@@ -113,16 +130,26 @@ def main() -> int:
                             log(f"EMPTY {schema} {root} {tag} (no listings)")
                             skipped += 1
                             break
+                        # Downloaded but the manifest append timed out on the shared lock
+                        # (fast-fail). Do NOT re-download -- databento refuses with
+                        # FileExistsError and we'd just churn. Accept; reconcile records it
+                        # from disk at END.
+                        if os.path.exists(dest) and os.path.getsize(dest) > 0:
+                            unrecorded += 1
+                            log(f"UNRECORDED {schema} {root} {tag}: {type(e).__name__} "
+                                f"(file present; ledger reconcile pending)")
+                            break
                         log(f"RETRY {schema} {root} {tag} a{attempt}: {type(e).__name__}: {msg[:120]}")
                         time.sleep(8 * attempt)
                 else:
                     failed += 1
                     log(f"FAILED {schema} {root} {tag} after 3 attempts")
             log(f"root done: {schema} {root} | done={done} fail={failed} skip={skipped} "
-                f"ledger=${c.budget._calculate_total_used():.2f}")
+                f"unrec={unrecorded} ledger=${c.budget._calculate_total_used():.2f}")
 
     total = c.budget._calculate_total_used()
-    log(f"END done={done} failed={failed} skipped={skipped} ledger=${total:.2f}")
+    log(f"END done={done} failed={failed} skipped={skipped} unrecorded={unrecorded} "
+        f"(run reconcile_pm_backfill_ledger.py to record {unrecorded} on-disk chunks) ledger=${total:.2f}")
     return 0 if failed == 0 else 1
 
 
