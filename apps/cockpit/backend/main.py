@@ -64,6 +64,11 @@ from fastapi.responses import JSONResponse  # noqa: E402
 _RL_WINDOW_S = 60.0
 _RL_MAX = int(os.environ.get("COCKPIT_RATE_LIMIT_PER_MIN", "120"))
 _RL_CHAT_MAX = int(os.environ.get("COCKPIT_CHAT_RATE_LIMIT_PER_MIN", "20"))
+_RL_MAX_KEYS = 4096  # cap distinct buckets so the limiter can't be grown without bound
+# Behind Caddy every request arrives from 127.0.0.1, so without this the limit is
+# one global bucket (one client can lock out the rest). Opt in when a trusted proxy
+# fronts the cockpit to key on the real client via X-Forwarded-For.
+_RL_TRUST_PROXY = os.environ.get("COCKPIT_TRUST_PROXY", "") == "1"
 _rl_hits: dict[str, deque] = defaultdict(deque)
 
 
@@ -73,6 +78,10 @@ async def _rate_limit(request, call_next):
     if path.startswith("/api/") and path != "/api/health":
         is_chat = path == "/api/chat"
         ip = request.client.host if request.client else "?"
+        if _RL_TRUST_PROXY:
+            xff = request.headers.get("x-forwarded-for")
+            if xff:
+                ip = xff.split(",")[0].strip() or ip
         key = f"{ip}:{'chat' if is_chat else 'api'}"
         limit = _RL_CHAT_MAX if is_chat else _RL_MAX
         now = _time.monotonic()
@@ -85,6 +94,14 @@ async def _rate_limit(request, call_next):
                 status_code=429,
             )
         dq.append(now)
+        # The limiter must not become its own memory-exhaustion vector: when the
+        # bucket count blows past the cap, drop idle buckets, then hard-reset under
+        # a genuine flood (fail-open on TRACKING, never on the limit itself).
+        if len(_rl_hits) > _RL_MAX_KEYS:
+            for k in [k for k, v in list(_rl_hits.items()) if not v or now - v[-1] > _RL_WINDOW_S]:
+                _rl_hits.pop(k, None)
+            if len(_rl_hits) > _RL_MAX_KEYS:
+                _rl_hits.clear()
     return await call_next(request)
 
 

@@ -29,6 +29,7 @@
 
 param(
     [switch]$Confirm,
+    [switch]$Headless,
     [string]$ScriptPath = "",
     [string]$PowerShellExe = ""
 )
@@ -51,7 +52,12 @@ Write-Host ""
 Write-Host "Task registration summary"
 Write-Host "========================="
 Write-Host "  Task name    : $TaskName"
-Write-Host "  Trigger      : At user logon (long-running service)"
+if ($Headless) {
+    Write-Host "  Trigger      : At system startup (headless; runs whether logged on or not, S4U)"
+    Write-Host "    NOTE       : set PYTHONPATH shim + HFT3_NPZ_ROOT/etc + COCKPIT_VIEW_TOKEN MACHINE-wide so a no-user-session run resolves them"
+} else {
+    Write-Host "  Trigger      : At user logon (runs while logged in)"
+}
 Write-Host "  Restart      : on failure, every 1 min, up to 999 times"
 Write-Host "  Time limit   : none (runs until stopped)"
 Write-Host "  Executable   : $PowerShellExe"
@@ -69,7 +75,15 @@ Write-Host "Registering task '$TaskName' ..."
 
 $action = New-ScheduledTaskAction -Execute $PowerShellExe -Argument $Arguments
 
-$trigger = New-ScheduledTaskTrigger -AtLogOn
+if ($Headless) {
+    # True boot service: start at system startup, run whether or not a user is
+    # logged on (S4U = no stored password). The cockpit env must be machine-wide.
+    $trigger = New-ScheduledTaskTrigger -AtStartup
+    $logonType = "S4U"
+} else {
+    $trigger = New-ScheduledTaskTrigger -AtLogOn
+    $logonType = "Interactive"
+}
 
 # ExecutionTimeLimit 0 = no limit (long-running); restart on failure.
 $settings = New-ScheduledTaskSettingsSet `
@@ -83,7 +97,7 @@ $settings = New-ScheduledTaskSettingsSet `
 
 $principal = New-ScheduledTaskPrincipal `
     -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) `
-    -LogonType Interactive `
+    -LogonType $logonType `
     -RunLevel Limited
 
 Register-ScheduledTask `
