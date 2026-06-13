@@ -80,36 +80,23 @@ def read_verdict(universe: dict, slug: str, *, event_type: Optional[str] = None)
     rob = universe.get("robustness") if isinstance(universe, dict) else None
     rob = rob if isinstance(rob, dict) else {}
 
-    # run_event_universe keys the per-cell robustness blocks by ``{slug}_{event_type}``
-    # (cell_slug) while Holm passed_slugs are the bare ``{slug}``. Try cell_slug first
-    # (the real on-disk schema), then fall back to the bare slug for older/flat artifacts.
-    _rob_keys = [f"{slug}_{event_type}", slug] if event_type else [slug]
-
-    def _rob_cell(by_cell: Any) -> Any:
-        for k in _rob_keys:
-            v = _dig(by_cell or {}, k)
-            if v is not None:
-                return v
-        return None
-
-    dsr_cell = _rob_cell(rob.get("dsr_by_cell")) or {}
+    dsr_cell = _dig(rob.get("dsr_by_cell") or {}, slug) or {}
     dsr = _f(_dig(dsr_cell, "dsr", "deflated_sharpe", "value")) if isinstance(dsr_cell, dict) else _f(dsr_cell)
 
     pbo_block = rob.get("pbo")
     pbo = None
     if isinstance(pbo_block, dict):
-        # pbo may be global or per-cell (keyed by cell_slug or bare slug)
+        # pbo may be global or per-cell
         pbo = _f(_dig(pbo_block, "pbo", "value"))
-        if pbo is None:
-            per = _rob_cell(pbo_block)
-            pbo = _f(_dig(per or {}, "pbo", "value")) if isinstance(per, dict) else _f(per)
+        if pbo is None and slug in pbo_block:
+            pbo = _f(_dig(pbo_block.get(slug) or {}, "pbo", "value"))
     else:
         pbo = _f(pbo_block)
 
-    boot_cell = _rob_cell(rob.get("bootstrap_by_cell")) or {}
+    boot_cell = _dig(rob.get("bootstrap_by_cell") or {}, slug) or {}
     ci_lower = _f(_dig(boot_cell, "ci_lower", "lower", "ci_low")) if isinstance(boot_cell, dict) else None
 
-    fee_cell = _rob_cell(rob.get("fee_stress_by_cell")) or {}
+    fee_cell = _dig(rob.get("fee_stress_by_cell") or {}, slug) or {}
     fee_x2 = bool(_dig(fee_cell, "fee_x2_pass", "fee_2x_pass", "passed")) if isinstance(fee_cell, dict) else False
 
     holm = _holm_survivor(universe, slug, event_type)
