@@ -14,6 +14,17 @@ from .. import paths, schemas
 DATABENTO_INITIAL_CREDIT = 125.00
 DATABENTO_OPERATING_CAP = 112.50
 
+MANDATORY_OPTIONS_CHECKS = (
+    "options-datasets",
+    "options-fixing-mbo",
+    "options-fixing-coverage",
+    "options-ohlcv",
+    "options-definitions",
+    "options-statistics",
+)
+
+_PROBLEM_CHECK_STATUSES = {"FAIL", "WARN", "WARNING", "MISSING", "STALE", "UNKNOWN"}
+
 
 def _latency() -> dict:
     data = paths.read_json(paths.LATENCY_SUMMARY)
@@ -92,23 +103,34 @@ def _databento() -> dict:
     receipt = paths.read_json(paths.DATABENTO_RECEIPT)
     total_used: Optional[float] = None
     rows: Optional[int] = None
+    status = schemas.MISSING
+    note = "Databento manifest missing; budget cannot be read"
     try:
-        import pandas as pd  # heavy; only if available
-
         if paths.DATABENTO_MANIFEST.exists():
+            import pandas as pd  # heavy; only if available
+
             df = pd.read_parquet(paths.DATABENTO_MANIFEST)
             rows = int(len(df))
             if "cost" in df.columns:
                 total_used = float(df["cost"].sum())
-    except Exception:  # pandas/pyarrow missing or unreadable parquet
-        pass
+                status = schemas.OK
+                note = "Databento budget read from manifest"
+            else:
+                status = schemas.UNKNOWN
+                note = "Databento manifest has no cost column"
+    except Exception as exc:  # pandas/pyarrow missing or unreadable parquet
+        status = schemas.UNKNOWN
+        note = f"Databento manifest unreadable: {exc}"
     out = {
-        "status": schemas.OK,
+        "status": status,
         "initial_credit": DATABENTO_INITIAL_CREDIT,
         "operating_cap": DATABENTO_OPERATING_CAP,
         "total_used": total_used,
         "remaining": (DATABENTO_INITIAL_CREDIT - total_used) if total_used is not None else None,
+        "remaining_authoritative": total_used is not None,
         "manifest_rows": rows,
+        "manifest": str(paths.DATABENTO_MANIFEST),
+        "note": note,
     }
     if isinstance(receipt, dict):
         out["last_download"] = {
@@ -156,24 +178,78 @@ def _execution() -> dict:
 def _options_data_readiness() -> dict:
     data = paths.read_json(paths.DATA_DOCTOR_REPORT)
     if not isinstance(data, dict):
-        return {"status": schemas.MISSING, "note": "run scripts/data_doctor.py"}
+        return {
+            "status": schemas.MISSING,
+            "note": "run scripts/data_doctor.py",
+            "missing_checks": list(MANDATORY_OPTIONS_CHECKS),
+        }
     report_utc = data.get("run_utc")
     all_checks = data.get("checks") or []
     options_checks = [c for c in all_checks if isinstance(c, dict) and str(c.get("name", "")).startswith("options-")]
     summary = data.get("options_lane")
+    check_names = {str(c.get("name", "")) for c in options_checks}
+    missing_checks = [name for name in MANDATORY_OPTIONS_CHECKS if name not in check_names]
     if not options_checks and summary is None:
-        return {"status": schemas.MISSING, "note": "data_doctor report predates options checks"}
-    status = schemas.FAIL if any(c.get("status") == "FAIL" for c in options_checks) else schemas.OK
+        return {
+            "status": schemas.MISSING,
+            "note": "data_doctor report predates options checks",
+            "report_utc": report_utc,
+            "report_age": schemas.freshness(report_utc, stale_after_s=48 * 3600),
+            "checks": options_checks,
+            "summary": summary,
+            "missing_checks": missing_checks,
+        }
+    statuses = [str(c.get("status", "")).upper() for c in options_checks]
+    report_age = schemas.freshness(report_utc, stale_after_s=48 * 3600)
+    lake_present = paths.OPTIONS_LAKE_ROOT.is_dir()
+    if "FAIL" in statuses:
+        status = schemas.FAIL
+    elif report_age == schemas.STALE:
+        status = schemas.STALE
+    elif not lake_present or not summary or missing_checks:
+        status = schemas.MISSING
+    elif any(s in _PROBLEM_CHECK_STATUSES for s in statuses):
+        status = schemas.STALE if "STALE" in statuses else schemas.MISSING
+    else:
+        status = schemas.OK
     lake_root_path = paths.OPTIONS_LAKE_ROOT.parent
     return {
         "status": status,
         "report_utc": report_utc,
-        "report_age": schemas.freshness(report_utc, stale_after_s=48 * 3600),
+        "report_age": report_age,
         "checks": options_checks,
         "summary": summary,
-        "lake_present": paths.OPTIONS_LAKE_ROOT.is_dir(),
+        "missing_checks": missing_checks,
+        "lake_present": lake_present,
         "lake_root": str(lake_root_path),
     }
+
+
+def _options_defect_ledger() -> dict:
+    try:
+        from hft3.validation.options_defect_ledger import load_options_defect_ledger
+
+        ledger = load_options_defect_ledger(paths.REPO)
+        payload = ledger.to_dict()
+        return {
+            "status": schemas.OK if ledger.empty else schemas.FAIL,
+            "open_count": ledger.open_count,
+            "open_ids": list(ledger.open_ids),
+            "ledger_status": ledger.status,
+            "artifact": payload.get("artifact"),
+            "reason": payload.get("reason"),
+            "items": payload.get("items", []),
+        }
+    except Exception as exc:
+        return {
+            "status": schemas.FAIL,
+            "open_count": 1,
+            "open_ids": ["OPTIONS_LEDGER_UNREADABLE"],
+            "ledger_status": "unreadable",
+            "artifact": "specs/OPTIONS_LANE.md",
+            "reason": str(exc),
+            "items": [],
+        }
 
 
 def _lanes() -> dict:
@@ -217,6 +293,7 @@ def _lanes() -> dict:
             "registered": registered,
             "items": items,
             "cme_options_data": _options_data_readiness(),
+            "cme_options_defects": _options_defect_ledger(),
         }
     except Exception as exc:
         return {
@@ -225,6 +302,7 @@ def _lanes() -> dict:
             "items": [],
             "error": str(exc),
             "cme_options_data": _options_data_readiness(),
+            "cme_options_defects": _options_defect_ledger(),
         }
 
 
@@ -232,7 +310,11 @@ def build() -> dict:
     latency = _latency()
     slow = _slow_tier()
     cert = _certification()
-    components = [latency, slow, cert]
+    databento = _databento()
+    lanes = _lanes()
+    cme_options_data = lanes.get("cme_options_data", {}) if isinstance(lanes, dict) else {}
+    cme_options_defects = lanes.get("cme_options_defects", {}) if isinstance(lanes, dict) else {}
+    components = [latency, slow, cert, databento, cme_options_data, cme_options_defects]
     if any(c.get("status") == schemas.FAIL for c in components):
         health = schemas.RED
     elif any(c.get("status") in (schemas.STALE, schemas.MISSING, schemas.UNKNOWN) for c in components):
@@ -246,8 +328,8 @@ def build() -> dict:
         "latency": latency,
         "slow_tier": slow,
         "certification": cert,
-        "databento": _databento(),
+        "databento": databento,
         "capture": _capture(),
         "execution": _execution(),
-        "lanes": _lanes(),
+        "lanes": lanes,
     }

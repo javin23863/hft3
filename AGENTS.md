@@ -1,3 +1,5 @@
+# MANDATORY ONTOLOGY GATE: Before every interaction in this project, operate from the Obsidian vault ontology and the provided mathematics/quantitative-finance/HFT PDFs; do not invent codebases, pipelines, models, or methodology outside that authority.
+
 # hft3 Agent Charter
 
 Chicago CME microstructure research and execution stack. Agents working in this repo follow mandatory delegation, Karpathy engineering principles, and hft3-specific constraints below.
@@ -5,6 +7,27 @@ Chicago CME microstructure research and execution stack. Agents working in this 
 **Human onboarding:** [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) (read once, top to bottom) · [docs/human/DOC_INDEX.md](docs/human/DOC_INDEX.md) · [docs/ai/ONBOARDING.md](docs/ai/ONBOARDING.md) (graph-first for agents) · [docs/ai/ENGINEERING.md](docs/ai/ENGINEERING.md) (Karpathy style)
 
 Full workflow reference: [docs/AGENTIC_ENGINEERING.md](docs/AGENTIC_ENGINEERING.md)
+
+## VaultGate: check project memory first
+
+Before starting work, locating code, designing a change, or asking the user for missing context, consult the hft3 Obsidian vault:
+
+`C:\Users\MSI\Desktop\Obsidian Vault From VPS\hft3\`
+
+Minimum read path:
+
+1. `wiki/hot.md` for current state, blockers, moved lanes, and urgent handoffs.
+2. `Home.md` for the curated KB map.
+3. `Memory Stack.md` for the graph + vault protocol.
+4. Relevant notes in `decisions/`, `sessions/`, `architecture/`, `pipelines/`, `validation/`, `operations/`, `references/`, or `library/`.
+
+Use targeted search when the task has clear keywords, for example:
+
+```powershell
+rg -n "<task keywords>" "C:\Users\MSI\Desktop\Obsidian Vault From VPS\hft3" -g "*.md"
+```
+
+If the vault answers the question, proceed from that context and cite the note names in your reasoning or handoff. If it does not, state what vault notes/searches were checked before asking the user. VaultGate complements GraphGate: vault first for declarative memory, then graph first for code structure.
 
 ## Mandatory delegation
 
@@ -113,19 +136,20 @@ Touch only what the task requires. Match existing naming, types, and style. Ever
 
 Convert imperative instructions into verifiable success criteria. Prefer "write a failing test, then make it pass" over "fix the bug." Strong criteria let the agent loop independently; weak criteria ("make it work") require constant clarification.
 
-## Spec → GraphPre → Plan → Code → Verify → GraphPost
+## VaultGate → Spec → GraphPre → Plan → Code → Verify → GraphPost
 
 Every task runs this loop:
 
-1. **Spec** — Restate goal, constraints, and success criteria. Ask if ambiguous.
-2. **GraphGate** — **Blocking:** `scripts/graphify_gate.ps1 -Query "..."` (or `bash scripts/graphify_gate.sh '...'`). Writes `graphify-out/.last-graph-query.json`. **No code edits before this.**
-3. **GraphPre** — `scripts/graphify_pre_edit.ps1` (exits 2 if gate stamp missing/stale). Use graph query output — not blind repo grep. CHI404: [docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md](docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md).
-4. **Plan** — Brief plan with verification steps before editing. Delegate locate work when needed (with graph context).
-5. **Code** — Minimal change via builder or approved multi-file path. No drive-by edits. No parallel CHI404 orchestrators.
-6. **Verify** — **cavecrew-reviewer** must complete Pass A (Karpathy) and Pass B (math invariants) on the diff before **shell** runs bounded pytest (see [docs/ai/SHELL_EXECUTION.md](docs/ai/SHELL_EXECUTION.md)) and CHI404 validate gates when infra applies. Loop until met or blocked.
-7. **GraphPost** — After code edits: `graphify update .` or `scripts/graphify_rebuild.ps1`. Commit updated `graphify-out/` with the change when the team tracks graph in git.
+1. **VaultGate** — **Blocking:** read/search the Obsidian vault before implementation or user questions. Use `wiki/hot.md`, `Home.md`, `Memory Stack.md`, and task-relevant notes/decisions first.
+2. **Spec** — Restate goal, constraints, and success criteria. Ask only after VaultGate if ambiguity remains.
+3. **GraphGate** — **Blocking:** `scripts/graphify_gate.ps1 -Query "..."` (or `bash scripts/graphify_gate.sh '...'`). Writes `graphify-out/.last-graph-query.json`. **No code edits before this.**
+4. **GraphPre** — `scripts/graphify_pre_edit.ps1` (exits 2 if gate stamp missing/stale). Use graph query output — not blind repo grep. CHI404: [docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md](docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md).
+5. **Plan** — Brief plan with verification steps before editing. Delegate locate work when needed (with graph context).
+6. **Code** — Minimal change via builder or approved multi-file path. No drive-by edits. No parallel CHI404 orchestrators.
+7. **Verify** — **cavecrew-reviewer** must complete Pass A (Karpathy) and Pass B (math invariants) on the diff before **shell** runs bounded pytest (see [docs/ai/SHELL_EXECUTION.md](docs/ai/SHELL_EXECUTION.md)) and CHI404 validate gates when infra applies. Loop until met or blocked.
+8. **GraphPost** — After code edits: `graphify update .` or `scripts/graphify_rebuild.ps1`. Commit updated `graphify-out/` with the change when the team tracks graph in git.
 
-Do not skip GraphGate, GraphPre, Plan, Verify, or GraphPost for "small" changes.
+Do not skip VaultGate, GraphGate, GraphPre, Plan, Verify, or GraphPost for "small" changes.
 
 ## hft3-specific constraints
 

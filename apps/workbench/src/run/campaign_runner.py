@@ -27,6 +27,9 @@ from workbench.src.data.event_catalog import (
 # Options-type model identifiers (options parity fixture flow)
 _OPTIONS_MODEL_IDS = frozenset({"PDF_MODEL_5", "DEALER_HEDGING"})
 _OPTIONS_PREFIXES = ("OPTIONS_", "PARITY_")
+_OPTIONS_PROMOTION_PREFIXES = ("FOPT_", *_OPTIONS_PREFIXES)
+_OPTIONS_PROMOTION_LANE_TOKENS = {"CME_OPTIONS", "OPTIONS_LANE"}
+_OPTIONS_PROMOTION_SYMBOL_FAMILIES = {"OPTIONS", "PARITY"}
 from workbench.src.data.coverage_check import (
     compute_model_coverage,
     format_coverage_summary,
@@ -221,6 +224,72 @@ def _is_options_type_model(model_id: str) -> bool:
     return False
 
 
+def _is_options_like_promotion_scope(summary: dict[str, Any]) -> bool:
+    """Return True when a summary belongs to an options-like promotion surface."""
+    for key in ("model_id", "symbol", "event_id", "lane", "campaign_mode"):
+        token = str(summary.get(key) or "").strip().upper()
+        if not token:
+            continue
+        if token in _OPTIONS_MODEL_IDS:
+            return True
+        if token in _OPTIONS_PROMOTION_LANE_TOKENS or token in _OPTIONS_PROMOTION_SYMBOL_FAMILIES:
+            return True
+        if token.startswith(_OPTIONS_PROMOTION_PREFIXES):
+            return True
+    return False
+
+
+def _unreadable_options_defect_ledger(exc: Exception) -> Dict[str, Any]:
+    return {
+        "status": "unreadable",
+        "empty": False,
+        "open_count": 1,
+        "open_ids": ["OPTIONS_LEDGER_UNREADABLE"],
+        "items": [],
+        "artifact": "specs/OPTIONS_LANE.md",
+        "reason": f"options ledger unreadable; fail closed: {exc}",
+    }
+
+
+def _options_defect_ledger_payload(repo_root: Path) -> Dict[str, Any]:
+    try:
+        from hft3.validation.options_defect_ledger import load_options_defect_ledger
+
+        raw = dict(load_options_defect_ledger(repo_root).to_dict())
+    except Exception as exc:
+        return _unreadable_options_defect_ledger(exc)
+
+    try:
+        open_count = int(raw.get("open_count", 1))
+    except (TypeError, ValueError):
+        open_count = 1
+    status = str(raw.get("status") or "unknown")
+    raw["status"] = status
+    raw["open_count"] = open_count
+    raw["empty"] = bool(raw.get("empty")) and status == "empty" and open_count == 0
+    raw.setdefault("open_ids", [])
+    raw.setdefault("items", [])
+    raw.setdefault("artifact", "specs/OPTIONS_LANE.md")
+    raw.setdefault("reason", "")
+    return raw
+
+
+def _options_defect_ledger_gate(repo_root: Path) -> tuple[bool, Dict[str, Any], Dict[str, Any] | None]:
+    ledger = _options_defect_ledger_payload(repo_root)
+    if ledger.get("empty") is True:
+        return True, ledger, None
+    reason = str(ledger.get("reason") or "options defect ledger is not empty; fail closed")
+    gate = {
+        "gate": "options_defect_ledger",
+        "status": str(ledger.get("status") or "blocked").upper(),
+        "reason": reason,
+        "artifact": ledger.get("artifact", "specs/OPTIONS_LANE.md"),
+        "open_count": ledger.get("open_count", 1),
+        "open_ids": list(ledger.get("open_ids") or []),
+    }
+    return False, ledger, gate
+
+
 def record_paper_shadow(repo_root: Path, campaign_id: str, status: str) -> Path:
     """Record paper shadow result for an options lane campaign.
 
@@ -242,7 +311,13 @@ def record_paper_shadow(repo_root: Path, campaign_id: str, status: str) -> Path:
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
         summary["paper_shadow_status"] = status
         all_stages_pass = _all_stage_gates_pass(summary)
-        summary["promote_candidate"] = all_stages_pass and status == "PASS"
+        promote_ok = all_stages_pass and status == "PASS"
+        ledger_ok, ledger, ledger_gate = _options_defect_ledger_gate(repo_root)
+        summary["options_defect_ledger"] = ledger
+        if ledger_gate:
+            _append_blocking_gate(summary, ledger_gate)
+        promote_ok = promote_ok and ledger_ok
+        summary["promote_candidate"] = promote_ok
         summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     return artifact_dir / "paper_shadow.json"
 
@@ -250,6 +325,8 @@ def record_paper_shadow(repo_root: Path, campaign_id: str, status: str) -> Path:
 def _all_stage_gates_pass(summary: dict[str, Any]) -> bool:
     """Return True if all period stage gates passed (campaign status PASS, no blocking gates)."""
     if summary.get("status") != "PASS":
+        return False
+    if summary.get("blocking_gates"):
         return False
     for p in summary.get("periods") or []:
         if isinstance(p, dict) and not p.get("gate_pass", False) and not p.get("evaluate_only", False):
@@ -433,7 +510,8 @@ def _run_options_type_campaign(
     status = "PASS" if gate_pass else "FAIL"
     paper_cfg = load_paper_shadow_config(repo_root)
     paper_status = _paper_shadow_status(artifact_dir)
-    promote_ok = status == "PASS" and paper_status == "PASS"
+    ledger_ok, ledger, ledger_gate = _options_defect_ledger_gate(repo_root)
+    promote_ok = status == "PASS" and paper_status == "PASS" and ledger_ok
     summary = {
         "campaign_id": campaign_id,
         "status": status,
@@ -445,12 +523,15 @@ def _run_options_type_campaign(
         "paper_shadow_required": True,
         "paper_shadow_status": paper_status,
         "paper_shadow_days": paper_cfg.get("days"),
+        "options_defect_ledger": ledger,
         "promote_candidate": promote_ok,
         "promote_note": (
             "Options/parity lane (CME futures options, non-DMA): "
-            "paper shadow required before promotion"
+            "paper shadow and empty options defect ledger required before promotion"
         ),
     }
+    if ledger_gate:
+        _append_blocking_gate(summary, ledger_gate)
     (artifact_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     metrics_status = _run_institutional_model_metrics(repo_root, artifact_dir)
     summary["institutional_metrics"] = metrics_status

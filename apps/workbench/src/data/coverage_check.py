@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
+import sys
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -183,16 +185,84 @@ def _path_matches_symbol(path: Path, symbol: str) -> bool:
     return False
 
 
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _npz_manifest_rows(repo_root: Path, npz_root: Path) -> dict[Path, dict[str, Any]]:
+    manifest_path = npz_root / "manifest.json"
+    if not manifest_path.is_file():
+        return {}
+    try:
+        raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    rows = raw.get("files", raw) if isinstance(raw, dict) else raw
+    if not isinstance(rows, list):
+        return {}
+    out: dict[Path, dict[str, Any]] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        raw_path = row.get("npz_path") or row.get("path")
+        if not raw_path:
+            continue
+        p = Path(str(raw_path))
+        candidates = [p] if p.is_absolute() else [repo_root / p, npz_root / p, npz_root / p.name]
+        for candidate in candidates:
+            try:
+                out[candidate.resolve()] = row
+            except OSError:
+                out[candidate] = row
+    return out
+
+
+def _runnable_npz_artifact_ok(path: Path, manifest_rows: dict[Path, dict[str, Any]]) -> bool:
+    try:
+        row = manifest_rows.get(path.resolve())
+    except OSError:
+        row = manifest_rows.get(path)
+    if not row:
+        return False
+    try:
+        expected_count = int(row.get("event_count"))
+    except (TypeError, ValueError):
+        return False
+    if expected_count <= 0:
+        return False
+    expected_sha = str(row.get("sha256") or "").lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", expected_sha):
+        return False
+    try:
+        if _file_sha256(path) != expected_sha:
+            return False
+        import numpy as np  # noqa: PLC0415
+
+        with np.load(path, allow_pickle=False) as npz:
+            if "data" not in npz:
+                return False
+            return len(npz["data"]) == expected_count
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _runnable_npz_dates_for_symbol(repo_root: Path, symbol: str) -> set[date]:
     """Official CME robustness coverage: converted MBO NPZ files only."""
     npz_root = repo_root / "data" / "npz"
     if not npz_root.is_dir():
         return set()
+    manifest_rows = _npz_manifest_rows(repo_root, npz_root)
     dates: set[date] = set()
     for path in npz_root.glob("*_mbo.npz"):
         if not path.is_file():
             continue
         if not _path_matches_symbol(path, symbol):
+            continue
+        if not _runnable_npz_artifact_ok(path, manifest_rows):
             continue
         found = _date_from_path(path)
         if found is not None:
@@ -250,24 +320,77 @@ def _event_has_own_official_npz(repo_root: Path, event: EventSpec, requested_sym
     )
 
 
-def _option_dates(repo_root: Path) -> set[date]:
+def _option_roots(repo_root: Path) -> list[Path]:
     from data_system.src.npz_resolver import lake_root
 
-    option_roots = [repo_root / "data" / "options", repo_root / "packages" / "options_lane" / "fixtures"]
+    option_roots = [repo_root / "data" / "options"]
     lake_options = lake_root(repo_root) / "options"
     if lake_options not in option_roots:
         option_roots.append(lake_options)
+    return option_roots
+
+
+_OPTION_DATASET_SCHEMAS = {
+    "fixing_mbo": "mbo",
+    "options_ohlcv": "ohlcv",
+    "options_definitions": "definition",
+    "options_statistics": "statistics",
+    "options_chain": "mbo",
+}
+
+
+def _option_expected_schema(dataset: str, path: Path) -> str | None:
+    if dataset == "fixing_mbo" and "_trades_" in path.name:
+        return "trades"
+    return _OPTION_DATASET_SCHEMAS.get(dataset)
+
+
+def _option_artifact_valid(repo_root: Path, path: Path, expected_schema: str | None) -> bool:
+    if path.name.endswith(".doctor.json") or path.suffix.lower() == ".json":
+        return False
+    if not path.name.endswith((".dbn", ".dbn.zst")):
+        return False
+    try:
+        scripts_dir = repo_root / "scripts"
+        if str(scripts_dir) not in sys.path:
+            sys.path.insert(0, str(scripts_dir))
+        import data_doctor as dd  # noqa: PLC0415
+
+        ok, _ = dd._valid_options_artifact(path, expected_schema=expected_schema)
+        return bool(ok)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _option_dataset_dates(repo_root: Path, dataset: str) -> set[date]:
+    subdirs = {
+        "fixing_mbo": ("fixing_mbo",),
+        "options_ohlcv": ("ohlcv",),
+        "options_definitions": ("definitions",),
+        "options_statistics": ("statistics",),
+        "options_chain": ("chain",),
+    }.get(dataset, ())
     dates: set[date] = set()
-    for root in option_roots:
+    for root in _option_roots(repo_root):
         if not root.is_dir():
             continue
-        for path in root.rglob("*"):
-            if not path.is_file():
+        roots = [root / sub for sub in subdirs] if subdirs else []
+        for ds_root in roots:
+            if not ds_root.is_dir():
                 continue
-            found = _date_from_path(path)
-            if found is not None:
-                dates.add(found)
+            for path in ds_root.rglob("*"):
+                if not path.is_file():
+                    continue
+                if not _option_artifact_valid(repo_root, path, _option_expected_schema(dataset, path)):
+                    continue
+                found = _date_from_path(path)
+                if found is not None:
+                    dates.add(found)
     return dates
+
+
+def _option_dates(repo_root: Path) -> set[date]:
+    return _option_dataset_dates(repo_root, "fixing_mbo")
 
 
 def _compress_dates(dates: Iterable[date]) -> list[str]:
@@ -419,8 +542,11 @@ def compute_model_coverage(repo_root: Path, model_id: str, symbol: str) -> Cover
             if event_date is not None:
                 missing_dates.add(event_date)
     _options_dataset_triggers = {"options_chain", "fixing_mbo", "options_ohlcv", "options_definitions", "options_statistics"}
-    needs_option_dates = bool(_options_dataset_triggers & {str(v) for v in (binding.get("required_datasets") or [])})
-    option_dates = _option_dates(repo_root) if needs_option_dates else None
+    required_option_datasets = _options_dataset_triggers & {str(v) for v in (binding.get("required_datasets") or [])}
+    option_dates = None
+    if required_option_datasets:
+        date_sets = [_option_dataset_dates(repo_root, ds) for ds in sorted(required_option_datasets)]
+        option_dates = set.intersection(*date_sets) if date_sets and all(date_sets) else set()
     return build_coverage_summary_from_dates(
         model_name=slug,
         data_type=data_type,

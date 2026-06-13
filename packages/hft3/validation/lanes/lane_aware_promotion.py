@@ -63,9 +63,13 @@ def resolve_lane_for_candidate(
         if lane != Lane.CME_FUTURES:
             return lane
     sym_upper = (symbol or "").upper()
+    if sym_upper.startswith("FOPT_"):
+        return Lane.CME_OPTIONS
     if sym_upper.startswith(("OPTIONS", "PARITY")):
         return Lane.EQUITIES
     eid_upper = (event_id or "").upper()
+    if eid_upper.startswith("FOPT_"):
+        return Lane.CME_OPTIONS
     if eid_upper.startswith(("OPTIONS_", "PARITY_")):
         return Lane.EQUITIES
     return Lane.CME_FUTURES
@@ -90,6 +94,8 @@ def _capability_failures(lane: Lane, lane_dict: dict[str, Any]) -> tuple[list[st
     if not isinstance(profile, dict):
         return [f"lane '{lane.value}' capability_profile is invalid"], {}
     failures: list[str] = []
+    if profile.get("research_only") is True:
+        failures.append(f"lane '{lane.value}' is research_only; promotion/live/shadow gates are blocked")
     if lane == Lane.CME_FUTURES:
         if not profile.get("is_hft") or not profile.get("dma") or not profile.get("hft_proof_required"):
             failures.append("CME lane requires true HFT/DMA capability proof")

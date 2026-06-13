@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+import sys
 from datetime import date, timedelta
+from pathlib import Path
+
+import numpy as np
+import pytest
 
 from workbench.src.data.coverage_check import (
     MIN_VALID_TRADING_DAYS,
     OPTIONS_MIN_VALID_DAYS,
     TARGET_VALID_TRADING_DAYS,
     _event_has_own_official_npz,
+    _option_dataset_dates,
     _option_dates,
     _raw_backlog_dates_for_symbol,
     _runnable_npz_dates_for_symbol,
@@ -17,6 +25,8 @@ from workbench.src.data.coverage_check import (
     required_symbols_for_model,
 )
 from workbench.src.data.event_catalog import EventSpec
+
+REPO = Path(__file__).resolve().parents[2]
 
 
 def _days(count: int, *, start: date = date(2024, 1, 2)) -> set[date]:
@@ -27,6 +37,58 @@ def _days(count: int, *, start: date = date(2024, 1, 2)) -> set[date]:
             days.add(cursor)
         cursor += timedelta(days=1)
     return days
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _write_npz_manifest(npz_root: Path, rows: list[dict]) -> None:
+    (npz_root / "manifest.json").write_text(json.dumps(rows), encoding="utf-8")
+
+
+def _write_manifested_npz(path: Path, *, event_count: int = 2) -> dict:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    arr = np.arange(event_count, dtype=np.int64)
+    np.savez(str(path), data=arr)
+    return {
+        "npz_path": str(path),
+        "event_count": event_count,
+        "sha256": _sha256(path),
+    }
+
+
+def _install_fixture_dbn_sampler(monkeypatch: pytest.MonkeyPatch) -> None:
+    scripts = REPO / "scripts"
+    if str(scripts) not in sys.path:
+        sys.path.insert(0, str(scripts))
+    import data_doctor as dd  # noqa: PLC0415
+
+    def _fixture_sample_valid(path: Path, expected_schema: str | None = None, expected_record_count: int | None = None):
+        if path.read_bytes() == b"valid-dbn-fixture":
+            return True, "fixture dbn sample ok"
+        return False, "fixture dbn rejected"
+
+    monkeypatch.setattr(dd, "_dbn_sample_valid", _fixture_sample_valid)
+
+
+def _write_valid_dbn_fixture(path: Path, schema: str) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"valid-dbn-fixture")
+    blob = path.read_bytes()
+    path.with_name(f"{path.name}.doctor.json").write_text(
+        json.dumps(
+            {
+                "valid": True,
+                "schema": schema,
+                "record_count": 1,
+                "size_bytes": len(blob),
+                "sha256": hashlib.sha256(blob).hexdigest(),
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path
 
 
 def test_coverage_status_boundaries():
@@ -97,12 +159,16 @@ def test_options_model_requires_underlying_and_option_days():
 
 def test_official_coverage_counts_only_runnable_mbo_npz(tmp_path):
     npz = tmp_path / "data" / "npz" / "MES.v.0_CPI_2025_02_12_TIGHT_mbo.npz"
+    corrupt = tmp_path / "data" / "npz" / "MES.v.0_CPI_2025_02_13_TIGHT_mbo.npz"
     raw = tmp_path / "data" / "replay" / "mbp10" / "MES.v.0_CPI_2025_03_12_TIGHT_mbp-10.dbn.zst"
     root_raw = tmp_path / "data" / "MES.v.0_NFP_2025_04_04_TIGHT_mbo.dbn.zst"
     npz.parent.mkdir(parents=True)
     raw.parent.mkdir(parents=True)
     root_raw.parent.mkdir(parents=True, exist_ok=True)
-    npz.write_bytes(b"npz-placeholder")
+    valid_row = _write_manifested_npz(npz, event_count=2)
+    corrupt.write_bytes(b"not-an-npz")
+    corrupt_row = {"npz_path": str(corrupt), "event_count": 1, "sha256": _sha256(corrupt)}
+    _write_npz_manifest(npz.parent, [valid_row, corrupt_row])
     raw.write_bytes(b"raw-placeholder")
     root_raw.write_bytes(b"raw-placeholder")
 
@@ -158,17 +224,47 @@ def test_data_type_for_model_fixing_mbo_returns_expiry_day_label():
 
 
 def test_option_dates_includes_lake_root_options_and_both_filename_patterns(tmp_path, monkeypatch):
+    _install_fixture_dbn_sampler(monkeypatch)
     npz_dir = tmp_path / "npz"
     npz_dir.mkdir()
     monkeypatch.setenv("HFT3_NPZ_ROOT", str(npz_dir))
 
     options_dir = tmp_path / "options" / "fixing_mbo"
     options_dir.mkdir(parents=True)
-    (options_dir / "ES_fixing_2025-01-03.dbn.zst").write_bytes(b"x")
-    (options_dir / "ES_fixing_trades_2025-01-06.dbn.zst").write_bytes(b"x")
+    _write_valid_dbn_fixture(options_dir / "ES_fixing_2025-01-03.dbn.zst", "mbo")
+    _write_valid_dbn_fixture(options_dir / "ES_fixing_trades_2025-01-06.dbn.zst", "trades")
+    (options_dir / "ES_fixing_2025-01-07.dbn.zst").write_bytes(b"x")
 
     from datetime import date
 
     found = _option_dates(tmp_path)
     assert date(2025, 1, 3) in found
     assert date(2025, 1, 6) in found
+    assert date(2025, 1, 7) not in found
+
+
+def test_options_required_datasets_are_independent(tmp_path, monkeypatch):
+    _install_fixture_dbn_sampler(monkeypatch)
+    npz_dir = tmp_path / "npz"
+    npz_dir.mkdir()
+    monkeypatch.setenv("HFT3_NPZ_ROOT", str(npz_dir))
+
+    defs = tmp_path / "options" / "definitions" / "JOBX"
+    defs.mkdir(parents=True)
+    _write_valid_dbn_fixture(defs / "ES_def_2025-01-03.dbn.zst", "definition")
+
+    assert _option_dataset_dates(tmp_path, "options_definitions") == {date(2025, 1, 3)}
+    assert _option_dataset_dates(tmp_path, "fixing_mbo") == set()
+    assert _option_dataset_dates(tmp_path, "options_statistics") == set()
+
+
+def test_options_fixtures_do_not_count_as_production_coverage_by_default(tmp_path, monkeypatch):
+    npz_dir = tmp_path / "npz"
+    npz_dir.mkdir()
+    monkeypatch.setenv("HFT3_NPZ_ROOT", str(npz_dir))
+
+    fixture = tmp_path / "packages" / "options_lane" / "fixtures" / "fixing_mbo"
+    fixture.mkdir(parents=True)
+    (fixture / "ES_fixing_2025-01-03.dbn.zst").write_bytes(b"x")
+
+    assert _option_dates(tmp_path) == set()

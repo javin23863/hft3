@@ -186,8 +186,11 @@ def test_cme_options_backtester_run():
     bt = CMEOptionsBacktester(load_cme_options_config())
     result = bt.run(target="FOPT_ES_CALL_20241220")
     assert result.lane == Lane.CME_OPTIONS
-    assert result.degraded is False
+    assert result.degraded is True
     assert result.extra["research_only"] is True
+    assert result.extra["structural_only"] is True
+    assert result.extra["promotable"] is False
+    assert result.failure_notes
 
 
 def test_cme_options_backtester_validate_config():

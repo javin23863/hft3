@@ -129,8 +129,13 @@ def complete(job_id: str, artifacts: Optional[dict] = None) -> dict:
     return _move(job_id, "running", "done", lambda j: j.update({"artifacts": artifacts or {}}))
 
 
-def fail(job_id: str, error: str) -> dict:
-    return _move(job_id, "running", "failed", lambda j: j.update({"error": error}))
+def fail(job_id: str, error: str, artifacts: Optional[dict] = None) -> dict:
+    def mutate(j: dict) -> None:
+        j.update({"error": error})
+        if artifacts is not None:
+            j["artifacts"] = artifacts
+
+    return _move(job_id, "running", "failed", mutate)
 
 
 def list_jobs(state: str) -> list[dict]:

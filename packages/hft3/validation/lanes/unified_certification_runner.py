@@ -53,17 +53,21 @@ def _run_pytest_for_lane(
     if not test_paths:
         return LaneRunResult(
             lane="unknown",
-            passed=True,
-            returncode=0,
+            passed=False,
+            returncode=2,
             output_tail="(no test paths configured)",
+            failure_notes=["no test paths configured"],
         )
     combined_output = ""
     overall_pass = True
     last_returncode = 0
+    ran_any = False
     for tp in test_paths:
         path = root / tp
         if not path.exists():
             combined_output += f"[skip] {tp} (not present)\n"
+            overall_pass = False
+            last_returncode = 2
             continue
         try:
             proc = subprocess.run(
@@ -80,13 +84,20 @@ def _run_pytest_for_lane(
             continue
         except FileNotFoundError:
             combined_output += f"[skip] {tp} (pytest not available)\n"
+            overall_pass = False
+            last_returncode = 127
             continue
+        ran_any = True
         last_returncode = proc.returncode
         if proc.returncode != 0:
             overall_pass = False
         combined_output += f"=== {tp} (rc={proc.returncode}) ===\n"
         combined_output += (proc.stdout or "")[-500:]
         combined_output += (proc.stderr or "")[-500:]
+    if not ran_any:
+        overall_pass = False
+        if last_returncode == 0:
+            last_returncode = 2
     return LaneRunResult(
         lane="unknown",
         passed=overall_pass,
@@ -130,10 +141,11 @@ def run_unified_certification(
         if skip_pytest:
             run_results[lane.value] = LaneRunResult(
                 lane=lane.value,
-                passed=True,
-                returncode=0,
+                passed=False,
+                returncode=2,
                 output_tail="(pytest skipped)",
                 test_paths=list(lane_reg.test_paths),
+                failure_notes=["pytest skipped; non-promotable certification result"],
             )
             continue
         result = _run_pytest_for_lane(

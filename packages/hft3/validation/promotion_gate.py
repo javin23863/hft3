@@ -38,12 +38,16 @@ from hft3.validation.gate_result import (
     warnings as gate_warnings,
     write_robustness_gates_json,
 )
-from hft3.validation.lanes.lane_aware_promotion import check_candidate_lane_coverage
+from hft3.validation.lanes.lane import Lane
+from hft3.validation.lanes.lane_aware_promotion import check_candidate_lane_coverage, resolve_lane_for_candidate
+from hft3.validation.options_defect_ledger import load_options_defect_ledger
 
 REPORT_JSON_REL = Path("runtime/validation/champion_promotion_gate_report.json")
 REPORT_MD_REL = Path("runtime/validation/champion_promotion_gate_report.md")
 ROBUSTNESS_GATES_REL = Path("runtime/validation/robustness_gates.json")
 SCORECARD_JSON_REL = Path("runtime/validation/backtester_certification_scorecard.json")
+OPTIONS_LIKE_PREFIXES = ("FOPT_", "OPTIONS_", "PARITY_")
+OPTIONS_LIKE_SYMBOL_FAMILIES = ("OPTIONS", "PARITY")
 
 
 @dataclass
@@ -140,6 +144,24 @@ def _coverage_reason_code(covers_reason: str) -> str:
     return "SCORECARD_NOT_COVERED"
 
 
+def _is_options_like_candidate(
+    candidate_lane: Lane,
+    *,
+    model_id: str = "",
+    symbol: str = "",
+    event_id: str = "",
+) -> bool:
+    if candidate_lane in {Lane.CME_OPTIONS, Lane.EQUITIES}:
+        return True
+    for value in (model_id, symbol, event_id):
+        upper = (value or "").upper()
+        if upper.startswith(OPTIONS_LIKE_PREFIXES):
+            return True
+        if upper in OPTIONS_LIKE_SYMBOL_FAMILIES:
+            return True
+    return False
+
+
 def evaluate_promotion_gates(
     *,
     model_id: str = "",
@@ -161,6 +183,7 @@ def evaluate_promotion_gates(
     registry = load_registry(root)
     staleness = assess_staleness(root, registry=registry)
     gates: list[GateResult] = []
+    candidate_lane = resolve_lane_for_candidate(model_id=model_id, symbol=symbol, event_id=event_id)
 
     # 1. registry status
     gates.append(
@@ -288,6 +311,67 @@ def evaluate_promotion_gates(
                     extra={"failure_reason": covers_reason} if covers_reason else {},
                 )
             )
+
+    options_like = _is_options_like_candidate(
+        candidate_lane,
+        model_id=model_id,
+        symbol=symbol,
+        event_id=event_id,
+    )
+
+    if options_like:
+        capability_result = check_candidate_lane_coverage(
+            model_id=model_id,
+            symbol=symbol,
+            event_id=event_id,
+            latency_ms=latency_ms,
+            queue_model=queue_model,
+            scorecard=None,
+        )
+        gates.append(
+            GateResult(
+                gate_name="lane_capability_live_eligible",
+                gate_category=GateCategory.REGISTRY_ELIGIBILITY,
+                metric_name="lane_capability_profile",
+                threshold=None,
+                observed_value=None,
+                comparison_operator="==",
+                pass_fail=capability_result.passed,
+                severity=Severity.BLOCKING,
+                reason_code=(
+                    "LANE_CAPABILITY_LIVE_ELIGIBLE"
+                    if capability_result.passed
+                    else "LANE_CAPABILITY_NOT_LIVE_ELIGIBLE"
+                ),
+                artifact_reference="packages/hft3/validation/lanes/registration.py",
+                extra=capability_result.to_dict(),
+            )
+        )
+
+    # Options lane defect ledger: scoped to canonical CME options and the
+    # legacy options/parity shim. The ontology in specs/OPTIONS_LANE.md blocks
+    # shadow/live while any o-* item is blocking, regardless of other evidence.
+    if options_like:
+        ledger = load_options_defect_ledger(root)
+        gates.append(
+            GateResult(
+                gate_name="options_defect_ledger_empty",
+                gate_category=GateCategory.REGISTRY_ELIGIBILITY,
+                metric_name="options_open_defects",
+                threshold=0.0,
+                observed_value=float(ledger.open_count),
+                comparison_operator="==",
+                pass_fail=ledger.empty,
+                severity=Severity.BLOCKING,
+                reason_code=(
+                    "OPTIONS_DEFECT_LEDGER_EMPTY"
+                    if ledger.empty
+                    else f"OPTIONS_DEFECT_LEDGER_{ledger.status.upper()}"
+                ),
+                artifact_reference=ledger.artifact,
+                extra=ledger.to_dict(),
+            )
+        )
 
     # 8. T0 pytest (or fast_gate_report reload)
     if skip_t0_rerun:

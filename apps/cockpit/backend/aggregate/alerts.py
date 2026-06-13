@@ -6,6 +6,7 @@ the trader (and the outbound notifier, W4) can watch."""
 from __future__ import annotations
 
 from .. import paths, schemas
+from .system import MANDATORY_OPTIONS_CHECKS
 
 
 def _alert(id_: str, severity: str, source: str, message: str, ts=None) -> dict:
@@ -71,12 +72,41 @@ def collect() -> list[dict]:
     doc = paths.read_json(paths.DATA_DOCTOR_REPORT)
     if isinstance(doc, dict):
         ts = doc.get("run_utc")
+        if schemas.freshness(ts, stale_after_s=48 * 3600) == schemas.STALE:
+            out.append(_alert("lake-data-doctor-stale", schemas.SEV_WARN, "data_lake",
+                              "data_doctor report STALE", ts))
+        options_check_names = {
+            str(c.get("name", ""))
+            for c in doc.get("checks", []) or []
+            if isinstance(c, dict) and str(c.get("name", "")).startswith("options-")
+        }
+        for name in MANDATORY_OPTIONS_CHECKS:
+            if name not in options_check_names:
+                out.append(_alert(f"lake-{name}-missing", schemas.SEV_WARN, "data_lake",
+                                  f"mandatory options check {name} MISSING", ts))
         for c in doc.get("checks", []) or []:
-            if c.get("status") == "FAIL":
+            status = str(c.get("status", "")).upper()
+            if status in {"FAIL", "WARN", "WARNING", "MISSING", "STALE", "UNKNOWN"}:
                 name = c.get("name")
-                sev = schemas.SEV_CRIT if name == "disk-free" else schemas.SEV_WARN
+                sev = schemas.SEV_CRIT if name == "disk-free" or status == "FAIL" else schemas.SEV_WARN
                 out.append(_alert(f"lake-{name}", sev, "data_lake",
-                                  f"lake check {name} FAIL: {c.get('detail', '')}", ts))
+                                  f"lake check {name} {status}: {c.get('detail', '')}", ts))
+    else:
+        out.append(_alert("lake-data-doctor-missing", schemas.SEV_WARN, "data_lake",
+                          "data_doctor report MISSING", None))
+
+    # options known-defect ledger — blocks shadow/live arm while non-empty
+    try:
+        from hft3.validation.options_defect_ledger import load_options_defect_ledger
+
+        ledger = load_options_defect_ledger(paths.REPO)
+        if not ledger.empty:
+            out.append(_alert("options-defect-ledger-open", schemas.SEV_CRIT, "cme_options",
+                              f"options ledger {ledger.status}: {ledger.open_count} open blocker(s)",
+                              None))
+    except Exception as exc:
+        out.append(_alert("options-defect-ledger-unreadable", schemas.SEV_CRIT, "cme_options",
+                          f"options ledger unreadable: {exc}", None))
 
     # autonomy — frozen breaker or tampered audit chain
     try:

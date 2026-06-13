@@ -1,6 +1,7 @@
 """Tests for the options-lane checks in scripts/data_doctor.py."""
 from __future__ import annotations
 
+import hashlib
 import importlib
 import json
 import sys
@@ -38,9 +39,19 @@ def _load_dd():
 # Per-test fixture: reset the module-level checks list so tests are isolated.
 # ---------------------------------------------------------------------------
 @pytest.fixture(autouse=True)
-def _reset_checks():
+def _reset_checks(monkeypatch: pytest.MonkeyPatch):
     """Reset data_doctor.checks before every test."""
     dd = _load_dd()
+    real_sample_valid = dd._dbn_sample_valid
+
+    def _fixture_sample_valid(path: Path, expected_schema: str | None = None, expected_record_count: int | None = None):
+        if path.read_bytes() == b"valid-dbn-fixture":
+            if expected_record_count is not None and int(expected_record_count) <= 0:
+                return False, "record_count <= 0"
+            return True, "fixture dbn sample ok"
+        return real_sample_valid(path, expected_schema=expected_schema, expected_record_count=expected_record_count)
+
+    monkeypatch.setattr(dd, "_dbn_sample_valid", _fixture_sample_valid)
     original = dd.checks[:]
     dd.checks.clear()
     yield
@@ -60,6 +71,25 @@ def _expected_dates(start: date = _SHORT_START, today: date = _SHORT_TODAY) -> l
     return sorted({d.isoformat() for d, _ in expiries_between(start, today)})
 
 
+def _write_dummy_dbn(path: Path, schema: str, *, record_count: int = 1) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"valid-dbn-fixture")
+    blob = path.read_bytes()
+    path.with_name(f"{path.name}.doctor.json").write_text(
+        json.dumps(
+            {
+                "valid": True,
+                "schema": schema,
+                "record_count": record_count,
+                "size_bytes": len(blob),
+                "sha256": hashlib.sha256(blob).hexdigest(),
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
 def _build_lake(tmp_path: Path, *, dates: list[str] | None = None,
                 include_trades: bool = False,
                 ohlcv: bool = True,
@@ -73,24 +103,24 @@ def _build_lake(tmp_path: Path, *, dates: list[str] | None = None,
     fixing.mkdir(parents=True, exist_ok=True)
     if dates is not None:
         for d in dates:
-            (fixing / f"ES_fixing_{d}.dbn.zst").write_bytes(b"dummy")
+            _write_dummy_dbn(fixing / f"ES_fixing_{d}.dbn.zst", "mbo")
             if include_trades:
-                (fixing / f"ES_fixing_trades_{d}.dbn.zst").write_bytes(b"dummy")
+                _write_dummy_dbn(fixing / f"ES_fixing_trades_{d}.dbn.zst", "trades")
 
     if ohlcv:
         ohlcv_dir = opt / "ohlcv"
         ohlcv_dir.mkdir(parents=True, exist_ok=True)
-        (ohlcv_dir / "ES_ohlcv_2026.dbn.zst").write_bytes(b"dummy")
+        _write_dummy_dbn(ohlcv_dir / "ES_ohlcv_2026.dbn.zst", "ohlcv-1m")
 
     if definitions:
         defs = opt / "definitions" / "JOBX"
         defs.mkdir(parents=True, exist_ok=True)
-        (defs / "file.dbn.zst").write_bytes(b"dummy")
+        _write_dummy_dbn(defs / "file.dbn.zst", "definition")
 
     if statistics:
         stats = opt / "statistics"
         stats.mkdir(parents=True, exist_ok=True)
-        (stats / "ES_stats.dbn.zst").write_bytes(b"dummy")
+        _write_dummy_dbn(stats / "ES_stats.dbn.zst", "statistics")
 
     return lroot
 
@@ -115,16 +145,16 @@ def test_no_options_dir(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test 2: complete synthetic lake -> all OK except options-statistics WARN
+# Test 2: complete synthetic lake -> all OK
 # ---------------------------------------------------------------------------
 
-def test_complete_lake_all_ok_except_statistics(tmp_path: Path) -> None:
+def test_complete_lake_all_ok(tmp_path: Path) -> None:
     dd = _load_dd()
     dates = _expected_dates()
     # Remove dates that are covered elsewhere so coverage is satisfied
     covered = dd.OPTIONS_FIXING_COVERED_ELSEWHERE
     effective_dates = [d for d in dates if d not in covered]
-    lroot = _build_lake(tmp_path, dates=effective_dates, ohlcv=True, definitions=True, statistics=False)
+    lroot = _build_lake(tmp_path, dates=effective_dates, ohlcv=True, definitions=True, statistics=True)
     result = dd.options_lane_checks(lroot, today=_SHORT_TODAY, start=_SHORT_START)
     assert result is not None
 
@@ -135,17 +165,17 @@ def test_complete_lake_all_ok_except_statistics(tmp_path: Path) -> None:
     assert by_name["options-fixing-coverage"]["status"] == "OK"
     assert by_name["options-ohlcv"]["status"] == "OK"
     assert by_name["options-definitions"]["status"] == "OK"
-    assert by_name["options-statistics"]["status"] == "WARN"
+    assert by_name["options-statistics"]["status"] == "OK"
 
     fails = [c for c in dd.checks if c["status"] == "FAIL"]
     assert fails == []
 
 
 # ---------------------------------------------------------------------------
-# Test 3: date present only as trades file -> counts as covered
+# Test 3: date present only as trades file -> does not cover fixing MBO
 # ---------------------------------------------------------------------------
 
-def test_trades_only_counts_as_covered(tmp_path: Path) -> None:
+def test_trades_only_does_not_count_as_fixing_mbo_covered(tmp_path: Path) -> None:
     dd = _load_dd()
     dates = _expected_dates()
     covered = dd.OPTIONS_FIXING_COVERED_ELSEWHERE
@@ -163,26 +193,199 @@ def test_trades_only_counts_as_covered(tmp_path: Path) -> None:
     fixing = opt / "fixing_mbo"
     fixing.mkdir(parents=True, exist_ok=True)
     # Write the first date as trades-only
-    (fixing / f"ES_fixing_trades_{trade_only_date}.dbn.zst").write_bytes(b"dummy")
+    _write_dummy_dbn(fixing / f"ES_fixing_trades_{trade_only_date}.dbn.zst", "trades")
     # Write rest as quotes
     for d in other_dates:
-        (fixing / f"ES_fixing_{d}.dbn.zst").write_bytes(b"dummy")
+        _write_dummy_dbn(fixing / f"ES_fixing_{d}.dbn.zst", "mbo")
     # Add ohlcv and definitions
     ohlcv_dir = opt / "ohlcv"
     ohlcv_dir.mkdir(parents=True, exist_ok=True)
-    (ohlcv_dir / "ES_ohlcv_2026.dbn.zst").write_bytes(b"dummy")
+    _write_dummy_dbn(ohlcv_dir / "ES_ohlcv_2026.dbn.zst", "ohlcv-1m")
     defs = opt / "definitions" / "JOBX"
     defs.mkdir(parents=True, exist_ok=True)
-    (defs / "file.dbn.zst").write_bytes(b"dummy")
+    _write_dummy_dbn(defs / "file.dbn.zst", "definition")
+    stats = opt / "statistics"
+    stats.mkdir(parents=True, exist_ok=True)
+    _write_dummy_dbn(stats / "ES_stats.dbn.zst", "statistics")
 
     result = dd.options_lane_checks(lroot, today=_SHORT_TODAY, start=_SHORT_START)
     assert result is not None
 
     by_name = {c["name"]: c for c in dd.checks}
-    assert by_name["options-fixing-coverage"]["status"] == "OK"
+    assert by_name["options-fixing-coverage"]["status"] in {"WARN", "FAIL"}
 
-    # Verify the trades-only date appears in dates_covered
-    assert result["fixing_mbo"]["dates_covered"] == len(effective_dates)
+    assert result["fixing_mbo"]["dates_covered"] == len(other_dates)
+    assert result["fixing_mbo"]["trade_only_dates"] == 1
+
+
+def test_missing_statistics_is_fail(tmp_path: Path) -> None:
+    dd = _load_dd()
+    dates = _expected_dates()
+    covered = dd.OPTIONS_FIXING_COVERED_ELSEWHERE
+    effective_dates = [d for d in dates if d not in covered]
+    lroot = _build_lake(tmp_path, dates=effective_dates, ohlcv=True, definitions=True, statistics=False)
+    result = dd.options_lane_checks(lroot, today=_SHORT_TODAY, start=_SHORT_START)
+    assert result is not None
+    by_name = {c["name"]: c for c in dd.checks}
+    assert by_name["options-statistics"]["status"] == "FAIL"
+
+
+def test_zero_byte_fixing_file_is_invalid(tmp_path: Path) -> None:
+    dd = _load_dd()
+    dates = _expected_dates()
+    if not dates:
+        pytest.skip("no dates in short range")
+    bad_date = dates[0]
+    lroot = _build_lake(tmp_path, dates=dates[1:], ohlcv=True, definitions=True, statistics=True)
+    fixing = lroot / "options" / "fixing_mbo"
+    (fixing / f"ES_fixing_{bad_date}.dbn.zst").write_bytes(b"")
+
+    result = dd.options_lane_checks(lroot, today=_SHORT_TODAY, start=_SHORT_START)
+
+    assert result is not None
+    assert result["fixing_mbo"]["invalid_files"] == 1
+    assert result["expiry_coverage"]["gap_count"] >= 1
+
+
+def test_wrong_schema_sidecar_rejects_fixing_mbo(tmp_path: Path) -> None:
+    dd = _load_dd()
+    dates = _expected_dates()
+    if not dates:
+        pytest.skip("no dates in short range")
+    bad_date = dates[0]
+    lroot = _build_lake(tmp_path, dates=dates, ohlcv=True, definitions=True, statistics=True)
+    bad_file = lroot / "options" / "fixing_mbo" / f"ES_fixing_{bad_date}.dbn.zst"
+    bad_file.with_name(f"{bad_file.name}.doctor.json").write_text(
+        json.dumps({"valid": True, "schema": "trades", "record_count": 1}),
+        encoding="utf-8",
+    )
+
+    result = dd.options_lane_checks(lroot, today=_SHORT_TODAY, start=_SHORT_START)
+
+    assert result is not None
+    assert result["fixing_mbo"]["invalid_files"] == 1
+    assert result["expiry_coverage"]["gap_count"] >= 1
+
+
+def test_incomplete_sidecar_rejects_fixing_mbo(tmp_path: Path) -> None:
+    dd = _load_dd()
+    dates = _expected_dates()
+    if not dates:
+        pytest.skip("no dates in short range")
+    bad_date = dates[0]
+    lroot = _build_lake(tmp_path, dates=dates, ohlcv=True, definitions=True, statistics=True)
+    bad_file = lroot / "options" / "fixing_mbo" / f"ES_fixing_{bad_date}.dbn.zst"
+    bad_file.with_name(f"{bad_file.name}.doctor.json").write_text(
+        json.dumps({"valid": True}),
+        encoding="utf-8",
+    )
+
+    result = dd.options_lane_checks(lroot, today=_SHORT_TODAY, start=_SHORT_START)
+
+    assert result is not None
+    assert result["fixing_mbo"]["invalid_files"] == 1
+    assert result["expiry_coverage"]["gap_count"] >= 1
+
+
+def test_missing_valid_flag_sidecar_rejects_fixing_mbo(tmp_path: Path) -> None:
+    dd = _load_dd()
+    dates = _expected_dates()
+    if not dates:
+        pytest.skip("no dates in short range")
+    bad_date = dates[0]
+    lroot = _build_lake(tmp_path, dates=dates, ohlcv=True, definitions=True, statistics=True)
+    bad_file = lroot / "options" / "fixing_mbo" / f"ES_fixing_{bad_date}.dbn.zst"
+    bad_file.with_name(f"{bad_file.name}.doctor.json").write_text(
+        json.dumps({"schema": "mbo", "record_count": 1}),
+        encoding="utf-8",
+    )
+
+    result = dd.options_lane_checks(lroot, today=_SHORT_TODAY, start=_SHORT_START)
+
+    assert result is not None
+    assert result["fixing_mbo"]["invalid_files"] == 1
+    assert result["expiry_coverage"]["gap_count"] >= 1
+
+
+def test_stale_sidecar_rejects_corrupt_fixing_mbo(tmp_path: Path) -> None:
+    dd = _load_dd()
+    dates = _expected_dates()
+    if not dates:
+        pytest.skip("no dates in short range")
+    bad_date = dates[0]
+    lroot = _build_lake(tmp_path, dates=dates, ohlcv=True, definitions=True, statistics=True)
+    bad_file = lroot / "options" / "fixing_mbo" / f"ES_fixing_{bad_date}.dbn.zst"
+    bad_file.write_bytes(b"dumMy")
+
+    result = dd.options_lane_checks(lroot, today=_SHORT_TODAY, start=_SHORT_START)
+
+    assert result is not None
+    assert result["fixing_mbo"]["invalid_files"] == 1
+    assert result["expiry_coverage"]["gap_count"] >= 1
+
+
+def test_large_corrupt_dbn_is_rejected(tmp_path: Path) -> None:
+    dd = _load_dd()
+    dates = _expected_dates()
+    if not dates:
+        pytest.skip("no dates in short range")
+    bad_date = dates[0]
+    lroot = _build_lake(tmp_path, dates=dates[1:], ohlcv=True, definitions=True, statistics=True)
+    bad_file = lroot / "options" / "fixing_mbo" / f"ES_fixing_{bad_date}.dbn.zst"
+    bad_file.write_bytes(b"not-a-dbn" * 600)
+
+    result = dd.options_lane_checks(lroot, today=_SHORT_TODAY, start=_SHORT_START)
+
+    assert result is not None
+    assert result["fixing_mbo"]["invalid_files"] == 1
+    assert result["expiry_coverage"]["gap_count"] >= 1
+
+
+def test_tiny_corrupt_dbn_without_sidecar_is_rejected(tmp_path: Path) -> None:
+    dd = _load_dd()
+    dates = _expected_dates()
+    if not dates:
+        pytest.skip("no dates in short range")
+    bad_date = dates[0]
+    lroot = _build_lake(tmp_path, dates=dates[1:], ohlcv=True, definitions=True, statistics=True)
+    bad_file = lroot / "options" / "fixing_mbo" / f"ES_fixing_{bad_date}.dbn.zst"
+    bad_file.write_bytes(b"tiny-not-a-dbn")
+
+    result = dd.options_lane_checks(lroot, today=_SHORT_TODAY, start=_SHORT_START)
+
+    assert result is not None
+    assert result["fixing_mbo"]["invalid_files"] == 1
+    assert result["expiry_coverage"]["gap_count"] >= 1
+
+
+def test_matching_sidecar_does_not_make_corrupt_dbn_valid(tmp_path: Path) -> None:
+    dd = _load_dd()
+    dates = _expected_dates()
+    if not dates:
+        pytest.skip("no dates in short range")
+    bad_date = dates[0]
+    lroot = _build_lake(tmp_path, dates=dates[1:], ohlcv=True, definitions=True, statistics=True)
+    bad_file = lroot / "options" / "fixing_mbo" / f"ES_fixing_{bad_date}.dbn.zst"
+    bad_file.write_bytes(b"dummy")
+    blob = bad_file.read_bytes()
+    bad_file.with_name(f"{bad_file.name}.doctor.json").write_text(
+        json.dumps(
+            {
+                "valid": True,
+                "schema": "mbo",
+                "record_count": 1,
+                "size_bytes": len(blob),
+                "sha256": hashlib.sha256(blob).hexdigest(),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = dd.options_lane_checks(lroot, today=_SHORT_TODAY, start=_SHORT_START)
+
+    assert result is not None
+    assert result["fixing_mbo"]["invalid_files"] == 1
+    assert result["expiry_coverage"]["gap_count"] >= 1
 
 
 # ---------------------------------------------------------------------------
@@ -263,10 +466,10 @@ def test_old_gap_is_fail(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test 6: monkeypatch OPTIONS_FIXING_COVERED_ELSEWHERE to cover a missing date -> OK
+# Test 6: monkeypatch OPTIONS_FIXING_COVERED_ELSEWHERE does not cover a missing date without proof
 # ---------------------------------------------------------------------------
 
-def test_covered_elsewhere_removes_gap(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_covered_elsewhere_without_manifest_does_not_clear_gap(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     dd = _load_dd()
     dates = _expected_dates()
     covered_orig = dd.OPTIONS_FIXING_COVERED_ELSEWHERE
@@ -286,8 +489,106 @@ def test_covered_elsewhere_removes_gap(tmp_path: Path, monkeypatch: pytest.Monke
     assert result is not None
 
     by_name = {c["name"]: c for c in dd.checks}
-    assert by_name["options-fixing-coverage"]["status"] == "OK"
+    assert by_name["options-fixing-coverage"]["status"] in {"WARN", "FAIL"}
+    assert result["expiry_coverage"]["gap_count"] >= 1
+
+
+def test_manifest_backed_covered_elsewhere_clears_gap(tmp_path: Path) -> None:
+    dd = _load_dd()
+    dates = _expected_dates()
+    if not dates:
+        pytest.skip("no dates in short range")
+    missing_date = dates[0]
+    present_dates = [d for d in dates if d != missing_date]
+
+    lroot = _build_lake(tmp_path, dates=present_dates, ohlcv=True, definitions=True, statistics=True)
+    opt = lroot / "options"
+    alt = opt / "alternate" / f"ES_fixing_{missing_date}.dbn.zst"
+    alt.parent.mkdir(parents=True, exist_ok=True)
+    _write_dummy_dbn(alt, "mbo")
+    (opt / "coverage_manifest.json").write_text(
+        json.dumps(
+            {
+                "covered_elsewhere": [
+                    {
+                        "date": missing_date,
+                        "dataset": "fixing_mbo",
+                        "schema": "mbo",
+                        "start_utc": f"{missing_date}T19:55:00Z",
+                        "end_utc": f"{missing_date}T20:05:00Z",
+                        "path": f"alternate/{alt.name}",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = dd.options_lane_checks(lroot, today=_SHORT_TODAY, start=_SHORT_START)
+
+    assert result is not None
     assert result["expiry_coverage"]["gap_count"] == 0
+    assert result["expiry_coverage"]["covered_elsewhere"] == [missing_date]
+    assert result["expiry_coverage"]["invalid_covered_elsewhere"] == []
+
+
+def test_manifest_proof_txt_does_not_clear_fixing_gap(tmp_path: Path) -> None:
+    dd = _load_dd()
+    dates = _expected_dates()
+    if not dates:
+        pytest.skip("no dates in short range")
+    missing_date = dates[0]
+    present_dates = [d for d in dates if d != missing_date]
+
+    lroot = _build_lake(tmp_path, dates=present_dates, ohlcv=True, definitions=True, statistics=True)
+    opt = lroot / "options"
+    proof = opt / "alternate" / "proof.txt"
+    proof.parent.mkdir(parents=True, exist_ok=True)
+    proof.write_text("manual vendor note", encoding="utf-8")
+    (opt / "coverage_manifest.json").write_text(
+        json.dumps(
+            {
+                "covered_elsewhere": [
+                    {
+                        "date": missing_date,
+                        "dataset": "fixing_mbo",
+                        "schema": "mbo",
+                        "start_utc": f"{missing_date}T19:55:00Z",
+                        "end_utc": f"{missing_date}T20:05:00Z",
+                        "path": f"alternate/{proof.name}",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = dd.options_lane_checks(lroot, today=_SHORT_TODAY, start=_SHORT_START)
+
+    assert result is not None
+    assert result["expiry_coverage"]["gap_count"] >= 1
+    assert result["expiry_coverage"]["covered_elsewhere"] == []
+    assert result["expiry_coverage"]["invalid_covered_elsewhere"]
+
+
+def test_statistics_job_status_json_is_not_counted(tmp_path: Path) -> None:
+    dd = _load_dd()
+    dates = _expected_dates()
+    lroot = _build_lake(tmp_path, dates=dates, ohlcv=True, definitions=True, statistics=False)
+    stats = lroot / "options" / "statistics" / "JOBX"
+    stats.mkdir(parents=True, exist_ok=True)
+    (stats / "job_status.json").write_text(
+        json.dumps({"status": "delivered", "files": 1}),
+        encoding="utf-8",
+    )
+
+    result = dd.options_lane_checks(lroot, today=_SHORT_TODAY, start=_SHORT_START)
+
+    assert result is not None
+    assert result["statistics"]["files"] == 0
+    assert result["statistics"]["invalid_files"]
+    by_name = {c["name"]: c for c in dd.checks}
+    assert by_name["options-statistics"]["status"] == "FAIL"
 
 
 # ---------------------------------------------------------------------------

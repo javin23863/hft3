@@ -1,5 +1,6 @@
 """ML-FIX — the executor: decay driver, submit gate, job worker, route materialize."""
 import importlib
+import sys
 import textwrap
 
 import pytest
@@ -98,8 +99,9 @@ def test_worker_records_only_when_exec_disabled(env):
     jr.enqueue("M", "param_tweak", {"entry": "scripts/run_event_universe.py", "args": ["--from-stage-a", "/tmp/x.json"]})
     res = worker.run_once(do_exec=False)
     assert res["processed"] == 1
-    done = jr.list_jobs("done")
-    assert done and done[0]["artifacts"]["executed"] is False
+    failed = jr.list_jobs("failed")
+    assert failed and failed[0]["artifacts"]["executed"] is False
+    assert "HFT3_ORCH_EXEC" in failed[0]["error"]
 
 
 def test_worker_skips_unmaterialized_command(env):
@@ -110,7 +112,36 @@ def test_worker_skips_unmaterialized_command(env):
     importlib.reload(worker)
     jr.enqueue("M", "param_tweak", {"entry": "x.py", "args": ["--from-stage-a", "<bridge_stub>"]})
     res = worker.run_once(do_exec=True)  # exec on, but command has placeholder -> skipped
-    assert jr.list_jobs("done")[0]["artifacts"]["executed"] is False
+    assert res["jobs"][0]["state"] == "failed"
+    assert jr.list_jobs("failed")[0]["artifacts"]["executed"] is False
+
+
+def test_worker_fails_chi404_job_without_chi404_entitlement(env):
+    cert, lc, tmp, mp = env
+    jr = importlib.import_module("lifecycle_orchestrator.src.job_runner")
+    importlib.reload(jr)
+    worker = importlib.import_module("lifecycle_orchestrator.src.worker")
+    importlib.reload(worker)
+    jr.enqueue("M", "roll_now", {"entry": "systemctl", "args": ["restart", "hft3-capture"]}, host="chi404")
+    res = worker.run_once(do_exec=True)
+    assert res["jobs"][0]["state"] == "failed"
+    failed = jr.list_jobs("failed")
+    assert failed and failed[0]["artifacts"]["executed"] is False
+    assert "CHI404" in failed[0]["error"]
+
+
+def test_worker_fails_nonzero_returncode(env):
+    cert, lc, tmp, mp = env
+    jr = importlib.import_module("lifecycle_orchestrator.src.job_runner")
+    importlib.reload(jr)
+    worker = importlib.import_module("lifecycle_orchestrator.src.worker")
+    importlib.reload(worker)
+    jr.enqueue("M", "param_tweak", {"entry": sys.executable, "args": ["-c", "import sys; sys.exit(2)"]})
+    res = worker.run_once(do_exec=True)
+    assert res["jobs"][0]["state"] == "failed"
+    failed = jr.list_jobs("failed")
+    assert failed[0]["artifacts"]["returncode"] == 2
+    assert "returncode 2" in failed[0]["error"]
 
 
 # --- route materialization --------------------------------------------------

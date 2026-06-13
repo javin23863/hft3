@@ -65,6 +65,43 @@ def _markout() -> Optional[dict]:
 # A live session that hasn't written in this long is treated as stale.
 _LIVE_STALE_S = 600.0
 
+_SESSION_RECENCY_ARTIFACTS = (
+    "session_manifest.json",
+    "active_models.json",
+    "registry_references.json",
+    "risk_limits.json",
+    "latency_metrics.json",
+    "slippage_metrics.json",
+    "session_metrics.json",
+    "order_intents.jsonl",
+    "order_state_transitions.jsonl",
+    "risk_rejections.jsonl",
+    "fills.jsonl",
+    "positions.jsonl",
+    "pnl_timeseries.jsonl",
+    "incident_log.jsonl",
+    "kill_switch_events.jsonl",
+    "session_report.md",
+)
+
+
+def _session_recency_mtime(session_dir: Any) -> Optional[float]:
+    """Newest expected session artifact mtime, falling back to the dir mtime."""
+    artifact_times: list[float] = []
+    for name in _SESSION_RECENCY_ARTIFACTS:
+        try:
+            p = session_dir / name
+            if p.is_file():
+                artifact_times.append(p.stat().st_mtime)
+        except OSError:
+            continue
+    if artifact_times:
+        return max(artifact_times)
+    try:
+        return session_dir.stat().st_mtime
+    except OSError:
+        return None
+
 
 def _live_session() -> tuple[Any, Optional[str], Optional[float], Optional[str]]:
     """Resolve the latest trade_manager session report. Returns
@@ -75,7 +112,7 @@ def _live_session() -> tuple[Any, Optional[str], Optional[float], Optional[str]]
       unreadable/malformed -> surfaced as a problem, never silently swallowed.
     - (ObserverView, None, age, sid): healthy read.
 
-    age_s = seconds since the session dir last changed (recency/staleness signal).
+    age_s = seconds since the newest session artifact last changed (recency/staleness signal).
     Detect-only: the cockpit READS the artifact, never creates a session.
     """
     root = paths.SESSIONS_ROOT
@@ -87,9 +124,10 @@ def _live_session() -> tuple[Any, Optional[str], Optional[float], Optional[str]]
         return None, f"sessions root unreadable: {exc}", None, None
     if not sessions:
         return None, None, None, None
-    latest = max(sessions, key=lambda d: d.stat().st_mtime)
+    latest = max(sessions, key=lambda d: _session_recency_mtime(d) or 0.0)
     try:
-        age_s = round(time.time() - latest.stat().st_mtime, 1)
+        newest_mtime = _session_recency_mtime(latest)
+        age_s = round(time.time() - newest_mtime, 1) if newest_mtime is not None else None
     except OSError:
         age_s = None
     try:
@@ -163,6 +201,9 @@ def build() -> dict:
     if view_err:
         health = schemas.AMBER
         notes.append(view_err)
+    if live and view is None and view_err is None:
+        health = schemas.AMBER
+        notes.append("LIVE mode has no readable trade_manager session")
     if _kill_engaged(kill):
         health = schemas.RED
         notes.append("kill switch engaged")
@@ -178,14 +219,14 @@ def build() -> dict:
         source = f"session {sid} (unreadable)"
         banner = view_err
     else:
-        source = "rithmic_pnl" if live else "research_cards/fills.csv"
-        banner = None if live else f"No live session — EXECUTION_MODE={mode}. Showing latest replay fills."
+        source = "no live session" if live else "research_cards/fills.csv"
+        banner = f"No live session — EXECUTION_MODE={mode}. Showing latest replay fills."
 
     return {
         "zone": "portfolio",
         "generated_utc": paths.now_iso(),
         "health": health,
-        "live_session": live,
+        "live_session": bool(live and view is not None),
         "execution_mode": mode,
         "banner": banner,
         "session_id": sid,

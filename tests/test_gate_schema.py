@@ -20,6 +20,8 @@ from pathlib import Path
 
 import pytest
 
+import hft3.validation.promotion_gate as promotion_gate
+from hft3.validation.certification_staleness import StalenessResult
 from hft3.validation.gate_result import (
     COMPARISON_OPERATORS,
     GateCategory,
@@ -38,13 +40,33 @@ from hft3.validation.promotion_gate import (
     write_robustness_gates_for_promotion,
 )
 from hft3.validation.certification_registry import CertificationRecord, save_registry
-from hft3.validation.lanes import CME_TRUE_HFT_DMA_PROFILE
+from hft3.validation.lanes import CME_TRUE_HFT_DMA_PROFILE, EQUITIES_SPEED_ADVANTAGE_PROFILE
 
 
 def _write_scorecard(root: Path, payload: dict) -> Path:
     path = root / "runtime/validation/backtester_certification_scorecard.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
+
+
+def _write_fast_gate_report(root: Path, *, passed: bool = True, git_sha: str = "unknown") -> Path:
+    path = root / "runtime/validation/fast_gate_report.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"passed": passed, "git_sha": git_sha}), encoding="utf-8")
+    return path
+
+
+def _write_options_spec(root: Path, status: str) -> Path:
+    path = root / "specs" / "OPTIONS_LANE.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "# OPTIONS_LANE.md\n\n"
+        "| ID | Component | Description | Status |\n"
+        "|----|-----------|-------------|--------|\n"
+        f"| o-a | `vol_clock` | placeholder | {status} |\n",
+        encoding="utf-8",
+    )
     return path
 
 
@@ -62,6 +84,34 @@ def _cme_lane_scorecard() -> dict:
             }
         },
     }
+
+
+def _options_lane_scorecard() -> dict:
+    return {
+        "status": "GREEN",
+        "lane_coverage": {
+            "equities": {
+                "symbols": ["OPTIONS", "PARITY"],
+                "event_types": ["options", "parity"],
+                "latency_bands_ms": [5.0],
+                "test_paths": ["tests/test_options_defect_ledger.py"],
+                "queue_models": ["LogProbQueueModel2"],
+                "capability_profile": EQUITIES_SPEED_ADVANTAGE_PROFILE.to_dict(),
+            }
+        },
+    }
+
+
+def _stub_current_certification(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        promotion_gate,
+        "assess_staleness",
+        lambda root, registry=None: StalenessResult(
+            certification_is_current=True,
+            current_commit="unknown",
+            certification_commit=getattr(registry, "latest_certification_commit", "unknown"),
+        ),
+    )
 
 
 # ---------- schema round-trip ----------
@@ -370,6 +420,155 @@ def test_promotion_gate_lane_scorecard_checks_queue_model(tmp_path: Path) -> Non
     lane_gate = next(g for g in result.gates if g.gate_name == "lane_scorecard_covers")
     assert lane_gate.pass_fail is False
     assert "UnsupportedQueueModel" in lane_gate.extra["failure_reasons"][0]
+
+
+def test_options_candidate_promotion_blocked_by_open_options_ledger(tmp_path: Path) -> None:
+    _write_options_spec(tmp_path, "**OPEN** - blocks shadow/live arm.")
+    save_registry(
+        CertificationRecord(latest_certification_status="GREEN", latest_certification_commit="abc"),
+        tmp_path,
+    )
+
+    result = evaluate_promotion_gate(
+        model_id="FOPT_ES_CALL",
+        event_id="FOPT_EXPIRY_2024",
+        symbol="FOPT_ES_CALL",
+        latency_ms=1.0,
+        queue_model="LogProbQueueModel2",
+        root=tmp_path,
+        skip_t0_rerun=True,
+    )
+
+    gate = next(g for g in result.gates if g.gate_name == "options_defect_ledger_empty")
+    assert gate.pass_fail is False
+    assert gate.observed_value == 1.0
+    assert gate.extra["open_ids"] == ["o-a"]
+    assert "options_defect_ledger_empty" in " ".join(result.failures)
+
+
+@pytest.mark.parametrize(
+    ("model_id", "event_id", "symbol"),
+    [
+        ("OPTIONS_ES_CALL", "OPTIONS_PARITY_2024", "OPTIONS"),
+        ("PARITY_ES_CALL", "PARITY_RUN_2024", "PARITY"),
+    ],
+)
+def test_legacy_options_candidate_promotion_blocked_by_open_options_ledger(
+    tmp_path: Path,
+    model_id: str,
+    event_id: str,
+    symbol: str,
+) -> None:
+    _write_options_spec(tmp_path, "**OPEN** - blocks shadow/live arm.")
+    save_registry(
+        CertificationRecord(latest_certification_status="GREEN", latest_certification_commit="abc"),
+        tmp_path,
+    )
+
+    result = evaluate_promotion_gate(
+        model_id=model_id,
+        event_id=event_id,
+        symbol=symbol,
+        latency_ms=5.0,
+        queue_model="LogProbQueueModel2",
+        root=tmp_path,
+        skip_t0_rerun=True,
+    )
+
+    gate = next(g for g in result.gates if g.gate_name == "options_defect_ledger_empty")
+    assert gate.pass_fail is False
+    assert gate.reason_code == "OPTIONS_DEFECT_LEDGER_BLOCKED"
+    assert gate.extra["open_ids"] == ["o-a"]
+
+
+def test_options_candidate_promotion_permits_empty_options_ledger(tmp_path: Path) -> None:
+    _write_options_spec(tmp_path, "**FIXED**")
+    save_registry(
+        CertificationRecord(latest_certification_status="GREEN", latest_certification_commit="abc"),
+        tmp_path,
+    )
+
+    result = evaluate_promotion_gate(
+        model_id="FOPT_ES_CALL",
+        event_id="FOPT_EXPIRY_2024",
+        symbol="FOPT_ES_CALL",
+        latency_ms=1.0,
+        queue_model="LogProbQueueModel2",
+        root=tmp_path,
+        skip_t0_rerun=True,
+    )
+
+    gate = next(g for g in result.gates if g.gate_name == "options_defect_ledger_empty")
+    assert gate.pass_fail is True
+    assert gate.observed_value == 0.0
+    assert result.passed is False
+    assert result.failures
+    assert not any("OPTIONS_DEFECT_LEDGER" in failure for failure in result.failures)
+
+
+def test_fopt_legacy_scorecard_still_blocked_by_research_only_lane(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _write_options_spec(tmp_path, "**FIXED**")
+    _write_scorecard(tmp_path, {"status": "GREEN"})
+    _write_fast_gate_report(tmp_path)
+    _stub_current_certification(monkeypatch)
+    save_registry(
+        CertificationRecord(
+            latest_certification_status="GREEN",
+            latest_certification_commit="unknown",
+            covered_symbols=["FOPT_ES_CALL"],
+            covered_event_types=["fopt"],
+            covered_latency_bands=[1.0],
+            covered_queue_models=["LogProbQueueModel2"],
+        ),
+        tmp_path,
+    )
+
+    result = evaluate_promotion_gate(
+        model_id="FOPT_ES_CALL",
+        event_id="FOPT_EXPIRY_2024",
+        symbol="FOPT_ES_CALL",
+        latency_ms=1.0,
+        queue_model="LogProbQueueModel2",
+        root=tmp_path,
+        skip_t0_rerun=True,
+    )
+
+    capability_gate = next(g for g in result.gates if g.gate_name == "lane_capability_live_eligible")
+    assert capability_gate.pass_fail is False
+    assert any("research_only" in reason for reason in capability_gate.extra["failure_reasons"])
+    assert result.passed is False
+
+
+def test_empty_options_ledger_allows_promotion_when_other_gates_pass(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _write_options_spec(tmp_path, "**FIXED**")
+    _write_scorecard(tmp_path, _options_lane_scorecard())
+    _write_fast_gate_report(tmp_path)
+    _stub_current_certification(monkeypatch)
+    save_registry(
+        CertificationRecord(latest_certification_status="GREEN", latest_certification_commit="unknown"),
+        tmp_path,
+    )
+
+    result = evaluate_promotion_gate(
+        model_id="OPTIONS_ES_CALL",
+        event_id="OPTIONS_PARITY_2024",
+        symbol="OPTIONS",
+        latency_ms=5.0,
+        queue_model="LogProbQueueModel2",
+        root=tmp_path,
+        skip_t0_rerun=True,
+    )
+
+    gate = next(g for g in result.gates if g.gate_name == "options_defect_ledger_empty")
+    assert gate.pass_fail is True
+    assert result.failures == []
+    assert result.passed is True
 
 
 # ---------- write_robustness_gates_for_promotion ----------

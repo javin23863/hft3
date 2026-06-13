@@ -103,9 +103,13 @@ class OptionsLaneBacktester:
             num_trades=0,
             max_drawdown=0.0,
             turnover=0.0,
-            degraded=False,
-            failure_notes=[],
-            extra={"target": target} if target else {},
+            degraded=True,
+            failure_notes=["structural-only options/parity adapter; no evidence backtest executed"],
+            extra={
+                **({"target": target} if target else {}),
+                "structural_only": True,
+                "promotable": False,
+            },
         )
 
     def validate_config(self) -> list[str]:

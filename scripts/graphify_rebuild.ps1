@@ -6,8 +6,8 @@ Set-Location $RepoRoot
 $LogDir = Join-Path $RepoRoot 'logs\graphify'
 $LogFile = Join-Path $LogDir 'rebuild.log'
 $TimeoutWrapper = Join-Path $RepoRoot 'tools\shell\run_with_timeout.ps1'
-$UpdateTimeoutSec = 300
-$ClusterTimeoutSec = 120
+$UpdateTimeoutSec = 900
+$ClusterTimeoutSec = 300
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 
 function Write-LogLine {

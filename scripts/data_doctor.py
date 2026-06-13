@@ -10,6 +10,7 @@ runtime/data_doctor_report.json for the cockpit alerts zone.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -40,7 +41,6 @@ OPTIONS_FIXING_START = date(2023, 5, 1)
 # DatabentoResearchClient at module scope.
 OPTIONS_FIXING_COVERED_ELSEWHERE: frozenset[str] = frozenset({"2024-09-18", "2025-06-20"})
 OPTIONS_VENDOR_LAG_GRACE_DAYS = 5  # trailing gaps within this window WARN, not FAIL
-
 _FIXING_RE = re.compile(r"^ES_fixing_(trades_)?(\d{4}-\d{2}-\d{2})\.dbn\.zst$")
 
 checks: list[dict] = []
@@ -50,6 +50,213 @@ def check(name: str, ok: bool, detail: str, warn_only: bool = False) -> None:
     level = "OK" if ok else ("WARN" if warn_only else "FAIL")
     checks.append({"name": name, "status": level, "detail": detail})
     print(f"{level:4}  {name}: {detail}")
+
+
+def _valid_nonempty_file(path: Path) -> bool:
+    try:
+        return path.is_file() and path.stat().st_size > 0
+    except OSError:
+        return False
+
+
+def _sidecar_path(path: Path) -> Path:
+    return path.with_name(f"{path.name}.doctor.json")
+
+
+def _load_doctor_sidecar(path: Path) -> dict | None:
+    sidecar = _sidecar_path(path)
+    if not sidecar.is_file():
+        return None
+    try:
+        data = json.loads(sidecar.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"valid": False, "reason": "unreadable sidecar"}
+    return data if isinstance(data, dict) else {"valid": False, "reason": "sidecar is not object"}
+
+
+def _is_dbn_artifact(path: Path) -> bool:
+    return path.name.endswith((".dbn", ".dbn.zst"))
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _dbn_sample_valid(
+    path: Path,
+    expected_schema: str | None = None,
+    expected_record_count: int | None = None,
+) -> tuple[bool, str]:
+    try:
+        import databento as db  # noqa: PLC0415
+    except Exception as exc:  # noqa: BLE001
+        return False, f"databento unavailable: {type(exc).__name__}"
+    try:
+        store = db.DBNStore.from_file(str(path))
+        metadata = getattr(store, "metadata", None)
+        schema = str(getattr(metadata, "schema", "") or "").lower()
+        if expected_schema and schema and expected_schema.lower() not in schema:
+            return False, f"schema {schema!r} != {expected_schema!r}"
+        count = 0
+        for _ in store:
+            count += 1
+            if expected_record_count is None:
+                break
+            if count > expected_record_count:
+                return False, f"record_count exceeds sidecar ({count}>{expected_record_count})"
+        if count == 0:
+            return False, "no sample records"
+        if expected_record_count is not None and count != expected_record_count:
+            return False, f"record_count {count} != sidecar {expected_record_count}"
+    except Exception as exc:  # noqa: BLE001
+        return False, f"dbn open/sample failed: {type(exc).__name__}: {exc}"
+    return True, "dbn sample ok"
+
+
+def _valid_dbn_sidecar(path: Path, sidecar: dict, expected_schema: str | None = None) -> tuple[bool, str]:
+    if sidecar.get("valid") is not True:
+        return False, str(sidecar.get("reason") or "sidecar valid flag not true")
+    schema = str(sidecar.get("schema") or "").lower()
+    if expected_schema:
+        if not schema:
+            return False, "sidecar schema missing"
+        if expected_schema.lower() not in schema:
+            return False, f"sidecar schema {schema!r} != {expected_schema!r}"
+    if sidecar.get("vendor_no_data_proof"):
+        record_count = sidecar.get("record_count")
+        if record_count is not None:
+            try:
+                int(record_count)
+            except (TypeError, ValueError):
+                return False, "sidecar record_count invalid"
+    else:
+        record_count = sidecar.get("record_count")
+        if record_count is None:
+            return False, "sidecar record_count missing"
+        try:
+            if int(record_count) <= 0:
+                return False, "sidecar record_count <= 0 without no-data proof"
+        except (TypeError, ValueError):
+            return False, "sidecar record_count invalid"
+
+    size_bytes = sidecar.get("size_bytes")
+    if size_bytes is None:
+        return False, "sidecar size_bytes missing"
+    try:
+        expected_size = int(size_bytes)
+    except (TypeError, ValueError):
+        return False, "sidecar size_bytes invalid"
+    try:
+        actual_size = path.stat().st_size
+    except OSError:
+        return False, "stat failed"
+    if expected_size != actual_size:
+        return False, "sidecar size_bytes mismatch"
+
+    sha256 = str(sidecar.get("sha256") or "").lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", sha256):
+        return False, "sidecar sha256 missing or invalid"
+    if _file_sha256(path) != sha256:
+        return False, "sidecar sha256 mismatch"
+    return True, "doctor sidecar ok"
+
+
+def _valid_options_artifact(path: Path, expected_schema: str | None = None) -> tuple[bool, str]:
+    if not _valid_nonempty_file(path):
+        return False, "missing_or_empty"
+    sidecar = _load_doctor_sidecar(path)
+    is_dbn = _is_dbn_artifact(path)
+    if expected_schema and not is_dbn:
+        return False, "not approved market-data artifact"
+    if is_dbn:
+        if sidecar is not None:
+            ok, reason = _valid_dbn_sidecar(path, sidecar, expected_schema=expected_schema)
+            if not ok:
+                return False, reason
+            if sidecar.get("vendor_no_data_proof"):
+                return True, reason
+            try:
+                expected_count = int(sidecar["record_count"])
+            except (KeyError, TypeError, ValueError):
+                return False, "sidecar record_count invalid"
+            sample_ok, sample_reason = _dbn_sample_valid(
+                path,
+                expected_schema=expected_schema,
+                expected_record_count=expected_count,
+            )
+            if not sample_ok:
+                return False, sample_reason
+            return True, f"{reason}; {sample_reason}"
+        return _dbn_sample_valid(path, expected_schema=expected_schema)
+    if sidecar is not None and sidecar.get("valid") is False:
+        return False, str(sidecar.get("reason") or "sidecar invalid")
+    return True, "nonempty"
+
+
+def _iter_option_data_files(root: Path):
+    for p in root.rglob("*"):
+        if p.name.endswith(".doctor.json") or p.name == "coverage_manifest.json":
+            continue
+        if p.is_file():
+            yield p
+
+
+def _manifest_covered_elsewhere(opt: Path, expected_dates: set[str]) -> tuple[set[str], list[dict], list[str]]:
+    manifest_path = opt / "coverage_manifest.json"
+    if not manifest_path.is_file():
+        return set(), [], []
+    try:
+        raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return set(), [], [f"{manifest_path.name}: unreadable {type(exc).__name__}"]
+    rows = raw.get("covered_elsewhere", raw) if isinstance(raw, dict) else raw
+    if not isinstance(rows, list):
+        return set(), [], [f"{manifest_path.name}: expected list or covered_elsewhere list"]
+
+    covered: set[str] = set()
+    accepted: list[dict] = []
+    invalid: list[str] = []
+    required = {"date", "dataset", "schema", "start_utc", "end_utc", "path"}
+    for i, row in enumerate(rows):
+        if not isinstance(row, dict):
+            invalid.append(f"row {i}: not object")
+            continue
+        missing = sorted(required - set(row))
+        if missing:
+            invalid.append(f"row {i}: missing {missing}")
+            continue
+        d = str(row.get("date"))
+        if d not in expected_dates:
+            invalid.append(f"row {i}: date {d} not expected")
+            continue
+        if str(row.get("dataset")) != "fixing_mbo":
+            invalid.append(f"row {i}: dataset {row.get('dataset')!r} not fixing_mbo")
+            continue
+        schema = str(row.get("schema") or "")
+        if schema.lower() not in {"mbo", "fixing_mbo", "quotes", "quote"}:
+            invalid.append(f"row {i}: schema {schema!r} not MBO/quotes")
+            continue
+        artifact = Path(str(row.get("path")))
+        if not artifact.is_absolute():
+            artifact = opt / artifact
+        ok, reason = _valid_options_artifact(artifact, expected_schema="mbo")
+        if not ok:
+            invalid.append(f"row {i}: {artifact} invalid: {reason}")
+            continue
+        covered.add(d)
+        accepted.append({
+            "date": d,
+            "dataset": row.get("dataset"),
+            "schema": row.get("schema"),
+            "start_utc": row.get("start_utc"),
+            "end_utc": row.get("end_utc"),
+            "path": str(artifact),
+        })
+    return covered, accepted, invalid
 
 
 def _rclone() -> str | None:
@@ -81,30 +288,44 @@ def options_lane_checks(
     fixing_dir = opt / "fixing_mbo"
     quote_files: list[str] = []
     trades_files: list[str] = []
-    dates: set[str] = set()
+    quote_dates: set[str] = set()
+    trades_dates: set[str] = set()
+    invalid_fixing_files: list[str] = []
     if fixing_dir.is_dir():
         for p in fixing_dir.iterdir():
             m = _FIXING_RE.match(p.name)
             if m:
                 is_trades = bool(m.group(1))
+                expected_schema = "trades" if is_trades else "mbo"
+                valid, reason = _valid_options_artifact(p, expected_schema=expected_schema)
+                if not valid:
+                    invalid_fixing_files.append(f"{p.name}: {reason}")
+                    continue
                 d_str = m.group(2)
-                dates.add(d_str)
                 if is_trades:
                     trades_files.append(p.name)
+                    trades_dates.add(d_str)
                 else:
                     quote_files.append(p.name)
+                    quote_dates.add(d_str)
 
+    dates = quote_dates
     first_date = min(dates) if dates else ""
     last_date = max(dates) if dates else ""
     check(
         "options-fixing-mbo",
         ok=len(dates) > 0,
-        detail=f"quotes={len(quote_files)} trades={len(trades_files)} dates={len(dates)} ({first_date}..{last_date})",
+        detail=(
+            f"quotes={len(quote_files)} trades={len(trades_files)} quote_dates={len(quote_dates)} "
+            f"trades_only_dates={len(trades_dates - quote_dates)} invalid={len(invalid_fixing_files)} "
+            f"({first_date}..{last_date})"
+        ),
     )
 
     # coverage: expected expiry dates vs. what we have
     expected = {d.isoformat() for d, _ in expiries_between(start, today)}
-    gaps = sorted(expected - dates - OPTIONS_FIXING_COVERED_ELSEWHERE)
+    alternate_dates, covered_elsewhere, invalid_covered_elsewhere = _manifest_covered_elsewhere(opt, expected)
+    gaps = sorted(expected - dates - alternate_dates)
     stale_gaps = [g for g in gaps if (today - date.fromisoformat(g)).days > OPTIONS_VENDOR_LAG_GRACE_DAYS]
     gap_sample = gaps[:10]
     check(
@@ -112,6 +333,7 @@ def options_lane_checks(
         ok=not gaps,
         detail=(
             f"gap_count={len(gaps)} stale={len(stale_gaps)} "
+            f"covered_elsewhere={len(alternate_dates)} invalid_manifest={len(invalid_covered_elsewhere)} "
             f"first_gaps={gap_sample}"
         ),
         warn_only=(not stale_gaps),
@@ -120,35 +342,53 @@ def options_lane_checks(
     # ohlcv
     ohlcv_dir = opt / "ohlcv"
     ohlcv_files: list[str] = []
+    invalid_ohlcv_files: list[str] = []
     if ohlcv_dir.is_dir():
-        ohlcv_files = [p.name for p in ohlcv_dir.glob("*.dbn.zst")]
-    check("options-ohlcv", ok=len(ohlcv_files) > 0, detail=str(ohlcv_files))
+        for p in ohlcv_dir.glob("*.dbn.zst"):
+            valid, reason = _valid_options_artifact(p, expected_schema="ohlcv")
+            if valid:
+                ohlcv_files.append(p.name)
+            else:
+                invalid_ohlcv_files.append(f"{p.name}: {reason}")
+    check("options-ohlcv", ok=len(ohlcv_files) > 0, detail=f"valid={ohlcv_files} invalid={invalid_ohlcv_files}")
 
     # definitions
     defs_dir = opt / "definitions"
     def_files: list[Path] = []
+    invalid_def_files: list[str] = []
     if defs_dir.is_dir():
-        def_files = list(defs_dir.rglob("*.dbn.zst"))
+        for p in defs_dir.rglob("*.dbn.zst"):
+            valid, reason = _valid_options_artifact(p, expected_schema="definition")
+            if valid:
+                def_files.append(p)
+            else:
+                invalid_def_files.append(f"{p.name}: {reason}")
     batches = sorted({p.parent.name for p in def_files if p.parent != defs_dir})
     check(
         "options-definitions",
         ok=len(def_files) > 0,
-        detail=f"files={len(def_files)} batches={batches}",
+        detail=f"files={len(def_files)} batches={batches} invalid={len(invalid_def_files)}",
     )
 
     # statistics
     stats_dir = opt / "statistics"
     stat_files: list[Path] = []
+    invalid_stat_files: list[str] = []
     if stats_dir.is_dir():
-        stat_files = [p for p in stats_dir.rglob("*") if p.is_file()]
+        for p in _iter_option_data_files(stats_dir):
+            valid, reason = _valid_options_artifact(p, expected_schema="statistics")
+            if valid:
+                stat_files.append(p)
+            else:
+                invalid_stat_files.append(f"{p.name}: {reason}")
     stats_state: str
     if len(stat_files) == 0:
         stats_state = "pending_batch_delivery"
         stats_detail = "pending Databento batch delivery (expected until WS-0.4 statistics job lands)"
     else:
         stats_state = "present"
-        stats_detail = f"files={len(stat_files)}"
-    check("options-statistics", ok=len(stat_files) > 0, detail=stats_detail, warn_only=True)
+        stats_detail = f"files={len(stat_files)} invalid={len(invalid_stat_files)}"
+    check("options-statistics", ok=len(stat_files) > 0, detail=stats_detail)
 
     return {
         "as_of_utc": datetime.now(timezone.utc).isoformat(),
@@ -156,12 +396,16 @@ def options_lane_checks(
             "quote_files": len(quote_files),
             "trades_files": len(trades_files),
             "dates_covered": len(dates),
+            "trade_only_dates": len(trades_dates - quote_dates),
+            "invalid_files": len(invalid_fixing_files),
             "first_date": first_date,
             "last_date": last_date,
         },
         "expiry_coverage": {
             "expected_dates": len(expected),
-            "covered_elsewhere": sorted(OPTIONS_FIXING_COVERED_ELSEWHERE),
+            "covered_elsewhere": sorted(alternate_dates),
+            "covered_elsewhere_manifest": covered_elsewhere,
+            "invalid_covered_elsewhere": invalid_covered_elsewhere,
             "gaps": len(gaps),
             "gap_count": len(gaps),
             "stale_gap_count": len(stale_gaps),
@@ -171,14 +415,17 @@ def options_lane_checks(
         "ohlcv": {
             "files": len(ohlcv_files),
             "names": ohlcv_files,
+            "invalid_files": invalid_ohlcv_files,
         },
         "definitions": {
             "files": len(def_files),
             "batches": batches,
+            "invalid_files": invalid_def_files,
         },
         "statistics": {
             "files": len(stat_files),
             "state": stats_state,
+            "invalid_files": invalid_stat_files,
         },
     }
 

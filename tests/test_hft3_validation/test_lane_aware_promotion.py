@@ -26,6 +26,14 @@ def test_resolve_lane_options_event_id_resolves_to_equities():
     assert resolve_lane_for_candidate(event_id="OPTIONS_PARITY_RUN") == Lane.EQUITIES
 
 
+def test_resolve_lane_fopt_symbol_resolves_to_cme_options():
+    assert resolve_lane_for_candidate(symbol="FOPT_ES_CALL") == Lane.CME_OPTIONS
+
+
+def test_resolve_lane_fopt_event_id_resolves_to_cme_options():
+    assert resolve_lane_for_candidate(event_id="FOPT_ES_EXPIRY_RUN") == Lane.CME_OPTIONS
+
+
 def test_resolve_lane_parity_event_id_resolves_to_equities():
     assert resolve_lane_for_candidate(event_id="PARITY_LEG_RUN") == Lane.EQUITIES
 
@@ -66,6 +74,17 @@ def test_cme_candidate_with_macro_event_passes():
         event_id="NFP_2024_01_05_TIGHT",
     )
     assert result.passed is True
+
+
+def test_fopt_candidate_fails_while_cme_options_research_only():
+    result = check_candidate_lane_coverage(
+        model_id="FOPT_ES_CALL",
+        symbol="ESO",
+        event_id="options_expiry",
+    )
+    assert result.passed is False
+    assert result.lane == "cme_options"
+    assert any("research_only" in r for r in result.failure_reasons)
 
 
 def test_cross_lane_foreign_symbol_against_cme_lane_fails():

@@ -40,21 +40,40 @@ function LanesCard({ lanes }: { lanes: Record<string, unknown> | undefined }) {
   return <Card title="Lanes" status={status} rows={rows} />;
 }
 
-function OptionsDataCard({ cod }: { cod: Record<string, unknown> | undefined }) {
+function OptionsDataCard({
+  cod,
+  defects,
+}: {
+  cod: Record<string, unknown> | undefined;
+  defects: Record<string, unknown> | undefined;
+}) {
   const status = cod ? String(g(cod, "status") ?? "unknown") : "missing";
+  const defectStatus = defects ? String(g(defects, "status") ?? "unknown") : "missing";
+  const openDefects = defects ? (g(defects, "open_count") ?? "—") : "—";
+  const openIds = defects ? ((g(defects, "open_ids") as unknown[] | undefined)?.join(", ") ?? "—") : "—";
+  const defectArtifact = defects ? g(defects, "artifact") : "—";
+  const defectReason = defects ? g(defects, "reason") : "—";
   const summary = cod ? (cod["summary"] as Record<string, unknown> | undefined) : undefined;
+  const expiryCoverage = summary ? (summary["expiry_coverage"] as Record<string, unknown> | undefined) : undefined;
   const checks = cod ? (cod["checks"] as Record<string, unknown>[] | undefined) ?? [] : [];
-  const fixingCheck = checks.find((c) => String(c["name"] ?? "").includes("fixing"));
-  const ohlcvCheck = checks.find((c) => String(c["name"] ?? "").includes("ohlcv"));
-  const defsCheck = checks.find((c) => String(c["name"] ?? "").includes("definition"));
-  const statsCheck = checks.find((c) => String(c["name"] ?? "").includes("statistic"));
-  const gapCheck = checks.find((c) => String(c["name"] ?? "").includes("gap"));
+  const byName = (name: string) => checks.find((c) => String(c["name"] ?? "") === name);
+  const fixingCheck = byName("options-fixing-mbo");
+  const coverageCheck = byName("options-fixing-coverage");
+  const ohlcvCheck = byName("options-ohlcv");
+  const defsCheck = byName("options-definitions");
+  const statsCheck = byName("options-statistics");
   const fixingDetail = fixingCheck ? String(fixingCheck["detail"] ?? "—") : "—";
   const ohlcvDetail = ohlcvCheck ? String(ohlcvCheck["detail"] ?? "—") : "—";
   const defsDetail = defsCheck ? String(defsCheck["detail"] ?? "—") : "—";
   const statsDetail = statsCheck ? String(statsCheck["detail"] ?? "—") : "—";
-  const gapsDetail = gapCheck ? String(gapCheck["detail"] ?? "none") : "none";
-  const summaryNote = summary ? String(summary["detail"] ?? s(g(summary, "status"))) : "—";
+  const coverageDetail = coverageCheck ? String(coverageCheck["detail"] ?? "—") : "—";
+  const gapCount = coverageCheck?.["gap_count"] ?? expiryCoverage?.["gap_count"] ?? expiryCoverage?.["gaps"];
+  const staleGapCount = coverageCheck?.["stale_gap_count"] ?? expiryCoverage?.["stale_gap_count"];
+  const gapsDetail = coverageCheck || expiryCoverage ? `${s(gapCount ?? "—")} gaps / ${s(staleGapCount ?? "—")} stale` : "—";
+  const coverageFallback = expiryCoverage
+    ? `${s(expiryCoverage["expected_dates"])} expected / ${s(gapCount ?? "—")} gaps`
+    : "—";
+  const summaryNote = coverageDetail !== "—" ? coverageDetail : coverageFallback;
   return (
     <Card title="Options data (CME)" status={status} rows={[
       ["fixing files", fixingDetail],
@@ -63,6 +82,10 @@ function OptionsDataCard({ cod }: { cod: Record<string, unknown> | undefined }) 
       ["ohlcv", ohlcvDetail],
       ["definitions", defsDetail],
       ["statistics", statsDetail],
+      ["open defects", `${s(openDefects)} (${defectStatus})`],
+      ["defect ids", openIds],
+      ["defect artifact", defectArtifact],
+      ["defect reason", defectReason],
       ["report age", cod ? s(g(cod, "report_age")) : "—"],
     ]} />
   );
@@ -74,6 +97,7 @@ export function SystemView() {
   const lat = sys.latency, cert = sys.certification, slow = sys.slow_tier, db = sys.databento, cap = sys.capture, ex = sys.execution;
   const lanes = sys.lanes as Record<string, unknown> | undefined;
   const cod = lanes ? (lanes["cme_options_data"] as Record<string, unknown> | undefined) : undefined;
+  const defects = lanes ? (lanes["cme_options_defects"] as Record<string, unknown> | undefined) : undefined;
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       <Card title="Latency" status={String(g(lat, "status") ?? "unknown")} rows={[
@@ -90,7 +114,7 @@ export function SystemView() {
         ["problems", g(slow, "n_problems")],
         ["age", g(slow, "problems_age")],
       ]} />
-      <Card title="Databento" rows={[
+      <Card title="Databento" status={String(g(db, "status") ?? "unknown")} rows={[
         ["used", g(db, "total_used") != null ? `$${Number(g(db, "total_used")).toFixed(2)}` : "—"],
         ["remaining", g(db, "remaining") != null ? `$${Number(g(db, "remaining")).toFixed(2)}` : "—"],
         ["manifest rows", g(db, "manifest_rows")],
@@ -103,7 +127,7 @@ export function SystemView() {
         ["mode", g(ex, "execution_mode")], ["kill switch", g(ex, "kill_switch")], ["live", String(g(ex, "live"))],
       ]} />
       <LanesCard lanes={lanes} />
-      <OptionsDataCard cod={cod} />
+      <OptionsDataCard cod={cod} defects={defects} />
     </div>
   );
 }

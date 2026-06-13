@@ -46,6 +46,7 @@ from options_lane.studies.fixing_window_study import (
     _pa_imbalance,
     _date_from_dbn_name,
     measure_file_from_arrays,
+    validate_measurement_record_schema,
     run_measure_dbn,
     load_expiry_oi,
     measure_file,
@@ -325,6 +326,47 @@ def test_markout_computed_when_post_window_trade_exists() -> None:
     assert abs(rec["markout_30s"] - (5005.0 - expected_vwap)) < 1e-6
 
 
+def test_post_fix_flow_does_not_leak_into_fixing_predictor() -> None:
+    date = "2024-06-12"
+    fix_start = _ns_on_date(date, 14, 59, 30)
+    fix_end = _ns_on_date(date, 15, 0, 0)
+
+    arr = np.zeros(2, dtype=_NPZ_DTYPE)
+    arr[0]["ev"] = _trade_ev(True)
+    arr[0]["local_ts"] = fix_start + 1_000_000_000
+    arr[0]["px"] = 5000.0
+    arr[0]["qty"] = 1
+    arr[1]["ev"] = _trade_ev(True)
+    arr[1]["local_ts"] = fix_end + 1_000_000_000
+    arr[1]["px"] = 5010.0
+    arr[1]["qty"] = 10
+
+    file_date_utc = datetime(2024, 6, 12, 20, 0, 0, tzinfo=timezone.utc)
+    rec = measure_file(arr, "ES.v.0", "TEST_EVENT", file_date_utc)
+
+    assert rec["imbalance_signed"] == 1.0
+    assert rec["imbalance_fix"] == 1.0
+    assert rec["imbalance_post"] == 1.0
+
+
+def test_post_only_flow_not_used_as_fixing_predictor() -> None:
+    date = "2024-06-12"
+    fix_end = _ns_on_date(date, 15, 0, 0)
+
+    arr = np.zeros(1, dtype=_NPZ_DTYPE)
+    arr[0]["ev"] = _trade_ev(True)
+    arr[0]["local_ts"] = fix_end + 1_000_000_000
+    arr[0]["px"] = 5010.0
+    arr[0]["qty"] = 10
+
+    file_date_utc = datetime(2024, 6, 12, 20, 0, 0, tzinfo=timezone.utc)
+    rec = measure_file(arr, "ES.v.0", "TEST_EVENT", file_date_utc)
+
+    assert rec["imbalance_signed"] is None
+    assert rec["imbalance_fix"] is None
+    assert rec["imbalance_post"] == 1.0
+
+
 # ---------------------------------------------------------------------------
 # Integration tests: inventory classifies covering vs non-covering files
 # ---------------------------------------------------------------------------
@@ -443,12 +485,54 @@ def test_inventory_missing_npz_counted_as_missing(tmp_path: Path) -> None:
     assert report["files_covering"] == 0
 
 
+def test_inventory_respects_explicit_lake_root(tmp_path: Path) -> None:
+    """The --root/plumbed lake root must drive manifest and relative NPZ resolution."""
+    date = "2024-06-12"
+    repo_root = tmp_path / "repo"
+    lake_root = tmp_path / "external_npz"
+    repo_root.mkdir()
+    lake_root.mkdir()
+
+    fix_start = _ns_on_date(date, 14, 59, 30)
+    npz_path = _make_npz(
+        [{"ev": _trade_ev(True), "local_ts": fix_start, "px": 5000.0, "qty": 1}],
+        lake_root,
+        "ES.v.0_CUSTOM_ROOT_mbo.npz",
+    )
+    _make_manifest(
+        [
+            {
+                "event_id": "CUSTOM_ROOT",
+                "symbol": "ES.v.0",
+                "npz_path": npz_path.name,
+                "event_count": 1,
+                "sha256": "cc",
+                "created_utc": f"{date}T20:00:00+00:00",
+            }
+        ],
+        lake_root,
+    )
+
+    old_env = os.environ.get("HFT3_NPZ_ROOT")
+    if old_env is not None:
+        del os.environ["HFT3_NPZ_ROOT"]
+    try:
+        report = run_inventory(repo_root, lake_root=lake_root)
+    finally:
+        if old_env is not None:
+            os.environ["HFT3_NPZ_ROOT"] = old_env
+
+    assert report["files_total"] == 1
+    assert report["files_covering"] == 1
+    assert Path(report["covering_entries"][0]["npz_path"]) == npz_path
+
+
 # ---------------------------------------------------------------------------
 # Integration: measure subcommand end-to-end
 # ---------------------------------------------------------------------------
 
 def test_measure_produces_oi_none_field(tmp_path: Path) -> None:
-    """measure_file always sets oi=None (WS-0.4a stub)."""
+    """measure_file labels unconditioned OI evidence explicitly."""
     date = "2024-06-12"
     fix_start = _ns_on_date(date, 14, 59, 30)
     arr = np.zeros(1, dtype=_NPZ_DTYPE)
@@ -461,6 +545,61 @@ def test_measure_produces_oi_none_field(tmp_path: Path) -> None:
     rec = measure_file(arr, "ES.v.0", "TEST", file_date_utc)
     assert "oi" in rec
     assert rec["oi"] is None
+    assert rec["oi_conditioned"] is False
+    assert rec["oi_blocker"] == "OI_UNAVAILABLE"
+    assert rec["options_2026_usage_class"] is None
+    assert rec["options_2026_policy"] == "not_applicable_pre_2026"
+
+
+def test_measure_2026_requires_usage_class() -> None:
+    date = "2026-06-12"
+    fix_start = _ns_on_date(date, 14, 59, 30)
+    arr = np.zeros(1, dtype=_NPZ_DTYPE)
+    arr[0]["ev"] = _trade_ev(True)
+    arr[0]["local_ts"] = fix_start + 1_000_000_000
+    arr[0]["px"] = 5000.0
+    arr[0]["qty"] = 1
+
+    with pytest.raises(ValueError, match="2026 options data requires usage_class"):
+        measure_file(arr, "ES.v.0", "TEST", datetime(2026, 6, 12, tzinfo=timezone.utc))
+
+
+def test_measure_2026_records_usage_class() -> None:
+    date = "2026-06-12"
+    fix_start = _ns_on_date(date, 14, 59, 30)
+    arr = np.zeros(1, dtype=_NPZ_DTYPE)
+    arr[0]["ev"] = _trade_ev(True)
+    arr[0]["local_ts"] = fix_start + 1_000_000_000
+    arr[0]["px"] = 5000.0
+    arr[0]["qty"] = 1
+
+    rec = measure_file(
+        arr,
+        "ES.v.0",
+        "TEST",
+        datetime(2026, 6, 12, tzinfo=timezone.utc),
+        usage_class="cost-calibration",
+    )
+
+    assert rec["options_2026_usage_class"] == "cost-calibration"
+    assert rec["options_2026_policy"] == "classified_2026_options_read"
+
+
+def test_measure_2026_rejects_alpha_fit_after_june_2026() -> None:
+    date = "2026-07-02"
+    fix_start = _ns_on_date(date, 14, 59, 30)
+    arrays = _make_arrays([
+        {"ts_ns": fix_start + 1_000_000_000, "price": 5000.0, "size": 1.0, "aggressor_sign": 1},
+    ])
+
+    with pytest.raises(ValueError, match="alpha-fit on options data after 2026-06-30"):
+        measure_file_from_arrays(
+            arrays,
+            "ES.v.0",
+            date,
+            datetime(2026, 7, 2, tzinfo=timezone.utc),
+            usage_class="alpha-fit",
+        )
 
 
 def test_measure_end_to_end_covering_file(tmp_path: Path) -> None:
@@ -529,9 +668,11 @@ def test_measure_end_to_end_covering_file(tmp_path: Path) -> None:
     assert rec["vwap_30s"] is not None
     assert abs(rec["vwap_30s"] - expected_vwap) < 1e-6
 
-    # Imbalance: scan window has buy(1)+sell(0)=1 pre + buy(2)@5000 + sell(1)@5002 + buy(1) post
-    # signed = +1 + 2 - 1 + 1 = 3, total = 1+2+1+1 = 5 → imbalance = 0.6
+    # Predictor imbalance is fixing-window-only: signed = +2 - 1, total = 3.
     assert rec["imbalance_signed"] is not None
+    assert abs(rec["imbalance_signed"] - (1 / 3)) < 1e-9
+    assert rec["imbalance_signed"] == rec["imbalance_fix"]
+    assert rec["imbalance_post"] == 1.0
 
     # markout_2m: post-window trade at fix_end+60s is within 2-min window
     assert rec["markout_2m"] is not None
@@ -703,8 +844,19 @@ class TestPaLastFirst:
             {"ts_ns": 200, "price": 5010.0},
             {"ts_ns": 300, "price": 5020.0},
         ])
-        assert abs(_pa_last_price(arrays, 0, 200) - 5010.0) < 1e-9
-        assert abs(_pa_last_price(arrays, 0, 300) - 5020.0) < 1e-9
+        assert abs(_pa_last_price(arrays, 0, 200) - 5000.0) < 1e-9
+        assert abs(_pa_last_price(arrays, 0, 201) - 5010.0) < 1e-9
+        assert abs(_pa_last_price(arrays, 0, 300) - 5010.0) < 1e-9
+        assert abs(_pa_last_price(arrays, 0, 301) - 5020.0) < 1e-9
+
+    def test_last_price_uses_last_file_row_when_timestamp_ties(self) -> None:
+        arrays = _make_arrays([
+            {"ts_ns": 100, "price": 5000.0},
+            {"ts_ns": 200, "price": 5010.0},
+            {"ts_ns": 200, "price": 5011.0},
+            {"ts_ns": 200, "price": 5012.0},
+        ])
+        assert abs(_pa_last_price(arrays, 0, 201) - 5012.0) < 1e-9
 
     def test_first_price(self) -> None:
         arrays = _make_arrays([
@@ -748,7 +900,22 @@ class TestMeasureFileFromArrays:
         assert abs(rec["markout_2m"] - (5004.0 - expected_vwap)) < 1e-6
 
         assert rec["oi"] is None
+        assert rec["oi_conditioned"] is False
+        assert rec["oi_blocker"] == "OI_UNAVAILABLE"
         assert rec["source"] == "dbn"
+
+    def test_post_only_flow_not_used_as_fixing_predictor(self) -> None:
+        date = "2024-06-12"
+        fix_end = _ns_on_date(date, 15, 0, 0)
+        arrays = _make_arrays([
+            {"ts_ns": fix_end + 1_000_000_000, "price": 5010.0, "size": 10.0, "aggressor_sign": 1},
+        ])
+        file_date_utc = datetime(2024, 6, 12, tzinfo=timezone.utc)
+        rec = measure_file_from_arrays(arrays, "ES.v.0", "2024-06-12", file_date_utc)
+
+        assert rec["imbalance_signed"] is None
+        assert rec["imbalance_fix"] is None
+        assert rec["imbalance_post"] == 1.0
 
     def test_no_post_window_markouts_are_none(self) -> None:
         date = "2024-06-12"
@@ -796,6 +963,44 @@ class TestMeasureFileFromArrays:
         assert abs(rec["markout_5m"] - (5015.0 - 5000.0)) < 1e-6
 
 
+class TestHalfOpenWindows:
+    def test_fix_end_trade_excluded_from_vwap_included_in_markout(self) -> None:
+        date = "2024-06-12"
+        fix_start = _ns_on_date(date, 14, 59, 30)
+        fix_end = _ns_on_date(date, 15, 0, 0)
+        arr = np.zeros(2, dtype=_NPZ_DTYPE)
+        arr[0]["ev"] = _trade_ev(True)
+        arr[0]["local_ts"] = fix_start
+        arr[0]["px"] = 5000.0
+        arr[0]["qty"] = 1
+        arr[1]["ev"] = _trade_ev(True)
+        arr[1]["local_ts"] = fix_end
+        arr[1]["px"] = 5100.0
+        arr[1]["qty"] = 1
+
+        file_date_utc = datetime(2024, 6, 12, tzinfo=timezone.utc)
+        rec = measure_file(arr, "ES.v.0", "TEST", file_date_utc)
+
+        assert rec["vwap_30s"] == 5000.0
+        assert rec["markout_30s"] == 100.0
+
+    def test_scan_end_trade_is_excluded_from_scan_imbalance(self) -> None:
+        date = "2024-06-12"
+        file_date_utc = datetime(2024, 6, 12, tzinfo=timezone.utc)
+        scan_start, _, _, _, _, mark_5m = _window_bounds_ns(file_date_utc)
+        arr = np.zeros(1, dtype=_NPZ_DTYPE)
+        arr[0]["ev"] = _trade_ev(True)
+        arr[0]["local_ts"] = mark_5m
+        arr[0]["px"] = 5000.0
+        arr[0]["qty"] = 1
+
+        imb, count, vol = _compute_imbalance(arr, scan_start, mark_5m)
+
+        assert math.isnan(imb)
+        assert count == 0
+        assert vol == 0.0
+
+
 # ---------------------------------------------------------------------------
 # Unit tests: DBN filename parsing + dedupe
 # ---------------------------------------------------------------------------
@@ -809,6 +1014,31 @@ class TestDbnFilenameParsing:
 
     def test_unparseable_returns_none(self) -> None:
         assert _date_from_dbn_name("ES_fixing_garbage.dbn.zst") is None
+
+    def test_legacy_measurement_record_schema_is_rejected_for_2026(self) -> None:
+        ok, reason = validate_measurement_record_schema(
+            {
+                "date": "2026-06-11",
+                "imbalance_signed": -0.4,
+                "markout_5m": 1.25,
+            }
+        )
+        assert ok is False
+        assert "imbalance_fix" in reason
+
+    def test_2026_measurement_record_requires_usage_class(self) -> None:
+        ok, reason = validate_measurement_record_schema(
+            {
+                "date": "2026-06-11",
+                "imbalance_fix": -0.4,
+                "imbalance_post": 0.2,
+                "oi_blocker": "OI_UNAVAILABLE",
+                "options_2026_policy": "classified_2026_options_read",
+                "options_2026_usage_class": None,
+            }
+        )
+        assert ok is False
+        assert "usage_class" in reason
 
     def test_dedupe_same_date_processed_once(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """MBO + trades file for same date → only one record (first file wins)."""
@@ -906,7 +1136,12 @@ class TestMeasureDbnIntegration:
     def test_measure_dbn_produces_output_file(self, tmp_path: Path) -> None:
         """run_measure_dbn with max_files=3 writes an NDJSON output file with >=1 record."""
         out_path = tmp_path / "dbn_measure_test.ndjson"
-        results = run_measure_dbn(dbn_dir=_DBN_DIR, out_path=out_path, max_files=3)
+        results = run_measure_dbn(
+            dbn_dir=_DBN_DIR,
+            out_path=out_path,
+            max_files=3,
+            usage_class="cost-calibration",
+        )
         assert len(results) >= 1, "Expected at least one measurement record"
         assert out_path.exists(), "Output file not created"
         lines = [l for l in out_path.read_text(encoding="utf-8").splitlines() if l.strip()]
@@ -921,7 +1156,12 @@ class TestMeasureDbnIntegration:
     @_skip_no_dbn
     def test_measure_dbn_vwap_finite(self, tmp_path: Path) -> None:
         """All records from run_measure_dbn have finite vwap_30s."""
-        results = run_measure_dbn(dbn_dir=_DBN_DIR, out_path=None, max_files=3)
+        results = run_measure_dbn(
+            dbn_dir=_DBN_DIR,
+            out_path=None,
+            max_files=3,
+            usage_class="cost-calibration",
+        )
         for rec in results:
             assert rec["vwap_30s"] is not None, f"vwap_30s is None for {rec['date']}"
             assert math.isfinite(rec["vwap_30s"]), f"vwap_30s not finite for {rec['date']}"

@@ -100,9 +100,14 @@ class CMEOptionsBacktester:
             num_trades=0,
             max_drawdown=0.0,
             turnover=0.0,
-            degraded=False,
-            failure_notes=[],
-            extra={"target": target, "research_only": self.config.capability_profile.research_only},
+            degraded=True,
+            failure_notes=["structural-only CME options adapter; no evidence backtest executed"],
+            extra={
+                "target": target,
+                "research_only": self.config.capability_profile.research_only,
+                "structural_only": True,
+                "promotable": False,
+            },
         )
 
     def validate_config(self) -> list[str]:

@@ -1,6 +1,16 @@
 # Fixing-window study (WS-1.1) — run log
 
 Stage: **first full-sample screening complete** (2026-06-13); OI-conditioned gate evaluation pending statistics backfill.
+2026 options usage class: `alpha-fit` through 2026-06-30 only, per the options-lane 2026 embargo extension.
+
+Third-pass correction (2026-06-14): the 2026-06-13 full-backfill screening
+tables below are **legacy/invalid for signal inference**. They were produced
+before the `imbalance_fix` / `imbalance_post` split and the old
+`imbalance_signed` window included post-fix trades from `[14:55, 15:05)`.
+Do not use those t-stats, means, or hit rates for edge, sizing, or gate
+evidence. Any refreshed table must come from the current `measure-dbn` harness,
+use `--usage-class alpha-fit` for eligible 2026 rows, pass the measurement
+record schema validator, and condition predictors on `imbalance_fix` only.
 
 ## Run 2026-06-13 — full backfill measure (772 expiry days, 2023-05-01 → 2026-06-11)
 
@@ -9,7 +19,7 @@ files, `C:\hft3-lake\options\fixing_mbo`); `measure-dbn`; output
 `fixing_window_measure_dbn_full_20260613.json`. Median 17.5k trades / 104k contracts per window.
 One missing date (2026-06-12, vendor availability lag).
 
-### Screening results (ES points; screening t only, no DSR/PBO)
+### Legacy leaked screening results (invalidated; ES points; screening t only, no DSR/PBO)
 
 **Unconditional post-fixing markouts ≈ 0** (|t| < 0.5 at 30s/2m/5m) — no systematic drift.
 
@@ -38,11 +48,15 @@ year-by-year drift conditioning is noise.
 2. Screening t-stats over 772 days, single hypothesis family — real inference goes through
    the gauntlet with a pre-registered card.
 3. The WS-1.1 GATE question (sign predictable BEFORE the window from OI/gamma) is still
-   open — `oi` is null on all rows until the ES.OPT statistics batch lands.
+   open — `oi_conditioned=false` and `oi_blocker=OI_UNAVAILABLE` on all rows until the
+   ES.OPT statistics batch lands.
 4. Any trade near the window interacts with the Rule 575 control
    (docs/compliance/rule_575_fixing_window.md): a post-15:00:00 futures fade by a book
    NOT holding expiring options is outside the restricted window, but the compliance doc
    governs.
+5. Raw options OI is not a pooled predictor until the parity/regime-defined OI store exists:
+   ES/MES, tick-regime, expiry, and post-2026 variable-tick regimes must be separated before
+   any OI/gamma conditioning can be interpreted.
 
 ### Executable-entry re-screen (same day, 2026-06-13): fade NOT tradable
 

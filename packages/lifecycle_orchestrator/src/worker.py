@@ -51,6 +51,14 @@ def _default_handler(job: dict, do_exec: bool) -> dict:
             "output_tail": tail, "stdout_tail": tail}
 
 
+def _failure_reason(result: dict) -> str | None:
+    if result.get("executed") is False:
+        return str(result.get("note") or "command was not executed")
+    if "returncode" in result and int(result.get("returncode") or 0) != 0:
+        return f"command exited with returncode {result.get('returncode')}"
+    return None
+
+
 def run_once(*, handler: Optional[Callable] = None, do_exec: Optional[bool] = None) -> dict:
     do_exec = exec_enabled() if do_exec is None else do_exec
     h = handler or _default_handler
@@ -63,8 +71,13 @@ def run_once(*, handler: Optional[Callable] = None, do_exec: Optional[bool] = No
             continue  # claimed by another worker
         try:
             result = h(job, do_exec)
-            job_runner.complete(jid, result)
-            processed.append({"job_id": jid, "state": "done"})
+            failure = _failure_reason(result)
+            if failure:
+                job_runner.fail(jid, failure, result)
+                processed.append({"job_id": jid, "state": "failed", "error": failure})
+            else:
+                job_runner.complete(jid, result)
+                processed.append({"job_id": jid, "state": "done"})
         except Exception as exc:
             job_runner.fail(jid, str(exc))
             processed.append({"job_id": jid, "state": "failed", "error": str(exc)})

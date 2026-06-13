@@ -69,7 +69,19 @@ _RL_MAX_KEYS = 4096  # cap distinct buckets so the limiter can't be grown withou
 # one global bucket (one client can lock out the rest). Opt in when a trusted proxy
 # fronts the cockpit to key on the real client via X-Forwarded-For.
 _RL_TRUST_PROXY = os.environ.get("COCKPIT_TRUST_PROXY", "") == "1"
+_RL_TRUSTED_PROXIES = {
+    h.strip()
+    for h in os.environ.get("COCKPIT_TRUSTED_PROXY_HOSTS", "").split(",")
+    if h.strip()
+}
 _rl_hits: dict[str, deque] = defaultdict(deque)
+
+
+def _client_ip_for_rate_limit(peer_ip: str, x_forwarded_for: str | None) -> str:
+    if not (_RL_TRUST_PROXY and peer_ip in _RL_TRUSTED_PROXIES and x_forwarded_for):
+        return peer_ip
+    chain = [p.strip() for p in x_forwarded_for.split(",") if p.strip()]
+    return chain[0] if chain else peer_ip
 
 
 @app.middleware("http")
@@ -78,10 +90,7 @@ async def _rate_limit(request, call_next):
     if path.startswith("/api/") and path != "/api/health":
         is_chat = path == "/api/chat"
         ip = request.client.host if request.client else "?"
-        if _RL_TRUST_PROXY:
-            xff = request.headers.get("x-forwarded-for")
-            if xff:
-                ip = xff.split(",")[0].strip() or ip
+        ip = _client_ip_for_rate_limit(ip, request.headers.get("x-forwarded-for"))
         key = f"{ip}:{'chat' if is_chat else 'api'}"
         limit = _RL_CHAT_MAX if is_chat else _RL_MAX
         now = _time.monotonic()

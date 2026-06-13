@@ -23,8 +23,9 @@ def test_unified_certification_runs_all_lanes():
         assert lane_value in card.lane_coverage
         run_result = card.lane_coverage[lane_value].get("run_result")
         assert run_result is not None
-        assert run_result["passed"] is True
-        assert run_result["returncode"] == 0
+        assert run_result["passed"] is False
+        assert run_result["returncode"] == 2
+        assert "pytest skipped" in run_result["output_tail"]
 
 
 def test_unified_certification_runs_subset_of_lanes():
@@ -49,6 +50,15 @@ def test_lane_run_result_to_dict():
     d = r.to_dict()
     assert d["lane"] == "equities"
     assert d["passed"] is True
+
+
+def test_missing_lane_test_path_fails_closed(tmp_path):
+    from hft3.validation.lanes.unified_certification_runner import _run_pytest_for_lane
+
+    result = _run_pytest_for_lane(["tests/no_such_lane_test.py"], tmp_path)
+    assert result.passed is False
+    assert result.returncode == 2
+    assert "not present" in result.output_tail
 
 
 def test_staleness_paths_cover_all_active_lanes():

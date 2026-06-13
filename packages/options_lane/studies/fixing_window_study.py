@@ -30,7 +30,7 @@ import json
 import math
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -47,7 +47,6 @@ _REPO_ROOT = _PKG_ROOT.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from data_system.src.lake_manifest import load_manifest, resolve_npz_path
 from data_system.src.npz_resolver import npz_root
 
 # ---------------------------------------------------------------------------
@@ -118,11 +117,14 @@ def _ct_hms_to_utc_ns(date_utc: datetime, h: int, m: int, s: int) -> int:
 def _window_bounds_ns(date_utc: datetime) -> tuple[int, int, int, int, int, int]:
     """Return (scan_start, fix_start, fix_end, markout_30s, markout_2m, markout_5m) in UTC ns.
 
-    scan window:   14:55:00–15:05:00 CT
-    fix window:    14:59:30–15:00:00 CT
-    markout_30s:   fix_end + 30s
-    markout_2m:    fix_end + 2min
-    markout_5m:    15:05:00 CT (= scan_end)
+    Window convention is half-open [start, end). Adjacent windows cannot
+    double-count a trade exactly on 15:00:00 CT.
+
+    scan window:   [14:55:00, 15:05:00) CT
+    fix window:    [14:59:30, 15:00:00) CT
+    markout_30s:   [fix_end, fix_end + 30s)
+    markout_2m:    [fix_end, fix_end + 2min)
+    markout_5m:    [fix_end, 15:05:00) CT
     """
     scan_start = _ct_hms_to_utc_ns(date_utc, 14, 55, 0)
     fix_start = _ct_hms_to_utc_ns(date_utc, 14, 59, 30)
@@ -146,6 +148,83 @@ def load_expiry_oi(date: datetime) -> float | None:  # noqa: D401
     ``oi`` field set to None for later joining once data is backfilled.
     """
     return None  # pragma: no cover — stub intentionally returns None
+
+
+def _oi_payload(oi: float | None) -> dict[str, Any]:
+    conditioned = oi is not None
+    return {
+        "oi": oi,
+        "oi_conditioned": conditioned,
+        "oi_blocker": None if conditioned else "OI_UNAVAILABLE",
+    }
+
+
+_OPTIONS_2026_START = date(2026, 1, 1)
+_OPTIONS_ALPHA_FIT_END = date(2026, 6, 30)
+_OPTIONS_2026_USAGE_CLASSES = {"cost-calibration", "alpha-fit", "oos-eval"}
+
+
+def _options_2026_policy_payload(
+    file_date_utc: datetime,
+    usage_class: str | None,
+) -> dict[str, Any]:
+    """Return usage-class metadata, refusing unclassified 2026 options reads."""
+    trade_date = file_date_utc.date()
+    if trade_date < _OPTIONS_2026_START:
+        return {
+            "options_2026_usage_class": None,
+            "options_2026_policy": "not_applicable_pre_2026",
+        }
+
+    normalized = (usage_class or "").strip().lower()
+    if not normalized:
+        raise ValueError(
+            "2026 options data requires usage_class in "
+            f"{sorted(_OPTIONS_2026_USAGE_CLASSES)}"
+        )
+    if normalized not in _OPTIONS_2026_USAGE_CLASSES:
+        raise ValueError(
+            f"invalid 2026 options usage_class '{usage_class}'; "
+            f"expected one of {sorted(_OPTIONS_2026_USAGE_CLASSES)}"
+        )
+    if normalized == "alpha-fit" and trade_date > _OPTIONS_ALPHA_FIT_END:
+        raise ValueError(
+            "alpha-fit on options data after 2026-06-30 is embargoed; "
+            "use oos-eval for frozen-rule forward evaluation"
+        )
+    return {
+        "options_2026_usage_class": normalized,
+        "options_2026_policy": "classified_2026_options_read",
+    }
+
+
+def _load_manifest_from_lake_root(lake_root: Path) -> list[dict[str, Any]]:
+    path = lake_root / "manifest.json"
+    if not path.is_file():
+        return []
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _resolve_npz_path_for_lake(
+    repo_root: Path,
+    lake_root: Path,
+    npz_path_str: str,
+) -> Path:
+    p = Path(npz_path_str)
+    if p.is_absolute():
+        return p
+
+    candidates: list[Path] = []
+    parts = p.parts
+    if len(parts) >= 3 and parts[0] == "data" and parts[1] == "npz":
+        candidates.append(lake_root / Path(*parts[2:]))
+    candidates.append(lake_root / p)
+    candidates.append(repo_root / p)
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +277,11 @@ def _date_from_manifest_entry(entry: dict[str, Any]) -> datetime | None:
         return None
 
 
-def run_inventory(repo_root: Path, out_path: Path | None = None) -> dict[str, Any]:
+def run_inventory(
+    repo_root: Path,
+    out_path: Path | None = None,
+    lake_root: Path | None = None,
+) -> dict[str, Any]:
     """Scan the lake manifest and report fixing-window coverage.
 
     For each manifest entry the NPZ is opened to read its local_ts range.
@@ -218,7 +301,8 @@ def run_inventory(repo_root: Path, out_path: Path | None = None) -> dict[str, An
         covering_entries     list[dict] — full detail for covering files
         non_covering_entries list[dict] — full detail for non-covering files
     """
-    manifest = load_manifest(repo_root)
+    resolved_lake_root = lake_root if lake_root is not None else npz_root(repo_root)
+    manifest = _load_manifest_from_lake_root(resolved_lake_root)
     total = len(manifest)
     covering: list[dict[str, Any]] = []
     non_covering: list[dict[str, Any]] = []
@@ -228,7 +312,11 @@ def run_inventory(repo_root: Path, out_path: Path | None = None) -> dict[str, An
         symbol = entry.get("symbol", "")
         event_id = entry.get("event_id", "")
         npz_path_str = entry.get("npz_path", "")
-        path = resolve_npz_path(repo_root, npz_path_str) if npz_path_str else Path("")
+        path = (
+            _resolve_npz_path_for_lake(repo_root, resolved_lake_root, npz_path_str)
+            if npz_path_str
+            else Path("")
+        )
 
         raw = _load_raw(path)
         if raw is None:
@@ -257,7 +345,7 @@ def run_inventory(repo_root: Path, out_path: Path | None = None) -> dict[str, An
         bounds = _window_bounds_ns(file_date_utc)
         scan_start, scan_end = bounds[0], bounds[5]  # scan_end = markout_5m = 15:05 CT
 
-        overlaps = ts_min <= scan_end and ts_max >= scan_start
+        overlaps = ts_min < scan_end and ts_max >= scan_start
 
         ts_min_utc_str = datetime.fromtimestamp(ts_min / 1e9, tz=timezone.utc).isoformat()
         ts_max_utc_str = datetime.fromtimestamp(ts_max / 1e9, tz=timezone.utc).isoformat()
@@ -328,16 +416,16 @@ def run_inventory(repo_root: Path, out_path: Path | None = None) -> dict[str, An
 # ---------------------------------------------------------------------------
 
 def _compute_vwap(raw: np.ndarray, ts_lo: int, ts_hi: int) -> float:
-    """Compute trade VWAP for rows where local_ts in [ts_lo, ts_hi].
+    """Compute trade VWAP for rows where local_ts in [ts_lo, ts_hi).
 
     Returns nan when there are no qualifying trades.
-    Filtration-safe: only rows with local_ts <= ts_hi and local_ts >= ts_lo.
+    Filtration-safe: only rows with local_ts < ts_hi and local_ts >= ts_lo.
     """
     mask = np.zeros(len(raw), dtype=bool)
     for i, row in enumerate(raw):
         ev = int(row["ev"])
         ts = int(row["local_ts"])
-        if _is_trade(ev) and ts_lo <= ts <= ts_hi:
+        if _is_trade(ev) and ts_lo <= ts < ts_hi:
             mask[i] = True
 
     trades = raw[mask]
@@ -353,7 +441,7 @@ def _compute_vwap(raw: np.ndarray, ts_lo: int, ts_hi: int) -> float:
 
 
 def _last_trade_price(raw: np.ndarray, ts_lo: int, ts_hi: int) -> float:
-    """Return price of the last trade row with local_ts in [ts_lo, ts_hi].
+    """Return price of the last trade row with local_ts in [ts_lo, ts_hi).
 
     Returns nan when no qualifying trade exists.
     """
@@ -362,20 +450,20 @@ def _last_trade_price(raw: np.ndarray, ts_lo: int, ts_hi: int) -> float:
     for row in raw:
         ev = int(row["ev"])
         ts = int(row["local_ts"])
-        if _is_trade(ev) and ts_lo <= ts <= ts_hi and ts >= best_ts:
+        if _is_trade(ev) and ts_lo <= ts < ts_hi and ts >= best_ts:
             best_ts = ts
             best_px = float(row["px"])
     return best_px
 
 
 def _first_trade_price(raw: np.ndarray, ts_lo: int, ts_hi: int) -> float:
-    """Return price of the first trade row with local_ts in [ts_lo, ts_hi]."""
+    """Return price of the first trade row with local_ts in [ts_lo, ts_hi)."""
     best_ts = -1
     best_px = float("nan")
     for row in raw:
         ev = int(row["ev"])
         ts = int(row["local_ts"])
-        if _is_trade(ev) and ts_lo <= ts <= ts_hi:
+        if _is_trade(ev) and ts_lo <= ts < ts_hi:
             if best_ts < 0 or ts < best_ts:
                 best_ts = ts
                 best_px = float(row["px"])
@@ -383,7 +471,7 @@ def _first_trade_price(raw: np.ndarray, ts_lo: int, ts_hi: int) -> float:
 
 
 def _compute_imbalance(raw: np.ndarray, ts_lo: int, ts_hi: int) -> tuple[float, int, float]:
-    """Compute signed aggressor imbalance in [ts_lo, ts_hi].
+    """Compute signed aggressor imbalance in [ts_lo, ts_hi).
 
     imbalance = sum(sign * qty) / sum(qty)
     where sign=+1 for BUY_EVENT aggressors, sign=-1 for SELL_EVENT.
@@ -399,7 +487,7 @@ def _compute_imbalance(raw: np.ndarray, ts_lo: int, ts_hi: int) -> tuple[float, 
         ts = int(row["local_ts"])
         if not _is_trade(ev):
             continue
-        if not (ts_lo <= ts <= ts_hi):
+        if not (ts_lo <= ts < ts_hi):
             continue
         qty = float(row["qty"])
         trade_count += 1
@@ -419,12 +507,14 @@ def measure_file(
     symbol: str,
     event_id: str,
     file_date_utc: datetime,
+    usage_class: str | None = None,
 ) -> dict[str, Any]:
     """Compute all fixing-window statistics for one NPZ file.
 
     Returns a flat dict suitable for NDJSON output.
 
-    OI field is always None — stub interface pending WS-0.4a.
+    OI-conditioned evidence is explicit: when OI is unavailable, the record is
+    non-conditionable and carries an OI_UNAVAILABLE blocker.
     """
     bounds = _window_bounds_ns(file_date_utc)
     scan_start, fix_start, fix_end, mark_30s, mark_2m, mark_5m = bounds
@@ -441,8 +531,15 @@ def measure_file(
     # --- 30-second VWAP 14:59:30–15:00:00 ---
     vwap_30s = _compute_vwap(raw, fix_start, fix_end)
 
-    # --- window-wide stats 14:55–15:05 ---
-    imbalance, trade_count, total_volume = _compute_imbalance(raw, scan_start, mark_5m)
+    # --- signed flow by information set ---
+    # The predictor available at the fixing boundary is the fixing-window flow
+    # itself. Post-fix markout flow is outcome-period data and must not leak
+    # into `imbalance_signed`.
+    imbalance_pre, trade_count_pre, volume_pre = _compute_imbalance(raw, scan_start, fix_start)
+    imbalance_fix, trade_count_fix, volume_fix = _compute_imbalance(raw, fix_start, fix_end)
+    imbalance_post, trade_count_post, volume_post = _compute_imbalance(raw, fix_end, mark_5m)
+    trade_count = trade_count_pre + trade_count_fix + trade_count_post
+    total_volume = volume_pre + volume_fix + volume_post
 
     # --- markouts: VWAP vs last trade at +30s, +2m, +5m ---
     def _markout(ts_end: int) -> float:
@@ -457,25 +554,33 @@ def measure_file(
 
     date_str = file_date_utc.date().isoformat()
 
+    oi = load_expiry_oi(file_date_utc)
+    policy_payload = _options_2026_policy_payload(file_date_utc, usage_class)
     return {
         "symbol": symbol,
         "event_id": event_id,
         "date": date_str,
         "trade_count_scan": trade_count,
         "volume_scan": total_volume,
-        "imbalance_signed": None if math.isnan(imbalance) else imbalance,
+        "imbalance_signed": None if math.isnan(imbalance_fix) else imbalance_fix,
+        "imbalance_pre": None if math.isnan(imbalance_pre) else imbalance_pre,
+        "imbalance_fix": None if math.isnan(imbalance_fix) else imbalance_fix,
+        "imbalance_post": None if math.isnan(imbalance_post) else imbalance_post,
         "vwap_30s": None if math.isnan(vwap_30s) else vwap_30s,
         "pre_window_drift": None if math.isnan(pre_drift) else pre_drift,
         "markout_30s": None if math.isnan(markout_30s) else markout_30s,
         "markout_2m": None if math.isnan(markout_2m) else markout_2m,
         "markout_5m": None if math.isnan(markout_5m_val) else markout_5m_val,
-        "oi": load_expiry_oi(file_date_utc),  # None — WS-0.4a pending
+        **_oi_payload(oi),
+        **policy_payload,
     }
 
 
 def run_measure(
     repo_root: Path,
     out_path: Path | None = None,
+    lake_root: Path | None = None,
+    usage_class: str | None = None,
 ) -> list[dict[str, Any]]:
     """Measure fixing-window statistics for all covering NPZ files.
 
@@ -483,7 +588,7 @@ def run_measure(
     Results are written to ``out_path`` as NDJSON (one JSON object per line).
     """
     # First run inventory to find covering files
-    inventory = run_inventory(repo_root, out_path=None)
+    inventory = run_inventory(repo_root, out_path=None, lake_root=lake_root)
     covering = inventory["covering_entries"]
 
     if not covering:
@@ -504,7 +609,13 @@ def run_measure(
             ts_min, _ = _ts_range(raw)
             file_date_utc = datetime.fromtimestamp(ts_min / 1e9, tz=timezone.utc)
 
-        rec = measure_file(raw, entry["symbol"], entry["event_id"], file_date_utc)
+        rec = measure_file(
+            raw,
+            entry["symbol"],
+            entry["event_id"],
+            file_date_utc,
+            usage_class=usage_class,
+        )
         results.append(rec)
         print(json.dumps(rec))
 
@@ -529,9 +640,9 @@ def run_measure(
 # ---------------------------------------------------------------------------
 
 def _pa_vwap(arrays: dict, ts_lo: int, ts_hi: int) -> float:
-    """Volume-weighted average price over trades with ts_ns in [ts_lo, ts_hi]."""
+    """Volume-weighted average price over trades with ts_ns in [ts_lo, ts_hi)."""
     ts = arrays["ts_ns"]
-    mask = (ts >= ts_lo) & (ts <= ts_hi)
+    mask = (ts >= ts_lo) & (ts < ts_hi)
     px = arrays["price"][mask]
     sz = arrays["size"][mask]
     total_sz = sz.sum()
@@ -541,20 +652,21 @@ def _pa_vwap(arrays: dict, ts_lo: int, ts_hi: int) -> float:
 
 
 def _pa_last_price(arrays: dict, ts_lo: int, ts_hi: int) -> float:
-    """Price of the last trade with ts_ns in [ts_lo, ts_hi]; nan when none."""
+    """Price of the last trade with ts_ns in [ts_lo, ts_hi); nan when none."""
     ts = arrays["ts_ns"]
-    mask = (ts >= ts_lo) & (ts <= ts_hi)
+    mask = (ts >= ts_lo) & (ts < ts_hi)
     if not mask.any():
         return float("nan")
-    # argmax on masked ts returns the position of the maximum ts in the window
-    masked_ts = ts[mask]
-    return float(arrays["price"][mask][masked_ts.argmax()])
+    indices = np.flatnonzero(mask)
+    max_ts = ts[indices].max()
+    max_indices = indices[ts[indices] == max_ts]
+    return float(arrays["price"][max_indices[-1]])
 
 
 def _pa_first_price(arrays: dict, ts_lo: int, ts_hi: int) -> float:
-    """Price of the first trade with ts_ns in [ts_lo, ts_hi]; nan when none."""
+    """Price of the first trade with ts_ns in [ts_lo, ts_hi); nan when none."""
     ts = arrays["ts_ns"]
-    mask = (ts >= ts_lo) & (ts <= ts_hi)
+    mask = (ts >= ts_lo) & (ts < ts_hi)
     if not mask.any():
         return float("nan")
     masked_ts = ts[mask]
@@ -562,13 +674,13 @@ def _pa_first_price(arrays: dict, ts_lo: int, ts_hi: int) -> float:
 
 
 def _pa_imbalance(arrays: dict, ts_lo: int, ts_hi: int) -> tuple[float, int, float]:
-    """Signed aggressor imbalance for trades with ts_ns in [ts_lo, ts_hi].
+    """Signed aggressor imbalance for trades with ts_ns in [ts_lo, ts_hi).
 
     Returns (imbalance, trade_count, total_volume).
     imbalance = sum(sign * size) / sum(size); nan when total_volume == 0.
     """
     ts = arrays["ts_ns"]
-    mask = (ts >= ts_lo) & (ts <= ts_hi)
+    mask = (ts >= ts_lo) & (ts < ts_hi)
     sz = arrays["size"][mask]
     sign = arrays["aggressor_sign"][mask].astype(np.float64)
     total_sz = sz.sum()
@@ -583,6 +695,7 @@ def measure_file_from_arrays(
     symbol: str,
     date_str: str,
     file_date_utc: datetime,
+    usage_class: str | None = None,
 ) -> dict[str, Any]:
     """Compute all fixing-window statistics from plain numpy arrays.
 
@@ -608,7 +721,11 @@ def measure_file_from_arrays(
 
     vwap_30s = _pa_vwap(arrays, fix_start, fix_end)
 
-    imbalance, trade_count, total_volume = _pa_imbalance(arrays, scan_start, mark_5m)
+    imbalance_pre, trade_count_pre, volume_pre = _pa_imbalance(arrays, scan_start, fix_start)
+    imbalance_fix, trade_count_fix, volume_fix = _pa_imbalance(arrays, fix_start, fix_end)
+    imbalance_post, trade_count_post, volume_post = _pa_imbalance(arrays, fix_end, mark_5m)
+    trade_count = trade_count_pre + trade_count_fix + trade_count_post
+    total_volume = volume_pre + volume_fix + volume_post
 
     def _markout(ts_end: int) -> float:
         last = _pa_last_price(arrays, fix_end, ts_end)
@@ -620,21 +737,53 @@ def measure_file_from_arrays(
     markout_2m = _markout(mark_2m)
     markout_5m_val = _markout(mark_5m)
 
+    policy_payload = _options_2026_policy_payload(file_date_utc, usage_class)
     return {
         "symbol": symbol,
         "event_id": date_str,  # date string doubles as event_id for DBN records
         "date": date_str,
         "trade_count_scan": trade_count,
         "volume_scan": total_volume,
-        "imbalance_signed": None if math.isnan(imbalance) else imbalance,
+        "imbalance_signed": None if math.isnan(imbalance_fix) else imbalance_fix,
+        "imbalance_pre": None if math.isnan(imbalance_pre) else imbalance_pre,
+        "imbalance_fix": None if math.isnan(imbalance_fix) else imbalance_fix,
+        "imbalance_post": None if math.isnan(imbalance_post) else imbalance_post,
         "vwap_30s": None if math.isnan(vwap_30s) else vwap_30s,
         "pre_window_drift": None if math.isnan(pre_drift) else pre_drift,
         "markout_30s": None if math.isnan(markout_30s) else markout_30s,
         "markout_2m": None if math.isnan(markout_2m) else markout_2m,
         "markout_5m": None if math.isnan(markout_5m_val) else markout_5m_val,
-        "oi": None,  # WS-0.4a pending
+        **_oi_payload(load_expiry_oi(file_date_utc)),
+        **policy_payload,
         "source": "dbn",
     }
+
+
+_MEASURE_RECORD_REQUIRED_FIELDS = frozenset({
+    "date",
+    "imbalance_fix",
+    "imbalance_post",
+    "oi_blocker",
+    "options_2026_policy",
+    "options_2026_usage_class",
+})
+
+
+def validate_measurement_record_schema(record: dict[str, Any]) -> tuple[bool, str]:
+    """Validate DBN fixing-window measurement records before using them as evidence."""
+    if not isinstance(record, dict):
+        return False, "record is not an object"
+    missing = sorted(_MEASURE_RECORD_REQUIRED_FIELDS - set(record))
+    if missing:
+        return False, f"missing fields: {missing}"
+    date_s = str(record.get("date") or "")
+    try:
+        rec_date = datetime.strptime(date_s, "%Y-%m-%d").date()
+    except ValueError:
+        return False, f"invalid date: {date_s!r}"
+    if rec_date >= datetime(2026, 1, 1).date() and not record.get("options_2026_usage_class"):
+        return False, "2026 options record missing options_2026_usage_class"
+    return True, "ok"
 
 
 _DBN_DEFAULT_DIR = Path(r"C:\hft3-lake\options\fixing_mbo")
@@ -659,6 +808,7 @@ def run_measure_dbn(
     dbn_dir: Path = _DBN_DEFAULT_DIR,
     out_path: Path | None = None,
     max_files: int | None = None,
+    usage_class: str | None = None,
 ) -> list[dict[str, Any]]:
     """Measure fixing-window statistics from ES_fixing_<date>.dbn.zst files.
 
@@ -702,7 +852,16 @@ def run_measure_dbn(
             print(f"Skipping {fpath.name}: no trade records")
             continue
 
-        rec = measure_file_from_arrays(arrays, "ES.v.0", date_part, file_date)
+        rec = measure_file_from_arrays(
+            arrays,
+            "ES.v.0",
+            date_part,
+            file_date,
+            usage_class=usage_class,
+        )
+        valid, reason = validate_measurement_record_schema(rec)
+        if not valid:
+            raise ValueError(f"{fpath.name}: invalid measurement record schema: {reason}")
         results.append(rec)
         print(json.dumps(rec))
 
@@ -760,6 +919,12 @@ def main(argv: list[str] | None = None) -> int:
         "measure",
         help="Compute fixing-window statistics for all covering files",
     )
+    p_meas.add_argument(
+        "--usage-class",
+        choices=sorted(_OPTIONS_2026_USAGE_CLASSES),
+        default=None,
+        help="Required when any measured options row touches 2026 data.",
+    )
     p_meas.set_defaults(func=_cmd_measure)
 
     p_dbn = sub.add_parser(
@@ -777,6 +942,12 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Process at most N files (for testing/preview)",
     )
+    p_dbn.add_argument(
+        "--usage-class",
+        choices=sorted(_OPTIONS_2026_USAGE_CLASSES),
+        default=None,
+        help="Required when any measured options row touches 2026 data.",
+    )
     p_dbn.set_defaults(func=_cmd_measure_dbn)
 
     args = parser.parse_args(argv)
@@ -791,15 +962,20 @@ def _resolve_root(args: argparse.Namespace) -> Path:
 
 def _cmd_inventory(args: argparse.Namespace) -> int:
     lake_root = _resolve_root(args)
-    # We need repo_root for resolve_npz_path; pass it through
     out_path = Path(args.out) if args.out else _default_out("inventory", _REPO_ROOT)
-    run_inventory(_REPO_ROOT, out_path=out_path)
+    run_inventory(_REPO_ROOT, out_path=out_path, lake_root=lake_root)
     return 0
 
 
 def _cmd_measure(args: argparse.Namespace) -> int:
+    lake_root = _resolve_root(args)
     out_path = Path(args.out) if args.out else _default_out("measure", _REPO_ROOT)
-    run_measure(_REPO_ROOT, out_path=out_path)
+    run_measure(
+        _REPO_ROOT,
+        out_path=out_path,
+        lake_root=lake_root,
+        usage_class=getattr(args, "usage_class", None),
+    )
     return 0
 
 
@@ -807,7 +983,12 @@ def _cmd_measure_dbn(args: argparse.Namespace) -> int:
     dbn_dir = Path(args.dbn_dir)
     out_path = Path(args.out) if args.out else _default_out("measure_dbn", _REPO_ROOT)
     max_files = getattr(args, "max_files", None)
-    run_measure_dbn(dbn_dir=dbn_dir, out_path=out_path, max_files=max_files)
+    run_measure_dbn(
+        dbn_dir=dbn_dir,
+        out_path=out_path,
+        max_files=max_files,
+        usage_class=getattr(args, "usage_class", None),
+    )
     return 0
 
 
