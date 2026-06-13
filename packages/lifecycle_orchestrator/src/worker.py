@@ -32,10 +32,23 @@ def _default_handler(job: dict, do_exec: bool) -> dict:
         return {"executed": False, "note": "command not fully materialized; skipped", "command": cmd}
     if job.get("host") == "chi404" and os.environ.get("HFT3_ORCH_CHI404") != "1":
         return {"executed": False, "note": "heavy CHI404 job; set HFT3_ORCH_CHI404=1 on the box to run", "command": cmd}
-    full = [sys.executable, entry, *args] if str(entry).endswith(".py") else [entry, *args]
-    proc = subprocess.run(full, capture_output=True, text=True)
-    return {"executed": True, "returncode": proc.returncode,
-            "stdout_tail": proc.stdout[-2000:], "stderr_tail": proc.stderr[-2000:]}
+    # .py entries run unbuffered (-u) so the per-job logfile updates LIVE, not at exit.
+    full = [sys.executable, "-u", entry, *args] if str(entry).endswith(".py") else [entry, *args]
+    log_dir = job_runner.jobs_dir() / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    logfile = log_dir / f"{job['job_id']}.log"
+    # Stream stdout+stderr (merged, chronological) to the logfile as the job runs;
+    # readers (e.g. the cockpit /job/{id}/logs) tail it live. The blocking wait keeps
+    # the queue serial, but the output is now observable mid-run, not only on exit.
+    with open(logfile, "w", encoding="utf-8", errors="replace") as lf:
+        proc = subprocess.Popen(full, stdout=lf, stderr=subprocess.STDOUT, text=True)
+        rc = proc.wait()
+    try:
+        tail = logfile.read_text(encoding="utf-8", errors="replace")[-2000:]
+    except OSError:
+        tail = ""
+    return {"executed": True, "returncode": rc, "logfile": str(logfile),
+            "output_tail": tail, "stdout_tail": tail}
 
 
 def run_once(*, handler: Optional[Callable] = None, do_exec: Optional[bool] = None) -> dict:
