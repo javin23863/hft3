@@ -135,17 +135,335 @@ def _window_bounds_ns(date_utc: datetime) -> tuple[int, int, int, int, int, int]
 
 
 # ---------------------------------------------------------------------------
-# OI conditioning stub — WS-0.4a statistics backfill pending
+# OI conditioning — WS-0.4a statistics layer
+# ---------------------------------------------------------------------------
+#
+# OIStore wraps the decoded definition map and OI arrays loaded ONCE from the
+# lake.  All functions that need OI data accept an optional ``store`` kwarg;
+# when store is None (or uninitialized) the behaviour is unchanged from the
+# previous stub: callers get oi=None and continue to work.
+#
+# Filtration F_t — NO LOOKAHEAD:
+#   load_expiry_oi(D, store) returns OI of options EXPIRING on D, summed over
+#   their instrument_ids, AS OF the latest ts_ref STRICTLY LESS THAN D.
+#   This is the last CME dissemination from the prior session, which is known
+#   before the 15:00 CT fixing window opens on D.  Using D's own ts_ref (or
+#   any future ts_ref) would constitute lookahead and is forbidden.
+#
+#   Verified: EW3 2023-05-19 expiry series OI = 1,074,322 on ts_ref=2023-05-18
+#   (last-wins deduplicated); OI is absent (0 records) on ts_ref=2023-05-19.
 # ---------------------------------------------------------------------------
 
-def load_expiry_oi(date: datetime) -> float | None:  # noqa: D401
-    """Return open-interest for the front ES option expiry on *date*, or None.
+import datetime as _dt
 
-    TODO: WS-0.4a statistics backfill pending — this function always returns
-    None until the OI time-series is available.  Imbalance records carry an
-    ``oi`` field set to None for later joining once data is backfilled.
+_INT64_MAX = 9_223_372_036_854_775_807
+
+
+class OIStore:
+    """Lazily-loaded container for definition map and OI arrays.
+
+    Parameters
+    ----------
+    options_root : Path
+        Root of the options data lake.  Expected sub-structure:
+            statistics/<root_asset>/          (*.dbn.zst stats files)
+            definitions/pm/<root_asset>/      (*.dbn.zst definition files)
+        Defaults to lake_root() / "options".
+    root_asset : str
+        CME root asset identifier, e.g. ``'EW3'`` or ``'ES'``.
+        Used to locate the correct subdirectories under ``options_root``.
+
+    Attributes
+    ----------
+    ready : bool
+        True once both the definition map and OI arrays have been loaded
+        successfully and contain at least some data.
     """
-    return None  # pragma: no cover — stub intentionally returns None
+
+    def __init__(self, options_root: Path | None = None, root_asset: str = "EW3") -> None:
+        self._options_root = options_root
+        self._root_asset = root_asset
+        self._def_map: dict | None = None   # instrument_id -> OptionMeta
+        self._oi: dict | None = None         # ts_ref_date / instrument_id / oi arrays
+        self._loaded = False
+
+    # ------------------------------------------------------------------
+    # Public helpers
+    # ------------------------------------------------------------------
+
+    @property
+    def ready(self) -> bool:
+        """True when the store has been loaded and contains data."""
+        return (
+            self._loaded
+            and self._def_map is not None
+            and len(self._def_map) > 0
+            and self._oi is not None
+            and len(self._oi.get("oi", [])) > 0
+        )
+
+    def load(self) -> None:
+        """Eagerly load definition map and OI arrays from disk.
+
+        Silently does nothing when the data directories do not exist (CI without
+        the lake).  ``self.ready`` will be False in that case.
+        """
+        if self._loaded:
+            return
+        self._loaded = True
+
+        opts_root = self._get_options_root()
+        if opts_root is None or not opts_root.is_dir():
+            return  # lake unavailable — stay silent
+
+        stats_dir = opts_root / "statistics" / self._root_asset
+        defs_dir = opts_root / "definitions" / "pm" / self._root_asset
+
+        if not stats_dir.is_dir() or not defs_dir.is_dir():
+            return  # missing sub-dirs — silent
+
+        try:
+            from options_lane.studies.definition_map import load_definition_map
+            from options_lane.studies.oi_decode import load_oi_dir
+
+            self._def_map = load_definition_map(defs_dir)
+            self._oi = load_oi_dir(stats_dir)
+        except Exception:
+            # Any decode failure leaves store unready; callers get oi=None.
+            self._def_map = None
+            self._oi = None
+
+    def _get_options_root(self) -> Path | None:
+        if self._options_root is not None:
+            return Path(self._options_root)
+        try:
+            from data_system.src.npz_resolver import lake_root as _lake_root
+            return _lake_root(_REPO_ROOT) / "options"
+        except Exception:
+            return None
+
+    # ------------------------------------------------------------------
+    # Internal accessors used by the OI query functions below
+    # ------------------------------------------------------------------
+
+    def _instrument_ids_expiring_on(self, d: _dt.date) -> list[int]:
+        """Return instrument_ids from the def map whose expiration == d."""
+        if not self._def_map:
+            return []
+        return [iid for iid, meta in self._def_map.items() if meta.expiration == d]
+
+    def _oi_for_instruments_on_date(
+        self, instrument_ids: list[int], ref_date: _dt.date
+    ) -> int:
+        """Sum OI across instrument_ids for the given ref_date."""
+        if not self._oi or len(self._oi.get("oi", [])) == 0:
+            return 0
+        ts_dates = self._oi["ts_ref_date"]
+        iids = self._oi["instrument_id"]
+        oi_vals = self._oi["oi"]
+        id_set = set(instrument_ids)
+        total = 0
+        for i in range(len(oi_vals)):
+            if ts_dates[i] == ref_date and iids[i] in id_set:
+                total += int(oi_vals[i])
+        return total
+
+    def _latest_ref_date_before(
+        self, instrument_ids: list[int], cutoff_date: _dt.date
+    ) -> _dt.date | None:
+        """Return the latest ts_ref_date strictly less than cutoff_date.
+
+        Only considers records that belong to the given instrument_ids.
+        Returns None when no qualifying records exist.
+
+        Filtration guarantee: strictly-less-than means we never touch the
+        cutoff_date's own OI or any future session — no lookahead.
+        """
+        if not self._oi or len(self._oi.get("oi", [])) == 0:
+            return None
+        ts_dates = self._oi["ts_ref_date"]
+        iids = self._oi["instrument_id"]
+        id_set = set(instrument_ids)
+        best: _dt.date | None = None
+        for i in range(len(ts_dates)):
+            d = ts_dates[i]
+            if d < cutoff_date and iids[i] in id_set:
+                if best is None or d > best:
+                    best = d
+        return best
+
+    def _right_for(self, instrument_id: int) -> str | None:
+        """Return 'C' or 'P' for an instrument_id, or None if not found."""
+        if not self._def_map:
+            return None
+        meta = self._def_map.get(instrument_id)
+        return meta.right if meta is not None else None
+
+
+# Module-level default store (not initialised at import time; instantiated on
+# first call via _get_default_store() if needed by the zero-arg legacy signature).
+_default_store: OIStore | None = None
+
+
+def _get_default_store() -> OIStore:
+    """Return the module-level default OIStore, loading it on first call."""
+    global _default_store
+    if _default_store is None:
+        _default_store = OIStore()
+    if not _default_store._loaded:
+        _default_store.load()
+    return _default_store
+
+
+def load_expiry_oi(
+    date: datetime,
+    store: OIStore | None = None,
+) -> float | None:
+    """Return total open-interest for the front ES option expiry on *date*, or None.
+
+    Filtration F_t — NO LOOKAHEAD:
+        Returns the OI of options EXPIRING on ``date``, summed over their
+        instrument_ids, AS OF the latest ts_ref_date STRICTLY LESS THAN ``date``
+        (the prior session's OI).  Using ``date``'s own ts_ref would be lookahead
+        and is forbidden.
+
+    Verified against real data (EW3 2023-05):
+        EW3 2023-05-19 expiry series OI = 1,074,322 on ts_ref=2023-05-18
+        (last-wins dedup, second CME dissemination).  OI is 0 on 2023-05-19.
+
+    Parameters
+    ----------
+    date : datetime
+        The fixing-window date (UTC).  Both ``datetime`` objects and
+        ``datetime.date`` are accepted.
+    store : OIStore, optional
+        Pre-loaded data store.  When None the module-level default store is
+        used (lazy-loaded from the lake on first call; silently stays unready
+        when the lake is absent — CI-safe).
+
+    Returns
+    -------
+    float or None
+        Total OI as a float, or None when the store is unavailable or no
+        qualifying OI records exist for the expiry on ``date``.
+    """
+    if store is None:
+        store = _get_default_store()
+
+    if not store.ready:
+        return None
+
+    # Accept either datetime or date
+    if isinstance(date, _dt.datetime):
+        d = date.date() if hasattr(date, "date") else _dt.date.fromisoformat(str(date))
+    else:
+        d = date  # type: ignore[assignment]
+
+    expiring_ids = store._instrument_ids_expiring_on(d)
+    if not expiring_ids:
+        return None
+
+    # NO-LOOKAHEAD: use the latest ts_ref STRICTLY BEFORE d
+    ref_date = store._latest_ref_date_before(expiring_ids, d)
+    if ref_date is None:
+        return None
+
+    total = store._oi_for_instruments_on_date(expiring_ids, ref_date)
+    if total == 0:
+        return None
+    return float(total)
+
+
+def load_expiry_oi_split(
+    date: datetime,
+    store: OIStore | None = None,
+) -> tuple[float | None, float | None, float | None]:
+    """Return (calls_oi, puts_oi, total_oi) for the front expiry on *date*.
+
+    Same filtration rule as load_expiry_oi — uses T-1 ts_ref (strictly prior
+    session).  Returns (None, None, None) when the store is unavailable.
+
+    Useful for gamma/heavy-light analysis that requires call/put decomposition.
+
+    Returns
+    -------
+    tuple (calls_oi, puts_oi, total_oi)
+        Each element is a float or None.  total_oi == calls_oi + puts_oi when
+        both are non-None.
+    """
+    if store is None:
+        store = _get_default_store()
+
+    if not store.ready:
+        return None, None, None
+
+    if isinstance(date, _dt.datetime):
+        d = date.date() if hasattr(date, "date") else _dt.date.fromisoformat(str(date))
+    else:
+        d = date  # type: ignore[assignment]
+
+    expiring_ids = store._instrument_ids_expiring_on(d)
+    if not expiring_ids:
+        return None, None, None
+
+    ref_date = store._latest_ref_date_before(expiring_ids, d)
+    if ref_date is None:
+        return None, None, None
+
+    ts_dates = store._oi["ts_ref_date"]
+    iids = store._oi["instrument_id"]
+    oi_vals = store._oi["oi"]
+    id_set = set(expiring_ids)
+
+    calls_oi = 0
+    puts_oi = 0
+    for i in range(len(oi_vals)):
+        if ts_dates[i] == ref_date and iids[i] in id_set:
+            right = store._right_for(int(iids[i]))
+            val = int(oi_vals[i])
+            if right == "C":
+                calls_oi += val
+            elif right == "P":
+                puts_oi += val
+
+    total_oi = calls_oi + puts_oi
+    if total_oi == 0:
+        return None, None, None
+
+    return float(calls_oi), float(puts_oi), float(total_oi)
+
+
+def classify_heavy_light(
+    oi_value: float | None,
+    ref_distribution: "np.ndarray | list[float]",
+) -> str | None:
+    """Classify an OI value as 'heavy' or 'light' relative to a reference distribution.
+
+    Pure function — no data loading.  Uses the median of ``ref_distribution``
+    as the threshold.  Values above median are 'heavy'; at-or-below are 'light'.
+
+    Parameters
+    ----------
+    oi_value : float or None
+        The OI value to classify.  Returns None when oi_value is None or the
+        reference distribution is empty.
+    ref_distribution : array-like of float
+        Historical OI values used to compute the median threshold.
+
+    Returns
+    -------
+    'heavy', 'light', or None
+    """
+    if oi_value is None:
+        return None
+    try:
+        arr = np.asarray(ref_distribution, dtype=float)
+    except (TypeError, ValueError):
+        return None
+    if len(arr) == 0:
+        return None
+    threshold = float(np.median(arr))
+    return "heavy" if oi_value > threshold else "light"
 
 
 # ---------------------------------------------------------------------------
@@ -419,12 +737,14 @@ def measure_file(
     symbol: str,
     event_id: str,
     file_date_utc: datetime,
+    store: "OIStore | None" = None,
 ) -> dict[str, Any]:
     """Compute all fixing-window statistics for one NPZ file.
 
     Returns a flat dict suitable for NDJSON output.
 
-    OI field is always None — stub interface pending WS-0.4a.
+    OI field is populated when a loaded OIStore is provided; otherwise None.
+    Pass ``store`` to enable OI conditioning (WS-0.4a).
     """
     bounds = _window_bounds_ns(file_date_utc)
     scan_start, fix_start, fix_end, mark_30s, mark_2m, mark_5m = bounds
@@ -469,7 +789,7 @@ def measure_file(
         "markout_30s": None if math.isnan(markout_30s) else markout_30s,
         "markout_2m": None if math.isnan(markout_2m) else markout_2m,
         "markout_5m": None if math.isnan(markout_5m_val) else markout_5m_val,
-        "oi": load_expiry_oi(file_date_utc),  # None — WS-0.4a pending
+        "oi": load_expiry_oi(file_date_utc, store=store),
     }
 
 
@@ -632,7 +952,7 @@ def measure_file_from_arrays(
         "markout_30s": None if math.isnan(markout_30s) else markout_30s,
         "markout_2m": None if math.isnan(markout_2m) else markout_2m,
         "markout_5m": None if math.isnan(markout_5m_val) else markout_5m_val,
-        "oi": None,  # WS-0.4a pending
+        "oi": None,  # store not threaded through run_measure_dbn yet (WS-0.4a)
         "source": "dbn",
     }
 
