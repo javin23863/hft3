@@ -295,47 +295,79 @@ def _iter_option_data_files(root: Path):
             yield p
 
 
-def _manifest_covered_elsewhere(opt: Path, expected_dates: set[str]) -> tuple[set[str], list[dict], list[str]]:
+def _coverage_invalid(
+    source: str,
+    message: str,
+    *,
+    date_str: str = "",
+    row_index: int | None = None,
+    path: str = "",
+    schema: str = "",
+) -> dict:
+    detail: dict = {
+        "source": source,
+        "reason": message,
+        "message": message,
+    }
+    if date_str:
+        detail["date"] = date_str
+    if row_index is not None:
+        detail["row"] = row_index
+    if path:
+        detail["path"] = path
+    if schema:
+        detail["schema"] = schema
+    return detail
+
+
+def _manifest_covered_elsewhere(opt: Path, expected_dates: set[str]) -> tuple[set[str], list[dict], list[dict]]:
     manifest_path = opt / "coverage_manifest.json"
     if not manifest_path.is_file():
         return set(), [], []
     try:
         raw = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        return set(), [], [f"{manifest_path.name}: unreadable {type(exc).__name__}"]
+        return set(), [], [_coverage_invalid("coverage_manifest", f"{manifest_path.name}: unreadable {type(exc).__name__}")]
     rows = raw.get("covered_elsewhere", raw) if isinstance(raw, dict) else raw
     if not isinstance(rows, list):
-        return set(), [], [f"{manifest_path.name}: expected list or covered_elsewhere list"]
+        return set(), [], [_coverage_invalid("coverage_manifest", f"{manifest_path.name}: expected list or covered_elsewhere list")]
 
     covered: set[str] = set()
     accepted: list[dict] = []
-    invalid: list[str] = []
+    invalid: list[dict] = []
     required = {"date", "dataset", "schema", "start_utc", "end_utc", "path"}
     for i, row in enumerate(rows):
         if not isinstance(row, dict):
-            invalid.append(f"row {i}: not object")
+            invalid.append(_coverage_invalid("coverage_manifest", f"row {i}: not object", row_index=i))
             continue
+        d = str(row.get("date") or "")
         missing = sorted(required - set(row))
         if missing:
-            invalid.append(f"row {i}: missing {missing}")
+            invalid.append(_coverage_invalid("coverage_manifest", f"row {i}: missing {missing}", date_str=d, row_index=i))
             continue
-        d = str(row.get("date"))
         if d not in expected_dates:
-            invalid.append(f"row {i}: date {d} not expected")
+            invalid.append(_coverage_invalid("coverage_manifest", f"row {i}: date {d} not expected", date_str=d, row_index=i))
             continue
         if str(row.get("dataset")) != "fixing_mbo":
-            invalid.append(f"row {i}: dataset {row.get('dataset')!r} not fixing_mbo")
+            invalid.append(_coverage_invalid("coverage_manifest", f"row {i}: dataset {row.get('dataset')!r} not fixing_mbo", date_str=d, row_index=i))
             continue
         schema = str(row.get("schema") or "")
         if schema.lower() not in {"mbo", "fixing_mbo", "quotes", "quote"}:
-            invalid.append(f"row {i}: schema {schema!r} not MBO/quotes")
+            invalid.append(_coverage_invalid("coverage_manifest", f"row {i}: schema {schema!r} not MBO/quotes", date_str=d, row_index=i, schema=schema))
             continue
         artifact = Path(str(row.get("path")))
         if not artifact.is_absolute():
             artifact = opt / artifact
         ok, reason = _valid_options_artifact(artifact, expected_schema="mbo")
         if not ok:
-            invalid.append(f"row {i}: {artifact} invalid: {reason}")
+            invalid.append(_coverage_invalid(
+                "coverage_manifest",
+                f"row {i}: {artifact} invalid: {reason}",
+                date_str=d,
+                row_index=i,
+                path=str(artifact),
+                schema=schema,
+            ))
             continue
         covered.add(d)
         accepted.append({
@@ -349,23 +381,23 @@ def _manifest_covered_elsewhere(opt: Path, expected_dates: set[str]) -> tuple[se
     return covered, accepted, invalid
 
 
-def _npz_manifest_covered_elsewhere(lroot: Path, expected_dates: set[str]) -> tuple[set[str], list[dict], list[str]]:
+def _npz_manifest_covered_elsewhere(lroot: Path, expected_dates: set[str]) -> tuple[set[str], list[dict], list[dict]]:
     manifest_path = lroot / "npz" / "manifest.json"
     if not manifest_path.is_file():
         return set(), [], []
     try:
         raw = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        return set(), [], [f"{manifest_path.name}: unreadable {type(exc).__name__}"]
+        return set(), [], [_coverage_invalid("active_npz_manifest", f"{manifest_path.name}: unreadable {type(exc).__name__}")]
     if not isinstance(raw, list):
-        return set(), [], [f"{manifest_path.name}: expected list"]
+        return set(), [], [_coverage_invalid("active_npz_manifest", f"{manifest_path.name}: expected list")]
 
     covered: set[str] = set()
     accepted: list[dict] = []
-    invalid: list[str] = []
+    invalid: list[dict] = []
     for i, row in enumerate(raw):
         if not isinstance(row, dict):
-            invalid.append(f"npz row {i}: not object")
+            invalid.append(_coverage_invalid("active_npz_manifest", f"npz row {i}: not object", row_index=i))
             continue
         if str(row.get("symbol") or "") != "ES.v.0":
             continue
@@ -379,16 +411,16 @@ def _npz_manifest_covered_elsewhere(lroot: Path, expected_dates: set[str]) -> tu
         try:
             event_count = int(row.get("event_count"))
         except (TypeError, ValueError):
-            invalid.append(f"npz row {i}: event_count invalid for {d}")
+            invalid.append(_coverage_invalid("active_npz_manifest", f"npz row {i}: event_count invalid for {d}", date_str=d, row_index=i))
             continue
         artifact = Path(str(row.get("npz_path") or ""))
         if not artifact.is_absolute():
             artifact = lroot / "npz" / artifact
         if event_count <= 0:
-            invalid.append(f"npz row {i}: event_count {event_count} for {d}")
+            invalid.append(_coverage_invalid("active_npz_manifest", f"npz row {i}: event_count {event_count} for {d}", date_str=d, row_index=i, path=str(artifact), schema="npz_mbo"))
             continue
         if not _valid_nonempty_file(artifact):
-            invalid.append(f"npz row {i}: {artifact} missing_or_empty")
+            invalid.append(_coverage_invalid("active_npz_manifest", f"npz row {i}: {artifact} missing_or_empty", date_str=d, row_index=i, path=str(artifact), schema="npz_mbo"))
             continue
         covered.add(d)
         accepted.append({
@@ -416,6 +448,48 @@ def _fixing_window_specs(dates: list[str], kinds_by_date: dict[str, set[str]]) -
             "end_utc": (fix_utc + _FIXING_WINDOW_AFTER).isoformat(),
         })
     return specs
+
+
+def _fixing_gap_diagnostics(
+    gap_dates: list[str],
+    kinds_by_date: dict[str, set[str]],
+    invalid_by_date: dict[str, list[dict]],
+    today: date,
+) -> list[dict]:
+    diagnostics = []
+    specs_by_date = {row["date"]: row for row in _fixing_window_specs(gap_dates, kinds_by_date)}
+    for d_str in gap_dates:
+        invalid = invalid_by_date.get(d_str, [])
+        days_old = (today - date.fromisoformat(d_str)).days
+        reason = "invalid_artifact" if invalid else "missing_artifact"
+        if not invalid and days_old <= OPTIONS_VENDOR_LAG_GRACE_DAYS:
+            reason = "missing_artifact_vendor_lag"
+        diagnostics.append({
+            "date": d_str,
+            "status": "FAIL",
+            "reason": reason,
+            "days_old": days_old,
+            "stale": days_old > OPTIONS_VENDOR_LAG_GRACE_DAYS,
+            "expiry_kinds": sorted(kinds_by_date.get(d_str, set())),
+            "invalid_artifacts": invalid,
+            "retry_window": specs_by_date[d_str],
+            "required_action": (
+                "replace_invalid_artifact_or_manifest_no_data_proof"
+                if invalid else
+                "backfill_or_manifest_vendor_no_data_proof"
+            ),
+        })
+    return diagnostics
+
+
+def _merge_invalid_coverage_by_date(
+    invalid_by_date: dict[str, list[dict]],
+    invalid_covered_elsewhere: list[dict],
+) -> None:
+    for invalid in invalid_covered_elsewhere:
+        d_str = str(invalid.get("date") or "")
+        if d_str:
+            invalid_by_date.setdefault(d_str, []).append(invalid)
 
 
 def _rclone() -> str | None:
@@ -450,17 +524,23 @@ def options_lane_checks(
     quote_dates: set[str] = set()
     trades_dates: set[str] = set()
     invalid_fixing_files: list[str] = []
+    invalid_fixing_by_date: dict[str, list[dict]] = {}
     if fixing_dir.is_dir():
         for p in fixing_dir.iterdir():
             m = _FIXING_RE.match(p.name)
             if m:
                 is_trades = bool(m.group(1))
                 expected_schema = "trades" if is_trades else "mbo"
+                d_str = m.group(2)
                 valid, reason = _valid_options_artifact(p, expected_schema=expected_schema)
                 if not valid:
                     invalid_fixing_files.append(f"{p.name}: {reason}")
+                    invalid_fixing_by_date.setdefault(d_str, []).append({
+                        "file": p.name,
+                        "schema": expected_schema,
+                        "reason": reason,
+                    })
                     continue
-                d_str = m.group(2)
                 if is_trades:
                     trades_files.append(p.name)
                     trades_dates.add(d_str)
@@ -492,12 +572,14 @@ def options_lane_checks(
     alternate_dates = manifest_dates | npz_dates
     covered_elsewhere = manifest_covered + npz_covered
     invalid_covered_elsewhere = manifest_invalid + npz_invalid
+    _merge_invalid_coverage_by_date(invalid_fixing_by_date, invalid_covered_elsewhere)
     gaps = sorted(expected - study_dates - alternate_dates)
     stale_gaps = [g for g in gaps if (today - date.fromisoformat(g)).days > OPTIONS_VENDOR_LAG_GRACE_DAYS]
     strict_mbo_gaps = sorted(expected - quote_dates - alternate_dates)
     strict_mbo_stale_gaps = [
         g for g in strict_mbo_gaps if (today - date.fromisoformat(g)).days > OPTIONS_VENDOR_LAG_GRACE_DAYS
     ]
+    gap_diagnostics = _fixing_gap_diagnostics(gaps, kinds_by_date, invalid_fixing_by_date, today)
     gap_sample = gaps[:10]
     check(
         "options-fixing-coverage",
@@ -597,6 +679,7 @@ def options_lane_checks(
             "gaps": len(gaps),
             "gap_count": len(gaps),
             "gap_dates": gaps,
+            "gap_diagnostics": gap_diagnostics,
             "stale_gap_count": len(stale_gaps),
             "stale_gap_dates": stale_gaps,
             "gap_request_windows": _fixing_window_specs(gaps, kinds_by_date),

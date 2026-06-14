@@ -281,6 +281,22 @@ def test_zero_byte_fixing_file_is_invalid(tmp_path: Path) -> None:
     assert result is not None
     assert result["fixing_mbo"]["invalid_files"] == 1
     assert result["expiry_coverage"]["gap_count"] >= 1
+    [diag] = [
+        row for row in result["expiry_coverage"]["gap_diagnostics"]
+        if row["date"] == bad_date
+    ]
+    assert diag["status"] == "FAIL"
+    assert diag["reason"] == "invalid_artifact"
+    assert diag["stale"] is True
+    assert diag["required_action"] == "replace_invalid_artifact_or_manifest_no_data_proof"
+    assert diag["retry_window"]["date"] == bad_date
+    assert diag["invalid_artifacts"] == [
+        {
+            "file": f"ES_fixing_{bad_date}.dbn.zst",
+            "schema": "mbo",
+            "reason": "missing_or_empty",
+        }
+    ]
 
 
 def test_wrong_schema_sidecar_rejects_fixing_mbo(tmp_path: Path) -> None:
@@ -425,7 +441,7 @@ def test_matching_sidecar_does_not_make_corrupt_dbn_valid(tmp_path: Path) -> Non
 
 
 # ---------------------------------------------------------------------------
-# Test 4: remove most recent expected date (within 5-day grace) -> WARN not FAIL
+# Test 4: remove most recent expected date (within 5-day grace) -> FAIL with vendor-lag reason
 # ---------------------------------------------------------------------------
 
 def test_recent_gap_is_fail_not_warn(tmp_path: Path) -> None:
@@ -460,6 +476,16 @@ def test_recent_gap_is_fail_not_warn(tmp_path: Path) -> None:
     # The gap must appear in summary
     assert result["expiry_coverage"]["gap_count"] >= 1
     assert result["expiry_coverage"]["stale_gap_count"] == 0
+    [diag] = [
+        row for row in result["expiry_coverage"]["gap_diagnostics"]
+        if row["date"] == drop_date
+    ]
+    assert diag["status"] == "FAIL"
+    assert diag["reason"] == "missing_artifact_vendor_lag"
+    assert diag["stale"] is False
+    assert diag["invalid_artifacts"] == []
+    assert diag["required_action"] == "backfill_or_manifest_vendor_no_data_proof"
+    assert diag["retry_window"]["date"] == drop_date
 
 
 # ---------------------------------------------------------------------------
@@ -606,6 +632,52 @@ def test_npz_manifest_backed_prop_flatten_clears_gap(tmp_path: Path) -> None:
     assert proof["schema"] == "npz_mbo"
 
 
+def test_invalid_npz_manifest_proof_marks_gap_invalid(tmp_path: Path) -> None:
+    dd = _load_dd()
+    dates = _expected_dates()
+    if not dates:
+        pytest.skip("no dates in short range")
+    missing_date = dates[0]
+    present_dates = [d for d in dates if d != missing_date]
+
+    lroot = _build_lake(tmp_path, dates=present_dates, ohlcv=True, definitions=True, statistics=True)
+    npz_root = lroot / "npz"
+    npz_root.mkdir()
+    event_date = missing_date.replace("-", "_")
+    npz = npz_root / f"ES.v.0_PROP_FLATTEN_TOPSTEP_{event_date}_MAIN_mbo.npz"
+    (npz_root / "manifest.json").write_text(
+        json.dumps(
+            [
+                {
+                    "event_id": f"PROP_FLATTEN_TOPSTEP_{event_date}_MAIN",
+                    "symbol": "ES.v.0",
+                    "npz_path": str(npz),
+                    "event_count": 7,
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = dd.options_lane_checks(lroot, today=_SHORT_TODAY, start=_SHORT_START)
+
+    assert result is not None
+    assert result["expiry_coverage"]["gap_count"] >= 1
+    assert result["expiry_coverage"]["covered_elsewhere"] == []
+    [invalid] = result["expiry_coverage"]["invalid_covered_elsewhere"]
+    assert invalid["source"] == "active_npz_manifest"
+    assert invalid["date"] == missing_date
+    assert invalid["path"].endswith("_mbo.npz")
+    [diag] = [
+        row for row in result["expiry_coverage"]["gap_diagnostics"]
+        if row["date"] == missing_date
+    ]
+    assert diag["status"] == "FAIL"
+    assert diag["reason"] == "invalid_artifact"
+    assert diag["required_action"] == "replace_invalid_artifact_or_manifest_no_data_proof"
+    assert diag["invalid_artifacts"] == [invalid]
+
+
 def test_manifest_proof_txt_does_not_clear_fixing_gap(tmp_path: Path) -> None:
     dd = _load_dd()
     dates = _expected_dates()
@@ -642,7 +714,18 @@ def test_manifest_proof_txt_does_not_clear_fixing_gap(tmp_path: Path) -> None:
     assert result is not None
     assert result["expiry_coverage"]["gap_count"] >= 1
     assert result["expiry_coverage"]["covered_elsewhere"] == []
-    assert result["expiry_coverage"]["invalid_covered_elsewhere"]
+    [invalid] = result["expiry_coverage"]["invalid_covered_elsewhere"]
+    assert invalid["source"] == "coverage_manifest"
+    assert invalid["date"] == missing_date
+    assert invalid["path"].endswith("proof.txt")
+    [diag] = [
+        row for row in result["expiry_coverage"]["gap_diagnostics"]
+        if row["date"] == missing_date
+    ]
+    assert diag["status"] == "FAIL"
+    assert diag["reason"] == "invalid_artifact"
+    assert diag["required_action"] == "replace_invalid_artifact_or_manifest_no_data_proof"
+    assert diag["invalid_artifacts"] == [invalid]
 
 
 def test_statistics_job_status_json_is_not_counted(tmp_path: Path) -> None:
@@ -700,8 +783,8 @@ def test_summary_shape_and_json(tmp_path: Path) -> None:
     for k in (
         "coverage_mode", "expected_dates", "dates_covered", "covered_elsewhere",
         "gaps", "gap_count", "gap_dates", "stale_gap_count", "stale_gap_dates",
-        "gap_request_windows", "strict_mbo_gap_count", "strict_mbo_gap_dates",
-        "grace_days", "calendar",
+        "gap_diagnostics", "gap_request_windows", "strict_mbo_gap_count",
+        "strict_mbo_gap_dates", "grace_days", "calendar",
     ):
         assert k in ec, f"missing key expiry_coverage.{k}"
 
