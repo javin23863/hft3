@@ -1,5 +1,7 @@
 # Documentation index (moved)
 
+Start-here chronology and fresh-state rule: **[docs/START_HERE.md](START_HERE.md)**
+
 Human chronological map: **[docs/human/DOC_INDEX.md](human/DOC_INDEX.md)**
 
 AI onboarding: **[docs/ai/ONBOARDING.md](ai/ONBOARDING.md)**

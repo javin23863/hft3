@@ -29,6 +29,22 @@ def test_fresh_start_deletes_generated_artifacts_and_writes_active_run(tmp_path:
     stale_fabric = tmp_path / "runtime" / "workbench" / "feature_fabric" / "feature_fabric_manifest.json"
     stale_fabric.parent.mkdir(parents=True)
     stale_fabric.write_text('{"run_id":"old"}', encoding="utf-8")
+    stale_stage_a = tmp_path / "research_cards" / "stage_a_full" / "stage_a_result.json"
+    stale_stage_a.parent.mkdir(parents=True)
+    stale_stage_a.write_text('{"run_id":"old_stage_a"}', encoding="utf-8")
+    stale_universe = tmp_path / "research_cards" / "universe_M6_smoke" / "universe_result.json"
+    stale_universe.parent.mkdir(parents=True)
+    stale_universe.write_text('{"run_id":"old_universe"}', encoding="utf-8")
+    stale_probe = tmp_path / "research_cards" / "_cockpit_smoke_probe.json"
+    stale_probe.write_text('{"run_id":"old_probe"}', encoding="utf-8")
+    stale_intake = tmp_path / "research_inputs" / "old" / "candidate.json"
+    stale_intake.parent.mkdir(parents=True)
+    stale_intake.write_text('{"run_id":"old_intake"}', encoding="utf-8")
+    stale_slow_tier = (
+        tmp_path / "artifacts" / "research_cards" / "slow_tier" / "session_labels.jsonl"
+    )
+    stale_slow_tier.parent.mkdir(parents=True)
+    stale_slow_tier.write_text('{"run_id":"old_slow_tier"}\n', encoding="utf-8")
     source_data = tmp_path / "data" / "source.ndjson"
     source_data.parent.mkdir(parents=True)
     source_data.write_text("keep\n", encoding="utf-8")
@@ -46,6 +62,11 @@ def test_fresh_start_deletes_generated_artifacts_and_writes_active_run(tmp_path:
     assert result["status"] == "PASS"
     assert not old_file.exists()
     assert not stale_fabric.exists()
+    assert not stale_stage_a.exists()
+    assert not stale_universe.exists()
+    assert not stale_probe.exists()
+    assert not stale_intake.exists()
+    assert not stale_slow_tier.exists()
     assert source_data.read_text(encoding="utf-8") == "keep\n"
     assert baseline.read_text(encoding="utf-8") == "{}"
     active = json.loads((tmp_path / "runtime" / "workbench" / "active_run.json").read_text(encoding="utf-8"))

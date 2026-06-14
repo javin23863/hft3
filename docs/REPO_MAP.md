@@ -7,6 +7,7 @@ Single source of truth for top-level layout. Chronological human path: [human/DO
 | File | Audience |
 |------|----------|
 | [README.md](../README.md) | Human vs AI fork |
+| [docs/START_HERE.md](START_HERE.md) | Chronological repo path and fresh-state rule |
 | [docs/human/GETTING_STARTED.md](human/GETTING_STARTED.md) | Human — read once top-to-bottom |
 | [docs/ai/ONBOARDING.md](ai/ONBOARDING.md) | AI — graph first |
 | [AGENTS.md](../AGENTS.md) | Agent charter |
@@ -77,6 +78,11 @@ Set `HFT3_ARTIFACTS_ROOT` to override artifact root (default: `artifacts/`).
 | `runtime/validation/` | Backtester certification registry, scorecards | Committed |
 | `runtime/latency_reports/` | CHI404 latency summaries | Committed when present |
 | `runtime/replay_audits/` | Replay session lifecycle JSONL | Ignored |
+
+Before an all-lane research run, reset generated evidence with
+`python -m apps.workbench fresh-start --confirm-hard-delete --json`, then run
+`python -m apps.workbench leakage-detect --json`. See
+[LEAKAGE_DETECTION.md](LEAKAGE_DETECTION.md).
 
 ## Model IDs
 

@@ -42,3 +42,26 @@ python -m apps.workbench fresh-start --confirm-hard-delete
 python -m apps.workbench all-lanes --run-id <fresh_run_id>
 python -m apps.workbench leakage-detect --run-id <fresh_run_id>
 ```
+
+## Fresh-Start Cleanup Scope
+
+The fresh-start command removes untracked generated evidence from active
+pipeline roots, including:
+
+- `runtime/workbench/*`
+- `runtime/research`
+- `runtime/reports/full_pipeline_gate.json`
+- `research_inputs`
+- `research_cards/_cockpit_smoke_probe.json`
+- `research_cards/stage_a_*`
+- `research_cards/universe_*`
+- `research_cards/pipeline_runs`
+- `research_cards/workbench_runs`
+- `research_cards/promotion`
+- `artifacts/research_cards/slow_tier`
+- `artifacts/research_cards/workbench_runs`
+- `artifacts/runs`
+
+It refuses tracked files and preserved source/data roots. Tracked historical
+generated artifacts are written to `rejected_stale_artifacts.json` and are not
+eligible as active-run evidence.
