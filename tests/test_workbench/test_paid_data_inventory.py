@@ -199,6 +199,43 @@ def test_q001_project_docs_keep_owner_decision_gate_fail_closed():
     assert "Q001 remains open until both ledgers are owner-accepted, filled, or explicitly rejected" in open_questions
     assert milestone_gate_rule in completion_gate
 
+    evidence_snapshot_path = repo_root / "tests" / "fixtures" / "q001_owner_packet_evidence_snapshot.json"
+    evidence_snapshot = json.loads(evidence_snapshot_path.read_text(encoding="utf-8"))
+    q001 = evidence_snapshot["q001"]
+    active = q001["futures"]["active_npz_manifest"]
+    pilot = q001["futures"]["mbo_pilot_basket"]
+    options = q001["options"]
+    expiry = options["options_lane"]["expiry_coverage"]
+    full_no_market_slots = pilot["no_market_window_count"] * len(q001["expected_canonical_cme_symbols"])
+    partial_symbol_absences = sum(len(row.get("missing_symbols") or []) for row in pilot["partial_windows"])
+
+    assert q001["status"] == "INVENTORIED_WITH_WARNINGS"
+    assert pilot["missing_or_unavailable_slots"] == full_no_market_slots + partial_symbol_absences
+    assert pilot["missing_or_unavailable_slots"] > 0
+    assert options["data_doctor_status"] == "WARN"
+    assert expiry["strict_mbo_gap_count"] > 0
+    assert expiry["strict_mbo_stale_gap_count"] > 0
+    assert f"| Q001 status | `{q001['status']}` |" in owner_packet
+    assert (
+        f"| Hash verification | `verify_q001_hashes={str(evidence_snapshot['verify_q001_hashes']).lower()}` |"
+        in owner_packet
+    )
+    assert f"| Active NPZ manifest rows | `{active['record_count']}` |" in owner_packet
+    assert f"| Missing NPZ files | `{active['missing_npz_files']}` |" in owner_packet
+    assert f"| Invalid SHA256 rows | `{active['invalid_sha256_rows']}` |" in owner_packet
+    assert f"| MBO pilot missing/unavailable slots | `{pilot['missing_or_unavailable_slots']}` |" in owner_packet
+    assert f"| Full no-market slots | `{full_no_market_slots}` |" in owner_packet
+    assert f"| Partial FED_H41 symbol absences | `{partial_symbol_absences}` |" in owner_packet
+    assert f"| Options data-doctor status | `{options['data_doctor_status']}` |" in owner_packet
+    assert (
+        f"| Options study coverage | `{expiry['dates_covered']}/{expiry['expected_dates']}` dates, "
+        f"`gap_count={expiry['gap_count']}` |"
+    ) in owner_packet
+    assert (
+        f"| Options strict quote MBO gaps | `{expiry['strict_mbo_gap_count']}` gaps, "
+        f"`{expiry['strict_mbo_stale_gap_count']}` stale |"
+    ) in owner_packet
+
 
 def test_q001_inventory_reports_futures_options_and_gaps(tmp_path, monkeypatch):
     repo = tmp_path / "repo"

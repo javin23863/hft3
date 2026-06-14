@@ -1,0 +1,60 @@
+{
+  "source_report": "runtime/data_audits/paid_data_inventory.json",
+  "source_generated_at_utc": "2026-06-14T18:15:21.854135+00:00",
+  "verify_q001_hashes": true,
+  "q001": {
+    "status": "INVENTORIED_WITH_WARNINGS",
+    "expected_canonical_cme_symbols": [
+      "MES.v.0",
+      "MNQ.v.0",
+      "ES.v.0",
+      "NQ.v.0",
+      "ZN.v.0",
+      "ZB.v.0",
+      "RTY.v.0"
+    ],
+    "futures": {
+      "active_npz_manifest": {
+        "record_count": 60643,
+        "missing_npz_files": 0,
+        "invalid_sha256_rows": 0
+      },
+      "mbo_pilot_basket": {
+        "missing_or_unavailable_slots": 211,
+        "no_market_window_count": 29,
+        "partial_windows": [
+          {
+            "event_id": "FED_H41_2024_06_19_TIGHT",
+            "missing_symbols": [
+              "ES.v.0",
+              "ZB.v.0",
+              "RTY.v.0"
+            ]
+          },
+          {
+            "event_id": "FED_H41_2024_07_03_TIGHT",
+            "missing_symbols": [
+              "MES.v.0",
+              "MNQ.v.0",
+              "ES.v.0",
+              "NQ.v.0",
+              "RTY.v.0"
+            ]
+          }
+        ]
+      }
+    },
+    "options": {
+      "data_doctor_status": "WARN",
+      "options_lane": {
+        "expiry_coverage": {
+          "expected_dates": 784,
+          "dates_covered": 784,
+          "gap_count": 0,
+          "strict_mbo_gap_count": 507,
+          "strict_mbo_stale_gap_count": 503
+        }
+      }
+    }
+  }
+}
