@@ -6,11 +6,46 @@ the trader (and the outbound notifier, W4) can watch."""
 from __future__ import annotations
 
 from .. import paths, schemas
-from .system import ADVISORY_OPTIONS_CHECKS, MANDATORY_OPTIONS_CHECKS
+from .system import ADVISORY_OPTIONS_CHECKS, MANDATORY_OPTIONS_CHECKS, _q001_inventory
 
 
 def _alert(id_: str, severity: str, source: str, message: str, ts=None) -> dict:
     return {"id": id_, "severity": severity, "source": source, "message": message, "ts": ts}
+
+
+def _q001_alert() -> dict | None:
+    q001 = _q001_inventory()
+    status = q001.get("status")
+    if status == schemas.OK:
+        return None
+    if status == schemas.FAIL:
+        severity = schemas.SEV_CRIT
+    elif status in {schemas.STALE, schemas.MISSING, schemas.UNKNOWN}:
+        severity = schemas.SEV_WARN
+    else:
+        severity = schemas.SEV_WARN
+
+    artifact = q001.get("artifact")
+    if isinstance(artifact, str):
+        artifact = artifact.replace("\\", "/")
+    evidence = [
+        f"q001_status={q001.get('q001_status')}",
+        f"artifact={artifact}",
+    ]
+    for key in (
+        "missing_or_unavailable_slots",
+        "data_doctor_status",
+        "strict_mbo_gap_count",
+        "strict_mbo_stale_gap_count",
+    ):
+        if key in q001:
+            evidence.append(f"{key}={q001.get(key)}")
+    return _alert(
+        "q001-paid-data-inventory",
+        severity,
+        "q001_inventory",
+        f"Q001 paid-data inventory {status}: " + ", ".join(evidence),
+    )
 
 
 def collect() -> list[dict]:
@@ -108,6 +143,10 @@ def collect() -> list[dict]:
     else:
         out.append(_alert("lake-data-doctor-missing", schemas.SEV_WARN, "data_lake",
                           "data_doctor report MISSING", None))
+
+    q001_alert = _q001_alert()
+    if q001_alert is not None:
+        out.append(q001_alert)
 
     # options known-defect ledger — blocks shadow/live arm while non-empty
     try:

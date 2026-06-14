@@ -16,6 +16,7 @@ from apps.cockpit.backend import control
 from apps.cockpit.backend import schemas as sc
 from apps.cockpit.backend import main as cockpit_main
 from apps.cockpit.backend.aggregate import ZONES
+from apps.cockpit.backend.aggregate import alerts as alerts_agg
 from apps.cockpit.backend.aggregate import pipeline as pipeline_agg
 from apps.cockpit.backend.aggregate import system as system_agg
 from apps.cockpit.backend.main import app
@@ -45,16 +46,18 @@ def _options_ok_checks() -> list[dict]:
 
 
 def _stub_q001_ok(monkeypatch) -> None:
+    payload = {
+        "status": sc.OK,
+        "q001_status": "INVENTORIED",
+        "artifact": "runtime/data_audits/paid_data_inventory.json",
+        "gaps": [],
+    }
     monkeypatch.setattr(
         system_agg,
         "_q001_inventory",
-        lambda: {
-            "status": sc.OK,
-            "q001_status": "INVENTORIED",
-            "artifact": "runtime/data_audits/paid_data_inventory.json",
-            "gaps": [],
-        },
+        lambda: payload,
     )
+    monkeypatch.setattr(alerts_agg, "_q001_inventory", lambda: payload)
 
 
 def _point_options_zone_ok(monkeypatch, root: Path) -> Path:
@@ -74,6 +77,12 @@ def _point_options_zone_ok(monkeypatch, root: Path) -> Path:
     monkeypatch.setattr(paths, "DATA_DOCTOR_REPORT", report_path)
     monkeypatch.setattr(paths, "OPTIONS_LAKE_ROOT", lake)
     return report_path
+
+
+def _silence_alert_sources(monkeypatch, root: Path) -> None:
+    for attr in ("SLOW_TIER_PROBLEMS", "CERT_REGISTRY", "LATENCY_SUMMARY",
+                 "CAPTURE_BASELINE", "MODEL_LIFECYCLE"):
+        monkeypatch.setattr(paths, attr, root / f"{attr}.json")
 
 
 def _write_jsonl(path: Path, *records: dict) -> None:
@@ -887,6 +896,7 @@ def test_pipeline_latency_gate_is_non_green_when_defensive_ack_required(monkeypa
 
 
 def test_alerts_quiet_when_healthy(monkeypatch, tmp_path):
+    _stub_q001_ok(monkeypatch)
     # Repoint every alert source at empty/missing → alert feed must be quiet.
     for attr in ("SLOW_TIER_PROBLEMS", "CERT_REGISTRY", "LATENCY_SUMMARY", "CAPTURE_BASELINE"):
         monkeypatch.setattr(paths, attr, tmp_path / f"{attr}.json")
@@ -2758,6 +2768,7 @@ def test_databento_manifest_missing_is_not_ok(monkeypatch, tmp_path):
 
 
 def test_alerts_missing_data_doctor_report(monkeypatch, tmp_path):
+    _stub_q001_ok(monkeypatch)
     monkeypatch.setattr(paths, "DATA_DOCTOR_REPORT", tmp_path / "no_report.json")
     for attr in ("SLOW_TIER_PROBLEMS", "CERT_REGISTRY", "LATENCY_SUMMARY",
                  "CAPTURE_BASELINE", "MODEL_LIFECYCLE"):
@@ -2768,6 +2779,7 @@ def test_alerts_missing_data_doctor_report(monkeypatch, tmp_path):
 
 
 def test_alerts_stale_data_doctor_report(monkeypatch, tmp_path):
+    _stub_q001_ok(monkeypatch)
     report_path = tmp_path / "data_doctor_report.json"
     report_path.write_text(json.dumps({"run_utc": "2020-01-01T00:00:00+00:00", "checks": []}),
                            encoding="utf-8")
@@ -2781,6 +2793,7 @@ def test_alerts_stale_data_doctor_report(monkeypatch, tmp_path):
 
 
 def test_alerts_options_warn_check_alert(monkeypatch, tmp_path):
+    _stub_q001_ok(monkeypatch)
     report_path = tmp_path / "data_doctor_report.json"
     report = {
         "run_utc": paths.now_iso(),
@@ -2806,6 +2819,7 @@ def test_alerts_options_warn_check_alert(monkeypatch, tmp_path):
 
 
 def test_alerts_strict_mbo_warn_is_diagnostic(monkeypatch, tmp_path):
+    _stub_q001_ok(monkeypatch)
     report_path = tmp_path / "data_doctor_report.json"
     report = {
         "run_utc": paths.now_iso(),
@@ -2831,7 +2845,158 @@ def test_alerts_strict_mbo_warn_is_diagnostic(monkeypatch, tmp_path):
     assert "lake-options-fixing-mbo-coverage" not in ids
 
 
+def test_alerts_q001_runtime_warning_rolls_up_without_raw_strict_mbo_alert(monkeypatch, tmp_path):
+    artifact = tmp_path / "runtime" / "data_audits" / "paid_data_inventory.json"
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    artifact.write_text(
+        json.dumps({
+            "q001_cme_data_inventory": {
+                "status": "INVENTORIED_WITH_WARNINGS",
+                "event_catalog": {"status": "OK"},
+                "futures": {
+                    "active_npz_manifest": {"status": "OK"},
+                    "mbo_pilot_basket": {
+                        "status": "completed_with_gaps",
+                        "missing_or_unavailable_slots": 211,
+                    },
+                },
+                "options": {
+                    "data_doctor_status": "WARN",
+                    "options_lane": {
+                        "expiry_coverage": {
+                            "strict_mbo_gap_count": 507,
+                            "strict_mbo_stale_gap_count": 503,
+                        },
+                    },
+                },
+                "gaps": [{"status": "WARN"}, {"status": "STALE"}],
+            },
+        }),
+        encoding="utf-8",
+    )
+    report_path = tmp_path / "data_doctor_report.json"
+    report_path.write_text(
+        json.dumps({
+            "run_utc": paths.now_iso(),
+            "checks": _options_ok_checks() + [
+                {
+                    "name": "options-fixing-mbo-coverage",
+                    "status": "WARN",
+                    "detail": "mode=strict_mbo_quotes gap_count=507",
+                }
+            ],
+            "failed": 0,
+            "warned": 1,
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "DATA_DOCTOR_REPORT", report_path)
+    _silence_alert_sources(monkeypatch, tmp_path)
+
+    a = ZONES["alerts"]()
+    ids = {al["id"] for al in a["alerts"]}
+    q001 = next(al for al in a["alerts"] if al["id"] == "q001-paid-data-inventory")
+
+    assert a["health"] == sc.AMBER
+    assert "q001-paid-data-inventory" in ids
+    assert "lake-options-fixing-mbo-coverage" not in ids
+    assert q001["severity"] == sc.SEV_WARN
+    assert q001["source"] == "q001_inventory"
+    for token in (
+        "q001_status=INVENTORIED_WITH_WARNINGS",
+        "artifact=runtime/data_audits/paid_data_inventory.json",
+        "missing_or_unavailable_slots=211",
+        "data_doctor_status=WARN",
+        "strict_mbo_gap_count=507",
+        "strict_mbo_stale_gap_count=503",
+    ):
+        assert token in q001["message"]
+
+
+def test_alerts_q001_missing_artifact_warns(monkeypatch, tmp_path):
+    report_path = tmp_path / "data_doctor_report.json"
+    report_path.write_text(
+        json.dumps({
+            "run_utc": paths.now_iso(),
+            "checks": _options_ok_checks(),
+            "options_lane": {"name": "options_lane", "status": "OK", "detail": "ok"},
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "DATA_DOCTOR_REPORT", report_path)
+    _silence_alert_sources(monkeypatch, tmp_path)
+
+    a = ZONES["alerts"]()
+
+    assert a["health"] == sc.AMBER
+    assert a["count"] == 1
+    assert a["alerts"] == [
+        {
+            "id": "q001-paid-data-inventory",
+            "severity": sc.SEV_WARN,
+            "source": "q001_inventory",
+            "message": (
+                "Q001 paid-data inventory missing: "
+                "q001_status=None, artifact=runtime/data_audits/paid_data_inventory.json"
+            ),
+            "ts": None,
+        }
+    ]
+
+
+def test_alerts_q001_fail_is_crit_and_red(monkeypatch, tmp_path):
+    report_path = tmp_path / "data_doctor_report.json"
+    report_path.write_text(
+        json.dumps({"run_utc": paths.now_iso(), "checks": _options_ok_checks()}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(paths, "DATA_DOCTOR_REPORT", report_path)
+    _silence_alert_sources(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        alerts_agg,
+        "_q001_inventory",
+        lambda: {
+            "status": sc.FAIL,
+            "q001_status": "FAIL",
+            "artifact": "runtime/data_audits/paid_data_inventory.json",
+            "missing_or_unavailable_slots": 0,
+            "data_doctor_status": "OK",
+            "strict_mbo_gap_count": 0,
+            "strict_mbo_stale_gap_count": 0,
+            "gaps": [],
+        },
+    )
+
+    a = ZONES["alerts"]()
+    q001 = next(al for al in a["alerts"] if al["id"] == "q001-paid-data-inventory")
+
+    assert a["health"] == sc.RED
+    assert q001["severity"] == sc.SEV_CRIT
+    assert q001["source"] == "q001_inventory"
+
+
+def test_alerts_q001_ok_emits_no_q001_alert(monkeypatch, tmp_path):
+    _stub_q001_ok(monkeypatch)
+    report_path = tmp_path / "data_doctor_report.json"
+    report_path.write_text(
+        json.dumps({"run_utc": paths.now_iso(), "checks": _options_ok_checks()}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(paths, "DATA_DOCTOR_REPORT", report_path)
+    _silence_alert_sources(monkeypatch, tmp_path)
+
+    a = ZONES["alerts"]()
+    ids = {al["id"] for al in a["alerts"]}
+
+    assert "q001-paid-data-inventory" not in ids
+    assert a["count"] == 0
+    assert a["health"] == sc.GREEN
+
+
 def test_alerts_missing_mandatory_options_checks(monkeypatch, tmp_path):
+    _stub_q001_ok(monkeypatch)
     report_path = tmp_path / "data_doctor_report.json"
     report = {
         "run_utc": paths.now_iso(),
@@ -2856,7 +3021,8 @@ def test_alerts_missing_mandatory_options_checks(monkeypatch, tmp_path):
     assert all(al["severity"] == "crit" for al in a["alerts"])
 
 
-def test_alerts_options_defect_ledger_open_is_not_runtime_alert():
+def test_alerts_options_defect_ledger_open_is_not_runtime_alert(monkeypatch):
+    _stub_q001_ok(monkeypatch)
     a = ZONES["alerts"]()
     ids = {al["id"] for al in a["alerts"]}
     assert "options-defect-ledger-open" not in ids
@@ -2865,6 +3031,7 @@ def test_alerts_options_defect_ledger_open_is_not_runtime_alert():
 def test_alerts_options_fixing_coverage_alert(monkeypatch, tmp_path):
     """alerts zone with a failing options-fixing-coverage check -> alert id
     'lake-options-fixing-coverage' present in the alerts feed."""
+    _stub_q001_ok(monkeypatch)
     report_path = tmp_path / "data_doctor_report.json"
     report = {
         "run_utc": paths.now_iso(),
