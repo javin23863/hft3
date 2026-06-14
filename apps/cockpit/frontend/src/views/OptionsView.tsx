@@ -1,14 +1,10 @@
 import { useZones } from "../zonesContext";
 import { Badge, Dot, Panel } from "../ui";
 import type { OptionsZone } from "../types";
+import { invalidArtifactSummary, records, s } from "./optionsDiagnostics";
 
 function g(o: Record<string, unknown> | undefined, k: string): unknown {
   return o ? o[k] : undefined;
-}
-
-function s(v: unknown): string {
-  if (Array.isArray(v)) return v.length ? v.join(", ") : "-";
-  return v === null || v === undefined ? "-" : String(v);
 }
 
 function statusTone(status: unknown): "ok" | "bad" | "warn" | "dim" {
@@ -51,6 +47,7 @@ export function OptionsView() {
   const ohlcv = summary?.["ohlcv"] as Record<string, unknown> | undefined;
   const defs = summary?.["definitions"] as Record<string, unknown> | undefined;
   const stats = summary?.["statistics"] as Record<string, unknown> | undefined;
+  const gapDiagnostics = records(g(expiry, "gap_diagnostics")).slice(0, 10);
 
   return (
     <div className="space-y-4">
@@ -109,6 +106,34 @@ export function OptionsView() {
               </tbody>
             </table>
           </div>
+          {gapDiagnostics.length > 0 && (
+            <div className="mt-4 overflow-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr>
+                    <th className="th">date</th>
+                    <th className="th">status</th>
+                    <th className="th">reason</th>
+                    <th className="th">stale</th>
+                    <th className="th">required action</th>
+                    <th className="th">artifact</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {gapDiagnostics.map((row) => (
+                    <tr key={s(row["date"])} className="border-t border-line/60">
+                      <td className="td mono">{s(row["date"])}</td>
+                      <td className="td"><Badge tone={statusTone(row["status"])}>{s(row["status"])}</Badge></td>
+                      <td className="td mono text-ink">{s(row["reason"])}</td>
+                      <td className="td mono">{s(row["stale"])}</td>
+                      <td className="td mono text-ink-dim">{s(row["required_action"])}</td>
+                      <td className="td text-ink-dim">{invalidArtifactSummary(row)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </Panel>
 
         <Panel title="Defect Ledger" right={<Badge tone={statusTone(g(defects, "status"))}>{s(g(defects, "ledger_status"))}</Badge>}>

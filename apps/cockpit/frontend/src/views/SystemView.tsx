@@ -1,6 +1,7 @@
 import { useZones } from "../zonesContext";
 import { Panel, Dot } from "../ui";
 import type { SystemZone } from "../types";
+import { gapSummary, records } from "./optionsDiagnostics";
 
 function g(o: Record<string, unknown> | undefined, k: string): unknown {
   return o ? o[k] : undefined;
@@ -19,7 +20,7 @@ function Card({ title, status, rows }: { title: string; status?: string; rows: [
         {rows.map(([k, v]) => (
           <div key={k} className="contents">
             <div className="text-ink-faint">{k}</div>
-            <div className="mono text-right text-ink">{s(v)}</div>
+            <div className="mono min-w-0 whitespace-normal break-words text-right text-ink">{s(v)}</div>
           </div>
         ))}
       </div>
@@ -71,6 +72,7 @@ function OptionsDataCard({
   const strictMboDetail = strictMboCoverageCheck ? String(strictMboCoverageCheck["detail"] ?? "—") : "—";
   const gapCount = coverageCheck?.["gap_count"] ?? expiryCoverage?.["gap_count"] ?? expiryCoverage?.["gaps"];
   const staleGapCount = coverageCheck?.["stale_gap_count"] ?? expiryCoverage?.["stale_gap_count"];
+  const gapDiagnostics = records(expiryCoverage?.["gap_diagnostics"]);
   const gapsDetail = coverageCheck || expiryCoverage ? `${s(gapCount ?? "—")} gaps / ${s(staleGapCount ?? "—")} stale` : "—";
   const coverageFallback = expiryCoverage
     ? `${s(expiryCoverage["expected_dates"])} expected / ${s(gapCount ?? "—")} gaps`
@@ -82,6 +84,7 @@ function OptionsDataCard({
       ["coverage", summaryNote],
       ["strict MBO", strictMboDetail],
       ["gaps", gapsDetail],
+      ["first gap", gapSummary(gapDiagnostics[0])],
       ["ohlcv", ohlcvDetail],
       ["definitions", defsDetail],
       ["statistics", statsDetail],

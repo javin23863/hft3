@@ -4,6 +4,7 @@ Run from repo root:  python -m pytest apps/cockpit/backend/tests -q
 """
 import json
 import os
+import subprocess
 import time
 from pathlib import Path
 
@@ -1988,6 +1989,9 @@ def test_options_view_renders_research_backtest_allowed_not_research_blocked():
     assert "research/backtest" in src
     assert "Standalone Options Models" in src
     assert "Legacy Options/Parity Fixture" in src
+    assert 'g(expiry, "gap_diagnostics")' in src
+    assert "required_action" in src
+    assert "invalidArtifactSummary" in src
     assert "research only" not in src.lower()
 
 
@@ -1995,6 +1999,68 @@ def test_system_view_reads_real_options_gap_summary():
     src = (paths.REPO / "apps/cockpit/frontend/src/views/SystemView.tsx").read_text(encoding="utf-8")
     assert "summary[\"expiry_coverage\"]" in src
     assert "expiryCoverage?.[\"gap_count\"]" in src
+    assert "expiryCoverage?.[\"gap_diagnostics\"]" in src
+    assert '["first gap", gapSummary(gapDiagnostics[0])]' in src
+
+
+def test_options_diagnostics_formatters_render_payloads():
+    frontend = paths.REPO / "apps/cockpit/frontend"
+    module_path = frontend / "src/views/optionsDiagnostics.ts"
+    esbuild_path = frontend / "node_modules/esbuild/lib/main.js"
+    if not esbuild_path.is_file():
+        pytest.skip("frontend esbuild dependency not installed")
+    script = """
+const [modulePath, esbuildPath] = process.argv.slice(1);
+const esbuild = require(esbuildPath);
+(async () => {
+  const result = await esbuild.build({
+    entryPoints: [modulePath],
+    bundle: true,
+    write: false,
+    format: "esm",
+    platform: "node",
+  });
+  const href = "data:text/javascript;base64," + Buffer.from(result.outputFiles[0].text).toString("base64");
+  const mod = await import(href);
+  const invalidRow = {
+    date: "2023-07-03",
+    reason: "invalid_artifact",
+    required_action: "replace_invalid_artifact_or_manifest_no_data_proof",
+    invalid_artifacts: [{ file: "ES_fixing_2023-07-03.dbn.zst", reason: "no sample records" }],
+  };
+  const vendorRow = {
+    date: "2026-06-12",
+    reason: "missing_artifact_vendor_lag",
+    required_action: "backfill_or_manifest_vendor_no_data_proof",
+    invalid_artifacts: [],
+  };
+  console.log(JSON.stringify({
+    invalidText: mod.invalidArtifactSummary(invalidRow),
+    gapText: mod.gapSummary(invalidRow),
+    vendorText: mod.invalidArtifactSummary(vendorRow),
+    recordCount: mod.records([{ a: 1 }, null, "x", { b: 2 }]).length,
+  }));
+})().catch((err) => {
+  console.error(err && err.stack ? err.stack : String(err));
+  process.exit(1);
+});
+"""
+    proc = subprocess.run(
+        ["node", "-e", script, str(module_path), str(esbuild_path)],
+        cwd=frontend,
+        check=True,
+        text=True,
+        capture_output=True,
+        timeout=15,
+    )
+    payload = json.loads(proc.stdout)
+    assert payload["invalidText"] == "ES_fixing_2023-07-03.dbn.zst: no sample records"
+    assert payload["gapText"] == (
+        "2023-07-03 invalid_artifact replace_invalid_artifact_or_manifest_no_data_proof"
+    )
+    assert payload["vendorText"] == "-"
+    assert payload["recordCount"] == 2
+    assert "[object Object]" not in proc.stdout
 
 
 def test_system_view_renders_options_defect_details_and_budget_status():
