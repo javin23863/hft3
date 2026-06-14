@@ -1247,7 +1247,7 @@ def test_lanes_synthetic_data_doctor_report(monkeypatch, tmp_path):
     _json_roundtrip(z)
 
 
-def test_options_zone_exposes_independent_research_only_state(monkeypatch, tmp_path):
+def test_options_zone_exposes_independent_research_backtest_state(monkeypatch, tmp_path):
     _write_options_spec(tmp_path, "**OPEN** — blocks shadow/live arm. Research/backtest NOT blocked.")
     lake = tmp_path / "options"
     lake.mkdir(parents=True)
@@ -1276,6 +1276,8 @@ def test_options_zone_exposes_independent_research_only_state(monkeypatch, tmp_p
     assert z["zone"] == "options"
     assert z["lane"] == "cme_options"
     assert z["model_id_prefix"] == "FOPT_"
+    assert z["research_backtest_status"] == "allowed"
+    assert z["execution_status"] == "shadow_live_blocked"
     assert z["research_only"] is True
     assert z["controls"]["live_order_controls"] is False
     assert z["controls"]["paper_order_controls"] is False
@@ -1283,8 +1285,13 @@ def test_options_zone_exposes_independent_research_only_state(monkeypatch, tmp_p
     assert z["defect_ledger"]["open_count"] == 1
     assert z["context_feature_coverage"]["status"] == "not_measured"
     assert z["context_feature_coverage"]["options_as_clue"] == "not_measured"
+    assert z["standalone_model_evidence"]["status"] == "structural_only"
+    assert z["standalone_model_evidence"]["model_id_prefix"] == "FOPT_"
+    assert z["standalone_model_evidence"]["real_data_backed"] is False
+    assert z["standalone_model_evidence"]["robustness_status"] == "not_observed"
     assert z["shadow_live_status"] == "blocked"
-    assert "research_only_phase" in z["shadow_live_blockers"]
+    assert "shadow_live_phase_gate" in z["shadow_live_blockers"]
+    assert "research_only_phase" not in z["shadow_live_blockers"]
     assert "defect_ledger_open" in z["shadow_live_blockers"]
     assert z["health"] == sc.AMBER
     _json_roundtrip(z)
@@ -1317,8 +1324,152 @@ def test_options_api_route(monkeypatch, tmp_path):
     payload = r.json()
     assert payload["zone"] == "options"
     assert payload["health"] == sc.AMBER
+    assert payload["research_backtest_status"] == "allowed"
+    assert payload["execution_status"] == "shadow_live_blocked"
+    assert payload["standalone_model_evidence"]["status"] == "structural_only"
+    assert payload["standalone_model_evidence"]["latest_artifact_status"] == "missing"
     assert payload["shadow_live_status"] == "blocked"
-    assert payload["shadow_live_blockers"] == ["research_only_phase"]
+    assert payload["shadow_live_blockers"] == ["shadow_live_phase_gate"]
+
+
+def test_options_zone_keeps_fopt_and_legacy_fixture_evidence_separate(monkeypatch, tmp_path):
+    _write_options_spec(tmp_path, "**FIXED**")
+    lake = tmp_path / "options"
+    lake.mkdir(parents=True)
+    report_path = tmp_path / "data_doctor_report.json"
+    report_path.write_text(
+        json.dumps({
+            "run_utc": paths.now_iso(),
+            "checks": _options_ok_checks(),
+            "options_lane": {"name": "options_lane", "status": "OK", "detail": "ok"},
+        }),
+        encoding="utf-8",
+    )
+    runs = tmp_path / "artifacts" / "research_cards" / "workbench_runs"
+    fopt = runs / "fopt_options_run"
+    explicit_cme = runs / "explicit_cme_options_run"
+    legacy = runs / "latest_legacy_options_run"
+    fopt.mkdir(parents=True)
+    explicit_cme.mkdir(parents=True)
+    legacy.mkdir(parents=True)
+    (fopt / "summary.json").write_text(
+        json.dumps({
+            "campaign_id": "fopt_options_run",
+            "status": "FAIL",
+            "model_id": "FOPT_ES_CALL",
+            "symbol": "MES.v.0",
+            "campaign_mode": "options_lane",
+            "periods": [{"name": "Options fixture"}],
+        }),
+        encoding="utf-8",
+    )
+    (explicit_cme / "summary.json").write_text(
+        json.dumps({
+            "campaign_id": "explicit_cme_options_run",
+            "status": "PASS",
+            "model_id": "HYP_5",
+            "symbol": "MES.v.0",
+            "lane": "cme_options",
+            "campaign_mode": "options_lane",
+            "periods": [{"name": "Options fixture"}],
+        }),
+        encoding="utf-8",
+    )
+    (legacy / "summary.json").write_text(
+        json.dumps({
+            "campaign_id": "latest_legacy_options_run",
+            "status": "PASS",
+            "model_id": "DEALER_HEDGING",
+            "symbol": "MES.v.0",
+            "campaign_mode": "options_lane",
+            "real_data_backed": True,
+            "periods": [{"name": "Options fixture", "num_trades": 2}],
+        }),
+        encoding="utf-8",
+    )
+    os.utime(fopt / "summary.json", (1_700_000_000, 1_700_000_000))
+    os.utime(explicit_cme / "summary.json", (1_900_000_000, 1_900_000_000))
+    os.utime(legacy / "summary.json", (1_800_000_000, 1_800_000_000))
+
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "DATA_DOCTOR_REPORT", report_path)
+    monkeypatch.setattr(paths, "OPTIONS_LAKE_ROOT", lake)
+
+    z = ZONES["options"]()
+    fopt_evidence = z["standalone_model_evidence"]
+    legacy_evidence = z["legacy_options_fixture_evidence"]
+
+    assert fopt_evidence["status"] == "fixture_only"
+    assert fopt_evidence["latest_artifact"] == (
+        "artifacts/research_cards/workbench_runs/explicit_cme_options_run/summary.json"
+    )
+    assert fopt_evidence["latest_model_id"] == "HYP_5"
+    assert fopt_evidence["latest_lane"] == "cme_options"
+    assert fopt_evidence["latest_summary_status"] == "PASS"
+    assert fopt_evidence["fixture_backed"] is True
+    assert fopt_evidence["real_data_backed"] is False
+    assert fopt_evidence["structural_only"] is False
+    assert fopt_evidence["robustness_status"] == "not_observed"
+    assert legacy_evidence["status"] == "real_data_backed"
+    assert legacy_evidence["latest_artifact"] == (
+        "artifacts/research_cards/workbench_runs/latest_legacy_options_run/summary.json"
+    )
+    assert legacy_evidence["latest_model_id"] == "DEALER_HEDGING"
+    assert "claims real-data backing" in legacy_evidence["robustness_detail"]
+    assert "not FOPT CME_OPTIONS evidence" in legacy_evidence["robustness_detail"]
+    _json_roundtrip(z)
+
+
+def test_options_zone_finds_fopt_artifact_root_env(monkeypatch, tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _write_options_spec(repo, "**FIXED**")
+    lake = repo / "options"
+    lake.mkdir(parents=True)
+    report_path = repo / "data_doctor_report.json"
+    report_path.write_text(
+        json.dumps({
+            "run_utc": paths.now_iso(),
+            "checks": _options_ok_checks(),
+            "options_lane": {"name": "options_lane", "status": "OK", "detail": "ok"},
+        }),
+        encoding="utf-8",
+    )
+    artifact_root = tmp_path / "external_artifacts"
+    run_dir = artifact_root / "workbench_runs" / "fopt_external_run"
+    run_dir.mkdir(parents=True)
+    summary_path = run_dir / "summary.json"
+    summary_path.write_text(
+        json.dumps({
+            "campaign_id": "fopt_external_run",
+            "status": "PASS",
+            "model_id": "FOPT_ES_CALL",
+            "symbol": "MES.v.0",
+            "lane": "cme_options",
+            "real_data_backed": True,
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("HFT3_ARTIFACTS_ROOT", str(artifact_root))
+    monkeypatch.setattr(paths, "REPO", repo)
+    monkeypatch.setattr(paths, "DATA_DOCTOR_REPORT", report_path)
+    monkeypatch.setattr(paths, "OPTIONS_LAKE_ROOT", lake)
+
+    evidence = ZONES["options"]()["standalone_model_evidence"]
+
+    assert evidence["status"] == "real_data_backed"
+    assert evidence["latest_artifact"] == str(summary_path)
+    assert evidence["latest_model_id"] == "FOPT_ES_CALL"
+    assert evidence["real_data_backed"] is True
+    assert evidence["fixture_backed"] is False
+
+
+def test_options_view_renders_research_backtest_allowed_not_research_blocked():
+    src = (paths.REPO / "apps/cockpit/frontend/src/views/OptionsView.tsx").read_text(encoding="utf-8")
+    assert "research/backtest" in src
+    assert "Standalone Options Models" in src
+    assert "Legacy Options/Parity Fixture" in src
+    assert "research only" not in src.lower()
 
 
 def test_system_view_reads_real_options_gap_summary():

@@ -122,10 +122,15 @@ export interface OptionsZone {
   lane: string;
   model_id_prefix: string;
   phase: string;
+  research_backtest_status: string;
+  research_backtest_detail?: string;
+  execution_status: string;
   research_only: boolean;
   data_readiness: Record<string, unknown>;
   defect_ledger: Record<string, unknown>;
   context_feature_coverage: Record<string, unknown>;
+  standalone_model_evidence: Record<string, unknown>;
+  legacy_options_fixture_evidence: Record<string, unknown>;
   shadow_live_status: string;
   shadow_live_blockers: string[];
   controls: Record<string, unknown>;

@@ -12,7 +12,11 @@ function s(v: unknown): string {
 
 function statusTone(status: unknown): "ok" | "bad" | "warn" | "dim" {
   const st = String(status ?? "").toLowerCase();
-  return st === "ok" || st === "green" ? "ok" : st === "fail" || st === "red" ? "bad" : "warn";
+  return st === "ok" || st === "green" || st === "allowed" || st === "clear" || st === "pass"
+    ? "ok"
+    : st === "fail" || st === "red" || st === "blocked"
+      ? "bad"
+      : "warn";
 }
 
 function FieldGrid({ rows }: { rows: [string, unknown][] }) {
@@ -35,6 +39,8 @@ export function OptionsView() {
   const data = z.data_readiness ?? {};
   const defects = z.defect_ledger ?? {};
   const contextCoverage = z.context_feature_coverage ?? {};
+  const standalone = z.standalone_model_evidence ?? {};
+  const legacyFixture = z.legacy_options_fixture_evidence ?? {};
   const summary = data["summary"] as Record<string, unknown> | undefined;
   const checks = (data["checks"] as Record<string, unknown>[] | undefined) ?? [];
   const openIds = (defects["open_ids"] as unknown[] | undefined)?.join(", ") || "-";
@@ -52,11 +58,13 @@ export function OptionsView() {
           <Badge tone="accent">{z.lane}</Badge>
           <Badge tone="dim">{z.model_id_prefix}</Badge>
           <Badge tone="warn">{z.phase}</Badge>
+          <Badge tone={statusTone(z.research_backtest_status)}>research/backtest {z.research_backtest_status}</Badge>
           <Badge tone={z.shadow_live_status === "clear" ? "ok" : "bad"}>shadow/live {z.shadow_live_status}</Badge>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <FieldGrid rows={[
-            ["research only", String(z.research_only)],
+            ["research/backtest", z.research_backtest_status],
+            ["execution", z.execution_status],
             ["data status", g(data, "status")],
             ["defects", `${s(g(defects, "open_count"))} open`],
             ["blockers", z.shadow_live_blockers.length ? z.shadow_live_blockers.join(", ") : "-"],
@@ -121,6 +129,51 @@ export function OptionsView() {
           </div>
         </Panel>
       </div>
+
+      <Panel title="Standalone Options Models" right={<Badge tone={statusTone(g(standalone, "status"))}>{s(g(standalone, "status"))}</Badge>}>
+        <div className="grid gap-3 md:grid-cols-2">
+          <FieldGrid rows={[
+            ["lane", g(standalone, "lane")],
+            ["model prefix", g(standalone, "model_id_prefix")],
+            ["latest model", g(standalone, "latest_model_id")],
+            ["latest lane", g(standalone, "latest_lane")],
+            ["latest artifact", g(standalone, "latest_artifact")],
+            ["artifact status", g(standalone, "latest_artifact_status")],
+            ["summary status", g(standalone, "latest_summary_status")],
+            ["robustness", g(standalone, "robustness_status")],
+          ]} />
+          <FieldGrid rows={[
+            ["real data backed", String(g(standalone, "real_data_backed"))],
+            ["fixture backed", String(g(standalone, "fixture_backed"))],
+            ["structural only", String(g(standalone, "structural_only"))],
+            ["next artifact", g(standalone, "next_required_artifact")],
+            ["robustness artifact", g(standalone, "robustness_artifact")],
+            ["fixture contract", g(standalone, "fixture_contract_path")],
+          ]} />
+        </div>
+        <div className="mt-3 text-sm text-ink-dim">{s(g(standalone, "robustness_detail"))}</div>
+      </Panel>
+
+      <Panel title="Legacy Options/Parity Fixture" right={<Badge tone={statusTone(g(legacyFixture, "status"))}>{s(g(legacyFixture, "status"))}</Badge>}>
+        <div className="grid gap-3 md:grid-cols-2">
+          <FieldGrid rows={[
+            ["lane", g(legacyFixture, "lane")],
+            ["model prefix", g(legacyFixture, "model_id_prefix")],
+            ["latest model", g(legacyFixture, "latest_model_id")],
+            ["latest lane", g(legacyFixture, "latest_lane")],
+            ["latest artifact", g(legacyFixture, "latest_artifact")],
+            ["artifact status", g(legacyFixture, "latest_artifact_status")],
+            ["summary status", g(legacyFixture, "latest_summary_status")],
+          ]} />
+          <FieldGrid rows={[
+            ["real data backed", String(g(legacyFixture, "real_data_backed"))],
+            ["fixture backed", String(g(legacyFixture, "fixture_backed"))],
+            ["robustness", g(legacyFixture, "robustness_status")],
+            ["robustness artifact", g(legacyFixture, "robustness_artifact")],
+          ]} />
+        </div>
+        <div className="mt-3 text-sm text-ink-dim">{s(g(legacyFixture, "robustness_detail"))}</div>
+      </Panel>
 
       <Panel title="Context Feature Coverage" right={<Badge tone="warn">{s(g(contextCoverage, "status"))}</Badge>}>
         <FieldGrid rows={[
