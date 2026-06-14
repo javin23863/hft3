@@ -1,6 +1,6 @@
 import { useZones } from "../zonesContext";
 import { Panel, Dot } from "../ui";
-import type { SystemZone } from "../types";
+import type { Q001InventoryEvidence, SystemZone } from "../types";
 import { gapSummary, records } from "./optionsDiagnostics";
 
 function g(o: Record<string, unknown> | undefined, k: string): unknown {
@@ -97,6 +97,30 @@ function OptionsDataCard({
   );
 }
 
+function Q001InventoryCard({ q001 }: { q001: Q001InventoryEvidence | undefined }) {
+  const status = q001 ? String(q001.status ?? "unknown") : "missing";
+  const gaps = Array.isArray(q001?.gaps) ? q001.gaps : [];
+  const gapRecords = records(q001?.gaps);
+  const gapCount = q001 ? q001["gap_count"] ?? gaps.length : undefined;
+  const firstGap = gapRecords[0];
+  const firstGapLabel = firstGap ? [firstGap["source"], firstGap["severity"]].filter(Boolean).join(" ") : "";
+  const gapText = firstGap
+    ? String(firstGap["detail"] ?? (firstGapLabel || gapSummary(firstGap)))
+    : gaps.length ? `${gaps.length} gaps` : "—";
+  return (
+    <Card title="Q001 paid-data inventory" status={status} rows={[
+      ["q001_status", q001?.q001_status],
+      ["artifact", q001?.artifact],
+      ["MBO missing/unavailable slots", q001?.missing_or_unavailable_slots],
+      ["options doctor", q001?.data_doctor_status],
+      ["strict MBO gaps", q001?.strict_mbo_gap_count],
+      ["strict MBO stale gaps", q001?.strict_mbo_stale_gap_count],
+      ["gap count", gapCount],
+      ["gap summary", gapText],
+    ]} />
+  );
+}
+
 export function SystemView() {
   const sys = useZones().system as SystemZone | undefined;
   if (!sys) return <Panel title="System"><span className="text-ink-dim">loading…</span></Panel>;
@@ -142,6 +166,7 @@ export function SystemView() {
       ]} />
       <LanesCard lanes={lanes} />
       <OptionsDataCard cod={cod} defects={defects} />
+      <Q001InventoryCard q001={sys.q001_inventory} />
     </div>
   );
 }

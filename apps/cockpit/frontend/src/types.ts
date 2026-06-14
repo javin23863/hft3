@@ -65,6 +65,18 @@ export interface ControlJobLog {
   log_tail: string;
 }
 
+export interface Q001InventoryEvidence {
+  status?: Status | string;
+  q001_status?: string | null;
+  artifact?: string | null;
+  gaps?: unknown[];
+  missing_or_unavailable_slots?: number | null;
+  data_doctor_status?: string | null;
+  strict_mbo_gap_count?: number | null;
+  strict_mbo_stale_gap_count?: number | null;
+  [k: string]: unknown;
+}
+
 export interface PortfolioZone {
   zone: "portfolio";
   generated_utc: string;
@@ -148,6 +160,7 @@ export interface SystemZone {
   capture: Record<string, unknown>;
   execution: Record<string, unknown>;
   lanes?: Record<string, unknown>;
+  q001_inventory?: Q001InventoryEvidence;
 }
 
 export interface Alert {
