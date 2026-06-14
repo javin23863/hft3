@@ -186,6 +186,7 @@ def test_q001_project_docs_keep_owner_decision_gate_fail_closed():
     assert "This packet does not accept the ledgers, close Q001, green" in owner_packet
     assert "An agent must not infer acceptance from silence." in owner_packet
     assert "Any unaccepted warning keeps Q001 open." in owner_packet
+    assert "[Q001_OWNER_DECISION_PACKET.md](Q001_OWNER_DECISION_PACKET.md)" in open_questions
     assert "Q001 remains open until both ledgers are owner-accepted, filled, or explicitly rejected" in open_questions
 
 
