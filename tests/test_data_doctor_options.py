@@ -212,10 +212,46 @@ def test_trades_only_does_not_count_as_fixing_mbo_covered(tmp_path: Path) -> Non
     assert result is not None
 
     by_name = {c["name"]: c for c in dd.checks}
-    assert by_name["options-fixing-coverage"]["status"] in {"WARN", "FAIL"}
+    assert by_name["options-fixing-coverage"]["status"] == "OK"
+    assert by_name["options-fixing-mbo-coverage"]["status"] == "WARN"
 
     assert result["fixing_mbo"]["dates_covered"] == len(other_dates)
+    assert result["fixing_mbo"]["study_dates_covered"] == len(effective_dates)
     assert result["fixing_mbo"]["trade_only_dates"] == 1
+    assert result["expiry_coverage"]["gap_count"] == 0
+    assert result["expiry_coverage"]["strict_mbo_gap_count"] >= 1
+
+
+def test_all_trades_only_lake_satisfies_fixing_study_presence(tmp_path: Path) -> None:
+    dd = _load_dd()
+    dates = _expected_dates()
+    lroot = tmp_path / "lake"
+    opt = lroot / "options"
+    fixing = opt / "fixing_mbo"
+    fixing.mkdir(parents=True, exist_ok=True)
+    for d in dates:
+        _write_dummy_dbn(fixing / f"ES_fixing_trades_{d}.dbn.zst", "trades")
+    ohlcv_dir = opt / "ohlcv"
+    ohlcv_dir.mkdir(parents=True, exist_ok=True)
+    _write_dummy_dbn(ohlcv_dir / "ES_ohlcv_2026.dbn.zst", "ohlcv-1m")
+    defs = opt / "definitions" / "JOBX"
+    defs.mkdir(parents=True, exist_ok=True)
+    _write_dummy_dbn(defs / "file.dbn.zst", "definition")
+    stats = opt / "statistics"
+    stats.mkdir(parents=True, exist_ok=True)
+    _write_dummy_dbn(stats / "ES_stats.dbn.zst", "statistics")
+
+    result = dd.options_lane_checks(lroot, today=_SHORT_TODAY, start=_SHORT_START)
+
+    assert result is not None
+    by_name = {c["name"]: c for c in dd.checks}
+    assert by_name["options-fixing-mbo"]["status"] == "OK"
+    assert by_name["options-fixing-coverage"]["status"] == "OK"
+    assert by_name["options-fixing-mbo-coverage"]["status"] == "WARN"
+    assert result["fixing_mbo"]["dates_covered"] == 0
+    assert result["fixing_mbo"]["study_dates_covered"] == len(dates)
+    assert result["expiry_coverage"]["gap_count"] == 0
+    assert result["expiry_coverage"]["strict_mbo_gap_count"] == len(dates)
 
 
 def test_missing_statistics_is_fail(tmp_path: Path) -> None:
@@ -392,7 +428,7 @@ def test_matching_sidecar_does_not_make_corrupt_dbn_valid(tmp_path: Path) -> Non
 # Test 4: remove most recent expected date (within 5-day grace) -> WARN not FAIL
 # ---------------------------------------------------------------------------
 
-def test_recent_gap_is_warn_not_fail(tmp_path: Path) -> None:
+def test_recent_gap_is_fail_not_warn(tmp_path: Path) -> None:
     dd = _load_dd()
     # Use today=_SHORT_TODAY, drop the most recent date that is within grace
     dates = _expected_dates()
@@ -419,7 +455,7 @@ def test_recent_gap_is_warn_not_fail(tmp_path: Path) -> None:
 
     by_name = {c["name"]: c for c in dd.checks}
     cov = by_name["options-fixing-coverage"]
-    assert cov["status"] == "WARN", f"expected WARN but got {cov['status']}: {cov['detail']}"
+    assert cov["status"] == "FAIL", f"expected FAIL but got {cov['status']}: {cov['detail']}"
 
     # The gap must appear in summary
     assert result["expiry_coverage"]["gap_count"] >= 1
@@ -532,6 +568,44 @@ def test_manifest_backed_covered_elsewhere_clears_gap(tmp_path: Path) -> None:
     assert result["expiry_coverage"]["invalid_covered_elsewhere"] == []
 
 
+def test_npz_manifest_backed_prop_flatten_clears_gap(tmp_path: Path) -> None:
+    dd = _load_dd()
+    dates = _expected_dates()
+    if not dates:
+        pytest.skip("no dates in short range")
+    missing_date = dates[0]
+    present_dates = [d for d in dates if d != missing_date]
+
+    lroot = _build_lake(tmp_path, dates=present_dates, ohlcv=True, definitions=True, statistics=True)
+    npz_root = lroot / "npz"
+    npz_root.mkdir()
+    event_date = missing_date.replace("-", "_")
+    npz = npz_root / f"ES.v.0_PROP_FLATTEN_TOPSTEP_{event_date}_MAIN_mbo.npz"
+    npz.write_bytes(b"npz-proof")
+    (npz_root / "manifest.json").write_text(
+        json.dumps(
+            [
+                {
+                    "event_id": f"PROP_FLATTEN_TOPSTEP_{event_date}_MAIN",
+                    "symbol": "ES.v.0",
+                    "npz_path": str(npz),
+                    "event_count": 7,
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = dd.options_lane_checks(lroot, today=_SHORT_TODAY, start=_SHORT_START)
+
+    assert result is not None
+    assert result["expiry_coverage"]["gap_count"] == 0
+    assert result["expiry_coverage"]["covered_elsewhere"] == [missing_date]
+    [proof] = result["expiry_coverage"]["covered_elsewhere_manifest"]
+    assert proof["source"] == "active_npz_manifest"
+    assert proof["schema"] == "npz_mbo"
+
+
 def test_manifest_proof_txt_does_not_clear_fixing_gap(tmp_path: Path) -> None:
     dd = _load_dd()
     dates = _expected_dates()
@@ -615,13 +689,20 @@ def test_summary_shape_and_json(tmp_path: Path) -> None:
 
     # fixing_mbo sub-keys
     fm = result["fixing_mbo"]
-    for k in ("quote_files", "trades_files", "dates_covered", "first_date", "last_date"):
+    for k in (
+        "quote_files", "trades_files", "dates_covered", "study_dates_covered",
+        "trade_only_date_list", "invalid_file_details", "first_date", "last_date",
+    ):
         assert k in fm, f"missing key fixing_mbo.{k}"
 
     # expiry_coverage sub-keys
     ec = result["expiry_coverage"]
-    for k in ("expected_dates", "covered_elsewhere", "gaps", "gap_count",
-              "stale_gap_count", "grace_days", "calendar"):
+    for k in (
+        "coverage_mode", "expected_dates", "dates_covered", "covered_elsewhere",
+        "gaps", "gap_count", "gap_dates", "stale_gap_count", "stale_gap_dates",
+        "gap_request_windows", "strict_mbo_gap_count", "strict_mbo_gap_dates",
+        "grace_days", "calendar",
+    ):
         assert k in ec, f"missing key expiry_coverage.{k}"
 
     # ohlcv sub-keys

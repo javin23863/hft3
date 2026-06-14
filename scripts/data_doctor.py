@@ -19,7 +19,7 @@ import subprocess
 import sys
 import time
 from collections import Counter
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 _REPO = Path(__file__).resolve().parents[1]
@@ -28,7 +28,7 @@ for _p in [str(_REPO), str(_REPO / "packages")]:
         sys.path.insert(0, _p)
 
 from data_system.src.npz_resolver import npz_root, lake_root  # noqa: E402
-from options_data.src.expiry_calendar import expiries_between  # noqa: E402
+from options_data.src.expiry_calendar import expiries_between, fixing_datetime_utc  # noqa: E402
 
 B2_REMOTE = os.environ.get("HFT3_B2_REMOTE", "hft3-b2:Hft3repo")
 MIN_FREE_FRACTION = 0.15
@@ -41,8 +41,11 @@ OPTIONS_FIXING_START = date(2023, 5, 1)
 # research_cards/fixing_window/README.md. Literals to avoid importing
 # DatabentoResearchClient at module scope.
 OPTIONS_FIXING_COVERED_ELSEWHERE: frozenset[str] = frozenset({"2024-09-18", "2025-06-20"})
-OPTIONS_VENDOR_LAG_GRACE_DAYS = 5  # trailing gaps within this window WARN, not FAIL
+OPTIONS_VENDOR_LAG_GRACE_DAYS = 5  # reported separately; fixing-study gaps still fail
 _FIXING_RE = re.compile(r"^ES_fixing_(trades_)?(\d{4}-\d{2}-\d{2})\.dbn\.zst$")
+_PROP_FLATTEN_RE = re.compile(r"^PROP_FLATTEN_TOPSTEP_(\d{4})_(\d{2})_(\d{2})_MAIN$")
+_FIXING_WINDOW_BEFORE = timedelta(minutes=5)
+_FIXING_WINDOW_AFTER = timedelta(minutes=5)
 
 checks: list[dict] = []
 
@@ -346,6 +349,75 @@ def _manifest_covered_elsewhere(opt: Path, expected_dates: set[str]) -> tuple[se
     return covered, accepted, invalid
 
 
+def _npz_manifest_covered_elsewhere(lroot: Path, expected_dates: set[str]) -> tuple[set[str], list[dict], list[str]]:
+    manifest_path = lroot / "npz" / "manifest.json"
+    if not manifest_path.is_file():
+        return set(), [], []
+    try:
+        raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return set(), [], [f"{manifest_path.name}: unreadable {type(exc).__name__}"]
+    if not isinstance(raw, list):
+        return set(), [], [f"{manifest_path.name}: expected list"]
+
+    covered: set[str] = set()
+    accepted: list[dict] = []
+    invalid: list[str] = []
+    for i, row in enumerate(raw):
+        if not isinstance(row, dict):
+            invalid.append(f"npz row {i}: not object")
+            continue
+        if str(row.get("symbol") or "") != "ES.v.0":
+            continue
+        event_id = str(row.get("event_id") or "")
+        m = _PROP_FLATTEN_RE.match(event_id)
+        if not m:
+            continue
+        d = f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+        if d not in expected_dates:
+            continue
+        try:
+            event_count = int(row.get("event_count"))
+        except (TypeError, ValueError):
+            invalid.append(f"npz row {i}: event_count invalid for {d}")
+            continue
+        artifact = Path(str(row.get("npz_path") or ""))
+        if not artifact.is_absolute():
+            artifact = lroot / "npz" / artifact
+        if event_count <= 0:
+            invalid.append(f"npz row {i}: event_count {event_count} for {d}")
+            continue
+        if not _valid_nonempty_file(artifact):
+            invalid.append(f"npz row {i}: {artifact} missing_or_empty")
+            continue
+        covered.add(d)
+        accepted.append({
+            "date": d,
+            "dataset": "fixing_mbo",
+            "schema": "npz_mbo",
+            "source": "active_npz_manifest",
+            "event_id": event_id,
+            "path": str(artifact),
+            "event_count": event_count,
+        })
+    return covered, accepted, invalid
+
+
+def _fixing_window_specs(dates: list[str], kinds_by_date: dict[str, set[str]]) -> list[dict]:
+    specs = []
+    for d_str in dates:
+        d = date.fromisoformat(d_str)
+        fix_utc = fixing_datetime_utc(d)
+        specs.append({
+            "date": d_str,
+            "expiry_kinds": sorted(kinds_by_date.get(d_str, set())),
+            "symbols": ["ES"],
+            "start_utc": (fix_utc - _FIXING_WINDOW_BEFORE).isoformat(),
+            "end_utc": (fix_utc + _FIXING_WINDOW_AFTER).isoformat(),
+        })
+    return specs
+
+
 def _rclone() -> str | None:
     for cand in (
         shutil.which("rclone"),
@@ -396,34 +468,55 @@ def options_lane_checks(
                     quote_files.append(p.name)
                     quote_dates.add(d_str)
 
-    dates = quote_dates
-    first_date = min(dates) if dates else ""
-    last_date = max(dates) if dates else ""
+    study_dates = quote_dates | trades_dates
+    first_date = min(quote_dates) if quote_dates else ""
+    last_date = max(quote_dates) if quote_dates else ""
     check(
         "options-fixing-mbo",
-        ok=len(dates) > 0,
+        ok=len(study_dates) > 0,
         detail=(
             f"quotes={len(quote_files)} trades={len(trades_files)} quote_dates={len(quote_dates)} "
+            f"study_dates={len(study_dates)} "
             f"trades_only_dates={len(trades_dates - quote_dates)} invalid={len(invalid_fixing_files)} "
             f"({first_date}..{last_date})"
         ),
     )
 
     # coverage: expected expiry dates vs. what we have
-    expected = {d.isoformat() for d, _ in expiries_between(start, today)}
-    alternate_dates, covered_elsewhere, invalid_covered_elsewhere = _manifest_covered_elsewhere(opt, expected)
-    gaps = sorted(expected - dates - alternate_dates)
+    kinds_by_date: dict[str, set[str]] = {}
+    for d, kind in expiries_between(start, today):
+        kinds_by_date.setdefault(d.isoformat(), set()).add(kind.value)
+    expected = set(kinds_by_date)
+    manifest_dates, manifest_covered, manifest_invalid = _manifest_covered_elsewhere(opt, expected)
+    npz_dates, npz_covered, npz_invalid = _npz_manifest_covered_elsewhere(lroot, expected)
+    alternate_dates = manifest_dates | npz_dates
+    covered_elsewhere = manifest_covered + npz_covered
+    invalid_covered_elsewhere = manifest_invalid + npz_invalid
+    gaps = sorted(expected - study_dates - alternate_dates)
     stale_gaps = [g for g in gaps if (today - date.fromisoformat(g)).days > OPTIONS_VENDOR_LAG_GRACE_DAYS]
+    strict_mbo_gaps = sorted(expected - quote_dates - alternate_dates)
+    strict_mbo_stale_gaps = [
+        g for g in strict_mbo_gaps if (today - date.fromisoformat(g)).days > OPTIONS_VENDOR_LAG_GRACE_DAYS
+    ]
     gap_sample = gaps[:10]
     check(
         "options-fixing-coverage",
         ok=not gaps,
         detail=(
-            f"gap_count={len(gaps)} stale={len(stale_gaps)} "
+            f"mode=fixing_study_trade_or_mbo dates={len(study_dates)} gap_count={len(gaps)} stale={len(stale_gaps)} "
             f"covered_elsewhere={len(alternate_dates)} invalid_manifest={len(invalid_covered_elsewhere)} "
             f"first_gaps={gap_sample}"
         ),
-        warn_only=(not stale_gaps),
+    )
+    check(
+        "options-fixing-mbo-coverage",
+        ok=not strict_mbo_gaps,
+        detail=(
+            f"mode=strict_mbo_quotes dates={len(quote_dates)} "
+            f"gap_count={len(strict_mbo_gaps)} stale={len(strict_mbo_stale_gaps)} "
+            f"first_gaps={strict_mbo_gaps[:10]}"
+        ),
+        warn_only=True,
     )
 
     # ohlcv
@@ -482,20 +575,34 @@ def options_lane_checks(
         "fixing_mbo": {
             "quote_files": len(quote_files),
             "trades_files": len(trades_files),
-            "dates_covered": len(dates),
+            "dates_covered": len(quote_dates),
+            "study_dates_covered": len(study_dates),
             "trade_only_dates": len(trades_dates - quote_dates),
             "invalid_files": len(invalid_fixing_files),
+            "quote_date_list": sorted(quote_dates),
+            "trades_date_list": sorted(trades_dates),
+            "study_date_list": sorted(study_dates),
+            "trade_only_date_list": sorted(trades_dates - quote_dates),
+            "invalid_file_details": invalid_fixing_files,
             "first_date": first_date,
             "last_date": last_date,
         },
         "expiry_coverage": {
+            "coverage_mode": "fixing_study_trade_or_mbo",
             "expected_dates": len(expected),
+            "dates_covered": len(study_dates | alternate_dates),
             "covered_elsewhere": sorted(alternate_dates),
             "covered_elsewhere_manifest": covered_elsewhere,
             "invalid_covered_elsewhere": invalid_covered_elsewhere,
             "gaps": len(gaps),
             "gap_count": len(gaps),
+            "gap_dates": gaps,
             "stale_gap_count": len(stale_gaps),
+            "stale_gap_dates": stale_gaps,
+            "gap_request_windows": _fixing_window_specs(gaps, kinds_by_date),
+            "strict_mbo_gap_count": len(strict_mbo_gaps),
+            "strict_mbo_stale_gap_count": len(strict_mbo_stale_gaps),
+            "strict_mbo_gap_dates": strict_mbo_gaps,
             "grace_days": OPTIONS_VENDOR_LAG_GRACE_DAYS,
             "calendar": "rule-based v0 (packages/options_data/src/expiry_calendar.py)",
         },

@@ -62,7 +62,7 @@ This is a fix ledger, not a confidence memo. A checkbox is complete only when th
 - [x] `O-002` Options dashboard gap display must read the exact coverage check.
   - Source: `apps/cockpit/frontend/src/views/SystemView.tsx`, `scripts/data_doctor.py`, commit `6506746`.
   - Failure: UI searches for check names containing `gap`; real `gap_count` lives under `options-fixing-coverage`, so the card can render `gaps: none` during coverage failure.
-  - Fix invariant: UI selects `options-fixing-coverage`, `options-fixing-mbo`, `options-statistics`, and lake checks by exact name and displays their real detail fields.
+  - Fix invariant: UI selects `options-fixing-coverage`, `options-fixing-mbo`, `options-fixing-mbo-coverage`, `options-statistics`, and lake checks by exact name and displays their real detail fields.
   - Tests: frontend/unit or fixture render with `gap_count>0`, stale gaps, statistics WARN, missing coverage check.
   - Evidence 2026-06-14: `apps/cockpit/frontend/src/views/SystemView.tsx` exact-name selectors.
 
@@ -176,16 +176,16 @@ This is a fix ledger, not a confidence memo. A checkbox is complete only when th
 - [x] `D-003` Options data doctor must validate bytes, schema, and consumer requirements.
   - Source: `scripts/data_doctor.py`, tests `tests/test_data_doctor_options.py`.
   - Failure: date coverage is inferred from filenames; zero-byte/corrupt/wrong-schema files can count. Trades-only counts as covered even when a consumer needs MBO/quotes. Statistics missing is WARN even for OI-dependent workflows.
-  - Fix invariant: checks are consumer-aware and open/decode at least a cheap schema sample. OI-dependent workflows fail without statistics and definitions.
+  - Fix invariant: checks are consumer-aware and open/decode at least a cheap schema sample. The fixing-window study can use MBO/quotes or trades, while strict MBO/quotes reconstruction gaps are reported separately. OI-dependent workflows fail without statistics and definitions.
   - Tests: zero byte, corrupt DBN, wrong schema, trades-only consumer mismatch, missing stats for OI-conditioned gate.
-  - Evidence 2026-06-14: `scripts/data_doctor.py` rejects zero-byte, tiny corrupt DBN without sidecar, wrong-schema sidecars, large corrupt DBN samples, trades-only fixing coverage, and missing statistics.
+  - Evidence 2026-06-14: `scripts/data_doctor.py` rejects zero-byte, tiny corrupt DBN without sidecar, wrong-schema sidecars, large corrupt DBN samples, separates fixing-study coverage from strict MBO coverage, and fails missing statistics.
 
 - [x] `D-004` Hardcoded options coverage exceptions must be manifest-proven.
   - Source: `scripts/data_doctor.py`.
   - Failure: `OPTIONS_FIXING_COVERED_ELSEWHERE` removes dates from expected gaps without machine-verifiable artifact proof.
   - Fix invariant: covered-elsewhere is derived from a manifest or signed ledger entry that names dataset, schema, time window, and path.
   - Tests: hardcoded exception without manifest fails; manifest-backed alternate file passes.
-  - Evidence 2026-06-14: `options/coverage_manifest.json` rows must name date/dataset/schema/window/path and pass artifact validation before clearing a gap.
+  - Evidence 2026-06-14: `options/coverage_manifest.json` rows must name date/dataset/schema/window/path and pass artifact validation before clearing a gap; active NPZ manifest `PROP_FLATTEN_TOPSTEP` proof may clear only matching ES fixing dates with positive event counts and nonempty files.
 
 - [x] `D-005` Options data doctor sidecars must prove the DBN they certify.
   - Source: `scripts/data_doctor.py`.

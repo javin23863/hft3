@@ -1225,7 +1225,12 @@ def test_lanes_partial_options_report_missing_mandatory_checks(monkeypatch, tmp_
 
     from apps.cockpit.backend import schemas as sc
     assert cod.get("status") == sc.MISSING
-    assert cod.get("missing_checks") == ["options-ohlcv", "options-definitions", "options-statistics"]
+    assert cod.get("missing_checks") == [
+        "options-fixing-mbo-coverage",
+        "options-ohlcv",
+        "options-definitions",
+        "options-statistics",
+    ]
 
 
 def test_lanes_synthetic_data_doctor_report(monkeypatch, tmp_path):

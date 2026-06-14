@@ -59,6 +59,7 @@ function OptionsDataCard({
   const byName = (name: string) => checks.find((c) => String(c["name"] ?? "") === name);
   const fixingCheck = byName("options-fixing-mbo");
   const coverageCheck = byName("options-fixing-coverage");
+  const strictMboCoverageCheck = byName("options-fixing-mbo-coverage");
   const ohlcvCheck = byName("options-ohlcv");
   const defsCheck = byName("options-definitions");
   const statsCheck = byName("options-statistics");
@@ -67,6 +68,7 @@ function OptionsDataCard({
   const defsDetail = defsCheck ? String(defsCheck["detail"] ?? "—") : "—";
   const statsDetail = statsCheck ? String(statsCheck["detail"] ?? "—") : "—";
   const coverageDetail = coverageCheck ? String(coverageCheck["detail"] ?? "—") : "—";
+  const strictMboDetail = strictMboCoverageCheck ? String(strictMboCoverageCheck["detail"] ?? "—") : "—";
   const gapCount = coverageCheck?.["gap_count"] ?? expiryCoverage?.["gap_count"] ?? expiryCoverage?.["gaps"];
   const staleGapCount = coverageCheck?.["stale_gap_count"] ?? expiryCoverage?.["stale_gap_count"];
   const gapsDetail = coverageCheck || expiryCoverage ? `${s(gapCount ?? "—")} gaps / ${s(staleGapCount ?? "—")} stale` : "—";
@@ -78,6 +80,7 @@ function OptionsDataCard({
     <Card title="Options data (CME)" status={status} rows={[
       ["fixing files", fixingDetail],
       ["coverage", summaryNote],
+      ["strict MBO", strictMboDetail],
       ["gaps", gapsDetail],
       ["ohlcv", ohlcvDetail],
       ["definitions", defsDetail],

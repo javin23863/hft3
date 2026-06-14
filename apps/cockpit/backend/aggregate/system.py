@@ -18,6 +18,7 @@ MANDATORY_OPTIONS_CHECKS = (
     "options-datasets",
     "options-fixing-mbo",
     "options-fixing-coverage",
+    "options-fixing-mbo-coverage",
     "options-ohlcv",
     "options-definitions",
     "options-statistics",
