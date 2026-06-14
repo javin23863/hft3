@@ -2,9 +2,24 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 
-from scripts.paid_data_inventory import build_report, write_reports
+from scripts.paid_data_inventory import build_q001_cme_data_inventory, build_report, write_reports
+
+
+def _manifest_row(path, event_id, symbol, event_count=1):
+    payload = b"npz-bytes"
+    path.write_bytes(payload)
+    return {
+        "event_id": event_id,
+        "symbol": symbol,
+        "npz_path": str(path),
+        "event_count": event_count,
+        "sha256": hashlib.sha256(payload).hexdigest(),
+        "created_utc": "2026-06-14T00:00:00+00:00",
+    }
 
 
 def test_paid_data_inventory_sync_reports_runnable_and_raw_separately(tmp_path):
@@ -82,3 +97,298 @@ def test_paid_data_inventory_writes_runtime_reports(tmp_path):
 
     assert json.loads(json_path.read_text(encoding="utf-8"))["official_coverage_status"] == "NO_RUNNABLE_CME_NPZ"
     assert "Raw DBN/MBP10 files are downloaded backlog" in md_path.read_text(encoding="utf-8")
+
+
+def test_q001_inventory_reports_futures_options_and_gaps(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    npz_root = repo / "data" / "npz"
+    npz_root.mkdir(parents=True)
+    (repo / "packages" / "data_system" / "config").mkdir(parents=True)
+    (repo / "runtime").mkdir(parents=True)
+    monkeypatch.delenv("HFT3_NPZ_ROOT", raising=False)
+
+    (npz_root / "manifest.json").write_text(
+        json.dumps(
+            [
+                _manifest_row(npz_root / "MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz", "CPI_2024_09_11_TIGHT", "MES.v.0", 10),
+                _manifest_row(npz_root / "ES.v.0_NFP_2024_10_04_TIGHT_mbo.npz", "NFP_2024_10_04_TIGHT", "ES.v.0", 20),
+            ]
+        ),
+        encoding="utf-8",
+    )
+    events_csv = repo / "packages" / "data_system" / "config" / "events.csv"
+    events_csv.write_text(
+        "event_id,event_type,symbols\n"
+        'CPI_2024_09_11_TIGHT,CPI,"MES.v.0,ES.v.0"\n',
+        encoding="utf-8",
+    )
+    mbo_manifest = repo / "packages" / "data_system" / "config" / "mbo_pilot_basket_20260605_manifest.json"
+    mbo_manifest.write_text(
+        json.dumps(
+            {
+                "run_id": "mbo_pilot",
+                "status": "completed_with_gaps",
+                "databento_request": {
+                    "dataset": "GLBX.MDP3",
+                    "schema": "mbo",
+                    "stype_in": "continuous",
+                    "range_start_utc": "2024-01-01T00:00:00+00:00",
+                    "range_end_utc": "2024-01-02T00:00:00+00:00",
+                },
+                "coverage": {
+                    "expected_event_symbol_slots": 4,
+                    "present_runnable_npz_slots": 3,
+                    "missing_or_unavailable_slots": 1,
+                },
+                "partial_windows": [{"event_id": "FED_H41_2024_06_19_TIGHT"}],
+                "no_market_windows": ["FOMC_PRESS_2024_09_15_TIGHT"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    data_doctor = repo / "runtime" / "data_doctor_report.json"
+    data_doctor.write_text(
+        json.dumps(
+            {
+                "run_utc": "2026-06-14T00:00:00+00:00",
+                "failed": 0,
+                "warned": 1,
+                "checks": [{"name": "options-fixing-coverage", "status": "WARN", "detail": "gap_count=1"}],
+                "options_lane": {
+                    "fixing_mbo": {"dates_covered": 3, "first_date": "2026-01-01", "last_date": "2026-01-03"},
+                    "expiry_coverage": {"gap_count": 1},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = build_q001_cme_data_inventory(repo_root=repo, verify_hashes=True)
+
+    assert report["status"] == "INVENTORIED_WITH_WARNINGS"
+    assert report["cme_symbol_universe"] == ["ES.v.0", "MES.v.0"]
+    assert report["futures"]["active_npz_manifest"]["record_count"] == 2
+    assert report["futures"]["mbo_pilot_basket"]["coverage_pct"] == 75.0
+    assert report["options"]["options_lane"]["fixing_mbo"]["dates_covered"] == 3
+    assert {gap["source"] for gap in report["gaps"]} == {"mbo_pilot_manifest", "data_doctor"}
+
+
+def test_q001_inventory_honors_external_npz_root(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    external = tmp_path / "lake" / "npz"
+    external.mkdir(parents=True)
+    monkeypatch.setenv("HFT3_NPZ_ROOT", os.fspath(external))
+    (external / "manifest.json").write_text(
+        json.dumps([
+            _manifest_row(
+                external / "MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz",
+                "CPI_2024_09_11_TIGHT",
+                "MES.v.0",
+            )
+        ]),
+        encoding="utf-8",
+    )
+
+    report = build_q001_cme_data_inventory(repo_root=repo)
+
+    assert report["futures"]["active_npz_manifest"]["path"] == str(external / "manifest.json")
+    assert report["futures"]["active_npz_manifest"]["record_count"] == 1
+    assert any("sha256_content_not_verified" in gap["detail"] for gap in report["gaps"])
+    assert any(gap["source"] == "mbo_pilot_manifest" for gap in report["gaps"])
+
+
+def test_q001_inventory_blocks_on_manifest_schema_violation(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    npz_root = repo / "data" / "npz"
+    npz_root.mkdir(parents=True)
+    monkeypatch.delenv("HFT3_NPZ_ROOT", raising=False)
+    (npz_root / "manifest.json").write_text(
+        json.dumps([{"event_id": "CPI_2024_09_11_TIGHT", "symbol": "MES.v.0"}]),
+        encoding="utf-8",
+    )
+
+    report = build_q001_cme_data_inventory(repo_root=repo, verify_hashes=True)
+
+    assert report["status"] == "BLOCKED"
+    active = report["futures"]["active_npz_manifest"]
+    assert active["status"] == "FAIL_SCHEMA_OR_PATH_VALIDATION"
+    assert active["missing_required_field_rows"] == 1
+    assert any(gap["source"] == "active_npz_manifest" and gap["severity"] == "FAIL" for gap in report["gaps"])
+
+
+def test_q001_inventory_blocks_on_manifest_sha_mismatch(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    npz_root = repo / "data" / "npz"
+    npz_root.mkdir(parents=True)
+    monkeypatch.delenv("HFT3_NPZ_ROOT", raising=False)
+    row = _manifest_row(
+        npz_root / "MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz",
+        "CPI_2024_09_11_TIGHT",
+        "MES.v.0",
+    )
+    row["sha256"] = "b" * 64
+    (npz_root / "manifest.json").write_text(json.dumps([row]), encoding="utf-8")
+
+    report = build_q001_cme_data_inventory(repo_root=repo, verify_hashes=True)
+
+    assert report["status"] == "BLOCKED"
+    active = report["futures"]["active_npz_manifest"]
+    assert active["invalid_sha256_rows"] == 1
+    assert "sha256 mismatch" in active["validation_error_examples"][0]
+
+
+def test_q001_hash_verification_does_not_crash_on_missing_npz_path(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    npz_root = repo / "data" / "npz"
+    npz_root.mkdir(parents=True)
+    monkeypatch.delenv("HFT3_NPZ_ROOT", raising=False)
+    row = _manifest_row(
+        npz_root / "MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz",
+        "CPI_2024_09_11_TIGHT",
+        "MES.v.0",
+    )
+    (npz_root / "MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz").unlink()
+    (npz_root / "manifest.json").write_text(json.dumps([row]), encoding="utf-8")
+
+    report = build_q001_cme_data_inventory(repo_root=repo, verify_hashes=True)
+
+    assert report["status"] == "BLOCKED"
+    active = report["futures"]["active_npz_manifest"]
+    assert active["missing_npz_files"] == 1
+
+
+def test_q001_inventory_blocks_on_data_doctor_top_level_failures(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    npz_root = repo / "data" / "npz"
+    npz_root.mkdir(parents=True)
+    (repo / "runtime").mkdir(parents=True)
+    monkeypatch.delenv("HFT3_NPZ_ROOT", raising=False)
+    (npz_root / "manifest.json").write_text(
+        json.dumps([
+            _manifest_row(
+                npz_root / "MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz",
+                "CPI_2024_09_11_TIGHT",
+                "MES.v.0",
+            )
+        ]),
+        encoding="utf-8",
+    )
+    (repo / "runtime" / "data_doctor_report.json").write_text(
+        json.dumps({"failed": 1, "warned": 0, "checks": []}),
+        encoding="utf-8",
+    )
+
+    report = build_q001_cme_data_inventory(repo_root=repo)
+
+    assert report["status"] == "BLOCKED"
+    assert report["options"]["data_doctor_status"] == "FAIL"
+    assert any(gap["source"] == "data_doctor" and gap["severity"] == "FAIL" for gap in report["gaps"])
+
+
+def test_q001_inventory_reports_missing_events_csv_without_defaulting(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    npz_root = repo / "data" / "npz"
+    npz_root.mkdir(parents=True)
+    monkeypatch.delenv("HFT3_NPZ_ROOT", raising=False)
+    (npz_root / "manifest.json").write_text(
+        json.dumps([
+            _manifest_row(
+                npz_root / "MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz",
+                "CPI_2024_09_11_TIGHT",
+                "MES.v.0",
+            )
+        ]),
+        encoding="utf-8",
+    )
+
+    report = build_q001_cme_data_inventory(repo_root=repo)
+
+    assert report["cme_symbol_universe"] == []
+    assert report["expected_canonical_cme_symbols"] == ["MES.v.0", "MNQ.v.0", "ES.v.0", "NQ.v.0", "ZN.v.0", "ZB.v.0", "RTY.v.0"]
+    assert any(gap["source"] == "events_csv" and gap["detail"] == "MISSING" for gap in report["gaps"])
+
+
+def test_q001_inventory_reports_malformed_json_without_crashing(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    npz_root = repo / "data" / "npz"
+    npz_root.mkdir(parents=True)
+    monkeypatch.delenv("HFT3_NPZ_ROOT", raising=False)
+    (npz_root / "manifest.json").write_text("{bad", encoding="utf-8")
+
+    report = build_q001_cme_data_inventory(repo_root=repo)
+
+    assert report["status"] == "BLOCKED"
+    assert report["futures"]["active_npz_manifest"]["status"] == "MALFORMED_JSON"
+    assert any(gap["source"] == "active_npz_manifest" and gap["severity"] == "FAIL" for gap in report["gaps"])
+
+
+def test_q001_inventory_blocks_on_incomplete_mbo_pilot_manifest(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    npz_root = repo / "data" / "npz"
+    npz_root.mkdir(parents=True)
+    (repo / "packages" / "data_system" / "config").mkdir(parents=True)
+    monkeypatch.delenv("HFT3_NPZ_ROOT", raising=False)
+    (npz_root / "manifest.json").write_text(
+        json.dumps([
+            _manifest_row(
+                npz_root / "MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz",
+                "CPI_2024_09_11_TIGHT",
+                "MES.v.0",
+            )
+        ]),
+        encoding="utf-8",
+    )
+    mbo_manifest = repo / "packages" / "data_system" / "config" / "mbo_pilot_basket_20260605_manifest.json"
+    mbo_manifest.write_text(json.dumps({"status": "completed"}), encoding="utf-8")
+
+    report = build_q001_cme_data_inventory(repo_root=repo)
+
+    assert report["status"] == "BLOCKED"
+    assert report["futures"]["mbo_pilot_basket"]["status"] == "MALFORMED_SCHEMA"
+    assert any(gap["source"] == "mbo_pilot_manifest" and gap["severity"] == "FAIL" for gap in report["gaps"])
+
+
+def test_q001_inventory_blocks_on_impossible_mbo_coverage_math(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    npz_root = repo / "data" / "npz"
+    npz_root.mkdir(parents=True)
+    (repo / "packages" / "data_system" / "config").mkdir(parents=True)
+    monkeypatch.delenv("HFT3_NPZ_ROOT", raising=False)
+    (npz_root / "manifest.json").write_text(
+        json.dumps([
+            _manifest_row(
+                npz_root / "MES.v.0_CPI_2024_09_11_TIGHT_mbo.npz",
+                "CPI_2024_09_11_TIGHT",
+                "MES.v.0",
+            )
+        ]),
+        encoding="utf-8",
+    )
+    mbo_manifest = repo / "packages" / "data_system" / "config" / "mbo_pilot_basket_20260605_manifest.json"
+    mbo_manifest.write_text(
+        json.dumps(
+            {
+                "status": "completed",
+                "databento_request": {
+                    "dataset": "GLBX.MDP3",
+                    "schema": "mbo",
+                    "stype_in": "continuous",
+                    "range_start_utc": "2024-01-01T00:00:00+00:00",
+                    "range_end_utc": "2024-01-02T00:00:00+00:00",
+                },
+                "coverage": {
+                    "expected_event_symbol_slots": 1,
+                    "present_runnable_npz_slots": 2,
+                    "missing_or_unavailable_slots": 0,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = build_q001_cme_data_inventory(repo_root=repo)
+
+    assert report["status"] == "BLOCKED"
+    pilot = report["futures"]["mbo_pilot_basket"]
+    assert pilot["status"] == "MALFORMED_SCHEMA"
+    assert "coverage.present_runnable_npz_slots_gt_expected" in pilot["validation_errors"]
