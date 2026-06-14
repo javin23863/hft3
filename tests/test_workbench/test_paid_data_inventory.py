@@ -37,6 +37,70 @@ def _markdown_table_rows(markdown: str) -> list[list[str]]:
     return rows
 
 
+_Q001_RE = re.compile(r"\bQ001\b", flags=re.IGNORECASE)
+_Q001_FINAL_STATE_TOKEN_RE = re.compile(
+    r"\b(?:"
+    r"owner[\s_-]+accepted|owner[\s_-]+approval|owner[\s_-]+approved|"
+    r"owner[\s_-]+acceptance[\s_-]+received|"
+    r"accepted|approved|green|closed|completed?|resolved|certified|pass(?:ed)?|unblocked"
+    r")\b",
+    flags=re.IGNORECASE,
+)
+
+
+def _normalize_markdown_unit(lines: list[str]) -> str:
+    return " ".join(" ".join(line.strip().split()) for line in lines).strip()
+
+
+def _normalized_markdown_units(markdown: str) -> list[tuple[int, str]]:
+    units = []
+    pending_lines = []
+    pending_start_line = 0
+
+    for line_no, line in enumerate(markdown.splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped:
+            if pending_lines:
+                units.append((pending_start_line, _normalize_markdown_unit(pending_lines)))
+                pending_lines = []
+                pending_start_line = 0
+            continue
+
+        if stripped.startswith("|"):
+            if pending_lines:
+                units.append((pending_start_line, _normalize_markdown_unit(pending_lines)))
+                pending_lines = []
+                pending_start_line = 0
+            units.append((line_no, _normalize_markdown_unit([stripped])))
+            continue
+
+        if not pending_lines:
+            pending_start_line = line_no
+        pending_lines.append(stripped)
+
+    if pending_lines:
+        units.append((pending_start_line, _normalize_markdown_unit(pending_lines)))
+
+    return units
+
+
+def _q001_final_state_units(doc_name: str, markdown: str) -> list[tuple[str, int, str]]:
+    claims = []
+    for line_no, unit in _normalized_markdown_units(markdown):
+        if _Q001_RE.search(unit) and _Q001_FINAL_STATE_TOKEN_RE.search(unit):
+            claims.append((doc_name, line_no, unit))
+    return claims
+
+
+def _unexpected_q001_final_state_units(docs: dict[str, str], allowed_units: set[tuple[str, str]]) -> list[str]:
+    claims = []
+    for doc_name, markdown in docs.items():
+        for claim_doc_name, line_no, unit in _q001_final_state_units(doc_name, markdown):
+            if (claim_doc_name, unit) not in allowed_units:
+                claims.append(f"{claim_doc_name}:{line_no}: {unit}")
+    return claims
+
+
 def _section(markdown: str, heading: str, next_heading: str) -> str:
     return markdown.split(heading, 1)[1].split(next_heading, 1)[0]
 
@@ -226,7 +290,108 @@ def test_q001_project_docs_keep_owner_decision_gate_fail_closed():
     open_questions = (repo_root / "docs" / "project" / "OPEN_QUESTIONS_AND_REJECTIONS.md").read_text(
         encoding="utf-8"
     )
+    mbo_gap_ledger = (repo_root / "docs" / "project" / "Q001_MBO_GAP_REJECTION_LEDGER.md").read_text(
+        encoding="utf-8"
+    )
+    options_warning_ledger = (
+        repo_root / "docs" / "project" / "Q001_OPTIONS_STRICT_MBO_WARNING_LEDGER.md"
+    ).read_text(encoding="utf-8")
     acceptance_checklist = (repo_root / "docs" / "project" / "ACCEPTANCE_CHECKLIST.md").read_text(encoding="utf-8")
+    q001_docs = {
+        "Q001_DATA_INVENTORY_STATUS.md": status_doc,
+        "Q001_OWNER_DECISION_PACKET.md": owner_packet,
+        "OPEN_QUESTIONS_AND_REJECTIONS.md": open_questions,
+        "Q001_MBO_GAP_REJECTION_LEDGER.md": mbo_gap_ledger,
+        "Q001_OPTIONS_STRICT_MBO_WARNING_LEDGER.md": options_warning_ledger,
+        "ACCEPTANCE_CHECKLIST.md": acceptance_checklist,
+    }
+    allowed_q001_final_state_units = {
+        (
+            "OPEN_QUESTIONS_AND_REJECTIONS.md",
+            "| Q001 | What exact CME futures/options historical datasets are available for full universe research after the lane split? | F001, F002, F005 | Full model-universe claims require real coverage, not assumed coverage. | Current status: `inventory-with-warnings`, not closed/green. See [Q001_DATA_INVENTORY_STATUS.md](Q001_DATA_INVENTORY_STATUS.md) and the consolidated [Q001_OWNER_DECISION_PACKET.md](Q001_OWNER_DECISION_PACKET.md). The 2026-06-14 `python scripts\\paid_data_inventory.py --dry-run --verify-q001-hashes` run content-verified the active NPZ manifest and classified the MBO gaps as `203` full no-market slots plus `8` partial symbol absences. [Q001_MBO_GAP_REJECTION_LEDGER.md](Q001_MBO_GAP_REJECTION_LEDGER.md) records the proposed MBO gap rejection ledger, and [Q001_OPTIONS_STRICT_MBO_WARNING_LEDGER.md](Q001_OPTIONS_STRICT_MBO_WARNING_LEDGER.md) records the proposed strict options MBO warning ledger. Q001 remains open until both ledgers are owner-accepted, filled, or explicitly rejected for model scope; after any owner decision, rerun `python scripts\\paid_data_inventory.py --dry-run --verify-q001-hashes` and update the Q001 status doc. |",
+        ),
+        (
+            "Q001_DATA_INVENTORY_STATUS.md",
+            "- Q001 scope is read-only local inventory, not model execution or promotion evidence. - Hash verification was enabled: `verify_q001_hashes=true`. - Active NPZ manifest status is `OK`: `record_count=60643`, `date_min=2018-01-01`, `date_max=2026-06-04`, `missing_npz_files=0`, `invalid_sha256_rows=0`, `sha256_content_verified=true`, `sha256_validation_mode=content_verified`. - MBO pilot status is `completed_with_gaps`: `present_runnable_npz_slots=4829`, `expected_event_symbol_slots=5040`, `missing_or_unavailable_slots=211`, `coverage_pct=95.8135`. - MBO pilot missing-slot taxonomy is verified: `203` slots are full `no_market_data` windows (`29` windows * `7` symbols) and `8` slots are partial FED_H41 symbol absences after redownload. - The event/window rejection ledger is drafted in [Q001_MBO_GAP_REJECTION_LEDGER.md](Q001_MBO_GAP_REJECTION_LEDGER.md), but it is not owner-accepted and does not close Q001 by itself. - Options `data_doctor` status is `WARN` only due to `options-fixing-mbo-coverage`; study coverage has `gap_count=0`, `expiry_coverage.dates_covered=784/784`, and `fail_checks=[]`. - The strict options MBO warning ledger is drafted in [Q001_OPTIONS_STRICT_MBO_WARNING_LEDGER.md](Q001_OPTIONS_STRICT_MBO_WARNING_LEDGER.md), but it is not owner-accepted and does not close Q001 by itself.",
+        ),
+        (
+            "Q001_DATA_INVENTORY_STATUS.md",
+            "Q001 is no longer an unknown-data question: the active NPZ manifest exists, is readable, has content-verified SHA256 coverage, and has no missing NPZ files or invalid SHA256 rows. It is still not green or closed because the MBO pilot has 211 missing or unavailable event-symbol slots and the options strict MBO quote diagnostic still warns. The warning triage narrows the remaining decision, but it does not convert missing slots into coverage.",
+        ),
+        (
+            "Q001_MBO_GAP_REJECTION_LEDGER.md",
+            "If accepted by the project owner, these rows can close the MBO pilot gap portion of Q001 for inventory scope only. Model runners must still skip or reject each listed event-symbol slot unless a future paid-data fill changes the tracked manifest.",
+        ),
+        (
+            "Q001_MBO_GAP_REJECTION_LEDGER.md",
+            "- The `203` full no-market slots are accepted as unavailable data, not missing repo files. - The `8` partial symbol absences are accepted as symbol-specific unavailable data. - Future model-universe runners must keep these rows as explicit skips or rejections. - The strict options MBO quote warning still needs separate acceptance or clearing for Q001.",
+        ),
+        (
+            "Q001_OPTIONS_STRICT_MBO_WARNING_LEDGER.md",
+            "This ledger classifies the Q001 options warning named `options-fixing-mbo-coverage`. It does not clear the warning, does not make Q001 green, and does not prove options model readiness. It records the boundary between the study-coverage gate and the stricter MBO quote reconstruction diagnostic.",
+        ),
+        (
+            "Q001_OPTIONS_STRICT_MBO_WARNING_LEDGER.md",
+            "| Expiry coverage dates covered | `784/784` | Union coverage is complete for Q001 inventory scope after allowed alternate active NPZ coverage is counted. |",
+        ),
+        (
+            "Q001_OPTIONS_STRICT_MBO_WARNING_LEDGER.md",
+            "If the project owner accepts this ledger for Q001 inventory scope, the accepted meaning is limited to:",
+        ),
+        (
+            "Q001_OPTIONS_STRICT_MBO_WARNING_LEDGER.md",
+            "- Q001 inventory/study coverage is not blocked by strict quote gaps because `fixing_study_trade_or_mbo` has `expiry_coverage.dates_covered=784/784` and `gap_count=0`. This is union coverage: `782` raw fixing MBO study dates plus `2` net-new active-NPZ dates, with `1` covered-elsewhere date overlapping raw study coverage. - The strict quote warning remains visible and must not be hidden from cockpit, data-doctor, or handoff docs. - Strict options quote reconstruction, strict quote-only MBO features, options order-book replay, and options model promotion remain blocked until strict quote coverage is filled or separately scoped out. - This acceptance does not promote, certify, or green any options model.",
+        ),
+        (
+            "Q001_OWNER_DECISION_PACKET.md",
+            "Purpose: give the project owner one auditable decision surface for Q001 without changing Q001 status. This packet does not accept the ledgers, close Q001, green the cockpit, or prove model readiness.",
+        ),
+        (
+            "Q001_OWNER_DECISION_PACKET.md",
+            "- Acceptance is limited to Q001 inventory scope. - Acceptance does not prove model readiness, PIT joins, robustness, promotion eligibility, or options lane readiness. - The cockpit must not show green from this packet alone. - Full-universe research must treat rejected or unavailable MBO slots as explicit skip/rejection reasons unless the data is filled later. - Strict options quote reconstruction, strict quote-only MBO features, options order-book replay, and options model promotion remain blocked until strict quote coverage is filled or separately scoped out.",
+        ),
+        (
+            "Q001_OWNER_DECISION_PACKET.md",
+            "4. Treat the rerun output as the authority. If it still reports warnings, keep Q001 and the cockpit non-green unless every remaining warning is explicitly owner-accepted as non-blocking for Q001 inventory scope and no unaccepted blocker remains. Any unaccepted warning keeps Q001 open.",
+        ),
+        (
+            "Q001_OWNER_DECISION_PACKET.md",
+            "```text Owner decision date: MBO pilot gap decision: Options strict MBO warning decision: Accepted inventory scope: Rejected model scope, if any: Required future data fill, if any: Post-decision verifier command: Post-decision verifier result: Q001 final status after rerun: ```",
+        ),
+    }
+    long_bad_q001_claim = "Q001 " + " ".join(["still blocked"] * 80) + " passed."
+    assert _unexpected_q001_final_state_units(
+        {
+            "NEGATIVE.md": (
+                "Q001 is green and accepted.\n\n"
+                "Warnings are accepted as non-blocking for Q001.\n\n"
+                f"{long_bad_q001_claim}\n\n"
+                "Q001 status OWNER_ACCEPTED.\n\n"
+                "Q001 is owner accepted.\n\n"
+                "Q001 owner approval received.\n\n"
+                "Q001 owner acceptance received.\n\n"
+                "Q001 is approved.\n\n"
+                "Q001 is unblocked.\n\n"
+                "Q001 status PASS."
+            )
+        },
+        set(),
+    ) == [
+        "NEGATIVE.md:1: Q001 is green and accepted.",
+        "NEGATIVE.md:3: Warnings are accepted as non-blocking for Q001.",
+        f"NEGATIVE.md:5: {long_bad_q001_claim}",
+        "NEGATIVE.md:7: Q001 status OWNER_ACCEPTED.",
+        "NEGATIVE.md:9: Q001 is owner accepted.",
+        "NEGATIVE.md:11: Q001 owner approval received.",
+        "NEGATIVE.md:13: Q001 owner acceptance received.",
+        "NEGATIVE.md:15: Q001 is approved.",
+        "NEGATIVE.md:17: Q001 is unblocked.",
+        "NEGATIVE.md:19: Q001 status PASS.",
+    ]
+    forbidden_q001_final_state_units = _unexpected_q001_final_state_units(
+        q001_docs,
+        allowed_q001_final_state_units,
+    )
     milestone_gate_rule = (
         "[ ] Current milestone/open-question gate is not OWNER_DECISION_REQUIRED; "
         "no next milestone starts while the current milestone has any required owner decision, "
@@ -243,8 +408,16 @@ def test_q001_project_docs_keep_owner_decision_gate_fail_closed():
     assert "This packet does not accept the ledgers, close Q001, green" in owner_packet
     assert "An agent must not infer acceptance from silence." in owner_packet
     assert "Any unaccepted warning keeps Q001 open." in owner_packet
-    assert "[Q001_OWNER_DECISION_PACKET.md](Q001_OWNER_DECISION_PACKET.md)" in open_questions
-    assert "Q001 remains open until both ledgers are owner-accepted, filled, or explicitly rejected" in open_questions
+    assert forbidden_q001_final_state_units == []
+    q001_rows = [row for row in _markdown_table_rows(open_questions) if row and row[0] == "Q001"]
+    assert len(q001_rows) == 1
+    q001_open_question_row = " | ".join(q001_rows[0])
+    assert "`inventory-with-warnings`" in q001_open_question_row
+    assert "Q001_OWNER_DECISION_PACKET.md" in q001_open_question_row
+    assert (
+        "Q001 remains open until both ledgers are owner-accepted, filled, or explicitly rejected"
+        in q001_open_question_row
+    )
     assert milestone_gate_rule in completion_gate
     decision_template_section = owner_packet.split("## Decision Record Template", 1)[1]
     decision_template_block = re.search(r"\A\s*```text\n(?P<body>.*?)\n```", decision_template_section, flags=re.DOTALL)
