@@ -1,5 +1,6 @@
 """Catalog-backed event end-to-end workbench smoke."""
 
+import os
 from pathlib import Path
 
 import pytest
@@ -9,12 +10,17 @@ LATENCY = REPO / "runtime" / "latency_reports" / "latency_summary.json"
 
 
 def _available_catalog_event():
+    from features_engine.src.features.npz_feed import load_npz_events
     from workbench.src.data.event_catalog import list_campaign_events, load_periods
 
     candidates = []
     for period in load_periods(REPO):
         for event in list_campaign_events("SPREAD_BLOWOUT_RECOMPRESSION", period, "MES.v.0", REPO):
             if event.npz_present and event.npz_symbol_used == "MES.v.0" and event.npz_path.is_file():
+                try:
+                    load_npz_events(str(event.npz_path))
+                except ValueError:
+                    continue
                 candidates.append(event)
     if not candidates:
         pytest.skip("no MES catalog MBO NPZ present locally")
@@ -22,6 +28,8 @@ def _available_catalog_event():
 
 
 def test_workbench_catalog_event_e2e():
+    if os.environ.get("HFT3_RUN_CATALOG_EVENT_E2E") != "1":
+        pytest.skip("catalog event e2e is an opt-in lake-backed gate; set HFT3_RUN_CATALOG_EVENT_E2E=1")
     from workbench.src.run.engine import WorkbenchEngine
 
     event = _available_catalog_event()

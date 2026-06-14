@@ -7,7 +7,10 @@ import shutil
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from workbench.src.core.params import DEFAULT_STRATEGY_PARAMS
+from workbench.src.data.coverage_check import CoverageSummary
 from workbench.src.robustness.pack import RobustnessResult
 from workbench.src.robustness.wfc.gate import WfcResult
 from workbench.src.run.campaign_runner import PeriodResult, _holdout_used_for_tuning, run_campaign
@@ -21,6 +24,34 @@ def _cleanup_artifact(result):
         ap = Path(result.artifact_dir)
         if ap.exists():
             shutil.rmtree(str(ap), ignore_errors=True)
+
+
+def _fixture_coverage(model_name: str = "HYP_5") -> CoverageSummary:
+    return CoverageSummary(
+        model_name=model_name,
+        data_type="CME MBO Level 3",
+        required_symbols=["MES"],
+        available_start_date="2018-01-01",
+        available_end_date="2025-12-31",
+        valid_trading_days=250,
+        minimum_required_days=250,
+        target_days=750,
+        coverage_status="MINIMUM_ONLY",
+        missing_date_ranges=[],
+        action_taken="fixture coverage for WFC campaign contract test",
+    )
+
+
+@pytest.fixture(autouse=True)
+def campaign_preflight_fixtures(monkeypatch: pytest.MonkeyPatch) -> None:
+    import workbench.src.run.campaign_runner as campaign_runner
+
+    monkeypatch.setattr(
+        campaign_runner,
+        "compute_model_coverage",
+        lambda repo_root, model_id, symbol: _fixture_coverage(model_id),
+    )
+    monkeypatch.setattr(campaign_runner, "catalog_years_available", lambda *a, **kw: 10.0)
 
 
 @patch("workbench.src.run.campaign_runner.run_full_matrix_oos")

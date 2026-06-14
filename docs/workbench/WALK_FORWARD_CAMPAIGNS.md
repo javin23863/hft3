@@ -21,9 +21,10 @@ Config: [`workbench/config/walk_forward.yaml`](../../workbench/config/walk_forwa
 ## Per-model events
 
 Each model binds to event contexts from [`features_engine/src/hypotheses/modules.py`](../../features_engine/src/hypotheses/modules.py) via [`workbench/config/model_event_binding.yaml`](../../workbench/config/model_event_binding.yaml).
+Models with explicit event-context gates run only on those contexts. Models without explicit gates use the generated sourced campaign universe in [`packages/data_system/config/events.csv`](../../packages/data_system/config/events.csv); CPI/NFP are high-volatility examples, not a hard-coded allowlist.
 
 - HYP_29 → prop flatten windows (not CPI)
-- HYP_5 (no gate) → macro `CPI_TIGHT` / `NFP_TIGHT` windows (NFP calendar in `packages/economic_event_universe/config/calendars/sourced/bls_nfp.csv`)
+- HYP_5 (no gate) → generated sourced campaign universe, including CPI/NFP and smaller macro/session/prop clue events
 - PDF_MODEL_5 → `options_lane` fixture MVP (quarantined under `research_cards/parity/`)
 
 Regenerate binding:

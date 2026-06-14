@@ -14,7 +14,41 @@ from workbench.src.run.campaign_runner import run_campaign
 REPO = Path(__file__).resolve().parents[2]
 
 
-def test_dry_run_returns_preview(tmp_path, monkeypatch):
+def _fixture_coverage(model_name: str = "HYP_5") -> CoverageSummary:
+    return CoverageSummary(
+        model_name=model_name,
+        data_type="CME MBO Level 3",
+        required_symbols=["MES"],
+        available_start_date="2018-01-01",
+        available_end_date="2025-12-31",
+        valid_trading_days=250,
+        minimum_required_days=250,
+        target_days=750,
+        coverage_status="MINIMUM_ONLY",
+        missing_date_ranges=[],
+        action_taken="fixture coverage for dry-run contract test",
+    )
+
+
+@pytest.fixture
+def dry_run_fixtures(monkeypatch: pytest.MonkeyPatch) -> None:
+    import workbench.src.data.event_catalog as event_catalog
+    import workbench.src.run.campaign_runner as campaign_runner
+
+    monkeypatch.setattr(
+        campaign_runner,
+        "compute_model_coverage",
+        lambda repo_root, model_id, symbol: _fixture_coverage(model_id),
+    )
+    monkeypatch.setattr(campaign_runner, "catalog_years_available", lambda *a, **kw: 10.0)
+    monkeypatch.setattr(
+        event_catalog,
+        "campaign_preview",
+        lambda *a, **kw: {"periods": [], "missing": [], "runnable": []},
+    )
+
+
+def test_dry_run_returns_preview(tmp_path, monkeypatch, dry_run_fixtures):
     monkeypatch.chdir(REPO)
     result = run_campaign(
         REPO,
@@ -28,7 +62,7 @@ def test_dry_run_returns_preview(tmp_path, monkeypatch):
     assert preview.is_file()
 
 
-def test_dry_run_persists_composition_in_manifest():
+def test_dry_run_persists_composition_in_manifest(dry_run_fixtures):
     from workbench.src.core.composition import DefensiveStub, ModelComposition
 
     comp = ModelComposition(
@@ -51,7 +85,11 @@ def test_dry_run_persists_composition_in_manifest():
 @patch("workbench.src.run.campaign_runner.load_wfc_config")
 @patch("workbench.src.run.engine.WorkbenchEngine")
 @patch("workbench.src.run.campaign_runner.list_campaign_events")
-def test_sequential_gate_stops_after_discovery_fail(mock_list, MockEngine, mock_wfc):
+def test_sequential_gate_stops_after_discovery_fail(mock_list, MockEngine, mock_wfc, monkeypatch):
+    import workbench.src.run.campaign_runner as campaign_runner
+
+    monkeypatch.setattr(campaign_runner, "compute_model_coverage", lambda *a, **kw: _fixture_coverage())
+    monkeypatch.setattr(campaign_runner, "catalog_years_available", lambda *a, **kw: 10.0)
     mock_wfc.return_value = {"enabled": False}
     from workbench.src.data.event_catalog import EventSpec
 
@@ -99,7 +137,7 @@ def test_sequential_gate_stops_after_discovery_fail(mock_list, MockEngine, mock_
     assert result.periods[0].gate_pass is False
 
 
-def test_hyp_29_dry_run_no_cpi_events():
+def test_hyp_29_dry_run_no_cpi_events(dry_run_fixtures):
     result = run_campaign(REPO, "HYP_29", "MES.v.0", dry_run=True, allow_partial=True)
     assert result.status == "DRY_RUN"
 

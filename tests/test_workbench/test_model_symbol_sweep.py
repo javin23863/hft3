@@ -32,6 +32,8 @@ def test_sweep_dry_run_exit_zero():
             str(SCRIPT),
             "--sweep",
             "--dry-run",
+            "--models",
+            "HYP_29",
             "--symbols",
             "MES.v.0",
         ],

@@ -6,11 +6,12 @@ from hft3.validation.lanes.registration import register_all_lanes
 from workbench.src.registry.unified_registry import build_models_config, list_models
 
 
-def test_fifty_six_models():
+def test_all_registered_models_are_exposed():
     cfg = build_models_config()
-    assert len(cfg) == 56
-    assert len(list_models()) == 56
-    for slug in all_slugs():
+    slugs = all_slugs()
+    assert len(cfg) == len(slugs)
+    assert len(list_models()) == len(slugs)
+    for slug in slugs:
         assert slug in cfg
     assert "SPREAD_BLOWOUT_RECOMPRESSION" in cfg
     assert "HYBRID_EXECUTION" in cfg
