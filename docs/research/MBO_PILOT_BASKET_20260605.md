@@ -54,6 +54,11 @@ The `211` missing or unavailable slots split into `203` full no-market slots and
 `8` partial-window symbol absences. The full no-market slots are `29` windows
 multiplied by the `7` canonical CME symbols in the pilot basket.
 
+The acceptance ledger for these gaps is
+[../project/Q001_MBO_GAP_REJECTION_LEDGER.md](../project/Q001_MBO_GAP_REJECTION_LEDGER.md).
+It is a proposed inventory-scope rejection ledger, not owner acceptance and not
+model-readiness evidence.
+
 The no-market windows by event type are:
 
 | Event type | No-market windows | No-market slots |
@@ -70,7 +75,7 @@ The only partial windows are:
 - `FED_H41_2024_06_19_TIGHT`: missing `ES.v.0`, `ZB.v.0`, `RTY.v.0` after redownload.
 - `FED_H41_2024_07_03_TIGHT`: missing `MES.v.0`, `MNQ.v.0`, `ES.v.0`, `NQ.v.0`, `RTY.v.0` after redownload.
 
-All other missing slots are classified as `no_market_data`; see the JSON manifest for the complete list. These gaps are classified evidence, not runnable coverage.
+All other missing slots are classified as `no_market_data`; see the Q001 ledger and JSON manifest for the complete list. These gaps are classified evidence, not runnable coverage.
 
 ## Backtesting Agent Notes
 
