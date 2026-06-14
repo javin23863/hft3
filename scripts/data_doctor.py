@@ -18,6 +18,7 @@ import shutil
 import subprocess
 import sys
 import time
+from collections import Counter
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -84,6 +85,92 @@ def _file_sha256(path: Path) -> str:
         for chunk in iter(lambda: fh.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _read_json_list(path: Path) -> tuple[list[dict], str | None]:
+    if not path.is_file():
+        return [], "missing"
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return [], f"unreadable:{type(exc).__name__}"
+    if not isinstance(raw, list):
+        return [], "not_list"
+    rows = [row for row in raw if isinstance(row, dict)]
+    if len(rows) != len(raw):
+        return rows, "non_object_rows"
+    return rows, None
+
+
+def _path_key(path: Path) -> str:
+    return os.path.normcase(str(path.resolve(strict=False)))
+
+
+def _catalog_path_keys(rows: list[dict], source: str, nroot: Path) -> tuple[list[str], list[str]]:
+    root_key = _path_key(nroot)
+    keys: list[str] = []
+    errors: list[str] = []
+    for idx, row in enumerate(rows):
+        raw_path = row.get("npz_path")
+        if not isinstance(raw_path, str) or not raw_path.strip():
+            errors.append(f"{source}[{idx}].npz_path=missing")
+            continue
+        path = Path(raw_path)
+        if not path.is_absolute():
+            path = nroot / path
+        resolved = path.resolve(strict=False)
+        if resolved.suffix.lower() != ".npz":
+            errors.append(f"{source}[{idx}].npz_path=not_npz:{raw_path}")
+            continue
+        if _path_key(resolved.parent) != root_key:
+            errors.append(f"{source}[{idx}].npz_path=not_top_level:{raw_path}")
+            continue
+        keys.append(_path_key(resolved))
+    return keys, errors
+
+
+def catalog_coverage_detail(nroot: Path) -> tuple[bool, str, bool]:
+    """Return NPZ accounting status and whether any failure must be hard."""
+    manifest_rows, manifest_error = _read_json_list(nroot / "manifest.json")
+    quarantine_rows, quarantine_error = _read_json_list(nroot / "catalog_quarantine.json")
+    on_disk_paths = {_path_key(path) for path in nroot.glob("*.npz")}
+    manifest_paths, manifest_path_errors = _catalog_path_keys(manifest_rows, "manifest", nroot)
+    quarantine_paths, quarantine_path_errors = _catalog_path_keys(quarantine_rows, "quarantine", nroot)
+    accounted_paths = manifest_paths + quarantine_paths
+    accounted_unique = set(accounted_paths)
+    duplicate_paths = [path for path, count in Counter(accounted_paths).items() if count > 1]
+    manifest_set = set(manifest_paths)
+    quarantine_set = set(quarantine_paths)
+    overlap_paths = manifest_set & quarantine_set
+    unaccounted_paths = on_disk_paths - accounted_unique
+    stale_entries = accounted_unique - on_disk_paths
+    catalog_count = len(manifest_rows)
+    quarantine_count = len(quarantine_rows)
+    errors = []
+    if manifest_error:
+        errors.append(f"manifest={manifest_error}")
+    if quarantine_error:
+        errors.append(f"quarantine={quarantine_error}")
+    errors.extend(manifest_path_errors)
+    errors.extend(quarantine_path_errors)
+    if duplicate_paths:
+        errors.append(f"duplicate_paths={len(duplicate_paths)}")
+    if overlap_paths:
+        errors.append(f"manifest_quarantine_overlap={len(overlap_paths)}")
+    hard_failure = bool(errors)
+    ok = (
+        not hard_failure
+        and not unaccounted_paths
+        and not stale_entries
+    )
+    detail = (
+        f"catalog={catalog_count} quarantine={quarantine_count} on_disk={len(on_disk_paths)} "
+        f"unaccounted={len(unaccounted_paths)} overaccounted={len(stale_entries)} "
+        f"duplicates={len(duplicate_paths)} invalid_rows={len(errors)}"
+    )
+    if errors:
+        detail += f" errors={errors}"
+    return ok, detail, hard_failure
 
 
 def _dbn_sample_valid(
@@ -452,12 +539,21 @@ def main() -> int:
 
     # 3. hash catalog freshness
     cat = nroot / "manifest.json"
+    quarantine_cat = nroot / "catalog_quarantine.json"
     if cat.is_file():
         age_h = (time.time() - cat.stat().st_mtime) / 3600
-        n = len(json.loads(cat.read_text(encoding="utf-8")))
-        on_disk = sum(1 for _ in nroot.glob("*.npz"))
         check("catalog-fresh", age_h < MAX_CATALOG_AGE_H, f"{age_h:.1f}h old (limit {MAX_CATALOG_AGE_H}h)")
-        check("catalog-coverage", on_disk - n < 500, f"catalog={n} on_disk={on_disk}", warn_only=True)
+        if quarantine_cat.is_file():
+            quarantine_age_h = (time.time() - quarantine_cat.stat().st_mtime) / 3600
+            check(
+                "catalog-quarantine-fresh",
+                quarantine_age_h < MAX_CATALOG_AGE_H,
+                f"{quarantine_age_h:.1f}h old (limit {MAX_CATALOG_AGE_H}h)",
+            )
+        else:
+            check("catalog-quarantine-fresh", False, f"{quarantine_cat} missing")
+        catalog_ok, catalog_detail, catalog_hard_failure = catalog_coverage_detail(nroot)
+        check("catalog-coverage", catalog_ok, catalog_detail, warn_only=not catalog_hard_failure)
     else:
         check("catalog-fresh", False, f"{cat} missing")
 
