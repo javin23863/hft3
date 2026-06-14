@@ -5,9 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
+from datetime import date
 from pathlib import Path
 
-from scripts.paid_data_inventory import build_q001_cme_data_inventory, build_report, write_reports
+from scripts.paid_data_inventory import DEFAULT_CME_SYMBOLS, build_q001_cme_data_inventory, build_report, write_reports
 
 
 def _manifest_row(path, event_id, symbol, event_count=1):
@@ -21,6 +23,52 @@ def _manifest_row(path, event_id, symbol, event_count=1):
         "sha256": hashlib.sha256(payload).hexdigest(),
         "created_utc": "2026-06-14T00:00:00+00:00",
     }
+
+
+def _markdown_table_rows(markdown: str) -> list[list[str]]:
+    rows = []
+    for line in markdown.splitlines():
+        if not line.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if not cells or set(cells[0]) <= {"-", ":"}:
+            continue
+        rows.append(cells)
+    return rows
+
+
+def _section(markdown: str, heading: str, next_heading: str) -> str:
+    return markdown.split(heading, 1)[1].split(next_heading, 1)[0]
+
+
+def _event_type_from_event_id(event_id: str) -> str:
+    parts = event_id.split("_")
+    for idx, part in enumerate(parts):
+        if len(part) == 4 and part.isdigit():
+            return "_".join(parts[:idx])
+    return parts[0]
+
+
+def _date_from_event_id(event_id: str) -> str:
+    parts = event_id.split("_")
+    for idx in range(len(parts) - 2):
+        year, month, day = parts[idx : idx + 3]
+        if (
+            len(year) == 4
+            and year.isdigit()
+            and len(month) == 2
+            and month.isdigit()
+            and len(day) == 2
+            and day.isdigit()
+        ):
+            value = f"{year}-{month}-{day}"
+            date.fromisoformat(value)
+            return value
+    raise AssertionError(f"event id has no YYYY_MM_DD date: {event_id}")
+
+
+def _unquote_markdown_code(value: str) -> str:
+    return value.replace("`", "")
 
 
 def test_paid_data_inventory_sync_reports_runnable_and_raw_separately(tmp_path):
@@ -235,6 +283,222 @@ def test_q001_project_docs_keep_owner_decision_gate_fail_closed():
         f"| Options strict quote MBO gaps | `{expiry['strict_mbo_gap_count']}` gaps, "
         f"`{expiry['strict_mbo_stale_gap_count']}` stale |"
     ) in owner_packet
+
+
+def test_q001_mbo_gap_rejection_ledger_arithmetic_matches_manifest():
+    repo_root = Path(__file__).resolve().parents[2]
+    ledger = (repo_root / "docs" / "project" / "Q001_MBO_GAP_REJECTION_LEDGER.md").read_text(encoding="utf-8")
+    manifest = json.loads(
+        (repo_root / "packages" / "data_system" / "config" / "mbo_pilot_basket_20260605_manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    no_market_windows = manifest["no_market_windows"]
+    partial_windows = manifest["partial_windows"]
+    partial_slot_count = sum(len(window["missing_symbols"]) for window in partial_windows)
+    missing_by_event_type = manifest["missing_npz_slots_by_event_type"]
+    canonical_symbols = re.findall(
+        r"`([^`]+)`",
+        _section(ledger, "Canonical pilot symbols:", "## Event-Type Summary"),
+    )
+    assert canonical_symbols == list(DEFAULT_CME_SYMBOLS)
+    symbol_count = len(canonical_symbols)
+    no_market_slot_count = len(no_market_windows) * symbol_count
+
+    assert ledger.count("Status: `PROPOSED_REJECTION_LEDGER` (`not-owner-accepted`, not closed/green)") == 1
+    assert ledger.count("Q001 remains `INVENTORIED_WITH_WARNINGS`") == 1
+    ledger_lower = ledger.lower()
+    assert "status: `accepted`" not in ledger_lower
+    assert "status: `owner_accepted`" not in ledger_lower
+    forbidden_q001_claim = re.compile(
+        r"\b(?:closed?|green|accepts?|accepted|acceptance|owner[_ -]?accepted)\b", re.IGNORECASE
+    )
+    allowed_q001_claims = {
+        "status: `proposed_rejection_ledger` (`not-owner-accepted`, not closed/green)",
+        "## acceptance decision needed",
+        (
+            "if accepted by the project owner, these rows can close the mbo pilot gap portion of q001 for "
+            "inventory scope only. model runners must still skip or reject each listed event-symbol slot unless "
+            "a future paid-data fill changes the tracked manifest."
+        ),
+        (
+            "this ledger classifies the `211` missing or unavailable mbo pilot event-symbol slots for q001 inventory "
+            "acceptance. it is not model-readiness evidence, not a robustness artifact, and not permission to treat "
+            "unavailable data as successful runnable coverage."
+        ),
+        (
+            "q001 remains `inventoried_with_warnings` until the project owner explicitly accepts or rejects this "
+            "ledger for inventory scope. owner acceptance would mean:"
+        ),
+        (
+            "- the `203` full no-market slots are accepted as unavailable data, not missing repo files. - the `8` "
+            "partial symbol absences are accepted as symbol-specific unavailable data. - future model-universe "
+            "runners must keep these rows as explicit skips or rejections. - the strict options mbo quote warning "
+            "still needs separate acceptance or clearing for q001."
+        ),
+        (
+            "if accepted, update [q001_data_inventory_status.md](q001_data_inventory_status.md) and "
+            "[open_questions_and_rejections.md](open_questions_and_rejections.md) with the owner decision and rerun:"
+        ),
+    }
+    paragraphs = {" ".join(raw.split()).lower() for raw in ledger.split("\n\n") if raw.strip()}
+    assert allowed_q001_claims <= paragraphs
+    for paragraph in paragraphs:
+        if not forbidden_q001_claim.search(paragraph):
+            continue
+        assert paragraph in allowed_q001_claims, paragraph
+    assert (
+        manifest["coverage"]["expected_event_symbol_slots"] - manifest["coverage"]["present_runnable_npz_slots"]
+        == manifest["coverage"]["missing_or_unavailable_slots"]
+    )
+    assert no_market_slot_count + partial_slot_count == manifest["coverage"]["missing_or_unavailable_slots"]
+
+    slot_table = _markdown_table_rows(_section(ledger, "## Slot Arithmetic", "## Event-Type Summary"))
+    assert slot_table[0] == ["Class", "Window count", "Slot count", "Treatment"]
+    slot_rows = slot_table[1:]
+    assert len(slot_rows) == 3
+    assert all(len(row) == 4 for row in slot_rows)
+    assert [row[0] for row in slot_rows] == [
+        "Full no-market windows",
+        "Partial symbol absences",
+        "Total missing or unavailable",
+    ]
+    assert slot_rows == [
+        [
+            "Full no-market windows",
+            str(len(no_market_windows)),
+            str(no_market_slot_count),
+            "Reject/skip all 7 canonical pilot symbols for each window.",
+        ],
+        [
+            "Partial symbol absences",
+            str(len(partial_windows)),
+            str(partial_slot_count),
+            "Reject/skip only the listed symbols for the event window.",
+        ],
+        [
+            "Total missing or unavailable",
+            str(len(no_market_windows) + len(partial_windows)),
+            str(manifest["coverage"]["missing_or_unavailable_slots"]),
+            "Must not be counted as runnable coverage.",
+        ],
+    ]
+    slot_totals = {row[0]: (int(row[1]), int(row[2])) for row in slot_rows}
+    assert slot_totals["Full no-market windows"] == (len(no_market_windows), no_market_slot_count)
+    assert slot_totals["Partial symbol absences"] == (len(partial_windows), partial_slot_count)
+    assert slot_totals["Total missing or unavailable"] == (
+        len(no_market_windows) + len(partial_windows),
+        manifest["coverage"]["missing_or_unavailable_slots"],
+    )
+
+    event_table = _markdown_table_rows(_section(ledger, "## Event-Type Summary", "## Full No-Market Window Rejections"))
+    assert event_table[0] == ["Event type", "No-market windows", "No-market slots", "Partial slots", "Total rejected slots"]
+    event_rows = event_table[1:]
+    assert len(event_rows) == len(missing_by_event_type) + 1
+    assert all(len(row) == 5 for row in event_rows)
+    event_totals = {
+        row[0]: {
+            "no_market_windows": int(row[1]),
+            "no_market_slots": int(row[2]),
+            "partial_slots": int(row[3]),
+            "total_slots": int(row[4]),
+        }
+        for row in event_rows
+    }
+    assert set(event_totals) == set(missing_by_event_type) | {"Total"}
+    non_total_event_totals = {event_type: row for event_type, row in event_totals.items() if event_type != "Total"}
+    for row in non_total_event_totals.values():
+        assert row["total_slots"] == row["no_market_slots"] + row["partial_slots"]
+    summed_event_totals = {
+        "no_market_windows": sum(row["no_market_windows"] for row in non_total_event_totals.values()),
+        "no_market_slots": sum(row["no_market_slots"] for row in non_total_event_totals.values()),
+        "partial_slots": sum(row["partial_slots"] for row in non_total_event_totals.values()),
+        "total_slots": sum(row["total_slots"] for row in non_total_event_totals.values()),
+    }
+    assert summed_event_totals == event_totals["Total"]
+    assert summed_event_totals["total_slots"] == manifest["coverage"]["missing_or_unavailable_slots"]
+    no_market_counts_by_event_type: dict[str, int] = {}
+    for event_id in no_market_windows:
+        event_type = _event_type_from_event_id(event_id)
+        no_market_counts_by_event_type[event_type] = no_market_counts_by_event_type.get(event_type, 0) + 1
+    partial_slots_by_event_type: dict[str, int] = {}
+    for window in partial_windows:
+        event_type = _event_type_from_event_id(window["event_id"])
+        assert window["event_type"] == event_type
+        partial_slots_by_event_type[event_type] = partial_slots_by_event_type.get(event_type, 0) + len(
+            window["missing_symbols"]
+        )
+    for event_type, total_slots in missing_by_event_type.items():
+        expected_no_market_windows = no_market_counts_by_event_type.get(event_type, 0)
+        expected_no_market_slots = expected_no_market_windows * symbol_count
+        expected_partial_slots = partial_slots_by_event_type.get(event_type, 0)
+        assert event_totals[event_type] == {
+            "no_market_windows": expected_no_market_windows,
+            "no_market_slots": expected_no_market_slots,
+            "partial_slots": expected_partial_slots,
+            "total_slots": total_slots,
+        }
+    assert event_totals["Total"] == {
+        "no_market_windows": len(no_market_windows),
+        "no_market_slots": no_market_slot_count,
+        "partial_slots": partial_slot_count,
+        "total_slots": manifest["coverage"]["missing_or_unavailable_slots"],
+    }
+
+    no_market_table = _markdown_table_rows(
+        _section(ledger, "## Full No-Market Window Rejections", "## Partial Window Symbol Rejections")
+    )
+    assert no_market_table[0] == ["Event type", "Event ID", "Release date", "Reason", "Rejected slots", "Rejected symbols"]
+    no_market_rows = no_market_table[1:]
+    assert len(no_market_rows) == len(no_market_windows)
+    assert all(len(row) == 6 for row in no_market_rows)
+    expected_no_market_rows = [
+        [
+            _event_type_from_event_id(event_id),
+            f"`{event_id}`",
+            _date_from_event_id(event_id),
+            "`no_market_data`",
+            str(symbol_count),
+            "all 7 canonical pilot symbols unavailable",
+        ]
+        for event_id in no_market_windows
+    ]
+    assert no_market_rows == expected_no_market_rows
+    no_market_ids = {_unquote_markdown_code(row[1]) for row in no_market_rows}
+    assert len(no_market_ids) == len(no_market_rows)
+    assert no_market_ids == set(no_market_windows)
+    assert all(_unquote_markdown_code(row[3]) == "no_market_data" for row in no_market_rows)
+    assert all(int(row[4]) == symbol_count for row in no_market_rows)
+
+    partial_table = _markdown_table_rows(_section(ledger, "## Partial Window Symbol Rejections", "## Acceptance Decision Needed"))
+    assert partial_table[0] == ["Event type", "Event ID", "Release date", "Reason", "Rejected slots", "Rejected symbols"]
+    partial_rows = partial_table[1:]
+    assert len(partial_rows) == len(partial_windows)
+    assert all(len(row) == 6 for row in partial_rows)
+    expected_partial_rows = [
+        [
+            _event_type_from_event_id(window["event_id"]),
+            f"`{window['event_id']}`",
+            window["release_date"],
+            f"`{window['reason']}`",
+            str(len(window["missing_symbols"])),
+            ", ".join(f"`{symbol}`" for symbol in window["missing_symbols"]),
+        ]
+        for window in partial_windows
+    ]
+    for window in partial_windows:
+        date.fromisoformat(window["release_date"])
+        assert window["release_date"] == _date_from_event_id(window["event_id"])
+    assert partial_rows == expected_partial_rows
+    partial_by_event_id = {_unquote_markdown_code(row[1]): row for row in partial_rows}
+    assert len(partial_by_event_id) == len(partial_rows)
+    assert set(partial_by_event_id) == {window["event_id"] for window in partial_windows}
+    for window in partial_windows:
+        row = partial_by_event_id[window["event_id"]]
+        row_symbols = [_unquote_markdown_code(symbol.strip()) for symbol in row[5].split(",")]
+        assert _unquote_markdown_code(row[3]) == window["reason"]
+        assert int(row[4]) == len(window["missing_symbols"])
+        assert row_symbols == window["missing_symbols"]
 
 
 def test_q001_inventory_reports_futures_options_and_gaps(tmp_path, monkeypatch):
