@@ -1227,11 +1227,48 @@ def test_lanes_partial_options_report_missing_mandatory_checks(monkeypatch, tmp_
     from apps.cockpit.backend import schemas as sc
     assert cod.get("status") == sc.MISSING
     assert cod.get("missing_checks") == [
-        "options-fixing-mbo-coverage",
         "options-ohlcv",
         "options-definitions",
         "options-statistics",
     ]
+
+
+def test_lanes_strict_mbo_warn_is_advisory(monkeypatch, tmp_path):
+    lake = tmp_path / "options"
+    lake.mkdir(parents=True)
+    report_path = tmp_path / "data_doctor_report.json"
+    checks = _options_ok_checks() + [
+        {
+            "name": "options-fixing-mbo-coverage",
+            "status": "WARN",
+            "detail": "mode=strict_mbo_quotes gap_count=507",
+        }
+    ]
+    report_path.write_text(
+        json.dumps({
+            "run_utc": paths.now_iso(),
+            "checks": checks,
+            "options_lane": {"name": "options_lane", "status": "OK", "detail": "ok"},
+            "failed": 0,
+            "warned": 1,
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(paths, "DATA_DOCTOR_REPORT", report_path)
+    monkeypatch.setattr(paths, "OPTIONS_LAKE_ROOT", lake)
+
+    z = ZONES["system"]()
+    cod = z.get("lanes", {}).get("cme_options_data", {})
+
+    from apps.cockpit.backend import schemas as sc
+    assert cod.get("status") == sc.OK
+    assert cod.get("missing_checks") == []
+    assert z.get("shadow_live_blockers", {}).get("cme_options_data") == sc.OK
+    strict = next(
+        c for c in cod.get("checks", [])
+        if c.get("name") == "options-fixing-mbo-coverage"
+    )
+    assert strict.get("status") == "WARN"
 
 
 def test_lanes_synthetic_data_doctor_report(monkeypatch, tmp_path):
@@ -2132,6 +2169,32 @@ def test_alerts_options_warn_check_alert(monkeypatch, tmp_path):
         al["severity"] == "crit" and al["source"] == "cme_options_backfill"
         for al in a["alerts"]
     )
+
+
+def test_alerts_strict_mbo_warn_is_diagnostic(monkeypatch, tmp_path):
+    report_path = tmp_path / "data_doctor_report.json"
+    report = {
+        "run_utc": paths.now_iso(),
+        "checks": _options_ok_checks() + [
+            {
+                "name": "options-fixing-mbo-coverage",
+                "status": "WARN",
+                "detail": "mode=strict_mbo_quotes gap_count=507",
+            }
+        ],
+        "failed": 0,
+        "warned": 1,
+    }
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    monkeypatch.setattr(paths, "DATA_DOCTOR_REPORT", report_path)
+    for attr in ("SLOW_TIER_PROBLEMS", "CERT_REGISTRY", "LATENCY_SUMMARY",
+                 "CAPTURE_BASELINE", "MODEL_LIFECYCLE"):
+        monkeypatch.setattr(paths, attr, tmp_path / f"{attr}.json")
+
+    a = ZONES["alerts"]()
+    ids = {al["id"] for al in a["alerts"]}
+
+    assert "lake-options-fixing-mbo-coverage" not in ids
 
 
 def test_alerts_missing_mandatory_options_checks(monkeypatch, tmp_path):

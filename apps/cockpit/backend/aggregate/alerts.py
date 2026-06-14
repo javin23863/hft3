@@ -6,7 +6,7 @@ the trader (and the outbound notifier, W4) can watch."""
 from __future__ import annotations
 
 from .. import paths, schemas
-from .system import MANDATORY_OPTIONS_CHECKS
+from .system import ADVISORY_OPTIONS_CHECKS, MANDATORY_OPTIONS_CHECKS
 
 
 def _alert(id_: str, severity: str, source: str, message: str, ts=None) -> dict:
@@ -94,6 +94,8 @@ def collect() -> list[dict]:
             if status in {"FAIL", "WARN", "WARNING", "MISSING", "STALE", "UNKNOWN"}:
                 name = c.get("name")
                 if str(name).startswith("options-"):
+                    if str(name) in ADVISORY_OPTIONS_CHECKS:
+                        continue
                     sev = schemas.SEV_CRIT
                     source = "cme_options_backfill"
                 else:

@@ -18,11 +18,14 @@ MANDATORY_OPTIONS_CHECKS = (
     "options-datasets",
     "options-fixing-mbo",
     "options-fixing-coverage",
-    "options-fixing-mbo-coverage",
     "options-ohlcv",
     "options-definitions",
     "options-statistics",
 )
+
+ADVISORY_OPTIONS_CHECKS = frozenset({
+    "options-fixing-mbo-coverage",
+})
 
 _PROBLEM_CHECK_STATUSES = {"FAIL", "WARN", "WARNING", "MISSING", "STALE", "UNKNOWN"}
 
@@ -212,16 +215,20 @@ def _options_data_readiness() -> dict:
             "summary": summary,
             "missing_checks": missing_checks,
         }
-    statuses = [str(c.get("status", "")).upper() for c in options_checks]
+    readiness_checks = [
+        c for c in options_checks
+        if str(c.get("name", "")) not in ADVISORY_OPTIONS_CHECKS
+    ]
+    readiness_statuses = [str(c.get("status", "")).upper() for c in readiness_checks]
     report_age = schemas.freshness(report_utc, stale_after_s=48 * 3600)
     lake_present = paths.OPTIONS_LAKE_ROOT.is_dir()
-    if "FAIL" in statuses:
+    if "FAIL" in readiness_statuses:
         status = schemas.FAIL
     elif report_age == schemas.STALE:
         status = schemas.STALE
     elif not lake_present or not summary or missing_checks:
         status = schemas.MISSING
-    elif any(s in _PROBLEM_CHECK_STATUSES for s in statuses):
+    elif any(s in _PROBLEM_CHECK_STATUSES for s in readiness_statuses):
         status = schemas.FAIL
     else:
         status = schemas.OK
