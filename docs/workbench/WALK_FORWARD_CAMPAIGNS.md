@@ -24,7 +24,7 @@ Each model binds to event contexts from [`features_engine/src/hypotheses/modules
 Models with explicit event-context gates run only on those contexts. Models without explicit gates use the generated sourced campaign universe in [`packages/data_system/config/events.csv`](../../packages/data_system/config/events.csv); CPI/NFP are high-volatility examples, not a hard-coded allowlist.
 
 - HYP_29 → prop flatten windows (not CPI)
-- HYP_5 (no gate) → generated sourced campaign universe, including CPI/NFP and smaller macro/session/prop clue events
+- HYP_5 (no gate) → generated sourced campaign universe, including CPI/NFP and smaller macro/session/prop context events
 - PDF_MODEL_5 → `options_lane` fixture MVP (quarantined under `research_cards/parity/`)
 
 Regenerate binding:

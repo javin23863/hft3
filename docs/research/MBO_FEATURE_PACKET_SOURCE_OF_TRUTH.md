@@ -573,7 +573,7 @@ Interpretation:
 
 # 15. Iceberg / Hidden Liquidity Detection
 
-CME notes that native iceberg displayed quantity refreshes can retain the same OrderID, while synthetic iceberg behavior may appear differently depending on implementation. That does not mean every refresh is an iceberg, but it gives you an observable clue for a hidden-liquidity score. ([CME Group][3])
+CME notes that native iceberg displayed quantity refreshes can retain the same OrderID, while synthetic iceberg behavior may appear differently depending on implementation. That does not mean every refresh is an iceberg, but it gives you an observable feature input for a hidden-liquidity score. ([CME Group][3])
 
 Possible score:
 
