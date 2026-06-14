@@ -15,6 +15,10 @@ Options strict MBO warning ledger:
 [Q001_OPTIONS_STRICT_MBO_WARNING_LEDGER.md](Q001_OPTIONS_STRICT_MBO_WARNING_LEDGER.md)
 (`PROPOSED_WARNING_LEDGER`, not owner-accepted)
 
+Owner decision packet:
+[Q001_OWNER_DECISION_PACKET.md](Q001_OWNER_DECISION_PACKET.md)
+(`OWNER_DECISION_REQUIRED`, not owner-accepted)
+
 Command run:
 
 ```powershell
@@ -52,6 +56,10 @@ The strict options MBO quote warning is non-blocking only for the narrowed Q001 
 ## Options Strict MBO Warning Ledger
 
 [Q001_OPTIONS_STRICT_MBO_WARNING_LEDGER.md](Q001_OPTIONS_STRICT_MBO_WARNING_LEDGER.md) records the exact strict quote-only MBO warning boundary: `507` strict quote gaps, `503` stale strict quote gaps, `expiry_coverage.dates_covered=784/784`, and `0` study gaps. Its status is `PROPOSED_WARNING_LEDGER`; it is acceptance-ready evidence for the project owner, not a completed acceptance decision.
+
+## Owner Decision Packet
+
+[Q001_OWNER_DECISION_PACKET.md](Q001_OWNER_DECISION_PACKET.md) consolidates the two required owner decisions for Q001: the MBO pilot gap ledger and the options strict MBO warning ledger. Its status is `OWNER_DECISION_REQUIRED`; it does not accept either ledger, close Q001, or prove model readiness.
 
 ## Interpretation
 
