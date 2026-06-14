@@ -44,6 +44,19 @@ def _options_ok_checks() -> list[dict]:
     return [{"name": name, "status": "OK", "detail": "ok"} for name in system_agg.MANDATORY_OPTIONS_CHECKS]
 
 
+def _stub_q001_ok(monkeypatch) -> None:
+    monkeypatch.setattr(
+        system_agg,
+        "_q001_inventory",
+        lambda: {
+            "status": sc.OK,
+            "q001_status": "INVENTORIED",
+            "artifact": "runtime/data_audits/paid_data_inventory.json",
+            "gaps": [],
+        },
+    )
+
+
 def _point_options_zone_ok(monkeypatch, root: Path) -> Path:
     _write_options_spec(root, "**FIXED**")
     lake = root / "options"
@@ -1155,7 +1168,8 @@ def test_lanes_registered_contains_cme_options():
         f"FOPT_ prefix not in model_id_prefixes: {prefixes}"
 
 
-def test_lanes_options_defect_ledger_open_blocks_shadow_live_only():
+def test_lanes_options_defect_ledger_open_blocks_shadow_live_only(monkeypatch):
+    _stub_q001_ok(monkeypatch)
     z = ZONES["system"]()
     defects = z.get("lanes", {}).get("cme_options_defects", {})
     assert defects.get("status") == "fail"
@@ -1169,6 +1183,7 @@ def test_lanes_options_defect_ledger_open_blocks_shadow_live_only():
 def test_lanes_missing_data_doctor_report_is_graceful(monkeypatch, tmp_path):
     """Pointing DATA_DOCTOR_REPORT at a nonexistent file -> cme_options_data.status==missing;
     system zone research/replay health remains green while the options card stays red."""
+    _stub_q001_ok(monkeypatch)
     monkeypatch.setattr(paths, "DATA_DOCTOR_REPORT", tmp_path / "no_report.json")
     z = ZONES["system"]()
     lanes = z.get("lanes", {})
@@ -1180,6 +1195,7 @@ def test_lanes_missing_data_doctor_report_is_graceful(monkeypatch, tmp_path):
 
 
 def test_lanes_options_warn_is_not_ok(monkeypatch, tmp_path):
+    _stub_q001_ok(monkeypatch)
     report_path = tmp_path / "data_doctor_report.json"
     report = {
         "run_utc": paths.now_iso(),
@@ -1199,6 +1215,624 @@ def test_lanes_options_warn_is_not_ok(monkeypatch, tmp_path):
     assert cod.get("status") in {sc.MISSING, sc.FAIL}
     assert "options-datasets" in cod.get("missing_checks", [])
     assert z.get("health") == sc.GREEN
+
+
+def test_system_q001_inventory_warnings_are_non_green(monkeypatch, tmp_path):
+    artifact = tmp_path / "runtime" / "data_audits" / "paid_data_inventory.json"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text(
+        json.dumps({
+            "q001_cme_data_inventory": {
+                "status": "INVENTORIED_WITH_WARNINGS",
+                "futures": {
+                    "mbo_pilot_basket": {
+                        "missing_or_unavailable_slots": 211,
+                    },
+                },
+                "options": {
+                    "data_doctor_status": "WARN",
+                    "options_lane": {
+                        "expiry_coverage": {
+                            "strict_mbo_gap_count": 507,
+                            "strict_mbo_stale_gap_count": 503,
+                        },
+                    },
+                },
+                "gaps": [
+                    {"source": "mbo_pilot_manifest", "severity": "WARN"},
+                    {"source": "data_doctor", "severity": "WARN"},
+                ],
+            },
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(system_agg, "_latency", lambda: {"status": sc.OK, "live_arm_status": sc.OK})
+    monkeypatch.setattr(system_agg, "_slow_tier", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_certification", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_databento", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_capture", lambda: {"status": sc.OK})
+    monkeypatch.setattr(
+        system_agg,
+        "_lanes",
+        lambda: {
+            "status": sc.OK,
+            "cme_options_data": {"status": sc.OK},
+            "cme_options_defects": {"status": sc.OK},
+        },
+    )
+
+    z = system_agg.build()
+    q001 = z["q001_inventory"]
+
+    assert z["health"] == sc.AMBER
+    assert q001["status"] == sc.STALE
+    assert q001["status"] != sc.OK
+    assert q001["q001_status"] == "INVENTORIED_WITH_WARNINGS"
+    assert q001["artifact"].replace("\\", "/") == "runtime/data_audits/paid_data_inventory.json"
+    assert q001["missing_or_unavailable_slots"] == 211
+    assert q001["data_doctor_status"] == "WARN"
+    assert q001["strict_mbo_gap_count"] == 507
+    assert q001["strict_mbo_stale_gap_count"] == 503
+    assert len(q001["gaps"]) == 2
+    _json_roundtrip(z)
+
+
+def test_system_q001_inventoried_with_warning_evidence_is_non_green(monkeypatch, tmp_path):
+    artifact = tmp_path / "runtime" / "data_audits" / "paid_data_inventory.json"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text(
+        json.dumps({
+            "q001_cme_data_inventory": {
+                "status": "INVENTORIED",
+                "event_catalog": {"status": "OK"},
+                "futures": {
+                    "active_npz_manifest": {"status": "OK"},
+                    "mbo_pilot_basket": {
+                        "status": "OK",
+                        "missing_or_unavailable_slots": 211,
+                    },
+                },
+                "options": {
+                    "data_doctor_status": "WARN",
+                    "options_lane": {
+                        "expiry_coverage": {
+                            "strict_mbo_gap_count": 507,
+                            "strict_mbo_stale_gap_count": 503,
+                        },
+                    },
+                },
+                "gaps": [
+                    {"source": "mbo_pilot_manifest", "severity": "WARN"},
+                ],
+            },
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(system_agg, "_latency", lambda: {"status": sc.OK, "live_arm_status": sc.OK})
+    monkeypatch.setattr(system_agg, "_slow_tier", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_certification", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_databento", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_capture", lambda: {"status": sc.OK})
+    monkeypatch.setattr(
+        system_agg,
+        "_lanes",
+        lambda: {
+            "status": sc.OK,
+            "cme_options_data": {"status": sc.OK},
+            "cme_options_defects": {"status": sc.OK},
+        },
+    )
+
+    z = system_agg.build()
+    q001 = z["q001_inventory"]
+
+    assert z["health"] == sc.AMBER
+    assert q001["status"] == sc.STALE
+    assert q001["status"] != sc.OK
+    assert q001["q001_status"] == "INVENTORIED"
+    assert q001["missing_or_unavailable_slots"] == 211
+    assert q001["data_doctor_status"] == "WARN"
+    assert q001["strict_mbo_gap_count"] == 507
+    assert q001["strict_mbo_stale_gap_count"] == 503
+    _json_roundtrip(z)
+
+
+def test_system_q001_blocked_with_warning_evidence_stays_red(monkeypatch, tmp_path):
+    artifact = tmp_path / "runtime" / "data_audits" / "paid_data_inventory.json"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text(
+        json.dumps({
+            "q001_cme_data_inventory": {
+                "status": "BLOCKED",
+                "futures": {
+                    "mbo_pilot_basket": {
+                        "missing_or_unavailable_slots": 211,
+                    },
+                },
+                "options": {
+                    "data_doctor_status": "WARN",
+                    "options_lane": {
+                        "expiry_coverage": {
+                            "strict_mbo_gap_count": 507,
+                            "strict_mbo_stale_gap_count": 503,
+                        },
+                    },
+                },
+                "gaps": [
+                    {"source": "mbo_pilot_manifest", "severity": "WARN"},
+                ],
+            },
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(system_agg, "_latency", lambda: {"status": sc.OK, "live_arm_status": sc.OK})
+    monkeypatch.setattr(system_agg, "_slow_tier", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_certification", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_databento", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_capture", lambda: {"status": sc.OK})
+    monkeypatch.setattr(
+        system_agg,
+        "_lanes",
+        lambda: {
+            "status": sc.OK,
+            "cme_options_data": {"status": sc.OK},
+            "cme_options_defects": {"status": sc.OK},
+        },
+    )
+
+    z = system_agg.build()
+    q001 = z["q001_inventory"]
+
+    assert z["health"] == sc.RED
+    assert q001["status"] == sc.FAIL
+    assert q001["q001_status"] == "BLOCKED"
+    assert q001["missing_or_unavailable_slots"] == 211
+    assert q001["data_doctor_status"] == "WARN"
+    assert q001["strict_mbo_gap_count"] == 507
+    assert q001["strict_mbo_stale_gap_count"] == 503
+    _json_roundtrip(z)
+
+
+@pytest.mark.parametrize("q001_status", ["BLOCKED_WITH_WARNINGS", "FAIL", "ERROR", "FAILED"])
+def test_system_q001_top_level_hard_fail_tokens_stay_red_with_clean_evidence(
+    monkeypatch, tmp_path, q001_status
+):
+    artifact = tmp_path / "runtime" / "data_audits" / "paid_data_inventory.json"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text(
+        json.dumps({
+            "q001_cme_data_inventory": {
+                "status": q001_status,
+                "event_catalog": {"status": "OK"},
+                "futures": {
+                    "active_npz_manifest": {"status": "OK"},
+                    "mbo_pilot_basket": {
+                        "status": "completed",
+                        "missing_or_unavailable_slots": 0,
+                    },
+                },
+                "options": {
+                    "data_doctor_status": "OK",
+                    "options_lane": {
+                        "expiry_coverage": {
+                            "strict_mbo_gap_count": 0,
+                            "strict_mbo_stale_gap_count": 0,
+                        },
+                    },
+                },
+                "gaps": [],
+            },
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(system_agg, "_latency", lambda: {"status": sc.OK, "live_arm_status": sc.OK})
+    monkeypatch.setattr(system_agg, "_slow_tier", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_certification", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_databento", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_capture", lambda: {"status": sc.OK})
+    monkeypatch.setattr(
+        system_agg,
+        "_lanes",
+        lambda: {
+            "status": sc.OK,
+            "cme_options_data": {"status": sc.OK},
+            "cme_options_defects": {"status": sc.OK},
+        },
+    )
+
+    z = system_agg.build()
+    q001 = z["q001_inventory"]
+
+    assert z["health"] == sc.RED
+    assert q001["status"] == sc.FAIL
+    assert q001["status"] != sc.OK
+    assert q001["q001_status"] == q001_status
+    assert q001["event_catalog_status"] == "OK"
+    assert q001["active_npz_manifest_status"] == "OK"
+    assert q001["mbo_pilot_basket_status"] == "completed"
+    assert q001["missing_or_unavailable_slots"] == 0
+    assert q001["data_doctor_status"] == "OK"
+    assert q001["strict_mbo_gap_count"] == 0
+    assert q001["strict_mbo_stale_gap_count"] == 0
+    assert q001["gaps"] == []
+    _json_roundtrip(z)
+
+
+def test_system_q001_inventoried_with_missing_evidence_is_non_green(monkeypatch, tmp_path):
+    artifact = tmp_path / "runtime" / "data_audits" / "paid_data_inventory.json"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text(
+        json.dumps({
+            "q001_cme_data_inventory": {
+                "status": "INVENTORIED",
+                "gaps": [],
+            },
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(system_agg, "_latency", lambda: {"status": sc.OK, "live_arm_status": sc.OK})
+    monkeypatch.setattr(system_agg, "_slow_tier", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_certification", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_databento", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_capture", lambda: {"status": sc.OK})
+    monkeypatch.setattr(
+        system_agg,
+        "_lanes",
+        lambda: {
+            "status": sc.OK,
+            "cme_options_data": {"status": sc.OK},
+            "cme_options_defects": {"status": sc.OK},
+        },
+    )
+
+    z = system_agg.build()
+    q001 = z["q001_inventory"]
+
+    assert z["health"] == sc.AMBER
+    assert q001["status"] == sc.UNKNOWN
+    assert q001["status"] != sc.OK
+    assert q001["q001_status"] == "INVENTORIED"
+    assert q001["gaps"] == []
+    assert "missing_or_unavailable_slots" not in q001
+    assert "data_doctor_status" not in q001
+    assert "strict_mbo_gap_count" not in q001
+    assert "strict_mbo_stale_gap_count" not in q001
+    _json_roundtrip(z)
+
+
+def test_system_q001_inventoried_with_source_status_failures_is_non_green(
+    monkeypatch, tmp_path
+):
+    artifact = tmp_path / "runtime" / "data_audits" / "paid_data_inventory.json"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text(
+        json.dumps({
+            "q001_cme_data_inventory": {
+                "status": "INVENTORIED",
+                "event_catalog": {"status": "MISSING"},
+                "futures": {
+                    "active_npz_manifest": {"status": "FAIL"},
+                    "mbo_pilot_basket": {
+                        "status": "OK",
+                        "missing_or_unavailable_slots": 0,
+                    },
+                },
+                "options": {
+                    "data_doctor_status": "OK",
+                    "options_lane": {
+                        "expiry_coverage": {
+                            "strict_mbo_gap_count": 0,
+                            "strict_mbo_stale_gap_count": 0,
+                        },
+                    },
+                },
+                "gaps": [],
+            },
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(system_agg, "_latency", lambda: {"status": sc.OK, "live_arm_status": sc.OK})
+    monkeypatch.setattr(system_agg, "_slow_tier", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_certification", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_databento", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_capture", lambda: {"status": sc.OK})
+    monkeypatch.setattr(
+        system_agg,
+        "_lanes",
+        lambda: {
+            "status": sc.OK,
+            "cme_options_data": {"status": sc.OK},
+            "cme_options_defects": {"status": sc.OK},
+        },
+    )
+
+    z = system_agg.build()
+    q001 = z["q001_inventory"]
+
+    assert z["health"] == sc.RED
+    assert q001["status"] == sc.FAIL
+    assert q001["status"] != sc.OK
+    assert q001["q001_status"] == "INVENTORIED"
+    assert q001["event_catalog_status"] == "MISSING"
+    assert q001["active_npz_manifest_status"] == "FAIL"
+    assert q001["mbo_pilot_basket_status"] == "OK"
+    assert q001["missing_or_unavailable_slots"] == 0
+    assert q001["data_doctor_status"] == "OK"
+    assert q001["strict_mbo_gap_count"] == 0
+    assert q001["strict_mbo_stale_gap_count"] == 0
+    _json_roundtrip(z)
+
+
+def test_system_q001_runtime_completed_with_gaps_is_stale(monkeypatch, tmp_path):
+    artifact = tmp_path / "runtime" / "data_audits" / "paid_data_inventory.json"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text(
+        json.dumps({
+            "q001_cme_data_inventory": {
+                "status": "INVENTORIED_WITH_WARNINGS",
+                "event_catalog": {"status": "OK"},
+                "futures": {
+                    "active_npz_manifest": {"status": "OK"},
+                    "mbo_pilot_basket": {
+                        "status": "completed_with_gaps",
+                        "missing_or_unavailable_slots": 211,
+                    },
+                },
+                "options": {
+                    "data_doctor_status": "WARN",
+                    "options_lane": {
+                        "expiry_coverage": {
+                            "strict_mbo_gap_count": 507,
+                            "strict_mbo_stale_gap_count": 503,
+                        },
+                    },
+                },
+                "gaps": [],
+            },
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(system_agg, "_latency", lambda: {"status": sc.OK, "live_arm_status": sc.OK})
+    monkeypatch.setattr(system_agg, "_slow_tier", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_certification", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_databento", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_capture", lambda: {"status": sc.OK})
+    monkeypatch.setattr(
+        system_agg,
+        "_lanes",
+        lambda: {
+            "status": sc.OK,
+            "cme_options_data": {"status": sc.OK},
+            "cme_options_defects": {"status": sc.OK},
+        },
+    )
+
+    z = system_agg.build()
+    q001 = z["q001_inventory"]
+
+    assert z["health"] == sc.AMBER
+    assert q001["status"] == sc.STALE
+    assert q001["status"] != sc.UNKNOWN
+    assert q001["status"] != sc.OK
+    assert q001["q001_status"] == "INVENTORIED_WITH_WARNINGS"
+    assert q001["event_catalog_status"] == "OK"
+    assert q001["active_npz_manifest_status"] == "OK"
+    assert q001["mbo_pilot_basket_status"] == "completed_with_gaps"
+    assert q001["missing_or_unavailable_slots"] == 211
+    assert q001["data_doctor_status"] == "WARN"
+    assert q001["strict_mbo_gap_count"] == 507
+    assert q001["strict_mbo_stale_gap_count"] == 503
+    _json_roundtrip(z)
+
+
+@pytest.mark.parametrize("mbo_status", ["OK", "GREEN", "PASS"])
+def test_system_q001_inventoried_generic_mbo_status_is_non_green(
+    monkeypatch, tmp_path, mbo_status
+):
+    artifact = tmp_path / "runtime" / "data_audits" / "paid_data_inventory.json"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text(
+        json.dumps({
+            "q001_cme_data_inventory": {
+                "status": "INVENTORIED",
+                "event_catalog": {"status": "OK"},
+                "futures": {
+                    "active_npz_manifest": {"status": "OK"},
+                    "mbo_pilot_basket": {
+                        "status": mbo_status,
+                        "missing_or_unavailable_slots": 0,
+                    },
+                },
+                "options": {
+                    "data_doctor_status": "OK",
+                    "options_lane": {
+                        "expiry_coverage": {
+                            "strict_mbo_gap_count": 0,
+                            "strict_mbo_stale_gap_count": 0,
+                        },
+                    },
+                },
+                "gaps": [],
+            },
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(system_agg, "_latency", lambda: {"status": sc.OK, "live_arm_status": sc.OK})
+    monkeypatch.setattr(system_agg, "_slow_tier", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_certification", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_databento", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_capture", lambda: {"status": sc.OK})
+    monkeypatch.setattr(
+        system_agg,
+        "_lanes",
+        lambda: {
+            "status": sc.OK,
+            "cme_options_data": {"status": sc.OK},
+            "cme_options_defects": {"status": sc.OK},
+        },
+    )
+
+    z = system_agg.build()
+    q001 = z["q001_inventory"]
+
+    assert z["health"] != sc.GREEN
+    assert q001["status"] == sc.UNKNOWN
+    assert q001["status"] != sc.OK
+    assert q001["q001_status"] == "INVENTORIED"
+    assert q001["event_catalog_status"] == "OK"
+    assert q001["active_npz_manifest_status"] == "OK"
+    assert q001["mbo_pilot_basket_status"] == mbo_status
+    assert q001["missing_or_unavailable_slots"] == 0
+    assert q001["data_doctor_status"] == "OK"
+    assert q001["strict_mbo_gap_count"] == 0
+    assert q001["strict_mbo_stale_gap_count"] == 0
+    assert q001["gaps"] == []
+    _json_roundtrip(z)
+
+
+@pytest.mark.parametrize("source_field", ["event_catalog", "active_npz_manifest", "data_doctor"])
+@pytest.mark.parametrize("source_status", ["GREEN", "PASS", "PASSED", "COMPLETED"])
+def test_system_q001_inventoried_generic_source_status_is_non_green(
+    monkeypatch, tmp_path, source_field, source_status
+):
+    payload = {
+        "q001_cme_data_inventory": {
+            "status": "INVENTORIED",
+            "event_catalog": {"status": "OK"},
+            "futures": {
+                "active_npz_manifest": {"status": "OK"},
+                "mbo_pilot_basket": {
+                    "status": "completed",
+                    "missing_or_unavailable_slots": 0,
+                },
+            },
+            "options": {
+                "data_doctor_status": "OK",
+                "options_lane": {
+                    "expiry_coverage": {
+                        "strict_mbo_gap_count": 0,
+                        "strict_mbo_stale_gap_count": 0,
+                    },
+                },
+            },
+            "gaps": [],
+        },
+    }
+    q001_payload = payload["q001_cme_data_inventory"]
+    if source_field == "event_catalog":
+        q001_payload["event_catalog"]["status"] = source_status
+    elif source_field == "active_npz_manifest":
+        q001_payload["futures"]["active_npz_manifest"]["status"] = source_status
+    else:
+        q001_payload["options"]["data_doctor_status"] = source_status
+
+    artifact = tmp_path / "runtime" / "data_audits" / "paid_data_inventory.json"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(system_agg, "_latency", lambda: {"status": sc.OK, "live_arm_status": sc.OK})
+    monkeypatch.setattr(system_agg, "_slow_tier", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_certification", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_databento", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_capture", lambda: {"status": sc.OK})
+    monkeypatch.setattr(
+        system_agg,
+        "_lanes",
+        lambda: {
+            "status": sc.OK,
+            "cme_options_data": {"status": sc.OK},
+            "cme_options_defects": {"status": sc.OK},
+        },
+    )
+
+    z = system_agg.build()
+    q001 = z["q001_inventory"]
+
+    assert z["health"] != sc.GREEN
+    assert q001["status"] == sc.UNKNOWN
+    assert q001["status"] != sc.OK
+    assert q001["q001_status"] == "INVENTORIED"
+    assert q001["mbo_pilot_basket_status"] == "completed"
+    assert q001["missing_or_unavailable_slots"] == 0
+    assert q001["strict_mbo_gap_count"] == 0
+    assert q001["strict_mbo_stale_gap_count"] == 0
+    if source_field == "event_catalog":
+        assert q001["event_catalog_status"] == source_status
+    elif source_field == "active_npz_manifest":
+        assert q001["active_npz_manifest_status"] == source_status
+    else:
+        assert q001["data_doctor_status"] == source_status
+    _json_roundtrip(z)
+
+
+def test_system_q001_clean_completed_mbo_pilot_is_green(monkeypatch, tmp_path):
+    artifact = tmp_path / "runtime" / "data_audits" / "paid_data_inventory.json"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text(
+        json.dumps({
+            "q001_cme_data_inventory": {
+                "status": "INVENTORIED",
+                "event_catalog": {"status": "OK"},
+                "futures": {
+                    "active_npz_manifest": {"status": "OK"},
+                    "mbo_pilot_basket": {
+                        "status": "completed",
+                        "missing_or_unavailable_slots": 0,
+                    },
+                },
+                "options": {
+                    "data_doctor_status": "OK",
+                    "options_lane": {
+                        "expiry_coverage": {
+                            "strict_mbo_gap_count": 0,
+                            "strict_mbo_stale_gap_count": 0,
+                        },
+                    },
+                },
+                "gaps": [],
+            },
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(system_agg, "_latency", lambda: {"status": sc.OK, "live_arm_status": sc.OK})
+    monkeypatch.setattr(system_agg, "_slow_tier", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_certification", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_databento", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_capture", lambda: {"status": sc.OK})
+    monkeypatch.setattr(
+        system_agg,
+        "_lanes",
+        lambda: {
+            "status": sc.OK,
+            "cme_options_data": {"status": sc.OK},
+            "cme_options_defects": {"status": sc.OK},
+        },
+    )
+
+    z = system_agg.build()
+    q001 = z["q001_inventory"]
+
+    assert z["health"] == sc.GREEN
+    assert q001["status"] == sc.OK
+    assert q001["q001_status"] == "INVENTORIED"
+    assert q001["event_catalog_status"] == "OK"
+    assert q001["active_npz_manifest_status"] == "OK"
+    assert q001["mbo_pilot_basket_status"] == "completed"
+    assert q001["missing_or_unavailable_slots"] == 0
+    assert q001["data_doctor_status"] == "OK"
+    assert q001["strict_mbo_gap_count"] == 0
+    assert q001["strict_mbo_stale_gap_count"] == 0
+    assert q001["gaps"] == []
+    _json_roundtrip(z)
 
 
 def test_lanes_partial_options_report_missing_mandatory_checks(monkeypatch, tmp_path):

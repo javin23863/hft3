@@ -28,6 +28,259 @@ ADVISORY_OPTIONS_CHECKS = frozenset({
 })
 
 _PROBLEM_CHECK_STATUSES = {"FAIL", "WARN", "WARNING", "MISSING", "STALE", "UNKNOWN"}
+_Q001_OK_STATUSES = {"INVENTORIED"}
+_Q001_FAIL_STATUSES = {"BLOCKED"}
+_Q001_FAIL_EVIDENCE = {"BLOCKED", "ERROR", "FAIL", "FAILED"}
+_Q001_WARN_EVIDENCE = {"MISSING", "STALE", "WARN", "WARNING"}
+
+
+def _q001_artifact():
+    return paths.REPO / "runtime" / "data_audits" / "paid_data_inventory.json"
+
+
+def _nested(mapping: dict, *keys: str):
+    cur = mapping
+    for key in keys:
+        if not isinstance(cur, dict):
+            return None
+        cur = cur.get(key)
+    return cur
+
+
+def _q001_status_evidence(value) -> Optional[str]:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return schemas.UNKNOWN
+    token = value.strip().upper()
+    if not token:
+        return schemas.UNKNOWN
+    if token in _Q001_FAIL_EVIDENCE or "FAIL" in token or "BLOCK" in token or "ERROR" in token:
+        return schemas.FAIL
+    if (
+        token in _Q001_WARN_EVIDENCE
+        or "WITH_GAPS" in token
+        or "WARN" in token
+        or "STALE" in token
+        or "MISS" in token
+    ):
+        return schemas.STALE
+    if token in {"COMPLETED", "GREEN", "OK", "PASS", "PASSED"}:
+        return None
+    return schemas.UNKNOWN
+
+
+def _q001_count_evidence(value) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return schemas.UNKNOWN
+    if isinstance(value, (int, float)):
+        if value > 0:
+            return schemas.STALE
+        if value == 0:
+            return None
+        return schemas.UNKNOWN
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return schemas.UNKNOWN
+        try:
+            number = float(text)
+        except ValueError:
+            return schemas.UNKNOWN
+        if number > 0:
+            return schemas.STALE
+        if number == 0:
+            return None
+        return schemas.UNKNOWN
+    return schemas.UNKNOWN
+
+
+def _q001_required_count_evidence(value) -> Optional[str]:
+    if value is None:
+        return schemas.UNKNOWN
+    return _q001_count_evidence(value)
+
+
+def _q001_required_status_evidence(value) -> Optional[str]:
+    if value is None:
+        return schemas.UNKNOWN
+    return _q001_status_evidence(value)
+
+
+def _q001_source_status_evidence(value) -> Optional[str]:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return schemas.UNKNOWN
+    token = value.strip().upper()
+    if not token:
+        return schemas.UNKNOWN
+    if token in _Q001_FAIL_EVIDENCE or "FAIL" in token or "BLOCK" in token or "ERROR" in token:
+        return schemas.FAIL
+    if (
+        token in _Q001_WARN_EVIDENCE
+        or "WITH_GAPS" in token
+        or "WARN" in token
+        or "STALE" in token
+        or "MISS" in token
+    ):
+        return schemas.STALE
+    if token == "OK":
+        return None
+    return schemas.UNKNOWN
+
+
+def _q001_required_source_status_evidence(value) -> Optional[str]:
+    if value is None:
+        return schemas.UNKNOWN
+    return _q001_source_status_evidence(value)
+
+
+def _q001_mbo_pilot_status_evidence(value) -> Optional[str]:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return schemas.UNKNOWN
+    token = value.strip().upper().replace("-", "_").replace(" ", "_")
+    if not token:
+        return schemas.UNKNOWN
+    if "FAIL" in token or "BLOCK" in token or "ERROR" in token:
+        return schemas.FAIL
+    if token == "COMPLETED":
+        return None
+    if "WITH_GAPS" in token or token.endswith("_GAPS") or "WARN" in token or "STALE" in token:
+        return schemas.STALE
+    return schemas.UNKNOWN
+
+
+def _q001_required_mbo_pilot_status_evidence(value) -> Optional[str]:
+    if value is None:
+        return schemas.UNKNOWN
+    return _q001_mbo_pilot_status_evidence(value)
+
+
+def _q001_gap_evidence(gaps) -> Optional[str]:
+    if gaps is None:
+        return None
+    if not isinstance(gaps, list):
+        return schemas.UNKNOWN
+    if not gaps:
+        return None
+    status = schemas.STALE
+    for gap in gaps:
+        if not isinstance(gap, dict):
+            continue
+        for key in ("severity", "status", "state"):
+            evidence = _q001_status_evidence(gap.get(key))
+            if evidence == schemas.FAIL:
+                return schemas.FAIL
+            if evidence == schemas.UNKNOWN:
+                status = schemas.UNKNOWN
+    return status
+
+
+def _q001_evidence_status(*evidence_values: Optional[str]) -> Optional[str]:
+    evidence = [value for value in evidence_values if value is not None]
+    if schemas.FAIL in evidence:
+        return schemas.FAIL
+    if schemas.STALE in evidence:
+        return schemas.STALE
+    if schemas.UNKNOWN in evidence:
+        return schemas.UNKNOWN
+    return None
+
+
+def _q001_required_clean_status(gaps, q001_values: dict) -> Optional[str]:
+    return _q001_evidence_status(
+        _q001_gap_evidence(gaps) if isinstance(gaps, list) else schemas.UNKNOWN,
+        _q001_required_source_status_evidence(q001_values["event_catalog_status"]),
+        _q001_required_source_status_evidence(q001_values["active_npz_manifest_status"]),
+        _q001_required_mbo_pilot_status_evidence(q001_values["mbo_pilot_basket_status"]),
+        _q001_required_count_evidence(q001_values["missing_or_unavailable_slots"]),
+        _q001_required_source_status_evidence(q001_values["data_doctor_status"]),
+        _q001_required_count_evidence(q001_values["strict_mbo_gap_count"]),
+        _q001_required_count_evidence(q001_values["strict_mbo_stale_gap_count"]),
+    )
+
+
+def _q001_inventory() -> dict:
+    artifact = _q001_artifact()
+    artifact_ref = str(artifact.relative_to(paths.REPO))
+    data = paths.read_json(artifact)
+    if not isinstance(data, dict):
+        return {
+            "status": schemas.MISSING,
+            "q001_status": None,
+            "artifact": artifact_ref,
+            "gaps": [],
+        }
+    q001 = data.get("q001_cme_data_inventory")
+    if not isinstance(q001, dict):
+        return {
+            "status": schemas.MISSING,
+            "q001_status": None,
+            "artifact": artifact_ref,
+            "gaps": [],
+        }
+    q001_status = q001.get("status")
+    if not isinstance(q001_status, str) or not q001_status.strip():
+        return {
+            "status": schemas.MISSING,
+            "q001_status": q001_status,
+            "artifact": artifact_ref,
+            "gaps": [],
+        }
+    q001_state = q001_status.strip().upper()
+    gaps = q001.get("gaps")
+    q001_values = {
+        "event_catalog_status": _nested(q001, "event_catalog", "status"),
+        "active_npz_manifest_status": _nested(q001, "futures", "active_npz_manifest", "status"),
+        "mbo_pilot_basket_status": _nested(q001, "futures", "mbo_pilot_basket", "status"),
+        "missing_or_unavailable_slots": _nested(
+            q001, "futures", "mbo_pilot_basket", "missing_or_unavailable_slots"
+        ),
+        "data_doctor_status": _nested(q001, "options", "data_doctor_status"),
+        "strict_mbo_gap_count": _nested(
+            q001, "options", "options_lane", "expiry_coverage", "strict_mbo_gap_count"
+        ),
+        "strict_mbo_stale_gap_count": _nested(
+            q001, "options", "options_lane", "expiry_coverage", "strict_mbo_stale_gap_count"
+        ),
+    }
+    evidence_status = _q001_evidence_status(
+        _q001_gap_evidence(gaps),
+        _q001_source_status_evidence(q001_values["event_catalog_status"]),
+        _q001_source_status_evidence(q001_values["active_npz_manifest_status"]),
+        _q001_mbo_pilot_status_evidence(q001_values["mbo_pilot_basket_status"]),
+        _q001_count_evidence(q001_values["missing_or_unavailable_slots"]),
+        _q001_source_status_evidence(q001_values["data_doctor_status"]),
+        _q001_count_evidence(q001_values["strict_mbo_gap_count"]),
+        _q001_count_evidence(q001_values["strict_mbo_stale_gap_count"]),
+    )
+    q001_status_evidence = _q001_status_evidence(q001_state)
+    if q001_status_evidence == schemas.FAIL or q001_state in _Q001_FAIL_STATUSES:
+        status = schemas.FAIL
+    elif q001_state in _Q001_OK_STATUSES:
+        required_status = _q001_required_clean_status(gaps, q001_values)
+        status = schemas.OK if required_status is None else required_status
+    elif evidence_status is not None:
+        status = evidence_status
+    elif q001_status_evidence == schemas.STALE:
+        status = schemas.STALE
+    else:
+        status = schemas.UNKNOWN
+    out = {
+        "status": status,
+        "q001_status": q001_status,
+        "artifact": artifact_ref,
+        "gaps": gaps if isinstance(gaps, list) else [],
+    }
+    for key, value in q001_values.items():
+        if value is not None:
+            out[key] = value
+    return out
 
 
 def _latency() -> dict:
@@ -331,10 +584,12 @@ def build() -> dict:
     slow = _slow_tier()
     cert = _certification()
     databento = _databento()
+    q001_inventory = _q001_inventory()
+    capture = _capture()
     lanes = _lanes()
     cme_options_data = lanes.get("cme_options_data", {}) if isinstance(lanes, dict) else {}
     cme_options_defects = lanes.get("cme_options_defects", {}) if isinstance(lanes, dict) else {}
-    components = [latency, slow, cert, databento, _capture()]
+    components = [latency, slow, cert, databento, capture, q001_inventory]
     if any(c.get("status") == schemas.FAIL for c in components):
         health = schemas.RED
     elif any(c.get("status") in (schemas.STALE, schemas.MISSING, schemas.UNKNOWN) for c in components):
@@ -349,7 +604,8 @@ def build() -> dict:
         "slow_tier": slow,
         "certification": cert,
         "databento": databento,
-        "capture": components[-1],
+        "q001_inventory": q001_inventory,
+        "capture": capture,
         "execution": _execution(),
         "lanes": lanes,
         "health_scope": "research_replay",
