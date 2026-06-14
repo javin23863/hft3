@@ -16,7 +16,53 @@ export interface PipelineZone {
   zone: "pipeline";
   generated_utc: string;
   health: Health;
+  latency_evidence?: PipelineLatencyEvidence;
   stages: Stage[];
+}
+
+export interface PipelineLatencyEvidence {
+  status: Status;
+  detail?: string;
+  ack_p99_us?: number | null;
+  m6_band_ms?: number | null;
+  offensive_engine_us?: number | null;
+  offensive_baseline_tick_to_send_us?: number | null;
+  offensive_baseline_decision_to_send_us?: number | null;
+  offensive_latest_decision_to_send_p50_us?: number | null;
+  offensive_latest_decision_to_send_p99_us?: number | null;
+  defensive_cancel_to_send_us?: number | null;
+  defensive_cancel_ack_status?: string;
+  live_readiness_status?: Status;
+  [k: string]: unknown;
+}
+
+export interface ControlTrackedJob {
+  job_id?: string;
+  name?: string;
+  host?: string;
+  state?: string;
+}
+
+export interface ControlStatus {
+  exec_enabled: boolean;
+  execution_mode: string;
+  jobs: Record<string, string>;
+  tracked_jobs: ControlTrackedJob[];
+  note?: string;
+}
+
+export interface ControlJobLog {
+  job_id: string;
+  name?: string;
+  host?: string;
+  state?: string;
+  command?: unknown;
+  executed?: boolean;
+  returncode?: number | null;
+  note?: string | null;
+  error?: string | null;
+  log_lines: number;
+  log_tail: string;
 }
 
 export interface PortfolioZone {
@@ -40,8 +86,22 @@ export interface ModelRow {
   status: string;
   total_trades: number;
   n_event_types: number;
+  n_events?: number;
+  n_events_with_vix?: number;
+  vix_coverage_pct?: number | null;
   mean_expectancy_usd: number | null;
   worst_event_tail_usd: number | null;
+}
+
+export interface ModelVixCoverage {
+  status: string;
+  cell_event_observations: number;
+  cell_event_observations_with_vix: number;
+  cells_with_vix: number;
+  invalid_cells?: number;
+  coverage_pct: number | null;
+  note: string;
+  authority_sources?: Array<Record<string, string>>;
 }
 
 export interface ModelsZone {
@@ -51,6 +111,7 @@ export interface ModelsZone {
   registry_total: number;
   funnel: Record<string, number>;
   silent_zero: { count: number; hypotheses: { id: number; name: string }[]; note: string };
+  vix_coverage?: ModelVixCoverage;
   rows: ModelRow[];
 }
 

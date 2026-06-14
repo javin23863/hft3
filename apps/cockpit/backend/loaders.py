@@ -43,14 +43,23 @@ def stage_a_cells_compact() -> list[dict]:
     for cell in raw.get("cells", []):
         if not isinstance(cell, dict):
             continue
+        vix_coverage = cell.get("vix_coverage")
+        if not isinstance(vix_coverage, dict):
+            vix_coverage = {}
+        n_events = cell.get("n_events")
+        n_events_with_vix = cell.get("n_events_with_vix")
+        if n_events is None:
+            n_events = vix_coverage.get("n_events")
+        if n_events_with_vix is None:
+            n_events_with_vix = vix_coverage.get("n_events_with_vix")
         out.append(
             {
                 "hypothesis_id": cell.get("hypothesis_id"),
                 "hypothesis_name": cell.get("hypothesis_name"),
                 "event_type": cell.get("event_type"),
                 "band_ms": cell.get("band_ms"),
-                "n_events": cell.get("n_events"),
-                "n_events_with_vix": cell.get("n_events_with_vix"),
+                "n_events": n_events,
+                "n_events_with_vix": n_events_with_vix,
                 "total_trades": cell.get("total_trades"),
                 "mean_expectancy_usd": cell.get("mean_expectancy_usd"),
                 "mean_win_rate": cell.get("mean_win_rate"),

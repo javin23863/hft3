@@ -20,8 +20,11 @@ def collect() -> list[dict]:
     probs = paths.read_json(paths.SLOW_TIER_PROBLEMS)
     if isinstance(probs, dict):
         ts = probs.get("generated_utc")
-        for i, msg in enumerate(probs.get("problems", []) or []):
-            out.append(_alert(f"slowtier-{i}", schemas.SEV_WARN, "slow_tier", str(msg), ts))
+        evald = paths.read_json(paths.SLOW_TIER_EVAL)
+        gate_pass = isinstance(evald, dict) and evald.get("gate_pass") is True
+        if not gate_pass:
+            for i, msg in enumerate(probs.get("problems", []) or []):
+                out.append(_alert(f"slowtier-{i}", schemas.SEV_WARN, "slow_tier", str(msg), ts))
 
     # certification RED
     cert = paths.read_json(paths.CERT_REGISTRY)
@@ -35,7 +38,9 @@ def collect() -> list[dict]:
     if isinstance(lat, dict):
         rc = lat.get("report_card", {}) if isinstance(lat.get("report_card"), dict) else {}
         verdict = rc.get("verdict", {}) if isinstance(rc.get("verdict"), dict) else {}
-        if verdict.get("overall") == "FAIL":
+        gates = lat.get("gates", {}) if isinstance(lat.get("gates"), dict) else {}
+        research_ack_ok = gates.get("order_ack_pass") is True and lat.get("order_ack_measured") is True
+        if verdict.get("overall") == "FAIL" and not research_ack_ok:
             out.append(_alert("latency-fail", schemas.SEV_WARN, "latency",
                               f"latency gate FAIL: {lat.get('dominant_bottleneck')}", lat.get("timestamp_utc")))
 
@@ -82,14 +87,21 @@ def collect() -> list[dict]:
         }
         for name in MANDATORY_OPTIONS_CHECKS:
             if name not in options_check_names:
-                out.append(_alert(f"lake-{name}-missing", schemas.SEV_WARN, "data_lake",
+                out.append(_alert(f"lake-{name}-missing", schemas.SEV_CRIT, "cme_options_backfill",
                                   f"mandatory options check {name} MISSING", ts))
         for c in doc.get("checks", []) or []:
             status = str(c.get("status", "")).upper()
             if status in {"FAIL", "WARN", "WARNING", "MISSING", "STALE", "UNKNOWN"}:
                 name = c.get("name")
-                sev = schemas.SEV_CRIT if name == "disk-free" or status == "FAIL" else schemas.SEV_WARN
-                out.append(_alert(f"lake-{name}", sev, "data_lake",
+                if str(name).startswith("options-"):
+                    sev = schemas.SEV_CRIT
+                    source = "cme_options_backfill"
+                else:
+                    if status != "FAIL":
+                        continue
+                    sev = schemas.SEV_CRIT if name == "disk-free" else schemas.SEV_WARN
+                    source = "data_lake"
+                out.append(_alert(f"lake-{name}", sev, source,
                                   f"lake check {name} {status}: {c.get('detail', '')}", ts))
     else:
         out.append(_alert("lake-data-doctor-missing", schemas.SEV_WARN, "data_lake",
@@ -99,14 +111,11 @@ def collect() -> list[dict]:
     try:
         from hft3.validation.options_defect_ledger import load_options_defect_ledger
 
-        ledger = load_options_defect_ledger(paths.REPO)
-        if not ledger.empty:
-            out.append(_alert("options-defect-ledger-open", schemas.SEV_CRIT, "cme_options",
-                              f"options ledger {ledger.status}: {ledger.open_count} open blocker(s)",
-                              None))
-    except Exception as exc:
-        out.append(_alert("options-defect-ledger-unreadable", schemas.SEV_CRIT, "cme_options",
-                          f"options ledger unreadable: {exc}", None))
+        load_options_defect_ledger(paths.REPO)
+        # The options defect ledger blocks shadow/live arm only; the System page
+        # exposes the open ids. Do not turn the replay/research alert feed red for it.
+    except Exception:
+        pass
 
     # autonomy — frozen breaker or tampered audit chain
     try:

@@ -44,6 +44,20 @@ _FAMILIES_FALLBACK = {
 _PROP_DEAD_FALLBACK = frozenset({20, 30, 32, 35, 36, 38})
 _CROSS_ASSET_FALLBACK = frozenset({16, 17, 18, 19, 20})
 _VIX_FALLBACK = frozenset({46, 47, 48, 49, 50})
+_VIX_COVERAGE_AUTHORITY = [
+    {
+        "source_ref": "docs/workbench/HOT_MEMORY_UNIVERSE.md",
+        "source_claim": "VIX/VVIX are contextual sensors and not executable instruments.",
+    },
+    {
+        "source_ref": "packages/features_engine/src/hypotheses/vix_modules.py",
+        "source_claim": "VIX hypotheses read MarketState.cross_asset_features['VIX'].",
+    },
+    {
+        "source_ref": "docs/cockpit/MACRO_CONTEXT_VIX_OPTIONS_CHECKLIST.md",
+        "source_claim": "VIX coverage must be measured in artifacts before interpreting VIX models.",
+    },
+]
 
 
 def _registry() -> tuple[dict, frozenset, frozenset, frozenset]:
@@ -68,6 +82,32 @@ def _family_tag(hid: int, cross: frozenset, vix: frozenset) -> str:
     return "core"
 
 
+def _count(value) -> Optional[int]:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int) and value >= 0:
+        return value
+    if isinstance(value, float) and value == value and value >= 0 and value.is_integer():
+        return int(value)
+    return None
+
+
+def _vix_counts(cell: dict) -> tuple[int, int, bool]:
+    raw_n_events = cell.get("n_events")
+    raw_n_events_with_vix = cell.get("n_events_with_vix")
+    if raw_n_events is None and raw_n_events_with_vix is None:
+        return 0, 0, False
+    n_events = _count(raw_n_events)
+    if n_events is None:
+        return 0, 0, True
+    if raw_n_events_with_vix is None:
+        return n_events, 0, False
+    n_events_with_vix = _count(raw_n_events_with_vix)
+    if n_events_with_vix is None or n_events_with_vix > n_events:
+        return 0, 0, True
+    return n_events, n_events_with_vix, False
+
+
 def _aggregate_cells() -> dict[int, dict]:
     """hyp_id -> {total_trades, sum_expectancy_weighted, n_event_types, ...}."""
     agg: dict[int, dict] = {}
@@ -76,10 +116,19 @@ def _aggregate_cells() -> dict[int, dict]:
         if hid is None:
             continue
         rec = agg.setdefault(hid, {"total_trades": 0, "n_event_types": 0,
-                                   "exp_sum": 0.0, "exp_n": 0, "worst_tail": None})
+                                   "exp_sum": 0.0, "exp_n": 0, "worst_tail": None,
+                                   "n_events": 0, "n_events_with_vix": 0,
+                                   "cells_with_vix": 0, "vix_invalid_cells": 0})
         trades = cell.get("total_trades", 0) or 0
         rec["total_trades"] += trades
         rec["n_event_types"] += 1
+        n_events, n_events_with_vix, vix_invalid = _vix_counts(cell)
+        if vix_invalid:
+            rec["vix_invalid_cells"] += 1
+        rec["n_events"] += n_events
+        rec["n_events_with_vix"] += n_events_with_vix
+        if not vix_invalid and n_events_with_vix > 0:
+            rec["cells_with_vix"] += 1
         exp = cell.get("mean_expectancy_usd")
         if isinstance(exp, (int, float)):
             rec["exp_sum"] += exp
@@ -95,6 +144,10 @@ def build() -> dict:
     cells = _aggregate_cells()
 
     rows = []
+    vix_cell_event_observations = 0
+    vix_cell_event_observations_with_vix = 0
+    vix_cells_with_coverage = 0
+    vix_invalid_cells = 0
     for hid in sorted(families):
         agg = cells.get(hid, {})
         trades = agg.get("total_trades", 0)
@@ -111,6 +164,16 @@ def build() -> dict:
             status = "negative"
         else:
             status = "untested"
+        n_events = agg.get("n_events", 0)
+        n_events_with_vix = agg.get("n_events_with_vix", 0)
+        cells_with_vix = agg.get("cells_with_vix", 0)
+        vix_cell_event_observations += n_events
+        vix_cell_event_observations_with_vix += n_events_with_vix
+        vix_cells_with_coverage += cells_with_vix
+        vix_invalid_cells += agg.get("vix_invalid_cells", 0)
+        vix_pct = None
+        if n_events > 0:
+            vix_pct = round(100.0 * n_events_with_vix / n_events, 2)
         rows.append({
             "id": hid,
             "name": families[hid],
@@ -119,6 +182,9 @@ def build() -> dict:
             "status": status,
             "total_trades": trades,
             "n_event_types": agg.get("n_event_types", 0),
+            "n_events": n_events,
+            "n_events_with_vix": n_events_with_vix,
+            "vix_coverage_pct": vix_pct,
             "mean_expectancy_usd": round(mean_exp, 4) if mean_exp is not None else None,
             "worst_event_tail_usd": agg.get("worst_tail"),
         })
@@ -131,11 +197,20 @@ def build() -> dict:
     n_screened = len({c.get("hypothesis_id") for c in (stage_a_raw.get("cells", []) if isinstance(stage_a_raw, dict) else [])})
 
     silent_zero = [{"id": hid, "name": families[hid]} for hid in sorted(prop_dead)]
+    vix_status = "unknown"
+    if vix_invalid_cells > 0:
+        vix_status = "corrupt"
+    elif vix_cell_event_observations > 0:
+        vix_status = "covered" if vix_cell_event_observations_with_vix > 0 else "zero"
+    vix_pct = None
+    if vix_cell_event_observations > 0:
+        vix_pct = round(100.0 * vix_cell_event_observations_with_vix / vix_cell_event_observations, 2)
+    health = schemas.RED if vix_invalid_cells else schemas.AMBER if silent_zero or vix_status in {"unknown", "zero"} else schemas.GREEN
 
     return {
         "zone": "models",
         "generated_utc": paths.now_iso(),
-        "health": schemas.AMBER if silent_zero else schemas.GREEN,
+        "health": health,
         "registry_total": len(families),
         "funnel": {
             "registry": len(families),
@@ -148,6 +223,16 @@ def build() -> dict:
             "hypotheses": silent_zero,
             "note": "no feature producer / no context / hardcoded 0 — never alive, not tested-and-rejected. "
                     "Source of truth: scripts/audit_prop_slots.py",
+        },
+        "vix_coverage": {
+            "status": vix_status,
+            "cell_event_observations": vix_cell_event_observations,
+            "cell_event_observations_with_vix": vix_cell_event_observations_with_vix,
+            "cells_with_vix": vix_cells_with_coverage,
+            "invalid_cells": vix_invalid_cells,
+            "coverage_pct": vix_pct,
+            "note": "Stage A cell-event observations, not unique macro events; counts come from research artifacts.",
+            "authority_sources": _VIX_COVERAGE_AUTHORITY,
         },
         "rows": rows,
     }

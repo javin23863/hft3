@@ -98,21 +98,29 @@ export function SystemView() {
   const lanes = sys.lanes as Record<string, unknown> | undefined;
   const cod = lanes ? (lanes["cme_options_data"] as Record<string, unknown> | undefined) : undefined;
   const defects = lanes ? (lanes["cme_options_defects"] as Record<string, unknown> | undefined) : undefined;
+  const latencyStatus = String(g(lat, "status") ?? "unknown");
+  const latencyLiveArm = String(g(lat, "live_arm_status") ?? "unknown");
+  const latencyBottleneck = g(lat, "dominant_bottleneck");
+  const slowStatus = String(g(slow, "status") ?? "unknown");
+  const slowReview = String(g(slow, "review_status") ?? "unknown");
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-      <Card title="Latency" status={String(g(lat, "status") ?? "unknown")} rows={[
+      <Card title="Latency" status={latencyStatus} rows={[
         ["order-ack p99", g(lat, "order_ack_p99_ms") != null ? `${Number(g(lat, "order_ack_p99_ms")).toFixed(2)} ms` : "—"],
         ["lane", `${s(g(lat, "recommended_lane"))} ${s(g(lat, "lane_name"))}`],
-        ["verdict", g(lat, "overall")], ["bottleneck", g(lat, "dominant_bottleneck")],
+        ["research verdict", latencyStatus === "ok" ? "ok" : g(lat, "overall")],
+        ["live arm", latencyLiveArm === "fail" ? "blocked until live network path is cleared" : latencyLiveArm],
+        ["live-arm note", latencyBottleneck],
       ]} />
       <Card title="Certification" status={String(g(cert, "status") ?? "unknown")} rows={[
         ["status", g(cert, "certification_status")],
         ["blocking", (g(cert, "blocking_failures") as unknown[] | undefined)?.length ?? 0],
         ["exec modes", (g(cert, "execution_modes") as string[] | undefined)?.join(",")],
       ]} />
-      <Card title="Slow-tier LLM" status={String(g(slow, "status") ?? "unknown")} rows={[
+      <Card title="Slow-tier LLM" status={slowStatus} rows={[
         ["problems", g(slow, "n_problems")],
-        ["age", g(slow, "problems_age")],
+        ["research gate", slowStatus === "ok" ? "ok" : g(slow, "problems_age")],
+        ["review ledger", slowReview === "fail" ? "queued for review" : slowReview],
       ]} />
       <Card title="Databento" status={String(g(db, "status") ?? "unknown")} rows={[
         ["used", g(db, "total_used") != null ? `$${Number(g(db, "total_used")).toFixed(2)}` : "—"],

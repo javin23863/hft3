@@ -21,6 +21,25 @@ export async function apiGet<T = unknown>(path: string): Promise<T> {
   return r.json();
 }
 
+export async function apiPost<T = unknown>(path: string, body: unknown): Promise<T> {
+  const r = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) {
+    let detail = r.statusText || "request failed";
+    try {
+      const payload = await r.json();
+      detail = String(payload?.detail || payload?.error || detail);
+    } catch {
+      /* keep HTTP status text */
+    }
+    throw new Error(`${r.status} ${detail}`.trim());
+  }
+  return r.json();
+}
+
 export interface ChatEvent {
   type: "context" | "token" | "done" | "error";
   text?: string;

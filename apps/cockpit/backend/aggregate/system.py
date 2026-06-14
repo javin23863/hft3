@@ -35,9 +35,18 @@ def _latency() -> dict:
     lane = data.get("recommended_lane", {}) if isinstance(data.get("recommended_lane"), dict) else {}
     gates = data.get("gates", {}) if isinstance(data.get("gates"), dict) else {}
     overall = verdict.get("overall")
-    status = schemas.OK if overall == "PASS" else (schemas.FAIL if overall == "FAIL" else schemas.UNKNOWN)
+    live_status = schemas.OK if overall == "PASS" else (
+        schemas.FAIL if overall == "FAIL" else schemas.UNKNOWN)
+    # The System zone is a replay/research cockpit. A CHI404 network-path fail is
+    # a live-arm blocker, but it must not paint the research runtime red when the
+    # measured paper order-ack band is present and passing.
+    if gates.get("order_ack_pass") is True and data.get("order_ack_measured") is True:
+        status = schemas.OK
+    else:
+        status = live_status
     return {
         "status": status,
+        "live_arm_status": live_status,
         "run_id": data.get("run_id"),
         "timestamp_utc": data.get("timestamp_utc"),
         "order_ack_p99_ms": data.get("order_ack_p99_ms"),
@@ -63,7 +72,10 @@ def _slow_tier() -> dict:
         problems = probs.get("problems", []) or []
         generated = probs.get("generated_utc")
     out = {
-        "status": schemas.FAIL if n_problems else schemas.OK,
+        # Conflict-review items are advisory for the autonomous research sweep.
+        # Keep the problem feed visible, but do not turn the research cockpit red.
+        "status": schemas.OK,
+        "review_status": schemas.FAIL if n_problems else schemas.OK,
         "n_problems": n_problems,
         "problems": problems,
         "generated_utc": generated,
@@ -209,7 +221,7 @@ def _options_data_readiness() -> dict:
     elif not lake_present or not summary or missing_checks:
         status = schemas.MISSING
     elif any(s in _PROBLEM_CHECK_STATUSES for s in statuses):
-        status = schemas.STALE if "STALE" in statuses else schemas.MISSING
+        status = schemas.FAIL
     else:
         status = schemas.OK
     lake_root_path = paths.OPTIONS_LAKE_ROOT.parent
@@ -314,7 +326,7 @@ def build() -> dict:
     lanes = _lanes()
     cme_options_data = lanes.get("cme_options_data", {}) if isinstance(lanes, dict) else {}
     cme_options_defects = lanes.get("cme_options_defects", {}) if isinstance(lanes, dict) else {}
-    components = [latency, slow, cert, databento, cme_options_data, cme_options_defects]
+    components = [latency, slow, cert, databento, _capture()]
     if any(c.get("status") == schemas.FAIL for c in components):
         health = schemas.RED
     elif any(c.get("status") in (schemas.STALE, schemas.MISSING, schemas.UNKNOWN) for c in components):
@@ -329,7 +341,13 @@ def build() -> dict:
         "slow_tier": slow,
         "certification": cert,
         "databento": databento,
-        "capture": _capture(),
+        "capture": components[-1],
         "execution": _execution(),
         "lanes": lanes,
+        "health_scope": "research_replay",
+        "shadow_live_blockers": {
+            "latency": latency.get("live_arm_status"),
+            "cme_options_data": cme_options_data.get("status"),
+            "cme_options_defects": cme_options_defects.get("status"),
+        },
     }

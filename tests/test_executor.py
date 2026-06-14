@@ -104,6 +104,18 @@ def test_worker_records_only_when_exec_disabled(env):
     assert "HFT3_ORCH_EXEC" in failed[0]["error"]
 
 
+def test_job_runner_singleton_rejects_active_duplicate(env):
+    cert, lc, tmp, mp = env
+    jr = importlib.import_module("lifecycle_orchestrator.src.job_runner")
+    importlib.reload(jr)
+    jid = jr.enqueue_singleton("M", "cockpit", {"entry": "x.py", "args": []})
+
+    with pytest.raises(jr.DuplicateActiveJob) as excinfo:
+        jr.enqueue_singleton("M", "cockpit", {"entry": "x.py", "args": []})
+
+    assert excinfo.value.job["job_id"] == jid
+
+
 def test_worker_skips_unmaterialized_command(env):
     cert, lc, tmp, mp = env
     jr = importlib.import_module("lifecycle_orchestrator.src.job_runner")

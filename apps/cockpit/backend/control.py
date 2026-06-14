@@ -30,6 +30,7 @@ router = APIRouter(prefix="/api/control", tags=["control"])
 JOBS = {
     "feature_rebuild": "rebuild feature store (PC6 chain)",
     "rescreen_stage_a": "re-run Stage A screen",
+    "cme_m6_universe_sweep": "run full CME M6 universe sweep (research-only)",
     "roll_now": "force contract roll on capture daemon",
     "capture_restart": "restart hft3-capture service",
     "slowtier_run": "run slow-tier nightly now",
@@ -51,10 +52,27 @@ def _job_cmd() -> dict:
         "feature_rebuild":  {"host": "laptop",
                              "command": {"entry": str(s / "build_feature_store.py"), "args": ["--rebuild"]}},
         "rescreen_stage_a": {"host": "laptop",
-                             "command": {"entry": str(s / "run_stage_a_screen.py"), "args": []}},
+                              "command": {"entry": str(s / "run_stage_a_screen.py"), "args": []}},
+        "cme_m6_universe_sweep": {
+            "host": "laptop",
+            "requires_exec_enabled": True,
+            "singleton": True,
+            "command": {
+                "entry": str(s / "run_event_universe.py"),
+                "args": [
+                    "--lane", "cme",
+                    "--bands", "6.255764",
+                    "--symbols", "MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0",
+                    "--events-csv", "packages/data_system/config/events.csv",
+                    "--from-stage-a", "research_cards/stage_a_full/stage_a_survivors.json",
+                    "--out", "research_cards/universe_M6_full",
+                    "--workers", "12",
+                ],
+            },
+        },
         "slowtier_run":     {"host": "laptop",
-                             "command": {"entry": "powershell",
-                                         "args": ["-NoProfile", "-ExecutionPolicy", "Bypass",
+                              "command": {"entry": "powershell",
+                                          "args": ["-NoProfile", "-ExecutionPolicy", "Bypass",
                                                   "-File", str(s / "slow_tier_nightly.ps1")]}},
         # The capture daemon auto-rolls (intraday live ROLL_ADD/DROP + ROLL_RESTART
         # self-exit) and handles only SIGTERM/SIGINT — no external force-roll or
@@ -130,6 +148,28 @@ def _all_jobs() -> list[dict]:
     return out
 
 
+def _active_job(name: str) -> Optional[dict]:
+    for job in _all_jobs():
+        if job.get("model_id") == name and job.get("state") in {"pending", "running"}:
+            return job
+    return None
+
+
+def _tracked_jobs() -> list[dict]:
+    jobs = _all_jobs()
+    recent = jobs[-20:]
+    active = [job for job in jobs if job.get("state") in {"pending", "running"}]
+    combined: list[dict] = []
+    seen: set[str] = set()
+    for job in [*active, *recent]:
+        job_id = str(job.get("job_id") or "")
+        if not job_id or job_id in seen:
+            continue
+        seen.add(job_id)
+        combined.append(job)
+    return combined
+
+
 def _audit(action: str, params: dict, result: dict) -> None:
     rec = {"ts": paths.now_iso(), "action": action, "params": params, "result": result}
     path = paths.CONTROL_AUDIT_LOG
@@ -160,7 +200,7 @@ def status(_: str = Depends(require_control)) -> dict:
         "tracked_jobs": [
             {"job_id": j.get("job_id"), "name": j.get("model_id"),
              "host": j.get("host"), "state": j.get("state")}
-            for j in _all_jobs()[-20:]
+            for j in _tracked_jobs()
         ],
         "recent_audit": _audit_tail(),
         "note": "control is local-origin only; job execution gated by COCKPIT_CONTROL_EXEC=1",
@@ -179,11 +219,9 @@ def trigger_job(req: JobRequest, _: str = Depends(require_control)) -> dict:
         raise HTTPException(400, f"unknown job '{req.name}'")
     if not req.confirm:
         raise HTTPException(400, "confirm=true required")
-    try:
-        from lifecycle_orchestrator.src import job_runner
-    except Exception as exc:
-        raise HTTPException(502, f"job queue unavailable: {exc}")
     spec = _job_cmd()[req.name]
+    if spec.get("requires_exec_enabled") and not _exec_enabled():
+        raise HTTPException(403, f"'{req.name}' requires COCKPIT_CONTROL_EXEC=1 before enqueue")
     # Disruptive jobs restart the live capture daemon (brief market-data gap):
     # require an explicit acknowledgement so the dashboard can never gap the tape
     # by a casual click.
@@ -193,7 +231,17 @@ def trigger_job(req: JobRequest, _: str = Depends(require_control)) -> dict:
             f"'{req.name}' restarts the live capture daemon (brief market-data gap); "
             "pass params.ack_capture_gap=true to acknowledge and proceed",
         )
-    job_id = job_runner.enqueue(req.name, "cockpit", spec["command"], host=spec["host"])
+    try:
+        from lifecycle_orchestrator.src import job_runner
+    except Exception as exc:
+        raise HTTPException(502, f"job queue unavailable: {exc}")
+    try:
+        if spec.get("singleton"):
+            job_id = job_runner.enqueue_singleton(req.name, "cockpit", spec["command"], host=spec["host"])
+        else:
+            job_id = job_runner.enqueue(req.name, "cockpit", spec["command"], host=spec["host"])
+    except getattr(job_runner, "DuplicateActiveJob", RuntimeError) as exc:
+        raise HTTPException(409, str(exc))
     result = {"enqueued": True, "job_id": job_id, "host": spec["host"]}
     if _exec_enabled():
         pid = _kick_worker()

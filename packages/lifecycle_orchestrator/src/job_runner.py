@@ -19,6 +19,16 @@ from model_metrics import lifecycle
 _STATES = ("pending", "running", "done", "failed")
 
 
+class DuplicateActiveJob(RuntimeError):
+    """Raised when a singleton job already has a pending/running instance."""
+
+    def __init__(self, job: dict) -> None:
+        self.job = job
+        super().__init__(
+            f"{job.get('model_id')} already {job.get('state')} as {job.get('job_id')}"
+        )
+
+
 class _EnqueueLock:
     def __init__(self, timeout_s: float = 5.0) -> None:
         self._path = jobs_dir() / "enqueue.lock"
@@ -86,15 +96,37 @@ def _next_seq() -> int:
 
 def enqueue(model_id: str, route: str, command: dict, *, host: str = "laptop", depends_on: Optional[list] = None) -> str:
     with _EnqueueLock():
-        seq = _bump_counter()
-        job_id = f"{model_id}_{route}_{seq}"
-        job = {
-            "job_id": job_id, "model_id": model_id, "route": route, "state": "pending",
-            "host": host, "command": command, "depends_on": depends_on or [],
-            "artifacts": {}, "error": None,
-        }
-        _write(job_id, "pending", job)
+        job_id = _enqueue_locked(model_id, route, command, host=host, depends_on=depends_on)
     return job_id
+
+
+def enqueue_singleton(model_id: str, route: str, command: dict, *, host: str = "laptop", depends_on: Optional[list] = None) -> str:
+    """Atomically enqueue only when no pending/running job exists for model_id."""
+    with _EnqueueLock():
+        active = _active_locked(model_id)
+        if active is not None:
+            raise DuplicateActiveJob(active)
+        return _enqueue_locked(model_id, route, command, host=host, depends_on=depends_on)
+
+
+def _enqueue_locked(model_id: str, route: str, command: dict, *, host: str, depends_on: Optional[list]) -> str:
+    seq = _bump_counter()
+    job_id = f"{model_id}_{route}_{seq}"
+    job = {
+        "job_id": job_id, "model_id": model_id, "route": route, "state": "pending",
+        "host": host, "command": command, "depends_on": depends_on or [],
+        "artifacts": {}, "error": None,
+    }
+    _write(job_id, "pending", job)
+    return job_id
+
+
+def _active_locked(model_id: str) -> Optional[dict]:
+    for state in ("pending", "running"):
+        for job in list_jobs(state):
+            if job.get("model_id") == model_id:
+                return job
+    return None
 
 
 def _path(job_id: str, state: str) -> Path:
