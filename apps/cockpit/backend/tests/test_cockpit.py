@@ -1247,6 +1247,80 @@ def test_lanes_synthetic_data_doctor_report(monkeypatch, tmp_path):
     _json_roundtrip(z)
 
 
+def test_options_zone_exposes_independent_research_only_state(monkeypatch, tmp_path):
+    _write_options_spec(tmp_path, "**OPEN** — blocks shadow/live arm. Research/backtest NOT blocked.")
+    lake = tmp_path / "options"
+    lake.mkdir(parents=True)
+    report_path = tmp_path / "data_doctor_report.json"
+    report_path.write_text(
+        json.dumps({
+            "run_utc": paths.now_iso(),
+            "checks": _options_ok_checks(),
+            "options_lane": {
+                "as_of_utc": paths.now_iso(),
+                "fixing_mbo": {"quote_files": 2, "trades_files": 3, "dates_covered": 4},
+                "expiry_coverage": {"expected_dates": 4, "gap_count": 0, "stale_gap_count": 0},
+                "ohlcv": {"files": 1, "names": ["ES_v0_ohlcv1m.dbn.zst"]},
+                "definitions": {"files": 5, "batches": ["defs"]},
+                "statistics": {"files": 0, "state": "pending_batch_delivery"},
+            },
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "DATA_DOCTOR_REPORT", report_path)
+    monkeypatch.setattr(paths, "OPTIONS_LAKE_ROOT", lake)
+
+    z = ZONES["options"]()
+
+    assert z["zone"] == "options"
+    assert z["lane"] == "cme_options"
+    assert z["model_id_prefix"] == "FOPT_"
+    assert z["research_only"] is True
+    assert z["controls"]["live_order_controls"] is False
+    assert z["controls"]["paper_order_controls"] is False
+    assert z["data_readiness"]["status"] == sc.OK
+    assert z["defect_ledger"]["open_count"] == 1
+    assert z["context_feature_coverage"]["status"] == "not_measured"
+    assert z["context_feature_coverage"]["options_as_clue"] == "not_measured"
+    assert z["shadow_live_status"] == "blocked"
+    assert "research_only_phase" in z["shadow_live_blockers"]
+    assert "defect_ledger_open" in z["shadow_live_blockers"]
+    assert z["health"] == sc.AMBER
+    _json_roundtrip(z)
+
+
+def test_options_api_route(monkeypatch, tmp_path):
+    from apps.cockpit.backend import auth
+
+    _write_options_spec(tmp_path, "**FIXED**")
+    lake = tmp_path / "options"
+    lake.mkdir(parents=True)
+    report_path = tmp_path / "data_doctor_report.json"
+    report_path.write_text(
+        json.dumps({
+            "run_utc": paths.now_iso(),
+            "checks": _options_ok_checks(),
+            "options_lane": {"name": "options_lane", "status": "OK", "detail": "ok"},
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "DATA_DOCTOR_REPORT", report_path)
+    monkeypatch.setattr(paths, "OPTIONS_LAKE_ROOT", lake)
+    monkeypatch.setattr(auth, "_LOOPBACK", {"testclient"})
+
+    client = TestClient(app)
+    r = client.get("/api/options")
+
+    assert r.status_code == 200
+    payload = r.json()
+    assert payload["zone"] == "options"
+    assert payload["health"] == sc.AMBER
+    assert payload["shadow_live_status"] == "blocked"
+    assert payload["shadow_live_blockers"] == ["research_only_phase"]
+
+
 def test_system_view_reads_real_options_gap_summary():
     src = (paths.REPO / "apps/cockpit/frontend/src/views/SystemView.tsx").read_text(encoding="utf-8")
     assert "summary[\"expiry_coverage\"]" in src

@@ -1,6 +1,6 @@
 import { NavLink } from "react-router-dom";
 import {
-  LayoutDashboard, GitBranch, Boxes, Activity, ShieldAlert, Cpu, Wallet, MessageSquare,
+  LayoutDashboard, GitBranch, Boxes, CircleDollarSign, Activity, ShieldAlert, Cpu, Wallet, MessageSquare,
 } from "lucide-react";
 import { useZones } from "../zonesContext";
 import { Dot } from "../ui";
@@ -9,6 +9,7 @@ const NAV = [
   { to: "/", label: "Overview", icon: LayoutDashboard, zone: null },
   { to: "/pipeline", label: "Pipeline", icon: GitBranch, zone: "pipeline" },
   { to: "/models", label: "Models", icon: Boxes, zone: "models" },
+  { to: "/options", label: "Options", icon: CircleDollarSign, zone: "options" },
   { to: "/lifecycle", label: "Lifecycle", icon: Activity, zone: "lifecycle" },
   { to: "/autonomy", label: "Autonomy", icon: ShieldAlert, zone: "autonomy" },
   { to: "/system", label: "System", icon: Cpu, zone: "system" },

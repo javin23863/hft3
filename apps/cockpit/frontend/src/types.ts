@@ -115,6 +115,23 @@ export interface ModelsZone {
   rows: ModelRow[];
 }
 
+export interface OptionsZone {
+  zone: "options";
+  generated_utc: string;
+  health: Health;
+  lane: string;
+  model_id_prefix: string;
+  phase: string;
+  research_only: boolean;
+  data_readiness: Record<string, unknown>;
+  defect_ledger: Record<string, unknown>;
+  context_feature_coverage: Record<string, unknown>;
+  shadow_live_status: string;
+  shadow_live_blockers: string[];
+  controls: Record<string, unknown>;
+  authority_sources?: string[];
+}
+
 export interface SystemZone {
   zone: "system";
   generated_utc: string;
@@ -192,6 +209,7 @@ export interface Zones {
   pipeline?: PipelineZone;
   portfolio?: PortfolioZone;
   models?: ModelsZone;
+  options?: OptionsZone;
   lifecycle?: LifecycleZone;
   autonomy?: AutonomyZone;
   system?: SystemZone;

@@ -6,6 +6,7 @@ import { TopBar } from "./components/TopBar";
 import { Overview } from "./views/Overview";
 import { PipelineView } from "./views/PipelineView";
 import { ModelsView } from "./views/ModelsView";
+import { OptionsView } from "./views/OptionsView";
 import { LifecycleView } from "./views/LifecycleView";
 import { AutonomyView } from "./views/AutonomyView";
 import { SystemView } from "./views/SystemView";
@@ -25,6 +26,7 @@ export default function App() {
               <Route path="/" element={<Overview />} />
               <Route path="/pipeline" element={<PipelineView />} />
               <Route path="/models" element={<ModelsView />} />
+              <Route path="/options" element={<OptionsView />} />
               <Route path="/lifecycle" element={<LifecycleView />} />
               <Route path="/autonomy" element={<AutonomyView />} />
               <Route path="/system" element={<SystemView />} />

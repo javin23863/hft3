@@ -144,6 +144,11 @@ def models(_: str = Depends(require_view)) -> dict:
     return _zone("models")
 
 
+@app.get("/api/options")
+def options(_: str = Depends(require_view)) -> dict:
+    return _zone("options")
+
+
 @app.get("/api/lifecycle")
 def lifecycle(_: str = Depends(require_view)) -> dict:
     return _zone("lifecycle")
