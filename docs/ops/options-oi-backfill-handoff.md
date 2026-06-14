@@ -37,6 +37,12 @@ OI = 1,074,322 as of T-1 (2023-05-18, last-wins), 0 on the expiry day.
   `C:\hft3-lake\options\statistics\<root>\` and `C:\hft3-lake\options\definitions\pm\<root>\`.
   Progress log: **`C:\hft3-lake\options\pm_backfill_log.txt`** (`tail` it). ~$121, ~120 GB,
   several hours. Idempotent: safe to re-run; it resumes.
+- **Pause snapshot (2026-06-14)** — fill intentionally paused with no live
+  `pull_pm_options_backfill.py` process. Last active file:
+  `C:\hft3-lake\options\statistics\E1A\E1A_stats_2024-07.dbn.zst`, 14,313,902 bytes,
+  DBN EOF validation OK (`785060` `StatMsg` records). Resume by rerunning the same script;
+  after `END`, run ledger reconcile. Durable note:
+  `docs/vault/PM_OPTIONS_BACKFILL_PAUSE_2026_06_14.md`.
 - Claude background task IDs (this session only): pull = `bmgw7fpl5`, log monitor = `bxp83mlx2`.
   (Ephemeral — a new operator just watches the log file + checks the manifest.)
 
