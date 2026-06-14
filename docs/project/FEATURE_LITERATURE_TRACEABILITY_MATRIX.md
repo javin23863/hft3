@@ -1,0 +1,42 @@
+# MANDATORY ONTOLOGY GATE: Before using this document, operate from the Obsidian vault ontology and the provided mathematics/quantitative-finance/HFT PDFs; do not invent project requirements outside that authority.
+
+# Feature Literature Traceability Matrix
+
+Status: v0.1 planning-control artifact. Rows classify feature areas from the
+product vision. Classification does not mean implementation is complete.
+
+Classification vocabulary is defined in
+[PROJECT_PLANNING_STANDARD.md](PROJECT_PLANNING_STANDARD.md).
+
+## Matrix
+
+| ID | Feature | Class | End-goal connection | Literature / ontology basis | Data requirement | Backend behavior | Cockpit behavior | Acceptance gate | Failure / rejection rule |
+|---|---|---|---|---|---|---|---|---|---|
+| F001 | Autonomous research engine | PARTIALLY_SUPPORTED | Runs model research without LLM babysitting. | `docs/references/dev_instructions.pdf`; `docs/research/AUTORESEARCH_PIPELINE.md`; vault `Autoresearch Pipeline`. | Clean historical market data, events, model registry, durable run queue. | Durable jobs execute bounded scopes, write standardized artifacts, and preserve failure reasons. | Shows queue state, active run id, logs, artifacts, blockers. | Reproducible clean-state run completes and emits auditable artifacts. | Reject any "autonomous" claim that depends on a human or LLM manually advancing each step. |
+| F002 | Full model universe testing | PARTIALLY_SUPPORTED | Tests a library of models across symbols, events, regimes, and latency assumptions. | `docs/workbench/MODEL_CATALOG.md`; `docs/structural_models/PDF_MODELS.md`; `docs/references/algorithmic_trading_strategy_development.pdf`. | Model inventory, symbol universe, event universe, fold definitions, latency envelope. | Each model receives run artifacts and lifecycle status. | Shows model count, running/completed/rejected/promoted states. | All in-scope models have artifacts or explicit skipped/missing-data reasons. | Reject silent omission of failed models or partial universe as full coverage. |
+| F003 | Macro event intelligence | PARTIALLY_SUPPORTED | Finds edge around major scheduled volatility events. | Event-study methodology; vault `Economic Event Universe`; `docs/references/MANIFEST.md` `event_context`. | Event calendar with release timestamps, tradable timestamps, revisions/vintages, symbols. | Event windows are constructed with PIT information boundaries. | Shows event coverage, missing releases, target events, event-window status. | Backtest states exact event window and PIT boundary. | Reject event features with ambiguous release timing or post-event leakage. |
+| F004 | Context feature system | EXPERIMENTAL | Measures whether macro, VIX, options, or cross-market features improve target trading. | Microstructure + event-study + temporal/PIT data literature; vault `System Implications`; `docs/cockpit/MACRO_CONTEXT_VIX_OPTIONS_CHECKLIST.md`. | PIT macro features, VIX/volatility snapshots, CME options snapshots, target futures data. | Computes target-only baseline and context-uplift model; records feature availability and leakage checks. | Shows feature families, PIT readiness, uplift/ablation result, rejection reason. | Context model beats target-only baseline under robustness gates. | Reject features whose availability at decision timestamp is not proven. |
+| F005 | First-class CME options lane | PARTIALLY_SUPPORTED | Options models are independently testable, not only inputs to futures models. | Vault options microstructure papers: O'Donovan/Yu/Zhang 2023, Lee/Ryu/Yang/Yu 2023, Sahut 2008; `docs/ops/ws0-3-cme-options-fees.md`; `docs/ops/ws0-5-tick-table-status.md`. | CME options chains, quotes/trades, greeks/underlying, fee/tick rules, expiries, PIT joins. | Separate options model registry, robustness artifacts, lifecycle, and rejection ledger. | Dedicated options lane panel with data readiness, model lifecycle, and blockers. | Options models can run their own research/robustness lifecycle. | Reject treating options as only a futures feature source. |
+| F006 | Robustness / anti-overfit gauntlet | SUPPORTED | Prevents false positives and invalid promotion. | Walk-forward validation; PBO/CSCV; data-snooping / Reality Check / SPA-style controls; `docs/vault/BACKTESTER_CERTIFICATION.md`; `docs/references/Ultimate_Quantitative_Finance_Researcher.pdf`. | In-sample/discovery, confirmation, holdout, recent holdout, cost/latency stress data. | Runs robustness gates and writes pass/fail thresholds and reasons. | Shows gate status and blocks green when artifacts are stale/missing/invalid. | Promotion impossible without valid robustness artifacts. | Reject in-sample-only winners and malformed/stale robustness output. |
+| F007 | Evidence-based cockpit | SUPPORTED | Makes true backend state visible to a human. | Observability and validation honesty; `docs/human/RUNTIME_CONTRACT.md`; `docs/VALIDATION_HONESTY.md`; `docs/cockpit/BUILDOUT_CORRECTNESS_CHECKLIST.md`. | Backend state files, job queue, artifacts, gate outputs, timestamps. | Aggregators fail closed on stale, smoke, fixture, malformed, or missing evidence. | No decorative green; panels show source, freshness, and blockers. | Every visible status maps to backend object and freshness rule. | Reject any panel that cannot name its backend source and freshness contract. |
+| F008 | Model library and lifecycle | PARTIALLY_SUPPORTED | Tracks candidates, failures, promotions, observation, degradation, retirement. | Model governance + robustness ontology; `docs/workbench/MODEL_CATALOG.md`; `docs/vault/BACKTESTER_CERTIFICATION.md`. | Model ids, run ids, artifacts, gate results, timestamps, rejection/promote reasons. | Maintains lifecycle states and transition audit. | Shows status, reason, last artifact, next required gate. | No model has an unexplained lifecycle transition. | Reject manual status edits without artifact provenance. |
+| F009 | Clean reproducibility | SUPPORTED | Prevents prior-run contamination and stale evidence. | Reproducible research, temporal data control; `docs/START_HERE.md` fresh-state rule; `docs/LEAKAGE_DETECTION.md`. | Cleanup roots, active run id, pre-delete manifest, reuse policy, leakage report. | Fresh-start command resets generated boundary and records manifest. | Shows active run id, artifact reuse policy, stale rejected artifacts. | All-model/all-lane run starts after fresh-start and leakage-detect. | Reject research whose artifacts predate or do not match active run id. |
+| F010 | Finance-grade correctness and ontology control | SUPPORTED | Keeps math, quant finance, and HFT claims grounded. | `AGENTS.md`; `docs/REVIEWER_CHARTER.md`; vault `Ontology`; vault `System Implications`; `docs/references/MANIFEST.md`. | Feature records, citations, tests, graph/vault evidence, review receipts. | Every feature has traceability, tests, acceptance gates, and rejection rules. | Shows blocked/unsupported state instead of false confidence. | GrepLoop/review/verify pass and feature row stays current. | Reject unsupported LLM-invented methodology or uncited feature behavior. |
+
+## Domain Reference Map
+
+| Domain | Primary local references |
+|---|---|
+| Event studies and macro releases | Vault `library/papers`; `docs/vault/ECONOMIC_EVENT_UNIVERSE.md`; `docs/references/MANIFEST.md` `event_context`. |
+| MBO / LOB microstructure | Vault `library/System Implications.md`; `docs/references/chicago_cme_microstructure_mathematical_model.pdf`; `docs/research/MBO_FEATURE_PACKET_SOURCE_OF_TRUTH.md`. |
+| Order-flow imbalance and impact | Vault papers `cont-kukanov-stoikov-2011-ofi`, `xu-gould-howison-2019-mlofi`, `bouchaud-farmer-lillo-2009-markets-digest`. |
+| Hawkes / point processes | Vault papers category 05; `docs/references/hft_framework_developer_prompt.pdf`. |
+| Options microstructure | Vault papers category 11; `docs/ops/ws0-3-cme-options-fees.md`; `docs/ops/ws0-5-tick-table-status.md`. |
+| Robustness / overfit control | `docs/vault/BACKTESTER_CERTIFICATION.md`; `docs/references/Ultimate_Quantitative_Finance_Researcher.pdf`; `docs/VALIDATION_HONESTY.md`. |
+| PIT / leakage control | `docs/LEAKAGE_DETECTION.md`; `docs/START_HERE.md`; `docs/human/RUNTIME_CONTRACT.md`. |
+
+## Update Rule
+
+Any implementation PR that adds, removes, renames, or changes behavior for a
+feature above must update this matrix in the same change or explicitly mark the
+matrix update as blocked in [OPEN_QUESTIONS_AND_REJECTIONS.md](OPEN_QUESTIONS_AND_REJECTIONS.md).

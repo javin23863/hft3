@@ -14,7 +14,8 @@ Read these before asking the owner for context or changing code:
 3. Vault `Memory Stack.md`
 4. [AGENTS.md](../AGENTS.md)
 5. [BLUEPRINT.md](../BLUEPRINT.md)
-6. [docs/references/README.md](references/README.md)
+6. [docs/project/PROJECT_PLANNING_STANDARD.md](project/PROJECT_PLANNING_STANDARD.md)
+7. [docs/references/README.md](references/README.md)
 
 Non-negotiables: filtration, event-time ordering, walk-forward discipline,
 CHI404-only live/paper topology, and quarantine boundaries.
@@ -62,11 +63,14 @@ Reference: [docs/LEAKAGE_DETECTION.md](LEAKAGE_DETECTION.md).
 
 Use the existing pipeline only:
 
-1. Event universe: [docs/vault/ECONOMIC_EVENT_UNIVERSE.md](vault/ECONOMIC_EVENT_UNIVERSE.md)
-2. Entry commands: [docs/vault/RESEARCH_ENTRYPOINTS.md](vault/RESEARCH_ENTRYPOINTS.md)
-3. Workbench campaigns: [docs/workbench/README.md](workbench/README.md)
-4. Certification: [docs/vault/BACKTESTER_CERTIFICATION.md](vault/BACKTESTER_CERTIFICATION.md)
-5. Validation honesty: [docs/VALIDATION_HONESTY.md](VALIDATION_HONESTY.md)
+1. Planning standard: [docs/project/PROJECT_PLANNING_STANDARD.md](project/PROJECT_PLANNING_STANDARD.md)
+2. Canonical project plan: [docs/project/CANONICAL_PROJECT_PLAN.md](project/CANONICAL_PROJECT_PLAN.md)
+3. Feature traceability matrix: [docs/project/FEATURE_LITERATURE_TRACEABILITY_MATRIX.md](project/FEATURE_LITERATURE_TRACEABILITY_MATRIX.md)
+4. Event universe: [docs/vault/ECONOMIC_EVENT_UNIVERSE.md](vault/ECONOMIC_EVENT_UNIVERSE.md)
+5. Entry commands: [docs/vault/RESEARCH_ENTRYPOINTS.md](vault/RESEARCH_ENTRYPOINTS.md)
+6. Workbench campaigns: [docs/workbench/README.md](workbench/README.md)
+7. Certification: [docs/vault/BACKTESTER_CERTIFICATION.md](vault/BACKTESTER_CERTIFICATION.md)
+8. Validation honesty: [docs/VALIDATION_HONESTY.md](VALIDATION_HONESTY.md)
 
 Do not create a second pipeline, event catalog, feature schema, or promotion path
 when the existing ontology object covers the behavior.

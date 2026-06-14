@@ -20,7 +20,9 @@ Chronological onboarding for human developers. AI agents: [../ai/ONBOARDING.md](
 | 7b | [../chi404/CPU_MEMORY_OVERCLOCK.md](../chi404/CPU_MEMORY_OVERCLOCK.md) | UEFI EXPO/PBO + market-load stability |
 | 8 | [../GRAPHIFY_WORKFLOW.md](../GRAPHIFY_WORKFLOW.md) | Code graph rebuild |
 | 9 | [../../AGENTS.md](../../AGENTS.md) + [../AGENTIC_ENGINEERING.md](../AGENTIC_ENGINEERING.md) | Agent delegation |
-| 10 | [../project/ROADMAP.md](../project/ROADMAP.md) + [../project/WORKSTREAMS.md](../project/WORKSTREAMS.md) | Parallel phase execution plan |
+| 10 | [../project/PROJECT_PLANNING_STANDARD.md](../project/PROJECT_PLANNING_STANDARD.md) + [../project/CANONICAL_PROJECT_PLAN.md](../project/CANONICAL_PROJECT_PLAN.md) + [../project/FEATURE_LITERATURE_TRACEABILITY_MATRIX.md](../project/FEATURE_LITERATURE_TRACEABILITY_MATRIX.md) | Project planning doctrine, target product plan, and feature traceability |
+| 10a | [../project/ACCEPTANCE_CHECKLIST.md](../project/ACCEPTANCE_CHECKLIST.md) + [../project/OPEN_QUESTIONS_AND_REJECTIONS.md](../project/OPEN_QUESTIONS_AND_REJECTIONS.md) | Planning gates, unresolved questions, and rejected ideas |
+| 10b | [../project/ROADMAP.md](../project/ROADMAP.md) + [../project/WORKSTREAMS.md](../project/WORKSTREAMS.md) | Parallel phase execution plan |
 | 11 | [../REPO_MAP.md](../REPO_MAP.md) | Complete top-level directory map |
 | 12 | [RUNTIME_CONTRACT.md](RUNTIME_CONTRACT.md) | Backend ↔ UI artifact schema |
 

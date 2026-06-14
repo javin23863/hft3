@@ -13,3 +13,5 @@ Cockpit build-out review (commits + next steps): **[docs/cockpit/BUILDOUT_REVIEW
 Cockpit + options correctness checklist (grader findings + fix passes): **[docs/cockpit/BUILDOUT_CORRECTNESS_CHECKLIST.md](cockpit/BUILDOUT_CORRECTNESS_CHECKLIST.md)**
 
 CME M6 sweep control plan (queued full-scope research sweep + latency evidence): **[docs/cockpit/CME_M6_SWEEP_CONTROL_PLAN.md](cockpit/CME_M6_SWEEP_CONTROL_PLAN.md)**
+
+Project planning control standard: **[docs/project/PROJECT_PLANNING_STANDARD.md](project/PROJECT_PLANNING_STANDARD.md)** · **[docs/project/CANONICAL_PROJECT_PLAN.md](project/CANONICAL_PROJECT_PLAN.md)** · **[docs/project/FEATURE_LITERATURE_TRACEABILITY_MATRIX.md](project/FEATURE_LITERATURE_TRACEABILITY_MATRIX.md)** · **[docs/project/ACCEPTANCE_CHECKLIST.md](project/ACCEPTANCE_CHECKLIST.md)** · **[docs/project/OPEN_QUESTIONS_AND_REJECTIONS.md](project/OPEN_QUESTIONS_AND_REJECTIONS.md)**
