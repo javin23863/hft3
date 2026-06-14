@@ -134,6 +134,7 @@ A development slice is complete only when:
 [ ] Scope-appropriate tests/builds ran with command output.
 [ ] git diff --check passed.
 [ ] Feature matrix and open questions/rejections are updated.
+[ ] Current milestone/open-question gate is not OWNER_DECISION_REQUIRED; no next milestone starts while the current milestone has any required owner decision, unaccepted warning, or blocker remaining open.
 [ ] GraphPost ran when tracked graph output is affected.
 [ ] merge-ready status is honest under docs/VALIDATION_HONESTY.md.
 ```

@@ -178,6 +178,15 @@ def test_q001_project_docs_keep_owner_decision_gate_fail_closed():
     open_questions = (repo_root / "docs" / "project" / "OPEN_QUESTIONS_AND_REJECTIONS.md").read_text(
         encoding="utf-8"
     )
+    acceptance_checklist = (repo_root / "docs" / "project" / "ACCEPTANCE_CHECKLIST.md").read_text(encoding="utf-8")
+    milestone_gate_rule = (
+        "[ ] Current milestone/open-question gate is not OWNER_DECISION_REQUIRED; "
+        "no next milestone starts while the current milestone has any required owner decision, "
+        "unaccepted warning, or blocker remaining open."
+    )
+    completion_gate = acceptance_checklist.split("## G. Completion Gate", 1)[1].split(
+        "## H. Immediate Rejection Conditions", 1
+    )[0]
 
     assert "Status: `INVENTORIED_WITH_WARNINGS` (`inventory-with-warnings`, not closed/green)" in status_doc
     assert "(`OWNER_DECISION_REQUIRED`, not owner-accepted)" in status_doc
@@ -188,6 +197,7 @@ def test_q001_project_docs_keep_owner_decision_gate_fail_closed():
     assert "Any unaccepted warning keeps Q001 open." in owner_packet
     assert "[Q001_OWNER_DECISION_PACKET.md](Q001_OWNER_DECISION_PACKET.md)" in open_questions
     assert "Q001 remains open until both ledgers are owner-accepted, filled, or explicitly rejected" in open_questions
+    assert milestone_gate_rule in completion_gate
 
 
 def test_q001_inventory_reports_futures_options_and_gaps(tmp_path, monkeypatch):
