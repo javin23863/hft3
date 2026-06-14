@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from pathlib import Path
 
 from scripts.paid_data_inventory import build_q001_cme_data_inventory, build_report, write_reports
 
@@ -168,6 +169,24 @@ def test_paid_data_inventory_markdown_splits_options_strict_and_study_coverage(t
     assert "strict_quote_gap_count=507" in markdown
     assert "strict_quote_stale=503" in markdown
     assert "| CME options fixing MBO | WARN | 275 dates;" not in markdown
+
+
+def test_q001_project_docs_keep_owner_decision_gate_fail_closed():
+    repo_root = Path(__file__).resolve().parents[2]
+    status_doc = (repo_root / "docs" / "project" / "Q001_DATA_INVENTORY_STATUS.md").read_text(encoding="utf-8")
+    owner_packet = (repo_root / "docs" / "project" / "Q001_OWNER_DECISION_PACKET.md").read_text(encoding="utf-8")
+    open_questions = (repo_root / "docs" / "project" / "OPEN_QUESTIONS_AND_REJECTIONS.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Status: `INVENTORIED_WITH_WARNINGS` (`inventory-with-warnings`, not closed/green)" in status_doc
+    assert "(`OWNER_DECISION_REQUIRED`, not owner-accepted)" in status_doc
+    assert "does not accept either ledger, close Q001, or prove model readiness" in status_doc
+    assert "Status: `OWNER_DECISION_REQUIRED` (`not-owner-accepted`, not closed/green)" in owner_packet
+    assert "This packet does not accept the ledgers, close Q001, green" in owner_packet
+    assert "An agent must not infer acceptance from silence." in owner_packet
+    assert "Any unaccepted warning keeps Q001 open." in owner_packet
+    assert "Q001 remains open until both ledgers are owner-accepted, filled, or explicitly rejected" in open_questions
 
 
 def test_q001_inventory_reports_futures_options_and_gaps(tmp_path, monkeypatch):
