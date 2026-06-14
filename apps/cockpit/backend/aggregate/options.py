@@ -8,6 +8,8 @@ source of truth and no new pipeline surface.
 from __future__ import annotations
 
 import os
+import re
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +21,15 @@ _CME_OPTIONS_CAMPAIGN_MODES = {"cme_options"}
 _LEGACY_OPTIONS_CAMPAIGN_MODES = {"options_lane"}
 _LEGACY_OPTIONS_MODEL_IDS = {"DEALER_HEDGING", "PDF_MODEL_5"}
 _LEGACY_OPTIONS_PREFIXES = ("OPTIONS_", "PARITY_")
+_SUMMARY_TIME_FIELDS = (
+    "generated_utc",
+    "run_utc",
+    "created_utc",
+    "completed_utc",
+    "as_of_utc",
+)
+_CAMPAIGN_TS_RE = re.compile(r"(\d{8}T\d{6}Z)")
+_ROBUSTNESS_PASS_STATUSES = {"clear", "green", "ok", "pass", "passed"}
 
 
 def _rel(path: Path) -> str:
@@ -100,8 +111,169 @@ def _has_fixture_evidence(summary: dict[str, Any]) -> bool:
     return any("options fixture" in name.lower() for name in _period_names(summary))
 
 
+def _parse_utc_datetime(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _campaign_timestamp(summary: dict[str, Any]) -> datetime | None:
+    match = _CAMPAIGN_TS_RE.search(str(summary.get("campaign_id") or ""))
+    if match is None:
+        return None
+    return datetime.strptime(match.group(1), "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+
+
+def _artifact_time(summary_path: Path, summary: dict[str, Any]) -> tuple[float, str | None, str, bool]:
+    for field in _SUMMARY_TIME_FIELDS:
+        parsed = _parse_utc_datetime(summary.get(field))
+        if parsed is not None:
+            return parsed.timestamp(), parsed.isoformat(), field, True
+    parsed = _campaign_timestamp(summary)
+    if parsed is not None:
+        return parsed.timestamp(), parsed.isoformat(), "campaign_id", True
+    try:
+        mtime = summary_path.stat().st_mtime
+    except OSError:
+        mtime = 0.0
+    return mtime, paths.mtime_iso(summary_path), "mtime", False
+
+
+def _float_value(value: Any) -> float:
+    if isinstance(value, bool):
+        return 0.0
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _summary_trade_count(summary: dict[str, Any]) -> float:
+    top_level = _float_value(summary.get("num_trades"))
+    periods = summary.get("periods")
+    period_total = 0.0
+    if isinstance(periods, list):
+        for period in periods:
+            if isinstance(period, dict):
+                period_total += _float_value(period.get("num_trades"))
+    return top_level if top_level > 0 else period_total
+
+
+def _extra(summary: dict[str, Any]) -> dict[str, Any]:
+    extra = summary.get("extra")
+    return extra if isinstance(extra, dict) else {}
+
+
+def _nonempty_list(value: Any) -> bool:
+    return isinstance(value, list) and bool(value)
+
+
+def _nonempty_container(value: Any) -> bool:
+    return isinstance(value, (dict, list, tuple, set)) and bool(value)
+
+
+def _coverage_summary(summary: dict[str, Any]) -> dict[str, Any]:
+    coverage = summary.get("coverage_summary")
+    return coverage if isinstance(coverage, dict) else {}
+
+
+def _has_source_ids(summary: dict[str, Any]) -> bool:
+    coverage = _coverage_summary(summary)
+    return (
+        _nonempty_list(summary.get("source_ids"))
+        or _nonempty_list(summary.get("data_source_ids"))
+        or _nonempty_list(coverage.get("source_ids"))
+    )
+
+
+def _has_timestamp_ids(summary: dict[str, Any]) -> bool:
+    coverage = _coverage_summary(summary)
+    return _nonempty_container(summary.get("timestamp_ids")) or _nonempty_container(
+        coverage.get("timestamp_ids")
+    )
+
+
+def _uses_2026_options_data(summary: dict[str, Any]) -> bool:
+    return summary.get("uses_2026_options_data") is True
+
+
+def _has_2026_usage_class(summary: dict[str, Any]) -> bool:
+    return bool(summary.get("options_2026_usage_class") or summary.get("usage_class"))
+
+
+def _robustness_status(robustness: Any) -> tuple[str, str | None]:
+    if not isinstance(robustness, dict):
+        return "not_observed", None
+    status = str(
+        robustness.get("status")
+        or robustness.get("gate_status")
+        or robustness.get("result")
+        or "observed"
+    )
+    return status, status.lower()
+
+
+def _real_data_proof_missing(summary: dict[str, Any], robustness: Any) -> list[str]:
+    missing: list[str] = []
+    if not _has_source_ids(summary):
+        missing.append("source_ids")
+    if not _has_timestamp_ids(summary):
+        missing.append("timestamp_ids")
+    if _summary_trade_count(summary) <= 0:
+        missing.append("nonzero_num_trades")
+    _, normalized_robustness = _robustness_status(robustness)
+    if normalized_robustness not in _ROBUSTNESS_PASS_STATUSES:
+        missing.append("robustness_pass")
+    if _uses_2026_options_data(summary) and not _has_2026_usage_class(summary):
+        missing.append("options_2026_usage_class")
+    return missing
+
+
+def _failure_notes(summary: dict[str, Any]) -> list[str]:
+    notes = summary.get("failure_notes")
+    if isinstance(notes, list):
+        return [str(note) for note in notes]
+    return []
+
+
+def _is_structural(summary: dict[str, Any]) -> bool:
+    notes = " ".join(_failure_notes(summary)).lower()
+    return (
+        summary.get("structural_only") is True
+        or _extra(summary).get("structural_only") is True
+        or "structural-only" in notes
+        or "structural only" in notes
+    )
+
+
+def _is_degraded(summary: dict[str, Any]) -> bool:
+    return (
+        summary.get("degraded") is True
+        or bool(_failure_notes(summary))
+        or _promotable(summary) is False
+    )
+
+
+def _promotable(summary: dict[str, Any]) -> Any:
+    if "promotable" in summary:
+        return summary.get("promotable")
+    extra = _extra(summary)
+    if "promotable" in extra:
+        return extra.get("promotable")
+    return None
+
+
 def _latest_options_summary(predicate) -> tuple[Path, dict[str, Any]] | None:
-    latest: tuple[float, Path, dict[str, Any]] | None = None
+    latest: tuple[tuple[int, float, float], Path, dict[str, Any]] | None = None
     for root in _workbench_roots():
         try:
             summaries = root.glob("*/summary.json")
@@ -115,8 +287,10 @@ def _latest_options_summary(predicate) -> tuple[Path, dict[str, Any]] | None:
                 mtime = path.stat().st_mtime
             except OSError:
                 mtime = 0.0
-            if latest is None or mtime > latest[0]:
-                latest = (mtime, path, data)
+            artifact_epoch, _, _, has_semantic_time = _artifact_time(path, data)
+            key = (1 if has_semantic_time else 0, artifact_epoch, mtime)
+            if latest is None or key > latest[0]:
+                latest = (key, path, data)
     if latest is None:
         return None
     return latest[1], latest[2]
@@ -125,31 +299,39 @@ def _latest_options_summary(predicate) -> tuple[Path, dict[str, Any]] | None:
 def _summary_evidence_update(summary_path: Path, summary: dict[str, Any]) -> dict:
     robustness_path = summary_path.parent / "robustness_summary.json"
     robustness = paths.read_json(robustness_path)
-    real_data_backed = summary.get("real_data_backed") is True
+    claimed_real_data_backed = summary.get("real_data_backed") is True
+    missing_real_data_proof = _real_data_proof_missing(summary, robustness)
+    real_data_proof_passed = claimed_real_data_backed and not missing_real_data_proof
     fixture_backed = _has_fixture_evidence(summary)
-    status = (
-        "real_data_backed"
-        if real_data_backed
-        else "fixture_only"
-        if fixture_backed
-        else "artifact_present_unclassified"
-    )
-    robustness_status = "not_observed"
+    structural_only = _is_structural(summary)
+    degraded = _is_degraded(summary)
+    if structural_only:
+        status = "structural_only"
+    elif degraded:
+        status = "artifact_degraded"
+    elif real_data_proof_passed:
+        status = "real_data_backed"
+    elif claimed_real_data_backed:
+        status = "real_data_claim_unverified"
+    elif fixture_backed:
+        status = "fixture_only"
+    else:
+        status = "artifact_present_unclassified"
+    real_data_backed = status == "real_data_backed"
+    robustness_status, _ = _robustness_status(robustness)
     robustness_artifact = None
     if isinstance(robustness, dict):
-        robustness_status = str(
-            robustness.get("status")
-            or robustness.get("gate_status")
-            or robustness.get("result")
-            or "observed"
-        )
         robustness_artifact = _rel(robustness_path)
+    artifact_epoch, artifact_time_utc, artifact_time_source, _ = _artifact_time(summary_path, summary)
 
     return {
         "status": status,
         "latest_artifact": _rel(summary_path),
         "latest_artifact_status": "present",
         "latest_artifact_mtime_utc": paths.mtime_iso(summary_path),
+        "latest_artifact_time_utc": artifact_time_utc,
+        "latest_artifact_time_source": artifact_time_source,
+        "latest_artifact_time_epoch": artifact_epoch,
         "latest_campaign_id": summary.get("campaign_id") or summary_path.parent.name,
         "latest_model_id": summary.get("model_id"),
         "latest_symbol": summary.get("symbol"),
@@ -157,8 +339,14 @@ def _summary_evidence_update(summary_path: Path, summary: dict[str, Any]) -> dic
         "latest_campaign_mode": summary.get("campaign_mode"),
         "latest_lane": summary.get("lane"),
         "real_data_backed": real_data_backed,
+        "claimed_real_data_backed": claimed_real_data_backed,
+        "missing_real_data_proof": missing_real_data_proof,
         "fixture_backed": fixture_backed,
-        "structural_only": False,
+        "structural_only": structural_only,
+        "degraded": degraded,
+        "failure_notes": _failure_notes(summary),
+        "promotable": _promotable(summary),
+        "trade_count": _summary_trade_count(summary),
         "robustness_status": robustness_status,
         "robustness_artifact": robustness_artifact,
     }
@@ -193,13 +381,37 @@ def _standalone_model_evidence() -> dict:
 
     summary_path, summary = latest
     update = _summary_evidence_update(summary_path, summary)
-    update["robustness_detail"] = (
-        "Latest FOPT workbench summary is real-data-backed by explicit artifact flag."
-        if update["real_data_backed"]
-        else "Latest FOPT workbench summary is fixture-backed; no real-data FOPT robustness artifact was observed."
-        if update["fixture_backed"]
-        else "Latest FOPT summary was observed but does not identify fixture or real-data backing."
-    )
+    if update["real_data_backed"]:
+        update["robustness_detail"] = (
+            "Latest FOPT workbench summary is real-data-backed with source IDs, "
+            "timestamp IDs, nonzero trades, and passing robustness evidence."
+        )
+    elif update["structural_only"]:
+        update["robustness_detail"] = (
+            "Latest FOPT workbench summary is structural-only or degraded; it is not "
+            "evidence for a tradable standalone options model."
+        )
+    elif update["status"] == "artifact_degraded":
+        update["robustness_detail"] = (
+            "Latest FOPT workbench summary is degraded or non-promotable and cannot "
+            "be promoted as real-data evidence."
+        )
+    elif update["status"] == "real_data_claim_unverified":
+        missing = ", ".join(update["missing_real_data_proof"])
+        update["robustness_detail"] = (
+            "Latest FOPT workbench summary claims real-data backing but is missing "
+            f"required proof: {missing}."
+        )
+    elif update["fixture_backed"]:
+        update["robustness_detail"] = (
+            "Latest FOPT workbench summary is fixture-backed; no real-data FOPT "
+            "robustness artifact was observed."
+        )
+    else:
+        update["robustness_detail"] = (
+            "Latest FOPT summary was observed but does not identify fixture or "
+            "real-data backing."
+        )
     base.update(update)
     return base
 
@@ -228,14 +440,32 @@ def _legacy_options_fixture_evidence() -> dict:
 
     summary_path, summary = latest
     update = _summary_evidence_update(summary_path, summary)
-    update["robustness_detail"] = (
-        "Latest legacy options/parity summary claims real-data backing; "
-        "it is still not FOPT CME_OPTIONS evidence."
-        if update["real_data_backed"]
-        else "Latest legacy options/parity summary is fixture-backed; it is not FOPT CME_OPTIONS evidence."
-        if update["fixture_backed"]
-        else "Latest legacy options/parity summary was observed but does not identify fixture or real-data backing."
-    )
+    if update["real_data_backed"]:
+        update["robustness_detail"] = (
+            "Latest legacy options/parity summary is real-data-backed, but it is "
+            "still not FOPT CME_OPTIONS evidence."
+        )
+    elif update["structural_only"] or update["status"] == "artifact_degraded":
+        update["robustness_detail"] = (
+            "Latest legacy options/parity summary is structural-only, degraded, or "
+            "non-promotable; it is not FOPT CME_OPTIONS evidence."
+        )
+    elif update["status"] == "real_data_claim_unverified":
+        missing = ", ".join(update["missing_real_data_proof"])
+        update["robustness_detail"] = (
+            "Latest legacy options/parity summary claims real-data backing but is "
+            f"missing required proof: {missing}. It is still not FOPT CME_OPTIONS evidence."
+        )
+    elif update["fixture_backed"]:
+        update["robustness_detail"] = (
+            "Latest legacy options/parity summary is fixture-backed; it is not FOPT "
+            "CME_OPTIONS evidence."
+        )
+    else:
+        update["robustness_detail"] = (
+            "Latest legacy options/parity summary was observed but does not identify "
+            "fixture or real-data backing."
+        )
     base.update(update)
     return base
 

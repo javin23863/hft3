@@ -1410,12 +1410,18 @@ def test_options_zone_keeps_fopt_and_legacy_fixture_evidence_separate(monkeypatc
     assert fopt_evidence["real_data_backed"] is False
     assert fopt_evidence["structural_only"] is False
     assert fopt_evidence["robustness_status"] == "not_observed"
-    assert legacy_evidence["status"] == "real_data_backed"
+    assert legacy_evidence["status"] == "real_data_claim_unverified"
     assert legacy_evidence["latest_artifact"] == (
         "artifacts/research_cards/workbench_runs/latest_legacy_options_run/summary.json"
     )
     assert legacy_evidence["latest_model_id"] == "DEALER_HEDGING"
+    assert legacy_evidence["real_data_backed"] is False
+    assert legacy_evidence["claimed_real_data_backed"] is True
+    assert "source_ids" in legacy_evidence["missing_real_data_proof"]
+    assert "timestamp_ids" in legacy_evidence["missing_real_data_proof"]
+    assert "robustness_pass" in legacy_evidence["missing_real_data_proof"]
     assert "claims real-data backing" in legacy_evidence["robustness_detail"]
+    assert "missing required proof" in legacy_evidence["robustness_detail"]
     assert "not FOPT CME_OPTIONS evidence" in legacy_evidence["robustness_detail"]
     _json_roundtrip(z)
 
@@ -1442,14 +1448,25 @@ def test_options_zone_finds_fopt_artifact_root_env(monkeypatch, tmp_path):
     summary_path.write_text(
         json.dumps({
             "campaign_id": "fopt_external_run",
+            "generated_utc": "2026-06-14T02:03:04+00:00",
             "status": "PASS",
             "model_id": "FOPT_ES_CALL",
             "symbol": "MES.v.0",
             "lane": "cme_options",
             "real_data_backed": True,
+            "source_ids": ["C:/hft3-lake/options/fixing/MES/example.mbo"],
+            "timestamp_ids": {
+                "source_timestamp_utc": "2026-06-14T02:00:00+00:00",
+                "feature_available_utc": "2026-06-14T02:01:00+00:00",
+                "target_decision_timestamp_utc": "2026-06-14T02:02:00+00:00",
+            },
+            "num_trades": 3,
+            "uses_2026_options_data": True,
+            "options_2026_usage_class": "cost-calibration",
         }),
         encoding="utf-8",
     )
+    (run_dir / "robustness_summary.json").write_text(json.dumps({"status": "PASS"}), encoding="utf-8")
     monkeypatch.setenv("HFT3_ARTIFACTS_ROOT", str(artifact_root))
     monkeypatch.setattr(paths, "REPO", repo)
     monkeypatch.setattr(paths, "DATA_DOCTOR_REPORT", report_path)
@@ -1461,7 +1478,165 @@ def test_options_zone_finds_fopt_artifact_root_env(monkeypatch, tmp_path):
     assert evidence["latest_artifact"] == str(summary_path)
     assert evidence["latest_model_id"] == "FOPT_ES_CALL"
     assert evidence["real_data_backed"] is True
+    assert evidence["claimed_real_data_backed"] is True
+    assert evidence["missing_real_data_proof"] == []
+    assert evidence["trade_count"] == 3.0
+    assert evidence["latest_artifact_time_source"] == "generated_utc"
     assert evidence["fixture_backed"] is False
+
+
+def test_options_zone_structural_artifact_dominates_real_data_claim(monkeypatch, tmp_path):
+    _write_options_spec(tmp_path, "**FIXED**")
+    lake = tmp_path / "options"
+    lake.mkdir(parents=True)
+    report_path = tmp_path / "data_doctor_report.json"
+    report_path.write_text(
+        json.dumps({
+            "run_utc": paths.now_iso(),
+            "checks": _options_ok_checks(),
+            "options_lane": {"name": "options_lane", "status": "OK", "detail": "ok"},
+        }),
+        encoding="utf-8",
+    )
+    run_dir = tmp_path / "artifacts" / "research_cards" / "workbench_runs" / "fopt_structural"
+    run_dir.mkdir(parents=True)
+    (run_dir / "summary.json").write_text(
+        json.dumps({
+            "campaign_id": "fopt_structural",
+            "status": "FAIL",
+            "model_id": "FOPT_ES_CALL",
+            "symbol": "MES.v.0",
+            "lane": "cme_options",
+            "real_data_backed": True,
+            "structural_only": True,
+            "degraded": True,
+            "failure_notes": ["structural-only CME options adapter; no evidence backtest executed"],
+            "promotable": False,
+            "num_trades": 0,
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "DATA_DOCTOR_REPORT", report_path)
+    monkeypatch.setattr(paths, "OPTIONS_LAKE_ROOT", lake)
+
+    evidence = ZONES["options"]()["standalone_model_evidence"]
+
+    assert evidence["status"] == "structural_only"
+    assert evidence["real_data_backed"] is False
+    assert evidence["claimed_real_data_backed"] is True
+    assert evidence["structural_only"] is True
+    assert evidence["degraded"] is True
+    assert evidence["promotable"] is False
+    assert "structural-only CME options adapter" in evidence["failure_notes"][0]
+    assert "not evidence for a tradable standalone options model" in evidence["robustness_detail"]
+
+
+def test_options_zone_non_promotable_artifact_dominates_real_data_claim(monkeypatch, tmp_path):
+    _write_options_spec(tmp_path, "**FIXED**")
+    lake = tmp_path / "options"
+    lake.mkdir(parents=True)
+    report_path = tmp_path / "data_doctor_report.json"
+    report_path.write_text(
+        json.dumps({
+            "run_utc": paths.now_iso(),
+            "checks": _options_ok_checks(),
+            "options_lane": {"name": "options_lane", "status": "OK", "detail": "ok"},
+        }),
+        encoding="utf-8",
+    )
+    run_dir = tmp_path / "artifacts" / "research_cards" / "workbench_runs" / "fopt_non_promotable"
+    run_dir.mkdir(parents=True)
+    (run_dir / "summary.json").write_text(
+        json.dumps({
+            "campaign_id": "fopt_non_promotable",
+            "status": "PASS",
+            "model_id": "FOPT_ES_CALL",
+            "symbol": "MES.v.0",
+            "lane": "cme_options",
+            "real_data_backed": True,
+            "source_ids": ["C:/hft3-lake/options/fixing/MES/example.mbo"],
+            "timestamp_ids": {
+                "source_timestamp_utc": "2026-06-14T02:00:00+00:00",
+                "feature_available_utc": "2026-06-14T02:01:00+00:00",
+                "target_decision_timestamp_utc": "2026-06-14T02:02:00+00:00",
+            },
+            "num_trades": 4,
+            "promotable": False,
+        }),
+        encoding="utf-8",
+    )
+    (run_dir / "robustness_summary.json").write_text(json.dumps({"status": "PASS"}), encoding="utf-8")
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "DATA_DOCTOR_REPORT", report_path)
+    monkeypatch.setattr(paths, "OPTIONS_LAKE_ROOT", lake)
+
+    evidence = ZONES["options"]()["standalone_model_evidence"]
+
+    assert evidence["status"] == "artifact_degraded"
+    assert evidence["real_data_backed"] is False
+    assert evidence["claimed_real_data_backed"] is True
+    assert evidence["missing_real_data_proof"] == []
+    assert evidence["promotable"] is False
+    assert "non-promotable" in evidence["robustness_detail"]
+
+
+def test_options_zone_uses_semantic_artifact_time_over_mtime(monkeypatch, tmp_path):
+    _write_options_spec(tmp_path, "**FIXED**")
+    lake = tmp_path / "options"
+    lake.mkdir(parents=True)
+    report_path = tmp_path / "data_doctor_report.json"
+    report_path.write_text(
+        json.dumps({
+            "run_utc": paths.now_iso(),
+            "checks": _options_ok_checks(),
+            "options_lane": {"name": "options_lane", "status": "OK", "detail": "ok"},
+        }),
+        encoding="utf-8",
+    )
+    runs = tmp_path / "artifacts" / "research_cards" / "workbench_runs"
+    older = runs / "fopt_older_semantic_newer_mtime"
+    newer = runs / "fopt_newer_semantic_older_mtime"
+    older.mkdir(parents=True)
+    newer.mkdir(parents=True)
+    older_summary = older / "summary.json"
+    newer_summary = newer / "summary.json"
+    older_summary.write_text(
+        json.dumps({
+            "campaign_id": "fopt_older_semantic_newer_mtime",
+            "generated_utc": "2026-01-01T00:00:00+00:00",
+            "status": "PASS",
+            "model_id": "FOPT_ES_CALL",
+            "symbol": "MES.v.0",
+            "periods": [{"name": "Options fixture"}],
+        }),
+        encoding="utf-8",
+    )
+    newer_summary.write_text(
+        json.dumps({
+            "campaign_id": "fopt_newer_semantic_older_mtime",
+            "generated_utc": "2026-02-01T00:00:00+00:00",
+            "status": "PASS",
+            "model_id": "FOPT_ES_CALL",
+            "symbol": "MES.v.0",
+            "periods": [{"name": "Options fixture"}],
+        }),
+        encoding="utf-8",
+    )
+    os.utime(older_summary, (1_900_000_000, 1_900_000_000))
+    os.utime(newer_summary, (1_700_000_000, 1_700_000_000))
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "DATA_DOCTOR_REPORT", report_path)
+    monkeypatch.setattr(paths, "OPTIONS_LAKE_ROOT", lake)
+
+    evidence = ZONES["options"]()["standalone_model_evidence"]
+
+    assert evidence["latest_artifact"] == (
+        "artifacts/research_cards/workbench_runs/fopt_newer_semantic_older_mtime/summary.json"
+    )
+    assert evidence["latest_campaign_id"] == "fopt_newer_semantic_older_mtime"
+    assert evidence["latest_artifact_time_source"] == "generated_utc"
+    assert evidence["latest_artifact_time_utc"] == "2026-02-01T00:00:00+00:00"
 
 
 def test_options_view_renders_research_backtest_allowed_not_research_blocked():

@@ -7,14 +7,15 @@ function g(o: Record<string, unknown> | undefined, k: string): unknown {
 }
 
 function s(v: unknown): string {
+  if (Array.isArray(v)) return v.length ? v.join(", ") : "-";
   return v === null || v === undefined ? "-" : String(v);
 }
 
 function statusTone(status: unknown): "ok" | "bad" | "warn" | "dim" {
   const st = String(status ?? "").toLowerCase();
-  return st === "ok" || st === "green" || st === "allowed" || st === "clear" || st === "pass"
+  return st === "ok" || st === "green" || st === "allowed" || st === "clear" || st === "pass" || st === "real_data_backed"
     ? "ok"
-    : st === "fail" || st === "red" || st === "blocked"
+    : st === "fail" || st === "red" || st === "blocked" || st === "artifact_degraded"
       ? "bad"
       : "warn";
 }
@@ -139,16 +140,24 @@ export function OptionsView() {
             ["latest lane", g(standalone, "latest_lane")],
             ["latest artifact", g(standalone, "latest_artifact")],
             ["artifact status", g(standalone, "latest_artifact_status")],
+            ["artifact time", g(standalone, "latest_artifact_time_utc")],
+            ["time source", g(standalone, "latest_artifact_time_source")],
             ["summary status", g(standalone, "latest_summary_status")],
             ["robustness", g(standalone, "robustness_status")],
           ]} />
           <FieldGrid rows={[
             ["real data backed", String(g(standalone, "real_data_backed"))],
+            ["claimed real data", String(g(standalone, "claimed_real_data_backed"))],
+            ["missing proof", g(standalone, "missing_real_data_proof")],
             ["fixture backed", String(g(standalone, "fixture_backed"))],
             ["structural only", String(g(standalone, "structural_only"))],
+            ["degraded", String(g(standalone, "degraded"))],
+            ["promotable", String(g(standalone, "promotable"))],
+            ["trade count", g(standalone, "trade_count")],
             ["next artifact", g(standalone, "next_required_artifact")],
             ["robustness artifact", g(standalone, "robustness_artifact")],
             ["fixture contract", g(standalone, "fixture_contract_path")],
+            ["failure notes", g(standalone, "failure_notes")],
           ]} />
         </div>
         <div className="mt-3 text-sm text-ink-dim">{s(g(standalone, "robustness_detail"))}</div>
@@ -163,13 +172,22 @@ export function OptionsView() {
             ["latest lane", g(legacyFixture, "latest_lane")],
             ["latest artifact", g(legacyFixture, "latest_artifact")],
             ["artifact status", g(legacyFixture, "latest_artifact_status")],
+            ["artifact time", g(legacyFixture, "latest_artifact_time_utc")],
+            ["time source", g(legacyFixture, "latest_artifact_time_source")],
             ["summary status", g(legacyFixture, "latest_summary_status")],
           ]} />
           <FieldGrid rows={[
             ["real data backed", String(g(legacyFixture, "real_data_backed"))],
+            ["claimed real data", String(g(legacyFixture, "claimed_real_data_backed"))],
+            ["missing proof", g(legacyFixture, "missing_real_data_proof")],
             ["fixture backed", String(g(legacyFixture, "fixture_backed"))],
+            ["structural only", String(g(legacyFixture, "structural_only"))],
+            ["degraded", String(g(legacyFixture, "degraded"))],
+            ["promotable", String(g(legacyFixture, "promotable"))],
+            ["trade count", g(legacyFixture, "trade_count")],
             ["robustness", g(legacyFixture, "robustness_status")],
             ["robustness artifact", g(legacyFixture, "robustness_artifact")],
+            ["failure notes", g(legacyFixture, "failure_notes")],
           ]} />
         </div>
         <div className="mt-3 text-sm text-ink-dim">{s(g(legacyFixture, "robustness_detail"))}</div>
