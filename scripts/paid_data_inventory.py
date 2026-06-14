@@ -644,6 +644,18 @@ def _markdown_report(report: dict[str, Any]) -> str:
         options_lane = options.get("options_lane") if isinstance(options.get("options_lane"), dict) else {}
         fixing = options_lane.get("fixing_mbo") if isinstance(options_lane.get("fixing_mbo"), dict) else {}
         expiry = options_lane.get("expiry_coverage") if isinstance(options_lane.get("expiry_coverage"), dict) else {}
+        covered_elsewhere = expiry.get("covered_elsewhere")
+        if not isinstance(covered_elsewhere, list):
+            covered_elsewhere = []
+        study_date_list = fixing.get("study_date_list")
+        if isinstance(study_date_list, list):
+            study_dates = {str(d) for d in study_date_list}
+            covered_elsewhere_dates = {str(d) for d in covered_elsewhere}
+            covered_elsewhere_net_new = len(covered_elsewhere_dates - study_dates)
+            covered_elsewhere_overlap = len(covered_elsewhere_dates & study_dates)
+        else:
+            covered_elsewhere_net_new = "unknown"
+            covered_elsewhere_overlap = "unknown"
         lines.extend(
             [
                 "",
@@ -674,8 +686,16 @@ def _markdown_report(report: dict[str, Any]) -> str:
                 ),
                 (
                     f"| CME options fixing MBO | {options.get('data_doctor_status', 'UNKNOWN')} | "
-                    f"{fixing.get('dates_covered', 0)} dates; {fixing.get('first_date', '')}..{fixing.get('last_date', '')} | "
-                    f"gap_count={expiry.get('gap_count', 'unknown')} |"
+                    f"strict_quote_dates={fixing.get('dates_covered', 0)}; "
+                    f"study_file_dates={fixing.get('study_dates_covered', 0)}; "
+                    f"coverage_dates={expiry.get('dates_covered', 'unknown')}/{expiry.get('expected_dates', 'unknown')}; "
+                    f"trade_only_dates={fixing.get('trade_only_dates', 0)}; "
+                    f"covered_elsewhere={len(covered_elsewhere)} "
+                    f"(net_new={covered_elsewhere_net_new}; overlap={covered_elsewhere_overlap}); "
+                    f"strict_quote_range={fixing.get('first_date', '')}..{fixing.get('last_date', '')} | "
+                    f"study_gap_count={expiry.get('gap_count', 'unknown')}; "
+                    f"strict_quote_gap_count={expiry.get('strict_mbo_gap_count', 'unknown')}; "
+                    f"strict_quote_stale={expiry.get('strict_mbo_stale_gap_count', 'unknown')} |"
                 ),
             ]
         )

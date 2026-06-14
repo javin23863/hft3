@@ -99,6 +99,77 @@ def test_paid_data_inventory_writes_runtime_reports(tmp_path):
     assert "Raw DBN/MBP10 files are downloaded backlog" in md_path.read_text(encoding="utf-8")
 
 
+def test_paid_data_inventory_markdown_splits_options_strict_and_study_coverage(tmp_path):
+    report = {
+        "generated_at_utc": "2026-06-15T00:00:00+00:00",
+        "data_root_used": str(tmp_path / "repo" / "data"),
+        "source_root": str(tmp_path / "paid" / "data"),
+        "sync_requested": False,
+        "dry_run": True,
+        "official_coverage_status": "RUNNABLE_CME_NPZ_PRESENT",
+        "runnable_npz_days": {},
+        "raw_download_days": {},
+        "missing_conversion_days": {},
+        "source_inventory": {"categories": {}},
+        "synced_files": [],
+        "q001_cme_data_inventory": {
+            "status": "INVENTORIED_WITH_WARNINGS",
+            "scope": "read-only local inventory",
+            "event_catalog": {"status": "OK", "symbols": ["MES.v.0"]},
+            "futures": {
+                "active_npz_manifest": {
+                    "status": "OK",
+                    "record_count": 1,
+                    "date_min": "2024-01-01",
+                    "date_max": "2024-01-01",
+                    "sha256_validation_mode": "content_verified",
+                },
+                "mbo_pilot_basket": {
+                    "status": "completed_with_gaps",
+                    "present_runnable_npz_slots": 3,
+                    "expected_event_symbol_slots": 4,
+                    "coverage_pct": 75.0,
+                    "missing_or_unavailable_slots": 1,
+                },
+            },
+            "options": {
+                "data_doctor_status": "WARN",
+                "options_lane": {
+                    "fixing_mbo": {
+                        "dates_covered": 275,
+                        "study_dates_covered": 782,
+                        "study_date_list": ["2023-09-15"],
+                        "trade_only_dates": 507,
+                        "first_date": "2023-05-01",
+                        "last_date": "2024-06-03",
+                    },
+                    "expiry_coverage": {
+                        "expected_dates": 784,
+                        "dates_covered": 784,
+                        "covered_elsewhere": ["2023-09-15", "2024-09-18", "2025-06-20"],
+                        "gap_count": 0,
+                        "strict_mbo_gap_count": 507,
+                        "strict_mbo_stale_gap_count": 503,
+                    },
+                },
+            },
+            "gaps": [],
+        },
+    }
+    _, md_path = write_reports(report, tmp_path / "runtime" / "data_audits")
+    markdown = md_path.read_text(encoding="utf-8")
+
+    assert "strict_quote_dates=275" in markdown
+    assert "study_file_dates=782" in markdown
+    assert "coverage_dates=784/784" in markdown
+    assert "trade_only_dates=507" in markdown
+    assert "covered_elsewhere=3 (net_new=2; overlap=1)" in markdown
+    assert "study_gap_count=0" in markdown
+    assert "strict_quote_gap_count=507" in markdown
+    assert "strict_quote_stale=503" in markdown
+    assert "| CME options fixing MBO | WARN | 275 dates;" not in markdown
+
+
 def test_q001_inventory_reports_futures_options_and_gaps(tmp_path, monkeypatch):
     repo = tmp_path / "repo"
     npz_root = repo / "data" / "npz"
