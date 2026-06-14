@@ -4,8 +4,8 @@
 Schema per record matches data_system.src.lake_manifest (event_id, symbol,
 npz_path, event_count, sha256, created_utc). Incremental: existing records are
 kept when the file's size+mtime are unchanged; pass --full to rehash all.
-Corrupt/unreadable NPZ are catalogued in <npz_root>/catalog_quarantine.json
-instead, never in the main manifest.
+Corrupt, unreadable, malformed, or empty NPZ are catalogued in
+<npz_root>/catalog_quarantine.json instead, never in the main manifest.
 
     python scripts/build_lake_catalog.py [--full] [--workers N]
 """
@@ -20,6 +20,7 @@ import sys
 from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 _REPO = Path(__file__).resolve().parents[1]
 for _p in [str(_REPO), str(_REPO / "packages")]:
@@ -30,6 +31,7 @@ from data_system.src.npz_resolver import npz_root  # noqa: E402
 
 # {SYMBOL}_{EVENT_ID}_mbo.npz ; symbol may contain dots (ES.v.0, VIX.OPT)
 _NAME_RE = re.compile(r"^(?P<symbol>[A-Z0-9]+\.[A-Za-z0-9.]+?)_(?P<event_id>.+?)_(?:mbo|quotes)\.npz$")
+_SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 
 
 def _hash_and_count(path_str: str) -> dict:
@@ -49,10 +51,48 @@ def _hash_and_count(path_str: str) -> dict:
             rec["event_count"] = int(len(z[key])) if key else 0
             if key is None:
                 rec["error"] = f"no data/quotes key (keys={z.files})"
+            elif rec["event_count"] <= 0:
+                rec["error"] = f"empty {key} array"
     except Exception as exc:  # corrupt zip / bad npz
         rec["event_count"] = -1
         rec["error"] = f"{type(exc).__name__}: {exc}"
     return rec
+
+
+def _as_int(value: Any, default: int = -1) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _catalog_entry(rec: dict[str, Any], now: str) -> tuple[dict[str, Any], bool]:
+    name = Path(str(rec.get("npz_path") or "")).name
+    m = _NAME_RE.match(name)
+    event_count = _as_int(rec.get("event_count"))
+    out = {
+        "event_id": m.group("event_id") if m else "",
+        "symbol": m.group("symbol") if m else "",
+        "npz_path": str(rec.get("npz_path") or ""),
+        "event_count": event_count,
+        "sha256": str(rec.get("sha256") or ""),
+        "created_utc": rec.get("created_utc", now),
+        "size": _as_int(rec.get("size"), 0),
+        "mtime": rec.get("mtime", 0),
+    }
+    reason = ""
+    if rec.get("error"):
+        reason = str(rec["error"])
+    elif not m:
+        reason = "unparseable filename"
+    elif not _SHA256_RE.fullmatch(str(rec.get("sha256") or "")):
+        reason = "invalid sha256"
+    elif event_count <= 0:
+        reason = "empty data/quotes array" if event_count == 0 else "invalid event_count"
+    if reason:
+        out["error"] = reason
+        return out, True
+    return out, False
 
 
 def main() -> int:
@@ -92,20 +132,8 @@ def main() -> int:
     now = datetime.now(timezone.utc).isoformat()
     records, quarantine = [], []
     for rec in kept + fresh:
-        name = Path(rec["npz_path"]).name
-        m = _NAME_RE.match(name)
-        out = {
-            "event_id": m.group("event_id") if m else "",
-            "symbol": m.group("symbol") if m else "",
-            "npz_path": rec["npz_path"],
-            "event_count": rec["event_count"],
-            "sha256": rec["sha256"],
-            "created_utc": rec.get("created_utc", now),
-            "size": rec["size"],
-            "mtime": rec["mtime"],
-        }
-        if rec.get("error") or not m:
-            out["error"] = rec.get("error", "unparseable filename")
+        out, is_quarantined = _catalog_entry(rec, now)
+        if is_quarantined:
             quarantine.append(out)
         else:
             records.append(out)

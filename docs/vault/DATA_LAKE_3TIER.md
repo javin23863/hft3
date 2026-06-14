@@ -25,7 +25,7 @@ Single canonical `C:\hft3-lake\manifest.parquet` (~197k rows, **$2,093.65 lifeti
 
 - Cleaning happens in **hftbacktest 2.4.2 `convert()`** (symbol filter, event-flag mapping, snapshot ts rewrite, latency + event-order correction, monotonicity check). Richer validation (sequence gaps, book-reconstruction smoke, sha256 sidecars) is `packages/mbo_release_lane/` (ported from the retired second clone 2026-06-12).
 - NPZ schema is uniform: one `data` array, fixed 8-field 64-byte `event_dtype`. VIX `*_quotes.npz` are the exception (key `quotes`).
-- Hash catalog: `scripts/build_lake_catalog.py` → `<npz_root>/manifest.json` (+ `catalog_quarantine.json`). 2026-06-12 run: 37.6k records, found 205 corrupt NPZ; `scripts/remediate_corrupt_npz.py` re-derived 204 from slot raws, zero re-purchase.
+- Hash catalog: `scripts/build_lake_catalog.py` → `<npz_root>/manifest.json` (+ `catalog_quarantine.json`). Empty `data`/`quotes` arrays, corrupt NPZs, and malformed filenames are quarantine entries, not runnable manifest coverage. 2026-06-12 run: 37.6k records, found 205 corrupt NPZ; `scripts/remediate_corrupt_npz.py` re-derived 204 from slot raws, zero re-purchase.
 - `events.jsonl` is **purged** on both machines (~118 GB): byte-rederivable from `raw.dbn.zst`, proven by `scripts/verify_jsonl_rederivation.py` (12/12) after pinning databento `rtype` enum→int and LF newlines in the lane. Do not recreate them except ad-hoc via the lane parser.
 - Downloaders run `--keep-dbn` since 2026-06-12: raw `.dbn.zst` is the primary and ships to B2; NPZ is derived.
 
