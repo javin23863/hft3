@@ -195,7 +195,7 @@ export function OptionsView() {
 
       <Panel title="Context Feature Coverage" right={<Badge tone="warn">{s(g(contextCoverage, "status"))}</Badge>}>
         <FieldGrid rows={[
-          ["options as clue", g(contextCoverage, "options_as_clue")],
+          ["options context features", g(contextCoverage, "options_context_features")],
           ["standalone options", g(contextCoverage, "options_standalone_strategy")],
           ["note", g(contextCoverage, "note")],
         ]} />

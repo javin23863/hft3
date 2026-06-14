@@ -30,6 +30,79 @@ _SUMMARY_TIME_FIELDS = (
 )
 _CAMPAIGN_TS_RE = re.compile(r"(\d{8}T\d{6}Z)")
 _ROBUSTNESS_PASS_STATUSES = {"clear", "green", "ok", "pass", "passed"}
+_CONTEXT_MEASURED_STATUSES = {
+    "available",
+    "covered",
+    "measured",
+    "ok",
+    "pass",
+    "passed",
+    "present",
+    "valid",
+}
+_CONTEXT_NOT_MEASURED_STATUSES = {
+    "",
+    "absent",
+    "false",
+    "missing",
+    "none",
+    "not_measured",
+    "unknown",
+    "unmeasured",
+}
+_CONTEXT_COUNT_KEYS = (
+    "options_context_feature_count",
+    "options_context_features_count",
+    "n_options_context_features",
+    "n_events_with_options_context",
+    "events_with_options_context",
+    "options_context_event_count",
+    "measured_count",
+    "covered_events",
+    "n_events",
+    "count",
+)
+_CONTEXT_ABLATION_ROW_KEYS = (
+    "rows",
+    "ablation_rows",
+    "context_ablation_rows",
+    "measurements",
+    "results",
+    "cells",
+)
+_CONTEXT_ABLATION_SECTION_KEYS = (
+    "baseline",
+    "target_only",
+    "target_plus_context",
+    "target_plus_options",
+    "options_context_features",
+    "full_context",
+)
+_CONTEXT_UNIT_KEYS = ("units", "unit", "feature_units")
+_CONTEXT_MISSINGNESS_KEYS = (
+    "missing_policy",
+    "missingness",
+    "missingness_policy",
+    "missing_fields",
+)
+_CONTEXT_TIMESTAMP_SOURCE_KEYS = (
+    "source_timestamp_utc",
+    "context_event_timestamp_utc",
+    "context_timestamp_utc",
+    "event_timestamp_utc",
+)
+_CONTEXT_TIMESTAMP_AVAILABLE_KEYS = (
+    "feature_available_utc",
+    "feature_availability_utc",
+    "available_utc",
+    "availability_utc",
+)
+_CONTEXT_TIMESTAMP_TARGET_KEYS = (
+    "target_decision_timestamp_utc",
+    "target_decision_utc",
+    "decision_timestamp_utc",
+    "target_timestamp_utc",
+)
 
 
 def _rel(path: Path) -> str:
@@ -179,6 +252,12 @@ def _nonempty_list(value: Any) -> bool:
 
 def _nonempty_container(value: Any) -> bool:
     return isinstance(value, (dict, list, tuple, set)) and bool(value)
+
+
+def _string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if str(item).strip()]
 
 
 def _coverage_summary(summary: dict[str, Any]) -> dict[str, Any]:
@@ -470,6 +549,357 @@ def _legacy_options_fixture_evidence() -> dict:
     return base
 
 
+def _default_context_feature_coverage() -> dict:
+    return {
+        "status": "not_measured",
+        "options_context_features": "not_measured",
+        "options_standalone_strategy": "not_measured",
+        "note": "No artifact-level options context-feature coverage is present yet.",
+    }
+
+
+def _context_block(summary: dict[str, Any], key: str) -> Any:
+    if key in summary:
+        return summary.get(key)
+    return _extra(summary).get(key)
+
+
+def _is_options_context_summary(summary: dict[str, Any]) -> bool:
+    return (
+        _is_cme_options_summary(summary) or _is_legacy_options_summary(summary)
+    ) and (
+        _context_block(summary, "context_feature_coverage") is not None
+        or _context_block(summary, "context_ablation") is not None
+    )
+
+
+def _context_source_family(summary: dict[str, Any]) -> str:
+    if _is_cme_options_summary(summary):
+        return "cme_options"
+    if _is_legacy_options_summary(summary):
+        return "legacy_options_parity"
+    return "unknown"
+
+
+def _first_source_ids(*values: Any) -> list[str]:
+    for value in values:
+        ids = _string_list(value)
+        if ids:
+            return ids
+    return []
+
+
+def _row_source_ids(rows: list[Any]) -> list[str]:
+    ids: list[str] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        for key in ("source_ids", "data_source_ids", "context_source_ids"):
+            ids.extend(_string_list(row.get(key)))
+    return list(dict.fromkeys(ids))
+
+
+def _first_timestamp_ids(*values: Any) -> Any:
+    for value in values:
+        if _nonempty_container(value):
+            return value
+    return None
+
+
+def _row_timestamp_ids(rows: list[Any]) -> list[Any]:
+    ids: list[Any] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        for key in ("timestamp_ids", "context_timestamp_ids"):
+            value = row.get(key)
+            if _nonempty_container(value):
+                ids.append(value)
+    return ids
+
+
+def _first_present_value(*values: Any) -> Any:
+    for value in values:
+        if isinstance(value, str) and value.strip():
+            return value
+        if _nonempty_container(value):
+            return value
+    return None
+
+
+def _row_value(rows: list[Any], keys: tuple[str, ...]) -> Any:
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        value = _first_present_value(*(row.get(key) for key in keys))
+        if value is not None:
+            return value
+    return None
+
+
+def _nonnegative_number(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number < 0:
+        return None
+    return number
+
+
+def _positive_number(value: Any) -> float | None:
+    number = _nonnegative_number(value)
+    if number is None or number <= 0:
+        return None
+    return number
+
+
+def _first_context_count(mapping: dict[str, Any]) -> float | None:
+    for key in _CONTEXT_COUNT_KEYS:
+        count = _positive_number(mapping.get(key))
+        if count is not None:
+            return count
+    return None
+
+
+def _context_ablation_rows(ablation: Any) -> list[Any]:
+    if isinstance(ablation, list):
+        return ablation
+    if not isinstance(ablation, dict):
+        return []
+    for key in _CONTEXT_ABLATION_ROW_KEYS:
+        rows = ablation.get(key)
+        if isinstance(rows, list):
+            return rows
+    if any(key in ablation for key in _CONTEXT_ABLATION_SECTION_KEYS):
+        return [ablation]
+    return []
+
+
+def _timestamp_first_value(timestamp_ids: Any, keys: tuple[str, ...]) -> Any:
+    if isinstance(timestamp_ids, dict):
+        for key in keys:
+            value = timestamp_ids.get(key)
+            if value:
+                return value
+    if isinstance(timestamp_ids, list):
+        for item in timestamp_ids:
+            value = _timestamp_first_value(item, keys)
+            if value:
+                return value
+    return None
+
+
+def _timestamp_proof_gaps(timestamp_ids: Any) -> tuple[list[str], list[str]]:
+    if timestamp_ids is None:
+        return ["timestamp_ids"], []
+    return _timestamp_proof_entry_gaps(timestamp_ids, "timestamp_ids")
+
+
+def _timestamp_proof_entry_gaps(entry: Any, prefix: str) -> tuple[list[str], list[str]]:
+    if isinstance(entry, list):
+        if not entry:
+            return [prefix], []
+        missing: list[str] = []
+        violations: list[str] = []
+        for idx, item in enumerate(entry):
+            item_missing, item_violations = _timestamp_proof_entry_gaps(
+                item, f"{prefix}[{idx}]"
+            )
+            missing.extend(item_missing)
+            violations.extend(item_violations)
+        return missing, violations
+    if not isinstance(entry, dict):
+        return [prefix], []
+
+    missing: list[str] = []
+    violations: list[str] = []
+    source_raw = _timestamp_first_value(entry, _CONTEXT_TIMESTAMP_SOURCE_KEYS)
+    available_raw = _timestamp_first_value(entry, _CONTEXT_TIMESTAMP_AVAILABLE_KEYS)
+    target_raw = _timestamp_first_value(entry, _CONTEXT_TIMESTAMP_TARGET_KEYS)
+    if not source_raw:
+        missing.append(f"{prefix}.source_timestamp")
+    if not available_raw:
+        missing.append(f"{prefix}.feature_available")
+    if not target_raw:
+        missing.append(f"{prefix}.target_decision")
+
+    source = _parse_utc_datetime(source_raw)
+    available = _parse_utc_datetime(available_raw)
+    target = _parse_utc_datetime(target_raw)
+    if source_raw and source is None:
+        violations.append(f"{prefix}.source_timestamp_unparseable")
+    if available_raw and available is None:
+        violations.append(f"{prefix}.feature_available_unparseable")
+    if target_raw and target is None:
+        violations.append(f"{prefix}.target_decision_unparseable")
+    if source is not None and available is not None and source > available:
+        violations.append(f"{prefix}.source_after_feature_available")
+    if available is not None and target is not None and available > target:
+        violations.append(f"{prefix}.feature_available_after_target_decision")
+    return missing, violations
+
+
+def _options_context_feature_measurement(
+    coverage: dict[str, Any], rows: list[Any]
+) -> tuple[bool, float | None, Any]:
+    feature_measurement = coverage.get("options_context_features")
+    if isinstance(feature_measurement, dict):
+        count = _first_context_count(feature_measurement)
+        if count is not None:
+            return True, count, feature_measurement
+        return False, count, feature_measurement
+
+    count = _first_context_count(coverage)
+    if count is not None:
+        return True, count, feature_measurement if feature_measurement is not None else count
+
+    if isinstance(feature_measurement, str):
+        normalized = feature_measurement.strip().lower()
+        if normalized in _CONTEXT_MEASURED_STATUSES | _CONTEXT_NOT_MEASURED_STATUSES:
+            return False, None, feature_measurement
+    elif feature_measurement is True:
+        return False, None, feature_measurement
+    else:
+        numeric = _positive_number(feature_measurement)
+        if numeric is not None:
+            return True, numeric, feature_measurement
+
+    for key in ("options_context_feature_measured", "options_context_measured"):
+        if coverage.get(key) is True:
+            return False, None, coverage.get(key)
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        row_text = " ".join(
+            str(row.get(key) or "")
+            for key in ("context_source", "context_set", "feature_group", "feature_id")
+        ).lower()
+        if "option" not in row_text:
+            continue
+        row_count = _first_context_count(row)
+        if row_count is not None:
+            return True, row_count, row
+    return False, None, feature_measurement
+
+
+def _context_feature_coverage_update(summary_path: Path, summary: dict[str, Any]) -> dict:
+    coverage_raw = _context_block(summary, "context_feature_coverage")
+    ablation_raw = _context_block(summary, "context_ablation")
+    malformed_fields: list[str] = []
+    if coverage_raw is not None and not isinstance(coverage_raw, dict):
+        malformed_fields.append("context_feature_coverage")
+    if ablation_raw is not None and not isinstance(ablation_raw, (dict, list)):
+        malformed_fields.append("context_ablation")
+
+    coverage = coverage_raw if isinstance(coverage_raw, dict) else {}
+    ablation_rows = _context_ablation_rows(ablation_raw)
+    source_ids = _first_source_ids(
+        coverage.get("source_ids"),
+        coverage.get("data_source_ids"),
+        coverage.get("context_source_ids"),
+        summary.get("source_ids"),
+        summary.get("data_source_ids"),
+        _coverage_summary(summary).get("source_ids"),
+        _row_source_ids(ablation_rows),
+    )
+    timestamp_ids = _first_timestamp_ids(
+        coverage.get("timestamp_ids"),
+        coverage.get("context_timestamp_ids"),
+        summary.get("timestamp_ids"),
+        _coverage_summary(summary).get("timestamp_ids"),
+        _row_timestamp_ids(ablation_rows),
+    )
+    units = _first_present_value(*(coverage.get(key) for key in _CONTEXT_UNIT_KEYS))
+    if units is None:
+        units = _row_value(ablation_rows, _CONTEXT_UNIT_KEYS)
+    missing_policy = _first_present_value(
+        *(coverage.get(key) for key in _CONTEXT_MISSINGNESS_KEYS)
+    )
+    if missing_policy is None:
+        missing_policy = _row_value(ablation_rows, _CONTEXT_MISSINGNESS_KEYS)
+    feature_measured, feature_count, feature_measurement = _options_context_feature_measurement(
+        coverage, ablation_rows
+    )
+    timestamp_missing_fields, timestamp_violations = _timestamp_proof_gaps(timestamp_ids)
+    missing_fields: list[str] = []
+    if not source_ids:
+        missing_fields.append("source_ids")
+    missing_fields.extend(timestamp_missing_fields)
+    if not ablation_rows:
+        missing_fields.append("context_ablation")
+    if not feature_measured:
+        missing_fields.append("options_context_features")
+    if units is None:
+        missing_fields.append("units")
+    if missing_policy is None:
+        missing_fields.append("missing_policy")
+
+    if malformed_fields:
+        status = "malformed"
+        feature_status = "malformed"
+        note = "Options context artifact block is malformed; coverage is fail-closed."
+    elif timestamp_violations:
+        status = "malformed"
+        feature_status = "malformed"
+        note = "Options context artifact violates timestamp proof; coverage is fail-closed."
+    elif missing_fields:
+        status = "incomplete"
+        feature_status = "incomplete"
+        note = "Options context artifact is missing required proof; coverage is fail-closed."
+    else:
+        status = "measured"
+        feature_status = "measured"
+        note = "Latest options-family workbench summary includes artifact-backed context coverage."
+    artifact_epoch, artifact_time_utc, artifact_time_source, _ = _artifact_time(summary_path, summary)
+    return {
+        "status": status,
+        "options_context_features": feature_status,
+        "options_context_feature_measured": status == "measured",
+        "options_context_feature_count": feature_count,
+        "options_context_feature_measurement": feature_measurement,
+        "options_standalone_strategy": coverage.get(
+            "options_standalone_strategy",
+            coverage.get("standalone_strategy", "separate_field"),
+        ),
+        "standalone_strategy_separated": True,
+        "standalone_evidence_field": "standalone_model_evidence",
+        "latest_artifact": _rel(summary_path),
+        "latest_artifact_status": "present",
+        "latest_artifact_mtime_utc": paths.mtime_iso(summary_path),
+        "latest_artifact_time_utc": artifact_time_utc,
+        "latest_artifact_time_source": artifact_time_source,
+        "latest_artifact_time_epoch": artifact_epoch,
+        "latest_campaign_id": summary.get("campaign_id") or summary_path.parent.name,
+        "latest_model_id": summary.get("model_id"),
+        "latest_symbol": summary.get("symbol"),
+        "latest_summary_status": summary.get("status"),
+        "latest_campaign_mode": summary.get("campaign_mode"),
+        "latest_lane": summary.get("lane"),
+        "source_family": _context_source_family(summary),
+        "source_ids": source_ids,
+        "timestamp_ids": timestamp_ids,
+        "units": units,
+        "missing_policy": missing_policy,
+        "context_ablation_row_count": len(ablation_rows),
+        "context_ablation_rows": ablation_rows,
+        "missing_fields": missing_fields,
+        "malformed_fields": malformed_fields + timestamp_violations,
+        "note": note,
+    }
+
+
+def _context_feature_coverage() -> dict:
+    latest = _latest_options_summary(_is_options_context_summary)
+    if latest is None:
+        return _default_context_feature_coverage()
+    summary_path, summary = latest
+    return _context_feature_coverage_update(summary_path, summary)
+
+
 def _health(data_status: str, defect_status: str, *, shadow_live_blocked: bool) -> str:
     if data_status == schemas.FAIL:
         return schemas.RED
@@ -487,6 +917,7 @@ def build() -> dict:
     defects = system._options_defect_ledger()
     data_status = str(data.get("status", schemas.UNKNOWN))
     defect_status = str(defects.get("status", schemas.UNKNOWN))
+    context_feature_coverage = _context_feature_coverage()
     research_only = True
     shadow_live_blocked = True
     blocked_reasons = ["shadow_live_phase_gate"]
@@ -494,10 +925,15 @@ def build() -> dict:
         blocked_reasons.append(f"data_readiness:{data_status}")
     if defect_status == schemas.FAIL:
         blocked_reasons.append("defect_ledger_open")
+    health = _health(data_status, defect_status, shadow_live_blocked=shadow_live_blocked)
+    if context_feature_coverage.get("status") == "malformed":
+        health = schemas.RED
+    elif context_feature_coverage.get("status") == "incomplete" and health == schemas.GREEN:
+        health = schemas.AMBER
     return {
         "zone": "options",
         "generated_utc": paths.now_iso(),
-        "health": _health(data_status, defect_status, shadow_live_blocked=shadow_live_blocked),
+        "health": health,
         "lane": "cme_options",
         "model_id_prefix": "FOPT_",
         "phase": "research_backtest_only",
@@ -510,12 +946,7 @@ def build() -> dict:
         "research_only": research_only,
         "data_readiness": data,
         "defect_ledger": defects,
-        "context_feature_coverage": {
-            "status": "not_measured",
-            "options_as_clue": "not_measured",
-            "options_standalone_strategy": "not_measured",
-            "note": "No artifact-level options context-feature coverage is present yet.",
-        },
+        "context_feature_coverage": context_feature_coverage,
         "standalone_model_evidence": _standalone_model_evidence(),
         "legacy_options_fixture_evidence": _legacy_options_fixture_evidence(),
         "shadow_live_status": "blocked",

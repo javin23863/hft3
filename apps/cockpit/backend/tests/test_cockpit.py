@@ -43,6 +43,25 @@ def _options_ok_checks() -> list[dict]:
     return [{"name": name, "status": "OK", "detail": "ok"} for name in system_agg.MANDATORY_OPTIONS_CHECKS]
 
 
+def _point_options_zone_ok(monkeypatch, root: Path) -> Path:
+    _write_options_spec(root, "**FIXED**")
+    lake = root / "options"
+    lake.mkdir(parents=True)
+    report_path = root / "data_doctor_report.json"
+    report_path.write_text(
+        json.dumps({
+            "run_utc": paths.now_iso(),
+            "checks": _options_ok_checks(),
+            "options_lane": {"name": "options_lane", "status": "OK", "detail": "ok"},
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(paths, "REPO", root)
+    monkeypatch.setattr(paths, "DATA_DOCTOR_REPORT", report_path)
+    monkeypatch.setattr(paths, "OPTIONS_LAKE_ROOT", lake)
+    return report_path
+
+
 def _write_jsonl(path: Path, *records: dict) -> None:
     path.write_text("\n".join(json.dumps(record) for record in records) + "\n", encoding="utf-8")
 
@@ -1284,7 +1303,7 @@ def test_options_zone_exposes_independent_research_backtest_state(monkeypatch, t
     assert z["data_readiness"]["status"] == sc.OK
     assert z["defect_ledger"]["open_count"] == 1
     assert z["context_feature_coverage"]["status"] == "not_measured"
-    assert z["context_feature_coverage"]["options_as_clue"] == "not_measured"
+    assert z["context_feature_coverage"]["options_context_features"] == "not_measured"
     assert z["standalone_model_evidence"]["status"] == "structural_only"
     assert z["standalone_model_evidence"]["model_id_prefix"] == "FOPT_"
     assert z["standalone_model_evidence"]["real_data_backed"] is False
@@ -1295,6 +1314,326 @@ def test_options_zone_exposes_independent_research_backtest_state(monkeypatch, t
     assert "defect_ledger_open" in z["shadow_live_blockers"]
     assert z["health"] == sc.AMBER
     _json_roundtrip(z)
+
+
+def test_options_context_coverage_absent_summary_preserves_not_measured(monkeypatch, tmp_path):
+    _point_options_zone_ok(monkeypatch, tmp_path)
+    run_dir = tmp_path / "artifacts" / "research_cards" / "workbench_runs" / "fopt_no_context"
+    run_dir.mkdir(parents=True)
+    (run_dir / "summary.json").write_text(
+        json.dumps({
+            "campaign_id": "fopt_no_context",
+            "generated_utc": "2026-06-14T01:00:00+00:00",
+            "status": "PASS",
+            "model_id": "FOPT_ES_CALL",
+            "symbol": "MES.v.0",
+            "lane": "cme_options",
+        }),
+        encoding="utf-8",
+    )
+
+    coverage = ZONES["options"]()["context_feature_coverage"]
+
+    assert coverage == {
+        "status": "not_measured",
+        "options_context_features": "not_measured",
+        "options_standalone_strategy": "not_measured",
+        "note": "No artifact-level options context-feature coverage is present yet.",
+    }
+
+
+def test_options_context_coverage_valid_fopt_artifact_is_measured(monkeypatch, tmp_path):
+    _point_options_zone_ok(monkeypatch, tmp_path)
+    run_dir = tmp_path / "artifacts" / "research_cards" / "workbench_runs" / "fopt_context"
+    run_dir.mkdir(parents=True)
+    (run_dir / "summary.json").write_text(
+        json.dumps({
+            "campaign_id": "fopt_context",
+            "generated_utc": "2026-06-14T02:03:04+00:00",
+            "status": "PASS",
+            "model_id": "FOPT_ES_CALL",
+            "symbol": "MES.v.0",
+            "lane": "cme_options",
+            "context_feature_coverage": {
+                "source_ids": [
+                    "C:/hft3-lake/options/statistics/ES.OPT/2025-09-10.statistics"
+                ],
+                "timestamp_ids": {
+                    "source_timestamp_utc": "2025-09-10T13:29:00+00:00",
+                    "feature_available_utc": "2025-09-10T13:29:30+00:00",
+                    "target_decision_timestamp_utc": "2025-09-10T13:30:00+00:00",
+                },
+                "units": {"iv_rank": "pct", "quote_intensity": "quotes_per_second"},
+                "missing_policy": "partial_rows_flagged",
+                "options_context_features": {"status": "measured", "n_events": 7, "missing": 1},
+                "options_standalone_strategy": {"status": "separate"},
+            },
+            "context_ablation": {
+                "rows": [
+                    {
+                        "target_event_type": "CPI",
+                        "context_set": "target_plus_options",
+                        "target_only_ev": 1.0,
+                        "target_plus_context_ev": 1.4,
+                        "delta_ev": 0.4,
+                    }
+                ]
+            },
+        }),
+        encoding="utf-8",
+    )
+
+    z = ZONES["options"]()
+    coverage = z["context_feature_coverage"]
+
+    assert z["health"] == sc.AMBER
+    assert coverage["status"] == "measured"
+    assert coverage["options_context_features"] == "measured"
+    assert coverage["options_context_feature_measured"] is True
+    assert coverage["options_context_feature_count"] == 7.0
+    assert coverage["options_standalone_strategy"] == {"status": "separate"}
+    assert coverage["standalone_strategy_separated"] is True
+    assert coverage["standalone_evidence_field"] == "standalone_model_evidence"
+    assert coverage["latest_artifact"] == (
+        "artifacts/research_cards/workbench_runs/fopt_context/summary.json"
+    )
+    assert coverage["latest_campaign_id"] == "fopt_context"
+    assert coverage["latest_model_id"] == "FOPT_ES_CALL"
+    assert coverage["source_family"] == "cme_options"
+    assert coverage["source_ids"] == [
+        "C:/hft3-lake/options/statistics/ES.OPT/2025-09-10.statistics"
+    ]
+    assert coverage["timestamp_ids"]["target_decision_timestamp_utc"] == (
+        "2025-09-10T13:30:00+00:00"
+    )
+    assert coverage["units"]["iv_rank"] == "pct"
+    assert coverage["missing_policy"] == "partial_rows_flagged"
+    assert coverage["context_ablation_row_count"] == 1
+    assert coverage["context_ablation_rows"][0]["context_set"] == "target_plus_options"
+    assert coverage["missing_fields"] == []
+    assert coverage["malformed_fields"] == []
+    _json_roundtrip(z)
+
+
+def test_options_context_coverage_claim_missing_proof_fails_closed(monkeypatch, tmp_path):
+    _point_options_zone_ok(monkeypatch, tmp_path)
+    run_dir = tmp_path / "artifacts" / "research_cards" / "workbench_runs" / "fopt_context_claim"
+    run_dir.mkdir(parents=True)
+    (run_dir / "summary.json").write_text(
+        json.dumps({
+            "campaign_id": "fopt_context_claim",
+            "generated_utc": "2026-06-14T03:00:00+00:00",
+            "status": "PASS",
+            "model_id": "FOPT_ES_CALL",
+            "symbol": "MES.v.0",
+            "lane": "cme_options",
+            "context_feature_coverage": {"options_context_features": "measured"},
+        }),
+        encoding="utf-8",
+    )
+
+    z = ZONES["options"]()
+    coverage = z["context_feature_coverage"]
+
+    assert z["health"] != sc.GREEN
+    assert coverage["status"] == "incomplete"
+    assert coverage["options_context_features"] == "incomplete"
+    assert coverage["options_context_feature_measured"] is False
+    assert coverage["latest_artifact"] == (
+        "artifacts/research_cards/workbench_runs/fopt_context_claim/summary.json"
+    )
+    assert set(coverage["missing_fields"]) == {
+        "source_ids",
+        "timestamp_ids",
+        "context_ablation",
+        "options_context_features",
+        "units",
+        "missing_policy",
+    }
+    assert coverage["context_ablation_row_count"] == 0
+    assert "fail-closed" in coverage["note"]
+    _json_roundtrip(z)
+
+
+def test_options_context_coverage_zero_count_is_not_measured(monkeypatch, tmp_path):
+    _point_options_zone_ok(monkeypatch, tmp_path)
+    run_dir = tmp_path / "artifacts" / "research_cards" / "workbench_runs" / "fopt_context_zero"
+    run_dir.mkdir(parents=True)
+    (run_dir / "summary.json").write_text(
+        json.dumps({
+            "campaign_id": "fopt_context_zero",
+            "generated_utc": "2026-06-14T03:30:00+00:00",
+            "status": "PASS",
+            "model_id": "FOPT_ES_CALL",
+            "symbol": "MES.v.0",
+            "lane": "cme_options",
+            "context_feature_coverage": {
+                "source_ids": ["C:/hft3-lake/options/statistics/ES.OPT/2025-09-10.statistics"],
+                "timestamp_ids": {
+                    "source_timestamp_utc": "2025-09-10T13:29:00+00:00",
+                    "feature_available_utc": "2025-09-10T13:29:30+00:00",
+                    "target_decision_timestamp_utc": "2025-09-10T13:30:00+00:00",
+                },
+                "units": {"iv_rank": "pct"},
+                "missing_policy": "zero_coverage_visible",
+                "options_context_features": {"status": "measured", "n_events": 0},
+            },
+            "context_ablation": {
+                "rows": [
+                    {
+                        "target_event_type": "CPI",
+                        "context_set": "target_plus_options",
+                        "target_only_ev": 1.0,
+                        "target_plus_context_ev": 1.0,
+                        "delta_ev": 0.0,
+                    }
+                ]
+            },
+        }),
+        encoding="utf-8",
+    )
+
+    coverage = ZONES["options"]()["context_feature_coverage"]
+
+    assert coverage["status"] == "incomplete"
+    assert coverage["options_context_feature_measured"] is False
+    assert "options_context_features" in coverage["missing_fields"]
+
+
+def test_options_context_coverage_future_timestamp_fails_closed(monkeypatch, tmp_path):
+    _point_options_zone_ok(monkeypatch, tmp_path)
+    run_dir = tmp_path / "artifacts" / "research_cards" / "workbench_runs" / "fopt_context_leak"
+    run_dir.mkdir(parents=True)
+    (run_dir / "summary.json").write_text(
+        json.dumps({
+            "campaign_id": "fopt_context_leak",
+            "generated_utc": "2026-06-14T04:00:00+00:00",
+            "status": "PASS",
+            "model_id": "FOPT_ES_CALL",
+            "symbol": "MES.v.0",
+            "lane": "cme_options",
+            "context_feature_coverage": {
+                "source_ids": ["C:/hft3-lake/options/statistics/ES.OPT/2025-09-10.statistics"],
+                "timestamp_ids": {
+                    "source_timestamp_utc": "2025-09-10T13:29:00+00:00",
+                    "feature_available_utc": "2025-09-10T13:30:01+00:00",
+                    "target_decision_timestamp_utc": "2025-09-10T13:30:00+00:00",
+                },
+                "units": {"iv_rank": "pct"},
+                "missing_policy": "partial_rows_flagged",
+                "options_context_features": {"n_events": 3},
+            },
+            "context_ablation": {
+                "rows": [
+                    {
+                        "target_event_type": "CPI",
+                        "context_set": "target_plus_options",
+                        "target_only_ev": 1.0,
+                        "target_plus_context_ev": 1.4,
+                        "delta_ev": 0.4,
+                    }
+                ]
+            },
+        }),
+        encoding="utf-8",
+    )
+
+    z = ZONES["options"]()
+    coverage = z["context_feature_coverage"]
+
+    assert z["health"] == sc.RED
+    assert coverage["status"] == "malformed"
+    assert "timestamp_ids.feature_available_after_target_decision" in coverage["malformed_fields"]
+    assert "timestamp proof" in coverage["note"]
+    _json_roundtrip(z)
+
+
+def test_options_context_coverage_future_source_timestamp_fails_closed(monkeypatch, tmp_path):
+    _point_options_zone_ok(monkeypatch, tmp_path)
+    run_dir = tmp_path / "artifacts" / "research_cards" / "workbench_runs" / "fopt_context_future_source"
+    run_dir.mkdir(parents=True)
+    (run_dir / "summary.json").write_text(
+        json.dumps({
+            "campaign_id": "fopt_context_future_source",
+            "generated_utc": "2026-06-14T04:30:00+00:00",
+            "status": "PASS",
+            "model_id": "FOPT_ES_CALL",
+            "symbol": "MES.v.0",
+            "lane": "cme_options",
+            "context_feature_coverage": {
+                "source_ids": ["C:/hft3-lake/options/statistics/ES.OPT/2025-09-10.statistics"],
+                "timestamp_ids": {
+                    "source_timestamp_utc": "2025-09-10T13:29:45+00:00",
+                    "feature_available_utc": "2025-09-10T13:29:30+00:00",
+                    "target_decision_timestamp_utc": "2025-09-10T13:30:00+00:00",
+                },
+                "units": {"iv_rank": "pct"},
+                "missing_policy": "partial_rows_flagged",
+                "options_context_features": {"n_events": 3},
+            },
+            "context_ablation": {
+                "rows": [{
+                    "target_event_type": "CPI",
+                    "context_set": "target_plus_options",
+                    "target_only_ev": 1.0,
+                    "target_plus_context_ev": 1.4,
+                    "delta_ev": 0.4,
+                }]
+            },
+        }),
+        encoding="utf-8",
+    )
+
+    coverage = ZONES["options"]()["context_feature_coverage"]
+
+    assert coverage["status"] == "malformed"
+    assert "timestamp_ids.source_after_feature_available" in coverage["malformed_fields"]
+
+
+def test_options_context_coverage_timestamp_rows_do_not_mix(monkeypatch, tmp_path):
+    _point_options_zone_ok(monkeypatch, tmp_path)
+    run_dir = tmp_path / "artifacts" / "research_cards" / "workbench_runs" / "fopt_context_mixed_timestamps"
+    run_dir.mkdir(parents=True)
+    (run_dir / "summary.json").write_text(
+        json.dumps({
+            "campaign_id": "fopt_context_mixed_timestamps",
+            "generated_utc": "2026-06-14T05:00:00+00:00",
+            "status": "PASS",
+            "model_id": "FOPT_ES_CALL",
+            "symbol": "MES.v.0",
+            "lane": "cme_options",
+            "context_feature_coverage": {
+                "source_ids": ["C:/hft3-lake/options/statistics/ES.OPT/2025-09-10.statistics"],
+                "timestamp_ids": [
+                    {
+                        "source_timestamp_utc": "2025-09-10T13:29:00+00:00",
+                        "feature_available_utc": "2025-09-10T13:29:30+00:00",
+                    },
+                    {"target_decision_timestamp_utc": "2025-09-10T13:30:00+00:00"},
+                ],
+                "units": {"iv_rank": "pct"},
+                "missing_policy": "partial_rows_flagged",
+                "options_context_features": {"n_events": 3},
+            },
+            "context_ablation": {
+                "rows": [{
+                    "target_event_type": "CPI",
+                    "context_set": "target_plus_options",
+                    "target_only_ev": 1.0,
+                    "target_plus_context_ev": 1.4,
+                    "delta_ev": 0.4,
+                }]
+            },
+        }),
+        encoding="utf-8",
+    )
+
+    coverage = ZONES["options"]()["context_feature_coverage"]
+
+    assert coverage["status"] == "incomplete"
+    assert "timestamp_ids[0].target_decision" in coverage["missing_fields"]
+    assert "timestamp_ids[1].source_timestamp" in coverage["missing_fields"]
+    assert "timestamp_ids[1].feature_available" in coverage["missing_fields"]
 
 
 def test_options_api_route(monkeypatch, tmp_path):
