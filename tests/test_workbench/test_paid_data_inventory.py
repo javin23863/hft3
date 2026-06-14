@@ -285,6 +285,182 @@ def test_q001_project_docs_keep_owner_decision_gate_fail_closed():
     ) in owner_packet
 
 
+def test_q001_options_strict_mbo_warning_ledger_matches_inventory_report():
+    repo_root = Path(__file__).resolve().parents[2]
+    ledger = (repo_root / "docs" / "project" / "Q001_OPTIONS_STRICT_MBO_WARNING_LEDGER.md").read_text(
+        encoding="utf-8"
+    )
+    report = json.loads((repo_root / "runtime" / "data_audits" / "paid_data_inventory.json").read_text(encoding="utf-8"))
+    q001 = report["q001_cme_data_inventory"]
+    options = q001["options"]
+    fixing_mbo = options["options_lane"]["fixing_mbo"]
+    expiry = options["options_lane"]["expiry_coverage"]
+    warn_checks = options["warn_checks"]
+    fail_checks = options["fail_checks"]
+    covered_elsewhere = expiry["covered_elsewhere"]
+    study_dates = set(fixing_mbo["study_date_list"])
+    covered_elsewhere_net_new = [value for value in covered_elsewhere if value not in study_dates]
+    covered_elsewhere_overlap = [value for value in covered_elsewhere if value in study_dates]
+    first_strict_gaps = expiry["strict_mbo_gap_dates"][:10]
+
+    expected_status_line = "Status: `PROPOSED_WARNING_LEDGER` (`not-owner-accepted`, not closed/green)"
+    assert re.findall(r"^Status: .+$", ledger, flags=re.MULTILINE) == [expected_status_line]
+    assert ledger.count(expected_status_line) == 1
+    ledger_lower = ledger.lower()
+    assert "status: `accepted`" not in ledger_lower
+    assert "status: `owner_accepted`" not in ledger_lower
+    forbidden_q001_claim = re.compile(
+        r"\b(?:closed?|green|accepts?|accepted|acceptance|owner[_ -]?accepted)\b", re.IGNORECASE
+    )
+    allowed_q001_claims = {
+        "status: `proposed_warning_ledger` (`not-owner-accepted`, not closed/green)",
+        (
+            "this ledger classifies the q001 options warning named `options-fixing-mbo-coverage`. it does not "
+            "clear the warning, does not make q001 green, and does not prove options model readiness. it records "
+            "the boundary between the study-coverage gate and the stricter mbo quote reconstruction diagnostic."
+        ),
+        "## acceptance boundary",
+        "if the project owner accepts this ledger for q001 inventory scope, the accepted meaning is limited to:",
+        (
+            "- q001 inventory/study coverage is not blocked by strict quote gaps because "
+            "`fixing_study_trade_or_mbo` has `expiry_coverage.dates_covered=784/784` and `gap_count=0`. this is "
+            "union coverage: `782` raw fixing mbo study dates plus `2` net-new active-npz dates, with `1` "
+            "covered-elsewhere date overlapping raw study coverage. - the strict quote warning remains visible "
+            "and must not be hidden from cockpit, data-doctor, or handoff docs. - strict options quote "
+            "reconstruction, strict quote-only mbo features, options order-book replay, and options model "
+            "promotion remain blocked until strict quote coverage is filled or separately scoped out. - this "
+            "acceptance does not promote, certify, or green any options model."
+        ),
+        (
+            "if accepted, update [q001_data_inventory_status.md](q001_data_inventory_status.md) and "
+            "[open_questions_and_rejections.md](open_questions_and_rejections.md) with the owner decision and rerun:"
+        ),
+    }
+    paragraphs = {" ".join(raw.split()).lower() for raw in ledger.split("\n\n") if raw.strip()}
+    assert allowed_q001_claims <= paragraphs
+    for paragraph in paragraphs:
+        if not forbidden_q001_claim.search(paragraph):
+            continue
+        assert paragraph in allowed_q001_claims, paragraph
+
+    assert q001["status"] == "INVENTORIED_WITH_WARNINGS"
+    assert q001["status"] not in {"ACCEPTED", "CLOSED", "GREEN", "OK", "PASS", "COMPLETED", "RESOLVED", "CERTIFIED"}
+    assert options["data_doctor_status"] == "WARN"
+    assert [row["name"] for row in warn_checks] == ["options-fixing-mbo-coverage"]
+    assert warn_checks[0]["status"] == "WARN"
+    assert fail_checks == []
+    assert expiry["coverage_mode"] == "fixing_study_trade_or_mbo"
+    assert len(covered_elsewhere) == 3
+    assert len(covered_elsewhere_net_new) == 2
+    assert len(covered_elsewhere_overlap) == 1
+    assert expiry["dates_covered"] == expiry["expected_dates"]
+    assert expiry["gap_count"] == 0
+    assert expiry["stale_gap_count"] == 0
+    assert fixing_mbo["study_dates_covered"] + len(covered_elsewhere_net_new) == expiry["dates_covered"]
+    assert fixing_mbo["quote_files"] == fixing_mbo["dates_covered"]
+    assert fixing_mbo["trades_files"] == fixing_mbo["trade_only_dates"]
+    assert fixing_mbo["invalid_files"] == 0
+    for value in covered_elsewhere + first_strict_gaps + [fixing_mbo["first_date"], fixing_mbo["last_date"]]:
+        date.fromisoformat(value)
+
+    current_evidence_table = _markdown_table_rows(
+        _section(ledger, "## Current Evidence", "First strict quote gaps recorded by the report:")
+    )
+    assert current_evidence_table[0] == ["Field", "Value", "Meaning"]
+    assert current_evidence_table[1:] == [
+        [
+            "Q001 options status",
+            f"`{options['data_doctor_status']}`",
+            "One warning remains in the options data-doctor surface.",
+        ],
+        ["Warn check", f"`{warn_checks[0]['name']}`", "Strict quote-only MBO diagnostic."],
+        ["Fail checks", f"`{len(fail_checks)}`", "No options fail checks are present in the Q001 report."],
+        [
+            "Study coverage mode",
+            f"`{expiry['coverage_mode']}`",
+            "Study coverage may use quote files, trade files, or validated active NPZ manifest coverage.",
+        ],
+        ["Expected expiry dates", f"`{expiry['expected_dates']}`", "Rule-based options expiry calendar expectation."],
+        [
+            "Expiry coverage dates covered",
+            f"`{expiry['dates_covered']}/{expiry['expected_dates']}`",
+            "Union coverage is complete for Q001 inventory scope after allowed alternate active NPZ coverage is counted.",
+        ],
+        [
+            "Raw fixing MBO study file dates",
+            f"`{fixing_mbo['study_dates_covered']}`",
+            "Dates covered directly by fixing MBO quote/trade files before active NPZ manifest coverage is counted.",
+        ],
+        [
+            "Covered elsewhere",
+            f"`{len(covered_elsewhere)}`",
+            "Expected dates covered by validated active NPZ manifest evidence.",
+        ],
+        [
+            "Covered-elsewhere net-new dates",
+            f"`{len(covered_elsewhere_net_new)}`",
+            "Dates added to the study coverage union: `2024-09-18`, `2025-06-20`.",
+        ],
+        [
+            "Covered-elsewhere overlap",
+            f"`{len(covered_elsewhere_overlap)}`",
+            "Date already present in raw fixing MBO study coverage: `2023-09-15`.",
+        ],
+        ["Study gap count", f"`{expiry['gap_count']}`", f"No missing dates under `{expiry['coverage_mode']}`."],
+        ["Study stale gap count", f"`{expiry['stale_gap_count']}`", "No stale study-coverage gaps."],
+        [
+            "Strict quote files",
+            f"`{fixing_mbo['quote_files']}`",
+            "Dates covered by strict quote-level fixing MBO files.",
+        ],
+        [
+            "Strict quote gap count",
+            f"`{expiry['strict_mbo_gap_count']}`",
+            "Expected dates not covered by strict quote-level fixing MBO quotes or alternate active NPZ coverage.",
+        ],
+        [
+            "Strict quote stale gap count",
+            f"`{expiry['strict_mbo_stale_gap_count']}`",
+            "Strict quote gaps older than the vendor-lag grace window.",
+        ],
+        ["Trade files", f"`{fixing_mbo['trades_files']}`", "Dates with trade-only fixing MBO files."],
+        [
+            "Trade-only dates",
+            f"`{fixing_mbo['trade_only_dates']}`",
+            "Trade coverage that satisfies study coverage but not strict quote reconstruction.",
+        ],
+        ["Invalid fixing files", f"`{fixing_mbo['invalid_files']}`", "No invalid fixing files in the report."],
+    ]
+
+    gap_block = _section(ledger, "First strict quote gaps recorded by the report:", "## Code Boundary")
+    recorded_gaps = [
+        line.strip()
+        for line in gap_block.splitlines()
+        if line.strip() and not line.strip().startswith("```")
+    ]
+    assert recorded_gaps == first_strict_gaps
+
+    code_boundary_table = _markdown_table_rows(_section(ledger, "## Code Boundary", "## Acceptance Boundary"))
+    assert code_boundary_table == [
+        ["Check", "Mode", "Gate behavior"],
+        ["`options-fixing-coverage`", "`fixing_study_trade_or_mbo`", "Fails if study coverage has gaps."],
+        [
+            "`options-fixing-mbo-coverage`",
+            "`strict_mbo_quotes`",
+            "`warn_only=True`; warns if strict quote-only MBO has gaps.",
+        ],
+    ]
+    code_boundary = _section(ledger, "## Code Boundary", "## Acceptance Boundary")
+    for check_name in [
+        "options-fixing-coverage",
+        "options-fixing-mbo",
+        "options-ohlcv",
+        "options-definitions",
+        "options-statistics",
+    ]:
+        assert f"`{check_name}`" in code_boundary
+
+
 def test_q001_mbo_gap_rejection_ledger_arithmetic_matches_manifest():
     repo_root = Path(__file__).resolve().parents[2]
     ledger = (repo_root / "docs" / "project" / "Q001_MBO_GAP_REJECTION_LEDGER.md").read_text(encoding="utf-8")
