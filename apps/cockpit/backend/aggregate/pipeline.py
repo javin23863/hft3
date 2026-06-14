@@ -1,6 +1,6 @@
 """Pipeline zone — start-to-end stage state machine.
 
-Capture -> Feature Build -> Stage A -> Gauntlet B -> M6 Gate -> Promote.
+Capture -> Feature Build -> Stage A -> Q001 Data Inventory -> Gauntlet B -> M6 Gate -> Promote.
 Each stage is derived purely from the artifact it writes; a stage whose
 artifact is absent renders as MISSING ("not yet run"), never an error.
 """
@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from .. import loaders, paths, schemas
+from .system import _q001_inventory
 
 
 def _stage(id_: str, label: str, status: str, **extra) -> dict:
@@ -107,6 +108,14 @@ _M6_FULL_ARTIFACT_ID = "research_cards/universe_M6_full/universe_result.json"
 _M6_BAND_MS = 6.255764
 _FULL_STAGE_A = "research_cards/stage_a_full/stage_a_survivors.json"
 _ACTIVE_SWEEP_PLACEHOLDER_IDS = {"gauntlet_b", "m6_gate"}
+_Q001_STAGE_FIELDS = (
+    "q001_status",
+    "artifact",
+    "missing_or_unavailable_slots",
+    "data_doctor_status",
+    "strict_mbo_gap_count",
+    "strict_mbo_stale_gap_count",
+)
 
 
 def _active_cme_m6_sweep() -> bool:
@@ -122,6 +131,24 @@ def _active_cme_m6_sweep() -> bool:
             if job.get("model_id") == "cme_m6_universe_sweep":
                 return True
     return False
+
+
+def _q001_stage() -> dict:
+    q001 = _q001_inventory()
+    status = q001.get("status") or schemas.UNKNOWN
+    gaps = q001.get("gaps")
+    gap_count = len(gaps) if isinstance(gaps, list) else 0
+    extra = {key: q001.get(key) for key in _Q001_STAGE_FIELDS}
+    artifact = extra.get("artifact")
+    if isinstance(artifact, str):
+        extra["artifact"] = artifact.replace("\\", "/")
+    extra["gap_count"] = gap_count
+    if status != schemas.OK:
+        extra["detail"] = (
+            f"Q001 inventory {status}: "
+            f"q001_status={q001.get('q001_status')}, gap_count={gap_count}"
+        )
+    return _stage("q001_inventory", "Q001 Data Inventory", status, **extra)
 
 
 def _preferred_universe_path(fallback: Path) -> Path:
@@ -680,6 +707,7 @@ def build() -> dict:
         _capture_stage(),
         _feature_stage(),
         _stage_a_stage(),
+        _q001_stage(),
         _universe_stage("gauntlet_b", "Gauntlet B", _preferred_universe_path(paths.STAGE_B_RESULT)),
         _gate_stage(latency_evidence),
         _promote_stage(),
@@ -693,7 +721,7 @@ def build() -> dict:
         and all(s.get("id") in _ACTIVE_SWEEP_PLACEHOLDER_IDS for s in non_ok)
     ):
         health = schemas.GREEN
-    elif any(s["status"] in (schemas.STALE, schemas.MISSING) for s in stages):
+    elif any(s["status"] in (schemas.STALE, schemas.MISSING, schemas.UNKNOWN) for s in stages):
         health = schemas.AMBER
     else:
         health = schemas.GREEN

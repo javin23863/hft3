@@ -58,6 +58,7 @@ def _stub_q001_ok(monkeypatch) -> None:
         lambda: payload,
     )
     monkeypatch.setattr(alerts_agg, "_q001_inventory", lambda: payload)
+    monkeypatch.setattr(pipeline_agg, "_q001_inventory", lambda: payload)
 
 
 def _point_options_zone_ok(monkeypatch, root: Path) -> Path:
@@ -219,10 +220,18 @@ def test_zone_shape(name):
     _json_roundtrip(payload)  # raises if non-serializable
 
 
-def test_pipeline_has_six_stages():
+def test_pipeline_has_seven_stages():
     p = ZONES["pipeline"]()
     ids = [s["id"] for s in p["stages"]]
-    assert ids == ["capture", "feature_build", "stage_a", "gauntlet_b", "m6_gate", "promote"]
+    assert ids == [
+        "capture",
+        "feature_build",
+        "stage_a",
+        "q001_inventory",
+        "gauntlet_b",
+        "m6_gate",
+        "promote",
+    ]
     for s in p["stages"]:
         assert {"id", "label", "status"}.issubset(s)
 
@@ -837,11 +846,64 @@ def test_pipeline_active_sweep_masks_only_universe_placeholders(monkeypatch, tmp
     monkeypatch.setattr(paths, "ALPHA_CME_SPEC", tmp_path / "missing.md")
     loaders._cache.clear()
     monkeypatch.setattr(pipeline_agg, "_latency_evidence", lambda **_: {"status": sc.OK, "live_readiness_status": sc.STALE})
+    monkeypatch.setattr(
+        pipeline_agg,
+        "_q001_inventory",
+        lambda: {
+            "status": sc.STALE,
+            "q001_status": "INVENTORIED_WITH_WARNINGS",
+            "artifact": "runtime/data_audits/paid_data_inventory.json",
+            "missing_or_unavailable_slots": 211,
+            "data_doctor_status": "WARN",
+            "strict_mbo_gap_count": 507,
+            "strict_mbo_stale_gap_count": 503,
+            "gaps": [{"source": "mbo_pilot_manifest", "severity": "WARN"}],
+        },
+    )
 
+    p = pipeline_agg.build()
+
+    q001 = next(s for s in p["stages"] if s["id"] == "q001_inventory")
+    assert p["health"] == sc.AMBER
+    assert q001["status"] == sc.STALE
+    assert q001["q001_status"] == "INVENTORIED_WITH_WARNINGS"
+    assert q001["artifact"] == "runtime/data_audits/paid_data_inventory.json"
+    assert q001["missing_or_unavailable_slots"] == 211
+    assert q001["data_doctor_status"] == "WARN"
+    assert q001["strict_mbo_gap_count"] == 507
+    assert q001["strict_mbo_stale_gap_count"] == 503
+    assert q001["gap_count"] == 1
+    assert "q001_status=INVENTORIED_WITH_WARNINGS" in q001["detail"]
+    assert {s["id"] for s in p["stages"] if s["status"] != sc.OK} == {
+        "q001_inventory",
+        "gauntlet_b",
+        "m6_gate",
+    }
+
+    _stub_q001_ok(monkeypatch)
     p = pipeline_agg.build()
 
     assert p["health"] == sc.GREEN
     assert {s["id"] for s in p["stages"] if s["status"] != sc.OK} == {"gauntlet_b", "m6_gate"}
+
+    monkeypatch.setattr(
+        pipeline_agg,
+        "_q001_inventory",
+        lambda: {
+            "status": sc.UNKNOWN,
+            "q001_status": "INVENTORIED",
+            "artifact": "runtime/data_audits/paid_data_inventory.json",
+            "gaps": [],
+        },
+    )
+    p = pipeline_agg.build()
+
+    assert p["health"] == sc.AMBER
+    assert {s["id"] for s in p["stages"] if s["status"] != sc.OK} == {
+        "q001_inventory",
+        "gauntlet_b",
+        "m6_gate",
+    }
 
 
 def test_pipeline_active_sweep_does_not_hide_missing_prerequisites(monkeypatch, tmp_path):
