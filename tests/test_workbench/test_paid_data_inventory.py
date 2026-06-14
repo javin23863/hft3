@@ -246,6 +246,20 @@ def test_q001_project_docs_keep_owner_decision_gate_fail_closed():
     assert "[Q001_OWNER_DECISION_PACKET.md](Q001_OWNER_DECISION_PACKET.md)" in open_questions
     assert "Q001 remains open until both ledgers are owner-accepted, filled, or explicitly rejected" in open_questions
     assert milestone_gate_rule in completion_gate
+    decision_template_section = owner_packet.split("## Decision Record Template", 1)[1]
+    decision_template_block = re.search(r"\A\s*```text\n(?P<body>.*?)\n```", decision_template_section, flags=re.DOTALL)
+    assert decision_template_block is not None
+    assert decision_template_block.group("body").splitlines() == [
+        "Owner decision date:",
+        "MBO pilot gap decision:",
+        "Options strict MBO warning decision:",
+        "Accepted inventory scope:",
+        "Rejected model scope, if any:",
+        "Required future data fill, if any:",
+        "Post-decision verifier command:",
+        "Post-decision verifier result:",
+        "Q001 final status after rerun:",
+    ]
 
     evidence_snapshot_path = repo_root / "tests" / "fixtures" / "q001_owner_packet_evidence_snapshot.json"
     evidence_snapshot = json.loads(evidence_snapshot_path.read_text(encoding="utf-8"))
