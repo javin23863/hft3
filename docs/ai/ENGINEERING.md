@@ -29,10 +29,11 @@ Canonical coding style for all human and AI contributors. [AGENTS.md](../../AGEN
 ## Agent workflow (mandatory)
 
 ```
-Spec → GraphPre → Plan → Delegate → Review → Verify → GraphPost
+Spec -> GraphPre -> Plan -> Delegate -> Code -> GrepLoop -> Review -> Verify -> GraphPost
 ```
 
 - **GraphPre:** `graphify query` before locating code.
+- **GrepLoop:** mandatory bounded task-specific `rg` loop after every repo edit; Codex self-review is not enough; see [GREPLOOP.md](GREPLOOP.md).
 - **Review:** dual-pass per [REVIEWER_CHARTER.md](../REVIEWER_CHARTER.md).
 - **Verify:** bounded pytest + domain gates — [SHELL_EXECUTION.md](SHELL_EXECUTION.md) (timeouts mandatory).
 - **GraphPost:** rebuild `graphify-out/` after code edits.

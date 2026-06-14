@@ -27,7 +27,8 @@ python tools/graphify/build_wiki_index.py
 - [AGENTS.md](../../AGENTS.md) — delegation, topology (CHI404 only for live), verify loop
 - [ENGINEERING.md](ENGINEERING.md) — Karpathy principles (canonical coding style)
 - [SHELL_EXECUTION.md](SHELL_EXECUTION.md) — **time-bounded shell/SSH/pytest (mandatory)**
-- [docs/AGENTIC_ENGINEERING.md](../AGENTIC_ENGINEERING.md) — Spec → GraphPre → Plan → Code → Review → Verify → GraphPost
+- [docs/AGENTIC_ENGINEERING.md](../AGENTIC_ENGINEERING.md) — Spec -> GraphPre -> Plan -> Code -> GrepLoop -> Review -> Verify -> GraphPost
+- [GREPLOOP.md](GREPLOOP.md) — mandatory `rg` loop for stale terms, old fields, missing evidence rows, and PR Greptile review when available
 
 ## Step 2 — Math invariants
 
