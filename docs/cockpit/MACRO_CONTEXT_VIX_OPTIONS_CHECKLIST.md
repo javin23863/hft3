@@ -8,6 +8,49 @@ Audience: human developer, Codex agents, and review subagents working on the CME
 
 Purpose: capture the exact behavior the owner requested before any implementation pass. This is not permission to invent a new pipeline. It is a checklist for implementing the missing pieces inside the existing hft3 ontology, using the vault math library, the existing replay/research stack, and the existing fail-closed cockpit gates.
 
+## Bad-Mood Grader Review
+
+- [ ] Reject any future implementation that says "use context features" without naming the exact source authority for the feature, timestamp rule, unit, missingness rule, and validation gate.
+- [ ] Reject any future implementation that lists academic URLs but does not bind each touched file to the specific paper, vault note, repo spec, or PDF claim that justifies the change.
+- [ ] Reject any future implementation that treats general LLM knowledge as an authority. General knowledge may help navigate, but it is not an implementation source for this project.
+- [ ] Reject any future implementation that creates a new pipeline, schema, runner, or model family when an existing hft3 ontology object already covers the behavior.
+- [ ] Reject any future implementation that marks a checklist item done without an artifact, test, or cockpit field proving it.
+- [ ] Reject any future implementation that uses options, VIX, or macro context as "alpha" before proving point-in-time availability, coverage, ablation uplift, and robustness.
+- [ ] Reject any future implementation that changes code without updating the citation ledger below or a same-purpose project artifact.
+- [ ] Reject any future implementation that cannot explain why the chosen code path is the right hft3 code path from VaultGate, GraphGate, and repo docs.
+
+## Implementation Citation Gate
+
+No source row, no edit. Every code or schema change made from this checklist must carry an implementation citation row before it can be considered reviewable.
+
+Required row fields:
+
+- [ ] `touched_file`: exact repo path changed.
+- [ ] `feature_or_rule`: what behavior the file implements.
+- [ ] `authority`: vault note, repo doc/spec, PDF, or per-paper vault note used as the source.
+- [ ] `source_claim`: the specific claim taken from the authority.
+- [ ] `implementation_consequence`: what the claim forces in code.
+- [ ] `tests_or_artifacts`: tests, research-card fields, packet fields, or cockpit fields that prove the implementation obeys the claim.
+- [ ] `review_status`: pending, accepted, rejected, or blocked.
+
+The row may live in this checklist while the feature is being built, then move into a narrower feature doc or research artifact once the implementation matures. It must align with the existing packet/schema vocabulary where possible, especially `source_ref`, `source_id`, `source_registry_key`, and `citation` fields found by GraphGate in `packages/data_layer/packet/schema_research_decision_packet_v1.json`.
+
+## Authority Map
+
+Use these sources as the starting authority set. Add more specific paper rows before implementation when the claim is more specific than the source listed here.
+
+| Work area | Starting authorities | Implementation consequence |
+|---|---|---|
+| Macro event targets and context events | Vault `architecture/Economic Event Universe.md`; Vault `pipelines/Event Replay and Backtesting.md`; `packages/data_system/config/events.csv`; `specs/FEATURES.md` event context section | Use the existing event universe and event-context machinery. Do not invent a second event catalog. Every context join needs release timestamp and target decision timestamp. |
+| Filtration, event-time, walk-forward | Vault `Home.md` non-negotiable invariants; Vault `validation/Backtester Certification.md`; `docs/AGENTIC_ENGINEERING.md`; `docs/REVIEWER_CHARTER.md`; `docs/VALIDATION_HONESTY.md` | No lookahead, ns event-time ordering, explicit walk-forward split, and honest non-GREEN status when gates are missing or stale. |
+| Replay and research artifacts | Vault `pipelines/Event Replay and Backtesting.md`; `specs/PIPELINE.md`; `packages/data_layer/packet/schema_research_decision_packet_v1.json` | Extend existing replay/research artifacts and packet citation fields rather than adding hidden UI-only state. |
+| VIX and vol sensors | `docs/workbench/HOT_MEMORY_UNIVERSE.md`; `packages/features_engine/src/features/vix_features.py`; `packages/features_engine/src/hypotheses/vix_modules.py`; Vault `library/11 Options Microstructure.md` when VIX options are used | Treat VIX/VVIX as sensors, not executable instruments. VIX coverage must be counted and missingness must be explicit. |
+| CME options context | Vault `decisions/2026-06-12 Options-lane build decisions (slices 1-7).md`; Vault `decisions/2026-06-12 Options-lane 2026-embargo policy extension.md`; `specs/OPTIONS_LANE.md`; Vault `library/papers/lee-ryu-yang-yu-2023-options-order-imbalance.md`; Vault `library/papers/odonovan-yu-zhang-2023-option-mm-hedging-liquidity.md`; Vault `library/papers/sahut-2008-option-market-microstructure.md` | Keep options research-only while defects are open. Separate parity-arbitrage flow from informed-flow proxies or mark raw imbalance as proxy-only. Enforce 2026 usage-class policy. |
+| Execution realism and costs | Vault `library/System Implications.md`; Vault `library/06 Optimal Execution.md`; Vault `library/07 Market Making and Stochastic Control.md`; Vault `validation/Backtester Certification.md` | Include fees, slippage, fill probability, book resilience, inventory risk, and adverse selection in any promoted measurement. |
+| Latency | `specs/LATENCY.md`; `docs/LATENCY_BASELINE.md`; `docs/workbench/LATENCY_ARCHITECTURE.md`; Vault `wiki/hot.md`; Vault `library/10 HFT Market Design and Latency.md` | Use artifact-backed latency only. C++ hot-path measurements are authoritative for production-style claims. Unit conversions between us and ms must be explicit. |
+| Model measurement and robustness | Vault `library/08 High-Frequency Econometrics.md`; Vault `library/09 ML and Deep Learning for LOB.md`; Vault `validation/Backtester Certification.md`; `specs/PIPELINE.md` | Require target-only baseline, context ablation, PBO/CSCV/bootstrap evidence, multiple-testing control, and cost/latency stress. |
+| Autonomy and cockpit status | `specs/MODEL_LIFECYCLE.md`; `apps/cockpit/backend/aggregate/*`; Vault `Memory Stack.md`; `AGENTS.md` | Cockpit observes and explains the autonomous lifecycle. It must not fake GREEN or require Codex as a runtime step. |
+
 ## Owner Intent
 
 - [ ] Treat major volatility events as primary target events: CPI, CORE_CPI, NFP, unemployment claims, FOMC, GDP, PCE, PPI, and similar scheduled shocks.
@@ -50,6 +93,7 @@ Purpose: capture the exact behavior the owner requested before any implementatio
 
 ## Feature Template
 
+- [ ] Define `authority_sources`: exact vault notes, repo docs, specs, PDFs, or paper notes that justify the feature.
 - [ ] Define `target_event_type`: the event being traded.
 - [ ] Define `context_event_type`: an earlier or adjacent event allowed to inform the target.
 - [ ] Define `context_window`: lookback horizon and cutoff relative to target event timestamp.
@@ -127,14 +171,16 @@ Purpose: capture the exact behavior the owner requested before any implementatio
 ## Implementation Passes
 
 - [ ] Pass 1: documentation and audit only. Commit this checklist so a human developer has the exact owner intent and evidence map.
-- [ ] Pass 2: implement smallest code changes for measurement visibility first: artifact schema, coverage counts, cockpit display, and tests.
-- [ ] Pass 3: implement context feature generation only after the measurement schema is fail-closed.
-- [ ] Pass 4: implement options lane cockpit page/API only after the existing system options checks are preserved.
-- [ ] Pass 5: implement real options backtest pipeline only after the structural-only and fixture-only adapters are replaced or clearly bypassed for real-data research.
+- [ ] Pass 2: fill implementation citation rows before code. Each touched file must have authority, source claim, consequence, and tests/artifacts listed.
+- [ ] Pass 3: implement smallest code changes for measurement visibility first: artifact schema, coverage counts, cockpit display, and tests.
+- [ ] Pass 4: implement context feature generation only after the measurement schema is fail-closed.
+- [ ] Pass 5: implement options lane cockpit page/API only after the existing system options checks are preserved.
+- [ ] Pass 6: implement real options backtest pipeline only after the structural-only and fixture-only adapters are replaced or clearly bypassed for real-data research.
 - [ ] Every pass requires VaultGate, GraphGate, subagent locate/edit/review for code, bounded tests, and no unstated live/paper changes.
 
 ## Test Checklist
 
+- [ ] Tests or artifacts cite the same authority rows used by the code change.
 - [ ] Unit tests for `target_event` versus `context_event` semantics.
 - [ ] Unit tests for point-in-time event context joins.
 - [ ] Unit tests that future event context is rejected.
