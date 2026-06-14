@@ -55,7 +55,10 @@ def test_resolve_download_symbol_uses_primary_when_available():
     assert cost == 0.024
 
 
-def test_resolve_npz_for_event_detects_es_fallback_file(tmp_path: Path):
+def test_resolve_npz_for_event_detects_es_fallback_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.delenv("HFT3_NPZ_ROOT", raising=False)
     event_id = "CPI_2018_01_11_TIGHT"
     parsed = ("MES.v.0", "ES.v.0")
     es_path = tmp_path / "data" / "npz" / f"ES.v.0_{event_id}_mbo.npz"

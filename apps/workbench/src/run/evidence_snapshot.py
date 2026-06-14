@@ -2784,11 +2784,18 @@ def _all_lanes_snapshot(repo: Path) -> RunEvidenceSnapshot:
     terminal_counts = {state: 0 for state in sorted(ALL_LANES_TERMINAL_STATES)}
     missing_state_rows: list[dict[str, Any]] = []
     invalid_state_rows: list[dict[str, Any]] = []
-    lane_counts: dict[str, int] = {}
+    planned_lane_counts = plan.get("lane_model_counts") if isinstance(plan.get("lane_model_counts"), dict) else {}
+    lane_counts: dict[str, int] = {
+        str(lane): int(count)
+        for lane, count in planned_lane_counts.items()
+        if isinstance(count, int) and not isinstance(count, bool)
+    }
+    has_planned_lane_counts = bool(lane_counts)
     for row in model_rows:
         state = str(row.get("terminal_state") or row.get("state") or row.get("status") or "")
         lane = str(row.get("lane") or row.get("resolved_lane") or "unknown")
-        lane_counts[lane] = lane_counts.get(lane, 0) + 1
+        if not has_planned_lane_counts:
+            lane_counts[lane] = lane_counts.get(lane, 0) + 1
         if not state:
             missing_state_rows.append(row)
         elif state not in ALL_LANES_TERMINAL_STATES:
@@ -2846,6 +2853,15 @@ def _all_lanes_snapshot(repo: Path) -> RunEvidenceSnapshot:
                 }
             )
 
+    plan_coverage_gates = [
+        dict(gate)
+        for gate in plan.get("lane_coverage_gates", [])
+        if isinstance(gate, dict)
+    ]
+    summary_gates = list(summary.get("blocking_gates") or [])
+    if not summary_gates:
+        summary_gates = plan_coverage_gates
+
     state = str(summary.get("state") or active.get("state") or ("blocked" if blocking_gates else "planned"))
     planned = len(model_rows)
     executed = terminal_counts["EXECUTED"] + terminal_counts["PROMOTED"] + terminal_counts["QUARANTINED"]
@@ -2890,6 +2906,7 @@ def _all_lanes_snapshot(repo: Path) -> RunEvidenceSnapshot:
         data={
             "planned_model_count": planned,
             "lane_counts": lane_counts,
+            "lane_coverage_gates": plan_coverage_gates,
             "source_data_reused": active.get("source_data_reused", True),
             "previous_run_artifacts_reused": active.get("previous_run_artifacts_reused", False),
         },
@@ -2909,6 +2926,7 @@ def _all_lanes_snapshot(repo: Path) -> RunEvidenceSnapshot:
                 "invalid_terminal_state_count": len(invalid_state_rows),
                 "leakage_detection_status": leakage_detection.get("status", summary.get("leakage_detection_status", "")),
                 "leakage_detection_blockers": leakage_detection.get("blocking", summary.get("leakage_detection_blockers", [])),
+                "lane_coverage_gates": plan_coverage_gates,
             },
             "rejected_stale_artifacts": read_json(run_dir / "rejected_stale_artifacts.json"),
         },
@@ -2926,7 +2944,7 @@ def _all_lanes_snapshot(repo: Path) -> RunEvidenceSnapshot:
                 else "All-lane model plan is present; promotion remains gated by observed evidence."
             ),
             "live_registry_ready": bool(summary.get("live_registry_ready", False)),
-            "blocking_gates": blocking_gates + list(summary.get("blocking_gates") or []),
+            "blocking_gates": blocking_gates + summary_gates,
             "terminal_counts": terminal_counts,
         },
         reports={

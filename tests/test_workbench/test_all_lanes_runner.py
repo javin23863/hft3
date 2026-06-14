@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -18,13 +19,27 @@ def test_build_all_lanes_plan_assigns_one_terminal_state_per_model() -> None:
 
     assert plan["run_id"] == "fresh_all_lanes_test"
     assert plan["model_count"] == len(plan["models"])
+    assert plan["registered_lane_count"] == len(plan["lanes"])
+    assert set(plan["lane_model_counts"]) == {lane["lane"] for lane in plan["lanes"]}
+    assert sum(plan["lane_model_counts"].values()) == len(plan["models"])
     assert plan["models"]
     for row in plan["models"]:
         assert row["run_id"] == "fresh_all_lanes_test"
         assert row["model_id"]
-        assert row["lane"] in {"cme_futures", "equities"}
+        assert row["lane"] in {"cme_futures", "equities", "cme_options"}
+        assert row["kind"] in {"hypothesis", "pdf", ""}
+        assert isinstance(row["required_datasets"], list)
+        assert "latency_lane" in row
+        assert "execution_assumptions" in row
+        assert isinstance(row["parameter_bounds"], dict)
         assert row["terminal_state"] in TERMINAL_STATES
     assert sum(plan["terminal_counts"].values()) == len(plan["models"])
+    for lane, count in plan["lane_model_counts"].items():
+        matching_gates = [gate for gate in plan["lane_coverage_gates"] if gate.get("lane") == lane]
+        if count == 0:
+            assert matching_gates
+        else:
+            assert not matching_gates
 
 
 def test_run_all_lanes_writes_run_id_scoped_artifacts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -42,6 +57,18 @@ def test_run_all_lanes_writes_run_id_scoped_artifacts(tmp_path: Path, monkeypatc
             "artifact_reuse_policy": "active_run_id_only",
             "previous_run_artifacts_reused": False,
             "lanes": [{"lane": "crypto", "load_status": "loaded"}],
+            "registered_lane_count": 1,
+            "lane_model_counts": {"crypto": 1, "cme_options": 0},
+            "lane_coverage_gates": [
+                {
+                    "gate": "lane_model_universe",
+                    "status": "BLOCKING",
+                    "lane": "cme_options",
+                    "reason": "missing",
+                    "model_count": 0,
+                }
+            ],
+            "model_universe_status": "BLOCKING",
             "models": [
                 {
                     "run_id": run_id,
@@ -78,7 +105,10 @@ def test_run_all_lanes_writes_run_id_scoped_artifacts(tmp_path: Path, monkeypatc
     assert plan["run_id"] == "fresh_all_lanes_test"
     assert summary["run_id"] == "fresh_all_lanes_test"
     assert rejected["run_id"] == "fresh_all_lanes_test"
-    assert summary["blocking_gates"][0]["gate"] == "model_execution"
+    assert summary["lane_model_counts"] == {"crypto": 1, "cme_options": 0}
+    assert summary["lane_coverage_gates"][0]["lane"] == "cme_options"
+    assert summary["blocking_gates"][0]["gate"] == "lane_model_universe"
+    assert summary["blocking_gates"][1]["gate"] == "model_execution"
 
 
 def test_run_all_lanes_preserves_stale_artifact_rejection_ledger(
@@ -99,6 +129,10 @@ def test_run_all_lanes_preserves_stale_artifact_rejection_ledger(
             "artifact_reuse_policy": "active_run_id_only",
             "previous_run_artifacts_reused": False,
             "lanes": [],
+            "registered_lane_count": 0,
+            "lane_model_counts": {},
+            "lane_coverage_gates": [],
+            "model_universe_status": "PLANNED",
             "models": [],
             "model_count": 0,
             "terminal_states": sorted(TERMINAL_STATES),
@@ -155,6 +189,10 @@ def test_run_all_lanes_returns_fail_when_leakage_detector_blocks(
             "artifact_reuse_policy": "active_run_id_only",
             "previous_run_artifacts_reused": False,
             "lanes": [],
+            "registered_lane_count": 0,
+            "lane_model_counts": {},
+            "lane_coverage_gates": [],
+            "model_universe_status": "PLANNED",
             "models": [],
             "model_count": 0,
             "terminal_states": sorted(TERMINAL_STATES),
@@ -228,3 +266,91 @@ def test_build_all_lanes_plan_equities_uses_planning_default(
     for row in plan["models"]:
         assert row["terminal_state"] == "BLOCKED_VALIDATION", row
         assert "IBKR" not in row["reason"]
+
+
+def test_build_all_lanes_plan_blocks_registered_lane_with_no_models(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import workbench.src.run.all_lanes as module
+
+    monkeypatch.setattr(module, "list_models", lambda: ["CME_ALPHA"])
+    monkeypatch.setattr(
+        module,
+        "build_models_config",
+        lambda: {
+            "CME_ALPHA": SimpleNamespace(
+                kind="hypothesis",
+                required_datasets=["mbo_npz"],
+                min_history_years=10,
+                robustness_window="discovery",
+                latency_lane="sub_10ms",
+                execution_assumptions="limit_queue",
+                parameter_bounds={},
+                signal_field="",
+                diagnostics_only=False,
+                hyp_id=1,
+            )
+        },
+    )
+    monkeypatch.setattr(
+        module,
+        "load_catalog",
+        lambda repo: {
+            "CME_ALPHA": SimpleNamespace(
+                role="alpha",
+                display_name="CME alpha",
+            )
+        },
+    )
+
+    class _FakeEnum(str):
+        @property
+        def value(self) -> str:
+            return str(self)
+
+    class _Config:
+        def __init__(self, lane: str) -> None:
+            self._lane = lane
+
+        def to_dict(self) -> dict:
+            return {
+                "lane": self._lane,
+                "symbols": ["ES.v.0"],
+                "event_types": ["CPI"],
+            }
+
+    class _Registration:
+        def __init__(self, lane: str) -> None:
+            self.lane = _FakeEnum(lane)
+            self.test_paths = []
+
+        def config_loader(self) -> _Config:
+            return _Config(str(self.lane))
+
+    class _FakeRegistry:
+        @staticmethod
+        def instance():
+            return _FakeRegistry()
+
+        def resolve_lane(self, model_id: str) -> _FakeEnum:
+            return _FakeEnum("cme_futures")
+
+        def all_registrations(self):
+            return [_Registration("cme_futures"), _Registration("cme_options")]
+
+    monkeypatch.setattr(module, "LaneRegistry", _FakeRegistry)
+    monkeypatch.setattr(module, "register_all_lanes", lambda: None)
+
+    plan = build_all_lanes_plan(tmp_path, "lane_gap_test")
+
+    assert plan["lane_model_counts"] == {"cme_futures": 1, "cme_options": 0}
+    assert plan["model_universe_status"] == "BLOCKING"
+    assert plan["lane_coverage_gates"] == [
+        {
+            "gate": "lane_model_universe",
+            "status": "BLOCKING",
+            "lane": "cme_options",
+            "reason": "Registered lane has no model ids resolved from the Workbench model registry.",
+            "model_count": 0,
+        }
+    ]

@@ -32,12 +32,16 @@ from workbench.src.run.feature_fabric import ensure_catalog_feature_fabric
 REPO = Path(__file__).resolve().parents[2]
 
 
-def test_crypto_lane_source_is_blocked_inside_active_all_lane_boundary() -> None:
-    snapshot = load_run_evidence(REPO, "crypto_lane")
+def test_crypto_lane_source_is_stale_inside_active_all_lane_boundary(tmp_path: Path) -> None:
+    active = tmp_path / "runtime" / "workbench" / "active_run.json"
+    active.parent.mkdir(parents=True)
+    active.write_text('{"run_id":"fresh_all_lanes_1","scope":"all_lanes"}', encoding="utf-8")
 
-    assert snapshot.current_stage == "legacy_source_disabled"
+    snapshot = load_run_evidence(tmp_path, "crypto_lane")
+
+    assert snapshot.current_stage == "stale_source_blocked"
     assert snapshot.decision["action"] == "BLOCKED"
-    assert any(gate["gate"] == "legacy_source_disabled" for gate in snapshot.decision["blocking_gates"])
+    assert any(gate["gate"] == "stale_artifact_source" for gate in snapshot.decision["blocking_gates"])
 
 
 def test_workbench_run_sources_cover_registered_model_lanes() -> None:
@@ -88,6 +92,16 @@ def test_all_lanes_snapshot_requires_active_run_and_terminal_states(tmp_path: Pa
         json.dumps(
             {
                 "run_id": "fresh_all_lanes_1",
+                "lane_model_counts": {"crypto": 1, "equities": 1, "cme_options": 0},
+                "lane_coverage_gates": [
+                    {
+                        "gate": "lane_model_universe",
+                        "status": "BLOCKING",
+                        "lane": "cme_options",
+                        "reason": "Registered lane has no model ids resolved from the Workbench model registry.",
+                        "model_count": 0,
+                    }
+                ],
                 "models": [
                     {"model_id": "A", "lane": "crypto", "terminal_state": "BLOCKED_MISSING_DATA"},
                     {"model_id": "B", "lane": "equities", "terminal_state": "EXECUTED"},
@@ -100,9 +114,11 @@ def test_all_lanes_snapshot_requires_active_run_and_terminal_states(tmp_path: Pa
     snapshot = load_run_evidence(tmp_path, "all_lanes")
     assert snapshot.run_id == "fresh_all_lanes_1"
     assert snapshot.backtest["summary"]["planned"] == 2
+    assert snapshot.data["lane_counts"]["cme_options"] == 0
+    assert snapshot.diagnostics["leakage_boundary"]["lane_coverage_gates"][0]["lane"] == "cme_options"
     assert snapshot.decision["terminal_counts"]["EXECUTED"] == 1
     assert snapshot.decision["terminal_counts"]["BLOCKED_MISSING_DATA"] == 1
-    assert not snapshot.decision["blocking_gates"]
+    assert snapshot.decision["blocking_gates"][0]["gate"] == "lane_model_universe"
 
 
 def test_cme_rithmic_snapshot_surfaces_paper_endpoint_readiness() -> None:

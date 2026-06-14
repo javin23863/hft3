@@ -35,8 +35,18 @@ if (-not (Test-Path $Stamp)) {
 }
 
 try {
-    $stampJson = Get-Content $Stamp -Raw | ConvertFrom-Json
-    $stampUtc = [datetime]::Parse($stampJson.timestamp_utc).ToUniversalTime()
+    $stampRaw = Get-Content $Stamp -Raw
+    $stampJson = $stampRaw | ConvertFrom-Json
+    $timestampMatch = [regex]::Match($stampRaw, '"timestamp_utc"\s*:\s*"([^"]+)"')
+    if (-not $timestampMatch.Success) {
+        Write-Warning 'Graph gate stamp missing timestamp_utc - re-run graphify_gate.ps1.'
+        exit 2
+    }
+    $stampUtc = [System.DateTimeOffset]::Parse(
+        $timestampMatch.Groups[1].Value,
+        [System.Globalization.CultureInfo]::InvariantCulture,
+        [System.Globalization.DateTimeStyles]::RoundtripKind
+    ).UtcDateTime
     $ageMin = ((Get-Date).ToUniversalTime() - $stampUtc).TotalMinutes
     $excerpt = [string]$stampJson.output_excerpt
     if ($excerpt.Length -lt 40) {
