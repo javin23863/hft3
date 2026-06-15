@@ -54,6 +54,22 @@ _STRICT_OPTIONS_DATASETS = {
     "options_order_book",
     "options_quote_mbo",
 }
+_CME_OPTIONS_STRUCTURAL_MODEL_ID = "FOPT_ES_CALL"
+_CME_OPTIONS_STRUCTURAL_MODEL_CONFIG = {
+    "kind": "lane_structural",
+    "required_datasets": ["options_chain", "strict_options_quotes", "options_quote_mbo"],
+    "min_history_years": 10,
+    "robustness_window": "discovery",
+    "latency_lane": "10_250ms",
+    "execution_assumptions": "cme_options_research_only_structural_adapter",
+    "parameter_bounds": {},
+    "signal_field": "",
+    "diagnostics_only": True,
+    "hyp_id": None,
+    "display_name": "CME options structural governance model",
+    "role": "options_standalone",
+    "model_source": "cme_options_lane_registration_structural_fopt",
+}
 
 
 def _load_model_event_bindings(repo: Path) -> dict[str, dict[str, Any]]:
@@ -127,6 +143,19 @@ def _model_config_payload(config: Any) -> dict[str, Any]:
         "diagnostics_only": bool(getattr(config, "diagnostics_only", False)),
         "hyp_id": getattr(config, "hyp_id", None),
     }
+
+
+def _structural_cme_options_models(
+    registrations: dict[str, Any],
+    model_ids: list[str],
+) -> dict[str, dict[str, Any]]:
+    registration = registrations.get(Lane.CME_OPTIONS.value)
+    prefixes = {str(prefix).upper() for prefix in getattr(registration, "model_id_prefixes", ()) or ()}
+    if "FOPT_" not in prefixes:
+        return {}
+    if any(str(model_id).upper().startswith("FOPT_") for model_id in model_ids):
+        return {}
+    return {_CME_OPTIONS_STRUCTURAL_MODEL_ID: dict(_CME_OPTIONS_STRUCTURAL_MODEL_CONFIG)}
 
 
 def _load_q001_owner_decision(repo: Path) -> tuple[dict[str, Any], str]:
@@ -250,13 +279,26 @@ def build_all_lanes_plan(repo: Path, run_id: str) -> dict[str, Any]:
 
     models: list[dict[str, Any]] = []
     lane_model_counts = {lane: 0 for lane in sorted(registrations)}
-    for model_id in list_models():
+    registry_model_ids = list_models()
+    structural_lane_models = _structural_cme_options_models(registrations, registry_model_ids)
+    for model_id in sorted([*registry_model_ids, *structural_lane_models]):
         binding = model_event_bindings.get(model_id, {})
         lane = _resolve_plan_lane(registry, model_id, binding)
         lane_model_counts[lane] = lane_model_counts.get(lane, 0) + 1
         catalog_entry = catalog.get(model_id)
-        config_payload = _model_config_payload(model_configs.get(model_id))
-        display_name = getattr(catalog_entry, "display_name", model_id) if catalog_entry else model_id
+        structural_config = structural_lane_models.get(model_id)
+        config_payload = (
+            dict(structural_config)
+            if structural_config
+            else _model_config_payload(model_configs.get(model_id))
+        )
+        display_name = (
+            str(structural_config.get("display_name"))
+            if structural_config
+            else getattr(catalog_entry, "display_name", model_id)
+            if catalog_entry
+            else model_id
+        )
         reason = "All-lane dry-run planning emitted no execution evidence yet."
         terminal_state = "BLOCKED_VALIDATION"
         data_scope_fields = _available_data_scope_fields(q001_policy, q001_error)
@@ -295,7 +337,13 @@ def build_all_lanes_plan(repo: Path, run_id: str) -> dict[str, Any]:
                 "model_id": model_id,
                 "lane": lane,
                 "campaign_mode": str(binding.get("campaign_mode") or ""),
-                "role": getattr(catalog_entry, "role", "") if catalog_entry else "",
+                "role": (
+                    str(structural_config.get("role"))
+                    if structural_config
+                    else getattr(catalog_entry, "role", "")
+                    if catalog_entry
+                    else ""
+                ),
                 "display_name": display_name,
                 **config_payload,
                 "terminal_state": terminal_state,

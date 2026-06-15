@@ -120,7 +120,7 @@ def test_build_all_lanes_plan_assigns_one_terminal_state_per_model() -> None:
         assert row["model_id"]
         assert row["lane"] in {"cme_futures", "equities", "cme_options"}
         assert "campaign_mode" in row
-        assert row["kind"] in {"hypothesis", "pdf", ""}
+        assert row["kind"] in {"hypothesis", "pdf", "lane_structural", ""}
         assert isinstance(row["required_datasets"], list)
         assert "latency_lane" in row
         assert "execution_assumptions" in row
@@ -145,6 +145,24 @@ def test_build_all_lanes_plan_routes_options_campaign_binding_to_options_lane() 
     assert row["terminal_state"] == "BLOCKED_MISSING_DATA"
     assert row["reason_code"] == "q001_strict_options_missing_data_sidelined"
     assert plan["lane_model_counts"]["equities"] == 1
+
+
+def test_build_all_lanes_plan_tracks_structural_cme_options_model() -> None:
+    plan = build_all_lanes_plan(REPO, "fresh_all_lanes_cme_options_structural_test")
+    row = next(model for model in plan["models"] if model["model_id"] == "FOPT_ES_CALL")
+
+    assert row["lane"] == "cme_options"
+    assert row["kind"] == "lane_structural"
+    assert row["role"] == "options_standalone"
+    assert row["model_source"] == "cme_options_lane_registration_structural_fopt"
+    assert row["required_datasets"] == ["options_chain", "strict_options_quotes", "options_quote_mbo"]
+    assert row["terminal_state"] == "BLOCKED_MISSING_DATA"
+    assert row["reason_code"] == "q001_strict_options_missing_data_sidelined"
+    assert row["missing_data_policy"] == "SIDELINE_UNTIL_DATA_FILLED"
+    assert row["skip_or_rejection_required"] is True
+    assert "available_data_policy" not in row
+    assert plan["lane_model_counts"]["cme_options"] == 1
+    assert not [gate for gate in plan["lane_coverage_gates"] if gate.get("lane") == "cme_options"]
 
 
 def test_run_all_lanes_writes_run_id_scoped_artifacts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
