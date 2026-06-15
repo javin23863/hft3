@@ -2606,6 +2606,189 @@ def test_options_context_coverage_absent_summary_preserves_not_measured(monkeypa
     }
 
 
+def test_options_context_coverage_explicit_not_measured_contract(monkeypatch, tmp_path):
+    _point_options_zone_ok(monkeypatch, tmp_path)
+    run_dir = (
+        tmp_path
+        / "artifacts"
+        / "research_cards"
+        / "workbench_runs"
+        / "legacy_options_fixture"
+    )
+    run_dir.mkdir(parents=True)
+    (run_dir / "summary.json").write_text(
+        json.dumps({
+            "campaign_id": "legacy_options_fixture",
+            "generated_utc": "2026-06-14T01:30:00+00:00",
+            "status": "PASS",
+            "model_id": "DEALER_HEDGING",
+            "symbol": "MES.v.0",
+            "campaign_mode": "options_lane",
+            "periods": [{"net_pnl": 10.0, "num_trades": 2}],
+            "promote_candidate": False,
+            "context_feature_coverage": {
+                "status": "not_measured",
+                "options_context_features": "not_measured",
+                "options_standalone_strategy": {
+                    "status": "separate",
+                    "evidence_field": "periods",
+                },
+                "standalone_strategy_separated": True,
+                "missing_policy": "fail_closed_not_measured",
+                "units": {"options_context_features": "not_applicable"},
+                "note": (
+                    "Standalone options/parity fixture profitability is reported only in periods; "
+                    "no target-vs-context uplift has been measured."
+                ),
+            },
+            "context_ablation": {
+                "status": "not_measured",
+                "target_only": "separate_standalone_periods",
+                "target_plus_options": "not_measured",
+                "uplift": "not_measured",
+                "missing_policy": "fail_closed_not_measured",
+                "rows": [],
+            },
+        }),
+        encoding="utf-8",
+    )
+
+    z = ZONES["options"]()
+    coverage = z["context_feature_coverage"]
+
+    assert coverage["status"] == "not_measured"
+    assert coverage["options_context_features"] == "not_measured"
+    assert coverage["options_context_feature_measured"] is False
+    assert coverage["options_context_feature_count"] is None
+    assert coverage["options_standalone_strategy"] == {
+        "status": "separate",
+        "evidence_field": "periods",
+    }
+    assert coverage["missing_policy"] == "fail_closed_not_measured"
+    assert coverage["units"] == {"options_context_features": "not_applicable"}
+    assert coverage["context_ablation_row_count"] == 0
+    assert coverage["missing_fields"] == []
+    assert coverage["malformed_fields"] == []
+    assert "no target-vs-context uplift has been measured" in coverage["note"]
+    _json_roundtrip(z)
+
+
+def test_options_context_coverage_not_measured_without_ablation_fails_closed(
+    monkeypatch, tmp_path
+):
+    _point_options_zone_ok(monkeypatch, tmp_path)
+    run_dir = (
+        tmp_path
+        / "artifacts"
+        / "research_cards"
+        / "workbench_runs"
+        / "partial_options_fixture"
+    )
+    run_dir.mkdir(parents=True)
+    (run_dir / "summary.json").write_text(
+        json.dumps({
+            "campaign_id": "partial_options_fixture",
+            "generated_utc": "2026-06-14T01:31:00+00:00",
+            "status": "PASS",
+            "model_id": "DEALER_HEDGING",
+            "symbol": "MES.v.0",
+            "campaign_mode": "options_lane",
+            "context_feature_coverage": {
+                "status": "not_measured",
+                "options_context_features": "not_measured",
+                "missing_policy": "fail_closed_not_measured",
+                "units": {"options_context_features": "not_applicable"},
+            },
+        }),
+        encoding="utf-8",
+    )
+
+    z = ZONES["options"]()
+    coverage = z["context_feature_coverage"]
+
+    assert z["health"] != sc.GREEN
+    assert coverage["status"] == "incomplete"
+    assert coverage["options_context_features"] == "incomplete"
+    assert coverage["options_context_feature_measured"] is False
+    assert set(coverage["missing_fields"]) == {
+        "source_ids",
+        "timestamp_ids",
+        "context_ablation",
+        "options_context_features",
+    }
+    assert coverage["context_ablation_row_count"] == 0
+    assert "fail-closed" in coverage["note"]
+    _json_roundtrip(z)
+
+
+@pytest.mark.parametrize(
+    ("coverage_extra", "ablation"),
+    [
+        (
+            {"n_events_with_options_context": 3},
+            {"status": "not_measured", "rows": []},
+        ),
+        (
+            {},
+            {
+                "status": "not_measured",
+                "rows": [
+                    {
+                        "context_set": "target_plus_options",
+                        "target_only_ev": 1.0,
+                        "target_plus_context_ev": 1.4,
+                        "delta_ev": 0.4,
+                    }
+                ],
+            },
+        ),
+    ],
+)
+def test_options_context_coverage_not_measured_with_evidence_fails_closed(
+    monkeypatch, tmp_path, coverage_extra, ablation
+):
+    _point_options_zone_ok(monkeypatch, tmp_path)
+    run_dir = (
+        tmp_path
+        / "artifacts"
+        / "research_cards"
+        / "workbench_runs"
+        / "contradictory_options_fixture"
+    )
+    run_dir.mkdir(parents=True)
+    coverage = {
+        "status": "not_measured",
+        "options_context_features": "not_measured",
+        "missing_policy": "fail_closed_not_measured",
+        "units": {"options_context_features": "not_applicable"},
+        **coverage_extra,
+    }
+    (run_dir / "summary.json").write_text(
+        json.dumps({
+            "campaign_id": "contradictory_options_fixture",
+            "generated_utc": "2026-06-14T01:32:00+00:00",
+            "status": "PASS",
+            "model_id": "DEALER_HEDGING",
+            "symbol": "MES.v.0",
+            "campaign_mode": "options_lane",
+            "context_feature_coverage": coverage,
+            "context_ablation": ablation,
+        }),
+        encoding="utf-8",
+    )
+
+    z = ZONES["options"]()
+    payload = z["context_feature_coverage"]
+
+    assert z["health"] != sc.GREEN
+    assert payload["status"] == "malformed"
+    assert payload["options_context_features"] == "malformed"
+    assert payload["options_context_feature_measured"] is False
+    assert "context_not_measured_contradiction" in payload["malformed_fields"]
+    assert "fail-closed" in payload["note"]
+    _json_roundtrip(z)
+
+
 def test_options_context_coverage_valid_fopt_artifact_is_measured(monkeypatch, tmp_path):
     _point_options_zone_ok(monkeypatch, tmp_path)
     run_dir = tmp_path / "artifacts" / "research_cards" / "workbench_runs" / "fopt_context"

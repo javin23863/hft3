@@ -224,6 +224,40 @@ def _is_options_type_model(model_id: str) -> bool:
     return False
 
 
+def _options_parity_context_contract() -> Dict[str, Any]:
+    """Fail-closed context contract for standalone options/parity fixture runs."""
+    note = (
+        "Standalone options/parity fixture profitability is reported only in periods; "
+        "no target-vs-context uplift has been measured."
+    )
+    return {
+        "context_feature_coverage": {
+            "status": "not_measured",
+            "options_context_features": "not_measured",
+            "options_standalone_strategy": {
+                "status": "separate",
+                "evidence_field": "periods",
+            },
+            "standalone_strategy_separated": True,
+            "missing_policy": "fail_closed_not_measured",
+            "units": {"options_context_features": "not_applicable"},
+            "note": note,
+        },
+        "context_ablation": {
+            "status": "not_measured",
+            "target_only": "separate_standalone_periods",
+            "target_plus_options": "not_measured",
+            "uplift": "not_measured",
+            "missing_policy": "fail_closed_not_measured",
+            "rows": [],
+            "note": (
+                "No target-only vs target-plus-options ablation has been measured; "
+                "do not infer uplift from standalone periods."
+            ),
+        },
+    }
+
+
 def _is_options_like_promotion_scope(summary: dict[str, Any]) -> bool:
     """Return True when a summary belongs to an options-like promotion surface."""
     for key in ("model_id", "symbol", "event_id", "lane", "campaign_mode"):
@@ -529,6 +563,7 @@ def _run_options_type_campaign(
             "Options/parity lane (CME futures options, non-DMA): "
             "paper shadow and empty options defect ledger required before promotion"
         ),
+        **_options_parity_context_contract(),
     }
     if ledger_gate:
         _append_blocking_gate(summary, ledger_gate)

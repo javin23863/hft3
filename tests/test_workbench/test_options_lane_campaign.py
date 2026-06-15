@@ -134,6 +134,28 @@ def test_options_fixture_campaign_paper_shadow_contract(
     assert summary.get("paper_shadow_required") is True
     assert summary.get("paper_shadow_status") in ("PENDING", "PASS", "FAIL")
     assert isinstance(summary.get("paper_shadow_days"), int)
+    assert summary["periods"][0]["net_pnl"] == 10.0
+    assert summary["periods"][0]["num_trades"] == 2
+
+    coverage = summary["context_feature_coverage"]
+    assert coverage["status"] == "not_measured"
+    assert coverage["options_context_features"] == "not_measured"
+    assert coverage["options_standalone_strategy"] == {
+        "status": "separate",
+        "evidence_field": "periods",
+    }
+    assert coverage["missing_policy"] == "fail_closed_not_measured"
+    assert coverage["units"] == {"options_context_features": "not_applicable"}
+    assert "no target-vs-context uplift has been measured" in coverage["note"]
+
+    ablation = summary["context_ablation"]
+    assert ablation["status"] == "not_measured"
+    assert ablation["target_only"] == "separate_standalone_periods"
+    assert ablation["target_plus_options"] == "not_measured"
+    assert ablation["uplift"] == "not_measured"
+    assert ablation["rows"] == []
+    assert "delta_ev" not in ablation
+    assert "target_plus_context_ev" not in ablation
 
     # promote_candidate must be False while paper shadow is PENDING.
     if summary.get("paper_shadow_status") == "PENDING":

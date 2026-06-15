@@ -786,6 +786,51 @@ def _options_context_feature_measurement(
     return False, None, feature_measurement
 
 
+def _context_status(value: Any) -> str:
+    if isinstance(value, dict):
+        return str(value.get("status") or "").strip().lower()
+    return str(value or "").strip().lower()
+
+
+def _is_explicit_not_measured_context_contract(
+    coverage: dict[str, Any],
+    ablation: Any,
+    *,
+    feature_measured: bool,
+    ablation_rows: list[Any],
+) -> bool:
+    if not isinstance(ablation, dict):
+        return False
+    if feature_measured or ablation_rows:
+        return False
+    coverage_status = _context_status(coverage.get("status"))
+    feature_status = _context_status(coverage.get("options_context_features"))
+    ablation_status = _context_status(ablation.get("status"))
+    return (
+        coverage_status == "not_measured"
+        and feature_status == "not_measured"
+        and ablation_status == "not_measured"
+    )
+
+
+def _has_not_measured_context_contradiction(
+    coverage: dict[str, Any],
+    ablation: Any,
+    *,
+    feature_measured: bool,
+    ablation_rows: list[Any],
+) -> bool:
+    coverage_status = _context_status(coverage.get("status"))
+    feature_status = _context_status(coverage.get("options_context_features"))
+    ablation_status = _context_status(ablation.get("status")) if isinstance(ablation, dict) else ""
+    claims_not_measured = (
+        coverage_status == "not_measured"
+        or feature_status == "not_measured"
+        or ablation_status == "not_measured"
+    )
+    return claims_not_measured and (feature_measured or bool(ablation_rows))
+
+
 def _context_feature_coverage_update(summary_path: Path, summary: dict[str, Any]) -> dict:
     coverage_raw = _context_block(summary, "context_feature_coverage")
     ablation_raw = _context_block(summary, "context_ablation")
@@ -824,6 +869,57 @@ def _context_feature_coverage_update(summary_path: Path, summary: dict[str, Any]
     feature_measured, feature_count, feature_measurement = _options_context_feature_measurement(
         coverage, ablation_rows
     )
+    artifact_epoch, artifact_time_utc, artifact_time_source, _ = _artifact_time(summary_path, summary)
+    not_measured_contradiction = _has_not_measured_context_contradiction(
+        coverage,
+        ablation_raw,
+        feature_measured=feature_measured,
+        ablation_rows=ablation_rows,
+    )
+    if not malformed_fields and _is_explicit_not_measured_context_contract(
+        coverage,
+        ablation_raw,
+        feature_measured=feature_measured,
+        ablation_rows=ablation_rows,
+    ):
+        return {
+            "status": "not_measured",
+            "options_context_features": "not_measured",
+            "options_context_feature_measured": False,
+            "options_context_feature_count": None,
+            "options_context_feature_measurement": feature_measurement,
+            "options_standalone_strategy": coverage.get(
+                "options_standalone_strategy",
+                coverage.get("standalone_strategy", "separate_field"),
+            ),
+            "standalone_strategy_separated": True,
+            "standalone_evidence_field": "standalone_model_evidence",
+            "latest_artifact": _rel(summary_path),
+            "latest_artifact_status": "present",
+            "latest_artifact_mtime_utc": paths.mtime_iso(summary_path),
+            "latest_artifact_time_utc": artifact_time_utc,
+            "latest_artifact_time_source": artifact_time_source,
+            "latest_artifact_time_epoch": artifact_epoch,
+            "latest_campaign_id": summary.get("campaign_id") or summary_path.parent.name,
+            "latest_model_id": summary.get("model_id"),
+            "latest_symbol": summary.get("symbol"),
+            "latest_summary_status": summary.get("status"),
+            "latest_campaign_mode": summary.get("campaign_mode"),
+            "latest_lane": summary.get("lane"),
+            "source_family": _context_source_family(summary),
+            "source_ids": source_ids,
+            "timestamp_ids": timestamp_ids,
+            "units": units,
+            "missing_policy": missing_policy,
+            "context_ablation_row_count": len(ablation_rows),
+            "context_ablation_rows": ablation_rows,
+            "missing_fields": [],
+            "malformed_fields": [],
+            "note": coverage.get(
+                "note",
+                "Options context features are explicitly not measured in the latest artifact.",
+            ),
+        }
     timestamp_missing_fields, timestamp_violations = _timestamp_proof_gaps(timestamp_ids)
     missing_fields: list[str] = []
     if not source_ids:
@@ -838,10 +934,13 @@ def _context_feature_coverage_update(summary_path: Path, summary: dict[str, Any]
     if missing_policy is None:
         missing_fields.append("missing_policy")
 
-    if malformed_fields:
+    if malformed_fields or not_measured_contradiction:
         status = "malformed"
         feature_status = "malformed"
-        note = "Options context artifact block is malformed; coverage is fail-closed."
+        note = (
+            "Options context artifact block is malformed or internally contradictory; "
+            "coverage is fail-closed."
+        )
     elif timestamp_violations:
         status = "malformed"
         feature_status = "malformed"
@@ -854,7 +953,6 @@ def _context_feature_coverage_update(summary_path: Path, summary: dict[str, Any]
         status = "measured"
         feature_status = "measured"
         note = "Latest options-family workbench summary includes artifact-backed context coverage."
-    artifact_epoch, artifact_time_utc, artifact_time_source, _ = _artifact_time(summary_path, summary)
     return {
         "status": status,
         "options_context_features": feature_status,
@@ -887,7 +985,11 @@ def _context_feature_coverage_update(summary_path: Path, summary: dict[str, Any]
         "context_ablation_row_count": len(ablation_rows),
         "context_ablation_rows": ablation_rows,
         "missing_fields": missing_fields,
-        "malformed_fields": malformed_fields + timestamp_violations,
+        "malformed_fields": (
+            malformed_fields
+            + (["context_not_measured_contradiction"] if not_measured_contradiction else [])
+            + timestamp_violations
+        ),
         "note": note,
     }
 
