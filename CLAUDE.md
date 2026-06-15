@@ -1,5 +1,9 @@
 # CLAUDE.md — hft3 navigation and memory wiring
 
+## Fable mindset (standing operating discipline)
+
+Before touching hft3, use the Fable loop: ground in real state, reason before action, act in deliberate batches, observe, re-evaluate, read exact regions before edits, verify with real checks, recover by diagnosis, and report truthfully. Use `C:\Users\MSI\.codex\skills\fable-mindset\references\Fable_Mindset_public.md` as the full reference when the task is long-running, high-risk, finance/math-critical, or the user asks to reestablish mindset.
+
 ## Knowledge graph first (structural memory)
 
 Before any repo-wide grep or file exploration, query the code graph:

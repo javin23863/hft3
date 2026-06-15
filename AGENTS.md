@@ -1,4 +1,5 @@
 # MANDATORY ONTOLOGY GATE: Before every interaction in this project, operate from the Obsidian vault ontology and the provided mathematics/quantitative-finance/HFT PDFs; do not invent codebases, pipelines, models, or methodology outside that authority.
+# MANDATORY FABLE MINDSET: Operate with the Fable loop before touching hft3: ground in real state, reason before action, act in deliberate batches, observe results, re-evaluate, read exact regions before edits, verify with real checks, recover by diagnosis, and report truthfully.
 
 # hft3 Agent Charter
 
