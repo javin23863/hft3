@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
 
 import pytest
 import yaml
 
+from economic_event_universe.registry import default_cme_symbols
+
 REPO = Path(__file__).resolve().parents[2]
 BINDING = REPO / "apps" / "workbench" / "config" / "model_event_binding.yaml"
+GENERATOR = REPO / "apps" / "workbench" / "scripts" / "generate_model_event_binding.py"
 SCRIPT_PATHS = [
     REPO / "scripts" / "run_pipeline.py",
     REPO / "scripts" / "run_full_pipeline_gate.py",
@@ -22,6 +26,15 @@ SCRIPT_PATHS = [
     REPO / "scripts" / "run_l3_cross_asset_event_ablation.sh",
     REPO / "scripts" / "run_replay_execution_parity_proof.sh",
 ]
+
+
+def _generated_binding_doc() -> dict:
+    spec = importlib.util.spec_from_file_location("generate_model_event_binding", GENERATOR)
+    assert spec is not None
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module.build_doc()
 
 
 def test_binding_file_exists():
@@ -67,3 +80,27 @@ def test_pdf_model_5_options_lane():
     cfg = raw["pdf"]["DEALER_HEDGING"]
     assert cfg.get("campaign_mode") == "options_lane"
     assert "options_chain" in cfg.get("required_datasets", [])
+
+
+def test_generator_adds_default_research_symbol_and_canonical_universe():
+    raw = _generated_binding_doc()
+    assert "packages/economic_event_universe/config/event_universe.yaml" in raw["authority"]
+    cfg = raw["hypothesis"]["SPREAD_BLOWOUT_RECOMPRESSION"]
+    assert cfg["research_symbol"] == "MES.v.0"
+    assert cfg["symbol_universe"] == list(default_cme_symbols())
+    assert cfg["symbol_source"] == "economic_event_universe.defaults.symbol_universe_default"
+
+
+def test_generator_adds_model_specific_research_symbols():
+    raw = _generated_binding_doc()
+    assert raw["hypothesis"]["NQ_MNQ_LEAD_LAG"]["research_symbol"] == "MNQ.v.0"
+    assert raw["hypothesis"]["ZN_ZB_ES_NQ_MACRO_IMPULSE"]["research_symbol"] == "ZN.v.0"
+
+
+def test_generator_keeps_pdf_structural_models_without_research_symbol():
+    raw = _generated_binding_doc()
+    for model_id in ("BOOK_PRESSURE", "TREASURY_CTD", "DOW_YM_INDEX", "DEALER_HEDGING"):
+        cfg = raw["pdf"][model_id]
+        assert "research_symbol" not in cfg
+        assert "symbol_universe" not in cfg
+    assert raw["pdf"]["DEALER_HEDGING"].get("campaign_mode") == "options_lane"

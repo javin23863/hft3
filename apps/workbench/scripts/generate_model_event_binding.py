@@ -17,15 +17,23 @@ from hft3_bootstrap import features_engine_root, setup_repo_paths, workbench_roo
 
 setup_repo_paths()
 
+from economic_event_universe.registry import default_cme_symbols
 from features_engine.src.model_registry import get_slug_for_hyp_id, legacy_to_slug, load_model_registry
 
 MODULES = features_engine_root() / "src" / "hypotheses" / "modules.py"
 OUT = workbench_root() / "config" / "model_event_binding.yaml"
-WF = workbench_root() / "config" / "walk_forward.yaml"
 
 CATALOG_ALL_CONTEXTS = "catalog_all_contexts"
 
 _L2S = legacy_to_slug()
+DEFAULT_RESEARCH_SYMBOL = "MES.v.0"
+SYMBOL_SOURCE = "economic_event_universe.defaults.symbol_universe_default"
+PRIMARY_RESEARCH_SYMBOLS = {
+    "NQ_MNQ_LEAD_LAG": "MNQ.v.0",
+    "ES_NQ_DIVERGENCE_SNAPBACK": "ES.v.0",
+    "ES_MES_LEAD_LAG": "MES.v.0",
+    "ZN_ZB_ES_NQ_MACRO_IMPULSE": "ZN.v.0",
+}
 PDF_OVERRIDES = {
     _L2S["PDF_MODEL_5"]: {
         "required_datasets": ["options_chain"],
@@ -33,6 +41,20 @@ PDF_OVERRIDES = {
         "campaign_mode": "options_lane",
     },
 }
+
+
+def _with_workbench_research_symbol(model_id: str, cfg: dict) -> dict:
+    if cfg.get("campaign_mode") == "options_lane":
+        return cfg
+
+    primary = PRIMARY_RESEARCH_SYMBOLS.get(model_id, DEFAULT_RESEARCH_SYMBOL)
+    universe = list(default_cme_symbols())
+    if primary not in universe:
+        return cfg
+    cfg["research_symbol"] = primary
+    cfg["symbol_universe"] = universe
+    cfg["symbol_source"] = SYMBOL_SOURCE
+    return cfg
 
 
 def _extract_hyp_bindings() -> dict[str, dict]:
@@ -88,30 +110,38 @@ def _extract_hyp_bindings() -> dict[str, dict]:
 
 
 def main() -> int:
-    wf = yaml.safe_load(WF.read_text(encoding="utf-8")) or {}
+    doc = build_doc()
+    OUT.parent.mkdir(parents=True, exist_ok=True)
+    OUT.write_text(yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
+    print(f"Wrote {OUT}")
+    return 0
 
+
+def build_doc() -> dict:
     hyp = _extract_hyp_bindings()
+    hyp = {
+        model_id: _with_workbench_research_symbol(model_id, cfg)
+        for model_id, cfg in hyp.items()
+    }
 
     pdf = {}
     for i in range(1, 12):
         legacy = f"PDF_MODEL_{i}"
         slug = _L2S[legacy]
-        pdf[slug] = dict(PDF_OVERRIDES.get(slug, {"event_context_policy": CATALOG_ALL_CONTEXTS}))
+        cfg = dict(PDF_OVERRIDES.get(slug, {"event_context_policy": CATALOG_ALL_CONTEXTS}))
+        pdf[slug] = cfg
 
-    doc = {
+    return {
         "authority": [
             "chicago_cme_microstructure_a_plus_developer_handoff.pdf",
             "hft_framework_developer_prompt.pdf",
             "features_engine/src/hypotheses/modules.py",
             "features_engine/src/regime/event_context.py",
+            "packages/economic_event_universe/config/event_universe.yaml",
         ],
         "hypothesis": hyp,
         "pdf": pdf,
     }
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
-    print(f"Wrote {OUT}")
-    return 0
 
 
 if __name__ == "__main__":

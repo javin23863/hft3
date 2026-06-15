@@ -749,6 +749,25 @@ def test_build_all_lanes_plan_uses_explicit_binding_symbol_for_execution(
     assert row["execution_block_reason"] == ""
 
 
+def test_build_all_lanes_plan_real_bindings_emit_execution_symbols() -> None:
+    plan = build_all_lanes_plan(REPO, "fresh_all_lanes_real_symbols")
+    rows = {row["model_id"]: row for row in plan["models"]}
+
+    assert rows["SPREAD_BLOWOUT_RECOMPRESSION"]["symbol"] == "MES.v.0"
+    assert rows["SPREAD_BLOWOUT_RECOMPRESSION"]["execution_eligible"] is True
+    assert rows["NQ_MNQ_LEAD_LAG"]["symbol"] == "MNQ.v.0"
+    assert rows["ZN_ZB_ES_NQ_MACRO_IMPULSE"]["symbol"] == "ZN.v.0"
+    assert "symbol" not in rows["BOOK_PRESSURE"]
+    assert rows["BOOK_PRESSURE"]["execution_eligible"] is False
+    assert rows["BOOK_PRESSURE"]["execution_block_reason"] == "missing_explicit_workbench_symbol"
+    assert "symbol" not in rows["TREASURY_CTD"]
+    assert rows["TREASURY_CTD"]["execution_eligible"] is False
+    assert rows["DEALER_HEDGING"]["terminal_state"] == "BLOCKED_MISSING_DATA"
+    assert rows["DEALER_HEDGING"]["execution_eligible"] is False
+    assert rows["FOPT_ES_CALL"]["terminal_state"] == "BLOCKED_MISSING_DATA"
+    assert rows["FOPT_ES_CALL"]["execution_eligible"] is False
+
+
 def test_build_all_lanes_plan_invalid_q001_available_data_model_is_not_missing_data_blocked(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

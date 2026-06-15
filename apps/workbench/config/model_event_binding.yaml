@@ -3,120 +3,621 @@ authority:
 - hft_framework_developer_prompt.pdf
 - features_engine/src/hypotheses/modules.py
 - features_engine/src/regime/event_context.py
+- packages/economic_event_universe/config/event_universe.yaml
 hypothesis:
   ABSORPTION_FADE:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   AGGRESSOR_DECELERATION_FADE:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   BOOK_SLOPE_COLLAPSE:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   CANCEL_STORM_BEFORE_MOVE:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   CUTOFF_PANIC_EXITS:
     required_event_contexts:
     - FRIDAY_CLOSE
     - PROP_FLATTEN_TOPSTEP
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   DAILY_LOSS_LIMIT_DEFENSE:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   DEPTH_REFILL_IMBALANCE:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   DOM_ILLUSION_TRAP:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   ECONOMIC_EVENT_RESTRICTION_FLATTENING:
     required_event_contexts:
     - _TIGHT
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   END_OF_DAY_FORCED_FLATTEN_FLOW:
     required_event_contexts:
     - FRIDAY_CLOSE
     - PROP_FLATTEN_TOPSTEP
     - TPT_FLATTEN
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   ES_MES_LEAD_LAG:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   ES_NQ_DIVERGENCE_SNAPBACK:
     event_context_policy: catalog_all_contexts
+    research_symbol: ES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   FALSE_BREAKOUT_TRAP:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   FORCED_LIQUIDATION_CASCADE:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   FRIDAY_WEEKEND_DERISKING:
     required_event_contexts:
     - FRIDAY_CLOSE
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   GHOST_ROUTE:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   ICEBERG_RELOAD_DETECTION:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   LATE_CANDLE_ENTRY_FADE:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   LIQUIDITY_DEFENSE_BREAK:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   LIQUIDITY_VACUUM_CONTINUATION:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   MAX_CONTRACT_CROWDING_IN_MICROS:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   MICRO_CONTRACT_RETAIL_LAG:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   NO_OVERNIGHT_INVENTORY_SQUEEZE:
     required_event_contexts:
     - FRIDAY_CLOSE
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   NQ_MNQ_LEAD_LAG:
     event_context_policy: catalog_all_contexts
+    research_symbol: MNQ.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   ONE_SIDED_ADD_CANCEL_IMBALANCE:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   OPENING_CANDLE_CHASE:
     required_event_contexts:
     - CASH_EQUITY_OPEN
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   PANIC_MARKET_ORDER_SPREAD_TAX:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   PASSIVE_TRAP_FILL:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   PRIOR_HIGH_LOW_BREAKOUT_TRAP:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   PROFIT_LOCK_BEHAVIOR:
     required_event_contexts:
     - PROP_FLATTEN_TOPSTEP
     - TPT_FLATTEN
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   PROP_RESET_REOPEN_WINDOW:
     required_event_contexts:
     - PROP_REOPEN
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   QUEUE_DEPLETION_TRIGGER:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   QUOTE_PULL_BEFORE_VOLATILITY:
     required_event_contexts:
     - CPI_TIGHT
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   REBATE_TRAP_AVOIDANCE:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   REQUOTE_RACE_AFTER_SHOCK:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   ROUND_NUMBER_STOP_SWEEP:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   SECOND_WAVE_CONTINUATION:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   SPREAD_BLOWOUT_RECOMPRESSION:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   SPREAD_REGIME_CHANGE:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   STOP_LOSS_CASCADE_CONTINUATION:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   STOP_RUN_EXHAUSTION_FADE:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   THIN_BOOK_CONTINUATION:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   TRAILING_DRAWDOWN_PRESSURE:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   VIX_DEPTH_IMBALANCE_DIRECTION:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   VIX_IMPLIED_REALIZED_GAP:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   VIX_LEVEL_CONDITIONED_CONTINUATION:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   VIX_QUOTE_PULL_LIQUIDITY_VACUUM:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   VIX_SPIKE_EVENT_FADE:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   VWAP_DEFENSE_BREAK:
     event_context_policy: catalog_all_contexts
+    research_symbol: MES.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
   ZN_ZB_ES_NQ_MACRO_IMPULSE:
     event_context_policy: catalog_all_contexts
+    research_symbol: ZN.v.0
+    symbol_universe:
+    - MES.v.0
+    - MNQ.v.0
+    - ES.v.0
+    - NQ.v.0
+    - ZN.v.0
+    - ZB.v.0
+    - RTY.v.0
+    symbol_source: economic_event_universe.defaults.symbol_universe_default
 pdf:
   BOOK_PRESSURE:
     event_context_policy: catalog_all_contexts
