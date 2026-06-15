@@ -9,6 +9,9 @@ export function Overview() {
   const s = z.system as SystemZone | undefined;
   const a = z.autonomy as AutonomyZone | undefined;
   const al = z.alerts as AlertsZone | undefined;
+  const alertItems = al?.alerts ?? [];
+  const hasAlertsPayload = al != null && Array.isArray(al.alerts) && typeof al.count === "number" && typeof al.health === "string";
+  const showNominalAlerts = hasAlertsPayload && al.health === "green" && al.count === 0 && alertItems.length === 0;
   const lane = s?.latency?.recommended_lane as number | undefined;
 
   return (
@@ -22,12 +25,14 @@ export function Overview() {
       </div>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <Panel title="Alerts" right={`${al?.count ?? 0} active`}>
-          {(al?.alerts?.length ?? 0) === 0 ? (
+        <Panel title="Alerts" right={hasAlertsPayload ? `${al.count} active` : "unknown"}>
+          {showNominalAlerts ? (
             <div className="flex items-center gap-2 text-ok"><Dot status="green" /> All systems nominal.</div>
+          ) : alertItems.length === 0 ? (
+            <div className="flex items-center gap-2 text-ink-dim"><Dot status="unknown" /> {hasAlertsPayload ? "Alert state unavailable." : "Alert state loading."}</div>
           ) : (
             <div className="space-y-2">
-              {al!.alerts.map((x) => (
+              {alertItems.map((x) => (
                 <div key={x.id} className={`flex items-start gap-2 rounded-lg border p-2 text-sm ${x.severity === "crit" ? "border-bad/40" : "border-warn/40"}`}>
                   <Badge tone={x.severity === "crit" ? "bad" : "warn"}>{x.source}</Badge>
                   <span className="text-ink-dim">{x.message}</span>

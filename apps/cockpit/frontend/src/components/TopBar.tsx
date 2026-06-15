@@ -19,9 +19,9 @@ export function TopBar({ connected, lastUpdate }: { connected: boolean; lastUpda
           <span className="mono">{alertCount}</span>
         </div>
         <div className="flex items-center gap-1.5 text-xs text-ink-dim">
-          {connected ? <Wifi size={15} className="text-ok" /> : <WifiOff size={15} className="text-bad" />}
-          <span>{connected ? "live" : "reconnecting"}</span>
-          <Dot status={connected ? "ok" : "fail"} />
+          {connected ? <Wifi size={15} className="text-run" /> : <WifiOff size={15} className="text-ink-faint" />}
+          <span>{connected ? "streaming" : "reconnecting"}</span>
+          <Dot status={connected ? "running" : "unknown"} />
         </div>
         {lastUpdate && <span className="mono text-[11px] text-ink-faint">{new Date(lastUpdate).toLocaleTimeString()}</span>}
       </div>
