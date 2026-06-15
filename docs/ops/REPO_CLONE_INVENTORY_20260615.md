@@ -83,10 +83,10 @@ Do not retire/delete this checkout until `perf/event-driven-quoting` is pushed o
 
 ## Physical Stub State
 
-`C:\Users\MSI\Documents\hft3` remains a legacy Codex entry stub containing only `.git` and `AGENTS.md`. Replacing it with a junction to `C:\Users\MSI\repos\hft3` was attempted again on 2026-06-15, but Windows still reported the directory as in use.
+`C:\Users\MSI\Documents\hft3` remains a legacy Codex entry stub containing only `AGENTS.md`. Its stray empty `.git` directory was moved to `C:\Users\MSI\Documents\hft3.git.legacy-empty-20260615-184124`, so the legacy path is no longer a second git working tree. Replacing the stub itself with a junction to `C:\Users\MSI\repos\hft3` was attempted again on 2026-06-15, but Windows still reported the directory as in use because this active Codex session was opened there.
 
 Required next step when unlocked:
 
-1. Verify the stub still contains only `.git` and `AGENTS.md`.
+1. Verify the stub still contains only `AGENTS.md`.
 2. Move the stub to `C:\Users\MSI\Documents\hft3.stub-archived-<timestamp>`.
 3. Create a junction at `C:\Users\MSI\Documents\hft3` targeting `C:\Users\MSI\repos\hft3`.

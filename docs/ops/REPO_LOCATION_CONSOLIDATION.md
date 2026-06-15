@@ -33,7 +33,7 @@ Do not run repo work from these paths unless a migration plan explicitly says so
 
 | Path | Current role | Required handling |
 |---|---|---|
-| `C:\Users\MSI\Documents\hft3` | Legacy Codex entry stub | Keep as redirect warning until it can be replaced by a junction to canonical. Do not run git/tests/scripts here. |
+| `C:\Users\MSI\Documents\hft3` | Legacy Codex entry stub, no `.git` directory | Keep as redirect warning until it can be replaced by a junction to canonical. Do not run git/tests/scripts here. |
 | `C:\Users\MSI\Documents\GitHub\hft3` | Dirty standalone stale clone | Quarantine first. Inventory branch, commits, dirty files, generated data, and unique artifacts before copying or deleting anything. |
 | `C:\Users\MSI\Documents\opencode\hft3` | Mostly clean standalone clone with local artifacts | Preserve or reject `perf/event-driven-quoting`, `runtime/universe_logs/`, local `data/`, `artifacts/`, Rithmic SDK/vendor material, `graphify-out/`, and secure env files before retirement. |
 | `C:\Users\MSI\repos\hft3-baseline` | Linked worktree / baseline view | Review dirty `graphify-out/*`; keep only if still needed for comparison. |
@@ -47,6 +47,6 @@ Do not run repo work from these paths unless a migration plan explicitly says so
 3. Preserve or reject unique artifacts from `C:\Users\MSI\Documents\opencode\hft3`.
 4. Review `hft3-baseline` dirty graph files and decide whether the worktree still has value.
 5. Keep `hft3-eqopt` until its branch is accepted, rejected, or moved to the lane repo.
-6. When no process has `C:\Users\MSI\Documents\hft3` open, replace the stub with a junction to `C:\Users\MSI\repos\hft3`.
+6. When no process has `C:\Users\MSI\Documents\hft3` open, replace the non-git stub with a junction to `C:\Users\MSI\repos\hft3`.
 
 No destructive delete, move, reset, or cleanup is allowed against any alternate clone until the inventory proves its contents are duplicated, obsolete, or intentionally rejected.
