@@ -14,6 +14,98 @@ from workbench.src.run.all_lanes import TERMINAL_STATES, build_all_lanes_plan, r
 REPO = Path(__file__).resolve().parents[2]
 
 
+def _write_valid_q001_owner_decision(repo: Path) -> None:
+    path = repo / "docs" / "project" / "q001_owner_decision.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "question_id": "Q001",
+                "decision_date": "2026-06-15",
+                "status": "ACCEPTED_AVAILABLE_DATA_SCOPE",
+                "mbo_gap_ledger": "ACCEPTED_NON_BLOCKING_INVENTORY_SCOPE",
+                "options_strict_mbo_warning_ledger": "ACCEPTED_NON_BLOCKING_INVENTORY_SCOPE",
+                "available_data_research_allowed": True,
+                "accepted_evidence": {
+                    "missing_or_unavailable_slots": 211,
+                    "strict_mbo_gap_count": 507,
+                    "strict_mbo_stale_gap_count": 503,
+                    "options_warn_checks": ["options-fixing-mbo-coverage"],
+                },
+                "model_gap_policy": {
+                    "missing_mbo_required_models": "SIDELINE_UNTIL_DATA_FILLED",
+                    "strict_options_quote_required_models": "SIDELINE_UNTIL_DATA_FILLED",
+                    "available_data_models": "RUN_WITH_EXPLICIT_COVERAGE",
+                    "must_emit_skip_or_rejection_reasons": True,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def _patch_single_model_plan(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    model_id: str,
+    lane: str,
+    required_datasets: list[str],
+    display_name: str = "Test model",
+) -> None:
+    import workbench.src.run.all_lanes as module
+
+    monkeypatch.setattr(module, "list_models", lambda: [model_id])
+    monkeypatch.setattr(
+        module,
+        "build_models_config",
+        lambda: {
+            model_id: SimpleNamespace(
+                kind="hypothesis",
+                required_datasets=required_datasets,
+                min_history_years=10,
+                robustness_window="discovery",
+                latency_lane="sub_10ms",
+                execution_assumptions="limit_queue",
+                parameter_bounds={},
+                signal_field="",
+                diagnostics_only=False,
+                hyp_id=1,
+            )
+        },
+    )
+    monkeypatch.setattr(
+        module,
+        "load_catalog",
+        lambda repo: {
+            model_id: SimpleNamespace(
+                role="alpha",
+                display_name=display_name,
+            )
+        },
+    )
+
+    class _FakeEnum(str):
+        @property
+        def value(self) -> str:
+            return str(self)
+
+    class _FakeRegistry:
+        @staticmethod
+        def instance():
+            return _FakeRegistry()
+
+        def resolve_lane(self, resolved_model_id: str) -> _FakeEnum:
+            assert resolved_model_id == model_id
+            return _FakeEnum(lane)
+
+        def all_registrations(self):
+            return []
+
+    monkeypatch.setattr(module, "LaneRegistry", _FakeRegistry)
+    monkeypatch.setattr(module, "register_all_lanes", lambda: None)
+
+
 def test_build_all_lanes_plan_assigns_one_terminal_state_per_model() -> None:
     plan = build_all_lanes_plan(REPO, "fresh_all_lanes_test")
 
@@ -27,6 +119,7 @@ def test_build_all_lanes_plan_assigns_one_terminal_state_per_model() -> None:
         assert row["run_id"] == "fresh_all_lanes_test"
         assert row["model_id"]
         assert row["lane"] in {"cme_futures", "equities", "cme_options"}
+        assert "campaign_mode" in row
         assert row["kind"] in {"hypothesis", "pdf", ""}
         assert isinstance(row["required_datasets"], list)
         assert "latency_lane" in row
@@ -40,6 +133,18 @@ def test_build_all_lanes_plan_assigns_one_terminal_state_per_model() -> None:
             assert matching_gates
         else:
             assert not matching_gates
+
+
+def test_build_all_lanes_plan_routes_options_campaign_binding_to_options_lane() -> None:
+    plan = build_all_lanes_plan(REPO, "fresh_all_lanes_options_binding_test")
+    row = next(model for model in plan["models"] if model["model_id"] == "DEALER_HEDGING")
+
+    assert row["campaign_mode"] == "options_lane"
+    assert row["lane"] == "equities"
+    assert row["required_datasets"] == ["options_chain"]
+    assert row["terminal_state"] == "BLOCKED_MISSING_DATA"
+    assert row["reason_code"] == "q001_strict_options_missing_data_sidelined"
+    assert plan["lane_model_counts"]["equities"] == 1
 
 
 def test_run_all_lanes_writes_run_id_scoped_artifacts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -266,6 +371,186 @@ def test_build_all_lanes_plan_equities_uses_planning_default(
     for row in plan["models"]:
         assert row["terminal_state"] == "BLOCKED_VALIDATION", row
         assert "IBKR" not in row["reason"]
+
+
+@pytest.mark.parametrize(
+    "required_dataset",
+    [
+        "options_chain",
+        "strict_options_quotes",
+        "strict_mbo_quotes",
+        "options_order_book",
+        "options_quote_mbo",
+        "l2_order_book",
+    ],
+)
+def test_build_all_lanes_plan_strict_options_model_blocks_missing_data(
+    required_dataset: str,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_valid_q001_owner_decision(tmp_path)
+    _patch_single_model_plan(
+        monkeypatch,
+        model_id="FOPT_STRICT_CHAIN",
+        lane="cme_options",
+        required_datasets=[required_dataset],
+        display_name="FOPT strict options chain",
+    )
+
+    plan = build_all_lanes_plan(tmp_path, "q001_strict_options")
+    row = plan["models"][0]
+
+    assert row["terminal_state"] == "BLOCKED_MISSING_DATA"
+    assert row["reason_code"] == "q001_strict_options_missing_data_sidelined"
+    assert row["missing_data_policy"] == "SIDELINE_UNTIL_DATA_FILLED"
+    assert row["skip_or_rejection_required"] is True
+    assert "docs/project/q001_owner_decision.json" in row["authority_refs"]
+    assert "available_data_policy" not in row
+    assert plan["model_universe_status"] == "PLANNED"
+    assert plan["model_gap_gates"] == []
+    assert plan["terminal_counts"]["BLOCKED_MISSING_DATA"] == 1
+    assert plan["terminal_counts"]["BLOCKED_VALIDATION"] == 0
+
+
+def test_build_all_lanes_plan_normal_mbo_npz_model_remains_validation_blocked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_valid_q001_owner_decision(tmp_path)
+    _patch_single_model_plan(
+        monkeypatch,
+        model_id="CME_MBO_ALPHA",
+        lane="cme_futures",
+        required_datasets=["mbo_npz"],
+    )
+
+    plan = build_all_lanes_plan(tmp_path, "q001_normal_mbo")
+    row = plan["models"][0]
+
+    assert row["terminal_state"] == "BLOCKED_VALIDATION"
+    assert row["reason"] == "All-lane dry-run planning emitted no execution evidence yet."
+    assert row["available_data_policy"] == "RUN_WITH_EXPLICIT_COVERAGE"
+    assert row["skip_or_rejection_required"] is True
+    assert "docs/project/q001_owner_decision.json" in row["authority_refs"]
+    assert "reason_code" not in row
+    assert plan["terminal_counts"]["BLOCKED_VALIDATION"] == 1
+    assert plan["terminal_counts"]["BLOCKED_MISSING_DATA"] == 0
+
+
+def test_build_all_lanes_plan_invalid_q001_available_data_model_is_not_missing_data_blocked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch_single_model_plan(
+        monkeypatch,
+        model_id="CME_AVAILABLE_ALPHA",
+        lane="cme_futures",
+        required_datasets=["mbo_npz"],
+    )
+
+    plan = build_all_lanes_plan(tmp_path, "q001_invalid_available_data")
+    row = plan["models"][0]
+
+    assert row["terminal_state"] == "BLOCKED_VALIDATION"
+    assert row["available_data_policy"] == "VERIFY_Q001_OWNER_DECISION_BEFORE_EXECUTION"
+    assert row["q001_policy_warning"] == "q001_owner_decision_missing"
+    assert "reason_code" not in row
+    assert plan["terminal_counts"]["BLOCKED_VALIDATION"] == 1
+    assert plan["terminal_counts"]["BLOCKED_MISSING_DATA"] == 0
+
+
+@pytest.mark.parametrize(
+    ("decision_text", "reason_code"),
+    [
+        (None, "q001_owner_decision_missing"),
+        ("{not json", "q001_owner_decision_invalid_json"),
+        (
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "question_id": "Q001",
+                    "status": "ACCEPTED_AVAILABLE_DATA_SCOPE",
+                    "mbo_gap_ledger": "ACCEPTED_NON_BLOCKING_INVENTORY_SCOPE",
+                    "options_strict_mbo_warning_ledger": "ACCEPTED_NON_BLOCKING_INVENTORY_SCOPE",
+                    "available_data_research_allowed": True,
+                    "accepted_evidence": {
+                        "missing_or_unavailable_slots": 999,
+                        "strict_mbo_gap_count": 507,
+                        "strict_mbo_stale_gap_count": 503,
+                        "options_warn_checks": ["options-fixing-mbo-coverage"],
+                    },
+                    "model_gap_policy": {
+                        "strict_options_quote_required_models": "SIDELINE_UNTIL_DATA_FILLED",
+                        "missing_mbo_required_models": "SIDELINE_UNTIL_DATA_FILLED",
+                        "available_data_models": "RUN_WITH_EXPLICIT_COVERAGE",
+                        "must_emit_skip_or_rejection_reasons": True,
+                    },
+                }
+            ),
+            "q001_owner_decision_invalid_accepted_evidence",
+        ),
+        (
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "question_id": "Q001",
+                    "status": "ACCEPTED_AVAILABLE_DATA_SCOPE",
+                    "mbo_gap_ledger": "ACCEPTED_NON_BLOCKING_INVENTORY_SCOPE",
+                    "options_strict_mbo_warning_ledger": "STALE_WARNING",
+                    "available_data_research_allowed": True,
+                    "accepted_evidence": {
+                        "missing_or_unavailable_slots": 211,
+                        "strict_mbo_gap_count": 507,
+                        "strict_mbo_stale_gap_count": 503,
+                        "options_warn_checks": ["options-fixing-mbo-coverage"],
+                    },
+                    "model_gap_policy": {
+                        "missing_mbo_required_models": "SIDELINE_UNTIL_DATA_FILLED",
+                        "strict_options_quote_required_models": "SIDELINE_UNTIL_DATA_FILLED",
+                        "available_data_models": "RUN_WITH_EXPLICIT_COVERAGE",
+                        "must_emit_skip_or_rejection_reasons": True,
+                    },
+                }
+            ),
+            "q001_owner_decision_invalid_options_ledger",
+        ),
+    ],
+)
+def test_build_all_lanes_plan_missing_or_invalid_q001_decision_blocks_strict_model(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    decision_text: str | None,
+    reason_code: str,
+) -> None:
+    if decision_text is not None:
+        path = tmp_path / "docs" / "project" / "q001_owner_decision.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(decision_text, encoding="utf-8")
+    _patch_single_model_plan(
+        monkeypatch,
+        model_id="FOPT_STRICT_QUOTES",
+        lane="cme_options",
+        required_datasets=["strict_options_quotes"],
+        display_name="FOPT strict options quotes",
+    )
+
+    plan = build_all_lanes_plan(tmp_path, "q001_fail_closed")
+    row = plan["models"][0]
+
+    assert row["terminal_state"] == "BLOCKED_MISSING_DATA"
+    assert row["reason_code"] == reason_code
+    assert row["missing_data_policy"] == "SIDELINE_UNTIL_Q001_OWNER_DECISION_VALID"
+    assert row["skip_or_rejection_required"] is True
+    assert plan["model_universe_status"] == "BLOCKING"
+    assert plan["model_gap_gates"] == [
+        {
+            "gate": "q001_owner_decision",
+            "status": "BLOCKING",
+            "reason": (
+                "Strict missing-data models require a valid Q001 owner decision "
+                "before available-data scope can proceed."
+            ),
+            "reason_code": reason_code,
+        }
+    ]
 
 
 def test_build_all_lanes_plan_blocks_registered_lane_with_no_models(

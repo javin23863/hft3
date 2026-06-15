@@ -7,8 +7,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from hft3.validation.lanes.registration import register_all_lanes
 from hft3.validation.lanes.lane_registry import LaneRegistry
+from hft3.validation.lanes.lane import Lane
 from workbench.src.registry.model_catalog import load_catalog
 from workbench.src.registry.unified_registry import build_models_config, list_models
 
@@ -23,6 +26,60 @@ TERMINAL_STATES = {
     "QUARANTINED",
     "PROMOTED",
 }
+
+_MODEL_EVENT_BINDING_PATH = Path("apps/workbench/config/model_event_binding.yaml")
+_Q001_OWNER_DECISION_PATH = Path("docs/project/q001_owner_decision.json")
+_Q001_AUTHORITY_REFS = [
+    "docs/project/q001_owner_decision.json",
+    "docs/project/Q001_OWNER_DECISION_PACKET.md",
+    "docs/project/Q001_DATA_INVENTORY_STATUS.md",
+]
+_Q001_ACCEPTED_EVIDENCE = {
+    "missing_or_unavailable_slots": 211,
+    "strict_mbo_gap_count": 507,
+    "strict_mbo_stale_gap_count": 503,
+}
+_Q001_ACCEPTED_LEDGER_STATUS = "ACCEPTED_NON_BLOCKING_INVENTORY_SCOPE"
+_Q001_REQUIRED_MODEL_GAP_POLICY = {
+    "missing_mbo_required_models": "SIDELINE_UNTIL_DATA_FILLED",
+    "strict_options_quote_required_models": "SIDELINE_UNTIL_DATA_FILLED",
+    "available_data_models": "RUN_WITH_EXPLICIT_COVERAGE",
+    "must_emit_skip_or_rejection_reasons": True,
+}
+_Q001_ACCEPTED_OPTIONS_WARN_CHECKS = {"options-fixing-mbo-coverage"}
+_STRICT_OPTIONS_DATASETS = {
+    "options_chain",
+    "strict_options_quotes",
+    "strict_mbo_quotes",
+    "options_order_book",
+    "options_quote_mbo",
+}
+
+
+def _load_model_event_bindings(repo: Path) -> dict[str, dict[str, Any]]:
+    path = repo / _MODEL_EVENT_BINDING_PATH
+    try:
+        payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except FileNotFoundError:
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    bindings: dict[str, dict[str, Any]] = {}
+    for section in ("pdf", "hypothesis"):
+        rows = payload.get(section) or {}
+        if not isinstance(rows, dict):
+            continue
+        for model_id, binding in rows.items():
+            if isinstance(binding, dict):
+                bindings[str(model_id)] = dict(binding)
+    return bindings
+
+
+def _resolve_plan_lane(registry: LaneRegistry, model_id: str, binding: dict[str, Any]) -> str:
+    campaign_mode = str(binding.get("campaign_mode") or "")
+    if campaign_mode == "options_lane":
+        return Lane.EQUITIES.value
+    return registry.resolve_lane(model_id).value
 
 
 def _utc_now() -> str:
@@ -72,6 +129,76 @@ def _model_config_payload(config: Any) -> dict[str, Any]:
     }
 
 
+def _load_q001_owner_decision(repo: Path) -> tuple[dict[str, Any], str]:
+    path = repo / _Q001_OWNER_DECISION_PATH
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}, "q001_owner_decision_missing"
+    except json.JSONDecodeError:
+        return {}, "q001_owner_decision_invalid_json"
+    if not isinstance(payload, dict):
+        return {}, "q001_owner_decision_invalid_shape"
+    policy = payload.get("model_gap_policy")
+    if not isinstance(policy, dict):
+        return payload, "q001_owner_decision_invalid_model_gap_policy"
+    accepted_evidence = payload.get("accepted_evidence")
+    if not isinstance(accepted_evidence, dict):
+        return payload, "q001_owner_decision_invalid_accepted_evidence"
+    for key, expected in _Q001_ACCEPTED_EVIDENCE.items():
+        if accepted_evidence.get(key) != expected:
+            return payload, "q001_owner_decision_invalid_accepted_evidence"
+    warn_checks = accepted_evidence.get("options_warn_checks")
+    if (
+        not isinstance(warn_checks, list)
+        or {str(check) for check in warn_checks} != _Q001_ACCEPTED_OPTIONS_WARN_CHECKS
+    ):
+        return payload, "q001_owner_decision_invalid_accepted_evidence"
+    if payload.get("question_id") != "Q001" or payload.get("status") != "ACCEPTED_AVAILABLE_DATA_SCOPE":
+        return payload, "q001_owner_decision_invalid_status"
+    if payload.get("mbo_gap_ledger") != _Q001_ACCEPTED_LEDGER_STATUS:
+        return payload, "q001_owner_decision_invalid_mbo_gap_ledger"
+    if payload.get("options_strict_mbo_warning_ledger") != _Q001_ACCEPTED_LEDGER_STATUS:
+        return payload, "q001_owner_decision_invalid_options_ledger"
+    if payload.get("available_data_research_allowed") is not True:
+        return payload, "q001_owner_decision_invalid_available_data_permission"
+    for key, expected in _Q001_REQUIRED_MODEL_GAP_POLICY.items():
+        if policy.get(key) != expected:
+            return payload, "q001_owner_decision_invalid_model_gap_policy"
+    return payload, ""
+
+
+def _has_strict_missing_data_dependency(
+    *,
+    model_id: str,
+    lane: str,
+    display_name: str,
+    required_datasets: list[Any],
+) -> bool:
+    datasets = {str(dataset).lower() for dataset in required_datasets}
+    if datasets & _STRICT_OPTIONS_DATASETS:
+        return True
+    if "l2_order_book" not in datasets:
+        return False
+    context = " ".join([model_id, lane, display_name, *sorted(datasets)]).lower()
+    return any(term in context for term in ("option", "options", "fopt"))
+
+
+def _available_data_scope_fields(q001_policy: dict[str, Any], q001_error: str) -> dict[str, Any]:
+    if q001_error:
+        return {
+            "available_data_policy": "VERIFY_Q001_OWNER_DECISION_BEFORE_EXECUTION",
+            "q001_policy_warning": q001_error,
+            "authority_refs": list(_Q001_AUTHORITY_REFS),
+            "skip_or_rejection_required": True,
+        }
+    return {
+        "available_data_policy": str(q001_policy.get("available_data_models") or "RUN_WITH_EXPLICIT_COVERAGE"),
+        "authority_refs": list(_Q001_AUTHORITY_REFS),
+        "skip_or_rejection_required": True,
+    }
+
+
 def _lane_coverage_gates(lanes: list[dict[str, Any]], lane_model_counts: dict[str, int]) -> list[dict[str, Any]]:
     gates: list[dict[str, Any]] = []
     for lane in lanes:
@@ -100,6 +227,9 @@ def build_all_lanes_plan(repo: Path, run_id: str) -> dict[str, Any]:
     registry = LaneRegistry.instance()
     catalog = load_catalog(repo)
     model_configs = build_models_config()
+    model_event_bindings = _load_model_event_bindings(repo)
+    q001_owner_decision, q001_error = _load_q001_owner_decision(repo)
+    q001_policy = q001_owner_decision.get("model_gap_policy") if not q001_error else {}
     registrations = {registration.lane.value: registration for registration in registry.all_registrations()}
     lanes: list[dict[str, Any]] = []
     lane_config_errors: dict[str, str] = {}
@@ -121,26 +251,57 @@ def build_all_lanes_plan(repo: Path, run_id: str) -> dict[str, Any]:
     models: list[dict[str, Any]] = []
     lane_model_counts = {lane: 0 for lane in sorted(registrations)}
     for model_id in list_models():
-        lane = registry.resolve_lane(model_id).value
+        binding = model_event_bindings.get(model_id, {})
+        lane = _resolve_plan_lane(registry, model_id, binding)
         lane_model_counts[lane] = lane_model_counts.get(lane, 0) + 1
         catalog_entry = catalog.get(model_id)
         config_payload = _model_config_payload(model_configs.get(model_id))
+        display_name = getattr(catalog_entry, "display_name", model_id) if catalog_entry else model_id
         reason = "All-lane dry-run planning emitted no execution evidence yet."
         terminal_state = "BLOCKED_VALIDATION"
+        data_scope_fields = _available_data_scope_fields(q001_policy, q001_error)
         if lane in lane_config_errors:
             terminal_state = "BLOCKED_VALIDATION"
             reason = f"Lane config failed to load: {lane_config_errors[lane]}"
+        if _has_strict_missing_data_dependency(
+            model_id=model_id,
+            lane=lane,
+            display_name=display_name,
+            required_datasets=config_payload["required_datasets"],
+        ):
+            terminal_state = "BLOCKED_MISSING_DATA"
+            if q001_error:
+                reason_code = q001_error
+                missing_data_policy = "SIDELINE_UNTIL_Q001_OWNER_DECISION_VALID"
+                reason = "Q001 owner decision is missing or invalid; strict options missing-data model is fail-closed."
+            else:
+                reason_code = "q001_strict_options_missing_data_sidelined"
+                missing_data_policy = str(
+                    q001_policy.get("strict_options_quote_required_models") or "SIDELINE_UNTIL_DATA_FILLED"
+                )
+                reason = (
+                    "Q001 accepts available-data inventory scope only; strict options quote/chain/order-book "
+                    "models stay sidelined until data is filled or separately scoped out."
+                )
+            data_scope_fields = {
+                "reason_code": reason_code,
+                "missing_data_policy": missing_data_policy,
+                "authority_refs": list(_Q001_AUTHORITY_REFS),
+                "skip_or_rejection_required": True,
+            }
         models.append(
             {
                 "run_id": run_id,
                 "model_id": model_id,
                 "lane": lane,
+                "campaign_mode": str(binding.get("campaign_mode") or ""),
                 "role": getattr(catalog_entry, "role", "") if catalog_entry else "",
-                "display_name": getattr(catalog_entry, "display_name", model_id) if catalog_entry else model_id,
+                "display_name": display_name,
                 **config_payload,
                 "terminal_state": terminal_state,
                 "reason": reason,
                 "evidence_scope": "all_lanes_plan_no_previous_run_artifacts",
+                **data_scope_fields,
             }
         )
 
@@ -149,6 +310,16 @@ def build_all_lanes_plan(repo: Path, run_id: str) -> dict[str, Any]:
         terminal_counts[row["terminal_state"]] += 1
 
     lane_coverage_gates = _lane_coverage_gates(lanes, lane_model_counts)
+    model_gap_gates = []
+    if q001_error and terminal_counts.get("BLOCKED_MISSING_DATA", 0) > 0:
+        model_gap_gates.append(
+            {
+                "gate": "q001_owner_decision",
+                "status": "BLOCKING",
+                "reason": "Strict missing-data models require a valid Q001 owner decision before available-data scope can proceed.",
+                "reason_code": q001_error,
+            }
+        )
     return {
         "schema_version": "workbench_all_lanes_plan_v1",
         "run_id": run_id,
@@ -160,7 +331,8 @@ def build_all_lanes_plan(repo: Path, run_id: str) -> dict[str, Any]:
         "lanes": lanes,
         "lane_model_counts": lane_model_counts,
         "lane_coverage_gates": lane_coverage_gates,
-        "model_universe_status": "BLOCKING" if lane_coverage_gates else "PLANNED",
+        "model_gap_gates": model_gap_gates,
+        "model_universe_status": "BLOCKING" if lane_coverage_gates or model_gap_gates else "PLANNED",
         "models": models,
         "model_count": len(models),
         "terminal_states": sorted(TERMINAL_STATES),
@@ -197,12 +369,14 @@ def run_all_lanes(repo: Path, run_id: str, *, execute: bool = False) -> dict[str
         "registered_lane_count": plan.get("registered_lane_count", len(plan.get("lanes", []))),
         "lane_model_counts": plan.get("lane_model_counts", {}),
         "lane_coverage_gates": plan.get("lane_coverage_gates", []),
+        "model_gap_gates": plan.get("model_gap_gates", []),
         "model_universe_status": plan.get("model_universe_status", "PLANNED"),
         "terminal_counts": plan["terminal_counts"],
         "decision_action": "BLOCKED",
         "decision_reason": "All-lane run has a clean model plan; model execution evidence has not been emitted yet.",
         "blocking_gates": [
             *list(plan.get("lane_coverage_gates", [])),
+            *list(plan.get("model_gap_gates", [])),
             {
                 "gate": "model_execution",
                 "status": "PENDING",
