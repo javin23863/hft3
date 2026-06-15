@@ -12,6 +12,20 @@ C:\Users\MSI\repos\hft3
 
 This inventory is read-only evidence for retiring or migrating alternate hft3 checkouts. No alternate checkout is safe to delete yet.
 
+## Canonical Repo-Managed Worktrees
+
+These are not standalone repos, but their top-level names can make them look like alternate canonical checkouts. They are linked worktrees owned by `C:\Users\MSI\repos\hft3`.
+
+| Path | State | Retirement rule |
+| --- | --- | --- |
+| `C:\Users\MSI\repos\hft3-baseline` | Detached at `66a73425` / tag `pre-lane-split-20260612`; dirty only in `graphify-out` metadata at inspection time. | Keep as explicit baseline archive until the lane-split rollback/audit need is closed. Do not treat as active work. |
+| `C:\Users\MSI\repos\hft3-eqopt` | Branch `eqopt/live-probe` at `76ec5117`, tracking `origin/eqopt/live-probe`; dirty only in `graphify-out` metadata at inspection time. | Keep only while the eq/options live-probe branch still needs review or migration. |
+| `C:\Users\MSI\repos\hft3\.claude\worktrees\options-slice1b` | Branch `options/cockpit-integration` at `6bd3ed22`. | Codex-internal worktree; review before pruning. |
+
+Recommendation:
+
+Do not run broad searches, tests, or edits from these worktrees unless the task explicitly names the branch. Normal work starts in `C:\Users\MSI\repos\hft3`.
+
 ## `C:\Users\MSI\Documents\GitHub\hft3`
 
 Role: dirty standalone stale clone.
@@ -81,9 +95,41 @@ Recommendation:
 
 Do not retire/delete this checkout until `perf/event-driven-quoting` is pushed or archived, and local data/artifacts/logs/Rithmic SDK material are copied or deliberately declared disposable.
 
+## `C:\Users\MSI\repos\hft3-lever2`
+
+Role: linked worktree owned by `C:\Users\MSI\Documents\opencode\hft3`, not by the canonical repo.
+
+Git state:
+
+- Branch: `perf/event-driven-quoting`.
+- HEAD: `fb9df99` (`fix(gateway): align adapter with real RApiPlus 13.7 headers`).
+- Untracked local benchmark/helper files under `scripts/`: `ab_bench_out.txt`, `ab_capped_bench.py`, `ab_capped_out.txt`, `ab_event_stepping_bench.py`, `ab_fixture_bench.py`, `ab_simple_bench.py`, `ab_simple_out.txt`, `find_active_hyp.py`, `quick_ab.py`.
+- Parent gitdir: `C:\Users\MSI\Documents\opencode\hft3\.git\worktrees\hft3-lever2`.
+
+Recommendation:
+
+Do not delete or move this worktree until the `perf/event-driven-quoting` branch and untracked benchmark files are either merged into the canonical repo, bundled, or explicitly declared disposable. If it is moved, use `git worktree move` from the owning checkout so Git metadata stays valid.
+
+## `C:\Users\MSI\Documents\New project`
+
+Role: old standalone checkout still referenced as remote `primary` by at least one alternate checkout.
+
+Git state at inspection:
+
+- Branch: `chore/repo-cleanup-and-data-fill`.
+- HEAD: `50a377aa` (`fix: address grader review issues in robustness pipeline`).
+- Upstream: `origin/chore/repo-cleanup-and-data-fill`.
+- Untracked local artifact directories include `artifacts/runs/`, `build-msvc/`, `data/latency_baselines/`, `data/npz/`, `reports/latency_baselines/`, `research_cards/kg/`, and `research_cards/pipeline_runs/`.
+
+Recommendation:
+
+Do not retire/delete this checkout until its artifact directories and any references from other clone remotes are audited. It is not the active repo.
+
 ## Physical Stub State
 
 `C:\Users\MSI\Documents\hft3` remains a legacy Codex entry stub containing only `AGENTS.md`. Its stray empty `.git` directory was moved to `C:\Users\MSI\Documents\hft3.git.legacy-empty-20260615-184124`, so the legacy path is no longer a second git working tree. Replacing the stub itself with a junction to `C:\Users\MSI\repos\hft3` was attempted again on 2026-06-15, but Windows still reported the directory as in use because this active Codex session was opened there.
+
+A bounded deferred helper was started on 2026-06-15 to retry the same safe operation after the lock releases. It logs to `C:\Users\MSI\.codex\tmp\hft3_repo_consolidation.log` and only proceeds if the legacy path still contains no `.git` directory and no children except `AGENTS.md`.
 
 Required next step when unlocked:
 
