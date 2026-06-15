@@ -351,9 +351,276 @@ def test_run_all_lanes_returns_fail_when_leakage_detector_blocks(
     assert any(gate["gate"] == "leakage_detection" for gate in summary["blocking_gates"])
 
 
-def test_run_all_lanes_execute_mode_is_not_silent_fake_execution(tmp_path: Path) -> None:
-    with pytest.raises(NotImplementedError, match="not wired"):
-        run_all_lanes(tmp_path, "fresh_all_lanes_test", execute=True)
+def test_run_all_lanes_execute_dispatches_eligible_available_data_model(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import workbench.src.run.all_lanes as module
+    import workbench.src.run.campaign_runner as campaign_module
+    import workbench.src.run.leakage_detector as leakage_module
+
+    terminal_counts = {state: 0 for state in TERMINAL_STATES}
+    terminal_counts["BLOCKED_VALIDATION"] = 1
+    terminal_counts["BLOCKED_MISSING_DATA"] = 1
+    monkeypatch.setattr(
+        module,
+        "build_all_lanes_plan",
+        lambda repo, run_id: {
+            "schema_version": "workbench_all_lanes_plan_v1",
+            "run_id": run_id,
+            "generated_at_utc": "2026-06-05T00:00:00Z",
+            "repo": str(repo),
+            "artifact_reuse_policy": "active_run_id_only",
+            "previous_run_artifacts_reused": False,
+            "lanes": [{"lane": "cme_futures", "load_status": "loaded", "symbols": ["ES.v.0"]}],
+            "registered_lane_count": 1,
+            "lane_model_counts": {"cme_futures": 2},
+            "lane_coverage_gates": [],
+            "model_universe_status": "PLANNED",
+            "models": [
+                {
+                    "run_id": run_id,
+                    "model_id": "CME_AVAILABLE_ALPHA",
+                    "lane": "cme_futures",
+                    "symbol": "ES.v.0",
+                    "terminal_state": "BLOCKED_VALIDATION",
+                    "reason": "planning",
+                    "available_data_policy": "RUN_WITH_EXPLICIT_COVERAGE",
+                    "execution_eligible": True,
+                    "execution_block_reason": "",
+                },
+                {
+                    "run_id": run_id,
+                    "model_id": "FOPT_STRICT_QUOTES",
+                    "lane": "cme_futures",
+                    "terminal_state": "BLOCKED_MISSING_DATA",
+                    "reason": "strict missing data",
+                    "missing_data_policy": "SIDELINE_UNTIL_DATA_FILLED",
+                    "execution_eligible": False,
+                    "execution_block_reason": "q001_strict_options_missing_data_sidelined",
+                },
+            ],
+            "model_count": 2,
+            "terminal_states": sorted(TERMINAL_STATES),
+            "terminal_counts": terminal_counts,
+        },
+    )
+    monkeypatch.setattr(
+        leakage_module,
+        "run_leakage_detection",
+        lambda repo, run_id=None: {
+            "status": "PASS",
+            "blocking": [],
+            "artifact_paths": {
+                "json": str(repo / "runtime" / "workbench" / "all_lanes" / str(run_id) / "leakage_detection.json")
+            },
+        },
+    )
+    calls: list[dict[str, object]] = []
+
+    def _fake_run_campaign(repo: Path, model_id: str, symbol: str, **kwargs: object) -> SimpleNamespace:
+        calls.append({"repo": repo, "model_id": model_id, "symbol": symbol, "kwargs": kwargs})
+        return SimpleNamespace(
+            campaign_id=kwargs["campaign_id"],
+            model_id=model_id,
+            symbol=symbol,
+            status="PASS",
+            param_hash="abc123",
+            periods=[SimpleNamespace(events_run=1)],
+            artifact_dir=str(repo / "research_cards" / "workbench_runs" / str(kwargs["campaign_id"])),
+        )
+
+    monkeypatch.setattr(campaign_module, "run_campaign", _fake_run_campaign)
+
+    result = run_all_lanes(tmp_path, "fresh_all_lanes_test", execute=True)
+
+    assert result["status"] == "PASS"
+    assert len(calls) == 1
+    assert calls[0]["repo"] == tmp_path
+    assert calls[0]["model_id"] == "CME_AVAILABLE_ALPHA"
+    assert calls[0]["symbol"] == "ES.v.0"
+    assert calls[0]["kwargs"] == {
+        "dry_run": False,
+        "download_missing": False,
+        "allow_partial": True,
+        "trial_mode": False,
+        "campaign_id": "all_lanes_fresh_all_lanes_test_CME_AVAILABLE_ALPHA_ES.v.0",
+    }
+    run_dir = tmp_path / "runtime" / "workbench" / "all_lanes" / "fresh_all_lanes_test"
+    plan = json.loads((run_dir / "plan.json").read_text(encoding="utf-8"))
+    summary = json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))
+    executed_row = next(row for row in plan["models"] if row["model_id"] == "CME_AVAILABLE_ALPHA")
+    strict_row = next(row for row in plan["models"] if row["model_id"] == "FOPT_STRICT_QUOTES")
+    assert executed_row["terminal_state"] == "EXECUTED"
+    assert executed_row["campaign_status"] == "PASS"
+    assert executed_row["campaign_id"] == "all_lanes_fresh_all_lanes_test_CME_AVAILABLE_ALPHA_ES.v.0"
+    assert executed_row["artifact_dir"].endswith("all_lanes_fresh_all_lanes_test_CME_AVAILABLE_ALPHA_ES.v.0")
+    assert strict_row["terminal_state"] == "BLOCKED_MISSING_DATA"
+    assert "campaign_id" not in strict_row
+    assert plan["terminal_counts"]["EXECUTED"] == 1
+    assert plan["terminal_counts"]["BLOCKED_MISSING_DATA"] == 1
+    assert summary["decision_action"] == "BLOCKED"
+    assert summary["state"] == "executed"
+    assert summary["execution_results"] == plan["execution_results"]
+    assert [row["status"] for row in summary["execution_results"]] == ["EXECUTED", "SKIPPED"]
+
+
+def test_run_all_lanes_execute_skips_missing_explicit_workbench_symbol(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import workbench.src.run.all_lanes as module
+    import workbench.src.run.campaign_runner as campaign_module
+    import workbench.src.run.leakage_detector as leakage_module
+
+    terminal_counts = {state: 0 for state in TERMINAL_STATES}
+    terminal_counts["BLOCKED_VALIDATION"] = 1
+    monkeypatch.setattr(
+        module,
+        "build_all_lanes_plan",
+        lambda repo, run_id: {
+            "schema_version": "workbench_all_lanes_plan_v1",
+            "run_id": run_id,
+            "generated_at_utc": "2026-06-05T00:00:00Z",
+            "repo": str(repo),
+            "artifact_reuse_policy": "active_run_id_only",
+            "previous_run_artifacts_reused": False,
+            "lanes": [{"lane": "cme_futures", "load_status": "loaded", "symbols": ["ES", "MES"]}],
+            "registered_lane_count": 1,
+            "lane_model_counts": {"cme_futures": 1},
+            "lane_coverage_gates": [],
+            "model_universe_status": "PLANNED",
+            "models": [
+                {
+                    "run_id": run_id,
+                    "model_id": "CME_AVAILABLE_ALPHA",
+                    "lane": "cme_futures",
+                    "terminal_state": "BLOCKED_VALIDATION",
+                    "reason": "planning",
+                    "available_data_policy": "RUN_WITH_EXPLICIT_COVERAGE",
+                    "execution_eligible": True,
+                    "execution_block_reason": "missing_explicit_workbench_symbol",
+                }
+            ],
+            "model_count": 1,
+            "terminal_states": sorted(TERMINAL_STATES),
+            "terminal_counts": terminal_counts,
+        },
+    )
+    monkeypatch.setattr(
+        leakage_module,
+        "run_leakage_detection",
+        lambda repo, run_id=None: {"status": "PASS", "blocking": [], "artifact_paths": {"json": ""}},
+    )
+    symbols: list[str] = []
+
+    def _fake_run_campaign(repo: Path, model_id: str, symbol: str, **kwargs: object) -> SimpleNamespace:
+        symbols.append(symbol)
+        return SimpleNamespace(
+            campaign_id=kwargs["campaign_id"],
+            model_id=model_id,
+            symbol=symbol,
+            status="PASS",
+            param_hash="abc123",
+            artifact_dir=str(repo / "research_cards" / "workbench_runs" / str(kwargs["campaign_id"])),
+        )
+
+    monkeypatch.setattr(campaign_module, "run_campaign", _fake_run_campaign)
+
+    run_all_lanes(tmp_path, "fresh_all_lanes_raw_symbols", execute=True)
+
+    assert symbols == []
+    summary = json.loads(
+        (
+            tmp_path
+            / "runtime"
+            / "workbench"
+            / "all_lanes"
+            / "fresh_all_lanes_raw_symbols"
+            / "summary.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert summary["state"] == "skipped"
+    assert summary["execution_results"][0]["reason"] == "missing_explicit_workbench_symbol"
+
+
+def test_run_all_lanes_execute_blocks_before_campaign_when_leakage_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import workbench.src.run.all_lanes as module
+    import workbench.src.run.campaign_runner as campaign_module
+    import workbench.src.run.leakage_detector as leakage_module
+
+    terminal_counts = {state: 0 for state in TERMINAL_STATES}
+    terminal_counts["BLOCKED_VALIDATION"] = 1
+    monkeypatch.setattr(
+        module,
+        "build_all_lanes_plan",
+        lambda repo, run_id: {
+            "schema_version": "workbench_all_lanes_plan_v1",
+            "run_id": run_id,
+            "generated_at_utc": "2026-06-05T00:00:00Z",
+            "repo": str(repo),
+            "artifact_reuse_policy": "active_run_id_only",
+            "previous_run_artifacts_reused": False,
+            "lanes": [{"lane": "cme_futures", "load_status": "loaded", "symbols": ["MES.v.0"]}],
+            "registered_lane_count": 1,
+            "lane_model_counts": {"cme_futures": 1},
+            "lane_coverage_gates": [],
+            "model_universe_status": "PLANNED",
+            "models": [
+                {
+                    "run_id": run_id,
+                    "model_id": "CME_AVAILABLE_ALPHA",
+                    "lane": "cme_futures",
+                    "symbol": "MES.v.0",
+                    "terminal_state": "BLOCKED_VALIDATION",
+                    "reason": "planning",
+                    "available_data_policy": "RUN_WITH_EXPLICIT_COVERAGE",
+                    "execution_eligible": True,
+                    "execution_block_reason": "",
+                }
+            ],
+            "model_count": 1,
+            "terminal_states": sorted(TERMINAL_STATES),
+            "terminal_counts": terminal_counts,
+        },
+    )
+    monkeypatch.setattr(
+        leakage_module,
+        "run_leakage_detection",
+        lambda repo, run_id=None: {
+            "status": "FAIL",
+            "blocking": [{"gate": "generated_artifact_roots_clean", "status": "FAIL", "reason": "stale"}],
+            "artifact_paths": {
+                "json": str(repo / "runtime" / "workbench" / "all_lanes" / str(run_id) / "leakage_detection.json")
+            },
+        },
+    )
+
+    def _unexpected_campaign(*args: object, **kwargs: object) -> None:
+        raise AssertionError("campaign must not start when leakage detection fails")
+
+    monkeypatch.setattr(campaign_module, "run_campaign", _unexpected_campaign)
+
+    result = run_all_lanes(tmp_path, "fresh_all_lanes_leakage_blocks", execute=True)
+
+    assert result["status"] == "FAIL"
+    summary = json.loads(
+        (
+            tmp_path
+            / "runtime"
+            / "workbench"
+            / "all_lanes"
+            / "fresh_all_lanes_leakage_blocks"
+            / "summary.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert summary["state"] == "blocked"
+    assert summary["execution_results"] == []
+    assert summary["blocking_gates"][0]["gate"] == "model_execution"
+    assert summary["blocking_gates"][0]["status"] == "BLOCKED"
 
 
 def test_build_all_lanes_plan_equities_uses_planning_default(
@@ -450,8 +717,36 @@ def test_build_all_lanes_plan_normal_mbo_npz_model_remains_validation_blocked(
     assert row["skip_or_rejection_required"] is True
     assert "docs/project/q001_owner_decision.json" in row["authority_refs"]
     assert "reason_code" not in row
+    assert row["execution_eligible"] is False
+    assert row["execution_block_reason"] == "missing_explicit_workbench_symbol"
     assert plan["terminal_counts"]["BLOCKED_VALIDATION"] == 1
     assert plan["terminal_counts"]["BLOCKED_MISSING_DATA"] == 0
+
+
+def test_build_all_lanes_plan_uses_explicit_binding_symbol_for_execution(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import workbench.src.run.all_lanes as module
+
+    _write_valid_q001_owner_decision(tmp_path)
+    _patch_single_model_plan(
+        monkeypatch,
+        model_id="CME_MBO_ALPHA",
+        lane="cme_futures",
+        required_datasets=["mbo_npz"],
+    )
+    monkeypatch.setattr(
+        module,
+        "_load_model_event_bindings",
+        lambda repo: {"CME_MBO_ALPHA": {"symbol": "MES.v.0"}},
+    )
+
+    plan = build_all_lanes_plan(tmp_path, "q001_explicit_symbol")
+    row = plan["models"][0]
+
+    assert row["symbol"] == "MES.v.0"
+    assert row["execution_eligible"] is True
+    assert row["execution_block_reason"] == ""
 
 
 def test_build_all_lanes_plan_invalid_q001_available_data_model_is_not_missing_data_blocked(

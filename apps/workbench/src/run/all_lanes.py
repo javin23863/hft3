@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -70,6 +71,8 @@ _CME_OPTIONS_STRUCTURAL_MODEL_CONFIG = {
     "role": "options_standalone",
     "model_source": "cme_options_lane_registration_structural_fopt",
 }
+_EXECUTION_ELIGIBLE_STATE = "BLOCKED_VALIDATION"
+_EXECUTION_ELIGIBLE_POLICY = "RUN_WITH_EXPLICIT_COVERAGE"
 
 
 def _load_model_event_bindings(repo: Path) -> dict[str, dict[str, Any]]:
@@ -105,6 +108,297 @@ def _utc_now() -> str:
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _stable_id_part(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return "unknown"
+    return re.sub(r"[^A-Za-z0-9_.-]+", "_", text).strip("._-") or "unknown"
+
+
+def _is_workbench_symbol(symbol: str) -> bool:
+    return ".v." in symbol
+
+
+def _binding_execution_symbol(binding: dict[str, Any]) -> str:
+    symbol = str(binding.get("symbol") or binding.get("research_symbol") or "")
+    if _is_workbench_symbol(symbol):
+        return symbol
+    symbols = binding.get("symbols") or binding.get("symbol_universe") or []
+    if not isinstance(symbols, list):
+        return ""
+    for candidate in symbols:
+        candidate_symbol = str(candidate or "")
+        if _is_workbench_symbol(candidate_symbol):
+            return candidate_symbol
+    return ""
+
+
+def _execution_symbol(row: dict[str, Any]) -> str:
+    row_symbol = str(row.get("symbol") or "")
+    if row_symbol and _is_workbench_symbol(row_symbol):
+        return row_symbol
+    return ""
+
+
+def _execution_campaign_id(run_id: str, model_id: str, symbol: str) -> str:
+    return "all_lanes_{run_id}_{model_id}_{symbol}".format(
+        run_id=_stable_id_part(run_id),
+        model_id=_stable_id_part(model_id),
+        symbol=_stable_id_part(symbol),
+    )
+
+
+def _is_execution_eligible(row: dict[str, Any]) -> bool:
+    return (
+        row.get("execution_eligible") is True
+        and row.get("terminal_state") == _EXECUTION_ELIGIBLE_STATE
+        and row.get("available_data_policy") == _EXECUTION_ELIGIBLE_POLICY
+        and bool(_execution_symbol(row))
+    )
+
+
+def _run_research_campaign(
+    repo: Path,
+    model_id: str,
+    symbol: str,
+    *,
+    campaign_id: str,
+) -> Any:
+    from workbench.src.run.campaign_runner import run_campaign
+
+    return run_campaign(
+        repo,
+        model_id,
+        symbol,
+        dry_run=False,
+        download_missing=False,
+        allow_partial=True,
+        trial_mode=False,
+        campaign_id=campaign_id,
+    )
+
+
+def _period_events_run(period: Any) -> int:
+    if isinstance(period, dict):
+        value = period.get("events_run", 0)
+    else:
+        value = getattr(period, "events_run", 0)
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _campaign_events_ran(result: Any, artifact_dir: str) -> int:
+    periods = getattr(result, "periods", []) or []
+    total = sum(_period_events_run(period) for period in periods)
+    if total > 0:
+        return total
+    summary_path = Path(artifact_dir) / "summary.json" if artifact_dir else Path()
+    if not summary_path.is_file():
+        return 0
+    try:
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return 0
+    try:
+        events_ran = int(summary.get("events_ran", 0) or 0)
+    except (TypeError, ValueError):
+        events_ran = 0
+    if events_ran > 0:
+        return events_ran
+    return sum(_period_events_run(period) for period in summary.get("periods", []) or [])
+
+
+def _execute_available_data_models(repo: Path, plan: dict[str, Any], run_id: str) -> list[dict[str, Any]]:
+    execution_results: list[dict[str, Any]] = []
+    for row in plan.get("models", []):
+        if not isinstance(row, dict):
+            continue
+        model_id = str(row.get("model_id") or "")
+        symbol = _execution_symbol(row)
+        if not _is_execution_eligible(row):
+            execution_results.append(
+                {
+                    "model_id": model_id,
+                    "symbol": symbol,
+                    "status": "SKIPPED",
+                    "reason": str(
+                        row.get("execution_block_reason")
+                        or "model is not eligible for available-data research execution"
+                    ),
+                    "terminal_state": row.get("terminal_state", ""),
+                    "available_data_policy": row.get("available_data_policy", ""),
+                }
+            )
+            continue
+        campaign_id = _execution_campaign_id(run_id, model_id, symbol)
+        try:
+            result = _run_research_campaign(repo, model_id, symbol, campaign_id=campaign_id)
+        except Exception as exc:
+            row["terminal_state"] = "BLOCKED_VALIDATION"
+            row["reason"] = f"Research-only campaign execution failed: {exc}"
+            row["execution_status"] = "ERROR"
+            row["campaign_id"] = campaign_id
+            row["campaign_status"] = "ERROR"
+            row["artifact_dir"] = ""
+            execution_results.append(
+                {
+                    "model_id": model_id,
+                    "symbol": symbol,
+                    "status": "ERROR",
+                    "reason": str(exc),
+                    "campaign_id": campaign_id,
+                    "artifact_dir": "",
+                }
+            )
+            continue
+        result_campaign_id = str(getattr(result, "campaign_id", campaign_id) or campaign_id)
+        result_status = str(getattr(result, "status", "") or "")
+        artifact_dir = str(getattr(result, "artifact_dir", "") or "")
+        events_ran = _campaign_events_ran(result, artifact_dir)
+        executed = result_status in {"PASS", "FAIL"} and events_ran > 0
+        row["terminal_state"] = "EXECUTED" if executed else "BLOCKED_VALIDATION"
+        row["reason"] = (
+            "Research-only Workbench campaign emitted backtest evidence with explicit available-data coverage; "
+            f"campaign_status={result_status}; events_ran={events_ran}."
+            if executed
+            else (
+                "Research-only Workbench campaign did not emit accepted backtest evidence; "
+                f"campaign_status={result_status}; events_ran={events_ran}."
+            )
+        )
+        row["execution_status"] = "EXECUTED" if executed else "BLOCKED"
+        row["campaign_id"] = result_campaign_id
+        row["campaign_status"] = result_status
+        row["artifact_dir"] = artifact_dir
+        execution_results.append(
+            {
+                "model_id": model_id,
+                "symbol": symbol,
+                "status": "EXECUTED" if executed else "BLOCKED",
+                "campaign_id": result_campaign_id,
+                "campaign_status": result_status,
+                "artifact_dir": artifact_dir,
+                "events_ran": events_ran,
+            }
+        )
+    plan["terminal_counts"] = {state: 0 for state in sorted(TERMINAL_STATES)}
+    for row in plan.get("models", []):
+        if isinstance(row, dict) and row.get("terminal_state") in plan["terminal_counts"]:
+            plan["terminal_counts"][row["terminal_state"]] += 1
+    plan["execution_results"] = execution_results
+    return execution_results
+
+
+def _execution_result_counts(execution_results: list[dict[str, Any]]) -> dict[str, int]:
+    return {
+        "executed_count": sum(1 for result in execution_results if result.get("status") == "EXECUTED"),
+        "skipped_count": sum(1 for result in execution_results if result.get("status") == "SKIPPED"),
+        "blocked_count": sum(1 for result in execution_results if result.get("status") == "BLOCKED"),
+        "error_count": sum(1 for result in execution_results if result.get("status") == "ERROR"),
+    }
+
+
+def _execution_state(
+    *,
+    execute: bool,
+    counts: dict[str, int],
+    execution_blocked_reason: str,
+) -> str:
+    if not execute:
+        return "planned"
+    if execution_blocked_reason:
+        return "blocked"
+    if counts["executed_count"] > 0 and counts["blocked_count"] == 0 and counts["error_count"] == 0:
+        return "executed"
+    if counts["executed_count"] > 0:
+        return "partial"
+    if counts["blocked_count"] or counts["error_count"]:
+        return "blocked"
+    return "skipped"
+
+
+def _model_execution_gate(
+    *,
+    execute: bool,
+    counts: dict[str, int],
+    execution_blocked_reason: str,
+) -> dict[str, Any]:
+    if not execute:
+        status = "PENDING"
+        reason = "No model backtest/replay evidence has been emitted for this active run."
+    elif execution_blocked_reason:
+        status = "BLOCKED"
+        reason = execution_blocked_reason
+    elif counts["executed_count"] > 0 and counts["blocked_count"] == 0 and counts["error_count"] == 0:
+        status = "RESEARCH_ONLY_EXECUTED"
+        reason = "Eligible available-data models emitted Workbench campaign evidence with safe research-only kwargs."
+    elif counts["executed_count"] > 0:
+        status = "PARTIAL_RESEARCH_EXECUTION"
+        reason = "Some eligible available-data models emitted campaign evidence; others blocked or errored."
+    elif counts["blocked_count"] or counts["error_count"]:
+        status = "BLOCKED"
+        reason = "No eligible available-data model emitted accepted campaign evidence."
+    else:
+        status = "SKIPPED"
+        reason = "No plan row was eligible for available-data research execution."
+    return {
+        "gate": "model_execution",
+        "status": status,
+        "reason": reason,
+        **counts,
+    }
+
+
+def _build_summary(
+    plan: dict[str, Any],
+    run_id: str,
+    *,
+    execute: bool,
+    execution_results: list[dict[str, Any]],
+    execution_blocked_reason: str = "",
+) -> dict[str, Any]:
+    counts = _execution_result_counts(execution_results)
+    state = _execution_state(
+        execute=execute,
+        counts=counts,
+        execution_blocked_reason=execution_blocked_reason,
+    )
+    decision_reason = (
+        "All-lane run attempted eligible available-data research campaigns only; promotion remains blocked."
+        if execute
+        else "All-lane run has a clean model plan; model execution evidence has not been emitted yet."
+    )
+    if execution_blocked_reason:
+        decision_reason = execution_blocked_reason
+    return {
+        "schema_version": "workbench_all_lanes_summary_v1",
+        "run_id": run_id,
+        "state": state,
+        "current_stage": "model_execution_campaigns" if execute else "model_execution_plan",
+        "planned_model_count": plan["model_count"],
+        "registered_lane_count": plan.get("registered_lane_count", len(plan.get("lanes", []))),
+        "lane_model_counts": plan.get("lane_model_counts", {}),
+        "lane_coverage_gates": plan.get("lane_coverage_gates", []),
+        "model_gap_gates": plan.get("model_gap_gates", []),
+        "model_universe_status": plan.get("model_universe_status", "PLANNED"),
+        "terminal_counts": plan["terminal_counts"],
+        "execution_results": execution_results,
+        "decision_action": "BLOCKED",
+        "decision_reason": decision_reason,
+        "blocking_gates": [
+            *list(plan.get("lane_coverage_gates", [])),
+            *list(plan.get("model_gap_gates", [])),
+            _model_execution_gate(
+                execute=execute,
+                counts=counts,
+                execution_blocked_reason=execution_blocked_reason,
+            ),
+        ],
+    }
 
 
 def _config_payload(registration: Any) -> tuple[dict[str, Any], str]:
@@ -331,27 +625,42 @@ def build_all_lanes_plan(repo: Path, run_id: str) -> dict[str, Any]:
                 "authority_refs": list(_Q001_AUTHORITY_REFS),
                 "skip_or_rejection_required": True,
             }
-        models.append(
-            {
-                "run_id": run_id,
-                "model_id": model_id,
-                "lane": lane,
-                "campaign_mode": str(binding.get("campaign_mode") or ""),
-                "role": (
-                    str(structural_config.get("role"))
-                    if structural_config
-                    else getattr(catalog_entry, "role", "")
-                    if catalog_entry
-                    else ""
-                ),
-                "display_name": display_name,
-                **config_payload,
-                "terminal_state": terminal_state,
-                "reason": reason,
-                "evidence_scope": "all_lanes_plan_no_previous_run_artifacts",
-                **data_scope_fields,
-            }
-        )
+        execution_symbol = _binding_execution_symbol(binding)
+        execution_block_reason = ""
+        if lane in lane_config_errors:
+            execution_block_reason = f"lane_config_failed:{lane_config_errors[lane]}"
+        elif terminal_state != _EXECUTION_ELIGIBLE_STATE:
+            execution_block_reason = str(data_scope_fields.get("reason_code") or terminal_state)
+        elif data_scope_fields.get("available_data_policy") != _EXECUTION_ELIGIBLE_POLICY:
+            execution_block_reason = str(
+                data_scope_fields.get("q001_policy_warning") or "available_data_policy_not_accepted"
+            )
+        elif not execution_symbol:
+            execution_block_reason = "missing_explicit_workbench_symbol"
+        row = {
+            "run_id": run_id,
+            "model_id": model_id,
+            "lane": lane,
+            "campaign_mode": str(binding.get("campaign_mode") or ""),
+            "role": (
+                str(structural_config.get("role"))
+                if structural_config
+                else getattr(catalog_entry, "role", "")
+                if catalog_entry
+                else ""
+            ),
+            "display_name": display_name,
+            **config_payload,
+            "terminal_state": terminal_state,
+            "reason": reason,
+            "evidence_scope": "all_lanes_plan_no_previous_run_artifacts",
+            "execution_eligible": execution_block_reason == "",
+            "execution_block_reason": execution_block_reason,
+            **data_scope_fields,
+        }
+        if execution_symbol:
+            row["symbol"] = execution_symbol
+        models.append(row)
 
     terminal_counts = {state: 0 for state in sorted(TERMINAL_STATES)}
     for row in models:
@@ -391,14 +700,13 @@ def build_all_lanes_plan(repo: Path, run_id: str) -> dict[str, Any]:
 def run_all_lanes(repo: Path, run_id: str, *, execute: bool = False) -> dict[str, Any]:
     """Write all-lane run artifacts.
 
-    v1 is intentionally conservative: it creates the no-leakage execution plan
-    and terminal-state rows. Real model execution can fill the same run-scoped
-    artifacts later without changing the Workbench evidence contract.
+    Planning mode creates the no-leakage execution plan and terminal-state rows.
+    Execution mode hands eligible available-data rows to the existing Workbench
+    campaign runner without enabling downloads, trial mode, paper, or live routing.
     """
 
-    if execute:
-        raise NotImplementedError("all-lane model execution is not wired in this conservative planning pass")
     plan = build_all_lanes_plan(repo, run_id)
+    execution_results: list[dict[str, Any]] = []
     run_dir = repo / "runtime" / "workbench" / "all_lanes" / run_id
     rejected_stale = {}
     rejected_stale_path = run_dir / "rejected_stale_artifacts.json"
@@ -408,31 +716,6 @@ def run_all_lanes(repo: Path, run_id: str, *, execute: bool = False) -> dict[str
         except json.JSONDecodeError:
             rejected_stale = {}
     _write_json(run_dir / "plan.json", plan)
-    summary = {
-        "schema_version": "workbench_all_lanes_summary_v1",
-        "run_id": run_id,
-        "state": "planned",
-        "current_stage": "model_execution_plan",
-        "planned_model_count": plan["model_count"],
-        "registered_lane_count": plan.get("registered_lane_count", len(plan.get("lanes", []))),
-        "lane_model_counts": plan.get("lane_model_counts", {}),
-        "lane_coverage_gates": plan.get("lane_coverage_gates", []),
-        "model_gap_gates": plan.get("model_gap_gates", []),
-        "model_universe_status": plan.get("model_universe_status", "PLANNED"),
-        "terminal_counts": plan["terminal_counts"],
-        "decision_action": "BLOCKED",
-        "decision_reason": "All-lane run has a clean model plan; model execution evidence has not been emitted yet.",
-        "blocking_gates": [
-            *list(plan.get("lane_coverage_gates", [])),
-            *list(plan.get("model_gap_gates", [])),
-            {
-                "gate": "model_execution",
-                "status": "PENDING",
-                "reason": "No model backtest/replay evidence has been emitted for this active run.",
-            }
-        ],
-    }
-    _write_json(run_dir / "summary.json", summary)
     _write_json(
         rejected_stale_path,
         rejected_stale
@@ -444,9 +727,27 @@ def run_all_lanes(repo: Path, run_id: str, *, execute: bool = False) -> dict[str
             "rejected_count": 0,
         },
     )
+    summary = _build_summary(plan, run_id, execute=False, execution_results=[])
+    _write_json(run_dir / "summary.json", summary)
     from workbench.src.run.leakage_detector import run_leakage_detection
 
     leakage = run_leakage_detection(repo, run_id=run_id)
+    execution_blocked_reason = ""
+    if execute:
+        if leakage.get("status") != "PASS":
+            execution_blocked_reason = "Leakage detector failed before model execution; campaigns were not started."
+        elif plan.get("lane_coverage_gates") or plan.get("model_gap_gates"):
+            execution_blocked_reason = "All-lane plan has blocking lane or model-gap gates; campaigns were not started."
+        else:
+            execution_results = _execute_available_data_models(repo, plan, run_id)
+            _write_json(run_dir / "plan.json", plan)
+    summary = _build_summary(
+        plan,
+        run_id,
+        execute=execute,
+        execution_results=execution_results,
+        execution_blocked_reason=execution_blocked_reason,
+    )
     summary["leakage_detection_status"] = leakage.get("status", "FAIL")
     summary["leakage_detection_path"] = (leakage.get("artifact_paths") or {}).get("json", "")
     summary["leakage_detection_blockers"] = leakage.get("blocking", [])
