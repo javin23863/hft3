@@ -17,3 +17,7 @@ CME M6 sweep control plan (queued full-scope research sweep + latency evidence):
 Project planning control standard: **[docs/project/PROJECT_PLANNING_STANDARD.md](project/PROJECT_PLANNING_STANDARD.md)** · **[docs/project/CANONICAL_PROJECT_PLAN.md](project/CANONICAL_PROJECT_PLAN.md)** · **[docs/project/FEATURE_LITERATURE_TRACEABILITY_MATRIX.md](project/FEATURE_LITERATURE_TRACEABILITY_MATRIX.md)** · **[docs/project/ACCEPTANCE_CHECKLIST.md](project/ACCEPTANCE_CHECKLIST.md)** · **[docs/project/OPEN_QUESTIONS_AND_REJECTIONS.md](project/OPEN_QUESTIONS_AND_REJECTIONS.md)**
 
 Q001 owner-decision/status: **[docs/project/Q001_OWNER_DECISION_PACKET.md](project/Q001_OWNER_DECISION_PACKET.md)** (`ACCEPTED_AVAILABLE_DATA_SCOPE`) · **[docs/project/Q001_DATA_INVENTORY_STATUS.md](project/Q001_DATA_INVENTORY_STATUS.md)** (`ACCEPTED_AVAILABLE_DATA_SCOPE`)
+
+Repo-location consolidation: **[docs/ops/REPO_LOCATION_CONSOLIDATION.md](ops/REPO_LOCATION_CONSOLIDATION.md)**
+
+Repo clone inventory: **[docs/ops/REPO_CLONE_INVENTORY_20260615.md](ops/REPO_CLONE_INVENTORY_20260615.md)**

@@ -1,7 +1,8 @@
 # HFT3 Pipeline Audit — Current State (Phase 1)
 
 > Generated from a read-only sweep of the HFT3 repository on 2026-06-02.
-> Source paths are absolute and start at `C:\Users\MSI\Documents\opencode\hft3\`.
+> Historical source paths start at `C:\Users\MSI\Documents\opencode\hft3\`.
+> Current canonical working tree is `C:\Users\MSI\repos\hft3\`.
 
 ## Executive summary
 
