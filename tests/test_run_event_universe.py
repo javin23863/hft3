@@ -377,6 +377,424 @@ def _fake_hyp_results_for(hypotheses, npz_path: str, *, latency_ms: float = 1.0,
     }
 
 
+def _checkpoint_row(
+    event_id: str,
+    *,
+    npz_path: str | None = None,
+    npz_fingerprint: dict[str, Any] | None = None,
+    event_type: str = "CPI",
+    release_date: str = "2024-01-10",
+    event_fingerprint: str | None = None,
+    hyp_ids: list[int] | None = None,
+    expected_hypothesis_ids: list[int] | None = None,
+    sensor_feature_fingerprints: dict[str, Any] | None = None,
+    error: str | None = None,
+    skip_reason: str | None = None,
+    hypotheses: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    row_npz_path = npz_path or f"/fake/{event_id}.npz"
+    return {
+        "run_id": f"run_{event_id}",
+        "event_id": event_id,
+        "symbol": "MES.v.0",
+        "npz_path": row_npz_path,
+        "npz_fingerprint": npz_fingerprint or {
+            "path": row_npz_path,
+            "size": 1000,
+            "mtime_ns": 123456789,
+            "sha256": f"sha:{event_id}:v1",
+        },
+        "sensor_feature_fingerprints": sensor_feature_fingerprints or {},
+        "latency_ms": 1.0,
+        "event_type": event_type,
+        "release_date": release_date,
+        "event_fingerprint": event_fingerprint or f"event-fp:{event_id}:v1",
+        "hyp_ids": hyp_ids,
+        "expected_hypothesis_ids": expected_hypothesis_ids or [1],
+        "elapsed_s": 0.01,
+        "error": error,
+        "skip_reason": skip_reason,
+        "hypotheses": hypotheses if hypotheses is not None else ([] if skip_reason or error else [{
+            "hypothesis_id": 1,
+            "hypothesis_name": "cached_hyp",
+            "net_pnl_usd": 0.1,
+            "num_trades": 2,
+            "win_rate": 0.6,
+            "expectancy_usd": 0.05,
+            "adverse_selection_ticks": 0.1,
+            "tail_loss_usd": -0.02,
+            "fee_per_round_trip_usd": 1.24,
+            "tick_value_usd": 1.25,
+        }]),
+    }
+
+
+class TestResumeCheckpoint:
+    def _unit(self, event_id: str, *, npz_path: str | None = None) -> dict[str, Any]:
+        unit_npz_path = npz_path or f"/fake/{event_id}.npz"
+        return {
+            "event_id": event_id,
+            "symbol": "MES.v.0",
+            "npz_path": unit_npz_path,
+            "npz_fingerprint": {
+                "path": unit_npz_path,
+                "size": 1000,
+                "mtime_ns": 123456789,
+                "sha256": f"sha:{event_id}:v1",
+            },
+            "sensor_feature_fingerprints": {},
+            "latency_ms": 1.0,
+            "event_type": "CPI",
+            "release_date": "2024-01-10",
+            "event_fingerprint": f"event-fp:{event_id}:v1",
+            "hyp_ids": None,
+            "expected_hypothesis_ids": [1],
+        }
+
+    def test_checkpoint_source_hashes_include_replay_modules(self, universe_mod):
+        hashes = universe_mod._checkpoint_source_hashes()
+
+        assert "packages/replay/replay_session.py" in hashes
+        assert "packages/execution/adapter_factory.py" in hashes
+        assert len(hashes["packages/replay/replay_session.py"]) == 64
+
+    def test_embargoed_rows_do_not_resolve_sensor_features(self, universe_mod, tmp_path, monkeypatch):
+        events = tmp_path / "events.csv"
+        events.write_text(
+            "event_id,event_type,release_date,release_time,timezone,window_name,start_offset_seconds,end_offset_seconds,symbols,priority,source,source_url,effective_date,notes,row_status\n"
+            "FUTURE_EVT,CPI,2026-01-02,08:30:00,America/New_York,TIGHT,-30,300,\"MES.v.0\",50,TEST,http://example.com,2024-01-01,test,SOURCED\n",
+            encoding="utf-8",
+        )
+
+        def _boom(_event_id):
+            raise AssertionError("sensor lookup must not touch embargoed rows")
+
+        monkeypatch.setattr(universe_mod, "_sensor_feature_fingerprints", _boom)
+        work_units, skipped = universe_mod.build_work_units(
+            events,
+            {("MES.v.0", "FUTURE_EVT"): "/must/not/hash.npz"},
+            latency_bands=[1.0],
+            event_type_filter=None,
+            symbol_filter=["MES.v.0"],
+            max_events=None,
+        )
+
+        assert work_units == []
+        assert skipped[0]["reason"] == "embargo_2026"
+
+    def test_checkpoint_loader_reuses_only_current_non_errored_rows(self, universe_mod, tmp_path):
+        checkpoint = tmp_path / "unit_results.jsonl"
+        ok_row = _checkpoint_row("AAA_EVT_A")
+        skip_row = _checkpoint_row("SKIP_EVT", skip_reason="empty_npz")
+        error_row = _checkpoint_row("ERR_EVT", error="boom")
+        mismatched_npz_path_row = _checkpoint_row("MISMATCH_NPZ_PATH_EVT", npz_path="/old/MISMATCH_EVT.npz")
+        mismatched_npz_fp_row = _checkpoint_row(
+            "MISMATCH_NPZ_FP_EVT",
+            npz_fingerprint={
+                "path": "/fake/MISMATCH_NPZ_FP_EVT.npz",
+                "size": 1000,
+                "mtime_ns": 123456789,
+                "sha256": "sha:MISMATCH_NPZ_FP_EVT:old",
+            },
+        )
+        mismatched_event_fp_row = _checkpoint_row(
+            "MISMATCH_EVENT_FP_EVT",
+            event_fingerprint="event-fp:MISMATCH_EVENT_FP_EVT:old",
+        )
+        mismatched_sensor_fp_row = _checkpoint_row(
+            "MISMATCH_SENSOR_FP_EVT",
+            sensor_feature_fingerprints={
+                "VIX": {
+                    "path": "/fake/VIX.OPT_MISMATCH_SENSOR_FP_EVT_features_v1.npz",
+                    "size": 2000,
+                    "mtime_ns": 10,
+                    "sha256": "old-vix",
+                }
+            },
+        )
+        malformed_hyp_row = _checkpoint_row("BAD_HYP_EVT", hypotheses=[{"hypothesis_id": 1}])
+        missing_expected_hyp_row = _checkpoint_row(
+            "MISSING_EXPECTED_HYP_EVT",
+            expected_hypothesis_ids=[1, 2],
+        )
+        duplicate_expected_hyp_row = _checkpoint_row(
+            "DUP_EXPECTED_HYP_EVT",
+            expected_hypothesis_ids=[1, 1],
+        )
+        stale_row = _checkpoint_row("STALE_EVT")
+        checkpoint.write_text(
+            "\n".join([
+                json.dumps(ok_row),
+                json.dumps(skip_row),
+                json.dumps(error_row),
+                json.dumps(mismatched_npz_path_row),
+                json.dumps(mismatched_npz_fp_row),
+                json.dumps(mismatched_event_fp_row),
+                json.dumps(mismatched_sensor_fp_row),
+                json.dumps(malformed_hyp_row),
+                json.dumps(missing_expected_hyp_row),
+                json.dumps(duplicate_expected_hyp_row),
+                "{truncated",
+                json.dumps({"event_id": "NO_SYMBOL"}),
+                json.dumps({"event_id": "MISSING_EVT", "symbol": "MES.v.0", "latency_ms": 1.0}),
+                json.dumps(stale_row),
+            ]) + "\n",
+            encoding="utf-8",
+        )
+        work_units = [
+            self._unit("AAA_EVT_A"),
+            self._unit("SKIP_EVT"),
+            self._unit("ERR_EVT"),
+            self._unit("MISMATCH_NPZ_PATH_EVT", npz_path="/new/MISMATCH_EVT.npz"),
+            self._unit("MISMATCH_NPZ_FP_EVT"),
+            self._unit("MISMATCH_EVENT_FP_EVT"),
+            {
+                **self._unit("MISMATCH_SENSOR_FP_EVT"),
+                "sensor_feature_fingerprints": {
+                    "VIX": {
+                        "path": "/fake/VIX.OPT_MISMATCH_SENSOR_FP_EVT_features_v1.npz",
+                        "size": 2000,
+                        "mtime_ns": 10,
+                        "sha256": "new-vix",
+                    }
+                },
+            },
+            self._unit("BAD_HYP_EVT"),
+            {**self._unit("MISSING_EXPECTED_HYP_EVT"), "expected_hypothesis_ids": [1, 2]},
+            {**self._unit("DUP_EXPECTED_HYP_EVT"), "expected_hypothesis_ids": [1, 1]},
+            self._unit("MISSING_EVT"),
+        ]
+
+        loaded = universe_mod._load_checkpoint_results(checkpoint, work_units)
+
+        assert set(loaded) == {"AAA_EVT_A|MES.v.0|1.0", "SKIP_EVT|MES.v.0|1.0"}
+        assert loaded["AAA_EVT_A|MES.v.0|1.0"]["event_id"] == "AAA_EVT_A"
+        assert loaded["SKIP_EVT|MES.v.0|1.0"]["skip_reason"] == "empty_npz"
+
+    def test_checkpoint_context_rescan_mismatch_invalidates_cache(self, universe_mod, tmp_path):
+        checkpoint = tmp_path / "unit_results.jsonl"
+        checkpoint.write_text(json.dumps(_checkpoint_row("AAA_EVT_A")) + "\n", encoding="utf-8")
+        old_context = universe_mod._checkpoint_context({
+            "lane": "cme",
+            "events_csv": "events.csv",
+            "rescan": False,
+        })
+        current_context = universe_mod._checkpoint_context({
+            "lane": "cme",
+            "events_csv": "events.csv",
+            "rescan": True,
+        })
+        universe_mod._checkpoint_context_path(checkpoint).write_text(
+            json.dumps(old_context, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
+        loaded = universe_mod._prepare_checkpoint_results(
+            checkpoint,
+            [self._unit("AAA_EVT_A")],
+            current_context,
+        )
+
+        assert loaded == {}
+        assert checkpoint.read_text(encoding="utf-8") == ""
+        stored = json.loads(universe_mod._checkpoint_context_path(checkpoint).read_text(encoding="utf-8"))
+        assert stored["cli_args"]["rescan"] is True
+
+    def test_main_reuses_checkpoint_and_reruns_error_or_malformed_entries(
+        self, tmp_path, events_csv, minimal_npz, minimal_npz_b, monkeypatch
+    ):
+        import backtest_pipeline.src.replay_matrix as _rm
+        _orig = _rm.run_all_hypotheses_replay
+
+        mod = _load_fresh_universe_mod("run_event_universe_resume")
+        monkeypatch.setattr(mod, "DEFAULT_CHI404_SUMMARY", tmp_path / "missing_chi404_summary.json")
+        mod.load_lake_index = lambda _, rescan=False: {
+            ("MES.v.0", "AAA_EVT_A"): str(minimal_npz),
+            ("MES.v.0", "BBB_EVT_B"): str(minimal_npz_b),
+        }
+        argv = [
+            "--events-csv", str(events_csv),
+            "--symbols", "MES.v.0",
+            "--workers", "1",
+            "--bands", "1.0",
+            "--max-events", "2",
+        ]
+        cli_args = {
+            "lane": "cme",
+            "bands_override": "1.0",
+            "event_type": None,
+            "symbols": "MES.v.0",
+            "events_csv": str(events_csv),
+            "rescan": False,
+            "workers": 1,
+            "max_events": 2,
+            "from_stage_a": None,
+            "from_stage_a_sha256": None,
+            "cells": None,
+            "shard": None,
+            "shard_index": None,
+            "shard_total": None,
+        }
+        out_dir = tmp_path / "resume_out"
+        out_dir.mkdir()
+        checkpoint = out_dir / "unit_results.jsonl"
+        clean_dir = tmp_path / "clean_out"
+
+        try:
+            _rm.run_all_hypotheses_replay = _fake_hyp_results_for  # type: ignore[assignment]
+            clean_rc = mod.main([*argv, "--out", str(clean_dir)])
+            clean_payload = json.loads((clean_dir / "universe_result.json").read_text(encoding="utf-8"))
+            cached_aaa = next(row for row in clean_payload["unit_results"] if row["event_id"] == "AAA_EVT_A")
+            cached_bbb_error = next(row for row in clean_payload["unit_results"] if row["event_id"] == "BBB_EVT_B")
+            cached_bbb_error = {
+                **cached_bbb_error,
+                "error": "previous failure",
+                "hypotheses": [],
+            }
+            checkpoint.write_text(
+                "\n".join([
+                    json.dumps(cached_aaa),
+                    json.dumps(cached_bbb_error),
+                    "{truncated",
+                ]) + "\n",
+                encoding="utf-8",
+            )
+            mod._checkpoint_context_path(checkpoint).write_text(
+                json.dumps(mod._checkpoint_context(cli_args), indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            rc = mod.main([*argv, "--out", str(out_dir)])
+        finally:
+            _rm.run_all_hypotheses_replay = _orig
+
+        assert clean_rc == 0
+        assert rc == 0
+        payload = json.loads((out_dir / "universe_result.json").read_text(encoding="utf-8"))
+        by_event = {row["event_id"]: row for row in payload["unit_results"]}
+        assert set(by_event) == {"AAA_EVT_A", "BBB_EVT_B"}
+        assert by_event["AAA_EVT_A"]["run_id"] == cached_aaa["run_id"]
+        assert by_event["BBB_EVT_B"]["error"] is None
+        assert payload["aggregated"] == clean_payload["aggregated"]
+        assert payload["checkpoint"]["reused_units"] == 1
+        assert payload["checkpoint"]["new_units"] == 1
+
+        lines = checkpoint.read_text(encoding="utf-8").splitlines()
+        completed_rows = [
+            json.loads(line) for line in lines
+            if line.startswith("{") and not line.startswith("{truncated")
+        ]
+        assert [row["event_id"] for row in completed_rows].count("BBB_EVT_B") == 2
+
+    def test_reused_ok_does_not_hide_fresh_failfast(
+        self, tmp_path, events_csv, minimal_npz, minimal_npz_b, monkeypatch
+    ):
+        import backtest_pipeline.src.replay_matrix as _rm
+        _orig = _rm.run_all_hypotheses_replay
+
+        mod = _load_fresh_universe_mod("run_event_universe_failfast_resume")
+        monkeypatch.setattr(mod, "DEFAULT_CHI404_SUMMARY", tmp_path / "missing_chi404_summary.json")
+        monkeypatch.setenv("HFT3_UNIVERSE_FAILFAST_ERRORS", "1")
+        mod.load_lake_index = lambda _, rescan=False: {
+            ("MES.v.0", "AAA_EVT_A"): str(minimal_npz),
+            ("MES.v.0", "BBB_EVT_B"): str(minimal_npz_b),
+        }
+        argv = [
+            "--events-csv", str(events_csv),
+            "--symbols", "MES.v.0",
+            "--workers", "1",
+            "--bands", "1.0",
+            "--max-events", "2",
+        ]
+        cli_args = {
+            "lane": "cme",
+            "bands_override": "1.0",
+            "event_type": None,
+            "symbols": "MES.v.0",
+            "events_csv": str(events_csv),
+            "rescan": False,
+            "workers": 1,
+            "max_events": 2,
+            "from_stage_a": None,
+            "from_stage_a_sha256": None,
+            "cells": None,
+            "shard": None,
+            "shard_index": None,
+            "shard_total": None,
+        }
+        clean_dir = tmp_path / "clean_failfast_seed"
+        out_dir = tmp_path / "resume_failfast"
+        out_dir.mkdir()
+        checkpoint = out_dir / "unit_results.jsonl"
+
+        def _failing_replay(*args, **kwargs):
+            raise RuntimeError("fresh replay failure")
+
+        try:
+            _rm.run_all_hypotheses_replay = _fake_hyp_results_for  # type: ignore[assignment]
+            clean_rc = mod.main([*argv, "--out", str(clean_dir)])
+            clean_payload = json.loads((clean_dir / "universe_result.json").read_text(encoding="utf-8"))
+            cached_aaa = next(row for row in clean_payload["unit_results"] if row["event_id"] == "AAA_EVT_A")
+            checkpoint.write_text(json.dumps(cached_aaa) + "\n", encoding="utf-8")
+            mod._checkpoint_context_path(checkpoint).write_text(
+                json.dumps(mod._checkpoint_context(cli_args), indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            _rm.run_all_hypotheses_replay = _failing_replay  # type: ignore[assignment]
+            rc = mod.main([*argv, "--out", str(out_dir)])
+        finally:
+            _rm.run_all_hypotheses_replay = _orig
+
+        assert clean_rc == 0
+        assert rc == 2
+        payload = json.loads((out_dir / "universe_result.json").read_text(encoding="utf-8"))
+        assert payload["status"] == "ABORTED_NO_PROGRESS"
+        assert payload["units_processed"] == 1
+        assert payload["units_errored"] == 1
+
+    def test_worker_rejects_incomplete_hypothesis_results(self, tmp_path, minimal_npz, monkeypatch):
+        import backtest_pipeline.src.replay_matrix as _rm
+        _orig = _rm.run_all_hypotheses_replay
+
+        from backtest_pipeline.src.backtest_result import BacktestResult
+
+        mod = _load_fresh_universe_mod("run_event_universe_incomplete_hyps")
+
+        def _one_result(_hyps, _npz_path, *, latency_ms=1.0, **_kw):
+            return {
+                1: BacktestResult(
+                    hypothesis_id=1,
+                    net_pnl=0.1,
+                    num_trades=2,
+                    win_rate=0.6,
+                    expectancy=0.05,
+                    adverse_selection_ticks=0.1,
+                    tail_loss=-0.02,
+                )
+            }
+
+        try:
+            _rm.run_all_hypotheses_replay = _one_result  # type: ignore[assignment]
+            row = mod._worker({
+                "event_id": "AAA_EVT_A",
+                "symbol": "MES.v.0",
+                "npz_path": str(minimal_npz),
+                "npz_fingerprint": mod._npz_fingerprint(str(minimal_npz)),
+                "sensor_feature_fingerprints": {},
+                "latency_ms": 1.0,
+                "event_type": "CPI",
+                "release_date": "2024-01-10",
+                "event_fingerprint": "event-fp",
+                "hyp_ids": [1, 2],
+                "expected_hypothesis_ids": [1, 2],
+            })
+        finally:
+            _rm.run_all_hypotheses_replay = _orig
+
+        assert row["error"]
+        assert "expected [1, 2]" in row["error"]
+        assert row["hypotheses"] == []
+
+
 class TestEndToEndSmoke:
     def test_main_single_event_mocked_replay(self, tmp_path, events_csv, minimal_npz):
         """Call main() with mocked run_all_hypotheses_replay; verify JSON/MD outputs and schema.

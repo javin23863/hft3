@@ -75,6 +75,30 @@ Q001_MBO_PILOT_MANIFEST = (
 DEFAULT_SYMBOL = "MES.v.0"
 NPZ_PATTERN = re.compile(r"^(?P<symbol>.+?)_(?P<event_id>.+)_mbo\.npz$")
 RESEARCH_EMBARGO_START = "2026-01-01"  # ALPHA_CME.md §4 / DEPLOYMENT.md §4.2: research sweeps must never read data >= this date; first 2026 touch is the M9 paper-shadow bundle.
+CHECKPOINT_SOURCE_GLOBS = (
+    "scripts/run_event_universe.py",
+    "packages/backtest_pipeline/src/**/*.py",
+    "packages/execution/**/*.py",
+    "packages/features_engine/src/**/*.py",
+    "packages/replay/**/*.py",
+    "packages/trade_manager/**/*.py",
+)
+CHECKPOINT_SKIP_REASONS = frozenset({"empty_npz"})
+CHECKPOINT_ENV_KEYS = (
+    "HFT3_CROSS_ASSET",
+    "HFT3_FEATURE_BACKEND",
+    "HFT3_FEATURE_ROOT",
+    "HFT3_QUOTE_STEPPING",
+    "HFT3_SCRATCH_HYP_REGISTRY",
+)
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -252,6 +276,87 @@ def _q001_gap_reason_map(
     return gap_reasons
 
 
+EVENT_FINGERPRINT_FIELDS = (
+    "event_id",
+    "event_type",
+    "release_date",
+    "release_time",
+    "timezone",
+    "window_name",
+    "start_offset_seconds",
+    "end_offset_seconds",
+    "symbols",
+    "priority",
+    "source",
+    "source_url",
+    "effective_date",
+    "notes",
+    "row_status",
+)
+
+
+def _event_row_fingerprint(row: dict[str, str]) -> str:
+    payload = {field: str(row.get(field, "")) for field in EVENT_FINGERPRINT_FIELDS}
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _npz_fingerprint(path: str, cache: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
+    if cache is not None and path in cache:
+        return cache[path]
+    p = Path(path)
+    st = p.stat()
+    fingerprint = {
+        "path": str(p),
+        "size": int(st.st_size),
+        "mtime_ns": int(st.st_mtime_ns),
+        "sha256": _file_sha256(p),
+    }
+    if cache is not None:
+        cache[path] = fingerprint
+    return fingerprint
+
+
+def _sensor_feature_fingerprints(event_id: str) -> dict[str, dict[str, Any]]:
+    vix_path = _vix_feature_path(event_id)
+    if vix_path is None:
+        return {}
+    return {"VIX": _npz_fingerprint(str(vix_path))}
+
+
+def _stamp_expected_hypothesis_ids(work_units: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    from features_engine.src.hypotheses.registry import get_active_hypotheses
+
+    active_ids = sorted(int(h.hyp_id) for h in get_active_hypotheses())
+    stamped: list[dict[str, Any]] = []
+    for unit in work_units:
+        hyp_ids_filter = unit.get("hyp_ids")
+        if hyp_ids_filter is None:
+            expected_ids = active_ids
+        else:
+            allowed = {int(h) for h in hyp_ids_filter}
+            expected_ids = [h for h in active_ids if h in allowed]
+        stamped.append({**unit, "expected_hypothesis_ids": expected_ids})
+    return stamped
+
+
+def _validate_requested_hypothesis_ids(
+    per_etype_hyp_ids: dict[str, set[int]] | None,
+    *,
+    p: argparse.ArgumentParser,
+) -> None:
+    if per_etype_hyp_ids is None:
+        return
+    from features_engine.src.hypotheses.registry import get_active_hypotheses
+
+    active_ids = {int(h.hyp_id) for h in get_active_hypotheses()}
+    for etype, hyp_ids in sorted(per_etype_hyp_ids.items()):
+        requested = [int(h) for h in hyp_ids]
+        missing = sorted(set(requested) - active_ids)
+        if missing:
+            p.error(f"Stage-A filter references inactive/missing hyp_ids for event_type={etype}: {missing}")
+
+
 def build_work_units(
     events_csv: Path,
     lake_index: dict[tuple[str, str], str],
@@ -273,6 +378,8 @@ def build_work_units(
     work: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
     _empty_cache: dict[str, bool] = {}  # npz_path -> is-empty (built-time skip)
+    _npz_fingerprint_cache: dict[str, dict[str, Any]] = {}
+    _sensor_fingerprint_cache: dict[str, dict[str, dict[str, Any]]] = {}
     # max_events caps events that actually produce work units — truncating
     # the raw rows first would just select the alphabetically-first events
     # regardless of whether their NPZ exists.
@@ -285,6 +392,7 @@ def build_work_units(
             continue
 
         event_id = row["event_id"]
+        event_fingerprint = _event_row_fingerprint(row)
         candidate_symbols = _parse_symbols(row.get("symbols", DEFAULT_SYMBOL))
         if symbol_filter:
             candidate_symbols = [s for s in candidate_symbols if s in symbol_filter]
@@ -304,6 +412,10 @@ def build_work_units(
                         "reason": "embargo_2026",
                     })
             continue
+
+        if event_id not in _sensor_fingerprint_cache:
+            _sensor_fingerprint_cache[event_id] = _sensor_feature_fingerprints(event_id)
+        sensor_feature_fingerprints = _sensor_fingerprint_cache[event_id]
 
         has_any_npz = any(
             lake_index.get((symbol, event_id)) is not None
@@ -356,9 +468,12 @@ def build_work_units(
                         "event_id": event_id,
                         "symbol": symbol,
                         "npz_path": npz_path,
+                        "npz_fingerprint": _npz_fingerprint(npz_path, _npz_fingerprint_cache),
+                        "sensor_feature_fingerprints": sensor_feature_fingerprints,
                         "latency_ms": band,
                         "event_type": etype,
                         "release_date": release_date,
+                        "event_fingerprint": event_fingerprint,
                     })
                     events_with_work.add(event_id)
 
@@ -436,12 +551,15 @@ def _worker(unit: dict[str, Any]) -> dict[str, Any]:
     npz_path: str = unit["npz_path"]
     latency_ms: float = float(unit["latency_ms"])
     hyp_ids_filter: list[int] | None = unit.get("hyp_ids")
+    hyp_ids_checkpoint = sorted(int(h) for h in hyp_ids_filter) if hyp_ids_filter is not None else None
+    expected_hypothesis_ids = [int(h) for h in unit.get("expected_hypothesis_ids", [])]
 
     run_id = _det_id(npz_path, latency_ms, "LogProbQueueModel2")
 
-    vix_path = _vix_feature_path(event_id)
+    sensor_fingerprints = unit.get("sensor_feature_fingerprints", {})
     sensor_feature_npz: dict[str, str] | None = (
-        {"VIX": str(vix_path)} if vix_path is not None else None
+        {name: str(fp["path"]) for name, fp in sensor_fingerprints.items()}
+        if sensor_fingerprints else None
     )
 
     t0 = time.monotonic()
@@ -452,6 +570,11 @@ def _worker(unit: dict[str, Any]) -> dict[str, Any]:
         results = run_all_hypotheses_replay(
             hyps, npz_path, latency_ms=latency_ms, sensor_feature_npz=sensor_feature_npz
         )
+        result_ids = sorted(int(hyp_id) for hyp_id in results)
+        if result_ids != sorted(expected_hypothesis_ids):
+            raise RuntimeError(
+                f"replay returned hypothesis ids {result_ids}, expected {sorted(expected_hypothesis_ids)}"
+            )
         hyp_name_map = {h.hyp_id: h.name for h in hyps}
         # Derive fee_per_round_trip_usd from FeeModel for R6 fee-stress (post-hoc).
         # Uses the same product resolution as replay_matrix / stage_a_screen.
@@ -491,11 +614,17 @@ def _worker(unit: dict[str, Any]) -> dict[str, Any]:
             "event_id": event_id,
             "symbol": symbol,
             "npz_path": npz_path,
+            "npz_fingerprint": unit.get("npz_fingerprint"),
+            "sensor_feature_fingerprints": sensor_fingerprints,
             "latency_ms": latency_ms,
             "event_type": unit.get("event_type", ""),
             "release_date": unit.get("release_date", ""),
+            "event_fingerprint": unit.get("event_fingerprint", ""),
+            "hyp_ids": hyp_ids_checkpoint,
+            "expected_hypothesis_ids": expected_hypothesis_ids,
             "elapsed_s": round(elapsed, 3),
             "error": None,
+            "skip_reason": None,
             "hypotheses": serialized,
         }
     except Exception as exc:  # noqa: BLE001
@@ -510,9 +639,14 @@ def _worker(unit: dict[str, Any]) -> dict[str, Any]:
             "event_id": event_id,
             "symbol": symbol,
             "npz_path": npz_path,
+            "npz_fingerprint": unit.get("npz_fingerprint"),
+            "sensor_feature_fingerprints": sensor_fingerprints,
             "latency_ms": latency_ms,
             "event_type": unit.get("event_type", ""),
             "release_date": unit.get("release_date", ""),
+            "event_fingerprint": unit.get("event_fingerprint", ""),
+            "hyp_ids": hyp_ids_checkpoint,
+            "expected_hypothesis_ids": expected_hypothesis_ids,
             "elapsed_s": round(elapsed, 3),
             "error": None if is_empty else msg,
             "skip_reason": "empty_npz" if is_empty else None,
@@ -1042,6 +1176,202 @@ def _combined_skip_rows(
     return [*skipped, *_runtime_skip_rows(unit_results)]
 
 
+CHECKPOINT_SCHEMA = "universe_unit_results_checkpoint_v1"
+
+
+def _checkpoint_context_path(checkpoint_path: Path) -> Path:
+    return checkpoint_path.with_suffix(".context.json")
+
+
+def _checkpoint_source_hashes() -> dict[str, str]:
+    paths: set[Path] = set()
+    for pattern in CHECKPOINT_SOURCE_GLOBS:
+        paths.update(p for p in _REPO.glob(pattern) if p.is_file())
+    return {
+        str(path.relative_to(_REPO)).replace("\\", "/"): _file_sha256(path)
+        for path in sorted(paths)
+    }
+
+
+def _checkpoint_env_identity() -> dict[str, Any]:
+    env = {key: os.environ.get(key, "") for key in CHECKPOINT_ENV_KEYS}
+    scratch_path = env.get("HFT3_SCRATCH_HYP_REGISTRY", "").strip()
+    scratch_hash = None
+    if scratch_path:
+        try:
+            scratch_hash = _file_sha256(Path(scratch_path))
+        except OSError:
+            scratch_hash = "missing"
+    return {
+        "env": env,
+        "scratch_registry_sha256": scratch_hash,
+    }
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    with tmp.open("w", encoding="utf-8") as fh:
+        fh.write(text)
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(tmp, path)
+
+
+def _reset_checkpoint_context(checkpoint_path: Path, context: dict[str, Any]) -> None:
+    _atomic_write_text(checkpoint_path, "")
+    _atomic_write_text(
+        _checkpoint_context_path(checkpoint_path),
+        json.dumps(context, indent=2, sort_keys=True) + "\n",
+    )
+
+
+def _checkpoint_context(cli_args: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "schema": CHECKPOINT_SCHEMA,
+        "git_commit": _git_commit(_REPO),
+        "source_hashes": _checkpoint_source_hashes(),
+        "env_identity": _checkpoint_env_identity(),
+        "cli_args": cli_args,
+    }
+
+
+def _prepare_checkpoint_results(
+    checkpoint_path: Path,
+    work_units: list[dict[str, Any]],
+    context: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    context_path = _checkpoint_context_path(checkpoint_path)
+    try:
+        stored_context = json.loads(context_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        stored_context = None
+    if stored_context != context:
+        _reset_checkpoint_context(checkpoint_path, context)
+        return {}
+    return _load_checkpoint_results(checkpoint_path, work_units)
+
+
+def _load_checkpoint_results(
+    checkpoint_path: Path,
+    work_units: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    current_units = {_unit_shard_key(unit): unit for unit in work_units}
+    current_keys = set(current_units)
+    if not checkpoint_path.is_file() or not current_keys:
+        return {}
+
+    results: dict[str, dict[str, Any]] = {}
+    with checkpoint_path.open("r", encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            try:
+                key = _unit_shard_key(row)
+            except (KeyError, TypeError):
+                continue
+            if key in current_keys and _checkpoint_result_reusable(row, current_units[key]):
+                results[key] = row
+    return results
+
+
+def _checkpoint_result_reusable(row: dict[str, Any], current_unit: dict[str, Any]) -> bool:
+    if row.get("error"):
+        return False
+    required = (
+        "event_id",
+        "symbol",
+        "npz_path",
+        "npz_fingerprint",
+        "sensor_feature_fingerprints",
+        "latency_ms",
+        "event_type",
+        "release_date",
+        "event_fingerprint",
+        "hyp_ids",
+        "expected_hypothesis_ids",
+        "elapsed_s",
+        "error",
+        "skip_reason",
+        "hypotheses",
+    )
+    if any(k not in row for k in required):
+        return False
+    for key in ("event_id", "symbol", "npz_path", "event_type", "release_date"):
+        if str(row.get(key)) != str(current_unit.get(key)):
+            return False
+    try:
+        if float(row.get("latency_ms")) != float(current_unit.get("latency_ms")):
+            return False
+    except (TypeError, ValueError):
+        return False
+    if row.get("npz_fingerprint") != current_unit.get("npz_fingerprint"):
+        return False
+    if row.get("sensor_feature_fingerprints") != current_unit.get("sensor_feature_fingerprints"):
+        return False
+    if str(row.get("event_fingerprint")) != str(current_unit.get("event_fingerprint")):
+        return False
+    if row.get("hyp_ids") != current_unit.get("hyp_ids"):
+        return False
+    if row.get("expected_hypothesis_ids") != current_unit.get("expected_hypothesis_ids"):
+        return False
+    hypotheses = row.get("hypotheses")
+    if not isinstance(hypotheses, list):
+        return False
+    if row.get("skip_reason"):
+        if row.get("skip_reason") not in CHECKPOINT_SKIP_REASONS:
+            return False
+        if row.get("error") is not None:
+            return False
+        if hypotheses:
+            return False
+        return True
+    required_hyp_keys = (
+        "hypothesis_id",
+        "hypothesis_name",
+        "num_trades",
+        "expectancy_usd",
+        "win_rate",
+        "adverse_selection_ticks",
+    )
+    actual_hyp_ids: list[int] = []
+    for hyp in hypotheses:
+        if not isinstance(hyp, dict) or any(k not in hyp for k in required_hyp_keys):
+            return False
+        try:
+            actual_hyp_ids.append(int(hyp["hypothesis_id"]))
+            int(hyp["num_trades"])
+            float(hyp["expectancy_usd"])
+            float(hyp["win_rate"])
+            float(hyp["adverse_selection_ticks"])
+        except (TypeError, ValueError):
+            return False
+    expected_hyp_ids = [int(h) for h in row.get("expected_hypothesis_ids", [])]
+    if not expected_hyp_ids:
+        return False
+    if len(expected_hyp_ids) != len(set(expected_hyp_ids)):
+        return False
+    if len(actual_hyp_ids) != len(set(actual_hyp_ids)):
+        return False
+    if sorted(actual_hyp_ids) != sorted(expected_hyp_ids):
+        return False
+    return True
+
+
+def _append_checkpoint_result(checkpoint_path: Path, result: dict[str, Any]) -> None:
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    with checkpoint_path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(result, sort_keys=True, separators=(",", ":")) + "\n")
+        fh.flush()
+        os.fsync(fh.fileno())
+
+
 def write_universe_result(
     out_dir: Path,
     *,
@@ -1057,6 +1387,7 @@ def write_universe_result(
     run_end_utc: str,
     total_elapsed_s: float,
     stage_a_filter: dict[str, Any] | None = None,
+    checkpoint: dict[str, Any] | None = None,
 ) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     all_skipped = _combined_skip_rows(skipped, unit_results)
@@ -1079,6 +1410,7 @@ def write_universe_result(
             "units_skipped_embargo": units_skipped_embargo,
         },
         **({"stage_a_filter": stage_a_filter} if stage_a_filter is not None else {}),
+        **({"checkpoint": checkpoint} if checkpoint is not None else {}),
         "skipped": sorted(all_skipped, key=lambda s: (s["event_id"], s["symbol"], s["latency_ms"])),
         "certification_stamp": stamp,
         "certification_footer": format_stamp_footer(stamp),
@@ -1339,10 +1671,13 @@ def main(argv: list[str] | None = None) -> int:
     per_etype_hyp_ids: dict[str, set[int]] | None = None
     # tested_cells from the stage-A report (full family for Holm honesty)
     stage_a_tested_cells: list[dict[str, Any]] = []
+    from_stage_a_sha256: str | None = None
 
     if args.from_stage_a:
         sa_path = Path(args.from_stage_a)
-        sa_data = json.loads(sa_path.read_text(encoding="utf-8"))
+        sa_bytes = sa_path.read_bytes()
+        from_stage_a_sha256 = hashlib.sha256(sa_bytes).hexdigest()
+        sa_data = json.loads(sa_bytes.decode("utf-8"))
         survivors: list[dict[str, Any]] = sa_data.get("survivors", [])
         pass_through: list[Any] = sa_data.get("pass_through", [])
         stage_a_tested_cells = sa_data.get("tested_cells", [])
@@ -1352,15 +1687,15 @@ def main(argv: list[str] | None = None) -> int:
         # Surviving event_types (from survivors list) — used for work-unit restriction below
         surviving_etypes: set[str] = {s["event_type"] for s in survivors if "event_type" in s}
 
-        allowed_cells = set()
+        allowed_cell_entries: list[tuple[int, str]] = []
         for s in survivors:
             if "hyp_id" in s and "event_type" in s:
-                allowed_cells.add((int(s["hyp_id"]), s["event_type"]))
+                allowed_cell_entries.append((int(s["hyp_id"]), s["event_type"]))
         # pass_through hyps advance for ALL event_types in the original tested family
         for pt in pass_through:
             pt_id = int(pt) if isinstance(pt, (int, str)) else int(pt.get("hyp_id", pt))
             for etype in tested_etypes:
-                allowed_cells.add((pt_id, etype))
+                allowed_cell_entries.append((pt_id, etype))
 
         # Explicit --cells override adds additional cells
         if args.cells:
@@ -1368,12 +1703,21 @@ def main(argv: list[str] | None = None) -> int:
                 token = token.strip()
                 if ":" in token:
                     hid_str, et = token.split(":", 1)
-                    allowed_cells.add((int(hid_str.strip()), et.strip()))
+                    allowed_cell_entries.append((int(hid_str.strip()), et.strip()))
+
+        if len(allowed_cell_entries) != len(set(allowed_cell_entries)):
+            duplicates = sorted({
+                cell for cell in allowed_cell_entries
+                if allowed_cell_entries.count(cell) > 1
+            })
+            p.error(f"Stage-A filter has duplicate allowed cells: {duplicates}")
+        allowed_cells = set(allowed_cell_entries)
 
         # Build per-event_type hyp_id sets for _worker filtering
         per_etype_hyp_ids = {}
         for hyp_id, etype in allowed_cells:
             per_etype_hyp_ids.setdefault(etype, set()).add(hyp_id)
+        _validate_requested_hypothesis_ids(per_etype_hyp_ids, p=p)
 
         allowed_cells_count = len(allowed_cells)
         stage_a_filter = {
@@ -1421,6 +1765,7 @@ def main(argv: list[str] | None = None) -> int:
             for u in work_units
             if u.get("event_type") in allowed_etypes
         ]
+    work_units = _stamp_expected_hypothesis_ids(work_units)
 
     total_before_shard = len(work_units)
     if shard_spec is not None:
@@ -1446,8 +1791,46 @@ def main(argv: list[str] | None = None) -> int:
 
     work_units = sorted(work_units, key=_unit_sort_key)
 
-    print(f"Work units: {len(work_units)}  skipped: {len(skipped)}", flush=True)
-    if not work_units:
+    cli_args = {
+        "lane": args.lane,
+        "bands_override": args.bands,
+        "event_type": args.event_type,
+        "symbols": args.symbols,
+        "events_csv": str(args.events_csv),
+        "rescan": args.rescan,
+        "workers": args.workers,
+        "max_events": args.max_events,
+        "from_stage_a": args.from_stage_a,
+        "from_stage_a_sha256": from_stage_a_sha256,
+        "cells": args.cells,
+        "shard": args.shard,
+        "shard_index": shard_spec[0] if shard_spec else None,
+        "shard_total": shard_spec[1] if shard_spec else None,
+    }
+    checkpoint_path = out_dir / "unit_results.jsonl"
+    checkpoint_results = _prepare_checkpoint_results(
+        checkpoint_path,
+        work_units,
+        _checkpoint_context(cli_args),
+    )
+    checkpoint_keys = set(checkpoint_results)
+    reused_results = [
+        checkpoint_results[_unit_shard_key(unit)]
+        for unit in work_units
+        if _unit_shard_key(unit) in checkpoint_results
+    ]
+    total_work_units = len(work_units)
+    work_units = [
+        unit for unit in work_units
+        if _unit_shard_key(unit) not in checkpoint_keys
+    ]
+
+    print(
+        f"Work units: {total_work_units}  reused: {len(reused_results)}  "
+        f"remaining: {len(work_units)}  skipped: {len(skipped)}",
+        flush=True,
+    )
+    if total_work_units == 0:
         print("No work units — check --symbols, --event-type, and data/npz/ contents.", flush=True)
         # Still write minimal output so callers can see the skipped list
         stamp = build_certification_stamp(
@@ -1476,21 +1859,6 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Wrote {out_dir / 'universe_result.json'}", flush=True)
         return 0
 
-    cli_args = {
-        "lane": args.lane,
-        "bands_override": args.bands,
-        "event_type": args.event_type,
-        "symbols": args.symbols,
-        "events_csv": str(args.events_csv),
-        "workers": args.workers,
-        "max_events": args.max_events,
-        "from_stage_a": args.from_stage_a,
-        "cells": args.cells,
-        "shard": args.shard,
-        "shard_index": shard_spec[0] if shard_spec else None,
-        "shard_total": shard_spec[1] if shard_spec else None,
-    }
-
     run_start_utc = datetime.now(timezone.utc).isoformat()
     t_start = time.monotonic()
 
@@ -1507,23 +1875,24 @@ def main(argv: list[str] | None = None) -> int:
     # all-empty slice just finishes fast). Error-based ⇒ it also never fires on a
     # healthy run, so the pool is never torn down mid-flight.
     failfast_errors = int(os.environ.get("HFT3_UNIVERSE_FAILFAST_ERRORS", "100"))
-    ok_count = 0
-    err_count = 0
+    fresh_ok_count = 0
+    fresh_err_count = 0
     aborted = False
 
     def _should_abort() -> bool:
-        return err_count >= failfast_errors and ok_count == 0
+        return fresh_err_count >= failfast_errors and fresh_ok_count == 0
 
-    unit_results: list[dict[str, Any]] = []
+    unit_results: list[dict[str, Any]] = list(reused_results)
     if args.workers == 1:
         # Sequential path — avoids spawn overhead in tests and single-core envs
         for i, unit in enumerate(work_units, 1):
             r = _worker(unit)
             st = _unit_status(r)
-            ok_count += st == "ok"
-            err_count += st == "ERROR"
+            fresh_ok_count += st == "ok"
+            fresh_err_count += st == "ERROR"
             print(f"  [{i}/{len(work_units)}] {unit['event_id']} {unit['symbol']} {unit['latency_ms']}ms {st}", flush=True)
             unit_results.append(r)
+            _append_checkpoint_result(checkpoint_path, r)
             if _should_abort():
                 aborted = True
                 break
@@ -1532,8 +1901,8 @@ def main(argv: list[str] | None = None) -> int:
         with ctx.Pool(processes=args.workers) as pool:
             for i, result in enumerate(pool.imap_unordered(_worker, work_units), 1):
                 st = _unit_status(result)
-                ok_count += st == "ok"
-                err_count += st == "ERROR"
+                fresh_ok_count += st == "ok"
+                fresh_err_count += st == "ERROR"
                 print(
                     f"  [{i}/{len(work_units)}] {result['event_id']} "
                     f"{result['symbol']} {result['latency_ms']}ms "
@@ -1541,15 +1910,17 @@ def main(argv: list[str] | None = None) -> int:
                     flush=True,
                 )
                 unit_results.append(result)
+                _append_checkpoint_result(checkpoint_path, result)
                 if _should_abort():
                     aborted = True
                     break  # context-manager __exit__ tears the pool down safely
 
     if aborted:
-        n = len(unit_results)
-        n_err = sum(1 for u in unit_results if u.get("error"))
-        n_skip = sum(1 for u in unit_results if u.get("skip_reason"))
-        msg = (f"FAIL-FAST ABORT: {n_err} errors with 0 OK after {n} units. "
+        fresh_results = unit_results[len(reused_results):]
+        n = len(fresh_results)
+        n_err = sum(1 for u in fresh_results if u.get("error"))
+        n_skip = sum(1 for u in fresh_results if u.get("skip_reason"))
+        msg = (f"FAIL-FAST ABORT: {n_err} fresh errors with 0 fresh OK after {n} fresh units. "
                f"The replay path is broken (not empty data — empties skip). "
                f"Not grinding the remaining {len(work_units) - n} units. "
                f"Check the traceback above / HFT3_NPZ_ROOT.")
@@ -1608,6 +1979,12 @@ def main(argv: list[str] | None = None) -> int:
         run_end_utc=run_end_utc,
         total_elapsed_s=total_elapsed,
         stage_a_filter=stage_a_filter,
+        checkpoint={
+            "path": str(checkpoint_path),
+            "reused_units": len(reused_results),
+            "new_units": len(unit_results) - len(reused_results),
+            "remaining_units_started": len(work_units),
+        },
     )
     report_path = write_universe_report(
         out_dir,
