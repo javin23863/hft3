@@ -6,6 +6,11 @@ Date: 2026-06-15
 
 Status: `PLANNED_NON_BLOCKING_INTAKE` (no new pipeline, no live routing, no model-readiness claim)
 
+Machine-readable queue: `docs/project/missing_data_backfill_sidecar.json`.
+`scripts/paid_data_inventory.py` includes this queue in
+`runtime/data_audits/paid_data_inventory.*` so later upload/backfill staging can
+be audited without changing model execution or cockpit gates.
+
 ## Purpose
 
 This sidecar records the missing-data upload/backfill queue that can run later

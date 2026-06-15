@@ -37,6 +37,40 @@ def _markdown_table_rows(markdown: str) -> list[list[str]]:
     return rows
 
 
+def _valid_backfill_sidecar_payload(**overrides):
+    payload = {
+        "schema_version": 1,
+        "status": "PLANNED_NON_BLOCKING_INTAKE",
+        "updated_utc": "2026-06-15T00:00:00+00:00",
+        "non_blocking": True,
+        "authority_sources": ["docs/project/MISSING_DATA_BACKFILL_SIDECAR.md"],
+        "intake_contract": {
+            "preflight_required": True,
+            "destructive_actions_allowed": False,
+            "raw_downloads_are_runnable_coverage": False,
+            "completion_requires_catalog_or_data_doctor_evidence": True,
+            "refresh_command": "python scripts\\paid_data_inventory.py --dry-run --verify-q001-hashes",
+        },
+        "queues": [
+            {
+                "id": "vix_options_feature_inputs",
+                "status": "BACKLOG_NON_BLOCKING",
+                "lane": "CME_FUTURES_FEATURES",
+                "missing_evidence": "VIX feature lake is incomplete.",
+                "source_layouts": ["features/**/*"],
+                "landing_zones": ["<lake_root>/sensors"],
+                "tracking_surfaces": ["packages/features_engine/src/features/vix_features.py"],
+                "preflight_commands": ["python scripts\\paid_data_inventory.py --dry-run"],
+                "staging_commands": ["Stage accepted source files."],
+                "model_treatment": "Missing features are unknown, never zero.",
+                "manual_steps_remaining": ["Land accepted VIX raw and sensor files."],
+            }
+        ],
+    }
+    payload.update(overrides)
+    return payload
+
+
 _Q001_RE = re.compile(r"\bQ001\b", flags=re.IGNORECASE)
 _Q001_FINAL_STATE_TOKEN_RE = re.compile(
     r"\b(?:"
@@ -210,6 +244,94 @@ def test_paid_data_inventory_writes_runtime_reports(tmp_path):
 
     assert json.loads(json_path.read_text(encoding="utf-8"))["official_coverage_status"] == "NO_RUNNABLE_CME_NPZ"
     assert "Raw DBN/MBP10 files are downloaded backlog" in md_path.read_text(encoding="utf-8")
+
+
+def test_paid_data_inventory_reports_missing_data_backfill_sidecar(tmp_path):
+    repo = tmp_path / "repo"
+    sidecar = repo / "docs" / "project" / "missing_data_backfill_sidecar.json"
+    sidecar.parent.mkdir(parents=True)
+    sidecar.write_text(
+        json.dumps(_valid_backfill_sidecar_payload()),
+        encoding="utf-8",
+    )
+
+    report = build_report(repo_root=repo, source_root=repo / "data", sync=False, dry_run=True)
+    _, md_path = write_reports(report, tmp_path / "runtime" / "data_audits")
+    markdown = md_path.read_text(encoding="utf-8")
+
+    assert report["missing_data_backfill_sidecar"]["status"] == "PLANNED_NON_BLOCKING_INTAKE"
+    assert report["missing_data_backfill_sidecar"]["non_blocking"] is True
+    assert report["missing_data_backfill_sidecar"]["queue_count"] == 1
+    assert report["missing_data_backfill_sidecar"]["queues"][0]["id"] == "vix_options_feature_inputs"
+    assert "## Missing Data Backfill Sidecar" in markdown
+    assert "| vix_options_feature_inputs | BACKLOG_NON_BLOCKING | CME_FUTURES_FEATURES | <lake_root>/sensors | Missing features are unknown, never zero. |" in markdown
+
+
+def test_paid_data_inventory_sidecar_non_blocking_requires_literal_true(tmp_path):
+    repo = tmp_path / "repo"
+    sidecar = repo / "docs" / "project" / "missing_data_backfill_sidecar.json"
+    sidecar.parent.mkdir(parents=True)
+    sidecar.write_text(
+        json.dumps(_valid_backfill_sidecar_payload(non_blocking="false")),
+        encoding="utf-8",
+    )
+
+    report = build_report(repo_root=repo, source_root=repo / "data", sync=False, dry_run=True)
+
+    assert report["missing_data_backfill_sidecar"]["status"] == "MALFORMED_SCHEMA"
+    assert report["missing_data_backfill_sidecar"]["non_blocking"] is False
+
+
+def test_paid_data_inventory_sidecar_malformed_schema_does_not_hide_queue_errors(tmp_path):
+    repo = tmp_path / "repo"
+    sidecar = repo / "docs" / "project" / "missing_data_backfill_sidecar.json"
+    sidecar.parent.mkdir(parents=True)
+    sidecar.write_text(
+        json.dumps(_valid_backfill_sidecar_payload(
+            queues=[{
+                "id": "bad_upload",
+                "status": "BACKLOG_NON_BLOCKING",
+                "lane": "CME_FUTURES",
+                "missing_evidence": "bad path",
+                "source_layouts": ["npz/**/*_mbo.npz"],
+                "landing_zones": ["../../outside"],
+                "tracking_surfaces": ["scripts/paid_data_inventory.py"],
+                "preflight_commands": ["python scripts\\paid_data_inventory.py --dry-run"],
+                "staging_commands": ["python scripts\\paid_data_inventory.py --sync"],
+                "model_treatment": "Must remain sidelined.",
+                "manual_steps_remaining": ["Fix the landing zone."],
+            }]
+        )),
+        encoding="utf-8",
+    )
+
+    report = build_report(repo_root=repo, source_root=repo / "data", sync=False, dry_run=True)
+    _, md_path = write_reports(report, tmp_path / "runtime" / "data_audits")
+    sidecar_report = report["missing_data_backfill_sidecar"]
+
+    assert sidecar_report["status"] == "MALFORMED_SCHEMA"
+    assert sidecar_report["non_blocking"] is False
+    assert sidecar_report["queue_count"] == 1
+    assert "landing_zones contains unsupported zone" in " ".join(sidecar_report["validation_errors"])
+    assert "Validation errors:" in md_path.read_text(encoding="utf-8")
+
+
+def test_paid_data_inventory_sidecar_rejects_runtime_landing_zones(tmp_path):
+    repo = tmp_path / "repo"
+    sidecar = repo / "docs" / "project" / "missing_data_backfill_sidecar.json"
+    sidecar.parent.mkdir(parents=True)
+    payload = _valid_backfill_sidecar_payload()
+    payload["queues"][0]["landing_zones"] = ["runtime/lifecycle/jobs/running"]
+    sidecar.write_text(json.dumps(payload), encoding="utf-8")
+
+    report = build_report(repo_root=repo, source_root=repo / "data", sync=False, dry_run=True)
+    sidecar_report = report["missing_data_backfill_sidecar"]
+
+    assert sidecar_report["status"] == "MALFORMED_SCHEMA"
+    assert sidecar_report["non_blocking"] is False
+    assert "unsupported zone: runtime/lifecycle/jobs/running" in " ".join(
+        sidecar_report["validation_errors"]
+    )
 
 
 def test_paid_data_inventory_markdown_splits_options_strict_and_study_coverage(tmp_path):

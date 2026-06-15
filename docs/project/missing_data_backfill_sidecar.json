@@ -1,0 +1,167 @@
+{
+  "schema_version": 1,
+  "updated_utc": "2026-06-15T00:00:00+00:00",
+  "status": "PLANNED_NON_BLOCKING_INTAKE",
+  "non_blocking": true,
+  "scope": "missing-data upload/backfill staging only; not model readiness, pipeline gating, live routing, or cockpit GREEN evidence",
+  "authority_sources": [
+    "docs/project/MISSING_DATA_BACKFILL_SIDECAR.md",
+    "docs/project/Q001_DATA_INVENTORY_STATUS.md",
+    "docs/project/Q001_MBO_GAP_REJECTION_LEDGER.md",
+    "docs/project/Q001_OPTIONS_STRICT_MBO_WARNING_LEDGER.md",
+    "docs/vault/DATA_LAKE_3TIER.md",
+    "runtime/data_audits/paid_data_inventory.json"
+  ],
+  "intake_contract": {
+    "preflight_required": true,
+    "destructive_actions_allowed": false,
+    "raw_downloads_are_runnable_coverage": false,
+    "completion_requires_catalog_or_data_doctor_evidence": true,
+    "refresh_command": "python scripts\\paid_data_inventory.py --dry-run --verify-q001-hashes"
+  },
+  "queues": [
+    {
+      "id": "cme_mbo_pilot_missing_slots",
+      "status": "BACKLOG_NON_BLOCKING",
+      "lane": "CME_FUTURES",
+      "missing_evidence": "211 event-symbol slots: 203 full no-market slots plus 8 FED_H41 partial symbol absences.",
+      "source_layouts": [
+        "npz/**/*_mbo.npz",
+        "replay/mbp10/**/*.dbn.zst",
+        "*.dbn.zst"
+      ],
+      "landing_zones": [
+        "HFT3_NPZ_ROOT",
+        "data/npz",
+        "data/replay/mbp10",
+        "data/raw/databento_mbo"
+      ],
+      "tracking_surfaces": [
+        "scripts/paid_data_inventory.py",
+        "scripts/build_lake_catalog.py",
+        "<npz_root>/manifest.json",
+        "<npz_root>/catalog_quarantine.json",
+        "runtime/data_audits/paid_data_inventory.json",
+        "docs/project/Q001_MBO_GAP_REJECTION_LEDGER.md"
+      ],
+      "preflight_commands": [
+        "python scripts\\paid_data_inventory.py --source-root <paid-data-source> --dry-run --verify-q001-hashes",
+        "python apps\\workbench\\scripts\\backfill_catalog.py --model <MODEL_ID> --symbol <SYM>.v.0 --scope full_universe --dry-run"
+      ],
+      "staging_commands": [
+        "python scripts\\paid_data_inventory.py --source-root <paid-data-source> --sync --verify-q001-hashes",
+        "python scripts\\build_lake_catalog.py --full"
+      ],
+      "model_treatment": "Only affected event-symbol cells remain skipped/rejected; available-data cells continue.",
+      "manual_steps_remaining": [
+        "Obtain or upload source bytes.",
+        "Convert raw DBN backlog to accepted NPZ when needed.",
+        "Refresh catalog and paid-data inventory.",
+        "Update Q001 ledgers only for newly filled cells."
+      ]
+    },
+    {
+      "id": "options_strict_fixing_mbo",
+      "status": "BACKLOG_NON_BLOCKING",
+      "lane": "CME_OPTIONS",
+      "missing_evidence": "507 strict quote gaps and 503 stale strict quote gaps; fixing-study trade-or-MBO coverage remains non-failing.",
+      "source_layouts": [
+        "options/fixing_mbo/**/*.dbn.zst",
+        "options/fixing_mbo/**/*.doctor.json"
+      ],
+      "landing_zones": [
+        "C:\\hft3-lake\\options\\fixing_mbo",
+        "<lake_root>/options/fixing_mbo"
+      ],
+      "tracking_surfaces": [
+        "scripts/data_doctor.py",
+        "runtime/data_doctor_report.json",
+        "docs/project/Q001_OPTIONS_STRICT_MBO_WARNING_LEDGER.md"
+      ],
+      "preflight_commands": [
+        "python scripts\\pull_fixing_windows.py mbo --dry-run",
+        "python scripts\\pull_fixing_windows.py mbo --estimate-cost"
+      ],
+      "staging_commands": [
+        "python scripts\\pull_fixing_windows.py mbo --download",
+        "python scripts\\data_doctor.py"
+      ],
+      "model_treatment": "Strict quote reconstruction, strict quote-only features, order-book replay, and options promotion stay sidelined until strict evidence is accepted.",
+      "manual_steps_remaining": [
+        "Run vendor cost estimate with the active account.",
+        "Download or upload matching DBN windows.",
+        "Attach .doctor.json proof for valid no-data DBN files.",
+        "Rerun data doctor and update the warning ledger."
+      ]
+    },
+    {
+      "id": "options_definitions_statistics_ohlcv_expansion",
+      "status": "BACKLOG_AS_NEEDED",
+      "lane": "CME_OPTIONS",
+      "missing_evidence": "Not a Q001 blocker; needed only for studies requiring wider chain/date coverage.",
+      "source_layouts": [
+        "options/definitions/**/*",
+        "options/statistics/**/*",
+        "options/ohlcv/**/*"
+      ],
+      "landing_zones": [
+        "<lake_root>/options/definitions",
+        "<lake_root>/options/statistics",
+        "<lake_root>/options/ohlcv"
+      ],
+      "tracking_surfaces": [
+        "scripts/data_doctor.py",
+        "runtime/data_doctor_report.json",
+        "research_cards/backfill_plans/"
+      ],
+      "preflight_commands": [
+        "Use Databento metadata.get_cost/get_billable_size before any paid pull."
+      ],
+      "staging_commands": [
+        "Stage under the matching <lake_root>/options/* directory.",
+        "python scripts\\data_doctor.py"
+      ],
+      "model_treatment": "Only studies requiring the expansion remain sidelined.",
+      "manual_steps_remaining": [
+        "Confirm account pricing and plan terms.",
+        "Choose full-complex or definition-driven banded scope.",
+        "Refresh data doctor evidence after landing bytes."
+      ]
+    },
+    {
+      "id": "vix_options_feature_inputs",
+      "status": "BACKLOG_NON_BLOCKING",
+      "lane": "CME_FUTURES_FEATURES",
+      "missing_evidence": "No Q001 certification of a complete VIX feature lake; VIX feature builder raises VixDataUnavailable instead of zero-filling.",
+      "source_layouts": [
+        "mbo_release/<event_id>/VIX.OPT/raw.dbn.zst",
+        "sensors/<event_id>_sensors.parquet",
+        "features/**/*"
+      ],
+      "landing_zones": [
+        "<lake_root>/mbo_release",
+        "<lake_root>/sensors",
+        "HFT3_FEATURE_ROOT",
+        "<lake_root>/features"
+      ],
+      "tracking_surfaces": [
+        "packages/data_system/src/event_data_resolver.py",
+        "packages/features_engine/src/features/vix_features.py",
+        "runtime/data_audits/paid_data_inventory.json"
+      ],
+      "preflight_commands": [
+        "python scripts\\paid_data_inventory.py --source-root <paid-data-source> --dry-run --verify-q001-hashes"
+      ],
+      "staging_commands": [
+        "Stage VIX raw/sensor files under the existing lake roots.",
+        "Run the feature builder only for events with accepted source data."
+      ],
+      "model_treatment": "Models requiring unavailable VIX/options-derived inputs stay sidelined; missing features are unknown, never zero.",
+      "manual_steps_remaining": [
+        "Land accepted VIX raw and sensor files.",
+        "Build feature files for covered events.",
+        "Record missing source data as unavailable, not as zero-valued features."
+      ]
+    }
+  ]
+}

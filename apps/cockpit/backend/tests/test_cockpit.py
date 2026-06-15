@@ -2,6 +2,7 @@
 
 Run from repo root:  python -m pytest apps/cockpit/backend/tests -q
 """
+import importlib.util
 import json
 import os
 import subprocess
@@ -22,6 +23,17 @@ from apps.cockpit.backend.aggregate import system as system_agg
 from apps.cockpit.backend.main import app
 
 VIEW_KEYS = {"zone", "generated_utc", "health"}
+_REPO_ROOT = Path(__file__).resolve().parents[4]
+
+
+def _load_run_event_universe():
+    script = _REPO_ROOT / "scripts" / "run_event_universe.py"
+    spec = importlib.util.spec_from_file_location("run_event_universe_contract", script)
+    if spec is None or spec.loader is None:
+        raise AssertionError(f"unable to load {script}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _json_roundtrip(obj):
@@ -798,6 +810,101 @@ def test_universe_q001_accepted_gap_skips_do_not_block_full_ok(monkeypatch, tmp_
         "no_market_data": 1,
         "symbol_absent_in_raw_after_redownload": 1,
     }
+
+
+def test_runner_universe_result_writer_feeds_cockpit_universe_stage(monkeypatch, tmp_path):
+    manifest = tmp_path / "packages" / "data_system" / "config" / "mbo_pilot_basket_20260605_manifest.json"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(json.dumps({
+        "no_market_windows": ["EIA_CRUDE_2024_12_25_TIGHT"],
+        "partial_windows": [{
+            "event_id": "FED_H41_2024_06_19_TIGHT",
+            "missing_symbols": ["ES.v.0"],
+            "reason": "symbol_absent_in_raw_after_redownload",
+        }],
+    }), encoding="utf-8")
+    writer = _load_run_event_universe().write_universe_result
+    artifact = writer(
+        tmp_path / "research_cards" / "universe_contract",
+        unit_results=[{
+            "event_id": "CPI_2024_09_11_TIGHT",
+            "event_type": "CPI",
+            "release_date": "2024-09-11",
+            "symbol": "MES.v.0",
+            "latency_ms": 6.255764,
+            "error": None,
+            "skip_reason": None,
+            "hypotheses": [
+                {"hypothesis_id": 2, "hypothesis_name": "Stop-run exhaustion fade"}
+            ],
+        }],
+        skipped=[
+            {
+                "event_id": "EIA_CRUDE_2024_12_25_TIGHT",
+                "event_type": "EIA_CRUDE",
+                "release_date": "2024-12-25",
+                "symbol": "MES.v.0",
+                "latency_ms": 6.255764,
+                "reason": "no_market_data",
+            },
+            {
+                "event_id": "FED_H41_2024_06_19_TIGHT",
+                "event_type": "FED_H41",
+                "release_date": "2024-06-19",
+                "symbol": "ES.v.0",
+                "latency_ms": 6.255764,
+                "reason": "symbol_absent_in_raw_after_redownload",
+            },
+        ],
+        aggregated={},
+        corrections={"CPI": {"holm": {"passed_slugs": ["hyp_2_band_6.255764"]}}},
+        robustness={
+            "dsr_by_cell": {"hyp_2_band_6.255764_CPI": {"dsr": 0.8}},
+            "pbo": {"pbo": 0.12, "n_configs": 2, "n_partitions": 16},
+            "bootstrap_by_cell": {"hyp_2_band_6.255764_CPI": {"ci_lower": 1.5}},
+            "fee_stress_by_cell": {"hyp_2_band_6.255764_CPI": {"fee_x2_pass": True}},
+        },
+        latency_bands=[6.255764],
+        cli_args=_full_universe_cli_args(tmp_path),
+        stamp={
+            "status": "GREEN",
+            "stale": False,
+            "promotion_eligible": True,
+            "promotion_label": "PROMOTION_ELIGIBLE_FROM_BACKTESTER_SIDE",
+        },
+        run_start_utc="2026-06-15T00:00:00+00:00",
+        run_end_utc="2026-06-15T00:00:01+00:00",
+        total_elapsed_s=1.0,
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(pipeline_agg, "_q001_inventory", lambda: {
+        "status": sc.STALE,
+        "available_data_scope_accepted": False,
+    })
+
+    stale_stage = pipeline_agg._universe_stage("gauntlet_b", "Gauntlet B", artifact)
+
+    assert stale_stage["status"] == sc.STALE
+    assert stale_stage["detail"] == (
+        "coverage skips: no_market_data=1, symbol_absent_in_raw_after_redownload=1"
+    )
+
+    monkeypatch.setattr(pipeline_agg, "_q001_inventory", lambda: {
+        "status": sc.OK,
+        "available_data_scope_accepted": True,
+    })
+
+    stage = pipeline_agg._universe_stage("gauntlet_b", "Gauntlet B", artifact)
+
+    assert stage["status"] == sc.OK
+    assert stage["scope"] == "full"
+    assert stage["skip_reason_counts"] == {
+        "no_market_data": 1,
+        "symbol_absent_in_raw_after_redownload": 1,
+    }
+    assert stage["units_skipped"] == 2
+    assert stage["evaluated_model_rows"] == 1
+    assert stage["robustness_status"] == sc.OK
 
 
 def test_universe_q001_reason_strings_without_accepted_scope_stay_stale(monkeypatch, tmp_path):

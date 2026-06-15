@@ -37,11 +37,30 @@ DEFAULT_SOURCE_ROOT = Path(
 DATE_RE = re.compile(r"(20\d{2})[-_](\d{2})[-_](\d{2})")
 SYMBOL_RE = re.compile(r"^(?P<symbol>[A-Z0-9]+(?:\.v\.0)?)_", re.IGNORECASE)
 DEFAULT_DATA_DOCTOR_REPORT = _REPO_ROOT / "runtime" / "data_doctor_report.json"
+DEFAULT_BACKFILL_SIDECAR = _REPO_ROOT / "docs" / "project" / "missing_data_backfill_sidecar.json"
 DEFAULT_MBO_PILOT_MANIFEST = (
     _REPO_ROOT / "packages" / "data_system" / "config" / "mbo_pilot_basket_20260605_manifest.json"
 )
 DEFAULT_EVENTS_CSV = _REPO_ROOT / "packages" / "data_system" / "config" / "events.csv"
 DEFAULT_CME_SYMBOLS = ("MES.v.0", "MNQ.v.0", "ES.v.0", "NQ.v.0", "ZN.v.0", "ZB.v.0", "RTY.v.0")
+BACKFILL_SIDECAR_STATUS = "PLANNED_NON_BLOCKING_INTAKE"
+BACKFILL_QUEUE_STATUSES = {"BACKLOG_AS_NEEDED", "BACKLOG_NON_BLOCKING"}
+BACKFILL_QUEUE_LANES = {"CME_FUTURES", "CME_FUTURES_FEATURES", "CME_OPTIONS"}
+BACKFILL_QUEUE_REQUIRED_STRINGS = ("id", "status", "lane", "missing_evidence", "model_treatment")
+BACKFILL_QUEUE_REQUIRED_LISTS = (
+    "source_layouts",
+    "landing_zones",
+    "tracking_surfaces",
+    "preflight_commands",
+    "staging_commands",
+    "manual_steps_remaining",
+)
+BACKFILL_INTAKE_FLAGS = {
+    "preflight_required": True,
+    "destructive_actions_allowed": False,
+    "raw_downloads_are_runnable_coverage": False,
+    "completion_requires_catalog_or_data_doctor_evidence": True,
+}
 
 
 @dataclass(frozen=True)
@@ -432,6 +451,148 @@ def _summarize_data_doctor(path: Path) -> dict[str, Any]:
     }
 
 
+def _sidecar_error(
+    path: Path,
+    status: str,
+    *,
+    errors: list[str] | None = None,
+    error: str | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "path": str(path),
+        "exists": True,
+        "status": status,
+        "non_blocking": False,
+        "queues": [],
+        "queue_count": 0,
+    }
+    if errors:
+        payload["validation_errors"] = errors
+    if error:
+        payload["error"] = error
+    return payload
+
+
+def _string_list(value: Any) -> list[str] | None:
+    if not isinstance(value, list) or not value:
+        return None
+    out = []
+    for item in value:
+        if not isinstance(item, str) or not item.strip():
+            return None
+        out.append(item)
+    return out
+
+
+def _allowed_backfill_landing_zone(zone: str) -> bool:
+    normalized = zone.replace("\\", "/")
+    if re.search(r"\s", zone):
+        return False
+    if any(part == ".." for part in normalized.split("/")):
+        return False
+    if zone in {"HFT3_FEATURE_ROOT", "HFT3_NPZ_ROOT"}:
+        return True
+    if normalized.startswith(("<lake_root>/", "data/")):
+        return True
+    return bool(re.match(r"^C:\\hft3-lake\\", zone, flags=re.IGNORECASE))
+
+
+def _summarize_backfill_sidecar(path: Path) -> dict[str, Any]:
+    raw = _load_json_file(path)
+    if raw is None:
+        return {
+            "path": str(path),
+            "exists": False,
+            "status": "MISSING",
+            "non_blocking": False,
+            "queues": [],
+            "queue_count": 0,
+        }
+    if isinstance(raw, MalformedJson):
+        return _sidecar_error(path, "MALFORMED_JSON", error=raw.error)
+    if not isinstance(raw, dict):
+        return _sidecar_error(path, "MALFORMED")
+    validation_errors: list[str] = []
+    if isinstance(raw.get("schema_version"), bool) or raw.get("schema_version") != 1:
+        validation_errors.append("schema_version must equal 1")
+    if raw.get("status") != BACKFILL_SIDECAR_STATUS:
+        validation_errors.append(f"status must equal {BACKFILL_SIDECAR_STATUS}")
+    if raw.get("non_blocking") is not True:
+        validation_errors.append("non_blocking must be literal true")
+    authority_sources = _string_list(raw.get("authority_sources"))
+    if authority_sources is None:
+        validation_errors.append("authority_sources must be a non-empty string list")
+    intake = raw.get("intake_contract")
+    if not isinstance(intake, dict):
+        validation_errors.append("intake_contract must be an object")
+    else:
+        for key, expected in BACKFILL_INTAKE_FLAGS.items():
+            if intake.get(key) is not expected:
+                validation_errors.append(f"intake_contract.{key} must be {expected!r}")
+        if (
+            not isinstance(intake.get("refresh_command"), str)
+            or not intake.get("refresh_command", "").strip()
+        ):
+            validation_errors.append("intake_contract.refresh_command must be a non-empty string")
+    queues = raw.get("queues")
+    if not isinstance(queues, list) or not queues:
+        validation_errors.append("queues must be a non-empty list")
+        queues = []
+    normalized_queues: list[dict[str, Any]] = []
+    for idx, queue in enumerate(queues):
+        if not isinstance(queue, dict):
+            validation_errors.append(f"queues[{idx}] must be an object")
+            continue
+        normalized: dict[str, Any] = {}
+        for key in BACKFILL_QUEUE_REQUIRED_STRINGS:
+            value = queue.get(key)
+            if not isinstance(value, str) or not value.strip():
+                validation_errors.append(f"queues[{idx}].{key} must be a non-empty string")
+                value = ""
+            normalized[key] = value
+        if normalized["status"] and normalized["status"] not in BACKFILL_QUEUE_STATUSES:
+            validation_errors.append(f"queues[{idx}].status is not allowed")
+        if normalized["lane"] and normalized["lane"] not in BACKFILL_QUEUE_LANES:
+            validation_errors.append(f"queues[{idx}].lane is not allowed")
+        for key in BACKFILL_QUEUE_REQUIRED_LISTS:
+            values = _string_list(queue.get(key))
+            if values is None:
+                validation_errors.append(f"queues[{idx}].{key} must be a non-empty string list")
+                values = []
+            normalized[key] = values
+        for zone in normalized["landing_zones"]:
+            if not _allowed_backfill_landing_zone(zone):
+                validation_errors.append(f"queues[{idx}].landing_zones contains unsupported zone: {zone}")
+        normalized_queues.append(
+            {
+                "id": normalized["id"],
+                "status": normalized["status"] or "UNKNOWN",
+                "lane": normalized["lane"],
+                "landing_zones": normalized["landing_zones"],
+                "tracking_surfaces": normalized["tracking_surfaces"],
+                "model_treatment": normalized["model_treatment"],
+                "manual_steps_remaining": normalized["manual_steps_remaining"],
+            }
+        )
+    if validation_errors:
+        payload = _sidecar_error(path, "MALFORMED_SCHEMA", errors=validation_errors)
+        payload["schema_version"] = raw.get("schema_version")
+        payload["updated_utc"] = raw.get("updated_utc")
+        payload["queues"] = normalized_queues
+        payload["queue_count"] = len(normalized_queues)
+        return payload
+    return {
+        "path": str(path),
+        "exists": True,
+        "status": BACKFILL_SIDECAR_STATUS,
+        "schema_version": raw.get("schema_version"),
+        "updated_utc": raw.get("updated_utc"),
+        "non_blocking": True,
+        "queue_count": len(normalized_queues),
+        "queues": normalized_queues,
+    }
+
+
 def _q001_status(gaps: list[dict[str, Any]]) -> str:
     if any(gap.get("severity") == "FAIL" for gap in gaps):
         return "BLOCKED"
@@ -582,6 +743,7 @@ def build_report(
     synced_files = sync_paid_data(source_root, data_root, dry_run=dry_run) if sync else []
     after = inventory_data_root(data_root)
     q001 = build_q001_cme_data_inventory(repo_root=repo_root, verify_hashes=verify_q001_hashes)
+    backfill_sidecar = _summarize_backfill_sidecar(repo_root / DEFAULT_BACKFILL_SIDECAR.relative_to(_REPO_ROOT))
     return {
         "schema_version": 1,
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -600,6 +762,7 @@ def build_report(
         "missing_conversion_days": after["missing_conversion_days"],
         "official_coverage_status": after["official_coverage_status"],
         "q001_cme_data_inventory": q001,
+        "missing_data_backfill_sidecar": backfill_sidecar,
     }
 
 
@@ -705,6 +868,36 @@ def _markdown_report(report: dict[str, Any]) -> str:
             for gap in gaps:
                 if isinstance(gap, dict):
                     lines.append(f"- `{gap.get('severity', 'INFO')}` {gap.get('source', '')}: {gap.get('detail', '')}")
+
+    sidecar = report.get("missing_data_backfill_sidecar")
+    if isinstance(sidecar, dict) and sidecar.get("exists"):
+        lines.extend(
+            [
+                "",
+                "## Missing Data Backfill Sidecar",
+                "",
+                f"Status: `{sidecar.get('status', 'UNKNOWN')}`",
+                f"Non-blocking: `{sidecar.get('non_blocking', False)}`",
+                f"Queue count: `{sidecar.get('queue_count', 0)}`",
+                "",
+                "| Queue | Status | Lane | Landing zones | Treatment |",
+                "|---|---|---|---|---|",
+            ]
+        )
+        errors = sidecar.get("validation_errors") if isinstance(sidecar.get("validation_errors"), list) else []
+        if errors:
+            lines.extend(["", "Validation errors:"])
+            for error in errors:
+                lines.append(f"- {error}")
+            lines.append("")
+        for queue in sidecar.get("queues") or []:
+            if not isinstance(queue, dict):
+                continue
+            zones = ", ".join(str(zone) for zone in queue.get("landing_zones", []))
+            lines.append(
+                f"| {queue.get('id', '')} | {queue.get('status', '')} | {queue.get('lane', '')} | "
+                f"{zones} | {queue.get('model_treatment', '')} |"
+            )
 
     lines.extend(["", "## Source Categories", "", "| Category | Files | Size MB | Dates | Date range |", "|---|---:|---:|---:|---|"])
     for name, stats in (report.get("source_inventory", {}).get("categories") or {}).items():
