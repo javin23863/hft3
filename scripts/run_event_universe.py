@@ -69,6 +69,9 @@ from replay.replay_clock import deterministic_run_id
 
 DEFAULT_EVENTS_CSV = _REPO / "packages" / "data_system" / "config" / "events.csv"
 DEFAULT_NPZ_DIR = _REPO / "data" / "npz"
+Q001_MBO_PILOT_MANIFEST = (
+    _REPO / "packages" / "data_system" / "config" / "mbo_pilot_basket_20260605_manifest.json"
+)
 DEFAULT_SYMBOL = "MES.v.0"
 NPZ_PATTERN = re.compile(r"^(?P<symbol>.+?)_(?P<event_id>.+)_mbo\.npz$")
 RESEARCH_EMBARGO_START = "2026-01-01"  # ALPHA_CME.md §4 / DEPLOYMENT.md §4.2: research sweeps must never read data >= this date; first 2026 touch is the M9 paper-shadow bundle.
@@ -213,6 +216,42 @@ def apply_shard(
     ]
 
 
+def _q001_gap_reason_map(
+    manifest_path: Path | None = None,
+) -> dict[tuple[str, str | None], str]:
+    """Return known Q001 unavailable MBO slots from the accepted gap ledger."""
+    using_default_manifest = manifest_path is None
+    manifest_path = Q001_MBO_PILOT_MANIFEST if manifest_path is None else manifest_path
+    try:
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        if using_default_manifest:
+            raise RuntimeError(f"Q001 MBO pilot manifest unavailable or malformed: {manifest_path}") from exc
+        return {}
+    if not isinstance(data, dict):
+        if using_default_manifest:
+            raise RuntimeError(f"Q001 MBO pilot manifest root must be a JSON object: {manifest_path}")
+        return {}
+
+    gap_reasons: dict[tuple[str, str | None], str] = {}
+    for event_id in data.get("no_market_windows") or []:
+        gap_reasons[(str(event_id), None)] = "no_market_data"
+
+    for window in data.get("partial_windows") or []:
+        if not isinstance(window, dict):
+            continue
+        event_id = str(window.get("event_id") or "")
+        reason = str(window.get("reason") or "symbol_absent_in_raw_after_redownload")
+        if not event_id:
+            continue
+        missing_symbols = window.get("missing_symbols") or []
+        if not isinstance(missing_symbols, list):
+            continue
+        for symbol in missing_symbols:
+            gap_reasons[(event_id, str(symbol))] = reason
+    return gap_reasons
+
+
 def build_work_units(
     events_csv: Path,
     lake_index: dict[tuple[str, str], str],
@@ -225,7 +264,7 @@ def build_work_units(
     """Return (work_units, skipped_units) sorted deterministically.
 
     Each work unit: {event_id, symbol, npz_path, latency_ms, event_type, release_date}
-    Each skipped unit: {event_id, symbol, latency_ms, reason}
+    Each skipped unit: {event_id, event_type, release_date, symbol, latency_ms, reason}
     """
     rows = _read_events_csv(events_csv)
     # stable sort by event_id for determinism
@@ -238,6 +277,7 @@ def build_work_units(
     # the raw rows first would just select the alphabetically-first events
     # regardless of whether their NPZ exists.
     events_with_work: set[str] = set()
+    q001_gap_reasons = _q001_gap_reason_map()
 
     for row in rows:
         etype = row.get("event_type", "")
@@ -257,6 +297,8 @@ def build_work_units(
                 for band in sorted(latency_bands):
                     skipped.append({
                         "event_id": event_id,
+                        "event_type": etype,
+                        "release_date": release_date,
                         "symbol": symbol,
                         "latency_ms": band,
                         "reason": "embargo_2026",
@@ -278,9 +320,21 @@ def build_work_units(
         for symbol in sorted(candidate_symbols):
             npz_path = lake_index.get((symbol, event_id))
             for band in sorted(latency_bands):
-                if npz_path is None:
+                q001_gap_reason = q001_gap_reasons.get((event_id, symbol)) or q001_gap_reasons.get((event_id, None))
+                if q001_gap_reason:
                     skipped.append({
                         "event_id": event_id,
+                        "event_type": etype,
+                        "release_date": release_date,
+                        "symbol": symbol,
+                        "latency_ms": band,
+                        "reason": q001_gap_reason,
+                    })
+                elif npz_path is None:
+                    skipped.append({
+                        "event_id": event_id,
+                        "event_type": etype,
+                        "release_date": release_date,
                         "symbol": symbol,
                         "latency_ms": band,
                         "reason": "npz_missing",
@@ -291,6 +345,8 @@ def build_work_units(
                     # zero events). This is what keeps the run from grinding.
                     skipped.append({
                         "event_id": event_id,
+                        "event_type": etype,
+                        "release_date": release_date,
                         "symbol": symbol,
                         "latency_ms": band,
                         "reason": "empty_npz",
@@ -486,7 +542,7 @@ def _aggregate_results(
     accum: dict[tuple[int, str, float], dict[str, Any]] = {}
 
     for ur in unit_results:
-        if ur.get("error"):
+        if ur.get("error") or ur.get("skip_reason"):
             continue
         etype = ur["event_type"]
         band = float(ur["latency_ms"])
@@ -826,7 +882,7 @@ def _compute_robustness(
     # fee_stress_for_cell detects this and sets stress_data_available=False.
     _fee_decomp: dict[tuple[int, str, float], dict[str, list]] = {}
     for ur in unit_results:
-        if ur.get("error"):
+        if ur.get("error") or ur.get("skip_reason"):
             continue
         ur_etype = ur.get("event_type", "")
         ur_band  = float(ur.get("latency_ms", 0.0))
@@ -863,7 +919,7 @@ def _compute_robustness(
     events_ordered: list[str] = []
     seen_events: set[str] = set()
     for ur in sorted(unit_results, key=lambda u: (u.get("release_date", ""), u["event_id"])):
-        if not ur.get("error") and ur["event_id"] not in seen_events:
+        if not ur.get("error") and not ur.get("skip_reason") and ur["event_id"] not in seen_events:
             events_ordered.append(ur["event_id"])
             seen_events.add(ur["event_id"])
 
@@ -896,7 +952,7 @@ def _compute_robustness(
             # We need to look up per-event values from unit_results
             event_expec: dict[str, float] = {}
             for ur in unit_results:
-                if ur.get("error") or ur.get("event_type", "") != etype:
+                if ur.get("error") or ur.get("skip_reason") or ur.get("event_type", "") != etype:
                     continue
                 for hrow in ur.get("hypotheses", []):
                     if int(hrow["hypothesis_id"]) == hyp_id and float(ur["latency_ms"]) == band:
@@ -954,6 +1010,38 @@ def _git_commit(repo_root: Path) -> str:
     return "unknown"
 
 
+def _skip_reason_counts(skipped: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in skipped:
+        reason = str(row.get("reason") or "unspecified")
+        counts[reason] = counts.get(reason, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def _runtime_skip_rows(unit_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for row in unit_results:
+        reason = row.get("skip_reason")
+        if not reason:
+            continue
+        rows.append({
+            "event_id": row.get("event_id", ""),
+            "event_type": row.get("event_type", ""),
+            "release_date": row.get("release_date", ""),
+            "symbol": row.get("symbol", ""),
+            "latency_ms": row.get("latency_ms"),
+            "reason": str(reason),
+        })
+    return rows
+
+
+def _combined_skip_rows(
+    skipped: list[dict[str, Any]],
+    unit_results: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    return [*skipped, *_runtime_skip_rows(unit_results)]
+
+
 def write_universe_result(
     out_dir: Path,
     *,
@@ -971,7 +1059,9 @@ def write_universe_result(
     stage_a_filter: dict[str, Any] | None = None,
 ) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
-    units_skipped_embargo = sum(1 for s in skipped if s.get("reason") == "embargo_2026")
+    all_skipped = _combined_skip_rows(skipped, unit_results)
+    units_skipped_embargo = sum(1 for s in all_skipped if s.get("reason") == "embargo_2026")
+    skip_reason_counts = _skip_reason_counts(all_skipped)
     payload = {
         "schema": "universe_result_v1",
         "run_start_utc": run_start_utc,
@@ -981,14 +1071,15 @@ def write_universe_result(
         "cli_args": cli_args,
         "latency_bands_ms": sorted(latency_bands),
         "units_run": len(unit_results),
-        "units_skipped": len(skipped),
+        "units_skipped": len(all_skipped),
         "units_errored": sum(1 for u in unit_results if u.get("error")),
+        "skip_reason_counts": skip_reason_counts,
         "embargo": {
             "start": RESEARCH_EMBARGO_START,
             "units_skipped_embargo": units_skipped_embargo,
         },
         **({"stage_a_filter": stage_a_filter} if stage_a_filter is not None else {}),
-        "skipped": sorted(skipped, key=lambda s: (s["event_id"], s["symbol"], s["latency_ms"])),
+        "skipped": sorted(all_skipped, key=lambda s: (s["event_id"], s["symbol"], s["latency_ms"])),
         "certification_stamp": stamp,
         "certification_footer": format_stamp_footer(stamp),
         "aggregated": aggregated,
@@ -1014,6 +1105,7 @@ def write_universe_report(
     total_elapsed_s: float,
 ) -> Path:
     lines: list[str] = []
+    all_skipped = _combined_skip_rows(skipped, unit_results)
 
     lines += [
         "# Universe screening report",
@@ -1022,31 +1114,42 @@ def write_universe_report(
         f"- **total_elapsed_s:** {total_elapsed_s:.1f}",
         f"- **latency_bands_ms:** {sorted(latency_bands)}",
         f"- **units_run:** {len(unit_results)}",
-        f"- **units_skipped:** {len(skipped)}",
+        f"- **units_skipped:** {len(all_skipped)}",
         f"- **units_errored:** {sum(1 for u in unit_results if u.get('error'))}",
         f"- **cert_status:** {stamp.get('status', 'MISSING')}",
         "",
     ]
 
     # --- Coverage stats ---
-    event_types = sorted({u["event_type"] for u in unit_results if not u.get("error")})
+    event_types = sorted({
+        u["event_type"] for u in unit_results
+        if not u.get("error") and not u.get("skip_reason")
+    })
     lines += ["## Coverage", "", "| event_type | events_run | events_skipped |", "|---|---|---|"]
-    skip_by_etype: dict[str, int] = {}
-    for s in skipped:
-        # We don't have event_type on skipped entries; count globally
-        skip_by_etype["all"] = skip_by_etype.get("all", 0) + 1
+    skip_by_etype: dict[str, set[str]] = {}
+    for s in all_skipped:
+        etype = str(s.get("event_type") or "unknown")
+        skip_by_etype.setdefault(etype, set()).add(str(s.get("event_id") or "unknown"))
 
     run_by_etype: dict[str, set[str]] = {}
     for u in unit_results:
-        if not u.get("error"):
+        if not u.get("error") and not u.get("skip_reason"):
             etype = u["event_type"]
             run_by_etype.setdefault(etype, set()).add(u["event_id"])
-    for etype in event_types:
+    for etype in sorted(set(event_types) | set(skip_by_etype)):
         n_events = len(run_by_etype.get(etype, set()))
-        lines.append(f"| {etype} | {n_events} | — |")
-    units_skipped_embargo = sum(1 for s in skipped if s.get("reason") == "embargo_2026")
+        n_skipped_events = len(skip_by_etype.get(etype, set()))
+        lines.append(f"| {etype} | {n_events} | {n_skipped_events} |")
+    units_skipped_embargo = sum(1 for s in all_skipped if s.get("reason") == "embargo_2026")
     lines.append(f"\nEmbargoed (>= 2026-01-01): {units_skipped_embargo} units skipped")
     lines.append("")
+
+    skip_reason_counts = _skip_reason_counts(all_skipped)
+    if skip_reason_counts:
+        lines += ["## Skip reason counts", "", "| reason | units_skipped |", "|---|---:|"]
+        for reason, count in skip_reason_counts.items():
+            lines.append(f"| {reason} | {count} |")
+        lines.append("")
 
     # --- Survivors per event_type × band (Holm) ---
     lines += [
@@ -1126,13 +1229,16 @@ def write_universe_report(
         lines.append("")
 
     # --- Skipped ---
-    if skipped:
-        lines += ["## Skipped work units (NPZ missing)", ""]
-        lines += ["| event_id | symbol | latency_ms | reason |",
-                  "|---|---|---|---|"]
-        for s in sorted(skipped, key=lambda x: (x["event_id"], x["symbol"], x["latency_ms"])):
+    if all_skipped:
+        lines += ["## Skipped work units (explicit skip/rejection reasons)", ""]
+        lines += [
+            "| event_id | event_type | release_date | symbol | latency_ms | reason |",
+            "|---|---|---|---|---|---|",
+        ]
+        for s in sorted(all_skipped, key=lambda x: (x["event_id"], x["symbol"], x["latency_ms"])):
             lines.append(
-                f"| {s['event_id']} | {s['symbol']} | {s['latency_ms']} | {s['reason']} |"
+                f"| {s['event_id']} | {s.get('event_type', '')} | {s.get('release_date', '')} "
+                f"| {s['symbol']} | {s['latency_ms']} | {s['reason']} |"
             )
         lines.append("")
 
@@ -1358,6 +1464,7 @@ def main(argv: list[str] | None = None) -> int:
             "git_commit": _git_commit(_REPO),
             "units_run": 0,
             "units_skipped": len(skipped),
+            "skip_reason_counts": _skip_reason_counts(skipped),
             "embargo": {
                 "start": RESEARCH_EMBARGO_START,
                 "units_skipped_embargo": _early_embargo,
@@ -1515,7 +1622,11 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     n_errored = sum(1 for u in unit_results if u.get("error"))
-    print(f"\nDone. units_run={len(unit_results)} errored={n_errored} skipped={len(skipped)}", flush=True)
+    print(
+        f"\nDone. units_run={len(unit_results)} errored={n_errored} "
+        f"skipped={len(_combined_skip_rows(skipped, unit_results))}",
+        flush=True,
+    )
     print(f"Wrote {result_path}", flush=True)
     print(f"Wrote {report_path}", flush=True)
     return 0

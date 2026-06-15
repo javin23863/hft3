@@ -114,6 +114,92 @@ class TestBuildWorkUnits:
         )
         for s in skipped:
             assert s["reason"] == "npz_missing"
+            assert s["event_type"] in {"CPI", "NFP"}
+            assert s["release_date"] in {"2024-02-02", "2024-03-13"}
+            assert s["symbol"] == "MES.v.0"
+            assert s["latency_ms"] == 1.0
+
+    def test_q001_no_market_window_skipped_with_accepted_reason(
+        self, universe_mod, tmp_path, minimal_npz
+    ):
+        p = tmp_path / "q001_no_market_events.csv"
+        p.write_text(
+            "event_id,event_type,release_date,release_time,timezone,window_name,start_offset_seconds,"
+            "end_offset_seconds,symbols,priority,source,source_url,effective_date,notes,row_status\n"
+            "EIA_CRUDE_2024_12_25_TIGHT,EIA_CRUDE,2024-12-25,10:30:00,America/New_York,TIGHT,"
+            "-30,300,\"MES.v.0\",50,TEST,http://example.com,2024-01-01,test,SOURCED\n",
+            encoding="utf-8",
+        )
+        work, skipped = universe_mod.build_work_units(
+            p,
+            {("MES.v.0", "EIA_CRUDE_2024_12_25_TIGHT"): str(minimal_npz)},
+            latency_bands=[1.0],
+            event_type_filter=None,
+            symbol_filter=["MES.v.0"],
+            max_events=None,
+        )
+        assert work == []
+        assert skipped == [{
+            "event_id": "EIA_CRUDE_2024_12_25_TIGHT",
+            "event_type": "EIA_CRUDE",
+            "release_date": "2024-12-25",
+            "symbol": "MES.v.0",
+            "latency_ms": 1.0,
+            "reason": "no_market_data",
+        }]
+
+    def test_q001_partial_window_skips_only_missing_symbols(
+        self, universe_mod, tmp_path, minimal_npz
+    ):
+        p = tmp_path / "q001_partial_events.csv"
+        p.write_text(
+            "event_id,event_type,release_date,release_time,timezone,window_name,start_offset_seconds,"
+            "end_offset_seconds,symbols,priority,source,source_url,effective_date,notes,row_status\n"
+            "FED_H41_2024_06_19_TIGHT,FED_H41,2024-06-19,16:30:00,America/New_York,TIGHT,"
+            "-30,300,\"MES.v.0,ES.v.0\",50,TEST,http://example.com,2024-01-01,test,SOURCED\n",
+            encoding="utf-8",
+        )
+        lake_index = {
+            ("MES.v.0", "FED_H41_2024_06_19_TIGHT"): str(minimal_npz),
+            ("ES.v.0", "FED_H41_2024_06_19_TIGHT"): str(minimal_npz),
+        }
+        work, skipped = universe_mod.build_work_units(
+            p,
+            lake_index,
+            latency_bands=[1.0],
+            event_type_filter=None,
+            symbol_filter=["MES.v.0", "ES.v.0"],
+            max_events=None,
+        )
+        assert [(u["event_id"], u["symbol"]) for u in work] == [
+            ("FED_H41_2024_06_19_TIGHT", "MES.v.0")
+        ]
+        assert skipped == [{
+            "event_id": "FED_H41_2024_06_19_TIGHT",
+            "event_type": "FED_H41",
+            "release_date": "2024-06-19",
+            "symbol": "ES.v.0",
+            "latency_ms": 1.0,
+            "reason": "symbol_absent_in_raw_after_redownload",
+        }]
+
+    @pytest.mark.parametrize("manifest_text", [None, "[]"])
+    def test_default_q001_manifest_unavailable_fails_closed(
+        self, universe_mod, events_csv, minimal_npz, tmp_path, manifest_text
+    ):
+        manifest = tmp_path / "missing_or_malformed_manifest.json"
+        if manifest_text is not None:
+            manifest.write_text(manifest_text, encoding="utf-8")
+        with mock.patch.object(universe_mod, "Q001_MBO_PILOT_MANIFEST", manifest):
+            with pytest.raises(RuntimeError, match="Q001 MBO pilot manifest"):
+                universe_mod.build_work_units(
+                    events_csv,
+                    {("MES.v.0", "AAA_EVT_A"): str(minimal_npz)},
+                    latency_bands=[1.0],
+                    event_type_filter=None,
+                    symbol_filter=["MES.v.0"],
+                    max_events=None,
+                )
 
     def test_event_type_filter(self, universe_mod, events_csv, minimal_npz, tmp_path):
         from backtest_pipeline.src.replay_npz_fixture import build_minimal_mbo_npz
@@ -369,7 +455,67 @@ class TestEndToEndSmoke:
         result_path = out_dir / "universe_result.json"
         assert result_path.exists()
         payload = json.loads(result_path.read_text(encoding="utf-8"))
+        assert payload["units_run"] == 0
         assert payload["units_skipped"] > 0
+        assert payload["skip_reason_counts"] == {"npz_missing": payload["units_skipped"]}
+        assert sum(payload["skip_reason_counts"].values()) == payload["units_skipped"]
+        for row in payload["skipped"]:
+            assert row["reason"] == "npz_missing"
+            assert row["event_type"] in {"CPI", "NFP"}
+            assert row["release_date"] in {"2024-01-10", "2024-02-02", "2024-03-13"}
+            assert row["symbol"] == "MES.v.0"
+
+    def test_result_and_report_count_worker_skip_reasons(self, universe_mod, tmp_path):
+        unit_results = [{
+            "event_id": "EMPTY_EVT",
+            "event_type": "CPI",
+            "release_date": "2024-04-10",
+            "symbol": "MES.v.0",
+            "latency_ms": 1.0,
+            "elapsed_s": 0.01,
+            "error": None,
+            "skip_reason": "empty_npz",
+            "hypotheses": [],
+        }]
+        result_path = universe_mod.write_universe_result(
+            tmp_path,
+            unit_results=unit_results,
+            skipped=[],
+            aggregated={},
+            corrections={},
+            robustness=None,
+            latency_bands=[1.0],
+            cli_args={},
+            stamp={},
+            run_start_utc="2026-06-15T00:00:00+00:00",
+            run_end_utc="2026-06-15T00:00:01+00:00",
+            total_elapsed_s=1.0,
+        )
+        report_path = universe_mod.write_universe_report(
+            tmp_path,
+            unit_results=unit_results,
+            skipped=[],
+            aggregated={},
+            corrections={},
+            latency_bands=[1.0],
+            stamp={},
+            run_start_utc="2026-06-15T00:00:00+00:00",
+            total_elapsed_s=1.0,
+        )
+        payload = json.loads(result_path.read_text(encoding="utf-8"))
+        assert payload["units_skipped"] == 1
+        assert payload["skip_reason_counts"] == {"empty_npz": 1}
+        assert payload["skipped"] == [{
+            "event_id": "EMPTY_EVT",
+            "event_type": "CPI",
+            "release_date": "2024-04-10",
+            "symbol": "MES.v.0",
+            "latency_ms": 1.0,
+            "reason": "empty_npz",
+        }]
+        report = report_path.read_text(encoding="utf-8")
+        assert "| empty_npz | 1 |" in report
+        assert "| CPI | 0 | 1 |" in report
 
 
 # ---------------------------------------------------------------------------

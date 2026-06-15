@@ -17,6 +17,10 @@ Options strict MBO warning ledger:
 [Q001_OPTIONS_STRICT_MBO_WARNING_LEDGER.md](Q001_OPTIONS_STRICT_MBO_WARNING_LEDGER.md)
 (`ACCEPTED_NON_BLOCKING_INVENTORY_SCOPE`)
 
+Missing data backfill sidecar:
+[MISSING_DATA_BACKFILL_SIDECAR.md](MISSING_DATA_BACKFILL_SIDECAR.md)
+(`PLANNED_NON_BLOCKING_INTAKE`)
+
 Owner decision packet:
 [Q001_OWNER_DECISION_PACKET.md](Q001_OWNER_DECISION_PACKET.md)
 (`ACCEPTED_AVAILABLE_DATA_SCOPE`)
@@ -78,8 +82,9 @@ Available-data models may proceed only when they emit explicit coverage, skip, o
 Non-blocking data fill setup:
 
 ```powershell
-python apps\workbench\scripts\backfill_catalog.py --model HYP_5 --symbol <SYM>.v.0 --dry-run
-python scripts\pull_fixing_windows.py --schema mbo --dry-run
+python scripts\paid_data_inventory.py --source-root <paid-data-source> --dry-run --verify-q001-hashes
+python apps\workbench\scripts\backfill_catalog.py --model HYP_5 --symbol <SYM>.v.0 --scope full_universe --dry-run
+python scripts\pull_fixing_windows.py mbo --dry-run
 ```
 
 After any data fill or scope change, rerun:
