@@ -883,6 +883,112 @@ class TestEndToEndSmoke:
             assert row["release_date"] in {"2024-01-10", "2024-02-02", "2024-03-13"}
             assert row["symbol"] == "MES.v.0"
 
+    def test_stage_a_pass_through_overlap_is_union_not_duplicate(self, tmp_path, events_csv, minimal_npz):
+        """A BH survivor can also be queue-sensitive pass_through; that is one allowed cell."""
+        stage_a = tmp_path / "stage_a_survivors.json"
+        stage_a.write_text(json.dumps({
+            "band_ms": 1.0,
+            "tested_cells": [
+                {"hyp_id": 42, "event_type": "CPI", "band_ms": 1.0, "p": 0.01},
+                {"hyp_id": 42, "event_type": "NFP", "band_ms": 1.0, "p": 1.0},
+            ],
+            "survivors": [
+                {"hyp_id": 42, "event_type": "CPI", "p": 0.01},
+            ],
+            "pass_through": [42],
+        }), encoding="utf-8")
+
+        out_dir = tmp_path / "out_stage_a_union"
+        mod = _load_fresh_universe_mod("run_event_universe_stage_a_union")
+        mod.load_lake_index = lambda _, rescan=False: {("MES.v.0", "AAA_EVT_A"): str(minimal_npz)}
+        import backtest_pipeline.src.replay_matrix as _rm
+        _orig_fn = _rm.run_all_hypotheses_replay
+
+        try:
+            _rm.run_all_hypotheses_replay = _fake_hyp_results_for  # type: ignore[assignment]
+            rc = mod.main([
+                "--events-csv", str(events_csv),
+                "--symbols", "MES.v.0",
+                "--from-stage-a", str(stage_a),
+                "--out", str(out_dir),
+                "--workers", "1",
+                "--bands", "1.0",
+            ])
+        finally:
+            _rm.run_all_hypotheses_replay = _orig_fn
+
+        assert rc == 0
+        payload = json.loads((out_dir / "universe_result.json").read_text(encoding="utf-8"))
+        assert payload["units_run"] >= 1
+        assert payload["stage_a_filter"]["allowed_cells_count"] == 2
+
+    def test_stage_a_duplicate_same_source_cells_still_fail(self, tmp_path, events_csv):
+        """Malformed Stage A JSON with repeated survivor cells remains fail-closed."""
+        stage_a = tmp_path / "stage_a_survivors_duplicate.json"
+        stage_a.write_text(json.dumps({
+            "band_ms": 1.0,
+            "tested_cells": [
+                {"hyp_id": 42, "event_type": "CPI", "band_ms": 1.0, "p": 0.01},
+            ],
+            "survivors": [
+                {"hyp_id": 42, "event_type": "CPI", "p": 0.01},
+                {"hyp_id": 42, "event_type": "CPI", "p": 0.01},
+            ],
+            "pass_through": [],
+        }), encoding="utf-8")
+
+        out_dir = tmp_path / "out_stage_a_duplicate"
+        mod = _load_fresh_universe_mod("run_event_universe_stage_a_duplicate")
+        mod.load_lake_index = lambda _, rescan=False: {}
+
+        with pytest.raises(SystemExit) as excinfo:
+            mod.main([
+                "--events-csv", str(events_csv),
+                "--symbols", "MES.v.0",
+                "--from-stage-a", str(stage_a),
+                "--out", str(out_dir),
+                "--workers", "1",
+                "--bands", "1.0",
+            ])
+
+        assert excinfo.value.code == 2
+
+    def test_stage_a_duplicate_cli_cells_are_idempotent(self, tmp_path, events_csv, minimal_npz):
+        """Repeated manual --cells additions should not make Stage A look malformed."""
+        stage_a = tmp_path / "stage_a_survivors.json"
+        stage_a.write_text(json.dumps({
+            "band_ms": 1.0,
+            "tested_cells": [
+                {"hyp_id": 42, "event_type": "CPI", "band_ms": 1.0, "p": 0.01},
+            ],
+            "survivors": [],
+            "pass_through": [],
+        }), encoding="utf-8")
+
+        out_dir = tmp_path / "out_stage_a_cli_cells"
+        mod = _load_fresh_universe_mod("run_event_universe_stage_a_cli_cells")
+        mod.load_lake_index = lambda _, rescan=False: {("MES.v.0", "AAA_EVT_A"): str(minimal_npz)}
+        import backtest_pipeline.src.replay_matrix as _rm
+        _orig_fn = _rm.run_all_hypotheses_replay
+
+        try:
+            _rm.run_all_hypotheses_replay = _fake_hyp_results_for  # type: ignore[assignment]
+            rc = mod.main([
+                "--events-csv", str(events_csv),
+                "--symbols", "MES.v.0",
+                "--from-stage-a", str(stage_a),
+                "--cells", "42:CPI,42:CPI",
+                "--out", str(out_dir),
+                "--workers", "1",
+                "--bands", "1.0",
+            ])
+        finally:
+            _rm.run_all_hypotheses_replay = _orig_fn
+
+        assert rc == 0
+        payload = json.loads((out_dir / "universe_result.json").read_text(encoding="utf-8"))
+        assert payload["stage_a_filter"]["allowed_cells_count"] == 1
+
     def test_result_and_report_count_worker_skip_reasons(self, universe_mod, tmp_path):
         unit_results = [{
             "event_id": "EMPTY_EVT",

@@ -1687,15 +1687,24 @@ def main(argv: list[str] | None = None) -> int:
         # Surviving event_types (from survivors list) — used for work-unit restriction below
         surviving_etypes: set[str] = {s["event_type"] for s in survivors if "event_type" in s}
 
-        allowed_cell_entries: list[tuple[int, str]] = []
+        allowed_cell_sources: dict[tuple[int, str], set[str]] = {}
+        duplicate_same_source: set[tuple[int, str]] = set()
+
+        def _add_allowed_cell(hyp_id: int, etype: str, source: str) -> None:
+            cell = (int(hyp_id), str(etype))
+            sources = allowed_cell_sources.setdefault(cell, set())
+            if source in sources and source != "cells":
+                duplicate_same_source.add(cell)
+            sources.add(source)
+
         for s in survivors:
             if "hyp_id" in s and "event_type" in s:
-                allowed_cell_entries.append((int(s["hyp_id"]), s["event_type"]))
+                _add_allowed_cell(int(s["hyp_id"]), s["event_type"], "survivor")
         # pass_through hyps advance for ALL event_types in the original tested family
         for pt in pass_through:
             pt_id = int(pt) if isinstance(pt, (int, str)) else int(pt.get("hyp_id", pt))
             for etype in tested_etypes:
-                allowed_cell_entries.append((pt_id, etype))
+                _add_allowed_cell(pt_id, etype, "pass_through")
 
         # Explicit --cells override adds additional cells
         if args.cells:
@@ -1703,15 +1712,11 @@ def main(argv: list[str] | None = None) -> int:
                 token = token.strip()
                 if ":" in token:
                     hid_str, et = token.split(":", 1)
-                    allowed_cell_entries.append((int(hid_str.strip()), et.strip()))
+                    _add_allowed_cell(int(hid_str.strip()), et.strip(), "cells")
 
-        if len(allowed_cell_entries) != len(set(allowed_cell_entries)):
-            duplicates = sorted({
-                cell for cell in allowed_cell_entries
-                if allowed_cell_entries.count(cell) > 1
-            })
-            p.error(f"Stage-A filter has duplicate allowed cells: {duplicates}")
-        allowed_cells = set(allowed_cell_entries)
+        if duplicate_same_source:
+            p.error(f"Stage-A filter has duplicate source cells: {sorted(duplicate_same_source)}")
+        allowed_cells = set(allowed_cell_sources)
 
         # Build per-event_type hyp_id sets for _worker filtering
         per_etype_hyp_ids = {}
