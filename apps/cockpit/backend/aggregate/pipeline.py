@@ -103,11 +103,13 @@ _FULL_SCOPE_KEYS = (
     "shard",
 )
 _FULL_SYMBOL_SCOPE = {"MES.v.0", "MNQ.v.0", "ES.v.0", "NQ.v.0", "ZN.v.0", "ZB.v.0", "RTY.v.0"}
-_NON_BLOCKING_SKIP_REASONS = {"embargo_2026"}
 _M6_FULL_ARTIFACT_ID = "research_cards/universe_M6_full/universe_result.json"
 _M6_BAND_MS = 6.255764
 _FULL_STAGE_A = "research_cards/stage_a_full/stage_a_survivors.json"
 _ACTIVE_SWEEP_PLACEHOLDER_IDS = {"gauntlet_b", "m6_gate"}
+_Q001_MBO_PILOT_MANIFEST = "packages/data_system/config/mbo_pilot_basket_20260605_manifest.json"
+_Q001_ACCEPTED_SKIP_REASONS = {"no_market_data", "symbol_absent_in_raw_after_redownload"}
+_MALFORMED_SKIP_REASON_COUNTS = "malformed_skip_reason_counts"
 _Q001_STAGE_FIELDS = (
     "q001_status",
     "artifact",
@@ -533,9 +535,9 @@ def _gauntlet_gate_state(data: dict) -> tuple[str, str]:
     return schemas.OK, f"gauntlet survivors={passed}/{evaluated}"
 
 
-def _skip_reason_counts(data: dict) -> dict[str, int]:
+def _counts_from_skipped_rows(data: dict) -> tuple[dict[str, int], int]:
     counts: dict[str, int] = {}
-    counted_from_skipped = 0
+    counted = 0
     skipped = data.get("skipped")
     if isinstance(skipped, list):
         for row in skipped:
@@ -543,10 +545,12 @@ def _skip_reason_counts(data: dict) -> dict[str, int]:
                 continue
             reason = str(row.get("reason") or "unspecified")
             counts[reason] = counts.get(reason, 0) + 1
-            counted_from_skipped += 1
-    declared_skips = _as_int(data.get("units_skipped"))
-    if declared_skips > counted_from_skipped:
-        counts["unspecified"] = counts.get("unspecified", 0) + (declared_skips - counted_from_skipped)
+            counted += 1
+    return counts, counted
+
+
+def _counts_from_runtime_skips(data: dict) -> dict[str, int]:
+    counts: dict[str, int] = {}
     unit_results = data.get("unit_results")
     if isinstance(unit_results, list):
         for unit in unit_results:
@@ -559,11 +563,100 @@ def _skip_reason_counts(data: dict) -> dict[str, int]:
     return counts
 
 
-def _blocking_skip_detail(skip_counts: dict[str, int]) -> Optional[str]:
+def _skip_reason_counts(data: dict) -> dict[str, int]:
+    declared_counts = data.get("skip_reason_counts")
+    if isinstance(declared_counts, dict):
+        counts: dict[str, int] = {}
+        valid = True
+        for reason, count in declared_counts.items():
+            if isinstance(count, bool) or type(count) is not int:
+                valid = False
+                break
+            if count < 0:
+                valid = False
+                break
+            counts[str(reason)] = counts.get(str(reason), 0) + count
+        declared_skips = data.get("units_skipped")
+        if declared_skips is not None and _as_int(declared_skips, -1) != sum(counts.values()):
+            valid = False
+        skipped_counts, skipped_rows = _counts_from_skipped_rows(data)
+        if skipped_rows > 0 and skipped_counts != counts:
+            valid = False
+        if valid:
+            return dict(sorted(counts.items()))
+        return {_MALFORMED_SKIP_REASON_COUNTS: 1}
+
+    counts, counted_from_skipped = _counts_from_skipped_rows(data)
+    declared_skips = _as_int(data.get("units_skipped"))
+    if declared_skips > counted_from_skipped:
+        counts["unspecified"] = counts.get("unspecified", 0) + (declared_skips - counted_from_skipped)
+    if not counts:
+        counts.update(_counts_from_runtime_skips(data))
+    return counts
+
+
+def _q001_gap_reason_map() -> dict[tuple[str, str | None], str]:
+    manifest = paths.read_json(paths.REPO / _Q001_MBO_PILOT_MANIFEST)
+    if not isinstance(manifest, dict):
+        return {}
+    out: dict[tuple[str, str | None], str] = {}
+    for event_id in manifest.get("no_market_windows") or []:
+        out[(str(event_id), None)] = "no_market_data"
+    for window in manifest.get("partial_windows") or []:
+        if not isinstance(window, dict):
+            continue
+        event_id = str(window.get("event_id") or "")
+        reason = str(window.get("reason") or "symbol_absent_in_raw_after_redownload")
+        missing_symbols = window.get("missing_symbols") or []
+        if not event_id or not isinstance(missing_symbols, list):
+            continue
+        for symbol in missing_symbols:
+            out[(event_id, str(symbol))] = reason
+    return out
+
+
+def _q001_skip_rows_are_ledger_backed(data: dict) -> bool:
+    q001_rows = []
+    skipped = data.get("skipped")
+    if not isinstance(skipped, list):
+        return False
+    for row in skipped:
+        if isinstance(row, dict) and row.get("reason") in _Q001_ACCEPTED_SKIP_REASONS:
+            q001_rows.append(row)
+    if not q001_rows:
+        return False
+    gap_reasons = _q001_gap_reason_map()
+    if not gap_reasons:
+        return False
+    for row in q001_rows:
+        event_id = str(row.get("event_id") or "")
+        symbol = str(row.get("symbol") or "")
+        reason = str(row.get("reason") or "")
+        if reason == "no_market_data":
+            if gap_reasons.get((event_id, None)) != reason:
+                return False
+        elif gap_reasons.get((event_id, symbol)) != reason:
+            return False
+    return True
+
+
+def _accepted_non_blocking_skip_reasons(data: dict, skip_counts: dict[str, int]) -> set[str]:
+    accepted = {"embargo_2026"}
+    if not any(reason in skip_counts for reason in _Q001_ACCEPTED_SKIP_REASONS):
+        return accepted
+    q001 = _q001_inventory()
+    if q001.get("status") == schemas.OK and q001.get("available_data_scope_accepted") is True:
+        if _q001_skip_rows_are_ledger_backed(data):
+            accepted.update(_Q001_ACCEPTED_SKIP_REASONS)
+    return accepted
+
+
+def _blocking_skip_detail(data: dict, skip_counts: dict[str, int]) -> Optional[str]:
+    non_blocking = _accepted_non_blocking_skip_reasons(data, skip_counts)
     blocking = {
         reason: count
         for reason, count in skip_counts.items()
-        if count > 0 and reason not in _NON_BLOCKING_SKIP_REASONS
+        if count > 0 and reason not in non_blocking
     }
     if not blocking:
         return None
@@ -597,7 +690,7 @@ def _universe_stage(id_: str, label: str, path) -> dict:
     scope, scope_detail, scope_issue = _scope_from_cli_args(data)
     robustness_status, robustness_detail, pbo = _robustness_state(data)
     skip_counts = _skip_reason_counts(data)
-    blocking_skip_detail = _blocking_skip_detail(skip_counts)
+    blocking_skip_detail = _blocking_skip_detail(data, skip_counts)
     certification_status, certification_detail, stamp = _certification_state(data)
 
     detail = None

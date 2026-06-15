@@ -9,6 +9,7 @@ export interface Stage {
   id: string;
   label: string;
   status: Status;
+  skip_reason_counts?: Record<string, number>;
   [k: string]: unknown;
 }
 

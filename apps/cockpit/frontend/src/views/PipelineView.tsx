@@ -10,6 +10,7 @@ const SWEEP_JOB = "cme_m6_universe_sweep";
 function meta(s: Stage): [string, unknown][] {
   const keys = [
     "detail",
+    "skip_reason_counts",
     "q001_status",
     "missing_or_unavailable_slots",
     "data_doctor_status",

@@ -696,6 +696,58 @@ def test_universe_non_embargo_skips_are_stale(monkeypatch, tmp_path):
     assert stage["detail"] == "coverage skips: empty_npz=1, npz_missing=1"
 
 
+def test_universe_declared_skip_reason_counts_prevent_runtime_double_count(monkeypatch, tmp_path):
+    stage = _read_universe_stage(monkeypatch, tmp_path, {
+        "units_skipped": 1,
+        "skip_reason_counts": {"empty_npz": 1},
+        "skipped": [
+            {
+                "event_id": "EMPTY_EVT",
+                "event_type": "CPI",
+                "release_date": "2024-04-10",
+                "symbol": "MES.v.0",
+                "latency_ms": 1.0,
+                "reason": "empty_npz",
+            },
+        ],
+        "unit_results": [
+            {
+                "event_id": "CPI_2024_09_11_TIGHT",
+                "symbol": "MES.v.0",
+                "latency_ms": 1.0,
+                "error": None,
+                "skip_reason": None,
+                "hypotheses": [
+                    {"hypothesis_id": 2, "hypothesis_name": "Stop-run exhaustion fade"}
+                ],
+            },
+            {
+                "event_id": "EMPTY_EVT",
+                "symbol": "MES.v.0",
+                "latency_ms": 1.0,
+                "error": None,
+                "skip_reason": "empty_npz",
+                "hypotheses": [],
+            },
+        ],
+    })
+
+    assert stage["skip_reason_counts"] == {"empty_npz": 1}
+    assert stage["detail"] == "coverage skips: empty_npz=1"
+
+
+def test_universe_malformed_declared_skip_reason_counts_are_stale(monkeypatch, tmp_path):
+    stage = _read_universe_stage(monkeypatch, tmp_path, {
+        "units_skipped": 1,
+        "skip_reason_counts": {"empty_npz": True},
+        "skipped": [{"reason": "embargo_2026"}],
+    })
+
+    assert stage["status"] == sc.STALE
+    assert stage["skip_reason_counts"] == {"malformed_skip_reason_counts": 1}
+    assert stage["detail"] == "coverage skips: malformed_skip_reason_counts=1"
+
+
 def test_universe_embargo_only_skips_do_not_block_full_ok(monkeypatch, tmp_path):
     stage = _read_universe_stage(monkeypatch, tmp_path, {
         "units_skipped": 1,
@@ -704,6 +756,73 @@ def test_universe_embargo_only_skips_do_not_block_full_ok(monkeypatch, tmp_path)
 
     assert stage["status"] == sc.OK
     assert stage["skip_reason_counts"] == {"embargo_2026": 1}
+
+
+def test_universe_q001_accepted_gap_skips_do_not_block_full_ok(monkeypatch, tmp_path):
+    manifest = tmp_path / "packages" / "data_system" / "config" / "mbo_pilot_basket_20260605_manifest.json"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(json.dumps({
+        "no_market_windows": ["EIA_CRUDE_2024_12_25_TIGHT"],
+        "partial_windows": [{
+            "event_id": "FED_H41_2024_06_19_TIGHT",
+            "missing_symbols": ["ES.v.0"],
+            "reason": "symbol_absent_in_raw_after_redownload",
+        }],
+    }), encoding="utf-8")
+    monkeypatch.setattr(pipeline_agg, "_q001_inventory", lambda: {
+        "status": sc.OK,
+        "available_data_scope_accepted": True,
+    })
+    stage = _read_universe_stage(monkeypatch, tmp_path, {
+        "units_skipped": 2,
+        "skip_reason_counts": {
+            "no_market_data": 1,
+            "symbol_absent_in_raw_after_redownload": 1,
+        },
+        "skipped": [
+            {
+                "event_id": "EIA_CRUDE_2024_12_25_TIGHT",
+                "symbol": "MES.v.0",
+                "reason": "no_market_data",
+            },
+            {
+                "event_id": "FED_H41_2024_06_19_TIGHT",
+                "symbol": "ES.v.0",
+                "reason": "symbol_absent_in_raw_after_redownload",
+            },
+        ],
+    })
+
+    assert stage["status"] == sc.OK
+    assert stage["skip_reason_counts"] == {
+        "no_market_data": 1,
+        "symbol_absent_in_raw_after_redownload": 1,
+    }
+
+
+def test_universe_q001_reason_strings_without_accepted_scope_stay_stale(monkeypatch, tmp_path):
+    manifest = tmp_path / "packages" / "data_system" / "config" / "mbo_pilot_basket_20260605_manifest.json"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(json.dumps({
+        "no_market_windows": ["EIA_CRUDE_2024_12_25_TIGHT"],
+        "partial_windows": [],
+    }), encoding="utf-8")
+    monkeypatch.setattr(pipeline_agg, "_q001_inventory", lambda: {
+        "status": sc.STALE,
+        "available_data_scope_accepted": False,
+    })
+    stage = _read_universe_stage(monkeypatch, tmp_path, {
+        "units_skipped": 1,
+        "skip_reason_counts": {"no_market_data": 1},
+        "skipped": [{
+            "event_id": "EIA_CRUDE_2024_12_25_TIGHT",
+            "symbol": "MES.v.0",
+            "reason": "no_market_data",
+        }],
+    })
+
+    assert stage["status"] == sc.STALE
+    assert stage["detail"] == "coverage skips: no_market_data=1"
 
 
 def test_universe_stale_certification_stamp_is_stale(monkeypatch, tmp_path):
@@ -3033,6 +3152,11 @@ def test_system_view_reads_real_options_gap_summary():
     assert "expiryCoverage?.[\"gap_count\"]" in src
     assert "expiryCoverage?.[\"gap_diagnostics\"]" in src
     assert '["first gap", gapSummary(gapDiagnostics[0])]' in src
+
+
+def test_pipeline_view_renders_skip_reason_counts():
+    src = (paths.REPO / "apps/cockpit/frontend/src/views/PipelineView.tsx").read_text(encoding="utf-8")
+    assert '"skip_reason_counts"' in src
 
 
 def test_options_diagnostics_formatters_render_payloads():
