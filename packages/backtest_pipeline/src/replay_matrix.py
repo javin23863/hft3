@@ -17,24 +17,28 @@ def _fill_metrics(
     hyp_id: int,
     tick_size: float,
 ) -> Tuple[List[FillRecord], List[float], List[float]]:
-    """Build FillRecords, FIFO round-trip PnLs, and per-fill adverse selection.
+    """Build FillRecords, FIFO closed-trade PnLs, and per-fill adverse selection.
 
-    Round-trip PnL is in price-point * qty units (matching hbt's balance
-    accounting). Adverse selection per fill is measured in ticks against the
-    mid observed at drain time: positive means the market moved against the
-    fill immediately after execution.
+    Closed-trade PnL is in the same cash units as hftbacktest balance and is
+    net of the matched opening/closing fill fees. Open inventory is deliberately
+    excluded: hftbacktest balance is cash accounting, so an unclosed buy can
+    make balance look like a large loss even though no round trip exists.
+    Adverse selection per fill is measured in ticks against the mid observed at
+    drain time: positive means the market moved against the fill immediately
+    after execution.
     """
     fills: List[FillRecord] = []
     trade_pnls: List[float] = []
     as_ticks: List[float] = []
 
     open_side = 0  # +1 long lots, -1 short lots, 0 flat
-    open_lots: deque = deque()  # [price, qty]
+    open_lots: deque = deque()  # [price, qty, remaining_fee]
 
     for f in fill_events:
         side = str(f["side"]).upper()
         px = float(f["exec_price"])
         qty = float(f["qty"])
+        fee = float(f.get("fees", 0.0) or 0.0)
         if qty <= 0.0 or side not in ("BUY", "SELL"):
             continue
 
@@ -60,20 +64,28 @@ def _fill_metrics(
 
         sign = 1 if side == "BUY" else -1
         if open_side in (0, sign):
-            open_lots.append([px, qty])
+            open_lots.append([px, qty, fee])
             open_side = sign
             continue
         remaining = qty
+        remaining_fee = fee
         while remaining > 1e-12 and open_lots:
             lot = open_lots[0]
-            matched = min(remaining, lot[1])
-            trade_pnls.append((px - lot[0]) * matched * open_side)
+            lot_qty_before = lot[1]
+            remaining_before = remaining
+            matched = min(remaining, lot_qty_before)
+            open_fee = lot[2] * (matched / lot_qty_before) if lot_qty_before else 0.0
+            close_fee = remaining_fee * (matched / remaining_before) if remaining_before else 0.0
+            gross = (px - lot[0]) * matched * open_side
+            trade_pnls.append(gross - open_fee - close_fee)
             lot[1] -= matched
+            lot[2] -= open_fee
             remaining -= matched
+            remaining_fee -= close_fee
             if lot[1] <= 1e-12:
                 open_lots.popleft()
         if remaining > 1e-12:
-            open_lots.append([px, remaining])
+            open_lots.append([px, remaining, remaining_fee])
             open_side = sign
         elif not open_lots:
             open_side = 0
@@ -115,18 +127,18 @@ def run_hypothesis_replay(
             tail_loss=0.0,
         )
 
-    pnl = float(result.get("balance", 0.0))
-    total_fees = float(result.get("fee", 0.0))
+    hftbacktest_cash_balance = float(result.get("balance", 0.0))
+    ending_position_qty = float(result.get("position", 0.0))
     fill_events = result.get("fill_events", [])
     fills, trade_pnls, as_ticks = _fill_metrics(
         fill_events, hypothesis.hyp_id, tick_size
     )
 
-    # Fees are spread evenly across round trips; open residual inventory keeps
-    # its share inside net_pnl (hbt's balance) but not in the per-trade stats.
+    # Report realized closed-round-trip PnL. Raw hftbacktest balance is cash
+    # accounting and can include open-inventory cost/proceeds, so it is carried
+    # separately as hftbacktest_cash_balance.
     num_round_trips = len(trade_pnls)
-    fee_per_trade = total_fees / num_round_trips if num_round_trips else 0.0
-    net_trade_pnls = [p - fee_per_trade for p in trade_pnls]
+    net_trade_pnls = trade_pnls
 
     if net_trade_pnls:
         win_rate = float(np.mean([p > 0 for p in net_trade_pnls]))
@@ -139,12 +151,14 @@ def run_hypothesis_replay(
 
     return BacktestResult(
         hypothesis_id=hypothesis.hyp_id,
-        net_pnl=pnl,
+        net_pnl=float(sum(net_trade_pnls)),
         num_trades=num_round_trips,
         win_rate=win_rate,
         expectancy=expectancy,
         adverse_selection_ticks=float(np.mean(as_ticks)) if as_ticks else 0.0,
         tail_loss=tail_loss,
+        hftbacktest_cash_balance=hftbacktest_cash_balance,
+        ending_position_qty=ending_position_qty,
         fills=fills,
     )
 

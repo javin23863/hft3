@@ -33,4 +33,6 @@ class BacktestResult:
     expectancy: float
     adverse_selection_ticks: float
     tail_loss: float
+    hftbacktest_cash_balance: float = 0.0
+    ending_position_qty: float = 0.0
     fills: List[FillRecord] = field(default_factory=list)

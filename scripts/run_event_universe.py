@@ -596,6 +596,8 @@ def _worker(unit: dict[str, Any]) -> dict[str, Any]:
                 "hypothesis_id": hyp_id,
                 "hypothesis_name": hyp_name_map.get(hyp_id, ""),
                 "net_pnl_usd": round(float(res.net_pnl), 6),
+                "hftbacktest_cash_balance_usd": round(float(res.hftbacktest_cash_balance), 6),
+                "ending_position_qty": round(float(res.ending_position_qty), 6),
                 "num_trades": int(res.num_trades),
                 "win_rate": round(float(res.win_rate), 6),
                 "expectancy_usd": round(float(res.expectancy), 6),

@@ -31,6 +31,46 @@ _REPO = Path(__file__).resolve().parents[1]
 AUDIT_DIR = _REPO / "runtime" / "replay_audits"
 
 
+def _realized_closed_trade_pnl(fill_records: List[Dict[str, Any]]) -> float:
+    open_side = 0
+    open_lots: list[list[float]] = []  # [price, qty, remaining_fee]
+    realized = 0.0
+    for f in fill_records:
+        side = str(f.get("side", "")).upper()
+        px = float(f.get("exec_price", 0.0) or 0.0)
+        qty = float(f.get("qty", 0.0) or 0.0)
+        fee = float(f.get("fees", 0.0) or 0.0)
+        if qty <= 0.0 or side not in ("BUY", "SELL"):
+            continue
+        sign = 1 if side == "BUY" else -1
+        if open_side in (0, sign):
+            open_lots.append([px, qty, fee])
+            open_side = sign
+            continue
+        remaining = qty
+        remaining_fee = fee
+        while remaining > 1e-12 and open_lots:
+            lot = open_lots[0]
+            lot_qty_before = lot[1]
+            remaining_before = remaining
+            matched = min(remaining, lot_qty_before)
+            open_fee = lot[2] * (matched / lot_qty_before) if lot_qty_before else 0.0
+            close_fee = remaining_fee * (matched / remaining_before) if remaining_before else 0.0
+            realized += (px - lot[0]) * matched * open_side - open_fee - close_fee
+            lot[1] -= matched
+            lot[2] -= open_fee
+            remaining -= matched
+            remaining_fee -= close_fee
+            if lot[1] <= 1e-12:
+                open_lots.pop(0)
+        if remaining > 1e-12:
+            open_lots.append([px, remaining, remaining_fee])
+            open_side = sign
+        elif not open_lots:
+            open_side = 0
+    return realized
+
+
 @dataclass
 class ReplayStepContext:
     run_id: str
@@ -430,6 +470,7 @@ class ReplaySession:
             counts[ev.event_type.value] = counts.get(ev.event_type.value, 0) + 1
 
         counters = safety.counter_snapshot()
+        realized_pnl = _realized_closed_trade_pnl(self._fill_records)
         return {
             "run_id": self.run_id,
             "order_intent_count": self._intent_count,
@@ -441,7 +482,8 @@ class ReplaySession:
             "replace_count": counts.get(OrderEventType.ORDER_REPLACED.value, 0),
             **counters,
             "total_fees": account.fee,
-            "realized_pnl": account.balance,
+            "cash_balance": account.balance,
+            "realized_pnl": realized_pnl,
             "unrealized_pnl": account.unrealized_pnl,
             "max_position": abs(account.position),
             "latency_band_ms": self.config.latency_ms,
