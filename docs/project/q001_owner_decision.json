@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "question_id": "Q001",
+  "decision_date": "2026-06-15",
+  "status": "ACCEPTED_AVAILABLE_DATA_SCOPE",
+  "mbo_gap_ledger": "ACCEPTED_NON_BLOCKING_INVENTORY_SCOPE",
+  "options_strict_mbo_warning_ledger": "ACCEPTED_NON_BLOCKING_INVENTORY_SCOPE",
+  "available_data_research_allowed": true,
+  "accepted_evidence": {
+    "missing_or_unavailable_slots": 211,
+    "strict_mbo_gap_count": 507,
+    "strict_mbo_stale_gap_count": 503,
+    "options_warn_checks": ["options-fixing-mbo-coverage"]
+  },
+  "model_gap_policy": {
+    "missing_mbo_required_models": "SIDELINE_UNTIL_DATA_FILLED",
+    "strict_options_quote_required_models": "SIDELINE_UNTIL_DATA_FILLED",
+    "available_data_models": "RUN_WITH_EXPLICIT_COVERAGE",
+    "must_emit_skip_or_rejection_reasons": true
+  }
+}

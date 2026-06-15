@@ -107,9 +107,29 @@ function Q001InventoryCard({ q001 }: { q001: Q001InventoryEvidence | undefined }
   const gapText = firstGap
     ? String(firstGap["detail"] ?? (firstGapLabel || gapSummary(firstGap)))
     : gaps.length ? `${gaps.length} gaps` : "—";
+  const acceptedEvidence = q001?.accepted_evidence;
+  const modelGapPolicy = q001?.model_gap_policy;
+  const validationErrors = Array.isArray(q001?.owner_decision_validation_errors)
+    ? q001.owner_decision_validation_errors.join(", ")
+    : "—";
+  const acceptedScope = q001?.available_data_scope_accepted === true
+    ? "accepted; missing-data models sidelined"
+    : q001 ? "not accepted" : "—";
+  const acceptedCounts = acceptedEvidence
+    ? `mbo=${s(acceptedEvidence["missing_or_unavailable_slots"])}, strict=${s(acceptedEvidence["strict_mbo_gap_count"])}/${s(acceptedEvidence["strict_mbo_stale_gap_count"])}`
+    : "—";
+  const gapPolicy = modelGapPolicy
+    ? `${s(modelGapPolicy["available_data_models"])}; ${s(modelGapPolicy["missing_mbo_required_models"])}`
+    : "—";
   return (
     <Card title="Q001 paid-data inventory" status={status} rows={[
       ["q001_status", q001?.q001_status],
+      ["owner decision", q001?.owner_decision_status],
+      ["available-data scope", acceptedScope],
+      ["decision artifact", q001?.owner_decision_artifact],
+      ["accepted evidence", acceptedCounts],
+      ["model gap policy", gapPolicy],
+      ["decision validation", validationErrors],
       ["artifact", q001?.artifact],
       ["MBO missing/unavailable slots", q001?.missing_or_unavailable_slots],
       ["options doctor", q001?.data_doctor_status],

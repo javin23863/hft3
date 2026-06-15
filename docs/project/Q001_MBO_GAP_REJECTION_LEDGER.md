@@ -4,7 +4,7 @@
 
 Date: 2026-06-15
 
-Status: `PROPOSED_REJECTION_LEDGER` (`not-owner-accepted`, not closed/green)
+Status: `ACCEPTED_NON_BLOCKING_INVENTORY_SCOPE` (not model-readiness evidence)
 
 Sources:
 
@@ -20,10 +20,9 @@ slots for Q001 inventory acceptance. It is not model-readiness evidence, not a
 robustness artifact, and not permission to treat unavailable data as successful
 runnable coverage.
 
-If accepted by the project owner, these rows can close the MBO pilot gap portion
-of Q001 for inventory scope only. Model runners must still skip or reject each
-listed event-symbol slot unless a future paid-data fill changes the tracked
-manifest.
+The project owner accepts these rows for available-data inventory scope only.
+Model runners must still skip or reject each listed event-symbol slot unless a
+future paid-data fill changes the tracked manifest.
 
 ## Slot Arithmetic
 
@@ -95,19 +94,17 @@ remain unavailable after redownload and must be rejected only for those symbols.
 | FED_H41 | `FED_H41_2024_06_19_TIGHT` | 2024-06-19 | `symbol_absent_in_raw_after_redownload` | 3 | `ES.v.0`, `ZB.v.0`, `RTY.v.0` |
 | FED_H41 | `FED_H41_2024_07_03_TIGHT` | 2024-07-03 | `symbol_absent_in_raw_after_redownload` | 5 | `MES.v.0`, `MNQ.v.0`, `ES.v.0`, `NQ.v.0`, `RTY.v.0` |
 
-## Acceptance Decision Needed
+## Acceptance Decision Recorded
 
-Q001 remains `INVENTORIED_WITH_WARNINGS` until the project owner explicitly
-accepts or rejects this ledger for inventory scope. Owner acceptance would mean:
+Owner acceptance means:
 
 - The `203` full no-market slots are accepted as unavailable data, not missing repo files.
 - The `8` partial symbol absences are accepted as symbol-specific unavailable data.
 - Future model-universe runners must keep these rows as explicit skips or rejections.
-- The strict options MBO quote warning still needs separate acceptance or clearing for Q001.
+- This does not certify model readiness, robustness, PIT joins, or promotion eligibility.
 
-If accepted, update [Q001_DATA_INVENTORY_STATUS.md](Q001_DATA_INVENTORY_STATUS.md)
-and [OPEN_QUESTIONS_AND_REJECTIONS.md](OPEN_QUESTIONS_AND_REJECTIONS.md) with
-the owner decision and rerun:
+After any future data fill, update [Q001_DATA_INVENTORY_STATUS.md](Q001_DATA_INVENTORY_STATUS.md)
+and rerun:
 
 ```powershell
 python scripts\paid_data_inventory.py --dry-run --verify-q001-hashes

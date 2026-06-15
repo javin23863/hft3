@@ -6,6 +6,7 @@ never surfaced (only presence via keystore.status())."""
 from __future__ import annotations
 
 import os
+from datetime import date
 from typing import Optional
 
 from .. import paths, schemas
@@ -32,10 +33,29 @@ _Q001_OK_STATUSES = {"INVENTORIED"}
 _Q001_FAIL_STATUSES = {"BLOCKED"}
 _Q001_FAIL_EVIDENCE = {"BLOCKED", "ERROR", "FAIL", "FAILED"}
 _Q001_WARN_EVIDENCE = {"MISSING", "STALE", "WARN", "WARNING"}
+_Q001_ACCEPTED_OWNER_STATUS = "ACCEPTED_AVAILABLE_DATA_SCOPE"
+_Q001_ACCEPTED_LEDGER_STATUS = "ACCEPTED_NON_BLOCKING_INVENTORY_SCOPE"
+_Q001_ACCEPTED_GAP_SOURCES = {"mbo_pilot_manifest", "data_doctor"}
+_Q001_ACCEPTED_OPTIONS_WARN_CHECKS = {"options-fixing-mbo-coverage"}
+_Q001_ACCEPTED_EVIDENCE_COUNTS = {
+    "missing_or_unavailable_slots": 211,
+    "strict_mbo_gap_count": 507,
+    "strict_mbo_stale_gap_count": 503,
+}
+_Q001_REQUIRED_MODEL_GAP_POLICY = {
+    "missing_mbo_required_models": "SIDELINE_UNTIL_DATA_FILLED",
+    "strict_options_quote_required_models": "SIDELINE_UNTIL_DATA_FILLED",
+    "available_data_models": "RUN_WITH_EXPLICIT_COVERAGE",
+    "must_emit_skip_or_rejection_reasons": True,
+}
 
 
 def _q001_artifact():
     return paths.REPO / "runtime" / "data_audits" / "paid_data_inventory.json"
+
+
+def _q001_owner_decision_artifact():
+    return paths.REPO / "docs" / "project" / "q001_owner_decision.json"
 
 
 def _nested(mapping: dict, *keys: str):
@@ -192,6 +212,170 @@ def _q001_evidence_status(*evidence_values: Optional[str]) -> Optional[str]:
     return None
 
 
+def _q001_valid_decision_date(value) -> bool:
+    if not isinstance(value, str) or not value.strip():
+        return False
+    try:
+        date.fromisoformat(value.strip())
+    except ValueError:
+        return False
+    return True
+
+
+def _q001_decision_evidence(data: dict) -> tuple[dict, list[str]]:
+    errors = []
+    evidence = data.get("accepted_evidence")
+    if not isinstance(evidence, dict):
+        return {}, ["accepted_evidence"]
+    for key, expected in _Q001_ACCEPTED_EVIDENCE_COUNTS.items():
+        if evidence.get(key) != expected:
+            errors.append(f"accepted_evidence.{key}")
+    warn_checks = evidence.get("options_warn_checks")
+    if not isinstance(warn_checks, list) or set(map(str, warn_checks)) != _Q001_ACCEPTED_OPTIONS_WARN_CHECKS:
+        errors.append("accepted_evidence.options_warn_checks")
+    return evidence, errors
+
+
+def _q001_owner_decision() -> dict:
+    artifact = _q001_owner_decision_artifact()
+    artifact_ref = str(artifact.relative_to(paths.REPO))
+    data = paths.read_json(artifact)
+    if not isinstance(data, dict):
+        return {
+            "artifact": artifact_ref,
+            "status": None,
+            "accepted_available_data_scope": False,
+        }
+    status = str(data.get("status") or "").strip().upper()
+    mbo = str(data.get("mbo_gap_ledger") or "").strip().upper()
+    options = str(data.get("options_strict_mbo_warning_ledger") or "").strip().upper()
+    policy = data.get("model_gap_policy") if isinstance(data.get("model_gap_policy"), dict) else {}
+    accepted_evidence, evidence_errors = _q001_decision_evidence(data)
+    validation_errors = list(evidence_errors)
+    if data.get("schema_version") != 1:
+        validation_errors.append("schema_version")
+    if data.get("question_id") != "Q001":
+        validation_errors.append("question_id")
+    if not _q001_valid_decision_date(data.get("decision_date")):
+        validation_errors.append("decision_date")
+    if policy != _Q001_REQUIRED_MODEL_GAP_POLICY:
+        validation_errors.append("model_gap_policy")
+    accepted = (
+        status == _Q001_ACCEPTED_OWNER_STATUS
+        and mbo == _Q001_ACCEPTED_LEDGER_STATUS
+        and options == _Q001_ACCEPTED_LEDGER_STATUS
+        and data.get("available_data_research_allowed") is True
+        and not validation_errors
+    )
+    return {
+        "artifact": artifact_ref,
+        "status": status or None,
+        "mbo_gap_ledger": mbo or None,
+        "options_strict_mbo_warning_ledger": options or None,
+        "accepted_available_data_scope": accepted,
+        "accepted_evidence": accepted_evidence,
+        "model_gap_policy": policy,
+        "validation_errors": validation_errors,
+    }
+
+
+def _q001_gap_evidence_for_owner_scope(gaps, accepted: bool) -> Optional[str]:
+    if not accepted:
+        return _q001_gap_evidence(gaps)
+    if gaps is None:
+        return schemas.UNKNOWN
+    if not isinstance(gaps, list):
+        return schemas.UNKNOWN
+    sources_seen = set()
+    for gap in gaps:
+        if not isinstance(gap, dict):
+            return schemas.UNKNOWN
+        source = str(gap.get("source") or "").strip()
+        sources_seen.add(source)
+        evidence = _q001_status_evidence(gap.get("severity") or gap.get("status") or gap.get("state"))
+        if evidence == schemas.FAIL:
+            return schemas.FAIL
+        if source not in _Q001_ACCEPTED_GAP_SOURCES:
+            return schemas.UNKNOWN if evidence is None else evidence
+        if evidence != schemas.STALE:
+            return schemas.UNKNOWN if evidence is None else evidence
+    if sources_seen != _Q001_ACCEPTED_GAP_SOURCES:
+        return schemas.UNKNOWN
+    return None
+
+
+def _q001_options_warning_evidence_for_owner_scope(warn_checks, fail_checks) -> Optional[str]:
+    if not isinstance(warn_checks, list) or not isinstance(fail_checks, list):
+        return schemas.UNKNOWN
+    if fail_checks:
+        return schemas.FAIL
+    actual_names = set()
+    for check in warn_checks:
+        if not isinstance(check, dict):
+            return schemas.UNKNOWN
+        name = str(check.get("name") or "").strip()
+        actual_names.add(name)
+        evidence = _q001_source_status_evidence(check.get("status"))
+        if evidence == schemas.FAIL:
+            return schemas.FAIL
+        if name not in _Q001_ACCEPTED_OPTIONS_WARN_CHECKS or evidence != schemas.STALE:
+            return schemas.STALE if evidence is None else evidence
+    if actual_names != _Q001_ACCEPTED_OPTIONS_WARN_CHECKS:
+        return schemas.STALE
+    return None
+
+
+def _q001_accepted_evidence_status(q001_values: dict, owner_decision: dict) -> Optional[str]:
+    evidence = owner_decision.get("accepted_evidence")
+    if not isinstance(evidence, dict):
+        return schemas.UNKNOWN
+    for key, expected in _Q001_ACCEPTED_EVIDENCE_COUNTS.items():
+        if q001_values.get(key) != expected or evidence.get(key) != expected:
+            return schemas.STALE
+    warn_checks = evidence.get("options_warn_checks")
+    if not isinstance(warn_checks, list) or set(map(str, warn_checks)) != _Q001_ACCEPTED_OPTIONS_WARN_CHECKS:
+        return schemas.UNKNOWN
+    return None
+
+
+def _q001_accepted_available_data_status(q001_state: str, gaps, q001_values: dict, owner_decision: dict) -> Optional[str]:
+    if not owner_decision.get("accepted_available_data_scope"):
+        return None
+    if _q001_status_evidence(q001_state) == schemas.FAIL:
+        return schemas.FAIL
+    if q001_values["options_fail_checks"]:
+        return schemas.FAIL
+    source_status = _q001_evidence_status(
+        _q001_required_source_status_evidence(q001_values["event_catalog_status"]),
+        _q001_required_source_status_evidence(q001_values["active_npz_manifest_status"]),
+    )
+    if source_status is not None:
+        return source_status
+    accepted_evidence_status = _q001_accepted_evidence_status(q001_values, owner_decision)
+    if accepted_evidence_status is not None:
+        return accepted_evidence_status
+    mbo_status = _q001_required_mbo_pilot_status_evidence(q001_values["mbo_pilot_basket_status"])
+    if mbo_status in {schemas.FAIL, schemas.UNKNOWN}:
+        return mbo_status
+    data_doctor_status = _q001_required_source_status_evidence(q001_values["data_doctor_status"])
+    if data_doctor_status in {schemas.FAIL, schemas.UNKNOWN}:
+        return data_doctor_status
+    if data_doctor_status == schemas.STALE:
+        options_warning_status = _q001_options_warning_evidence_for_owner_scope(
+            q001_values["options_warn_checks"],
+            q001_values["options_fail_checks"],
+        )
+        if options_warning_status is not None:
+            return options_warning_status
+    for count_key in ("missing_or_unavailable_slots", "strict_mbo_gap_count", "strict_mbo_stale_gap_count"):
+        if q001_values[count_key] is None:
+            return schemas.UNKNOWN
+    gap_status = _q001_gap_evidence_for_owner_scope(gaps, accepted=True)
+    if gap_status is not None:
+        return gap_status
+    return schemas.OK
+
+
 def _q001_required_clean_status(gaps, q001_values: dict) -> Optional[str]:
     return _q001_evidence_status(
         _q001_gap_evidence(gaps) if isinstance(gaps, list) else schemas.UNKNOWN,
@@ -242,6 +426,8 @@ def _q001_inventory() -> dict:
             q001, "futures", "mbo_pilot_basket", "missing_or_unavailable_slots"
         ),
         "data_doctor_status": _nested(q001, "options", "data_doctor_status"),
+        "options_warn_checks": _nested(q001, "options", "warn_checks"),
+        "options_fail_checks": _nested(q001, "options", "fail_checks"),
         "strict_mbo_gap_count": _nested(
             q001, "options", "options_lane", "expiry_coverage", "strict_mbo_gap_count"
         ),
@@ -260,8 +446,12 @@ def _q001_inventory() -> dict:
         _q001_count_evidence(q001_values["strict_mbo_stale_gap_count"]),
     )
     q001_status_evidence = _q001_status_evidence(q001_state)
+    owner_decision = _q001_owner_decision()
+    accepted_status = _q001_accepted_available_data_status(q001_state, gaps, q001_values, owner_decision)
     if q001_status_evidence == schemas.FAIL or q001_state in _Q001_FAIL_STATUSES:
         status = schemas.FAIL
+    elif accepted_status is not None:
+        status = accepted_status
     elif q001_state in _Q001_OK_STATUSES:
         required_status = _q001_required_clean_status(gaps, q001_values)
         status = schemas.OK if required_status is None else required_status
@@ -276,7 +466,16 @@ def _q001_inventory() -> dict:
         "q001_status": q001_status,
         "artifact": artifact_ref,
         "gaps": gaps if isinstance(gaps, list) else [],
+        "owner_decision_status": owner_decision.get("status"),
+        "owner_decision_artifact": owner_decision.get("artifact"),
+        "available_data_scope_accepted": owner_decision.get("accepted_available_data_scope", False),
     }
+    if owner_decision.get("validation_errors"):
+        out["owner_decision_validation_errors"] = owner_decision["validation_errors"]
+    if owner_decision.get("accepted_evidence"):
+        out["accepted_evidence"] = owner_decision["accepted_evidence"]
+    if owner_decision.get("model_gap_policy"):
+        out["model_gap_policy"] = owner_decision["model_gap_policy"]
     for key, value in q001_values.items():
         if value is not None:
             out[key] = value

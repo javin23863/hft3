@@ -1303,6 +1303,8 @@ def test_system_q001_inventory_warnings_are_non_green(monkeypatch, tmp_path):
                 },
                 "options": {
                     "data_doctor_status": "WARN",
+                    "warn_checks": [{"name": "options-fixing-mbo-coverage", "status": "WARN"}],
+                    "fail_checks": [],
                     "options_lane": {
                         "expiry_coverage": {
                             "strict_mbo_gap_count": 507,
@@ -1348,6 +1350,293 @@ def test_system_q001_inventory_warnings_are_non_green(monkeypatch, tmp_path):
     assert q001["strict_mbo_stale_gap_count"] == 503
     assert len(q001["gaps"]) == 2
     _json_roundtrip(z)
+
+
+def test_system_q001_owner_accepted_available_data_scope_is_green_with_skips(monkeypatch, tmp_path):
+    decision = tmp_path / "docs" / "project" / "q001_owner_decision.json"
+    decision.parent.mkdir(parents=True)
+    decision.write_text(
+        json.dumps({
+            "status": "ACCEPTED_AVAILABLE_DATA_SCOPE",
+            "schema_version": 1,
+            "question_id": "Q001",
+            "decision_date": "2026-06-15",
+            "mbo_gap_ledger": "ACCEPTED_NON_BLOCKING_INVENTORY_SCOPE",
+            "options_strict_mbo_warning_ledger": "ACCEPTED_NON_BLOCKING_INVENTORY_SCOPE",
+            "available_data_research_allowed": True,
+            "accepted_evidence": {
+                "missing_or_unavailable_slots": 211,
+                "strict_mbo_gap_count": 507,
+                "strict_mbo_stale_gap_count": 503,
+                "options_warn_checks": ["options-fixing-mbo-coverage"],
+            },
+            "model_gap_policy": {
+                "missing_mbo_required_models": "SIDELINE_UNTIL_DATA_FILLED",
+                "strict_options_quote_required_models": "SIDELINE_UNTIL_DATA_FILLED",
+                "available_data_models": "RUN_WITH_EXPLICIT_COVERAGE",
+                "must_emit_skip_or_rejection_reasons": True,
+            },
+        }),
+        encoding="utf-8",
+    )
+    artifact = tmp_path / "runtime" / "data_audits" / "paid_data_inventory.json"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text(
+        json.dumps({
+            "q001_cme_data_inventory": {
+                "status": "INVENTORIED_WITH_WARNINGS",
+                "event_catalog": {"status": "OK"},
+                "futures": {
+                    "active_npz_manifest": {"status": "OK"},
+                    "mbo_pilot_basket": {
+                        "status": "completed_with_gaps",
+                        "missing_or_unavailable_slots": 211,
+                    },
+                },
+                "options": {
+                    "data_doctor_status": "WARN",
+                    "warn_checks": [{"name": "options-fixing-mbo-coverage", "status": "WARN"}],
+                    "fail_checks": [],
+                    "options_lane": {
+                        "expiry_coverage": {
+                            "strict_mbo_gap_count": 507,
+                            "strict_mbo_stale_gap_count": 503,
+                        },
+                    },
+                },
+                "gaps": [
+                    {"source": "mbo_pilot_manifest", "severity": "WARN"},
+                    {"source": "data_doctor", "severity": "WARN"},
+                ],
+            },
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(system_agg, "_latency", lambda: {"status": sc.OK, "live_arm_status": sc.OK})
+    monkeypatch.setattr(system_agg, "_slow_tier", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_certification", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_databento", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_capture", lambda: {"status": sc.OK})
+    monkeypatch.setattr(
+        system_agg,
+        "_lanes",
+        lambda: {
+            "status": sc.OK,
+            "cme_options_data": {"status": sc.OK},
+            "cme_options_defects": {"status": sc.OK},
+        },
+    )
+
+    z = system_agg.build()
+    q001 = z["q001_inventory"]
+
+    assert z["health"] == sc.GREEN
+    assert q001["status"] == sc.OK
+    assert q001["available_data_scope_accepted"] is True
+    assert q001["owner_decision_status"] == "ACCEPTED_AVAILABLE_DATA_SCOPE"
+    assert q001["missing_or_unavailable_slots"] == 211
+    assert q001["strict_mbo_gap_count"] == 507
+    assert q001["accepted_evidence"]["strict_mbo_stale_gap_count"] == 503
+    assert q001["model_gap_policy"]["available_data_models"] == "RUN_WITH_EXPLICIT_COVERAGE"
+    _json_roundtrip(z)
+
+
+def test_system_q001_owner_acceptance_rejects_accepted_evidence_drift():
+    owner_decision = {
+        "accepted_available_data_scope": True,
+        "accepted_evidence": {
+            "missing_or_unavailable_slots": 211,
+            "strict_mbo_gap_count": 507,
+            "strict_mbo_stale_gap_count": 503,
+            "options_warn_checks": ["options-fixing-mbo-coverage"],
+        },
+    }
+    q001_values = {
+        "event_catalog_status": "OK",
+        "active_npz_manifest_status": "OK",
+        "mbo_pilot_basket_status": "completed_with_gaps",
+        "missing_or_unavailable_slots": 211,
+        "data_doctor_status": "WARN",
+        "options_warn_checks": [{"name": "options-fixing-mbo-coverage", "status": "WARN"}],
+        "options_fail_checks": [],
+        "strict_mbo_gap_count": 508,
+        "strict_mbo_stale_gap_count": 503,
+    }
+
+    status = system_agg._q001_accepted_available_data_status(
+        "INVENTORIED_WITH_WARNINGS",
+        [{"source": "mbo_pilot_manifest", "severity": "WARN"}],
+        q001_values,
+        owner_decision,
+    )
+
+    assert status == sc.STALE
+
+
+def _accepted_q001_values() -> dict:
+    return {
+        "event_catalog_status": "OK",
+        "active_npz_manifest_status": "OK",
+        "mbo_pilot_basket_status": "completed_with_gaps",
+        "missing_or_unavailable_slots": 211,
+        "data_doctor_status": "WARN",
+        "options_warn_checks": [{"name": "options-fixing-mbo-coverage", "status": "WARN"}],
+        "options_fail_checks": [],
+        "strict_mbo_gap_count": 507,
+        "strict_mbo_stale_gap_count": 503,
+    }
+
+
+def _accepted_owner_decision() -> dict:
+    return {
+        "accepted_available_data_scope": True,
+        "accepted_evidence": {
+            "missing_or_unavailable_slots": 211,
+            "strict_mbo_gap_count": 507,
+            "strict_mbo_stale_gap_count": 503,
+            "options_warn_checks": ["options-fixing-mbo-coverage"],
+        },
+    }
+
+
+def test_system_q001_owner_acceptance_requires_explicit_gap_evidence():
+    status = system_agg._q001_accepted_available_data_status(
+        "INVENTORIED_WITH_WARNINGS",
+        None,
+        _accepted_q001_values(),
+        _accepted_owner_decision(),
+    )
+
+    assert status == sc.UNKNOWN
+
+
+def test_system_q001_owner_acceptance_rejects_unknown_gap_evidence():
+    status = system_agg._q001_accepted_available_data_status(
+        "INVENTORIED_WITH_WARNINGS",
+        [
+            {"source": "mbo_pilot_manifest", "severity": "WARN"},
+            {"source": "data_doctor", "severity": "OK"},
+        ],
+        _accepted_q001_values(),
+        _accepted_owner_decision(),
+    )
+
+    assert status == sc.UNKNOWN
+
+
+def test_system_q001_owner_acceptance_rejects_options_fail_checks_despite_summary_ok():
+    values = _accepted_q001_values()
+    values["data_doctor_status"] = "OK"
+    values["options_fail_checks"] = [{"name": "options-fixing-coverage", "status": "FAIL"}]
+
+    status = system_agg._q001_accepted_available_data_status(
+        "INVENTORIED_WITH_WARNINGS",
+        [
+            {"source": "mbo_pilot_manifest", "severity": "WARN"},
+            {"source": "data_doctor", "severity": "WARN"},
+        ],
+        values,
+        _accepted_owner_decision(),
+    )
+
+    assert status == sc.FAIL
+
+
+def test_system_q001_owner_decision_requires_schema_policy_and_evidence(monkeypatch, tmp_path):
+    decision = tmp_path / "docs" / "project" / "q001_owner_decision.json"
+    decision.parent.mkdir(parents=True)
+    decision.write_text(
+        json.dumps({
+            "status": "ACCEPTED_AVAILABLE_DATA_SCOPE",
+            "mbo_gap_ledger": "ACCEPTED_NON_BLOCKING_INVENTORY_SCOPE",
+            "options_strict_mbo_warning_ledger": "ACCEPTED_NON_BLOCKING_INVENTORY_SCOPE",
+            "available_data_research_allowed": True,
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+
+    owner_decision = system_agg._q001_owner_decision()
+
+    assert owner_decision["accepted_available_data_scope"] is False
+    assert set(owner_decision["validation_errors"]) == {
+        "accepted_evidence",
+        "schema_version",
+        "question_id",
+        "decision_date",
+        "model_gap_policy",
+    }
+
+
+def test_system_q001_owner_acceptance_rejects_unscoped_options_warning(monkeypatch, tmp_path):
+    decision = tmp_path / "docs" / "project" / "q001_owner_decision.json"
+    decision.parent.mkdir(parents=True)
+    decision.write_text(
+        json.dumps({
+            "status": "ACCEPTED_AVAILABLE_DATA_SCOPE",
+            "schema_version": 1,
+            "question_id": "Q001",
+            "decision_date": "2026-06-15",
+            "mbo_gap_ledger": "ACCEPTED_NON_BLOCKING_INVENTORY_SCOPE",
+            "options_strict_mbo_warning_ledger": "ACCEPTED_NON_BLOCKING_INVENTORY_SCOPE",
+            "available_data_research_allowed": True,
+            "accepted_evidence": {
+                "missing_or_unavailable_slots": 211,
+                "strict_mbo_gap_count": 507,
+                "strict_mbo_stale_gap_count": 503,
+                "options_warn_checks": ["options-fixing-mbo-coverage"],
+            },
+            "model_gap_policy": {
+                "missing_mbo_required_models": "SIDELINE_UNTIL_DATA_FILLED",
+                "strict_options_quote_required_models": "SIDELINE_UNTIL_DATA_FILLED",
+                "available_data_models": "RUN_WITH_EXPLICIT_COVERAGE",
+                "must_emit_skip_or_rejection_reasons": True,
+            },
+        }),
+        encoding="utf-8",
+    )
+    artifact = tmp_path / "runtime" / "data_audits" / "paid_data_inventory.json"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text(
+        json.dumps({
+            "q001_cme_data_inventory": {
+                "status": "INVENTORIED_WITH_WARNINGS",
+                "event_catalog": {"status": "OK"},
+                "futures": {
+                    "active_npz_manifest": {"status": "OK"},
+                    "mbo_pilot_basket": {
+                        "status": "completed_with_gaps",
+                        "missing_or_unavailable_slots": 211,
+                    },
+                },
+                "options": {
+                    "data_doctor_status": "WARN",
+                    "warn_checks": [{"name": "options-definitions", "status": "WARN"}],
+                    "fail_checks": [],
+                    "options_lane": {
+                        "expiry_coverage": {
+                            "strict_mbo_gap_count": 507,
+                            "strict_mbo_stale_gap_count": 503,
+                        },
+                    },
+                },
+                "gaps": [
+                    {"source": "mbo_pilot_manifest", "severity": "WARN"},
+                    {"source": "data_doctor", "severity": "WARN"},
+                ],
+            },
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+
+    q001 = system_agg._q001_inventory()
+
+    assert q001["status"] == sc.STALE
+    assert q001["available_data_scope_accepted"] is True
+    assert q001["options_warn_checks"] == [{"name": "options-definitions", "status": "WARN"}]
+    _json_roundtrip(q001)
 
 
 def test_system_q001_inventoried_with_warning_evidence_is_non_green(monkeypatch, tmp_path):

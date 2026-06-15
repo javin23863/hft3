@@ -15,7 +15,9 @@ Read these before asking the owner for context or changing code:
 4. [AGENTS.md](../AGENTS.md)
 5. [BLUEPRINT.md](../BLUEPRINT.md)
 6. [docs/project/PROJECT_PLANNING_STANDARD.md](project/PROJECT_PLANNING_STANDARD.md)
-7. [docs/references/README.md](references/README.md)
+7. [docs/project/Q001_OWNER_DECISION_PACKET.md](project/Q001_OWNER_DECISION_PACKET.md)
+8. [docs/project/Q001_DATA_INVENTORY_STATUS.md](project/Q001_DATA_INVENTORY_STATUS.md)
+9. [docs/references/README.md](references/README.md)
 
 Non-negotiables: filtration, event-time ordering, walk-forward discipline,
 CHI404-only live/paper topology, and quarantine boundaries.
@@ -43,6 +45,12 @@ The short version:
 
 Before any all-model or all-lane research run, reset the active generated-artifact
 boundary:
+
+Precondition: before any all-model/all-lane research or fresh-start run, check
+Q001. Current owner decision is `ACCEPTED_AVAILABLE_DATA_SCOPE`: available-data
+models may run with explicit coverage, skip, or rejection reasons. Models that
+require missing MBO slots or strict options quote reconstruction stay sidelined
+until data is filled or separately scoped out.
 
 ```powershell
 $env:PYTHONPATH = "apps;packages"

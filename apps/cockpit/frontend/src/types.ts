@@ -70,6 +70,12 @@ export interface Q001InventoryEvidence {
   q001_status?: string | null;
   artifact?: string | null;
   gaps?: unknown[];
+  owner_decision_status?: string | null;
+  owner_decision_artifact?: string | null;
+  available_data_scope_accepted?: boolean;
+  accepted_evidence?: Record<string, unknown>;
+  model_gap_policy?: Record<string, unknown>;
+  owner_decision_validation_errors?: unknown[];
   missing_or_unavailable_slots?: number | null;
   data_doctor_status?: string | null;
   strict_mbo_gap_count?: number | null;
