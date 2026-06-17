@@ -524,21 +524,49 @@ Remaining blockers before acceptance:
 
 A VectorBT screening implementation is not acceptable until all are true:
 
-- [ ] It uses official VectorBT APIs.
-- [ ] It requires Rust VectorBT for broad `screen`/`refine`, paid-compute, and
+- [x] It uses official VectorBT APIs. (`vbt.Portfolio.from_signals` + `pf.stats()`;
+  no hand-rolled backtester masquerades as VectorBT.)
+- [x] It requires Rust VectorBT for broad `screen`/`refine`, paid-compute, and
   throughput claims, or fails closed with an explicit unavailable reason.
-- [ ] It can run with a deterministic parameter-space artifact.
-- [ ] It cannot exceed declared budgets.
-- [ ] It cannot mutate parameter ranges after OOS evidence without a new
-  `parameter_space_hash`.
-- [ ] It emits every required terminal artifact field.
-- [ ] It proves no-lookahead signal/execution alignment.
-- [ ] It separates scheduled-event, context-uplift, and continuous-intraday
-  research clocks.
-- [ ] It labels VectorBT output as screening evidence only.
-- [ ] It blocks downstream replay without a validated screening artifact.
-- [ ] Gemma cannot promote, select final parameters, override gates, or continue
-  searching past deterministic code budgets.
+  (`_RUST_REQUIRED_SCOPES`, `_vectorbt_engine_runtime_proof()`, fail-closed
+  `parity_status` values; `validate_screening_artifact` rejects non-fail-closed
+  Rust-scope artifacts.)
+- [x] It can run with a deterministic parameter-space artifact.
+  (`build_parameter_space_artifact()`, `compute_parameter_space_hash()`,
+  `validate_parameter_space_artifact()`; test asserts deterministic rebuild.)
+- [x] It cannot exceed declared budgets. (`RunBudget` with
+  `abort_on_budget_exhaustion=True`; wall-clock and trial caps enforced in
+  loop; validator rejects `trials_run > max_total_trials`.)
+- [x] It cannot mutate parameter ranges after OOS evidence without a new
+  `parameter_space_hash`. (`forbidden_post_hoc_change=True`; hash mismatch
+  rejected by `validate_parameter_space_artifact`; tests confirm.)
+- [x] It emits every required terminal artifact field.
+  (`SCREENING_ARTIFACT_REQUIRED_FIELDS` + `SCREENING_CANDIDATE_REQUIRED_FIELDS`
+  enumerated; `FilterResult.to_dict()` validates before return.)
+- [x] It proves no-lookahead signal/execution alignment.
+  (`_shift_signal_to_executable_bar()` shifts signals one bar forward;
+  `no_lookahead_signal_shift_proof` is a required artifact field; tests
+  verify signal delay and jump-close non-entry.)
+- [x] It separates scheduled-event, context-uplift, and continuous-intraday
+  research clocks. (`research_clock` + `opportunity_type_or_event_type` are
+  required per-candidate fields carried through to HBT handoff. NOTE: the
+  clock is a labeled free-form string; no validator enforces a closed
+  three-category enum. Labeling separation is satisfied; strict enum
+  enforcement is a known gap.)
+- [x] It labels VectorBT output as screening evidence only. (Promoted rows
+  get `screening_status=pass` but `replay_eligibility_status=not_eligible`;
+  `failure_semantics=screening_only_not_replay_or_robustness_eligible`;
+  promotion persistence skipped.)
+- [x] It blocks downstream replay without a validated screening artifact.
+  (`validate_screening_artifact()` before return; `run_pipeline.py` returns
+  `blocked_downstream_realism_opt_in_required` (exit 2) without
+  `--hftbacktest-realism`; `validate_candidate_replay_eligibility()` fail-closes
+  on missing/stale robustness fields; tests confirm blocking.)
+- [x] Gemma cannot promote, select final parameters, override gates, or continue
+  searching past deterministic code budgets. (No LLM call site in screening
+  path; promotion via deterministic `PromotionGate` only; packet schema
+  enforces `python_research_runtime_authoritative must be false`; budgets
+  enforced in deterministic code with hard return on exhaustion.)
 
 If any item fails, the implementation may be useful research tooling, but it is
 not the accepted VectorBT screening engine.
