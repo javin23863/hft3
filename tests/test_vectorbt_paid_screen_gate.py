@@ -99,9 +99,20 @@ def test_paid_screen_dry_run_lists_units(tmp_path: Path) -> None:
     assert proc.returncode == 0, proc.stderr
 
 
-def test_next_steps_defaults_to_phase_a() -> None:
+def test_next_steps_defaults_to_phase_a(tmp_path: Path) -> None:
+    missing = tmp_path / "missing.json"
     proc = subprocess.run(
-        [sys.executable, str(SCRIPTS / "vbt_paid_screen_next_steps.py"), "--json"],
+        [
+            sys.executable,
+            str(SCRIPTS / "vbt_paid_screen_next_steps.py"),
+            "--json",
+            "--pilot-artifact",
+            str(missing),
+            "--smoke-manifest",
+            str(missing),
+            "--gate-file",
+            str(missing),
+        ],
         cwd=REPO,
         capture_output=True,
         text=True,

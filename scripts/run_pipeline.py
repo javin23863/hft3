@@ -49,6 +49,22 @@ def _run_id() -> str:
     return f"pipeline_{ts}_{uuid.uuid4().hex[:8]}"
 
 
+_PIPELINE_RESULT_MARKER = "HFT3_PIPELINE_RESULT="
+
+
+def _emit_pipeline_payload(payload: dict, *, orchestrator_result: bool) -> None:
+    if orchestrator_result:
+        slim = {
+            "run_id": payload.get("run_id"),
+            "artifact_dir": payload.get("artifact_dir"),
+            "status": payload.get("status"),
+            "paths": payload.get("paths"),
+        }
+        print(_PIPELINE_RESULT_MARKER + json.dumps(slim))
+    else:
+        print(json.dumps(payload, indent=2))
+
+
 def _pipeline_llm_status(parsed: ParsedHypothesis, *, no_llm: bool) -> str:
     if no_llm:
         return "skipped_no_llm"
@@ -150,6 +166,11 @@ def main() -> int:
     parser.add_argument("--review-memory-limit", type=int, default=5, help="Prior AAR/KG memory facts to include")
     parser.add_argument("--idea-temperature", type=float, default=None, help="Sampling temperature for idea generation only")
     parser.add_argument("--idea-top-p", type=float, default=None, help="Top-p sampling for idea generation only")
+    parser.add_argument(
+        "--orchestrator-result",
+        action="store_true",
+        help="Emit single-line HFT3_PIPELINE_RESULT for paid-screen worker subprocesses",
+    )
     args = parser.parse_args()
 
     if args.hftbacktest_realism and args.vectorbt_only:
@@ -426,7 +447,7 @@ def main() -> int:
             if idea_packet:
                 payload["idea_summary"] = idea_summary
                 payload["idea_set_packet"] = idea_packet
-            print(json.dumps(payload, indent=2))
+            _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
             return 0 if candidates else 1
         paths = {
             "screening_artifact_path": str(screening_path),
@@ -445,7 +466,7 @@ def main() -> int:
                 "screening_artifact": vectorbt_artifact,
                 "paths": paths,
             }
-            print(json.dumps(payload, indent=2))
+            _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
             return 2
         promoted_ids = list(vectorbt_artifact.get("promoted_ids") or [])
         if not promoted_ids:
@@ -465,7 +486,7 @@ def main() -> int:
                 "replay_summary": replay_summary,
                 "paths": paths,
             }
-            print(json.dumps(payload, indent=2))
+            _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
             return 2
         missing_hbt_inputs = _missing_hftbacktest_realism_inputs(args)
         if missing_hbt_inputs:
@@ -488,7 +509,7 @@ def main() -> int:
                 "replay_summary": replay_summary,
                 "paths": paths,
             }
-            print(json.dumps(payload, indent=2))
+            _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
             return 2
 
         hftbacktest_out_dir = artifact_dir / "hftbacktest_realism"
@@ -530,7 +551,7 @@ def main() -> int:
             "replay_summary": replay_summary,
             "paths": paths,
         }
-        print(json.dumps(payload, indent=2))
+        _emit_pipeline_payload(payload, orchestrator_result=args.orchestrator_result)
         return 0 if replay_summary.get("replay_realism_status") == "pass" else 2
 
     if args.dry_run:

@@ -1215,6 +1215,7 @@ class TestFilterCandidates:
         monkeypatch.setattr(vectorbt_adapter, "_vectorbt_version", "1.0.0")
         monkeypatch.setattr(vectorbt_adapter, "_rust_engine_available", True)
         monkeypatch.setattr(vectorbt_adapter, "_VECTORBT_ENGINE_RUNTIME_PROOF", False)
+        monkeypatch.setattr(vectorbt_adapter, "_establish_vectorbt_rust_runtime_proof", lambda: False)
         close = 100.0 + np.arange(40, dtype=float) * 0.1
         ohlcv = np.column_stack([close, close, close, close, np.ones_like(close)])
 
@@ -1247,6 +1248,7 @@ class TestFilterCandidates:
         monkeypatch.setattr(vectorbt_adapter, "_vectorbt_version", "1.0.0")
         monkeypatch.setattr(vectorbt_adapter, "_rust_engine_available", True)
         monkeypatch.setattr(vectorbt_adapter, "_VECTORBT_ENGINE_RUNTIME_PROOF", False)
+        monkeypatch.setattr(vectorbt_adapter, "_establish_vectorbt_rust_runtime_proof", lambda: False)
 
         result = filter_candidates(
             candidates=_duplicate_base_candidates(),

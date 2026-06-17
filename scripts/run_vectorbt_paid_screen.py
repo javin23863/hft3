@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import multiprocessing as mp
+import os
 import subprocess
 import sys
 import time
@@ -19,6 +20,43 @@ if str(_REPO) not in sys.path:
 from hft3_bootstrap import setup_repo_paths
 
 setup_repo_paths()
+
+_PIPELINE_RESULT_MARKER = "HFT3_PIPELINE_RESULT="
+
+
+def _parse_pipeline_stdout(stdout: str) -> Optional[Path]:
+    for line in stdout.splitlines():
+        if line.startswith(_PIPELINE_RESULT_MARKER):
+            payload = json.loads(line[len(_PIPELINE_RESULT_MARKER):])
+            paths = payload.get("paths") or {}
+            rel = paths.get("screening_artifact_path")
+            if rel:
+                return Path(rel)
+            artifact_dir = payload.get("artifact_dir")
+            if artifact_dir:
+                return Path(artifact_dir) / "screening_artifact.json"
+    for line in reversed(stdout.splitlines()):
+        stripped = line.strip()
+        if '"screening_artifact_path"' not in stripped:
+            continue
+        try:
+            _, raw = stripped.split(":", 1)
+            value = raw.strip().rstrip(",").strip().strip('"')
+            if value:
+                return Path(value)
+        except ValueError:
+            continue
+    return None
+
+
+def _subprocess_env(repo_root: Path) -> Dict[str, str]:
+    env = os.environ.copy()
+    roots = [str(repo_root), str(repo_root / "packages"), str(repo_root / "apps")]
+    existing = env.get("PYTHONPATH", "").strip()
+    if existing:
+        roots.append(existing)
+    env["PYTHONPATH"] = os.pathsep.join(roots)
+    return env
 
 
 def _load_units(path: Path) -> List[Dict[str, Any]]:
@@ -74,6 +112,7 @@ def _run_unit_worker(args: Tuple[Dict[str, Any], str, str, str, int, bool]) -> D
         "--no-llm",
         "--repo-root",
         str(repo_root),
+        "--orchestrator-result",
     ]
     if max_wall_clock > 0:
         cmd.extend(["--vectorbt-max-wall-clock-seconds", str(max_wall_clock)])
@@ -85,6 +124,7 @@ def _run_unit_worker(args: Tuple[Dict[str, Any], str, str, str, int, bool]) -> D
             cwd=repo_root,
             capture_output=True,
             text=True,
+            env=_subprocess_env(repo_root),
             timeout=max(max_wall_clock + 60, 600) if max_wall_clock > 0 else 3600,
         )
     except subprocess.TimeoutExpired:
@@ -99,17 +139,19 @@ def _run_unit_worker(args: Tuple[Dict[str, Any], str, str, str, int, bool]) -> D
     screening_path: Optional[Path] = None
     stdout = (proc.stdout or "").strip()
     if stdout:
-        try:
-            payload = json.loads(stdout.split("\n")[-1])
-            artifact_dir = payload.get("artifact_dir")
-            paths = payload.get("paths") or {}
-            rel = paths.get("screening_artifact_path")
-            if rel:
-                screening_path = Path(rel)
-            elif artifact_dir:
-                screening_path = Path(artifact_dir) / "screening_artifact.json"
-        except json.JSONDecodeError:
-            pass
+        screening_path = _parse_pipeline_stdout(stdout)
+        if screening_path is None:
+            try:
+                payload = json.loads(stdout.split("\n")[-1])
+                artifact_dir = payload.get("artifact_dir")
+                paths = payload.get("paths") or {}
+                rel = paths.get("screening_artifact_path")
+                if rel:
+                    screening_path = Path(rel)
+                elif artifact_dir:
+                    screening_path = Path(artifact_dir) / "screening_artifact.json"
+            except json.JSONDecodeError:
+                pass
 
     if screening_path is None or not screening_path.is_file():
         return {

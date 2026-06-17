@@ -72,14 +72,49 @@ def _vectorbt_engine_runtime_proof() -> bool:
     """Runtime proof that VectorBT actually executed with the Rust engine.
 
     Source-lock detection and the presence of ``vectorbt.rust`` are static
-    signals only. Until the code path explicitly invokes and records a Rust
-    engine execution, this remains ``False`` so broad/screen/refine/paid scopes
-    fail closed.
+    signals only. Paid/broad scopes require a successful rust preflight or
+  trial before screening proceeds.
     """
     global _VECTORBT_ENGINE_RUNTIME_PROOF
     if _VECTORBT_ENGINE_RUNTIME_PROOF is None:
         _VECTORBT_ENGINE_RUNTIME_PROOF = False
     return _VECTORBT_ENGINE_RUNTIME_PROOF
+
+
+def _set_vectorbt_engine_runtime_proof(value: bool) -> None:
+    global _VECTORBT_ENGINE_RUNTIME_PROOF
+    _VECTORBT_ENGINE_RUNTIME_PROOF = value
+
+
+def _establish_vectorbt_rust_runtime_proof() -> bool:
+    """Run a tiny Portfolio.from_signals(..., engine='rust') canary."""
+    if _vectorbt_engine_runtime_proof():
+        return True
+    if not _detect_vectorbt_rust_engine():
+        return False
+    try:
+        import numpy as np
+        import vectorbt as vbt  # type: ignore
+
+        close = np.linspace(100.0, 101.0, 32)
+        entries = np.zeros(32, dtype=bool)
+        exits = np.zeros(32, dtype=bool)
+        entries[4] = True
+        exits[12] = True
+        pf = vbt.Portfolio.from_signals(
+            close,
+            entries=entries,
+            exits=exits,
+            init_cash=10000.0,
+            freq="1min",
+            engine="rust",
+        )
+        pf.stats()
+        _set_vectorbt_engine_runtime_proof(True)
+        return True
+    except Exception as exc:
+        print(f"Warning: VectorBT rust runtime preflight failed: {exc}", file=sys.stderr)
+        return False
 
 
 def _vectorbt_available() -> bool:
@@ -111,23 +146,31 @@ def _detect_vectorbt_version() -> str:
 
 
 def _detect_vectorbt_rust_engine() -> bool:
-    """Detect official VectorBT Rust only when repo source-lock evidence exists."""
+    """Detect official VectorBT Rust when repo source-lock evidence exists."""
     global _rust_engine_available
     if _rust_engine_available is None:
         rust_specs = ("vectorbt.rust", "vectorbt._rust")
         _rust_engine_available = False
+        if not _vectorbt_rust_source_lock_verified():
+            return _rust_engine_available
         for name in rust_specs:
             try:
                 spec = importlib.util.find_spec(name)
                 if (
                     spec is not None
                     and _is_official_vectorbt_rust_spec(spec)
-                    and _vectorbt_rust_source_lock_verified()
                 ):
                     _rust_engine_available = True
                     break
             except (ImportError, ModuleNotFoundError, ValueError):
                 continue
+        if not _rust_engine_available:
+            try:
+                spec = importlib.util.find_spec("vectorbt_rust")
+                if spec is not None and _is_official_vectorbt_rust_extension_spec(spec):
+                    _rust_engine_available = True
+            except (ImportError, ModuleNotFoundError, ValueError):
+                pass
     return _rust_engine_available
 
 
@@ -148,6 +191,19 @@ def _is_official_vectorbt_rust_spec(spec: Any) -> bool:
         return False
     try:
         dist = importlib.metadata.distribution("vectorbt")
+        dist_root = Path(dist.locate_file("")).resolve()
+        origin_path = Path(origin).resolve()
+    except (importlib.metadata.PackageNotFoundError, OSError, ValueError):
+        return False
+    return origin_path == dist_root or dist_root in origin_path.parents
+
+
+def _is_official_vectorbt_rust_extension_spec(spec: Any) -> bool:
+    origin = getattr(spec, "origin", None)
+    if not origin:
+        return False
+    try:
+        dist = importlib.metadata.distribution("vectorbt-rust")
         dist_root = Path(dist.locate_file("")).resolve()
         origin_path = Path(origin).resolve()
     except (importlib.metadata.PackageNotFoundError, OSError, ValueError):
@@ -2236,7 +2292,7 @@ def _default_signal_computer(
 ) -> Tuple[np.ndarray, np.ndarray]:
     from features_engine.src.model_registry import resolve_model_id
     from features_engine.src.hypotheses.registry import get_active_hypotheses
-    from features_engine.src.market_state_pipeline import MarketStatePipeline
+    from features_engine.src.pipeline.market_state_pipeline import MarketStatePipeline
 
     resolved = resolve_model_id(cand.model_id)
     hypotheses = get_active_hypotheses()
@@ -2325,6 +2381,10 @@ def _run_vectorbt_simulation(
     rust_required = bool(engine_meta["rust_engine_required_for_scope"])
     rust_available = bool(engine_meta["rust_engine_available"])
     rust_runtime_proof = bool(engine_meta["vectorbt_engine_runtime_proof"])
+    if rust_required and rust_available and not rust_runtime_proof:
+        rust_runtime_proof = _establish_vectorbt_rust_runtime_proof()
+        if rust_runtime_proof:
+            engine_meta = _screening_engine_metadata(screening_scope)
     if not vectorbt_available or (rust_required and (not rust_available or not rust_runtime_proof)):
         stop_reason = "vectorbt_unavailable_fail_closed"
         if vectorbt_available and rust_required and not rust_available:
@@ -2360,6 +2420,9 @@ def _run_vectorbt_simulation(
         return result
 
     import vectorbt as vbt  # type: ignore[no-redef]
+    portfolio_engine = str(engine_meta.get("vectorbt_engine") or "numba")
+    if portfolio_engine != "rust":
+        portfolio_engine = "numba"
     close = _ohlcv_column(ohlcv, "close")
     open_p = _ohlcv_column(ohlcv, "open")
     high = _ohlcv_column(ohlcv, "high")
@@ -2447,6 +2510,7 @@ def _run_vectorbt_simulation(
                     init_cash=10000.0, freq="1min",
                     sl_stop=stop_loss_f / 100.0 if stop_loss_f else None,
                     tp_stop=take_profit_f / 100.0 if take_profit_f else None,
+                    engine=portfolio_engine,
                 )
                 vbt_stats = dict(pf.stats())
             except Exception as exc:
@@ -2609,6 +2673,10 @@ def filter_candidates(
     rust_available = bool(engine_meta["rust_engine_available"])
     rust_runtime_proof = bool(engine_meta["vectorbt_engine_runtime_proof"])
     vectorbt_available = bool(engine_meta["vectorbt_available"])
+    if rust_required and rust_available and not rust_runtime_proof:
+        rust_runtime_proof = _establish_vectorbt_rust_runtime_proof()
+        if rust_runtime_proof:
+            engine_meta = _screening_engine_metadata(screening_scope)
     if rust_required and (not vectorbt_available or not rust_available or not rust_runtime_proof):
         stop_reason = (
             "rust_runtime_proof_missing_fail_closed"
