@@ -89,7 +89,7 @@ Do not tell the user work is merge-ready unless **all** of the following are tru
 | Gate | Requirement |
 |------|-------------|
 | Reviewer | `cavecrew-reviewer` verdict **merge-ready: yes**, **0 🔴** |
-| GrepLoop | Local GrepLoop ran on the changed scope. If a PR/MR/CL exists and Greptile is installed, PR GrepLoop also ran or the unavailability is documented. |
+| GrepLoop | Local GrepLoop ran on the changed scope. If a PR/MR/CL exists and an external PR AI review connector is installed, PR GrepLoop also ran or the unavailability is documented. |
 | Tests | Scope-green per [docs/VALIDATION_HONESTY.md](docs/VALIDATION_HONESTY.md): full scope pytest or gate script with **exit code and output tail** pasted in thread — not targeted file subsets alone. Full-repo `pytest` when scope is ambiguous. |
 | Skipped tests | Every skip has a **documented blocker** (e.g. CMake missing → `test_cpp_feature_golden` skipped). Say **merge-ready: no** until the gate runs or the user explicitly accepts the skip. |
 | C++ parity | When Python/C++ feature slots change: build `hft_feature_golden` and pass `tests/test_cpp_feature_golden.py` |

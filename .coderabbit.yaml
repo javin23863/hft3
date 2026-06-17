@@ -1,4 +1,4 @@
-# hft3 uses Greptile GrepLoop for PR AI review.
+# hft3 uses an external PR AI review connector (e.g. Greptile, ChatGPT/Codex Connector) for GrepLoop.
 # CodeRabbit must not auto-review PRs for this repository.
 reviews:
   auto_review:

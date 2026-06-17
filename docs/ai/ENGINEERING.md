@@ -34,7 +34,7 @@ Spec -> Plan -> Delegate -> Code -> Local Preflight -> Review -> Verify -> PR Gr
 
 - **GraphPre/GraphPost:** `waived-by-owner-2026-06-16`; do not run graphify commands until the owner lifts the temporary waiver.
 - **Local preflight:** mandatory bounded task-specific `rg` loop after every repo edit; Codex self-review is not enough; see [GREPLOOP.md](GREPLOOP.md).
-- **PR GrepLoop:** Greptile-backed PR/MR/CL loop only. A local `rg` pass is not GrepLoop.
+- **PR GrepLoop:** external PR AI review loop (e.g. Greptile, ChatGPT/Codex Connector, GitHub Copilot PR review). A local `rg` pass is not GrepLoop.
 - **AI coding delegate:** when token pressure is high, use [CODING_DELEGATE.md](CODING_DELEGATE.md) to draft code from exact supplied context only; Codex still reviews, applies, verifies, and runs PR GrepLoop.
 - **Review:** dual-pass per [REVIEWER_CHARTER.md](../REVIEWER_CHARTER.md).
 - **Verify:** bounded pytest + domain gates — [SHELL_EXECUTION.md](SHELL_EXECUTION.md) (timeouts mandatory).

@@ -13,8 +13,8 @@ Codex keeps ownership of:
 - Deciding whether the task is safe to delegate.
 - Reviewing the returned patch or text.
 - Applying edits with normal repo tools.
-- Running local preflight, reviewer, tests, and Greptile PR GrepLoop when a PR
-  review surface exists.
+- Running local preflight, reviewer, tests, and PR GrepLoop (external PR AI
+  review) when a PR review surface exists.
 
 The delegate endpoint only drafts code, plans, or review text from the supplied
 prompt and file excerpts. It does not browse the repo, does not decide financial
@@ -114,4 +114,5 @@ A delegate draft is only useful after all of this is true:
 - Local preflight hygiene ran.
 - Reviewer pass ran.
 - Verification ran with exit code.
-- PR GrepLoop ran when Greptile is installed and a PR/MR/CL surface exists.
+- PR GrepLoop / external PR AI review ran when a connector is installed and
+  a PR/MR/CL surface exists.
