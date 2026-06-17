@@ -2,7 +2,7 @@
 
 Status: binding scope for Phase D full rent. Supersedes ad-hoc CPI+NFP / single-hypothesis JSONL.
 
-Authority: [OPPORTUNITY_RESEARCH_SPEC.md](OPPORTUNITY_RESEARCH_SPEC.md) (Stage A 423 survivors, 16,931 Stage A units), [CME_M6_SWEEP_CONTROL_PLAN.md](../cockpit/CME_M6_SWEEP_CONTROL_PLAN.md) (symbol universe), [VBT_PAID_SCREEN_RUNBOOK.md](VBT_PAID_SCREEN_RUNBOOK.md).
+Authority: [OPPORTUNITY_RESEARCH_SPEC.md](OPPORTUNITY_RESEARCH_SPEC.md) (Stage A 423 survivors, 16,931 Stage A units), [CME_M6_SWEEP_CONTROL_PLAN.md](../cockpit/CME_M6_SWEEP_CONTROL_PLAN.md) (symbol universe), [VBT_PAID_SCREEN_RUNBOOK.md](VBT_PAID_SCREEN_RUNBOOK.md), [VBT_MODEL_ONTOLOGY.md](VBT_MODEL_ONTOLOGY.md).
 
 ## Wrong scope (do not use for full rent)
 
@@ -29,7 +29,7 @@ Phase B smoke may use 8–16 diverse units (including CPI/NFP) — that is **not
 
 **Events:** `packages/data_system/config/events.csv`, `window_name=TIGHT`, every row whose `event_type` is in the allowed set and whose `symbols` column intersects the symbol filter.
 
-**One VectorBT work unit** = one `(model_id=HYP_{hyp_id}, symbol, event_id)` screening run via `run_pipeline.py --vectorbt --vectorbt-scope paid-compute`.
+**One VectorBT work unit** = one `(model_id=<canonical slug>, symbol, event_id)` screening run via `run_pipeline.py --vectorbt --vectorbt-scope paid-compute`. See [VBT_MODEL_ONTOLOGY.md](VBT_MODEL_ONTOLOGY.md) for model composition (fs_v1 slots, gates, params).
 
 This is **not** the M6 universe unit (which runs all active hypotheses inside one NPZ×latency replay). VectorBT paid units are **per hypothesis** per event×symbol.
 

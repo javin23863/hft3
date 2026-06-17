@@ -18,16 +18,40 @@ from hft3_bootstrap import setup_repo_paths
 
 setup_repo_paths()
 
+from features_engine.src.model_registry import get_slug_for_hyp_id, load_model_registry
+
 _DEFAULT_SYMBOL = "MES.v.0"
 # CME M6 full symbol universe (CME_M6_SWEEP_CONTROL_PLAN.md)
 CME_M6_SYMBOLS = "MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0"
 _DEFAULT_THESIS_TEMPLATE = (
-    "Event-window microstructure strategy {model_id} on {event_type} release for {symbol}"
+    "{display_name} event-window strategy ({model_id}) on {event_type} release for {symbol} event {event_id}"
 )
 
 
+def _display_name_for_slug(slug: str) -> str:
+    entry = load_model_registry().get("models", {}).get(slug) or {}
+    return str(entry.get("display_name") or slug)
+
+
 def _hypothesis_model_id(hyp_id: int) -> str:
-    return f"HYP_{hyp_id}"
+    return get_slug_for_hyp_id(hyp_id)
+
+
+def _format_thesis(
+    *,
+    model_id: str,
+    event_type: str,
+    symbol: str,
+    event_id: str,
+    thesis_template: str,
+) -> str:
+    return thesis_template.format(
+        model_id=model_id,
+        display_name=_display_name_for_slug(model_id),
+        event_type=event_type,
+        symbol=symbol,
+        event_id=event_id,
+    )
 
 
 def _parse_stage_a_allowed_cells(
@@ -92,8 +116,6 @@ def _load_events(
                 continue
             row_symbols = [s.strip() for s in (row.get("symbols") or "").split(",") if s.strip()]
             symbol = next((s for s in symbols if s in row_symbols), None)
-            if symbol is None and row_symbols:
-                symbol = row_symbols[0]
             if symbol is None:
                 continue
             rows.append(
@@ -121,11 +143,12 @@ def _units_from_events(
         symbol = ev["symbol"]
         event_type = ev["event_type"]
         unit_id = _slug(f"{model_id}|{symbol}|{event_id}")
-        thesis = thesis_template.format(
+        thesis = _format_thesis(
             model_id=model_id,
             event_type=event_type,
             symbol=symbol,
             event_id=event_id,
+            thesis_template=thesis_template,
         )
         units.append(
             {
@@ -184,11 +207,12 @@ def _units_from_stage_a_survivors(
                     "event_type": event_type,
                     "model_id": model_id,
                     "hyp_id": hyp_id,
-                    "thesis": thesis_template.format(
+                    "thesis": _format_thesis(
                         model_id=model_id,
                         event_type=event_type,
                         symbol=symbol,
                         event_id=event_id,
+                        thesis_template=thesis_template,
                     ),
                 }
             )
@@ -212,7 +236,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         type=Path,
         default=_REPO / "packages" / "data_system" / "config" / "events.csv",
     )
-    parser.add_argument("--model-id", default="HYP_5")
+    parser.add_argument("--model-id", default="SPREAD_BLOWOUT_RECOMPRESSION")
     parser.add_argument("--symbols", default=CME_M6_SYMBOLS, help="Comma-separated symbols (default: CME M6 universe)")
     parser.add_argument("--event-types", default=None, help="Comma-separated event_type filter")
     parser.add_argument("--window-name", default="TIGHT")

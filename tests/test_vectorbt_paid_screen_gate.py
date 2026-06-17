@@ -201,8 +201,29 @@ def test_stage_a_survivors_expansion_not_capped_at_fifty(tmp_path: Path) -> None
     # CPI TIGHT MES catalog has >50 events; old [:50] cap would yield exactly 50
     assert len(lines) > 50
     row = json.loads(lines[0])
-    assert row["model_id"] == "HYP_5"
+    assert row["model_id"] == "SPREAD_BLOWOUT_RECOMPRESSION"
     assert row.get("hyp_id") == 5
+    assert "SPREAD_BLOWOUT_RECOMPRESSION" in row["thesis"]
+
+    from research_pipeline.hypothesis_parser import parse_hypothesis
+
+    parsed = parse_hypothesis(row["thesis"], use_llm=False)
+    assert parsed.primary_model_id == row["model_id"]
+
+
+def test_generated_thesis_round_trips_hyp_ids_1_to_50(tmp_path: Path) -> None:
+    """Every Stage-A-style thesis must parse back to the same canonical slug."""
+    from features_engine.src.model_registry import get_slug_for_hyp_id
+    from research_pipeline.hypothesis_parser import parse_hypothesis
+
+    for hyp_id in range(1, 51):
+        slug = get_slug_for_hyp_id(hyp_id)
+        thesis = (
+            f"Display event-window strategy ({slug}) on CPI release for MES.v.0 "
+            f"event CPI_2024_09_11_TIGHT"
+        )
+        parsed = parse_hypothesis(thesis, use_llm=False)
+        assert parsed.primary_model_id == slug, f"hyp_id={hyp_id} got {parsed.primary_model_id}"
 
 
 def test_paid_screen_refuses_high_workers_without_gate(tmp_path: Path) -> None:

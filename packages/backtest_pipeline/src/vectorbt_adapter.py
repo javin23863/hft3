@@ -2290,15 +2290,16 @@ def _default_signal_computer(
     parsed: ParsedHypothesis,
     repo_root: Path,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    from features_engine.src.model_registry import resolve_model_id
+    from features_engine.src.model_registry import get_hyp_id_for_slug, resolve_model_id
     from features_engine.src.hypotheses.registry import get_active_hypotheses
     from features_engine.src.pipeline.market_state_pipeline import MarketStatePipeline
 
     resolved = resolve_model_id(cand.model_id)
-    hypotheses = get_active_hypotheses()
-    hypothesis_cls = hypotheses.get(resolved)
+    hyp_id = get_hyp_id_for_slug(resolved)
+    by_hyp_id = {h.hyp_id: h for h in get_active_hypotheses()}
+    hypothesis_cls = by_hyp_id.get(hyp_id)
     if hypothesis_cls is None:
-        raise ValueError(f"model_id {cand.model_id} not in active hypotheses")
+        raise ValueError(f"model_id {cand.model_id} (hyp_id={hyp_id}) not in active hypotheses")
 
     pipeline = MarketStatePipeline()
     n_bars = len(ohlcv)
