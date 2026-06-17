@@ -128,8 +128,8 @@ Reject decorative UI that does not reflect backend truth.
 A development slice is complete only when:
 
 ```text
-[ ] Local GrepLoop ran on changed scope.
-[ ] PR Greptile loop ran when PR and Greptile are available, or unavailability is documented.
+[ ] Local preflight ran on changed scope.
+[ ] PR GrepLoop ran when a PR and external PR AI review connector are available, or unavailability is documented.
 [ ] Reviewer found zero red findings or remaining findings are accepted blockers.
 [ ] Scope-appropriate tests/builds ran with command output.
 [ ] git diff --check passed.
