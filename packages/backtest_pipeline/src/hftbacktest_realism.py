@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from backtest_pipeline.src.fee_model import FeeModel
+from backtest_pipeline.src.research_clock import research_clock_validation_errors
 from backtest_pipeline.src.vectorbt_adapter import compute_screening_artifact_hash
 
 UPSTREAM_REPO_URL = "https://github.com/nkaz001/hftbacktest"
@@ -2360,6 +2361,13 @@ def validate_candidate_replay_eligibility(candidate: Mapping[str, Any]) -> list[
         if field not in candidate or _is_missing_candidate_field(candidate.get(field)):
             reasons.append(_replay_ineligible_reason(f"missing_field:{field}"))
 
+    if "research_clock" in candidate and not _is_missing_candidate_field(candidate.get("research_clock")):
+        for clock_error in research_clock_validation_errors(
+            candidate["research_clock"],
+            context="candidate.research_clock",
+        ):
+            reasons.append(_replay_ineligible_reason(clock_error))
+
     for field in REPLAY_ELIGIBILITY_REQUIRED_MAPPING_FIELDS:
         value = candidate.get(field)
         if field in candidate and (not isinstance(value, Mapping) or not value):
@@ -2647,7 +2655,11 @@ def write_hftbacktest_realism_artifacts(
         "candidate_id": selected_id,
         "model_id": selected_candidate.get("hypothesis_id") or selected_candidate.get("model_id") or "",
         "symbol": selected_candidate.get("symbol") or "",
-        "research_clock": screening_artifact.get("research_clock") or "",
+        "research_clock": (
+            selected_candidate.get("research_clock")
+            or screening_artifact.get("research_clock")
+            or ""
+        ),
         "event_or_session_scope": screening_artifact.get("event_id") or "not_run_hbt0",
         "hftbacktest_source_lock_hash": lock["source_lock_hash"],
         "data_validation_status": data_validation["data_validation_status"],

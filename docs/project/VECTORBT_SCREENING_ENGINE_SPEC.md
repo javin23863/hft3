@@ -549,10 +549,11 @@ A VectorBT screening implementation is not acceptable until all are true:
   verify signal delay and jump-close non-entry.)
 - [x] It separates scheduled-event, context-uplift, and continuous-intraday
   research clocks. (`research_clock` + `opportunity_type_or_event_type` are
-  required per-candidate fields carried through to HBT handoff. NOTE: the
-  clock is a labeled free-form string; no validator enforces a closed
-  three-category enum. Labeling separation is satisfied; strict enum
-  enforcement is a known gap.)
+  required per-candidate fields carried through to HBT handoff. Closed
+  three-category enum enforced by
+  `packages/backtest_pipeline/src/research_clock.py` in parameter-space,
+  screening-artifact, and HBT replay-eligibility validators. Legacy pilot label
+  `event_window_pilot` aliases to `scheduled_event`.)
 - [x] It labels VectorBT output as screening evidence only. (Promoted rows
   get `screening_status=pass` but `replay_eligibility_status=not_eligible`;
   `failure_semantics=screening_only_not_replay_or_robustness_eligible`;

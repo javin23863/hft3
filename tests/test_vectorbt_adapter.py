@@ -474,6 +474,20 @@ class TestParameterSpaceArtifact:
         with pytest.raises(ParameterSpaceArtifactError, match="max_trials"):
             validate_parameter_space_artifact(artifact)
 
+    def test_build_rejects_invalid_research_clock(self):
+        with pytest.raises(ParameterSpaceArtifactError, match="research_clock_invalid"):
+            build_parameter_space_artifact(
+                param_grid={"signal_threshold": [0.1]},
+                parameter_definitions=_parameter_definitions(),
+                model_id="HYP_5",
+                feature_set_id="fs_cme_microstructure_v1",
+                research_clock="bogus_lane",
+                symbol_universe=["MES"],
+                data_manifest_hash="data_manifest_sha256",
+                split_scheme_id="wf_2018_2025",
+                max_trials=1,
+            )
+
 
 class TestMetricsFallback:
     def test_metrics_on_synthetic_data(self):
@@ -1656,6 +1670,15 @@ class TestFilterCandidates:
         mismatched["screening_artifact_hash"] = compute_screening_artifact_hash(mismatched)
         with pytest.raises(ScreeningArtifactError, match="promoted_reasons"):
             validate_screening_artifact(mismatched)
+
+    def test_validator_rejects_invalid_research_clock(self, monkeypatch, tmp_path):
+        artifact = _promoted_screening_artifact(monkeypatch, tmp_path)
+        bad = copy.deepcopy(artifact)
+        bad["research_clock"] = "bogus_lane"
+        bad["promoted"][0]["research_clock"] = "bogus_lane"
+        bad["screening_artifact_hash"] = compute_screening_artifact_hash(bad)
+        with pytest.raises(ScreeningArtifactError, match="research_clock_invalid"):
+            validate_screening_artifact(bad)
 
     def test_validator_rejects_missing_and_stale_rejected_reasons(self, tmp_path):
         artifact = filter_candidates(

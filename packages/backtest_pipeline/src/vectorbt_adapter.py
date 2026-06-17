@@ -36,6 +36,12 @@ from backtest_pipeline.src.promotion_gate import (
     RejectedCandidate,
     serialize_promoted,
 )
+from backtest_pipeline.src.research_clock import (
+    RESEARCH_CLOCK_SCHEDULED_EVENT,
+    ResearchClockError,
+    research_clock_validation_errors,
+    validate_research_clock,
+)
 from backtest_pipeline.src.robustness_bridge import compute_robustness_evidence
 from backtest_pipeline.src.surface_stability import compute_surface_stability
 from research_pipeline.types import CandidateModel, ParsedHypothesis
@@ -555,12 +561,20 @@ def build_parameter_space_artifact(
     if len(candidates) > parsed_max_trials:
         raise ParameterSpaceArtifactError("parameter grid exceeds max_trials")
 
+    try:
+        canonical_research_clock = validate_research_clock(
+            research_clock,
+            context="parameter_space_artifact.research_clock",
+        )
+    except ResearchClockError as exc:
+        raise ParameterSpaceArtifactError(str(exc)) from exc
+
     artifact: Dict[str, Any] = {
         "parameter_space_id": parameter_space_id or "",
         "parameter_space_hash": "",
         "model_id": model_id,
         "feature_set_id": feature_set_id,
-        "research_clock": research_clock,
+        "research_clock": canonical_research_clock,
         "symbol_universe": list(symbol_universe),
         "data_manifest_hash": data_manifest_hash,
         "split_scheme_id": split_scheme_id,
@@ -604,6 +618,11 @@ def validate_parameter_space_artifact(artifact: Mapping[str, Any]) -> None:
     for field_name in required_top_level:
         if field_name not in artifact or artifact[field_name] in ("", None):
             raise ParameterSpaceArtifactError(f"missing required field: {field_name}")
+    for clock_error in research_clock_validation_errors(
+        artifact.get("research_clock"),
+        context="parameter_space_artifact.research_clock",
+    ):
+        raise ParameterSpaceArtifactError(clock_error)
     if artifact["forbidden_post_hoc_change"] is not True:
         raise ParameterSpaceArtifactError("forbidden_post_hoc_change must be true")
 
@@ -646,6 +665,14 @@ def validate_parameter_space_artifact(artifact: Mapping[str, Any]) -> None:
     expected_space_hash = compute_parameter_space_hash(artifact)
     if artifact["parameter_space_hash"] != expected_space_hash:
         raise ParameterSpaceArtifactError("parameter_space_hash mismatch")
+
+
+def _canonical_research_clock_label(value: str) -> str:
+    """Return canonical enum label when valid; otherwise echo raw value for later fail-closed."""
+    try:
+        return validate_research_clock(value)
+    except ResearchClockError:
+        return str(value)
 
 
 def _screening_not_run(reason: str) -> Dict[str, str]:
@@ -1094,7 +1121,7 @@ def _normalise_promoted_screening_row(
         "base_candidate_metadata": metrics.get("base_candidate_metadata", {}),
         "model_id": candidate.hypothesis_id,
         "symbol": candidate.symbol or "unknown",
-        "research_clock": result.research_clock,
+        "research_clock": _canonical_research_clock_label(result.research_clock),
         "opportunity_type_or_event_type": metrics.get(
             "opportunity_type_or_event_type",
             "not_recorded_in_vbt2_pilot",
@@ -1196,7 +1223,7 @@ def _normalise_rejected_screening_row(
         "base_candidate_metadata": metrics.get("base_candidate_metadata", {}),
         "model_id": candidate.hypothesis_id,
         "symbol": str(metrics.get("symbol") or "unknown"),
-        "research_clock": result.research_clock,
+        "research_clock": _canonical_research_clock_label(result.research_clock),
         "opportunity_type_or_event_type": metrics.get(
             "opportunity_type_or_event_type",
             "not_recorded_candidate_rejected",
@@ -1370,6 +1397,20 @@ def validate_screening_artifact(artifact: Mapping[str, Any]) -> None:
 
     if artifact.get("screening_backend") != "vectorbt":
         errors.append("screening_backend must be vectorbt")
+    for clock_error in research_clock_validation_errors(
+        artifact.get("research_clock"),
+        context="screening_artifact.research_clock",
+    ):
+        errors.append(clock_error)
+    artifact_research_clock = ""
+    if not any(err.endswith("research_clock_invalid") for err in errors):
+        try:
+            artifact_research_clock = validate_research_clock(
+                str(artifact.get("research_clock", "")),
+                context="screening_artifact.research_clock",
+            )
+        except ResearchClockError:
+            artifact_research_clock = ""
     screening_scope = str(artifact.get("screening_scope") or "")
     rust_required_for_scope = _rust_required_for_scope(screening_scope)
     if rust_required_for_scope and artifact.get("rust_engine_required_for_scope") is not True:
@@ -1403,6 +1444,22 @@ def validate_screening_artifact(artifact: Mapping[str, Any]) -> None:
                     errors.append(f"{candidate_id} missing candidate field: {field_name}")
                 elif field_name != "rejection_reason_or_null" and _screening_field_missing(candidate[field_name]):
                     errors.append(f"{candidate_id} empty candidate field: {field_name}")
+            if "research_clock" in candidate and not _screening_field_missing(candidate.get("research_clock")):
+                for clock_error in research_clock_validation_errors(
+                    candidate["research_clock"],
+                    context="research_clock",
+                ):
+                    errors.append(f"{candidate_id}_{clock_error}")
+                if artifact_research_clock:
+                    try:
+                        candidate_clock = validate_research_clock(
+                            str(candidate["research_clock"]),
+                            context="research_clock",
+                        )
+                        if candidate_clock != artifact_research_clock:
+                            errors.append(f"{candidate_id}_research_clock_mismatch_with_artifact")
+                    except ResearchClockError:
+                        pass
             if "parameter_values" in candidate and "parameter_values_hash" in candidate:
                 parameter_values = candidate.get("parameter_values")
                 if not isinstance(parameter_values, Mapping):
@@ -1563,7 +1620,7 @@ class FilterResult:
     rust_engine_available: bool = False
     vectorbt_engine_runtime_proof: bool = False
     license_review: str = "pilot_only_license_review_required_before_broad_or_paid_compute"
-    research_clock: str = "event_window_pilot"
+    research_clock: str = RESEARCH_CLOCK_SCHEDULED_EVENT
     parameter_space_id: str = ""
     parameter_space_hash: str = ""
     max_trials: int = 0
@@ -1622,7 +1679,7 @@ class FilterResult:
             "rust_engine_available": self.rust_engine_available,
             "vectorbt_engine_runtime_proof": self.vectorbt_engine_runtime_proof,
             "license_review": self.license_review,
-            "research_clock": self.research_clock,
+            "research_clock": _canonical_research_clock_label(self.research_clock),
             "parameter_space_id": self.parameter_space_id,
             "parameter_space_hash": self.parameter_space_hash,
             "max_trials": self.max_trials,
@@ -2471,6 +2528,9 @@ def _run_vectorbt_simulation(
 
 
 def _candidate_id(cand: CandidateModel, params: Dict[str, Any]) -> str:
+    meta_clock = cand.metadata.get("research_clock")
+    if meta_clock is not None:
+        meta_clock = _canonical_research_clock_label(str(meta_clock))
     identity = {
         "base_candidate_id": cand.candidate_id,
         "model_id": cand.model_id,
@@ -2480,7 +2540,7 @@ def _candidate_id(cand: CandidateModel, params: Dict[str, Any]) -> str:
         "feature_set_id": cand.metadata.get("feature_set_id")
         or cand.metadata.get("_candidate_feature_set_id"),
         "candidate_symbol_id": cand.metadata.get("_candidate_symbol_id"),
-        "research_clock": cand.metadata.get("research_clock"),
+        "research_clock": meta_clock,
     }
     raw = json.dumps(identity, sort_keys=True, default=str)
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
