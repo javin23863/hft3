@@ -40,24 +40,26 @@ flowchart LR
   GP --> P[Plan]
   P --> I[Investigator / Explore]
   I --> B[Builder ≤2 files]
-  B --> GL[GrepLoop]
-  GL --> R["Reviewer (Karpathy + math)"]
+  B --> LP[Local Preflight]
+  LP --> R["Reviewer (Karpathy + math)"]
   R --> V[Verify]
   V -->|fail| P
-  V -->|pass| GPO[GraphPost]
+  V -->|pass| PR[PR GrepLoop]
+  PR --> GPO[GraphPost]
   GPO --> D[Done]
 ```
 
-### Spec -> GraphPre -> Plan -> Code -> GrepLoop -> Review -> Verify -> GraphPost
+### Spec -> GraphPre -> Plan -> Code -> Local Preflight -> Review -> Verify -> PR GrepLoop -> GraphPost
 
 1. **Spec** — Read relevant spec (BLUEPRINT, PDF prompts, issue). State invariants (data lanes, PASS gates).
 2. **GraphPre** — `graphify query` or fresh `graphify-out/GRAPH_REPORT.md` before edits ([GRAPHIFY_WORKFLOW.md](GRAPHIFY_WORKFLOW.md)).
 3. **Plan** — Orchestrator decomposes; spawn investigators in parallel if needed.
 4. **Code** — Builder for surgical edits; main/feature agent for larger scope; shell for commands.
-5. **GrepLoop** — Run the mandatory local loop in [docs/ai/GREPLOOP.md](ai/GREPLOOP.md): search changed scope for forbidden legacy terms, old fields, missing required terms/citation rows, and whitespace errors; patch actionable hits; max three local iterations. If a PR/MR/CL exists and Greptile is installed, run the Greptile PR loop too.
+5. **Local preflight** — Run the mandatory local preflight loop in [docs/ai/GREPLOOP.md](ai/GREPLOOP.md): search changed scope for forbidden legacy terms, old fields, missing required terms/citation rows, and whitespace errors; patch actionable hits; max three local iterations.
 6. **Review** — Dual-pass reviewer on diff. Both passes must be green before test commands can be used as merge evidence.
 7. **Verify** — Run bounded `pytest`/build commands (and CHI404 validate when infra). No merge narrative without green commands.
-8. **GraphPost** — `graphify update .` or `scripts/graphify_rebuild.ps1` after code changes (AST-only, no Google API). Optional semantic PDF pass: `scripts/graphify_semantic_local.ps1` (local Ollama).
+8. **PR GrepLoop** — If a PR/MR/CL exists and an external PR AI review connector is installed, run the PR loop. Codex GitHub review is requested by `.github/workflows/codex_pr_review.yml` when enabled.
+9. **GraphPost** — `graphify update .` or `scripts/graphify_rebuild.ps1` after code changes (AST-only, no Google API). Optional semantic PDF pass: `scripts/graphify_semantic_local.ps1` (local Ollama).
 
 ## Dual-pass review
 
@@ -103,9 +105,9 @@ Orchestrator entry: `infrastructure/chi404/run_chi404_tuning.sh` (validate step 
 | **Skipped subagent chain** | Main thread inline locate/edit/review with no subagent receipts; unacceptable on a live execution stack — see [AGENTS.md § Trust](../AGENTS.md#trust-non-skippable-workflow). |
 | **Windows in HFT loop** | Wiring a dev workstation into live/paper Rithmic capture or order path — violates BLUEPRINT §4; colo must be self-sufficient. |
 | **Dishonest merge-ready** | Claiming done while reviewer said no, tests skipped without documented blockers, or C++ parity gate not run. |
-| **Skipped GrepLoop** | Letting stale field names, old vocabulary, or missing citation rows survive into reviewer/test cycles. |
-| **Codex-only review** | Treating agent self-review as equivalent to grep evidence, dual-pass reviewer, tests, or Greptile PR feedback. |
-| **Oversized review surface** | Sending >1000 changed lines or unrelated subsystems through one review when the work can be split; Greptile and humans need one coherent surface. |
+| **Skipped local preflight** | Letting stale field names, old vocabulary, or missing citation rows survive into reviewer/test cycles. |
+| **Codex-only review** | Treating local agent self-review as equivalent to grep evidence, dual-pass reviewer, tests, or external PR AI review evidence. |
+| **Oversized review surface** | Sending >1000 changed lines or unrelated subsystems through one review when the work can be split; external AI reviewers and humans need one coherent surface. |
 | **Subset pytest as scope-green** | Targeted file pass while the scope test directory or gate script for the touched path fails. |
 | **Verify todo theater** | Marking verify todos `completed` when pytest or gate scripts were waived, not run, or failed. |
 | **Production mode without data** | Production YAML or paths with empty trusted lake — config-only, not "real-data wired". |
@@ -118,7 +120,7 @@ Orchestrator entry: `infrastructure/chi404/run_chi404_tuning.sh` (validate step 
 ## Related docs
 
 - [docs/VALIDATION_HONESTY.md](VALIDATION_HONESTY.md) — repo-wide status block, scope-green gates, forbidden verification theater
-- [docs/ai/GREPLOOP.md](ai/GREPLOOP.md) — mandatory local `rg` loop plus Greptile PR loop when available
+- [docs/ai/GREPLOOP.md](ai/GREPLOOP.md) — mandatory local `rg` loop plus external PR AI review loop when available
 - [AGENTS.md](../AGENTS.md) — agent roles and repo conventions
 - [GRAPHIFY_WORKFLOW.md](GRAPHIFY_WORKFLOW.md) — mandatory graph consult and rebuild
 - [.cursor/rules/delegate-subagents.mdc](../.cursor/rules/delegate-subagents.mdc) — always-on delegation rule

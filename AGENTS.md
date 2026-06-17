@@ -71,7 +71,7 @@ Run this loop in order. The main thread **orchestrates and integrates**; it does
 
 1. **Locate** — `cavecrew-investigator` or `explore` when definitions, callers, or test sites are not already known.
 2. **Edit** — `cavecrew-builder` for surgical changes (≤2 files). Multi-file work stays in main/feature agent with explicit user approval per batch.
-3. **GrepLoop** — run the mandatory bounded task-specific `rg` loop in [docs/ai/GREPLOOP.md](docs/ai/GREPLOOP.md) to catch stale terms, old fields, missing required vocabulary, missing citation rows, and whitespace errors before reviewer time. Codex self-review is not a substitute.
+3. **Local preflight** — run the mandatory bounded task-specific `rg` loop in [docs/ai/GREPLOOP.md](docs/ai/GREPLOOP.md) to catch stale terms, old fields, missing required vocabulary, missing citation rows, and whitespace errors before reviewer time. Codex self-review is not a substitute.
 4. **Review** — `cavecrew-reviewer` dual-pass (Karpathy + math invariants) **before** claiming the change is sound. Report reviewer receipt: 🔴 count, 🟡 count, **merge-ready yes/no**.
 5. **Verify** — `shell` runs `pytest` (and CHI404 validate when infra applies). Paste or summarize command output; do not narrate "tests pass" without evidence.
 6. **GraphPost** — `graphify update .` or `scripts/graphify_rebuild.ps1` after edits. Commit updated `graphify-out/` with the change when the team tracks graph in git.
@@ -80,7 +80,7 @@ Run this loop in order. The main thread **orchestrates and integrates**; it does
 
 ### If the chain was skipped
 
-Stop. Acknowledge the miss to the user. Re-run the full **Spec → GraphPre → Plan → Delegate → Verify → GraphPost** loop on the current diff before more edits or a merge/commit narrative.
+Stop. Acknowledge the miss to the user. Re-run the full **Spec → GraphPre → Plan → Delegate → Local Preflight → Review → Verify → PR GrepLoop when available → GraphPost** loop on the current diff before more edits or a merge/commit narrative.
 
 ### Merge-ready criteria (honest status)
 
@@ -89,7 +89,7 @@ Do not tell the user work is merge-ready unless **all** of the following are tru
 | Gate | Requirement |
 |------|-------------|
 | Reviewer | `cavecrew-reviewer` verdict **merge-ready: yes**, **0 🔴** |
-| GrepLoop | Local GrepLoop ran on the changed scope. If a PR/MR/CL exists and an external PR AI review connector is installed, PR GrepLoop also ran or the unavailability is documented. |
+| Local preflight / PR GrepLoop | Local preflight ran on the changed scope. If a PR/MR/CL exists and an external PR AI review connector is installed, PR GrepLoop also ran or the unavailability is documented. |
 | Tests | Scope-green per [docs/VALIDATION_HONESTY.md](docs/VALIDATION_HONESTY.md): full scope pytest or gate script with **exit code and output tail** pasted in thread — not targeted file subsets alone. Full-repo `pytest` when scope is ambiguous. |
 | Skipped tests | Every skip has a **documented blocker** (e.g. CMake missing → `test_cpp_feature_golden` skipped). Say **merge-ready: no** until the gate runs or the user explicitly accepts the skip. |
 | C++ parity | When Python/C++ feature slots change: build `hft_feature_golden` and pass `tests/test_cpp_feature_golden.py` |
@@ -140,7 +140,7 @@ Touch only what the task requires. Match existing naming, types, and style. Ever
 
 Convert imperative instructions into verifiable success criteria. Prefer "write a failing test, then make it pass" over "fix the bug." Strong criteria let the agent loop independently; weak criteria ("make it work") require constant clarification.
 
-## VaultGate → Spec → GraphPre → Plan → Code → GrepLoop → Review → Verify → GraphPost
+## VaultGate → Spec → GraphPre → Plan → Code → Local Preflight → Review → Verify → PR GrepLoop → GraphPost
 
 Every task runs this loop:
 
@@ -150,12 +150,13 @@ Every task runs this loop:
 4. **GraphPre** — `scripts/graphify_pre_edit.ps1` (exits 2 if gate stamp missing/stale). Use graph query output — not blind repo grep. CHI404: [docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md](docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md).
 5. **Plan** — Brief plan with verification steps before editing. Delegate locate work when needed (with graph context).
 6. **Code** — Minimal change via builder or approved multi-file path. No drive-by edits. No parallel CHI404 orchestrators.
-7. **GrepLoop** — Before reviewer, run a bounded, task-specific `rg` loop for forbidden legacy terms, old fields, missing required terms/citation rows, and whitespace errors. Patch actionable hits; max three local iterations; report blockers instead of widening blindly.
+7. **Local preflight** — Before reviewer, run a bounded, task-specific `rg` loop for forbidden legacy terms, old fields, missing required terms/citation rows, and whitespace errors. Patch actionable hits; max three local iterations; report blockers instead of widening blindly.
 8. **Review** — **cavecrew-reviewer** must complete Pass A (Karpathy) and Pass B (math invariants) on the diff before test commands can be used as merge evidence.
 9. **Verify** — **shell** runs bounded pytest (see [docs/ai/SHELL_EXECUTION.md](docs/ai/SHELL_EXECUTION.md)) and CHI404 validate gates when infra applies. Loop until met or blocked.
-10. **GraphPost** — After code edits: `graphify update .` or `scripts/graphify_rebuild.ps1`. Commit updated `graphify-out/` with the change when the team tracks graph in git.
+10. **PR GrepLoop** — If a PR/MR/CL exists and an external PR AI review connector is installed, run the PR loop or document unavailability.
+11. **GraphPost** — After code edits: `graphify update .` or `scripts/graphify_rebuild.ps1`. Commit updated `graphify-out/` with the change when the team tracks graph in git.
 
-Do not skip VaultGate, GraphGate, GraphPre, Plan, GrepLoop, Review, Verify, or GraphPost for "small" changes.
+Do not skip VaultGate, GraphGate, GraphPre, Plan, Local Preflight, Review, Verify, PR GrepLoop when available, or GraphPost for "small" changes.
 
 ## hft3-specific constraints
 
