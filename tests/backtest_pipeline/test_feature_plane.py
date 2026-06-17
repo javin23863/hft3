@@ -23,6 +23,17 @@ from backtest_pipeline.src.vectorbt_adapter import (
 
 
 def _bar_stub_payload(**overrides):
+    return build_feature_plane_payload(
+        bar_construction_id="ohlcv_1m_from_npz_or_supplied_array",
+        feature_set_id="fs_v1_pilot_unknown",
+        feature_set_hash="pilot_requires_feature_manifest_before_screen",
+        research_clock="scheduled_event",
+        screening_scope="pilot",
+        overrides=overrides,
+    )
+
+
+def _bar_stub_payload_raw(**overrides):
     payload = build_feature_plane_payload(
         bar_construction_id="ohlcv_1m_from_npz_or_supplied_array",
         feature_set_id="fs_v1_pilot_unknown",
@@ -64,16 +75,22 @@ class TestFeaturePlaneValidation:
         assert payload["feature_plane_status"] == FEATURE_PLANE_STATUS_BAR_STUB
 
     def test_rejects_mislabeled_context_coverage(self):
-        payload = _bar_stub_payload()
+        payload = _bar_stub_payload_raw()
         payload["context_feature_coverage_status"] = "measured"
         errors = feature_plane_validation_errors(payload)
         assert any("mislabeled_full_product" in err for err in errors)
 
     def test_rejects_pit_declared_without_feature_complete_status(self):
-        payload = _bar_stub_payload()
+        payload = _bar_stub_payload_raw()
         payload["model_feature_usage_status"] = "pit_declared"
         errors = feature_plane_validation_errors(payload)
         assert "model_feature_usage_pit_declared_without_feature_complete_status" in errors
+
+    def test_manifest_hash_mismatch_fails(self):
+        payload = _bar_stub_payload_raw()
+        payload["feature_usage_manifest_hash"] = "deadbeef"
+        errors = feature_plane_validation_errors(payload)
+        assert "feature_usage_manifest_hash_mismatch" in errors
 
     def test_accepts_feature_complete_when_all_families_consumed(self):
         consumed_manifest = {
@@ -115,12 +132,6 @@ class TestFeaturePlaneValidation:
             },
         )
         assert feature_plane_validation_errors(payload) == []
-
-    def test_manifest_hash_mismatch_fails(self):
-        payload = _bar_stub_payload()
-        payload["feature_usage_manifest_hash"] = "deadbeef"
-        errors = feature_plane_validation_errors(payload)
-        assert "feature_usage_manifest_hash_mismatch" in errors
 
 
 class TestVectorbtAdapterIntegration:

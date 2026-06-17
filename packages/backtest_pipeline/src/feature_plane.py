@@ -359,6 +359,10 @@ def build_feature_plane_payload(
             "feature_usage_manifest",
             "feature_usage_manifest_hash",
         }:
+            # Guard: do not let an invalid explicit status override bypass the
+            # deterministic classifier and manifest-based validation.
+            if key == "feature_plane_status" and str(value) not in FEATURE_PLANE_STATUSES:
+                continue
             payload[key] = value
     payload["feature_usage_manifest_hash"] = compute_feature_usage_manifest_hash(
         payload["feature_usage_manifest"]
