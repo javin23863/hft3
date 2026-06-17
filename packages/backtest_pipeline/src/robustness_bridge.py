@@ -58,7 +58,11 @@ def _not_run_sentinel() -> Dict[str, Any]:
 
 
 def _all_not_run_output(candidate_id: str = "") -> Dict[str, Any]:
-    """Return the full fail-closed output when robustness input is missing."""
+    """Return the full fail-closed output when robustness input is missing.
+
+    Must include every key that ``compute_robustness_evidence`` returns on the
+    normal path so downstream consumers never see KeyError on fail-closed.
+    """
     sentinel = _not_run_sentinel()
     return {
         "wfc_status": _NOT_RUN,
@@ -70,6 +74,14 @@ def _all_not_run_output(candidate_id: str = "") -> Dict[str, Any]:
         "dsr_or_not_run": dict(sentinel),
         "pbo_or_not_run": dict(sentinel),
         "cscv_count_or_not_run": dict(sentinel),
+        "fee_stress_or_not_run": dict(sentinel),
+        "slippage_stress_or_not_run": dict(sentinel),
+        "latency_stress_or_not_run": dict(sentinel),
+        "holm_bh_or_not_run": dict(sentinel),
+        "null_battery_or_not_run": dict(sentinel),
+        "planted_alpha_or_not_run": dict(sentinel),
+        "adversarial_or_not_run": dict(sentinel),
+        "parameter_perturbation_or_not_run": dict(sentinel),
         "walk_forward_metrics": {
             "status": _NOT_RUN,
             "fold_matrix": [],
@@ -190,7 +202,9 @@ def _run_fee_stress(
             per_event_expectancies, per_event_n_trades,
             per_event_fee_per_rt, per_event_tick_value
         )
-        return {"status": _PASS, **result}
+        stress_pass = result.get("stress_pass")
+        status = _PASS if stress_pass is True else (_FAIL if stress_pass is False else _NOT_RUN)
+        return {"status": status, **result}
     except Exception as exc:  # noqa: BLE001
         logger.warning("fee_stress producer failed: %s", exc)
         return _producer_error(str(exc))
@@ -207,7 +221,9 @@ def _run_slippage_stress(
             per_event_expectancies, per_event_n_trades,
             per_event_fee_per_rt, per_event_tick_value
         )
-        return {"status": _PASS, **result}
+        stress_pass = result.get("stress_pass")
+        status = _PASS if stress_pass is True else (_FAIL if stress_pass is False else _NOT_RUN)
+        return {"status": status, **result}
     except Exception as exc:  # noqa: BLE001
         logger.warning("slippage_stress producer failed: %s", exc)
         return _producer_error(str(exc))
@@ -224,7 +240,9 @@ def _run_latency_stress(
             per_event_expectancies, per_event_n_trades,
             per_event_fee_per_rt, per_event_tick_value
         )
-        return {"status": _PASS, **result}
+        stress_pass = result.get("stress_pass")
+        status = _PASS if stress_pass is True else (_FAIL if stress_pass is False else _NOT_RUN)
+        return {"status": status, **result}
     except Exception as exc:  # noqa: BLE001
         logger.warning("latency_stress producer failed: %s", exc)
         return _producer_error(str(exc))
@@ -302,6 +320,7 @@ def _run_parameter_perturbation(
     perturbation_fractions: List[float] | None = None,
     n_runs_per_fraction: int = 50,
     min_stability_score: float = 0.7,
+    seed: int = 0,
 ) -> Dict[str, Any]:
     try:
         result = parameter_perturbation(
@@ -309,7 +328,7 @@ def _run_parameter_perturbation(
             parameter_values=None,
             perturbation_fractions=perturbation_fractions,
             n_runs_per_fraction=n_runs_per_fraction,
-            seed=0,
+            seed=seed,
             min_stability_score=min_stability_score,
         )
         return {"status": _PASS, **result}
@@ -524,6 +543,7 @@ def compute_robustness_evidence(robustness_input: dict, candidate_id: str = "") 
     perturbation_fractions = robustness_input.get("perturbation_fractions")
     n_runs_per_fraction = robustness_input.get("n_runs_per_fraction", 50)
     min_stability_score = robustness_input.get("min_stability_score", 0.7)
+    perturbation_seed = robustness_input.get("perturbation_seed", 0)
 
     has_expectancies = (
         isinstance(per_event_expectancies, list) and len(per_event_expectancies) > 0
@@ -594,6 +614,7 @@ def compute_robustness_evidence(robustness_input: dict, candidate_id: str = "") 
             perturbation_fractions=perturbation_fractions,
             n_runs_per_fraction=n_runs_per_fraction,
             min_stability_score=min_stability_score,
+            seed=perturbation_seed,
         )
 
     pbo_result = _not_run_sentinel()
@@ -639,7 +660,13 @@ def compute_robustness_evidence(robustness_input: dict, candidate_id: str = "") 
     latency_stress_pass = latency_stress_result.get("stress_pass")
     latency_stress_status = _PASS if (latency_stress_pass is True) else (_FAIL if (latency_stress_pass is False) else _NOT_RUN)
     holm_bh_n_rejected = holm_bh_result.get("n_rejected")
-    holm_bh_status = _PASS if (holm_bh_n_rejected is not None and holm_bh_n_rejected > 0) else (_NOT_RUN if not has_p_values else _FAIL)
+    holm_bh_reason = holm_bh_result.get("reason")
+    # Holm/BH "pass" = the correction ran and produced valid output (not an
+    # error).  The correction is a gate that accounts for multiplicity —
+    # running successfully means the family was corrected, regardless of how
+    # many hypotheses were rejected.  A high rejection count is evidence the
+    # family contains many false discoveries, not that this candidate passes.
+    holm_bh_status = _PASS if (holm_bh_reason is None and has_p_values) else (_NOT_RUN if not has_p_values else _FAIL)
     null_battery_pass = null_battery_result.get("null_pass")
     null_battery_status = _PASS if (null_battery_pass is True) else (_FAIL if (null_battery_pass is False) else _NOT_RUN)
     planted_alpha_pass = planted_alpha_result.get("planted_pass")

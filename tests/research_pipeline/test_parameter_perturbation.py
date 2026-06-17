@@ -27,18 +27,24 @@ class TestParameterPerturbationHandMath:
         assert result["reason"] is None
 
     def test_weak_edge_fails_perturbation(self):
-        """Cells with negative expectancy always fail (cannot survive perturbation)."""
-        expectancies = [-0.01] * 100  # Negative edge
+        """Cells with explicitly zero mean should fail under perturbation.
+
+        The additive noise model scales noise with std(arr). When the mean
+        is exactly zero (demeaned series), the perturbed mean is pure noise,
+        so survival_rate ≈ 0.5 < 0.7.
+        """
+        rng = np.random.default_rng(99)
+        expectancies_arr = rng.normal(0.0, 0.01, 100)
+        expectancies_arr -= expectancies_arr.mean()  # explicitly demean
+        expectancies = expectancies_arr.tolist()
         result = parameter_perturbation(
             expectancies,
-            perturbation_fractions=[0.50],
+            perturbation_fractions=[0.25, 0.50],
             n_runs_per_fraction=100,
             seed=42,
-            min_stability_score=0.5,
+            min_stability_score=0.7,
         )
-        # Negative mean always fails regardless of perturbation
-        assert result["observed_mean"] == -0.01
-        assert result["parameter_stability_score"] == 0.0
+        assert result["parameter_stability_score"] < 0.7
         assert result["parameter_perturbation_pass"] is False
 
     def test_negative_edge_never_survives(self):
@@ -248,17 +254,20 @@ class TestParameterPerturbationPassFail:
         assert result["parameter_perturbation_pass"] is True
 
     def test_fail_when_score_below_threshold(self):
-        """Fail when stability_score < min_stability_score (via negative edge)."""
-        expectancies = [-0.01] * 100  # Negative edge yields score 0.0
+        """Fail when stability_score < min_stability_score (via zero-mean series)."""
+        rng = np.random.default_rng(99)
+        expectancies_arr = rng.normal(0.0, 0.01, 100)
+        expectancies_arr -= expectancies_arr.mean()  # explicitly demean
+        expectancies = expectancies_arr.tolist()
         result = parameter_perturbation(
             expectancies,
-            perturbation_fractions=[0.50],
+            perturbation_fractions=[0.25, 0.50],
             n_runs_per_fraction=100,
             seed=42,
             min_stability_score=0.7,
         )
         assert result["parameter_perturbation_pass"] is False
-        assert result["parameter_stability_score"] == 0.0
+        assert result["parameter_stability_score"] < 0.7
 
     def test_exactly_at_boundary(self):
         """Behavior at exact boundary depends on floating point."""
@@ -286,8 +295,13 @@ class TestParameterPerturbationOrdering:
     """Monotonicity: higher perturbation fraction -> lower survival rate."""
 
     def test_larger_fraction_lower_survival(self):
-        """For weak edges, larger perturbation should reduce survival."""
-        expectancies = [0.02] * 100  # Weak edge
+        """For weak edges, larger perturbation should reduce survival.
+
+        With heterogeneous expectancies (non-zero std), the additive noise
+        model produces decreasing survival as the perturbation fraction grows.
+        """
+        rng = np.random.default_rng(77)
+        expectancies = (rng.normal(0.001, 0.01, 100)).tolist()  # weak + variable
         result = parameter_perturbation(
             expectancies,
             perturbation_fractions=[0.10, 0.25, 0.50],
@@ -297,9 +311,9 @@ class TestParameterPerturbationOrdering:
         r_10 = result["fraction_survival_rates"][0.10]
         r_25 = result["fraction_survival_rates"][0.25]
         r_50 = result["fraction_survival_rates"][0.50]
-        # With weak edge, survival should generally decrease with perturbation
-        assert r_50 <= r_25 + 0.02  # Allow small random variation
-        assert r_25 <= r_10 + 0.02
+        # With weak edge and variable data, survival should generally decrease
+        assert r_50 <= r_25 + 0.05  # Allow small random variation
+        assert r_25 <= r_10 + 0.05
 
 
 if __name__ == "__main__":

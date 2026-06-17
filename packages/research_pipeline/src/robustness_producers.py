@@ -1474,15 +1474,20 @@ def parameter_perturbation(
     Algorithm
     ---------
     1. observed_mean = mean(per_event_expectancies).
-    2. Default perturbation_fractions = [0.10, 0.25] (±10%, ±25%).
-    3. For each fraction f in perturbation_fractions:
+    2. observed_std = std(per_event_expectancies, ddof=1).
+    3. Default perturbation_fractions = [0.10, 0.25] (±10%, ±25%).
+    4. For each fraction f in perturbation_fractions:
          For n_runs_per_fraction trials:
-           a. Draw multiplicative noise ~ LogNormal(0, f) for each event.
-           b. perturbed = expectancies * noise.
+           a. Draw additive noise: noise = f * observed_std * N(0,1).
+              The noise scale is proportional to the data's natural variability
+              (std), not the mean. This degrades the SNR as f grows: a weak
+              edge (low mean/std ratio) fails at lower f, a strong edge
+              (high mean/std ratio) survives.
+           b. perturbed = expectancies + noise.
            c. survived = mean(perturbed) > 0.
          fraction_survival = sum(survived) / n_runs_per_fraction.
-    4. parameter_stability_score = mean(fraction_survival across fractions).
-    5. parameter_perturbation_pass = score >= min_stability_score.
+    5. parameter_stability_score = mean(fraction_survival across fractions).
+    6. parameter_perturbation_pass = score >= min_stability_score.
 
     Parameters
     ----------
@@ -1495,7 +1500,8 @@ def parameter_perturbation(
         expectancy series directly as a proxy for parameter instability.
     perturbation_fractions:
         List of perturbation magnitudes as fractions (default [0.10, 0.25]
-        for ±10% and ±25%). Each fraction represents the log-normal sigma.
+        for ±10% and ±25%). Each fraction scales the additive noise relative
+        to the observed standard deviation: noise = f * std * N(0,1).
     n_runs_per_fraction:
         Number of perturbation trials per fraction (default 50).
     seed:
@@ -1587,6 +1593,7 @@ def parameter_perturbation(
         }
 
     observed_mean = float(np.mean(arr))
+    observed_std = float(np.std(arr, ddof=1)) if n_obs > 1 else 0.0
     rng = np.random.default_rng(seed)
 
     fraction_survival_rates = {}
@@ -1594,10 +1601,15 @@ def parameter_perturbation(
     for frac in fractions:
         survived = 0
         for _ in range(n_runs_per_fraction):
-            # Multiplicative log-normal noise: exp(N(0, frac)) has median 1,
-            # std ≈ frac for small frac. This models proportional parameter drift.
-            noise = rng.lognormal(mean=0.0, sigma=frac, size=n_obs)
-            perturbed = arr * noise
+            # Additive noise: perturbed = arr + frac * std(arr) * N(0,1).
+            # The noise scale is proportional to the observed standard deviation
+            # of the expectancies, not the mean. This degrades the SNR as frac
+            # grows: a weak edge (low mean/std ratio) fails at lower frac, a
+            # strong edge (high mean/std ratio) survives. This models parameter
+            # drift injecting noise at a fraction of the data's natural variability.
+            noise_scale = frac * observed_std if observed_std > 0 else 0.0
+            noise = rng.standard_normal(size=n_obs) * noise_scale
+            perturbed = arr + noise
             perturbed_mean = float(np.mean(perturbed))
             if perturbed_mean > 0.0:
                 survived += 1
