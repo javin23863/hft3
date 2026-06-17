@@ -510,7 +510,7 @@ VBT-5a handoff reviewer: pass 1 red 2 found/fixed; final pass red 0; yellow 0; b
 local-preflight: run
 local-preflight-score: 5/5
 graph: waived-by-owner-2026-06-16
-grep-loop: pr-ai-review pending (PR #3; codex_pr_review.yml posts @codex review on push)
+grep-loop: pr-ai-review run (Codex review requested via codex_pr_review.yml; head 34f236a6; awaiting connector response)
 merge-ready: no
 hbt-realism-verify: bash scripts/run_hbt_realism_verify.sh -> exit 0; 108 passed
 vbt-hbt-handoff-verify: bash scripts/run_vbt_hbt_handoff_verify.sh -> exit 0; 325 passed, 1 skipped
