@@ -255,7 +255,9 @@ def _run_holm_bh(
 ) -> Dict[str, Any]:
     try:
         result = holm_bh_correction(p_values, alpha=alpha, method=method)
-        return {"status": _PASS, **result}
+        reason = result.get("reason")
+        status = _PASS if reason is None else _FAIL
+        return {"status": status, **result}
     except Exception as exc:  # noqa: BLE001
         logger.warning("holm_bh_correction producer failed: %s", exc)
         return _producer_error(str(exc))
@@ -272,7 +274,9 @@ def _run_null_battery(
             per_event_expectancies, n_null_runs=n_null_runs,
             seed=seed, min_p_value=min_p_value
         )
-        return {"status": _PASS, **result}
+        null_pass = result.get("null_pass")
+        status = _PASS if null_pass is True else (_FAIL if null_pass is False else _NOT_RUN)
+        return {"status": status, **result}
     except Exception as exc:  # noqa: BLE001
         logger.warning("null_strategy_battery producer failed: %s", exc)
         return _producer_error(str(exc))
@@ -290,7 +294,9 @@ def _run_planted_alpha(
             per_event_expectancies, n_planted=n_planted,
             alpha_strength=alpha_strength, seed=seed, min_p_value=min_p_value
         )
-        return {"status": _PASS, **result}
+        planted_pass = result.get("planted_pass")
+        status = _PASS if planted_pass is True else (_FAIL if planted_pass is False else _NOT_RUN)
+        return {"status": status, **result}
     except Exception as exc:  # noqa: BLE001
         logger.warning("planted_alpha_synthetic_control producer failed: %s", exc)
         return _producer_error(str(exc))
@@ -309,7 +315,9 @@ def _run_adversarial(
             n_perturbations=n_perturbations, seed=seed,
             min_survival_rate=min_survival_rate
         )
-        return {"status": _PASS, **result}
+        adversarial_pass = result.get("adversarial_pass")
+        status = _PASS if adversarial_pass is True else (_FAIL if adversarial_pass is False else _NOT_RUN)
+        return {"status": status, **result}
     except Exception as exc:  # noqa: BLE001
         logger.warning("adversarial_perturbation producer failed: %s", exc)
         return _producer_error(str(exc))
@@ -331,7 +339,9 @@ def _run_parameter_perturbation(
             seed=seed,
             min_stability_score=min_stability_score,
         )
-        return {"status": _PASS, **result}
+        param_pass = result.get("parameter_perturbation_pass")
+        status = _PASS if param_pass is True else (_FAIL if param_pass is False else _NOT_RUN)
+        return {"status": status, **result}
     except Exception as exc:  # noqa: BLE001
         logger.warning("parameter_perturbation producer failed: %s", exc)
         return _producer_error(str(exc))
@@ -716,16 +726,41 @@ def compute_robustness_evidence(robustness_input: dict, candidate_id: str = "") 
     if not has_wfc:
         wfc_status = _NOT_RUN
 
-    # Determine staleness: all gates must pass (including new §10 producers when input is provided).
+    # Determine staleness: all gates must pass.
+    # Per Codex P1 finding: when a §10 producer is attempted (input provided)
+    # but fails/errors, the derived status is not_run — but that should NOT
+    # count as fresh. Only genuinely-not-provided producers (no input data)
+    # are exempt. Producers that ran but returned not_run (e.g. missing
+    # decomposition, producer error) must count as fail for staleness.
+    _section10_optional_when_no_input = (
+        not has_stress_decomposition  # fee/slippage/latency need decomposition
+        and not has_p_values           # holm_bh needs p_values
+    )
     all_pass = (
         wfc_status == _PASS
         and dsr_status == _PASS
         and pbo_status == _PASS
         and cscv_status == _PASS
-        and fee_stress_status in (_PASS, _NOT_RUN)
-        and slippage_stress_status in (_PASS, _NOT_RUN)
-        and latency_stress_status in (_PASS, _NOT_RUN)
-        and holm_bh_status in (_PASS, _NOT_RUN)
+        and (
+            fee_stress_status == _PASS
+            if has_stress_decomposition
+            else fee_stress_status in (_PASS, _NOT_RUN)
+        )
+        and (
+            slippage_stress_status == _PASS
+            if has_stress_decomposition
+            else slippage_stress_status in (_PASS, _NOT_RUN)
+        )
+        and (
+            latency_stress_status == _PASS
+            if has_stress_decomposition
+            else latency_stress_status in (_PASS, _NOT_RUN)
+        )
+        and (
+            holm_bh_status == _PASS
+            if has_p_values
+            else holm_bh_status in (_PASS, _NOT_RUN)
+        )
         and null_battery_status in (_PASS, _NOT_RUN)
         and planted_alpha_status in (_PASS, _NOT_RUN)
         and adversarial_status in (_PASS, _NOT_RUN)

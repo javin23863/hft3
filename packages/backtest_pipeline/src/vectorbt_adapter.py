@@ -304,6 +304,14 @@ SCREENING_CANDIDATE_REQUIRED_FIELDS = (
     "dsr_or_not_run",
     "pbo_or_not_run",
     "cscv_count_or_not_run",
+    "fee_stress_or_not_run",
+    "slippage_stress_or_not_run",
+    "latency_stress_or_not_run",
+    "holm_bh_or_not_run",
+    "null_battery_or_not_run",
+    "planted_alpha_or_not_run",
+    "adversarial_or_not_run",
+    "parameter_perturbation_or_not_run",
     "screening_status",
     "replay_eligibility_status",
     "rejection_reason_or_null",
@@ -319,6 +327,14 @@ REPLAY_ELIGIBILITY_NOT_RUN_FIELDS = (
     "dsr_or_not_run",
     "pbo_or_not_run",
     "cscv_count_or_not_run",
+    "fee_stress_or_not_run",
+    "slippage_stress_or_not_run",
+    "latency_stress_or_not_run",
+    "holm_bh_or_not_run",
+    "null_battery_or_not_run",
+    "planted_alpha_or_not_run",
+    "adversarial_or_not_run",
+    "parameter_perturbation_or_not_run",
 )
 _VBT2_PILOT_NOT_ELIGIBLE_REASON = (
     "vbt2_pilot_screen_only_without_real_wfc_dsr_pbo_cscv_pass_evidence"
@@ -1031,6 +1047,15 @@ def _normalise_promoted_screening_row(
     default_dsr = _screening_not_run(reason)
     default_pbo = _screening_not_run(reason)
     default_cscv_count = _screening_not_run(reason)
+    # Per Codex P2-7: default not-run for the 8 new §10 evidence maps.
+    default_fee_stress = _screening_not_run(reason)
+    default_slippage_stress = _screening_not_run(reason)
+    default_latency_stress = _screening_not_run(reason)
+    default_holm_bh = _screening_not_run(reason)
+    default_null_battery = _screening_not_run(reason)
+    default_planted_alpha = _screening_not_run(reason)
+    default_adversarial = _screening_not_run(reason)
+    default_param_perturb = _screening_not_run(reason)
 
     # When the bridge produced evidence, use its values.
     if bridge_evidence:
@@ -1051,6 +1076,17 @@ def _normalise_promoted_screening_row(
         default_cscv_count = bridge_evidence.get(
             "cscv_count_or_not_run", default_cscv_count
         )
+        # Per Codex P2-7: surface the 8 new §10 robustness evidence maps
+        # in the promoted screening row so downstream consumers receive
+        # fee/slippage/latency/Holm/null/planted/adversarial/parameter evidence.
+        default_fee_stress = bridge_evidence.get("fee_stress_or_not_run", _screening_not_run(reason))
+        default_slippage_stress = bridge_evidence.get("slippage_stress_or_not_run", _screening_not_run(reason))
+        default_latency_stress = bridge_evidence.get("latency_stress_or_not_run", _screening_not_run(reason))
+        default_holm_bh = bridge_evidence.get("holm_bh_or_not_run", _screening_not_run(reason))
+        default_null_battery = bridge_evidence.get("null_battery_or_not_run", _screening_not_run(reason))
+        default_planted_alpha = bridge_evidence.get("planted_alpha_or_not_run", _screening_not_run(reason))
+        default_adversarial = bridge_evidence.get("adversarial_or_not_run", _screening_not_run(reason))
+        default_param_perturb = bridge_evidence.get("parameter_perturbation_or_not_run", _screening_not_run(reason))
 
     row.update({
         "candidate_id": candidate.candidate_id,
@@ -1101,6 +1137,14 @@ def _normalise_promoted_screening_row(
         "dsr_or_not_run": default_dsr,
         "pbo_or_not_run": default_pbo,
         "cscv_count_or_not_run": default_cscv_count,
+        "fee_stress_or_not_run": default_fee_stress,
+        "slippage_stress_or_not_run": default_slippage_stress,
+        "latency_stress_or_not_run": default_latency_stress,
+        "holm_bh_or_not_run": default_holm_bh,
+        "null_battery_or_not_run": default_null_battery,
+        "planted_alpha_or_not_run": default_planted_alpha,
+        "adversarial_or_not_run": default_adversarial,
+        "parameter_perturbation_or_not_run": default_param_perturb,
         "screening_status": "pass",
         "replay_eligibility_status": "not_eligible",
         "rejection_reason_or_null": reason,
@@ -1187,6 +1231,14 @@ def _normalise_rejected_screening_row(
         "dsr_or_not_run": _screening_not_run(not_run_reason),
         "pbo_or_not_run": _screening_not_run(not_run_reason),
         "cscv_count_or_not_run": _screening_not_run(not_run_reason),
+        "fee_stress_or_not_run": _screening_not_run(not_run_reason),
+        "slippage_stress_or_not_run": _screening_not_run(not_run_reason),
+        "latency_stress_or_not_run": _screening_not_run(not_run_reason),
+        "holm_bh_or_not_run": _screening_not_run(not_run_reason),
+        "null_battery_or_not_run": _screening_not_run(not_run_reason),
+        "planted_alpha_or_not_run": _screening_not_run(not_run_reason),
+        "adversarial_or_not_run": _screening_not_run(not_run_reason),
+        "parameter_perturbation_or_not_run": _screening_not_run(not_run_reason),
         "screening_status": "rejected",
         "replay_eligibility_status": "not_eligible",
         "rejection_reason_or_null": reason,

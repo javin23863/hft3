@@ -503,7 +503,13 @@ def slippage_stress_for_cell(
     # Guard: if fee/tick decomposition fields are absent (old records), all
     # fee_per_rt will be 0.0 — slippage arithmetic is meaningless without a
     # tick_value baseline.  Fail closed.
-    if not per_event_fee_per_rt or all(v == 0.0 for v in per_event_fee_per_rt):
+    # Per Codex P2-5: also refuse zero tick values — without tick_value the
+    # slippage penalties become zero and slip_x2_pass passes without stress.
+    tick_all_zero = (
+        not per_event_tick_value
+        or all(v == 0.0 for v in per_event_tick_value)
+    )
+    if not per_event_fee_per_rt or all(v == 0.0 for v in per_event_fee_per_rt) or tick_all_zero:
         return {
             "stress_data_available": False,
             "slip_x1_5_expectancy": None,
@@ -690,27 +696,41 @@ def latency_stress_for_cell(
     arr_exp = np.array(per_event_expectancies, dtype=float)
     arr_fee = np.array(per_event_fee_per_rt, dtype=float)
 
+    # Per Codex P2-3: use per-event tick values instead of the default ES
+    # scalar tick_value_usd=12.5. MES or mixed-product rows have different
+    # tick values (e.g. 1.25 for MES vs 12.5 for ES). Using the wrong tick
+    # value over/understates latency costs by 10x.
+    arr_tv = np.array(per_event_tick_value, dtype=float)
+    # If per-event tick values are all zero or unavailable, fall back to
+    # the scalar tick_value_usd parameter.
+    if np.all(arr_tv == 0.0):
+        arr_tv = np.full(n, tick_value_usd, dtype=float)
+
     # Recover per-event gross expectancy: gross = net + fee_per_round_trip.
     # The gross figure is latency-cost-free (fee is exchange fee, not
     # slippage); the net figure embeds the baseline latency cost.
     arr_gross = arr_exp + arr_fee
 
-    # Per-round-trip latency cost at a given latency (USD):
-    #   latency_cost_per_rt(ms) = ms * ticks_per_ms * tick_value_usd
-    baseline_cost_per_rt = latency_ms_baseline * ticks_per_ms * tick_value_usd
-    stress_cost_per_rt   = latency_ms_stress   * ticks_per_ms * tick_value_usd
+    # Per-round-trip latency cost at a given latency (USD), per event:
+    #   latency_cost_per_rt_i(ms) = ms * ticks_per_ms * tick_value_i
+    baseline_cost_per_rt = latency_ms_baseline * ticks_per_ms
+    stress_cost_per_rt = latency_ms_stress * ticks_per_ms
 
-    # Incremental latency cost per round trip (USD) — the quantity actually
-    # being stressed (reported to callers as latency_cost_per_rt).
-    latency_cost_per_rt = max(stress_cost_per_rt - baseline_cost_per_rt, 0.0)
+    # Per-event cost arrays for baseline and stress.
+    baseline_cost_arr = baseline_cost_per_rt * arr_tv
+    stress_cost_arr = stress_cost_per_rt * arr_tv
+
+    # Incremental latency cost per round trip (USD) — mean across events.
+    incremental_arr = np.maximum(stress_cost_arr - baseline_cost_arr, 0.0)
+    latency_cost_per_rt = float(np.mean(incremental_arr)) if n > 0 else 0.0
 
     # Baseline expectancy: gross minus fee minus baseline latency cost.
     # (With latency_ms_baseline=0 this equals the echoed base net mean.)
-    baseline_expectancy = float(np.mean(arr_gross - arr_fee - baseline_cost_per_rt))
+    baseline_expectancy = float(np.mean(arr_gross - arr_fee - baseline_cost_arr))
 
     # Stress expectancy: gross minus fee minus full stressed latency cost.
     # When latency_ms_stress == latency_ms_baseline this equals baseline.
-    stress_expectancy = float(np.mean(arr_gross - arr_fee - stress_cost_per_rt))
+    stress_expectancy = float(np.mean(arr_gross - arr_fee - stress_cost_arr))
 
     stress_pass = bool(stress_expectancy > 0.0)
 
@@ -1406,6 +1426,10 @@ def adversarial_perturbation(
     # survival_rate reflects the raw sign of observed_mean.
     n_perturb = int(round(perturbation_fraction * n_obs))
     n_perturb = max(0, min(n_perturb, n_obs))
+    # Per Codex P2-6: ensure at least 1 perturbation when fraction > 0
+    # and n_obs > 0, so small samples don't skip corruption entirely.
+    if n_perturb == 0 and perturbation_fraction > 0.0 and n_obs > 0:
+        n_perturb = 1
 
     rng = np.random.default_rng(seed)
     survived = 0
@@ -1415,12 +1439,16 @@ def adversarial_perturbation(
         if n_perturb > 0:
             perturb_idx = rng.choice(n_obs, size=n_perturb, replace=False)
             vals = perturbed[perturb_idx]
-            # Adversarial sign worsening: positive -> -|v|*2, negative -> |v|*2
-            # (doubling magnitude in the adverse direction).
+            # Per Codex P1-2: adversarial perturbation must ALWAYS worsen
+            # the position, never improve it. For positive values, flip to
+            # negative (double magnitude). For negative values, worsen the
+            # negative (double magnitude in the SAME negative direction).
+            # Previous code turned -x into +2x (improving losers); now keeps
+            # them negative: -x becomes -2x.
             perturbed[perturb_idx] = np.where(
                 vals > 0.0,
                 -np.abs(vals) * 2.0,
-                np.abs(vals) * 2.0,
+                -np.abs(vals) * 2.0,
             )
         perturbed_mean = float(np.mean(perturbed))
         if perturbed_mean > 0.0:
