@@ -59,6 +59,10 @@ class TestFeatureUsageManifest:
 
 
 class TestFeaturePlaneValidation:
+    def test_rejects_invalid_explicit_status_override(self):
+        payload = _bar_stub_payload(feature_plane_status="not_a_real_status")
+        assert payload["feature_plane_status"] == FEATURE_PLANE_STATUS_BAR_STUB
+
     def test_rejects_mislabeled_context_coverage(self):
         payload = _bar_stub_payload()
         payload["context_feature_coverage_status"] = "measured"

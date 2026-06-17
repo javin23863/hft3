@@ -236,8 +236,8 @@ def classify_feature_plane_status(
     research_clock: str,
     explicit_status: str | None = None,
 ) -> str:
-    if explicit_status:
-        return explicit_status
+    if explicit_status and str(explicit_status) in FEATURE_PLANE_STATUSES:
+        return str(explicit_status)
     if _all_families_consumed(manifest):
         return FEATURE_PLANE_STATUS_FEATURE_COMPLETE
     if _is_bar_stub_path(
