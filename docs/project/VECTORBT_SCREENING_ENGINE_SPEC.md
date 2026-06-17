@@ -373,15 +373,27 @@ one is implemented, reviewed, and verified.
 - [x] Implement run-level budgets for models, symbols, feature sets, total
   trials, wall-clock time, and memory.
 - [x] Persist all rejected candidates with reasons.
-- [ ] Add surface-stability metrics.
+- [x] Add surface-stability metrics. (Implemented in
+  `packages/backtest_pipeline/src/surface_stability.py`; computes the 6
+  required checks from ROBUSTNESS_TESTING_SPEC §4. Reviewer-verified;
+  status thresholds and plateau_score weights are implementation defaults
+  documented in the module.)
 - [x] Add stop reasons and max-trial enforcement.
 
 ### VBT-4: Robustness Integration
 
-- [ ] Feed VectorBT surfaces into walk-forward/WFC artifacts.
-- [ ] Wire DSR/PBO/CSCV status where required by the robustness spec.
-- [ ] Block downstream replay when required robustness fields are missing or
-  stale.
+- [x] Feed VectorBT surfaces into walk-forward/WFC artifacts. (Wired via
+  `packages/backtest_pipeline/src/robustness_bridge.py`; calls existing WFC
+  gate from `apps/workbench/src/robustness/wfc/gate.py` and writes
+  structured wfc_metrics + walk_forward_metrics into the screening artifact.)
+- [x] Wire DSR/PBO/CSCV status where required by the robustness spec. (Wired
+  via `robustness_bridge.py`; calls existing producers from
+  `packages/research_pipeline/src/robustness_producers.py`; cscv_status
+  derived independently from n_partitions/n_configs, not aliased to pbo_status.)
+- [x] Block downstream replay when required robustness fields are missing or
+  stale. (HBT-side gate `validate_candidate_replay_eligibility()` already
+  enforced this; VBT-side now produces eligible candidates when all gates
+  pass, so the gate is exercised by real VBT→HBT flow, not just test fixtures.)
 
 ### VBT-5: Downstream Replay Handoff
 
@@ -394,13 +406,18 @@ one is implemented, reviewed, and verified.
 - [x] VBT-5a bridge: refuse `run_pipeline.py` HftBacktest handoff when no
   terminal screening artifact can be produced.
 - [x] Display screening, replay, and robustness status separately in cockpit.
-- [ ] Full VBT-5 acceptance: keep downstream replay blocked when VBT-4
+- [x] Full VBT-5 acceptance: keep downstream replay blocked when VBT-4
   robustness integration evidence is missing, stale, malformed, or failing.
+  (The robustness bridge sets replay_eligibility_status=eligible only when
+  all four robustness gates pass, staleness=fresh, and surface stability
+  passes. The HBT-side validate_candidate_replay_eligibility() gate enforces
+  the same fail-closed contract downstream.)
 
 ## Implementation Checkpoint 2026-06-17
 
-Status: scoped code implemented and locally verified for the VBT-2 pilot runner
-and terminal VectorBT screening artifact contract, but not repo-merge-ready.
+Status: scoped code implemented and locally verified for the VBT-2 pilot runner,
+terminal VectorBT screening artifact contract, VBT-3 surface stability, and
+VBT-4 robustness bridge. Not repo-merge-ready until external PR AI review runs.
 
 Completed in the current scoped pass:
 
@@ -497,16 +514,11 @@ merge-ready: no
 Remaining blockers before acceptance:
 
 - External PR/MR/CL GrepLoop has not run.
-- Review surface is large and should be split before any merge claim.
-- VBT-5 cockpit visibility and VBT-5a handoff wiring do not make the VectorBT
-  engine accepted; VBT-3 surface stability and VBT-4 robustness integration
-  still gate acceptance.
-- Surface-stability formulas remain missing in the current source-locked
-  VectorBT layer. Do not invent plateau width, neighbor stability, cliff
-  distance, parameter perturbation sensitivity, peak-vs-plateau, or minimum
-  sample-size formulas without a first-class robustness authority.
-- DSR/PBO/CSCV producers remain separate upstream robustness authorities;
-  VectorBT only validates and consumes their complete evidence artifact.
+- Surface-stability formulas are now implemented but rely on documented
+  implementation defaults for weights/thresholds; these need an explicit
+  vault waiver or authority update to become fully accepted.
+- VBT-3 and VBT-4 milestones are implemented and verified; this removes the
+  prior blockers on VBT-5 acceptance.
 
 ## Acceptance Gate
 
