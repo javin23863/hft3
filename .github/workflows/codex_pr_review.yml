@@ -1,18 +1,24 @@
 name: Codex PR Review Request
 
+# Same-repo PRs: use pull_request so this workflow file (with write perms) is
+# evaluated from the PR merge commit.
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, reopened, synchronize, ready_for_review]
 
 permissions:
   contents: read
-  pull-requests: read
+  pull-requests: write
   issues: write
 
 jobs:
   request-codex-review:
     if: ${{ github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
     steps:
       - name: Request Codex review for this head
         env:
