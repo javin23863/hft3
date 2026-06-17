@@ -99,8 +99,15 @@ gh pr view --json number,headRefName,headRefOid
 ```powershell
 git push
 gh pr comment <PR_NUMBER> --body "@greptileai"       # if Greptile is installed
+gh pr comment <PR_NUMBER> --body "@codex review"     # if Codex GitHub review is enabled
 # or use the GitHub / Copilot / Codex Connector review UI to request a review
 ```
+
+When `.github/workflows/codex_pr_review.yml` is present and enabled, GitHub
+Actions requests Codex review automatically for each non-draft PR head SHA by
+posting `@codex review` with a hidden head marker. This is only a trigger. The
+PR GrepLoop gate is satisfied only after the external reviewer actually posts
+review evidence and all actionable comments are resolved.
 
 3. Fetch all current review surfaces, especially the latest AI reviewer general
    PR comment by `updated_at`, because bot summaries may be edited in place:
@@ -155,7 +162,7 @@ git diff --numstat
 Every handoff after a repo edit must include:
 
 ```text
-grep-loop: run | waived-by-user
+local-preflight: run | waived-by-user
 patterns: <patterns searched>
 hits: 0 | <summary>
 pr-ai-review: run | unavailable(no-pr|no-connector|not-authenticated) | waived-by-user
@@ -163,4 +170,4 @@ review-surface: <files/changed-lines>; split-needed yes|no
 remaining-risk: <none or blocker>
 ```
 
-If `grep-loop` is anything other than `run`, report `merge-ready: no`.
+If `local-preflight` is anything other than `run`, report `merge-ready: no`.
