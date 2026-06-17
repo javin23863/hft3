@@ -1,8 +1,7 @@
 name: Codex PR Review Request
 
 # Same-repo PRs: use pull_request so this workflow file (with write perms) is
-# evaluated from the PR merge commit. pull_request_target reads workflow from
-# the base branch and blocked @codex review comments with GITHUB_TOKEN.
+# evaluated from the PR merge commit.
 on:
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review]
