@@ -514,6 +514,7 @@ grep-loop: unavailable(no-pr)
 merge-ready: no
 hbt-realism-verify: bash scripts/run_hbt_realism_verify.sh -> exit 0; 108 passed
 vbt-hbt-handoff-verify: bash scripts/run_vbt_hbt_handoff_verify.sh -> exit 0; 325 passed, 1 skipped
+skipped: test_evaluate_model_smoke (CPI NPZ not present locally)
 ```
 
 Remaining blockers before acceptance:
