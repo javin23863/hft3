@@ -1,0 +1,59 @@
+{
+  "triggerOnUpdates": true,
+  "triggerOnDrafts": true,
+  "statusCheck": true,
+  "statusCommentsEnabled": true,
+  "shouldUpdateDescription": false,
+  "strictness": 2,
+  "commentTypes": ["logic", "syntax"],
+  "fixWithAI": false,
+  "summarySection": {
+    "included": true,
+    "collapsible": false,
+    "defaultOpen": true
+  },
+  "issuesTableSection": {
+    "included": true,
+    "collapsible": false,
+    "defaultOpen": true
+  },
+  "confidenceScoreSection": {
+    "included": true,
+    "collapsible": false,
+    "defaultOpen": true
+  },
+  "customContext": {
+    "files": [
+      {
+        "path": "AGENTS.md",
+        "description": "hft3 mandatory ontology, Fable, workflow, and verification contract."
+      },
+      {
+        "path": "docs/ai/GREPLOOP.md",
+        "description": "hft3 GrepLoop contract: local rg is preflight only; PR GrepLoop requires Greptile review evidence."
+      },
+      {
+        "path": "docs/ai/CODING_DELEGATE.md",
+        "description": "AI coding delegate safety contract and non-production boundaries."
+      },
+      {
+        "path": "docs/REVIEWER_CHARTER.md",
+        "description": "Required dual-pass reviewer contract for hft3 changes."
+      }
+    ],
+    "rules": [
+      {
+        "scope": ["**/*"],
+        "rule": "Do not accept claims that local rg/preflight, CodeRabbit, Cursor Bugbot, or generic CI checks satisfy PR GrepLoop; only Greptile review evidence can satisfy that gate."
+      },
+      {
+        "scope": ["scripts/tools/ai_coding_delegate.py", "tests/test_tools/test_ai_coding_delegate.py", "docs/ai/CODING_DELEGATE.md"],
+        "rule": "The coding delegate must never persist or exfiltrate secrets, must not apply patches automatically, and must keep draft output inside ignored runtime/ai_delegate quarantine."
+      },
+      {
+        "scope": ["docs/**/*.md", "specs/**/*.md", "packages/**/*.py", "scripts/**/*.py"],
+        "rule": "For HFT3 finance/math/research behavior, reject uncited methodology, invented pipelines, stale replay-universe paths, and claims that bypass VectorBT/HftBacktest source-lock constraints."
+      }
+    ]
+  }
+}
