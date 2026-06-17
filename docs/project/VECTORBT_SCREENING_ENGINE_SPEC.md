@@ -644,12 +644,20 @@ A VectorBT screening implementation is not acceptable until all are true:
   `packages/backtest_pipeline/src/research_clock.py` in parameter-space,
   screening-artifact, and HBT replay-eligibility validators. Legacy pilot label
   `event_window_pilot` aliases to `scheduled_event`.)
-- [ ] It emits the feature-complete data-plane fields from this spec and refuses
+- [x] It emits the feature-complete data-plane fields from this spec and refuses
   to present `scheduled_event_only`, `bar_stub_research_only`, or
   `incomplete_feature_plane` artifacts as full-product evidence.
-- [ ] It proves model feature consumption separately from feature catalog
+  (`packages/backtest_pipeline/src/feature_plane.py` emits required fields on
+  every screening artifact; `full_product_evidence_status=refused` unless
+  `feature_plane_status=feature_complete_pit_declared`; validator rejects
+  mislabeled context/continuous/consumption claims.)
+- [x] It proves model feature consumption separately from feature catalog
   eligibility for cross-asset, VIX/VVIX, VIX options, CME options, macro
   context, continuous/session state, and latency state.
+  (`feature_usage_manifest` rows carry `catalog_eligibility` and
+  `model_consumption` separately with `evidence_scope`; default bar-stub path
+  marks catalog-eligible `fs_v1` as `not_used`; tests in
+  `tests/backtest_pipeline/test_feature_plane.py`.)
 - [x] It labels VectorBT output as screening evidence only. (Promoted rows
   get `screening_status=pass` but `replay_eligibility_status=not_eligible`;
   `failure_semantics=screening_only_not_replay_or_robustness_eligible`;

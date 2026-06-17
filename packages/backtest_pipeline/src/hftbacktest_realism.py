@@ -14,6 +14,10 @@ from typing import Any, Mapping
 
 from backtest_pipeline.src.fee_model import FeeModel
 from backtest_pipeline.src.research_clock import research_clock_validation_errors
+from backtest_pipeline.src.feature_plane import (
+    FEATURE_PLANE_ARTIFACT_FIELDS,
+    feature_plane_validation_errors,
+)
 from backtest_pipeline.src.vectorbt_adapter import compute_screening_artifact_hash
 
 UPSTREAM_REPO_URL = "https://github.com/nkaz001/hftbacktest"
@@ -112,6 +116,7 @@ SCREENING_ARTIFACT_REQUIRED_FIELDS = (
     "promoted_reasons",
     "rejected_reasons",
     "no_lookahead_signal_shift_proof",
+    *FEATURE_PLANE_ARTIFACT_FIELDS,
 )
 REPLAY_ELIGIBILITY_REQUIRED_FIELDS = (
     "candidate_id",
@@ -2319,8 +2324,14 @@ def _screening_hash(screening_artifact: Mapping[str, Any]) -> str:
 
 def _validate_screening_artifact_hash(screening_artifact: Mapping[str, Any]) -> list[str]:
     reasons: list[str] = []
+    nullable_fields = {
+        "target_event_type_or_null",
+        "allowed_context_set_id_or_null",
+    }
     for field in SCREENING_ARTIFACT_REQUIRED_FIELDS:
-        if field not in screening_artifact or screening_artifact[field] in ("", None):
+        if field not in screening_artifact:
+            reasons.append(f"missing_screening_artifact_field:{field}")
+        elif screening_artifact[field] in ("", None) and field not in nullable_fields:
             reasons.append(f"missing_screening_artifact_field:{field}")
     if screening_artifact.get("screening_backend") != "vectorbt":
         reasons.append("screening_artifact_backend_not_vectorbt")
@@ -2357,6 +2368,7 @@ def _validate_screening_artifact_hash(screening_artifact: Mapping[str, Any]) -> 
         return reasons
     if observed and observed != expected:
         reasons.append("screening_artifact_hash_mismatch")
+    reasons.extend(feature_plane_validation_errors(screening_artifact))
     return reasons
 
 

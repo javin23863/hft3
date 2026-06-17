@@ -36,6 +36,11 @@ from backtest_pipeline.src.promotion_gate import (
     RejectedCandidate,
     serialize_promoted,
 )
+from backtest_pipeline.src.feature_plane import (
+    FEATURE_PLANE_ARTIFACT_FIELDS,
+    feature_plane_validation_errors,
+    build_feature_plane_payload,
+)
 from backtest_pipeline.src.research_clock import (
     RESEARCH_CLOCK_SCHEDULED_EVENT,
     ResearchClockError,
@@ -324,11 +329,14 @@ SCREENING_ARTIFACT_REQUIRED_FIELDS = (
     "fees_model_id",
     "slippage_model_id",
     "bar_construction_id",
+    *FEATURE_PLANE_ARTIFACT_FIELDS,
     "screening_artifact_hash",
 )
 _SCREENING_ARTIFACT_NULLABLE_FIELDS = {
     "max_wall_clock_seconds",
     "max_peak_memory_mb_or_null",
+    "target_event_type_or_null",
+    "allowed_context_set_id_or_null",
 }
 SCREENING_CANDIDATE_REQUIRED_FIELDS = (
     "candidate_id",
@@ -1412,7 +1420,9 @@ def validate_screening_artifact(artifact: Mapping[str, Any]) -> None:
     """Validate the terminal VectorBT screening artifact and fail closed."""
     errors: List[str] = []
     for field_name in SCREENING_ARTIFACT_REQUIRED_FIELDS:
-        if field_name not in artifact or artifact[field_name] == "":
+        if field_name not in artifact:
+            errors.append(f"missing required field: {field_name}")
+        elif artifact[field_name] == "":
             errors.append(f"missing required field: {field_name}")
         elif artifact[field_name] is None and field_name not in _SCREENING_ARTIFACT_NULLABLE_FIELDS:
             errors.append(f"missing required field: {field_name}")
@@ -1640,6 +1650,8 @@ def validate_screening_artifact(artifact: Mapping[str, Any]) -> None:
         if artifact["screening_artifact_hash"] != expected_hash:
             errors.append("screening_artifact_hash mismatch")
 
+    errors.extend(feature_plane_validation_errors(artifact))
+
     if errors:
         raise ScreeningArtifactError("; ".join(errors))
 
@@ -1706,6 +1718,10 @@ class FilterResult:
     slippage_model_id: str = "slippage_zero_pilot"
     bar_construction_id: str = "ohlcv_1m_from_npz_or_supplied_array"
     screening_artifact_hash: str = ""
+    feature_plane_overrides: Dict[str, Any] = field(default_factory=dict)
+    target_event_type_or_null: Optional[str] = None
+    allowed_context_set_id_or_null: Optional[str] = None
+    declared_context_sets: List[Any] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         promoted_rows = [_normalise_promoted_screening_row(p, self) for p in self.promoted]
@@ -1773,6 +1789,19 @@ class FilterResult:
             "promoted": promoted_rows,
             "rejected": rejected_rows,
         }
+        payload.update(
+            build_feature_plane_payload(
+                bar_construction_id=self.bar_construction_id,
+                feature_set_id=self.feature_set_id,
+                feature_set_hash=self.feature_set_hash,
+                research_clock=self.research_clock,
+                screening_scope=self.screening_scope,
+                target_event_type=self.target_event_type_or_null,
+                allowed_context_set_id=self.allowed_context_set_id_or_null,
+                declared_context_sets=self.declared_context_sets,
+                overrides=self.feature_plane_overrides,
+            )
+        )
         payload["screening_artifact_hash"] = compute_screening_artifact_hash(payload)
         validate_screening_artifact(payload)
         return payload

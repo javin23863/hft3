@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from backtest_pipeline.src.feature_plane import build_feature_plane_payload
 from backtest_pipeline.src.robustness_bridge import compute_robustness_evidence
 from backtest_pipeline.src.vectorbt_adapter import compute_screening_artifact_hash
 
@@ -145,6 +146,17 @@ def screening_artifact_shell(
         "promoted": promoted_rows,
         "rejected": [],
     }
+    artifact.update(
+        build_feature_plane_payload(
+            bar_construction_id=str(artifact_overrides.get("bar_construction_id", "ohlcv_1m_from_npz_or_supplied_array")),
+            feature_set_id=str(artifact_overrides.get("feature_set_id", "fs_v1_pilot_unknown")),
+            feature_set_hash=str(
+                artifact_overrides.get("feature_set_hash", "pilot_requires_feature_manifest_before_screen")
+            ),
+            research_clock=str(artifact.get("research_clock", "scheduled_event")),
+            screening_scope=str(artifact.get("screening_scope", "pilot")),
+        )
+    )
     artifact.update(artifact_overrides)
     artifact["screening_artifact_hash"] = compute_screening_artifact_hash(artifact)
     return artifact
