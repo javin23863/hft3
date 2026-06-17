@@ -1,6 +1,11 @@
-# VectorBT paid screen — model ontology (authoritative)
+# VectorBT paid screen model ontology
 
-Status: binding ontology for paid VectorBT screening. Use this before generating units, interpreting `screening_artifact.json`, or renting Vast compute.
+Status: binding only for model identity and paid-screen interpretation. It is
+not the full research-product authority. The canonical product authority is
+[OPPORTUNITY_RESEARCH_SPEC.md](OPPORTUNITY_RESEARCH_SPEC.md),
+[VECTORBT_SCREENING_ENGINE_SPEC.md](VECTORBT_SCREENING_ENGINE_SPEC.md),
+[MACRO_CONTEXT_VIX_OPTIONS_CHECKLIST.md](../cockpit/MACRO_CONTEXT_VIX_OPTIONS_CHECKLIST.md),
+and [FEATURE_LITERATURE_TRACEABILITY_MATRIX.md](FEATURE_LITERATURE_TRACEABILITY_MATRIX.md).
 
 Authority chain (do not invent parallel processes):
 
@@ -13,13 +18,17 @@ Authority chain (do not invent parallel processes):
 | Hypothesis signal logic | `packages/features_engine/src/hypotheses/modules.py`, `vix_modules.py` |
 | VectorBT screen engine | [VECTORBT_SCREENING_ENGINE_SPEC.md](VECTORBT_SCREENING_ENGINE_SPEC.md), `vectorbt_adapter.py` |
 | Paid rent phases | [VBT_PAID_SCREEN_RUNBOOK.md](VBT_PAID_SCREEN_RUNBOOK.md), [VBT_PAID_SCREEN_UNIT_SCOPE.md](VBT_PAID_SCREEN_UNIT_SCOPE.md) |
-| **Full product scope (three clocks)** | [VBT_RESEARCH_PRODUCT_SCOPE.md](VBT_RESEARCH_PRODUCT_SCOPE.md) |
+| Full product scope (three clocks) | [OPPORTUNITY_RESEARCH_SPEC.md](OPPORTUNITY_RESEARCH_SPEC.md); [VBT_RESEARCH_PRODUCT_SCOPE.md](VBT_RESEARCH_PRODUCT_SCOPE.md) is a derivative handoff map only |
 | Macro / VIX / options context | [MACRO_CONTEXT_VIX_OPTIONS_CHECKLIST.md](../cockpit/MACRO_CONTEXT_VIX_OPTIONS_CHECKLIST.md) |
 | Stage A (separate job) | `scripts/run_stage_a_screen.py` → `stage_a_survivors.json` |
 
 ## Critical scope warning
 
-The current paid JSONL generator and `run_vectorbt_paid_screen.py` implement **scheduled-event target units only** (family A in [VBT_RESEARCH_PRODUCT_SCOPE.md](VBT_RESEARCH_PRODUCT_SCOPE.md)).
+The current paid JSONL generator and `run_vectorbt_paid_screen.py` implement
+**scheduled-event target units only**. In the derivative
+[VBT_RESEARCH_PRODUCT_SCOPE.md](VBT_RESEARCH_PRODUCT_SCOPE.md) map this is
+called "family A," but the canonical classification is
+`research_clock=scheduled_event` plus `feature_plane_status`.
 
 They do **not** yet implement:
 

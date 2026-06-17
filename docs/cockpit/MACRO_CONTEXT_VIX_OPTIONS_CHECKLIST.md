@@ -8,6 +8,29 @@ Audience: human developer, Codex agents, and review subagents working on the CME
 
 Purpose: capture the exact behavior the owner requested before any implementation pass. This is not permission to invent a new pipeline. It is a checklist for implementing the missing pieces inside the existing hft3 ontology, using the vault math library, the existing replay/research stack, and the existing fail-closed cockpit gates.
 
+## 2026-06-17 VectorBT/Vast Drift Correction
+
+- [ ] Do not call options, VIX, macro, cross-asset, or latency inputs "clues" in
+  implementation artifacts. They are model features with source IDs, timestamp
+  IDs, units, coverage, missingness, and validation gates.
+- [ ] Do not accept a bar chart of per-event profitability as proof of
+  context-feature usage. It proves only standalone target-event measurement
+  unless `context_feature_coverage` and `context_ablation` artifacts exist.
+- [ ] Do not create a new canonical scope doc for the full research product.
+  Update `docs/project/OPPORTUNITY_RESEARCH_SPEC.md`,
+  `docs/project/VECTORBT_SCREENING_ENGINE_SPEC.md`, this checklist, and the
+  traceability matrix instead.
+- [ ] Every VectorBT/Vast run must declare whether it is
+  `scheduled_event_only`, `bar_stub_research_only`, `incomplete_feature_plane`,
+  or `feature_complete_pit_declared`.
+- [ ] Major volatility events remain primary target events. Smaller events
+  remain eligible both as standalone targets and as point-in-time features for
+  later targets, but those measurements must stay separate.
+- [ ] Latency is a feature/execution-state dimension, not just a runner flag.
+  Use artifact-backed units; the current CME M5 p99 convention is
+  `band_ms=6.255764` / approximately `6.256` ms until a newer cited
+  offensive/defensive measurement supersedes it.
+
 ## Bad-Mood Grader Review
 
 - [ ] Reject any future implementation that says "use context features" without naming the exact source authority for the feature, timestamp rule, unit, missingness rule, and validation gate.
@@ -175,6 +198,9 @@ Use these sources as the starting authority set. Add more specific paper rows be
 - [ ] Require non-GREEN for insufficient event counts, invalid PBO, insufficient CSCV, stale certification, malformed thresholds, or smoke-only scope.
 - [ ] Store every context feature and measurement row in artifacts, not only in UI state.
 - [ ] Add explicit `context_feature_coverage` and `context_ablation` sections to research cards.
+- [ ] Add a feature-usage manifest that proves model consumption, not just lake
+  existence, for cross-asset, VIX/VVIX, VIX options, CME options,
+  macro-context, continuous/session, and latency features.
 - [ ] Add a "why not used" reason for every missing context group.
 
 ## Autonomy Checklist

@@ -5,7 +5,14 @@ Authority: [OPPORTUNITY_RESEARCH_SPEC.md](OPPORTUNITY_RESEARCH_SPEC.md), [VECTOR
 
 **Do not** use `run_event_universe` as broad discovery on rented compute. Paid rent starts only after gated pilot + smoke passes.
 
-**Scope:** Phase D as currently scripted is **scheduled-event screening only**. For the full three-clock product (context uplift, continuous intraday, options/VIX at decision time), read [VBT_RESEARCH_PRODUCT_SCOPE.md](VBT_RESEARCH_PRODUCT_SCOPE.md) before expanding the manifest or claiming full backtest coverage.
+**Scope:** Phase D as currently scripted is **scheduled-event screening only**.
+For the full three-clock product (context uplift, continuous intraday,
+options/VIX at decision time), the canonical authority is
+[OPPORTUNITY_RESEARCH_SPEC.md](OPPORTUNITY_RESEARCH_SPEC.md) plus
+[VECTORBT_SCREENING_ENGINE_SPEC.md](VECTORBT_SCREENING_ENGINE_SPEC.md) and
+[MACRO_CONTEXT_VIX_OPTIONS_CHECKLIST.md](../cockpit/MACRO_CONTEXT_VIX_OPTIONS_CHECKLIST.md).
+[VBT_RESEARCH_PRODUCT_SCOPE.md](VBT_RESEARCH_PRODUCT_SCOPE.md) is only a
+derivative handoff map and must not be used to invent a parallel manifest.
 
 **After smoke passes:** follow [VBT_PAID_SCREEN_POST_GATE_PLAYBOOK.md](VBT_PAID_SCREEN_POST_GATE_PLAYBOOK.md) (pre-rent checklist → Vast → completion). Run `python scripts/vbt_paid_screen_next_steps.py` for the current phase and exact next commands.
 

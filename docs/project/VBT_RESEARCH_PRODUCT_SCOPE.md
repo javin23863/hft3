@@ -1,9 +1,21 @@
-# VectorBT research product scope (full ontology vs current paid JSONL)
+# VectorBT research product scope map (derivative handoff)
 
-Status: binding scope map before any “full backtest” or Vast rent claim.
-Read this **before** [VBT_PAID_SCREEN_UNIT_SCOPE.md](VBT_PAID_SCREEN_UNIT_SCOPE.md).
+Status: derivative condensation, not canonical authority. This file exists only
+to help humans and agents navigate the current paid JSONL/Vast thread. The
+canonical product authority remains [OPPORTUNITY_RESEARCH_SPEC.md](OPPORTUNITY_RESEARCH_SPEC.md),
+[VECTORBT_SCREENING_ENGINE_SPEC.md](VECTORBT_SCREENING_ENGINE_SPEC.md),
+[MACRO_CONTEXT_VIX_OPTIONS_CHECKLIST.md](../cockpit/MACRO_CONTEXT_VIX_OPTIONS_CHECKLIST.md),
+and [FEATURE_LITERATURE_TRACEABILITY_MATRIX.md](FEATURE_LITERATURE_TRACEABILITY_MATRIX.md).
+If this file conflicts with those docs, those docs win. Update those docs first.
+Read this before [VBT_PAID_SCREEN_UNIT_SCOPE.md](VBT_PAID_SCREEN_UNIT_SCOPE.md)
+only as a handoff map.
 
-Authority: [OPPORTUNITY_RESEARCH_SPEC.md](OPPORTUNITY_RESEARCH_SPEC.md), [MACRO_CONTEXT_VIX_OPTIONS_CHECKLIST.md](../cockpit/MACRO_CONTEXT_VIX_OPTIONS_CHECKLIST.md), [FEATURE_LITERATURE_TRACEABILITY_MATRIX.md](FEATURE_LITERATURE_TRACEABILITY_MATRIX.md) F004, [ECONOMIC_EVENT_UNIVERSE.md](../vault/ECONOMIC_EVENT_UNIVERSE.md), [HOT_MEMORY_UNIVERSE.md](../workbench/HOT_MEMORY_UNIVERSE.md).
+Authority map: [OPPORTUNITY_RESEARCH_SPEC.md](OPPORTUNITY_RESEARCH_SPEC.md), [VECTORBT_SCREENING_ENGINE_SPEC.md](VECTORBT_SCREENING_ENGINE_SPEC.md), [MACRO_CONTEXT_VIX_OPTIONS_CHECKLIST.md](../cockpit/MACRO_CONTEXT_VIX_OPTIONS_CHECKLIST.md), [FEATURE_LITERATURE_TRACEABILITY_MATRIX.md](FEATURE_LITERATURE_TRACEABILITY_MATRIX.md) F004, [ECONOMIC_EVENT_UNIVERSE.md](../vault/ECONOMIC_EVENT_UNIVERSE.md), [HOT_MEMORY_UNIVERSE.md](../workbench/HOT_MEMORY_UNIVERSE.md).
+
+2026-06-17 correction: do not treat the family labels below as a new ontology
+or as a replacement for the three research clocks. They are a temporary
+navigation aid. The artifact contract is `feature_plane_status` plus
+point-in-time feature-usage proof per the canonical specs.
 
 ## What the owner is asking for (not optional nuance)
 
@@ -124,9 +136,12 @@ From [MACRO_CONTEXT_VIX_OPTIONS_CHECKLIST.md](../cockpit/MACRO_CONTEXT_VIX_OPTIO
 - Model Detail bar chart shows per-event EV, **not** context-for-target uplift
 - Pass 4 (context feature generation) blocked until measurement schema is fail-closed
 
-## Correct unit manifest shape for “full product” (not yet one JSONL)
+## Correct unit manifest shape for "full product" (derivative map, not ontology)
 
-A complete discovery sweep is a **union** of unit families:
+A complete discovery sweep is described canonically by the three research
+clocks in [OPPORTUNITY_RESEARCH_SPEC.md](OPPORTUNITY_RESEARCH_SPEC.md). The
+lettered families below are only a local explanation of that scope, not a new
+source of truth:
 
 ```text
 A) Event Target units
@@ -154,7 +169,11 @@ Renting Vast for family A alone is valid **only** if the run declaration says:
 - `continuous_intraday` explicitly out of scope
 - `model_feature_usage_status` honestly reflects bar-stub vs full fs_v1 path
 
-Claiming “all features looked at” or “full backtest” from family A alone is **false** per OPPORTUNITY_RESEARCH_SPEC.
+Claiming "all features looked at" or "full backtest" from family A alone is
+**false** per OPPORTUNITY_RESEARCH_SPEC. A run must instead declare
+`feature_plane_status` and prove model consumption of admitted feature families,
+or label itself `scheduled_event_only`, `bar_stub_research_only`, or
+`incomplete_feature_plane`.
 
 ## Before backtesting: feature coverage checklist
 

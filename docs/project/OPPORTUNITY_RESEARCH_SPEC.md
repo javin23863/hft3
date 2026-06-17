@@ -13,6 +13,57 @@ the official-HftBacktest-backed realism runner; retired hft3 replay entrypoints
 such as `replay_matrix` and `run_event_universe` are not valid fallback gates for
 this implementation.
 
+## 2026-06-17 Authority Correction
+
+Do not create a second "full research product" scope document when this spec,
+`docs/cockpit/MACRO_CONTEXT_VIX_OPTIONS_CHECKLIST.md`,
+`docs/project/VECTORBT_SCREENING_ENGINE_SPEC.md`, and
+`docs/project/FEATURE_LITERATURE_TRACEABILITY_MATRIX.md` already define the
+product. If derivative files such as `VBT_RESEARCH_PRODUCT_SCOPE.md`,
+`VBT_MODEL_ONTOLOGY.md`, or `VBT_HYPOTHESIS_FEATURE_MAP.md` appear in another
+branch or agent workspace, treat them as non-canonical condensations unless
+they explicitly defer to these authorities. The canonical fix is to update the
+existing authority docs, not to invent a parallel ontology.
+
+The full research product is not an agent-defined `A union B union C union D`
+manifest. The canonical product is the three-clock research system below, with
+dependency-scoped feature admission and artifact proof. The required unit grain
+is:
+
+```text
+model_id
+research_clock
+target_event_type_or_opportunity_type
+allowed_context_set_id
+symbol
+latency_band_ms
+feature_plane_status
+```
+
+At each decision timestamp, a model must either consume or explicitly sideline
+each admitted point-in-time feature family: primary futures MBO / `fs_v1`,
+cross-asset futures state, VIX/VVIX sensors, VIX options, CME options, earlier
+macro releases, continuous/session book state, and latency state. Feature
+existence in the lake is not feature usage. Every artifact must say which
+families were used, which were absent, which were intentionally excluded, and
+why.
+
+The owner intent is two separate measurements:
+
+- Smaller events may be standalone tradable targets if they pass robustness.
+- Smaller events may also be features for later major volatility targets such
+  as CPI, NFP, unemployment claims, FOMC, GDP, PCE, or PPI.
+
+Those are not interchangeable. ADP profitability as a target does not prove ADP
+improves NFP trading. A context claim requires target-only baseline,
+target-plus-context result, delta after costs, PIT proof, and robustness state.
+
+A VectorBT/Vast run that uses bar-only inputs, event-only JSONL, or an
+incomplete feature plane is still useful as a scheduled-event screening slice,
+but it must be labeled `bar_stub_research_only`, `scheduled_event_only`, or the
+equivalent terminal artifact status. It must not claim full context-feature,
+cross-asset, options, latency, or continuous-intraday coverage.
+
 ## Why This Exists
 
 The CME M6 sweep is a valid event-window execution-realism gate for selected
@@ -239,6 +290,10 @@ These are binding planning lessons for future expensive runs:
 - [ ] Tail units that take much longer than median units must be summarized by event, symbol, hypothesis count, elapsed seconds, and data size before rerunning.
 - [ ] Compute scaling must be measured while still using paid capacity aggressively. More cores do not help if the bottleneck is Python startup, disk I/O, single long event windows, serialization, or hftbacktest per-event setup, but under-utilization is not acceptable without proof.
 - [ ] Missing data must be converted into model/unit skip rules, not global stoppage, unless the missing data is a declared dependency of the model or opportunity unit being tested.
+- [ ] Feature-plane drift must be rejected before another expensive run. A run
+  that cannot prove PIT consumption of admitted cross-asset, VIX, options,
+  macro-context, continuous/session, and latency features must be scoped down
+  honestly instead of marketed as the full research product.
 
 ## Candidate Opportunity Families
 
@@ -285,6 +340,13 @@ Before another all-scope or rented-compute run:
 - [ ] The full run has a stall monitor and abort rule.
 - [ ] The checkpoint preflight records whether any runner/source hash changed since the checkpoint was written. If yes, preserve a backup and require an explicit metadata-only migration note before reuse.
 - [ ] The artifact records `model_feature_usage_status`, not only feature catalog eligibility.
+- [ ] The artifact records `feature_plane_status` and a feature-usage manifest
+  covering primary futures MBO / `fs_v1`, cross-asset futures, VIX/VVIX, VIX
+  options, CME options, prior macro releases, continuous/session features, and
+  latency state.
+- [ ] Any unavailable feature family has a dependency-scoped
+  `why_not_used_or_sidelined` reason and does not globally block unrelated
+  available-data research.
 - [ ] Context-feature claims include target-only baseline, target-plus-context result, delta after costs, PIT proof, and robustness state.
 - [ ] Continuous intraday claims include decision timestamp/bucket, opportunity type, horizon, and execution assumption.
 - [ ] Missing data sidelines only dependent models; it must not block unrelated available-data models.

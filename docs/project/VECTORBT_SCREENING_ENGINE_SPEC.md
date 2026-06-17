@@ -27,6 +27,51 @@ The screening engine is upstream of HftBacktest/replay realism gates. It may
 reject candidates cheaply. It may promote candidates into deeper replay. It may
 not certify execution realism, live readiness, queue position, or fill quality.
 
+## Feature-Complete Data Plane Contract
+
+The VectorBT/Vast screening path must not drift back into an event-only or
+bar-only proxy while claiming to test the full research product. The canonical
+research product is defined by `docs/project/OPPORTUNITY_RESEARCH_SPEC.md` and
+`docs/cockpit/MACRO_CONTEXT_VIX_OPTIONS_CHECKLIST.md`, not by a derivative
+`VBT_RESEARCH_PRODUCT_SCOPE.md` file or any agent-defined family manifest.
+
+Every VectorBT screening artifact must classify the feature plane it actually
+used:
+
+```text
+feature_plane_status=feature_complete_pit_declared|scheduled_event_only|bar_stub_research_only|incomplete_feature_plane
+feature_usage_manifest_hash
+declared_context_sets
+target_event_type_or_null
+allowed_context_set_id_or_null
+context_feature_coverage_status
+context_ablation_status
+continuous_clock_status
+cross_asset_alignment_status
+vix_sensor_status
+vix_options_status
+cme_options_context_status
+latency_feature_status
+data_scope_skip_manifest_hash
+```
+
+`feature_complete_pit_declared` is allowed only when the artifact proves, at
+the decision timestamp, which admitted point-in-time families were consumed:
+primary futures MBO / `fs_v1`, cross-asset futures state, VIX/VVIX sensors, VIX
+options, CME options, earlier macro releases, continuous/session book state,
+and latency state. A feature family that exists on disk but is not consumed by
+the model is `not_used`, not "covered."
+
+`scheduled_event_only` and `bar_stub_research_only` are valid screening states
+for cheap rejection, but they are not context-feature, cross-asset, options,
+latency-feature, continuous-intraday, or execution-realism evidence. Those rows
+must remain non-promotable until downstream artifacts provide the missing proof.
+
+Context features must use the correct vocabulary. They are features, not
+"clues." A smaller event can be measured as its own target, and the same event
+can be measured as a feature for a later major target, but those two results
+must be stored and scored separately.
+
 ## Source Authority
 
 | Authority | Local location | Binding consequence |
@@ -596,6 +641,12 @@ A VectorBT screening implementation is not acceptable until all are true:
   `packages/backtest_pipeline/src/research_clock.py` in parameter-space,
   screening-artifact, and HBT replay-eligibility validators. Legacy pilot label
   `event_window_pilot` aliases to `scheduled_event`.)
+- [ ] It emits the feature-complete data-plane fields from this spec and refuses
+  to present `scheduled_event_only`, `bar_stub_research_only`, or
+  `incomplete_feature_plane` artifacts as full-product evidence.
+- [ ] It proves model feature consumption separately from feature catalog
+  eligibility for cross-asset, VIX/VVIX, VIX options, CME options, macro
+  context, continuous/session state, and latency state.
 - [x] It labels VectorBT output as screening evidence only. (Promoted rows
   get `screening_status=pass` but `replay_eligibility_status=not_eligible`;
   `failure_semantics=screening_only_not_replay_or_robustness_eligible`;
