@@ -1,0 +1,20 @@
+{
+  "ready_for_full_run": true,
+  "evaluated_at_utc": "2026-06-17T16:35:06.351393+00:00",
+  "pilot_artifact": "/workspace/research_cards/pipeline_runs/pipeline_20260617T162920Z_96fbb9e6/screening_artifact.json",
+  "smoke_manifest": "/workspace/research_cards/pipeline_runs/paid_smoke_20260617T163436Z/paid_screen_run_manifest.json",
+  "pilot_hashes": {
+    "events_csv_hash": "not_applicable_for_vectorbt_pilot",
+    "lake_manifest_hash": "pilot_requires_lake_manifest_before_screen",
+    "screening_scope": "pilot",
+    "vectorbt_engine": "numba"
+  },
+  "smoke_manifest_summary": {
+    "expected_work_units": 12,
+    "completed_work_units": 12,
+    "failed_work_units": 0,
+    "units_per_hour": 2162.7531
+  },
+  "errors": [],
+  "lookahead_pytest_tail": ".                                                                        [100%]\n1 passed in 0.74s"
+}

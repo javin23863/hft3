@@ -19,9 +19,51 @@ from hft3_bootstrap import setup_repo_paths
 setup_repo_paths()
 
 _DEFAULT_SYMBOL = "MES.v.0"
+# CME M6 full symbol universe (CME_M6_SWEEP_CONTROL_PLAN.md)
+CME_M6_SYMBOLS = "MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0"
 _DEFAULT_THESIS_TEMPLATE = (
     "Event-window microstructure strategy {model_id} on {event_type} release for {symbol}"
 )
+
+
+def _hypothesis_model_id(hyp_id: int) -> str:
+    return f"HYP_{hyp_id}"
+
+
+def _parse_stage_a_allowed_cells(
+    payload: Dict[str, Any],
+) -> Set[tuple[int, str]]:
+    """Mirror run_event_universe stage-A allowed (hyp_id, event_type) cells."""
+    survivors = payload.get("survivors") or []
+    pass_through = payload.get("pass_through") or []
+    tested_cells = payload.get("tested_cells") or []
+    tested_etypes: Set[str] = {
+        str(tc["event_type"]).strip()
+        for tc in tested_cells
+        if isinstance(tc, dict) and tc.get("event_type")
+    }
+    allowed: Set[tuple[int, str]] = set()
+
+    for row in survivors:
+        if not isinstance(row, dict):
+            continue
+        if "hyp_id" in row and "event_type" in row:
+            allowed.add((int(row["hyp_id"]), str(row["event_type"]).strip()))
+
+    for pt in pass_through:
+        pt_id: Optional[int] = None
+        if isinstance(pt, int):
+            pt_id = pt
+        elif isinstance(pt, str) and pt.strip().isdigit():
+            pt_id = int(pt.strip())
+        elif isinstance(pt, dict) and pt.get("hyp_id") is not None:
+            pt_id = int(pt["hyp_id"])
+        if pt_id is None:
+            continue
+        for etype in tested_etypes:
+            allowed.add((pt_id, etype))
+
+    return allowed
 
 
 def _slug(text: str) -> str:
@@ -105,27 +147,32 @@ def _units_from_stage_a_survivors(
     symbols: List[str],
     thesis_template: str,
     max_units: Optional[int],
+    window_name: str,
 ) -> List[Dict[str, Any]]:
     payload = json.loads(survivors_path.read_text(encoding="utf-8"))
-    survivors = payload.get("survivors") or []
-    if not isinstance(survivors, list):
-        raise ValueError("stage_a_survivors.json: survivors must be a list")
+    allowed_cells = _parse_stage_a_allowed_cells(payload)
+    if not allowed_cells:
+        raise ValueError("stage_a_survivors.json: no allowed (hyp_id, event_type) cells")
 
+    allowed_etypes = {etype for _, etype in allowed_cells}
     by_type: Dict[str, List[Dict[str, Any]]] = {}
-    for row in _load_events(events_csv, event_types=None, symbols=symbols, window_name="TIGHT", max_rows=None):
+    for row in _load_events(
+        events_csv,
+        event_types=allowed_etypes,
+        symbols=symbols,
+        window_name=window_name,
+        max_rows=None,
+    ):
         by_type.setdefault(row["event_type"], []).append(row)
 
     units: List[Dict[str, Any]] = []
     seen: Set[str] = set()
-    for sv in survivors:
-        hyp_id = str(sv.get("hyp_id") or sv.get("model_id") or "").strip()
-        event_type = str(sv.get("event_type") or "").strip()
-        if not hyp_id or not event_type:
-            continue
-        for ev in by_type.get(event_type, [])[:50]:
+    for hyp_id, event_type in sorted(allowed_cells):
+        model_id = _hypothesis_model_id(hyp_id)
+        for ev in by_type.get(event_type, []):
             event_id = ev["event_id"]
             symbol = ev["symbol"]
-            unit_id = _slug(f"{hyp_id}|{symbol}|{event_id}")
+            unit_id = _slug(f"{model_id}|{symbol}|{event_id}")
             if unit_id in seen:
                 continue
             seen.add(unit_id)
@@ -135,9 +182,10 @@ def _units_from_stage_a_survivors(
                     "event_id": event_id,
                     "symbol": symbol,
                     "event_type": event_type,
-                    "model_id": hyp_id,
+                    "model_id": model_id,
+                    "hyp_id": hyp_id,
                     "thesis": thesis_template.format(
-                        model_id=hyp_id,
+                        model_id=model_id,
                         event_type=event_type,
                         symbol=symbol,
                         event_id=event_id,
@@ -165,7 +213,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         default=_REPO / "packages" / "data_system" / "config" / "events.csv",
     )
     parser.add_argument("--model-id", default="HYP_5")
-    parser.add_argument("--symbols", default=_DEFAULT_SYMBOL)
+    parser.add_argument("--symbols", default=CME_M6_SYMBOLS, help="Comma-separated symbols (default: CME M6 universe)")
     parser.add_argument("--event-types", default=None, help="Comma-separated event_type filter")
     parser.add_argument("--window-name", default="TIGHT")
     parser.add_argument("--smoke-count", type=int, default=None, help="Cap events for smoke JSONL")
@@ -191,6 +239,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             symbols=symbols,
             thesis_template=args.thesis_template,
             max_units=args.max_units,
+            window_name=args.window_name,
         )
     else:
         max_rows = args.smoke_count or args.max_units

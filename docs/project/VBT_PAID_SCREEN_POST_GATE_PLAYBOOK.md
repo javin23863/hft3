@@ -127,6 +127,7 @@ PY
 ```bash
 python scripts/generate_vbt_paid_units_jsonl.py \
   --from-stage-a-survivors research_cards/stage_a_full/stage_a_survivors.json \
+  --symbols MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0 \
   --events-csv packages/data_system/config/events.csv \
   --out runtime/reports/vbt_full_units.jsonl
 
@@ -202,7 +203,24 @@ Canary pass: `screening_artifact.json` exists, `vectorbt_engine=rust`, `no_looka
 
 ---
 
-## Phase D4 — Full paid run (tmux)
+## Phase D4 — Full paid run (tmux, **230 workers on Vast**)
+
+**Scope:** [VBT_PAID_SCREEN_UNIT_SCOPE.md](VBT_PAID_SCREEN_UNIT_SCOPE.md) — Stage A survivors × CME M6 symbols; not CPI+NFP smoke.
+
+**Preferred on Vast (NPZ already on host):**
+
+```bash
+bash scripts/run_vbt_paid_screen_vast_full.sh
+```
+
+From workstation via SSH:
+
+```bash
+export VAST_SSH_TARGET='root@<vast-host> -p <port>'
+bash scripts/vast_ssh_run_vbt_paid_screen.sh
+```
+
+Manual equivalent:
 
 ```bash
 tmux new -s vbt_full

@@ -167,6 +167,44 @@ def test_aggregate_promoted_ids(tmp_path: Path) -> None:
     assert set(payload["promoted_ids"]) == {"cand_a", "cand_b"}
 
 
+def test_stage_a_survivors_expansion_not_capped_at_fifty(tmp_path: Path) -> None:
+    """Full scope uses all TIGHT events per cell — not [:50] and not CPI+NFP-only smoke."""
+    survivors = tmp_path / "stage_a_survivors.json"
+    survivors.write_text(
+        json.dumps(
+            {
+                "survivors": [{"hyp_id": 5, "event_type": "CPI"}],
+                "pass_through": [],
+                "tested_cells": [{"hyp_id": 5, "event_type": "CPI"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    out = tmp_path / "units.jsonl"
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "generate_vbt_paid_units_jsonl.py"),
+            "--from-stage-a-survivors",
+            str(survivors),
+            "--symbols",
+            "MES.v.0",
+            "--out",
+            str(out),
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    lines = [ln for ln in out.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    # CPI TIGHT MES catalog has >50 events; old [:50] cap would yield exactly 50
+    assert len(lines) > 50
+    row = json.loads(lines[0])
+    assert row["model_id"] == "HYP_5"
+    assert row.get("hyp_id") == 5
+
+
 def test_paid_screen_refuses_high_workers_without_gate(tmp_path: Path) -> None:
     units = tmp_path / "units.jsonl"
     units.write_text(

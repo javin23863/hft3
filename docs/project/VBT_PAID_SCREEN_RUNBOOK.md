@@ -1,7 +1,7 @@
 # VectorBT paid-compute screen runbook (Vast 256 vCPU)
 
 Status: operational runbook for corrected VectorBT→HftBacktest discovery path.
-Authority: [OPPORTUNITY_RESEARCH_SPEC.md](OPPORTUNITY_RESEARCH_SPEC.md), [VECTORBT_SCREENING_ENGINE_SPEC.md](VECTORBT_SCREENING_ENGINE_SPEC.md), [RESEARCH_ENTRYPOINTS.md](../vault/RESEARCH_ENTRYPOINTS.md).
+Authority: [OPPORTUNITY_RESEARCH_SPEC.md](OPPORTUNITY_RESEARCH_SPEC.md), [VECTORBT_SCREENING_ENGINE_SPEC.md](VECTORBT_SCREENING_ENGINE_SPEC.md), [RESEARCH_ENTRYPOINTS.md](../vault/RESEARCH_ENTRYPOINTS.md), [VBT_PAID_SCREEN_UNIT_SCOPE.md](VBT_PAID_SCREEN_UNIT_SCOPE.md).
 
 **Do not** use `run_event_universe` as broad discovery on rented compute. Paid rent starts only after gated pilot + smoke passes.
 
@@ -21,7 +21,7 @@ Authority: [OPPORTUNITY_RESEARCH_SPEC.md](OPPORTUNITY_RESEARCH_SPEC.md), [VECTOR
 | Phase | Where | Workers | Units | Rent? | Proceed only if |
 |-------|-------|---------|-------|-------|-----------------|
 | **A Pilot** | Workstation | 1 | 1 (`CPI_2024_09_11_TIGHT`) | No | Artifact validates; lookahead pytest green |
-| **B Smoke** | Workstation or small Vast slice | 4–8 | 8–16 diverse units | Optional small | Gate script exit 0; zero unit `ERROR` |
+| **B Smoke** | Workstation only | 4–8 | 8–16 diverse units | No | Gate script exit 0; zero unit `ERROR` |
 | **C Gate** | Workstation | — | — | No | `paid_screen_ready_gate.json` written |
 | **D Full** | Vast 256 vCPU | **≥230** | Stage A scope (see below) | **Yes** | `--ready-gate-file` from Phase C |
 | **E Post-run** | Workstation | — | — | No | Manifest complete; quarantine import before cockpit |
@@ -152,8 +152,8 @@ python scripts/validate_paid_screen_ready_gate.py \
   "host_vcpu": 256,
   "reserved_vcpu": 26,
   "workers_requested": 230,
-  "expected_work_units": 423,
-  "units_source": "research_cards/stage_a_full/stage_a_survivors.json expanded",
+  "expected_work_units": "<wc -l runtime/reports/vbt_full_units.jsonl after D1>",
+  "units_source": "research_cards/stage_a_full/stage_a_survivors.json expanded (all hyp_id×event_type cells, CME M6 symbols)",
   "stall_minutes": 30,
   "abort_on_failed_units": true,
   "git_head": "<sha>",
