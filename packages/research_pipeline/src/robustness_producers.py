@@ -1440,3 +1440,181 @@ def adversarial_perturbation(
         "n_obs": n_obs,
         "reason": None,
     }
+
+
+# ---------------------------------------------------------------------------
+# Parameter perturbation stability — Stage B perturbed re-runs
+# Satisfies ROBUSTNESS_TESTING_SPEC.md §10 line 286
+# ("parameter perturbation") and gap matrix #3.
+# ---------------------------------------------------------------------------
+
+def parameter_perturbation(
+    per_event_expectancies: list[float],
+    parameter_values: dict[str, float] | None = None,
+    perturbation_fractions: list[float] | None = None,
+    n_runs_per_fraction: int = 50,
+    seed: int = 0,
+    min_stability_score: float = 0.7,
+) -> dict[str, Any]:
+    """Parameter perturbation stability — Stage B perturbed re-runs.
+
+    Satisfies ROBUSTNESS_TESTING_SPEC.md §10 line 286 (\"parameter
+    perturbation\") and the 2026-06-11 gap matrix #3 remediation:
+    \"Stage B perturbed re-runs → parameter_stability_score\"
+
+    Perturbs the effective edge by applying multiplicative noise to the
+    per-event expectancies, simulating threshold/parameter instability.
+    For each perturbation fraction, runs multiple trials and measures the
+    fraction where the perturbed mean remains positive (edge survives).
+
+    The stability score is the average survival rate across all perturbation
+    fractions. A robust strategy maintains positive expectancy under modest
+    parameter drift.
+
+    Algorithm
+    ---------
+    1. observed_mean = mean(per_event_expectancies).
+    2. Default perturbation_fractions = [0.10, 0.25] (±10%, ±25%).
+    3. For each fraction f in perturbation_fractions:
+         For n_runs_per_fraction trials:
+           a. Draw multiplicative noise ~ LogNormal(0, f) for each event.
+           b. perturbed = expectancies * noise.
+           c. survived = mean(perturbed) > 0.
+         fraction_survival = sum(survived) / n_runs_per_fraction.
+    4. parameter_stability_score = mean(fraction_survival across fractions).
+    5. parameter_perturbation_pass = score >= min_stability_score.
+
+    Parameters
+    ----------
+    per_event_expectancies:
+        List of per-event expectancy values for one cell.
+    parameter_values:
+        Optional dict of named parameter values (e.g., {"threshold": 0.5,
+        "window": 100}). Currently unused but reserved for future direct
+        parameter perturbation; the current implementation perturbs the
+        expectancy series directly as a proxy for parameter instability.
+    perturbation_fractions:
+        List of perturbation magnitudes as fractions (default [0.10, 0.25]
+        for ±10% and ±25%). Each fraction represents the log-normal sigma.
+    n_runs_per_fraction:
+        Number of perturbation trials per fraction (default 50).
+    seed:
+        Seed for ``numpy.random.default_rng`` (deterministic; default 0).
+    min_stability_score:
+        Minimum stability score required to pass (default 0.7).
+        ``parameter_perturbation_pass = score >= min_stability_score``.
+
+    Returns
+    -------
+    Dict with keys:
+        observed_mean                – float, mean of original expectancies.
+        fraction_survival_rates      – dict mapping fraction -> survival rate.
+        parameter_stability_score    – float in [0, 1], mean survival across fractions.
+        parameter_perturbation_pass  – bool; score >= min_stability_score.
+        perturbation_fractions       – list[float], echoed.
+        n_runs_per_fraction          – int, echoed.
+        min_stability_score          – float, echoed.
+        seed                         – int, echoed.
+        n_obs                        – int, number of observations.
+        reason                       – None on success; human-readable string
+                                        when input is empty / insufficient
+                                        (fail-closed).
+    """
+    n_obs = len(per_event_expectancies)
+
+    # Fail-closed guard: no observations.
+    if n_obs == 0:
+        return {
+            "observed_mean": None,
+            "fraction_survival_rates": {},
+            "parameter_stability_score": None,
+            "parameter_perturbation_pass": False,
+            "perturbation_fractions": perturbation_fractions or [0.10, 0.25],
+            "n_runs_per_fraction": n_runs_per_fraction,
+            "min_stability_score": min_stability_score,
+            "seed": seed,
+            "n_obs": 0,
+            "reason": "no_observations: empty per_event_expectancies",
+        }
+
+    arr = np.asarray(per_event_expectancies, dtype=float)
+
+    # Fail-closed guard: non-finite observations.
+    if not np.all(np.isfinite(arr)):
+        return {
+            "observed_mean": None,
+            "fraction_survival_rates": {},
+            "parameter_stability_score": None,
+            "parameter_perturbation_pass": False,
+            "perturbation_fractions": perturbation_fractions or [0.10, 0.25],
+            "n_runs_per_fraction": n_runs_per_fraction,
+            "min_stability_score": min_stability_score,
+            "seed": seed,
+            "n_obs": n_obs,
+            "reason": "non_finite_observations: per_event_expectancies contain NaN/inf",
+        }
+
+    # Fail-closed guard: no runs requested.
+    if n_runs_per_fraction < 1:
+        return {
+            "observed_mean": round(float(np.mean(arr)), 8),
+            "fraction_survival_rates": {},
+            "parameter_stability_score": None,
+            "parameter_perturbation_pass": False,
+            "perturbation_fractions": perturbation_fractions or [0.10, 0.25],
+            "n_runs_per_fraction": n_runs_per_fraction,
+            "min_stability_score": min_stability_score,
+            "seed": seed,
+            "n_obs": n_obs,
+            "reason": f"insufficient_runs: n_runs_per_fraction={n_runs_per_fraction} < 1",
+        }
+
+    fractions = perturbation_fractions or [0.10, 0.25]
+
+    # Validate fractions
+    if any(not (0.0 <= f <= 1.0) for f in fractions):
+        return {
+            "observed_mean": round(float(np.mean(arr)), 8),
+            "fraction_survival_rates": {},
+            "parameter_stability_score": None,
+            "parameter_perturbation_pass": False,
+            "perturbation_fractions": fractions,
+            "n_runs_per_fraction": n_runs_per_fraction,
+            "min_stability_score": min_stability_score,
+            "seed": seed,
+            "n_obs": n_obs,
+            "reason": f"invalid_fractions: all fractions must be in [0, 1], got {fractions}",
+        }
+
+    observed_mean = float(np.mean(arr))
+    rng = np.random.default_rng(seed)
+
+    fraction_survival_rates = {}
+
+    for frac in fractions:
+        survived = 0
+        for _ in range(n_runs_per_fraction):
+            # Multiplicative log-normal noise: exp(N(0, frac)) has median 1,
+            # std ≈ frac for small frac. This models proportional parameter drift.
+            noise = rng.lognormal(mean=0.0, sigma=frac, size=n_obs)
+            perturbed = arr * noise
+            perturbed_mean = float(np.mean(perturbed))
+            if perturbed_mean > 0.0:
+                survived += 1
+        fraction_survival_rates[frac] = round(survived / n_runs_per_fraction, 8)
+
+    parameter_stability_score = float(np.mean(list(fraction_survival_rates.values())))
+    parameter_perturbation_pass = bool(parameter_stability_score >= min_stability_score)
+
+    return {
+        "observed_mean": round(observed_mean, 8),
+        "fraction_survival_rates": fraction_survival_rates,
+        "parameter_stability_score": round(parameter_stability_score, 8),
+        "parameter_perturbation_pass": parameter_perturbation_pass,
+        "perturbation_fractions": fractions,
+        "n_runs_per_fraction": n_runs_per_fraction,
+        "min_stability_score": min_stability_score,
+        "seed": seed,
+        "n_obs": n_obs,
+        "reason": None,
+    }

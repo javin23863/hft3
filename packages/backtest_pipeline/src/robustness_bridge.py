@@ -30,6 +30,7 @@ from research_pipeline.src.robustness_producers import (
     holm_bh_correction,
     latency_stress_for_cell,
     null_strategy_battery,
+    parameter_perturbation,
     planted_alpha_synthetic_control,
     slippage_stress_for_cell,
 )
@@ -296,6 +297,27 @@ def _run_adversarial(
         return _producer_error(str(exc))
 
 
+def _run_parameter_perturbation(
+    per_event_expectancies: List[float],
+    perturbation_fractions: List[float] | None = None,
+    n_runs_per_fraction: int = 50,
+    min_stability_score: float = 0.7,
+) -> Dict[str, Any]:
+    try:
+        result = parameter_perturbation(
+            per_event_expectancies,
+            parameter_values=None,
+            perturbation_fractions=perturbation_fractions,
+            n_runs_per_fraction=n_runs_per_fraction,
+            seed=0,
+            min_stability_score=min_stability_score,
+        )
+        return {"status": _PASS, **result}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("parameter_perturbation producer failed: %s", exc)
+        return _producer_error(str(exc))
+
+
 def _run_wfc_gate(
     rows: List[Dict[str, Any]],
     cfg: Dict[str, Any],
@@ -457,7 +479,7 @@ def compute_robustness_evidence(robustness_input: dict, candidate_id: str = "") 
     """Given robustness raw input data, call producers and return artifact fields.
 
     Input dict keys:
-    - per_event_expectancies: list[float]  (for DSR + bootstrap + null battery + planted alpha + adversarial)
+    - per_event_expectancies: list[float]  (for DSR + bootstrap + null battery + planted alpha + adversarial + parameter perturbation)
     - n_trials: int  (DSR multiplicity denominator)
     - cscv_matrix: np.ndarray  (n_blocks x n_configs, for PBO/CSCV)
     - wfc_rows: list[dict]  (fold rows for WFC gate)
@@ -468,6 +490,9 @@ def compute_robustness_evidence(robustness_input: dict, candidate_id: str = "") 
     - p_values: list[float]  (for Holm/BH correction)
     - holm_bh_alpha: float  (optional, default 0.05)
     - holm_bh_method: str  (optional, "bh" or "holm", default "bh")
+    - perturbation_fractions: list[float]  (optional, for parameter perturbation, default [0.10, 0.25])
+    - n_runs_per_fraction: int  (optional, for parameter perturbation, default 50)
+    - min_stability_score: float  (optional, for parameter perturbation, default 0.7)
 
     Returns dict with keys matching the screening artifact fields:
     - wfc_status, dsr_status, pbo_status, cscv_status
@@ -475,6 +500,7 @@ def compute_robustness_evidence(robustness_input: dict, candidate_id: str = "") 
     - bootstrap_ci_or_not_run, dsr_or_not_run, pbo_or_not_run, cscv_count_or_not_run
     - fee_stress_or_not_run, slippage_stress_or_not_run, latency_stress_or_not_run
     - holm_bh_or_not_run, null_battery_or_not_run, planted_alpha_or_not_run, adversarial_or_not_run
+    - parameter_perturbation_or_not_run
     - walk_forward_metrics (dict with fold_matrix, fold_train_test_dates, etc. if available)
     - wfc_metrics (dict with pearson, spearman, quadrant_counts, etc.)
     """
@@ -494,6 +520,10 @@ def compute_robustness_evidence(robustness_input: dict, candidate_id: str = "") 
     p_values = robustness_input.get("p_values")
     holm_bh_alpha = robustness_input.get("holm_bh_alpha", 0.05)
     holm_bh_method = robustness_input.get("holm_bh_method", "bh")
+    # Parameter perturbation inputs
+    perturbation_fractions = robustness_input.get("perturbation_fractions")
+    n_runs_per_fraction = robustness_input.get("n_runs_per_fraction", 50)
+    min_stability_score = robustness_input.get("min_stability_score", 0.7)
 
     has_expectancies = (
         isinstance(per_event_expectancies, list) and len(per_event_expectancies) > 0
@@ -557,6 +587,15 @@ def compute_robustness_evidence(robustness_input: dict, candidate_id: str = "") 
     if has_expectancies:
         adversarial_result = _run_adversarial(per_event_expectancies)
 
+    param_perturb_result = _not_run_sentinel()
+    if has_expectancies:
+        param_perturb_result = _run_parameter_perturbation(
+            per_event_expectancies,
+            perturbation_fractions=perturbation_fractions,
+            n_runs_per_fraction=n_runs_per_fraction,
+            min_stability_score=min_stability_score,
+        )
+
     pbo_result = _not_run_sentinel()
     if has_matrix:
         pbo_result = _run_cscv_pbo(cscv_matrix)
@@ -607,6 +646,8 @@ def compute_robustness_evidence(robustness_input: dict, candidate_id: str = "") 
     planted_alpha_status = _PASS if (planted_alpha_pass is True) else (_FAIL if (planted_alpha_pass is False) else _NOT_RUN)
     adversarial_pass = adversarial_result.get("adversarial_pass")
     adversarial_status = _PASS if (adversarial_pass is True) else (_FAIL if (adversarial_pass is False) else _NOT_RUN)
+    param_perturb_pass = param_perturb_result.get("parameter_perturbation_pass")
+    param_perturb_status = _PASS if (param_perturb_pass is True) else (_FAIL if (param_perturb_pass is False) else _NOT_RUN)
     # Derive cscv_status independently from the CSCV/PBO producer result, using
     # whether the CSCV partition/config analysis actually ran (n_partitions
     # and n_configs present and > 0).  This is a separate criterion from pbo_status
@@ -635,6 +676,7 @@ def compute_robustness_evidence(robustness_input: dict, candidate_id: str = "") 
         null_battery_status = _NOT_RUN
         planted_alpha_status = _NOT_RUN
         adversarial_status = _NOT_RUN
+        param_perturb_status = _NOT_RUN
     if not has_stress_decomposition:
         fee_stress_status = _NOT_RUN
         slippage_stress_status = _NOT_RUN
@@ -660,6 +702,7 @@ def compute_robustness_evidence(robustness_input: dict, candidate_id: str = "") 
         and null_battery_status in (_PASS, _NOT_RUN)
         and planted_alpha_status in (_PASS, _NOT_RUN)
         and adversarial_status in (_PASS, _NOT_RUN)
+        and param_perturb_status in (_PASS, _NOT_RUN)
     )
     staleness = _FRESH if all_pass else _STALE
 
@@ -683,6 +726,7 @@ def compute_robustness_evidence(robustness_input: dict, candidate_id: str = "") 
         "null_battery_or_not_run": null_battery_result,
         "planted_alpha_or_not_run": planted_alpha_result,
         "adversarial_or_not_run": adversarial_result,
+        "parameter_perturbation_or_not_run": param_perturb_result,
         "walk_forward_metrics": walk_forward_metrics_dict,
         "wfc_metrics": wfc_metrics_dict,
         "candidate_id": candidate_id,
