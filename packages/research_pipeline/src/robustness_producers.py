@@ -73,6 +73,32 @@ def _deflated_sharpe_cdf_inline(
 # Public API
 # ---------------------------------------------------------------------------
 
+def _stress_decomposition_length_mismatch_reason(
+    n_expectancies: int,
+    per_event_n_trades: list[int],
+    per_event_fee_per_rt: list[float],
+    per_event_tick_value: list[float],
+) -> str | None:
+    """Return reason when any decomposition array length != expectancy count.
+
+    Prevents NumPy broadcasting a single-element fee/tick list across many events
+    when producers are called directly (e.g. scripts/run_event_universe.py).
+    """
+    if n_expectancies == 0:
+        return None
+    for name, arr in (
+        ("per_event_n_trades", per_event_n_trades),
+        ("per_event_fee_per_rt", per_event_fee_per_rt),
+        ("per_event_tick_value", per_event_tick_value),
+    ):
+        if len(arr) != n_expectancies:
+            return (
+                f"decomposition_length_mismatch: {name} has {len(arr)} elements, "
+                f"expected {n_expectancies} (per_event_expectancies count)"
+            )
+    return None
+
+
 def deflated_sharpe_for_cell(
     per_event_expectancies: list[float],
     n_trials: int,
@@ -390,6 +416,24 @@ def fee_stress_for_cell(
             "reason": "no_events",
         }
 
+    len_reason = _stress_decomposition_length_mismatch_reason(
+        n, per_event_n_trades, per_event_fee_per_rt, per_event_tick_value,
+    )
+    if len_reason:
+        return {
+            "stress_data_available": False,
+            "fee_x1_5_expectancy": None,
+            "fee_x2_expectancy": None,
+            "fee_x2_pass": None,
+            "fee_x3_expectancy": None,
+            "slip_p5t_expectancy": None,
+            "slip_1t_expectancy": None,
+            "stress_pass": None,
+            "n_events": n,
+            "base_mean_expectancy": round(base_mean, 8),
+            "reason": len_reason,
+        }
+
     arr_exp = np.array(per_event_expectancies, dtype=float)
     arr_fee = np.array(per_event_fee_per_rt, dtype=float)
     arr_tv  = np.array(per_event_tick_value, dtype=float)
@@ -538,6 +582,24 @@ def slippage_stress_for_cell(
             "n_events":             0,
             "base_mean_expectancy": None,
             "reason":               "no_events",
+        }
+
+    len_reason = _stress_decomposition_length_mismatch_reason(
+        n, per_event_n_trades, per_event_fee_per_rt, per_event_tick_value,
+    )
+    if len_reason:
+        return {
+            "stress_data_available": False,
+            "slip_x1_5_expectancy": None,
+            "slip_x2_expectancy":   None,
+            "slip_x2_pass":         None,
+            "slip_x3_expectancy":   None,
+            "slip_p5t_expectancy":  None,
+            "slip_1t_expectancy":   None,
+            "stress_pass":          None,
+            "n_events":             n,
+            "base_mean_expectancy": round(base_mean, 8),
+            "reason":               len_reason,
         }
 
     arr_exp = np.array(per_event_expectancies, dtype=float)
@@ -692,6 +754,21 @@ def latency_stress_for_cell(
             "n_events":              0,
             "base_mean_expectancy":  None,
             "reason":                "no_events",
+        }
+
+    len_reason = _stress_decomposition_length_mismatch_reason(
+        n, per_event_n_trades, per_event_fee_per_rt, per_event_tick_value,
+    )
+    if len_reason:
+        return {
+            "stress_data_available": False,
+            "baseline_expectancy":   None,
+            "stress_expectancy":     None,
+            "latency_cost_per_rt":   None,
+            "stress_pass":           None,
+            "n_events":              n,
+            "base_mean_expectancy":  round(base_mean, 8),
+            "reason":                len_reason,
         }
 
     arr_exp = np.array(per_event_expectancies, dtype=float)

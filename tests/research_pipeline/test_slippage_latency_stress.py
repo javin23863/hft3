@@ -215,6 +215,19 @@ class TestSlippageGuards:
         assert result["stress_data_available"] is True
         assert result["reason"] is None
 
+    def test_single_tick_broadcast_fails_closed(self):
+        """One tick value for many events must not silently broadcast via NumPy."""
+        expecs = [2.0, 2.0, 2.0]
+        n_trades = [5, 5, 5]
+        fee_list = [1.0, 1.0, 1.0]
+        tv_list = [1.25]  # length 1 vs 3 expectancies
+        result = slippage_stress_for_cell(expecs, n_trades, fee_list, tv_list)
+        assert result["stress_data_available"] is False
+        assert "decomposition_length_mismatch" in (result["reason"] or "")
+        assert "per_event_tick_value" in (result["reason"] or "")
+        assert result["slip_x2_pass"] is None
+        assert result["stress_pass"] is None
+
 
 class TestSlippageDeterminism:
     """No randomness: repeated calls produce identical results."""
@@ -431,6 +444,19 @@ class TestLatencyGuards:
         result = latency_stress_for_cell(expecs, n_trades, fee_list, tv_list)
         assert result["stress_data_available"] is True
         assert result["reason"] is None
+
+    def test_single_n_trades_broadcast_fails_closed(self):
+        """One n_trades value for many events must not silently broadcast."""
+        expecs = [2.0, 2.0, 2.0]
+        n_trades = [5]  # length 1 vs 3 expectancies
+        fee_list = [1.0, 1.0, 1.0]
+        tv_list = [12.5, 12.5, 12.5]
+        result = latency_stress_for_cell(expecs, n_trades, fee_list, tv_list)
+        assert result["stress_data_available"] is False
+        assert "decomposition_length_mismatch" in (result["reason"] or "")
+        assert "per_event_n_trades" in (result["reason"] or "")
+        assert result["stress_pass"] is None
+        assert result["stress_expectancy"] is None
 
 
 class TestLatencyDeterminism:
