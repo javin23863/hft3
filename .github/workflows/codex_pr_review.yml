@@ -1,0 +1,52 @@
+name: Codex PR Review Request
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  request-codex-review:
+    if: ${{ github.event.pull_request.draft == false }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request Codex review for this head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          marker="<!-- hft3-codex-review:${HEAD_SHA} -->"
+          existing="$(
+            gh api --paginate "repos/${REPO}/issues/${PR_NUMBER}/comments?per_page=100" \
+              --jq ".[] | select(.user.login == \"github-actions[bot]\") | select(.body | contains(\"${marker}\")) | select(.body | contains(\"@codex review\")) | .id" \
+              | head -n 1 || true
+          )"
+
+          if [ -n "${existing}" ]; then
+            echo "Codex review already requested for ${HEAD_SHA} in comment ${existing}."
+            exit 0
+          fi
+
+          cat > /tmp/hft3-codex-review.md <<EOF
+          ${marker}
+          @codex review
+
+          HFT3 external PR AI review request for head \`${HEAD_SHA}\`.
+
+          Review focus:
+          - Follow \`AGENTS.md\` and closest review guidance.
+          - Flag serious correctness, security, finance/math, HFT workflow, or verification issues.
+          - Do not treat local preflight, CI, or agent self-review as the external PR AI review gate.
+          EOF
+
+          gh pr comment "${PR_NUMBER}" \
+            --repo "${REPO}" \
+            --body-file /tmp/hft3-codex-review.md
