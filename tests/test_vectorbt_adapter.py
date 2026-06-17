@@ -143,6 +143,14 @@ def _valid_external_robustness_evidence() -> dict:
         "dsr_or_not_run": {"status": "pass", "dsr_pass": True, "dsr_cdf": 0.96},
         "pbo_or_not_run": {"status": "pass", "pbo_pass": True, "pbo": 0.12, "maximum_pbo": 0.2},
         "cscv_count_or_not_run": {"status": "pass", "n_partitions": 16, "n_configs": 8},
+        "fee_stress_or_not_run": {"status": "pass"},
+        "slippage_stress_or_not_run": {"status": "pass"},
+        "latency_stress_or_not_run": {"status": "pass"},
+        "holm_bh_or_not_run": {"status": "pass"},
+        "null_battery_or_not_run": {"status": "pass"},
+        "planted_alpha_or_not_run": {"status": "pass"},
+        "adversarial_or_not_run": {"status": "pass"},
+        "parameter_perturbation_or_not_run": {"status": "pass"},
     }
 
 
