@@ -489,7 +489,10 @@ python -B -m pytest -q tests\test_research_pipeline.py -p no:cacheprovider
 -> 30 passed, 1 skipped
 
 python -B -m pytest -q tests\test_vectorbt_adapter.py tests\test_research_pipeline.py tests\backtest_pipeline\test_hftbacktest_realism_hbt0.py tests\backtest_pipeline\test_hftbacktest_realism_hbt1.py tests\backtest_pipeline\test_hftbacktest_realism_hbt2.py tests\backtest_pipeline\test_hftbacktest_realism_hbt3.py tests\backtest_pipeline\test_hftbacktest_realism_hbt4.py tests\backtest_pipeline\test_hftbacktest_realism_hbt5.py -p no:cacheprovider
--> 315 passed, 1 skipped
+-> 325 passed, 1 skipped
+
+bash scripts/run_vbt_hbt_handoff_verify.sh
+-> exit 0; 325 passed, 1 skipped (installs submodules + verify deps + bounded pytest)
 
 git diff --check -- scripts\run_pipeline.py tests\test_research_pipeline.py docs\project\VECTORBT_SCREENING_ENGINE_SPEC.md docs\human\VECTORBT_PIPELINE.md docs\vault\RESEARCH_ENTRYPOINTS.md
 -> exit 0; CRLF warnings only
@@ -510,6 +513,7 @@ graph: waived-by-owner-2026-06-16
 grep-loop: unavailable(no-pr)
 merge-ready: no
 hbt-realism-verify: bash scripts/run_hbt_realism_verify.sh -> exit 0; 108 passed
+vbt-hbt-handoff-verify: bash scripts/run_vbt_hbt_handoff_verify.sh -> exit 0; 325 passed, 1 skipped
 ```
 
 Remaining blockers before acceptance:
@@ -529,13 +533,25 @@ Pinned official HftBacktest install + full HBT0–HBT5 gate:
 bash scripts/run_hbt_realism_verify.sh
 ```
 
-Steps inside the script:
+Full VectorBT→HftBacktest handoff gate (submodules, pipeline deps, VBT adapter,
+`test_research_pipeline.py`, HBT0–HBT5):
 
-1. `bash scripts/install_hftbacktest_realism_deps.sh` — PyPI `hftbacktest==2.4.2`
-   from `vendor/hftbacktest/VENDOR.lock` (source-lock `v2.4.2` verification).
-2. `pytest tests/backtest_pipeline/test_hftbacktest_realism_hbt*.py` — shared
-   fixtures in `tests/backtest_pipeline/hft_screening_fixtures.py` carry §10
-   robustness evidence maps and hash-backed CHI404 native latency evidence.
+```bash
+bash scripts/run_vbt_hbt_handoff_verify.sh
+```
+
+Steps inside `run_vbt_hbt_handoff_verify.sh`:
+
+1. `bash scripts/install_vbt_hbt_handoff_verify_deps.sh` — `git submodule update
+   --init vendor/openfoundry vendor/alphageometry` plus PyPI packages for
+   `run_pipeline.py` imports (`jsonschema`, `networkx`, …) and pinned
+   `hftbacktest==2.4.2` from `vendor/hftbacktest/VENDOR.lock`.
+2. Bounded pytest slice matching the acceptance verification block above.
+
+`run_hbt_realism_verify.sh` is the narrower HBT-only slice (install +
+`test_hftbacktest_realism_hbt*.py` + vendor lock); shared fixtures live in
+`tests/backtest_pipeline/hft_screening_fixtures.py` (§10 evidence maps and
+hash-backed CHI404 native latency evidence).
 
 CHI404 production paper-latency sweeps remain lane-scoped per
 `docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md`; this workflow is the offline
