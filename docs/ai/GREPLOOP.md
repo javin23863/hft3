@@ -1,11 +1,12 @@
 # Grep Loop Workflow
 
-Purpose: add a mandatory grep-driven review loop to the existing HFT3 agent
-workflow. Codex self-review is not a substitute. Local GrepLoop is required
-after every repo edit, including docs-only edits, before reviewer time.
+Purpose: distinguish local preflight hygiene from the external Greptile PR
+GrepLoop. Codex self-review is not a substitute. Local `rg` preflight is
+required after every repo edit, including docs-only edits, before reviewer time,
+but it is not GrepLoop.
 
-This does not replace VaultGate, GraphGate, reviewer, pytest, or GraphPost.
-It is a cheap negative-search pass that catches stale terminology, old API
+Local preflight does not replace VaultGate, GraphGate, reviewer, pytest, or
+GraphPost. It is a cheap negative-search pass that catches stale terminology, old API
 fields, missing proof rows, and review-drift before the heavier gates run.
 
 External pattern: Greptile's `greploop` skill
@@ -30,20 +31,20 @@ Video-derived additions from `https://youtu.be/WIDIV8oDDC8`:
 
 ## Position
 
-Run this after each edit pass and before claiming the diff is ready for the
-dual-pass reviewer:
+Run local preflight after each edit pass and before claiming the diff is ready
+for the dual-pass reviewer:
 
 ```text
-VaultGate -> GraphGate -> GraphPre -> Plan -> Code -> GrepLoop -> Review -> Verify -> GraphPost
+VaultGate -> GraphGate -> GraphPre -> Plan -> Code -> Local Preflight -> Review -> Verify -> PR GrepLoop -> GraphPost
 ```
 
-If reviewer or tests find issues, fix them and run the relevant GrepLoop
+If reviewer or tests find issues, fix them and run the relevant local preflight
 again before the next review.
 
-If local GrepLoop was not run, the change is not merge-ready. The only allowed
+If local preflight was not run, the change is not merge-ready. The only allowed
 exception is an explicit user waiver, and that still reports `merge-ready: no`.
 
-## Local Codex GrepLoop
+## Local Preflight Hygiene
 
 Mandatory for every repo edit. Use `rg`, not broad manual reading. Keep the
 patterns task-specific.
@@ -77,7 +78,7 @@ git diff --check
 
 ## PR GrepLoop
 
-Required in addition to local GrepLoop when there is an actual PR/MR/CL review
+Required in addition to local preflight when there is an actual PR/MR/CL review
 surface and Greptile is installed for the repo. If no PR exists, or Greptile is
 not installed/authenticated, record `pr-greptile: unavailable(...)`; do not
 pretend local Codex review satisfied this external review gate.
@@ -92,7 +93,7 @@ gh pr view --json number,headRefName,headRefOid
 
 ```powershell
 git push
-gh pr comment <PR_NUMBER> --body "@greptile review"
+gh pr comment <PR_NUMBER> --body "@greptileai"
 ```
 
 3. Fetch all current review surfaces, especially the latest Greptile general
