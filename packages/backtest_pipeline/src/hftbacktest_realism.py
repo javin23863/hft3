@@ -441,6 +441,7 @@ REPLAY_SUMMARY_REQUIRED_FIELDS = (
     "fail_closed_reasons",
 )
 L3_EVENT_TYPES = {
+    2: "TRADE_EVENT",
     10: "ADD_ORDER_EVENT",
     11: "CANCEL_ORDER_EVENT",
     12: "MODIFY_ORDER_EVENT",

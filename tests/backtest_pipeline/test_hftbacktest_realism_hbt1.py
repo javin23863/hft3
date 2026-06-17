@@ -347,9 +347,10 @@ def test_validate_hftbacktest_event_array_rejects_mixed_l2_l3(
     assert "L2_L3_MISMATCH" in result["fail_closed_reasons"]
 
 
-def test_validate_hftbacktest_event_array_rejects_trade_plus_l3_mixed(
+def test_validate_hftbacktest_event_array_accepts_trade_plus_l3_events(
     hbt_contract: tuple[np.dtype, dict[str, int]],
 ) -> None:
+    """TRADE_EVENT is L3-compatible (round-3 P1); trade + ADD is valid L3 MBO."""
     event_dtype, constants = hbt_contract
     events = _make_events(
         event_dtype,
@@ -381,9 +382,10 @@ def test_validate_hftbacktest_event_array_rejects_trade_plus_l3_mixed(
         timestamp_units="nanoseconds",
     )
 
-    assert result["data_validation_status"] == "fail"
-    assert result["l2_l3_classification"] == "mixed_rejected"
-    assert "L2_L3_MISMATCH" in result["fail_closed_reasons"]
+    assert result["data_validation_status"] == "pass"
+    assert result["l2_l3_classification"] == "l3_mbo"
+    assert "L2_L3_MISMATCH" not in result["fail_closed_reasons"]
+    assert "EVENT_TYPE_UNKNOWN" not in result["fail_closed_reasons"]
 
 
 def test_validate_hftbacktest_event_array_rejects_empty_events(

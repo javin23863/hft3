@@ -509,6 +509,7 @@ local-preflight-score: 5/5
 graph: waived-by-owner-2026-06-16
 grep-loop: unavailable(no-pr)
 merge-ready: no
+hbt-realism-verify: bash scripts/run_hbt_realism_verify.sh -> exit 0; 108 passed
 ```
 
 Remaining blockers before acceptance:
@@ -519,6 +520,26 @@ Remaining blockers before acceptance:
   vault waiver or authority update to become fully accepted.
 - VBT-3 and VBT-4 milestones are implemented and verified; this removes the
   prior blockers on VBT-5 acceptance.
+
+## HBT realism verify workflow (dev / CI)
+
+Pinned official HftBacktest install + full HBT0–HBT5 gate:
+
+```bash
+bash scripts/run_hbt_realism_verify.sh
+```
+
+Steps inside the script:
+
+1. `bash scripts/install_hftbacktest_realism_deps.sh` — PyPI `hftbacktest==2.4.2`
+   from `vendor/hftbacktest/VENDOR.lock` (source-lock `v2.4.2` verification).
+2. `pytest tests/backtest_pipeline/test_hftbacktest_realism_hbt*.py` — shared
+   fixtures in `tests/backtest_pipeline/hft_screening_fixtures.py` carry §10
+   robustness evidence maps and hash-backed CHI404 native latency evidence.
+
+CHI404 production paper-latency sweeps remain lane-scoped per
+`docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md`; this workflow is the offline
+VectorBT→HftBacktest handoff verify path on dev/CI hosts.
 
 ## Acceptance Gate
 
