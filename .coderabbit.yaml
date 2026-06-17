@@ -1,0 +1,13 @@
+# hft3 uses Greptile GrepLoop for PR AI review.
+# CodeRabbit must not auto-review PRs for this repository.
+reviews:
+  auto_review:
+    enabled: false
+    description_keyword: ""
+    labels: []
+    drafts: false
+    ignore_title_keywords:
+      - "[skip review]"
+      - "GREPLOOP_ONLY"
+  commit_status: false
+  review_status: false
