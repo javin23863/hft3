@@ -36,6 +36,8 @@ from backtest_pipeline.src.promotion_gate import (
     RejectedCandidate,
     serialize_promoted,
 )
+from backtest_pipeline.src.robustness_bridge import compute_robustness_evidence
+from backtest_pipeline.src.surface_stability import compute_surface_stability
 from research_pipeline.types import CandidateModel, ParsedHypothesis
 
 logger = logging.getLogger(__name__)
@@ -915,6 +917,68 @@ def _not_run_reason_for_candidate(candidate_id: str) -> str:
     return f"{_VBT2_PILOT_NOT_ELIGIBLE_REASON}:{candidate_id}"
 
 
+def _compute_surface_stability_for_candidate(
+    candidate: PromotedCandidate,
+) -> Dict[str, Any]:
+    """Compute surface-stability metrics for a promoted candidate.
+
+    Looks for a ``parameter_surface`` dict (mapping parameter-value tuples to
+    per-cell metric dicts) inside the candidate's ``in_sample_results`` or
+    ``vectorbt_results``.  When present and non-empty, the §4 producer
+    (:func:`compute_surface_stability`) is invoked and its defined output is
+    returned.  When absent, the fail-closed sentinel is returned so the
+    screening-artifact validator recognises the "formula missing" state.
+
+    The ``parameter_surface`` grid may optionally specify producer overrides
+    (``performance_metric``, ``tolerance``, ``loss_threshold``,
+    ``min_sample_size``) under the ``surface_stability_config`` key alongside
+    the grid itself.
+    """
+    grid = None
+    for source in (
+        candidate.in_sample_results,
+        candidate.vectorbt_results,
+    ):
+        if not isinstance(source, Mapping):
+            continue
+        surface = source.get("parameter_surface")
+        if isinstance(surface, Mapping) and len(surface) > 0:
+            grid = surface
+            break
+    if grid is None:
+        return _surface_stability_formula_missing()
+
+    config: Mapping[str, Any] = {}
+    for source in (
+        candidate.in_sample_results,
+        candidate.vectorbt_results,
+    ):
+        if isinstance(source, Mapping):
+            cfg = source.get("surface_stability_config")
+            if isinstance(cfg, Mapping):
+                config = cfg
+                break
+
+    try:
+        metrics = compute_surface_stability(
+            grid,
+            performance_metric=config.get("performance_metric", "net_return"),
+            tolerance=config.get("tolerance", 0.1),
+            loss_threshold=config.get("loss_threshold", 0.0),
+            min_sample_size=config.get("min_sample_size", 30),
+        )
+    except (ValueError, TypeError):
+        # Malformed / unusable grid → fail closed with the sentinel so the
+        # screening-artifact validator does not raise on an undefined shape.
+        logger.warning(
+            "surface stability computation failed for candidate %s; "
+            "falling back to formula-missing sentinel",
+            candidate.candidate_id,
+        )
+        return _surface_stability_formula_missing()
+    return metrics
+
+
 def _normalise_promoted_screening_row(
     candidate: PromotedCandidate,
     result: "FilterResult",
@@ -925,7 +989,7 @@ def _normalise_promoted_screening_row(
     net_return = _return_fraction(metrics)
     reason = _not_run_reason_for_candidate(candidate.candidate_id)
     row = dict(candidate.to_dict())
-    surface_stability_metrics = _surface_stability_formula_missing()
+    surface_stability_metrics = _compute_surface_stability_for_candidate(candidate)
     if "param_stability_score" in metrics:
         surface_stability_metrics["observed_param_stability_score_or_not_run"] = metrics[
             "param_stability_score"
@@ -934,6 +998,60 @@ def _normalise_promoted_screening_row(
         surface_stability_metrics["observed_slippage_sensitivity_or_not_run"] = metrics[
             "slippage_sensitivity"
         ]
+
+    # VBT-4: compute robustness evidence via the bridge when raw input is supplied.
+    robustness_input = metrics.get("robustness_input")
+    bridge_evidence: Optional[Dict[str, Any]] = None
+    if isinstance(robustness_input, Mapping) and robustness_input:
+        try:
+            bridge_evidence = compute_robustness_evidence(
+                dict(robustness_input), candidate_id=candidate.candidate_id
+            )
+        except Exception:  # noqa: BLE001 — fail-closed
+            logger.warning(
+                "robustness bridge computation failed for candidate %s",
+                candidate.candidate_id,
+            )
+            bridge_evidence = None
+
+    # Default robustness fields (fail-closed not_run sentinels).
+    default_walk_forward_metrics: Dict[str, Any] = {
+        "status": "pilot_summary_only",
+        "wf_consistency": metrics.get("wf_consistency"),
+        "oos_expectancy": metrics.get("oos_expectancy"),
+        "reason": "full_walk_forward_fold_matrix_not_run_in_vbt2_pilot",
+    }
+    default_wfc_metrics = _screening_not_run(reason)
+    default_wfc_status = "not_run"
+    default_dsr_status = "not_run"
+    default_pbo_status = "not_run"
+    default_cscv_status = "not_run"
+    default_staleness: Any = _screening_not_run(reason)
+    default_bootstrap = _screening_not_run(reason)
+    default_dsr = _screening_not_run(reason)
+    default_pbo = _screening_not_run(reason)
+    default_cscv_count = _screening_not_run(reason)
+
+    # When the bridge produced evidence, use its values.
+    if bridge_evidence:
+        walk_forward_metrics_bridge = bridge_evidence.get("walk_forward_metrics")
+        if isinstance(walk_forward_metrics_bridge, Mapping) and walk_forward_metrics_bridge:
+            default_walk_forward_metrics = dict(walk_forward_metrics_bridge)
+        wfc_metrics_bridge = bridge_evidence.get("wfc_metrics")
+        if isinstance(wfc_metrics_bridge, Mapping):
+            default_wfc_metrics = dict(wfc_metrics_bridge)
+        default_wfc_status = str(bridge_evidence.get("wfc_status", "not_run"))
+        default_dsr_status = str(bridge_evidence.get("dsr_status", "not_run"))
+        default_pbo_status = str(bridge_evidence.get("pbo_status", "not_run"))
+        default_cscv_status = str(bridge_evidence.get("cscv_status", "not_run"))
+        default_staleness = bridge_evidence.get("robustness_artifact_staleness", "stale")
+        default_bootstrap = bridge_evidence.get("bootstrap_ci_or_not_run", default_bootstrap)
+        default_dsr = bridge_evidence.get("dsr_or_not_run", default_dsr)
+        default_pbo = bridge_evidence.get("pbo_or_not_run", default_pbo)
+        default_cscv_count = bridge_evidence.get(
+            "cscv_count_or_not_run", default_cscv_count
+        )
+
     row.update({
         "candidate_id": candidate.candidate_id,
         "base_candidate_id": metrics.get("base_candidate_id", candidate.candidate_id),
@@ -958,24 +1076,19 @@ def _normalise_promoted_screening_row(
             if candidate.out_of_sample_results
             else _screening_not_run(reason)
         ),
-        "walk_forward_metrics": {
-            "status": "pilot_summary_only",
-            "wf_consistency": metrics.get("wf_consistency"),
-            "oos_expectancy": metrics.get("oos_expectancy"),
-            "reason": "full_walk_forward_fold_matrix_not_run_in_vbt2_pilot",
-        },
-        "wfc_metrics": _screening_not_run(reason),
+        "walk_forward_metrics": default_walk_forward_metrics,
+        "wfc_metrics": default_wfc_metrics,
         "surface_stability_metrics": surface_stability_metrics,
         "robustness_gate_scope": "pilot",
-        "wfc_status": "not_run",
-        "dsr_status": "not_run",
-        "pbo_status": "not_run",
-        "cscv_status": "not_run",
-        "robustness_artifact_staleness": _screening_not_run(reason),
+        "wfc_status": default_wfc_status,
+        "dsr_status": default_dsr_status,
+        "pbo_status": default_pbo_status,
+        "cscv_status": default_cscv_status,
+        "robustness_artifact_staleness": default_staleness,
         "trade_count": _metric_or_not_run(metrics, reason, "num_trades", "trade_count"),
         "gross_return": net_return,
-        "total_fees": 0.0,
-        "total_slippage": 0.0,
+        "total_fees": _metric_or_not_run(metrics, reason, "total_fees"),
+        "total_slippage": _metric_or_not_run(metrics, reason, "total_slippage"),
         "net_return": net_return,
         "net_pnl": _net_pnl(metrics, net_return),
         "expectancy_per_trade": _metric_or_not_run(metrics, reason, "expectancy", "oos_expectancy"),
@@ -984,14 +1097,36 @@ def _normalise_promoted_screening_row(
         "sortino": _metric_or_not_run(metrics, reason, "sortino", "Sortino Ratio"),
         "max_drawdown": _metric_or_not_run(metrics, reason, "max_drawdown_pct", "Max Drawdown [%]"),
         "turnover": _metric_or_not_run(metrics, reason, "turnover_mean_pct", "turnover"),
-        "bootstrap_ci_or_not_run": _screening_not_run(reason),
-        "dsr_or_not_run": _screening_not_run(reason),
-        "pbo_or_not_run": _screening_not_run(reason),
-        "cscv_count_or_not_run": _screening_not_run(reason),
+        "bootstrap_ci_or_not_run": default_bootstrap,
+        "dsr_or_not_run": default_dsr,
+        "pbo_or_not_run": default_pbo,
+        "cscv_count_or_not_run": default_cscv_count,
         "screening_status": "pass",
         "replay_eligibility_status": "not_eligible",
         "rejection_reason_or_null": reason,
     })
+
+    # VBT-4: determine replay eligibility from bridge evidence.
+    # Eligible when: screening_status == "pass", all four robustness statuses
+    # are "pass", staleness == "fresh", and surface_stability status == "pass".
+    if bridge_evidence:
+        surface_status = _screening_status_text(surface_stability_metrics)
+        all_robustness_pass = (
+            default_wfc_status == "pass"
+            and default_dsr_status == "pass"
+            and default_pbo_status == "pass"
+            and default_cscv_status == "pass"
+        )
+        staleness_text = _screening_status_text(default_staleness)
+        if (
+            row["screening_status"] == "pass"
+            and all_robustness_pass
+            and staleness_text == "fresh"
+            and surface_status == "pass"
+        ):
+            row["replay_eligibility_status"] = "eligible"
+            row["rejection_reason_or_null"] = None
+
     _apply_external_robustness_evidence(row, robustness_evidence)
     return row
 
@@ -2276,7 +2411,7 @@ def _run_vectorbt_simulation(
                 vectorbt_results=vectorbt_results,
                 pass_reason="vectorbt_simulated",
                 in_sample_results={"expectancy": gate_metrics.get("expectancy", 0.0)},
-                out_of_sample_results={"expectancy": gate_metrics.get("oos_expectancy", 0.0)},
+                out_of_sample_results={"expectancy": wf.get("oos_expectancy", 0.0)},
             )
             result.promoted.append(promoted)
 
