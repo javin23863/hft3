@@ -555,7 +555,8 @@ VBT-5a handoff reviewer: pass 1 red 2 found/fixed; final pass red 0; yellow 0; b
 local-preflight: run
 local-preflight-score: 5/5
 graph: waived-by-owner-2026-06-16
-grep-loop: pr-ai-review run (Codex review requested via codex_pr_review.yml; head 34f236a6; awaiting connector response)
+grep-loop: pr-ai-review unavailable(not-authenticated) — workflow posted @codex review for head d3e83369; chatgpt-codex-connector replied "create a Codex account and connect to github" (same on e803afef, eba7fd76, d3e83369)
+local-preflight: run (2026-06-18; forbidden "clue" hits are guardrail prose only; feature_plane_status vocabulary present in authority docs)
 merge-ready: no
 hbt-realism-verify: bash scripts/run_hbt_realism_verify.sh -> exit 0; 108 passed
 vbt-hbt-handoff-verify: bash scripts/run_vbt_hbt_handoff_verify.sh -> exit 0; 325 passed, 1 skipped
@@ -564,7 +565,9 @@ skipped: test_evaluate_model_smoke (CPI NPZ not present locally)
 
 Remaining blockers before acceptance:
 
-- External PR/MR/CL GrepLoop has not run.
+- External PR/MR/CL GrepLoop: connector not authenticated on PR #3 as of head
+  `d3e83369` (reconnect at https://chatgpt.com/codex/cloud/settings/connectors,
+  then re-trigger `@codex review`).
 - Surface-stability formulas are now implemented but rely on documented
   implementation defaults for weights/thresholds; these need an explicit
   vault waiver or authority update to become fully accepted.
