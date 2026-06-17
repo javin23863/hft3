@@ -503,13 +503,14 @@ def slippage_stress_for_cell(
     # Guard: if fee/tick decomposition fields are absent (old records), all
     # fee_per_rt will be 0.0 — slippage arithmetic is meaningless without a
     # tick_value baseline.  Fail closed.
-    # Per Codex P2-5: also refuse zero tick values — without tick_value the
-    # slippage penalties become zero and slip_x2_pass passes without stress.
-    tick_all_zero = (
+    # Per Codex P2-3 + P2-5: also reject ANY zero tick value (not just all-zero),
+    # since a mixed set like [1.25, 0.0] would assign zero slippage penalty to
+    # the missing-tick event, inflating slip_x2_pass without real stress.
+    tick_has_any_zero = (
         not per_event_tick_value
-        or all(v == 0.0 for v in per_event_tick_value)
+        or any(v == 0.0 for v in per_event_tick_value)
     )
-    if not per_event_fee_per_rt or all(v == 0.0 for v in per_event_fee_per_rt) or tick_all_zero:
+    if not per_event_fee_per_rt or all(v == 0.0 for v in per_event_fee_per_rt) or tick_has_any_zero:
         return {
             "stress_data_available": False,
             "slip_x1_5_expectancy": None,
@@ -700,11 +701,21 @@ def latency_stress_for_cell(
     # scalar tick_value_usd=12.5. MES or mixed-product rows have different
     # tick values (e.g. 1.25 for MES vs 12.5 for ES). Using the wrong tick
     # value over/understates latency costs by 10x.
+    # Per Codex P2-4: when all per-event tick values are zero, fail closed
+    # instead of fabricating ES tick values — missing decomposition must not
+    # produce made-up evidence.
     arr_tv = np.array(per_event_tick_value, dtype=float)
-    # If per-event tick values are all zero or unavailable, fall back to
-    # the scalar tick_value_usd parameter.
     if np.all(arr_tv == 0.0):
-        arr_tv = np.full(n, tick_value_usd, dtype=float)
+        return {
+            "stress_data_available": False,
+            "baseline_expectancy":   None,
+            "stress_expectancy":     None,
+            "latency_cost_per_rt":   None,
+            "stress_pass":           None,
+            "n_events":              n,
+            "base_mean_expectancy":  round(base_mean, 8),
+            "reason": "decomposition_unavailable: per_event_tick_value all zero — cannot compute latency cost without tick values",
+        }
 
     # Recover per-event gross expectancy: gross = net + fee_per_round_trip.
     # The gross figure is latency-cost-free (fee is exchange fee, not
@@ -724,13 +735,13 @@ def latency_stress_for_cell(
     incremental_arr = np.maximum(stress_cost_arr - baseline_cost_arr, 0.0)
     latency_cost_per_rt = float(np.mean(incremental_arr)) if n > 0 else 0.0
 
-    # Baseline expectancy: gross minus fee minus baseline latency cost.
-    # (With latency_ms_baseline=0 this equals the echoed base net mean.)
-    baseline_expectancy = float(np.mean(arr_gross - arr_fee - baseline_cost_arr))
-
-    # Stress expectancy: gross minus fee minus full stressed latency cost.
-    # When latency_ms_stress == latency_ms_baseline this equals baseline.
-    stress_expectancy = float(np.mean(arr_gross - arr_fee - stress_cost_arr))
+    # Per Codex P2-8: the per-event net expectancy already embeds the baseline
+    # latency cost. The stress scenario should subtract ONLY the incremental
+    # cost (stress - baseline), not the full stressed cost from the same net
+    # series (which double-counts baseline). Baseline expectancy = net mean
+    # as-is; stress expectancy = net mean - incremental cost.
+    baseline_expectancy = float(np.mean(arr_exp))
+    stress_expectancy = float(np.mean(arr_exp - incremental_arr))
 
     stress_pass = bool(stress_expectancy > 0.0)
 

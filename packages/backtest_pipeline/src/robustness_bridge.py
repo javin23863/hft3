@@ -565,6 +565,23 @@ def compute_robustness_evidence(robustness_input: dict, candidate_id: str = "") 
         isinstance(per_event_fee_per_rt, list) and len(per_event_fee_per_rt) > 0 and
         isinstance(per_event_tick_value, list) and len(per_event_tick_value) > 0
     )
+    # Per Codex P2-6: verify decomposition arrays match event count to prevent
+    # NumPy broadcasting a single-item list across all events.
+    if has_stress_decomposition and has_expectancies:
+        _n_exp = len(per_event_expectancies)
+        for _arr_name, _arr in (
+            ("per_event_n_trades", per_event_n_trades),
+            ("per_event_fee_per_rt", per_event_fee_per_rt),
+            ("per_event_tick_value", per_event_tick_value),
+        ):
+            if len(_arr) != _n_exp:
+                has_stress_decomposition = False
+                logger.warning(
+                    "stress decomposition length mismatch: %s has %d elements, "
+                    "expected %d (expectancies count)",
+                    _arr_name, len(_arr), _n_exp,
+                )
+                break
     has_p_values = isinstance(p_values, list) and len(p_values) > 0
 
     # If absolutely no input data, return all not_run.
@@ -671,12 +688,18 @@ def compute_robustness_evidence(robustness_input: dict, candidate_id: str = "") 
     latency_stress_status = _PASS if (latency_stress_pass is True) else (_FAIL if (latency_stress_pass is False) else _NOT_RUN)
     holm_bh_n_rejected = holm_bh_result.get("n_rejected")
     holm_bh_reason = holm_bh_result.get("reason")
-    # Holm/BH "pass" = the correction ran and produced valid output (not an
-    # error).  The correction is a gate that accounts for multiplicity —
-    # running successfully means the family was corrected, regardless of how
-    # many hypotheses were rejected.  A high rejection count is evidence the
-    # family contains many false discoveries, not that this candidate passes.
-    holm_bh_status = _PASS if (holm_bh_reason is None and has_p_values) else (_NOT_RUN if not has_p_values else _FAIL)
+    # Per Codex P2-7: Holm/BH "pass" requires the correction ran (no error)
+    # AND at least one hypothesis survived alpha (n_rejected > 0). If every
+    # hypothesis was rejected (n_rejected == 0), the family-level correction
+    # found no surviving strategy — the candidate should not get fresh evidence.
+    if not has_p_values:
+        holm_bh_status = _NOT_RUN
+    elif holm_bh_reason is not None:
+        holm_bh_status = _FAIL
+    elif holm_bh_n_rejected is not None and holm_bh_n_rejected > 0:
+        holm_bh_status = _PASS
+    else:
+        holm_bh_status = _FAIL
     null_battery_pass = null_battery_result.get("null_pass")
     null_battery_status = _PASS if (null_battery_pass is True) else (_FAIL if (null_battery_pass is False) else _NOT_RUN)
     planted_alpha_pass = planted_alpha_result.get("planted_pass")
@@ -727,15 +750,12 @@ def compute_robustness_evidence(robustness_input: dict, candidate_id: str = "") 
         wfc_status = _NOT_RUN
 
     # Determine staleness: all gates must pass.
-    # Per Codex P1 finding: when a §10 producer is attempted (input provided)
-    # but fails/errors, the derived status is not_run — but that should NOT
-    # count as fresh. Only genuinely-not-provided producers (no input data)
-    # are exempt. Producers that ran but returned not_run (e.g. missing
-    # decomposition, producer error) must count as fail for staleness.
-    _section10_optional_when_no_input = (
-        not has_stress_decomposition  # fee/slippage/latency need decomposition
-        and not has_p_values           # holm_bh needs p_values
-    )
+    # Per Codex P1-1 + P2-2 + P2-5: When expectancies are provided, ALL §10
+    # producers that depend on expectancies (null, planted, adversarial,
+    # parameter) must produce valid evidence (not not_run). Bootstrap CI
+    # is also a required §10 check and must pass when expectancies present.
+    # Fee/slippage/latency require stress decomposition; Holm/BH requires
+    # p_values. Missing required evidence → stale.
     all_pass = (
         wfc_status == _PASS
         and dsr_status == _PASS
@@ -761,10 +781,34 @@ def compute_robustness_evidence(robustness_input: dict, candidate_id: str = "") 
             if has_p_values
             else holm_bh_status in (_PASS, _NOT_RUN)
         )
-        and null_battery_status in (_PASS, _NOT_RUN)
-        and planted_alpha_status in (_PASS, _NOT_RUN)
-        and adversarial_status in (_PASS, _NOT_RUN)
-        and param_perturb_status in (_PASS, _NOT_RUN)
+        # Per Codex P2-5: bootstrap is a required §10 check — include in staleness.
+        and (
+            bootstrap_result.get("status") == _PASS
+            if has_expectancies
+            else True
+        )
+        # Per Codex P1-1 + P2-2: when expectancies provided, null/planted/
+        # adversarial/parameter must produce valid evidence (not not_run).
+        and (
+            null_battery_status == _PASS
+            if has_expectancies
+            else null_battery_status in (_PASS, _NOT_RUN)
+        )
+        and (
+            planted_alpha_status == _PASS
+            if has_expectancies
+            else planted_alpha_status in (_PASS, _NOT_RUN)
+        )
+        and (
+            adversarial_status == _PASS
+            if has_expectancies
+            else adversarial_status in (_PASS, _NOT_RUN)
+        )
+        and (
+            param_perturb_status == _PASS
+            if has_expectancies
+            else param_perturb_status in (_PASS, _NOT_RUN)
+        )
     )
     staleness = _FRESH if all_pass else _STALE
 

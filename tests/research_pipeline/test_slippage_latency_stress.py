@@ -334,7 +334,8 @@ class TestLatencyHandMath:
         assert r2["latency_cost_per_rt"] == pytest.approx(2.0 * r1["latency_cost_per_rt"], abs=1e-8)
 
     def test_nonzero_baseline(self):
-        """baseline_expectancy subtracts baseline latency cost; stress adds incremental."""
+        """baseline_expectancy = net mean (already embeds baseline latency);
+        stress_expectancy = net mean - incremental cost (stress - baseline)."""
         fee_per_rt = 1.0
         net_exp = 3.0
         tick_value_usd = 12.5
@@ -347,11 +348,14 @@ class TestLatencyHandMath:
             tick_value_usd=tick_value_usd,
             ticks_per_ms=ticks_per_ms,
         )
-        gross = net_exp + fee_per_rt  # 4.0
+        # Per Codex P2-8: net expectancy already embeds baseline latency cost,
+        # so baseline_expectancy = net mean (no double-counting). stress_expectancy
+        # subtracts only the incremental cost (stress - baseline) from the net.
         baseline_cost = 0.5 * ticks_per_ms * tick_value_usd  # 0.00625
         stress_cost = 2.0 * ticks_per_ms * tick_value_usd   # 0.025
-        assert result["baseline_expectancy"] == pytest.approx(gross - fee_per_rt - baseline_cost, abs=1e-6)
-        assert result["stress_expectancy"] == pytest.approx(gross - fee_per_rt - stress_cost, abs=1e-6)
+        incremental_cost = stress_cost - baseline_cost       # 0.01875
+        assert result["baseline_expectancy"] == pytest.approx(net_exp, abs=1e-6)
+        assert result["stress_expectancy"] == pytest.approx(net_exp - incremental_cost, abs=1e-6)
 
 
 class TestLatencyPassFail:
