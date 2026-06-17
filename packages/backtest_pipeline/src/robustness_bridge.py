@@ -33,6 +33,7 @@ from research_pipeline.src.robustness_producers import (
     parameter_perturbation,
     planted_alpha_synthetic_control,
     slippage_stress_for_cell,
+    _stress_decomposition_length_mismatch_reason,
 )
 from workbench.src.robustness.wfc.gate import evaluate_wfc_gate
 
@@ -577,19 +578,15 @@ def compute_robustness_evidence(robustness_input: dict, candidate_id: str = "") 
     # NumPy broadcasting a single-item list across all events.
     if has_stress_decomposition and has_expectancies:
         _n_exp = len(per_event_expectancies)
-        for _arr_name, _arr in (
-            ("per_event_n_trades", per_event_n_trades),
-            ("per_event_fee_per_rt", per_event_fee_per_rt),
-            ("per_event_tick_value", per_event_tick_value),
-        ):
-            if len(_arr) != _n_exp:
-                has_stress_decomposition = False
-                logger.warning(
-                    "stress decomposition length mismatch: %s has %d elements, "
-                    "expected %d (expectancies count)",
-                    _arr_name, len(_arr), _n_exp,
-                )
-                break
+        _len_reason = _stress_decomposition_length_mismatch_reason(
+            _n_exp,
+            per_event_n_trades,
+            per_event_fee_per_rt,
+            per_event_tick_value,
+        )
+        if _len_reason:
+            has_stress_decomposition = False
+            logger.warning("%s", _len_reason)
     has_p_values = isinstance(p_values, list) and len(p_values) > 0
 
     # If absolutely no input data, return all not_run.
