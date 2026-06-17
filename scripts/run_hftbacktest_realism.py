@@ -12,7 +12,10 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(REPO), str(REPO / "packages")]
 
-from backtest_pipeline.src.hftbacktest_realism import write_hftbacktest_realism_artifacts
+from backtest_pipeline.src.hftbacktest_realism import (
+    default_hftbacktest_upstream_ref,
+    write_hftbacktest_realism_artifacts,
+)
 
 
 def _default_run_id() -> str:
@@ -78,6 +81,7 @@ def main() -> int:
     repo_root = args.repo_root.resolve()
     run_id = args.run_id or _default_run_id()
     out_root = args.out_root.resolve() if args.out_root else repo_root / "research_cards" / "hftbacktest_realism"
+    upstream_ref = args.hftbacktest_upstream_ref or default_hftbacktest_upstream_ref(repo_root)
     payload = write_hftbacktest_realism_artifacts(
         repo_root=repo_root,
         out_dir=out_root / run_id,
@@ -87,7 +91,7 @@ def main() -> int:
         fill_queue_model_path=args.fill_queue_model.resolve() if args.fill_queue_model else None,
         observation_artifact_path=args.observation_artifact.resolve() if args.observation_artifact else None,
         candidate_id=args.candidate_id,
-        upstream_ref=args.hftbacktest_upstream_ref,
+        upstream_ref=upstream_ref,
         native_hot_path_evidence=list(args.native_hot_path_evidence or []),
         run_id=run_id,
     )

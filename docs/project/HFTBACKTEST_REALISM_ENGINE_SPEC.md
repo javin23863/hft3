@@ -113,6 +113,10 @@ native_hot_path_status
 
 Rules:
 
+- Pin coordinates live in `vendor/hftbacktest/VENDOR.lock`. Install the pinned
+  PyPI package with `bash scripts/install_hftbacktest_realism_deps.sh` before
+  HBT realism tests or source-lock runs. The installed package version must
+  match `upstream_commit_sha_or_tag` for `package_version_match` verification.
 - If the installed package, upstream repo snapshot, and docs disagree, the run
   must record the discrepancy and the implementation must follow the installed
   API plus pinned upstream source for that run.

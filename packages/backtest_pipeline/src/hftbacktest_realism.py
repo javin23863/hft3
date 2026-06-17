@@ -18,6 +18,7 @@ from backtest_pipeline.src.vectorbt_adapter import compute_screening_artifact_ha
 
 UPSTREAM_REPO_URL = "https://github.com/nkaz001/hftbacktest"
 UPSTREAM_DOCS_URL = "https://hftbacktest.readthedocs.io/en/latest/index.html"
+HFTBACKTEST_VENDOR_LOCK_REL = Path("vendor/hftbacktest/VENDOR.lock")
 DOCS_PAGES_USED = [
     UPSTREAM_DOCS_URL,
     "https://hftbacktest.readthedocs.io/en/latest/data.html",
@@ -1344,6 +1345,46 @@ def _repo_dirty(repo_root: Path) -> bool:
     except Exception:
         return True
     return bool(status.strip())
+
+
+def _repo_root_default() -> Path:
+    return Path(__file__).resolve().parents[3]
+
+
+def read_hftbacktest_vendor_lock(repo_root: Path | None = None) -> dict[str, str]:
+    """Load pinned HftBacktest upstream + PyPI coordinates from vendor/hftbacktest/VENDOR.lock."""
+    root = repo_root or _repo_root_default()
+    lock_path = root / HFTBACKTEST_VENDOR_LOCK_REL
+    if not lock_path.is_file():
+        raise HftBacktestRealismArtifactError(f"hftbacktest_vendor_lock_missing:{lock_path}")
+    parsed: dict[str, str] = {}
+    for raw_line in lock_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        parsed[key.strip()] = value.strip()
+    required = ("upstream_repo_url", "upstream_commit_sha_or_tag", "python_package_version", "pypi_package")
+    missing = [field for field in required if not parsed.get(field)]
+    if missing:
+        raise HftBacktestRealismArtifactError(
+            f"hftbacktest_vendor_lock_incomplete:missing={','.join(missing)}"
+        )
+    if parsed["upstream_repo_url"] != UPSTREAM_REPO_URL:
+        raise HftBacktestRealismArtifactError("hftbacktest_vendor_lock_upstream_repo_mismatch")
+    if parsed["pypi_package"] != "hftbacktest":
+        raise HftBacktestRealismArtifactError("hftbacktest_vendor_lock_pypi_package_mismatch")
+    return parsed
+
+
+def default_hftbacktest_upstream_ref(repo_root: Path | None = None) -> str:
+    """Return the vendor-lock upstream tag used for source-lock verification."""
+    lock = read_hftbacktest_vendor_lock(repo_root)
+    tag = lock["upstream_commit_sha_or_tag"]
+    version = lock["python_package_version"]
+    return tag or f"v{version}"
 
 
 def detect_hftbacktest_installation() -> dict[str, Any]:
