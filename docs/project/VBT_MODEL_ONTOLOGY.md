@@ -13,9 +13,23 @@ Authority chain (do not invent parallel processes):
 | Hypothesis signal logic | `packages/features_engine/src/hypotheses/modules.py`, `vix_modules.py` |
 | VectorBT screen engine | [VECTORBT_SCREENING_ENGINE_SPEC.md](VECTORBT_SCREENING_ENGINE_SPEC.md), `vectorbt_adapter.py` |
 | Paid rent phases | [VBT_PAID_SCREEN_RUNBOOK.md](VBT_PAID_SCREEN_RUNBOOK.md), [VBT_PAID_SCREEN_UNIT_SCOPE.md](VBT_PAID_SCREEN_UNIT_SCOPE.md) |
+| **Full product scope (three clocks)** | [VBT_RESEARCH_PRODUCT_SCOPE.md](VBT_RESEARCH_PRODUCT_SCOPE.md) |
+| Macro / VIX / options context | [MACRO_CONTEXT_VIX_OPTIONS_CHECKLIST.md](../cockpit/MACRO_CONTEXT_VIX_OPTIONS_CHECKLIST.md) |
 | Stage A (separate job) | `scripts/run_stage_a_screen.py` → `stage_a_survivors.json` |
 
-## What we are doing (canonical)
+## Critical scope warning
+
+The current paid JSONL generator and `run_vectorbt_paid_screen.py` implement **scheduled-event target units only** (family A in [VBT_RESEARCH_PRODUCT_SCOPE.md](VBT_RESEARCH_PRODUCT_SCOPE.md)).
+
+They do **not** yet implement:
+
+- Context-feature uplift (ADP→NFP, VIX/options at `t_dec`, target-only vs target+context ablation)
+- Continuous intraday opportunity units
+- Full `fs_v1` MBO row loop with VIX/options/cross-asset injection (VectorBT path uses bar OHLCV stub today; Stage A uses full feature matrix + VIX)
+
+Do not describe Phase D Vast rent as “full backtest” or “all features” until the manifest declares research clocks and the data plane matches Stage A / replay injection paths.
+
+## What we are doing today (Phase D — partial)
 
 ```text
 Stage A survivors (423 cells) — prior cheap expectancy screen on fs_v1 cells
