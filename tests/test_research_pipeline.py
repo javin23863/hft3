@@ -11,6 +11,109 @@ REPO = Path(__file__).resolve().parents[1]
 PDF = REPO / "docs" / "references" / "dev_instructions.pdf"
 
 
+def _last_json_object(stdout: str) -> dict:
+    start = stdout.rfind("\n{")
+    if start == -1:
+        start = stdout.find("{")
+    else:
+        start += 1
+    assert start != -1, stdout
+    return json.loads(stdout[start:])
+
+
+def test_hftbacktest_realism_preflight_requires_source_lock_and_native_evidence():
+    import argparse
+
+    import scripts.run_pipeline as run_pipeline
+
+    args = argparse.Namespace(
+        hftbacktest_data_npz=Path("data.npz"),
+        hftbacktest_latency_model=Path("latency.json"),
+        hftbacktest_fill_queue_model=Path("fill_queue.json"),
+        hftbacktest_upstream_ref=None,
+        native_hot_path_evidence=[],
+    )
+
+    assert run_pipeline._missing_hftbacktest_realism_inputs(args) == [
+        "--hftbacktest-upstream-ref",
+        "--native-hot-path-evidence",
+    ]
+
+
+def test_run_pipeline_hftbacktest_realism_requires_vectorbt(monkeypatch, capsys):
+    import sys
+
+    import scripts.run_pipeline as run_pipeline
+
+    monkeypatch.setattr(
+        run_pipeline,
+        "build_pipeline_request",
+        lambda **kwargs: pytest.fail("hftbacktest-realism without vectorbt wrote artifacts"),
+    )
+    monkeypatch.setattr(sys, "argv", [
+        "run_pipeline.py",
+        "--thesis",
+        "Fade CPI blowout",
+        "--event-id",
+        "CPI_2024_09_11_TIGHT",
+        "--no-llm",
+        "--hftbacktest-realism",
+    ])
+
+    assert run_pipeline.main() == 2
+    assert "--hftbacktest-realism requires --vectorbt" in capsys.readouterr().err
+
+
+def test_run_pipeline_hftbacktest_realism_rejects_vectorbt_only(monkeypatch, capsys):
+    import sys
+
+    import scripts.run_pipeline as run_pipeline
+
+    monkeypatch.setattr(
+        run_pipeline,
+        "build_pipeline_request",
+        lambda **kwargs: pytest.fail("hftbacktest-realism vectorbt-only wrote artifacts"),
+    )
+    monkeypatch.setattr(sys, "argv", [
+        "run_pipeline.py",
+        "--thesis",
+        "Fade CPI blowout",
+        "--event-id",
+        "CPI_2024_09_11_TIGHT",
+        "--no-llm",
+        "--vectorbt-only",
+        "--hftbacktest-realism",
+    ])
+
+    assert run_pipeline.main() == 2
+    assert "--hftbacktest-realism cannot be combined with --vectorbt-only" in capsys.readouterr().err
+
+
+def test_run_pipeline_doc_without_vectorbt_is_dry_run_only(monkeypatch, capsys):
+    import sys
+
+    import scripts.run_pipeline as run_pipeline
+
+    monkeypatch.setattr(
+        run_pipeline,
+        "build_pipeline_request",
+        lambda **kwargs: pytest.fail("doc ingestion without vectorbt/dry-run wrote artifacts"),
+    )
+    monkeypatch.setattr(sys, "argv", [
+        "run_pipeline.py",
+        "--thesis",
+        "Fade CPI blowout",
+        "--doc",
+        str(PDF),
+        "--event-id",
+        "CPI_2024_09_11_TIGHT",
+        "--no-llm",
+    ])
+
+    assert run_pipeline.main() == 2
+    assert "--doc without --vectorbt/--vectorbt-only is dry-run only" in capsys.readouterr().err
+
+
 def test_extract_text_dev_instructions_pdf():
     if not PDF.is_file():
         pytest.skip("dev_instructions.pdf not in repo")
@@ -417,7 +520,7 @@ def test_run_pipeline_vectorbt_only_promoted_exits_before_hftbacktest(
     import sys
 
     import scripts.run_pipeline as run_pipeline
-    from backtest_pipeline.src.promotion_gate import PromotedCandidate
+    from backtest_pipeline.src.promotion_gate import PromotedCandidate, RejectedCandidate
     from backtest_pipeline.src.vectorbt_adapter import FilterResult
     from research_pipeline.types import CandidateModel, ParsedHypothesis
 
@@ -494,7 +597,7 @@ def test_run_pipeline_vectorbt_only_promoted_exits_before_hftbacktest(
         return FilterResult(
             promoted=[
                 PromotedCandidate(
-                    candidate_id="cand_vbt",
+                    candidate_id="hashed_trial_cand_vbt",
                     hypothesis_id="SPREAD_BLOWOUT_RECOMPRESSION",
                     strategy_family="SPREAD_BLOWOUT_RECOMPRESSION",
                     asset_class="CME",
@@ -502,15 +605,44 @@ def test_run_pipeline_vectorbt_only_promoted_exits_before_hftbacktest(
                     timeframe="1m",
                     param_values={"signal_threshold": 0.1},
                     vectorbt_run_id="vbt_test",
-                    vectorbt_results={"oos_expectancy": 1.0, "num_trades": 3},
-                    pass_reason="all_gates_passed",
+                    vectorbt_results={
+                        "base_candidate_id": "cand_vbt",
+                        "base_candidate_metadata": dict(candidate.metadata),
+                        "oos_expectancy": 1.0,
+                        "num_trades": 3,
+                    },
+                    pass_reason="vectorbt_screen_passed_replay_not_eligible",
                 )
             ],
-            rejected=[],
+            rejected=[
+                RejectedCandidate(
+                    candidate_id="cand_rejected",
+                    hypothesis_id="SPREAD_BLOWOUT_RECOMPRESSION",
+                    reject_reason="NEGATIVE_OOS_EXPECTANCY",
+                    metric_values={"parameter_values": {"signal_threshold": 0.2}},
+                )
+            ],
             vectorbt_available=True,
-            backend="test",
+            backend="vectorbt",
             run_id="vbt_test",
             total_candidates=7,
+            code_commit="abc123",
+            vectorbt_version="1.0.0",
+            vectorbt_engine="numba",
+            engine_parity_status="rust_unavailable_pilot_only",
+            rust_engine_required_for_scope=False,
+            rust_engine_available=False,
+            parameter_space_id="vbt_ps_test",
+            parameter_space_hash="ps_hash_test",
+            max_trials=7,
+            trials_run=7,
+            max_total_trials=7,
+            candidate_ids=["cand_vbt", "cand_rejected"],
+            candidate_reasons={
+                "cand_vbt": "queued_for_vectorbt_screen",
+                "cand_rejected": "NEGATIVE_OOS_EXPECTANCY",
+            },
+            stop_reasons=[],
         )
 
     monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_vbt_only")
@@ -553,14 +685,576 @@ def test_run_pipeline_vectorbt_only_promoted_exits_before_hftbacktest(
     run_dir = tmp_path / "research_cards" / "pipeline_runs" / "pipeline_vbt_only"
     response = json.loads((run_dir / "response_packet.json").read_text(encoding="utf-8"))
     vectorbt_filter = json.loads((run_dir / "vectorbt_filter.json").read_text(encoding="utf-8"))
+    screening_artifact = json.loads((run_dir / "screening_artifact.json").read_text(encoding="utf-8"))
 
     assert response["candidates_tested"] == 7
     assert response["results"] == []
     assert response["selected_model_id"] is None
     assert vectorbt_filter["promoted_count"] == 1
+    assert screening_artifact == vectorbt_filter
+    assert vectorbt_filter["screening_backend"] == "vectorbt"
+    assert vectorbt_filter["vectorbt_version"] == "1.0.0"
+    assert vectorbt_filter["vectorbt_engine"] == "numba"
+    assert vectorbt_filter["engine_parity_status"] == "rust_unavailable_pilot_only"
+    assert vectorbt_filter["rust_engine_required_for_scope"] is False
+    assert vectorbt_filter["rust_engine_available"] is False
+    assert vectorbt_filter["parameter_space_id"] == "vbt_ps_test"
+    assert vectorbt_filter["parameter_space_hash"] == "ps_hash_test"
+    assert vectorbt_filter["max_trials"] == 7
+    assert vectorbt_filter["trials_run"] == 7
+    assert vectorbt_filter["run_budget_id"] == "vbt2_pilot"
+    assert vectorbt_filter["max_total_trials"] == 7
+    assert vectorbt_filter["candidate_ids"] == ["hashed_trial_cand_vbt", "cand_rejected"]
+    assert vectorbt_filter["promoted_ids"] == ["hashed_trial_cand_vbt"]
+    assert vectorbt_filter["rejected_ids"] == ["cand_rejected"]
+    assert vectorbt_filter["promoted_reasons"] == {
+        "hashed_trial_cand_vbt": "vectorbt_screen_passed_replay_not_eligible"
+    }
+    assert vectorbt_filter["rejected_reasons"] == {"cand_rejected": "NEGATIVE_OOS_EXPECTANCY"}
+    assert vectorbt_filter["rejected"][0]["candidate_id"] == "cand_rejected"
+    assert vectorbt_filter["rejected"][0]["rejection_reason_or_null"] == "NEGATIVE_OOS_EXPECTANCY"
+    assert vectorbt_filter["stop_reasons"] == []
+    assert vectorbt_filter["license_review"]
+    assert vectorbt_filter["research_clock"]
+    assert vectorbt_filter["no_lookahead_signal_shift_proof"]
+    assert vectorbt_filter["screening_artifact_hash"]
     if idea_set:
         assert response["idea_summary"]["candidates_from_ideas"] == 1
         assert (run_dir / "idea_set_packet.json").is_file()
+        idea_packet_out = json.loads((run_dir / "idea_set_packet.json").read_text(encoding="utf-8"))
+        assert idea_packet_out["ideas"][0]["status"] == "queued_for_test"
+
+
+@pytest.mark.parametrize("scope_alias", ["broad", "broad-screen", "paid-compute", "all-models"])
+def test_run_pipeline_accepts_rust_required_vectorbt_scope_aliases(
+    tmp_path, monkeypatch, scope_alias
+):
+    import sys
+
+    import scripts.run_pipeline as run_pipeline
+    from backtest_pipeline.src.promotion_gate import RejectedCandidate
+    from backtest_pipeline.src.vectorbt_adapter import FilterResult
+    from research_pipeline.types import CandidateModel, ParsedHypothesis
+
+    parsed = ParsedHypothesis(
+        thesis="Fade spread blowout after CPI",
+        instrument_universe=["MES"],
+        entry_rules=["enter_spread"],
+        exit_rules=["exit_revert"],
+        indicators=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        feature_list=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        param_ranges={"signal_threshold": [0.05, 0.35]},
+        primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        source="heuristic",
+    )
+    candidate = CandidateModel(
+        candidate_id="cand_vbt",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        strategy_params={"signal_threshold": 0.1},
+        thesis=parsed.thesis,
+        metadata={},
+    )
+    captured = {}
+
+    def fake_filter_candidates(*args, **kwargs):
+        captured["screening_scope"] = kwargs["screening_scope"]
+        captured["run_budget"] = kwargs["run_budget"]
+        return FilterResult(
+            rejected=[
+                RejectedCandidate(
+                    candidate_id="cand_rejected",
+                    hypothesis_id="SPREAD_BLOWOUT_RECOMPRESSION",
+                    reject_reason="rust_runtime_proof_missing_fail_closed",
+                    metric_values={
+                        "base_candidate_id": "cand_vbt",
+                        "base_candidate_metadata": {},
+                    },
+                )
+            ],
+            vectorbt_available=True,
+            backend="vectorbt_rust_unavailable",
+            run_id="vbt_scope_alias",
+            total_candidates=1,
+            code_commit="abc123",
+            vectorbt_version="1.0.0",
+            vectorbt_engine="numba",
+            engine_parity_status="rust_runtime_proof_missing_fail_closed",
+            rust_engine_required_for_scope=True,
+            rust_engine_available=True,
+            vectorbt_engine_runtime_proof=False,
+            parameter_space_id="vbt_ps_test",
+            parameter_space_hash="ps_hash_test",
+            max_trials=1,
+            trials_run=0,
+            max_total_trials=1,
+            screening_scope=scope_alias.replace("-", "_"),
+            stop_reasons=["rust_runtime_proof_missing_fail_closed"],
+        )
+
+    run_id = f"pipeline_{scope_alias.replace('-', '_')}"
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: run_id)
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", lambda **kwargs: {
+        "schema_version": "1",
+        "request_id": run_id,
+        "thesis": parsed.thesis,
+        "event_id": "CPI_2024_09_11_TIGHT",
+        "openfoundry_meta": {
+            "connector_id": "hft3-cme-mbo",
+            "asset_class": "cme_mbo_microstructure",
+            "vendor_shas": {"openfoundry": "test"},
+            "schema_version": "1",
+        },
+        "max_candidates": 1,
+    })
+    monkeypatch.setattr(run_pipeline, "parse_hypothesis", lambda *args, **kwargs: parsed)
+    monkeypatch.setattr(run_pipeline, "generate_candidates", lambda *args, **kwargs: [candidate])
+    monkeypatch.setattr(run_pipeline, "filter_candidates", fake_filter_candidates)
+    monkeypatch.setattr(
+        run_pipeline,
+        "evaluate_model",
+        lambda *args, **kwargs: pytest.fail("vectorbt-only called HftBacktest evaluate"),
+    )
+    monkeypatch.setattr(sys, "argv", [
+        "run_pipeline.py",
+        "--thesis",
+        parsed.thesis,
+        "--event-id",
+        "CPI_2024_09_11_TIGHT",
+        "--repo-root",
+        str(tmp_path),
+        "--max-candidates",
+        "1",
+        "--no-llm",
+        "--vectorbt-only",
+        "--vectorbt-scope",
+        scope_alias,
+        "--vectorbt-max-trials",
+        "11",
+        "--vectorbt-max-models",
+        "3",
+        "--vectorbt-max-symbols",
+        "2",
+        "--vectorbt-max-feature-sets",
+        "4",
+        "--vectorbt-max-total-trials",
+        "33",
+        "--vectorbt-max-wall-clock-seconds",
+        "120",
+        "--vectorbt-max-peak-memory-mb",
+        "2048",
+    ])
+
+    assert run_pipeline.main() == 1
+    assert captured["screening_scope"] == scope_alias
+    assert captured["run_budget"] == {
+        "max_trials": 11,
+        "max_models": 3,
+        "max_symbols": 2,
+        "max_feature_sets": 4,
+        "max_total_trials": 33,
+        "max_wall_clock_seconds": 120,
+        "max_peak_memory_mb_or_null": 2048,
+    }
+
+
+def test_run_pipeline_vectorbt_full_requires_hftbacktest_opt_in(tmp_path, monkeypatch, capsys):
+    import sys
+
+    import scripts.run_pipeline as run_pipeline
+    from backtest_pipeline.src.promotion_gate import PromotedCandidate, RejectedCandidate
+    from backtest_pipeline.src.vectorbt_adapter import FilterResult
+    from research_pipeline.types import CandidateModel, ParsedHypothesis
+
+    parsed = ParsedHypothesis(
+        thesis="Fade spread blowout after CPI",
+        instrument_universe=["MES"],
+        entry_rules=["enter_spread"],
+        exit_rules=["exit_revert"],
+        indicators=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        feature_list=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        param_ranges={"signal_threshold": [0.05, 0.35]},
+        primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+    )
+    candidate = CandidateModel(
+        candidate_id="cand_vbt",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        strategy_params={"signal_threshold": 0.1},
+        thesis=parsed.thesis,
+    )
+    request = {
+        "schema_version": "1",
+        "request_id": "pipeline_vbt_full",
+        "thesis": parsed.thesis,
+        "event_id": "CPI_2024_09_11_TIGHT",
+        "openfoundry_meta": {},
+        "max_candidates": 1,
+    }
+
+    def fake_filter_candidates(*args, **kwargs):
+        assert kwargs["screening_scope"] == "pilot"
+        return FilterResult(
+            promoted=[
+                PromotedCandidate(
+                    candidate_id="hashed_trial_cand_vbt",
+                    hypothesis_id="SPREAD_BLOWOUT_RECOMPRESSION",
+                    strategy_family="SPREAD_BLOWOUT_RECOMPRESSION",
+                    asset_class="CME",
+                    symbol="MES",
+                    timeframe="1m",
+                    param_values={"signal_threshold": 0.1},
+                    vectorbt_run_id="vbt_test",
+                    vectorbt_results={
+                        "base_candidate_id": "cand_vbt",
+                        "base_candidate_metadata": dict(candidate.metadata),
+                        "oos_expectancy": 1.0,
+                        "num_trades": 3,
+                    },
+                    pass_reason="vectorbt_screen_passed_replay_not_eligible",
+                )
+            ],
+            rejected=[
+                RejectedCandidate(
+                    candidate_id="cand_rejected",
+                    hypothesis_id="SPREAD_BLOWOUT_RECOMPRESSION",
+                    reject_reason="NEGATIVE_OOS_EXPECTANCY",
+                    metric_values={"parameter_values": {"signal_threshold": 0.2}},
+                )
+            ],
+            vectorbt_available=True,
+            backend="vectorbt",
+            run_id="vbt_test",
+            total_candidates=2,
+            code_commit="abc123",
+            vectorbt_version="1.0.0",
+            vectorbt_engine="numba",
+            engine_parity_status="rust_unavailable_pilot_only",
+            rust_engine_required_for_scope=False,
+            rust_engine_available=False,
+            parameter_space_id="vbt_ps_test",
+            parameter_space_hash="ps_hash_test",
+            max_trials=1,
+            trials_run=1,
+            max_total_trials=1,
+            candidate_ids=["cand_vbt", "cand_rejected"],
+            candidate_reasons={
+                "cand_vbt": "queued_for_vectorbt_screen",
+                "cand_rejected": "NEGATIVE_OOS_EXPECTANCY",
+            },
+            stop_reasons=[],
+        )
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_vbt_full")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", lambda **kwargs: request)
+    monkeypatch.setattr(run_pipeline, "parse_hypothesis", lambda *args, **kwargs: parsed)
+    monkeypatch.setattr(run_pipeline, "generate_candidates", lambda *args, **kwargs: [candidate])
+    monkeypatch.setattr(run_pipeline, "filter_candidates", fake_filter_candidates)
+    monkeypatch.setattr(
+        run_pipeline,
+        "evaluate_model",
+        lambda *args, **kwargs: pytest.fail("full vectorbt called Workbench evaluation before explicit HftBacktest opt-in"),
+    )
+    monkeypatch.setattr(
+        run_pipeline,
+        "write_hftbacktest_realism_artifacts",
+        lambda *args, **kwargs: pytest.fail("default --vectorbt called HftBacktest writer without explicit opt-in"),
+    )
+    monkeypatch.setattr(sys, "argv", [
+        "run_pipeline.py",
+        "--thesis",
+        parsed.thesis,
+        "--event-id",
+        "CPI_2024_09_11_TIGHT",
+        "--repo-root",
+        str(tmp_path),
+        "--max-candidates",
+        "1",
+        "--no-llm",
+        "--vectorbt",
+    ])
+
+    assert run_pipeline.main() == 2
+    payload = _last_json_object(capsys.readouterr().out)
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / "pipeline_vbt_full"
+    vectorbt_filter = json.loads((run_dir / "vectorbt_filter.json").read_text(encoding="utf-8"))
+    screening_artifact = json.loads((run_dir / "screening_artifact.json").read_text(encoding="utf-8"))
+
+    assert payload["status"] == "blocked_downstream_realism_opt_in_required"
+    assert "required HftBacktest input artifacts" in payload["detail"]
+    assert screening_artifact == vectorbt_filter
+    assert vectorbt_filter["promoted_ids"] == ["hashed_trial_cand_vbt"]
+    assert vectorbt_filter["rejected_ids"] == ["cand_rejected"]
+    assert not (run_dir / "response_packet.json").exists()
+
+
+def test_run_pipeline_vectorbt_hftbacktest_opt_in_calls_writer(tmp_path, monkeypatch, capsys):
+    import sys
+
+    import scripts.run_pipeline as run_pipeline
+    from backtest_pipeline.src.promotion_gate import PromotedCandidate
+    from backtest_pipeline.src.vectorbt_adapter import FilterResult
+    from research_pipeline.types import CandidateModel, ParsedHypothesis
+
+    parsed = ParsedHypothesis(
+        thesis="Fade spread blowout after CPI",
+        instrument_universe=["MES"],
+        entry_rules=["enter_spread"],
+        exit_rules=["exit_revert"],
+        indicators=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        feature_list=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        param_ranges={"signal_threshold": [0.05, 0.35]},
+        primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+    )
+    candidate = CandidateModel(
+        candidate_id="cand_vbt",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        strategy_params={"signal_threshold": 0.1},
+        thesis=parsed.thesis,
+    )
+    request = {
+        "schema_version": "1",
+        "request_id": "pipeline_vbt_hbt",
+        "thesis": parsed.thesis,
+        "event_id": "CPI_2024_09_11_TIGHT",
+        "openfoundry_meta": {},
+        "max_candidates": 1,
+    }
+
+    def fake_filter_candidates(*args, **kwargs):
+        return FilterResult(
+            promoted=[
+                PromotedCandidate(
+                    candidate_id="hashed_trial_cand_vbt",
+                    hypothesis_id="SPREAD_BLOWOUT_RECOMPRESSION",
+                    strategy_family="SPREAD_BLOWOUT_RECOMPRESSION",
+                    asset_class="CME",
+                    symbol="MES",
+                    timeframe="1m",
+                    param_values={"signal_threshold": 0.1},
+                    vectorbt_run_id="vbt_test",
+                    vectorbt_results={
+                        "base_candidate_id": "cand_vbt",
+                        "base_candidate_metadata": dict(candidate.metadata),
+                        "oos_expectancy": 1.0,
+                        "num_trades": 12,
+                    },
+                    pass_reason="vectorbt_screen_passed_replay_not_eligible",
+                )
+            ],
+            rejected=[],
+            vectorbt_available=True,
+            backend="vectorbt",
+            run_id="vbt_test",
+            total_candidates=1,
+            code_commit="abc123",
+            vectorbt_version="1.0.0",
+            vectorbt_engine="rust",
+            engine_parity_status="rust_engine_verified",
+            rust_engine_required_for_scope=False,
+            rust_engine_available=True,
+            vectorbt_engine_runtime_proof=True,
+            parameter_space_id="vbt_ps_test",
+            parameter_space_hash="ps_hash_test",
+            max_trials=1,
+            trials_run=1,
+            max_total_trials=1,
+            candidate_ids=["cand_vbt"],
+            candidate_reasons={"cand_vbt": "queued_for_vectorbt_screen"},
+            stop_reasons=[],
+        )
+
+    data_path = tmp_path / "data.npz"
+    latency_path = tmp_path / "latency.json"
+    fill_queue_path = tmp_path / "fill_queue.json"
+    observation_path = tmp_path / "observation.json"
+    for path in (data_path, latency_path, fill_queue_path, observation_path):
+        path.write_text("{}", encoding="utf-8")
+    captured = {}
+
+    def fake_writer(**kwargs):
+        captured.update(kwargs)
+        return {
+            "replay_summary": {
+                "run_id": "pipeline_vbt_hbt",
+                "replay_realism_status": "pass",
+                "fail_closed_reasons": [],
+            },
+            "source_lock_path": str(kwargs["out_dir"] / "hftbacktest_source_lock.json"),
+            "latency_model_path": str(kwargs["out_dir"] / "latency_model.json"),
+            "fill_queue_model_path": str(kwargs["out_dir"] / "fill_queue_model.json"),
+            "official_replay_path": str(kwargs["out_dir"] / "official_replay.json"),
+            "replay_summary_path": str(kwargs["out_dir"] / "replay_summary.json"),
+        }
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_vbt_hbt")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", lambda **kwargs: request)
+    monkeypatch.setattr(run_pipeline, "parse_hypothesis", lambda *args, **kwargs: parsed)
+    monkeypatch.setattr(run_pipeline, "generate_candidates", lambda *args, **kwargs: [candidate])
+    monkeypatch.setattr(run_pipeline, "filter_candidates", fake_filter_candidates)
+    monkeypatch.setattr(run_pipeline, "write_hftbacktest_realism_artifacts", fake_writer)
+    monkeypatch.setattr(sys, "argv", [
+        "run_pipeline.py",
+        "--thesis",
+        parsed.thesis,
+        "--event-id",
+        "CPI_2024_09_11_TIGHT",
+        "--repo-root",
+        str(tmp_path),
+        "--max-candidates",
+        "1",
+        "--no-llm",
+        "--vectorbt",
+        "--hftbacktest-realism",
+        "--hftbacktest-data-npz",
+        str(data_path),
+        "--hftbacktest-latency-model",
+        str(latency_path),
+        "--hftbacktest-fill-queue-model",
+        str(fill_queue_path),
+        "--hftbacktest-observation-artifact",
+        str(observation_path),
+        "--hftbacktest-candidate-id",
+        "hashed_trial_cand_vbt",
+        "--hftbacktest-upstream-ref",
+        "v2.4.2",
+        "--native-hot-path-evidence",
+        "sha256:native-hot-path",
+    ])
+
+    assert run_pipeline.main() == 0
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / "pipeline_vbt_hbt"
+    payload = _last_json_object(capsys.readouterr().out)
+
+    assert captured["repo_root"] == tmp_path.resolve()
+    assert captured["out_dir"] == run_dir / "hftbacktest_realism"
+    assert captured["screening_artifact_path"] == run_dir / "screening_artifact.json"
+    assert captured["data_npz_path"] == data_path.resolve()
+    assert captured["latency_model_path"] == latency_path.resolve()
+    assert captured["fill_queue_model_path"] == fill_queue_path.resolve()
+    assert captured["observation_artifact_path"] == observation_path.resolve()
+    assert captured["candidate_id"] == "hashed_trial_cand_vbt"
+    assert captured["upstream_ref"] == "v2.4.2"
+    assert captured["native_hot_path_evidence"] == ["sha256:native-hot-path"]
+    assert captured["run_id"] == "pipeline_vbt_hbt"
+    assert payload["status"] == "hftbacktest_realism_pass"
+    assert payload["replay_summary"]["replay_realism_status"] == "pass"
+    assert payload["hftbacktest_realism"]["replay_summary"] == payload["replay_summary"]
+    assert payload["paths"]["screening_artifact_path"] == str(run_dir / "screening_artifact.json")
+    assert payload["paths"]["hftbacktest_realism_dir"] == str(run_dir / "hftbacktest_realism")
+
+
+def test_run_pipeline_vectorbt_hftbacktest_opt_in_no_promoted_does_not_call_writer(
+    tmp_path, monkeypatch, capsys
+):
+    import sys
+
+    import scripts.run_pipeline as run_pipeline
+    from backtest_pipeline.src.promotion_gate import RejectedCandidate
+    from backtest_pipeline.src.vectorbt_adapter import FilterResult
+    from research_pipeline.types import CandidateModel, ParsedHypothesis
+
+    parsed = ParsedHypothesis(
+        thesis="Fade spread blowout after CPI",
+        instrument_universe=["MES"],
+        entry_rules=["enter_spread"],
+        exit_rules=["exit_revert"],
+        indicators=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        feature_list=["SPREAD_BLOWOUT_RECOMPRESSION"],
+        param_ranges={"signal_threshold": [0.05, 0.35]},
+        primary_model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+    )
+    candidate = CandidateModel(
+        candidate_id="cand_vbt",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        strategy_params={"signal_threshold": 0.1},
+        thesis=parsed.thesis,
+    )
+    request = {
+        "schema_version": "1",
+        "request_id": "pipeline_vbt_hbt_no_promoted",
+        "thesis": parsed.thesis,
+        "event_id": "CPI_2024_09_11_TIGHT",
+        "openfoundry_meta": {},
+        "max_candidates": 1,
+    }
+
+    def fake_filter_candidates(*args, **kwargs):
+        return FilterResult(
+            promoted=[],
+            rejected=[
+                RejectedCandidate(
+                    candidate_id="cand_rejected",
+                    hypothesis_id="SPREAD_BLOWOUT_RECOMPRESSION",
+                    reject_reason="NEGATIVE_OOS_EXPECTANCY",
+                    metric_values={"parameter_values": {"signal_threshold": 0.2}},
+                )
+            ],
+            vectorbt_available=True,
+            backend="vectorbt",
+            run_id="vbt_test",
+            total_candidates=1,
+            code_commit="abc123",
+            vectorbt_version="1.0.0",
+            vectorbt_engine="rust",
+            engine_parity_status="rust_engine_verified",
+            rust_engine_required_for_scope=False,
+            rust_engine_available=True,
+            vectorbt_engine_runtime_proof=True,
+            parameter_space_id="vbt_ps_test",
+            parameter_space_hash="ps_hash_test",
+            max_trials=1,
+            trials_run=1,
+            max_total_trials=1,
+            candidate_ids=["cand_vbt"],
+            candidate_reasons={"cand_vbt": "queued_for_vectorbt_screen"},
+            stop_reasons=[],
+        )
+
+    data_path = tmp_path / "data.npz"
+    latency_path = tmp_path / "latency.json"
+    fill_queue_path = tmp_path / "fill_queue.json"
+    for path in (data_path, latency_path, fill_queue_path):
+        path.write_text("{}", encoding="utf-8")
+
+    monkeypatch.setattr(run_pipeline, "_run_id", lambda: "pipeline_vbt_hbt_no_promoted")
+    monkeypatch.setattr(run_pipeline, "build_pipeline_request", lambda **kwargs: request)
+    monkeypatch.setattr(run_pipeline, "parse_hypothesis", lambda *args, **kwargs: parsed)
+    monkeypatch.setattr(run_pipeline, "generate_candidates", lambda *args, **kwargs: [candidate])
+    monkeypatch.setattr(run_pipeline, "filter_candidates", fake_filter_candidates)
+    monkeypatch.setattr(
+        run_pipeline,
+        "write_hftbacktest_realism_artifacts",
+        lambda *args, **kwargs: pytest.fail("no-promoted HftBacktest opt-in called writer"),
+    )
+    monkeypatch.setattr(sys, "argv", [
+        "run_pipeline.py",
+        "--thesis",
+        parsed.thesis,
+        "--event-id",
+        "CPI_2024_09_11_TIGHT",
+        "--repo-root",
+        str(tmp_path),
+        "--max-candidates",
+        "1",
+        "--no-llm",
+        "--vectorbt",
+        "--hftbacktest-realism",
+        "--hftbacktest-data-npz",
+        str(data_path),
+        "--hftbacktest-latency-model",
+        str(latency_path),
+        "--hftbacktest-fill-queue-model",
+        str(fill_queue_path),
+    ])
+
+    assert run_pipeline.main() == 2
+    payload = _last_json_object(capsys.readouterr().out)
+
+    assert payload["status"] == "blocked_hftbacktest_realism_no_promoted_candidates"
+    assert payload["hftbacktest_realism"] is None
+    assert payload["replay_summary"]["replay_realism_status"] == "fail"
+    assert payload["replay_summary"]["fail_closed_reasons"] == [
+        "screening_artifact_has_no_promoted_candidate"
+    ]
 
 
 def test_pipeline_request_response_roundtrip():

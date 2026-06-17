@@ -32,7 +32,8 @@ from research_pipeline.idea_generation import (
     parsed_from_idea,
     update_idea_statuses_from_results,
 )
-from backtest_pipeline.src.vectorbt_adapter import filter_candidates
+from backtest_pipeline.src.vectorbt_adapter import filter_candidates, persist_screening_artifact
+from backtest_pipeline.src.hftbacktest_realism import write_hftbacktest_realism_artifacts
 from backtest_pipeline.src.promotion_gate import PromotionGate
 from research_pipeline.packets import (
     build_pipeline_request,
@@ -76,6 +77,23 @@ def _idea_set_missing_prefilter(
     return idea_set_enabled and not dry_run and not (vectorbt or vectorbt_only)
 
 
+def _missing_hftbacktest_realism_inputs(args: argparse.Namespace) -> list[str]:
+    required = {
+        "hftbacktest_data_npz": "--hftbacktest-data-npz",
+        "hftbacktest_latency_model": "--hftbacktest-latency-model",
+        "hftbacktest_fill_queue_model": "--hftbacktest-fill-queue-model",
+        "hftbacktest_upstream_ref": "--hftbacktest-upstream-ref",
+    }
+    missing = [flag for attr, flag in required.items() if getattr(args, attr) is None]
+    if not args.native_hot_path_evidence:
+        missing.append("--native-hot-path-evidence")
+    return missing
+
+
+def _optional_resolved_path(path: Path | None) -> Path | None:
+    return path.resolve() if path is not None else None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Autoresearch pipeline")
     parser.add_argument("--thesis", required=True, help="Natural-language trading thesis")
@@ -88,12 +106,70 @@ def main() -> int:
     parser.add_argument("--repo-root", type=Path, default=REPO)
     parser.add_argument("--vectorbt", action="store_true", help="Enable VectorBT pre-filter before HftBacktest")
     parser.add_argument("--vectorbt-only", action="store_true", help="Run VectorBT filter only, skip HftBacktest")
+    parser.add_argument(
+        "--vectorbt-scope",
+        choices=[
+            "pilot",
+            "screen",
+            "refine",
+            "paid",
+            "paid-compute",
+            "paid_compute",
+            "broad",
+            "broad-screen",
+            "broad_screen",
+            "all-model",
+            "all_model",
+            "all-models",
+            "all_models",
+        ],
+        default="pilot",
+        help="VectorBT screening scope; all non-pilot broad/refine/paid scopes require the Rust engine",
+    )
+    parser.add_argument("--vectorbt-max-trials", type=int, default=None)
+    parser.add_argument("--vectorbt-max-models", type=int, default=None)
+    parser.add_argument("--vectorbt-max-symbols", type=int, default=None)
+    parser.add_argument("--vectorbt-max-feature-sets", type=int, default=None)
+    parser.add_argument("--vectorbt-max-total-trials", type=int, default=None)
+    parser.add_argument("--vectorbt-max-wall-clock-seconds", type=int, default=None)
+    parser.add_argument("--vectorbt-max-peak-memory-mb", type=int, default=None)
+    parser.add_argument(
+        "--hftbacktest-realism",
+        action="store_true",
+        help="Opt in to official HftBacktest realism handoff after VectorBT screening",
+    )
+    parser.add_argument("--hftbacktest-data-npz", type=Path, default=None)
+    parser.add_argument("--hftbacktest-latency-model", type=Path, default=None)
+    parser.add_argument("--hftbacktest-fill-queue-model", type=Path, default=None)
+    parser.add_argument("--hftbacktest-observation-artifact", type=Path, default=None)
+    parser.add_argument("--hftbacktest-candidate-id", default=None)
+    parser.add_argument("--hftbacktest-upstream-ref", default=None)
+    parser.add_argument("--native-hot-path-evidence", action="append", default=[])
     parser.add_argument("--idea-set", action="store_true", help="Use packet-strict LLM idea set before candidate tests")
     parser.add_argument("--max-ideas", type=int, default=None, help="Maximum idea records to accept before static filtering")
     parser.add_argument("--review-memory-limit", type=int, default=5, help="Prior AAR/KG memory facts to include")
     parser.add_argument("--idea-temperature", type=float, default=None, help="Sampling temperature for idea generation only")
     parser.add_argument("--idea-top-p", type=float, default=None, help="Top-p sampling for idea generation only")
     args = parser.parse_args()
+
+    if args.hftbacktest_realism and args.vectorbt_only:
+        print(
+            "Error: --hftbacktest-realism cannot be combined with --vectorbt-only.",
+            file=sys.stderr,
+        )
+        return 2
+    if args.hftbacktest_realism and not args.vectorbt:
+        print(
+            "Error: --hftbacktest-realism requires --vectorbt so the handoff has a terminal screening_artifact.json.",
+            file=sys.stderr,
+        )
+        return 2
+    if args.doc and not args.dry_run and not (args.vectorbt or args.vectorbt_only):
+        print(
+            "Error: --doc without --vectorbt/--vectorbt-only is dry-run only; add --dry-run or use the VectorBT/HftBacktest handoff.",
+            file=sys.stderr,
+        )
+        return 2
 
     repo_root = args.repo_root.resolve()
     run_id = _run_id()
@@ -199,17 +275,60 @@ def main() -> int:
             max_drawdown_pct=-50.0,
             min_trades=3 if args.vectorbt_only else 10,
         )
+        run_budget = {
+            key: value
+            for key, value in {
+                "max_trials": args.vectorbt_max_trials,
+                "max_models": args.vectorbt_max_models,
+                "max_symbols": args.vectorbt_max_symbols,
+                "max_feature_sets": args.vectorbt_max_feature_sets,
+                "max_total_trials": args.vectorbt_max_total_trials,
+                "max_wall_clock_seconds": args.vectorbt_max_wall_clock_seconds,
+                "max_peak_memory_mb_or_null": args.vectorbt_max_peak_memory_mb,
+            }.items()
+            if value is not None
+        }
         filter_result = filter_candidates(
             candidates=candidates,
             parsed=parsed,
             event_id=args.event_id,
             repo_root=repo_root,
             gates=vbt_gates,
+            screening_scope=args.vectorbt_scope,
+            run_budget=run_budget or None,
+        )
+        vectorbt_artifact = filter_result.to_dict()
+        screening_path = persist_screening_artifact(
+            vectorbt_artifact,
+            artifact_dir / "screening_artifact.json",
+        )
+        vectorbt_artifact = json.loads(screening_path.read_text(encoding="utf-8"))
+        (artifact_dir / "vectorbt_filter.json").write_text(
+            json.dumps(vectorbt_artifact, indent=2) + "\n", encoding="utf-8"
         )
         print(f"  Promoted: {len(filter_result.promoted)}, Rejected: {len(filter_result.rejected)}")
         for r in filter_result.rejected:
             print(f"  REJECTED {r.candidate_id}: {r.reject_reason}")
         if filter_result.promoted:
+            def _promotion_source_meta(promoted):
+                base_id = (
+                    promoted.vectorbt_results.get("base_candidate_id")
+                    if isinstance(promoted.vectorbt_results, dict)
+                    else None
+                )
+                embedded_meta = (
+                    promoted.vectorbt_results.get("base_candidate_metadata")
+                    if isinstance(promoted.vectorbt_results, dict)
+                    else None
+                )
+                if isinstance(embedded_meta, dict):
+                    return dict(embedded_meta)
+                if base_id and base_id in source_meta:
+                    return dict(source_meta[base_id])
+                if promoted.candidate_id in source_meta:
+                    return dict(source_meta[promoted.candidate_id])
+                return {}
+
             candidates = [
                 CandidateModel(
                     candidate_id=p.candidate_id,
@@ -217,7 +336,7 @@ def main() -> int:
                     strategy_params=p.param_values,
                     thesis=parsed.thesis,
                     metadata={
-                        **source_meta.get(p.candidate_id, {}),
+                        **_promotion_source_meta(p),
                         "strategy_family": p.strategy_family,
                         "promoted": True,
                         "vectorbt_run_id": p.vectorbt_run_id,
@@ -249,9 +368,6 @@ def main() -> int:
                 json.dumps(idea_packet, indent=2), encoding="utf-8"
             )
         if args.vectorbt_only:
-            (artifact_dir / "vectorbt_filter.json").write_text(
-                json.dumps(filter_result.to_dict(), indent=2), encoding="utf-8"
-            )
             idea_summary = (
                 summarize_ideas(idea_packet, candidates_from_ideas_count=idea_candidates_count)
                 if idea_packet
@@ -290,7 +406,8 @@ def main() -> int:
                 "artifact_dir": str(artifact_dir),
                 "request_packet": request,
                 "response_packet": response,
-                "vectorbt_filter": filter_result.to_dict(),
+                "vectorbt_filter": vectorbt_artifact,
+                "screening_artifact": vectorbt_artifact,
                 "parsed": {
                     "primary_model_id": parsed.primary_model_id,
                     "source": parsed.source,
@@ -311,6 +428,110 @@ def main() -> int:
                 payload["idea_set_packet"] = idea_packet
             print(json.dumps(payload, indent=2))
             return 0 if candidates else 1
+        paths = {
+            "screening_artifact_path": str(screening_path),
+            "vectorbt_filter_path": str(artifact_dir / "vectorbt_filter.json"),
+        }
+        if not args.hftbacktest_realism:
+            payload = {
+                "run_id": run_id,
+                "artifact_dir": str(artifact_dir),
+                "status": "blocked_downstream_realism_opt_in_required",
+                "detail": (
+                    "screening_artifact.json was written; pass --hftbacktest-realism "
+                    "with required HftBacktest input artifacts to run the official realism handoff"
+                ),
+                "vectorbt_filter": vectorbt_artifact,
+                "screening_artifact": vectorbt_artifact,
+                "paths": paths,
+            }
+            print(json.dumps(payload, indent=2))
+            return 2
+        promoted_ids = list(vectorbt_artifact.get("promoted_ids") or [])
+        if not promoted_ids:
+            replay_summary = {
+                "run_id": run_id,
+                "replay_realism_status": "fail",
+                "fail_closed_reasons": ["screening_artifact_has_no_promoted_candidate"],
+            }
+            payload = {
+                "run_id": run_id,
+                "artifact_dir": str(artifact_dir),
+                "status": "blocked_hftbacktest_realism_no_promoted_candidates",
+                "detail": "HftBacktest realism handoff requires at least one VectorBT-promoted candidate",
+                "vectorbt_filter": vectorbt_artifact,
+                "screening_artifact": vectorbt_artifact,
+                "hftbacktest_realism": None,
+                "replay_summary": replay_summary,
+                "paths": paths,
+            }
+            print(json.dumps(payload, indent=2))
+            return 2
+        missing_hbt_inputs = _missing_hftbacktest_realism_inputs(args)
+        if missing_hbt_inputs:
+            replay_summary = {
+                "run_id": run_id,
+                "replay_realism_status": "fail",
+                "fail_closed_reasons": [
+                    f"missing_hftbacktest_realism_input:{flag}" for flag in missing_hbt_inputs
+                ],
+            }
+            payload = {
+                "run_id": run_id,
+                "artifact_dir": str(artifact_dir),
+                "status": "blocked_hftbacktest_realism_inputs_missing",
+                "detail": "HftBacktest realism handoff was opted in but required source-lock, native, or input artifacts were not provided",
+                "missing_hftbacktest_inputs": missing_hbt_inputs,
+                "vectorbt_filter": vectorbt_artifact,
+                "screening_artifact": vectorbt_artifact,
+                "hftbacktest_realism": None,
+                "replay_summary": replay_summary,
+                "paths": paths,
+            }
+            print(json.dumps(payload, indent=2))
+            return 2
+
+        hftbacktest_out_dir = artifact_dir / "hftbacktest_realism"
+        hftbacktest_realism = write_hftbacktest_realism_artifacts(
+            repo_root=repo_root,
+            out_dir=hftbacktest_out_dir,
+            screening_artifact_path=screening_path,
+            data_npz_path=_optional_resolved_path(args.hftbacktest_data_npz),
+            latency_model_path=_optional_resolved_path(args.hftbacktest_latency_model),
+            fill_queue_model_path=_optional_resolved_path(args.hftbacktest_fill_queue_model),
+            observation_artifact_path=_optional_resolved_path(args.hftbacktest_observation_artifact),
+            candidate_id=args.hftbacktest_candidate_id,
+            upstream_ref=args.hftbacktest_upstream_ref,
+            native_hot_path_evidence=list(args.native_hot_path_evidence or []),
+            run_id=run_id,
+        )
+        replay_summary = hftbacktest_realism["replay_summary"]
+        paths.update(
+            {
+                "hftbacktest_realism_dir": str(hftbacktest_out_dir),
+                "source_lock_path": hftbacktest_realism.get("source_lock_path"),
+                "latency_model_path": hftbacktest_realism.get("latency_model_path"),
+                "fill_queue_model_path": hftbacktest_realism.get("fill_queue_model_path"),
+                "official_replay_path": hftbacktest_realism.get("official_replay_path"),
+                "replay_summary_path": hftbacktest_realism.get("replay_summary_path"),
+            }
+        )
+        payload = {
+            "run_id": run_id,
+            "artifact_dir": str(artifact_dir),
+            "status": (
+                "hftbacktest_realism_pass"
+                if replay_summary.get("replay_realism_status") == "pass"
+                else "hftbacktest_realism_fail_closed"
+            ),
+            "vectorbt_filter": vectorbt_artifact,
+            "screening_artifact": vectorbt_artifact,
+            "hftbacktest_realism": hftbacktest_realism,
+            "replay_summary": replay_summary,
+            "paths": paths,
+        }
+        print(json.dumps(payload, indent=2))
+        return 0 if replay_summary.get("replay_realism_status") == "pass" else 2
 
     if args.dry_run:
         idea_summary = (
