@@ -5,6 +5,8 @@ Authority: [OPPORTUNITY_RESEARCH_SPEC.md](OPPORTUNITY_RESEARCH_SPEC.md), [VECTOR
 
 **Do not** use `run_event_universe` as broad discovery on rented compute. Paid rent starts only after gated pilot + smoke passes.
 
+**After smoke passes:** follow [VBT_PAID_SCREEN_POST_GATE_PLAYBOOK.md](VBT_PAID_SCREEN_POST_GATE_PLAYBOOK.md) (pre-rent checklist → Vast → completion). Run `python scripts/vbt_paid_screen_next_steps.py` for the current phase and exact next commands.
+
 ## Fable discipline (every phase)
 
 1. **Ground** — read manifest, `events.csv` hash, git `HEAD`, NPZ path env vars.
@@ -232,7 +234,7 @@ If stalled: capture `ps`, `iostat`, last 20 log lines; kill worker pool; preserv
 
 **Downstream (separate job, smaller scope):**
 
-- Aggregate `promoted_ids` from all unit artifacts (script TBD or manual).
+- Aggregate `promoted_ids` from all unit artifacts: `python scripts/aggregate_vbt_promoted_ids.py --manifest <full_manifest>`
 - HBT realism on promoted only — [RESEARCH_ENTRYPOINTS.md](../vault/RESEARCH_ENTRYPOINTS.md) §1.
 - M6 `run_event_universe` only on selected promoted IDs — not discovery.
 

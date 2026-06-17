@@ -542,7 +542,8 @@ bash scripts/run_vbt_hbt_handoff_verify.sh
 ```
 
 **Paid-compute Vast run (pilot → smoke → gate → full):** see
-[docs/project/VBT_PAID_SCREEN_RUNBOOK.md](VBT_PAID_SCREEN_RUNBOOK.md).
+[docs/project/VBT_PAID_SCREEN_RUNBOOK.md](VBT_PAID_SCREEN_RUNBOOK.md) and
+[docs/project/VBT_PAID_SCREEN_POST_GATE_PLAYBOOK.md](VBT_PAID_SCREEN_POST_GATE_PLAYBOOK.md).
 
 Steps inside `run_vbt_hbt_handoff_verify.sh`:
 

@@ -99,6 +99,63 @@ def test_paid_screen_dry_run_lists_units(tmp_path: Path) -> None:
     assert proc.returncode == 0, proc.stderr
 
 
+def test_next_steps_defaults_to_phase_a() -> None:
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPTS / "vbt_paid_screen_next_steps.py"), "--json"],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["phase"] == "A"
+    assert payload["commands"]
+
+
+def test_aggregate_promoted_ids(tmp_path: Path) -> None:
+    unit_dir = tmp_path / "units" / "u1"
+    unit_dir.mkdir(parents=True)
+    artifact = {
+        "promoted_ids": ["cand_a", "cand_b"],
+        "candidate_ids": ["cand_a", "cand_b", "cand_c"],
+    }
+    (unit_dir / "screening_artifact.json").write_text(json.dumps(artifact), encoding="utf-8")
+    manifest = {
+        "out_dir": str(tmp_path),
+        "expected_work_units": 1,
+        "completed_work_units": 1,
+        "failed_work_units": 0,
+        "skipped_work_units": 0,
+        "unit_results": [
+            {
+                "unit_id": "u1",
+                "status": "OK",
+                "screening_artifact_relpath": "units/u1/screening_artifact.json",
+            }
+        ],
+    }
+    manifest_path = tmp_path / "paid_screen_run_manifest.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    out = tmp_path / "promoted.json"
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "aggregate_vbt_promoted_ids.py"),
+            "--manifest",
+            str(manifest_path),
+            "--out",
+            str(out),
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["promoted_id_count"] == 2
+    assert set(payload["promoted_ids"]) == {"cand_a", "cand_b"}
+
+
 def test_paid_screen_refuses_high_workers_without_gate(tmp_path: Path) -> None:
     units = tmp_path / "units.jsonl"
     units.write_text(
