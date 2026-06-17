@@ -541,6 +541,9 @@ Full VectorBT→HftBacktest handoff gate (submodules, pipeline deps, VBT adapter
 bash scripts/run_vbt_hbt_handoff_verify.sh
 ```
 
+**Paid-compute Vast run (pilot → smoke → gate → full):** see
+[docs/project/VBT_PAID_SCREEN_RUNBOOK.md](VBT_PAID_SCREEN_RUNBOOK.md).
+
 Steps inside `run_vbt_hbt_handoff_verify.sh`:
 
 1. `bash scripts/install_vbt_hbt_handoff_verify_deps.sh` — `git submodule update
