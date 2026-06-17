@@ -22,9 +22,16 @@ from typing import Any, Dict, List, Mapping, Optional
 import numpy as np
 
 from research_pipeline.src.robustness_producers import (
+    adversarial_perturbation,
     bootstrap_ci,
     cscv_pbo,
     deflated_sharpe_for_cell,
+    fee_stress_for_cell,
+    holm_bh_correction,
+    latency_stress_for_cell,
+    null_strategy_battery,
+    planted_alpha_synthetic_control,
+    slippage_stress_for_cell,
 )
 from workbench.src.robustness.wfc.gate import evaluate_wfc_gate
 
@@ -168,6 +175,124 @@ def _run_cscv_pbo(
         }
     except Exception as exc:  # noqa: BLE001
         logger.warning("CSCV/PBO producer failed: %s", exc)
+        return _producer_error(str(exc))
+
+
+def _run_fee_stress(
+    per_event_expectancies: List[float],
+    per_event_n_trades: List[int],
+    per_event_fee_per_rt: List[float],
+    per_event_tick_value: List[float],
+) -> Dict[str, Any]:
+    try:
+        result = fee_stress_for_cell(
+            per_event_expectancies, per_event_n_trades,
+            per_event_fee_per_rt, per_event_tick_value
+        )
+        return {"status": _PASS, **result}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("fee_stress producer failed: %s", exc)
+        return _producer_error(str(exc))
+
+
+def _run_slippage_stress(
+    per_event_expectancies: List[float],
+    per_event_n_trades: List[int],
+    per_event_fee_per_rt: List[float],
+    per_event_tick_value: List[float],
+) -> Dict[str, Any]:
+    try:
+        result = slippage_stress_for_cell(
+            per_event_expectancies, per_event_n_trades,
+            per_event_fee_per_rt, per_event_tick_value
+        )
+        return {"status": _PASS, **result}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("slippage_stress producer failed: %s", exc)
+        return _producer_error(str(exc))
+
+
+def _run_latency_stress(
+    per_event_expectancies: List[float],
+    per_event_n_trades: List[int],
+    per_event_fee_per_rt: List[float],
+    per_event_tick_value: List[float],
+) -> Dict[str, Any]:
+    try:
+        result = latency_stress_for_cell(
+            per_event_expectancies, per_event_n_trades,
+            per_event_fee_per_rt, per_event_tick_value
+        )
+        return {"status": _PASS, **result}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("latency_stress producer failed: %s", exc)
+        return _producer_error(str(exc))
+
+
+def _run_holm_bh(
+    p_values: List[float],
+    alpha: float = 0.05,
+    method: str = "bh",
+) -> Dict[str, Any]:
+    try:
+        result = holm_bh_correction(p_values, alpha=alpha, method=method)
+        return {"status": _PASS, **result}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("holm_bh_correction producer failed: %s", exc)
+        return _producer_error(str(exc))
+
+
+def _run_null_battery(
+    per_event_expectancies: List[float],
+    n_null_runs: int = 1000,
+    seed: int = 0,
+    min_p_value: float = 0.05,
+) -> Dict[str, Any]:
+    try:
+        result = null_strategy_battery(
+            per_event_expectancies, n_null_runs=n_null_runs,
+            seed=seed, min_p_value=min_p_value
+        )
+        return {"status": _PASS, **result}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("null_strategy_battery producer failed: %s", exc)
+        return _producer_error(str(exc))
+
+
+def _run_planted_alpha(
+    per_event_expectancies: List[float],
+    n_planted: int = 100,
+    alpha_strength: float = 0.01,
+    seed: int = 0,
+    min_p_value: float = 0.05,
+) -> Dict[str, Any]:
+    try:
+        result = planted_alpha_synthetic_control(
+            per_event_expectancies, n_planted=n_planted,
+            alpha_strength=alpha_strength, seed=seed, min_p_value=min_p_value
+        )
+        return {"status": _PASS, **result}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("planted_alpha_synthetic_control producer failed: %s", exc)
+        return _producer_error(str(exc))
+
+
+def _run_adversarial(
+    per_event_expectancies: List[float],
+    perturbation_fraction: float = 0.1,
+    n_perturbations: int = 100,
+    seed: int = 0,
+    min_survival_rate: float = 0.8,
+) -> Dict[str, Any]:
+    try:
+        result = adversarial_perturbation(
+            per_event_expectancies, perturbation_fraction=perturbation_fraction,
+            n_perturbations=n_perturbations, seed=seed,
+            min_survival_rate=min_survival_rate
+        )
+        return {"status": _PASS, **result}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("adversarial_perturbation producer failed: %s", exc)
         return _producer_error(str(exc))
 
 
@@ -332,16 +457,24 @@ def compute_robustness_evidence(robustness_input: dict, candidate_id: str = "") 
     """Given robustness raw input data, call producers and return artifact fields.
 
     Input dict keys:
-    - per_event_expectancies: list[float]  (for DSR + bootstrap)
+    - per_event_expectancies: list[float]  (for DSR + bootstrap + null battery + planted alpha + adversarial)
     - n_trials: int  (DSR multiplicity denominator)
     - cscv_matrix: np.ndarray  (n_blocks x n_configs, for PBO/CSCV)
     - wfc_rows: list[dict]  (fold rows for WFC gate)
     - wfc_cfg: dict  (WFC gate config, optional)
+    - per_event_n_trades: list[int]  (for fee/slippage/latency stress)
+    - per_event_fee_per_rt: list[float]  (fee per round trip USD)
+    - per_event_tick_value: list[float]  (tick value USD per contract)
+    - p_values: list[float]  (for Holm/BH correction)
+    - holm_bh_alpha: float  (optional, default 0.05)
+    - holm_bh_method: str  (optional, "bh" or "holm", default "bh")
 
     Returns dict with keys matching the screening artifact fields:
     - wfc_status, dsr_status, pbo_status, cscv_status
     - robustness_artifact_staleness (str: "fresh" or "stale")
     - bootstrap_ci_or_not_run, dsr_or_not_run, pbo_or_not_run, cscv_count_or_not_run
+    - fee_stress_or_not_run, slippage_stress_or_not_run, latency_stress_or_not_run
+    - holm_bh_or_not_run, null_battery_or_not_run, planted_alpha_or_not_run, adversarial_or_not_run
     - walk_forward_metrics (dict with fold_matrix, fold_train_test_dates, etc. if available)
     - wfc_metrics (dict with pearson, spearman, quadrant_counts, etc.)
     """
@@ -354,15 +487,28 @@ def compute_robustness_evidence(robustness_input: dict, candidate_id: str = "") 
     cscv_matrix = robustness_input.get("cscv_matrix")
     wfc_rows = robustness_input.get("wfc_rows")
     wfc_cfg = robustness_input.get("wfc_cfg") or {}
+    # New §10 robustness producer inputs
+    per_event_n_trades = robustness_input.get("per_event_n_trades")
+    per_event_fee_per_rt = robustness_input.get("per_event_fee_per_rt")
+    per_event_tick_value = robustness_input.get("per_event_tick_value")
+    p_values = robustness_input.get("p_values")
+    holm_bh_alpha = robustness_input.get("holm_bh_alpha", 0.05)
+    holm_bh_method = robustness_input.get("holm_bh_method", "bh")
 
     has_expectancies = (
         isinstance(per_event_expectancies, list) and len(per_event_expectancies) > 0
     )
     has_matrix = cscv_matrix is not None
     has_wfc = isinstance(wfc_rows, list) and len(wfc_rows) > 0
+    has_stress_decomposition = (
+        isinstance(per_event_n_trades, list) and len(per_event_n_trades) > 0 and
+        isinstance(per_event_fee_per_rt, list) and len(per_event_fee_per_rt) > 0 and
+        isinstance(per_event_tick_value, list) and len(per_event_tick_value) > 0
+    )
+    has_p_values = isinstance(p_values, list) and len(p_values) > 0
 
     # If absolutely no input data, return all not_run.
-    if not has_expectancies and not has_matrix and not has_wfc:
+    if not has_expectancies and not has_matrix and not has_wfc and not has_stress_decomposition and not has_p_values:
         return _all_not_run_output(candidate_id)
 
     # Run each producer in isolation.
@@ -373,6 +519,43 @@ def compute_robustness_evidence(robustness_input: dict, candidate_id: str = "") 
     bootstrap_result = _not_run_sentinel()
     if has_expectancies:
         bootstrap_result = _run_bootstrap_ci(per_event_expectancies)
+
+    fee_stress_result = _not_run_sentinel()
+    if has_expectancies and has_stress_decomposition:
+        fee_stress_result = _run_fee_stress(
+            per_event_expectancies, per_event_n_trades,
+            per_event_fee_per_rt, per_event_tick_value
+        )
+
+    slippage_stress_result = _not_run_sentinel()
+    if has_expectancies and has_stress_decomposition:
+        slippage_stress_result = _run_slippage_stress(
+            per_event_expectancies, per_event_n_trades,
+            per_event_fee_per_rt, per_event_tick_value
+        )
+
+    latency_stress_result = _not_run_sentinel()
+    if has_expectancies and has_stress_decomposition:
+        latency_stress_result = _run_latency_stress(
+            per_event_expectancies, per_event_n_trades,
+            per_event_fee_per_rt, per_event_tick_value
+        )
+
+    holm_bh_result = _not_run_sentinel()
+    if has_p_values:
+        holm_bh_result = _run_holm_bh(p_values, alpha=holm_bh_alpha, method=holm_bh_method)
+
+    null_battery_result = _not_run_sentinel()
+    if has_expectancies:
+        null_battery_result = _run_null_battery(per_event_expectancies)
+
+    planted_alpha_result = _not_run_sentinel()
+    if has_expectancies:
+        planted_alpha_result = _run_planted_alpha(per_event_expectancies)
+
+    adversarial_result = _not_run_sentinel()
+    if has_expectancies:
+        adversarial_result = _run_adversarial(per_event_expectancies)
 
     pbo_result = _not_run_sentinel()
     if has_matrix:
@@ -410,6 +593,20 @@ def compute_robustness_evidence(robustness_input: dict, candidate_id: str = "") 
     # Determine status fields.
     dsr_status = dsr_result.get("status", _NOT_RUN)
     pbo_status = pbo_result.get("status", _NOT_RUN)
+    fee_stress_pass = fee_stress_result.get("stress_pass")
+    fee_stress_status = _PASS if (fee_stress_pass is True) else (_FAIL if (fee_stress_pass is False) else _NOT_RUN)
+    slippage_stress_pass = slippage_stress_result.get("stress_pass")
+    slippage_stress_status = _PASS if (slippage_stress_pass is True) else (_FAIL if (slippage_stress_pass is False) else _NOT_RUN)
+    latency_stress_pass = latency_stress_result.get("stress_pass")
+    latency_stress_status = _PASS if (latency_stress_pass is True) else (_FAIL if (latency_stress_pass is False) else _NOT_RUN)
+    holm_bh_n_rejected = holm_bh_result.get("n_rejected")
+    holm_bh_status = _PASS if (holm_bh_n_rejected is not None and holm_bh_n_rejected > 0) else (_NOT_RUN if not has_p_values else _FAIL)
+    null_battery_pass = null_battery_result.get("null_pass")
+    null_battery_status = _PASS if (null_battery_pass is True) else (_FAIL if (null_battery_pass is False) else _NOT_RUN)
+    planted_alpha_pass = planted_alpha_result.get("planted_pass")
+    planted_alpha_status = _PASS if (planted_alpha_pass is True) else (_FAIL if (planted_alpha_pass is False) else _NOT_RUN)
+    adversarial_pass = adversarial_result.get("adversarial_pass")
+    adversarial_status = _PASS if (adversarial_pass is True) else (_FAIL if (adversarial_pass is False) else _NOT_RUN)
     # Derive cscv_status independently from the CSCV/PBO producer result, using
     # whether the CSCV partition/config analysis actually ran (n_partitions
     # and n_configs present and > 0).  This is a separate criterion from pbo_status
@@ -432,18 +629,37 @@ def compute_robustness_evidence(robustness_input: dict, candidate_id: str = "") 
     # If a producer wasn't run (no input), set status to not_run.
     if not has_expectancies:
         dsr_status = _NOT_RUN
+        fee_stress_status = _NOT_RUN
+        slippage_stress_status = _NOT_RUN
+        latency_stress_status = _NOT_RUN
+        null_battery_status = _NOT_RUN
+        planted_alpha_status = _NOT_RUN
+        adversarial_status = _NOT_RUN
+    if not has_stress_decomposition:
+        fee_stress_status = _NOT_RUN
+        slippage_stress_status = _NOT_RUN
+        latency_stress_status = _NOT_RUN
+    if not has_p_values:
+        holm_bh_status = _NOT_RUN
     if not has_matrix:
         pbo_status = _NOT_RUN
         cscv_status = _NOT_RUN
     if not has_wfc:
         wfc_status = _NOT_RUN
 
-    # Determine staleness: all four gates must pass.
+    # Determine staleness: all gates must pass (including new §10 producers when input is provided).
     all_pass = (
         wfc_status == _PASS
         and dsr_status == _PASS
         and pbo_status == _PASS
         and cscv_status == _PASS
+        and fee_stress_status in (_PASS, _NOT_RUN)
+        and slippage_stress_status in (_PASS, _NOT_RUN)
+        and latency_stress_status in (_PASS, _NOT_RUN)
+        and holm_bh_status in (_PASS, _NOT_RUN)
+        and null_battery_status in (_PASS, _NOT_RUN)
+        and planted_alpha_status in (_PASS, _NOT_RUN)
+        and adversarial_status in (_PASS, _NOT_RUN)
     )
     staleness = _FRESH if all_pass else _STALE
 
@@ -460,6 +676,13 @@ def compute_robustness_evidence(robustness_input: dict, candidate_id: str = "") 
         "dsr_or_not_run": dsr_result,
         "pbo_or_not_run": pbo_result,
         "cscv_count_or_not_run": cscv_count_result,
+        "fee_stress_or_not_run": fee_stress_result,
+        "slippage_stress_or_not_run": slippage_stress_result,
+        "latency_stress_or_not_run": latency_stress_result,
+        "holm_bh_or_not_run": holm_bh_result,
+        "null_battery_or_not_run": null_battery_result,
+        "planted_alpha_or_not_run": planted_alpha_result,
+        "adversarial_or_not_run": adversarial_result,
         "walk_forward_metrics": walk_forward_metrics_dict,
         "wfc_metrics": wfc_metrics_dict,
         "candidate_id": candidate_id,
