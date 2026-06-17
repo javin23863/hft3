@@ -170,6 +170,7 @@ runtime/lifecycle/
 runtime/npz_nested_differ.txt
 runtime/pm_options_backfill_watchdog.ps1
 runtime/rprotocol/
+runtime/ai_delegate/
 runtime/slow_tier/
 runtime/validation/autonomy_audit*.json*
 runtime/validation/slow_tier_eval.json
