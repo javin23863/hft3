@@ -446,7 +446,10 @@ L3_EVENT_TYPES = {
 }
 L2_EVENT_TYPES = {
     1: "DEPTH_EVENT",
-    2: "TRADE_EVENT",
+    # Per Codex round-3 P1: TRADE_EVENT (type 2) can appear in real CME MBO/L3
+    # captures alongside ADD/CANCEL/MODIFY/FILL events. Listing it as L2-only
+    # causes valid L3 feeds with trades to be rejected as L2_L3_MISMATCH.
+    # TRADE_EVENT is now treated as L3-compatible (not L2-exclusive).
     3: "DEPTH_CLEAR_EVENT",
 }
 L3_ORPHAN_EVENT_TYPES = {11, 12, 13}
@@ -864,10 +867,12 @@ def validate_official_hbt4_replay_contract(
         reasons.append("official_replay_unsupported_time_in_force_policy")
 
     minimum_order_qty = fill_queue_model.get("minimum_order_qty")
-    intent_qty = selected_candidate.get("hbt4_order_intent", {}).get("quantity") if isinstance(
-        selected_candidate.get("hbt4_order_intent"),
-        Mapping,
-    ) else None
+    # Per Codex round-3 P2: honor official_replay_order_intent alias.
+    intent_obj = (
+        selected_candidate.get("hbt4_order_intent")
+        or selected_candidate.get("official_replay_order_intent")
+    )
+    intent_qty = intent_obj.get("quantity") if isinstance(intent_obj, Mapping) else None
     if not _is_positive_number(minimum_order_qty):
         reasons.append("official_replay_invalid_minimum_order_qty")
     elif not _is_positive_number(intent_qty) or float(intent_qty) < float(minimum_order_qty):
@@ -902,9 +907,12 @@ def validate_official_hbt4_replay_contract(
 
 
 def _official_replay_builder_queue_model_type(fill_queue_model: Mapping[str, Any]) -> str:
-    if fill_queue_model.get("fill_model_scope") == "l3_mbo":
-        return "LogProbQueueModel2"
-    return str(fill_queue_model.get("queue_model") or "LogProbQueueModel2")
+    # Per Codex round-3 P1: when fill_model_scope == "l3_mbo", use the
+    # declared queue model (should be L3FIFOQueueModel), not LogProbQueueModel2.
+    # The contract validator accepts L3FIFOQueueModel for L3 scope; the builder
+    # must honor the declared model, not silently switch it.
+    declared = str(fill_queue_model.get("queue_model") or "LogProbQueueModel2")
+    return declared
 
 
 def _load_fill_queue_model_artifact(fill_queue_model_path: Path | None) -> tuple[dict[str, Any], list[str]]:
@@ -1121,7 +1129,15 @@ def run_minimal_official_hftbacktest_replay(
         )
 
     try:
-        latency_ms = float(latency_model.get("order_entry_latency_ms") or latency_model.get("latency_p50_ms") or 0.0)
+        # Per Codex round-3 P2: preserve explicit zero order-entry latency.
+        # The `or` chain treats 0.0 as falsy and falls back to latency_p50_ms;
+        # use explicit None checks instead so 0.0 is honored.
+        _oe_latency = latency_model.get("order_entry_latency_ms")
+        if _oe_latency is None:
+            _oe_latency = latency_model.get("latency_p50_ms")
+        if _oe_latency is None:
+            _oe_latency = 0.0
+        latency_ms = float(_oe_latency)
         hbt = build_hftbacktest(
             str(data_npz_path),
             latency_ms=latency_ms,
@@ -1222,6 +1238,17 @@ def run_minimal_official_hftbacktest_replay(
         gross_pnl = _float_field(final_state, "balance")
         fees = _float_field(final_state, "fee")
         net_pnl = gross_pnl - fees
+        # Per Codex round-3 P1: subtract declared market-impact charges from
+        # replay PnL when market_impact_mode == "external_charge". Without
+        # this, net_pnl overstates execution-adjusted expectancy by the
+        # declared market-impact cost.
+        market_impact_charge = fill_queue_model.get("market_impact_charge_value")
+        if (
+            _normalize_market_impact_mode(fill_queue_model.get("market_impact_mode"))
+            == "external_charge"
+            and _is_positive_number(market_impact_charge)
+        ):
+            net_pnl = net_pnl - float(market_impact_charge)
         orders_submitted = 1 if submit_ret == 0 else 0
         orders_acknowledged = 1 if response_ret in (0, 3) else 0
         fills_count = len(fills)
@@ -1259,6 +1286,10 @@ def run_minimal_official_hftbacktest_replay(
             "fill_rate": fills_count / max(orders_submitted, 1),
             "gross_pnl": gross_pnl,
             "net_pnl": net_pnl,
+            # Per Codex round-3 P2: persist replay fees for HBT5 comparison.
+            "total_fees": fees,
+            "fees": fees,
+            "fee_total": fees,
             "execution_adjusted_expectancy": net_pnl,
             "max_drawdown": 0.0,
             "adverse_selection_markout": None,
@@ -2362,8 +2393,14 @@ def validate_candidate_replay_eligibility(candidate: Mapping[str, Any]) -> list[
         reasons.append(_replay_ineligible_reason("candidate_has_rejection_reason"))
 
     for field in REPLAY_ELIGIBILITY_NOT_RUN_EVIDENCE_FIELDS:
-        if field in candidate and _is_not_run_evidence(candidate.get(field)):
+        value = candidate.get(field)
+        if field in candidate and _is_not_run_evidence(value):
             reasons.append(_replay_ineligible_reason(f"{field}_not_run"))
+        # Per Codex round-3 P2: also reject §10 maps with status "fail".
+        if isinstance(value, Mapping):
+            map_status = _status_text(value.get("status"))
+            if map_status == "fail":
+                reasons.append(_replay_ineligible_reason(f"{field}_status_fail"))
 
     dsr_evidence = candidate.get("dsr_or_not_run")
     if "dsr_or_not_run" in candidate and not _is_not_run_evidence(dsr_evidence):

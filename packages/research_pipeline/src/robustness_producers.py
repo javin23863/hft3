@@ -701,11 +701,10 @@ def latency_stress_for_cell(
     # scalar tick_value_usd=12.5. MES or mixed-product rows have different
     # tick values (e.g. 1.25 for MES vs 12.5 for ES). Using the wrong tick
     # value over/understates latency costs by 10x.
-    # Per Codex P2-4: when all per-event tick values are zero, fail closed
-    # instead of fabricating ES tick values — missing decomposition must not
-    # produce made-up evidence.
+    # Per Codex P2-4 + round-3 P2: reject ANY zero tick value (not just all-zero),
+    # so mixed [12.5, 0.0] fails closed instead of zero-costing the gap event.
     arr_tv = np.array(per_event_tick_value, dtype=float)
-    if np.all(arr_tv == 0.0):
+    if not per_event_tick_value or np.any(arr_tv == 0.0):
         return {
             "stress_data_available": False,
             "baseline_expectancy":   None,

@@ -256,7 +256,15 @@ def _run_holm_bh(
     try:
         result = holm_bh_correction(p_values, alpha=alpha, method=method)
         reason = result.get("reason")
-        status = _PASS if reason is None else _FAIL
+        n_rejected = result.get("n_rejected")
+        # Per Codex P2-3: pass requires reason is None AND n_rejected > 0.
+        # Zero rejections = no surviving hypothesis = fail.
+        if reason is not None:
+            status = _FAIL
+        elif n_rejected is not None and n_rejected > 0:
+            status = _PASS
+        else:
+            status = _FAIL
         return {"status": status, **result}
     except Exception as exc:  # noqa: BLE001
         logger.warning("holm_bh_correction producer failed: %s", exc)
@@ -750,30 +758,33 @@ def compute_robustness_evidence(robustness_input: dict, candidate_id: str = "") 
         wfc_status = _NOT_RUN
 
     # Determine staleness: all gates must pass.
-    # Per Codex P1-1 + P2-2 + P2-5: When expectancies are provided, ALL §10
-    # producers that depend on expectancies (null, planted, adversarial,
-    # parameter) must produce valid evidence (not not_run). Bootstrap CI
-    # is also a required §10 check and must pass when expectancies present.
-    # Fee/slippage/latency require stress decomposition; Holm/BH requires
-    # p_values. Missing required evidence → stale.
+    # Per Codex P1-1 + P2-2 + P2-5 + round-3 P1: When expectancies are provided,
+    # ALL §10 producers must produce valid evidence. Fee/slippage/latency
+    # require stress decomposition — if decomposition is missing, that's a
+    # missing required check → stale. Holm/BH requires p_values. Bootstrap,
+    # null, planted, adversarial, parameter all require expectancies.
+    # No §10 check is optional when its input is present; missing inputs
+    # for required checks also make the artifact stale.
     all_pass = (
         wfc_status == _PASS
         and dsr_status == _PASS
         and pbo_status == _PASS
         and cscv_status == _PASS
+        # Fee/slippage/latency: required when expectancies present.
+        # If decomposition missing → not_run → stale (not fresh).
         and (
             fee_stress_status == _PASS
-            if has_stress_decomposition
+            if has_expectancies
             else fee_stress_status in (_PASS, _NOT_RUN)
         )
         and (
             slippage_stress_status == _PASS
-            if has_stress_decomposition
+            if has_expectancies
             else slippage_stress_status in (_PASS, _NOT_RUN)
         )
         and (
             latency_stress_status == _PASS
-            if has_stress_decomposition
+            if has_expectancies
             else latency_stress_status in (_PASS, _NOT_RUN)
         )
         and (
@@ -781,14 +792,13 @@ def compute_robustness_evidence(robustness_input: dict, candidate_id: str = "") 
             if has_p_values
             else holm_bh_status in (_PASS, _NOT_RUN)
         )
-        # Per Codex P2-5: bootstrap is a required §10 check — include in staleness.
+        # Bootstrap CI: required §10 check when expectancies present.
         and (
             bootstrap_result.get("status") == _PASS
             if has_expectancies
             else True
         )
-        # Per Codex P1-1 + P2-2: when expectancies provided, null/planted/
-        # adversarial/parameter must produce valid evidence (not not_run).
+        # Null/planted/adversarial/parameter: required when expectancies present.
         and (
             null_battery_status == _PASS
             if has_expectancies

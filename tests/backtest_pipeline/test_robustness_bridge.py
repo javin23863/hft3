@@ -83,9 +83,9 @@ def _passing_wfc_cfg() -> Dict[str, Any]:
 
 
 def _passing_expectancies(seed: int = 42, n: int = 200) -> List[float]:
-    """Per-event expectancies with high SNR → DSR passes."""
+    """Per-event expectancies with high SNR → DSR + all §10 producers pass."""
     rng = np.random.default_rng(seed)
-    return rng.normal(0.05, 0.02, n).tolist()
+    return rng.normal(0.10, 0.01, n).tolist()
 
 
 def _failing_dsr_expectancies(seed: int = 42, n: int = 50) -> List[float]:
@@ -113,13 +113,26 @@ def _failing_pbo_matrix(seed: int = 134) -> np.ndarray:
 
 
 def _full_passing_input(seed: int = 42) -> Dict[str, Any]:
-    """Complete robustness input where all four gates pass."""
+    """Complete robustness input where all gates pass.
+
+    Includes stress decomposition arrays and p_values so the §10 producers
+    (fee/slippage/latency stress, Holm/BH) can run and pass.
+    """
+    n = 200
     return {
         "per_event_expectancies": _passing_expectancies(seed=seed),
         "n_trials": 10,
         "cscv_matrix": _passing_cscv_matrix(seed=seed),
         "wfc_rows": _passing_wfc_rows(seed=seed),
         "wfc_cfg": _passing_wfc_cfg(),
+        # Stress decomposition: one value per expectancy event.
+        # Fee per round trip and tick value are small relative to expectancy
+        # (~0.10) so fee_x2 and slip_x2 stress stay positive.
+        "per_event_n_trades": [10] * n,
+        "per_event_fee_per_rt": [0.001] * n,
+        "per_event_tick_value": [0.01] * n,
+        # Holm/BH p_values: small enough to have surviving hypotheses.
+        "p_values": [0.01, 0.02, 0.03, 0.04, 0.05],
     }
 
 
