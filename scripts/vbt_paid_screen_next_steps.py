@@ -80,13 +80,21 @@ def _resolve_paths(args: argparse.Namespace) -> Dict[str, Optional[Path]]:
     }
 
 
+def _declaration_commands() -> List[str]:
+    return [
+        "Phase D0 — full-run declaration (required before Vast rent)",
+        "See docs/project/VBT_PAID_SCREEN_POST_GATE_PLAYBOOK.md § D0",
+        "Write runtime/reports/vbt_full_run_declaration.json (on Vast after unit generation)",
+        "Required fields: expected_work_units, stall_minutes, abort_on_failed_units, git_head, pilot_hashes",
+        "Use POST_GATE_PLAYBOOK D0 python template to emit the declaration JSON",
+    ]
+
+
 def _phase(paths: Dict[str, Optional[Path]]) -> Tuple[str, List[str]]:
-    notes: List[str] = []
     pilot = paths["pilot"]
     smoke = paths["smoke"]
     gate = paths["gate"]
     full = paths["full"]
-    full_units = paths["full_units"]
 
     if pilot is None or not pilot.is_file():
         return "A", [
@@ -120,35 +128,22 @@ def _phase(paths: Dict[str, Optional[Path]]) -> Tuple[str, List[str]]:
             "Proceed only if exit 0 and ready_for_full_run: true",
         ]
 
-    if not full_units.is_file():
-        return "D1", [
-            "Phase D1 — generate full unit manifest (workstation)",
-            "python scripts/generate_vbt_paid_units_jsonl.py \\",
-            "  --from-stage-a-survivors research_cards/stage_a_full/stage_a_survivors.json \\",
-            "  --events-csv packages/data_system/config/events.csv \\",
-            "  --out runtime/reports/vbt_full_units.jsonl",
-            "python scripts/run_vectorbt_paid_screen.py \\",
-            "  --units-jsonl runtime/reports/vbt_full_units.jsonl \\",
-            "  --out /tmp/vbt_dry_run --dry-run",
-        ]
-
-    if not paths["decl"].is_file():
-        notes.append("Write runtime/reports/vbt_full_run_declaration.json (see POST_GATE_PLAYBOOK D0)")
+    decl_missing = not paths["decl"].is_file()
 
     full_m = _load_json(full) if full and full.is_file() else None
     if full_m is None:
-        return "D2-D4", [
-            "Phase D0–D4 — pre-rent checklist + Vast full run",
+        commands = [
+            "Phase D1–D4 — Vast full VectorBT screen (units generated on host)",
             "See docs/project/VBT_PAID_SCREEN_POST_GATE_PLAYBOOK.md",
-            "Gate ready. Sync repo + NPZ to Vast; run preflight; then:",
-            "export VBT_FULL_RUN_ID=\"paid_full_$(date -u +%Y%m%dT%H%M%SZ)\"",
-            "python scripts/run_vectorbt_paid_screen.py \\",
-            "  --units-jsonl runtime/reports/vbt_full_units.jsonl \\",
-            "  --out \"research_cards/pipeline_runs/${VBT_FULL_RUN_ID}\" \\",
-            "  --vectorbt-scope paid-compute --workers 230 \\",
-            "  --ready-gate-file runtime/reports/paid_screen_ready_gate.json \\",
-            "  --max-wall-clock-seconds 86400 --no-llm",
+            "Gate ready. Sync repo + NPZ + paid_screen_ready_gate.json to Vast; then on Vast host:",
+            "bash scripts/run_vbt_paid_screen_vast_full.sh",
+            "Units: events.csv TIGHT rows × CME M6 symbols × active model registry (not local Stage A survivors).",
+            "Env knobs: VBT_MODEL_SCOPE=active | VBT_MODEL_IDS=... | VBT_EVENT_TYPES=... | VBT_SYMBOLS=...",
+            "export VBT_FULL_RUN_ID=\"paid_full_$(date -u +%Y%m%dT%H%M%SZ)\"  # optional override",
         ]
+        if decl_missing:
+            commands = _declaration_commands() + commands
+        return "D1-D4", commands
 
     if full_m.get("status") != "complete" or not _manifest_ok(full_m):
         return "D5", [

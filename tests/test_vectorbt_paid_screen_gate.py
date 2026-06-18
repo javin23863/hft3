@@ -167,6 +167,116 @@ def test_aggregate_promoted_ids(tmp_path: Path) -> None:
     assert set(payload["promoted_ids"]) == {"cand_a", "cand_b"}
 
 
+def test_all_active_models_generates_multiple_hypotheses(tmp_path: Path) -> None:
+    """Full-scope generator expands active registry (not single model or Stage A)."""
+    from features_engine.src.hypotheses.registry import get_active_hypotheses
+
+    n_active = len(get_active_hypotheses())
+    out = tmp_path / "units.jsonl"
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "generate_vbt_paid_units_jsonl.py"),
+            "--all-active-models",
+            "--event-types",
+            "CPI",
+            "--symbols",
+            "MES.v.0",
+            "--out",
+            str(out),
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    lines = [ln for ln in out.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    assert len(lines) >= n_active
+    model_ids = {json.loads(ln)["model_id"] for ln in lines}
+    assert len(model_ids) >= 2
+    row = json.loads(lines[0])
+    assert row.get("hyp_id") is not None
+    assert "unit_id" in row and "event_id" in row and "thesis" in row
+
+
+def test_model_ids_flag_expands_explicit_models(tmp_path: Path) -> None:
+    out = tmp_path / "units.jsonl"
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "generate_vbt_paid_units_jsonl.py"),
+            "--model-ids",
+            "HYP_5,HYP_1",
+            "--event-types",
+            "CPI",
+            "--symbols",
+            "MES.v.0",
+            "--out",
+            str(out),
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    rows = [json.loads(ln) for ln in out.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    assert len(rows) >= 2
+    model_ids = {r["model_id"] for r in rows}
+    assert "SPREAD_BLOWOUT_RECOMPRESSION" in model_ids
+    assert "SECOND_WAVE_CONTINUATION" in model_ids
+
+
+def test_next_steps_after_gate_points_to_vast_full(tmp_path: Path) -> None:
+    pilot = tmp_path / "pilot.json"
+    pilot.write_text(json.dumps({"screening_backend": "vectorbt"}), encoding="utf-8")
+    smoke_manifest = tmp_path / "smoke_manifest.json"
+    smoke_manifest.write_text(
+        json.dumps(
+            {
+                "expected_work_units": 1,
+                "completed_work_units": 1,
+                "skipped_work_units": 0,
+                "failed_work_units": 0,
+                "out_dir": str(tmp_path),
+                "unit_results": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    gate = tmp_path / "gate.json"
+    gate.write_text(json.dumps({"ready_for_full_run": True}), encoding="utf-8")
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "vbt_paid_screen_next_steps.py"),
+            "--json",
+            "--pilot-artifact",
+            str(pilot),
+            "--smoke-manifest",
+            str(smoke_manifest),
+            "--gate-file",
+            str(gate),
+            "--full-manifest",
+            str(tmp_path / "missing_full.json"),
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["phase"] == "D1-D4"
+    joined = "\n".join(payload["commands"])
+    assert "run_vbt_paid_screen_vast_full.sh" in joined
+    assert "stage_a_survivors" not in joined
+
+
+def test_vast_full_script_has_no_stage_a_prerequisite() -> None:
+    script = (REPO / "scripts" / "run_vbt_paid_screen_vast_full.sh").read_text(encoding="utf-8")
+    assert "stage_a_survivors" not in script
+    assert "--all-active-models" in script
+
+
 def test_stage_a_survivors_expansion_not_capped_at_fifty(tmp_path: Path) -> None:
     """Full scope uses all TIGHT events per cell — not [:50] and not CPI+NFP-only smoke."""
     survivors = tmp_path / "stage_a_survivors.json"
@@ -248,3 +358,205 @@ def test_paid_screen_refuses_high_workers_without_gate(tmp_path: Path) -> None:
         text=True,
     )
     assert proc.returncode == 2
+
+
+def test_single_model_id_hyp_5_resolves_canonical_slug(tmp_path: Path) -> None:
+    events_csv = tmp_path / "events.csv"
+    events_csv.write_text(
+        "event_id,event_type,release_date,release_time,timezone,window_name,"
+        "start_offset_seconds,end_offset_seconds,symbols,priority,source,source_url,"
+        "effective_date,notes,row_status\n"
+        "CPI_2020_01_15_TIGHT,CPI,2020-01-15,08:30:00,America/New_York,TIGHT,"
+        "-60,10,MES.v.0,50,CPI,https://example.com/,2020-01-01,test,SOURCED\n",
+        encoding="utf-8",
+    )
+    out = tmp_path / "units.jsonl"
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "generate_vbt_paid_units_jsonl.py"),
+            "--events-csv",
+            str(events_csv),
+            "--model-id",
+            "HYP_5",
+            "--symbols",
+            "MES.v.0",
+            "--event-types",
+            "CPI",
+            "--out",
+            str(out),
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    row = json.loads(out.read_text(encoding="utf-8").splitlines()[0])
+    assert row["model_id"] == "SPREAD_BLOWOUT_RECOMPRESSION"
+    assert row.get("hyp_id") == 5
+    assert "SPREAD_BLOWOUT_RECOMPRESSION" in row["thesis"]
+
+
+def test_multi_symbol_expansion_emits_all_matching_symbols(tmp_path: Path) -> None:
+    events_csv = tmp_path / "events.csv"
+    events_csv.write_text(
+        "event_id,event_type,release_date,release_time,timezone,window_name,"
+        "start_offset_seconds,end_offset_seconds,symbols,priority,source,source_url,"
+        "effective_date,notes,row_status\n"
+        "CPI_2020_01_15_TIGHT,CPI,2020-01-15,08:30:00,America/New_York,TIGHT,"
+        "-60,10,\"MES.v.0,MNQ.v.0\",50,CPI,https://example.com/,2020-01-01,test,SOURCED\n",
+        encoding="utf-8",
+    )
+    out = tmp_path / "units.jsonl"
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "generate_vbt_paid_units_jsonl.py"),
+            "--events-csv",
+            str(events_csv),
+            "--model-id",
+            "HYP_5",
+            "--symbols",
+            "MES.v.0,MNQ.v.0",
+            "--event-types",
+            "CPI",
+            "--out",
+            str(out),
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    rows = [json.loads(ln) for ln in out.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    symbols = {r["symbol"] for r in rows}
+    assert symbols == {"MES.v.0", "MNQ.v.0"}
+    assert len(rows) == 2
+
+
+def test_all_active_default_excludes_holdout_events(tmp_path: Path) -> None:
+    out = tmp_path / "units.jsonl"
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "generate_vbt_paid_units_jsonl.py"),
+            "--all-active-models",
+            "--event-types",
+            "CPI",
+            "--symbols",
+            "MES.v.0",
+            "--out",
+            str(out),
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    rows = [json.loads(ln) for ln in out.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    assert rows
+    assert all(r.get("research_split") == "discovery_confirmation" for r in rows)
+    years = {int(r["event_id"].split("_")[1]) for r in rows if r["event_id"].startswith("CPI_")}
+    assert max(years) <= 2022
+    assert not any(y >= 2023 for y in years)
+
+
+def test_all_active_holdout_split_includes_holdout_when_explicit(tmp_path: Path) -> None:
+    out = tmp_path / "units.jsonl"
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "generate_vbt_paid_units_jsonl.py"),
+            "--all-active-models",
+            "--research-split",
+            "holdout",
+            "--event-types",
+            "CPI",
+            "--symbols",
+            "MES.v.0",
+            "--max-units",
+            "5",
+            "--out",
+            str(out),
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    rows = [json.loads(ln) for ln in out.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    assert rows
+    assert all(r.get("research_split") == "holdout" for r in rows)
+    years = {int(r["event_id"].split("_")[1]) for r in rows if r["event_id"].startswith("CPI_")}
+    assert years.issubset({2023, 2024})
+    assert min(years) >= 2023
+
+
+def test_vast_full_script_requires_declaration_before_workers() -> None:
+    script = (REPO / "scripts" / "run_vbt_paid_screen_vast_full.sh").read_text(encoding="utf-8")
+    assert "vbt_full_run_declaration.json" in script
+    assert "expected_work_units" in script
+    assert "DECL_EXPECTED" in script
+    assert "ERROR: Full-run declaration missing" in script
+    assert "ERROR: Declaration expected_work_units=" in script
+    assert "--research-split" in script
+
+
+def test_vast_ssh_script_uses_current_branch_not_hardcoded_main() -> None:
+    script = (REPO / "scripts" / "vast_ssh_run_vbt_paid_screen.sh").read_text(encoding="utf-8")
+    assert "VBT_GIT_BRANCH:-main" not in script
+    assert "git branch --show-current" in script
+    assert "detached HEAD" in script
+
+
+def test_vast_ssh_script_supports_separate_host_and_port() -> None:
+    script = (REPO / "scripts" / "vast_ssh_run_vbt_paid_screen.sh").read_text(encoding="utf-8")
+    assert "VAST_SSH_HOST_ARG" in script
+    assert "VAST_SSH_PORT" in script
+    assert 'SSH_OPTS+=(-p "$VAST_SSH_PORT")' in script
+    assert 'SCP_OPTS+=(-P "$VAST_SSH_PORT")' in script
+    assert "do not embed -p in VAST_SSH_TARGET" in script
+    assert '"$VAST_SSH_HOST_ARG"' in script
+    assert "VAST_SSH_TARGET" in script
+
+
+def test_next_steps_includes_declaration_before_full_run(tmp_path: Path) -> None:
+    from scripts.vbt_paid_screen_next_steps import _phase
+
+    pilot = tmp_path / "pilot.json"
+    pilot.write_text(json.dumps({"screening_backend": "vectorbt"}), encoding="utf-8")
+    smoke_manifest = tmp_path / "smoke_manifest.json"
+    smoke_manifest.write_text(
+        json.dumps(
+            {
+                "expected_work_units": 1,
+                "completed_work_units": 1,
+                "skipped_work_units": 0,
+                "failed_work_units": 0,
+                "out_dir": str(tmp_path),
+                "unit_results": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    gate = tmp_path / "gate.json"
+    gate.write_text(json.dumps({"ready_for_full_run": True}), encoding="utf-8")
+    missing_decl = tmp_path / "missing_decl.json"
+    missing_full = tmp_path / "missing_full.json"
+
+    phase, commands = _phase(
+        {
+            "pilot": pilot,
+            "smoke": smoke_manifest,
+            "gate": gate,
+            "full": missing_full,
+            "full_units": tmp_path / "units.jsonl",
+            "decl": missing_decl,
+        }
+    )
+    assert phase == "D1-D4"
+    joined = "\n".join(commands)
+    assert "Phase D0" in joined
+    assert "vbt_full_run_declaration.json" in joined
+    assert "run_vbt_paid_screen_vast_full.sh" in joined
+    assert joined.index("vbt_full_run_declaration.json") < joined.index("run_vbt_paid_screen_vast_full.sh")

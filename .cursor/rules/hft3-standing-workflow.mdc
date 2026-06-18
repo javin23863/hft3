@@ -1,0 +1,37 @@
+---
+description: Standing hft3 workflow — Fable mindset, orchestrator role, mandatory gates, graph waiver
+alwaysApply: true
+---
+
+# hft3 standing workflow (orchestrator)
+
+Owner standing instruction. Applies to every hft3 task unless the user overrides in-thread.
+
+## Fable mindset (load first)
+
+Before decisions or tooling on hft3 work, **load and apply the Fable loop**: ground in real state, reason before action, act in batches, observe, re-evaluate, read exact regions before edits, verify with real checks, recover by diagnosis, report truthfully.
+
+Full reference: `C:\Users\MSI\.codex\skills\fable-mindset\references\Fable_Mindset_public.md` · [docs/vault/FABLE_MINDSET.md](../../docs/vault/FABLE_MINDSET.md)
+
+## Main agent = orchestrator / brain
+
+The **main agent** owns intent, vault/repo grounding, planning, integration, and gate sequencing. It does **not** absorb large implementation inline.
+
+- **Default delegate:** coding implementation goes to **Composer 2.5** (builder / task subagents) unless the user explicitly says otherwise.
+- Chain detail: [.cursor/rules/delegate-subagents.mdc](delegate-subagents.mdc)
+
+## Mandatory gates (every code change)
+
+Non-negotiable order — skip none **except graph while waived** (item 2):
+
+1. **Vault / Ontology gate** — `scripts/vault_gate.ps1` + `scripts/vault_pre_edit.ps1`; consult Obsidian vault (`wiki/hot.md`, `Home.md`, `Memory Stack.md`, relevant `decisions/`). See [.cursor/rules/graph-before-code.mdc](graph-before-code.mdc).
+2. **Graph gates** — While vault `wiki/hot.md` contains `waived-by-owner-2026-06-16`: **skip** GraphGate, GraphPre, GraphPost; VaultGate + targeted reads replace graph. Once owner lifts the waiver: GraphGate + GraphPre before edits and GraphPost after code edits are **mandatory again**.
+3. **Plan / locate / implement** — delegate; main thread integrates.
+4. **Dual-pass review** — spawn **cavecrew-reviewer** per [docs/REVIEWER_CHARTER.md](../../docs/REVIEWER_CHARTER.md) (Pass A Karpathy + Pass B math invariants). See [.cursor/rules/reviewer-charter.mdc](reviewer-charter.mdc).
+5. **Verify** — bounded pytest/gates with **exact command, exit code, and output tail** pasted in thread.
+6. **Validation honesty handoff** — status block per [docs/VALIDATION_HONESTY.md](../../docs/VALIDATION_HONESTY.md). See [.cursor/rules/validation-honesty.mdc](validation-honesty.mdc).
+
+## Optional / contrast gates
+
+- **Local grep / preflight** — owner-overridden to **optional hygiene**; not a mandatory review gate. Do **not** label local `rg` searches **"GrepLoop"** (reserved for external PR/MR review connectors).
+- **External PR/MR review connector loops** and **reviewer-finding loops** remain mandatory until **0 🔴** or user explicitly accepts/waives. Do not claim merge-ready while open 🔴 remain.

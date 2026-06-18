@@ -20,11 +20,10 @@ flowchart TD
   G[Gate JSON ready_for_full_run true] -->|no| FIX[Fix errors from gate JSON; re-smoke Phase B]
   G -->|yes| PRE[Pre-rent checklist D0]
   PRE -->|fail| FIXPRE[Fix NPZ/env/hash; do not rent]
-  PRE -->|pass| UNITS[Generate vbt_full_units.jsonl D1]
-  UNITS --> VAST[Provision Vast + sync D2]
+  PRE -->|pass| VAST[Provision Vast + sync D1-D2]
   VAST --> PREFLIGHT[Vast preflight D3]
   PREFLIGHT -->|fail| TEARDOWN[Destroy instance; fix locally]
-  PREFLIGHT -->|pass| FULL[run_vectorbt_paid_screen 230 workers D4]
+  PREFLIGHT -->|pass| FULL[run_vbt_paid_screen_vast_full.sh D4]
   FULL --> MONITOR[Stall watch loop D5]
   MONITOR -->|stalled| ABORT[Kill pool; sync partial manifest D6]
   MONITOR -->|complete| SYNC[Sync artifacts to workstation D7]
@@ -75,7 +74,7 @@ cp runtime/reports/paid_screen_ready_gate.json \
 
 ## Phase D0 — Pre-rent checklist (workstation, $0)
 
-Complete **every row** before creating a Vast instance.
+Complete **every row** before creating a Vast instance. Unit generation happens **on Vast** (D4 via `run_vbt_paid_screen_vast_full.sh`), not from local Stage A survivors.
 
 | # | Check | Command / action | Pass criterion |
 |---|--------|------------------|----------------|
@@ -85,25 +84,26 @@ Complete **every row** before creating a Vast instance.
 | 4 | Lake hash | Match gate `pilot_hashes.lake_manifest_hash` | Exact string match |
 | 5 | Events hash | Match gate `pilot_hashes.events_csv_hash` | Exact string match |
 | 6 | Rust VectorBT | `python -c "import vectorbt; print(vectorbt.__version__)"` on Vast after install | `vectorbt[rust]==1.0.0` |
-| 7 | Work unit count | `wc -l runtime/reports/vbt_full_units.jsonl` (after D1) | Equals declaration `expected_work_units` |
-| 8 | ETA | `units_per_hour` from smoke × `expected_work_units` | Owner accepts wall clock + cost |
+| 7 | Unit scope | Review [VBT_PAID_SCREEN_UNIT_SCOPE.md](VBT_PAID_SCREEN_UNIT_SCOPE.md) | `events.csv` TIGHT × active models × M6 symbols |
+| 8 | ETA | `units_per_hour` from smoke × estimated unit count | Owner accepts wall clock + cost |
 | 9 | Stall policy | Document `stall_minutes: 30` in declaration | Written before rent |
 | 10 | Abort policy | `abort_on_failed_units: true` | Any ERROR → kill pool, no cockpit GREEN |
 
-Write declaration (template):
+Declaration template (write on Vast **after** on-host unit generation in D4, or pre-fill `expected_work_units` from a dry-run on Vast):
 
 ```bash
 python - <<'PY'
 import json, subprocess
 from pathlib import Path
 gate = json.loads(Path("runtime/reports/paid_screen_ready_gate.json").read_text())
-units = sum(1 for _ in Path("runtime/reports/vbt_full_units.jsonl").open() if _.strip())
+units_path = Path("runtime/reports/vbt_full_units.jsonl")
+units = sum(1 for _ in units_path.open() if _.strip()) if units_path.is_file() else None
 decl = {
     "host_vcpu": 256,
     "reserved_vcpu": 26,
     "workers_requested": 230,
     "expected_work_units": units,
-    "units_source": "research_cards/stage_a_full/stage_a_survivors.json expanded",
+    "units_source": "events.csv TIGHT × CME M6 symbols × active model registry (generated on Vast host)",
     "stall_minutes": 30,
     "abort_on_failed_units": True,
     "git_head": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
@@ -120,29 +120,7 @@ PY
 
 ---
 
-## Phase D1 — Full unit manifest (workstation)
-
-**Source of truth:** Stage A survivors (not `run_event_universe` discovery).
-
-```bash
-python scripts/generate_vbt_paid_units_jsonl.py \
-  --from-stage-a-survivors research_cards/stage_a_full/stage_a_survivors.json \
-  --symbols MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0 \
-  --events-csv packages/data_system/config/events.csv \
-  --out runtime/reports/vbt_full_units.jsonl
-
-# Sanity
-python scripts/run_vectorbt_paid_screen.py \
-  --units-jsonl runtime/reports/vbt_full_units.jsonl \
-  --out /tmp/vbt_dry_run \
-  --dry-run
-```
-
-Record `expected_work_units` from dry-run line `DRY_RUN units=N`.
-
----
-
-## Phase D2 — Vast host setup
+## Phase D1 — Vast host setup
 
 1. **Instance:** 256 vCPU bare-metal or closest Vast offer; **≥500 GB** disk for NPZ lake + artifacts.
 2. **Sync repo** (same `git_head` as declaration):
@@ -168,6 +146,28 @@ export HFT3_MANIFEST_PATH=/data/npz/manifest.json
 ```bash
 scp runtime/reports/paid_screen_ready_gate.json vast:/path/hft3/runtime/reports/
 ```
+
+---
+
+## Phase D2 — On-host unit manifest (Vast, before workers)
+
+**Source of truth:** `packages/data_system/config/events.csv` + active hypothesis registry (`--all-active-models`). Stage A survivors are **not** required; historical `--from-stage-a-survivors` remains for M6 backward compatibility only.
+
+```bash
+python scripts/generate_vbt_paid_units_jsonl.py \
+  --all-active-models \
+  --events-csv packages/data_system/config/events.csv \
+  --symbols MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0 \
+  --out runtime/reports/vbt_full_units.jsonl
+
+# Sanity
+python scripts/run_vectorbt_paid_screen.py \
+  --units-jsonl runtime/reports/vbt_full_units.jsonl \
+  --out /tmp/vbt_dry_run \
+  --dry-run
+```
+
+Record `expected_work_units` from `wc -l runtime/reports/vbt_full_units.jsonl` and dry-run line `DRY_RUN units=N`. `run_vbt_paid_screen_vast_full.sh` performs this step automatically.
 
 ---
 
@@ -205,9 +205,9 @@ Canary pass: `screening_artifact.json` exists, `vectorbt_engine=rust`, `no_looka
 
 ## Phase D4 — Full paid run (tmux, **230 workers on Vast**)
 
-**Scope:** [VBT_PAID_SCREEN_UNIT_SCOPE.md](VBT_PAID_SCREEN_UNIT_SCOPE.md) — Stage A survivors × CME M6 symbols; not CPI+NFP smoke.
+**Scope:** [VBT_PAID_SCREEN_UNIT_SCOPE.md](VBT_PAID_SCREEN_UNIT_SCOPE.md) — `events.csv` TIGHT × active models × CME M6 symbols; not CPI+NFP smoke.
 
-**Preferred on Vast (NPZ already on host):**
+**Preferred on Vast (generates units + runs orchestrator):**
 
 ```bash
 bash scripts/run_vbt_paid_screen_vast_full.sh
@@ -216,11 +216,19 @@ bash scripts/run_vbt_paid_screen_vast_full.sh
 From workstation via SSH:
 
 ```bash
-export VAST_SSH_TARGET='root@<vast-host> -p <port>'
+# Preferred: separate host and port (non-22 ports require this)
+export VAST_SSH_HOST='root@<vast-host>'
+export VAST_SSH_PORT='<port>'
+bash scripts/vast_ssh_run_vbt_paid_screen.sh
+
+# Or ssh-config alias / host-only (port from ~/.ssh/config when applicable)
+export VAST_SSH_TARGET='<vast-ssh-alias-or-user@host>'
 bash scripts/vast_ssh_run_vbt_paid_screen.sh
 ```
 
-Manual equivalent:
+Do **not** embed `-p <port>` inside `VAST_SSH_TARGET`; the wrapper passes host and port as separate `ssh`/`scp` arguments.
+
+Manual equivalent (after D2 unit generation):
 
 ```bash
 tmux new -s vbt_full

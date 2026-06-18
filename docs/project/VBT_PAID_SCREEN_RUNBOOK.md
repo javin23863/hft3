@@ -32,7 +32,7 @@ derivative handoff map and must not be used to invent a parallel manifest.
 | **A Pilot** | Workstation | 1 | 1 (`CPI_2024_09_11_TIGHT`) | No | Artifact validates; lookahead pytest green |
 | **B Smoke** | Workstation only | 4–8 | 8–16 diverse units | No | Gate script exit 0; zero unit `ERROR` |
 | **C Gate** | Workstation | — | — | No | `paid_screen_ready_gate.json` written |
-| **D Full** | Vast 256 vCPU | **≥230** | Stage A scope (see below) | **Yes** | `--ready-gate-file` from Phase C |
+| **D Full** | Vast 256 vCPU | **≥230** | events.csv × active models (see below) | **Yes** | `--ready-gate-file` from Phase C |
 | **E Post-run** | Workstation | — | — | No | Manifest complete; quarantine import before cockpit |
 
 ```mermaid
@@ -161,8 +161,8 @@ python scripts/validate_paid_screen_ready_gate.py \
   "host_vcpu": 256,
   "reserved_vcpu": 26,
   "workers_requested": 230,
-  "expected_work_units": "<wc -l runtime/reports/vbt_full_units.jsonl after D1>",
-  "units_source": "research_cards/stage_a_full/stage_a_survivors.json expanded (all hyp_id×event_type cells, CME M6 symbols)",
+  "expected_work_units": "<unit count from Vast host after on-host generation>",
+  "units_source": "events.csv TIGHT × CME M6 symbols × active model registry (generated on Vast host)",
   "stall_minutes": 30,
   "abort_on_failed_units": true,
   "git_head": "<sha>",
@@ -171,18 +171,21 @@ python scripts/validate_paid_screen_ready_gate.py \
 }
 ```
 
-### D1 Generate full unit manifest
+### D1 Generate full unit manifest (on Vast host)
 
-From Stage A survivors (workstation with lake paths):
+Full units are **not** generated on the workstation from local Stage A survivors. `bash scripts/run_vbt_paid_screen_vast_full.sh` generates `runtime/reports/vbt_full_units.jsonl` on the Vast instance before workers start.
 
 ```bash
 python scripts/generate_vbt_paid_units_jsonl.py \
-  --from-stage-a-survivors research_cards/stage_a_full/stage_a_survivors.json \
+  --all-active-models \
   --events-csv packages/data_system/config/events.csv \
+  --symbols MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0 \
   --out runtime/reports/vbt_full_units.jsonl
 ```
 
-Or explicit units file maintained by owner.
+Env knobs on Vast: `VBT_MODEL_SCOPE=active` (default), `VBT_MODEL_IDS=...`, `VBT_EVENT_TYPES=...`, `VBT_SYMBOLS=...`.
+
+Historical only: `--from-stage-a-survivors research_cards/stage_a_full/stage_a_survivors.json` (M6 Stage A path; not required for VectorBT paid screen).
 
 ### D2 Vast host setup
 
@@ -196,6 +199,14 @@ export HFT3_MANIFEST_PATH=/path/to/manifest.json
 ```
 
 ### D3 Execute (tmux)
+
+Preferred one-shot on Vast (generates units + runs orchestrator):
+
+```bash
+bash scripts/run_vbt_paid_screen_vast_full.sh
+```
+
+Or manual orchestrator after on-host unit generation:
 
 ```bash
 export VBT_FULL_RUN_ID="paid_full_$(date -u +%Y%m%dT%H%M%SZ)"
@@ -241,10 +252,10 @@ If stalled: capture `ps`, `iostat`, last 20 log lines; kill worker pool; preserv
 - `failed_work_units > 0` without owner acceptance
 - Partial import (333-row lesson)
 
-**Downstream (separate job, smaller scope):**
+**Downstream (separate job, heavier realism — not a prerequisite to unit generation):**
 
 - Aggregate `promoted_ids` from all unit artifacts: `python scripts/aggregate_vbt_promoted_ids.py --manifest <full_manifest>`
-- HBT realism on promoted only — [RESEARCH_ENTRYPOINTS.md](../vault/RESEARCH_ENTRYPOINTS.md) §1.
+- HftBacktest realism on promoted only — [RESEARCH_ENTRYPOINTS.md](../vault/RESEARCH_ENTRYPOINTS.md) §1.
 - M6 `run_event_universe` only on selected promoted IDs — not discovery.
 
 ## Error → action matrix
