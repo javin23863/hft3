@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-_REPO = Path(__file__).resolve().parents[1]
+_REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO / "packages"))
 
 from backtest_pipeline.src.latency_components import (  # noqa: E402

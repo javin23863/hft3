@@ -46,7 +46,11 @@ def resolve_order_ack_ms(summary: dict[str, Any]) -> tuple[float | None, bool, s
 
         p99, _dist, source = resolve_new_send_to_ack_ms(summary)
         if p99 is not None:
-            measured = source.startswith("new_send_to_ack") or source.startswith("live_order")
+            measured = (
+                source.startswith("new_send_to_ack")
+                or source.startswith("live_order")
+                or source == "derived_from_native_probe"
+            )
             return p99, measured, source
     except ImportError:
         pass
