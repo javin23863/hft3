@@ -56,12 +56,14 @@ feature_families:
     canonical_files:
       - packages/features_engine/src/features/vix_features.py
       - packages/replay/sensor_feature_adapter.py
+      - packages/replay/sensor_assembly.py
     tests:
       - tests/test_features/test_vix_hypotheses.py
+      - tests/test_sensor_assembly.py
 
   vix_options:
     source_generation_status: partial
-    synchronization_status: partial
+    synchronization_status: implemented
     vectorbt_consumption_status: not_used
     hftbacktest_consumption_status: not_measured
     autonomous_candidate_status: blocked
@@ -72,8 +74,10 @@ feature_families:
     canonical_files:
       - packages/features_engine/src/features/vix_features.py
       - packages/features_engine/src/hypotheses/vix_modules.py
+      - packages/replay/sensor_assembly.py
     tests:
       - tests/test_features/test_vix_hypotheses.py
+      - tests/test_sensor_assembly.py
 
   cme_options_context:
     source_generation_status: partial

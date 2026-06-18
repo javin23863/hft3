@@ -360,9 +360,29 @@ def attach_feature_recipe_to_candidate(
         recipe.feature_recipe_hash = compute_feature_recipe_hash(recipe.to_dict())
         cross_proof = alignment.to_proof()
 
+    vix_proof: dict[str, Any] | None = None
+    if cross_asset_features is not None:
+        from replay.sensor_assembly import (
+            VIX_SENSOR_KEY,
+            apply_vix_to_recipe_families,
+            validate_vix_families,
+        )
+
+        vix_leg = cross_asset_features.get(VIX_SENSOR_KEY) or cross_asset_features.get("VIX")
+        if isinstance(vix_leg, Mapping):
+            vix_validation = validate_vix_families(
+                vix_leg,
+                decision_timestamp_ns=decision_timestamp_ns,
+            )
+            apply_vix_to_recipe_families(recipe.feature_families, vix_validation)
+            recipe.feature_recipe_hash = compute_feature_recipe_hash(recipe.to_dict())
+            vix_proof = vix_validation.to_proof()
+
     meta = dict(candidate.metadata or {})
     if cross_proof is not None:
         meta["cross_asset_alignment_proof"] = cross_proof
+    if vix_proof is not None:
+        meta["vix_sensor_proof"] = vix_proof
     meta["feature_recipe_hash"] = recipe.feature_recipe_hash
     meta["research_clock"] = recipe.research_clock
     meta["symbol"] = recipe.target_symbol

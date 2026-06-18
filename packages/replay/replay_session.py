@@ -331,6 +331,7 @@ class ReplaySession:
                 if (secondary_mdas or sensor_adapters) and state is not None:
                     cross: Dict[str, Dict[str, float]] = {}
                     from replay.cross_asset_assembly import enrich_cross_leg
+                    from replay.sensor_assembly import enrich_sensor_leg
 
                     for sym, sec_mda in secondary_mdas.items():
                         sec_mda.sync_to_timestamp(feature_ts)
@@ -345,7 +346,12 @@ class ReplaySession:
                         ad.sync_to_timestamp(feature_ts)
                         feats = ad.current_features()
                         if feats is not None:
-                            cross[k] = feats
+                            cross[k] = enrich_sensor_leg(
+                                feats,
+                                sensor_id=k,
+                                source_timestamp_ns=feature_ts,
+                                sensor_kind="vix_options" if k.upper() == "VIX" else "sensor",
+                            )
                     if cross:
                         state = MarketState(
                             feature_vector=state.feature_vector,
