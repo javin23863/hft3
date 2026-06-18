@@ -133,12 +133,14 @@ def _phase(paths: Dict[str, Optional[Path]]) -> Tuple[str, List[str]]:
     full_m = _load_json(full) if full and full.is_file() else None
     if full_m is None:
         commands = [
-            "Phase D1–D4 — Vast full VectorBT screen (units generated on host)",
-            "See docs/project/VBT_PAID_SCREEN_POST_GATE_PLAYBOOK.md",
+            "Phase D1–D4 — Vast full VectorBT screen (v2 default; units generated on host)",
+            "See docs/project/VBT_PAID_SCREEN_POST_GATE_PLAYBOOK.md and docs/project/PAID_SCREEN_OPS_COMMANDS.md",
             "Gate ready. Sync repo + NPZ + paid_screen_ready_gate.json to Vast; then on Vast host:",
-            "bash scripts/run_vbt_paid_screen_vast_full.sh",
+            "bash scripts/run_vbt_paid_screen_vast_full.sh  # uses run_paid_screen.py --execution-mode v2",
+            "Rollback only: export VBT_EXECUTION_MODE=v1 before the same script",
+            "v2 resume: export VBT_RESUME=1; cache/recycle: VBT_CACHE_MEMORY_LIMIT_MB, VBT_MAX_BATCHES_BEFORE_RECYCLE",
             "Units: events.csv TIGHT rows × CME M6 symbols × active model registry (not local Stage A survivors).",
-            "Env knobs: VBT_MODEL_SCOPE=active | VBT_MODEL_IDS=... | VBT_EVENT_TYPES=... | VBT_SYMBOLS=...",
+            "Env knobs: VBT_WORKERS | VBT_MODEL_SCOPE=active | VBT_MODEL_IDS=... | VBT_EVENT_TYPES=... | VBT_SYMBOLS=...",
             "export VBT_FULL_RUN_ID=\"paid_full_$(date -u +%Y%m%dT%H%M%SZ)\"  # optional override",
         ]
         if decl_missing:

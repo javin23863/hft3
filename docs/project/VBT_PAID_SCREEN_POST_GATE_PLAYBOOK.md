@@ -203,15 +203,21 @@ Canary pass: `screening_artifact.json` exists, `vectorbt_engine=rust`, `no_looka
 
 ---
 
-## Phase D4 — Full paid run (tmux, **230 workers on Vast**)
+## Phase D4 — Full paid run (tmux, **v2 orchestrator**, workers from declaration or `VBT_WORKERS`)
 
 **Scope:** [VBT_PAID_SCREEN_UNIT_SCOPE.md](VBT_PAID_SCREEN_UNIT_SCOPE.md) — `events.csv` TIGHT × active models × CME M6 symbols; not CPI+NFP smoke.
 
-**Preferred on Vast (generates units + runs orchestrator):**
+**Preferred on Vast (generates units + runs v2 orchestrator):**
 
 ```bash
 bash scripts/run_vbt_paid_screen_vast_full.sh
 ```
+
+Uses `scripts/run_paid_screen.py --execution-mode v2` (long-lived workers) by default.
+Rollback: `export VBT_EXECUTION_MODE=v1` before the same script.
+Resume: `export VBT_RESUME=1`. Cache/recycle knobs: `VBT_CACHE_MEMORY_LIMIT_MB`,
+`VBT_CACHE_MAX_ENTRIES`, `VBT_MAX_BATCHES_BEFORE_RECYCLE`. See
+[PAID_SCREEN_OPS_COMMANDS.md](PAID_SCREEN_OPS_COMMANDS.md).
 
 From workstation via SSH:
 
@@ -235,13 +241,17 @@ tmux new -s vbt_full
 export HFT3_REPO="$(pwd)"
 export VBT_FULL_RUN_ID="paid_full_$(date -u +%Y%m%dT%H%M%SZ)"
 
-python scripts/run_vectorbt_paid_screen.py \
+python scripts/run_paid_screen.py \
+  --execution-mode v2 \
   --units-jsonl runtime/reports/vbt_full_units.jsonl \
   --out "research_cards/pipeline_runs/${VBT_FULL_RUN_ID}" \
   --vectorbt-scope paid-compute \
-  --workers 230 \
+  --workers "${VBT_WORKERS:-230}" \
   --ready-gate-file runtime/reports/paid_screen_ready_gate.json \
   --max-wall-clock-seconds 86400 \
+  --max-batches-before-recycle 100 \
+  --cache-memory-limit-mb 4096 \
+  --cache-max-entries 1000 \
   --no-llm \
   2>&1 | tee "research_cards/pipeline_runs/${VBT_FULL_RUN_ID}/orchestrator.log"
 ```

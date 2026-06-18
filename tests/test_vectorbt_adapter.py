@@ -2579,3 +2579,77 @@ class TestFilterCandidates:
         assert result.rejected[0].reject_reason == "no_ohlcv_data"
         assert result.rejected[0].metric_values["operator_escape_ignored"] is True
         assert not (tmp_path / "research_cards" / "promotion").exists()
+
+
+class TestFilterCandidatesDefaultDataLoaderSymbol:
+    def test_default_loader_receives_screen_symbol_when_fs_v1_unavailable(
+        self, monkeypatch, tmp_path,
+    ):
+        from backtest_pipeline.src import vectorbt_adapter
+        from backtest_pipeline.src.vectorbt_adapter import FilterResult
+
+        captured: dict[str, object] = {}
+        close = 100.0 + np.arange(40, dtype=float) * 0.1
+        ohlcv = np.column_stack([close, close, close, close, np.ones_like(close)])
+
+        def spy_default(event_id, repo_root, symbol=None):
+            captured["symbol"] = symbol
+            captured["event_id"] = event_id
+            return ohlcv
+
+        monkeypatch.setattr(vectorbt_adapter, "_default_data_loader", spy_default)
+        monkeypatch.setattr(
+            vectorbt_adapter,
+            "_run_vectorbt_simulation",
+            lambda ohlcv_arg, *args, **kwargs: FilterResult(
+                backend="vectorbt",
+                run_id="symbol_scope_test",
+                screening_scope="pilot",
+            ),
+        )
+
+        filter_candidates(
+            candidates=[_mock_candidate()],
+            parsed=None,
+            event_id="EVT_SYMBOL_SCOPE",
+            repo_root=tmp_path,
+            screening_scope="pilot",
+            prefer_fs_v1_path=False,
+        )
+
+        assert captured.get("symbol") == "MES"
+        assert captured.get("event_id") == "EVT_SYMBOL_SCOPE"
+
+    def test_custom_two_arg_loader_not_passed_symbol(self, monkeypatch, tmp_path):
+        from backtest_pipeline.src import vectorbt_adapter
+        from backtest_pipeline.src.vectorbt_adapter import FilterResult
+
+        calls: list[tuple[str, Path]] = []
+        close = 100.0 + np.arange(40, dtype=float) * 0.1
+        ohlcv = np.column_stack([close, close, close, close, np.ones_like(close)])
+
+        def custom_loader(event_id, repo_root):
+            calls.append((event_id, repo_root))
+            return ohlcv
+
+        monkeypatch.setattr(
+            vectorbt_adapter,
+            "_run_vectorbt_simulation",
+            lambda ohlcv_arg, *args, **kwargs: FilterResult(
+                backend="vectorbt",
+                run_id="custom_loader_test",
+                screening_scope="pilot",
+            ),
+        )
+
+        filter_candidates(
+            candidates=[_mock_candidate()],
+            parsed=None,
+            event_id="EVT_CUSTOM_LOADER",
+            repo_root=tmp_path,
+            screening_scope="pilot",
+            data_loader=custom_loader,
+            prefer_fs_v1_path=False,
+        )
+
+        assert calls == [("EVT_CUSTOM_LOADER", tmp_path)]

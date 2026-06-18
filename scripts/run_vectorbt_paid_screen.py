@@ -21,6 +21,12 @@ from hft3_bootstrap import setup_repo_paths
 
 setup_repo_paths()
 
+from backtest_pipeline.src.paid_screen_profiling import (
+    determine_manifest_status,
+    write_failure_diagnostics,
+    FailureDiagnostic,
+)
+
 _PIPELINE_RESULT_MARKER = "HFT3_PIPELINE_RESULT="
 
 
@@ -277,8 +283,30 @@ def main(argv: Optional[List[str]] = None) -> int:
     elapsed_hours = max((datetime.now(timezone.utc) - started).total_seconds() / 3600.0, 1e-9)
     units_per_hour = completed / elapsed_hours
 
+    aborted = False
+    failure_diagnostics_path: Optional[str] = None
+    if failed > 0:
+        failure_diagnostics_path = write_failure_diagnostics(
+            str(out_dir),
+            [
+                FailureDiagnostic(
+                    unit_or_batch_id=str(r.get("unit_id", "")),
+                    stage_name="run_unit_worker",
+                    exception_type="unit_error",
+                    exception_message=str(r.get("error", "")),
+                    full_traceback="",
+                    worker_pid=0,
+                    start_ts_utc="",
+                    finish_ts_utc="",
+                    elapsed_seconds=float(r.get("elapsed_seconds", 0.0)),
+                    cache_state={},
+                )
+                for r in unit_results
+                if r.get("status") == "ERROR"
+            ],
+        )
     manifest: Dict[str, Any] = {
-        "status": "complete",
+        "status": determine_manifest_status(completed, failed, aborted, len(units)),
         "started_at_utc": started.isoformat(),
         "finished_at_utc": datetime.now(timezone.utc).isoformat(),
         "out_dir": str(out_dir),
@@ -291,6 +319,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         "skipped_work_units": skipped,
         "units_per_hour": round(units_per_hour, 4),
         "unit_results": unit_results,
+        "failure_diagnostics_path": failure_diagnostics_path,
+        "orchestrator_version": "v1",
     }
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     print(f"Manifest: {manifest_path}")

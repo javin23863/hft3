@@ -11,7 +11,7 @@ dashboard never hard-depends on the trading core at request time.
 """
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from .. import loaders, paths, schemas
 
@@ -189,12 +189,27 @@ def build() -> dict:
             "worst_event_tail_usd": agg.get("worst_tail"),
         })
 
-    # Promotion funnel
+    # Promotion funnel — Stage A is historical M6; VectorBT paid screen is current prefilter.
     survivors = paths.read_json(paths.STAGE_A_SURVIVORS)
     n_survivors = len(survivors) if isinstance(survivors, list) else (
         len(survivors.get("survivors", [])) if isinstance(survivors, dict) else 0)
     stage_a_raw = loaders.stage_a_raw()
     n_screened = len({c.get("hypothesis_id") for c in (stage_a_raw.get("cells", []) if isinstance(stage_a_raw, dict) else [])})
+
+    vbt_tracking: dict[str, Any] = {}
+    vbt_promoted: int | None = None
+    try:
+        from .pipeline import _vectorbt_paid_screen_tracking, _latest_screening_fields
+
+        vbt_tracking = _vectorbt_paid_screen_tracking()
+        tracking_run_id = vbt_tracking.get("run_id")
+        if tracking_run_id:
+            screening = _latest_screening_fields(run_id=tracking_run_id)
+            promoted = screening.get("screening_promoted_count")
+            if isinstance(promoted, int):
+                vbt_promoted = promoted
+    except Exception:
+        vbt_tracking = {}
 
     slug_registry_total = 0
     slug_registry_kinds: dict[str, int] = {}
@@ -235,6 +250,13 @@ def build() -> dict:
             "slug_registry_error": slug_registry_error,
             "screened_stage_a": n_screened,
             "survivors_stage_a": n_survivors,
+            "screened_stage_a_note": "historical M6 Stage A; not VectorBT paid-screen prerequisite",
+            "vectorbt_tracking_state": vbt_tracking.get("state"),
+            "vectorbt_expected_work_units": vbt_tracking.get("expected_work_units"),
+            "vectorbt_completed_work_units": vbt_tracking.get("completed_work_units"),
+            "vectorbt_workers": vbt_tracking.get("workers"),
+            "vectorbt_research_split": vbt_tracking.get("research_split"),
+            "vectorbt_promoted_count": vbt_promoted,
             "structurally_dead": len(prop_dead),
         },
         "silent_zero": {

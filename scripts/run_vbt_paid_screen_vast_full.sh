@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
-# Phase D full VectorBT paid screen on Vast 256 vCPU (230 workers).
-# Authority: docs/project/VBT_PAID_SCREEN_UNIT_SCOPE.md
+# Phase D full VectorBT paid screen on Vast (default v2 long-lived workers).
+# Authority: docs/project/VBT_PAID_SCREEN_UNIT_SCOPE.md, PAID_SCREEN_OPS_COMMANDS.md
 # Run ON the Vast instance (NPZ lake already present). Do not use 4-worker smoke topology.
 # Units are generated on-host from events.csv + active model registry (not local Stage A survivors).
+# Rollback: export VBT_EXECUTION_MODE=v1 before launch (legacy subprocess-per-unit).
+# v2 env knobs: VBT_CACHE_MEMORY_LIMIT_MB, VBT_CACHE_MAX_ENTRIES, VBT_MAX_BATCHES_BEFORE_RECYCLE, VBT_RESUME=1
+# v2 provenance: passes --events-csv + derived --events-csv-hash; lake hash from HFT3_MANIFEST_PATH
+# (sha256 file content) or declaration lake_manifest_hash — fail-closed before v2 launch if unavailable.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -102,21 +106,146 @@ fi
 
 echo "Declaration OK: expected_work_units=$DECL_EXPECTED"
 
+if [[ -z "${VBT_WORKERS:-}" && -f "$DECL_FILE" ]]; then
+  DECL_WORKERS="$(python3 - "$DECL_FILE" <<'PY'
+import json, sys
+w = json.load(open(sys.argv[1], encoding="utf-8")).get("workers_requested")
+print(w if w is not None else "")
+PY
+)"
+  if [[ -n "$DECL_WORKERS" && "$DECL_WORKERS" -gt 0 ]]; then
+    WORKERS="$DECL_WORKERS"
+    echo "Workers from declaration: $WORKERS"
+  fi
+fi
+
+if [[ -z "${VBT_FULL_RUN_ID:-}" && -f "$DECL_FILE" ]]; then
+  DECL_RUN_ID="$(python3 - "$DECL_FILE" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+for key in ("run_id", "vbt_full_run_id"):
+    v = d.get(key)
+    if isinstance(v, str) and v.strip():
+        print(v.strip())
+        break
+PY
+)"
+  if [[ -n "$DECL_RUN_ID" ]]; then
+    export VBT_FULL_RUN_ID="$DECL_RUN_ID"
+    echo "Run id from declaration: $VBT_FULL_RUN_ID"
+  fi
+fi
+
 export VBT_FULL_RUN_ID="${VBT_FULL_RUN_ID:-paid_full_$(date -u +%Y%m%dT%H%M%SZ)}"
 OUT_DIR="${REPO_ROOT}/research_cards/pipeline_runs/${VBT_FULL_RUN_ID}"
 LOG_FILE="${OUT_DIR}/orchestrator.log"
 mkdir -p "$OUT_DIR"
 
-echo "Starting full run id=$VBT_FULL_RUN_ID workers=$WORKERS out=$OUT_DIR"
-python3 scripts/run_vectorbt_paid_screen.py \
-  --units-jsonl "$UNITS_JSONL" \
-  --out "$OUT_DIR" \
-  --vectorbt-scope paid-compute \
-  --workers "$WORKERS" \
-  --ready-gate-file "$GATE_FILE" \
-  --max-wall-clock-seconds "${VBT_MAX_WALL_CLOCK_SECONDS:-86400}" \
-  --no-llm \
-  2>&1 | tee "$LOG_FILE"
+# Execution mode: v2 (default) long-lived workers; v1 subprocess-per-unit rollback.
+EXECUTION_MODE="${VBT_EXECUTION_MODE:-v2}"
+PAID_SCREEN_SCRIPT="scripts/run_paid_screen.py"
+if [[ "$EXECUTION_MODE" == "v1" ]]; then
+  PAID_SCREEN_SCRIPT="scripts/run_vectorbt_paid_screen.py"
+  echo "WARN: VBT_EXECUTION_MODE=v1 — legacy subprocess-per-unit path (rollback only)" >&2
+fi
+
+# v2 fail-closes without real events/lake provenance hashes. v1 rollback skips this block.
+EVENTS_CSV_HASH=""
+LAKE_MANIFEST_HASH=""
+if [[ "$EXECUTION_MODE" != "v1" ]]; then
+  echo "Resolving v2 provenance hashes (events CSV + lake manifest)..."
+  if ! read -r EVENTS_CSV_HASH LAKE_MANIFEST_HASH < <(
+    python3 - "$REPO_ROOT" "$EVENTS_CSV" "$DECL_FILE" <<'PY'
+import hashlib
+import json
+import os
+import sys
+from pathlib import Path
+
+repo_root = Path(sys.argv[1])
+events_csv = Path(sys.argv[2])
+decl_file = Path(sys.argv[3])
+
+
+def file_sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()[:32]
+
+
+def resolve_events_csv_hash(events_csv: Path, repo_root: Path) -> str:
+    path = events_csv if events_csv.is_absolute() else repo_root / events_csv
+    if not path.is_file():
+        print(
+            f"ERROR: events CSV unavailable for hash: {path} "
+            "(expected on-host events.csv for --events-csv / --events-csv-hash)",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    return file_sha256(path)
+
+
+def resolve_lake_manifest_hash(repo_root: Path, decl_file: Path) -> str:
+    manifest_env = os.environ.get("HFT3_MANIFEST_PATH", "").strip()
+    if manifest_env:
+        manifest_path = Path(manifest_env)
+        if not manifest_path.is_absolute():
+            manifest_path = repo_root / manifest_path
+        if manifest_path.is_file():
+            return file_sha256(manifest_path)
+    if decl_file.is_file():
+        decl_hash = str(
+            json.loads(decl_file.read_text(encoding="utf-8")).get("lake_manifest_hash") or ""
+        ).strip()
+        if decl_hash:
+            return decl_hash
+    print(
+        "ERROR: lake manifest hash unavailable for v2 launch: "
+        "set HFT3_MANIFEST_PATH to an on-host manifest file, or record "
+        "lake_manifest_hash in the full-run declaration. "
+        "Do not substitute units JSONL or other artifacts.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+
+print(resolve_events_csv_hash(events_csv, repo_root), resolve_lake_manifest_hash(repo_root, decl_file))
+PY
+  ); then
+    exit 1
+  fi
+  echo "events_csv_hash=$EVENTS_CSV_HASH lake_manifest_hash=$LAKE_MANIFEST_HASH"
+fi
+
+PAID_ARGS=(
+  python3 "$PAID_SCREEN_SCRIPT"
+)
+if [[ "$EXECUTION_MODE" != "v1" ]]; then
+  PAID_ARGS+=(--execution-mode "$EXECUTION_MODE")
+fi
+PAID_ARGS+=(
+  --units-jsonl "$UNITS_JSONL"
+  --out "$OUT_DIR"
+  --vectorbt-scope paid-compute
+  --workers "$WORKERS"
+  --ready-gate-file "$GATE_FILE"
+  --max-wall-clock-seconds "${VBT_MAX_WALL_CLOCK_SECONDS:-86400}"
+  --no-llm
+)
+if [[ "$EXECUTION_MODE" != "v1" ]]; then
+  PAID_ARGS+=(
+    --max-batches-before-recycle "${VBT_MAX_BATCHES_BEFORE_RECYCLE:-100}"
+    --cache-memory-limit-mb "${VBT_CACHE_MEMORY_LIMIT_MB:-4096}"
+    --cache-max-entries "${VBT_CACHE_MAX_ENTRIES:-1000}"
+    --events-csv "$EVENTS_CSV"
+    --events-csv-hash "$EVENTS_CSV_HASH"
+    --lake-manifest-hash "$LAKE_MANIFEST_HASH"
+  )
+  if [[ "${VBT_RESUME:-}" == "1" || "${VBT_RESUME:-}" == "true" ]]; then
+    PAID_ARGS+=(--resume)
+  fi
+fi
+
+echo "Starting full run id=$VBT_FULL_RUN_ID workers=$WORKERS execution_mode=$EXECUTION_MODE out=$OUT_DIR"
+"${PAID_ARGS[@]}" 2>&1 | tee "$LOG_FILE"
 
 echo "Manifest: ${OUT_DIR}/paid_screen_run_manifest.json"
 python3 scripts/aggregate_vbt_promoted_ids.py \

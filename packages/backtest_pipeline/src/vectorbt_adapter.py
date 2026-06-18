@@ -2077,14 +2077,46 @@ def _new_filter_result(
 def _default_data_loader(
     event_id: str,
     repo_root: Path,
+    symbol: str | None = None,
 ) -> Optional[np.ndarray]:
     """Load OHLCV bars from existing HFT3 data pipeline.
     Falls back to building bars from the NPZ MBO data.
     Returns None if no data is available.
     """
     npz_dir = repo_root / "data" / "npz"
-    candidates = list(npz_dir.glob(f"*{event_id}*_mbo.npz")) if npz_dir.exists() else []
-    candidates.extend(list(repo_root.glob(f"data/npz/*{event_id}*_mbo.npz")))
+    candidates: list[Path] = []
+    if npz_dir.exists():
+        if symbol:
+            from backtest_pipeline.src.fs_v1_screen_path import _store_symbol_variants
+
+            for sym in _store_symbol_variants(symbol):
+                exact = npz_dir / f"{sym}_{event_id}_mbo.npz"
+                if exact.is_file():
+                    candidates = [exact]
+                    break
+            if not candidates:
+                for sym in _store_symbol_variants(symbol):
+                    sym_candidates = sorted(
+                        p for p in npz_dir.glob(f"*{event_id}*_mbo.npz")
+                        if p.name.startswith(f"{sym}_")
+                    )
+                    if sym_candidates:
+                        candidates = sym_candidates
+                        break
+        else:
+            candidates = sorted(npz_dir.glob(f"*{event_id}*_mbo.npz"))
+    if not candidates:
+        fallback = sorted(repo_root.glob(f"data/npz/*{event_id}*_mbo.npz"))
+        if symbol:
+            from backtest_pipeline.src.fs_v1_screen_path import _store_symbol_variants
+
+            for sym in _store_symbol_variants(symbol):
+                sym_candidates = [p for p in fallback if p.name.startswith(f"{sym}_")]
+                if sym_candidates:
+                    candidates = sym_candidates
+                    break
+        else:
+            candidates = fallback
     if not candidates:
         return None
     npz_path = str(candidates[0])
@@ -2931,7 +2963,7 @@ def filter_candidates(
     fs_v1_ctx = None
     research_clock = _resolve_research_clock(candidates)
     screen_symbol = _resolve_screen_symbol(candidates, symbol)
-    if prefer_fs_v1_path and candidates:
+    if prefer_fs_v1_path and candidates and data_loader is _default_data_loader:
         from backtest_pipeline.src.fs_v1_screen_path import (
             build_fs_v1_signal_computer,
             ohlcv_from_feature_store,
@@ -2950,7 +2982,10 @@ def filter_candidates(
         ohlcv = ohlcv_from_feature_store(fs_v1_ctx.store)
         signal_computer = build_fs_v1_signal_computer(fs_v1_ctx)
     else:
-        ohlcv = data_loader(event_id, repo_root)
+        if data_loader is _default_data_loader:
+            ohlcv = data_loader(event_id, repo_root, symbol=screen_symbol)
+        else:
+            ohlcv = data_loader(event_id, repo_root)
 
     if ohlcv is None:
         logger.warning("No OHLCV data for %s — rejecting all candidates", event_id)
@@ -2998,6 +3033,26 @@ def filter_candidates(
             research_clock=research_clock,
             screening_scope=screening_scope,
         )
+    return apply_promotion_gates(
+        result,
+        screening_scope=screening_scope,
+        gates=gates,
+        repo_root=repo_root,
+        persist_promotions=persist_promotions,
+    )
+
+
+def apply_promotion_gates(
+    result: FilterResult,
+    *,
+    screening_scope: str,
+    gates: Optional[PromotionGate] = None,
+    repo_root: Optional[Path] = None,
+    persist_promotions: bool = False,
+) -> FilterResult:
+    """Apply robust promotion gates after VectorBT simulation (BLUEPRINT §8)."""
+    gates = gates or PromotionGate()
+    repo_root = repo_root or _REPO
     promoted_out: List[PromotedCandidate] = []
     rejected_out: List[RejectedCandidate] = list(result.rejected)
 
