@@ -2,7 +2,28 @@
 
 from __future__ import annotations
 
+import json
+import re
+from pathlib import Path
 from typing import Any
+
+MIN_CC_SAMPLE_COUNT = 50
+
+_CC_SUMMARY_PREFIXES: dict[str, str] = {
+    "cc2": "cc2_feed_",
+    "cc3": "cc3_new_decomp_",
+    "cc4": "cc4_cancel_",
+}
+
+_METRIC_CC_SOURCES: dict[str, tuple[str, ...]] = {
+    "feed_latency_us": ("cc3", "cc2"),
+    "new_send_to_exchange_us": ("cc3",),
+    "new_exchange_to_ack_us": ("cc3",),
+    "cancel_send_to_exchange_us": ("cc4",),
+    "cancel_exchange_to_ack_us": ("cc4",),
+}
+
+_RUN_SUFFIX_RE = re.compile(r"_(\d{8}T\d{6}Z)_summary\.json$")
 
 CRITICAL_BANDS = (
     "feed_latency_us",
@@ -178,6 +199,182 @@ def default_component_bands(*, live_placement: dict[str, Any] | None = None) -> 
         ),
     }
     return bands
+
+
+def _cc_summary_sort_key(path: Path) -> str:
+    match = _RUN_SUFFIX_RE.search(path.name)
+    if match:
+        return match.group(1)
+    return path.name
+
+
+def find_latest_cc_summary(repo_root: Path, prefix: str) -> Path | None:
+    """Return newest CC summary JSON for a campaign prefix under reports/latency_baselines/."""
+    baselines = repo_root / "reports" / "latency_baselines"
+    if not baselines.is_dir():
+        return None
+    candidates = sorted(
+        baselines.glob(f"{prefix}*_summary.json"),
+        key=_cc_summary_sort_key,
+        reverse=True,
+    )
+    return candidates[0] if candidates else None
+
+
+def load_cc_summaries(repo_root: Path) -> dict[str, dict[str, Any]]:
+    """Load latest cc2/cc3/cc4 summary JSON objects keyed by campaign id."""
+    loaded: dict[str, dict[str, Any]] = {}
+    repo_root = Path(repo_root)
+    for cc_key, prefix in _CC_SUMMARY_PREFIXES.items():
+        path = find_latest_cc_summary(repo_root, prefix)
+        if path is None:
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(data, dict):
+            loaded[cc_key] = data
+    return loaded
+
+
+def extract_metric_stats(summary: dict[str, Any], metric: str) -> dict[str, Any] | None:
+    """Read metric stats from summary.metrics or a top-level component block."""
+    metrics = summary.get("metrics")
+    if isinstance(metrics, dict):
+        stats = metrics.get(metric)
+        if isinstance(stats, dict):
+            return stats
+    block = summary.get(metric)
+    if isinstance(block, dict) and "count" in block:
+        return block
+    us_block = summary.get(f"{metric}")
+    if isinstance(us_block, dict) and isinstance(us_block.get("us"), dict):
+        return us_block["us"]
+    return None
+
+
+def _regime_us_value(dist: dict[str, Any], regime: str) -> float | None:
+    key_map = {
+        "fast": "p50_us",
+        "normal": "p90_us",
+        "stress": "p99_us",
+        "extreme": "p99_9_us",
+    }
+    key = key_map.get(regime, "p99_us")
+    val = dist.get(key)
+    if isinstance(val, (int, float)):
+        return float(val)
+    val = dist.get("p99_us")
+    return float(val) if isinstance(val, (int, float)) else None
+
+
+def enrich_latency_model_from_component_bands(
+    model: dict[str, Any],
+    bands: dict[str, Any],
+    *,
+    regime: str,
+) -> dict[str, Any]:
+    """Apply measured component_bands to a latency_model dict (feed/entry/response)."""
+    out = dict(model)
+    feed = bands.get("feed_latency_us") or {}
+    entry = bands.get("new_send_to_exchange_us") or {}
+    resp = bands.get("new_exchange_to_ack_us") or {}
+
+    if feed.get("measurement_status") == "MEASURED":
+        dist = feed.get("distribution_us") or {}
+        feed_us = _regime_us_value(dist, regime)
+        if feed_us is not None:
+            out["feed_latency_ms"] = feed_us / 1000.0
+            out["feed_latency_source"] = feed.get("source_run_id") or "cc3_feed_latency_us"
+            mapping = dict(out.get("latency_component_mapping") or {})
+            mapping["feed_latency"] = f"feed_latency_us from {feed.get('source_run_id', 'CC campaign')}"
+            out["latency_component_mapping"] = mapping
+
+    entry_dist = entry.get("distribution_us") if entry.get("measurement_status") == "MEASURED" else None
+    resp_dist = resp.get("distribution_us") if resp.get("measurement_status") == "MEASURED" else None
+    if isinstance(entry_dist, dict) and isinstance(resp_dist, dict):
+        entry_us = _regime_us_value(entry_dist, regime)
+        resp_us = _regime_us_value(resp_dist, regime)
+        if entry_us is not None and resp_us is not None:
+            out["order_entry_latency_ms"] = entry_us / 1000.0
+            out["order_response_latency_ms"] = resp_us / 1000.0
+            out["latency_p99_ms"] = (entry_us + resp_us) / 1000.0
+            src = entry.get("source_run_id") or "cc3_new_decomp"
+            out["order_entry_latency_source"] = src
+            out["order_response_latency_source"] = src
+            out["latency_proxy_status"] = "measured_decomposed"
+            out["note"] = (
+                f"CC-3 decomposed entry/response from {src}; "
+                "symmetric split fallback no longer used for this regime."
+            )
+    return out
+
+
+def merge_component_bands_from_cc_summaries(repo_root: Path, bands: dict[str, Any]) -> dict[str, Any]:
+    """Merge CC-2/3/4 campaign summaries into component_bands measurement status."""
+    loaded = load_cc_summaries(repo_root)
+    merged = {name: dict(payload) for name, payload in bands.items()}
+    cc4 = loaded.get("cc4") or {}
+    cc4_run_id = cc4.get("run_id")
+
+    for metric in CRITICAL_BANDS:
+        base = dict(merged.get(metric) or {})
+        base.setdefault("metric", metric)
+        base.setdefault("hftbacktest_component", _hftbacktest_component(metric))
+
+        stats: dict[str, Any] | None = None
+        source_run_id: str | None = None
+        for cc_key in _METRIC_CC_SOURCES.get(metric, ()):
+            summary = loaded.get(cc_key)
+            if not summary:
+                continue
+            candidate = extract_metric_stats(summary, metric)
+            count = int((candidate or {}).get("count") or 0)
+            if count > 0:
+                stats = candidate
+                source_run_id = str(summary.get("run_id") or cc_key)
+                break
+
+        if stats is not None and int(stats.get("count") or 0) >= MIN_CC_SAMPLE_COUNT:
+            dist = distribution_from_stats(stats)
+            base["measurement_status"] = "MEASURED"
+            base["distribution_us"] = dist
+            base["source_run_id"] = source_run_id
+            base["sample_count"] = int(stats["count"])
+            base["note"] = f"Measured by CC campaign {source_run_id} (n={int(stats['count'])})"
+            merged[metric] = base
+            continue
+
+        if metric == "cancel_exchange_to_ack_us" and cc4_run_id:
+            cc4_stats = extract_metric_stats(cc4, metric) or {}
+            cc4_count = int(cc4_stats.get("count") or 0)
+            base["measurement_status"] = "UNMEASURED"
+            base["note"] = (
+                f"CC-4 {cc4_run_id}: cancel_exchange_to_ack_us count={cc4_count} "
+                "(live Rithmic 01 far-from-market; all cancel_ack_timeout in probe)"
+            )
+            if cc4_count > 0:
+                base["sample_count"] = cc4_count
+            base["source_run_id"] = cc4_run_id
+            merged[metric] = base
+            continue
+
+        if metric == "cancel_send_to_exchange_us" and cc4_run_id:
+            cc4_stats = extract_metric_stats(cc4, metric) or {}
+            cc4_count = int(cc4_stats.get("count") or 0)
+            base["measurement_status"] = "OPEN"
+            base["source_run_id"] = cc4_run_id
+            base["note"] = (
+                f"CC-4 {cc4_run_id}: cancel_send_to_exchange_us count={cc4_count} "
+                "(cancel_ack_timeout; local cancel_to_send_us measured in placement test)"
+            )
+            merged[metric] = base
+            continue
+
+        merged[metric] = base
+
+    return merged
 
 
 def _hftbacktest_component(metric: str) -> str:

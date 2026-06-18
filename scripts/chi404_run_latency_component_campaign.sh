@@ -101,10 +101,10 @@ case "$CAMPAIGN" in
     run_cc4_cancel
     run_cc5_fill
     run_cc6_reject
-    python3 scripts/latency_probe/summarize_latency.py --repo "$REPO"
+    python3 scripts/latency_probe/ingest_latency_truth_components.py --repo "$REPO"
     python3 scripts/latency_probe/generate_latency_regimes.py --repo "$REPO"
     ;;
   *) echo "Usage: $0 [cc2|cc3|cc4|cc5|cc6|all]" >&2; exit 2 ;;
 esac
 
-echo "Done. Ingest with: python3 scripts/latency_probe/summarize_latency.py --repo $REPO"
+echo "Done. Ingest with: python3 scripts/latency_probe/ingest_latency_truth_components.py --repo $REPO"

@@ -14,6 +14,8 @@ from backtest_pipeline.src.latency_components import (  # noqa: E402
     build_new_send_to_ack_from_live_stats,
     critical_bands_measured,
     default_component_bands,
+    enrich_latency_model_from_component_bands,
+    merge_component_bands_from_cc_summaries,
     resolve_new_send_to_ack_ms,
 )
 from backtest_pipeline.src.chi404_latency import (  # noqa: E402
@@ -50,6 +52,68 @@ def test_default_component_bands_marks_critical_open() -> None:
     bands = default_component_bands()
     assert bands["feed_latency_us"]["measurement_status"] == "OPEN"
     assert not critical_bands_measured(bands)
+
+
+def test_merge_component_bands_from_cc3_summary(tmp_path: Path) -> None:
+    baselines = tmp_path / "reports" / "latency_baselines"
+    baselines.mkdir(parents=True)
+    cc3 = {
+        "run_id": "cc3_new_decomp_fixture",
+        "metrics": {
+            "feed_latency_us": {"count": 200, "p50_us": 2400.0, "p99_us": 8700.0},
+            "new_send_to_exchange_us": {"count": 200, "p50_us": 2900.0, "p99_us": 3600.0},
+            "new_exchange_to_ack_us": {"count": 200, "p50_us": 370.0, "p99_us": 1800.0},
+        },
+    }
+    (baselines / "cc3_new_decomp_20260618T000001Z_summary.json").write_text(
+        json.dumps(cc3), encoding="utf-8"
+    )
+    cc4 = {
+        "run_id": "cc4_cancel_20260618T000001Z",
+        "metrics": {
+            "cancel_send_to_exchange_us": {"count": 0},
+            "cancel_exchange_to_ack_us": {"count": 0},
+        },
+    }
+    (baselines / "cc4_cancel_20260618T000001Z_summary.json").write_text(json.dumps(cc4), encoding="utf-8")
+
+    merged = merge_component_bands_from_cc_summaries(tmp_path, default_component_bands())
+    assert merged["feed_latency_us"]["measurement_status"] == "MEASURED"
+    assert merged["feed_latency_us"]["sample_count"] == 200
+    assert merged["feed_latency_us"]["source_run_id"] == "cc3_new_decomp_fixture"
+    assert merged["new_send_to_exchange_us"]["distribution_us"]["p99_us"] == pytest.approx(3600.0)
+    assert merged["cancel_exchange_to_ack_us"]["measurement_status"] == "UNMEASURED"
+    assert "cc4_cancel_20260618T000001Z" in merged["cancel_exchange_to_ack_us"]["note"]
+    assert merged["cancel_send_to_exchange_us"]["measurement_status"] == "OPEN"
+
+
+def test_enrich_latency_model_from_component_bands() -> None:
+    bands = {
+        "feed_latency_us": {
+            "measurement_status": "MEASURED",
+            "source_run_id": "cc3_fixture",
+            "distribution_us": {"p99_us": 8739.0},
+        },
+        "new_send_to_exchange_us": {
+            "measurement_status": "MEASURED",
+            "source_run_id": "cc3_fixture",
+            "distribution_us": {"p99_us": 3595.0},
+        },
+        "new_exchange_to_ack_us": {
+            "measurement_status": "MEASURED",
+            "source_run_id": "cc3_fixture",
+            "distribution_us": {"p99_us": 1793.0},
+        },
+    }
+    model = enrich_latency_model_from_component_bands(
+        {"latency_model_family": "ConstantLatency", "feed_latency_ms": None},
+        bands,
+        regime="stress",
+    )
+    assert model["feed_latency_ms"] == pytest.approx(8.739)
+    assert model["order_entry_latency_ms"] == pytest.approx(3.595)
+    assert model["order_response_latency_ms"] == pytest.approx(1.793)
+    assert model["feed_latency_source"] == "cc3_fixture"
 
 
 def test_resolve_latency_model_stress_regime() -> None:

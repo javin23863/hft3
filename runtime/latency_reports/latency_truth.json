@@ -1,6 +1,6 @@
 {
   "campaign": "CC-1 Latency Truth",
-  "generated_utc": "2026-06-18T07:55:00Z",
+  "generated_utc": "2026-06-18T03:53:28Z",
   "run_host": "CHI404",
   "compute": {
     "tick_to_decision_ns": 15300,
@@ -227,33 +227,74 @@
   "component_bands": {
     "feed_latency_us": {
       "metric": "feed_latency_us",
-      "measurement_status": "OPEN",
+      "measurement_status": "MEASURED",
       "hftbacktest_component": "feed",
-      "note": "Instrument probe v3 MD path; CC-2 campaign pending"
+      "note": "Measured by CC campaign cc3_new_decomp_20260618T022002Z (n=200)",
+      "distribution_us": {
+        "count": 200,
+        "min_us": 682.603,
+        "mean_us": 3202.314,
+        "p50_us": 2407.373,
+        "p90_us": 5971.381,
+        "p95_us": 7727.312,
+        "p99_us": 8739.771,
+        "p99_9_us": 37248.936,
+        "max_us": 37248.936
+      },
+      "source_run_id": "cc3_new_decomp_20260618T022002Z",
+      "sample_count": 200
     },
     "new_send_to_exchange_us": {
       "metric": "new_send_to_exchange_us",
-      "measurement_status": "OPEN",
+      "measurement_status": "MEASURED",
       "hftbacktest_component": "order_entry",
-      "note": "Requires req_ts + calibrated exch_ts; CC-3 campaign pending"
+      "note": "Measured by CC campaign cc3_new_decomp_20260618T022002Z (n=200)",
+      "distribution_us": {
+        "count": 200,
+        "min_us": 2526.321,
+        "mean_us": 2962.033,
+        "p50_us": 2933.951,
+        "p90_us": 3238.252,
+        "p95_us": 3395.2,
+        "p99_us": 3595.122,
+        "p99_9_us": 3719.311,
+        "max_us": 3719.311
+      },
+      "source_run_id": "cc3_new_decomp_20260618T022002Z",
+      "sample_count": 200
     },
     "new_exchange_to_ack_us": {
       "metric": "new_exchange_to_ack_us",
-      "measurement_status": "OPEN",
+      "measurement_status": "MEASURED",
       "hftbacktest_component": "order_response",
-      "note": "Requires calibrated exch_ts + resp_ts; CC-3 campaign pending"
+      "note": "Measured by CC campaign cc3_new_decomp_20260618T022002Z (n=200)",
+      "distribution_us": {
+        "count": 200,
+        "min_us": 186.65,
+        "mean_us": 536.467,
+        "p50_us": 371.509,
+        "p90_us": 687.688,
+        "p95_us": 814.041,
+        "p99_us": 1793.268,
+        "p99_9_us": 10790.345,
+        "max_us": 10790.345
+      },
+      "source_run_id": "cc3_new_decomp_20260618T022002Z",
+      "sample_count": 200
     },
     "cancel_send_to_exchange_us": {
       "metric": "cancel_send_to_exchange_us",
       "measurement_status": "OPEN",
       "hftbacktest_component": "order_entry",
-      "note": "CC-4 campaign pending"
+      "note": "CC-4 cc4_cancel_20260618T022002Z: cancel_send_to_exchange_us count=0 (cancel_ack_timeout; local cancel_to_send_us measured in placement test)",
+      "source_run_id": "cc4_cancel_20260618T022002Z"
     },
     "cancel_exchange_to_ack_us": {
       "metric": "cancel_exchange_to_ack_us",
       "measurement_status": "UNMEASURED",
       "hftbacktest_component": "order_response",
-      "note": "Live placement test: all 25 cancel ack timeouts"
+      "note": "CC-4 cc4_cancel_20260618T022002Z: cancel_exchange_to_ack_us count=0 (live Rithmic 01 far-from-market; all cancel_ack_timeout in probe)",
+      "source_run_id": "cc4_cancel_20260618T022002Z"
     },
     "tick_to_send_us": {
       "metric": "tick_to_send_us",
@@ -281,7 +322,7 @@
         "p50_us": 2736.0,
         "p99_us": 13693.0
       },
-      "note": "Ack campaign n=200; see new_send_to_ack_ms in latency_summary.json"
+      "note": "Placement test n=25; ack campaign n=200 in new_send_to_ack_ms"
     },
     "fill_exchange_to_local_us": {
       "metric": "fill_exchange_to_local_us",
@@ -322,5 +363,10 @@
       "extreme"
     ],
     "generator": "scripts/latency_probe/generate_latency_regimes.py"
+  },
+  "cc_component_ingest": {
+    "last_ingest_utc": "2026-06-18T03:53:28Z",
+    "script": "scripts/latency_probe/ingest_latency_truth_components.py",
+    "repo": "C:\\Users\\MSI\\repos\\hft3"
   }
 }
