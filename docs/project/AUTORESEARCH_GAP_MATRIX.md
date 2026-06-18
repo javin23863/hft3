@@ -13,20 +13,26 @@ Status as of merge `d6665025` (VectorBT VBT-HBT handoff + HftBacktest campaign o
 | HftBacktest campaign runner + manifest | `hft_campaign/runner.py`, `manifest.py` |
 | Workbench robustness / WFC | `campaign_runner.run_campaign` |
 
-## OPEN (this plan — multi-generation loop)
+## OPEN (superseded by FEATURE_FAMILY_IMPLEMENTATION_AUDIT — Phase 7)
 
 | Capability | Missing connection | Minimal change |
 |---|---|---|
-| Multi-gen driver | No `--autoresearch` loop | `generation_loop.py` + CLI flags |
-| Cross-gen lineage | No `autoresearch_manifest.json` | `generation_state.py` |
-| Elite refinement Gen N+1 | No neighbor expansion from validated elites | `elite_refinement.py` |
-| Generation outcome aggregation | No validated summary across runners | `generation_summary.py` |
-| Workbench robustness from loop | `run_campaign` not called from autoresearch | Wire top-K in `generation_loop.py` |
-| Hft campaign from loop | `run_hftbacktest_campaign` not called from autoresearch | Wire after screening in `generation_loop.py` |
-| Review memory roots | Wrong workbench scan paths | Fix `_candidate_roots()` |
-| Generation memory write | No JSONL facts | `append_generation_memory()` |
-| Idea `param_ranges` | Hard-coded in `parsed_from_idea` | Honor idea payload ranges |
-| Holdout in learner | Could leak into elite selection | Filter in `generation_summary.py` |
+| Feature-recipe candidate generation | Autoresearch refines 4 execution params only | Phase 7: family-aware `propose_next_candidates` |
+| VectorBT fs_v1 row-loop consumption | Default bar stub | Phase 5: wire recipes into adapter |
+| HBT recipe-hash equality | No cross-check yet | Phase 6: gate in handoff |
+| Cross-asset real leader | Placeholder OFI | Phase 2: multi-symbol sync |
+
+## DONE (this plan slice — multi-generation loop shell)
+
+| Capability | Location |
+|---|---|
+| Multi-gen driver | `generation_loop.py` + `--autoresearch` |
+| Cross-gen lineage | `generation_state.py`, `autoresearch_manifest.json` |
+| Elite refinement Gen N+1 | `elite_refinement.py` (execution params; family recipes Phase 7) |
+| Generation outcome aggregation | `generation_summary.py` |
+| Workbench robustness from loop | `make_default_robustness_fn` → `frozen_strategy_params` |
+| Review memory roots + JSONL | `review_memory.py` |
+| Holdout exclusion in summary | `generation_summary.py` |
 
 ## Out of scope
 

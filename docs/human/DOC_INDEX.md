@@ -5,6 +5,9 @@ Chronological onboarding for human developers. AI agents: [../ai/ONBOARDING.md](
 | Step | Document | Why read it |
 |------|----------|-------------|
 | 0 | [../REPO_STATE.md](../REPO_STATE.md) | Canonical path (`C:\Users\MSI\repos\hft3`), active `main`, branch map, clean-tree checks |
+| **0a** | **[RESEARCH_SYSTEM_EXECUTION_ORDER.md](RESEARCH_SYSTEM_EXECUTION_ORDER.md)** | **Chronological research path: data → features → families → VectorBT → robustness → HBT → learning → artifacts** |
+| **0b** | **[../project/FEATURE_FAMILY_IMPLEMENTATION_AUDIT.md](../project/FEATURE_FAMILY_IMPLEMENTATION_AUDIT.md)** | **Feature-family inventory, canonical vs obsolete paths, status manifest** |
+| **0c** | **[../project/FEATURE_FAMILY_RESEARCH_SYSTEM_PROMPT.md](../project/FEATURE_FAMILY_RESEARCH_SYSTEM_PROMPT.md)** | **Active workstream phases 0–9 (integration + ordering)** |
 | 1 | [GETTING_STARTED.md](GETTING_STARTED.md) | Clone, setup, lanes, verification |
 | 2 | [../../BLUEPRINT.md](../../BLUEPRINT.md) | System spec: math invariants, topology, walk-forward |
 | 3 | [../references/README.md](../references/README.md) + [../references/MANIFEST.md](../references/MANIFEST.md) | Authority PDF bundle |
@@ -36,6 +39,9 @@ Chronological onboarding for human developers. AI agents: [../ai/ONBOARDING.md](
 | After-action LLM | [../workbench/AFTER_ACTION_REPORTS.md](../workbench/AFTER_ACTION_REPORTS.md) |
 | Project merge protocol | [../project/MERGE_PROTOCOL.md](../project/MERGE_PROTOCOL.md) |
 | Phase contracts | [../project/PHASE_CONTRACTS.md](../project/PHASE_CONTRACTS.md) |
+| Feature-family audit | [../project/FEATURE_FAMILY_IMPLEMENTATION_AUDIT.md](../project/FEATURE_FAMILY_IMPLEMENTATION_AUDIT.md) |
+| Feature-family status YAML | [../project/FEATURE_FAMILY_STATUS_MANIFEST.yaml](../project/FEATURE_FAMILY_STATUS_MANIFEST.yaml) |
+| Research execution order | [RESEARCH_SYSTEM_EXECUTION_ORDER.md](RESEARCH_SYSTEM_EXECUTION_ORDER.md) |
 | Validation matrix | [../project/VALIDATION_MATRIX.md](../project/VALIDATION_MATRIX.md) |
 | Structural PDF models | [../structural_models/PDF_MODELS.md](../structural_models/PDF_MODELS.md) |
 | Contributing | [../../CONTRIBUTING.md](../../CONTRIBUTING.md) |

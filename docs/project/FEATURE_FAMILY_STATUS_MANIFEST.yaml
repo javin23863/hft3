@@ -1,0 +1,155 @@
+# Feature-family implementation status (Phase 0 snapshot)
+
+# Machine-readable manifest for cockpit and paid-screen gates.
+# Owner: docs/project/FEATURE_FAMILY_IMPLEMENTATION_AUDIT.md
+# Update after each implementation phase; do not claim consumed without proof.
+
+schema_version: feature_family_status.v1
+updated: 2026-06-18
+
+feature_families:
+  primary_fs_v1:
+    source_generation_status: implemented
+    synchronization_status: implemented
+    vectorbt_consumption_status: not_used
+    hftbacktest_consumption_status: partial
+    autonomous_candidate_status: eligible_limited
+    pit_proof_status: partial
+    ablation_status: not_measured
+    data_coverage_status: npz_catalog_available
+    blocking_reason: vectorbt_default_bar_stub_not_fs_v1_row_loop
+    canonical_files:
+      - packages/features_engine/src/features/mbo_features.py
+      - packages/features_engine/src/pipeline/market_state_pipeline.py
+      - packages/backtest_pipeline/src/feature_plane.py
+    tests:
+      - tests/test_market_state_pipeline_features.py
+      - tests/backtest_pipeline/test_feature_plane.py
+
+  cross_asset_futures:
+    source_generation_status: partial
+    synchronization_status: partial
+    vectorbt_consumption_status: not_used
+    hftbacktest_consumption_status: not_measured
+    autonomous_candidate_status: blocked
+    pit_proof_status: missing
+    ablation_status: missing
+    data_coverage_status: multi_symbol_npz_gaps
+    blocking_reason: leader_symbol_placeholder_ofi_must_be_removed
+    canonical_files:
+      - packages/features_engine/src/hypotheses/modules.py
+      - packages/replay/replay_session.py
+      - packages/replay/market_data_adapter.py
+    tests:
+      - tests/test_cross_asset_replay.py
+
+  vix_vvix_sensor:
+    source_generation_status: implemented
+    synchronization_status: implemented
+    vectorbt_consumption_status: not_used
+    hftbacktest_consumption_status: not_measured
+    autonomous_candidate_status: blocked
+    pit_proof_status: partial
+    ablation_status: missing
+    data_coverage_status: sensor_npz_when_present
+    blocking_reason: not_wired_into_vectorbt_screen
+    canonical_files:
+      - packages/features_engine/src/features/vix_features.py
+      - packages/replay/sensor_feature_adapter.py
+    tests:
+      - tests/test_features/test_vix_hypotheses.py
+
+  vix_options:
+    source_generation_status: partial
+    synchronization_status: partial
+    vectorbt_consumption_status: not_used
+    hftbacktest_consumption_status: not_measured
+    autonomous_candidate_status: blocked
+    pit_proof_status: partial
+    ablation_status: missing
+    data_coverage_status: limited_strike_expiry
+    blocking_reason: options_depth_not_full_product
+    canonical_files:
+      - packages/features_engine/src/features/vix_features.py
+      - packages/features_engine/src/hypotheses/vix_modules.py
+    tests:
+      - tests/test_features/test_vix_hypotheses.py
+
+  cme_options_context:
+    source_generation_status: partial
+    synchronization_status: not_measured
+    vectorbt_consumption_status: not_used
+    hftbacktest_consumption_status: not_measured
+    autonomous_candidate_status: blocked
+    pit_proof_status: missing
+    ablation_status: missing
+    data_coverage_status: options_lane_quarantined
+    blocking_reason: data_requirements_unsatisfied
+    canonical_files:
+      - packages/options_lane/
+    tests:
+      - tests/test_workbench/test_options_lane_campaign.py
+
+  macro_context:
+    source_generation_status: implemented
+    synchronization_status: implemented
+    vectorbt_consumption_status: not_used
+    hftbacktest_consumption_status: not_measured
+    autonomous_candidate_status: blocked
+    pit_proof_status: partial
+    ablation_status: not_measured
+    data_coverage_status: event_catalog_complete
+    blocking_reason: target_only_vs_context_uplift_not_split_in_screen
+    canonical_files:
+      - apps/workbench/src/data/event_catalog.py
+      - packages/data_system/config/events.csv
+    tests:
+      - tests/test_workbench/test_event_catalog.py
+
+  continuous_session:
+    source_generation_status: implemented
+    synchronization_status: implemented
+    vectorbt_consumption_status: sidelined_scope
+    hftbacktest_consumption_status: not_measured
+    autonomous_candidate_status: blocked
+    pit_proof_status: partial
+    ablation_status: not_measured
+    data_coverage_status: scheduled_event_scope_default
+    blocking_reason: continuous_intraday_clock_out_of_scope_for_scheduled_screen
+    canonical_files:
+      - packages/features_engine/src/pipeline/market_state_pipeline.py
+    tests:
+      - tests/backtest_pipeline/test_feature_plane.py
+
+  latency_state:
+    source_generation_status: partial
+    synchronization_status: partial
+    vectorbt_consumption_status: not_used
+    hftbacktest_consumption_status: partial
+    autonomous_candidate_status: blocked
+    pit_proof_status: partial
+    ablation_status: missing
+    data_coverage_status: chi404_artifacts_when_measured
+    blocking_reason: latency_as_runner_config_not_model_feature_family
+    canonical_files:
+      - packages/replay/replay_session.py
+      - docs/workbench/LATENCY_ARCHITECTURE.md
+    tests:
+      - tests/test_replay_feature_latency.py
+
+paid_screen_gate:
+  allowed: false
+  reason: feature_plane_drift_blocks_expensive_run_until_pilot_proves_pit_consumption
+  required_pilot_fields:
+    - feature_recipe_hash
+    - feature_usage_manifest
+    - cross_asset_alignment_status
+    - vix_sensor_status
+    - vix_options_status
+    - cme_options_context_status
+    - macro_context_ablation_status
+    - continuous_clock_status
+    - latency_feature_status
+    - vectorbt_result
+    - robustness_result
+    - hftbacktest_handoff_status
