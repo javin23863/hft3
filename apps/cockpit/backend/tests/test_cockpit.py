@@ -2,7 +2,6 @@
 
 Run from repo root:  python -m pytest apps/cockpit/backend/tests -q
 """
-import importlib.util
 import json
 import os
 import subprocess
@@ -21,19 +20,21 @@ from apps.cockpit.backend.aggregate import alerts as alerts_agg
 from apps.cockpit.backend.aggregate import pipeline as pipeline_agg
 from apps.cockpit.backend.aggregate import system as system_agg
 from apps.cockpit.backend.main import app
+from backtest_pipeline.src.vectorbt_adapter import (
+    SURFACE_STABILITY_REQUIRED_CHECKS,
+    compute_screening_artifact_hash,
+    _parameter_values_hash,
+)
+from backtest_pipeline.src.hftbacktest_realism import (
+    DEFAULT_ADAPTER_FILES,
+    DEFAULT_API_SURFACE_USED,
+    DOCS_PAGES_USED,
+    UPSTREAM_DOCS_URL,
+    UPSTREAM_REPO_URL,
+    compute_hftbacktest_source_lock_hash,
+)
 
 VIEW_KEYS = {"zone", "generated_utc", "health"}
-_REPO_ROOT = Path(__file__).resolve().parents[4]
-
-
-def _load_run_event_universe():
-    script = _REPO_ROOT / "scripts" / "run_event_universe.py"
-    spec = importlib.util.spec_from_file_location("run_event_universe_contract", script)
-    if spec is None or spec.loader is None:
-        raise AssertionError(f"unable to load {script}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 def _json_roundtrip(obj):
@@ -117,7 +118,7 @@ def _full_universe_cli_args(repo: Path) -> dict:
     }
 
 
-def _write_universe_result(path: Path, **overrides) -> None:
+def _write_universe_artifact(path: Path, **overrides) -> None:
     repo = path.parents[1]
     payload = {
         "schema": "universe_result_v1",
@@ -189,6 +190,16 @@ def _write_latency_evidence_files(root: Path) -> None:
         }),
         encoding="utf-8",
     )
+    (root / "reports" / "latency_baselines" / "live_r01_chicago_baseline.json").write_text(
+        json.dumps({
+            "metrics": {
+                "tick_to_send_us": {"p99_us": 60.894},
+                "cancel_to_send_us": {"p99_us": 18.906},
+                "cancel_to_ack_us": {"p99_us": None},
+            }
+        }),
+        encoding="utf-8",
+    )
     (root / "reports" / "latency_baselines" / "order_ack_campaign_20260611T072116Z_summary.json").write_text(
         json.dumps({"metrics": {"decision_to_send_us": {"p50_us": 12.404, "p99_us": 38.693}}}),
         encoding="utf-8",
@@ -204,12 +215,15 @@ def _point_latency_paths(monkeypatch, root: Path) -> None:
     monkeypatch.setattr(paths, "LATENCY_SUMMARY", root / "runtime" / "latency_reports" / "latency_summary.json")
     monkeypatch.setattr(paths, "LATENCY_TRUTH", root / "runtime" / "latency_reports" / "latency_truth.json")
     monkeypatch.setattr(paths, "LATENCY_CURRENT_BASELINE", root / "reports" / "latency_baselines" / "current_baseline.json")
+    monkeypatch.setattr(paths, "LATENCY_LIVE_BASELINE", root / "reports" / "latency_baselines" / "live_r01_chicago_baseline.json")
+    monkeypatch.setattr(paths, "LATENCY_LIVE_PLACEMENT_CAPABILITY", root / "runtime" / "latency_reports" / "live_placement_capability.json")
     monkeypatch.setattr(paths, "LATENCY_LATEST_ORDER_SUMMARY", root / "reports" / "latency_baselines" / "order_ack_campaign_20260611T072116Z_summary.json")
     monkeypatch.setattr(paths, "LATENCY_DEFENSIVE_CANCEL_SAMPLE", root / "data" / "latency_baselines" / "2026-06-11" / "order_ack_campaign_20260611T071952Z.jsonl")
 
 
 def _point_non_universe_pipeline_paths(monkeypatch, root: Path) -> None:
     monkeypatch.setattr(paths, "CAPTURE_BASELINE", root / "missing_capture.json")
+    monkeypatch.setattr(paths, "ACTIVE_RUN", root / "runtime" / "workbench" / "active_run.json")
     monkeypatch.setattr(paths, "FEATURE_FABRIC", root / "missing_feature.json")
     monkeypatch.setattr(paths, "STAGE_A_RESULT", root / "missing_stage_a.json")
     monkeypatch.setattr(paths, "STAGE_A_SURVIVORS", root / "missing_survivors.json")
@@ -219,9 +233,291 @@ def _point_non_universe_pipeline_paths(monkeypatch, root: Path) -> None:
 
 def _read_universe_stage(monkeypatch, tmp_path: Path, payload: dict) -> dict:
     artifact = tmp_path / "research_cards" / "universe_result.json"
-    _write_universe_result(artifact, **payload)
+    _write_universe_artifact(artifact, **payload)
     monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "ACTIVE_RUN", tmp_path / "runtime" / "workbench" / "active_run.json")
     return pipeline_agg._universe_stage("gauntlet_b", "Gauntlet B", artifact)
+
+
+def _write_active_run(root: Path, run_id: str) -> Path:
+    active = root / "runtime" / "workbench" / "active_run.json"
+    active.parent.mkdir(parents=True, exist_ok=True)
+    active.write_text(
+        json.dumps({
+            "schema_version": "workbench_active_run_v1",
+            "run_id": run_id,
+            "artifact_reuse_policy": "active_run_id_only",
+        }),
+        encoding="utf-8",
+    )
+    return active
+
+
+def _robustness_with_dsr_cell(dsr_cell: dict, fee_cell: dict | None = None) -> dict:
+    return {
+        "dsr_by_cell": {"hyp_2_band_1.0_CPI": dsr_cell},
+        "pbo": {"pbo": 0.12, "n_configs": 8, "n_partitions": 70},
+        "bootstrap_by_cell": {"hyp_2_band_1.0_CPI": {"ci_lower": 1.5}},
+        "fee_stress_by_cell": {"hyp_2_band_1.0_CPI": fee_cell or {"fee_x2_pass": True}},
+    }
+
+
+def _surface_formula_missing() -> dict:
+    return {
+        "status": "not_run",
+        "reason": "surface_stability_formula_authority_missing",
+        "authority": "docs/project/ROBUSTNESS_TESTING_SPEC.md#4-in-sample-surface-robustness",
+        "formula_authority_status": "missing",
+        "literature_or_ontology_citation": "docs/project/ROBUSTNESS_TESTING_SPEC.md:130-144",
+        "required_checks": list(SURFACE_STABILITY_REQUIRED_CHECKS),
+        "failure_semantics": "SURFACE_STABILITY_FORMULA_MISSING",
+    }
+
+
+def _surface_formula_defined() -> dict:
+    return {
+        "status": "pass",
+        "formula_authority_status": "defined",
+        "required_checks": list(SURFACE_STABILITY_REQUIRED_CHECKS),
+        "plateau_score": 0.8,
+        "plateau_width": 3,
+        "neighbor_stability": 0.9,
+        "cliff_distance_from_loss_regions": 2,
+        "parameter_perturbation_sensitivity": 0.1,
+        "peak_vs_plateau_comparison": 0.02,
+        "minimum_sample_size": 30,
+    }
+
+
+def _screening_candidate_row(run_id: str, *, replay_eligible: bool, surface_defined: bool) -> dict:
+    candidate_id = f"{run_id}_cand"
+    parameter_values = {"signal_threshold": 0.15}
+    return {
+        "candidate_id": candidate_id,
+        "model_id": "HYP_5",
+        "symbol": "MES.v.0",
+        "research_clock": "continuous_intraday",
+        "opportunity_type_or_event_type": "screen",
+        "parameter_values": parameter_values,
+        "parameter_values_hash": _parameter_values_hash(parameter_values),
+        "trials_budget_tier": "screen",
+        "in_sample_metrics": {"expectancy": 1.2},
+        "out_of_sample_metrics": {"expectancy": 1.1},
+        "walk_forward_metrics": {"folds": 4},
+        "wfc_metrics": {"pearson": 0.5},
+        "surface_stability_metrics": (
+            _surface_formula_defined() if surface_defined else _surface_formula_missing()
+        ),
+        "robustness_gate_scope": "screen",
+        "wfc_status": "pass",
+        "dsr_status": "pass",
+        "pbo_status": "pass",
+        "cscv_status": "pass",
+        "robustness_artifact_staleness": "fresh",
+        "trade_count": 12,
+        "gross_return": 120.0,
+        "total_fees": 4.0,
+        "total_slippage": 2.0,
+        "net_return": 114.0,
+        "net_pnl": 114.0,
+        "expectancy_per_trade": 9.5,
+        "profit_factor": 1.4,
+        "sharpe": 1.2,
+        "sortino": 1.3,
+        "max_drawdown": -20.0,
+        "turnover": 1.0,
+        "bootstrap_ci_or_not_run": {"status": "pass", "ci_lower": 0.1, "ci_upper": 2.0},
+        "dsr_or_not_run": {"status": "pass", "dsr_pass": True, "dsr_cdf": 0.96},
+        "pbo_or_not_run": {"status": "pass", "pbo_pass": True, "pbo": 0.1, "maximum_pbo": 0.2},
+        "cscv_count_or_not_run": {"status": "pass", "n_partitions": 8, "n_configs": 3},
+        "screening_status": "pass",
+        "replay_eligibility_status": "eligible" if replay_eligible else "not_eligible",
+        "rejection_reason_or_null": None if replay_eligible else (
+            "vbt_screen_passed_surface_formula_authority_missing"
+        ),
+        "pass_reason": "vectorbt_screen_passed_replay_not_eligible",
+    }
+
+
+def _write_screening_artifact(
+    root: Path,
+    run_id: str,
+    created_at: str,
+    *,
+    replay_eligible: bool = False,
+    surface_defined: bool = False,
+    **overrides,
+) -> Path:
+    artifact = root / "research_cards" / "pipeline_runs" / run_id / "screening_artifact.json"
+    row = _screening_candidate_row(
+        run_id,
+        replay_eligible=replay_eligible,
+        surface_defined=surface_defined,
+    )
+    payload = {
+        "run_id": run_id,
+        "created_at_utc": created_at,
+        "code_commit": "test",
+        "screening_backend": "vectorbt",
+        "vectorbt_version": "1.0.0",
+        "vectorbt_engine": "rust",
+        "engine_parity_status": "rust_runtime_proof_present",
+        "rust_engine_required_for_scope": True,
+        "rust_engine_available": True,
+        "vectorbt_engine_runtime_proof": True,
+        "license_review": "test",
+        "research_clock": "continuous_intraday",
+        "parameter_space_id": "ps_test",
+        "parameter_space_hash": "ps_hash",
+        "max_trials": 1,
+        "trials_run": 1,
+        "run_budget_id": "screen_1",
+        "max_models": 1,
+        "max_symbols": 1,
+        "max_feature_sets": 1,
+        "max_total_trials": 1,
+        "max_wall_clock_seconds": None,
+        "max_peak_memory_mb_or_null": None,
+        "abort_on_budget_exhaustion": True,
+        "screening_scope": "screen",
+        "candidate_ids": [row["candidate_id"]],
+        "candidate_reasons": {row["candidate_id"]: row["pass_reason"]},
+        "promoted_ids": [row["candidate_id"]],
+        "promoted_reasons": {row["candidate_id"]: row["pass_reason"]},
+        "rejected_ids": [],
+        "rejected_reasons": {},
+        "stop_reasons": [],
+        "feature_set_id": "features_test",
+        "feature_set_hash": "features_hash",
+        "data_manifest_hash": "data_hash",
+        "lake_manifest_hash": "lake_hash",
+        "events_csv_hash_or_not_applicable": "not_applicable",
+        "split_scheme_id": "split_test",
+        "no_lookahead_signal_shift_proof": {"status": "pass", "shift_bars": 1},
+        "fees_model_id": "fees_test",
+        "slippage_model_id": "slippage_test",
+        "bar_construction_id": "bars_test",
+        "promoted": [row],
+        "rejected": [],
+        "screening_artifact_hash": "",
+    }
+    payload.update(overrides)
+    payload["screening_artifact_hash"] = compute_screening_artifact_hash(payload)
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    artifact.write_text(json.dumps(payload), encoding="utf-8")
+    return artifact
+
+
+_NATIVE_CPP_LATENCY_EVIDENCE = (
+    "reports/latency_baselines/order_ack_campaign_20260611T072116Z_summary.json"
+    f"#sha256:{'a' * 64}"
+)
+_OFFICIAL_REPLAY_HASH = f"sha256:{'b' * 64}"
+
+
+def _hftbacktest_source_lock(created_at: str) -> dict:
+    lock = {
+        "upstream_repo_url": UPSTREAM_REPO_URL,
+        "upstream_commit_sha_or_tag": "v2.4.2",
+        "upstream_ref_verification_status": "package_version_match",
+        "upstream_ref_verified_against": "installed_python_package_version",
+        "upstream_docs_url": UPSTREAM_DOCS_URL,
+        "docs_pages_used": list(DOCS_PAGES_USED),
+        "python_package_name": "hftbacktest",
+        "python_package_version": "2.4.2",
+        "rust_crate_version_or_not_used": "not_used_by_python_hbt0",
+        "installed_module_path": "site-packages/hftbacktest",
+        "source_lock_created_at_utc": created_at,
+        "hft3_commit": "test",
+        "hft3_adapter_files": list(DEFAULT_ADAPTER_FILES),
+        "api_surface_used": list(DEFAULT_API_SURFACE_USED),
+        "known_doc_repo_discrepancies": [],
+        "license_review": "test",
+        "native_hot_path_required": True,
+        "native_hot_path_evidence": [_NATIVE_CPP_LATENCY_EVIDENCE],
+        "native_hot_path_status": "provided",
+        "hftbacktest_available": True,
+    }
+    lock["source_lock_hash"] = compute_hftbacktest_source_lock_hash(lock)
+    return lock
+
+
+def _write_replay_summary(
+    root: Path,
+    run_id: str,
+    generated_at: str,
+    *,
+    screening_hash: str = "",
+    candidate_id: str | None = None,
+    **overrides,
+) -> Path:
+    out_dir = root / "research_cards" / "hftbacktest_realism" / run_id
+    artifact = out_dir / "replay_summary.json"
+    selected_candidate_id = candidate_id or f"{run_id}_cand"
+    source_lock = _hftbacktest_source_lock(generated_at)
+    payload = {
+        "run_id": run_id,
+        "created_at_utc": generated_at,
+        "generated_utc": generated_at,
+        "hft3_commit": "test",
+        "screening_artifact_hash": screening_hash,
+        "candidate_id": selected_candidate_id,
+        "model_id": "HYP_5",
+        "symbol": "MES.v.0",
+        "research_clock": "continuous_intraday",
+        "event_or_session_scope": "screen",
+        "hftbacktest_source_lock_hash": source_lock["source_lock_hash"],
+        "data_validation_status": "pass",
+        "latency_model_family": "ConstantLatency",
+        "exchange_model": "NoPartialFillExchange",
+        "queue_model": "RiskAdverseQueueModel",
+        "queue_model_source": "hftbacktest",
+        "fill_model_scope": "l2_queue_estimate",
+        "partial_fill_policy": "no_partial_fill",
+        "time_in_force_policy": "GTC",
+        "accelerated_mode": False,
+        "accuracy_tradeoff_declared": False,
+        "queue_position_modeled": True,
+        "order_response_latency_modeled": True,
+        "full_replay_comparison_hash_or_not_run": _OFFICIAL_REPLAY_HASH,
+        "certification_allowed": True,
+        "market_impact_mode": "not_modeled",
+        "orders_intended": 1,
+        "orders_submitted": 1,
+        "orders_acknowledged": 1,
+        "orders_cancelled": 0,
+        "fills_count": 1,
+        "partial_fills_count": 0,
+        "unfilled_count": 0,
+        "fill_rate": 1.0,
+        "avg_queue_position_or_not_available": 1.0,
+        "latency_p50_ms": 1.0,
+        "latency_p90_ms": 2.0,
+        "latency_p99_ms": 3.0,
+        "tick_size": 0.25,
+        "lot_size": 1,
+        "minimum_order_qty": 1,
+        "maker_fees": 0.2,
+        "taker_fees": 0.4,
+        "gross_pnl": 10.0,
+        "net_pnl": 9.0,
+        "execution_adjusted_expectancy": 9.0,
+        "max_drawdown": -2.0,
+        "adverse_selection_markout": 0.1,
+        "spread_capture_or_cost": 0.2,
+        "official_hftbacktest_replay_status": "pass",
+        "official_replay_artifact_hash": _OFFICIAL_REPLAY_HASH,
+        "discrepancy_comparison_status": "not_run",
+        "discrepancy_comparison_artifact_hash": "not_run",
+        "certification_feedback_status": "blocked_missing_observation",
+        "replay_realism_status": "pass",
+        "fail_closed_reasons": [],
+    }
+    payload.update(overrides)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "hftbacktest_source_lock.json").write_text(json.dumps(source_lock), encoding="utf-8")
+    artifact.write_text(json.dumps(payload), encoding="utf-8")
+    return artifact
 
 
 @pytest.mark.parametrize("name", list(ZONES))
@@ -246,6 +542,259 @@ def test_pipeline_has_seven_stages():
     ]
     for s in p["stages"]:
         assert {"id", "label", "status"}.issubset(s)
+
+
+def test_latest_screening_artifact_missing(monkeypatch, tmp_path):
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+
+    fields = pipeline_agg._latest_screening_fields()
+
+    assert fields["screening_status"] == sc.MISSING
+    assert fields["screening_artifact"] is None
+    assert fields["robustness_status"] == sc.MISSING
+    assert fields["robustness_artifact"] is None
+    assert fields["surface_stability_status"] == sc.MISSING
+    assert fields["surface_formula_authority_status"] == sc.MISSING
+
+
+def test_latest_screening_artifact_uses_semantic_time(monkeypatch, tmp_path):
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    newer = _write_screening_artifact(tmp_path, "newer", "2026-02-01T00:00:00+00:00")
+    older = _write_screening_artifact(
+        tmp_path,
+        "older",
+        "2026-01-01T00:00:00+00:00",
+        promoted_ids=[],
+        promoted=[],
+        rejected_ids=["older_cand"],
+        rejected=[{"candidate_id": "older_cand", "screening_status": "rejected"}],
+    )
+    os.utime(newer, (1_700_000_000, 1_700_000_000))
+    os.utime(older, (1_800_000_000, 1_800_000_000))
+
+    fields = pipeline_agg._latest_screening_fields()
+
+    assert fields["screening_status"] == "pass"
+    assert fields["screening_run_id"] == "newer"
+    assert fields["screening_artifact"] == "research_cards/pipeline_runs/newer/screening_artifact.json"
+    assert fields["screening_time_source"] == "created_at_utc"
+    assert fields["screening_promoted_count"] == 1
+    assert fields["robustness_status"] == "pass"
+    assert fields["robustness_artifact"] == fields["screening_artifact"]
+    assert fields["surface_stability_status"] == "not_run"
+    assert fields["surface_formula_authority_status"] == "missing"
+    assert fields["surface_stability_detail"] == "surface_stability_formula_authority_missing"
+
+
+def test_latest_hbt_replay_summary_missing(monkeypatch, tmp_path):
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+
+    fields = pipeline_agg._latest_replay_fields()
+
+    assert fields["replay_status"] == sc.MISSING
+    assert fields["replay_artifact"] is None
+
+
+def test_latest_hbt_replay_summary_uses_semantic_time(monkeypatch, tmp_path):
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    screening_path = _write_screening_artifact(
+        tmp_path,
+        "screen_newer",
+        "2026-02-01T00:00:00+00:00",
+        replay_eligible=True,
+        surface_defined=True,
+    )
+    screening_fields = pipeline_agg._latest_screening_fields()
+    screening_hash = screening_fields["screening_artifact_hash"]
+    candidate_id = screening_fields["robustness_candidate_id"]
+    newer = _write_replay_summary(
+        tmp_path,
+        "hbt_newer",
+        "2026-02-01T00:00:00+00:00",
+        screening_hash=screening_hash,
+        candidate_id=candidate_id,
+    )
+    older = _write_replay_summary(
+        tmp_path,
+        "hbt_older",
+        "2026-01-01T00:00:00+00:00",
+        screening_hash=screening_hash,
+        candidate_id=candidate_id,
+        official_hftbacktest_replay_status="not_run",
+        replay_realism_status="research_only",
+    )
+    os.utime(screening_path, (1_700_000_000, 1_700_000_000))
+    os.utime(newer, (1_700_000_000, 1_700_000_000))
+    os.utime(older, (1_800_000_000, 1_800_000_000))
+
+    fields = pipeline_agg._latest_replay_fields(screening_fields)
+
+    assert fields["replay_status"] == "pass"
+    assert fields["replay_run_id"] == "hbt_newer"
+    assert fields["replay_artifact"] == "research_cards/hftbacktest_realism/hbt_newer/replay_summary.json"
+    assert fields["replay_time_source"] == "generated_utc"
+    assert fields["official_hftbacktest_replay_status"] == "pass"
+
+
+def test_latest_hbt_replay_summary_requires_matching_screening_hash_and_candidate(monkeypatch, tmp_path):
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    _write_screening_artifact(
+        tmp_path,
+        "screen_run",
+        "2026-02-01T00:00:00+00:00",
+        replay_eligible=True,
+        surface_defined=True,
+    )
+    screening_fields = pipeline_agg._latest_screening_fields()
+    _write_replay_summary(
+        tmp_path,
+        "hbt_bad",
+        "2026-02-02T00:00:00+00:00",
+        screening_hash="different_hash",
+        candidate_id="different_candidate",
+    )
+
+    fields = pipeline_agg._latest_replay_fields(screening_fields)
+
+    assert fields["replay_status"] == sc.STALE
+    assert "no_paired_replay_summary_for_screening_hash_and_candidate" in fields["replay_detail"]
+
+
+def test_latest_hbt_replay_summary_prefers_paired_over_newer_unpaired(monkeypatch, tmp_path):
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    _write_screening_artifact(
+        tmp_path,
+        "screen_run",
+        "2026-02-01T00:00:00+00:00",
+        replay_eligible=True,
+        surface_defined=True,
+    )
+    screening_fields = pipeline_agg._latest_screening_fields()
+    _write_replay_summary(
+        tmp_path,
+        "hbt_paired_old",
+        "2026-02-02T00:00:00+00:00",
+        screening_hash=screening_fields["screening_artifact_hash"],
+        candidate_id=screening_fields["robustness_candidate_id"],
+    )
+    _write_replay_summary(
+        tmp_path,
+        "hbt_unpaired_new",
+        "2026-02-03T00:00:00+00:00",
+        screening_hash="different_hash",
+        candidate_id="different_candidate",
+    )
+
+    fields = pipeline_agg._latest_replay_fields(screening_fields)
+
+    assert fields["replay_status"] == "pass"
+    assert fields["replay_run_id"] == "hbt_paired_old"
+
+
+def test_latest_hbt_replay_summary_blocks_surface_formula_missing(monkeypatch, tmp_path):
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    _write_screening_artifact(tmp_path, "screen_run", "2026-02-01T00:00:00+00:00")
+    screening_fields = pipeline_agg._latest_screening_fields()
+    _write_replay_summary(
+        tmp_path,
+        "hbt_run",
+        "2026-02-02T00:00:00+00:00",
+        screening_hash=screening_fields["screening_artifact_hash"],
+        candidate_id=screening_fields["robustness_candidate_id"],
+    )
+
+    fields = pipeline_agg._latest_replay_fields(screening_fields)
+
+    assert fields["replay_status"] == sc.STALE
+    assert "surface_formula_authority_missing" in fields["replay_detail"]
+
+
+def test_pipeline_promote_stage_exposes_vbt5_visibility(monkeypatch, tmp_path):
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "ACTIVE_RUN", tmp_path / "runtime" / "workbench" / "active_run.json")
+    survivors = tmp_path / "research_cards" / "stage_a_full" / "stage_a_survivors.json"
+    survivors.parent.mkdir(parents=True, exist_ok=True)
+    survivors.write_text(json.dumps([{"hypothesis_id": "HYP_5"}]), encoding="utf-8")
+    monkeypatch.setattr(paths, "STAGE_A_SURVIVORS", survivors)
+    screening_path = _write_screening_artifact(
+        tmp_path,
+        "screen_run",
+        "2026-02-01T00:00:00+00:00",
+        replay_eligible=True,
+        surface_defined=True,
+    )
+    screening_data = json.loads(screening_path.read_text(encoding="utf-8"))
+    _write_replay_summary(
+        tmp_path,
+        "hbt_run",
+        "2026-02-02T00:00:00+00:00",
+        screening_hash=screening_data["screening_artifact_hash"],
+        candidate_id=screening_data["promoted"][0]["candidate_id"],
+    )
+
+    stage = pipeline_agg._promote_stage()
+
+    assert stage["status"] == sc.OK
+    assert stage["screening_status"] == "pass"
+    assert stage["screening_artifact"] == "research_cards/pipeline_runs/screen_run/screening_artifact.json"
+    assert stage["replay_status"] == "pass"
+    assert stage["replay_artifact"] == "research_cards/hftbacktest_realism/hbt_run/replay_summary.json"
+    assert stage["robustness_status"] == "pass"
+    assert stage["robustness_artifact"] == stage["screening_artifact"]
+    assert stage["surface_formula_authority_status"] == "defined"
+
+
+def test_pipeline_promote_stage_fails_closed_without_vbt5_evidence(monkeypatch, tmp_path):
+    survivors = tmp_path / "research_cards" / "stage_a_full" / "stage_a_survivors.json"
+    survivors.parent.mkdir(parents=True, exist_ok=True)
+    survivors.write_text(json.dumps([{"hypothesis_id": "HYP_5"}]), encoding="utf-8")
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "ACTIVE_RUN", tmp_path / "runtime" / "workbench" / "active_run.json")
+    monkeypatch.setattr(paths, "STAGE_A_SURVIVORS", survivors)
+
+    stage = pipeline_agg._promote_stage()
+
+    assert stage["status"] == sc.STALE
+    assert stage["vbt5_evidence_detail"] == "screening_status_not_pass"
+    assert stage["screening_status"] == sc.MISSING
+
+
+def test_latest_screening_artifact_stale_when_active_run_mismatch(monkeypatch, tmp_path):
+    active = _write_active_run(tmp_path, "fresh_run")
+    _write_screening_artifact(
+        tmp_path,
+        "old_run",
+        "2026-02-01T00:00:00+00:00",
+        replay_eligible=True,
+        surface_defined=True,
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "ACTIVE_RUN", active)
+
+    fields = pipeline_agg._latest_screening_fields()
+
+    assert fields["screening_status"] == sc.STALE
+    assert fields["robustness_status"] == sc.STALE
+    assert "artifact run_id=old_run != active_run_id=fresh_run" in fields["screening_detail"]
+
+
+def test_pipeline_view_meta_includes_vbt5_keys():
+    source = (Path(__file__).resolve().parents[2] / "frontend" / "src" / "views" / "PipelineView.tsx").read_text(encoding="utf-8")
+    for key in (
+        "screening_status",
+        "screening_artifact",
+        "screening_artifact_hash",
+        "replay_status",
+        "replay_detail",
+        "replay_eligibility_status",
+        "replay_artifact",
+        "robustness_artifact",
+        "surface_stability_status",
+        "surface_formula_authority_status",
+    ):
+        assert f'"{key}"' in source
+    assert source.index('"replay_detail"') < source.index("slice(0, 12)")
+    assert source.index('"replay_eligibility_status"') < source.index("slice(0, 12)")
 
 
 def test_models_registry_and_silent_zero():
@@ -607,9 +1156,37 @@ def test_universe_high_finite_pbo_is_stale(monkeypatch, tmp_path, high_pbo):
     assert stage["robustness_detail"] == f"pbo {high_pbo} > maximum_pbo 0.2"
 
 
-@pytest.mark.parametrize("bad_threshold", [float("nan"), float("inf"), -0.1, 1.1, "bad"])
+@pytest.mark.parametrize("bad_threshold", [float("nan"), float("inf"), -0.1, 0.5, 0.7, 1.1, "bad"])
 def test_universe_invalid_pbo_threshold_is_stale(monkeypatch, tmp_path, bad_threshold):
     monkeypatch.setattr(pipeline_agg, "_pbo_max", lambda: bad_threshold)
+    stage = _read_universe_stage(monkeypatch, tmp_path, {
+        "robustness": {"pbo": {"pbo": 0.12, "n_configs": 8, "n_partitions": 70}},
+    })
+
+    assert stage["status"] == sc.STALE
+    assert stage["robustness_status"] == sc.STALE
+    assert stage["robustness_detail"] == "maximum_pbo threshold invalid"
+
+
+def test_universe_pbo_equal_valid_threshold_is_ok(monkeypatch, tmp_path):
+    monkeypatch.setattr(pipeline_agg, "_pbo_max", lambda: 0.49)
+    robustness = _robustness_with_dsr_cell({"dsr_cdf": 0.95})
+    robustness["pbo"] = {"pbo": 0.49, "n_configs": 8, "n_partitions": 70}
+    stage = _read_universe_stage(monkeypatch, tmp_path, {
+        "robustness": robustness,
+    })
+
+    assert stage["status"] == sc.OK
+    assert stage["robustness_status"] == sc.OK
+    assert stage["pbo"] == 0.49
+    assert stage["robustness_detail"].startswith("pbo=0.49 <= maximum_pbo 0.49")
+
+
+@pytest.mark.parametrize("threshold", [0.5, 0.7])
+def test_universe_pbo_threshold_config_at_half_or_higher_is_stale(monkeypatch, tmp_path, threshold):
+    cfg = tmp_path / "configs" / "model_metrics.yaml"
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    cfg.write_text(f"global:\n  maximum_pbo: {threshold}\n", encoding="utf-8")
     stage = _read_universe_stage(monkeypatch, tmp_path, {
         "robustness": {"pbo": {"pbo": 0.12, "n_configs": 8, "n_partitions": 70}},
     })
@@ -682,6 +1259,205 @@ def test_universe_gauntlet_survivor_failure_is_stale(monkeypatch, tmp_path):
     assert stage["status"] == sc.STALE
     assert stage["robustness_status"] == sc.STALE
     assert "gauntlet gates failed" in stage["robustness_detail"]
+
+
+def test_universe_dsr_cdf_below_producer_threshold_is_stale(monkeypatch, tmp_path):
+    stage = _read_universe_stage(monkeypatch, tmp_path, {
+        "robustness": _robustness_with_dsr_cell({"dsr_cdf": 0.8}),
+    })
+
+    assert stage["status"] == sc.STALE
+    assert stage["robustness_status"] == sc.STALE
+    assert "dsr_cdf 0.8 < 0.95" in stage["robustness_detail"]
+
+
+def test_universe_dsr_cdf_above_probability_range_fails_closed(monkeypatch, tmp_path):
+    stage = _read_universe_stage(monkeypatch, tmp_path, {
+        "robustness": _robustness_with_dsr_cell({"dsr_pass": True, "dsr_cdf": 1.2}),
+    })
+
+    assert stage["status"] == sc.STALE
+    assert stage["robustness_status"] == sc.STALE
+    assert "dsr_cdf 1.2 outside [0.0, 1.0]" in stage["robustness_detail"]
+
+
+@pytest.mark.parametrize("dsr_cdf", [float("nan"), float("inf"), float("-inf")])
+def test_universe_non_finite_dsr_cdf_with_explicit_pass_fails_closed(monkeypatch, tmp_path, dsr_cdf):
+    stage = _read_universe_stage(monkeypatch, tmp_path, {
+        "robustness": _robustness_with_dsr_cell({"dsr_pass": True, "dsr_cdf": dsr_cdf}),
+    })
+
+    assert stage["status"] == sc.STALE
+    assert stage["robustness_status"] == sc.STALE
+    assert "dsr_cdf None outside [0.0, 1.0]" in stage["robustness_detail"]
+
+
+def test_universe_malformed_dsr_cdf_with_explicit_pass_fails_closed(monkeypatch, tmp_path):
+    stage = _read_universe_stage(monkeypatch, tmp_path, {
+        "robustness": _robustness_with_dsr_cell({"dsr_pass": True, "dsr_cdf": "not-a-number"}),
+    })
+
+    assert stage["status"] == sc.STALE
+    assert stage["robustness_status"] == sc.STALE
+    assert "dsr_cdf None outside [0.0, 1.0]" in stage["robustness_detail"]
+
+
+@pytest.mark.parametrize("dsr_cell", [{"dsr_cdf": 0.95}, {"dsr_cdf": 0.95, "dsr_pass": True}])
+def test_universe_dsr_cdf_threshold_or_explicit_producer_pass_is_ok(monkeypatch, tmp_path, dsr_cell):
+    stage = _read_universe_stage(monkeypatch, tmp_path, {
+        "robustness": _robustness_with_dsr_cell(dsr_cell),
+    })
+
+    assert stage["status"] == sc.OK
+    assert stage["robustness_status"] == sc.OK
+    assert "gauntlet survivors=1/1" in stage["robustness_detail"]
+
+
+def test_universe_bare_dsr_pass_without_cdf_or_signed_alias_fails_closed(monkeypatch, tmp_path):
+    stage = _read_universe_stage(monkeypatch, tmp_path, {
+        "robustness": _robustness_with_dsr_cell({"dsr_pass": True}),
+    })
+
+    assert stage["status"] == sc.STALE
+    assert stage["robustness_status"] == sc.STALE
+    assert "dsr_pass True without dsr_cdf or signed dsr" in stage["robustness_detail"]
+
+
+def test_universe_dsr_explicit_false_fails_closed(monkeypatch, tmp_path):
+    stage = _read_universe_stage(monkeypatch, tmp_path, {
+        "robustness": _robustness_with_dsr_cell({"dsr_pass": False, "dsr_cdf": 0.99}),
+    })
+
+    assert stage["status"] == sc.STALE
+    assert stage["robustness_status"] == sc.STALE
+    assert "dsr_pass False is not True" in stage["robustness_detail"]
+
+
+@pytest.mark.parametrize(
+    ("dsr_cell", "expected_reason"),
+    [
+        ({"dsr": {"value": 0.1, "dsr_pass": False}}, "dsr_pass False is not True"),
+        ({"deflated_sharpe": {"value": 0.1, "dsr_pass": "true"}}, "dsr_pass true is not True"),
+        ({"dsr_cdf": {"value": 0.96, "dsr_pass": False}}, "dsr_pass False is not True"),
+    ],
+)
+def test_universe_nested_dsr_pass_non_true_fails_closed(monkeypatch, tmp_path, dsr_cell, expected_reason):
+    stage = _read_universe_stage(monkeypatch, tmp_path, {
+        "robustness": _robustness_with_dsr_cell(dsr_cell),
+    })
+
+    assert stage["status"] == sc.STALE
+    assert stage["robustness_status"] == sc.STALE
+    assert expected_reason in stage["robustness_detail"]
+
+
+def test_universe_nested_dsr_pass_true_with_nested_numeric_evidence_passes(monkeypatch, tmp_path):
+    stage = _read_universe_stage(monkeypatch, tmp_path, {
+        "robustness": _robustness_with_dsr_cell({"dsr": {"value": 0.1, "dsr_pass": True}}),
+    })
+
+    assert stage["status"] == sc.OK
+    assert stage["robustness_status"] == sc.OK
+    assert "gauntlet survivors=1/1" in stage["robustness_detail"]
+
+
+@pytest.mark.parametrize("dsr_pass", [None, "true"])
+def test_universe_dsr_cdf_requires_explicit_true_when_pass_key_present(monkeypatch, tmp_path, dsr_pass):
+    stage = _read_universe_stage(monkeypatch, tmp_path, {
+        "robustness": _robustness_with_dsr_cell({"dsr_pass": dsr_pass, "dsr_cdf": 0.99}),
+    })
+
+    assert stage["status"] == sc.STALE
+    assert stage["robustness_status"] == sc.STALE
+    assert f"dsr_pass {dsr_pass} is not True" in stage["robustness_detail"]
+
+
+@pytest.mark.parametrize(
+    "dsr_cell",
+    [
+        {"dsr": 0.1},
+        {"dsr": {"value": 0.1}},
+        {"deflated_sharpe": 0.1},
+        {"deflated_sharpe": {"value": 0.1}},
+        {"value": 0.1},
+    ],
+)
+def test_universe_legacy_signed_dsr_aliases_still_pass(monkeypatch, tmp_path, dsr_cell):
+    stage = _read_universe_stage(monkeypatch, tmp_path, {
+        "robustness": _robustness_with_dsr_cell(dsr_cell),
+    })
+
+    assert stage["status"] == sc.OK
+    assert stage["robustness_status"] == sc.OK
+    assert "gauntlet survivors=1/1" in stage["robustness_detail"]
+
+
+@pytest.mark.parametrize("dsr_pass", [None, "true", "false", 1, False])
+def test_universe_legacy_signed_dsr_alias_requires_exact_true_when_pass_key_present(
+    monkeypatch,
+    tmp_path,
+    dsr_pass,
+):
+    stage = _read_universe_stage(monkeypatch, tmp_path, {
+        "robustness": _robustness_with_dsr_cell({"dsr": 0.1, "dsr_pass": dsr_pass}),
+    })
+
+    assert stage["status"] == sc.STALE
+    assert stage["robustness_status"] == sc.STALE
+    assert f"dsr_pass {dsr_pass} is not True" in stage["robustness_detail"]
+
+
+def test_universe_legacy_signed_dsr_alias_with_explicit_true_passes(monkeypatch, tmp_path):
+    stage = _read_universe_stage(monkeypatch, tmp_path, {
+        "robustness": _robustness_with_dsr_cell({"dsr": 0.1, "dsr_pass": True}),
+    })
+
+    assert stage["status"] == sc.OK
+    assert stage["robustness_status"] == sc.OK
+    assert "gauntlet survivors=1/1" in stage["robustness_detail"]
+
+
+def test_universe_fee_stress_pass_alias_is_ok(monkeypatch, tmp_path):
+    stage = _read_universe_stage(monkeypatch, tmp_path, {
+        "robustness": _robustness_with_dsr_cell({"dsr_cdf": 0.95}, {"stress_pass": True}),
+    })
+
+    assert stage["status"] == sc.OK
+    assert stage["robustness_status"] == sc.OK
+    assert "gauntlet survivors=1/1" in stage["robustness_detail"]
+
+
+@pytest.mark.parametrize(
+    ("fee_cell", "expected_status"),
+    [
+        ({"fee_x2_pass": "false", "stress_pass": True}, sc.STALE),
+        ({"fee_x2_pass": False, "stress_pass": True}, sc.STALE),
+        ({"stress_pass": True}, sc.OK),
+        ({"fee_x2_pass": True}, sc.OK),
+    ],
+)
+def test_universe_fee_stress_first_present_alias_wins(monkeypatch, tmp_path, fee_cell, expected_status):
+    stage = _read_universe_stage(monkeypatch, tmp_path, {
+        "robustness": _robustness_with_dsr_cell({"dsr_cdf": 0.95}, fee_cell),
+    })
+
+    assert stage["status"] == expected_status
+    assert stage["robustness_status"] == expected_status
+    if expected_status == sc.OK:
+        assert "gauntlet survivors=1/1" in stage["robustness_detail"]
+    else:
+        assert "fee-x2 stress fail" in stage["robustness_detail"]
+
+
+@pytest.mark.parametrize("stress_pass", [False, "true"])
+def test_universe_fee_stress_pass_alias_requires_exact_true(monkeypatch, tmp_path, stress_pass):
+    stage = _read_universe_stage(monkeypatch, tmp_path, {
+        "robustness": _robustness_with_dsr_cell({"dsr_cdf": 0.95}, {"stress_pass": stress_pass}),
+    })
+
+    assert stage["status"] == sc.STALE
+    assert stage["robustness_status"] == sc.STALE
+    assert "fee-x2 stress fail" in stage["robustness_detail"]
 
 
 def test_universe_insufficient_pbo_reason_is_stale(monkeypatch, tmp_path):
@@ -812,7 +1588,7 @@ def test_universe_q001_accepted_gap_skips_do_not_block_full_ok(monkeypatch, tmp_
     }
 
 
-def test_runner_universe_result_writer_feeds_cockpit_universe_stage(monkeypatch, tmp_path):
+def test_universe_artifact_skip_rows_feed_cockpit_universe_stage(monkeypatch, tmp_path):
     manifest = tmp_path / "packages" / "data_system" / "config" / "mbo_pilot_basket_20260605_manifest.json"
     manifest.parent.mkdir(parents=True)
     manifest.write_text(json.dumps({
@@ -823,9 +1599,10 @@ def test_runner_universe_result_writer_feeds_cockpit_universe_stage(monkeypatch,
             "reason": "symbol_absent_in_raw_after_redownload",
         }],
     }), encoding="utf-8")
-    writer = _load_run_event_universe().write_universe_result
-    artifact = writer(
-        tmp_path / "research_cards" / "universe_contract",
+    artifact = tmp_path / "research_cards" / "universe_contract" / "universe_result.json"
+    _write_universe_artifact(
+        artifact,
+        units_skipped=2,
         unit_results=[{
             "event_id": "CPI_2024_09_11_TIGHT",
             "event_type": "CPI",
@@ -859,14 +1636,14 @@ def test_runner_universe_result_writer_feeds_cockpit_universe_stage(monkeypatch,
         aggregated={},
         corrections={"CPI": {"holm": {"passed_slugs": ["hyp_2_band_6.255764"]}}},
         robustness={
-            "dsr_by_cell": {"hyp_2_band_6.255764_CPI": {"dsr": 0.8}},
-            "pbo": {"pbo": 0.12, "n_configs": 2, "n_partitions": 16},
+            "dsr_by_cell": {"hyp_2_band_6.255764_CPI": {"dsr_cdf": 0.95}},
+            "pbo": {"pbo": 0.12, "n_configs": 8, "n_partitions": 70},
             "bootstrap_by_cell": {"hyp_2_band_6.255764_CPI": {"ci_lower": 1.5}},
             "fee_stress_by_cell": {"hyp_2_band_6.255764_CPI": {"fee_x2_pass": True}},
         },
         latency_bands=[6.255764],
         cli_args=_full_universe_cli_args(tmp_path),
-        stamp={
+        certification_stamp={
             "status": "GREEN",
             "stale": False,
             "promotion_eligible": True,
@@ -877,6 +1654,7 @@ def test_runner_universe_result_writer_feeds_cockpit_universe_stage(monkeypatch,
         total_elapsed_s=1.0,
     )
     monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "ACTIVE_RUN", tmp_path / "runtime" / "workbench" / "active_run.json")
     monkeypatch.setattr(pipeline_agg, "_q001_inventory", lambda: {
         "status": sc.STALE,
         "available_data_scope_accepted": False,
@@ -981,17 +1759,141 @@ def test_universe_full_artifact_with_numeric_pbo_is_ok(monkeypatch, tmp_path):
     assert stage["pbo"] == 0.12
 
 
+def test_pipeline_active_run_guard_rejects_mismatched_generated_artifacts(monkeypatch, tmp_path):
+    active = _write_active_run(tmp_path, "fresh_all_lanes")
+    feature = tmp_path / "runtime" / "workbench" / "feature_fabric_manifest.json"
+    stage_a = tmp_path / "research_cards" / "stage_a_full" / "stage_a_result.json"
+    universe = tmp_path / "research_cards" / "universe_M6_full" / "universe_result.json"
+    feature.parent.mkdir(parents=True, exist_ok=True)
+    stage_a.parent.mkdir(parents=True, exist_ok=True)
+    feature.write_text(json.dumps({"run_id": "old_run", "row_count": 1}), encoding="utf-8")
+    stage_a.write_text(json.dumps({"run_id": "old_run", "units_run": 1, "units_errored": 0}), encoding="utf-8")
+    _write_universe_artifact(universe, run_id="old_run")
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "ACTIVE_RUN", active)
+    monkeypatch.setattr(paths, "FEATURE_FABRIC", feature)
+    monkeypatch.setattr(paths, "STAGE_A_RESULT", stage_a)
+    loaders._cache.clear()
+
+    feature_stage = pipeline_agg._feature_stage()
+    stage_a_stage = pipeline_agg._stage_a_stage()
+    universe_stage = pipeline_agg._universe_stage("m6_gate", "M6 Gate", universe)
+
+    for stage in (feature_stage, stage_a_stage, universe_stage):
+        assert stage["status"] == sc.STALE
+        assert stage["active_run_id"] == "fresh_all_lanes"
+        assert stage["artifact_reuse_policy"] == "active_run_id_only"
+        assert stage["observed_run_id"] == "old_run"
+        assert "old_run != active_run_id=fresh_all_lanes" in stage["detail"]
+
+
+def test_pipeline_active_run_guard_rejects_mismatched_stage_a_survivors(monkeypatch, tmp_path):
+    active = _write_active_run(tmp_path, "fresh_all_lanes")
+    stage_a = tmp_path / "research_cards" / "stage_a_full" / "stage_a_result.json"
+    survivors = tmp_path / "research_cards" / "stage_a_full" / "stage_a_survivors.json"
+    stage_a.parent.mkdir(parents=True, exist_ok=True)
+    stage_a.write_text(
+        json.dumps({"run_id": "fresh_all_lanes", "units_run": 1, "units_errored": 0}),
+        encoding="utf-8",
+    )
+    survivors.write_text(json.dumps({"run_id": "old_run", "survivors": [{"hypothesis_id": 2}]}), encoding="utf-8")
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "ACTIVE_RUN", active)
+    monkeypatch.setattr(paths, "STAGE_A_RESULT", stage_a)
+    monkeypatch.setattr(paths, "STAGE_A_SURVIVORS", survivors)
+    loaders._cache.clear()
+
+    stage = pipeline_agg._stage_a_stage()
+    promote = pipeline_agg._promote_stage()
+
+    for item in (stage, promote):
+        assert item["status"] == sc.STALE
+        assert item["active_run_id"] == "fresh_all_lanes"
+        assert item["artifact_reuse_policy"] == "active_run_id_only"
+        assert item["observed_run_id"] == "old_run"
+        assert item["artifact"] == "research_cards/stage_a_full/stage_a_survivors.json"
+        assert "old_run != active_run_id=fresh_all_lanes" in item["detail"]
+
+
+def test_pipeline_active_run_guard_rejects_survivor_list_with_missing_run_id(monkeypatch, tmp_path):
+    active = _write_active_run(tmp_path, "fresh_all_lanes")
+    survivors = tmp_path / "research_cards" / "stage_a_full" / "stage_a_survivors.json"
+    survivors.parent.mkdir(parents=True, exist_ok=True)
+    survivors.write_text(
+        json.dumps([
+            {"run_id": "fresh_all_lanes", "hypothesis_id": 2},
+            {"hypothesis_id": 3},
+        ]),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "ACTIVE_RUN", active)
+    monkeypatch.setattr(paths, "STAGE_A_SURVIVORS", survivors)
+
+    promote = pipeline_agg._promote_stage()
+
+    assert promote["status"] == sc.STALE
+    assert promote["active_run_id"] == "fresh_all_lanes"
+    assert promote["artifact_reuse_policy"] == "active_run_id_only"
+    assert promote["observed_run_id"] is None
+    assert promote["candidates"] == 0
+    assert "artifact run_id=missing != active_run_id=fresh_all_lanes" in promote["detail"]
+
+
+def test_pipeline_active_run_guard_requires_run_id_not_active_run_id_alias(monkeypatch, tmp_path):
+    active = _write_active_run(tmp_path, "fresh_all_lanes")
+    feature = tmp_path / "runtime" / "workbench" / "feature_fabric_manifest.json"
+    survivors = tmp_path / "research_cards" / "stage_a_full" / "stage_a_survivors.json"
+    feature.parent.mkdir(parents=True, exist_ok=True)
+    survivors.parent.mkdir(parents=True, exist_ok=True)
+    feature.write_text(json.dumps({"active_run_id": "fresh_all_lanes", "row_count": 1}), encoding="utf-8")
+    survivors.write_text(
+        json.dumps({"active_run_id": "fresh_all_lanes", "survivors": [{"hypothesis_id": 2}]}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "ACTIVE_RUN", active)
+    monkeypatch.setattr(paths, "FEATURE_FABRIC", feature)
+    monkeypatch.setattr(paths, "STAGE_A_SURVIVORS", survivors)
+
+    feature_stage = pipeline_agg._feature_stage()
+    promote = pipeline_agg._promote_stage()
+
+    for item in (feature_stage, promote):
+        assert item["status"] == sc.STALE
+        assert item["active_run_id"] == "fresh_all_lanes"
+        assert item["observed_run_id"] is None
+        assert "artifact run_id=missing != active_run_id=fresh_all_lanes" in item["detail"]
+
+
+def test_pipeline_active_run_guard_allows_matching_universe_artifact(monkeypatch, tmp_path):
+    active = _write_active_run(tmp_path, "fresh_all_lanes")
+    universe = tmp_path / "research_cards" / "universe_M6_full" / "universe_result.json"
+    _write_universe_artifact(
+        universe,
+        run_id="fresh_all_lanes",
+        cli_args=_full_universe_cli_args(tmp_path),
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "ACTIVE_RUN", active)
+
+    stage = pipeline_agg._universe_stage("m6_gate", "M6 Gate", universe)
+
+    assert stage["status"] == sc.OK
+    assert stage["scope"] == "full"
+
+
 def test_pipeline_prefers_full_m6_artifact_when_present(monkeypatch, tmp_path):
     smoke = tmp_path / "research_cards" / "universe_M6_smoke" / "universe_result.json"
     full = tmp_path / "research_cards" / "universe_M6_full" / "universe_result.json"
-    _write_universe_result(smoke, cli_args={
+    _write_universe_artifact(smoke, cli_args={
         "lane": "cme",
         "max_events": 1,
         "event_type": "CPI",
         "symbols": "MES.v.0",
         "bands_override": "6.255764",
     })
-    _write_universe_result(full, cli_args=_full_universe_cli_args(tmp_path))
+    _write_universe_artifact(full, cli_args=_full_universe_cli_args(tmp_path))
     monkeypatch.setattr(paths, "REPO", tmp_path)
     monkeypatch.setattr(paths, "STAGE_B_RESULT", smoke)
     monkeypatch.setattr(paths, "M6_RESULT", smoke)
@@ -1012,7 +1914,7 @@ def test_pipeline_prefers_full_m6_artifact_when_present(monkeypatch, tmp_path):
 def test_pipeline_falls_back_to_smoke_when_full_m6_absent(monkeypatch, tmp_path):
     smoke = tmp_path / "research_cards" / "universe_M6_smoke" / "universe_result.json"
     full = tmp_path / "research_cards" / "universe_M6_full" / "universe_result.json"
-    _write_universe_result(smoke, cli_args={
+    _write_universe_artifact(smoke, cli_args={
         "lane": "cme",
         "max_events": 1,
         "event_type": "CPI",
@@ -1034,10 +1936,10 @@ def test_pipeline_falls_back_to_smoke_when_full_m6_absent(monkeypatch, tmp_path)
     assert gauntlet["scope"] == "smoke"
 
 
-def test_pipeline_active_sweep_masks_only_universe_placeholders(monkeypatch, tmp_path):
+def test_pipeline_smoke_universe_placeholders_do_not_mask_q001(monkeypatch, tmp_path):
     smoke = tmp_path / "research_cards" / "universe_M6_smoke" / "universe_result.json"
     full = tmp_path / "research_cards" / "universe_M6_full" / "universe_result.json"
-    _write_universe_result(smoke, cli_args={
+    _write_universe_artifact(smoke, cli_args={
         "lane": "cme",
         "max_events": 1,
         "event_type": "CPI",
@@ -1055,13 +1957,8 @@ def test_pipeline_active_sweep_masks_only_universe_placeholders(monkeypatch, tmp
     feature.write_text(json.dumps({"generated_at_utc": paths.now_iso(), "row_count": 1, "rejected_count": 0}), encoding="utf-8")
     stage_a.write_text(json.dumps({"units_run": 1, "units_errored": 0, "units_skipped": 0, "cells": [], "certification_stamp": {"status": "GREEN"}}), encoding="utf-8")
     survivors.write_text(json.dumps([{"hypothesis_id": 2}]), encoding="utf-8")
-    job_dir = tmp_path / "runtime" / "lifecycle" / "jobs" / "running"
-    job_dir.mkdir(parents=True, exist_ok=True)
-    (job_dir / "cme_m6_universe_sweep_cockpit_1.json").write_text(
-        json.dumps({"job_id": "cme_m6_universe_sweep_cockpit_1", "model_id": "cme_m6_universe_sweep"}),
-        encoding="utf-8",
-    )
     monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "ACTIVE_RUN", tmp_path / "runtime" / "workbench" / "active_run.json")
     monkeypatch.setattr(paths, "CAPTURE_BASELINE", capture)
     monkeypatch.setattr(paths, "FEATURE_FABRIC", feature)
     monkeypatch.setattr(paths, "STAGE_A_RESULT", stage_a)
@@ -1104,13 +2001,14 @@ def test_pipeline_active_sweep_masks_only_universe_placeholders(monkeypatch, tmp
         "q001_inventory",
         "gauntlet_b",
         "m6_gate",
+        "promote",
     }
 
     _stub_q001_ok(monkeypatch)
     p = pipeline_agg.build()
 
-    assert p["health"] == sc.GREEN
-    assert {s["id"] for s in p["stages"] if s["status"] != sc.OK} == {"gauntlet_b", "m6_gate"}
+    assert p["health"] == sc.AMBER
+    assert {s["id"] for s in p["stages"] if s["status"] != sc.OK} == {"gauntlet_b", "m6_gate", "promote"}
 
     monkeypatch.setattr(
         pipeline_agg,
@@ -1129,16 +2027,11 @@ def test_pipeline_active_sweep_masks_only_universe_placeholders(monkeypatch, tmp
         "q001_inventory",
         "gauntlet_b",
         "m6_gate",
+        "promote",
     }
 
 
-def test_pipeline_active_sweep_does_not_hide_missing_prerequisites(monkeypatch, tmp_path):
-    job_dir = tmp_path / "runtime" / "lifecycle" / "jobs" / "running"
-    job_dir.mkdir(parents=True, exist_ok=True)
-    (job_dir / "cme_m6_universe_sweep_cockpit_1.json").write_text(
-        json.dumps({"job_id": "cme_m6_universe_sweep_cockpit_1", "model_id": "cme_m6_universe_sweep"}),
-        encoding="utf-8",
-    )
+def test_pipeline_missing_universe_does_not_hide_missing_prerequisites(monkeypatch, tmp_path):
     monkeypatch.setattr(paths, "REPO", tmp_path)
     _point_non_universe_pipeline_paths(monkeypatch, tmp_path)
     monkeypatch.setattr(paths, "STAGE_B_RESULT", tmp_path / "missing_stageb.json")
@@ -1166,8 +2059,10 @@ def test_pipeline_latency_evidence_preserves_unmeasured_defensive_ack(monkeypatc
     assert evidence["m6_band_ms"] == 6.255764
     assert evidence["offensive_engine_us"] == 15.3
     assert evidence["offensive_baseline_tick_to_send_us"] == 23.314
+    assert evidence["offensive_live_tick_to_send_us"] == 60.894
     assert evidence["offensive_latest_decision_to_send_p99_us"] == 38.693
-    assert evidence["defensive_cancel_to_send_us"] == 14.677
+    assert evidence["defensive_cancel_to_send_us"] == 18.906
+    assert evidence["defensive_live_cancel_to_send_us"] == 18.906
     assert evidence["defensive_cancel_ack_status"] == "UNMEASURED"
     assert evidence["live_readiness_status"] == sc.STALE
 
@@ -1284,22 +2179,22 @@ def test_control_rejects_remote_origin():
     assert r.status_code == 403
 
 
-def test_control_status_lists_cme_m6_sweep(monkeypatch):
+def test_control_status_omits_retired_cme_m6_sweep(monkeypatch):
     from apps.cockpit.backend import auth
 
     monkeypatch.setattr(auth, "_LOOPBACK", {"testclient"})
     client = TestClient(app)
     r = client.get("/api/control/status")
     assert r.status_code == 200
-    assert "cme_m6_universe_sweep" in r.json()["jobs"]
+    assert "cme_m6_universe_sweep" not in r.json()["jobs"]
 
 
-def test_control_status_keeps_active_sweep_visible(monkeypatch):
+def test_control_status_keeps_active_allowed_job_visible(monkeypatch):
     from apps.cockpit.backend import auth
 
     active = {
-        "job_id": "cme_m6_universe_sweep_cockpit_1",
-        "model_id": "cme_m6_universe_sweep",
+        "job_id": "feature_rebuild_cockpit_1",
+        "model_id": "feature_rebuild",
         "host": "laptop",
         "state": "pending",
     }
@@ -1318,62 +2213,39 @@ def test_control_status_keeps_active_sweep_visible(monkeypatch):
     assert any(j["job_id"] == active["job_id"] for j in tracked)
 
 
-def test_control_rejects_m6_sweep_when_exec_off(monkeypatch):
+def test_control_rejects_retired_cme_m6_sweep_as_unknown_when_exec_on(monkeypatch):
     from apps.cockpit.backend import auth
-
-    monkeypatch.setattr(auth, "_LOOPBACK", {"testclient"})
-    monkeypatch.setattr(control, "_exec_enabled", lambda: False)
-    client = TestClient(app)
-
-    r = client.post("/api/control/job", json={"name": "cme_m6_universe_sweep", "confirm": True})
-
-    assert r.status_code == 403
-    assert "COCKPIT_CONTROL_EXEC=1" in r.json()["detail"]
-
-
-def test_control_rejects_duplicate_active_m6_sweep(monkeypatch):
-    from apps.cockpit.backend import auth
-    from lifecycle_orchestrator.src import job_runner
-
-    active = {
-        "job_id": "cme_m6_universe_sweep_cockpit_1",
-        "model_id": "cme_m6_universe_sweep",
-        "host": "laptop",
-        "state": "running",
-    }
-    def duplicate(*_args, **_kwargs):
-        raise job_runner.DuplicateActiveJob(active)
 
     monkeypatch.setattr(auth, "_LOOPBACK", {"testclient"})
     monkeypatch.setattr(control, "_exec_enabled", lambda: True)
-    monkeypatch.setattr(job_runner, "enqueue_singleton", duplicate)
     client = TestClient(app)
 
     r = client.post("/api/control/job", json={"name": "cme_m6_universe_sweep", "confirm": True})
 
-    assert r.status_code == 409
-    assert active["job_id"] in r.json()["detail"]
+    assert r.status_code == 400
+    assert r.json()["detail"] == "unknown job 'cme_m6_universe_sweep'"
 
 
-def test_control_cme_m6_sweep_command_is_full_scope():
-    spec = control._job_cmd()["cme_m6_universe_sweep"]
+def test_control_rescreen_stage_a_command_refreshes_full_artifact():
+    spec = control._job_cmd()["rescreen_stage_a"]
     args = spec["command"]["args"]
 
     assert spec["host"] == "laptop"
-    assert spec["command"]["entry"].endswith("run_event_universe.py")
+    assert spec["command"]["entry"].endswith("run_stage_a_screen.py")
     assert args == [
-        "--lane", "cme",
-        "--bands", "6.255764",
+        "--band", "6.255764",
         "--symbols", "MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0",
-        "--events-csv", "packages/data_system/config/events.csv",
-        "--from-stage-a", "research_cards/stage_a_full/stage_a_survivors.json",
-        "--out", "research_cards/universe_M6_full",
+        "--out", "research_cards/stage_a_full",
         "--workers", "12",
     ]
-    assert "--max-events" not in args
     assert "--event-type" not in args
+    assert "--max-units" not in args
     assert "--cells" not in args
     assert "--shard" not in args
+
+
+def test_control_job_commands_omit_retired_cme_m6_sweep():
+    assert "cme_m6_universe_sweep" not in control._job_cmd()
 
 
 # --- notifier (push) --------------------------------------------------------

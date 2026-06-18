@@ -39,7 +39,7 @@ from __future__ import annotations
 import atexit
 import os
 import tempfile
-from typing import Optional
+from typing import Any, Mapping, Optional
 
 import numpy as np
 
@@ -165,10 +165,41 @@ QUEUE_MODELS = list(QUEUE_MODEL_BUILDERS.keys())
 # Public builder
 # ---------------------------------------------------------------------------
 
+def _apply_latency_model(
+    asset: BacktestAsset,
+    *,
+    latency_ms: float,
+    latency_model: Mapping[str, Any] | None = None,
+) -> None:
+    """Apply ConstantLatency or IntpOrderLatency from an optional latency_model dict."""
+    if latency_model and str(latency_model.get("latency_model_family")) == "IntpOrderLatency":
+        sample_path = latency_model.get("latency_sample_artifact")
+        if sample_path and hasattr(asset, "intp_order_latency"):
+            import numpy as np
+
+            samples = np.load(str(sample_path), allow_pickle=False)
+            asset.intp_order_latency(samples)
+            return
+
+    entry_ms = latency_ms
+    resp_ms = latency_ms
+    if latency_model:
+        entry_val = latency_model.get("order_entry_latency_ms")
+        resp_val = latency_model.get("order_response_latency_ms")
+        if isinstance(entry_val, (int, float)):
+            entry_ms = float(entry_val)
+        if isinstance(resp_val, (int, float)):
+            resp_ms = float(resp_val)
+    entry_ns = int(entry_ms * 1_000_000)
+    resp_ns = int(resp_ms * 1_000_000)
+    _apply_constant_latency(asset, entry_ns, resp_ns)
+
+
 def build_hftbacktest(
     data_path: str,
     *,
     latency_ms: float = 1.0,
+    latency_model: Mapping[str, Any] | None = None,
     queue_model_type: str = "LogProbQueueModel2",
     tick_size: float = 0.25,
     lot_size: float = 1.0,
@@ -188,7 +219,10 @@ def build_hftbacktest(
 
     Args:
         data_path: Path to the NPZ file (key ``data``, dtype ``event_dtype``).
-        latency_ms: Constant order entry and response latency in milliseconds.
+        latency_ms: Fallback scalar when latency_model absent. Also used as combined
+            latency when latency_model has no separate entry/response fields.
+        latency_model: Optional HftBacktest latency_model.json dict with separate
+            order_entry_latency_ms / order_response_latency_ms or IntpOrderLatency samples.
         queue_model_type: Queue model for the **L2 path only**.  Ignored on L3.
             One of ``"LogProbQueueModel2"`` (default) or ``"SquareProbQueueModel"``.
         tick_size: Instrument tick size.
@@ -240,7 +274,7 @@ def build_hftbacktest(
 
     asset.tick_size(tick_size)
     asset.lot_size(lot_size)
-    _apply_constant_latency(asset, latency_ns, latency_ns)
+    _apply_latency_model(asset, latency_ms=latency_ms, latency_model=latency_model)
     asset.no_partial_fill_exchange()
 
     fee = fee_model.get_fee_per_contract()

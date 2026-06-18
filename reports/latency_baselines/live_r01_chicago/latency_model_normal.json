@@ -1,0 +1,24 @@
+{
+  "latency_model_family": "ConstantLatency",
+  "latency_regime": "normal",
+  "feed_latency_source": "open_pending_cc2_campaign",
+  "order_entry_latency_source": "new_send_to_ack_ms.authoritative",
+  "order_response_latency_source": "new_send_to_ack_ms.authoritative",
+  "latency_units": "milliseconds",
+  "latency_source_authority": "hft3_native_cpp_rithmic_latency_probe",
+  "latency_proxy_status": "measured_partial",
+  "latency_component_mapping": {
+    "feed_latency": "feed_latency_us from probe v3 CC-2",
+    "order_entry_latency": "new_send_to_exchange_us or symmetric split of new_send_to_ack",
+    "order_response_latency": "new_exchange_to_ack_us or symmetric split of new_send_to_ack"
+  },
+  "feed_latency_ms": null,
+  "order_entry_latency_ms": 3.5,
+  "order_response_latency_ms": 3.5,
+  "latency_p50_ms": 3.537,
+  "latency_p90_ms": 7.0,
+  "latency_p99_ms": 9.810776839999999,
+  "order_response_latency_modeled": true,
+  "native_latency_probe_host": "CHI404",
+  "note": "Symmetric split until CC-3 IntpOrderLatency samples populate entry/response separately."
+}

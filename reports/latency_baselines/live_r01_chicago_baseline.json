@@ -1,0 +1,118 @@
+{
+  "schema_version": "latency_baseline_summary_v1",
+  "baseline_role": "live_r01_chicago_baseline",
+  "baseline_status": "active",
+  "baseline_reason": "Live Rithmic 01 / Chicago Area native C++ latency test on CHI404 (n=25 paired new+cancel submits). MD-primed per order; mlock+prefault; no CPU affinity.",
+  "accepted_as_baseline_at_utc": "2026-06-18T00:55:27Z",
+  "run_id": "live_latency_test_v2_20260618T075012Z",
+  "generated_at_utc": "2026-06-18T00:55:27Z",
+  "sample_count": 50,
+  "paired_new_ack_count": 25,
+  "paired_cancel_submit_count": 25,
+  "sample_path": "data/latency_baselines/2026-06-18/live_latency_test_v2_20260618T075012Z.jsonl",
+  "summary_path": "reports/latency_baselines/live_r01_chicago_baseline_summary.json",
+  "primary_kpi": "tick_to_send_us",
+  "placement_trigger_kpi": "tick_to_send_trigger_us",
+  "principle": "offensive_and_defensive_placement_us_are_separate_from_send_to_ack_ms",
+  "operating_profile": {
+    "host": "CHI404",
+    "system": "Rithmic 01",
+    "gateway": "Chicago Area",
+    "profile": "live_chicago_r01",
+    "account": "40262422",
+    "hot_path_language": "c++",
+    "wrapper": "none",
+    "symbol": "MESU6",
+    "exchange": "CME",
+    "order_price": 7000.0,
+    "order_quantity": 1,
+    "order_side": "B",
+    "order_count": 25,
+    "order_interval_us": 2000000,
+    "cancel_after_ack": 1,
+    "require_md": 1,
+    "rithmic_probe_cpu": -1,
+    "rithmic_probe_rt_priority": 0,
+    "rithmic_probe_mlock": 1,
+    "rithmic_probe_prefault_bytes": 16777216
+  },
+  "execution_budgets_us": {
+    "offensive_tick_to_send_p50": 27.291,
+    "offensive_tick_to_send_p99": 60.894,
+    "offensive_tick_to_send_trigger_p99": 5.2,
+    "offensive_decision_to_send_p99": 59.581,
+    "defensive_cancel_to_send_p50": 13.074,
+    "defensive_cancel_to_send_p99": 18.906,
+    "defensive_cancel_to_ack_p99": null,
+    "round_trip_send_to_ack_p50_ms": 2.736,
+    "round_trip_send_to_ack_p99_ms": 13.693,
+    "note": "Use offensive/defensive _us budgets for placement/cancel-send feasibility. Use send_to_ack for replay injection only. cancel_to_ack unmeasured on live (cancel_ack_timeout)."
+  },
+  "metrics": {
+    "tick_to_decision_us": {
+      "count": 25,
+      "p50_us": 0.962,
+      "p99_us": 5.15,
+      "max_us": 5.15
+    },
+    "tick_to_send_trigger_us": {
+      "count": 25,
+      "p50_us": 1.012,
+      "p99_us": 5.2,
+      "max_us": 5.2
+    },
+    "decision_to_send_us": {
+      "count": 25,
+      "p50_us": 26.088,
+      "p99_us": 59.581,
+      "max_us": 59.581
+    },
+    "tick_to_send_us": {
+      "count": 25,
+      "p50_us": 27.291,
+      "p99_us": 60.894,
+      "max_us": 60.894
+    },
+    "rithmic_send_call_us": {
+      "count": 25,
+      "p50_us": 26.038,
+      "p99_us": 59.531,
+      "max_us": 59.531
+    },
+    "cancel_to_send_us": {
+      "count": 25,
+      "p50_us": 13.074,
+      "p99_us": 18.906,
+      "max_us": 18.906
+    },
+    "cancel_to_ack_us": {
+      "count": 0,
+      "p50_us": null,
+      "p99_us": null,
+      "status": "UNMEASURED"
+    },
+    "send_to_ack_us": {
+      "count": 25,
+      "p50_us": 2735.55,
+      "p99_us": 13692.579,
+      "max_us": 13692.579
+    }
+  },
+  "views": {
+    "offensive": [
+      "tick_to_decision_us",
+      "tick_to_send_trigger_us",
+      "decision_to_send_us",
+      "tick_to_send_us",
+      "rithmic_send_call_us"
+    ],
+    "defensive": [
+      "cancel_to_send_us",
+      "cancel_to_ack_us"
+    ],
+    "round_trip": [
+      "send_to_ack_us"
+    ]
+  },
+  "paper_baseline_reference": "reports/latency_baselines/current_baseline.json"
+}

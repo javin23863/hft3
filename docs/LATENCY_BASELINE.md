@@ -191,6 +191,49 @@ Observed native C++ Paper/Chicago values:
 The Workbench Latency Evidence tab treats `current_baseline.json` as the stable
 comparison base before falling back to the latest observed summary file.
 
+## Live Rithmic 01 / Chicago Area Baseline (2026-06-18)
+
+The accepted live placement baseline is stored at:
+
+```text
+reports/latency_baselines/live_r01_chicago_baseline.json
+```
+
+Summary: `reports/latency_baselines/live_r01_chicago_baseline_summary.json`
+
+Run: `live_latency_test_v2_20260618T075012Z` on CHI404 (Rithmic 01, Chicago Area,
+account 40262422, MESU6 @7000, n=25 new + 25 cancel submits, MD-primed).
+
+Observed native C++ Live/Chicago values (p50 / p99):
+
+| View | Metric | p50 | p99 |
+| --- | --- | ---: | ---: |
+| Offensive | `tick_to_send_trigger_us` | 1.0 µs | 5.2 µs |
+| Offensive | `tick_to_send_us` | 27.3 µs | **60.9 µs** |
+| Offensive | `rithmic_send_call_us` | 26.0 µs | 59.5 µs |
+| Defensive | `cancel_to_send_us` | 13.1 µs | **18.9 µs** |
+| Defensive | `cancel_to_ack_us` | — | **UNMEASURED** |
+| Round trip | `send_to_ack_us` | 2.74 ms | 13.69 ms |
+
+Replay ack injection (separate clock): `new_send_to_ack_ms` distribution — p99 **9.811 ms**
+from `runtime/latency_reports/latency_summary.json` (n=200 live ack campaign).
+Legacy alias `live_order_ack_p99_ms` is deprecated.
+
+Capability report for tactic modeling:
+
+```text
+runtime/latency_reports/live_placement_capability.json
+reports/latency_baselines/live_latency_test_v2_20260618T075012Z_capability.json
+```
+
+**Backtest rule:** use µs offensive/defensive budgets for tactic feasibility;
+use ms ack for HftBacktest order-latency injection only. Never substitute
+`send_to_ack_us` for `tick_to_send_us`.
+
+Paper baseline (`current_baseline.json`) remains the paper-lane comparison
+base; live baseline is authoritative for live-lane offensive/defensive placement
+speed on CHI404.
+
 ## Capability Modeling
 
 The baseline command also accepts speed-aware testing assumptions:

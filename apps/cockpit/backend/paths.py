@@ -24,6 +24,7 @@ def _p(*parts: str) -> Path:
 
 # --- Pipeline zone ----------------------------------------------------------
 CAPTURE_BASELINE = _p("runtime", "chi404", "baseline", "latest_capture.json")
+ACTIVE_RUN = _p("runtime", "workbench", "active_run.json")
 FEATURE_FABRIC = _p("runtime", "workbench", "feature_fabric_manifest.json")
 STAGE_A_RESULT = _p("research_cards", "stage_a_full", "stage_a_result.json")
 STAGE_A_SURVIVORS = _p("research_cards", "stage_a_full", "stage_a_survivors.json")
@@ -31,6 +32,14 @@ STAGE_B_RESULT = _p("research_cards", "universe_stageb_smoke", "universe_result.
 M6_RESULT = _p("research_cards", "universe_M6_smoke", "universe_result.json")
 M6_FULL_RESULT = _p("research_cards", "universe_M6_full", "universe_result.json")
 ALPHA_CME_SPEC = _p("specs", "ALPHA_CME.md")
+
+
+def pipeline_runs_root() -> Path:
+    return _p("research_cards", "pipeline_runs")
+
+
+def hftbacktest_realism_root() -> Path:
+    return _p("research_cards", "hftbacktest_realism")
 
 # --- Options lake -----------------------------------------------------------
 def _lake_root() -> Path:
@@ -57,6 +66,8 @@ LATENCY_SUMMARY = _p("runtime", "latency_reports", "latency_summary.json")
 LATENCY_TRUTH = _p("runtime", "latency_reports", "latency_truth.json")
 ORDER_ACK_DISTRIBUTION = _p("runtime", "latency_reports", "order_ack_distribution.json")
 LATENCY_CURRENT_BASELINE = _p("reports", "latency_baselines", "current_baseline.json")
+LATENCY_LIVE_BASELINE = _p("reports", "latency_baselines", "live_r01_chicago_baseline.json")
+LATENCY_LIVE_PLACEMENT_CAPABILITY = _p("runtime", "latency_reports", "live_placement_capability.json")
 LATENCY_LATEST_ORDER_SUMMARY = _p("reports", "latency_baselines", "order_ack_campaign_20260611T072116Z_summary.json")
 LATENCY_DEFENSIVE_CANCEL_SAMPLE = _p("data", "latency_baselines", "2026-06-11", "order_ack_campaign_20260611T071952Z.jsonl")
 SLOW_TIER_PROBLEMS = _p("runtime", "slow_tier", "problems_latest.json")

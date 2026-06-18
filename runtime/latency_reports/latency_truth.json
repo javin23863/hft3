@@ -1,6 +1,6 @@
 {
   "campaign": "CC-1 Latency Truth",
-  "generated_utc": "2026-06-11T15:00:00Z",
+  "generated_utc": "2026-06-18T07:55:00Z",
   "run_host": "CHI404",
   "compute": {
     "tick_to_decision_ns": 15300,
@@ -47,6 +47,68 @@
     "n": 200,
     "run_id": "latency_truth_submit_MESU6_20260611",
     "note": "paper-system processing artifact. MESM6 expired; MESU6 used. MESM6 1000-sample ref: p50=3.483ms p99=6.356ms"
+  },
+  "live_placement": {
+    "measured_utc": "2026-06-18",
+    "run_id": "live_latency_test_v2_20260618T075012Z",
+    "baseline_artifact": "reports/latency_baselines/live_r01_chicago_baseline.json",
+    "summary_artifact": "reports/latency_baselines/live_r01_chicago_baseline_summary.json",
+    "capability_artifact": "runtime/latency_reports/live_placement_capability.json",
+    "sample_path": "data/latency_baselines/2026-06-18/live_latency_test_v2_20260618T075012Z.jsonl",
+    "system": "Rithmic 01",
+    "gateway": "Chicago Area",
+    "host": "CHI404",
+    "account": "40262422",
+    "symbol": "MESU6",
+    "exchange": "CME",
+    "tool": "rithmic_latency_probe",
+    "hot_path_language": "c++",
+    "wrapper": "none",
+    "samples": {
+      "paired_new_ack": 25,
+      "paired_cancel_submit": 25,
+      "cancel_ack": 0
+    },
+    "offensive_us": {
+      "tick_to_decision_p50": 0.962,
+      "tick_to_decision_p99": 5.15,
+      "tick_to_send_trigger_p50": 1.012,
+      "tick_to_send_trigger_p99": 5.2,
+      "decision_to_send_p50": 26.088,
+      "decision_to_send_p99": 59.581,
+      "tick_to_send_p50": 27.291,
+      "tick_to_send_p99": 60.894,
+      "rithmic_send_call_p50": 26.038,
+      "rithmic_send_call_p99": 59.531,
+      "primary_kpi": "tick_to_send_us"
+    },
+    "defensive_us": {
+      "cancel_to_send_p50": 13.074,
+      "cancel_to_send_p99": 18.906,
+      "cancel_to_ack_p99": null,
+      "cancel_to_ack_status": "UNMEASURED",
+      "cancel_to_ack_note": "All 25 cancels hit cancel_ack_timeout; far-from-market @7000. Use cancel_to_send for fire speed; pending-state risk uses send_to_ack until cancel_to_ack is measured."
+    },
+    "round_trip_ms": {
+      "send_to_ack_p50": 2.736,
+      "send_to_ack_p99": 13.693,
+      "source_clock": "send_to_ack_us"
+    },
+    "live_order_ack_campaign": {
+      "n": 200,
+      "p50_ms": 3.537,
+      "p99_ms": 9.811,
+      "source": "runtime/latency_reports/latency_summary.json",
+      "backtest_injection_authority": "live_order_latency.authoritative"
+    },
+    "execution_budgets_for_backtest": {
+      "offensive_min_spacing_us_p99": 61,
+      "offensive_trigger_us_p99": 5,
+      "defensive_cancel_fire_us_p99": 19,
+      "replay_order_ack_injection_ms_p99": 9.811,
+      "cancel_ack_injection_ms_p99": null,
+      "note": "Use _us budgets for tactic feasibility (can we fire in time). Use ms ack for HftBacktest constant_order_latency injection only."
+    }
   },
   "live_unknown": {
     "sdk_finding": "Trial R|API+ SDK v13.7.0.0 ships NO Rithmic 01 (live) connection_params.txt. SDK docs state these are distributed by the Rithmic operations team after conformance testing. Rithmic 01 params require accepted user agreements and completed conformance test (rapi@rithmic.com). Hostname prefix for live system is not published in the trial SDK.",
@@ -120,16 +182,22 @@
       ]
     },
     "live_wire_bound": {
-      "status": "OPEN - not closeable without live Rithmic 01 credentials",
-      "lower_bound_inference": "ritpz01004.01.theomne.net (184.105.22.229, ~1ms TCP from CHI404) shows a co-located Paper Trading cluster node reachable at ~1ms. If Rithmic 01 live TS uses an equivalent co-located cluster in the same datacenter, wire RTT could be in the 1-4ms range. This is an inference from Paper Trading infrastructure topology only - NOT a Rithmic 01 live measurement.",
-      "remaining_unknown": "Rithmic 01 live system connection_params.txt not available in trial SDK. Closing this requires: funded live account, accepted exchange data agreements, completed API conformance testing with Omnesys/Rithmic ops. Also unknown: live order-server processing time, fill path through CME Globex, cancel-ack round-trip for live orders."
+      "status": "PARTIALLY CLOSED \u2014 live Rithmic 01 placement measured 2026-06-18; cancel_to_ack and live TCP RTT still open",
+      "measured_2026_06_18": {
+        "offensive_tick_to_send_p99_us": 60.894,
+        "defensive_cancel_to_send_p99_us": 18.906,
+        "live_order_ack_p99_ms": 9.811,
+        "artifact": "reports/latency_baselines/live_r01_chicago_baseline.json"
+      },
+      "lower_bound_inference": "ritpz01004.01.theomne.net (184.105.22.229, ~1ms TCP from CHI404) shows a co-located Paper Trading cluster node reachable at ~1ms. Live Rithmic 01 Chicago Area send_to_ack p50 2.74 ms / p99 13.69 ms (n=25 placement test) and live_order_ack campaign p99 9.81 ms (n=200) supersede paper-topology inference for replay injection.",
+      "remaining_unknown": "Live cancel_to_ack round-trip (timeout on far-from-market cancels). Live order-server TCP RTT probe against Rithmic 01 TS endpoint not yet run separately from order ack. MD wire-to-callback still unmeasured."
     },
     "what_remains": [
       "MD wire-to-callback (iSsboe+iUsecs vs callback_monotonic_ns) - instrument AlertBidData/AlertAskData",
-      "Cancel-ack: paper simulator does not return cancel-ack for far-from-market orders",
-      "Live order-to-fill: not measurable on paper",
+      "Cancel-ack on live: cancel_to_ack_us UNMEASURED (timeout all 25; retry at-market or longer timeout)",
+      "Live order-to-fill: not measured",
       "CHI404-to-CME-Globex propagation: needs exchange loopback",
-      "Rithmic 01 live gateway TCP RTT: gated behind conformance testing (rapi@rithmic.com)"
+      "Rithmic 01 live gateway TCP RTT: standalone probe not yet run (order ack measured)"
     ],
     "how_to_close": {
       "md_wire": "Instrument AlertBidData/AlertAskData in rithmic_adapter, 10-min subscription, clock-offset cal",
@@ -155,5 +223,104 @@
     "real_rtt_p50_ms": 3.687,
     "real_rtt_p99_ms": 4.144,
     "identification": "ss -tnp during live probe run"
+  },
+  "component_bands": {
+    "feed_latency_us": {
+      "metric": "feed_latency_us",
+      "measurement_status": "OPEN",
+      "hftbacktest_component": "feed",
+      "note": "Instrument probe v3 MD path; CC-2 campaign pending"
+    },
+    "new_send_to_exchange_us": {
+      "metric": "new_send_to_exchange_us",
+      "measurement_status": "OPEN",
+      "hftbacktest_component": "order_entry",
+      "note": "Requires req_ts + calibrated exch_ts; CC-3 campaign pending"
+    },
+    "new_exchange_to_ack_us": {
+      "metric": "new_exchange_to_ack_us",
+      "measurement_status": "OPEN",
+      "hftbacktest_component": "order_response",
+      "note": "Requires calibrated exch_ts + resp_ts; CC-3 campaign pending"
+    },
+    "cancel_send_to_exchange_us": {
+      "metric": "cancel_send_to_exchange_us",
+      "measurement_status": "OPEN",
+      "hftbacktest_component": "order_entry",
+      "note": "CC-4 campaign pending"
+    },
+    "cancel_exchange_to_ack_us": {
+      "metric": "cancel_exchange_to_ack_us",
+      "measurement_status": "UNMEASURED",
+      "hftbacktest_component": "order_response",
+      "note": "Live placement test: all 25 cancel ack timeouts"
+    },
+    "tick_to_send_us": {
+      "metric": "tick_to_send_us",
+      "measurement_status": "MEASURED",
+      "hftbacktest_component": "local_only",
+      "distribution_us": {
+        "p50_us": 27.291,
+        "p99_us": 60.894
+      }
+    },
+    "cancel_decision_to_send_us": {
+      "metric": "cancel_decision_to_send_us",
+      "measurement_status": "MEASURED",
+      "hftbacktest_component": "local_only",
+      "distribution_us": {
+        "p50_us": 13.074,
+        "p99_us": 18.906
+      }
+    },
+    "new_send_to_ack_us": {
+      "metric": "new_send_to_ack_us",
+      "measurement_status": "MEASURED",
+      "hftbacktest_component": "order_entry_plus_order_response_combined",
+      "distribution_us": {
+        "p50_us": 2736.0,
+        "p99_us": 13693.0
+      },
+      "note": "Ack campaign n=200; see new_send_to_ack_ms in latency_summary.json"
+    },
+    "fill_exchange_to_local_us": {
+      "metric": "fill_exchange_to_local_us",
+      "measurement_status": "OPEN",
+      "hftbacktest_component": "order_response"
+    },
+    "modify_send_to_exchange_us": {
+      "metric": "modify_send_to_exchange_us",
+      "measurement_status": "OPEN",
+      "hftbacktest_component": "local_or_unknown"
+    },
+    "modify_exchange_to_ack_us": {
+      "metric": "modify_exchange_to_ack_us",
+      "measurement_status": "OPEN",
+      "hftbacktest_component": "local_or_unknown"
+    },
+    "reject_or_throttle_to_response_us": {
+      "metric": "reject_or_throttle_to_response_us",
+      "measurement_status": "OPEN",
+      "hftbacktest_component": "local_or_unknown"
+    },
+    "send_queue_delay_us": {
+      "metric": "send_queue_delay_us",
+      "measurement_status": "INFERRED",
+      "hftbacktest_component": "local_or_unknown",
+      "distribution_us": {
+        "p99_us": 5.2
+      },
+      "note": "Partial: tick_to_send_trigger_us approximates decision to SDK entry"
+    }
+  },
+  "hftbacktest_regimes": {
+    "artifacts_dir": "reports/latency_baselines/live_r01_chicago",
+    "regimes": [
+      "fast",
+      "normal",
+      "stress",
+      "extreme"
+    ],
+    "generator": "scripts/latency_probe/generate_latency_regimes.py"
   }
 }
