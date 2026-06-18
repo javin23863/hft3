@@ -19,6 +19,7 @@ python3 scripts/run_vectorbt_paid_screen.py \
   --out "$OUT_DIR" \
   --vectorbt-scope paid-compute \
   --workers 4 \
+  --ready-gate-file runtime/reports/paid_screen_ready_gate.json \
   --max-wall-clock-seconds 3600 \
   --no-llm
 
