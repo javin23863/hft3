@@ -24,6 +24,7 @@ from backtest_pipeline.src.hft_campaign.ontology import (
     validate_screening_feature_plane,
 )
 from backtest_pipeline.src.hft_campaign.source_lock import build_campaign_source_lock
+from backtest_pipeline.src.recipe_hash_gate import validate_feature_recipe_hash_handoff
 from backtest_pipeline.src.vectorbt_adapter import validate_screening_artifact
 
 
@@ -58,6 +59,11 @@ def validate_stage0_scenario(scenario: HftReplayScenario, *, repo_root: Path) ->
                 reasons.append("candidate_not_replay_eligible")
         elif scenario.replay_tier not in ("stage1_minimal",):
             reasons.append("transitional_handoff_cannot_certify")
+        recipe_reasons = validate_feature_recipe_hash_handoff(
+            scenario_feature_recipe_hash=scenario.feature_recipe_hash,
+            promoted_row=candidate_row,
+        )
+        reasons.extend(recipe_reasons)
 
     if scenario.transitional_handoff and not transitional:
         reasons.append("scenario_transitional_flag_mismatch")

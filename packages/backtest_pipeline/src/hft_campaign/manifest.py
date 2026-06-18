@@ -11,6 +11,7 @@ from typing import Any, Iterable, Mapping
 from backtest_pipeline.src.hft_campaign.prepared_data import prepare_replay_data
 from backtest_pipeline.src.hft_campaign.scenario import HftReplayScenario, compute_scenario_id
 from backtest_pipeline.src.hft_campaign.transitional_handoff import load_screening_artifact
+from backtest_pipeline.src.recipe_hash_gate import extract_feature_recipe_hash_from_promoted_row
 from backtest_pipeline.src.hftbacktest_realism import validate_candidate_replay_eligibility
 from backtest_pipeline.src.vectorbt_adapter import validate_screening_artifact
 
@@ -158,6 +159,7 @@ def generate_scenario_manifest(cfg: ManifestGenerationConfig) -> tuple[list[HftR
 
     for candidate_id in selected_ids:
         row = promoted_by_id.get(candidate_id, {})
+        recipe_hash = extract_feature_recipe_hash_from_promoted_row(row) or ""
         variants = _stress_variants(cfg.stress_dimensions)
         for stress_label, stress_seed in variants:
             payload = {
@@ -170,6 +172,7 @@ def generate_scenario_manifest(cfg: ManifestGenerationConfig) -> tuple[list[HftR
                 "source_data_hash": prepared.source_data_hash,
                 "feature_set_id": str(screening.get("feature_set_id", "")),
                 "feature_set_hash": str(screening.get("feature_set_hash", "")),
+                "feature_recipe_hash": recipe_hash,
                 "research_clock": str(row.get("research_clock", screening.get("research_clock", ""))),
                 "latency_model_hash": latency_hash,
                 "fill_queue_model_hash": queue_hash,
@@ -224,6 +227,7 @@ def generate_scenario_manifest(cfg: ManifestGenerationConfig) -> tuple[list[HftR
                     accelerated_mode=False,
                     transitional_handoff=transitional,
                     feature_plane_status=str(screening.get("feature_plane_status", "scheduled_event_only")),
+                    feature_recipe_hash=recipe_hash,
                 )
             )
     return scenarios, reasons

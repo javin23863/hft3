@@ -18,8 +18,8 @@ Status as of merge `d6665025` (VectorBT VBT-HBT handoff + HftBacktest campaign o
 | Capability | Missing connection | Minimal change |
 |---|---|---|
 | Feature-recipe candidate generation | Autoresearch refines 4 execution params only | Phase 7: family-aware `propose_next_candidates` |
-| VectorBT fs_v1 row-loop consumption | Implemented when feature store NPZ exists; bar stub fallback otherwise | Phase 6: HBT recipe-hash equality gate |
-| HBT recipe-hash equality | No cross-check yet | Phase 6: gate in handoff |
+| VectorBT fs_v1 row-loop consumption | Implemented when feature store NPZ exists; bar stub fallback otherwise | Phase 7: autonomous feature-family learning |
+| HBT recipe-hash equality | Implemented in `recipe_hash_gate.py` + stage0 validation | Phase 7: feature-family search in autoresearch |
 | Cross-asset real leader | Placeholder OFI | Phase 2: multi-symbol sync |
 
 ## DONE (this plan slice — multi-generation loop shell)

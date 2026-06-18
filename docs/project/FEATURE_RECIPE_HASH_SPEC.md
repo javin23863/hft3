@@ -71,7 +71,7 @@ split_scheme, code_commit, generation_id, manifest_hash, frozen_at_utc
 
 Fields are immutable after `frozen_at_utc`.
 
-## Equality gate (Phase 6)
+## Equality gate (Phase 6 — implemented)
 
 ```text
 screening_artifact.promoted[].feature_recipe_hash
@@ -79,7 +79,7 @@ screening_artifact.promoted[].feature_recipe_hash
 hftbacktest_scenario.feature_recipe_hash
 ```
 
-Mismatch → fail closed.
+Enforced in `packages/backtest_pipeline/src/hft_campaign/validation.py` via `recipe_hash_gate.py`. Mismatch → fail closed.
 
 ## Backward compatibility
 

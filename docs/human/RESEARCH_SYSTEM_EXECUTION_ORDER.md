@@ -202,7 +202,7 @@ python scripts/run_pipeline.py ... --vectorbt --hftbacktest-realism \
   --native-hot-path-evidence <path>#sha256:<digest>
 ```
 
-**Phase 6 gate:** `vectorbt feature_recipe_hash == hftbacktest feature_recipe_hash` (to be implemented).
+**Phase 6 gate:** `vectorbt feature_recipe_hash == hftbacktest feature_recipe_hash` — enforced in `hft_campaign/validation.py` (implemented).
 
 ---
 

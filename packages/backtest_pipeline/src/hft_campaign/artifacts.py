@@ -124,6 +124,7 @@ def write_scenario_artifacts(
         "latency_model_hash": scenario.latency_model_hash,
         "fill_queue_model_hash": scenario.fill_queue_model_hash,
         "feature_set_hash": scenario.feature_set_hash,
+        "feature_recipe_hash": scenario.feature_recipe_hash,
         "feature_timeline_hash": scenario.feature_timeline_hash,
         "replay_tier": scenario.replay_tier,
         "stepping_mode": scenario.stepping_mode,

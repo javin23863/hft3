@@ -1268,6 +1268,8 @@ def _normalise_promoted_screening_row(
         ),
         "parameter_values": parameter_values,
         "parameter_values_hash": _parameter_values_hash(parameter_values),
+        "feature_recipe_hash": metrics.get("feature_recipe_hash")
+        or (metrics.get("base_candidate_metadata") or {}).get("feature_recipe_hash"),
         "trials_budget_tier": result.screening_scope,
         "in_sample_metrics": (
             dict(candidate.in_sample_results)

@@ -57,6 +57,7 @@ class HftReplayScenario:
     accelerated_mode: bool = False
     transitional_handoff: bool = False
     feature_plane_status: str = "scheduled_event_only"
+    feature_recipe_hash: str = ""
 
     def execution_hash_payload(self) -> dict[str, Any]:
         return {
@@ -69,6 +70,7 @@ class HftReplayScenario:
             "source_data_hash": self.source_data_hash,
             "feature_set_id": self.feature_set_id,
             "feature_set_hash": self.feature_set_hash,
+            "feature_recipe_hash": self.feature_recipe_hash,
             "feature_timeline_hash": self.feature_timeline_hash,
             "research_clock": self.research_clock,
             "latency_model_hash": self.latency_model_hash,
