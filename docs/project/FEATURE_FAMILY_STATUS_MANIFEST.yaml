@@ -107,8 +107,10 @@ feature_families:
     canonical_files:
       - apps/workbench/src/data/event_catalog.py
       - packages/data_system/config/events.csv
+      - packages/replay/context_assembly.py
     tests:
       - tests/test_workbench/test_event_catalog.py
+      - tests/test_context_assembly.py
 
   continuous_session:
     source_generation_status: implemented
@@ -122,12 +124,14 @@ feature_families:
     blocking_reason: continuous_intraday_clock_out_of_scope_for_scheduled_screen
     canonical_files:
       - packages/features_engine/src/pipeline/market_state_pipeline.py
+      - packages/replay/context_assembly.py
     tests:
       - tests/backtest_pipeline/test_feature_plane.py
+      - tests/test_context_assembly.py
 
   latency_state:
     source_generation_status: partial
-    synchronization_status: partial
+    synchronization_status: implemented
     vectorbt_consumption_status: not_used
     hftbacktest_consumption_status: partial
     autonomous_candidate_status: blocked
@@ -137,9 +141,11 @@ feature_families:
     blocking_reason: latency_as_runner_config_not_model_feature_family
     canonical_files:
       - packages/replay/replay_session.py
+      - packages/replay/context_assembly.py
       - docs/workbench/LATENCY_ARCHITECTURE.md
     tests:
       - tests/test_replay_feature_latency.py
+      - tests/test_context_assembly.py
 
 paid_screen_gate:
   allowed: false

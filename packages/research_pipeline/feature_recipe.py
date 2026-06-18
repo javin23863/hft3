@@ -306,6 +306,7 @@ def attach_feature_recipe_to_candidate(
     target_symbol: str = "MES",
     research_clock: str = "scheduled_event",
     cross_asset_features: Mapping[str, Mapping[str, Any]] | None = None,
+    context_snapshot: Mapping[str, Any] | None = None,
     decision_timestamp_ns: int | None = None,
 ) -> Any:
     """Return a new CandidateModel with feature_recipe fields populated."""
@@ -378,11 +379,57 @@ def attach_feature_recipe_to_candidate(
             recipe.feature_recipe_hash = compute_feature_recipe_hash(recipe.to_dict())
             vix_proof = vix_validation.to_proof()
 
+    context_proof: dict[str, Any] | None = None
+    if context_snapshot is not None:
+        from replay.context_assembly import (
+            apply_continuous_session_to_recipe_family,
+            apply_latency_to_recipe_family,
+            apply_macro_to_recipe_family,
+            validate_continuous_session,
+            validate_latency_state,
+            validate_macro_context,
+        )
+
+        macro_validation = validate_macro_context(
+            context_snapshot,
+            target_event_id=target_event_id or recipe.target_event_id,
+            decision_timestamp_ns=decision_timestamp_ns,
+        )
+        macro_fam = dict(recipe.feature_families.get("macro_context") or {})
+        apply_macro_to_recipe_family(macro_fam, macro_validation)
+        recipe.feature_families["macro_context"] = macro_fam
+
+        session_validation = validate_continuous_session(
+            context_snapshot,
+            research_clock=recipe.research_clock,
+            decision_timestamp_ns=decision_timestamp_ns,
+        )
+        session_fam = dict(recipe.feature_families.get("continuous_session") or {})
+        apply_continuous_session_to_recipe_family(session_fam, session_validation)
+        recipe.feature_families["continuous_session"] = session_fam
+
+        latency_validation = validate_latency_state(
+            context_snapshot,
+            decision_timestamp_ns=decision_timestamp_ns,
+        )
+        latency_fam = dict(recipe.feature_families.get("latency_state") or {})
+        apply_latency_to_recipe_family(latency_fam, latency_validation)
+        recipe.feature_families["latency_state"] = latency_fam
+
+        recipe.feature_recipe_hash = compute_feature_recipe_hash(recipe.to_dict())
+        context_proof = {
+            "macro_context": macro_validation.to_proof(),
+            "continuous_session": session_validation.to_proof(),
+            "latency_state": latency_validation.to_proof(),
+        }
+
     meta = dict(candidate.metadata or {})
     if cross_proof is not None:
         meta["cross_asset_alignment_proof"] = cross_proof
     if vix_proof is not None:
         meta["vix_sensor_proof"] = vix_proof
+    if context_proof is not None:
+        meta["context_assembly_proof"] = context_proof
     meta["feature_recipe_hash"] = recipe.feature_recipe_hash
     meta["research_clock"] = recipe.research_clock
     meta["symbol"] = recipe.target_symbol
