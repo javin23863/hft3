@@ -40,6 +40,8 @@ from backtest_pipeline.src.feature_plane import (
     FEATURE_PLANE_ARTIFACT_FIELDS,
     feature_plane_validation_errors,
     build_feature_plane_payload,
+    build_feature_usage_manifest,
+    build_manifest_from_feature_recipes,
 )
 from backtest_pipeline.src.research_clock import (
     RESEARCH_CLOCK_SCHEDULED_EVENT,
@@ -2761,6 +2763,72 @@ def _resolve_git_commit() -> str:
         return ""
 
 
+def _resolve_screen_symbol(candidates: List[CandidateModel], symbol: str | None) -> str:
+    if symbol:
+        return symbol
+    if candidates:
+        return load_validation_path(candidates[0]).symbol
+    return "MES.v.0"
+
+
+def _resolve_research_clock(candidates: List[CandidateModel]) -> str:
+    for cand in candidates:
+        meta_clock = (cand.metadata or {}).get("research_clock")
+        if meta_clock is not None:
+            try:
+                return validate_research_clock(str(meta_clock))
+            except ResearchClockError:
+                pass
+        recipe = getattr(cand, "feature_recipe", None) or (cand.metadata or {}).get("feature_recipe")
+        if isinstance(recipe, Mapping) and recipe.get("research_clock"):
+            try:
+                return validate_research_clock(str(recipe["research_clock"]))
+            except ResearchClockError:
+                pass
+    return RESEARCH_CLOCK_SCHEDULED_EVENT
+
+
+def _apply_fs_v1_screen_metadata(
+    result: FilterResult,
+    ctx: Any,
+    candidates: List[CandidateModel],
+    *,
+    research_clock: str,
+    screening_scope: str,
+) -> None:
+    from backtest_pipeline.src.fs_v1_screen_path import (
+        FS_V1_BAR_CONSTRUCTION_ID,
+        fs_v1_feature_set_hash,
+        fs_v1_feature_set_id,
+    )
+
+    base_manifest = build_feature_usage_manifest(
+        bar_construction_id=FS_V1_BAR_CONSTRUCTION_ID,
+        feature_set_id=fs_v1_feature_set_id(),
+        feature_set_hash=fs_v1_feature_set_hash(),
+        research_clock=research_clock,
+        screening_scope=screening_scope,
+    )
+    recipe_manifest = build_manifest_from_feature_recipes(
+        candidates,
+        fs_v1_row_loop_active=True,
+        vix_injected=ctx.has_vix,
+    )
+    result.bar_construction_id = FS_V1_BAR_CONSTRUCTION_ID
+    result.feature_set_id = fs_v1_feature_set_id()
+    result.feature_set_hash = fs_v1_feature_set_hash()
+    result.data_manifest_hash = ctx.manifest_hash or ctx.content_hash or "fs_v1_store"
+    result.research_clock = research_clock
+    result.feature_plane_overrides = {
+        "feature_usage_manifest": {**base_manifest, **recipe_manifest},
+        "model_feature_usage_status": "partial_observed",
+    }
+    result.no_lookahead_signal_shift_proof = (
+        "fs_v1_row_loop_visible_index_j_with_ts[j]<=ts[i]-feature_latency_ns;"
+        " signals shifted one executable bar before VectorBT portfolio simulation"
+    )
+
+
 def filter_candidates(
     candidates: List[CandidateModel],
     parsed: ParsedHypothesis,
@@ -2774,6 +2842,10 @@ def filter_candidates(
     screening_scope: str = "pilot",
     max_total_trials: Optional[int] = None,
     run_budget: Optional[Mapping[str, Any]] = None,
+    feature_store_root: Optional[Path] = None,
+    symbol: Optional[str] = None,
+    feature_latency_ms: float = 1.0,
+    prefer_fs_v1_path: bool = True,
 ) -> FilterResult:
     """Run VectorBT filter on candidates. Returns promoted+rejected lists.
 
@@ -2854,7 +2926,30 @@ def filter_candidates(
         _append_candidate_budget_rejections(result, candidates, stop_reason, metric_values)
         return result
 
-    ohlcv = data_loader(event_id, repo_root)
+    fs_v1_ctx = None
+    research_clock = _resolve_research_clock(candidates)
+    screen_symbol = _resolve_screen_symbol(candidates, symbol)
+    if prefer_fs_v1_path and candidates:
+        from backtest_pipeline.src.fs_v1_screen_path import (
+            build_fs_v1_signal_computer,
+            ohlcv_from_feature_store,
+            resolve_fs_v1_screen_context,
+        )
+
+        fs_v1_ctx = resolve_fs_v1_screen_context(
+            repo_root=repo_root,
+            event_id=event_id,
+            symbol=screen_symbol,
+            feature_store_root_override=feature_store_root,
+            feature_latency_ms=feature_latency_ms,
+        )
+
+    if fs_v1_ctx is not None:
+        ohlcv = ohlcv_from_feature_store(fs_v1_ctx.store)
+        signal_computer = build_fs_v1_signal_computer(fs_v1_ctx)
+    else:
+        ohlcv = data_loader(event_id, repo_root)
+
     if ohlcv is None:
         logger.warning("No OHLCV data for %s — rejecting all candidates", event_id)
         result = _new_filter_result(
@@ -2893,6 +2988,14 @@ def filter_candidates(
         max_total_trials=max_total_trials,
         run_budget=budget,
     )
+    if fs_v1_ctx is not None:
+        _apply_fs_v1_screen_metadata(
+            result,
+            fs_v1_ctx,
+            candidates,
+            research_clock=research_clock,
+            screening_scope=screening_scope,
+        )
     promoted_out: List[PromotedCandidate] = []
     rejected_out: List[RejectedCandidate] = list(result.rejected)
 

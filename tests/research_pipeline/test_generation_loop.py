@@ -27,7 +27,7 @@ class _FakeFilterResult:
         return dict(self.payload)
 
 
-def _fake_filter(*, candidates, parsed, event_id, repo_root, gates, screening_scope, run_budget=None):
+def _fake_filter(*, candidates, parsed, event_id, repo_root, gates, screening_scope, run_budget=None, **kwargs):
     promoted = []
     for cand in candidates[:2]:
         promoted.append(

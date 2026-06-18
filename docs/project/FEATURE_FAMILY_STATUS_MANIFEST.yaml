@@ -11,20 +11,23 @@ feature_families:
   primary_fs_v1:
     source_generation_status: implemented
     synchronization_status: implemented
-    vectorbt_consumption_status: not_used
+    vectorbt_consumption_status: partial
     hftbacktest_consumption_status: partial
     autonomous_candidate_status: eligible_limited
     pit_proof_status: partial
     ablation_status: not_measured
     data_coverage_status: npz_catalog_available
-    blocking_reason: vectorbt_default_bar_stub_not_fs_v1_row_loop
+    blocking_reason: vectorbt_fs_v1_path_requires_feature_store_at_screen_time
     canonical_files:
       - packages/features_engine/src/features/mbo_features.py
       - packages/features_engine/src/pipeline/market_state_pipeline.py
       - packages/backtest_pipeline/src/feature_plane.py
+      - packages/backtest_pipeline/src/fs_v1_screen_path.py
+      - packages/backtest_pipeline/src/vectorbt_adapter.py
     tests:
       - tests/test_market_state_pipeline_features.py
       - tests/backtest_pipeline/test_feature_plane.py
+      - tests/backtest_pipeline/test_fs_v1_vectorbt_path.py
 
   cross_asset_futures:
     source_generation_status: partial
@@ -35,7 +38,7 @@ feature_families:
     pit_proof_status: partial
     ablation_status: missing
     data_coverage_status: multi_symbol_npz_when_configured
-    blocking_reason: vectorbt_fs_v1_row_loop_still_required_for_consumption_proof
+    blocking_reason: not_wired_into_vectorbt_screen
     canonical_files:
       - packages/features_engine/src/hypotheses/modules.py
       - packages/replay/replay_session.py

@@ -125,6 +125,75 @@ def _family_row(
     return row
 
 
+def _map_recipe_consumption(state: Any) -> str:
+    text = str(state or "not_measured")
+    if text in MODEL_CONSUMPTION_VALUES:
+        return text
+    return "not_measured"
+
+
+def build_manifest_from_feature_recipes(
+    candidates: Sequence[Any],
+    *,
+    fs_v1_row_loop_active: bool = False,
+    vix_injected: bool = False,
+) -> dict[str, dict[str, Any]]:
+    """Merge frozen recipe family rows into VectorBT manifest vocabulary."""
+    merged: dict[str, dict[str, Any]] = {}
+    for cand in candidates:
+        recipe = getattr(cand, "feature_recipe", None)
+        if recipe is None and isinstance(getattr(cand, "metadata", None), Mapping):
+            recipe = cand.metadata.get("feature_recipe")
+        if not isinstance(recipe, Mapping):
+            continue
+        families = recipe.get("feature_families")
+        if not isinstance(families, Mapping):
+            continue
+        for family_id in FEATURE_FAMILIES:
+            row = families.get(family_id)
+            if not isinstance(row, Mapping):
+                continue
+            merged[family_id] = _family_row(
+                catalog_eligibility="eligible" if family_id == "primary_fs_v1" else "not_measured",
+                model_consumption=_map_recipe_consumption(row.get("model_consumption_state")),
+                why_not_used_or_sidelined=str(row.get("why_not_used_or_sidelined") or "") or None,
+                evidence_scope="frozen_feature_recipe",
+            )
+
+    if fs_v1_row_loop_active:
+        primary = dict(
+            merged.get("primary_fs_v1")
+            or _family_row(
+                catalog_eligibility="eligible",
+                model_consumption="not_measured",
+                why_not_used_or_sidelined="fs_v1_row_loop_observed_in_vectorbt_screen",
+                evidence_scope="vectorbt_fs_v1_row_loop",
+            )
+        )
+        primary["model_consumption"] = "not_measured"
+        primary["catalog_eligibility"] = "eligible"
+        primary["why_not_used_or_sidelined"] = "fs_v1_row_loop_observed_in_vectorbt_screen"
+        primary["evidence_scope"] = "vectorbt_fs_v1_row_loop"
+        merged["primary_fs_v1"] = primary
+
+    if vix_injected:
+        for family_id in ("vix_vvix_sensor", "vix_options"):
+            row = dict(
+                merged.get(family_id)
+                or _family_row(
+                    catalog_eligibility="not_measured",
+                    model_consumption="not_measured",
+                    why_not_used_or_sidelined="vix_sensor_row_injected_in_fs_v1_vectorbt_path",
+                    evidence_scope="vectorbt_fs_v1_row_loop",
+                )
+            )
+            row["model_consumption"] = "not_measured"
+            row["why_not_used_or_sidelined"] = "vix_sensor_row_injected_in_fs_v1_vectorbt_path"
+            merged[family_id] = row
+
+    return merged
+
+
 def build_feature_usage_manifest(
     *,
     bar_construction_id: str,
@@ -144,13 +213,17 @@ def build_feature_usage_manifest(
         feature_set_id=feature_set_id,
         feature_set_hash=feature_set_hash,
     )
+    fs_v1_active = "fs_v1_row_loop" in _text(bar_construction_id)
     fs_catalog = "eligible" if "fs_v1" in _text(feature_set_id) else "not_measured"
-    primary_consumption = "not_used" if bar_stub else "not_measured"
-    primary_why = (
-        "bar_ohlcv_stub_not_fs_v1_row_loop"
-        if bar_stub
-        else "model_feature_consumption_not_observed_in_screening_path"
-    )
+    if fs_v1_active:
+        primary_consumption = "not_measured"
+        primary_why = "fs_v1_row_loop_observed_in_vectorbt_screen"
+    elif bar_stub:
+        primary_consumption = "not_used"
+        primary_why = "bar_ohlcv_stub_not_fs_v1_row_loop"
+    else:
+        primary_consumption = "not_measured"
+        primary_why = "model_feature_consumption_not_observed_in_screening_path"
 
     manifest: dict[str, Any] = {
         "primary_fs_v1": _family_row(

@@ -164,6 +164,8 @@ def _run_vectorbt_screen(
     filter_fn: FilterFn = filter_candidates,
     persist_fn: PersistFn = persist_screening_artifact,
 ) -> tuple[dict[str, Any], Path]:
+    from data_system.src.feature_store import feature_store_root
+
     gates = PromotionGate(min_oos_expectancy=0.0, max_drawdown_pct=-50.0, min_trades=cfg.vectorbt_min_trades)
     result = filter_fn(
         candidates=candidates,
@@ -172,6 +174,8 @@ def _run_vectorbt_screen(
         repo_root=repo_root,
         gates=gates,
         screening_scope=cfg.screening_scope,
+        feature_store_root=feature_store_root(repo_root),
+        symbol=cfg.symbol,
     )
     artifact = result.to_dict()
     screening_path = persist_fn(artifact, artifact_dir / "screening_artifact.json")
