@@ -163,7 +163,7 @@ Each step lists: **purpose**, **canonical document**, **primary code**, **config
 python scripts/run_pipeline.py --thesis "..." --event-id CPI_2024_09_11_TIGHT --vectorbt --no-llm
 ```
 
-**Default path status:** `bar_stub_research_only` until fs_v1 consumption is proven (Phase 5).
+**Default path status:** auto-selects `fs_v1_row_loop_from_feature_store` when feature-store NPZ exists for `(symbol, event_id)`; otherwise falls back to `bar_stub_research_only` (Phase 5).
 
 ---
 
@@ -330,10 +330,11 @@ python -m pytest tests/backtester_validation/fast -q
 # 2. Event catalog
 python -m economic_event_universe.cli validate
 
-# 3. Single-shot VectorBT screen (honest bar-stub label until Phase 5)
+# 3. Single-shot VectorBT screen (fs_v1 when feature store present; else bar stub)
 python scripts/run_pipeline.py \
   --thesis "Fade spread blowout after CPI surprise on MES" \
   --event-id CPI_2024_09_11_TIGHT \
+  --symbol MES \
   --vectorbt --no-llm
 
 # 4. Inspect feature plane on artifact

@@ -32,7 +32,9 @@ from research_pipeline.idea_generation import (
     parsed_from_idea,
     update_idea_statuses_from_results,
 )
+from backtest_pipeline.src.fs_v1_screen_path import FS_V1_BAR_CONSTRUCTION_ID
 from backtest_pipeline.src.vectorbt_adapter import filter_candidates, persist_screening_artifact
+from data_system.src.feature_store import feature_store_root
 from backtest_pipeline.src.hftbacktest_realism import write_hftbacktest_realism_artifacts
 from backtest_pipeline.src.promotion_gate import PromotionGate
 from research_pipeline.packets import (
@@ -115,6 +117,11 @@ def main() -> int:
     parser.add_argument("--thesis", required=True, help="Natural-language trading thesis")
     parser.add_argument("--doc", type=Path, help="Optional research document (PDF/DOCX/URL)")
     parser.add_argument("--event-id", required=True, help="Explicit catalog event id from events.csv")
+    parser.add_argument(
+        "--symbol",
+        default="MES",
+        help="Target symbol for feature-store fs_v1 VectorBT path (default MES)",
+    )
     parser.add_argument("--max-candidates", type=int, default=5)
     parser.add_argument("--chi404-summary", type=Path, default=None)
     parser.add_argument("--dry-run", action="store_true", help="Parse and generate only")
@@ -336,8 +343,11 @@ def main() -> int:
             repo_root=repo_root,
         )
         candidates = list(generate_candidates(
-            parsed, max_candidates=args.max_candidates,
+            parsed,
+            max_candidates=args.max_candidates,
             expand_for_vectorbt=bool(args.vectorbt or args.vectorbt_only),
+            target_event_id=args.event_id,
+            target_symbol=args.symbol,
         ))
 
     if args.vectorbt or args.vectorbt_only:
@@ -369,8 +379,20 @@ def main() -> int:
             gates=vbt_gates,
             screening_scope=args.vectorbt_scope,
             run_budget=run_budget or None,
+            feature_store_root=feature_store_root(repo_root),
+            symbol=args.symbol,
         )
         vectorbt_artifact = filter_result.to_dict()
+        print(
+            f"  bar_construction_id: {vectorbt_artifact.get('bar_construction_id')}"
+            + (
+                " (fs_v1 row loop)"
+                if vectorbt_artifact.get("bar_construction_id") == FS_V1_BAR_CONSTRUCTION_ID
+                else " (ohlcv bar stub fallback)"
+            )
+        )
+        print(f"  feature_plane_status: {vectorbt_artifact.get('feature_plane_status')}")
+        print(f"  model_feature_usage_status: {vectorbt_artifact.get('model_feature_usage_status')}")
         screening_path = persist_screening_artifact(
             vectorbt_artifact,
             artifact_dir / "screening_artifact.json",
