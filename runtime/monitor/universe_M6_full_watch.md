@@ -4,7 +4,13 @@
 **Tmux session (when running):** `universe_M6_full`  
 **Primary log:** `/root/hft3/repo/runtime/universe_M6_full_20260618T043132Z.log`  
 **Output:** `/root/hft3/repo/research_cards/universe_M6_full/`  
-**Launch stamp (2026-06-18):** workers=254, lake `/data/npz`, commit `e9c72b8a`, queue ~285840 units (~224334 rescan skips expected).
+**Launch stamp (2026-06-18):** workers=252 target (`nproc-4` on 256-core host), lake `/data/npz`, BLAS thread cap in `run_event_universe.py` module import + pool initializer.
+
+**Proven max workers:** pending re-verify after instance restart (prior RED at 254 without import-time BLAS cap; 64 workers spawned OK in manual SSH test 2026-06-18).
+
+## Instance start blocker (2026-06-18)
+
+Machine **56458** reported **~95% CPU util** while instance **41383988** is **exited**. `vastai start instance 41383988` returns **"Required resources are currently unavailable, state change queued"** for 15+ minutes. Instance disk (500 GB, ~12% used, `/data/npz` lake) is intact on stopped instance — do **not** destroy. Relaunch script `runtime/relaunch_universe_M6_from_workstation.ps1` auto-starts and waits up to 15m.
 
 ## Quick health (run from workstation)
 
@@ -38,19 +44,16 @@ Copy `watch_universe_M6_full.sh` to the instance after editing locally, or keep 
 3. **All-hypothesis FAIL:** With zero completed units, do not interpret hypothesis FAIL rates; see `specs/CORRECTNESS.md` M6 masking note for prop-slot dead hypotheses (HYP 20, 30, 32, 35, 36, 38).
 4. **Wrong commit / lake:** Launch line must show `npz=/data/npz` and expected short SHA; lake index ~63602 entries.
 
-## Recommended relaunch (after RED spawn failure)
+## Recommended relaunch (after thread-cap fix)
 
-Do **not** use 254 workers until thread budget is bounded. Example:
+Use the workstation driver (starts instance, waits, scp fixes, tmux at `nproc-4`):
 
-```bash
-export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
-cd /root/hft3/repo
-ts=$(date -u +%Y%m%dT%H%M%SZ)
-log=runtime/universe_M6_full_${ts}.log
-tmux new-session -d -s universe_M6_full "python -u scripts/run_event_universe.py ... --workers 32 2>&1 | tee $log"
+```powershell
+cd C:\Users\MSI\repos\hft3
+powershell -NoProfile -ExecutionPolicy Bypass -File runtime\relaunch_universe_M6_from_workstation.ps1
 ```
 
-Tune `--workers` (32Ã¢â‚¬â€œ64) until `pgrep -c python` stabilizes and jsonl grows. Update **Primary log** path in this doc after relaunch.
+If pool spawn fails after instance is up, reduce `WORKERS` in `runtime/relaunch_universe_M6_vast.sh` by 16 until jsonl grows; do not default to 64 without ulimit evidence.
 
 ## Ongoing monitor (every 5Ã¢â‚¬â€œ10 min)
 
