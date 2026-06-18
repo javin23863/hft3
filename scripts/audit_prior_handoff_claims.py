@@ -127,7 +127,7 @@ def _audit_one(entry: dict) -> dict:
         "gate_verdict": gate.verdict,
         "gate_red_count": gate.red_count,
         "gate_reasons": list(gate.reasons),
-        "formal_status": "REJECTED_BY_ONTOLOGY_GATE",
+        "formal_status": "REJECTED_BY_ONTOLOGY_GATE" if gate.verdict == "REJECT" else "ACCEPTED_BY_ONTOLOGY_GATE",
     }
 
 
@@ -143,7 +143,7 @@ def main() -> int:
     _OUT.parent.mkdir(parents=True, exist_ok=True)
     _OUT.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps({"output": str(_OUT), "all_rejected": report["all_rejected"]}, indent=2))
-    return 0
+    return 0 if report["all_rejected"] else 1
 
 
 if __name__ == "__main__":

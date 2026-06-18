@@ -13,8 +13,8 @@ Bare `run_event_universe.py --rescan` on Vast **without** a VectorBT screening a
 Run the check:
 
 ```powershell
-$env:HFT3_VAULT_ROOT = "C:\Users\MSI\Desktop\Obsidian Vault From VPS\hft3"
-$env:PYTHONPATH = "C:\Users\MSI\repos\hft3-pr-vbt-hbt;C:\Users\MSI\repos\hft3-pr-vbt-hbt\packages"
+$env:HFT3_VAULT_ROOT = "$env:USERPROFILE\Desktop\Obsidian Vault From VPS\hft3"
+$env:PYTHONPATH = "$PWD;$PWD\packages"
 python scripts/validate_vast_m6_ontology_gate.py
 ```
 
@@ -34,7 +34,7 @@ Output: `runtime/reports/ontology_gate_vast_m6_validation.json` (expect `actual_
 paper: none
 spec: VECTORBT_SCREENING_ENGINE_SPEC.md::Screening Artifact Contract
 spec: OPPORTUNITY_RESEARCH_SPEC.md
-tool_doc: Portfolio.from_signals::vectorbt==1.0.0
+tool_doc: Portfolio.from_signals::1.0.0
 invariant: B1=pass,B2=pass,B3=pass,B4=pass,B5=pass,B6=na,B7=pass,B8=na
 artifact: screening_artifact.json validated
 feature_plane: scheduled_event_only | incomplete_feature_plane | feature_complete_pit_declared
@@ -47,4 +47,15 @@ feature_plane: scheduled_event_only | incomplete_feature_plane | feature_complet
 
 ## Unblocks when
 
-`python scripts/run_ontology_gate.py --fable-all-true --artifact <path/to/screening_artifact.json> --area backtest_pipeline` returns `"verdict": "PASS"`.
+1. A valid `screening_artifact.json` passes `validate_artifact_schema`.
+2. Handoff includes invariant results for applicable B-checks, for example:
+
+```
+invariant: B1=pass,B2=pass,B3=pass,B4=pass,B5=pass,B6=na,B7=pass,B8=na
+```
+
+3. CLI returns PASS:
+
+```powershell
+python scripts/run_ontology_gate.py --fable-json runtime/reports/fable_checklist.json --artifact path/to/screening_artifact.json --area backtest_pipeline --invariant-results "B1=pass,B2=pass,B3=pass,B4=pass,B5=pass,B6=na,B7=pass,B8=na"
+```

@@ -31,7 +31,7 @@ _REQUIRED_CITATIONS = [
     {
         "paper_id": "none",
         "spec_ref": "VECTORBT_SCREENING_ENGINE_SPEC.md::Screening Artifact Contract",
-        "tool_doc_ref": "Portfolio.from_signals::vectorbt==1.0.0",
+        "tool_doc_ref": "Portfolio.from_signals::1.0.0",
     },
     {
         "paper_id": "none",
@@ -56,15 +56,24 @@ def main() -> int:
         fable_active=True,
     )
 
-    # Current bad posture: no screening artifact, bare rescan narrative.
+    # Current bad posture: no screening artifact (empty payload fails schema).
     verdict = run_gate(
         fable_checklist=fable,
         citations=_REQUIRED_CITATIONS,
         area="backtest_pipeline",
-        artifact=None,
+        artifact={},
+        invariant_results={
+            "B1": "pass",
+            "B2": "pass",
+            "B3": "pass",
+            "B4": "pass",
+            "B5": "fail",
+            "B6": "na",
+            "B7": "pass",
+            "B8": "na",
+        },
+        invariant_findings=["missing_vectorbt_screening_artifact_before_hft_universe_sweep"],
         drift_text=_BARE_RESCAN_DRIFT,
-        missing_verify_tail=True,
-        scope_green_without_exit_code=True,
     )
 
     report = {
