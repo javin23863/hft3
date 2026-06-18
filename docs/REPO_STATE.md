@@ -1,6 +1,6 @@
 # Repository state (canonical consolidation)
 
-**Last updated:** 2026-06-18 (consolidation pass)  
+**Last updated:** 2026-06-18 (cleanup pass — pristine trees)  
 **Purpose:** One truthful map of where to work, what landed on `main`, and how to verify a clean tree. Humans and agents read this before assuming branch or path.
 
 ---
@@ -13,7 +13,7 @@
 | **Remote** | `https://github.com/javin23863/hft3` |
 | **Default branch** | `main` |
 | **Active branch (canonical)** | `main` |
-| **HEAD (after consolidation)** | `080254c3` — *Merge PR #6: HftBacktest three-component latency* |
+| **HEAD (canonical `main`)** | `dbfa9942` — *docs(repo): REPO_STATE + canonical path pointers* (tracks `origin/main`) |
 
 Do **not** treat `C:\Users\MSI\Documents\New project` or other hft3-looking folders as canonical without reading [Secondary workspaces](#secondary-workspaces) below.
 
@@ -25,6 +25,7 @@ Recent merges on the authoritative remote (read top-down):
 
 | When (UTC) | Commit | What |
 |------------|--------|------|
+| 2026-06-18 | `dbfa9942` | **REPO_STATE** on `main` — canonical path pointers in AGENTS/CLAUDE |
 | 2026-06-18 | `080254c3` | **PR #6 merged** — HftBacktest three-component latency taxonomy, probe/regime wiring, CC component ingest |
 | 2026-06-17 | `6fe3e8c2` | PR #4 merged — Codex PR review workflow |
 | 2026-06-17 | `fbd26a6b` | PR #2 merged — AI coding delegate workflow (earlier iteration) |
@@ -48,6 +49,8 @@ Latency feature commits on `main` (included in `080254c3`):
 | Reset stale local `main` | Local `main` had diverged (`780a161c`, 3 commits) from remote; reset to `origin/main` after merge (no force-push) |
 | Deleted local branch | `feat/hftbacktest-three-component-latency` (fully merged) |
 | **Not merged** | Dirty / unreviewed work from `chore/repo-cleanup-and-data-fill` and New project workspace — see below |
+| Cleanup pass (same day) | Canonical: stashed **27** modified files on `main` → `stash@{0}: pre-cleanup-2026-06-18: local main WIP (latency/docs/cockpit, 27 files)`. Workspace: `main` @ `dbfa9942`, removed untracked `artifacts/runs/`, `data/npz/`, `runtime/data_audits/`, `runtime/reports/`, `workbench_relaunch.log` (plus ignored cache via `git clean -fdX`). **No remote branches deleted.** |
+
 
 ---
 
@@ -65,7 +68,7 @@ Latency feature commits on `main` (included in `080254c3`):
 
 | Branch | Status |
 |--------|--------|
-| `main` | **Active** — tracks `origin/main` at `080254c3`, clean working tree |
+| `main` | **Active** — tracks `origin/main` at `dbfa9942`, clean working tree |
 | `feat/hftbacktest-three-component-latency` | **Removed locally** (merged); still on `origin` until remote prune |
 
 **Local branches still present (not deleted):**
@@ -125,13 +128,14 @@ origin/chi404/wip-l3-sim-fills
 
 ### `C:\Users\MSI\Documents\New project`
 
-| Item | State at consolidation |
-|------|----------------------|
+| Item | State (after cleanup pass) |
+|------|---------------------------|
 | Remote | Same (`javin23863/hft3`) |
-| Branch | `chore/repo-cleanup-and-data-fill` |
-| Local `main` | Was stale at `4d491d55` (pre-fetch); **not** canonical |
-| Dirty tree | ~29 entries (mostly untracked `runtime/`, `artifacts/`, one modified doc) |
-| Relationship | **Stale Cursor workspace clone** — contains substantial workbench/robustness commits on `chore/repo-cleanup-and-data-fill` **not** triaged into canonical `main` |
+| Branch | `main` (matches `origin/main` @ `dbfa9942`) |
+| Local branch kept | `chore/repo-cleanup-and-data-fill` still exists locally — **not merged** |
+| Working tree | **Clean** (`git status -sb` shows no M/D/??) |
+| Stash | `stash@{0}: On chore/repo-cleanup-and-data-fill: pre-push stash` |
+| Relationship | Cursor workspace clone; lane work on `chore/repo-cleanup-and-data-fill` remains on remote — triage via PR before merge |
 
 **Policy:** Do not merge or cherry-pick from this tree without explicit triage. Use `C:\Users\MSI\repos\hft3` on `main` for testing and new work. Reconcile `chore/repo-cleanup-and-data-fill` via a future reviewed PR if those commits are still wanted.
 
@@ -139,10 +143,13 @@ origin/chi404/wip-l3-sim-fills
 
 | Stash | Contents |
 |-------|----------|
-| `stash@{0}` | Pre-consolidation WIP from feat branch (pipeline deletions, latency local JSON, live probe scripts) |
-| `stash@{1}` | `On main: wip-all-local` (older) |
+| `stash@{0}` | `pre-cleanup-2026-06-18: local main WIP (latency/docs/cockpit, 27 files)` |
+| `stash@{1}` | `pre-consolidation-2026-06-18: pipeline cleanup + latency local WIP` (from feat branch) |
+| `stash@{2}` | `On main: wip-all-local` (older) |
 
-Inspect: `git stash show -p stash@{0} --stat`
+Inspect newest WIP: `git stash show -p stash@{0} --stat`
+
+**Remote branches merged into `origin/main` (safe to delete on GitHub after human confirm):** `origin/feat/hftbacktest-three-component-latency`, `origin/crypto/c0-venue-rtt`, `origin/options/ws1-slice1`, `origin/mandatory-vectorbt-idea-crypto-lane`, `origin/perf/event-driven-quoting`, `chi404/pc-sync`.
 
 ---
 
@@ -156,13 +163,13 @@ git fetch origin
 git checkout main
 git status -sb          # expect: ## main...origin/main  (no M/D/??)
 git branch -a           # branch inventory
-git log --oneline -5    # expect 080254c3 at top
+git log --oneline -5    # expect dbfa9942 at top
 git stash list          # WIP stashes if any
 ```
 
 Expected clean `git status`: no modified, deleted, or untracked files on `main` after consolidation commits.
 
-**Agent verify (bounded):**
+**Agent verify (bounded):** requires Python deps (e.g. `pandas`); if collection fails with `ModuleNotFoundError`, activate the project venv first.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/run_agent_verify.ps1
