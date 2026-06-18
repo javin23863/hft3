@@ -71,10 +71,13 @@ class StructuralModelIntegrator:
     are in a separate band for C++ parity compatibility.
     """
 
-    def __init__(self, tick_size: float = 0.25):
+    def __init__(self, tick_size: float = 0.25, *, target_asset: str = "MES", leader_asset: str = "ES"):
         self.models = get_structural_models()
         self.book = OrderBook()
         self.tick_size = tick_size
+        self._target_asset = str(target_asset).split(".")[0].upper()
+        self._leader_asset = str(leader_asset).split(".")[0].upper()
+        self._book_pressure_by_asset: Dict[str, BookPressureOutput] = {}
         self._last_snapshot = StructuralSnapshot()
         self._initialized_for_book_pressure = False
         self._vpin_model = None
@@ -87,6 +90,20 @@ class StructuralModelIntegrator:
                 self._vpin_model = m
             elif mid == "BOOK_PRESSURE":
                 self._book_pressure_model = m
+
+    def set_cross_asset_book_pressure(
+        self,
+        book_pressure_by_asset: Dict[str, BookPressureOutput],
+        *,
+        target_asset: Optional[str] = None,
+        leader_asset: Optional[str] = None,
+    ) -> None:
+        """Inject per-symbol book pressure from multi-symbol replay (no placeholder OFI)."""
+        self._book_pressure_by_asset = dict(book_pressure_by_asset)
+        if target_asset is not None:
+            self._target_asset = str(target_asset).split(".")[0].upper()
+        if leader_asset is not None:
+            self._leader_asset = str(leader_asset).split(".")[0].upper()
 
     def integrate(self, event: MBOEvent, feature_vector: np.ndarray) -> StructuralSnapshot:
         self.book.apply_event(event)
@@ -110,11 +127,26 @@ class StructuralModelIntegrator:
                 if mid_attr == "BOOK_PRESSURE":
                     result = model.evaluate(book=self.book, timestamp_ns=ts)
                     snapshot.book_pressure = result.payload
+                    self._book_pressure_by_asset[self._target_asset] = result.payload
                 elif mid_attr == "CROSS_ASSET_LEAD_LAG":
-                    ofi = snapshot.book_pressure.OFI_smooth if snapshot.book_pressure else 0.0
+                    book_by_asset = dict(self._book_pressure_by_asset)
+                    target = self._target_asset
+                    leader = self._leader_asset
+                    if (
+                        not book_by_asset
+                        or leader not in book_by_asset
+                        or target not in book_by_asset
+                        or leader == target
+                    ):
+                        continue
+                    own_ofi = book_by_asset[target].OFI_smooth
+                    leader_ofi = book_by_asset[leader].OFI_smooth
                     result = model.evaluate(
-                        own_ofi=ofi, leader_ofi=ofi,
-                        book_pressure_by_asset={},
+                        own_ofi=own_ofi,
+                        leader_ofi=leader_ofi,
+                        book_pressure_by_asset=book_by_asset,
+                        leader_asset=leader,
+                        target_asset=target,
                         timestamp_ns=ts,
                     )
                     snapshot.cross_asset = result.payload

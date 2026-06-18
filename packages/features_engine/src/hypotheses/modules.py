@@ -466,8 +466,12 @@ class EsToMesLeadLag(BaseHypothesis):
         super().__init__(16, "ES -> MES lead-lag")
         
     def evaluate(self, state: MarketState) -> float:
+        if "ES" not in state.cross_asset_features:
+            return 0.0
         mes_imb = state.primary_features.get('aggressor_volume_imbalance', 0.0)
         es_features = state.cross_asset_features.get('ES', {})
+        if not es_features or 'aggressor_volume_imbalance' not in es_features:
+            return 0.0
         es_imb = es_features.get('aggressor_volume_imbalance', 0.0)
         
         # Lead-lag divergence
@@ -483,8 +487,12 @@ class NqToMnqLeadLag(BaseHypothesis):
         super().__init__(17, "NQ -> MNQ lead-lag")
         
     def evaluate(self, state: MarketState) -> float:
+        if "NQ" not in state.cross_asset_features:
+            return 0.0
         mnq_imb = state.primary_features.get('aggressor_volume_imbalance', 0.0)
         nq_features = state.cross_asset_features.get('NQ', {})
+        if not nq_features or 'aggressor_volume_imbalance' not in nq_features:
+            return 0.0
         nq_imb = nq_features.get('aggressor_volume_imbalance', 0.0)
         
         divergence = nq_imb - mnq_imb
@@ -498,8 +506,12 @@ class EsNqDivergenceSnapback(BaseHypothesis):
         super().__init__(18, "ES/NQ divergence snapback")
         
     def evaluate(self, state: MarketState) -> float:
+        if "NQ" not in state.cross_asset_features or "ES" not in state.cross_asset_features:
+            return 0.0
         nq_features = state.cross_asset_features.get('NQ', {})
         es_features = state.cross_asset_features.get('ES', {})
+        if not nq_features or not es_features:
+            return 0.0
         
         nq_imb = nq_features.get('aggressor_volume_imbalance', 0.0)
         es_imb = es_features.get('aggressor_volume_imbalance', 0.0)
@@ -516,7 +528,11 @@ class ZnZbToEsNqMacroImpulse(BaseHypothesis):
         super().__init__(19, "ZN/ZB -> ES/NQ macro impulse")
         
     def evaluate(self, state: MarketState) -> float:
+        if "ZN" not in state.cross_asset_features:
+            return 0.0
         zn_features = state.cross_asset_features.get('ZN', {})
+        if not zn_features:
+            return 0.0
         zn_imb = zn_features.get('aggressor_volume_imbalance', 0.0)
         es_imb = state.primary_features.get('aggressor_volume_imbalance', 0.0)
         

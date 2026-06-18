@@ -305,6 +305,8 @@ def attach_feature_recipe_to_candidate(
     target_event_id: str | None = None,
     target_symbol: str = "MES",
     research_clock: str = "scheduled_event",
+    cross_asset_features: Mapping[str, Mapping[str, Any]] | None = None,
+    decision_timestamp_ns: int | None = None,
 ) -> Any:
     """Return a new CandidateModel with feature_recipe fields populated."""
     from research_pipeline.types import CandidateModel
@@ -340,7 +342,27 @@ def attach_feature_recipe_to_candidate(
             target_event_id=target_event_id,
         )
 
+    cross_proof: dict[str, Any] | None = None
+    if cross_asset_features is not None:
+        from replay.cross_asset_assembly import (
+            apply_cross_asset_to_recipe_family,
+            validate_cross_asset_alignment,
+        )
+
+        alignment = validate_cross_asset_alignment(
+            cross_asset_features,
+            target_symbol=target_symbol,
+            decision_timestamp_ns=decision_timestamp_ns,
+        )
+        fam = dict(recipe.feature_families.get("cross_asset_futures") or {})
+        apply_cross_asset_to_recipe_family(fam, alignment)
+        recipe.feature_families["cross_asset_futures"] = fam
+        recipe.feature_recipe_hash = compute_feature_recipe_hash(recipe.to_dict())
+        cross_proof = alignment.to_proof()
+
     meta = dict(candidate.metadata or {})
+    if cross_proof is not None:
+        meta["cross_asset_alignment_proof"] = cross_proof
     meta["feature_recipe_hash"] = recipe.feature_recipe_hash
     meta["research_clock"] = recipe.research_clock
     meta["symbol"] = recipe.target_symbol

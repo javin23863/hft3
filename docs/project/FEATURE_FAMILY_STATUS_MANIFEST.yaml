@@ -28,14 +28,14 @@ feature_families:
 
   cross_asset_futures:
     source_generation_status: partial
-    synchronization_status: partial
+    synchronization_status: implemented
     vectorbt_consumption_status: not_used
     hftbacktest_consumption_status: not_measured
     autonomous_candidate_status: blocked
-    pit_proof_status: missing
+    pit_proof_status: partial
     ablation_status: missing
-    data_coverage_status: multi_symbol_npz_gaps
-    blocking_reason: leader_symbol_placeholder_ofi_must_be_removed
+    data_coverage_status: multi_symbol_npz_when_configured
+    blocking_reason: vectorbt_fs_v1_row_loop_still_required_for_consumption_proof
     canonical_files:
       - packages/features_engine/src/hypotheses/modules.py
       - packages/replay/replay_session.py

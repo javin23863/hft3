@@ -330,11 +330,17 @@ class ReplaySession:
                 # Inject cross-asset features when secondary adapters exist.
                 if (secondary_mdas or sensor_adapters) and state is not None:
                     cross: Dict[str, Dict[str, float]] = {}
+                    from replay.cross_asset_assembly import enrich_cross_leg
+
                     for sym, sec_mda in secondary_mdas.items():
                         sec_mda.sync_to_timestamp(feature_ts)
                         sec_state = sec_mda.current_market_state(sym)
                         if sec_state is not None:
-                            cross[sym] = sec_state.primary_features
+                            cross[sym] = enrich_cross_leg(
+                                sec_state.primary_features,
+                                symbol=sym,
+                                source_timestamp_ns=feature_ts,
+                            )
                     for k, ad in sensor_adapters.items():
                         ad.sync_to_timestamp(feature_ts)
                         feats = ad.current_features()

@@ -98,10 +98,10 @@ class TestRegistryDefault:
         """With no env var set, all 45 hypotheses should be active."""
         monkeypatch.delenv("HFT3_CROSS_ASSET", raising=False)
         hyps = get_active_hypotheses()
-        assert len(hyps) == 45, f"Expected 45 active hypotheses by default, got {len(hyps)}"
+        assert len(hyps) == 50, f"Expected 50 active hypotheses by default, got {len(hyps)}"
 
     def test_cross_asset_env_0_excludes_families(self, monkeypatch):
-        """HFT3_CROSS_ASSET=0 should drop the 5 cross-asset families → 40 active."""
+        """HFT3_CROSS_ASSET=0 should drop the 5 cross-asset families."""
         monkeypatch.setenv("HFT3_CROSS_ASSET", "0")
         hyps = get_active_hypotheses()
         ids = {h.hyp_id for h in hyps}
@@ -114,11 +114,11 @@ class TestRegistryDefault:
         hyps = get_active_hypotheses()
         assert len(hyps) == 40
 
-    def test_cross_asset_env_1_still_45(self, monkeypatch):
-        """HFT3_CROSS_ASSET=1 (old opt-in form) still returns 45."""
+    def test_cross_asset_env_1_still_full_set(self, monkeypatch):
+        """HFT3_CROSS_ASSET=1 (legacy opt-in form) still returns full active set."""
         monkeypatch.setenv("HFT3_CROSS_ASSET", "1")
         hyps = get_active_hypotheses()
-        assert len(hyps) == 45
+        assert len(hyps) == 50
 
     def test_cross_asset_ids_present_in_default(self, monkeypatch):
         """Families 16-20 must be in the default active set."""
@@ -186,14 +186,13 @@ class TestCrossAssetHypothesesEvaluate:
         assert signal > 0.5
 
     def test_family20_micro_contract_retail_lag_nonzero(self):
-        """MicroContractRetailLag fires when ES has institutional_flow_score."""
+        """MicroContractRetailLag fires when ES aggressor imbalance leads micro."""
         hyp = MicroContractRetailLag()
         state = _make_market_state(
-            primary={},
-            cross={"ES": {"institutional_flow_score": 0.6}},
+            primary={"aggressor_volume_imbalance": 0.75},
+            cross={"ES": {"aggressor_volume_imbalance": 0.8}},
         )
         signal = hyp.evaluate(state)
-        # tanh(0.6 * 2.0) = tanh(1.2) ≈ 0.834
         assert signal > 0.5
 
     def test_cross_asset_families_zero_when_no_cross_features(self):
