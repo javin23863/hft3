@@ -13,6 +13,104 @@ import streamlit as st
 from workbench.src.run.evidence_snapshot import RunEvidenceSnapshot, read_json, read_text
 
 
+def _repo_context_rows(repo: Path) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = [{"field": "canonical path", "value": str(repo)}]
+    repo_state = repo / "docs" / "REPO_STATE.md"
+    rows.append({"field": "REPO_STATE", "value": "docs/REPO_STATE.md" if repo_state.is_file() else "missing"})
+    if repo_state.is_file():
+        for line in repo_state.read_text(encoding="utf-8", errors="replace").splitlines():
+            if "HEAD (canonical" in line:
+                rows.append({"field": "HEAD summary", "value": line.strip().lstrip("|").strip()})
+                break
+    try:
+        import subprocess
+
+        branch = subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        commit = subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        if branch.returncode == 0:
+            rows.append({"field": "branch", "value": branch.stdout.strip()})
+        if commit.returncode == 0:
+            rows.append({"field": "commit", "value": commit.stdout.strip()})
+    except (OSError, subprocess.SubprocessError):
+        pass
+    rows.append(
+        {
+            "field": "secondary workspace",
+            "value": "Do not treat Documents/New project as canonical (see docs/REPO_STATE.md).",
+        }
+    )
+    return rows
+
+
+def _latency_truth_component_rows(repo: Path) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    truth = read_json(repo / "runtime" / "latency_reports" / "latency_truth.json") or {}
+    bands = truth.get("component_bands") if isinstance(truth, dict) else None
+    order = (
+        "feed_latency_us",
+        "new_send_to_exchange_us",
+        "new_exchange_to_ack_us",
+        "cancel_send_to_exchange_us",
+        "cancel_exchange_to_ack_us",
+    )
+    rows: list[dict[str, Any]] = []
+    if isinstance(bands, dict):
+        for name in order:
+            band = bands.get(name) if isinstance(bands.get(name), dict) else {}
+            dist = band.get("distribution_us") if isinstance(band.get("distribution_us"), dict) else {}
+            rows.append(
+                {
+                    "component": name,
+                    "status": band.get("measurement_status", "MISSING"),
+                    "p99_us": dist.get("p99_us"),
+                    "note": band.get("note"),
+                }
+            )
+    live = truth.get("live_placement") if isinstance(truth, dict) else None
+    live_summary = None
+    if isinstance(live, dict):
+        samples = live.get("samples") if isinstance(live.get("samples"), dict) else {}
+        live_summary = {
+            "run_id": live.get("run_id"),
+            "host": live.get("host"),
+            "gateway": live.get("gateway"),
+            "paired_new_ack": samples.get("paired_new_ack"),
+            "cancel_ack": samples.get("cancel_ack"),
+            "capability_artifact": live.get("capability_artifact"),
+        }
+    return rows, live_summary
+
+
+def _model_registry_summary(repo: Path) -> dict[str, Any]:
+    try:
+        from features_engine.src.model_registry import all_slugs, load_model_registry
+
+        models = load_model_registry().get("models", {})
+        kinds: dict[str, int] = {}
+        for entry in models.values():
+            if isinstance(entry, dict):
+                kind = str(entry.get("kind") or "unknown")
+                kinds[kind] = kinds.get(kind, 0) + 1
+        return {
+            "slug_total": len(all_slugs()),
+            "kinds": kinds,
+            "artifact": "packages/features_engine/config/model_registry.yaml",
+        }
+    except Exception as exc:
+        return {"slug_total": 0, "kinds": {}, "artifact": "packages/features_engine/config/model_registry.yaml", "error": str(exc)}
+
+
 def _df(rows: list[dict[str, Any]]) -> None:
     if rows:
         st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
@@ -248,6 +346,12 @@ def render_autonomous_run(snapshot: RunEvidenceSnapshot) -> None:
 def render_registry_data(snapshot: RunEvidenceSnapshot) -> None:
     st.header("Registry & Data")
     render_run_header(snapshot)
+    registry_summary = _model_registry_summary(Path(__file__).resolve().parents[3])
+    if registry_summary.get("slug_total"):
+        st.caption(
+            f"Slug registry: {registry_summary['slug_total']} models "
+            f"({registry_summary.get('kinds')}) — {registry_summary.get('artifact')}"
+        )
     registry = snapshot.registry or {}
     data = snapshot.data or {}
     edge_packets = data.get("bitcoin_edge_packets") or {}
@@ -795,6 +899,22 @@ def render_backtest_evidence(snapshot: RunEvidenceSnapshot) -> None:
 def render_latency_evidence(snapshot: RunEvidenceSnapshot) -> None:
     st.header("Execution & Latency Evidence")
     render_run_header(snapshot)
+    repo = Path(__file__).resolve().parents[3]
+    component_rows, live_summary = _latency_truth_component_rows(repo)
+    if component_rows:
+        st.subheader("HftBacktest component bands (latency_truth.json)")
+        _display_df(
+            component_rows,
+            {
+                "component": "Component",
+                "status": "Status",
+                "p99_us": "p99 us",
+                "note": "Note",
+            },
+        )
+    if live_summary:
+        st.subheader("Live placement (CHI404)")
+        _df([live_summary])
     latency = snapshot.latency or {}
     rithmic_endpoint = latency.get("rithmic_endpoint") or {}
     if rithmic_endpoint:
@@ -1703,6 +1823,9 @@ def render_reports_analyst(snapshot: RunEvidenceSnapshot) -> None:
 def render_system(snapshot: RunEvidenceSnapshot, repo: Path) -> None:
     st.header("System")
     render_run_header(snapshot)
+    st.subheader("Repo context")
+    _display_df(_repo_context_rows(repo), {"field": "Field", "value": "Value"})
+    st.caption("Authority: docs/REPO_STATE.md · merge/verify charter: docs/VALIDATION_HONESTY.md")
     rithmic_endpoint = (snapshot.system or {}).get("rithmic_endpoint") or {}
     if rithmic_endpoint:
         st.subheader("Rithmic Endpoint Status")

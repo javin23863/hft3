@@ -196,6 +196,21 @@ def build() -> dict:
     stage_a_raw = loaders.stage_a_raw()
     n_screened = len({c.get("hypothesis_id") for c in (stage_a_raw.get("cells", []) if isinstance(stage_a_raw, dict) else [])})
 
+    slug_registry_total = 0
+    slug_registry_kinds: dict[str, int] = {}
+    slug_registry_error: str | None = None
+    try:
+        from features_engine.src.model_registry import all_slugs, load_model_registry
+
+        models_map = load_model_registry().get("models", {})
+        slug_registry_total = len(all_slugs())
+        for entry in models_map.values():
+            if isinstance(entry, dict):
+                kind = str(entry.get("kind") or "unknown")
+                slug_registry_kinds[kind] = slug_registry_kinds.get(kind, 0) + 1
+    except Exception as exc:
+        slug_registry_error = str(exc)
+
     silent_zero = [{"id": hid, "name": families[hid]} for hid in sorted(prop_dead)]
     vix_status = "unknown"
     if vix_invalid_cells > 0:
@@ -214,6 +229,10 @@ def build() -> dict:
         "registry_total": len(families),
         "funnel": {
             "registry": len(families),
+            "slug_registry_total": slug_registry_total,
+            "slug_registry_kinds": slug_registry_kinds,
+            "slug_registry_artifact": "packages/features_engine/config/model_registry.yaml",
+            "slug_registry_error": slug_registry_error,
             "screened_stage_a": n_screened,
             "survivors_stage_a": n_survivors,
             "structurally_dead": len(prop_dead),

@@ -30,7 +30,6 @@ router = APIRouter(prefix="/api/control", tags=["control"])
 JOBS = {
     "feature_rebuild": "rebuild feature store (PC6 chain)",
     "rescreen_stage_a": "re-run Stage A screen",
-    "cme_m6_universe_sweep": "run full CME M6 universe sweep (research-only)",
     "roll_now": "force contract roll on capture daemon",
     "capture_restart": "restart hft3-capture service",
     "slowtier_run": "run slow-tier nightly now",
@@ -53,23 +52,6 @@ def _job_cmd() -> dict:
                              "command": {"entry": str(s / "build_feature_store.py"), "args": ["--rebuild"]}},
         "rescreen_stage_a": {"host": "laptop",
                               "command": {"entry": str(s / "run_stage_a_screen.py"), "args": []}},
-        "cme_m6_universe_sweep": {
-            "host": "laptop",
-            "requires_exec_enabled": True,
-            "singleton": True,
-            "command": {
-                "entry": str(s / "run_event_universe.py"),
-                "args": [
-                    "--lane", "cme",
-                    "--bands", "6.255764",
-                    "--symbols", "MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0",
-                    "--events-csv", "packages/data_system/config/events.csv",
-                    "--from-stage-a", "research_cards/stage_a_full/stage_a_survivors.json",
-                    "--out", "research_cards/universe_M6_full",
-                    "--workers", "12",
-                ],
-            },
-        },
         "slowtier_run":     {"host": "laptop",
                               "command": {"entry": "powershell",
                                           "args": ["-NoProfile", "-ExecutionPolicy", "Bypass",

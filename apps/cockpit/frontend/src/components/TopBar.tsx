@@ -1,11 +1,12 @@
 import { Bell, Wifi, WifiOff } from "lucide-react";
 import { useZones } from "../zonesContext";
 import { Dot, Badge } from "../ui";
-import type { SystemZone, AlertsZone } from "../types";
+import type { SystemZone, AlertsZone, RepoContext } from "../types";
 
 export function TopBar({ connected, lastUpdate }: { connected: boolean; lastUpdate: number | null }) {
   const zones = useZones();
   const mode = (zones.system as SystemZone | undefined)?.execution?.execution_mode as string | undefined;
+  const repo = (zones.system as SystemZone | undefined)?.repo_context as RepoContext | undefined;
   const alerts = zones.alerts as AlertsZone | undefined;
   const alertCount = alerts?.count ?? 0;
   const crit = (alerts?.alerts ?? []).some((a) => a.severity === "crit");
@@ -13,6 +14,11 @@ export function TopBar({ connected, lastUpdate }: { connected: boolean; lastUpda
     <header className="flex items-center gap-3 border-b border-line bg-bg-soft/60 px-5 py-3 backdrop-blur">
       <div className="text-sm font-semibold tracking-tight text-ink-dim">Trading Cockpit</div>
       {mode && <Badge tone={mode === "LIVE" ? "bad" : "dim"}>{mode}</Badge>}
+      {repo?.branch && (
+        <span title={repo.canonical_path}>
+          <Badge tone="dim">{repo.branch}@{repo.commit ?? "?"}</Badge>
+        </span>
+      )}
       <div className="ml-auto flex items-center gap-4">
         <div className="flex items-center gap-1.5 text-xs text-ink-dim">
           <Bell size={15} className={crit ? "text-bad" : alertCount ? "text-warn" : "text-ink-faint"} />

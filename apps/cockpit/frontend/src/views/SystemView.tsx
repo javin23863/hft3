@@ -148,6 +148,9 @@ export function SystemView() {
   const lanes = sys.lanes as Record<string, unknown> | undefined;
   const cod = lanes ? (lanes["cme_options_data"] as Record<string, unknown> | undefined) : undefined;
   const defects = lanes ? (lanes["cme_options_defects"] as Record<string, unknown> | undefined) : undefined;
+  const gaps = sys.health_gaps as Record<string, unknown> | undefined;
+  const docsPresent = gaps?.docs_present as Record<string, boolean> | undefined;
+  const validationStatus = docsPresent?.validation_honesty === false ? "fail" : docsPresent ? "ok" : "unknown";
   const latencyStatus = String(g(lat, "status") ?? "unknown");
   const latencyLiveArm = String(g(lat, "live_arm_status") ?? "unknown");
   const latencyBottleneck = g(lat, "dominant_bottleneck");
@@ -187,6 +190,20 @@ export function SystemView() {
       <LanesCard lanes={lanes} />
       <OptionsDataCard cod={cod} defects={defects} />
       <Q001InventoryCard q001={sys.q001_inventory} />
+      <Card title="Repo context" status="ok" rows={[
+        ["canonical path", (sys.repo_context as Record<string, unknown> | undefined)?.canonical_path],
+        ["branch", (sys.repo_context as Record<string, unknown> | undefined)?.branch],
+        ["commit", (sys.repo_context as Record<string, unknown> | undefined)?.commit],
+        ["REPO_STATE", (sys.repo_context as Record<string, unknown> | undefined)?.repo_state_artifact],
+        ["HEAD summary", (sys.repo_context as Record<string, unknown> | undefined)?.head_summary],
+        ["secondary workspace", (sys.repo_context as Record<string, unknown> | undefined)?.secondary_workspace_note],
+      ]} />
+      <Card title="Validation honesty" status={validationStatus} rows={[
+        ["charter", (sys.health_gaps as Record<string, unknown> | undefined)?.validation_honesty_artifact ?? "docs/VALIDATION_HONESTY.md"],
+        ["repo state doc", (sys.health_gaps as Record<string, unknown> | undefined)?.repo_state_artifact],
+        ["M6 monitor doc", (sys.health_gaps as Record<string, unknown> | undefined)?.universe_monitor_artifact ?? "—"],
+        ["note", (sys.health_gaps as Record<string, unknown> | undefined)?.note],
+      ]} />
     </div>
   );
 }
