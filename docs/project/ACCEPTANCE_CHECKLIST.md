@@ -65,7 +65,8 @@ Before coding:
 
 ```text
 [ ] VaultGate completed: wiki/hot.md, Home.md, Memory Stack.md, and relevant notes.
-[ ] GraphGate completed with task-specific query.
+[ ] VaultPre passed: runtime/vault-gate/.last-vault-gate.json fresh (<4h).
+[ ] GraphGate completed with task-specific query (skip if vault reports waived-by-owner-2026-06-16).
 [ ] Existing ontology object checked before creating new pipeline/schema.
 [ ] Feature matrix row exists or is added in this slice.
 [ ] Scope is small enough for one coherent review surface.

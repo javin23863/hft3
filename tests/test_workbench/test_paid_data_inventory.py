@@ -559,10 +559,27 @@ def test_q001_project_docs_keep_owner_decision_gate_fail_closed():
 
 def test_q001_options_strict_mbo_warning_ledger_matches_inventory_report():
     repo_root = Path(__file__).resolve().parents[2]
+    report_path = repo_root / "runtime" / "data_audits" / "paid_data_inventory.json"
+    data_doctor = repo_root / "runtime" / "data_doctor_report.json"
+    if not report_path.is_file():
+        if not data_doctor.is_file():
+            import pytest
+
+            pytest.skip(
+                "runtime/data_audits/paid_data_inventory.json missing; "
+                "run scripts/paid_data_inventory.py after data_doctor_report.json exists"
+            )
+        report = build_report(
+            repo_root=repo_root,
+            source_root=repo_root / "data",
+            sync=False,
+            dry_run=True,
+        )
+        write_reports(report, report_path.parent)
     ledger = (repo_root / "docs" / "project" / "Q001_OPTIONS_STRICT_MBO_WARNING_LEDGER.md").read_text(
         encoding="utf-8"
     )
-    report = json.loads((repo_root / "runtime" / "data_audits" / "paid_data_inventory.json").read_text(encoding="utf-8"))
+    report = json.loads(report_path.read_text(encoding="utf-8"))
     q001 = report["q001_cme_data_inventory"]
     options = q001["options"]
     fixing_mbo = options["options_lane"]["fixing_mbo"]

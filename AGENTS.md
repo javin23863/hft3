@@ -144,10 +144,10 @@ Convert imperative instructions into verifiable success criteria. Prefer "write 
 
 Every task runs this loop:
 
-1. **VaultGate** — **Blocking:** read/search the Obsidian vault before implementation or user questions. Use `wiki/hot.md`, `Home.md`, `Memory Stack.md`, and task-relevant notes/decisions first.
+1. **VaultGate** — **Blocking:** `scripts/vault_gate.ps1 -Query "..."` then `scripts/vault_pre_edit.ps1` (exits 2 if stamp missing/stale). Read/search Obsidian vault: `wiki/hot.md`, `Home.md`, `Memory Stack.md`, task-relevant `decisions/`/`sessions/`. Stamp: `runtime/vault-gate/.last-vault-gate.json`.
 2. **Spec** — Restate goal, constraints, and success criteria. Ask only after VaultGate if ambiguity remains.
-3. **GraphGate** — **Blocking:** `scripts/graphify_gate.ps1 -Query "..."` (or `bash scripts/graphify_gate.sh '...'`). Writes `graphify-out/.last-graph-query.json`. **No code edits before this.**
-4. **GraphPre** — `scripts/graphify_pre_edit.ps1` (exits 2 if gate stamp missing/stale). Use graph query output — not blind repo grep. CHI404: [docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md](docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md).
+3. **GraphGate** — When **not** owner-waived (`wiki/hot.md` → `waived-by-owner-2026-06-16`): `scripts/graphify_gate.ps1 -Query "..."`. When waived: skip GraphGate/GraphPre/GraphPost; use VaultGate + targeted source reads.
+4. **GraphPre** — Only when graph gates active: `scripts/graphify_pre_edit.ps1`.
 5. **Plan** — Brief plan with verification steps before editing. Delegate locate work when needed (with graph context).
 6. **Code** — Minimal change via builder or approved multi-file path. No drive-by edits. No parallel CHI404 orchestrators.
 7. **Local preflight** — Before reviewer, run a bounded, task-specific `rg` loop for forbidden legacy terms, old fields, missing required terms/citation rows, and whitespace errors. Patch actionable hits; max three local iterations; report blockers instead of widening blindly.
@@ -156,7 +156,7 @@ Every task runs this loop:
 10. **PR GrepLoop** — If a PR/MR/CL exists and an external PR AI review connector is installed, run the PR loop or document unavailability.
 11. **GraphPost** — After code edits: `graphify update .` or `scripts/graphify_rebuild.ps1`. Commit updated `graphify-out/` with the change when the team tracks graph in git.
 
-Do not skip VaultGate, GraphGate, GraphPre, Plan, Local Preflight, Review, Verify, PR GrepLoop when available, or GraphPost for "small" changes.
+Do not skip VaultGate, VaultPre, GraphGate (when active), GraphPre, Plan, Local Preflight, Review, Verify, PR GrepLoop when available, or GraphPost (when active) for "small" changes.
 
 ## hft3-specific constraints
 

@@ -303,8 +303,25 @@ def _screening_candidate_row(run_id: str, *, replay_eligible: bool, surface_defi
         "trials_budget_tier": "screen",
         "in_sample_metrics": {"expectancy": 1.2},
         "out_of_sample_metrics": {"expectancy": 1.1},
-        "walk_forward_metrics": {"folds": 4},
-        "wfc_metrics": {"pearson": 0.5},
+        "walk_forward_metrics": {
+            "fold_matrix": [[1.0, 1.1], [1.2, 1.0]],
+            "fold_train_test_dates": [{"train": "2024-01-01", "test": "2024-02-01"}],
+            "fold_metrics": [{"is_expectancy": 1.0, "oos_expectancy": 0.9}],
+            "walk_forward_efficiency": 0.85,
+            "fold_dispersion": 0.1,
+            "is_oos_gap": 0.05,
+            "oos_decay": 0.02,
+        },
+        "wfc_metrics": {
+            "metric_in_sample": 1.2,
+            "metric_out_of_sample": 1.0,
+            "pearson": 0.5,
+            "spearman": 0.48,
+            "scatter_data": [[1.0, 1.0], [1.2, 1.1]],
+            "quadrant_counts": {"q1": 1, "q2": 0, "q3": 0, "q4": 1},
+            "high_is_high_oos_region": True,
+            "rejection_reason": None,
+        },
         "surface_stability_metrics": (
             _surface_formula_defined() if surface_defined else _surface_formula_missing()
         ),

@@ -66,6 +66,28 @@ def event_replays_dir() -> Path:
     return artifact_root() / "event_replays"
 
 
+def _campaign_artifacts_root() -> Path:
+    env = os.environ.get("HFT3_ARTIFACTS_ROOT")
+    if env:
+        p = Path(env).resolve()
+        if p.name == "research_cards":
+            return p.parent
+        return p
+    return repo_root() / "artifacts"
+
+
+def hftbacktest_prepared_data_dir(prepared_data_hash: str) -> Path:
+    return _campaign_artifacts_root() / "hftbacktest_prepared_data" / prepared_data_hash
+
+
+def hftbacktest_campaign_dir(campaign_id: str) -> Path:
+    return _campaign_artifacts_root() / "hftbacktest_campaigns" / campaign_id
+
+
+def hftbacktest_feature_timeline_dir(timeline_hash: str) -> Path:
+    return _campaign_artifacts_root() / "hftbacktest_feature_timelines" / timeline_hash
+
+
 AAR_RESPONSE_FILENAME = "after_action_response.json"
 AAR_REPORT_FILENAME = "after_action_report.md"
 

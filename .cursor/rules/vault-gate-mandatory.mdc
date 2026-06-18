@@ -1,0 +1,33 @@
+# VaultGate mandatory (orchestrator)
+
+Full protocol: [AGENTS.md](../../AGENTS.md) VaultGate section · vault [Memory Stack.md](file:///C:/Users/MSI/Desktop/Obsidian%20Vault%20From%20VPS/hft3/Memory%20Stack.md)
+
+## Non-negotiable order (before any code edit)
+
+1. **VaultGate** — `scripts/vault_gate.ps1 -Query "<task-specific question>"` (Windows) or `bash scripts/vault_gate.sh '<query>'`. Writes `runtime/vault-gate/.last-vault-gate.json`.
+2. **VaultPre** — `scripts/vault_pre_edit.ps1` (fails exit 2 if gate stamp missing or stale >4h).
+3. **GraphGate** — only when **not** owner-waived. Check vault `wiki/hot.md` for `waived-by-owner-2026-06-16`. When waived: report `graph-gates: waived-by-owner-2026-06-16` and use VaultGate + targeted source reads instead.
+4. Plan / locate / code / review / verify.
+
+## Vault path
+
+Default: `C:\Users\MSI\Desktop\Obsidian Vault From VPS\hft3`
+
+Override: `$env:HFT3_VAULT_ROOT`
+
+## Minimum read every session
+
+- `wiki/hot.md`
+- `Home.md`
+- `Memory Stack.md`
+- Task-relevant `decisions/` and `sessions/` (search with `-Query`)
+
+## Forbidden without VaultGate stamp
+
+- Creating pipelines, schemas, or methodology not grounded in vault + repo canonical docs
+- Skipping ontology gate because GraphGate ran (Graph does not substitute Vault)
+- Treating in-repo docs alone as sufficient when vault has active handoff guards
+
+## Handoff
+
+Every implementation handoff must cite vault notes consulted (e.g. `wiki/hot.md`, `decisions/2026-06-17 Feature-complete research authority correction`).

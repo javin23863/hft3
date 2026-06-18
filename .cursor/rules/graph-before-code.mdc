@@ -1,31 +1,25 @@
 ---
-description: Hard block on code edits until graphify gate runs with a task query
+description: Hard block on code edits until VaultGate runs; GraphGate only when not owner-waived
 alwaysApply: true
 ---
 
-# Graph before code (blocking)
+# Vault before graph before code (blocking)
 
-Full workflow: [docs/GRAPHIFY_WORKFLOW.md](../../docs/GRAPHIFY_WORKFLOW.md)  
-CHI404 paths: [docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md](../../docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md)
+Vault protocol: [AGENTS.md](../../AGENTS.md) · [Memory Stack](file:///C:/Users/MSI/Desktop/Obsidian%20Vault%20From%20VPS/hft3/Memory%20Stack.md)
 
 ## Non-negotiable order
 
-1. **GraphGate** — `scripts/graphify_gate.ps1 -Query "<task-specific question>"` (Windows) or `bash scripts/graphify_gate.sh '<query>'` (CHI404). Creates `graphify-out/.last-graph-query.json`.
-2. **GraphPre** — `scripts/graphify_pre_edit.ps1` (fails if gate stamp missing or stale >4h).
-3. **Plan** — Use graph output + canonical docs. **No blind repo-wide grep** as first move.
-4. **Locate** — `cavecrew-investigator` or `graphify path` / `graphify explain` with graph context from step 1.
-5. **Code** — Only after steps 1–4.
-6. **GraphPost** — `graphify update .` or `scripts/graphify_rebuild.ps1` after edits.
+1. **VaultGate** — `scripts/vault_gate.ps1 -Query "<task-specific question>"`. Creates `runtime/vault-gate/.last-vault-gate.json`. Read `wiki/hot.md`, `Home.md`, `Memory Stack.md`, relevant `decisions/`.
+2. **VaultPre** — `scripts/vault_pre_edit.ps1` (fails exit 2 if vault stamp missing or stale >4h).
+3. **Graph waiver check** — If vault `wiki/hot.md` says `waived-by-owner-2026-06-16`, **skip** GraphGate/GraphPre/GraphPost; use VaultGate + targeted source reads. Do not treat Graph as substitute for Vault.
+4. **GraphGate** (when active only) — `scripts/graphify_gate.ps1 -Query "..."`.
+5. **GraphPre** (when active only) — `scripts/graphify_pre_edit.ps1`.
+6. **Plan / locate / code / review / verify**.
 
-## Forbidden without graph consult
+## Forbidden
 
-- Creating parallel CHI404 orchestrators or host-side log inject scripts
-- Editing `chi404_vm_*` / `rithmic_trial` latency paths without reading CHI404 canonical entrypoints doc
-- Using TCP :65000 or synthetic `Add-Content` order lines as measured ack
+- Code edits without VaultPre passing
+- Skipping VaultGate because GraphGate ran
+- Running GraphGate when owner waiver is active (unless owner re-enabled graph in vault hot.md)
 
-## CHI404 paper latency (canonical)
-
-Deploy: `bash scripts/chi404_vm_deploy.sh`  
-Measure: `bash scripts/chi404_run_paper_latency_sweep.sh` (live gate, real R|Trader exports only)
-
-If graph query returns unrelated nodes, **refine the query** — do not fall back to grep-first exploration.
+CHI404 paths: [docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md](../../docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md)

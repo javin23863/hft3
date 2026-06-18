@@ -107,45 +107,8 @@ def _load_events(data_path: str) -> np.ndarray:
     return d["data"]
 
 
-def _is_l3_data(events: np.ndarray) -> bool:
-    """Return True if ``events`` contains Level-3 MBO events and no Level-2 DEPTH events.
-
-    Detection rule: ADD_ORDER_EVENT (ev_type 10) present AND DEPTH_EVENT (ev_type 1) absent.
-    """
-    ev_types = (events["ev"].astype(np.int64)) & 0xFF
-    has_add = bool(np.any(ev_types == ADD_ORDER_EVENT))
-    has_depth = bool(np.any(ev_types == DEPTH_EVENT))
-    return has_add and not has_depth
-
-
-def _filter_l3_orphans(events: np.ndarray) -> np.ndarray:
-    """Remove CANCEL/MODIFY/FILL events whose order_id had no prior ADD_ORDER_EVENT.
-
-    Real CME MBO captures start mid-session. Orders placed before the recording
-    window appear only as downstream CANCEL/MODIFY/FILL events. The L3 engine
-    has no prior book state for those orders and returns error 12 when it
-    encounters them. This filter drops them so the engine only processes orders
-    it has seen since recording began.
-
-    TRADE_EVENT rows (ev_type=2) have order_id=0 and are always kept.
-    All ADD_ORDER_EVENT rows are always kept (they register new orders).
-    """
-    ev_types = (events["ev"].astype(np.int64)) & 0xFF
-    known_ids: set = set()
-    keep = np.ones(len(events), dtype=bool)
-
-    for i in range(len(events)):
-        et = int(ev_types[i])
-        oid = int(events[i]["order_id"])
-        if et == ADD_ORDER_EVENT:
-            known_ids.add(oid)
-        elif et in (CANCEL_ORDER_EVENT, MODIFY_ORDER_EVENT, FILL_EVENT):
-            if oid not in known_ids:
-                keep[i] = False
-
-    return events[keep]
-
-
+from backtest_pipeline.src.l3_orphan_filter import filter_l3_orphans as _filter_l3_orphans
+from backtest_pipeline.src.l3_orphan_filter import is_l3_data as _is_l3_data
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -205,6 +168,7 @@ def build_hftbacktest(
     lot_size: float = 1.0,
     product: str = "MES",
     force_l3: Optional[bool] = None,
+    prepared_data: bool = False,
 ) -> HashMapMarketDepthBacktest:
     """Build a HashMapMarketDepthBacktest for the given NPZ data file.
 
@@ -230,6 +194,8 @@ def build_hftbacktest(
         product: Instrument name for fee-model lookup.
         force_l3: Override auto-detection.  ``True`` forces L3; ``False`` forces
             L2; ``None`` (default) auto-detects from the event array.
+        prepared_data: When True, skip L3 orphan filtering — data_path is
+            already content-addressed prepared replay output.
 
     Returns:
         A ready-to-use ``HashMapMarketDepthBacktest`` instance.
@@ -250,7 +216,7 @@ def build_hftbacktest(
 
     asset = BacktestAsset()
 
-    if use_l3:
+    if use_l3 and not prepared_data:
         # L3 path: filter orphan events, write to a temp NPZ, and pass the file path.
         #
         # IMPORTANT: hftbacktest reads NPZ files LAZILY — the file must stay on disk
@@ -268,6 +234,8 @@ def build_hftbacktest(
         np.savez_compressed(tmp_path, data=filtered)
         _l3_tmp_files.append(tmp_path)
         asset.data(tmp_path)
+    elif use_l3 and prepared_data:
+        asset.data(data_path)
     else:
         # L2 path: pass file path directly (no filtering needed).
         asset.data(data_path)

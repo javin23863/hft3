@@ -4,7 +4,19 @@
 
 **Canonical repo:** [docs/REPO_STATE.md](../REPO_STATE.md) — path, `main` HEAD, branch cleanup, `git status` verification (read before assuming workspace path or branch).
 
-## Step 0 — Code graph (mandatory)
+## Step 0 — Vault ontology gate (mandatory, always first)
+
+1. Read vault `wiki/hot.md`, `Home.md`, `Memory Stack.md` (path: `C:\Users\MSI\Desktop\Obsidian Vault From VPS\hft3` or `$env:HFT3_VAULT_ROOT`).
+2. Run task-specific consult:
+
+```powershell
+.\scripts\vault_gate.ps1 -Query "where does X fit in hft3 ontology?"
+.\scripts\vault_pre_edit.ps1
+```
+
+3. Check `graph_gates` in `runtime/vault-gate/.last-vault-gate.json`. If `waived-by-owner-2026-06-16`, skip Step 1 graph below.
+
+## Step 1 — Code graph (when not owner-waived)
 
 1. Open [graphify-out/wiki/index.md](../../graphify-out/wiki/index.md) — check **Freshness** banner (timestamp + git SHA).
 2. Run scoped queries (do not read raw `GRAPH_REPORT.md` or full `graph.json`):

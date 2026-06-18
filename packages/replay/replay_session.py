@@ -148,6 +148,11 @@ class ReplaySessionConfig:
     # "grid": fixed step_ns elapse() stepping throughout (legacy; A/B only).
     # Override at runtime: HFT3_QUOTE_STEPPING=grid|event env var.
     step_mode: str = "event"
+    # When True, npz_path points at content-addressed prepared replay data
+    # (orphan filtering already applied).
+    prepared_data: bool = False
+    latency_model_path: str = ""
+    fill_queue_model_path: str = ""
 
 
 class ReplaySession:
@@ -191,13 +196,36 @@ class ReplaySession:
             data_path = cfg.npz_path
 
         try:
+            latency_model = None
+            fill_queue_model = None
+            if cfg.latency_model_path:
+                latency_model = json.loads(Path(cfg.latency_model_path).read_text(encoding="utf-8"))
+            if cfg.fill_queue_model_path:
+                fill_queue_model = json.loads(Path(cfg.fill_queue_model_path).read_text(encoding="utf-8"))
+            queue_model_type = cfg.queue_model
+            tick = cfg.tick_size
+            lot = cfg.lot_size
+            force_l3 = None
+            if fill_queue_model:
+                tick = float(fill_queue_model.get("tick_size") or tick)
+                lot = float(fill_queue_model.get("lot_size") or lot)
+                if fill_queue_model.get("fill_model_scope") == "l3_mbo":
+                    force_l3 = True
+                from backtest_pipeline.src.hftbacktest_realism import (
+                    _official_replay_builder_queue_model_type,
+                )
+
+                queue_model_type = _official_replay_builder_queue_model_type(fill_queue_model)
             hbt = build_hftbacktest(
                 data_path,
                 latency_ms=cfg.latency_ms,
-                queue_model_type=cfg.queue_model,
-                tick_size=cfg.tick_size,
-                lot_size=cfg.lot_size,
+                latency_model=latency_model,
+                queue_model_type=queue_model_type,
+                tick_size=tick,
+                lot_size=lot,
                 product=cfg.product,
+                prepared_data=cfg.prepared_data,
+                force_l3=force_l3,
             )
             adapter = create_adapter(
                 "REPLAY",
@@ -386,6 +414,7 @@ class ReplaySession:
                 "summary_path": str(cfg.audit_dir / f"{self.run_id}_summary.json"),
                 "certification_stamp": stamp,
                 "certification_footer": format_stamp_footer(stamp),
+                "stepping_mode": effective_step_mode,
             }
         finally:
             if self._temp_npz is not None:

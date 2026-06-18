@@ -119,6 +119,17 @@ def compute_screening_artifact_hash(artifact: Mapping[str, Any]) -> str:
     return _hash_payload(_strip_screening_hash_exclusions(payload))
 
 
+class ScreeningArtifactError(ValueError):
+    """Raised when a VectorBT screening artifact fails validation."""
+
+
+def validate_screening_artifact(artifact: Mapping[str, Any]) -> list[str]:
+    """Public screening artifact validator for cockpit and HftBacktest handoff."""
+    from backtest_pipeline.src.hftbacktest_realism import _validate_screening_artifact_hash
+
+    return _validate_screening_artifact_hash(artifact)
+
+
 def _parameter_values_hash(values: Mapping[str, Any]) -> str:
     return _hash_payload(dict(values))
 

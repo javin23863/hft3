@@ -17,7 +17,7 @@ Only promoted candidates reach HftBacktest replay.
 6.   → Rejected candidates → logged       [NEW: with reason]
 7.   → Promoted candidates → serialized   [NEW: full metadata artifact]
 8.   → evaluate_model() → WorkbenchEngine [existing, fewer inputs]
-9.   → HftBacktest replay (ReplaySession) [existing, unchanged]
+9.   → HftBacktest campaign runner (`scripts/hft_run_campaign.py`) [replay-eligible only]
 10.  → deploy_best() → research_card      [existing, unchanged]
 ```
 
