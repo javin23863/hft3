@@ -134,9 +134,14 @@ def main(argv: list[str] | None = None) -> int:
     drift_artifact = _load_json(args.drift_artifact_json) if args.drift_artifact_json else None
     invariant_findings = None
     if args.invariant_findings:
-        invariant_findings = _load_json(args.invariant_findings)
+        try:
+            invariant_findings = _load_json(args.invariant_findings)
+        except (json.JSONDecodeError, OSError, ValueError) as exc:
+            print(f"error: invalid --invariant-findings: {exc}", file=sys.stderr)
+            return 2
         if not isinstance(invariant_findings, list):
-            raise ValueError("--invariant-findings must be a JSON array")
+            print("error: --invariant-findings must be a JSON array", file=sys.stderr)
+            return 2
 
     verdict = run_gate(
         fable_checklist=fable,
