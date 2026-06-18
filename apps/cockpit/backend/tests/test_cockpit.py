@@ -178,7 +178,28 @@ def _write_latency_evidence_files(root: Path) -> None:
         encoding="utf-8",
     )
     (root / "runtime" / "latency_reports" / "latency_truth.json").write_text(
-        json.dumps({"compute": {"tick_to_decision_ns": 15300}}),
+        json.dumps({
+            "compute": {"tick_to_decision_ns": 15300},
+            "live_placement": {
+                "run_id": "live_test",
+                "host": "CHI404",
+                "samples": {"paired_new_ack": 25, "cancel_ack": 0},
+                "offensive_us": {"tick_to_send_p99": 60.894},
+                "defensive_us": {"cancel_to_send_p99": 18.906},
+            },
+            "component_bands": {
+                "feed_latency_us": {
+                    "measurement_status": "MEASURED",
+                    "distribution_us": {"p99_us": 120.0},
+                }
+            },
+            "hftbacktest_regimes": {"regimes": ["fast", "normal"]},
+            "cc_component_ingest": {"last_ingest_utc": "2026-06-18T00:00:00Z"},
+        }),
+        encoding="utf-8",
+    )
+    (root / "runtime" / "latency_reports" / "live_placement_capability.json").write_text(
+        json.dumps({"status": "PASS"}),
         encoding="utf-8",
     )
     (root / "reports" / "latency_baselines" / "current_baseline.json").write_text(
@@ -2082,6 +2103,93 @@ def test_pipeline_latency_evidence_preserves_unmeasured_defensive_ack(monkeypatc
     assert evidence["defensive_live_cancel_to_send_us"] == 18.906
     assert evidence["defensive_cancel_ack_status"] == "UNMEASURED"
     assert evidence["live_readiness_status"] == sc.STALE
+    bands = evidence.get("component_bands")
+    assert isinstance(bands, list)
+    assert any(row.get("name") == "feed_latency_us" for row in bands)
+    assert evidence.get("live_placement", {}).get("host") == "CHI404"
+    assert evidence.get("execution_realism", {}).get("hftbacktest_regimes_present") is True
+
+
+def test_pipeline_universe_sweep_tracking_flags_local_workers(monkeypatch, tmp_path):
+    runtime = tmp_path / "runtime"
+    runtime.mkdir(parents=True)
+    log_path = runtime / "universe_M6_full_test.log"
+    log_path.write_text(
+        "Work units: 100 reused: 0 remaining: 100 skipped: 0\n[1/100] CPI MES.v.0 elapsed=1.0s\n",
+        encoding="utf-8",
+    )
+    checkpoint_dir = tmp_path / "research_cards" / "universe_M6_full"
+    checkpoint_dir.mkdir(parents=True)
+    (checkpoint_dir / "unit_results.context.json").write_text(
+        json.dumps({"cli_args": {"workers": 14}, "git_commit": "abc1234"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "M6_FULL_CHECKPOINT", checkpoint_dir / "unit_results.context.json")
+    monkeypatch.setattr(paths, "M6_FULL_RESULT", checkpoint_dir / "universe_result.json")
+
+    tracking = pipeline_agg._universe_sweep_tracking()
+
+    assert tracking["host_kind"] == "local"
+    assert tracking["workers"] == 14
+    assert tracking["log_artifact"].endswith("universe_M6_full_test.log")
+    assert "laptop-class run" in (tracking.get("detail") or "")
+    assert tracking["progress"]["remaining"] == 100
+    assert tracking.get("monitor_doc")
+
+
+def test_universe_sweep_complete_when_result_artifact_exists(monkeypatch, tmp_path):
+    runtime = tmp_path / "runtime"
+    runtime.mkdir(parents=True)
+    log_path = runtime / "universe_M6_full_test.log"
+    log_path.write_text(
+        "Work units: 100 reused: 0 remaining: 100 skipped: 0\n[1/100] CPI MES.v.0 elapsed=1.0s\n",
+        encoding="utf-8",
+    )
+    out_dir = tmp_path / "research_cards" / "universe_M6_full"
+    out_dir.mkdir(parents=True)
+    (out_dir / "universe_result.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "M6_FULL_CHECKPOINT", out_dir / "unit_results.context.json")
+    monkeypatch.setattr(paths, "M6_FULL_RESULT", out_dir / "universe_result.json")
+
+    tracking = pipeline_agg._universe_sweep_tracking()
+
+    assert tracking["state"] == "complete"
+
+
+def test_system_repo_context_includes_branch(monkeypatch, tmp_path):
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "REPO_STATE_DOC", tmp_path / "docs" / "REPO_STATE.md")
+    monkeypatch.setattr(paths, "VALIDATION_HONESTY_DOC", tmp_path / "docs" / "VALIDATION_HONESTY.md")
+    (tmp_path / "docs").mkdir(parents=True)
+    (tmp_path / "docs" / "REPO_STATE.md").write_text(
+        "| **HEAD (canonical `main`)** | `dbfa9942` — docs |\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "docs" / "VALIDATION_HONESTY.md").write_text("# charter\n", encoding="utf-8")
+
+    ctx = system_agg._repo_context()
+    gaps = system_agg._health_gaps()
+
+    assert ctx["canonical_path"] == str(tmp_path)
+    assert ctx["repo_state_artifact"] == "docs/REPO_STATE.md"
+    assert ctx["validation_honesty_artifact"] == "docs/VALIDATION_HONESTY.md"
+    assert "dbfa9942" in (ctx.get("head_summary") or "")
+    assert gaps["validation_honesty_artifact"] == "docs/VALIDATION_HONESTY.md"
+    assert gaps["docs_present"]["validation_honesty"] is True
+
+
+def test_pipeline_build_includes_universe_sweep_tracking(monkeypatch, tmp_path):
+    _stub_q001_ok(monkeypatch)
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    _point_non_universe_pipeline_paths(monkeypatch, tmp_path)
+    (tmp_path / "runtime").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "runtime" / "universe_M6_sweep.log").write_text("Work units: 1 reused: 0 remaining: 0 skipped: 0\n", encoding="utf-8")
+    monkeypatch.setattr(pipeline_agg, "_latency_evidence", lambda **_: {"status": sc.OK, "live_readiness_status": sc.OK})
+    p = pipeline_agg.build()
+    assert "universe_sweep_tracking" in p
+    assert p["universe_sweep_tracking"]["state"] in {"idle", "complete", "observed", "stalled", "running", "unknown"}
 
 
 def test_pipeline_latency_gate_is_non_green_when_defensive_ack_required(monkeypatch, tmp_path):

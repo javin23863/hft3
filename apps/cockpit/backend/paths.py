@@ -31,6 +31,10 @@ STAGE_A_SURVIVORS = _p("research_cards", "stage_a_full", "stage_a_survivors.json
 STAGE_B_RESULT = _p("research_cards", "universe_stageb_smoke", "universe_result.json")
 M6_RESULT = _p("research_cards", "universe_M6_smoke", "universe_result.json")
 M6_FULL_RESULT = _p("research_cards", "universe_M6_full", "universe_result.json")
+M6_FULL_CHECKPOINT = _p("research_cards", "universe_M6_full", "unit_results.context.json")
+REPO_STATE_DOC = _p("docs", "REPO_STATE.md")
+VALIDATION_HONESTY_DOC = _p("docs", "VALIDATION_HONESTY.md")
+UNIVERSE_MONITOR_DOC = _p("runtime", "monitor", "universe_M6_full_watch.md")
 ALPHA_CME_SPEC = _p("specs", "ALPHA_CME.md")
 
 
@@ -126,6 +130,11 @@ def read_json(path: Path) -> Optional[Any]:
 def read_text(path: Path) -> Optional[str]:
     try:
         return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        try:
+            return path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return None
     except (FileNotFoundError, OSError):
         return None
 

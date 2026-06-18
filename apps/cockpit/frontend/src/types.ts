@@ -18,6 +18,7 @@ export interface PipelineZone {
   generated_utc: string;
   health: Health;
   latency_evidence?: PipelineLatencyEvidence;
+  universe_sweep_tracking?: UniverseSweepTracking;
   stages: Stage[];
 }
 
@@ -34,7 +35,41 @@ export interface PipelineLatencyEvidence {
   defensive_cancel_to_send_us?: number | null;
   defensive_cancel_ack_status?: string;
   live_readiness_status?: Status;
+  hftbacktest_critical_bands_measured?: boolean | null;
+  component_bands?: Array<{
+    name: string;
+    measurement_status: string;
+    p99_us?: number | null;
+    note?: string | null;
+    source_run_id?: string | null;
+  }>;
   [k: string]: unknown;
+}
+
+export interface UniverseSweepTracking {
+  state?: string;
+  host_kind?: string;
+  host_label?: string;
+  workers?: number | null;
+  git_commit?: string | null;
+  log_artifact?: string | null;
+  checkpoint_artifact?: string | null;
+  output_artifact?: string | null;
+  progress?: Record<string, number | null> | null;
+  log_tail?: string | null;
+  detail?: string | null;
+  repo_state_doc?: string;
+  monitor_doc?: string | null;
+  tracking_mode?: string;
+}
+
+export interface RepoContext {
+  canonical_path?: string;
+  branch?: string | null;
+  commit?: string | null;
+  repo_state_artifact?: string;
+  head_summary?: string | null;
+  secondary_workspace_note?: string;
 }
 
 export interface ControlTrackedJob {
@@ -128,7 +163,11 @@ export interface ModelsZone {
   generated_utc: string;
   health: Health;
   registry_total: number;
-  funnel: Record<string, number>;
+  funnel: Record<string, number> & {
+    slug_registry_total?: number;
+    slug_registry_kinds?: Record<string, number>;
+    slug_registry_artifact?: string;
+  };
   silent_zero: { count: number; hypotheses: { id: number; name: string }[]; note: string };
   vix_coverage?: ModelVixCoverage;
   rows: ModelRow[];
@@ -168,6 +207,8 @@ export interface SystemZone {
   execution: Record<string, unknown>;
   lanes?: Record<string, unknown>;
   q001_inventory?: Q001InventoryEvidence;
+  repo_context?: RepoContext;
+  health_gaps?: Record<string, unknown>;
 }
 
 export interface Alert {

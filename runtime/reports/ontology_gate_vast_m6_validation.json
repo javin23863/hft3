@@ -1,0 +1,229 @@
+{
+  "actual_verdict": "REJECT",
+  "expected_until": [
+    "screening_artifact.json from VectorBT paid screen (rust engine for paid-compute scope)",
+    "run_event_universe --from-stage-a with stage_a_survivors.json",
+    "feature_plane_status declared on artifact (not lake_existence_as_usage)",
+    "ontology citation block in handoff per ONTOLOGY_GATE_AGENT_SPEC.md \u00a75"
+  ],
+  "expected_verdict": "REJECT",
+  "gate": {
+    "artifact": {
+      "issues": [
+        "run_id",
+        "created_at_utc",
+        "code_commit",
+        "screening_backend",
+        "vectorbt_version",
+        "vectorbt_engine",
+        "engine_parity_status",
+        "rust_engine_required_for_scope",
+        "rust_engine_available",
+        "vectorbt_engine_runtime_proof",
+        "license_review",
+        "research_clock",
+        "parameter_space_id",
+        "parameter_space_hash",
+        "max_trials",
+        "trials_run",
+        "run_budget_id",
+        "max_models",
+        "max_symbols",
+        "max_feature_sets",
+        "max_total_trials",
+        "max_wall_clock_seconds",
+        "max_peak_memory_mb_or_null",
+        "abort_on_budget_exhaustion",
+        "screening_scope",
+        "candidate_ids",
+        "candidate_reasons",
+        "promoted_ids",
+        "promoted_reasons",
+        "rejected_ids",
+        "rejected_reasons",
+        "stop_reasons",
+        "feature_set_id",
+        "feature_set_hash",
+        "data_manifest_hash",
+        "lake_manifest_hash",
+        "events_csv_hash_or_not_applicable",
+        "split_scheme_id",
+        "no_lookahead_signal_shift_proof",
+        "fees_model_id",
+        "slippage_model_id",
+        "bar_construction_id",
+        "feature_plane_status",
+        "feature_usage_manifest_hash",
+        "feature_usage_manifest",
+        "model_feature_usage_status",
+        "declared_context_sets",
+        "target_event_type_or_null",
+        "allowed_context_set_id_or_null",
+        "context_feature_coverage_status",
+        "context_ablation_status",
+        "continuous_clock_status",
+        "cross_asset_alignment_status",
+        "vix_sensor_status",
+        "vix_options_status",
+        "cme_options_context_status",
+        "latency_feature_status",
+        "data_scope_skip_manifest_hash",
+        "full_product_evidence_status",
+        "screening_artifact_hash",
+        "missing required field: feature_plane_status",
+        "missing required field: feature_usage_manifest_hash",
+        "missing required field: feature_usage_manifest",
+        "missing required field: model_feature_usage_status",
+        "missing required field: declared_context_sets",
+        "missing required field: target_event_type_or_null",
+        "missing required field: allowed_context_set_id_or_null",
+        "missing required field: context_feature_coverage_status",
+        "missing required field: context_ablation_status",
+        "missing required field: continuous_clock_status",
+        "missing required field: cross_asset_alignment_status",
+        "missing required field: vix_sensor_status",
+        "missing required field: vix_options_status",
+        "missing required field: cme_options_context_status",
+        "missing required field: latency_feature_status",
+        "missing required field: data_scope_skip_manifest_hash",
+        "missing required field: full_product_evidence_status",
+        "feature_usage_manifest_missing_family:primary_fs_v1",
+        "feature_usage_manifest_missing_family:cross_asset_futures",
+        "feature_usage_manifest_missing_family:vix_vvix_sensor",
+        "feature_usage_manifest_missing_family:vix_options",
+        "feature_usage_manifest_missing_family:cme_options_context",
+        "feature_usage_manifest_missing_family:macro_context",
+        "feature_usage_manifest_missing_family:continuous_session",
+        "feature_usage_manifest_missing_family:latency_state",
+        "non_feature_complete_must_refuse_full_product_evidence"
+      ],
+      "severity": "red",
+      "valid": false
+    },
+    "citations": [
+      {
+        "backed": true,
+        "issues": [],
+        "severity": "green",
+        "source_ref": "C:\\Users\\MSI\\repos\\hft3-pr-vbt-hbt\\docs\\project\\VECTORBT_SCREENING_ENGINE_SPEC.md",
+        "source_type": "spec"
+      },
+      {
+        "backed": true,
+        "issues": [],
+        "severity": "green",
+        "source_ref": "C:\\Users\\MSI\\repos\\hft3-pr-vbt-hbt\\docs\\project\\OPPORTUNITY_RESEARCH_SPEC.md",
+        "source_type": "spec"
+      }
+    ],
+    "drift": {
+      "clean": false,
+      "detected_patterns": [
+        "vbt_screening_as_hft_execution_realism"
+      ],
+      "severity": "red"
+    },
+    "fable_checklist": {
+      "AUTHORITY_LOCATED": true,
+      "FABLE_ACTIVE": true,
+      "GROUNDED": true,
+      "NO_ASSUMPTIONS": true,
+      "VAULT_READ": true
+    },
+    "invariants": {
+      "any_red": true,
+      "checks": [
+        {
+          "authority": "docs/REVIEWER_CHARTER.md#b1-filtration-integrity-f_t; chicago_cme_microstructure_mathematical_model.pdf",
+          "finding": "",
+          "invariant_id": "B1",
+          "severity": "green",
+          "status": "pass"
+        },
+        {
+          "authority": "docs/REVIEWER_CHARTER.md#b2-event-time-correctness; chicago_cme_microstructure_mathematical_model.pdf",
+          "finding": "",
+          "invariant_id": "B2",
+          "severity": "green",
+          "status": "pass"
+        },
+        {
+          "authority": "docs/REVIEWER_CHARTER.md#b3-no-lookahead--leakage; Ultimate_Quantitative_Finance_Researcher.pdf",
+          "finding": "",
+          "invariant_id": "B3",
+          "severity": "green",
+          "status": "pass"
+        },
+        {
+          "authority": "docs/REVIEWER_CHARTER.md#b4-walk-forward-discipline; BLUEPRINT.md",
+          "finding": "",
+          "invariant_id": "B4",
+          "severity": "green",
+          "status": "pass"
+        },
+        {
+          "authority": "docs/REVIEWER_CHARTER.md#b5-execution-realism; chicago_cme_microstructure_a_plus_developer_handoff.pdf",
+          "finding": "B5 Execution realism: latency bands, queue models, fees, net edge after costs \u2014 violation",
+          "invariant_id": "B5",
+          "severity": "red",
+          "status": "fail"
+        },
+        {
+          "authority": "docs/REVIEWER_CHARTER.md#b6-regime-pz_t--f_t; Ultimate_Quantitative_Finance_Researcher.pdf",
+          "finding": "",
+          "invariant_id": "B6",
+          "severity": "yellow",
+          "status": "na"
+        },
+        {
+          "authority": "docs/REVIEWER_CHARTER.md#b7-trial-vs-production-data-lanes; rithmic_trial_hftbacktest_pipeline_prompt.pdf",
+          "finding": "",
+          "invariant_id": "B7",
+          "severity": "green",
+          "status": "pass"
+        },
+        {
+          "authority": "docs/REVIEWER_CHARTER.md#b8-production-failure-states; chicago_cme_a_plus_production_implementation_prompt.pdf",
+          "finding": "",
+          "invariant_id": "B8",
+          "severity": "yellow",
+          "status": "na"
+        }
+      ],
+      "findings": [
+        "missing_vectorbt_screening_artifact_before_hft_universe_sweep",
+        "B5: B5 Execution realism: latency bands, queue models, fees, net edge after costs \u2014 violation (authority: docs/REVIEWER_CHARTER.md#b5-execution-realism; chicago_cme_microstructure_a_plus_developer_handoff.pdf)"
+      ],
+      "red_count": 1
+    },
+    "reasons": [
+      "invariant_B5_fail:B5 Execution realism: latency bands, queue models, fees, net edge after costs \u2014 violation",
+      "artifact_schema_invalid:run_id;created_at_utc;code_commit;screening_backend;vectorbt_version;vectorbt_engine;engine_parity_status;rust_engine_required_for_scope;rust_engine_available;vectorbt_engine_runtime_proof;license_review;research_clock;parameter_space_id;parameter_space_hash;max_trials;trials_run;run_budget_id;max_models;max_symbols;max_feature_sets;max_total_trials;max_wall_clock_seconds;max_peak_memory_mb_or_null;abort_on_budget_exhaustion;screening_scope;candidate_ids;candidate_reasons;promoted_ids;promoted_reasons;rejected_ids;rejected_reasons;stop_reasons;feature_set_id;feature_set_hash;data_manifest_hash;lake_manifest_hash;events_csv_hash_or_not_applicable;split_scheme_id;no_lookahead_signal_shift_proof;fees_model_id;slippage_model_id;bar_construction_id;feature_plane_status;feature_usage_manifest_hash;feature_usage_manifest;model_feature_usage_status;declared_context_sets;target_event_type_or_null;allowed_context_set_id_or_null;context_feature_coverage_status;context_ablation_status;continuous_clock_status;cross_asset_alignment_status;vix_sensor_status;vix_options_status;cme_options_context_status;latency_feature_status;data_scope_skip_manifest_hash;full_product_evidence_status;screening_artifact_hash;missing required field: feature_plane_status;missing required field: feature_usage_manifest_hash;missing required field: feature_usage_manifest;missing required field: model_feature_usage_status;missing required field: declared_context_sets;missing required field: target_event_type_or_null;missing required field: allowed_context_set_id_or_null;missing required field: context_feature_coverage_status;missing required field: context_ablation_status;missing required field: continuous_clock_status;missing required field: cross_asset_alignment_status;missing required field: vix_sensor_status;missing required field: vix_options_status;missing required field: cme_options_context_status;missing required field: latency_feature_status;missing required field: data_scope_skip_manifest_hash;missing required field: full_product_evidence_status;feature_usage_manifest_missing_family:primary_fs_v1;feature_usage_manifest_missing_family:cross_asset_futures;feature_usage_manifest_missing_family:vix_vvix_sensor;feature_usage_manifest_missing_family:vix_options;feature_usage_manifest_missing_family:cme_options_context;feature_usage_manifest_missing_family:macro_context;feature_usage_manifest_missing_family:continuous_session;feature_usage_manifest_missing_family:latency_state;non_feature_complete_must_refuse_full_product_evidence",
+      "drift_pattern:vbt_screening_as_hft_execution_realism"
+    ],
+    "red_count": 3,
+    "scope_honesty": {
+      "honest": true,
+      "issues": [],
+      "severity": "green"
+    },
+    "tool_usage": [],
+    "verdict": "REJECT",
+    "yellow_count": 2
+  },
+  "generated_at_utc": "2026-06-18T06:26:22.988121+00:00",
+  "required_citations": [
+    {
+      "paper_id": "none",
+      "spec_ref": "VECTORBT_SCREENING_ENGINE_SPEC.md::Screening Artifact Contract",
+      "tool_doc_ref": "Portfolio.from_signals::1.0.0"
+    },
+    {
+      "paper_id": "none",
+      "spec_ref": "OPPORTUNITY_RESEARCH_SPEC.md",
+      "tool_doc_ref": "none"
+    }
+  ],
+  "scenario": "vast_m6_bare_rescan_without_vbt_artifact",
+  "unblocks_when": "gate.verdict == PASS with valid screening artifact + survivors path"
+}

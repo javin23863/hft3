@@ -8,8 +8,11 @@ bash scripts/install_vbt_hbt_handoff_verify_deps.sh
 export PYTHONPATH="${REPO_ROOT}:${REPO_ROOT}/packages${PYTHONPATH:+:$PYTHONPATH}"
 exec bash tools/shell/run_with_timeout.sh 180 vbt-hbt-handoff-verify -- \
   python3 -B -m pytest -q \
+    tests/backtest_pipeline/test_ontology_gate.py \
+    tests/backtest_pipeline/test_feature_plane.py \
     tests/test_vectorbt_adapter.py \
     tests/test_research_pipeline.py \
+    tests/test_robustness_producers/test_fee_stress.py \
     tests/backtest_pipeline/test_hftbacktest_realism_hbt0.py \
     tests/backtest_pipeline/test_hftbacktest_realism_hbt1.py \
     tests/backtest_pipeline/test_hftbacktest_realism_hbt2.py \

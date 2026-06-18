@@ -35,12 +35,25 @@ processes.
 """
 from __future__ import annotations
 
+import os
+
+# Spawn workers re-import this module before Pool initializer runs; cap BLAS/OpenMP
+# threads here so numpy/scipy never see default multi-threaded backends.
+for _blas_thread_var in (
+    "OPENBLAS_NUM_THREADS",
+    "OMP_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+    "BLIS_NUM_THREADS",
+):
+    os.environ.setdefault(_blas_thread_var, "1")
+
 import argparse
 import csv
 import hashlib
 import json
 import multiprocessing as mp
-import os
 import re
 import sys
 import time
@@ -526,6 +539,19 @@ def _vix_feature_path(event_id: str) -> Path | None:
 # ---------------------------------------------------------------------------
 # Worker (top-level — picklable for spawn pool)
 # ---------------------------------------------------------------------------
+
+def _init_worker() -> None:
+    """Re-assert single-thread BLAS in spawn children (belt-and-suspenders)."""
+    for _var in (
+        "OPENBLAS_NUM_THREADS",
+        "OMP_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "NUMEXPR_NUM_THREADS",
+        "VECLIB_MAXIMUM_THREADS",
+        "BLIS_NUM_THREADS",
+    ):
+        os.environ[_var] = "1"
+
 
 def _worker(unit: dict[str, Any]) -> dict[str, Any]:
     """Run full hypothesis matrix for one (event_id, symbol, npz_path, latency_ms).
@@ -1905,7 +1931,7 @@ def main(argv: list[str] | None = None) -> int:
                 break
     else:
         ctx = mp.get_context("spawn")
-        with ctx.Pool(processes=args.workers) as pool:
+        with ctx.Pool(processes=args.workers, initializer=_init_worker) as pool:
             for i, result in enumerate(pool.imap_unordered(_worker, work_units), 1):
                 st = _unit_status(result)
                 fresh_ok_count += st == "ok"

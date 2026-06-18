@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
+import time
 from pathlib import Path
 from typing import Any, Optional
 
@@ -741,6 +743,219 @@ def _jsonl_metric(path: Path, field: str) -> Optional[float]:
     return None
 
 
+_COMPONENT_BAND_ORDER = (
+    "feed_latency_us",
+    "new_send_to_exchange_us",
+    "new_exchange_to_ack_us",
+    "cancel_send_to_exchange_us",
+    "cancel_exchange_to_ack_us",
+)
+_RE_UNIVERSE_PROGRESS = re.compile(r"\[(\d+)/(\d+)\]")
+_RE_WORK_UNITS = re.compile(
+    r"Work units:\s*(\d+)\s+reused:\s*(\d+)\s+remaining:\s*(\d+)\s+skipped:\s*(\d+)"
+)
+_RENTED_WORKER_THRESHOLD = 64
+
+
+def _component_band_rows(component_bands: Any) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    bands = component_bands if isinstance(component_bands, dict) else {}
+    for name in _COMPONENT_BAND_ORDER:
+        band = bands.get(name)
+        if not isinstance(band, dict):
+            rows.append(
+                {
+                    "name": name,
+                    "measurement_status": "MISSING",
+                    "p99_us": None,
+                    "note": None,
+                    "source_run_id": None,
+                }
+            )
+            continue
+        dist = band.get("distribution_us")
+        p99_us = dist.get("p99_us") if isinstance(dist, dict) else None
+        rows.append(
+            {
+                "name": name,
+                "measurement_status": str(band.get("measurement_status") or "UNKNOWN"),
+                "p99_us": _finite_float(p99_us),
+                "note": band.get("note"),
+                "source_run_id": band.get("source_run_id"),
+            }
+        )
+    return rows
+
+
+def _live_placement_summary(latency_truth: Any) -> dict[str, Any] | None:
+    live = _nested(latency_truth, "live_placement") if isinstance(latency_truth, dict) else None
+    if not isinstance(live, dict):
+        return None
+    samples = live.get("samples") if isinstance(live.get("samples"), dict) else {}
+    offensive = live.get("offensive_us") if isinstance(live.get("offensive_us"), dict) else {}
+    defensive = live.get("defensive_us") if isinstance(live.get("defensive_us"), dict) else {}
+    capability = paths.read_json(paths.LATENCY_LIVE_PLACEMENT_CAPABILITY)
+    capability_status = None
+    if isinstance(capability, dict):
+        capability_status = capability.get("status") or capability.get("verdict")
+    return {
+        "measured_utc": live.get("measured_utc"),
+        "run_id": live.get("run_id"),
+        "host": live.get("host"),
+        "system": live.get("system"),
+        "gateway": live.get("gateway"),
+        "hot_path_language": live.get("hot_path_language"),
+        "paired_new_ack": samples.get("paired_new_ack"),
+        "paired_cancel_submit": samples.get("paired_cancel_submit"),
+        "cancel_ack": samples.get("cancel_ack"),
+        "tick_to_send_p99_us": _finite_float(offensive.get("tick_to_send_p99")),
+        "decision_to_send_p99_us": _finite_float(offensive.get("decision_to_send_p99")),
+        "cancel_to_send_p99_us": _finite_float(defensive.get("cancel_to_send_p99")),
+        "cancel_to_ack_p99_us": _finite_float(defensive.get("cancel_to_ack_p99")),
+        "capability_status": capability_status,
+        "capability_artifact": live.get("capability_artifact"),
+        "baseline_artifact": live.get("baseline_artifact"),
+    }
+
+
+def _execution_realism_flags(latency_truth: Any) -> dict[str, Any]:
+    if not isinstance(latency_truth, dict):
+        return {"hftbacktest_regimes_present": False, "cc_component_ingest_present": False}
+    regimes = latency_truth.get("hftbacktest_regimes")
+    ingest = latency_truth.get("cc_component_ingest")
+    regime_names = regimes.get("regimes") if isinstance(regimes, dict) else None
+    return {
+        "hftbacktest_regimes_present": isinstance(regimes, dict),
+        "hftbacktest_regime_count": len(regime_names) if isinstance(regime_names, list) else 0,
+        "hftbacktest_regimes_artifact": (
+            regimes.get("artifacts_dir") if isinstance(regimes, dict) else None
+        ),
+        "cc_component_ingest_present": isinstance(ingest, dict),
+        "cc_component_ingest_utc": ingest.get("last_ingest_utc") if isinstance(ingest, dict) else None,
+    }
+
+
+def _latest_universe_log() -> Path | None:
+    candidates = [
+        *paths.REPO.glob("runtime/universe_M6*.log"),
+        *paths.REPO.glob("runtime/universe_M6*.log.*"),
+    ]
+    latest: tuple[float, Path] | None = None
+    for path in candidates:
+        if not path.is_file() or path.suffix == ".err":
+            continue
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            continue
+        if latest is None or mtime > latest[0]:
+            latest = (mtime, path)
+    return latest[1] if latest else None
+
+
+def _universe_sweep_host_label(workers: Any) -> tuple[str, str, str | None]:
+    override = os.environ.get("HFT3_UNIVERSE_SWEEP_HOST", "").strip()
+    if override:
+        return "external", override, None
+    if isinstance(workers, int) and not isinstance(workers, bool):
+        if workers >= _RENTED_WORKER_THRESHOLD:
+            return "rented", "vast-or-rented", None
+        if workers >= 12:
+            note = (
+                f"Detected laptop-class run (workers={workers}). "
+                "Authoritative M6 recovery should use Vast/rented host with high worker count."
+            )
+            return "local", "laptop", note
+    return "unknown", "unknown", None
+
+
+def _tail_log_text(path: Path, *, max_bytes: int = 65536) -> str:
+    try:
+        size = path.stat().st_size
+        with open(path, "rb") as fh:
+            if size > max_bytes:
+                fh.seek(size - max_bytes)
+            return fh.read().decode("utf-8", errors="replace")
+    except OSError:
+        return paths.read_text(path) or ""
+
+
+def _universe_sweep_tracking() -> dict[str, Any]:
+    context = paths.read_json(paths.M6_FULL_CHECKPOINT)
+    workers = _nested(context, "cli_args", "workers") if isinstance(context, dict) else None
+    host_kind, host_label, host_note = _universe_sweep_host_label(workers)
+    log_path = _latest_universe_log()
+    progress: dict[str, Any] = {}
+    log_tail = ""
+    state = "idle"
+    age_s: float | None = None
+    if log_path is not None:
+        log_text = _tail_log_text(log_path)
+        lines = [line for line in log_text.splitlines() if line.strip()]
+        log_tail = "\n".join(lines[-25:])
+        work_units = _RE_WORK_UNITS.search(log_text)
+        if work_units:
+            progress = {
+                "total": int(work_units.group(1)),
+                "reused": int(work_units.group(2)),
+                "remaining": int(work_units.group(3)),
+                "skipped": int(work_units.group(4)),
+            }
+        progress_lines = [line for line in lines if _RE_UNIVERSE_PROGRESS.search(line)]
+        if progress_lines:
+            match = _RE_UNIVERSE_PROGRESS.search(progress_lines[-1])
+            if match:
+                progress["current_unit"] = int(match.group(1))
+                progress["current_total"] = int(match.group(2))
+        try:
+            age_s = max(0.0, time.time() - log_path.stat().st_mtime)
+        except OSError:
+            age_s = None
+        current_unit = progress.get("current_unit")
+        current_total = progress.get("current_total")
+        if paths.M6_FULL_RESULT.is_file():
+            state = "complete"
+        elif isinstance(current_unit, int) and isinstance(current_total, int) and current_total > 0:
+            if current_unit >= current_total:
+                state = "complete"
+            elif age_s is not None and age_s < 300:
+                state = "running"
+            else:
+                state = "stalled"
+        elif progress.get("remaining") and age_s is not None and age_s < 300:
+            state = "running"
+        elif progress_lines or progress.get("remaining"):
+            state = "stalled"
+        else:
+            state = "observed"
+    detail = host_note
+    if host_kind in {"rented", "external"} and log_path and age_s is not None and age_s > 300:
+        sync_note = "Mirror Vast log/checkpoint to repo (see runtime/monitor/universe_M6_full_watch.md)."
+        detail = (detail + " " + sync_note if detail else sync_note)
+    if state == "stalled" and host_kind == "local":
+        detail = (detail + " Local run appears stalled/killed." if detail else "Local run appears stalled/killed.")
+    return {
+        "state": state,
+        "host_kind": host_kind,
+        "host_label": host_label,
+        "workers": workers,
+        "git_commit": context.get("git_commit") if isinstance(context, dict) else None,
+        "log_artifact": _rel(log_path) if log_path else None,
+        "checkpoint_artifact": _rel(paths.M6_FULL_CHECKPOINT) if paths.M6_FULL_CHECKPOINT.is_file() else None,
+        "output_artifact": _rel(paths.M6_FULL_RESULT) if paths.M6_FULL_RESULT.is_file() else None,
+        "progress": progress or None,
+        "log_tail": log_tail[-2400:] if log_tail else None,
+        "detail": detail,
+        "repo_state_doc": "docs/REPO_STATE.md",
+        "monitor_doc": (
+            _rel(paths.UNIVERSE_MONITOR_DOC)
+            if paths.UNIVERSE_MONITOR_DOC.is_file()
+            else "runtime/monitor/universe_M6_full_watch.md"
+        ),
+        "tracking_mode": "read_only_external",
+    }
+
+
 def _latency_evidence(*, defensive_ack_required: bool = False) -> dict:
     ack_dist = paths.read_json(paths.ORDER_ACK_DISTRIBUTION)
     latency_summary = paths.read_json(paths.LATENCY_SUMMARY)
@@ -836,6 +1051,9 @@ def _latency_evidence(*, defensive_ack_required: bool = False) -> dict:
         "defensive_cancel_ack_status": defensive_ack_status,
         "defensive_cancel_ack_required": defensive_ack_required,
         "hftbacktest_critical_bands_measured": critical_measured,
+        "component_bands": _component_band_rows(component_bands),
+        "live_placement": _live_placement_summary(latency_truth),
+        "execution_realism": _execution_realism_flags(latency_truth),
         "live_readiness_status": schemas.STALE if defensive_ack_status == "UNMEASURED" else schemas.OK,
         "sources": {
             "ack_p99": str(paths.ORDER_ACK_DISTRIBUTION.relative_to(paths.REPO)),
@@ -1452,5 +1670,6 @@ def build() -> dict:
         "generated_utc": paths.now_iso(),
         "health": health,
         "latency_evidence": latency_evidence,
+        "universe_sweep_tracking": _universe_sweep_tracking(),
         "stages": stages,
     }

@@ -1,0 +1,115 @@
+{
+  "all_rejected": true,
+  "authority": "docs/project/ONTOLOGY_GATE_AGENT_SPEC.md",
+  "claims_audited": 4,
+  "generated_at_utc": "2026-06-18T06:26:24.864468+00:00",
+  "results": [
+    {
+      "drift": {
+        "clean": false,
+        "detected_patterns": [
+          "vbt_screening_as_hft_execution_realism"
+        ],
+        "findings": [
+          "drift_pattern_detected:vbt_screening_as_hft_execution_realism \u2014 VectorBT screening treated as HFT execution realism"
+        ],
+        "severity": "red"
+      },
+      "formal_status": "REJECTED_BY_ONTOLOGY_GATE",
+      "gate_reasons": [
+        "drift_pattern:vbt_screening_as_hft_execution_realism",
+        "scope_honesty:scope_green_requires_full_scope_pytest_with_exit_code_and_output_tail",
+        "scope_honesty:verify_run_missing_exit_code_or_output_tail"
+      ],
+      "gate_red_count": 2,
+      "gate_verdict": "REJECT",
+      "id": "vast_bare_rescan",
+      "scope_honesty": {
+        "honest": false,
+        "issues": [
+          "scope_green_requires_full_scope_pytest_with_exit_code_and_output_tail",
+          "verify_run_missing_exit_code_or_output_tail"
+        ],
+        "severity": "red"
+      },
+      "summary": "Vast M6 launched run_event_universe --rescan without VectorBT screening artifact"
+    },
+    {
+      "drift": {
+        "clean": false,
+        "detected_patterns": [
+          "lake_existence_as_feature_usage"
+        ],
+        "findings": [
+          "drift_pattern_detected:lake_existence_as_feature_usage \u2014 feature usage claimed from lake existence only"
+        ],
+        "severity": "red"
+      },
+      "formal_status": "REJECTED_BY_ONTOLOGY_GATE",
+      "gate_reasons": [
+        "drift_pattern:lake_existence_as_feature_usage"
+      ],
+      "gate_red_count": 1,
+      "gate_verdict": "REJECT",
+      "id": "hyp5_two_slots_as_full_truth",
+      "scope_honesty": {
+        "honest": true,
+        "issues": [],
+        "severity": "green"
+      },
+      "summary": "HYP_5 evaluate() two slots described as complete feature-family coverage"
+    },
+    {
+      "drift": {
+        "clean": true,
+        "detected_patterns": [],
+        "findings": [],
+        "severity": "green"
+      },
+      "formal_status": "REJECTED_BY_ONTOLOGY_GATE",
+      "gate_reasons": [
+        "scope_honesty:subset_pytest_claimed_as_scope_green",
+        "scope_honesty:scope_green_requires_full_scope_pytest_with_exit_code_and_output_tail",
+        "scope_honesty:verify_run_missing_exit_code_or_output_tail"
+      ],
+      "gate_red_count": 1,
+      "gate_verdict": "REJECT",
+      "id": "merge_ready_theater",
+      "scope_honesty": {
+        "honest": false,
+        "issues": [
+          "subset_pytest_claimed_as_scope_green",
+          "scope_green_requires_full_scope_pytest_with_exit_code_and_output_tail",
+          "verify_run_missing_exit_code_or_output_tail"
+        ],
+        "severity": "red"
+      },
+      "summary": "merge-ready claimed with 0/285840 units and instance down"
+    },
+    {
+      "drift": {
+        "clean": false,
+        "detected_patterns": [
+          "creates_parallel_authority_docs"
+        ],
+        "findings": [
+          "drift_pattern_detected:creates_parallel_authority_docs \u2014 creates parallel authority docs instead of updating canonical files"
+        ],
+        "severity": "red"
+      },
+      "formal_status": "REJECTED_BY_ONTOLOGY_GATE",
+      "gate_reasons": [
+        "drift_pattern:creates_parallel_authority_docs"
+      ],
+      "gate_red_count": 1,
+      "gate_verdict": "REJECT",
+      "id": "parallel_vbt_scope_doc",
+      "scope_honesty": {
+        "honest": true,
+        "issues": [],
+        "severity": "green"
+      },
+      "summary": "VBT_RESEARCH_PRODUCT_SCOPE as canonical authority"
+    }
+  ]
+}

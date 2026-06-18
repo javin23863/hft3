@@ -6,6 +6,7 @@ never surfaced (only presence via keystore.status())."""
 from __future__ import annotations
 
 import os
+import subprocess
 from datetime import date
 from typing import Optional
 
@@ -778,6 +779,76 @@ def _lanes() -> dict:
         }
 
 
+def _repo_context() -> dict:
+    branch: str | None = None
+    commit: str | None = None
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(paths.REPO), "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        if proc.returncode == 0:
+            branch = proc.stdout.strip() or None
+        proc = subprocess.run(
+            ["git", "-C", str(paths.REPO), "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        if proc.returncode == 0:
+            commit = proc.stdout.strip() or None
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+    head_summary: str | None = None
+    repo_state_text = paths.read_text(paths.REPO_STATE_DOC)
+    if repo_state_text:
+        for line in repo_state_text.splitlines():
+            if "HEAD (canonical" in line:
+                head_summary = line.strip().lstrip("|").strip()
+                break
+
+    return {
+        "canonical_path": str(paths.REPO),
+        "branch": branch,
+        "commit": commit,
+        "repo_state_artifact": "docs/REPO_STATE.md",
+        "head_summary": head_summary,
+        "secondary_workspace_note": (
+            "Do not treat C:\\Users\\MSI\\Documents\\New project as canonical without triage "
+            "(see docs/REPO_STATE.md)."
+        ),
+        "validation_honesty_artifact": "docs/VALIDATION_HONESTY.md",
+    }
+
+
+def _health_gaps() -> dict:
+    """Read-only pointers for merge/verify honesty — not a substitute for pytest."""
+    repo_state_present = paths.REPO_STATE_DOC.is_file()
+    validation_present = paths.VALIDATION_HONESTY_DOC.is_file()
+    monitor_present = paths.UNIVERSE_MONITOR_DOC.is_file()
+    return {
+        "validation_honesty_artifact": "docs/VALIDATION_HONESTY.md",
+        "repo_state_artifact": "docs/REPO_STATE.md",
+        "universe_monitor_artifact": (
+            "runtime/monitor/universe_M6_full_watch.md" if monitor_present else None
+        ),
+        "docs_present": {
+            "repo_state": repo_state_present,
+            "validation_honesty": validation_present,
+            "universe_monitor": monitor_present,
+        },
+        "note": (
+            "Cockpit surfaces artifact truth only. Merge-ready requires scope-green pytest "
+            "per docs/VALIDATION_HONESTY.md — not inferred from dashboard health colors."
+        ),
+    }
+
+
 def build() -> dict:
     latency = _latency()
     slow = _slow_tier()
@@ -807,6 +878,8 @@ def build() -> dict:
         "capture": capture,
         "execution": _execution(),
         "lanes": lanes,
+        "repo_context": _repo_context(),
+        "health_gaps": _health_gaps(),
         "health_scope": "research_replay",
         "shadow_live_blockers": {
             "latency": latency.get("live_arm_status"),

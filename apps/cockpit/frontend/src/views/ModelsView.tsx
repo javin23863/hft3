@@ -22,7 +22,7 @@ export function ModelsView() {
 
   return (
     <div className="space-y-5">
-      <Panel title="Model tracker" right={`${fn.registry} reg · ${fn.screened_stage_a} screened · ${fn.survivors_stage_a} survivors · ${fn.structurally_dead} dead`}>
+      <Panel title="Model tracker" right={`${fn.registry} hyp · ${fn.slug_registry_total ?? "—"} slugs · ${fn.screened_stage_a} screened · ${fn.survivors_stage_a} survivors · ${fn.structurally_dead} dead`}>
         {z.silent_zero.count > 0 && (
           <div className="mb-3 rounded-lg border border-bad/40 bg-bad/5 p-2 text-sm text-ink-dim">
             ⚠ silent-zero: {z.silent_zero.count} hyps never alive ({z.silent_zero.hypotheses.map((h) => `#${h.id}`).join(", ")}). Not tested-and-rejected.
