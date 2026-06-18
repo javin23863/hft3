@@ -2692,6 +2692,10 @@ def _run_vectorbt_simulation(
             robustness_evidence = cand.metadata.get("robustness_evidence")
             if isinstance(robustness_evidence, Mapping):
                 vectorbt_results["robustness_evidence"] = copy.deepcopy(robustness_evidence)
+            if getattr(cand, "feature_recipe_hash", None):
+                vectorbt_results["feature_recipe_hash"] = cand.feature_recipe_hash
+            if getattr(cand, "feature_recipe", None):
+                vectorbt_results["feature_recipe"] = copy.deepcopy(cand.feature_recipe)
 
             candidate_path = resolve_validation_path(cand)
             promoted = PromotedCandidate(
@@ -2727,6 +2731,8 @@ def _candidate_id(cand: CandidateModel, params: Dict[str, Any]) -> str:
         or cand.metadata.get("_candidate_feature_set_id"),
         "candidate_symbol_id": cand.metadata.get("_candidate_symbol_id"),
         "research_clock": meta_clock,
+        "feature_recipe_hash": getattr(cand, "feature_recipe_hash", None)
+        or cand.metadata.get("feature_recipe_hash"),
     }
     raw = json.dumps(identity, sort_keys=True, default=str)
     return hashlib.sha256(raw.encode()).hexdigest()[:16]

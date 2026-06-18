@@ -8,6 +8,7 @@ from typing import Any, Dict, Iterator, List
 
 from workbench.src.core.params import DEFAULT_STRATEGY_PARAMS, param_hash_from_dict
 
+from research_pipeline.feature_recipe import attach_feature_recipe_to_candidate
 from research_pipeline.types import CandidateModel, ParsedHypothesis
 
 _DEFAULT_THRESHOLDS = [0.10, 0.15, 0.20, 0.25]
@@ -30,6 +31,9 @@ def generate_candidates(
     *,
     max_candidates: int = 20,
     expand_for_vectorbt: bool = False,
+    target_event_id: str | None = None,
+    target_symbol: str = "MES",
+    research_clock: str = "scheduled_event",
 ) -> Iterator[CandidateModel]:
     """Yield param variants for primary model and keyword-adjacent slugs.
 
@@ -51,12 +55,18 @@ def generate_candidates(
         params = dict(DEFAULT_STRATEGY_PARAMS)
         params["signal_threshold"] = threshold
         cid = param_hash_from_dict(model_id, params)
-        yield CandidateModel(
+        yield attach_feature_recipe_to_candidate(
+            CandidateModel(
             candidate_id=cid,
             model_id=model_id,
             strategy_params=params,
             thesis=parsed.thesis,
             metadata={"source_model": parsed.primary_model_id, "strategy_family": model_id},
+            ),
+            parsed=parsed,
+            target_event_id=target_event_id,
+            target_symbol=target_symbol,
+            research_clock=research_clock,
         )
         count += 1
 
@@ -69,7 +79,8 @@ def generate_candidates(
                 params["signal_threshold"] = threshold
                 params["holding_period_bars"] = holding
                 cid = param_hash_from_dict(model_id, params)
-                yield CandidateModel(
+                yield attach_feature_recipe_to_candidate(
+                    CandidateModel(
                     candidate_id=cid,
                     model_id=model_id,
                     strategy_params=params,
@@ -79,5 +90,10 @@ def generate_candidates(
                         "strategy_family": model_id,
                         "vectorbt_grid": True,
                     },
+                    ),
+                    parsed=parsed,
+                    target_event_id=target_event_id,
+                    target_symbol=target_symbol,
+                    research_clock=research_clock,
                 )
                 count += 1

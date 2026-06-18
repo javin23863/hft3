@@ -73,15 +73,17 @@ def _composite_score(row: Mapping[str, Any], *, holdout_names: set[str] | None =
 def _row_from_promoted(promoted: Mapping[str, Any], *, vectorbt_pass: bool = True) -> dict[str, Any]:
     vbt = promoted.get("vectorbt_results") if isinstance(promoted.get("vectorbt_results"), Mapping) else {}
     metrics = dict(vbt) if vbt else {}
-    return {
+    row = {
         "candidate_id": str(promoted.get("candidate_id") or ""),
         "model_id": str(promoted.get("hypothesis_id") or promoted.get("model_id") or ""),
         "strategy_params": dict(promoted.get("param_values") or promoted.get("strategy_params") or {}),
+        "feature_recipe_hash": promoted.get("feature_recipe_hash") or metrics.get("feature_recipe_hash"),
         "vectorbt_pass": vectorbt_pass,
         "robustness_pass": promoted.get("robustness_pass"),
         "hft_replay_status": promoted.get("hft_replay_status"),
         "metrics": metrics,
     }
+    return row
 
 
 def validate_generation_artifacts(

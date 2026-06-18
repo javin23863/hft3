@@ -28,6 +28,11 @@ class CandidateModel:
     strategy_params: Dict[str, Any]
     thesis: str
     metadata: Dict[str, Any] = field(default_factory=dict)
+    feature_recipe: Optional[Dict[str, Any]] = None
+    feature_recipe_hash: Optional[str] = None
+    target_symbol: str = "MES"
+    research_clock: str = "scheduled_event"
+    target_event_id: Optional[str] = None
 
 
 @dataclass

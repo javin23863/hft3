@@ -16,6 +16,7 @@ from backtest_pipeline.src.hft_campaign.manifest import ManifestGenerationConfig
 from backtest_pipeline.src.hft_campaign.runner import load_scenarios_from_manifest, run_hftbacktest_campaign
 from backtest_pipeline.src.promotion_gate import PromotionGate
 from backtest_pipeline.src.vectorbt_adapter import filter_candidates, persist_screening_artifact
+from research_pipeline.candidate_manifest import freeze_candidate_manifest, write_frozen_manifests
 from research_pipeline.elite_refinement import propose_next_candidates
 from research_pipeline.generation_state import (
     GENERATION_STATUS_COMPLETE,
@@ -36,7 +37,7 @@ from research_pipeline.hypothesis_parser import parse_hypothesis
 from research_pipeline.model_generation import generate_candidates
 from research_pipeline.review_memory import append_generation_memory
 from research_pipeline.types import CandidateModel, ParsedHypothesis
-from workbench.src.core.params import param_hash_from_dict
+from research_pipeline.feature_recipe import attach_feature_recipe_to_candidate, candidate_identity_hash
 
 FilterFn = Callable[..., Any]
 PersistFn = Callable[..., Path]
@@ -101,7 +102,7 @@ def _pipeline_run_id() -> str:
 
 
 def _candidate_hashes(candidates: list[CandidateModel]) -> list[str]:
-    return [param_hash_from_dict(c.model_id, c.strategy_params) for c in candidates]
+    return [candidate_identity_hash(c) for c in candidates]
 
 
 def make_default_robustness_fn(*, chi404_summary: Path | None = None) -> RobustnessFn:
@@ -335,9 +336,31 @@ def run_single_generation(
     manifest["generation_status"] = GENERATION_STATUS_IN_PROGRESS
     save_manifest(repo_root, manifest)
 
-    register_tested_hashes(manifest, _candidate_hashes(candidates))
+    attached = [
+        c
+        if c.feature_recipe
+        else attach_feature_recipe_to_candidate(
+            c,
+            parsed=parsed,
+            target_event_id=event_id,
+            target_symbol=cfg.symbol,
+            research_clock="scheduled_event",
+        )
+        for c in candidates
+    ]
+    frozen_manifests = [
+        freeze_candidate_manifest(
+            candidate=c,
+            repo_root=repo_root,
+            generation_index=generation_index,
+            proposal_reason=str(c.metadata.get("proposal_reason") or "generation"),
+        )
+        for c in attached
+    ]
+    write_frozen_manifests(gen_dir / "candidate_manifests.jsonl", frozen_manifests)
+    register_tested_hashes(manifest, _candidate_hashes(attached))
     screening, screening_path = _run_vectorbt_screen(
-        candidates=candidates,
+        candidates=attached,
         parsed=parsed,
         event_id=event_id,
         repo_root=repo_root,
@@ -481,6 +504,8 @@ def run_autoresearch_loop(
                     parsed,
                     max_candidates=cfg.max_candidates_per_generation,
                     expand_for_vectorbt=True,
+                    target_event_id=event_id,
+                    target_symbol=cfg.symbol,
                 )
             )
         else:
@@ -497,6 +522,8 @@ def run_autoresearch_loop(
                 tested_hashes=tested,
                 max_candidates=cfg.max_candidates_per_generation,
                 exploration_fraction=cfg.exploration_fraction,
+                target_event_id=event_id,
+                target_symbol=cfg.symbol,
             )
         if not candidates:
             manifest["stop_reason"] = "no_candidates_after_dedup"

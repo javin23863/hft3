@@ -8,6 +8,7 @@ from typing import Any, Mapping
 
 from workbench.src.core.params import DEFAULT_STRATEGY_PARAMS, param_hash_from_dict
 
+from research_pipeline.feature_recipe import attach_feature_recipe_to_candidate, candidate_identity_hash
 from research_pipeline.model_generation import generate_candidates
 from research_pipeline.types import CandidateModel, ParsedHypothesis
 
@@ -42,6 +43,9 @@ def propose_next_candidates(
     tested_hashes: set[str],
     max_candidates: int,
     exploration_fraction: float,
+    target_event_id: str | None = None,
+    target_symbol: str = "MES",
+    research_clock: str = "scheduled_event",
 ) -> list[CandidateModel]:
     """Build Gen N+1 candidates from validated elites plus exploration slice."""
     elites = _elite_rows(generation_summary)
@@ -49,10 +53,17 @@ def propose_next_candidates(
     seen: set[str] = set()
 
     def _add(model: CandidateModel) -> None:
-        phash = param_hash_from_dict(model.model_id, model.strategy_params)
-        if phash in tested_hashes or phash in seen:
+        model = attach_feature_recipe_to_candidate(
+            model,
+            parsed=parsed,
+            target_event_id=target_event_id,
+            target_symbol=target_symbol,
+            research_clock=research_clock,
+        )
+        key = candidate_identity_hash(model)
+        if key in tested_hashes or key in seen:
             return
-        seen.add(phash)
+        seen.add(key)
         out.append(model)
 
     for elite in elites:
@@ -91,7 +102,14 @@ def propose_next_candidates(
     if exploration_fraction > 0 and max_candidates:
         explore_budget = max(1, int(max_candidates * exploration_fraction))
     if len(out) < max_candidates and explore_budget:
-        for cand in generate_candidates(parsed, max_candidates=explore_budget, expand_for_vectorbt=True):
+        for cand in generate_candidates(
+            parsed,
+            max_candidates=explore_budget,
+            expand_for_vectorbt=True,
+            target_event_id=target_event_id,
+            target_symbol=target_symbol,
+            research_clock=research_clock,
+        ):
             _add(cand)
             if len(out) >= max_candidates:
                 break
