@@ -53,7 +53,8 @@ def load_vault_gate_receipt(repo_root: Path) -> tuple[dict[str, Any], list[str]]
     if not stamp_path.is_file():
         return {}, ["vault_gate_stamp_missing:run_scripts_vault_gate_ps1"]
     try:
-        payload = json.loads(stamp_path.read_text(encoding="utf-8"))
+        raw = stamp_path.read_text(encoding="utf-8-sig")
+        payload = json.loads(raw)
     except json.JSONDecodeError:
         return {}, ["vault_gate_stamp_invalid_json"]
     ts_raw = payload.get("timestamp_utc")

@@ -23,7 +23,16 @@ def _rel(repo_root: Path, path: Path) -> str:
 
 
 def _candidate_roots(repo_root: Path) -> Iterable[Path]:
+    try:
+        from workbench.src.artifacts.paths import workbench_runs_dir_for
+
+        canonical = workbench_runs_dir_for(repo_root)
+        if canonical.is_dir():
+            yield canonical
+    except Exception:
+        pass
     for root in (
+        repo_root / "artifacts" / "research_cards" / "workbench_runs",
         repo_root / "artifacts" / "workbench_runs",
         repo_root / "research_cards" / "workbench_runs",
         repo_root / "runtime" / "workbench" / "crypto_smoke",
@@ -132,3 +141,39 @@ def schema_memory_items(memory: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             }
         )
     return out
+
+
+def _autoresearch_memory_path(repo_root: Path) -> Path:
+    return Path(repo_root) / "research_cards" / "autoresearch" / "memory.jsonl"
+
+
+def append_generation_memory(
+    repo_root: Path,
+    summary: Dict[str, Any],
+    *,
+    generation_index: int,
+) -> Path:
+    """Append advisory-only generation facts; never overrides deterministic gates."""
+    path = _autoresearch_memory_path(repo_root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    record = {
+        "generation_index": generation_index,
+        "campaign_id": summary.get("campaign_id"),
+        "best_candidate_id": summary.get("best_candidate_id"),
+        "best_composite_score": summary.get("best_composite_score"),
+        "elite_count": sum(1 for row in summary.get("candidates") or [] if row.get("elite")),
+        "authority": "advisory",
+    }
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(record, sort_keys=True) + "\n")
+    return path
+
+
+def load_tested_hashes(repo_root: Path, campaign_id: str) -> set[str]:
+    from research_pipeline.generation_state import load_manifest
+
+    try:
+        manifest = load_manifest(repo_root, campaign_id)
+    except FileNotFoundError:
+        return set()
+    return set(manifest.get("tested_parameter_hashes") or [])

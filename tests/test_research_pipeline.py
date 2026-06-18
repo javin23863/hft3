@@ -250,8 +250,8 @@ def test_idea_static_filter_rejects_invalid_and_orders_queue():
     assert by_id["idea_bad"]["status"] == "static_reject"
     assert "primary_model_id_not_allowed" in by_id["idea_bad"]["static_error_codes"]
     assert [c.metadata["idea_id"] for c in candidates] == ["idea_high", "idea_low"]
-    assert candidates[0].strategy_params["signal_threshold"] == 0.05
-    assert parsed_from_idea(by_id["idea_high"]).param_ranges == {"signal_threshold": [0.05, 0.35]}
+    assert candidates[0].strategy_params["signal_threshold"] == 0.9
+    assert parsed_from_idea(by_id["idea_high"]).param_ranges == {"signal_threshold": [0.90, 0.95]}
     assert idea_summary(packet, candidates_from_ideas_count=len(candidates)) == {
         "ideas_generated": 3,
         "ideas_static_rejected": 1,

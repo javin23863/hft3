@@ -1,0 +1,20 @@
+# Minimal autoresearch loop config (research-only).
+max_generations: 3
+max_candidates_per_generation: 5
+robustness_max_candidates: 3
+exploration_fraction: 0.2
+hft_workers: 1
+stop_no_improvement_generations: 2
+target_score: null
+symbol: MES
+screening_scope: pilot
+run_robustness: true
+run_hft_campaign: false
+hft_stages: [0]
+vectorbt_min_trades: 3
+
+# Required when run_hft_campaign: true
+hft_source_npz: null
+hft_latency_model: null
+hft_fill_queue_model: null
+native_hot_path_evidence: []

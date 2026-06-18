@@ -626,6 +626,7 @@ def run_campaign(
     job_dir: Optional[Path] = None,
     campaign_id: Optional[str] = None,
     composition: Optional[ModelComposition] = None,
+    frozen_strategy_params: Optional[Dict[str, Any]] = None,
 ) -> CampaignResult:
     from features_engine.src.model_registry import resolve_model_id
     from workbench.src.registry.composition_orchestrator import CompositionOrchestrator
@@ -645,7 +646,13 @@ def run_campaign(
     campaign_id = campaign_id or _campaign_id(primary_id, symbol)
     artifact_dir = campaign_dir_for(repo_root, campaign_id)
     job_dir = job_dir or artifact_dir
-    param_hash = _param_hash(primary_id, DEFAULT_STRATEGY_PARAMS)
+    if frozen_strategy_params:
+        strategy_params_seed = dict(DEFAULT_STRATEGY_PARAMS)
+        strategy_params_seed.update(frozen_strategy_params)
+        param_hash = _param_hash(primary_id, strategy_params_seed)
+    else:
+        strategy_params_seed = None
+        param_hash = _param_hash(primary_id, DEFAULT_STRATEGY_PARAMS)
     artifact_dir.mkdir(parents=True, exist_ok=True)
     coverage = compute_model_coverage(repo_root, primary_id, symbol)
     if coverage.coverage_status == "BELOW_MINIMUM" and download_missing and audit_grade and not dry_run:
@@ -723,6 +730,9 @@ def run_campaign(
         "coverage_summary": coverage.to_dict(),
         "trial_mode": trial_mode,
     }
+    if strategy_params_seed is not None:
+        campaign_meta["strategy_params"] = strategy_params_seed
+        campaign_meta["frozen_strategy_params"] = True
     write_campaign_manifest(artifact_dir / "campaign.json", campaign_meta)
 
     if dry_run:
@@ -782,11 +792,25 @@ def run_campaign(
     wfc_dir = artifact_dir / "wfc"
     skip_periods = False
     matrix_rows: List[Dict[str, Any]] = []
-    strategy_params: Dict[str, Any] = dict(DEFAULT_STRATEGY_PARAMS)
+    strategy_params: Dict[str, Any] = (
+        dict(strategy_params_seed) if strategy_params_seed is not None else dict(DEFAULT_STRATEGY_PARAMS)
+    )
     bounds = load_parameter_bounds(primary_id)
     wfc_status_for_events = "SKIPPED"
 
-    if not trial_mode and wfc_cfg.get("enabled") and bounds:
+    if strategy_params_seed is not None:
+        wfc_result = WfcResult(
+            run_id=campaign_id,
+            model_id=primary_id,
+            wfc_status="SKIPPED",
+            rejection_reasons=["frozen_strategy_params from screening; WFC matrix search skipped"],
+        )
+        wfc_dir.mkdir(parents=True, exist_ok=True)
+        (wfc_dir / "wfc_summary.json").write_text(
+            json.dumps(wfc_result.to_dict(), indent=2), encoding="utf-8"
+        )
+        wfc_status_for_events = "SKIPPED"
+    elif not trial_mode and wfc_cfg.get("enabled") and bounds:
         try:
             matrix_rows = run_full_matrix_oos(
                 repo_root,

@@ -40,7 +40,7 @@ from research_pipeline.packets import (
     build_pipeline_response,
     write_pipeline_packets,
 )
-from research_pipeline.types import CandidateModel, GateThresholds, PipelineReport, ParsedHypothesis
+from research_pipeline.types import CandidateModel, EvaluationResult, GateThresholds, PipelineReport, ParsedHypothesis
 from data_layer.llm.openai_compatible_client import DEFAULT_MODEL_DEVELOPMENT_MODEL
 
 
@@ -171,7 +171,59 @@ def main() -> int:
         action="store_true",
         help="Emit single-line HFT3_PIPELINE_RESULT for paid-screen worker subprocesses",
     )
+    parser.add_argument("--autoresearch", action="store_true", help="Run multi-generation autoresearch loop")
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=REPO / "config" / "autoresearch" / "default.yaml",
+        help="Autoresearch loop YAML config",
+    )
+    parser.add_argument("--resume", action="store_true", help="Resume autoresearch campaign from manifest")
+    parser.add_argument("--campaign-id", default=None, help="Autoresearch campaign id (required with --resume)")
+    parser.add_argument("--max-generations", type=int, default=None, help="Override config max_generations")
+    parser.add_argument("--stop-file", type=Path, default=None, help="Stop autoresearch loop when this file exists")
     args = parser.parse_args()
+
+    if args.autoresearch:
+        from research_pipeline.generation_loop import (
+            load_autoresearch_config,
+            make_default_robustness_fn,
+            run_autoresearch_loop,
+        )
+
+        repo_root = args.repo_root.resolve()
+        overrides = {
+            "max_generations": args.max_generations,
+            "stop_file": str(args.stop_file) if args.stop_file else None,
+        }
+        cfg = load_autoresearch_config(args.config, overrides=overrides)
+        chi404 = args.chi404_summary
+        if chi404 is None:
+            default_lat = repo_root / "runtime" / "latency_reports" / "latency_summary.json"
+            chi404 = default_lat if default_lat.is_file() else None
+        robustness_fn = make_default_robustness_fn(chi404_summary=chi404) if cfg.run_robustness else None
+        code, report = run_autoresearch_loop(
+            repo_root=repo_root,
+            thesis=args.thesis,
+            event_id=args.event_id,
+            cfg=cfg,
+            campaign_id=args.campaign_id,
+            resume=bool(args.resume),
+            no_llm=args.no_llm,
+            robustness_fn=robustness_fn,
+        )
+        _emit_pipeline_payload(
+            {
+                "status": "autoresearch_complete" if code == 0 else "autoresearch_failed",
+                "autoresearch_report": report,
+            },
+            orchestrator_result=args.orchestrator_result,
+        )
+        return code
+
+    if args.resume and not args.autoresearch:
+        print("Error: --resume requires --autoresearch.", file=sys.stderr)
+        return 2
 
     if args.hftbacktest_realism and args.vectorbt_only:
         print(

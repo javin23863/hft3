@@ -257,6 +257,9 @@ def static_filter_ideas(packet: Dict[str, Any]) -> List[Dict[str, Any]]:
 def parsed_from_idea(idea: Dict[str, Any]) -> ParsedHypothesis:
     model_id = str(idea.get("primary_model_id") or "")
     feature_ids = list(idea.get("feature_ids") or [])
+    param_ranges = dict(idea.get("param_ranges") or {})
+    if "signal_threshold" not in param_ranges:
+        param_ranges["signal_threshold"] = [0.05, 0.35]
     return ParsedHypothesis(
         thesis=str(idea.get("thesis_code") or ""),
         instrument_universe=list(idea.get("instrument_ids") or ["MES"]),
@@ -264,7 +267,7 @@ def parsed_from_idea(idea: Dict[str, Any]) -> ParsedHypothesis:
         exit_rules=list(idea.get("exit_rule_codes") or []),
         indicators=feature_ids or [model_id],
         feature_list=[model_id],
-        param_ranges={"signal_threshold": [0.05, 0.35]},
+        param_ranges=param_ranges,
         primary_model_id=model_id,
         source="idea_set",
         llm_status=str(idea.get("status") or ""),
