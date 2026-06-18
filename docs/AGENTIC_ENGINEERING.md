@@ -70,6 +70,8 @@ Every code change requires **cavecrew-reviewer** under [REVIEWER_CHARTER.md](REV
 
 Orchestrator spawns reviewer with the charter **Spawn prompt** block. Pass B findings must cite BLUEPRINT or full repo-root PDF section/page. Both passes must pass before pytest / CHI404 gates.
 
+For VBT/HBT pipeline changes, run the deterministic **Ontology Gate Agent** after reviewer and before verify: [ONTOLOGY_GATE_AGENT_SPEC.md](project/ONTOLOGY_GATE_AGENT_SPEC.md) (`packages/backtest_pipeline/src/ontology_gate.py`, CLI `scripts/run_ontology_gate.py`). Any red finding → `REJECT`; do not claim merge-ready.
+
 ## hft3 verification commands
 
 From repo root (local):
