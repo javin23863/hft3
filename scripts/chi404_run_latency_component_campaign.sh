@@ -11,6 +11,21 @@ set -a
 source "${HFT3_ENV_FILE:-/root/hft3/.env}"
 set +a
 
+# Match chi404_run_live_latency_sweep.sh: live .env profile must use live yaml, not probe default (test yaml).
+if [[ "${RITHMIC_ENDPOINT_PROFILE:-}" == paper* ]]; then
+  export RITHMIC_CONFIG_PATH="${RITHMIC_CONFIG_PATH:-$REPO/packages/data_system/config/rithmic_api_paper.yaml}"
+  export RITHMIC_API_CONFIG="${RITHMIC_API_CONFIG:-packages/data_system/config/rithmic_api_paper.yaml}"
+  export RITHMIC_PROBE_ENV_LABEL="${RITHMIC_PROBE_ENV_LABEL:-paper_chicago}"
+else
+  export RITHMIC_CONFIG_PATH="${RITHMIC_CONFIG_PATH:-$REPO/packages/data_system/config/rithmic_api_live.yaml}"
+  export RITHMIC_API_CONFIG="${RITHMIC_API_CONFIG:-packages/data_system/config/rithmic_api_live.yaml}"
+  export RITHMIC_ENDPOINT_PROFILE="${RITHMIC_ENDPOINT_PROFILE:-live_chicago_r01}"
+  export RITHMIC_PROBE_ENV_LABEL="${RITHMIC_PROBE_ENV_LABEL:-live_r01_chicago}"
+fi
+export RITHMIC_PROBE_SYMBOL="${RITHMIC_PROBE_SYMBOL:-MESU6}"
+export RITHMIC_PROBE_EXCHANGE="${RITHMIC_PROBE_EXCHANGE:-CME}"
+export RITHMIC_PROBE_ORDER_PRICE="${RITHMIC_PROBE_ORDER_PRICE:-7000.0}"
+
 PROBE="${PROBE:-./build/rithmic_gateway/rithmic_latency_probe}"
 CAMPAIGN="${1:-all}"
 RUN_SUFFIX="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -31,6 +46,7 @@ run_cc2_feed() {
   export RITHMIC_PROBE_RUN_ID="cc2_feed_${RUN_SUFFIX}"
   export RITHMIC_PROBE_ORDER_COUNT=0
   export RITHMIC_PROBE_CALIB_MD_SAMPLES=1000
+  export RITHMIC_PROBE_MD_TIMEOUT_MS=600000
   export RITHMIC_PROBE_MD_SMOKE_TIMEOUT_MS=600000
   echo "=== CC-2 feed latency (MD-only calibration) ==="
   "$PROBE"

@@ -1146,7 +1146,7 @@ int main(int argc, char** argv) {
     const std::string model_id = get_env_or_string("RITHMIC_PROBE_MODEL_ID", "latency_probe");
     const std::string trade_manager_id = get_env_or_string("RITHMIC_PROBE_TRADE_MANAGER_ID", "native_cpp_probe");
 
-    if (count <= 0 || qty <= 0) {
+    if (qty <= 0 || count < 0 || (count == 0 && calib_md_samples <= 0 && !md_smoke_enabled)) {
         std::fprintf(stderr, "FAIL [%s] invalid order count/qty\n", env_name);
         adapter.disconnect();
         return 4;
