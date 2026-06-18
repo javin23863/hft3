@@ -24,6 +24,17 @@ from hft_screening_fixtures import (
     screening_artifact_shell,
 )
 
+# Per Codex review finding 13: skip the entire hbt0 suite when the hftbacktest
+# package is not importable.  hbt0 exercises the hftbacktest realism/source-lock
+# contract; while several tests monkeypatch detect_hftbacktest_installation to
+# test the fail-closed path, the suite as a whole is only meaningful when the
+# real hftbacktest package is present in the environment.
+_HFTBACKTEST_IMPORTABLE = importlib.util.find_spec("hftbacktest") is not None
+pytestmark = pytest.mark.skipif(
+    not _HFTBACKTEST_IMPORTABLE,
+    reason="hftbacktest package not installed; skipping hbt0 realism suite",
+)
+
 
 def _screening_artifact(candidate_id: str = "cand_hbt0") -> dict:
     return screening_artifact_shell("vbt_handoff", candidate_id)

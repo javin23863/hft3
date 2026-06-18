@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import sys
 from pathlib import Path
@@ -13,6 +14,28 @@ from backtest_pipeline.src.hftbacktest_realism import (
     validate_hftbacktest_data_path,
     validate_hftbacktest_event_array,
     write_hftbacktest_realism_artifacts,
+)
+
+# Per Codex review finding 14: the timestamp-ordering tests that assert
+# HFTBACKTEST_VALIDATE_EVENT_ORDER_FAILED require the real hftbacktest.data
+# validator to raise on non-monotonic events.  When hftbacktest is not
+# installed, the hbt_contract fixture injects a stub validate_event_order that
+# never raises, so those assertions cannot hold.  Skip those tests when the
+# real hftbacktest.data.validate_event_order is not importable.
+def _hftbacktest_validate_event_order_importable() -> bool:
+    try:
+        from hftbacktest.data import validate_event_order  # type: ignore  # noqa: F401
+
+        return True
+    except Exception:
+        return False
+
+
+_HBT_VALIDATE_EVENT_ORDER_AVAILABLE = _hftbacktest_validate_event_order_importable()
+_skip_if_no_real_validator = pytest.mark.skipif(
+    not _HBT_VALIDATE_EVENT_ORDER_AVAILABLE,
+    reason="hftbacktest.data.validate_event_order not importable; "
+    "real event-order validator required for this assertion",
 )
 
 
@@ -115,6 +138,7 @@ def _make_events(event_dtype: np.dtype, rows: list[dict[str, object]]) -> np.nda
     return events
 
 
+@_skip_if_no_real_validator
 def test_validate_hftbacktest_event_array_uses_installed_official_validator() -> None:
     from hftbacktest import types as real_types  # type: ignore
     from hftbacktest.data import validate_event_order as official_validate_event_order  # type: ignore
@@ -548,6 +572,7 @@ def test_validate_hftbacktest_data_path_rejects_missing_data_array(
     assert result["data_path"] == str(npz_path)
 
 
+@_skip_if_no_real_validator
 def test_validate_hftbacktest_event_array_rejects_non_monotonic_exchange_timestamps(
     hbt_contract: tuple[np.dtype, dict[str, int]],
 ) -> None:
@@ -581,6 +606,7 @@ def test_validate_hftbacktest_event_array_rejects_non_monotonic_exchange_timesta
     assert "HFTBACKTEST_VALIDATE_EVENT_ORDER_FAILED" in result["fail_closed_reasons"]
 
 
+@_skip_if_no_real_validator
 def test_validate_hftbacktest_event_array_rejects_non_monotonic_local_timestamps(
     hbt_contract: tuple[np.dtype, dict[str, int]],
 ) -> None:

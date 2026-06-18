@@ -710,6 +710,15 @@ def validate_hftbacktest_latency_model(latency_model: Mapping[str, Any]) -> list
     if all(_is_nonnegative_number(latency_model.get(field)) for field in ("latency_p50_ms", "latency_p90_ms", "latency_p99_ms")):
         if not latency_model["latency_p50_ms"] <= latency_model["latency_p90_ms"] <= latency_model["latency_p99_ms"]:
             reasons.append("invalid_latency_percentile_order")
+        # Per Codex review finding 5: validate that each latency percentile is
+        # inside the LATENCY_BANDS_MS band [0.5, 10.0].  The ordering check above
+        # only ensures monotonicity; a monotonically-ordered triple outside the
+        # band still indicates a broken latency model.
+        for field in ("latency_p50_ms", "latency_p90_ms", "latency_p99_ms"):
+            value = latency_model[field]
+            if value < 0.5 or value > 10.0:
+                reasons.append("latency_percentile_outside_band")
+                break
 
     if family == "FeedLatency" and not reasons:
         # FeedLatency remains proxy-only/non-certifying by contract.
@@ -1243,9 +1252,16 @@ def run_minimal_official_hftbacktest_replay(
         hbt.clear_inactive_orders(0)
         observed_api_calls.extend(("HashMapMarketDepthBacktest.clear_inactive_orders", "clear_inactive_orders"))
         final_state = hbt.state_values(0)
-        gross_pnl = _float_field(final_state, "balance")
+        # PnL accounting: in hftbacktest, state.balance is NET of fees (the
+        # engine deducts fees from balance) and state.fee is the accumulated
+        # fee.  Therefore gross_pnl = balance + fee (add fees back) and
+        # net_pnl = balance (already net of fees).  The previous code computed
+        # net_pnl = gross_pnl - fees which double-deducted fees.  Per Codex
+        # review finding 1.
+        balance = _float_field(final_state, "balance")
         fees = _float_field(final_state, "fee")
-        net_pnl = gross_pnl - fees
+        gross_pnl = balance + fees
+        net_pnl = balance
         # Per Codex round-3 P1: subtract declared market-impact charges from
         # replay PnL when market_impact_mode == "external_charge". Without
         # this, net_pnl overstates execution-adjusted expectancy by the
@@ -1299,9 +1315,15 @@ def run_minimal_official_hftbacktest_replay(
             "fees": fees,
             "fee_total": fees,
             "execution_adjusted_expectancy": net_pnl,
-            "max_drawdown": 0.0,
-            "adverse_selection_markout": None,
-            "spread_capture_or_cost": None,
+            # Per Codex review findings 2 & 3: this is a single-order replay,
+            # not a full equity curve, so max_drawdown is not meaningful.  The
+            # adverse_selection_markout and spread_capture_or_cost metrics are
+            # not measured in the HBT4 single-order replay path.  Use explicit
+            # string sentinels instead of 0.0 / None so the artifact clearly
+            # states what was not computed/measured.
+            "max_drawdown": "not_computed_single_order_replay",
+            "adverse_selection_markout": "not_measured_single_order_hbt4",
+            "spread_capture_or_cost": "not_measured_single_order_hbt4",
         }
         return artifact, replay_reasons
     except Exception as exc:

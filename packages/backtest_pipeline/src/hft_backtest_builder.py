@@ -202,6 +202,11 @@ def build_hftbacktest(
     """
     if queue_model_type not in QUEUE_MODEL_BUILDERS:
         raise ValueError(f"Unsupported queue model: {queue_model_type}")
+    # Per Codex review finding 4: enforce the LATENCY_BANDS_MS band.  The
+    # constant was defined but never validated against, allowing a caller to
+    # build a backtest with a latency outside the [0.5, 10.0] ms band.
+    if latency_ms < 0.5 or latency_ms > 10.0:
+        raise ValueError(f"latency_ms {latency_ms} outside band [0.5, 10.0]")
 
     fee_model = FeeModel(product=product)
     latency_ns = int(latency_ms * 1_000_000)

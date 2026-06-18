@@ -713,23 +713,30 @@ def compute_robustness_evidence(robustness_input: dict, candidate_id: str = "") 
     adversarial_status = _PASS if (adversarial_pass is True) else (_FAIL if (adversarial_pass is False) else _NOT_RUN)
     param_perturb_pass = param_perturb_result.get("parameter_perturbation_pass")
     param_perturb_status = _PASS if (param_perturb_pass is True) else (_FAIL if (param_perturb_pass is False) else _NOT_RUN)
-    # Derive cscv_status independently from the CSCV/PBO producer result, using
-    # whether the CSCV partition/config analysis actually ran (n_partitions
-    # and n_configs present and > 0).  This is a separate criterion from pbo_status
-    # (which reflects the PBO probability test) so that a CSCV that ran with valid
-    # structure counts as "pass" even if the PBO probability itself fails.
+    # Derive cscv_status independently from the CSCV/PBO producer result.
+    #
+    # Per Codex review finding 6: "cscv_status" means "CSCV structure ran"
+    # (i.e. the CSCV partition/config analysis executed with valid counts),
+    # NOT "CSCV anti-overfit test passed".  The PBO probability check
+    # (pbo_status) is the anti-overfit gate.  To avoid conflating structural
+    # execution with anti-overfit pass, cscv_status is only "pass" when the
+    # CSCV structure ran AND pbo_pass is True; when the structure ran but PBO
+    # did not pass, cscv_status is "structure_ran"; otherwise "not_run".
     cscv_n_partitions = pbo_result.get("n_partitions")
     cscv_n_configs = pbo_result.get("n_configs")
-    cscv_status = (
-        _PASS
-        if (
-            isinstance(cscv_n_partitions, (int, float))
-            and cscv_n_partitions > 0
-            and isinstance(cscv_n_configs, (int, float))
-            and cscv_n_configs > 0
-        )
-        else _NOT_RUN
+    cscv_structure_ran = (
+        isinstance(cscv_n_partitions, (int, float))
+        and cscv_n_partitions > 0
+        and isinstance(cscv_n_configs, (int, float))
+        and cscv_n_configs > 0
     )
+    cscv_pbo_pass = bool(pbo_result.get("pbo_pass", False))
+    if cscv_structure_ran and cscv_pbo_pass:
+        cscv_status = _PASS
+    elif cscv_structure_ran:
+        cscv_status = "structure_ran"
+    else:
+        cscv_status = _NOT_RUN
     wfc_status = wfc_result.get("wfc_status", _NOT_RUN)
 
     # If a producer wasn't run (no input), set status to not_run.
@@ -790,10 +797,14 @@ def compute_robustness_evidence(robustness_input: dict, candidate_id: str = "") 
             else holm_bh_status in (_PASS, _NOT_RUN)
         )
         # Bootstrap CI: required §10 check when expectancies present.
+        # Per Codex review finding 11: unify the "no expectancies" branch with
+        # the fee/slippage pattern (accept _PASS or _NOT_RUN) instead of an
+        # unconditional `else True`, so a bootstrap producer error (status
+        # _NOT_RUN) does not masquerade as a pass.
         and (
             bootstrap_result.get("status") == _PASS
             if has_expectancies
-            else True
+            else bootstrap_result.get("status") in (_PASS, _NOT_RUN)
         )
         # Null/planted/adversarial/parameter: required when expectancies present.
         and (

@@ -207,12 +207,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         print("ERROR: empty units jsonl", file=sys.stderr)
         return 1
 
-    if args.workers > 16 and not args.dry_run:
+    # Per Codex review finding 9: require the ready gate for any non-dry-run
+    # multi-worker run (workers > 1), not only workers > 16.  The dry-run
+    # exemption is preserved.
+    if args.workers > 1 and not args.dry_run:
         if args.owner_waiver:
             print(f"WARN: owner waiver for ready gate: {args.owner_waiver}", file=sys.stderr)
         elif not args.ready_gate_file:
             print(
-                "ERROR: --workers > 16 requires --ready-gate-file from "
+                "ERROR: --workers > 1 requires --ready-gate-file from "
                 "validate_paid_screen_ready_gate.py (or --owner-waiver)",
                 file=sys.stderr,
             )

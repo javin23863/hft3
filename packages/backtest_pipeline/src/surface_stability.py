@@ -300,6 +300,14 @@ def compute_surface_stability(
     # regions is rejected").  The weighting emphasizes neighbor stability most,
     # then perturbation insensitivity, cliff safety, and peak-vs-plateau evenness
     # equally, with the smallest weight on meeting the minimum-sample floor.
+    #
+    # Per Codex review finding 7: these composite weights and the pass/fail
+    # thresholds below are implementation defaults pending a vault waiver.  They
+    # are not ratified by ROBUSTNESS_TESTING_SPEC and must be re-confirmed against
+    # VECTORBT_SCREENING_ENGINE_SPEC.md lines 571-574 before being treated as
+    # contract-stable.  See VECTORBT_SCREENING_ENGINE_SPEC.md (lines 571-574) for
+    # the screening-engine composite contract that this surface-stability
+    # composite is expected to converge with.
     # ------------------------------------------------------------------
     if peak_vs_plateau_comparison > 0:
         peak_vs_plateau_inv = min(1.0 / peak_vs_plateau_comparison, 1.0)

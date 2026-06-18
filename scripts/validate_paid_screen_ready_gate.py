@@ -93,7 +93,13 @@ def _validate_smoke_manifest(manifest_path: Path, errors: List[str]) -> Dict[str
         if payload:
             validated += 1
             scope = str(payload.get("screening_scope") or manifest.get("vectorbt_scope") or "")
-            if scope in {"paid-compute", "paid", "broad-screen", "broad", "all-models"}:
+            # Per Codex review finding 10: include the underscore-variant scope
+            # names alongside the hyphen-variant names so the rust-engine
+            # requirement is enforced for all canonical spellings.
+            if scope in {
+                "paid-compute", "paid", "broad-screen", "broad", "all-models",
+                "paid_compute", "broad_screen", "all_model",
+            }:
                 engine = str(payload.get("vectorbt_engine") or "").lower()
                 if engine != "rust":
                     errors.append(
