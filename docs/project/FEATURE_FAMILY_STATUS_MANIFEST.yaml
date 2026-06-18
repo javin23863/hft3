@@ -17,7 +17,7 @@ feature_families:
     pit_proof_status: partial
     ablation_status: not_measured
     data_coverage_status: npz_catalog_available
-    blocking_reason: vectorbt_fs_v1_path_requires_feature_store_at_screen_time
+    blocking_reason: fs_v1_row_loop_requires_feature_store_npz_at_screen_time
     canonical_files:
       - packages/features_engine/src/features/mbo_features.py
       - packages/features_engine/src/pipeline/market_state_pipeline.py
@@ -51,11 +51,11 @@ feature_families:
     synchronization_status: implemented
     vectorbt_consumption_status: not_used
     hftbacktest_consumption_status: not_measured
-    autonomous_candidate_status: blocked
+    autonomous_candidate_status: eligible_limited
     pit_proof_status: partial
     ablation_status: missing
     data_coverage_status: sensor_npz_when_present
-    blocking_reason: not_wired_into_vectorbt_screen
+    blocking_reason: family_search_declared_not_vectorbt_consumed
     canonical_files:
       - packages/features_engine/src/features/vix_features.py
       - packages/replay/sensor_feature_adapter.py
@@ -102,11 +102,11 @@ feature_families:
     synchronization_status: implemented
     vectorbt_consumption_status: not_used
     hftbacktest_consumption_status: not_measured
-    autonomous_candidate_status: blocked
+    autonomous_candidate_status: eligible_limited
     pit_proof_status: partial
     ablation_status: not_measured
     data_coverage_status: event_catalog_complete
-    blocking_reason: target_only_vs_context_uplift_not_split_in_screen
+    blocking_reason: context_uplift_declared_in_recipe_search_not_screen_consumed
     canonical_files:
       - apps/workbench/src/data/event_catalog.py
       - packages/data_system/config/events.csv
@@ -153,6 +153,9 @@ feature_families:
 paid_screen_gate:
   allowed: false
   reason: feature_plane_drift_blocks_expensive_run_until_pilot_proves_pit_consumption
+  evaluator: packages/backtest_pipeline/src/feature_family_status.py
+  pilot_scope_allows_not_run:
+    - robustness_result
   required_pilot_fields:
     - feature_recipe_hash
     - feature_usage_manifest

@@ -29,12 +29,20 @@ Status as of merge `d6665025` (VectorBT VBT-HBT handoff + HftBacktest campaign o
 | Screening → HBT recipe-hash handoff | same |
 | fs_v1 bar construction when store present | same |
 
+## DONE (Phase 9 — paid-compute readiness gate)
+
+| Capability | Location |
+|---|---|
+| Feature-family manifest loader | `feature_family_status.py` |
+| Pilot field evaluation vs manifest | `evaluate_feature_family_paid_gate` |
+| Wired into paid ready gate | `scripts/validate_paid_screen_ready_gate.py` |
+
 ## OPEN (remaining feature-family work)
 
 | Capability | Missing connection | Minimal change |
 |---|---|---|
-| Cross-asset real leader | Placeholder OFI | Phase 2: multi-symbol sync |
-| Paid-compute readiness | Phase 9 | `FEATURE_FAMILY_STATUS_MANIFEST.yaml` gate |
+| Cross-asset real leader | Placeholder OFI | multi-symbol sync |
+| Flip `paid_screen_gate.allowed` | Real Phase A pilot artifact on workstation | Runbook Phase A then operator approval |
 
 ## DONE (this plan slice — multi-generation loop shell)
 

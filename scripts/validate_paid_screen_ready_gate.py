@@ -142,13 +142,19 @@ def evaluate_gate(
     run_pytest: bool,
 ) -> Dict[str, Any]:
     errors: List[str] = []
+    pilot_payload: Dict[str, Any] = {}
+    if pilot_artifact.is_file():
+        try:
+            pilot_payload = _load_json(pilot_artifact)
+        except (OSError, json.JSONDecodeError):
+            pilot_payload = {}
     pilot = _validate_screening_file(pilot_artifact, errors, "pilot")
     smoke = _validate_smoke_manifest(smoke_manifest, errors)
     pytest_tail = ""
     if run_pytest:
         pytest_tail = _run_lookahead_pytest(repo_root, errors)
 
-    pilot_hashes = _hash_fields(pilot)
+    pilot_hashes = _hash_fields(pilot or pilot_payload)
     smoke_unit_hashes: Dict[str, str] = {}
     for row in smoke.get("unit_results") or []:
         if row.get("status") not in {"OK", "OK_CACHED"}:
@@ -168,12 +174,24 @@ def evaluate_gate(
         if pilot_hashes["lake_manifest_hash"] != smoke_unit_hashes["lake_manifest_hash"]:
             errors.append("hash_mismatch:lake_manifest_hash")
 
+    feature_family_summary: Dict[str, Any] = {}
+    ff_source = pilot if pilot else pilot_payload
+    if ff_source:
+        from backtest_pipeline.src.feature_family_status import evaluate_feature_family_paid_gate
+
+        ff_errors, feature_family_summary = evaluate_feature_family_paid_gate(
+            ff_source,
+            repo_root=repo_root,
+        )
+        errors.extend(ff_errors)
+
     ready = len(errors) == 0
     result = {
         "ready_for_full_run": ready,
         "evaluated_at_utc": datetime.now(timezone.utc).isoformat(),
         "pilot_artifact": str(pilot_artifact),
         "smoke_manifest": str(smoke_manifest),
+        "feature_family_gate": feature_family_summary,
         "pilot_hashes": pilot_hashes,
         "smoke_manifest_summary": {
             "expected_work_units": smoke.get("expected_work_units"),
