@@ -53,6 +53,8 @@ Mathematical and production rules live in PDFs ΓÇö not duplicated in prose he
 
 ### 4.1 Clone with vendor submodules
 
+**Canonical Windows path:** `C:\Users\MSI\repos\hft3` on branch `main`. See [REPO_STATE.md](../REPO_STATE.md) for branch map and clean-tree checks before trusting other folders (e.g. Cursor `New project` workspace).
+
 ```bash
 git clone --recurse-submodules https://github.com/javin23863/hft3.git
 cd hft3

@@ -2,6 +2,8 @@
 
 **Read the graph before prose.** Humans start at [docs/human/GETTING_STARTED.md](../human/GETTING_STARTED.md).
 
+**Canonical repo:** [docs/REPO_STATE.md](../REPO_STATE.md) — path, `main` HEAD, branch cleanup, `git status` verification (read before assuming workspace path or branch).
+
 ## Step 0 — Code graph (mandatory)
 
 1. Open [graphify-out/wiki/index.md](../../graphify-out/wiki/index.md) — check **Freshness** banner (timestamp + git SHA).
