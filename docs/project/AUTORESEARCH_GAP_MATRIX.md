@@ -21,12 +21,19 @@ Status as of merge `d6665025` (VectorBT VBT-HBT handoff + HftBacktest campaign o
 | Elite refinement + family search budget | `elite_refinement.py`, `config/autoresearch/default.yaml` |
 | Elite row carries `feature_recipe` | `generation_summary.py` |
 
+## DONE (Phase 8 — end-to-end validation smoke)
+
+| Capability | Location |
+|---|---|
+| Autoresearch 2-gen + family-variant lineage | `tests/research_pipeline/test_feature_family_e2e_smoke.py` |
+| Screening → HBT recipe-hash handoff | same |
+| fs_v1 bar construction when store present | same |
+
 ## OPEN (remaining feature-family work)
 
 | Capability | Missing connection | Minimal change |
 |---|---|---|
 | Cross-asset real leader | Placeholder OFI | Phase 2: multi-symbol sync |
-| End-to-end validation smoke | Phase 8 | Full pipeline autoresearch + fs_v1 + HBT handoff |
 | Paid-compute readiness | Phase 9 | `FEATURE_FAMILY_STATUS_MANIFEST.yaml` gate |
 
 ## DONE (this plan slice — multi-generation loop shell)

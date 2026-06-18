@@ -223,7 +223,7 @@ python scripts/run_pipeline.py ... --vectorbt --hftbacktest-realism \
 python scripts/run_pipeline.py --autoresearch --thesis "..." --event-id CPI_2024_09_11_TIGHT --no-llm --max-generations 3
 ```
 
-**Current limitation:** Refines execution parameters; feature-family recipe generation is Phase 7 work.
+**Current capability:** Refines execution parameters and bounded feature-family recipe variants (Phase 7). See `tests/research_pipeline/test_feature_family_e2e_smoke.py` for Phase 8 smoke.
 
 ---
 
@@ -278,7 +278,7 @@ python -m pytest tests/backtest_pipeline/test_feature_plane.py tests/research_pi
 | **Document** | [../vault/RESEARCH_ENTRYPOINTS.md](../vault/RESEARCH_ENTRYPOINTS.md) |
 | **Code** | `run_pipeline.py`, generation loop mocks |
 | **Config** | Pilot `screening_scope`, fixture NPZ when available |
-| **Tests** | `tests/research_pipeline/test_generation_loop.py` (3-gen mock) |
+| **Tests** | `tests/research_pipeline/test_generation_loop.py`, `tests/research_pipeline/test_feature_family_e2e_smoke.py` |
 | **Inputs** | `--no-llm`, tight event_id |
 | **Outputs** | `final_report.json`, manifest with tested hashes |
 | **Next** | Step 15 — paid gate |
