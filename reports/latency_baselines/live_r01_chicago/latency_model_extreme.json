@@ -1,0 +1,29 @@
+{
+  "latency_model_family": "ConstantLatency",
+  "latency_regime": "extreme",
+  "feed_latency_source": "cc3_new_decomp_20260618T022002Z",
+  "order_entry_latency_source": "cc3_new_decomp_20260618T022002Z",
+  "order_response_latency_source": "cc3_new_decomp_20260618T022002Z",
+  "latency_units": "milliseconds",
+  "latency_source_authority": "hft3_native_cpp_rithmic_latency_probe",
+  "latency_proxy_status": "measured_decomposed",
+  "latency_component_mapping": {
+    "feed_latency": "feed_latency_us from cc3_new_decomp_20260618T022002Z",
+    "order_entry_latency": "new_send_to_exchange_us or symmetric split of new_send_to_ack",
+    "order_response_latency": "new_exchange_to_ack_us or symmetric split of new_send_to_ack"
+  },
+  "feed_latency_ms": 37.248936,
+  "order_entry_latency_ms": 3.7193110000000003,
+  "order_response_latency_ms": 10.790344999999999,
+  "latency_p50_ms": 3.537,
+  "latency_p90_ms": 7.0,
+  "latency_p99_ms": 14.509656,
+  "order_response_latency_modeled": true,
+  "native_latency_probe_host": "CHI404",
+  "note": "CC-3 decomposed entry/response from cc3_new_decomp_20260618T022002Z; symmetric split fallback no longer used for this regime.",
+  "native_latency_probe_artifact": "runtime/latency_reports/latency_summary.json",
+  "native_latency_probe_status": "provided",
+  "native_latency_probe_provenance": "hft3_native_cpp_rithmic_latency_probe",
+  "native_latency_probe_artifact_hash": "sha256:953e1af51228ace943b76e644a746f28546db8c85da44c7e1a5bed3afb82a46b",
+  "latency_value_or_sample_hash": "sha256:31d97990125202ed1bab0497b146153c002b01b3b2c20b51cd7797e524ae7e3e"
+}

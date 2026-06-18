@@ -11,7 +11,10 @@ DEFAULT_CHI404_SUMMARY = _REPO / "runtime" / "latency_reports" / "latency_summar
 
 PAPER_ORDER_MIN_PAIRED = 1000
 
-BACKTEST_LATENCY_NOTE_MEASURED = (
+BACKTEST_LATENCY_NOTE_LIVE = (
+    "Live Rithmic 01 order submit→ack p99 from native C++ rithmic_latency_probe on CHI404 colo"
+)
+BACKTEST_LATENCY_NOTE_PAPER = (
     "Paper order submit→ack p99 from native C++ rithmic_latency_probe on CHI404 colo"
 )
 BACKTEST_LATENCY_NOTE_UNMEASURED = (
@@ -37,7 +40,32 @@ def validate_replay_latency_ms(latency_ms: float, *, source: str) -> float:
 
 
 def resolve_order_ack_ms(summary: dict[str, Any]) -> tuple[float | None, bool, str]:
-    """Return (order_ack_p99_ms, measured, source_label)."""
+    """Return (order_ack_p99_ms, measured, source_label). Prefers new_send_to_ack over legacy."""
+    try:
+        from backtest_pipeline.src.latency_components import resolve_new_send_to_ack_ms
+
+        p99, _dist, source = resolve_new_send_to_ack_ms(summary)
+        if p99 is not None:
+            measured = (
+                source.startswith("new_send_to_ack")
+                or source.startswith("live_order")
+                or source == "derived_from_native_probe"
+            )
+            return p99, measured, source
+    except ImportError:
+        pass
+
+    live = summary.get("live_order_latency") or {}
+    live_p99 = summary.get("live_order_ack_p99_ms")
+    if live.get("authoritative") and isinstance(live_p99, (int, float)):
+        return float(live_p99), True, "live_order_latency.authoritative"
+    if live.get("preliminary") and isinstance(live_p99, (int, float)):
+        return float(live_p99), True, "live_order_latency.preliminary"
+
+    # Do not fall back to paper when live samples exist (HFT requires real wire).
+    if int(live.get("paired_count") or 0) > 0 and isinstance(live_p99, (int, float)):
+        return float(live_p99), True, "live_order_latency.partial"
+
     paper = summary.get("paper_order_latency") or {}
     if paper.get("measured") and isinstance(summary.get("order_ack_p99_ms"), (int, float)):
         return float(summary["order_ack_p99_ms"]), True, "paper_order_latency.authoritative"
@@ -102,7 +130,12 @@ def load_chi404_speed(summary_path: Path) -> dict[str, Any]:
     if measured and order_ack_ms is not None:
         payload["backtest_latency_ms"] = order_ack_ms
         payload["backtest_latency_source"] = ack_source
-        payload["backtest_latency_note"] = BACKTEST_LATENCY_NOTE_MEASURED
+        if ack_source == "live_order_latency.authoritative":
+            payload["backtest_latency_note"] = BACKTEST_LATENCY_NOTE_LIVE
+        else:
+            payload["backtest_latency_note"] = BACKTEST_LATENCY_NOTE_PAPER
+        payload["live_order_latency"] = s.get("live_order_latency")
+        payload["live_order_ack_p99_ms"] = s.get("live_order_ack_p99_ms")
     else:
         payload["backtest_latency_ms"] = None
         payload["backtest_latency_source"] = None
@@ -132,3 +165,105 @@ def resolve_replay_latency_ms(
         source=str(chi404.get("backtest_latency_source", "measured order ack")),
     )
     return ms, str(chi404.get("backtest_latency_source", "CHI404 measured order ack")), chi404
+
+
+def build_latency_model_from_summary(
+    *,
+    regime: str,
+    summary: dict[str, Any],
+) -> dict[str, Any]:
+    """Build a latency_model.json-compatible dict from a parsed latency_summary."""
+    p99_ms, measured, ack_source = resolve_order_ack_ms(summary)
+    if not measured or p99_ms is None:
+        raise ValueError(BACKTEST_LATENCY_NOTE_UNMEASURED)
+
+    new_send = summary.get("new_send_to_ack_ms") or {}
+    ms_block = new_send.get("ms") if isinstance(new_send, dict) else {}
+    p50_ms = ms_block.get("p50_ms") if isinstance(ms_block, dict) else None
+    p90_ms = ms_block.get("p90_ms") if isinstance(ms_block, dict) else None
+
+    entry_ms = float(p50_ms) if isinstance(p50_ms, (int, float)) else float(p99_ms) / 2.0
+    resp_ms = float(p99_ms) - entry_ms if float(p99_ms) > entry_ms else float(p99_ms) / 2.0
+    if regime == "fast" and isinstance(p50_ms, (int, float)):
+        entry_ms = resp_ms = float(p50_ms) / 2.0
+    elif regime == "normal" and isinstance(p90_ms, (int, float)):
+        entry_ms = resp_ms = float(p90_ms) / 2.0
+    elif regime == "stress":
+        entry_ms = resp_ms = float(p99_ms) / 2.0
+    elif regime == "extreme":
+        p999 = ms_block.get("p99_9_ms") or ms_block.get("max_ms")
+        if isinstance(p999, (int, float)):
+            entry_ms = resp_ms = float(p999) / 2.0
+
+    return {
+        "latency_model_family": "ConstantLatency",
+        "latency_regime": regime,
+        "feed_latency_source": "open_pending_cc2_campaign",
+        "order_entry_latency_source": ack_source,
+        "order_response_latency_source": ack_source,
+        "latency_units": "milliseconds",
+        "latency_source_authority": "hft3_native_cpp_rithmic_latency_probe",
+        "latency_proxy_status": "measured_partial",
+        "latency_component_mapping": {
+            "feed_latency": "feed_latency_us from probe v3 CC-2",
+            "order_entry_latency": "new_send_to_exchange_us or symmetric split of new_send_to_ack",
+            "order_response_latency": "new_exchange_to_ack_us or symmetric split of new_send_to_ack",
+        },
+        "feed_latency_ms": None,
+        "order_entry_latency_ms": entry_ms,
+        "order_response_latency_ms": resp_ms,
+        "latency_p50_ms": float(p50_ms) if isinstance(p50_ms, (int, float)) else None,
+        "latency_p90_ms": float(p90_ms) if isinstance(p90_ms, (int, float)) else None,
+        "latency_p99_ms": float(p99_ms),
+        "order_response_latency_modeled": True,
+        "native_latency_probe_host": "CHI404",
+        "note": "Symmetric split until CC-3 IntpOrderLatency samples populate entry/response separately.",
+    }
+
+
+def enrich_latency_model_probe_evidence(
+    model: dict[str, Any],
+    *,
+    chi404_summary: Path,
+) -> dict[str, Any]:
+    """Attach required native-probe realism evidence fields to a latency model."""
+    from backtest_pipeline.src.hftbacktest_realism import (
+        compute_latency_probe_artifact_hash,
+        compute_latency_value_or_sample_hash,
+    )
+
+    summary_path = chi404_summary.resolve()
+    artifact_rel = str(summary_path.relative_to(_REPO)).replace("\\", "/")
+    enriched = dict(model)
+    enriched["native_latency_probe_artifact"] = artifact_rel
+    enriched["native_latency_probe_status"] = "provided"
+    enriched["native_latency_probe_provenance"] = "hft3_native_cpp_rithmic_latency_probe"
+    enriched["native_latency_probe_host"] = "CHI404"
+    if summary_path.is_file():
+        enriched["native_latency_probe_artifact_hash"] = compute_latency_probe_artifact_hash(summary_path)
+    enriched["latency_value_or_sample_hash"] = compute_latency_value_or_sample_hash(enriched)
+    return enriched
+
+
+def resolve_latency_model(
+    *,
+    regime: str = "stress",
+    chi404_summary: Path = DEFAULT_CHI404_SUMMARY,
+) -> dict[str, Any]:
+    """Build a latency_model.json-compatible dict from measured CHI404 artifacts."""
+    summary_path = chi404_summary.resolve()
+    if not summary_path.is_file():
+        raise FileNotFoundError(f"CHI404 latency summary missing: {summary_path}")
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+
+    regime_dir = _REPO / "reports" / "latency_baselines" / "live_r01_chicago"
+    regime_path = regime_dir / f"latency_model_{regime}.json"
+    if regime_path.is_file():
+        model = json.loads(regime_path.read_text(encoding="utf-8"))
+        if isinstance(model, dict) and model.get("latency_model_family"):
+            if not model.get("latency_value_or_sample_hash"):
+                model = enrich_latency_model_probe_evidence(model, chi404_summary=summary_path)
+            return model
+
+    model = build_latency_model_from_summary(regime=regime, summary=summary)
+    return enrich_latency_model_probe_evidence(model, chi404_summary=summary_path)

@@ -66,6 +66,19 @@ static uint64_t steady_now_ns() {
     );
 }
 
+static uint64_t wall_now_ns() {
+    return static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::system_clock::now().time_since_epoch()
+        ).count()
+    );
+}
+
+static double exchange_to_wall_us(uint64_t exchange_ns, uint64_t wall_ns) {
+    if (exchange_ns == 0 || wall_ns == 0 || wall_ns < exchange_ns) return 0.0;
+    return static_cast<double>(wall_ns - exchange_ns) / 1000.0;
+}
+
 static std::string run_id_utc() {
     std::time_t t = std::time(nullptr);
     std::tm tm{};
@@ -315,6 +328,7 @@ struct BaselineSample {
     bool has_send_to_ack = true;
     bool has_cancel_metrics = false;
     bool has_cancel_to_ack = false;
+    bool has_component_metrics = false;
     double tick_to_decision_us = 0.0;
     double decision_to_send_trigger_us = 0.0;
     double tick_to_send_trigger_us = 0.0;
@@ -324,9 +338,18 @@ struct BaselineSample {
     double rithmic_send_call_us = 0.0;
     double cancel_to_send_us = 0.0;
     double cancel_to_ack_us = 0.0;
+    double feed_latency_us = 0.0;
+    double new_send_to_exchange_us = 0.0;
+    double new_exchange_to_ack_us = 0.0;
+    double cancel_send_to_exchange_us = 0.0;
+    double cancel_exchange_to_ack_us = 0.0;
+    double fill_exchange_to_local_us = 0.0;
+    double send_queue_delay_us = 0.0;
     bool success = false;
     std::string reject_reason;
     uint64_t market_event_received_ns = 0;
+    uint64_t market_event_exchange_ns = 0;
+    uint64_t market_event_wall_ns = 0;
     uint64_t features_ready_ns = 0;
     uint64_t decision_ready_ns = 0;
     uint64_t risk_check_ready_ns = 0;
@@ -334,11 +357,22 @@ struct BaselineSample {
     uint64_t order_api_call_start_ns = 0;
     uint64_t order_api_call_end_ns = 0;
     uint64_t order_send_ns = 0;
+    uint64_t order_send_wall_ns = 0;
     uint64_t ack_received_ns = 0;
+    uint64_t ack_exchange_ns = 0;
+    uint64_t ack_received_wall_ns = 0;
     uint64_t cancel_decision_ns = 0;
     uint64_t cancel_send_ns = 0;
+    uint64_t cancel_send_wall_ns = 0;
+    uint64_t cancel_effective_exchange_ns = 0;
     uint64_t cancel_ack_received_ns = 0;
+    uint64_t cancel_ack_received_wall_ns = 0;
     uint64_t broker_order_id = 0;
+    int md_events_per_s_bucket = 0;
+    int64_t intp_req_ts = 0;
+    int64_t intp_exch_ts = 0;
+    int64_t intp_resp_ts = 0;
+    int intp_padding = 0;
 };
 
 struct RuntimeTuningStatus {
@@ -544,6 +578,96 @@ static void write_metric_or_null_json(std::ofstream& f, const MetricSummary& s, 
     }
 }
 
+struct BurstTracker {
+    std::vector<uint64_t> md_mono_ns;
+    void note_md(uint64_t mono_ns) {
+        md_mono_ns.push_back(mono_ns);
+        const uint64_t window_ns = 1'000'000'000ULL;
+        while (!md_mono_ns.empty() && mono_ns - md_mono_ns.front() > window_ns) {
+            md_mono_ns.erase(md_mono_ns.begin());
+        }
+    }
+    int bucket() const {
+        const size_t n = md_mono_ns.size();
+        if (n >= 50000) return 50000;
+        if (n >= 10000) return 10000;
+        if (n >= 1000) return 1000;
+        return static_cast<int>(n);
+    }
+};
+
+static void append_intp_sample_jsonl(const std::string& path,
+                                     const std::string& run_id,
+                                     const std::string& action,
+                                     int64_t req_ts,
+                                     int64_t exch_ts,
+                                     int64_t resp_ts,
+                                     int padding) {
+    if (req_ts <= 0 || resp_ts <= 0) return;
+    std::ofstream f(path, std::ios::app);
+    if (!f.is_open()) return;
+    f << "{\"run_id\":\"" << json_escape(run_id) << "\","
+      << "\"action\":\"" << json_escape(action) << "\","
+      << "\"req_ts\":" << req_ts << ","
+      << "\"exch_ts\":" << exch_ts << ","
+      << "\"resp_ts\":" << resp_ts << ","
+      << "\"_padding\":" << padding << "}\n";
+}
+
+static bool write_clock_calibration_json(const std::string& path,
+                                         const std::vector<double>& feed_samples_us) {
+    std::ofstream f(path);
+    if (!f.is_open()) return false;
+    const MetricSummary feed = summarize_metric(feed_samples_us);
+    f << std::fixed << std::setprecision(3);
+    f << "{\n"
+      << "  \"schema_version\": \"latency_clock_calibration_v1\",\n"
+      << "  \"md_pair_count\": " << feed.count << ",\n"
+      << "  \"feed_latency_us\": ";
+    write_metric_or_null_json(f, feed, 2);
+    f << ",\n"
+      << "  \"method\": \"wall_minus_exchange_on_md_callback\",\n"
+      << "  \"note\": \"Exchange segments labeled MEASURED when feed samples n>=100\"\n"
+      << "}\n";
+    return true;
+}
+
+static void populate_new_order_components(BaselineSample& sample) {
+    if (sample.order_send_wall_ns == 0 || sample.ack_received_wall_ns == 0) {
+        return;
+    }
+    sample.has_component_metrics = true;
+    sample.send_queue_delay_us = sample.decision_to_send_trigger_us;
+    if (sample.ack_exchange_ns > sample.order_send_wall_ns) {
+        sample.new_send_to_exchange_us =
+            static_cast<double>(sample.ack_exchange_ns - sample.order_send_wall_ns) / 1000.0;
+    }
+    if (sample.ack_received_wall_ns > sample.ack_exchange_ns && sample.ack_exchange_ns > 0) {
+        sample.new_exchange_to_ack_us =
+            static_cast<double>(sample.ack_received_wall_ns - sample.ack_exchange_ns) / 1000.0;
+    }
+    sample.intp_req_ts = static_cast<int64_t>(sample.order_send_wall_ns);
+    sample.intp_exch_ts = static_cast<int64_t>(sample.ack_exchange_ns);
+    sample.intp_resp_ts = static_cast<int64_t>(sample.ack_received_wall_ns);
+}
+
+static void populate_cancel_components(BaselineSample& sample) {
+    if (sample.cancel_send_wall_ns == 0) return;
+    sample.has_component_metrics = true;
+    if (sample.cancel_effective_exchange_ns > sample.cancel_send_wall_ns) {
+        sample.cancel_send_to_exchange_us =
+            static_cast<double>(sample.cancel_effective_exchange_ns - sample.cancel_send_wall_ns) / 1000.0;
+    }
+    if (sample.cancel_ack_received_wall_ns > sample.cancel_effective_exchange_ns
+        && sample.cancel_effective_exchange_ns > 0) {
+        sample.cancel_exchange_to_ack_us =
+            static_cast<double>(sample.cancel_ack_received_wall_ns - sample.cancel_effective_exchange_ns) / 1000.0;
+    }
+    sample.intp_req_ts = static_cast<int64_t>(sample.cancel_send_wall_ns);
+    sample.intp_exch_ts = static_cast<int64_t>(sample.cancel_effective_exchange_ns);
+    sample.intp_resp_ts = static_cast<int64_t>(sample.cancel_ack_received_wall_ns);
+}
+
 static void append_sample_jsonl(const std::string& path,
                                 const std::string& run_id,
                                 const std::string& environment,
@@ -592,7 +716,21 @@ static void append_sample_jsonl(const std::string& path,
     metric(s.has_cancel_metrics, s.cancel_to_send_us);
     f << ",\"cancel_to_ack_us\":";
     metric(s.has_cancel_to_ack, s.cancel_to_ack_us);
-    f << ","
+    f << ",\"feed_latency_us\":";
+    metric(s.feed_latency_us > 0.0, s.feed_latency_us);
+    f << ",\"new_send_to_exchange_us\":";
+    metric(s.has_component_metrics && s.new_send_to_exchange_us > 0.0, s.new_send_to_exchange_us);
+    f << ",\"new_exchange_to_ack_us\":";
+    metric(s.has_component_metrics && s.new_exchange_to_ack_us > 0.0, s.new_exchange_to_ack_us);
+    f << ",\"cancel_send_to_exchange_us\":";
+    metric(s.has_component_metrics && s.cancel_send_to_exchange_us > 0.0, s.cancel_send_to_exchange_us);
+    f << ",\"cancel_exchange_to_ack_us\":";
+    metric(s.has_component_metrics && s.cancel_exchange_to_ack_us > 0.0, s.cancel_exchange_to_ack_us);
+    f << ",\"fill_exchange_to_local_us\":";
+    metric(s.fill_exchange_to_local_us > 0.0, s.fill_exchange_to_local_us);
+    f << ",\"send_queue_delay_us\":";
+    metric(s.send_queue_delay_us > 0.0, s.send_queue_delay_us);
+    f << ",\"md_events_per_s_bucket\":" << s.md_events_per_s_bucket << ","
       << "\"replace_to_send_us\":null,"
       << "\"replace_to_ack_us\":null,"
       << "\"success\":" << (s.success ? "true" : "false") << ","
@@ -611,6 +749,11 @@ static void append_sample_jsonl(const std::string& path,
       << "\"cancel_decision_ts\":" << s.cancel_decision_ns << ","
       << "\"cancel_send_ts\":" << s.cancel_send_ns << ","
       << "\"cancel_ack_received_ts\":" << s.cancel_ack_received_ns << ","
+      << "\"order_send_wall_ts\":" << s.order_send_wall_ns << ","
+      << "\"ack_exchange_ts\":" << s.ack_exchange_ns << ","
+      << "\"ack_received_wall_ts\":" << s.ack_received_wall_ns << ","
+      << "\"market_event_exchange_ts\":" << s.market_event_exchange_ns << ","
+      << "\"market_event_wall_ts\":" << s.market_event_wall_ns << ","
       << "\"replace_send_ts\":null,"
       << "\"replace_ack_received_ts\":null"
       << "},"
@@ -645,6 +788,11 @@ static bool write_summary_artifacts(const std::string& report_json_path,
     std::vector<double> send_to_ack;
     std::vector<double> cancel_to_send;
     std::vector<double> cancel_to_ack;
+    std::vector<double> feed_latency;
+    std::vector<double> new_send_to_exchange;
+    std::vector<double> new_exchange_to_ack;
+    std::vector<double> cancel_send_to_exchange;
+    std::vector<double> cancel_exchange_to_ack;
     tick_to_decision.reserve(samples.size());
     decision_to_send_trigger.reserve(samples.size());
     tick_to_send_trigger.reserve(samples.size());
@@ -654,6 +802,11 @@ static bool write_summary_artifacts(const std::string& report_json_path,
     send_to_ack.reserve(samples.size());
     cancel_to_send.reserve(samples.size());
     cancel_to_ack.reserve(samples.size());
+    feed_latency.reserve(samples.size());
+    new_send_to_exchange.reserve(samples.size());
+    new_exchange_to_ack.reserve(samples.size());
+    cancel_send_to_exchange.reserve(samples.size());
+    cancel_exchange_to_ack.reserve(samples.size());
     for (const auto& sample : samples) {
         if (sample.has_order_metrics) {
             tick_to_decision.push_back(sample.tick_to_decision_us);
@@ -672,6 +825,21 @@ static bool write_summary_artifacts(const std::string& report_json_path,
         if (sample.has_cancel_to_ack) {
             cancel_to_ack.push_back(sample.cancel_to_ack_us);
         }
+        if (sample.feed_latency_us > 0.0) {
+            feed_latency.push_back(sample.feed_latency_us);
+        }
+        if (sample.has_component_metrics && sample.new_send_to_exchange_us > 0.0) {
+            new_send_to_exchange.push_back(sample.new_send_to_exchange_us);
+        }
+        if (sample.has_component_metrics && sample.new_exchange_to_ack_us > 0.0) {
+            new_exchange_to_ack.push_back(sample.new_exchange_to_ack_us);
+        }
+        if (sample.has_component_metrics && sample.cancel_send_to_exchange_us > 0.0) {
+            cancel_send_to_exchange.push_back(sample.cancel_send_to_exchange_us);
+        }
+        if (sample.has_component_metrics && sample.cancel_exchange_to_ack_us > 0.0) {
+            cancel_exchange_to_ack.push_back(sample.cancel_exchange_to_ack_us);
+        }
     }
 
     const MetricSummary tick_decision = summarize_metric(tick_to_decision);
@@ -683,12 +851,17 @@ static bool write_summary_artifacts(const std::string& report_json_path,
     const MetricSummary send_ack = summarize_metric(send_to_ack);
     const MetricSummary cancel_send = summarize_metric(cancel_to_send);
     const MetricSummary cancel_ack = summarize_metric(cancel_to_ack);
+    const MetricSummary feed_lat = summarize_metric(feed_latency);
+    const MetricSummary new_entry = summarize_metric(new_send_to_exchange);
+    const MetricSummary new_resp = summarize_metric(new_exchange_to_ack);
+    const MetricSummary cancel_entry = summarize_metric(cancel_send_to_exchange);
+    const MetricSummary cancel_resp = summarize_metric(cancel_exchange_to_ack);
 
     std::ofstream jf(report_json_path);
     if (!jf.is_open()) return false;
     jf << std::fixed << std::setprecision(3);
     jf << "{\n"
-       << "  \"schema_version\": \"latency_baseline_summary_v1\",\n"
+       << "  \"schema_version\": \"latency_baseline_summary_v2\",\n"
        << "  \"run_id\": \"" << json_escape(run_id) << "\",\n"
        << "  \"generated_at_utc\": \"" << utc_timestamp() << "\",\n"
        << "  \"sample_count\": " << samples.size() << ",\n"
@@ -717,6 +890,16 @@ static bool write_summary_artifacts(const std::string& report_json_path,
     jf << ",\n    \"cancel_to_ack_us\": ";
     if (cancel_ack.count > 0) write_metric_json(jf, cancel_ack, 4);
     else write_null_metric_json(jf, 4);
+    jf << ",\n    \"feed_latency_us\": ";
+    write_metric_or_null_json(jf, feed_lat, 4);
+    jf << ",\n    \"new_send_to_exchange_us\": ";
+    write_metric_or_null_json(jf, new_entry, 4);
+    jf << ",\n    \"new_exchange_to_ack_us\": ";
+    write_metric_or_null_json(jf, new_resp, 4);
+    jf << ",\n    \"cancel_send_to_exchange_us\": ";
+    write_metric_or_null_json(jf, cancel_entry, 4);
+    jf << ",\n    \"cancel_exchange_to_ack_us\": ";
+    write_metric_or_null_json(jf, cancel_resp, 4);
     jf << ",\n    \"replace_to_send_us\": ";
     write_null_metric_json(jf, 4);
     jf << ",\n    \"replace_to_ack_us\": ";
@@ -725,7 +908,8 @@ static bool write_summary_artifacts(const std::string& report_json_path,
        << "  \"views\": {\n"
        << "    \"offensive\": [\"tick_to_decision_us\", \"decision_to_send_trigger_us\", \"tick_to_send_trigger_us\", \"decision_to_send_us\", \"tick_to_send_us\", \"rithmic_send_call_us\"],\n"
        << "    \"defensive\": [\"cancel_to_send_us\", \"cancel_to_ack_us\", \"replace_to_send_us\", \"replace_to_ack_us\"],\n"
-       << "    \"round_trip\": [\"send_to_ack_us\"]\n"
+       << "    \"round_trip\": [\"send_to_ack_us\"],\n"
+       << "    \"hftbacktest_components\": [\"feed_latency_us\", \"new_send_to_exchange_us\", \"new_exchange_to_ack_us\", \"cancel_send_to_exchange_us\", \"cancel_exchange_to_ack_us\"]\n"
        << "  },\n"
        << "  \"broker_mode\": {\n"
        << "    \"status\": \"" << (tick_send.count > 0 ? "observed" : "blocked") << "\",\n"
@@ -852,7 +1036,7 @@ int main(int argc, char** argv) {
     );
     cfg.username = user;
     cfg.password = pass;
-    cfg.app_name = load_yaml_scalar(yaml_path, "engine_params", "app_name", "HFT3-LatencyProbe");
+    cfg.app_name = load_yaml_scalar(yaml_path, "engine_params", "app_name", "midi:HFT3");
     cfg.app_version = load_yaml_scalar(yaml_path, "engine_params", "app_version", "1.0");
     cfg.log_file_path = repo + "/runtime/rithmic_latency_probe.log";
     cfg.rep_connect_point = get_env_or_string(
@@ -936,7 +1120,10 @@ int main(int argc, char** argv) {
     const int count = get_env_int_or("RITHMIC_PROBE_ORDER_COUNT", 1);
     const int qty = get_env_int_or("RITHMIC_PROBE_ORDER_QTY", 1);
     const int timeout_ms = get_env_int_or("RITHMIC_PROBE_ORDER_TIMEOUT_MS", 10000);
+    const int cancel_ack_timeout_ms = get_env_int_or(
+        "RITHMIC_PROBE_CANCEL_ACK_TIMEOUT_MS", timeout_ms);
     const int md_timeout_ms = get_env_int_or("RITHMIC_PROBE_MD_TIMEOUT_MS", 15000);
+    const int calib_md_samples = get_env_int_or("RITHMIC_PROBE_CALIB_MD_SAMPLES", 200);
     const int interval_us = get_env_int_or("RITHMIC_PROBE_ORDER_INTERVAL_US", 0);
     const bool cancel_after_ack = get_env_bool_or("RITHMIC_PROBE_CANCEL_AFTER_ACK", true);
     const bool require_md = get_env_bool_or("RITHMIC_PROBE_REQUIRE_MD", true);
@@ -959,7 +1146,7 @@ int main(int argc, char** argv) {
     const std::string model_id = get_env_or_string("RITHMIC_PROBE_MODEL_ID", "latency_probe");
     const std::string trade_manager_id = get_env_or_string("RITHMIC_PROBE_TRADE_MANAGER_ID", "native_cpp_probe");
 
-    if (count <= 0 || qty <= 0) {
+    if (qty <= 0 || count < 0 || (count == 0 && calib_md_samples <= 0 && !md_smoke_enabled)) {
         std::fprintf(stderr, "FAIL [%s] invalid order count/qty\n", env_name);
         adapter.disconnect();
         return 4;
@@ -972,11 +1159,18 @@ int main(int argc, char** argv) {
     std::filesystem::create_directories(data_dir);
     std::filesystem::create_directories(report_dir);
     const std::string sample_path = (data_dir / (run_id + ".jsonl")).string();
+    const std::string intp_sample_path = (data_dir / (run_id + "_intp_samples.jsonl")).string();
+    const std::string calib_path = (report_dir / (run_id + "_clock_calibration.json")).string();
     const std::string report_json_path = (report_dir / (run_id + "_summary.json")).string();
     const std::string report_md_path = (report_dir / (run_id + "_summary.md")).string();
     {
         std::ofstream clear(sample_path, std::ios::trunc);
+        std::ofstream clear_intp(intp_sample_path, std::ios::trunc);
     }
+
+    BurstTracker burst_tracker;
+    std::vector<double> calib_feed_us;
+    calib_feed_us.reserve(static_cast<size_t>(calib_md_samples));
 
     hft::OrderEvent stale_order;
     while (order_queue->pop(stale_order)) {}
@@ -1044,6 +1238,29 @@ int main(int argc, char** argv) {
             while (steady_now_ns() < warm_deadline_ns) {}
             std::printf("OK [%s] post_subscribe_warm_ms=%d\n",
                         env_name, post_subscribe_warm_ms);
+        }
+        if (calib_md_samples > 0 && subscribed_mbo) {
+            const uint64_t calib_deadline_ns = steady_now_ns()
+                + static_cast<uint64_t>(md_timeout_ms) * 1000000ULL;
+            while (static_cast<int>(calib_feed_us.size()) < calib_md_samples
+                   && steady_now_ns() < calib_deadline_ns) {
+                hft::MarketDataEvent ev;
+                if (!mbo_queue->pop(ev) || ev.price <= 0.0 || ev.timestamp_ns == 0) {
+                    continue;
+                }
+                const uint64_t recv_wall = wall_now_ns();
+                const uint64_t recv_mono = ev.callback_monotonic_ns
+                    ? ev.callback_monotonic_ns
+                    : steady_now_ns();
+                burst_tracker.note_md(recv_mono);
+                const double feed_us = exchange_to_wall_us(ev.timestamp_ns, recv_wall);
+                if (feed_us > 0.0) {
+                    calib_feed_us.push_back(feed_us);
+                }
+            }
+            write_clock_calibration_json(calib_path, calib_feed_us);
+            std::printf("OK [%s] clock_calibration samples=%zu path=%s\n",
+                        env_name, calib_feed_us.size(), calib_path.c_str());
         }
     }
 
@@ -1139,13 +1356,23 @@ int main(int argc, char** argv) {
 
         hft::MarketDataEvent md_event{};
         uint64_t market_event_received_ns = 0;
+        uint64_t md_exchange_ns = 0;
+        uint64_t md_wall_ns = 0;
+        double md_feed_us = 0.0;
         double md_price = 0.0;
+        const uint64_t md_not_before_ns = (i > 0) ? steady_now_ns() : 0;
         if (require_md) {
             bool got_md = false;
             if (primed_md_available) {
                 md_event = primed_md_event;
                 market_event_received_ns = primed_market_event_received_ns;
                 md_price = md_event.price;
+                md_exchange_ns = md_event.timestamp_ns;
+                md_wall_ns = wall_now_ns();
+                if (md_exchange_ns > 0 && md_wall_ns > md_exchange_ns) {
+                    md_feed_us = exchange_to_wall_us(md_exchange_ns, md_wall_ns);
+                }
+                burst_tracker.note_md(market_event_received_ns);
                 primed_md_available = false;
                 got_md = true;
             } else {
@@ -1159,11 +1386,21 @@ int main(int argc, char** argv) {
                     if (ev.price <= 0.0) {
                         continue;
                     }
-                    md_event = ev;
-                    market_event_received_ns = ev.callback_monotonic_ns
+                    const uint64_t ev_ns = ev.callback_monotonic_ns
                         ? ev.callback_monotonic_ns
                         : steady_now_ns();
+                    if (md_not_before_ns > 0 && ev_ns <= md_not_before_ns) {
+                        continue;
+                    }
+                    md_event = ev;
+                    market_event_received_ns = ev_ns;
                     md_price = ev.price;
+                    md_exchange_ns = ev.timestamp_ns;
+                    md_wall_ns = wall_now_ns();
+                    burst_tracker.note_md(ev_ns);
+                    if (md_exchange_ns > 0 && md_wall_ns > md_exchange_ns) {
+                        md_feed_us = exchange_to_wall_us(md_exchange_ns, md_wall_ns);
+                    }
                     got_md = true;
                     break;
                 }
@@ -1185,6 +1422,10 @@ int main(int argc, char** argv) {
         order_sample.order_type = "limit";
         order_sample.quantity = qty;
         order_sample.market_event_received_ns = market_event_received_ns;
+        order_sample.market_event_exchange_ns = md_exchange_ns;
+        order_sample.market_event_wall_ns = md_wall_ns;
+        order_sample.feed_latency_us = md_feed_us;
+        order_sample.md_events_per_s_bucket = burst_tracker.bucket();
         order_sample.features_ready_ns = steady_now_ns();
 
         double order_price = explicit_order_price;
@@ -1224,6 +1465,7 @@ int main(int argc, char** argv) {
         );
         order_sample.order_api_call_end_ns = steady_now_ns();
         order_sample.order_send_ns = order_sample.order_api_call_end_ns;
+        order_sample.order_send_wall_ns = wall_now_ns();
         order_sample.tick_to_decision_us = duration_us(order_sample.market_event_received_ns,
                                                        order_sample.decision_ready_ns);
         order_sample.decision_to_send_us = duration_us(order_sample.decision_ready_ns,
@@ -1271,6 +1513,23 @@ int main(int argc, char** argv) {
                             fixed_cstr(ev.user_msg, sizeof(ev.user_msg)).c_str(),
                             fixed_cstr(ev.tag, sizeof(ev.tag)).c_str());
             }
+            if (ev.event_type == 'F' && order_event_matches(ev, user_msgs[static_cast<size_t>(i)],
+                                     order_sample.order_send_ns)) {
+                const uint64_t fill_wall = ev.callback_wall_ns ? ev.callback_wall_ns : wall_now_ns();
+                if (ev.timestamp_ns > 0 && fill_wall > ev.timestamp_ns) {
+                    order_sample.fill_exchange_to_local_us =
+                        static_cast<double>(fill_wall - ev.timestamp_ns) / 1000.0;
+                }
+            }
+            if (ev.event_type == 'R' && order_event_matches(ev, user_msgs[static_cast<size_t>(i)],
+                                     order_sample.order_send_ns)) {
+                const uint64_t rej_wall = ev.callback_wall_ns ? ev.callback_wall_ns : wall_now_ns();
+                if (order_sample.order_send_wall_ns > 0 && rej_wall > order_sample.order_send_wall_ns) {
+                    order_sample.new_exchange_to_ack_us =
+                        static_cast<double>(rej_wall - order_sample.order_send_wall_ns) / 1000.0;
+                    order_sample.has_component_metrics = true;
+                }
+            }
             if (!order_event_matches(ev, user_msgs[static_cast<size_t>(i)],
                                      order_sample.order_send_ns)) {
                 continue;
@@ -1297,8 +1556,13 @@ int main(int argc, char** argv) {
         order_sample.ack_received_ns = terminal_event.callback_monotonic_ns
             ? terminal_event.callback_monotonic_ns
             : steady_now_ns();
+        order_sample.ack_exchange_ns = terminal_event.timestamp_ns;
+        order_sample.ack_received_wall_ns = terminal_event.callback_wall_ns
+            ? terminal_event.callback_wall_ns
+            : wall_now_ns();
         order_sample.send_to_ack_us = duration_us(order_sample.order_send_ns,
                                                   order_sample.ack_received_ns);
+        populate_new_order_components(order_sample);
         order_sample.broker_order_id = terminal_event.order_id;
         if (terminal_event.event_type == 'A') {
             ++ack_count;
@@ -1357,6 +1621,9 @@ int main(int argc, char** argv) {
         samples.push_back(order_sample);
         append_sample_jsonl(sample_path, run_id, env_name_str, "rithmic", exchange,
                             symbol, strategy_id, model_id, trade_manager_id, order_sample);
+        append_intp_sample_jsonl(intp_sample_path, run_id, "new",
+                                 order_sample.intp_req_ts, order_sample.intp_exch_ts,
+                                 order_sample.intp_resp_ts, order_sample.md_events_per_s_bucket);
         std::printf("ORDER_RESULT index=%d status=%s tick_to_send_us=%.3f send_to_ack_us=%.3f broker_order_id=%llu\n",
                     i + 1, order_sample.success ? "ack" : order_sample.reject_reason.c_str(),
                     order_sample.tick_to_send_us, order_sample.send_to_ack_us,
@@ -1379,6 +1646,7 @@ int main(int argc, char** argv) {
             cancel_sample.cancel_decision_ns = steady_now_ns();
             const bool cancel_sent = adapter.cancel_order(std::to_string(terminal_event.order_id));
             cancel_sample.cancel_send_ns = steady_now_ns();
+            cancel_sample.cancel_send_wall_ns = wall_now_ns();
             cancel_sample.cancel_to_send_us = duration_us(cancel_sample.cancel_decision_ns,
                                                           cancel_sample.cancel_send_ns);
             if (cancel_sent) {
@@ -1394,7 +1662,7 @@ int main(int argc, char** argv) {
             }
 
             const uint64_t cancel_deadline_ns = cancel_sample.cancel_send_ns
-                + static_cast<uint64_t>(timeout_ms) * 1000000ULL;
+                + static_cast<uint64_t>(cancel_ack_timeout_ms) * 1000000ULL;
             bool cancel_finished = false;
             while (steady_now_ns() < cancel_deadline_ns) {
                 hft::OrderEvent ev;
@@ -1407,12 +1675,17 @@ int main(int argc, char** argv) {
                 if (ev.event_type != 'C' && ev.event_type != 'X' && ev.event_type != 'R') {
                     continue;
                 }
+                cancel_sample.cancel_effective_exchange_ns = ev.timestamp_ns;
                 cancel_sample.cancel_ack_received_ns = ev.callback_monotonic_ns
                     ? ev.callback_monotonic_ns
                     : steady_now_ns();
+                cancel_sample.cancel_ack_received_wall_ns = ev.callback_wall_ns
+                    ? ev.callback_wall_ns
+                    : wall_now_ns();
                 cancel_sample.cancel_to_ack_us = duration_us(cancel_sample.cancel_send_ns,
                                                             cancel_sample.cancel_ack_received_ns);
                 cancel_sample.has_cancel_to_ack = true;
+                populate_cancel_components(cancel_sample);
                 cancel_sample.success = ev.event_type == 'C';
                 cancel_sample.reject_reason = cancel_sample.success ? "" : "cancel_reject_or_failure";
                 cancel_finished = true;
@@ -1426,11 +1699,18 @@ int main(int argc, char** argv) {
             samples.push_back(cancel_sample);
             append_sample_jsonl(sample_path, run_id, env_name_str, "rithmic", exchange,
                                 symbol, strategy_id, model_id, trade_manager_id, cancel_sample);
-            std::printf("CANCEL_RESULT index=%d status=%s cancel_to_send_us=%.3f cancel_to_ack_us=%.3f\n",
+            append_intp_sample_jsonl(intp_sample_path, run_id, "cancel",
+                                     cancel_sample.intp_req_ts, cancel_sample.intp_exch_ts,
+                                     cancel_sample.intp_resp_ts, order_sample.md_events_per_s_bucket);
+            std::printf("CANCEL_RESULT index=%d status=%s cancel_to_send_us=%.3f cancel_to_ack_us=%.3f"
+                        " cancel_send_to_exchange_us=%.3f cancel_exchange_to_ack_us=%.3f\n",
                         i + 1, cancel_sample.success ? "ack" : cancel_sample.reject_reason.c_str(),
-                        cancel_sample.cancel_to_send_us, cancel_sample.cancel_to_ack_us);
+                        cancel_sample.cancel_to_send_us, cancel_sample.cancel_to_ack_us,
+                        cancel_sample.cancel_send_to_exchange_us,
+                        cancel_sample.cancel_exchange_to_ack_us);
             if (!cancel_sample.success) {
-                break;
+                // Defensive cancel-ack may be unmeasurable on live/paper; keep campaign.
+                stop_reason = cancel_sample.reject_reason;
             }
         }
 

@@ -28,6 +28,8 @@ LANE_THRESHOLDS_MS = {
     4: (50.0, float("inf")),
 }
 PAPER_ORDER_MIN_PAIRED = 1000
+LIVE_ORDER_MIN_PAIRED = 50
+LIVE_ORDER_FULL_PAIRED = 200
 ORDER_ACK_BLOCKED_NOTE = (
     "Paper order submit→ack not measured; run bash scripts/chi404_run_paper_latency_sweep.sh "
     "(native C++ rithmic_latency_probe campaign) on CHI404"
@@ -37,6 +39,29 @@ TRIAL_APPENDIX_LIMITATIONS = [
     "Promoted to authoritative when paired_count>=1000",
 ]
 TRIAL_CONNECTORS = frozenset({"rtrader", "rtrader_bridge"})
+
+
+def _build_new_send_to_ack_distribution(stats: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(stats, dict):
+        return None
+    count = int(stats.get("count") or 0)
+    if count <= 0:
+        return None
+    us: dict[str, Any] = {"count": count}
+    ms: dict[str, Any] = {"count": count}
+    for key in ("min_us", "mean_us", "p50_us", "p90_us", "p95_us", "p99_us", "p99_9_us", "max_us"):
+        val = stats.get(key)
+        if isinstance(val, (int, float)):
+            us[key] = float(val)
+            ms[key.replace("_us", "_ms")] = float(val) / 1000.0
+    return {
+        "metric": "new_send_to_ack",
+        "unit_primary": "us",
+        "us": us,
+        "ms": ms,
+        "source": "rithmic_latency_probe_native_cpp",
+        "hftbacktest_component": "order_entry_plus_order_response_combined",
+    }
 
 
 def _load_json(path: Path) -> dict[str, Any] | None:
@@ -426,9 +451,71 @@ def build_summary(
     }
 
     native_probe = collect_native_probe_orders(repo_root)
-    native_count = native_probe.get("paired_count") or 0
-    native_stats = native_probe.get("order_submit_to_ack_us") or {}
+    native_paper = collect_native_probe_orders(
+        repo_root,
+        environment_prefix="paper",
+    )
+    if (native_paper.get("paired_count") or 0) == 0:
+        native_paper = collect_native_probe_orders(
+            repo_root,
+            run_id_prefix="order_ack_campaign_",
+        )
+    native_live = collect_native_probe_orders(
+        repo_root,
+        environment_prefix="live",
+    )
+    if (native_live.get("paired_count") or 0) == 0:
+        native_live = collect_native_probe_orders(
+            repo_root,
+            run_id_prefix="live_order_ack_campaign_",
+        )
+
+    native_count = native_paper.get("paired_count") or 0
+    native_stats = native_paper.get("order_submit_to_ack_us") or {}
     native_p99_us = native_stats.get("p99_us")
+
+    live_count = native_live.get("paired_count") or 0
+    live_stats = native_live.get("order_submit_to_ack_us") or {}
+    live_p99_us = live_stats.get("p99_us")
+    live_order_ack_p99_ms: float | None = None
+    live_new_send_to_ack: dict[str, Any] | None = None
+    live_order_latency: dict[str, Any] = {
+        "measured": False,
+        "authoritative": False,
+        "paired_count": live_count,
+        "source": "rithmic_latency_probe_native_cpp",
+        "measurement_tier": "native_cpp_probe",
+        "system": "Rithmic 01",
+        "gateway": "Chicago Area",
+    }
+    if live_count >= LIVE_ORDER_MIN_PAIRED and live_p99_us is not None and isinstance(live_p99_us, (int, float)):
+        live_order_ack_p99_ms = float(live_p99_us) / 1000.0
+        live_new_send_to_ack = _build_new_send_to_ack_distribution(live_stats)
+        live_order_latency = {
+            "measured": live_count >= LIVE_ORDER_FULL_PAIRED,
+            "authoritative": live_count >= LIVE_ORDER_FULL_PAIRED,
+            "preliminary": live_count >= LIVE_ORDER_MIN_PAIRED and live_count < LIVE_ORDER_FULL_PAIRED,
+            "paired_count": live_count,
+            "source": "rithmic_latency_probe_native_cpp",
+            "measurement_tier": "native_cpp_probe",
+            "hot_path_language": "c++",
+            "wrapper": "none",
+            "system": "Rithmic 01",
+            "gateway": "Chicago Area",
+            "sample_files": native_live.get("sample_files") or [],
+            "runs": native_live.get("runs") or [],
+            "note": (
+                "preliminary live sample — do not blast live account; "
+                "full M5 gate requires paper or explicit operator-approved live campaign"
+                if live_count < LIVE_ORDER_FULL_PAIRED
+                else None
+            ),
+        }
+    elif 0 < live_count < PAPER_ORDER_MIN_PAIRED:
+        live_order_latency["native_probe_partial"] = {
+            "paired_count": live_count,
+            "p99_us": live_p99_us,
+        }
 
     if native_count >= PAPER_ORDER_MIN_PAIRED and native_p99_us is not None and isinstance(native_p99_us, (int, float)):
         order_ack_p99_ms = float(native_p99_us) / 1000.0
@@ -524,8 +611,21 @@ def build_summary(
         "native_probe_orders": native_probe,
         "trial_order_ack_appendix": trial_appendix,
         "paper_order_latency": paper_order_latency,
+        "live_order_latency": live_order_latency,
+        "native_probe_orders_live": native_live,
+        "new_send_to_ack_ms": live_new_send_to_ack,
+        "new_send_to_ack_us": (
+            live_new_send_to_ack.get("us") if isinstance(live_new_send_to_ack, dict) else None
+        ),
+        "live_order_ack_p99_ms": live_order_ack_p99_ms,
         "order_ack_p99_ms": order_ack_p99_ms,
         "order_ack_measured": not order_ack_blocked,
+        "live_order_ack_measured": live_order_ack_p99_ms is not None,
+        "backtest_latency_preference": (
+            "live_order_latency.authoritative"
+            if live_order_ack_p99_ms is not None
+            else ("paper_order_latency.authoritative" if not order_ack_blocked else "unmeasured")
+        ),
         "gates": {
             "cyclictest_pass": cyclictest_pass,
             "network_pass": network_pass,

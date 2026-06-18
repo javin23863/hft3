@@ -1,13 +1,13 @@
 {
-  "run_id": "20260611T074546Z",
-  "timestamp_utc": "2026-06-11T07:55:58.466633+00:00",
+  "run_id": "live_latency_20260617T231534Z",
+  "timestamp_utc": "2026-06-17T23:25:26.678040+00:00",
   "authoritative_source": "chi404_bare_metal_only",
   "pass_criteria_path": "infrastructure/chi404/PASS_CRITERIA.json",
-  "raw_dir": "runtime/latency_reports/raw/20260611T074546Z",
+  "raw_dir": "runtime/latency_reports/raw/live_latency_20260617T231534Z",
   "cyclictest": {
     "by_run": {
       "cyclictest_idle_cpu11": {
-        "p50_us": 10,
+        "p50_us": 0,
         "p95_us": 10,
         "p99_us": 10,
         "p999_us": 10,
@@ -15,7 +15,7 @@
         "samples": 120000
       },
       "cyclictest_idle_cpu2": {
-        "p50_us": 10,
+        "p50_us": 0,
         "p95_us": 10,
         "p99_us": 10,
         "p999_us": 10,
@@ -23,7 +23,7 @@
         "samples": 120000
       },
       "cyclictest_loaded_cpu11": {
-        "p50_us": 10,
+        "p50_us": 0,
         "p95_us": 10,
         "p99_us": 10,
         "p999_us": 10,
@@ -31,7 +31,7 @@
         "samples": 120000
       },
       "cyclictest_loaded_cpu2": {
-        "p50_us": 9,
+        "p50_us": 0,
         "p95_us": 10,
         "p99_us": 10,
         "p999_us": 10,
@@ -47,12 +47,12 @@
   },
   "loopback_tcp": {
     "samples": 100,
-    "p50_us": 9.8090386018157,
-    "p95_us": 11.221040040254593,
-    "p99_us": 16.82201400399208,
-    "p999_us": 16.82201400399208,
-    "max_us": 445.00501826405525,
-    "avg_us": 14.317412860691547,
+    "p50_us": 10.028990800492465,
+    "p95_us": 10.82000380847603,
+    "p99_us": 17.081998521462083,
+    "p999_us": 17.081998521462083,
+    "max_us": 439.60400216747075,
+    "avg_us": 14.464409759966657,
     "errors": []
   },
   "network": {
@@ -62,41 +62,35 @@
       "received": 100,
       "loss_pct": 0.0,
       "samples": 100,
-      "p50_ms": 0.09,
-      "p95_ms": 0.125,
-      "p99_ms": 0.18,
-      "p999_ms": 0.18,
-      "max_ms": 0.221,
-      "avg_ms": 0.09562,
-      "jitter_ms": 0.01887473443521789,
+      "p50_ms": 0.091,
+      "p95_ms": 0.137,
+      "p99_ms": 0.19,
+      "p999_ms": 0.19,
+      "max_ms": 0.219,
+      "avg_ms": 0.09758,
+      "jitter_ms": 0.0214579495758565,
       "ping_summary": {
-        "min_ms": 0.079,
-        "avg_ms": 0.095,
-        "max_ms": 0.221,
-        "mdev_ms": 0.018
+        "min_ms": 0.074,
+        "avg_ms": 0.097,
+        "max_ms": 0.219,
+        "mdev_ms": 0.021
       },
       "status": "ok"
     },
     "rithmic_ping": {
-      "host": "rituz00100.00.rithmic.com",
+      "host": "ritpz01000.01.rithmic.com",
       "transmitted": 100,
-      "received": 100,
-      "loss_pct": 0.0,
-      "samples": 100,
-      "p50_ms": 37.3,
-      "p95_ms": 37.4,
-      "p99_ms": 37.5,
-      "p999_ms": 37.5,
-      "max_ms": 37.6,
-      "avg_ms": 37.32,
-      "jitter_ms": 0.04898979485566426,
-      "ping_summary": {
-        "min_ms": 37.272,
-        "avg_ms": 37.322,
-        "max_ms": 37.551,
-        "mdev_ms": 0.038
-      },
-      "status": "ok"
+      "received": 0,
+      "loss_pct": 100.0,
+      "samples": 0,
+      "p50_ms": null,
+      "p95_ms": null,
+      "p99_ms": null,
+      "p999_ms": null,
+      "max_ms": null,
+      "avg_ms": null,
+      "jitter_ms": null,
+      "status": "icmp_blocked_or_unreachable"
     },
     "gateway_tcp_443": {
       "host": "64.44.98.129",
@@ -116,32 +110,32 @@
       "status": "failed"
     },
     "rithmic_tcp_65000": {
-      "host": "rituz00100.00.rithmic.com",
+      "host": "ritpz01000.01.rithmic.com",
       "port": 65000,
       "samples": 30,
-      "p50_ms": 37.03409095760435,
-      "p95_ms": 37.52683603670448,
-      "p99_ms": 37.543877959251404,
-      "p999_ms": 37.543877959251404,
-      "max_ms": 37.5542480032891,
-      "avg_ms": 37.07385897093142,
+      "p50_ms": 2.2397900029318407,
+      "p95_ms": 2.6404719974379987,
+      "p99_ms": 2.6433369930600747,
+      "p999_ms": 2.6433369930600747,
+      "max_ms": 2.699923003092408,
+      "avg_ms": 2.3261505334327617,
       "errors": null,
       "status": "ok",
       "network_health_only": true
     }
   },
-  "network_p99_us": 37543.877959251404,
+  "network_p99_us": 2643.3369930600747,
   "network_p99_worst_source": "rithmic_tcp_65000",
   "network_limit_us": 500,
   "network_pass": false,
   "clock_discipline": {
     "status": "ok",
-    "tracking_text": "Reference ID    : 481E2358 (t2.time.bf1.yahoo.com)\nStratum         : 3\nRef time (UTC)  : Thu Jun 11 07:54:59 2026\nSystem time     : 0.000021912 seconds fast of NTP time\nLast offset     : +0.000000891 seconds\nRMS offset      : 0.000014251 seconds\nFrequency       : 1.104 ppm fast\nResidual freq   : -0.000 ppm\nSkew            : 0.013 ppm\nRoot delay      : 0.014069629 seconds\nRoot dispersion : 0.001242919 seconds\nUpdate interval : 323.7 seconds\nLeap status     : Normal",
-    "sources_text": ".-- Source mode  '^' = server, '=' = peer, '#' = local clock.\n / .- Source state '*' = current best, '+' = combined, '-' = not combined,\n| /             'x' = may be in error, '~' = too variable, '?' = unusable.\n||                                                 .- xxxx [ yyyy ] +/- zzzz\n||      Reachability register (octal) -.           |  xxxx = adjusted offset,\n||      Log2(Polling interval) --.      |          |  yyyy = measured offset,\n||                                \\     |          |  zzzz = estimated error.\n||                                 |    |           \\\nMS Name/IP address         Stratum Poll Reach LastRx Last sample               \n===============================================================================\n^+ 38.28.93.135                  1   6   377     9   -382us[ -382us] +/-   19ms\n^- 198-12-95-197-host.coloc>     3   6   377   79m  +8843us[+8844us] +/-   58ms\n^- 44.190.5.123                  2   6   377   176  -1332us[-1331us] +/-   25ms\n^* t2.time.bf1.yahoo.com         2   6   377    59    +67us[  +67us] +/- 8729us",
+    "tracking_text": "Reference ID    : 179628F2 (frumentum-zeus.infra.frumentum.media)\nStratum         : 3\nRef time (UTC)  : Wed Jun 17 23:24:56 2026\nSystem time     : 0.000773400 seconds slow of NTP time\nLast offset     : -0.000010877 seconds\nRMS offset      : 0.000054360 seconds\nFrequency       : 7.089 ppm fast\nResidual freq   : -0.009 ppm\nSkew            : 0.064 ppm\nRoot delay      : 0.036978226 seconds\nRoot dispersion : 0.000412200 seconds\nUpdate interval : 64.4 seconds\nLeap status     : Normal",
+    "sources_text": ".-- Source mode  '^' = server, '=' = peer, '#' = local clock.\n / .- Source state '*' = current best, '+' = combined, '-' = not combined,\n| /             'x' = may be in error, '~' = too variable, '?' = unusable.\n||                                                 .- xxxx [ yyyy ] +/- zzzz\n||      Reachability register (octal) -.           |  xxxx = adjusted offset,\n||      Log2(Polling interval) --.      |          |  yyyy = measured offset,\n||                                \\     |          |  zzzz = estimated error.\n||                                 |    |           \\\nMS Name/IP address         Stratum Poll Reach LastRx Last sample               \n===============================================================================\n^+ ntp.maxhost.io                2   6   377    20   -259us[ -259us] +/-   48ms\n^- ip216-250-115-174.pbiaas>     2   6   377    24  +8199us[+8199us] +/-  140ms\n^+ 173.249.203.227               2   6   377     0  +3182us[+3182us] +/-   27ms\n^* frumentum-zeus.infra.fru>     2   6   377    30  -3744us[-3755us] +/-   19ms",
     "parsed": {
       "synchronised": true,
-      "last_offset_us": 0.891,
-      "rms_offset_us": 14.251,
+      "last_offset_us": 10.876999999999999,
+      "rms_offset_us": 54.36,
       "limits_us": {
         "last_offset_halt": 500,
         "rms_halt": 5000
@@ -150,7 +144,7 @@
     }
   },
   "network_health": {
-    "rithmic_tcp_65000_p99_ms": 37.543877959251404,
+    "rithmic_tcp_65000_p99_ms": 2.6433369930600747,
     "network_health_only": true,
     "note": "TCP connect probes are network health telemetry; excluded from order_ack and backtest_latency_ms"
   },
@@ -165,28 +159,55 @@
     "spec": "scripts/latency_probe/build_waterfall_report.py"
   },
   "native_probe_orders": {
-    "paired_count": 1002,
+    "paired_count": 1403,
     "order_submit_to_ack_us": {
-      "count": 1002,
-      "p50_us": 3482.5865,
-      "p90_us": 3752.9379999999996,
-      "p99_us": 6255.764360000003,
-      "p999_us": 13768.18328300001
+      "count": 1403,
+      "p50_us": 3543.025,
+      "p90_us": 4302.5224,
+      "p99_us": 9671.3068,
+      "p999_us": 17318.76417400109
     },
     "sample_files": [
+      "data/latency_baselines/2026-06-11/latency_truth_cancel_20260611.jsonl",
+      "data/latency_baselines/2026-06-11/latency_truth_submit_MESU6_20260611.jsonl",
       "data/latency_baselines/2026-06-11/order_ack_campaign_20260611T071952Z.jsonl",
       "data/latency_baselines/2026-06-11/order_ack_campaign_20260611T072116Z.jsonl",
-      "data/latency_baselines/2026-06-11/rithmic-cpp-paper-baseline-20260611T071924Z.jsonl"
+      "data/latency_baselines/2026-06-11/rithmic-cpp-paper-baseline-20260611T071924Z.jsonl",
+      "data/latency_baselines/2026-06-17/gateway_baseline_chicago_area.jsonl",
+      "data/latency_baselines/2026-06-17/gateway_shootout_chicago_area_20260618T053706Z.jsonl",
+      "data/latency_baselines/2026-06-17/live_order_ack_20260617T230056Z_1.jsonl",
+      "data/latency_baselines/2026-06-17/live_order_ack_20260617T230127Z_2.jsonl",
+      "data/latency_baselines/2026-06-17/live_order_ack_20260617T230223Z_1.jsonl",
+      "data/latency_baselines/2026-06-17/live_order_ack_20260617T230312Z_2.jsonl",
+      "data/latency_baselines/2026-06-17/live_order_ack_20260617T231151Z_1.jsonl",
+      "data/latency_baselines/2026-06-17/live_order_ack_20260617T231301Z_2.jsonl",
+      "data/latency_baselines/2026-06-17/live_order_ack_20260617T231415Z_3.jsonl",
+      "data/latency_baselines/2026-06-17/live_order_ack_20260617T231526Z_4.jsonl",
+      "data/latency_baselines/2026-06-17/live_order_ack_controlled_20260617T225930Z_1.jsonl"
     ],
     "runs": [
+      "latency_truth_cancel_20260611",
+      "latency_truth_submit_MESU6_20260611",
       "order_ack_campaign_20260611T071952Z",
       "order_ack_campaign_20260611T072116Z",
-      "rithmic-cpp-paper-baseline-20260611T071924Z"
+      "rithmic-cpp-paper-baseline-20260611T071924Z",
+      "gateway_baseline_chicago_area",
+      "gateway_shootout_chicago_area_20260618T053706Z",
+      "live_order_ack_20260617T230056Z_1",
+      "live_order_ack_20260617T230127Z_2",
+      "live_order_ack_20260617T230223Z_1",
+      "live_order_ack_20260617T230312Z_2",
+      "live_order_ack_20260617T231151Z_1",
+      "live_order_ack_20260617T231301Z_2",
+      "live_order_ack_20260617T231415Z_3",
+      "live_order_ack_20260617T231526Z_4",
+      "live_order_ack_controlled_20260617T225930Z_1"
     ],
     "symbols": [
-      "MESM6"
+      "MESM6",
+      "MESU6"
     ],
-    "skipped_lines": 2
+    "skipped_lines": 7
   },
   "trial_order_ack_appendix": {
     "authoritative": false,
@@ -196,35 +217,102 @@
       "R|Trader VM log bridge; monotonic timestamps at ingest",
       "Promoted to authoritative when paired_count>=1000"
     ],
-    "status": "missing",
-    "reason": "no reports/rithmic_trial/.../latency_profile.json",
-    "populate_hint": "Send paper orders in R|Trader VM, then bash scripts/chi404_run_trial_live.sh"
+    "status": "disabled",
+    "reason": "trial appendix disabled (--no-trial-appendix or LATENCY_PROBE_INCLUDE_TRIAL_APPENDIX=0)"
   },
   "paper_order_latency": {
     "measured": true,
     "authoritative": true,
-    "paired_count": 1002,
+    "paired_count": 1203,
     "source": "rithmic_latency_probe_native_cpp",
     "measurement_tier": "native_cpp_probe",
     "hot_path_language": "c++",
     "wrapper": "none",
     "sample_files": [
+      "data/latency_baselines/2026-06-11/latency_truth_cancel_20260611.jsonl",
+      "data/latency_baselines/2026-06-11/latency_truth_submit_MESU6_20260611.jsonl",
       "data/latency_baselines/2026-06-11/order_ack_campaign_20260611T071952Z.jsonl",
       "data/latency_baselines/2026-06-11/order_ack_campaign_20260611T072116Z.jsonl",
-      "data/latency_baselines/2026-06-11/rithmic-cpp-paper-baseline-20260611T071924Z.jsonl"
+      "data/latency_baselines/2026-06-11/rithmic-cpp-paper-baseline-20260611T071924Z.jsonl",
+      "data/latency_baselines/2026-06-17/gateway_baseline_chicago_area.jsonl",
+      "data/latency_baselines/2026-06-17/gateway_shootout_chicago_area_20260618T053706Z.jsonl",
+      "data/latency_baselines/2026-06-17/live_order_ack_20260617T230056Z_1.jsonl",
+      "data/latency_baselines/2026-06-17/live_order_ack_20260617T230127Z_2.jsonl",
+      "data/latency_baselines/2026-06-17/live_order_ack_20260617T230223Z_1.jsonl",
+      "data/latency_baselines/2026-06-17/live_order_ack_20260617T230312Z_2.jsonl",
+      "data/latency_baselines/2026-06-17/live_order_ack_20260617T231151Z_1.jsonl",
+      "data/latency_baselines/2026-06-17/live_order_ack_20260617T231301Z_2.jsonl",
+      "data/latency_baselines/2026-06-17/live_order_ack_20260617T231415Z_3.jsonl",
+      "data/latency_baselines/2026-06-17/live_order_ack_20260617T231526Z_4.jsonl",
+      "data/latency_baselines/2026-06-17/live_order_ack_controlled_20260617T225930Z_1.jsonl"
     ],
     "runs": [
+      "latency_truth_cancel_20260611",
+      "latency_truth_submit_MESU6_20260611",
       "order_ack_campaign_20260611T071952Z",
       "order_ack_campaign_20260611T072116Z",
-      "rithmic-cpp-paper-baseline-20260611T071924Z"
+      "rithmic-cpp-paper-baseline-20260611T071924Z",
+      "gateway_baseline_chicago_area",
+      "gateway_shootout_chicago_area_20260618T053706Z",
+      "live_order_ack_20260617T230056Z_1",
+      "live_order_ack_20260617T230127Z_2",
+      "live_order_ack_20260617T230223Z_1",
+      "live_order_ack_20260617T230312Z_2",
+      "live_order_ack_20260617T231151Z_1",
+      "live_order_ack_20260617T231301Z_2",
+      "live_order_ack_20260617T231415Z_3",
+      "live_order_ack_20260617T231526Z_4",
+      "live_order_ack_controlled_20260617T225930Z_1"
     ]
   },
-  "order_ack_p99_ms": 6.255764360000003,
+  "live_order_latency": {
+    "measured": true,
+    "authoritative": true,
+    "preliminary": false,
+    "paired_count": 200,
+    "source": "rithmic_latency_probe_native_cpp",
+    "measurement_tier": "native_cpp_probe",
+    "hot_path_language": "c++",
+    "wrapper": "none",
+    "system": "Rithmic 01",
+    "gateway": "Chicago Area",
+    "sample_files": [
+      "data/latency_baselines/2026-06-17/gateway_baseline_chicago_area.jsonl",
+      "data/latency_baselines/2026-06-17/gateway_shootout_chicago_area_20260618T053706Z.jsonl",
+      "data/latency_baselines/2026-06-17/live_order_ack_20260617T230056Z_1.jsonl",
+      "data/latency_baselines/2026-06-17/live_order_ack_20260617T230127Z_2.jsonl",
+      "data/latency_baselines/2026-06-17/live_order_ack_20260617T230223Z_1.jsonl",
+      "data/latency_baselines/2026-06-17/live_order_ack_20260617T230312Z_2.jsonl",
+      "data/latency_baselines/2026-06-17/live_order_ack_20260617T231151Z_1.jsonl",
+      "data/latency_baselines/2026-06-17/live_order_ack_20260617T231301Z_2.jsonl",
+      "data/latency_baselines/2026-06-17/live_order_ack_20260617T231415Z_3.jsonl",
+      "data/latency_baselines/2026-06-17/live_order_ack_20260617T231526Z_4.jsonl",
+      "data/latency_baselines/2026-06-17/live_order_ack_controlled_20260617T225930Z_1.jsonl"
+    ],
+    "runs": [
+      "gateway_baseline_chicago_area",
+      "gateway_shootout_chicago_area_20260618T053706Z",
+      "live_order_ack_20260617T230056Z_1",
+      "live_order_ack_20260617T230127Z_2",
+      "live_order_ack_20260617T230223Z_1",
+      "live_order_ack_20260617T230312Z_2",
+      "live_order_ack_20260617T231151Z_1",
+      "live_order_ack_20260617T231301Z_2",
+      "live_order_ack_20260617T231415Z_3",
+      "live_order_ack_20260617T231526Z_4",
+      "live_order_ack_controlled_20260617T225930Z_1"
+    ],
+    "note": null
+  },
+  "live_order_ack_p99_ms": 9.810776839999999,
+  "order_ack_p99_ms": 6.910280140000006,
   "order_ack_measured": true,
+  "live_order_ack_measured": true,
+  "backtest_latency_preference": "live_order_latency.authoritative",
   "gates": {
     "cyclictest_pass": true,
     "network_pass": false,
-    "order_ack_pass": true
+    "order_ack_pass": null
   },
   "recommended_lane": {
     "lane": 2,
@@ -245,7 +333,7 @@
       "lane_4_order_ack_ms": "50+"
     }
   },
-  "dominant_bottleneck": "network_path (worst p99 37544 us)",
+  "dominant_bottleneck": "network_path (worst p99 2643 us)",
   "strategy_guidance": {
     "realistic": [
       "Low-latency scalping backtests at 2-10 ms bands."
@@ -257,15 +345,15 @@
   "report_card": {
     "schema_version": "1",
     "header": {
-      "run_id": "20260611T074546Z",
-      "timestamp_utc": "2026-06-11T07:55:58.466633+00:00",
+      "run_id": "live_latency_20260617T231534Z",
+      "timestamp_utc": "2026-06-17T23:25:26.678040+00:00",
       "authoritative_source": "chi404_bare_metal_only",
-      "raw_dir": "runtime/latency_reports/raw/20260611T074546Z",
+      "raw_dir": "runtime/latency_reports/raw/live_latency_20260617T231534Z",
       "pass_criteria_path": "infrastructure/chi404/PASS_CRITERIA.json"
     },
     "verdict": {
       "overall": "FAIL",
-      "dominant_bottleneck": "network_path (worst p99 37544 us)",
+      "dominant_bottleneck": "network_path (worst p99 2643 us)",
       "infra_pass": false,
       "probe_exit_nonzero": true
     },
@@ -282,7 +370,7 @@
         "id": "network_worst",
         "label": "Network worst p99",
         "status": "FAIL",
-        "value": "37544 us",
+        "value": "2643 us",
         "limit": "500 us",
         "detail": "source=rithmic_tcp_65000"
       },
@@ -307,24 +395,24 @@
         "probe": "gateway_ping",
         "host": "64.44.98.129",
         "status": "ok",
-        "p99": "0.180 ms",
+        "p99": "0.190 ms",
         "loss_pct": 0.0
       },
       {
         "probe": "rithmic_tcp_65000",
-        "host": "rituz00100.00.rithmic.com",
+        "host": "ritpz01000.01.rithmic.com",
         "status": "ok",
-        "p99": "37.544 ms",
+        "p99": "2.643 ms",
         "loss_pct": null
       }
     ],
     "trial_appendix": {
       "label": "Trial order ack (R|Trader VM, non-production)",
-      "status": "MISSING",
+      "status": "DISABLED",
       "value": "not measured",
       "profile_path": null,
-      "reason": "no reports/rithmic_trial/.../latency_profile.json",
-      "populate_hint": "Send paper orders in R|Trader VM, then bash scripts/chi404_run_trial_live.sh",
+      "reason": "trial appendix disabled (--no-trial-appendix or LATENCY_PROBE_INCLUDE_TRIAL_APPENDIX=0)",
+      "populate_hint": null,
       "note": "Does not affect colo recommended_lane"
     },
     "blocked": [
@@ -347,5 +435,35 @@
         "Sub-2 ms order ack assumptions in live execution."
       ]
     }
+  },
+  "new_send_to_ack_ms": {
+    "metric": "new_send_to_ack",
+    "unit_primary": "us",
+    "us": {
+      "count": 200,
+      "p50_us": 3537.0,
+      "p90_us": 7000.0,
+      "p99_us": 9810.776839999999,
+      "p99_9_us": 13735.087575999998,
+      "max_us": 13735.087575999998
+    },
+    "ms": {
+      "count": 200,
+      "p50_ms": 3.537,
+      "p90_ms": 7.0,
+      "p99_ms": 9.810776839999999,
+      "p99_9_ms": 13.735087575999998,
+      "max_ms": 13.735087575999998
+    },
+    "source": "rithmic_latency_probe_native_cpp",
+    "hftbacktest_component": "order_entry_plus_order_response_combined"
+  },
+  "new_send_to_ack_us": {
+    "count": 200,
+    "p50_us": 3537.0,
+    "p90_us": 7000.0,
+    "p99_us": 9810.776839999999,
+    "p99_9_us": 13735.087575999998,
+    "max_us": 13735.087575999998
   }
 }

@@ -1,6 +1,6 @@
 # LATENCY.md — No-Fixed-Latency Policy and Budget
 
-Version: 2026-06-11.
+Version: 2026-06-18.
 
 ---
 
@@ -133,11 +133,65 @@ verdict is meaningful.
 exceed this during shocks — queue-depth instrumentation and headroom check is
 CC4 scope (CONTINUOUS_CME).
 
+### 5.2 Live Rithmic 01 / Chicago Area placement (2026-06-18)
+
+Artifact: `reports/latency_baselines/live_r01_chicago_baseline.json`
+(run_id: `live_latency_test_v2_20260618T075012Z`, n=25 paired new+cancel on
+CHI404, account 40262422, MESU6 far-from-market @7000, MD-primed per order).
+
+**Do not conflate these clocks with §4 replay injection (ms ack).**
+
+| View | Metric | p50 | p99 | Use in backtest |
+|------|--------|-----|-----|-----------------|
+| Offensive placement | `tick_to_send_us` | **27.3 µs** | **60.9 µs** | Min spacing between offensive fires; tactic feasibility |
+| Offensive trigger | `tick_to_send_trigger_us` | 1.0 µs | 5.2 µs | Internal trigger-only bound (SDK entry, not return) |
+| Defensive fire | `cancel_to_send_us` | **13.1 µs** | **18.9 µs** | Min time to fire cancel after decision |
+| Defensive confirm | `cancel_to_ack_us` | — | **UNMEASURED** | Pending-state risk until measured |
+| Round-trip ack | `send_to_ack_us` | 2.74 ms | 13.69 ms | Placement-test ack only (n=25) |
+| Replay injection | `new_send_to_ack_ms` distribution | 3.54 ms | **9.81 ms** | `constant_order_latency` entry+response for HftBacktest (n=200 campaign) |
+
+Capability report: `runtime/latency_reports/live_placement_capability.json`.
+
+**Backtest execution budgets (conservative p99):**
+
+- Offensive: assume **≥61 µs** from MD tick to SDK return before next new order.
+- Defensive cancel fire: assume **≥19 µs** from cancel decision to cancel send.
+- Replay order ack: inject **9.811 ms** (`live_order_latency.authoritative` in
+  `runtime/latency_reports/latency_summary.json`).
+- Cancel ack: **not yet injectable** — treat pending cancel as open until
+  `cancel_to_ack_us` is measured.
+
+Paper baseline comparison (`current_baseline.json`): paper `tick_to_send_us` p99
+23.3 µs vs live 60.9 µs (+161%); paper `cancel_to_send_us` sample 14.7 µs vs
+live 18.9 µs (+29%). Live is slower on placement but within the same
+microsecond-loop band (`<100 µs`).
+
+### 5.3 HftBacktest three-component latency and regimes
+
+Authority: [docs/vault/HFTBACKTEST_LATENCY_ONTOLOGY.md](../docs/vault/HFTBACKTEST_LATENCY_ONTOLOGY.md).
+
+**Naming:** `runtime/latency_reports/latency_summary.json` uses `new_send_to_ack_ms`
+as a distribution object (`us` + `ms` blocks). Legacy `live_order_ack_p99_ms` is
+deprecated (still read for backward compatibility).
+
+**Injection:** separate `order_entry_latency_ms` and `order_response_latency_ms`
+when `latency_model.json` is provided; otherwise symmetric split of measured ack.
+
+**Regime artifacts:** `reports/latency_baselines/live_r01_chicago/latency_model_{fast,normal,stress,extreme}.json`
+
+Generate: `python scripts/latency_probe/generate_latency_regimes.py`
+
+**Do not** combine unrelated quantiles across components. Normal regime should
+use `IntpOrderLatency` samples from `<run_id>_intp_samples.jsonl` when CC-3
+campaign completes.
+
+**Campaign orchestrator:** `scripts/chi404_run_latency_component_campaign.sh`
+
 ---
 
 ## 6. Feature Clock
 
-Source: `packages/replay/replay_session.py` `ReplaySessionConfig.feature_latency_ms`.
+Source: active workbench/HftBacktest latency configuration.
 
 Default: `None` → mirrors `latency_ms`.
 Effect: feature clock shifted back by `feat_latency_ns = feat_latency_ms * 1e6`
@@ -247,4 +301,3 @@ bundle construction requires `--latency-ms` explicitly (§4 rung 1).
 ## 10. Crypto Order-Ack Measurement Campaign
 
 Moved with the crypto lane to the `hft3-crypto-lane` repo (split tag `pre-lane-split-20260612`).
-

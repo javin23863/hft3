@@ -1,0 +1,143 @@
+{
+  "assumptions": {
+    "arbitration_latency_us": 0.0,
+    "competitor_tick_to_send_us": null,
+    "defensive_activation_latency_us": 0.0,
+    "hybrid_coordination_latency_us": 0.0,
+    "opportunity_decay_us": 1000.0,
+    "pending_exposure": {
+      "cancel_replace_throttle_us": 50000.0,
+      "client_order_id_tracking": true,
+      "duplicate_order_protection": true,
+      "kill_switch_required": true,
+      "max_pending_notional": 0.0,
+      "max_pending_orders": 1,
+      "max_pending_quantity": 1.0,
+      "stale_pending_timeout_us": 500000.0
+    },
+    "queue_position_penalty_us": 0.0
+  },
+  "blocking_behavior": {
+    "ack_required_for_reconciliation": true,
+    "blocks_on_ack": false,
+    "note": "Acknowledgments reconcile official state but do not block the next decision cycle unless a test mode explicitly requires blocking."
+  },
+  "blocking_reasons": [],
+  "defensive_capability": {
+    "cancel_to_ack_us": null,
+    "cancel_to_send_us": 18.906,
+    "replace_to_ack_us": null,
+    "replace_to_send_us": null,
+    "stale_state_risk": "managed"
+  },
+  "evidence_status": "observed",
+  "external_confirmation_behavior": {
+    "acknowledgment_lag_classification": "tens_of_milliseconds_ack",
+    "cancel_to_ack_us": null,
+    "fill_received_latency_us": null,
+    "replace_to_ack_us": null,
+    "send_to_ack_us": 13692.579
+  },
+  "external_confirmation_speed": {
+    "cancel_to_ack_us": null,
+    "fill_received_latency_us": null,
+    "replace_to_ack_us": null,
+    "send_to_ack_us": 13692.579
+  },
+  "feasibility_statement": "The system is operating in the microsecond loop band for placement speed. Measured tick-to-SDK-return is 60.9 us against a 1000.0 us opportunity decay assumption. Measured tick-to-trigger is 5.2 us; this is call-entry, not broker acknowledgment. Offensive behavior is feasible inside the configured opportunity window. The selected interaction mode has 59.6 us total decision-to-action latency. External confirmation is classified as tens of milliseconds ack and must be handled asynchronously. Acknowledgment delay is within the configured stale-state timeout, but pending state still must be reconciled.",
+  "hybrid_configuration_capability": {
+    "ack_delay_creates_stale_state_risk": false,
+    "arbitration_sequencing_latency_us": 0.0,
+    "outcome_quality_effect": "timing_feasible",
+    "pending_exposure_behavior": "continues_processing_with_pending_state",
+    "requires_ack_blocking": false,
+    "selected_model_interaction_mode": "concurrent_offensive_defensive",
+    "total_decision_to_action_latency_us": 59.581,
+    "total_decision_to_trigger_latency_us": 0.11
+  },
+  "internal_operating_speed": {
+    "cancel_to_send_us": 18.906,
+    "decision_to_send_trigger_us": 0.11,
+    "decision_to_send_us": 59.581,
+    "replace_to_send_us": null,
+    "rithmic_send_call_us": 59.531,
+    "tick_to_decision_us": 5.15,
+    "tick_to_send_trigger_us": 5.2,
+    "tick_to_send_us": 60.894
+  },
+  "latency_baseline_schema_version": "latency_baseline_summary_v1",
+  "model_interaction_mode": "concurrent_offensive_defensive",
+  "offensive_capability": {
+    "competitor_relation": "unknown",
+    "decision_to_send_trigger_us": 0.11,
+    "decision_to_send_us": 59.581,
+    "operating_band": "microsecond_loop",
+    "opportunity_window_compatible": true,
+    "placement_trigger_kpi": "tick_to_send_trigger_us",
+    "rithmic_send_call_us": 59.531,
+    "sdk_return_operating_band": "microsecond_loop",
+    "sdk_return_opportunity_window_compatible": true,
+    "tick_to_decision_us": 5.15,
+    "tick_to_send_trigger_us": 5.2,
+    "tick_to_send_us": 60.894,
+    "trigger_competitor_relation": "unknown",
+    "trigger_opportunity_window_compatible": true
+  },
+  "pending_state_model": {
+    "ack_reconciliation": {
+      "PENDING_CANCEL": [
+        "CANCELED",
+        "CANCEL_REJECTED"
+      ],
+      "PENDING_NEW": [
+        "ACKED",
+        "WORKING",
+        "REJECTED"
+      ],
+      "PENDING_REPLACE": [
+        "REPLACED",
+        "REPLACE_REJECTED"
+      ],
+      "WORKING": [
+        "PARTIALLY_FILLED",
+        "FILLED"
+      ]
+    },
+    "nonblocking_ack_default": true,
+    "send_transitions": {
+      "cancel": "PENDING_CANCEL",
+      "new": "PENDING_NEW",
+      "replace": "PENDING_REPLACE"
+    }
+  },
+  "risk_controls": {
+    "blocking_reasons": [],
+    "cancel_replace_throttle_compatible": true,
+    "cancel_replace_throttle_us": 50000.0,
+    "client_order_id_tracking": true,
+    "duplicate_order_protection": true,
+    "kill_switch_required": true,
+    "max_pending_notional": 0.0,
+    "max_pending_orders": 1,
+    "max_pending_quantity": 1.0,
+    "pending_orders_within_limit": true,
+    "pending_quantity_within_limit": true,
+    "required_controls": [
+      "max_pending_orders",
+      "max_pending_quantity",
+      "max_pending_notional",
+      "duplicate_order_protection",
+      "client_order_id_tracking",
+      "stale_pending_order_timeout",
+      "cancel_replace_throttles",
+      "reject_handling",
+      "state_reconciliation",
+      "kill_switch"
+    ],
+    "stale_pending_timeout_us": 500000.0,
+    "stale_state_risk": "managed",
+    "status": "configured"
+  },
+  "run_id": "live_latency_test_v2_20260618T075012Z",
+  "schema_version": "latency_capability_report_v1"
+}

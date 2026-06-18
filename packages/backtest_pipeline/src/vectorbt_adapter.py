@@ -22,7 +22,7 @@ import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Mapping, Optional, Tuple
 
 import numpy as np
 
@@ -58,6 +58,69 @@ DEFAULT_PARAM_GRID = {
     "stop_loss_pct": [None, 0.5, 1.0, 2.0],
     "take_profit_pct": [None, 0.5, 1.0, 2.0],
 }
+
+SURFACE_STABILITY_REQUIRED_CHECKS = (
+    "plateau_width",
+    "neighbor_stability",
+    "cliff_distance_from_loss_regions",
+    "parameter_perturbation_sensitivity",
+    "peak_vs_plateau_comparison",
+    "minimum_sample_size",
+)
+
+
+def _canonical_json(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def _json_primitive_screening_payload(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {
+            str(key): _json_primitive_screening_payload(item)
+            for key, item in sorted(value.items(), key=lambda item: str(item[0]))
+        }
+    if isinstance(value, tuple):
+        return [_json_primitive_screening_payload(item) for item in value]
+    if isinstance(value, list):
+        return [_json_primitive_screening_payload(item) for item in value]
+    if isinstance(value, np.ndarray):
+        return _json_primitive_screening_payload(value.tolist())
+    if isinstance(value, np.generic):
+        return _json_primitive_screening_payload(value.item())
+    if isinstance(value, (str, int, bool)) or value is None:
+        return value
+    if isinstance(value, float):
+        if np.isfinite(value):
+            return value
+        return str(value)
+    return str(value)
+
+
+def _hash_payload(value: Any) -> str:
+    return hashlib.sha256(_canonical_json(value).encode("utf-8")).hexdigest()
+
+
+def _strip_screening_hash_exclusions(value: Any) -> Any:
+    excluded = {"screening_artifact_hash", "created_at_utc", "timestamp_utc", "updated_at_utc"}
+    if isinstance(value, Mapping):
+        return {
+            key: _strip_screening_hash_exclusions(item)
+            for key, item in value.items()
+            if key not in excluded
+        }
+    if isinstance(value, list):
+        return [_strip_screening_hash_exclusions(item) for item in value]
+    return value
+
+
+def compute_screening_artifact_hash(artifact: Mapping[str, Any]) -> str:
+    """Hash terminal screening artifact content excluding identity timestamps/hash."""
+    payload = _json_primitive_screening_payload(artifact)
+    return _hash_payload(_strip_screening_hash_exclusions(payload))
+
+
+def _parameter_values_hash(values: Mapping[str, Any]) -> str:
+    return _hash_payload(dict(values))
 
 
 def _grid_size(grid: Dict[str, List[Any]]) -> int:

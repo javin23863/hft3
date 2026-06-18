@@ -24,12 +24,17 @@ INTERNAL_LATENCY_FIELDS = (
     "rithmic_send_call_us",
     "cancel_to_send_us",
     "replace_to_send_us",
+    "feed_latency_us",
+    "new_send_to_exchange_us",
+    "new_exchange_to_ack_us",
+    "cancel_send_to_exchange_us",
 )
 EXTERNAL_CONFIRMATION_FIELDS = (
     "send_to_ack_us",
     "cancel_to_ack_us",
     "replace_to_ack_us",
     "fill_received_latency_us",
+    "cancel_exchange_to_ack_us",
 )
 
 
@@ -103,6 +108,42 @@ class CapabilityAssumptions:
 
 class LatencyCapabilityError(ValueError):
     """Raised when a latency capability input is malformed."""
+
+
+COMPONENT_METRIC_FIELDS = (
+    "feed_latency_us",
+    "new_send_to_exchange_us",
+    "new_exchange_to_ack_us",
+    "cancel_send_to_exchange_us",
+    "cancel_exchange_to_ack_us",
+)
+
+
+def _hftbacktest_component_view(
+    internal: dict[str, float | None],
+    external: dict[str, float | None],
+) -> dict[str, Any]:
+    tick = internal.get("tick_to_send_us")
+    cancel_fire = internal.get("cancel_to_send_us")
+    cancel_ack = external.get("cancel_to_ack_us")
+    send_ack = external.get("send_to_ack_us")
+    feed = internal.get("feed_latency_us") if "feed_latency_us" in internal else None
+    return {
+        "feed_latency_us": feed,
+        "order_entry_local_us": tick,
+        "order_response_round_trip_us": send_ack,
+        "cancel_decision_to_send_us": cancel_fire,
+        "cancel_exchange_to_ack_us": cancel_ack,
+        "cancel_effective_time_us": None if feed is None or cancel_fire is None else feed + cancel_fire,
+        "cancel_confirmed_time_us": None
+        if feed is None or cancel_fire is None or cancel_ack is None
+        else feed + cancel_fire + cancel_ack,
+        "measurement_status": {
+            name: ("MEASURED" if internal.get(name) is not None or external.get(name) is not None else "OPEN")
+            for name in COMPONENT_METRIC_FIELDS
+        },
+        "note": "Exchange-segmented bands populated by probe v3 CC campaigns.",
+    }
 
 
 def classify_internal_speed(tick_to_send_us: float | None) -> str:
@@ -207,6 +248,7 @@ def build_capability_report(
         "blocking_reasons": blockers,
         "model_interaction_mode": interaction_mode.value,
         "assumptions": assumptions.to_dict(),
+        "hftbacktest_components": _hftbacktest_component_view(internal, external),
         "internal_operating_speed": internal,
         "external_confirmation_speed": external,
         "offensive_capability": {
@@ -317,6 +359,11 @@ def render_capability_markdown(report: dict[str, Any]) -> str:
         f"- Cancel-to-ack: `{_fmt_us(external.get('cancel_to_ack_us'))}`",
         f"- Replace-to-ack: `{_fmt_us(external.get('replace_to_ack_us'))}`",
         f"- Ack lag class: `{external.get('acknowledgment_lag_classification', 'unknown')}`",
+        "",
+        "## HftBacktest Components",
+        f"- Feed latency: `{_fmt_us((report.get('hftbacktest_components') or {}).get('feed_latency_us'))}`",
+        f"- Cancel effective (est): `{_fmt_us((report.get('hftbacktest_components') or {}).get('cancel_effective_time_us'))}`",
+        f"- Cancel confirmed (est): `{_fmt_us((report.get('hftbacktest_components') or {}).get('cancel_confirmed_time_us'))}`",
         "",
         "## Risk Controls",
         f"- Status: `{risk.get('status', 'unknown')}`",

@@ -1,5 +1,9 @@
 # CHI404 canonical entrypoints (agents: read before any CHI404 / Rithmic work)
 
+**Load first:** [FABLE_MINDSET.md](FABLE_MINDSET.md).  
+**“Latency test”** = native `rithmic_latency_probe` → **offensive `tick_to_send_us` + defensive `cancel_to_send_us`** in **µs**.  
+Ack sweeps (`chi404_run_*_latency_sweep.sh`) = **ms `send_to_ack`** for backtest only — different ask.
+
 **Graph first:** `graphify query "CHI404 R|API+ paper latency"` or read this doc.  
 **Do not** invent host-side log inject, workstation round-trips, or parallel orchestrators.
 
@@ -59,11 +63,11 @@ This script:
 
 Requires `EVENT_ID` (e.g. `CPI_2024_09_11_TIGHT`) for canonical research. Without it the script does a smoke replay only.
 
-## Paper order submit→ack latency
+## Latency test (offensive + defensive µs)
 
-**Forbidden:** `Add-Content`, host `f.write` order lines, `SWEEP-*` synthetic order IDs, TCP :65000 as ack.
+**Operator default when they say “latency test”.** Same probe; read offensive and defensive sections of the summary JSON.
 
-Use the direct native C++ probe for placement-speed and submit-to-ack baselines:
+Use the direct native C++ probe for placement-speed and cancel-path baselines:
 
 ```bash
 cd /root/hft3/repo
@@ -94,11 +98,17 @@ This writes:
 | Artifact | Path |
 |----------|------|
 | Samples | `data/latency_baselines/YYYY-MM-DD/<run_id>.jsonl` |
-| Summary | `reports/latency_baselines/<run_id>_summary.json` |
+| Summary (offensive/defensive/**µs**, round-trip ack) | `reports/latency_baselines/<run_id>_summary.json` |
 | Markdown | `reports/latency_baselines/<run_id>_summary.md` |
 
-The compatibility sweep script now refuses Python/ctypes latency measurement and
-prints this native-probe command shape:
+**Primary KPI:** `tick_to_send_us` (µs). **Defensive:** `cancel_to_send_us`, `cancel_to_ack_us`.  
+**Not placement speed:** `send_to_ack_us` (report separately; ms often used for replay).
+
+**Forbidden:** `Add-Content`, host `f.write` order lines, `SWEEP-*` synthetic order IDs, TCP :65000 as ack.
+
+## Paper ack campaign (ms — backtest authority only)
+
+Bulk submit→ack sweeps for replay injection — run only when operator asks for **ack/backtest latency**, not **latency test**:
 
 ```bash
 bash scripts/chi404_run_paper_latency_sweep.sh
@@ -115,6 +125,22 @@ Refresh probe summary:
 ```bash
 python3 scripts/latency_probe/summarize_latency.py --run-id <probe_run_id> --include-trial-appendix
 ```
+
+## HftBacktest three-component campaigns (CC-2 .. CC-6)
+
+Probe v3 emits feed/entry/response bands + `*_intp_samples.jsonl`. See [HFTBACKTEST_LATENCY_ONTOLOGY.md](HFTBACKTEST_LATENCY_ONTOLOGY.md).
+
+```bash
+bash scripts/chi404_run_latency_component_campaign.sh all
+python3 scripts/latency_probe/generate_latency_regimes.py
+```
+
+| Artifact | Path |
+|----------|------|
+| Component samples | `data/latency_baselines/YYYY-MM-DD/<run_id>.jsonl` |
+| IntpOrderLatency samples | `data/latency_baselines/YYYY-MM-DD/<run_id>_intp_samples.jsonl` |
+| Clock calibration | `reports/latency_baselines/<run_id>_clock_calibration.json` |
+| Regime models | `reports/latency_baselines/live_r01_chicago/latency_model_{fast,normal,stress,extreme}.json` |
 
 ## One-time / recovery (host pin + cpuset)
 
