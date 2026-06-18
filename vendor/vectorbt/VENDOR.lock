@@ -1,0 +1,7 @@
+# Pinned official VectorBT Rust for hft3 paid-compute screening lane.
+# Install: pip install 'vectorbt[rust]==1.0.0'
+source-lock
+upstream_repo_url=https://github.com/polakowo/vectorbt
+python_package=vectorbt[rust]
+python_package_version=1.0.0
+parity=rust_runtime_preflight_required_before_paid_compute

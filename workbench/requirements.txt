@@ -1,0 +1,2 @@
+# CI compatibility shim. Dependencies live in the canonical apps/workbench package.
+-r ../apps/workbench/requirements.txt

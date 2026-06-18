@@ -1,0 +1,6 @@
+# Pinned official HftBacktest for hft3 realism lane (HBT-0 source lock).
+# Install: bash scripts/install_hftbacktest_realism_deps.sh
+upstream_repo_url=https://github.com/nkaz001/hftbacktest
+upstream_commit_sha_or_tag=v2.4.2
+python_package_version=2.4.2
+pypi_package=hftbacktest

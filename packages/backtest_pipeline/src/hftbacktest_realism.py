@@ -13,10 +13,16 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from backtest_pipeline.src.fee_model import FeeModel
+from backtest_pipeline.src.research_clock import research_clock_validation_errors
+from backtest_pipeline.src.feature_plane import (
+    FEATURE_PLANE_ARTIFACT_FIELDS,
+    feature_plane_validation_errors,
+)
 from backtest_pipeline.src.vectorbt_adapter import compute_screening_artifact_hash
 
 UPSTREAM_REPO_URL = "https://github.com/nkaz001/hftbacktest"
 UPSTREAM_DOCS_URL = "https://hftbacktest.readthedocs.io/en/latest/index.html"
+HFTBACKTEST_VENDOR_LOCK_REL = Path("vendor/hftbacktest/VENDOR.lock")
 DOCS_PAGES_USED = [
     UPSTREAM_DOCS_URL,
     "https://hftbacktest.readthedocs.io/en/latest/data.html",
@@ -110,6 +116,7 @@ SCREENING_ARTIFACT_REQUIRED_FIELDS = (
     "promoted_reasons",
     "rejected_reasons",
     "no_lookahead_signal_shift_proof",
+    *FEATURE_PLANE_ARTIFACT_FIELDS,
 )
 REPLAY_ELIGIBILITY_REQUIRED_FIELDS = (
     "candidate_id",
@@ -147,6 +154,14 @@ REPLAY_ELIGIBILITY_REQUIRED_FIELDS = (
     "dsr_or_not_run",
     "pbo_or_not_run",
     "cscv_count_or_not_run",
+    "fee_stress_or_not_run",
+    "slippage_stress_or_not_run",
+    "latency_stress_or_not_run",
+    "holm_bh_or_not_run",
+    "null_battery_or_not_run",
+    "planted_alpha_or_not_run",
+    "adversarial_or_not_run",
+    "parameter_perturbation_or_not_run",
     "screening_status",
     "replay_eligibility_status",
     "rejection_reason_or_null",
@@ -183,6 +198,14 @@ REPLAY_ELIGIBILITY_NOT_RUN_EVIDENCE_FIELDS = (
     "dsr_or_not_run",
     "pbo_or_not_run",
     "cscv_count_or_not_run",
+    "fee_stress_or_not_run",
+    "slippage_stress_or_not_run",
+    "latency_stress_or_not_run",
+    "holm_bh_or_not_run",
+    "null_battery_or_not_run",
+    "planted_alpha_or_not_run",
+    "adversarial_or_not_run",
+    "parameter_perturbation_or_not_run",
 )
 REPLAY_SUMMARY_STATUSES = {
     "pass",
@@ -423,6 +446,7 @@ REPLAY_SUMMARY_REQUIRED_FIELDS = (
     "fail_closed_reasons",
 )
 L3_EVENT_TYPES = {
+    2: "TRADE_EVENT",
     10: "ADD_ORDER_EVENT",
     11: "CANCEL_ORDER_EVENT",
     12: "MODIFY_ORDER_EVENT",
@@ -430,7 +454,10 @@ L3_EVENT_TYPES = {
 }
 L2_EVENT_TYPES = {
     1: "DEPTH_EVENT",
-    2: "TRADE_EVENT",
+    # Per Codex round-3 P1: TRADE_EVENT (type 2) can appear in real CME MBO/L3
+    # captures alongside ADD/CANCEL/MODIFY/FILL events. Listing it as L2-only
+    # causes valid L3 feeds with trades to be rejected as L2_L3_MISMATCH.
+    # TRADE_EVENT is now treated as L3-compatible (not L2-exclusive).
     3: "DEPTH_CLEAR_EVENT",
 }
 L3_ORPHAN_EVENT_TYPES = {11, 12, 13}
@@ -450,38 +477,6 @@ def _canonical_json(value: Any) -> str:
 
 def _sha256_payload(value: Any) -> str:
     return hashlib.sha256(_canonical_json(value).encode("utf-8")).hexdigest()
-
-
-def _format_sha256_digest(raw_hex: str) -> str:
-    return f"sha256:{raw_hex}"
-
-
-def compute_latency_probe_artifact_hash(artifact_path: Path) -> str:
-    """Hash native probe summary/artifact bytes for realism evidence."""
-    digest = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
-    return _format_sha256_digest(digest)
-
-
-def compute_latency_value_or_sample_hash(latency_model: Mapping[str, Any]) -> str:
-    """Hash regime latency values for tamper-evident latency_model artifacts."""
-    payload = {
-        "latency_regime": latency_model.get("latency_regime"),
-        "feed_latency_ms": latency_model.get("feed_latency_ms"),
-        "order_entry_latency_ms": latency_model.get("order_entry_latency_ms"),
-        "order_response_latency_ms": latency_model.get("order_response_latency_ms"),
-        "latency_p50_ms": latency_model.get("latency_p50_ms"),
-        "latency_p90_ms": latency_model.get("latency_p90_ms"),
-        "latency_p99_ms": latency_model.get("latency_p99_ms"),
-    }
-    return _format_sha256_digest(_sha256_payload(payload))
-
-
-LATENCY_PROXY_STATUS_PARTIAL = "measured_partial"
-
-
-def _feed_latency_source_open(feed_source: Any) -> bool:
-    normalized = str(feed_source or "").lower()
-    return normalized.startswith("open") or "pending" in normalized
 
 
 def _optional_list_arg(value: list[str] | None, *, field: str) -> list[str] | None:
@@ -662,11 +657,7 @@ def validate_hftbacktest_latency_model(latency_model: Mapping[str, Any]) -> list
     reasons.extend(_validate_latency_component_mapping(latency_model))
 
     if family == "ConstantLatency":
-        feed_ms = latency_model.get("feed_latency_ms")
-        feed_open = _feed_latency_source_open(latency_model.get("feed_latency_source"))
-        if proxy_status == LATENCY_PROXY_STATUS_PARTIAL and feed_open and feed_ms is None:
-            pass
-        elif not _is_nonnegative_number(feed_ms):
+        if not _is_nonnegative_number(latency_model.get("feed_latency_ms")):
             reasons.append("invalid_constant_feed_latency_ms")
         if not _is_nonnegative_number(latency_model.get("order_entry_latency_ms")):
             reasons.append("invalid_constant_latency_entry_ms")
@@ -706,16 +697,11 @@ def validate_hftbacktest_latency_model(latency_model: Mapping[str, Any]) -> list
             reasons.append("missing_order_latency_unavailable_reason")
 
     if family in LATENCY_MEASURED_FAMILIES:
-        if proxy_status == "measured":
-            if probe_status not in LATENCY_NATIVE_PROBE_OK_STATUSES:
-                reasons.append("invalid_native_latency_probe_evidence")
-            reasons.extend(_validate_native_latency_probe_evidence(latency_model))
-        elif proxy_status == LATENCY_PROXY_STATUS_PARTIAL:
-            if probe_status not in LATENCY_NATIVE_PROBE_OK_STATUSES:
-                reasons.append("invalid_native_latency_probe_evidence")
-            reasons.extend(_validate_native_latency_probe_evidence(latency_model))
-        else:
+        if proxy_status != "measured":
             reasons.append("measured_latency_proxy_status_must_be_measured")
+        if probe_status not in LATENCY_NATIVE_PROBE_OK_STATUSES:
+            reasons.append("invalid_native_latency_probe_evidence")
+        reasons.extend(_validate_native_latency_probe_evidence(latency_model))
 
     for field in ("latency_p50_ms", "latency_p90_ms", "latency_p99_ms"):
         value = latency_model.get(field)
@@ -724,6 +710,15 @@ def validate_hftbacktest_latency_model(latency_model: Mapping[str, Any]) -> list
     if all(_is_nonnegative_number(latency_model.get(field)) for field in ("latency_p50_ms", "latency_p90_ms", "latency_p99_ms")):
         if not latency_model["latency_p50_ms"] <= latency_model["latency_p90_ms"] <= latency_model["latency_p99_ms"]:
             reasons.append("invalid_latency_percentile_order")
+        # Per Codex review finding 5: validate that each latency percentile is
+        # inside the LATENCY_BANDS_MS band [0.5, 10.0].  The ordering check above
+        # only ensures monotonicity; a monotonically-ordered triple outside the
+        # band still indicates a broken latency model.
+        for field in ("latency_p50_ms", "latency_p90_ms", "latency_p99_ms"):
+            value = latency_model[field]
+            if value < 0.5 or value > 10.0:
+                reasons.append("latency_percentile_outside_band")
+                break
 
     if family == "FeedLatency" and not reasons:
         # FeedLatency remains proxy-only/non-certifying by contract.
@@ -889,10 +884,12 @@ def validate_official_hbt4_replay_contract(
         reasons.append("official_replay_unsupported_time_in_force_policy")
 
     minimum_order_qty = fill_queue_model.get("minimum_order_qty")
-    intent_qty = selected_candidate.get("hbt4_order_intent", {}).get("quantity") if isinstance(
-        selected_candidate.get("hbt4_order_intent"),
-        Mapping,
-    ) else None
+    # Per Codex round-3 P2: honor official_replay_order_intent alias.
+    intent_obj = (
+        selected_candidate.get("hbt4_order_intent")
+        or selected_candidate.get("official_replay_order_intent")
+    )
+    intent_qty = intent_obj.get("quantity") if isinstance(intent_obj, Mapping) else None
     if not _is_positive_number(minimum_order_qty):
         reasons.append("official_replay_invalid_minimum_order_qty")
     elif not _is_positive_number(intent_qty) or float(intent_qty) < float(minimum_order_qty):
@@ -927,9 +924,12 @@ def validate_official_hbt4_replay_contract(
 
 
 def _official_replay_builder_queue_model_type(fill_queue_model: Mapping[str, Any]) -> str:
-    if fill_queue_model.get("fill_model_scope") == "l3_mbo":
-        return "LogProbQueueModel2"
-    return str(fill_queue_model.get("queue_model") or "LogProbQueueModel2")
+    # Per Codex round-3 P1: when fill_model_scope == "l3_mbo", use the
+    # declared queue model (should be L3FIFOQueueModel), not LogProbQueueModel2.
+    # The contract validator accepts L3FIFOQueueModel for L3 scope; the builder
+    # must honor the declared model, not silently switch it.
+    declared = str(fill_queue_model.get("queue_model") or "LogProbQueueModel2")
+    return declared
 
 
 def _load_fill_queue_model_artifact(fill_queue_model_path: Path | None) -> tuple[dict[str, Any], list[str]]:
@@ -1146,18 +1146,18 @@ def run_minimal_official_hftbacktest_replay(
         )
 
     try:
-        latency_ms = float(latency_model.get("order_entry_latency_ms") or latency_model.get("latency_p50_ms") or 0.0)
-        resp_ms = latency_model.get("order_response_latency_ms")
-        if not isinstance(resp_ms, (int, float)):
-            resp_ms = latency_ms
+        # Per Codex round-3 P2: preserve explicit zero order-entry latency.
+        # The `or` chain treats 0.0 as falsy and falls back to latency_p50_ms;
+        # use explicit None checks instead so 0.0 is honored.
+        _oe_latency = latency_model.get("order_entry_latency_ms")
+        if _oe_latency is None:
+            _oe_latency = latency_model.get("latency_p50_ms")
+        if _oe_latency is None:
+            _oe_latency = 0.0
+        latency_ms = float(_oe_latency)
         hbt = build_hftbacktest(
             str(data_npz_path),
             latency_ms=latency_ms,
-            latency_model={
-                **latency_model,
-                "order_entry_latency_ms": latency_ms,
-                "order_response_latency_ms": float(resp_ms),
-            },
             queue_model_type=_official_replay_builder_queue_model_type(fill_queue_model),
             tick_size=float(fill_queue_model.get("tick_size") or 0.25),
             lot_size=float(fill_queue_model.get("lot_size") or 1.0),
@@ -1252,9 +1252,27 @@ def run_minimal_official_hftbacktest_replay(
         hbt.clear_inactive_orders(0)
         observed_api_calls.extend(("HashMapMarketDepthBacktest.clear_inactive_orders", "clear_inactive_orders"))
         final_state = hbt.state_values(0)
-        gross_pnl = _float_field(final_state, "balance")
+        # PnL accounting: in hftbacktest, state.balance is NET of fees (the
+        # engine deducts fees from balance) and state.fee is the accumulated
+        # fee.  Therefore gross_pnl = balance + fee (add fees back) and
+        # net_pnl = balance (already net of fees).  The previous code computed
+        # net_pnl = gross_pnl - fees which double-deducted fees.  Per Codex
+        # review finding 1.
+        balance = _float_field(final_state, "balance")
         fees = _float_field(final_state, "fee")
-        net_pnl = gross_pnl - fees
+        gross_pnl = balance + fees
+        net_pnl = balance
+        # Per Codex round-3 P1: subtract declared market-impact charges from
+        # replay PnL when market_impact_mode == "external_charge". Without
+        # this, net_pnl overstates execution-adjusted expectancy by the
+        # declared market-impact cost.
+        market_impact_charge = fill_queue_model.get("market_impact_charge_value")
+        if (
+            _normalize_market_impact_mode(fill_queue_model.get("market_impact_mode"))
+            == "external_charge"
+            and _is_positive_number(market_impact_charge)
+        ):
+            net_pnl = net_pnl - float(market_impact_charge)
         orders_submitted = 1 if submit_ret == 0 else 0
         orders_acknowledged = 1 if response_ret in (0, 3) else 0
         fills_count = len(fills)
@@ -1292,10 +1310,20 @@ def run_minimal_official_hftbacktest_replay(
             "fill_rate": fills_count / max(orders_submitted, 1),
             "gross_pnl": gross_pnl,
             "net_pnl": net_pnl,
+            # Per Codex round-3 P2: persist replay fees for HBT5 comparison.
+            "total_fees": fees,
+            "fees": fees,
+            "fee_total": fees,
             "execution_adjusted_expectancy": net_pnl,
-            "max_drawdown": 0.0,
-            "adverse_selection_markout": None,
-            "spread_capture_or_cost": None,
+            # Per Codex review findings 2 & 3: this is a single-order replay,
+            # not a full equity curve, so max_drawdown is not meaningful.  The
+            # adverse_selection_markout and spread_capture_or_cost metrics are
+            # not measured in the HBT4 single-order replay path.  Use explicit
+            # string sentinels instead of 0.0 / None so the artifact clearly
+            # states what was not computed/measured.
+            "max_drawdown": "not_computed_single_order_replay",
+            "adverse_selection_markout": "not_measured_single_order_hbt4",
+            "spread_capture_or_cost": "not_measured_single_order_hbt4",
         }
         return artifact, replay_reasons
     except Exception as exc:
@@ -1345,6 +1373,46 @@ def _repo_dirty(repo_root: Path) -> bool:
     except Exception:
         return True
     return bool(status.strip())
+
+
+def _repo_root_default() -> Path:
+    return Path(__file__).resolve().parents[3]
+
+
+def read_hftbacktest_vendor_lock(repo_root: Path | None = None) -> dict[str, str]:
+    """Load pinned HftBacktest upstream + PyPI coordinates from vendor/hftbacktest/VENDOR.lock."""
+    root = repo_root or _repo_root_default()
+    lock_path = root / HFTBACKTEST_VENDOR_LOCK_REL
+    if not lock_path.is_file():
+        raise HftBacktestRealismArtifactError(f"hftbacktest_vendor_lock_missing:{lock_path}")
+    parsed: dict[str, str] = {}
+    for raw_line in lock_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        parsed[key.strip()] = value.strip()
+    required = ("upstream_repo_url", "upstream_commit_sha_or_tag", "python_package_version", "pypi_package")
+    missing = [field for field in required if not parsed.get(field)]
+    if missing:
+        raise HftBacktestRealismArtifactError(
+            f"hftbacktest_vendor_lock_incomplete:missing={','.join(missing)}"
+        )
+    if parsed["upstream_repo_url"] != UPSTREAM_REPO_URL:
+        raise HftBacktestRealismArtifactError("hftbacktest_vendor_lock_upstream_repo_mismatch")
+    if parsed["pypi_package"] != "hftbacktest":
+        raise HftBacktestRealismArtifactError("hftbacktest_vendor_lock_pypi_package_mismatch")
+    return parsed
+
+
+def default_hftbacktest_upstream_ref(repo_root: Path | None = None) -> str:
+    """Return the vendor-lock upstream tag used for source-lock verification."""
+    lock = read_hftbacktest_vendor_lock(repo_root)
+    tag = lock["upstream_commit_sha_or_tag"]
+    version = lock["python_package_version"]
+    return tag or f"v{version}"
 
 
 def detect_hftbacktest_installation() -> dict[str, Any]:
@@ -2278,8 +2346,14 @@ def _screening_hash(screening_artifact: Mapping[str, Any]) -> str:
 
 def _validate_screening_artifact_hash(screening_artifact: Mapping[str, Any]) -> list[str]:
     reasons: list[str] = []
+    nullable_fields = {
+        "target_event_type_or_null",
+        "allowed_context_set_id_or_null",
+    }
     for field in SCREENING_ARTIFACT_REQUIRED_FIELDS:
-        if field not in screening_artifact or screening_artifact[field] in ("", None):
+        if field not in screening_artifact:
+            reasons.append(f"missing_screening_artifact_field:{field}")
+        elif screening_artifact[field] in ("", None) and field not in nullable_fields:
             reasons.append(f"missing_screening_artifact_field:{field}")
     if screening_artifact.get("screening_backend") != "vectorbt":
         reasons.append("screening_artifact_backend_not_vectorbt")
@@ -2316,6 +2390,7 @@ def _validate_screening_artifact_hash(screening_artifact: Mapping[str, Any]) -> 
         return reasons
     if observed and observed != expected:
         reasons.append("screening_artifact_hash_mismatch")
+    reasons.extend(feature_plane_validation_errors(screening_artifact))
     return reasons
 
 
@@ -2362,6 +2437,13 @@ def validate_candidate_replay_eligibility(candidate: Mapping[str, Any]) -> list[
         if field not in candidate or _is_missing_candidate_field(candidate.get(field)):
             reasons.append(_replay_ineligible_reason(f"missing_field:{field}"))
 
+    if "research_clock" in candidate and not _is_missing_candidate_field(candidate.get("research_clock")):
+        for clock_error in research_clock_validation_errors(
+            candidate["research_clock"],
+            context="candidate.research_clock",
+        ):
+            reasons.append(_replay_ineligible_reason(clock_error))
+
     for field in REPLAY_ELIGIBILITY_REQUIRED_MAPPING_FIELDS:
         value = candidate.get(field)
         if field in candidate and (not isinstance(value, Mapping) or not value):
@@ -2395,8 +2477,14 @@ def validate_candidate_replay_eligibility(candidate: Mapping[str, Any]) -> list[
         reasons.append(_replay_ineligible_reason("candidate_has_rejection_reason"))
 
     for field in REPLAY_ELIGIBILITY_NOT_RUN_EVIDENCE_FIELDS:
-        if field in candidate and _is_not_run_evidence(candidate.get(field)):
+        value = candidate.get(field)
+        if field in candidate and _is_not_run_evidence(value):
             reasons.append(_replay_ineligible_reason(f"{field}_not_run"))
+        # Per Codex round-3 P2: also reject §10 maps with status "fail".
+        if isinstance(value, Mapping):
+            map_status = _status_text(value.get("status"))
+            if map_status == "fail":
+                reasons.append(_replay_ineligible_reason(f"{field}_status_fail"))
 
     dsr_evidence = candidate.get("dsr_or_not_run")
     if "dsr_or_not_run" in candidate and not _is_not_run_evidence(dsr_evidence):
@@ -2643,7 +2731,11 @@ def write_hftbacktest_realism_artifacts(
         "candidate_id": selected_id,
         "model_id": selected_candidate.get("hypothesis_id") or selected_candidate.get("model_id") or "",
         "symbol": selected_candidate.get("symbol") or "",
-        "research_clock": screening_artifact.get("research_clock") or "",
+        "research_clock": (
+            selected_candidate.get("research_clock")
+            or screening_artifact.get("research_clock")
+            or ""
+        ),
         "event_or_session_scope": screening_artifact.get("event_id") or "not_run_hbt0",
         "hftbacktest_source_lock_hash": lock["source_lock_hash"],
         "data_validation_status": data_validation["data_validation_status"],

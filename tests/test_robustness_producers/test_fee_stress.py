@@ -250,3 +250,16 @@ class TestGuards:
         result = fee_stress_for_cell(expecs, n_trades, fee_list, tv_list)
         assert result["stress_data_available"] is True
         assert result["reason"] is None
+
+    def test_single_fee_broadcast_fails_closed(self):
+        """One fee value for many events must not silently broadcast via NumPy."""
+        expecs = [1.0, 2.0, 3.0]
+        n_trades = [5, 5, 5]
+        fee_list = [1.0]  # length 1 vs 3 expectancies
+        tv_list = [1.25, 1.25, 1.25]
+        result = fee_stress_for_cell(expecs, n_trades, fee_list, tv_list)
+        assert result["stress_data_available"] is False
+        assert "decomposition_length_mismatch" in (result["reason"] or "")
+        assert "per_event_fee_per_rt" in (result["reason"] or "")
+        assert result["fee_x2_pass"] is None
+        assert result["stress_pass"] is None
