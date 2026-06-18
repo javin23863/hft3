@@ -60,7 +60,12 @@ if _env_vault:
 elif os.environ.get("USERPROFILE"):
     _DEFAULT_VAULT_ROOT = Path(os.environ["USERPROFILE"]) / "Desktop" / "Obsidian Vault From VPS" / "hft3"
 else:
-    _DEFAULT_VAULT_ROOT = Path.home() / "Desktop" / "Obsidian Vault From VPS" / "hft3"
+    # Fallback: check common vault locations relative to repo root and home dir.
+    _candidate = _REPO_ROOT.parent / "Desktop" / "Obsidian Vault From VPS" / "hft3"
+    if _candidate.is_dir():
+        _DEFAULT_VAULT_ROOT = _candidate
+    else:
+        _DEFAULT_VAULT_ROOT = Path.home() / "Desktop" / "Obsidian Vault From VPS" / "hft3"
 _VAULT_LIBRARY_PAPERS = _DEFAULT_VAULT_ROOT / "library" / "papers"
 
 
@@ -444,6 +449,18 @@ def check_invariants(
     ``invariant_results`` maps ``"B1"``→``"pass"|"fail"|"na"``. Missing keys
     default to ``"na"``. Each returned :class:`InvariantCheck` carries the
     authority citation from :data:`INVARIANT_AUTHORITY`.
+
+    .. note::
+
+       This function is **deterministic** — it does not inspect diff text or
+       source code to detect invariant violations. The caller (typically the
+       ``cavecrew-reviewer`` agent running Pass B) is responsible for analyzing
+       the diff and feeding the results mapping. The gate applies rules to
+       those results; it does not replace the reviewer's judgment. This
+       coupling is intentional: the gate must be LLM-free and deterministic,
+       so invariant detection stays in the reviewer while invariant
+       enforcement (fail-closed, authority citation, area applicability)
+       lives here.
     """
     results = dict(invariant_results or {})
     applicable = _applicable_invariants(area)
@@ -524,7 +541,9 @@ def _check_vectorbt_call(call_site: Mapping[str, Any]) -> list[str]:
             issues.append(f"{matched}:missing_required_arg:{arg}")
     engine = str(call_site.get("engine") or "").lower()
     scope = str(call_site.get("scope") or call_site.get("screening_scope") or "").lower().replace("-", "_")
-    if scope in {"paid", "paid_compute", "broad", "broad_screen", "all_model", "all_models", "refine"}:
+    # Normalize common hyphenated forms to the canonical underscore form.
+    _PAID_COMPUTE_SCOPES = {"paid", "paid_compute", "broad", "broad_screen", "all_model", "all_models", "refine"}
+    if scope in _PAID_COMPUTE_SCOPES:
         if engine and engine != "rust":
             issues.append(f"{matched}:non_rust_engine_for_paid_compute_scope:{engine or 'missing'}")
     if call_site.get("hand_rolled") is True:
