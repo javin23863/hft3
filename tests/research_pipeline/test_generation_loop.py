@@ -104,6 +104,7 @@ def test_elite_refinement_dedup_and_neighbors() -> None:
         tested_hashes=tested,
         max_candidates=5,
         exploration_fraction=0.0,
+        family_search_enabled=False,
     )
     assert out
     assert all(c.candidate_id != "deadbeefdeadbeef" for c in out)
@@ -166,6 +167,8 @@ def test_generation_loop_spies_runners(tmp_path: Path, monkeypatch) -> None:
     cfg = AutoresearchConfig(
         max_generations=2,
         max_candidates_per_generation=3,
+        exploration_fraction=0.0,
+        family_search_enabled=False,
         run_robustness=True,
         run_hft_campaign=True,
         hft_source_npz=tmp_path / "x.npz",

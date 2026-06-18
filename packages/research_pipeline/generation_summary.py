@@ -78,6 +78,8 @@ def _row_from_promoted(promoted: Mapping[str, Any], *, vectorbt_pass: bool = Tru
         "model_id": str(promoted.get("hypothesis_id") or promoted.get("model_id") or ""),
         "strategy_params": dict(promoted.get("param_values") or promoted.get("strategy_params") or {}),
         "feature_recipe_hash": promoted.get("feature_recipe_hash") or metrics.get("feature_recipe_hash"),
+        "feature_recipe": promoted.get("feature_recipe") or metrics.get("feature_recipe"),
+        "research_clock": promoted.get("research_clock") or metrics.get("research_clock"),
         "vectorbt_pass": vectorbt_pass,
         "robustness_pass": promoted.get("robustness_pass"),
         "hft_replay_status": promoted.get("hft_replay_status"),

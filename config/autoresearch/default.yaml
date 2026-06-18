@@ -13,6 +13,10 @@ run_hft_campaign: false
 hft_stages: [0]
 vectorbt_min_trades: 3
 
+# Phase 7: bounded feature-family recipe search on Gen N+1 elites
+family_search_enabled: true
+family_search_fraction: 0.4
+
 # Required when run_hft_campaign: true
 hft_source_npz: null
 hft_latency_model: null

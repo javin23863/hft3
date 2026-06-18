@@ -13,14 +13,21 @@ Status as of merge `d6665025` (VectorBT VBT-HBT handoff + HftBacktest campaign o
 | HftBacktest campaign runner + manifest | `hft_campaign/runner.py`, `manifest.py` |
 | Workbench robustness / WFC | `campaign_runner.run_campaign` |
 
-## OPEN (superseded by FEATURE_FAMILY_IMPLEMENTATION_AUDIT — Phase 7)
+## DONE (Phase 7 — family-aware autoresearch Gen N+1)
+
+| Capability | Location |
+|---|---|
+| Bounded family recipe variants | `feature_family_proposals.py` |
+| Elite refinement + family search budget | `elite_refinement.py`, `config/autoresearch/default.yaml` |
+| Elite row carries `feature_recipe` | `generation_summary.py` |
+
+## OPEN (remaining feature-family work)
 
 | Capability | Missing connection | Minimal change |
 |---|---|---|
-| Feature-recipe candidate generation | Autoresearch refines 4 execution params only | Phase 7: family-aware `propose_next_candidates` |
-| VectorBT fs_v1 row-loop consumption | Implemented when feature store NPZ exists; bar stub fallback otherwise | Phase 7: autonomous feature-family learning |
-| HBT recipe-hash equality | Implemented in `recipe_hash_gate.py` + stage0 validation | Phase 7: feature-family search in autoresearch |
 | Cross-asset real leader | Placeholder OFI | Phase 2: multi-symbol sync |
+| End-to-end validation smoke | Phase 8 | Full pipeline autoresearch + fs_v1 + HBT handoff |
+| Paid-compute readiness | Phase 9 | `FEATURE_FAMILY_STATUS_MANIFEST.yaml` gate |
 
 ## DONE (this plan slice — multi-generation loop shell)
 
@@ -28,7 +35,7 @@ Status as of merge `d6665025` (VectorBT VBT-HBT handoff + HftBacktest campaign o
 |---|---|
 | Multi-gen driver | `generation_loop.py` + `--autoresearch` |
 | Cross-gen lineage | `generation_state.py`, `autoresearch_manifest.json` |
-| Elite refinement Gen N+1 | `elite_refinement.py` (execution params; family recipes Phase 7) |
+| Elite refinement Gen N+1 | `elite_refinement.py` (execution params + family recipe variants) |
 | Generation outcome aggregation | `generation_summary.py` |
 | Workbench robustness from loop | `make_default_robustness_fn` → `frozen_strategy_params` |
 | Review memory roots + JSONL | `review_memory.py` |

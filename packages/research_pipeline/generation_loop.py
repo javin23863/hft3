@@ -65,6 +65,8 @@ class AutoresearchConfig:
     hft_fill_queue_model: Path | None = None
     native_hot_path_evidence: list[str] | None = None
     stop_file: Path | None = None
+    family_search_enabled: bool = True
+    family_search_fraction: float = 0.4
 
 
 def load_autoresearch_config(path: Path, *, overrides: dict[str, Any] | None = None) -> AutoresearchConfig:
@@ -78,7 +80,7 @@ def load_autoresearch_config(path: Path, *, overrides: dict[str, Any] | None = N
         max_generations=int(raw.get("max_generations", 3)),
         max_candidates_per_generation=int(raw.get("max_candidates_per_generation", 5)),
         robustness_max_candidates=int(raw.get("robustness_max_candidates", 3)),
-        exploration_fraction=float(raw.get("exploration_fraction", 0.2)),
+        exploration_fraction=min(1.0, max(0.0, float(raw.get("exploration_fraction", 0.2)))),
         hft_workers=int(raw.get("hft_workers", 1)),
         stop_no_improvement_generations=int(raw.get("stop_no_improvement_generations", 2)),
         target_score=raw.get("target_score"),
@@ -93,6 +95,8 @@ def load_autoresearch_config(path: Path, *, overrides: dict[str, Any] | None = N
         hft_fill_queue_model=Path(raw["hft_fill_queue_model"]) if raw.get("hft_fill_queue_model") else None,
         native_hot_path_evidence=list(raw.get("native_hot_path_evidence") or []),
         stop_file=Path(raw["stop_file"]) if raw.get("stop_file") else None,
+        family_search_enabled=bool(raw.get("family_search_enabled", True)),
+        family_search_fraction=min(1.0, max(0.0, float(raw.get("family_search_fraction", 0.4)))),
     )
 
 
@@ -528,6 +532,8 @@ def run_autoresearch_loop(
                 exploration_fraction=cfg.exploration_fraction,
                 target_event_id=event_id,
                 target_symbol=cfg.symbol,
+                family_search_enabled=cfg.family_search_enabled,
+                family_search_fraction=cfg.family_search_fraction,
             )
         if not candidates:
             manifest["stop_reason"] = "no_candidates_after_dedup"
