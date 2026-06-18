@@ -6,28 +6,79 @@ Use this order. Do **not** skip to legacy paths below.
 
 Baseline metrics: [CPI_2024_09_11_TIGHT_BASELINE.md](CPI_2024_09_11_TIGHT_BASELINE.md)
 
-## 1. Macro event replay (primary research)
+## 1. VectorBT screen -> HftBacktest realism (primary research)
+
+Broad screening, refine, all-model, and paid-compute research now starts with
+the VectorBT handoff artifact. Broad scopes require the Rust VectorBT engine and
+fail closed without it. Execution-realism evidence then moves through the
+official HftBacktest source-lock/data/latency/fill gates in
+[HFTBACKTEST_REALISM_ENGINE_SPEC.md](../project/HFTBACKTEST_REALISM_ENGINE_SPEC.md).
+
+Retired hft3 replay entrypoints such as `scripts/run_event_replay.py`,
+`scripts/run_event_universe.py`, `replay_matrix.py`, and `ReplaySession` are
+historical only for this path. Do not use them as active research, fallback, or
+new workbench execution routes.
+
+```bash
+python scripts/run_pipeline.py \
+  --thesis "Fade spread blowout after CPI surprise on MES" \
+  --event-id CPI_2024_09_11_TIGHT \
+  --vectorbt \
+  --hftbacktest-realism \
+  --hftbacktest-data-npz <validated_hftbacktest_npz> \
+  --hftbacktest-latency-model <measured_latency_model.json> \
+  --hftbacktest-fill-queue-model <fill_queue_model.json> \
+  --hftbacktest-upstream-ref v2.4.2 \
+  --native-hot-path-evidence reports/latency_baselines/order_ack_campaign_20260611T072116Z_summary.json#sha256:<digest>
+```
+
+Equivalent handoff when a terminal screening artifact already exists:
+
+```bash
+python scripts/run_hftbacktest_realism.py \
+  --screening-artifact research_cards/pipeline_runs/<run_id>/screening_artifact.json \
+  --data-npz <validated_hftbacktest_npz> \
+  --latency-model <measured_latency_model.json> \
+  --fill-queue-model <fill_queue_model.json> \
+  --hftbacktest-upstream-ref v2.4.2 \
+  --native-hot-path-evidence reports/latency_baselines/order_ack_campaign_20260611T072116Z_summary.json#sha256:<digest>
+```
+
+This command now writes the HBT-0 through HBT-4 artifact set when supplied with
+valid inputs: source lock, data validation, latency model, fill/queue model,
+`official_replay.json`, orders/fills/markouts, discrepancies, and summary. It
+still fails closed unless the input is a Rust VectorBT screen-passed handoff,
+official HftBacktest replay runs non-accelerated, and the source lock contains
+hash-backed native C++ hot-path evidence. Exit code `2` remains expected for
+honest `research_only`, `market_impact_not_modeled`, or failing gate states.
+
+## 1a. Macro event replay (retired historical path)
 
 **Backtester certification:** Every replay output includes a `certification_stamp` (T1). See [BACKTESTER_CERTIFICATION.md](BACKTESTER_CERTIFICATION.md) for T0–T4 gates.
 
-**When:** Backtest a scheduled macro window (CPI, NFP, etc.) on Databento MBO with CHI404-measured latency.
+**Status:** Retired for active VectorBT/HftBacktest research. Kept only so
+older artifacts and audit notes remain interpretable.
+
+**Historical use:** Backtest a scheduled macro window (CPI, NFP, etc.) on
+Databento MBO with CHI404-measured latency.
 
 ```bash
+# Historical only; do not use for new VectorBT/HftBacktest work.
 python scripts/run_event_replay.py \
   --event-id CPI_2024_09_11_TIGHT \
   --chi404-summary runtime/latency_reports/latency_summary.json
 ```
 
 - Resolves window from `data_system/config/events.csv` (never `date +%F` as research key).
-- **Primary engine:** `replay_execution_adapter` (`ReplaySession` + `HftBacktestSimulatedExchangeAdapter` + combined hypotheses).
-- **Secondary engine:** `per_hypothesis_replay` (same adapter contract, one hypothesis per session).
-- Use `--skip-combined-replay` to run per-hypothesis matrix only (faster).
-- Output: `research_cards/<event_id>_replay/`
-- Lifecycle audits: `runtime/replay_audits/{run_id}_order_lifecycle.jsonl`
+- **Historical primary engine:** `replay_execution_adapter` (`ReplaySession` + `HftBacktestSimulatedExchangeAdapter` + combined hypotheses).
+- **Historical secondary engine:** `per_hypothesis_replay` (same adapter contract, one hypothesis per session).
+- Historical output: `research_cards/<event_id>_replay/`
+- Historical lifecycle audits: `runtime/replay_audits/{run_id}_order_lifecycle.jsonl`
 
 Equivalent:
 
 ```bash
+# Historical only; do not use for new VectorBT/HftBacktest work.
 python -m data_system.rithmic_trial.pipeline replay-event \
   --event-id CPI_2024_09_11_TIGHT
 ```
@@ -43,6 +94,7 @@ python scripts/run_pdf_hybrid_replay.py --event-id CPI_2024_09_11_TIGHT
 Or via event replay:
 
 ```bash
+# Historical only; do not use for new VectorBT/HftBacktest work.
 python scripts/run_event_replay.py --event-id CPI_2024_09_11_TIGHT --engine pdf_hybrid
 ```
 
@@ -76,22 +128,19 @@ Or via hybrid wrapper: `python scripts/run_hybrid_pipeline_gate.py --tier smoke 
 **Verify (scope-green):**
 
 ```bash
+# Historical verify only.
 python -m pytest tests/test_run_event_replay.py tests/test_replay_must_emit_order_intents.py tests/test_replay_clock_order_timestamps.py -q
 python scripts/run_hybrid_pipeline_gate.py --event-id CPI_2024_09_11_TIGHT  # when touching hybrid gate
 ```
 
-## 1b. Autoresearch pipeline (NL thesis)
+## 1b. Autoresearch pipeline (legacy NL thesis or dry-run only)
 
-**When:** Ingest a natural-language trading thesis (and optional research PDF), generate candidate models, backtest, and write pipeline artifacts. Workstation-only; no live deploy until CHI404 is stable.
+**Status:** For active VectorBT/HftBacktest research, use section 1 with
+`--vectorbt`. The no-VectorBT command below is retained for historical
+interpretation and dry-run candidate parsing only; it must not be used as a
+full research/backtest path.
 
 ```bash
-pip install -r packages/research_pipeline/requirements.txt
-
-python scripts/run_pipeline.py \
-  --thesis "Fade spread blowout after CPI surprise on MES" \
-  --event-id CPI_2024_09_11_TIGHT \
-  --max-candidates 5
-
 # Parse + candidates only (no backtest)
 python scripts/run_pipeline.py \
   --thesis "Fade spread blowout after CPI" \
@@ -99,77 +148,49 @@ python scripts/run_pipeline.py \
   --dry-run --no-llm
 ```
 
-Optional document ingestion:
+Optional document ingestion is dry-run only unless section 1's VectorBT/HftBacktest
+handoff flags are also supplied:
 
 ```bash
 python scripts/run_pipeline.py \
   --thesis "..." \
   --doc docs/references/dev_instructions.pdf \
-  --event-id CPI_2024_09_11_TIGHT
+  --event-id CPI_2024_09_11_TIGHT \
+  --dry-run --no-llm
 ```
 
 Output: `research_cards/pipeline_runs/<run_id>/`. Authority: [AUTORESEARCH_PIPELINE.md](../research/AUTORESEARCH_PIPELINE.md), source PDF [dev_instructions.pdf](../references/dev_instructions.pdf).
 
 **Verify (scope-green):** `python -m pytest tests/test_research_pipeline.py -q`
 
-## 1c. Low-float runner (equities lane)
+## 1c. Low-float runner (moved out / historical)
 
-**When:** Screen and backtest low-float momentum sessions on quarantined equities data. Workstation-only; separate from CME MBO production path.
+**Status:** Not an active hft3 research entrypoint. hft3's canonical active
+research path in this repo is CME VectorBT screen -> HftBacktest realism. The
+low-float equities lane was moved to `hft3-equities-lane`; use that repository's
+own entrypoint docs if mounted. Historical hft3 references remain only so old
+artifacts are interpretable.
 
-```bash
-pip install -r packages/equities_lane/requirements.txt
+Historical output: `research_cards/equities/<run_id>/`. Authority:
+[LOW_FLOAT_RUNNER.md](../research/LOW_FLOAT_RUNNER.md), source PDF
+[low_float_momentum_anomaly_research_pack.pdf](../references/low_float_momentum_anomaly_research_pack.pdf).
 
-python -m equities_lane.pipeline fixture-backtest
+## 1d. Crypto alpha (moved out / historical)
 
-python -m equities_lane.pipeline experiment \
-  --config packages/equities_lane/config/universe.yaml \
-  --ablation all
-```
+**Status:** Not an active hft3 research entrypoint. hft3's canonical active
+research path in this repo is CME VectorBT screen -> HftBacktest realism. The
+crypto lane was moved to `hft3-crypto-lane`; use that repository's own entrypoint
+docs if mounted. Historical hft3 references remain only so old artifacts are
+interpretable.
 
-Optional Databento download (requires `DATABENTO_API_KEY`):
+Historical hypotheses: `research/hypotheses/crypto_alpha_engine_extracted_hypotheses.yaml`.
+Historical manifest: `research/hypotheses/crypto_alpha_engine_manifest.yaml`.
+Historical report: [crypto_alpha_engine_extraction_report.md](../../research/reports/crypto_alpha_engine_extraction_report.md).
 
-```bash
-python -m equities_lane.pipeline download --symbol GME --date 2021-01-27
-python -m equities_lane.pipeline normalize --raw data/equities/raw/<file>.dbn.zst
-```
+## 2. Single-hypothesis drill-down (historical/non-primary)
 
-Output: `research_cards/equities/<run_id>/`. Authority: [LOW_FLOAT_RUNNER.md](../research/LOW_FLOAT_RUNNER.md), source PDF [low_float_momentum_anomaly_research_pack.pdf](../references/low_float_momentum_anomaly_research_pack.pdf).
-
-**Verify (scope-green):** `python -m pytest tests/test_equities_lane/ -q`
-
-## 1d. Crypto alpha (crypto lane)
-
-**When:** Walk-forward ML research on BTC spot/perp basis, funding, Deribit IV/RV, and local Bitcoin node mempool features. Workstation-only; quarantined from CME production path.
-
-```bash
-pip install -r packages/crypto_lane/requirements.txt
-
-# One-time (or after hypothesis schema changes):
-python packages/crypto_lane/scripts/generate_yaml_artifacts.py
-
-python -m crypto_lane.pipeline discover
-python -m crypto_lane.pipeline smoke --candidate crypto_h1_basis_compression
-python -m crypto_lane.pipeline smoke
-```
-
-**Validation modes** (crypto addendum: [packages/crypto_lane/docs/VALIDATION_HONESTY.md](../../packages/crypto_lane/docs/VALIDATION_HONESTY.md); repo-wide: [VALIDATION_HONESTY.md](../VALIDATION_HONESTY.md)):
-
-- **Dev/CI default:** `validation_mode: fixture` — bundled fixture CSVs; no live ingest required.
-- **Production real-data:** run ingest first (`python -m crypto_lane.pipeline ingest` or pull/normalize steps), populate `data/crypto/normalized/`, then smoke with `validation_mode: production` in backtest YAML.
-
-**Verify (scope-green gate):**
-
-```bash
-python -m pytest tests/test_crypto_lane/ -q
-```
-
-Targeted pytest on single files is smoke-only; it does not substitute for the command above.
-
-Hypotheses: `research/hypotheses/crypto_alpha_engine_extracted_hypotheses.yaml`. Manifest: `research/hypotheses/crypto_alpha_engine_manifest.yaml`. Report: [crypto_alpha_engine_extraction_report.md](../../research/reports/crypto_alpha_engine_extraction_report.md).
-
-## 2. Single-hypothesis drill-down
-
-**When:** One hypothesis family on the same event NPZ.
+**Status:** Historical diagnostic only. Do not use as the active
+VectorBT/HftBacktest research path.
 
 ```bash
 python scripts/run_single_hyp_backtest.py \
@@ -179,9 +200,10 @@ python scripts/run_single_hyp_backtest.py \
 
 Uses `SignalBacktester` only (not `ReplayRunner`).
 
-## 3. Full hypothesis matrix (offline sweep)
+## 3. Full hypothesis matrix (historical/non-primary)
 
-**When:** Latency band sweep across all active hypotheses.
+**Status:** Historical diagnostic only. Do not use as the active
+VectorBT/HftBacktest research path.
 
 ```bash
 python backtest_pipeline/src/research_runner.py \
@@ -195,7 +217,8 @@ Or orchestrated:
 python scripts/run_offline_pipeline.py --skip-download --event-id CPI_2024_09_11_TIGHT
 ```
 
-Uses `SignalBacktester` per hypothesis. HftBacktest combined replay is **opt-in** (`--full-hft` on offline pipeline).
+Uses `SignalBacktester` per hypothesis. This is not an official HftBacktest
+realism handoff and is not an active full-research substitute.
 
 ## 4. Rithmic trial live (CHI404 only)
 
@@ -218,7 +241,7 @@ EVENT_ID=CPI_2024_09_11_TIGHT bash scripts/chi404_run_trial_live.sh
 | Path | Role | Why not for CPI research |
 |------|------|---------------------------|
 | `pipeline replay-sample --simple` | Trial NPZ smoke | Trade-only trial capture; wrong calendar; no event_id |
-| `ReplayRunner` alone | Queue fill experiment | Was depth-only + mean@0.25 before fix; use via `run_event_replay` |
+| `ReplayRunner` alone | Queue fill experiment | Was depth-only + mean@0.25 before fix; retired for new VectorBT/HftBacktest work |
 | `run_offline_pipeline` without `--event-id` | Old matrix-only | Skips canonical event replay report |
 | Trial NPZ under `data/replay/hftbacktest/rithmic_trial/` | Infra quarantine | Not Databento CPI body |
 
@@ -247,7 +270,10 @@ Seven models from [algorithmic_trading_strategy_development.pdf](../references/a
 - Specs: [docs/structural_models/PDF_MODELS.md](../structural_models/PDF_MODELS.md)
 - Registry: `get_structural_models()` (not `get_active_hypotheses()`)
 
-Macro event replay (`run_event_replay.py`) runs HYP backtests by default; PDF hybrid replay is available via `--engine pdf_hybrid` or [PDF_HYBRID_REPLAY.md](../structural_models/PDF_HYBRID_REPLAY.md).
+Historical macro event replay (`run_event_replay.py`) ran HYP backtests by
+default. For new VectorBT/HftBacktest research, use the primary handoff above.
+PDF hybrid replay notes remain in [PDF_HYBRID_REPLAY.md](../structural_models/PDF_HYBRID_REPLAY.md)
+for artifact interpretation only.
 
 ## 6. Microstructure workbench (unified 51-model research)
 
@@ -277,7 +303,8 @@ python -m workbench campaign --model HYP_5 --symbol MES.v.0 --dry-run
 
 **Latency authority:** C++ measured distributions from CHI404 probes — not Python wall time. See [docs/workbench/LATENCY_ARCHITECTURE.md](../workbench/LATENCY_ARCHITECTURE.md). (config, manifest, trades.parquet, report.md)
 - Wraps `SignalBacktester` (primary) and documents HftBacktest queue path via matching config
-- Does **not** replace `run_event_replay.py`; use workbench for per-model latency viability and promotion gates
+- Does **not** replace the VectorBT/HftBacktest realism path; use workbench for
+  per-model latency viability and exploratory promotion gates only
 
 ## 7. Economic event universe (macro calendar API)
 

@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from features_engine.src.model_registry import all_slugs, load_model_registry
+from features_engine.src.model_registry import all_slugs, legacy_to_slug, load_model_registry
 
 from research_pipeline.llm import generate_json
 from research_pipeline.types import ParsedHypothesis
@@ -45,10 +45,40 @@ def _hypothesis_slugs() -> List[str]:
     return sorted(k for k, v in reg.items() if v.get("kind") == "hypothesis")
 
 
+def _slug_from_parentheses(thesis: str) -> Optional[str]:
+    """Extract canonical slug from thesis template '(SLUG)' suffix."""
+    models = load_model_registry().get("models", {})
+    for match in re.finditer(r"\(([A-Z][A-Z0-9_]+)\)", thesis):
+        slug = match.group(1)
+        if slug in models:
+            return slug
+    return None
+
+
+def _legacy_slug_from_thesis(thesis: str) -> Optional[str]:
+    match = re.search(r"\bHYP_(\d+)\b", thesis, re.I)
+    if not match:
+        return None
+    legacy = f"HYP_{match.group(1)}"
+    return legacy_to_slug().get(legacy)
+
+
 def _match_model(thesis: str) -> str:
+    slug_paren = _slug_from_parentheses(thesis)
+    if slug_paren is not None:
+        return slug_paren
+    legacy_slug = _legacy_slug_from_thesis(thesis)
+    if legacy_slug is not None:
+        return legacy_slug
     lower = thesis.lower()
     for pattern, slug in _KEYWORD_MODEL:
         if re.search(pattern, lower):
+            return slug
+    for slug, entry in load_model_registry().get("models", {}).items():
+        if entry.get("kind") != "hypothesis":
+            continue
+        display = str(entry.get("display_name") or "").lower()
+        if display and display in lower:
             return slug
     return "SPREAD_BLOWOUT_RECOMPRESSION"
 

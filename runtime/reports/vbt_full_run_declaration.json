@@ -1,0 +1,14 @@
+{
+  "host_vcpu": 4,
+  "reserved_vcpu": 0,
+  "workers_requested": 4,
+  "expected_work_units": 206,
+  "units_source": "runtime/reports/vbt_full_units.jsonl (CPI+NFP HYP_5 catalog lane)",
+  "stall_minutes": 30,
+  "abort_on_failed_units": true,
+  "git_head": "c6677eb5bbcd0a451dd9418faaf4403f3bdfdd3d",
+  "events_csv_hash": "not_applicable_for_vectorbt_pilot",
+  "lake_manifest_hash": "pilot_requires_lake_manifest_before_screen",
+  "smoke_units_per_hour": 2162.7531,
+  "data_mode": "minimal_npz_fixture_cloud_completion"
+}

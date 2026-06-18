@@ -40,3 +40,19 @@ Classification vocabulary is defined in
 Any implementation PR that adds, removes, renames, or changes behavior for a
 feature above must update this matrix in the same change or explicitly mark the
 matrix update as blocked in [OPEN_QUESTIONS_AND_REJECTIONS.md](OPEN_QUESTIONS_AND_REJECTIONS.md).
+
+## 2026-06-17 Feature-Plane Correction
+
+F003, F004, F005, and F006 are governed by
+`docs/project/OPPORTUNITY_RESEARCH_SPEC.md`,
+`docs/project/VECTORBT_SCREENING_ENGINE_SPEC.md`, and
+`docs/cockpit/MACRO_CONTEXT_VIX_OPTIONS_CHECKLIST.md`. A VectorBT/Vast run is
+not full-product evidence unless it records `feature_plane_status`, a
+feature-usage manifest, PIT coverage for every admitted feature family,
+target-only and target-plus-context ablations for context claims, and
+dependency-scoped skip reasons for unavailable data.
+
+Derivative files such as `VBT_RESEARCH_PRODUCT_SCOPE.md` are not canonical
+feature authority unless they explicitly defer to those three documents and
+this matrix. The implementation source remains the vault ontology, cited repo
+specs, and paper notes, not a newly invented agent organizing frame.

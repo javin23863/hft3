@@ -1,0 +1,140 @@
+{
+  "actual_verdict": "REJECT",
+  "expected_until": [
+    "screening_artifact.json from VectorBT paid screen (rust engine for paid-compute scope)",
+    "run_event_universe --from-stage-a with stage_a_survivors.json",
+    "feature_plane_status declared on artifact (not lake_existence_as_usage)",
+    "ontology citation block in handoff per ONTOLOGY_GATE_AGENT_SPEC.md \u00a75"
+  ],
+  "expected_verdict": "REJECT",
+  "gate": {
+    "artifact": null,
+    "citations": [
+      {
+        "backed": true,
+        "issues": [
+          "tool_doc_ref_not_found:Portfolio.from_signals::vectorbt==1.0.0"
+        ],
+        "severity": "green",
+        "source_ref": "C:\\Users\\MSI\\repos\\hft3-pr-vbt-hbt\\docs\\project\\VECTORBT_SCREENING_ENGINE_SPEC.md",
+        "source_type": "spec"
+      },
+      {
+        "backed": true,
+        "issues": [],
+        "severity": "green",
+        "source_ref": "C:\\Users\\MSI\\repos\\hft3-pr-vbt-hbt\\docs\\project\\OPPORTUNITY_RESEARCH_SPEC.md",
+        "source_type": "spec"
+      }
+    ],
+    "drift": {
+      "clean": false,
+      "detected_patterns": [
+        "vbt_screening_as_hft_execution_realism"
+      ],
+      "severity": "red"
+    },
+    "fable_checklist": {
+      "AUTHORITY_LOCATED": true,
+      "FABLE_ACTIVE": true,
+      "GROUNDED": true,
+      "NO_ASSUMPTIONS": true,
+      "VAULT_READ": true
+    },
+    "invariants": {
+      "any_red": false,
+      "checks": [
+        {
+          "authority": "docs/REVIEWER_CHARTER.md#b1-filtration-integrity-f_t; chicago_cme_microstructure_mathematical_model.pdf",
+          "finding": "",
+          "invariant_id": "B1",
+          "severity": "yellow",
+          "status": "na"
+        },
+        {
+          "authority": "docs/REVIEWER_CHARTER.md#b2-event-time-correctness; chicago_cme_microstructure_mathematical_model.pdf",
+          "finding": "",
+          "invariant_id": "B2",
+          "severity": "yellow",
+          "status": "na"
+        },
+        {
+          "authority": "docs/REVIEWER_CHARTER.md#b3-no-lookahead--leakage; Ultimate_Quantitative_Finance_Researcher.pdf",
+          "finding": "",
+          "invariant_id": "B3",
+          "severity": "yellow",
+          "status": "na"
+        },
+        {
+          "authority": "docs/REVIEWER_CHARTER.md#b4-walk-forward-discipline; BLUEPRINT.md",
+          "finding": "",
+          "invariant_id": "B4",
+          "severity": "yellow",
+          "status": "na"
+        },
+        {
+          "authority": "docs/REVIEWER_CHARTER.md#b5-execution-realism; chicago_cme_microstructure_a_plus_developer_handoff.pdf",
+          "finding": "",
+          "invariant_id": "B5",
+          "severity": "yellow",
+          "status": "na"
+        },
+        {
+          "authority": "docs/REVIEWER_CHARTER.md#b6-regime-pz_t--f_t; Ultimate_Quantitative_Finance_Researcher.pdf",
+          "finding": "",
+          "invariant_id": "B6",
+          "severity": "yellow",
+          "status": "na"
+        },
+        {
+          "authority": "docs/REVIEWER_CHARTER.md#b7-trial-vs-production-data-lanes; rithmic_trial_hftbacktest_pipeline_prompt.pdf",
+          "finding": "",
+          "invariant_id": "B7",
+          "severity": "yellow",
+          "status": "na"
+        },
+        {
+          "authority": "docs/REVIEWER_CHARTER.md#b8-production-failure-states; chicago_cme_a_plus_production_implementation_prompt.pdf",
+          "finding": "",
+          "invariant_id": "B8",
+          "severity": "yellow",
+          "status": "na"
+        }
+      ],
+      "findings": [],
+      "red_count": 0
+    },
+    "reasons": [
+      "drift_pattern:vbt_screening_as_hft_execution_realism",
+      "scope_honesty:scope_green_requires_full_scope_pytest_with_exit_code_and_output_tail",
+      "scope_honesty:verify_run_missing_exit_code_or_output_tail"
+    ],
+    "red_count": 2,
+    "scope_honesty": {
+      "honest": false,
+      "issues": [
+        "scope_green_requires_full_scope_pytest_with_exit_code_and_output_tail",
+        "verify_run_missing_exit_code_or_output_tail"
+      ],
+      "severity": "red"
+    },
+    "tool_usage": [],
+    "verdict": "REJECT",
+    "yellow_count": 8
+  },
+  "generated_at_utc": "2026-06-18T06:22:10.703520+00:00",
+  "required_citations": [
+    {
+      "paper_id": "none",
+      "spec_ref": "VECTORBT_SCREENING_ENGINE_SPEC.md::Screening Artifact Contract",
+      "tool_doc_ref": "Portfolio.from_signals::vectorbt==1.0.0"
+    },
+    {
+      "paper_id": "none",
+      "spec_ref": "OPPORTUNITY_RESEARCH_SPEC.md",
+      "tool_doc_ref": "none"
+    }
+  ],
+  "scenario": "vast_m6_bare_rescan_without_vbt_artifact",
+  "unblocks_when": "gate.verdict == PASS with valid screening artifact + survivors path"
+}
