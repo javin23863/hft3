@@ -452,6 +452,38 @@ def _sha256_payload(value: Any) -> str:
     return hashlib.sha256(_canonical_json(value).encode("utf-8")).hexdigest()
 
 
+def _format_sha256_digest(raw_hex: str) -> str:
+    return f"sha256:{raw_hex}"
+
+
+def compute_latency_probe_artifact_hash(artifact_path: Path) -> str:
+    """Hash native probe summary/artifact bytes for realism evidence."""
+    digest = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
+    return _format_sha256_digest(digest)
+
+
+def compute_latency_value_or_sample_hash(latency_model: Mapping[str, Any]) -> str:
+    """Hash regime latency values for tamper-evident latency_model artifacts."""
+    payload = {
+        "latency_regime": latency_model.get("latency_regime"),
+        "feed_latency_ms": latency_model.get("feed_latency_ms"),
+        "order_entry_latency_ms": latency_model.get("order_entry_latency_ms"),
+        "order_response_latency_ms": latency_model.get("order_response_latency_ms"),
+        "latency_p50_ms": latency_model.get("latency_p50_ms"),
+        "latency_p90_ms": latency_model.get("latency_p90_ms"),
+        "latency_p99_ms": latency_model.get("latency_p99_ms"),
+    }
+    return _format_sha256_digest(_sha256_payload(payload))
+
+
+LATENCY_PROXY_STATUS_PARTIAL = "measured_partial"
+
+
+def _feed_latency_source_open(feed_source: Any) -> bool:
+    normalized = str(feed_source or "").lower()
+    return normalized.startswith("open") or "pending" in normalized
+
+
 def _optional_list_arg(value: list[str] | None, *, field: str) -> list[str] | None:
     if value is None:
         return None
@@ -630,7 +662,11 @@ def validate_hftbacktest_latency_model(latency_model: Mapping[str, Any]) -> list
     reasons.extend(_validate_latency_component_mapping(latency_model))
 
     if family == "ConstantLatency":
-        if not _is_nonnegative_number(latency_model.get("feed_latency_ms")):
+        feed_ms = latency_model.get("feed_latency_ms")
+        feed_open = _feed_latency_source_open(latency_model.get("feed_latency_source"))
+        if proxy_status == LATENCY_PROXY_STATUS_PARTIAL and feed_open and feed_ms is None:
+            pass
+        elif not _is_nonnegative_number(feed_ms):
             reasons.append("invalid_constant_feed_latency_ms")
         if not _is_nonnegative_number(latency_model.get("order_entry_latency_ms")):
             reasons.append("invalid_constant_latency_entry_ms")
@@ -670,11 +706,16 @@ def validate_hftbacktest_latency_model(latency_model: Mapping[str, Any]) -> list
             reasons.append("missing_order_latency_unavailable_reason")
 
     if family in LATENCY_MEASURED_FAMILIES:
-        if proxy_status != "measured":
+        if proxy_status == "measured":
+            if probe_status not in LATENCY_NATIVE_PROBE_OK_STATUSES:
+                reasons.append("invalid_native_latency_probe_evidence")
+            reasons.extend(_validate_native_latency_probe_evidence(latency_model))
+        elif proxy_status == LATENCY_PROXY_STATUS_PARTIAL:
+            if probe_status not in LATENCY_NATIVE_PROBE_OK_STATUSES:
+                reasons.append("invalid_native_latency_probe_evidence")
+            reasons.extend(_validate_native_latency_probe_evidence(latency_model))
+        else:
             reasons.append("measured_latency_proxy_status_must_be_measured")
-        if probe_status not in LATENCY_NATIVE_PROBE_OK_STATUSES:
-            reasons.append("invalid_native_latency_probe_evidence")
-        reasons.extend(_validate_native_latency_probe_evidence(latency_model))
 
     for field in ("latency_p50_ms", "latency_p90_ms", "latency_p99_ms"):
         value = latency_model.get(field)

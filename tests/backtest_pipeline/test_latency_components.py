@@ -16,7 +16,12 @@ from backtest_pipeline.src.latency_components import (  # noqa: E402
     default_component_bands,
     resolve_new_send_to_ack_ms,
 )
-from backtest_pipeline.src.chi404_latency import resolve_latency_model  # noqa: E402
+from backtest_pipeline.src.chi404_latency import (  # noqa: E402
+    build_latency_model_from_summary,
+    enrich_latency_model_probe_evidence,
+    resolve_latency_model,
+)
+from backtest_pipeline.src.hftbacktest_realism import validate_hftbacktest_latency_model  # noqa: E402
 
 
 def test_build_new_send_to_ack_distribution() -> None:
@@ -58,3 +63,47 @@ def test_resolve_latency_model_stress_regime() -> None:
     assert model["order_entry_latency_ms"] + model["order_response_latency_ms"] == pytest.approx(
         model["latency_p99_ms"], rel=1e-6
     )
+
+
+def test_regime_latency_splits_differ_by_quantile() -> None:
+    summary_path = _REPO / "runtime" / "latency_reports" / "latency_summary.json"
+    if not summary_path.is_file():
+        pytest.skip("latency_summary.json missing")
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    fast = build_latency_model_from_summary(regime="fast", summary=summary)
+    normal = build_latency_model_from_summary(regime="normal", summary=summary)
+    stress = build_latency_model_from_summary(regime="stress", summary=summary)
+    extreme = build_latency_model_from_summary(regime="extreme", summary=summary)
+    assert fast["order_entry_latency_ms"] < normal["order_entry_latency_ms"]
+    assert normal["order_entry_latency_ms"] < stress["order_entry_latency_ms"]
+    assert stress["order_entry_latency_ms"] < extreme["order_entry_latency_ms"]
+
+
+def test_latency_regime_artifacts_pass_realism_validation() -> None:
+    summary_path = _REPO / "runtime" / "latency_reports" / "latency_summary.json"
+    if not summary_path.is_file():
+        pytest.skip("latency_summary.json missing")
+    regime_dir = _REPO / "reports" / "latency_baselines" / "live_r01_chicago"
+    for regime in ("fast", "normal", "stress", "extreme"):
+        path = regime_dir / f"latency_model_{regime}.json"
+        if not path.is_file():
+            pytest.skip(f"missing {path.name}")
+        model = json.loads(path.read_text(encoding="utf-8"))
+        reasons = validate_hftbacktest_latency_model(model)
+        assert reasons == [], f"{path.name}: {reasons}"
+        assert model["latency_value_or_sample_hash"].startswith("sha256:")
+        assert model["native_latency_probe_artifact_hash"].startswith("sha256:")
+        assert model["native_latency_probe_status"] == "provided"
+
+
+def test_enrich_latency_model_probe_evidence_from_summary() -> None:
+    summary_path = _REPO / "runtime" / "latency_reports" / "latency_summary.json"
+    if not summary_path.is_file():
+        pytest.skip("latency_summary.json missing")
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    model = build_latency_model_from_summary(regime="stress", summary=summary)
+    enriched = enrich_latency_model_probe_evidence(model, chi404_summary=summary_path)
+    assert enriched["native_latency_probe_artifact"] == "runtime/latency_reports/latency_summary.json"
+    assert enriched["native_latency_probe_provenance"] == "hft3_native_cpp_rithmic_latency_probe"
+    reasons = validate_hftbacktest_latency_model(enriched)
+    assert reasons == []

@@ -167,26 +167,15 @@ def resolve_replay_latency_ms(
     return ms, str(chi404.get("backtest_latency_source", "CHI404 measured order ack")), chi404
 
 
-def resolve_latency_model(
+def build_latency_model_from_summary(
     *,
-    regime: str = "stress",
-    chi404_summary: Path = DEFAULT_CHI404_SUMMARY,
+    regime: str,
+    summary: dict[str, Any],
 ) -> dict[str, Any]:
-    """Build a latency_model.json-compatible dict from measured CHI404 artifacts."""
-    summary_path = chi404_summary.resolve()
-    if not summary_path.is_file():
-        raise FileNotFoundError(f"CHI404 latency summary missing: {summary_path}")
-    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    """Build a latency_model.json-compatible dict from a parsed latency_summary."""
     p99_ms, measured, ack_source = resolve_order_ack_ms(summary)
     if not measured or p99_ms is None:
         raise ValueError(BACKTEST_LATENCY_NOTE_UNMEASURED)
-
-    regime_dir = _REPO / "reports" / "latency_baselines" / "live_r01_chicago"
-    regime_path = regime_dir / f"latency_model_{regime}.json"
-    if regime_path.is_file():
-        model = json.loads(regime_path.read_text(encoding="utf-8"))
-        if isinstance(model, dict) and model.get("latency_model_family"):
-            return model
 
     new_send = summary.get("new_send_to_ack_ms") or {}
     ms_block = new_send.get("ms") if isinstance(new_send, dict) else {}
@@ -199,6 +188,8 @@ def resolve_latency_model(
         entry_ms = resp_ms = float(p50_ms) / 2.0
     elif regime == "normal" and isinstance(p90_ms, (int, float)):
         entry_ms = resp_ms = float(p90_ms) / 2.0
+    elif regime == "stress":
+        entry_ms = resp_ms = float(p99_ms) / 2.0
     elif regime == "extreme":
         p999 = ms_block.get("p99_9_ms") or ms_block.get("max_ms")
         if isinstance(p999, (int, float)):
@@ -228,3 +219,51 @@ def resolve_latency_model(
         "native_latency_probe_host": "CHI404",
         "note": "Symmetric split until CC-3 IntpOrderLatency samples populate entry/response separately.",
     }
+
+
+def enrich_latency_model_probe_evidence(
+    model: dict[str, Any],
+    *,
+    chi404_summary: Path,
+) -> dict[str, Any]:
+    """Attach required native-probe realism evidence fields to a latency model."""
+    from backtest_pipeline.src.hftbacktest_realism import (
+        compute_latency_probe_artifact_hash,
+        compute_latency_value_or_sample_hash,
+    )
+
+    summary_path = chi404_summary.resolve()
+    artifact_rel = str(summary_path.relative_to(_REPO)).replace("\\", "/")
+    enriched = dict(model)
+    enriched["native_latency_probe_artifact"] = artifact_rel
+    enriched["native_latency_probe_status"] = "provided"
+    enriched["native_latency_probe_provenance"] = "hft3_native_cpp_rithmic_latency_probe"
+    enriched["native_latency_probe_host"] = "CHI404"
+    if summary_path.is_file():
+        enriched["native_latency_probe_artifact_hash"] = compute_latency_probe_artifact_hash(summary_path)
+    enriched["latency_value_or_sample_hash"] = compute_latency_value_or_sample_hash(enriched)
+    return enriched
+
+
+def resolve_latency_model(
+    *,
+    regime: str = "stress",
+    chi404_summary: Path = DEFAULT_CHI404_SUMMARY,
+) -> dict[str, Any]:
+    """Build a latency_model.json-compatible dict from measured CHI404 artifacts."""
+    summary_path = chi404_summary.resolve()
+    if not summary_path.is_file():
+        raise FileNotFoundError(f"CHI404 latency summary missing: {summary_path}")
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+
+    regime_dir = _REPO / "reports" / "latency_baselines" / "live_r01_chicago"
+    regime_path = regime_dir / f"latency_model_{regime}.json"
+    if regime_path.is_file():
+        model = json.loads(regime_path.read_text(encoding="utf-8"))
+        if isinstance(model, dict) and model.get("latency_model_family"):
+            if not model.get("latency_value_or_sample_hash"):
+                model = enrich_latency_model_probe_evidence(model, chi404_summary=summary_path)
+            return model
+
+    model = build_latency_model_from_summary(regime=regime, summary=summary)
+    return enrich_latency_model_probe_evidence(model, chi404_summary=summary_path)
