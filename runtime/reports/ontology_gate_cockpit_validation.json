@@ -1,0 +1,47 @@
+{
+  "authority": "docs/project/ONTOLOGY_GATE_AGENT_SPEC.md",
+  "backend_artifacts_checked": [
+    "research_cards/universe_M6_full/universe_result.json",
+    "runtime/universe_M6_vast.log",
+    "apps/cockpit/backend/aggregate/pipeline.py"
+  ],
+  "bad_claims_all_rejected": true,
+  "generated_at_utc": "2026-06-18T06:37:47.810182+00:00",
+  "honest_posture_passes": true,
+  "phase": "3C_cockpit_workbench_sync",
+  "scenarios": [
+    {
+      "actual_verdict": "REJECT",
+      "expected_verdict": "REJECT",
+      "gate_reasons": [
+        "invariant_B5_fail:B5 Execution realism: latency bands, queue models, fees, net edge after costs \u2014 violation",
+        "scope_honesty:scope_green_requires_full_scope_pytest_with_exit_code_and_output_tail",
+        "scope_honesty:verify_run_missing_exit_code_or_output_tail"
+      ],
+      "gate_red_count": 2,
+      "id": "m6_running_from_stale_log",
+      "scenario_ok": true,
+      "summary": "M6 sweep shown as running from mirrored log without Vast health artifact"
+    },
+    {
+      "actual_verdict": "REJECT",
+      "expected_verdict": "REJECT",
+      "gate_reasons": [
+        "scope_honesty:verify_run_missing_exit_code_or_output_tail"
+      ],
+      "gate_red_count": 1,
+      "id": "decorative_green_without_source",
+      "scenario_ok": true,
+      "summary": "Dashboard GREEN without named backend object and freshness rule"
+    },
+    {
+      "actual_verdict": "PASS",
+      "expected_verdict": "PASS",
+      "gate_reasons": [],
+      "gate_red_count": 0,
+      "id": "honest_cockpit_blocked_posture",
+      "scenario_ok": true,
+      "summary": "Cockpit fail-closed when artifact missing or stale (target posture after c10d2ec7)"
+    }
+  ]
+}

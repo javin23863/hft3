@@ -1,0 +1,68 @@
+{
+  "authority": "docs/vault/HFTBACKTEST_LATENCY_ONTOLOGY.md",
+  "band_summary": {
+    "band_count": 13,
+    "by_status": {
+      "INFERRED": [
+        "send_queue_delay_us"
+      ],
+      "MEASURED": [
+        "feed_latency_us",
+        "new_send_to_exchange_us",
+        "new_exchange_to_ack_us",
+        "tick_to_send_us",
+        "cancel_decision_to_send_us",
+        "new_send_to_ack_us"
+      ],
+      "OPEN": [
+        "cancel_send_to_exchange_us",
+        "fill_exchange_to_local_us",
+        "modify_send_to_exchange_us",
+        "modify_exchange_to_ack_us",
+        "reject_or_throttle_to_response_us"
+      ],
+      "UNMEASURED": [
+        "cancel_exchange_to_ack_us"
+      ]
+    },
+    "hftbacktest_critical_status": {
+      "cancel_exchange_to_ack_us": "UNMEASURED",
+      "cancel_send_to_exchange_us": "OPEN",
+      "feed_latency_us": "MEASURED",
+      "new_exchange_to_ack_us": "MEASURED",
+      "new_send_to_exchange_us": "MEASURED"
+    },
+    "open_or_unmeasured_critical": [
+      "cancel_send_to_exchange_us",
+      "cancel_exchange_to_ack_us"
+    ]
+  },
+  "dishonest_claim_rejected": true,
+  "generated_at_utc": "2026-06-18T06:35:53.712285+00:00",
+  "honest_posture_passes": true,
+  "phase": "3D_latency_truth_cc_campaigns",
+  "scenarios": [
+    {
+      "actual_verdict": "REJECT",
+      "expected_verdict": "REJECT",
+      "gate_reasons": [
+        "invariant_B5_fail:B5 Execution realism: latency bands, queue models, fees, net edge after costs \u2014 violation",
+        "scope_honesty:verify_run_missing_exit_code_or_output_tail"
+      ],
+      "gate_red_count": 2,
+      "id": "dishonest_all_bands_measured",
+      "scenario_ok": true,
+      "summary": "Claim all HftBacktest component bands MEASURED for promotion"
+    },
+    {
+      "actual_verdict": "PASS",
+      "expected_verdict": "PASS",
+      "gate_reasons": [],
+      "gate_red_count": 0,
+      "id": "honest_research_only_open_bands",
+      "scenario_ok": true,
+      "summary": "Honest research-only posture with OPEN/UNMEASURED cancel bands documented"
+    }
+  ],
+  "truth_path": "runtime\\latency_reports\\latency_truth.json"
+}
