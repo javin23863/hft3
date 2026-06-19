@@ -152,12 +152,12 @@ def _persist_unit_artifact(
     out_dir: Path, unit_id: str, source_artifact_path: Optional[str]
 ) -> Optional[Path]:
     """Copy the screening artifact produced by the worker into the run tree."""
+    if not source_artifact_path:
+        return None
+
     dest_dir = out_dir / "units" / unit_id
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / "screening_artifact.json"
-
-    if not source_artifact_path:
-        return None
 
     src = Path(source_artifact_path)
     if src.is_file():
@@ -289,6 +289,15 @@ def _write_run_manifest(
 # ---------------------------------------------------------------------------
 
 _DRAIN_POLL_INTERVAL_SECONDS = 0.5
+_INFLIGHT_BATCH_FACTOR = 2
+_MIN_INFLIGHT_BATCHES = 8
+_MANIFEST_FLUSH_INTERVAL_BATCHES = 5
+_MANIFEST_FLUSH_INTERVAL_SECONDS = 15.0
+
+
+def _inflight_batch_limit(num_workers: int) -> int:
+    """Cap outstanding batches so dispatch cannot outrun drain."""
+    return max(_MIN_INFLIGHT_BATCHES, num_workers * _INFLIGHT_BATCH_FACTOR)
 
 
 def _workers_all_dead(workers: List[mp.Process]) -> bool:
@@ -395,6 +404,139 @@ def _drain_workers(
             on_batch_collected(batch_id, results, profiler_summary)
 
     # Signal workers to shut down
+    for _ in workers:
+        try:
+            batch_queue.put(None)
+        except Exception:
+            pass
+
+    terminated_pids: set[int] = set()
+    for proc in workers:
+        proc.join(timeout=30)
+        if proc.is_alive():
+            if proc.pid is not None:
+                terminated_pids.add(proc.pid)
+            proc.terminate()
+            proc.join(timeout=5)
+
+    if worker_failure_reason is None:
+        post_join_failure = _failed_worker_stop_reason(
+            workers,
+            exclude_pids=frozenset(terminated_pids),
+        )
+        if post_join_failure is not None:
+            worker_failure_reason = post_join_failure
+
+    if len(collected) < expected_batches and stop_reason is None:
+        stop_reason = (
+            "max_wall_clock_seconds_exceeded"
+            if wall_clock_limited
+            else "batch_drain_timeout_or_collection_shortfall"
+        )
+
+    if worker_failure_reason is not None:
+        stop_reason = worker_failure_reason
+
+    return collected, stop_reason
+
+
+def _pipelined_dispatch_and_drain(
+    workers: List[mp.Process],
+    batch_queue: "mp.Queue",
+    result_queue: "mp.Queue",
+    batches: List[Tuple[Any, List[PaidScreenUnit]]],
+    expected_batches: int,
+    timeout_per_batch: float,
+    *,
+    run_deadline: float | None = None,
+    on_batch_collected: Callable[
+        [Any, List[UnitScreeningResult], Dict[str, Any]], None
+    ] | None = None,
+    inflight_limit: int | None = None,
+) -> Tuple[List[Tuple[Any, List[UnitScreeningResult], Dict[str, Any]]], str | None]:
+    """Dispatch batches with backpressure while draining worker results.
+
+    Unlike enqueue-all-then-drain, this keeps at most ``inflight_limit`` batches
+    outstanding so fast-failing workers cannot flood ``result_queue`` while the
+    orchestrator is blocked on manifest I/O in ``on_batch_collected``.
+    """
+    if inflight_limit is None:
+        inflight_limit = _inflight_batch_limit(max(1, len(workers)))
+
+    collected: List[Tuple[Any, List[UnitScreeningResult], Dict[str, Any]]] = []
+    stop_reason: str | None = None
+    worker_failure_reason: str | None = None
+    batch_iter = iter(batches)
+    inflight = 0
+
+    per_batch_budget = timeout_per_batch * max(expected_batches, 1)
+    now = time.monotonic()
+    per_batch_deadline = now + per_batch_budget
+    if run_deadline is not None:
+        wall_clock_limited = run_deadline <= per_batch_deadline
+        deadline = min(per_batch_deadline, run_deadline)
+    else:
+        wall_clock_limited = False
+        deadline = per_batch_deadline
+
+    def _try_dispatch_one() -> bool:
+        nonlocal inflight
+        try:
+            batch_id, batch_units = next(batch_iter)
+        except StopIteration:
+            return False
+        batch_queue.put((batch_id, batch_units))
+        inflight += 1
+        return True
+
+    while inflight < inflight_limit and stop_reason is None:
+        if not _try_dispatch_one():
+            break
+
+    if expected_batches > 0 and workers and _workers_all_dead(workers):
+        stop_reason = _worker_exit_stop_reason(workers)
+
+    while stop_reason is None and len(collected) < expected_batches:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            stop_reason = (
+                "max_wall_clock_seconds_exceeded"
+                if wall_clock_limited
+                else "batch_drain_timeout_or_collection_shortfall"
+            )
+            break
+        polled_failure = _failed_worker_stop_reason(workers)
+        if polled_failure is not None:
+            worker_failure_reason = polled_failure
+        if _workers_all_dead(workers) and inflight == 0:
+            stop_reason = _worker_exit_stop_reason(workers)
+            break
+        try:
+            batch_id, results, profiler_summary = result_queue.get(
+                timeout=min(remaining, _DRAIN_POLL_INTERVAL_SECONDS)
+            )
+        except queue.Empty:
+            if _workers_all_dead(workers) and inflight == 0:
+                stop_reason = _worker_exit_stop_reason(workers)
+            continue
+
+        collected.append((batch_id, results, profiler_summary))
+        inflight = max(0, inflight - 1)
+        ok_units = sum(1 for r in results if r.status == "OK")
+        failed_units = sum(1 for r in results if r.status == "ERROR")
+        print(
+            f"[drain] batch={batch_id} units={len(results)} "
+            f"ok={ok_units} failed={failed_units} "
+            f"collected={len(collected)}/{expected_batches} inflight={inflight}",
+            flush=True,
+        )
+        if on_batch_collected is not None:
+            on_batch_collected(batch_id, results, profiler_summary)
+
+        while inflight < inflight_limit and stop_reason is None:
+            if not _try_dispatch_one():
+                break
+
     for _ in workers:
         try:
             batch_queue.put(None)
@@ -648,9 +790,26 @@ def main(argv: Optional[List[str]] = None) -> int:
     expected_batches = len(batches)
     partial_results: List[UnitScreeningResult] = []
     partial_result_dicts: List[Dict[str, Any]] = []
-    run_state: Dict[str, Any] = {"collected_batches": 0, "stop_reason": None}
+    run_state: Dict[str, Any] = {
+        "collected_batches": 0,
+        "stop_reason": None,
+        "last_manifest_flush_mono": run_started_mono,
+    }
 
-    def _flush_running_manifest(*, finished: datetime | None = None) -> None:
+    def _should_flush_running_manifest() -> bool:
+        collected_batches = int(run_state["collected_batches"])
+        if collected_batches <= 0:
+            return False
+        if collected_batches % _MANIFEST_FLUSH_INTERVAL_BATCHES == 0:
+            return True
+        return (
+            time.monotonic() - float(run_state["last_manifest_flush_mono"])
+            >= _MANIFEST_FLUSH_INTERVAL_SECONDS
+        )
+
+    def _flush_running_manifest(*, finished: datetime | None = None, force: bool = False) -> None:
+        if not force and finished is None and not _should_flush_running_manifest():
+            return
         completed, failed, skipped = _count_work_units(partial_results)
         completed += len(resume_cached_results)
         collected_batches = int(run_state["collected_batches"])
@@ -689,6 +848,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             stop_reason=run_state.get("stop_reason"),
             units_per_hour=units_per_hour,
         )
+        run_state["last_manifest_flush_mono"] = time.monotonic()
 
     def _on_batch_collected(
         _batch_id: Any,
@@ -756,19 +916,18 @@ def main(argv: Optional[List[str]] = None) -> int:
         proc.start()
         workers.append(proc)
 
-    # Enqueue batches
-    for batch_id, batch_units in batches:
-        batch_queue.put((batch_id, batch_units))
-
-    # Collect results (manifest updated after each batch via callback)
-    collected, drain_stop_reason = _drain_workers(
+    # Pipelined dispatch + drain (backpressure keeps result_queue bounded)
+    collected, drain_stop_reason = _pipelined_dispatch_and_drain(
         workers, batch_queue, result_queue,
+        batches=batches,
         expected_batches=len(batches),
         timeout_per_batch=float(args.batch_timeout_seconds),
         run_deadline=run_deadline,
         on_batch_collected=_on_batch_collected,
+        inflight_limit=_inflight_batch_limit(num_workers),
     )
     run_state["stop_reason"] = drain_stop_reason
+    _flush_running_manifest(force=True)
 
     results_by_batch: Dict[int, List[UnitScreeningResult]] = {}
     profiler_summaries: List[Dict[str, Any]] = []

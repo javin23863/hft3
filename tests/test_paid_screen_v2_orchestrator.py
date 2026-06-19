@@ -46,6 +46,32 @@ def _immediate_worker_exit(_worker_args, _batch_queue, _result_queue) -> None:
     raise SystemExit(1)
 
 
+def _echo_fast_fail_worker(_worker_args, batch_queue, result_queue) -> None:
+    """Spawn target: immediately return ERROR results for each dispatched batch."""
+    while True:
+        batch = batch_queue.get()
+        if batch is None:
+            break
+        batch_id, units = batch
+        results = [
+            UnitScreeningResult(
+                unit_id=getattr(u, "unit_id", f"u{batch_id}"),
+                status="ERROR",
+                error="no_ohlcv_data",
+            )
+            for u in (units or [None])
+        ]
+        if not results:
+            results = [
+                UnitScreeningResult(
+                    unit_id=f"u{batch_id}",
+                    status="ERROR",
+                    error="no_ohlcv_data",
+                )
+            ]
+        result_queue.put((batch_id, results, {"stage_timings": {}}))
+
+
 def _load_v2_module():
     if str(_REPO) not in sys.path:
         sys.path.insert(0, str(_REPO))
@@ -828,6 +854,79 @@ class TestRunningManifestWrites:
 
         assert len(collected) == 2
         assert seen == [1, 1]
+
+
+class TestPipelinedDispatchAndDrain:
+    def test_inflight_batch_limit_scales_with_workers(self):
+        v2 = _load_v2_module()
+        assert v2._inflight_batch_limit(1) == v2._MIN_INFLIGHT_BATCHES
+        assert v2._inflight_batch_limit(230) == 460
+
+    def test_pipelined_dispatch_collects_all_batches_under_backpressure(self):
+        v2 = _load_v2_module()
+        ctx = mp.get_context("spawn")
+        batch_queue = ctx.Queue()
+        result_queue = ctx.Queue()
+        batches = [(idx, []) for idx in range(25)]
+        inflight_limit = 4
+        workers = [
+            ctx.Process(
+                target=_echo_fast_fail_worker,
+                args=({}, batch_queue, result_queue),
+            )
+            for _ in range(2)
+        ]
+        for proc in workers:
+            proc.start()
+
+        callback_batches: list[int] = []
+
+        def on_batch(batch_id, results, _summary):
+            callback_batches.append(int(batch_id))
+
+        collected, stop_reason = v2._pipelined_dispatch_and_drain(
+            workers,
+            batch_queue,
+            result_queue,
+            batches=batches,
+            expected_batches=len(batches),
+            timeout_per_batch=30.0,
+            on_batch_collected=on_batch,
+            inflight_limit=inflight_limit,
+        )
+
+        assert stop_reason is None
+        assert len(collected) == len(batches)
+        assert sorted(callback_batches) == list(range(25))
+
+    def test_manifest_flush_throttled_during_callback_flood(self, tmp_path, monkeypatch):
+        v2 = _load_v2_module()
+        flush_calls: list[int] = []
+
+        def counting_flush(*, finished=None, force=False):
+            flush_calls.append(int(run_state["collected_batches"]))
+
+        run_state = {"collected_batches": 0, "last_manifest_flush_mono": time.monotonic()}
+        monkeypatch.setattr(v2, "_MANIFEST_FLUSH_INTERVAL_BATCHES", 5)
+        monkeypatch.setattr(v2, "_MANIFEST_FLUSH_INTERVAL_SECONDS", 9999.0)
+
+        def should_flush():
+            collected_batches = int(run_state["collected_batches"])
+            if collected_batches <= 0:
+                return False
+            if collected_batches % v2._MANIFEST_FLUSH_INTERVAL_BATCHES == 0:
+                return True
+            return (
+                time.monotonic() - float(run_state["last_manifest_flush_mono"])
+                >= v2._MANIFEST_FLUSH_INTERVAL_SECONDS
+            )
+
+        for batch_idx in range(12):
+            run_state["collected_batches"] += 1
+            if should_flush():
+                counting_flush()
+
+        assert flush_calls == [5, 10]
 
 
 class TestWorkerScratchPath:
