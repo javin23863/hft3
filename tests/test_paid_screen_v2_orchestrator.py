@@ -72,6 +72,46 @@ def _echo_fast_fail_worker(_worker_args, batch_queue, result_queue) -> None:
         result_queue.put((batch_id, results, {"stage_timings": {}}))
 
 
+_DIE_BEFORE_ECHO_BUDGET: mp.sharedctypes.Synchronized | None = None
+
+
+def _die_budget_then_echo_worker(_worker_args, batch_queue, result_queue) -> None:
+    """Spawn target: exit without result for the first N batches, then fast-fail."""
+    while True:
+        batch = batch_queue.get()
+        if batch is None:
+            break
+        batch_id, _units = batch
+        budget = _DIE_BEFORE_ECHO_BUDGET
+        if budget is not None:
+            with budget.get_lock():
+                if budget.value > 0:
+                    budget.value -= 1
+                    raise SystemExit(137)
+        results = [
+            UnitScreeningResult(
+                unit_id=f"u{batch_id}",
+                status="ERROR",
+                error="no_ohlcv_data",
+            )
+        ]
+        result_queue.put((batch_id, results, {"stage_timings": {}}))
+
+
+def _spawn_test_echo_worker(
+    ctx: mp.context.BaseContext,
+    worker_args: dict,
+    batch_queue: mp.Queue,
+    result_queue: mp.Queue,
+) -> mp.Process:
+    proc = ctx.Process(
+        target=_die_budget_then_echo_worker,
+        args=(worker_args, batch_queue, result_queue),
+    )
+    proc.start()
+    return proc
+
+
 def _load_v2_module():
     if str(_REPO) not in sys.path:
         sys.path.insert(0, str(_REPO))
@@ -862,6 +902,33 @@ class TestPipelinedDispatchAndDrain:
         assert v2._inflight_batch_limit(1) == v2._MIN_INFLIGHT_BATCHES
         assert v2._inflight_batch_limit(230) == 460
 
+    def test_effective_inflight_limit_tracks_alive_workers(self):
+        v2 = _load_v2_module()
+        configured = v2._inflight_batch_limit(230)
+        assert v2._effective_inflight_limit(configured, 230) == 460
+        assert v2._effective_inflight_limit(configured, 2) == 8
+        assert v2._effective_inflight_limit(configured, 0) == 0
+
+    def test_redispatch_stale_batches_requeues_orphaned_work(self):
+        v2 = _load_v2_module()
+        ctx = mp.get_context("spawn")
+        batch_queue = ctx.Queue()
+        outstanding = {
+            7: (0.0, 0, []),
+            8: (50.0, 0, []),
+        }
+        redispatched = v2._redispatch_stale_batches(
+            outstanding,
+            batch_queue,
+            stale_after_seconds=30.0,
+            now=100.0,
+        )
+        assert redispatched == 2
+        assert batch_queue.get(timeout=1)[0] in {7, 8}
+        assert batch_queue.get(timeout=1)[0] in {7, 8}
+        assert outstanding[7][1] == 1
+        assert outstanding[8][1] == 1
+
     def test_pipelined_dispatch_collects_all_batches_under_backpressure(self):
         v2 = _load_v2_module()
         ctx = mp.get_context("spawn")
@@ -898,6 +965,76 @@ class TestPipelinedDispatchAndDrain:
         assert stop_reason is None
         assert len(collected) == len(batches)
         assert sorted(callback_batches) == list(range(25))
+
+    def test_pipelined_high_worker_fast_fail_collects_all_batches(self):
+        v2 = _load_v2_module()
+        ctx = mp.get_context("spawn")
+        batch_queue = ctx.Queue()
+        result_queue = ctx.Queue()
+        num_workers = 16
+        batch_count = 64
+        batches = [(idx, []) for idx in range(batch_count)]
+        workers = [
+            ctx.Process(
+                target=_echo_fast_fail_worker,
+                args=({}, batch_queue, result_queue),
+            )
+            for _ in range(num_workers)
+        ]
+        for proc in workers:
+            proc.start()
+
+        collected, stop_reason = v2._pipelined_dispatch_and_drain(
+            workers,
+            batch_queue,
+            result_queue,
+            batches=batches,
+            expected_batches=batch_count,
+            timeout_per_batch=30.0,
+            inflight_limit=v2._inflight_batch_limit(num_workers),
+        )
+
+        assert stop_reason is None
+        assert len(collected) == batch_count
+
+    def test_pipelined_recovers_batches_when_workers_die_without_result(
+        self, monkeypatch,
+    ):
+        v2 = _load_v2_module()
+        ctx = mp.get_context("spawn")
+        batch_queue = ctx.Queue()
+        result_queue = ctx.Queue()
+        batches = [(idx, []) for idx in range(6)]
+        worker_args = {"repo_root": str(_REPO)}
+
+        global _DIE_BEFORE_ECHO_BUDGET
+        _DIE_BEFORE_ECHO_BUDGET = ctx.Value("i", 2)
+
+        monkeypatch.setattr(v2, "_spawn_paid_screen_worker", _spawn_test_echo_worker)
+        monkeypatch.setattr(v2, "_STALE_BATCH_MIN_SECONDS", 0.05)
+        monkeypatch.setattr(v2, "_STALE_BATCH_MAX_SECONDS", 0.2)
+
+        workers = [
+            _spawn_test_echo_worker(ctx, worker_args, batch_queue, result_queue)
+            for _ in range(2)
+        ]
+
+        collected, stop_reason = v2._pipelined_dispatch_and_drain(
+            workers,
+            batch_queue,
+            result_queue,
+            batches=batches,
+            expected_batches=len(batches),
+            timeout_per_batch=10.0,
+            inflight_limit=4,
+            spawn_ctx=ctx,
+            spawn_worker_args=worker_args,
+            target_worker_count=2,
+        )
+
+        assert stop_reason is None
+        assert len(collected) == len(batches)
+        _DIE_BEFORE_ECHO_BUDGET = None
 
     def test_manifest_flush_throttled_during_callback_flood(self, tmp_path, monkeypatch):
         v2 = _load_v2_module()
