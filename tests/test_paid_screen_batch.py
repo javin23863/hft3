@@ -772,3 +772,95 @@ class TestDefaultDataLoaderNpzRoot:
             symbol,
         )
         assert candidates == [real]
+
+
+class TestV2FeatureFamilyConsumption:
+    def test_screen_paid_batch_stamps_primary_fs_v1_and_cross_asset(
+        self, monkeypatch, tmp_path,
+    ):
+        """v2 screen_paid_batch must emit fs_v1 + cross_asset family rows when stores exist."""
+        import numpy as np
+        from backtest_pipeline.src.fs_v1_screen_path import FS_V1_BAR_CONSTRUCTION_ID
+        from backtest_pipeline.src.paid_screen_cache import BoundedLRUCache
+        from data_system.src.feature_store import store_path
+        from research_pipeline.src.stage_a_screen import REGIME_LABELS_ORDERED
+
+        def _make_store(dest: Path) -> None:
+            from data_system.src.feature_store import feature_index_hash
+
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            n_rows = 40
+            ts_start = 1_700_000_000_000_000_000
+            tick_ns = 1_000_000
+            ts = np.array([ts_start + i * tick_ns for i in range(n_rows)], dtype=np.int64)
+            X = np.zeros((n_rows, 64), dtype=np.float64)
+            X[:, 40] = 5000.0
+            X[:, 0] = 0.6
+            np.savez_compressed(
+                str(dest),
+                ts=ts,
+                X=X,
+                best_bid=np.full(n_rows, 4999.75),
+                best_ask=np.full(n_rows, 5000.00),
+                bbo_valid=np.ones(n_rows, dtype=np.bool_),
+                regime_state_vocab=np.array(list(REGIME_LABELS_ORDERED)),
+                regime_state_id=np.zeros(n_rows, dtype=np.int32),
+                event_ctx_vocab=np.array(["NORMAL"]),
+                event_ctx_id=np.zeros(n_rows, dtype=np.int32),
+                vol_state_vocab=np.array(["NORMAL"]),
+                vol_state_id=np.zeros(n_rows, dtype=np.int32),
+                liq_state_vocab=np.array(["NORMAL"]),
+                liq_state_id=np.zeros(n_rows, dtype=np.int32),
+                tick_size=np.float64(0.25),
+                feature_index_hash=np.array(feature_index_hash()),
+            )
+
+        repo = tmp_path / "repo"
+        (repo / "packages").mkdir(parents=True)
+        features_root = repo / "data" / "features"
+        event_id = "CPI_2024_09_11_TIGHT"
+        mes_sym = "MES.v.0"
+        es_sym = "ES.v.0"
+        _make_store(store_path(features_root, mes_sym, event_id))
+        _make_store(store_path(features_root, es_sym, event_id))
+        monkeypatch.setenv("HFT3_FEATURE_ROOT", str(features_root))
+
+        ctx = make_context(repo_root=str(repo), screening_scope="pilot")
+        unit = make_unit(
+            unit_id="u_fs_v1",
+            model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+            event_id=event_id,
+            symbol=mes_sym,
+        )
+        scratch = repo / "runtime" / "paid_screen_scratch" / "v2_family_test"
+
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch.run_vectorbt_simulation_matrix",
+            lambda **kwargs: _valid_filter_result(unit, run_id="v2_family_test"),
+        )
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch.apply_promotion_gates",
+            lambda result, **kwargs: result,
+        )
+
+        results = screen_paid_batch(
+            [unit],
+            ctx,
+            data_cache=BoundedLRUCache(max_entries=4, max_memory_mb=64),
+            run_screening=True,
+            scratch_root=str(scratch),
+        )
+
+        assert len(results) == 1
+        assert results[0].status == "OK"
+        payload = json.loads(
+            Path(results[0].screening_artifact_path).read_text(encoding="utf-8")
+        )
+        validate_screening_artifact(payload)
+        assert payload["bar_construction_id"] == FS_V1_BAR_CONSTRUCTION_ID
+        manifest = payload["feature_usage_manifest"]
+        primary = manifest["primary_fs_v1"]
+        assert "fs_v1_row_loop" in primary["why_not_used_or_sidelined"]
+        cross = manifest["cross_asset_futures"]
+        assert "leader_legs_aligned" in cross["why_not_used_or_sidelined"]
+        assert payload["cross_asset_alignment_status"] == cross["model_consumption"]
