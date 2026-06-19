@@ -50,6 +50,11 @@ from backtest_pipeline.src.research_clock import (
     validate_research_clock,
 )
 from backtest_pipeline.src.robustness_bridge import compute_robustness_evidence
+from backtest_pipeline.src.research_pipeline_stages import (
+    STAGE_1_VECTORBT_SCREEN,
+    STAGE_2_PROMOTED_AGGREGATION,
+    stamp_artifact,
+)
 from backtest_pipeline.src.surface_stability import compute_surface_stability
 from research_pipeline.types import CandidateModel, ParsedHypothesis
 
@@ -488,12 +493,18 @@ def _hash_payload(value: Any) -> str:
 
 
 def _strip_screening_hash_exclusions(value: Any) -> Any:
-    excluded = {"screening_artifact_hash", "created_at_utc", "timestamp_utc", "updated_at_utc"}
+    excluded = {
+        "screening_artifact_hash",
+        "created_at_utc",
+        "timestamp_utc",
+        "updated_at_utc",
+    }
+    pipeline_prefix = "research_pipeline_"
     if isinstance(value, Mapping):
         return {
             key: _strip_screening_hash_exclusions(item)
             for key, item in value.items()
-            if key not in excluded
+            if key not in excluded and not str(key).startswith(pipeline_prefix)
         }
     if isinstance(value, list):
         return [_strip_screening_hash_exclusions(item) for item in value]
@@ -569,12 +580,18 @@ def _hash_payload(value: Any) -> str:
 
 
 def _strip_screening_hash_exclusions(value: Any) -> Any:
-    excluded = {"screening_artifact_hash", "created_at_utc", "timestamp_utc", "updated_at_utc"}
+    excluded = {
+        "screening_artifact_hash",
+        "created_at_utc",
+        "timestamp_utc",
+        "updated_at_utc",
+    }
+    pipeline_prefix = "research_pipeline_"
     if isinstance(value, Mapping):
         return {
             key: _strip_screening_hash_exclusions(item)
             for key, item in value.items()
-            if key not in excluded
+            if key not in excluded and not str(key).startswith(pipeline_prefix)
         }
     if isinstance(value, list):
         return [_strip_screening_hash_exclusions(item) for item in value]
@@ -1900,6 +1917,10 @@ class FilterResult:
         )
         payload["screening_artifact_hash"] = compute_screening_artifact_hash(payload)
         validate_screening_artifact(payload)
+        if payload.get("promoted_count", 0) > 0:
+            stamp_artifact(payload, STAGE_2_PROMOTED_AGGREGATION)
+        else:
+            stamp_artifact(payload, STAGE_1_VECTORBT_SCREEN)
         return payload
 
 
@@ -2863,7 +2884,23 @@ def _apply_fs_v1_screen_metadata(
         FS_V1_BAR_CONSTRUCTION_ID,
         fs_v1_feature_set_hash,
         fs_v1_feature_set_id,
+        sample_cross_asset_features_for_manifest,
     )
+
+    cross_asset_aligned = False
+    if ctx.leader_legs:
+        from replay.cross_asset_assembly import validate_cross_asset_alignment
+
+        cross_feats = sample_cross_asset_features_for_manifest(ctx)
+        ts = np.asarray(ctx.store.get("ts"), dtype=np.int64)
+        feat_latency_ns = int(ctx.feature_latency_ms * 1_000_000)
+        pit_decision_ns = int(ts[-1]) - feat_latency_ns if len(ts) else None
+        alignment = validate_cross_asset_alignment(
+            cross_feats,
+            target_symbol=ctx.symbol,
+            decision_timestamp_ns=pit_decision_ns,
+        )
+        cross_asset_aligned = alignment.ok
 
     base_manifest = build_feature_usage_manifest(
         bar_construction_id=FS_V1_BAR_CONSTRUCTION_ID,
@@ -2876,6 +2913,7 @@ def _apply_fs_v1_screen_metadata(
         candidates,
         fs_v1_row_loop_active=True,
         vix_injected=ctx.has_vix,
+        cross_asset_aligned=cross_asset_aligned,
     )
     result.bar_construction_id = FS_V1_BAR_CONSTRUCTION_ID
     result.feature_set_id = fs_v1_feature_set_id()
@@ -2992,7 +3030,7 @@ def filter_candidates(
     fs_v1_ctx = None
     research_clock = _resolve_research_clock(candidates)
     screen_symbol = _resolve_screen_symbol(candidates, symbol)
-    if prefer_fs_v1_path and candidates and data_loader is _default_data_loader:
+    if prefer_fs_v1_path and candidates:
         from backtest_pipeline.src.fs_v1_screen_path import (
             build_fs_v1_signal_computer,
             ohlcv_from_feature_store,

@@ -21,6 +21,7 @@ from backtest_pipeline.src.feature_plane import (
 from backtest_pipeline.src.fs_v1_screen_path import (
     FS_V1_BAR_CONSTRUCTION_ID,
     build_fs_v1_signal_computer,
+    cross_asset_features_at_vis_ts,
     ohlcv_from_feature_store,
     resolve_fs_v1_screen_context,
 )
@@ -148,3 +149,79 @@ def test_filter_candidates_selects_fs_v1_path(tmp_path: Path) -> None:
         FEATURE_PLANE_STATUS_SCHEDULED_EVENT_ONLY,
         "feature_complete_pit_declared",
     }
+
+
+def test_resolve_fs_v1_context_loads_leader_leg(tmp_path: Path) -> None:
+    event_id = "EVT"
+    mes_sym = "MES.v.0"
+    es_sym = "ES.v.0"
+    _make_feature_store_npz(store_path(tmp_path, mes_sym, event_id))
+    _make_feature_store_npz(store_path(tmp_path, es_sym, event_id))
+    ctx = resolve_fs_v1_screen_context(
+        repo_root=tmp_path,
+        event_id=event_id,
+        symbol=mes_sym,
+        feature_store_root_override=tmp_path,
+    )
+    assert ctx is not None
+    assert any(leader == "ES" for leader, _ in ctx.leader_legs)
+
+
+def test_cross_asset_features_at_vis_ts_includes_es_provenance(tmp_path: Path) -> None:
+    event_id = "EVT"
+    mes_sym = "MES.v.0"
+    es_sym = "ES.v.0"
+    _make_feature_store_npz(store_path(tmp_path, mes_sym, event_id))
+    _make_feature_store_npz(store_path(tmp_path, es_sym, event_id))
+    ctx = resolve_fs_v1_screen_context(
+        repo_root=tmp_path,
+        event_id=event_id,
+        symbol=mes_sym,
+        feature_store_root_override=tmp_path,
+    )
+    assert ctx is not None
+    ts = np.asarray(ctx.store["ts"], dtype=np.int64)
+    vis_ts = int(ts[10]) - 1_000_000
+    cross = cross_asset_features_at_vis_ts(ctx, vis_ts)
+    assert "ES" in cross
+    assert cross["ES"]["_symbol"] == "ES"
+    assert cross["ES"]["_source_timestamp_ns"] <= vis_ts
+
+
+def test_build_manifest_marks_cross_asset_when_aligned() -> None:
+    manifest = build_manifest_from_feature_recipes([], cross_asset_aligned=True)
+    cross = manifest["cross_asset_futures"]
+    assert "leader_legs_aligned" in cross["why_not_used_or_sidelined"]
+
+
+def test_filter_candidates_fs_v1_cross_asset_manifest(tmp_path: Path) -> None:
+    event_id = "EVT"
+    mes_sym = "MES.v.0"
+    es_sym = "ES.v.0"
+    _make_feature_store_npz(store_path(tmp_path, mes_sym, event_id))
+    _make_feature_store_npz(store_path(tmp_path, es_sym, event_id))
+    cand = CandidateModel(
+        candidate_id="c1",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        strategy_params={"signal_threshold": 0.01, "holding_period_bars": 5},
+        thesis="test",
+        metadata={"symbol": mes_sym},
+    )
+    result = filter_candidates(
+        candidates=[cand],
+        parsed=None,
+        event_id=event_id,
+        repo_root=tmp_path,
+        feature_store_root=tmp_path,
+        symbol=mes_sym,
+        prefer_fs_v1_path=True,
+        data_loader=lambda *_: None,
+        param_grid={
+            "signal_threshold": [0.01],
+            "holding_period_bars": [5],
+            "stop_loss_pct": [None],
+            "take_profit_pct": [None],
+        },
+    )
+    cross = result.to_dict()["feature_usage_manifest"]["cross_asset_futures"]
+    assert "leader_legs_aligned" in cross["why_not_used_or_sidelined"]

@@ -38,6 +38,15 @@ _VIX_SYMBOL = "VIX.OPT"
 
 
 @dataclass(frozen=True)
+class LeaderLegStore:
+    """PIT-aligned leader feature-store rows for cross-asset futures screening."""
+
+    symbol: str
+    ts: np.ndarray
+    X: np.ndarray
+
+
+@dataclass(frozen=True)
 class FsV1ScreenContext:
     symbol: str
     event_id: str
@@ -50,6 +59,7 @@ class FsV1ScreenContext:
     vix_cols: tuple[str, ...]
     vix_ts: np.ndarray | None
     vix_X: np.ndarray | None
+    leader_legs: tuple[tuple[str, LeaderLegStore], ...] = ()
 
 
 def _manifest_record_hash(record: Mapping[str, Any]) -> str:
@@ -68,6 +78,103 @@ def _store_symbol_variants(symbol: str) -> tuple[str, ...]:
         if candidate and candidate not in variants:
             variants.append(candidate)
     return tuple(variants)
+
+
+def _primary_features_from_row(vec: np.ndarray) -> dict[str, float]:
+    """Extract screening slots used by cross-asset and primary hypotheses."""
+    out: dict[str, float] = {}
+    if vec.shape[0] > 0:
+        out["aggressor_volume_imbalance"] = float(vec[0])
+    if vec.shape[0] > 40:
+        out["mid"] = float(vec[40])
+    return out
+
+
+def _leader_leg_features_from_row(vec: np.ndarray) -> dict[str, float]:
+    return dict(_primary_features_from_row(vec))
+
+
+def _load_leader_leg_store(
+    root: Path,
+    event_id: str,
+    leader_symbol: str,
+) -> LeaderLegStore | None:
+    for sym in _store_symbol_variants(leader_symbol):
+        candidate_path = store_path(root, sym, event_id)
+        if not candidate_path.is_file():
+            continue
+        try:
+            store = load_store(candidate_path)
+        except (OSError, ValueError):
+            continue
+        ts = np.asarray(store.get("ts"), dtype=np.int64)
+        if len(ts) < 2:
+            continue
+        X = np.asarray(store.get("X"), dtype=np.float64)
+        if X.shape[0] != len(ts):
+            continue
+        base = str(leader_symbol).split(".")[0].upper()
+        return LeaderLegStore(symbol=base, ts=ts, X=X)
+    return None
+
+
+def _load_leader_legs(
+    root: Path,
+    event_id: str,
+    target_symbol: str,
+) -> tuple[tuple[str, LeaderLegStore], ...]:
+    from replay.cross_asset_assembly import default_leaders_for_target
+
+    target = str(target_symbol).split(".")[0].upper()
+    legs: list[tuple[str, LeaderLegStore]] = []
+    for leader in default_leaders_for_target(target):
+        leg = _load_leader_leg_store(root, event_id, leader)
+        if leg is not None:
+            legs.append((leader, leg))
+    return tuple(legs)
+
+
+def cross_asset_features_at_vis_ts(
+    ctx: FsV1ScreenContext,
+    vis_ts: int,
+) -> dict[str, dict[str, Any]]:
+    """Build provenance-tagged leader (+ optional VIX) legs at one PIT visibility time."""
+    from replay.cross_asset_assembly import enrich_cross_leg
+
+    cross_feats: dict[str, dict[str, Any]] = {}
+    for leader, leg in ctx.leader_legs:
+        j = int(np.searchsorted(leg.ts, vis_ts, side="right")) - 1
+        if j < 0:
+            continue
+        cross_feats[leader] = enrich_cross_leg(
+            _leader_leg_features_from_row(leg.X[j]),
+            symbol=leader,
+            source_timestamp_ns=int(leg.ts[j]),
+        )
+    if ctx.has_vix and ctx.vix_ts is not None and ctx.vix_X is not None:
+        vix_j = int(np.searchsorted(ctx.vix_ts, vis_ts, side="right")) - 1
+        if vix_j >= 0 and ctx.vix_cols:
+            vix_feats = {
+                col: float(ctx.vix_X[vix_j, ci])
+                for ci, col in enumerate(ctx.vix_cols)
+                if ci < ctx.vix_X.shape[1]
+            }
+            cross_feats["VIX"] = enrich_cross_leg(
+                vix_feats,
+                symbol="VIX",
+                source_timestamp_ns=int(ctx.vix_ts[vix_j]),
+            )
+    return cross_feats
+
+
+def sample_cross_asset_features_for_manifest(ctx: FsV1ScreenContext) -> dict[str, dict[str, Any]]:
+    """Representative cross-asset legs at the final primary-store decision timestamp."""
+    ts = np.asarray(ctx.store.get("ts"), dtype=np.int64)
+    if len(ts) == 0:
+        return {}
+    feat_latency_ns = int(ctx.feature_latency_ms * 1_000_000)
+    vis_ts = int(ts[-1]) - feat_latency_ns
+    return cross_asset_features_at_vis_ts(ctx, vis_ts)
 
 
 def resolve_fs_v1_screen_context(
@@ -139,6 +246,7 @@ def resolve_fs_v1_screen_context(
             vix_cols = []
 
     has_vix = vix_ts is not None and vix_X is not None and len(vix_ts) > 0
+    leader_legs = _load_leader_legs(root, event_id, resolved_symbol)
     return FsV1ScreenContext(
         symbol=resolved_symbol,
         event_id=event_id,
@@ -151,6 +259,7 @@ def resolve_fs_v1_screen_context(
         vix_cols=tuple(vix_cols),
         vix_ts=vix_ts,
         vix_X=vix_X,
+        leader_legs=leader_legs,
     )
 
 
@@ -229,6 +338,7 @@ def build_fs_v1_signal_computer(ctx: FsV1ScreenContext) -> Callable[..., Tuple[n
                 continue
             vec_j = X[j]
             state.feature_vector = vec_j
+            state.primary_features = _primary_features_from_row(vec_j)
             state.event_context = (
                 str(event_ctx_vocab[int(event_ctx_id[j])]) if event_ctx_vocab else "NORMAL"
             )
@@ -245,20 +355,7 @@ def build_fs_v1_signal_computer(ctx: FsV1ScreenContext) -> Callable[..., Tuple[n
                 lbl: float(vec_j[_REGIME_SLOT_START + k])
                 for k, lbl in enumerate(REGIME_LABELS_ORDERED)
             }
-            if ctx.has_vix and ctx.vix_ts is not None and ctx.vix_X is not None:
-                vix_j = int(np.searchsorted(ctx.vix_ts, vis_ts, side="right")) - 1
-                if vix_j >= 0 and ctx.vix_cols:
-                    state.cross_asset_features = {
-                        "VIX": {
-                            col: float(ctx.vix_X[vix_j, ci])
-                            for ci, col in enumerate(ctx.vix_cols)
-                            if ci < ctx.vix_X.shape[1]
-                        }
-                    }
-                else:
-                    state.cross_asset_features = {}
-            else:
-                state.cross_asset_features = {}
+            state.cross_asset_features = cross_asset_features_at_vis_ts(ctx, vis_ts)
 
             signal[i] = float(hypothesis.evaluate(state))
 
