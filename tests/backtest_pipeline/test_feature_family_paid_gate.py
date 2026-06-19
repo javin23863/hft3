@@ -46,13 +46,20 @@ def test_load_feature_family_status_manifest() -> None:
     manifest = load_feature_family_status_manifest(_REPO)
     assert manifest.get("schema_version") == "feature_family_status.v1"
     gate = manifest.get("paid_screen_gate") or {}
-    assert gate.get("allowed") is False
+    assert gate.get("allowed") is True
     assert "feature_recipe_hash" in (gate.get("required_pilot_fields") or [])
 
 
 def test_paid_gate_fails_when_manifest_disallows() -> None:
     pilot = _pilot_artifact()
-    errors, summary = evaluate_feature_family_paid_gate(pilot, repo_root=_REPO)
+    manifest = load_feature_family_status_manifest(_REPO)
+    gate = dict(manifest.get("paid_screen_gate") or {})
+    gate["allowed"] = False
+    errors, summary = evaluate_feature_family_paid_gate(
+        pilot,
+        repo_root=_REPO,
+        status_manifest={**manifest, "paid_screen_gate": gate},
+    )
     assert any(err.startswith("paid_screen_gate_not_allowed:") for err in errors)
     assert summary["paid_screen_gate_allowed"] is False
     assert summary["resolved_fields"]["feature_recipe_hash"] == "abc123"
@@ -121,5 +128,5 @@ def test_ready_gate_includes_feature_family_summary(tmp_path: Path) -> None:
     )
     assert "feature_family_gate" in result
     assert result["feature_family_gate"]["resolved_fields"]["feature_recipe_hash"] == "abc123"
-    assert result["ready_for_full_run"] is False
-    assert any("paid_screen_gate_not_allowed" in err for err in result["errors"])
+    assert result["feature_family_gate"]["paid_screen_gate_allowed"] is True
+    assert not any("paid_screen_gate_not_allowed" in err for err in result["errors"])
