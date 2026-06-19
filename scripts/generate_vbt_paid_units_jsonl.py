@@ -418,6 +418,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         default=None,
         help="Inclusive release_date upper bound (YYYY-MM-DD); overrides period names when set",
     )
+    parser.add_argument(
+        "--validation-cpi-first",
+        action="store_true",
+        help="Sort JSONL with CPI event_type rows first (validation runs only; not Phase D scope)",
+    )
     args = parser.parse_args(argv)
 
     symbols = [s.strip() for s in args.symbols.split(",") if s.strip()]
@@ -494,6 +499,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     if not units:
         print("ERROR: zero units generated", file=sys.stderr)
         return 1
+
+    if args.validation_cpi_first:
+        units.sort(
+            key=lambda u: (
+                0 if str(u.get("event_type") or "").upper() == "CPI" else 1,
+                str(u.get("event_id") or ""),
+            )
+        )
 
     out = args.out if args.out.is_absolute() else _REPO / args.out
     write_units_jsonl(out, units)
