@@ -584,6 +584,10 @@ def _write_screening_artifact(
         json.dump(serializable, f, indent=2, sort_keys=True)
     os.replace(tmp_path, artifact_path)
 
+    from backtest_pipeline.src.research_pipeline_stages import annotate_promoted_screening_handoffs
+
+    annotate_promoted_screening_handoffs(artifact, artifact_path=artifact_path)
+
     return artifact.get("screening_artifact_hash", "")
 
 

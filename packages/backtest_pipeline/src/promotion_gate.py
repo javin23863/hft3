@@ -2,6 +2,12 @@
 
 Traces to integration spec: every promoted candidate must carry full traceable metadata.
 A candidate must not reach HftBacktest without this artifact.
+
+Authority: docs/vault/UNIFIED_RESEARCH_PIPELINE.md (Stage 2)
+Vault: library/13 Robust Backtesting and Multiple Testing.md
+Literature: docs/references/Ultimate_Quantitative_Finance_Researcher.pdf (DSR/PBO/CSCV);
+  docs/project/ROBUSTNESS_TESTING_SPEC.md
+Lifecycle: promoted rows carry hypothesis_id for Stage 5 enrollment via research_pipeline_stages.
 """
 from __future__ import annotations
 

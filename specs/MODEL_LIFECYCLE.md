@@ -117,7 +117,9 @@ Pipeline zone (`/api/pipeline`) surfaces:
 
 ## Research prefilter → realism handoff (current workflow)
 
-Authority: vault `library/14 Model Lifecycle and Governance.md`, `library/System Implications.md`.
+Authority: vault `library/14 Model Lifecycle and Governance.md`, `library/System Implications.md`, repo [UNIFIED_RESEARCH_PIPELINE.md](../docs/vault/UNIFIED_RESEARCH_PIPELINE.md) (chronological stages 0–7).
+
+Code stage registry: `packages/backtest_pipeline/src/research_pipeline_stages.py`.
 
 | Step | Role | Location |
 |------|------|----------|
