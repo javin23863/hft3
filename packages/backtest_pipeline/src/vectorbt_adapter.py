@@ -1835,6 +1835,8 @@ class FilterResult:
     target_event_type_or_null: Optional[str] = None
     allowed_context_set_id_or_null: Optional[str] = None
     declared_context_sets: List[Any] = field(default_factory=list)
+    feature_recipe_hash: str = ""
+    hftbacktest_handoff_status: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         promoted_rows = [_normalise_promoted_screening_row(p, self) for p in self.promoted]
@@ -1915,6 +1917,10 @@ class FilterResult:
                 overrides=self.feature_plane_overrides,
             )
         )
+        if self.feature_recipe_hash:
+            payload["feature_recipe_hash"] = self.feature_recipe_hash
+        if self.hftbacktest_handoff_status:
+            payload["hftbacktest_handoff_status"] = self.hftbacktest_handoff_status
         payload["screening_artifact_hash"] = compute_screening_artifact_hash(payload)
         validate_screening_artifact(payload)
         if payload.get("promoted_count", 0) > 0:
@@ -2879,6 +2885,7 @@ def _apply_fs_v1_screen_metadata(
     *,
     research_clock: str,
     screening_scope: str,
+    repo_root: Path,
 ) -> None:
     from backtest_pipeline.src.fs_v1_screen_path import (
         FS_V1_BAR_CONSTRUCTION_ID,
@@ -2928,6 +2935,38 @@ def _apply_fs_v1_screen_metadata(
         "fs_v1_row_loop_visible_index_j_with_ts[j]<=ts[i]-feature_latency_ns;"
         " signals shifted one executable bar before VectorBT portfolio simulation"
     )
+    from backtest_pipeline.src.paid_screen_profiling import (
+        resolve_events_csv_hash,
+        resolve_lake_manifest_hash,
+    )
+
+    try:
+        result.lake_manifest_hash = resolve_lake_manifest_hash(
+            explicit_hash=None,
+            repo_root=repo_root,
+        )
+    except (OSError, ValueError):
+        pass
+    try:
+        result.events_csv_hash_or_not_applicable = resolve_events_csv_hash(
+            explicit_hash=None,
+            events_csv=None,
+            repo_root=repo_root,
+        )
+    except (OSError, ValueError):
+        pass
+    for cand in candidates:
+        recipe_hash = str(
+            getattr(cand, "feature_recipe_hash", None)
+            or cand.metadata.get("feature_recipe_hash")
+            or ""
+        ).strip()
+        if recipe_hash:
+            result.feature_recipe_hash = recipe_hash
+            break
+    scope = str(screening_scope or "").lower()
+    if scope in {"pilot", "pilot-scope", "pilot_scope"} and result.feature_recipe_hash:
+        result.hftbacktest_handoff_status = "recipe_hash_handoff_ready"
 
 
 def filter_candidates(
@@ -3099,6 +3138,7 @@ def filter_candidates(
             candidates,
             research_clock=research_clock,
             screening_scope=screening_scope,
+            repo_root=repo_root,
         )
     return apply_promotion_gates(
         result,

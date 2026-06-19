@@ -113,6 +113,30 @@ def test_feature_plane_fs_v1_not_bar_stub() -> None:
     assert "fs_v1_row_loop" in manifest["primary_fs_v1"]["why_not_used_or_sidelined"]
 
 
+def test_build_fs_v1_signal_computer_accepts_numpy_vocabs(tmp_path: Path) -> None:
+    event_id = "EVT"
+    sym = "MES.v.0"
+    _make_feature_store_npz(store_path(tmp_path, sym, event_id))
+    ctx = resolve_fs_v1_screen_context(
+        repo_root=tmp_path,
+        event_id=event_id,
+        symbol=sym,
+        feature_store_root_override=tmp_path,
+    )
+    assert ctx is not None
+    ohlcv = ohlcv_from_feature_store(ctx.store)
+    cand = CandidateModel(
+        candidate_id="c1",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        strategy_params={"signal_threshold": 0.01, "holding_period_bars": 5},
+        thesis="test",
+        metadata={"symbol": sym},
+    )
+    entry, exit_ = build_fs_v1_signal_computer(ctx)(cand, ohlcv, None, tmp_path)
+    assert entry.shape == exit_.shape
+    assert len(entry) == len(ctx.store["ts"])
+
+
 def test_filter_candidates_selects_fs_v1_path(tmp_path: Path) -> None:
     event_id = "EVT"
     sym = "MES.v.0"

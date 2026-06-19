@@ -779,6 +779,7 @@ def screen_paid_batch(
                     [candidate],
                     research_clock=_resolve_research_clock([candidate]),
                     screening_scope=context.screening_scope,
+                    repo_root=Path(context.repo_root),
                 )
 
             # Write per-unit artifacts and collect results

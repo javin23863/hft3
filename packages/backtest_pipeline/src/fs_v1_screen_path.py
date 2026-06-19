@@ -37,6 +37,13 @@ _REGIME_SLOT_START = 41
 _VIX_SYMBOL = "VIX.OPT"
 
 
+def _store_vocab_list(value: Any) -> list:
+    """Coerce feature-store vocab to list without numpy truthiness checks."""
+    if value is None:
+        return []
+    return list(value)
+
+
 @dataclass(frozen=True)
 class LeaderLegStore:
     """PIT-aligned leader feature-store rows for cross-asset futures screening."""
@@ -305,13 +312,13 @@ def build_fs_v1_signal_computer(ctx: FsV1ScreenContext) -> Callable[..., Tuple[n
         ts = np.asarray(store["ts"], dtype=np.int64)
         X = np.asarray(store["X"], dtype=np.float64)
         event_ctx_id = np.asarray(store["event_ctx_id"])
-        event_ctx_vocab = list(store.get("event_ctx_vocab") or [])
+        event_ctx_vocab = _store_vocab_list(store.get("event_ctx_vocab"))
         regime_state_id = np.asarray(store["regime_state_id"])
-        regime_state_vocab = list(store.get("regime_state_vocab") or [])
+        regime_state_vocab = _store_vocab_list(store.get("regime_state_vocab"))
         vol_state_id = np.asarray(store["vol_state_id"])
-        vol_state_vocab = list(store.get("vol_state_vocab") or [])
+        vol_state_vocab = _store_vocab_list(store.get("vol_state_vocab"))
         liq_state_id = np.asarray(store["liq_state_id"])
-        liq_state_vocab = list(store.get("liq_state_vocab") or [])
+        liq_state_vocab = _store_vocab_list(store.get("liq_state_vocab"))
 
         n = len(ts)
         signal = np.zeros(n, dtype=np.float64)
