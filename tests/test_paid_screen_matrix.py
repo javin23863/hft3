@@ -118,7 +118,10 @@ class FakeMatrixPortfolio:
         else:
             entry_col = self._entries
             exit_col = self._exits
-        close = self._close
+        if self._close.ndim == 2:
+            close = self._close[:, col]
+        else:
+            close = self._close
         position = False
         entry_price = 0.0
         returns: list[float] = []
