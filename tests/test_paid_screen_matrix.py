@@ -382,12 +382,55 @@ class TestSlTpForPortfolio:
         assert sl.shape == (n_trials,)
         assert tp is None
 
-    def test_numba_engine_returns_lists(self):
+    def test_numba_engine_returns_column_ndarrays(self):
         chunk = [{"stop_loss_pct": 1.0, "take_profit_pct": 2.0}]
         sl_arr, tp_arr = _build_sl_tp_arrays(chunk)
         sl, tp = _sl_tp_for_portfolio(sl_arr, tp_arr, engine="numba")
-        assert sl == [0.01]
-        assert tp == [0.02]
+        assert isinstance(sl, np.ndarray)
+        assert isinstance(tp, np.ndarray)
+        assert sl.shape == (1,)
+        assert tp.shape == (1,)
+        assert sl.dtype == np.float64
+        assert tp.dtype == np.float64
+
+    def test_numba_ndarray_width_matches_matrix_cols_not_bars(self):
+        """Reproduces Vast repro128 failure: n_bars=5, n_cols=64 must not broadcast."""
+        n_trials = 64
+        m_bars = 5
+        chunk = [
+            {
+                "stop_loss_pct": 0.5 if i % 2 == 0 else None,
+                "take_profit_pct": 1.0,
+                "holding_period_bars": 5,
+            }
+            for i in range(n_trials)
+        ]
+        sl_arr, tp_arr = _build_sl_tp_arrays(chunk)
+        sl, tp = _sl_tp_for_portfolio(sl_arr, tp_arr, engine="numba")
+        assert sl.shape == (n_trials,)
+        assert tp.shape == (n_trials,)
+        assert sl.shape != (m_bars,)
+
+        try:
+            import vectorbt as vbt
+        except ImportError:
+            pytest.skip("vectorbt not installed")
+
+        close = np.ones(m_bars)
+        entries = np.zeros((m_bars, n_trials), dtype=bool)
+        entries[0, :] = True
+        exits = np.zeros((m_bars, n_trials), dtype=bool)
+        exits[-1, :] = True
+        pf = vbt.Portfolio.from_signals(
+            close,
+            entries=entries,
+            exits=exits,
+            sl_stop=sl,
+            tp_stop=tp,
+            freq="1min",
+            engine="numba",
+        )
+        assert pf.wrapper.shape[1] == n_trials
 
 
 # ---------------------------------------------------------------------------
