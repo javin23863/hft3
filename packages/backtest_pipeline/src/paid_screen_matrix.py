@@ -138,7 +138,6 @@ def _sl_tp_for_portfolio(
     tp_arr: Sequence[Optional[float]],
     *,
     engine: str,
-    n_bars: Optional[int] = None,
 ) -> Tuple[Optional[Any], Optional[Any]]:
     """Return per-column ``sl_stop`` / ``tp_stop`` as 1-D ``float64`` arrays.
 
@@ -146,6 +145,7 @@ def _sl_tp_for_portfolio(
     numba and rust.  Python lists are misread as bar-length stops and trigger
     broadcast errors (e.g. ``(n_bars,)`` vs ``(n_cols,)``).
     """
+    del engine  # same ndarray contract for all engines
     has_sl = any(s is not None for s in sl_arr)
     has_tp = any(t is not None for t in tp_arr)
     sl = (
@@ -164,17 +164,6 @@ def _sl_tp_for_portfolio(
         if has_tp
         else None
     )
-
-    def _broadcast_rust_matrix_stops(stops: Optional[np.ndarray]) -> Optional[np.ndarray]:
-        if engine != "rust" or stops is None or n_bars is None or stops.ndim != 1:
-            return stops
-        n_cols = int(stops.shape[0])
-        if n_bars == n_cols:
-            return stops
-        return np.broadcast_to(stops.reshape(1, -1), (n_bars, n_cols)).copy()
-
-    sl = _broadcast_rust_matrix_stops(sl)
-    tp = _broadcast_rust_matrix_stops(tp)
     return sl, tp
 
 
@@ -432,16 +421,10 @@ def run_vectorbt_simulation_matrix(
 
             sl_arr, tp_arr = _build_sl_tp_arrays(surviving_chunk)
             sl_stop, tp_stop = _sl_tp_for_portfolio(
-                sl_arr, tp_arr, engine=portfolio_engine, n_bars=n_bars
+                sl_arr, tp_arr, engine=portfolio_engine
             )
             for name, arr in (("sl_stop", sl_stop), ("tp_stop", tp_stop)):
                 if arr is None:
-                    continue
-                if isinstance(arr, np.ndarray) and arr.ndim == 2:
-                    if arr.shape != (n_bars, n_cols):
-                        raise ValueError(
-                            f"{name} shape {arr.shape} != matrix ({n_bars}, {n_cols})"
-                        )
                     continue
                 arr_len = int(arr.shape[0]) if isinstance(arr, np.ndarray) else len(arr)
                 if arr_len != n_cols:
