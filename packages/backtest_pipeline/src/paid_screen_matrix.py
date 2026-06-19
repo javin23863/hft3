@@ -432,10 +432,15 @@ def run_vectorbt_simulation_matrix(
                         f"{name} length {arr_len} != matrix columns {n_cols}"
                     )
 
+            close_matrix = np.broadcast_to(
+                np.asarray(close, dtype=float).reshape(-1, 1),
+                (n_bars, n_cols),
+            ).copy()
+
             # --- One matrix Portfolio.from_signals call ------------------------------
             try:
                 pf = vbt.Portfolio.from_signals(
-                    close,
+                    close_matrix,
                     entries=entries_matrix > 0,
                     exits=exits_matrix < 0,
                     init_cash=10000.0,
