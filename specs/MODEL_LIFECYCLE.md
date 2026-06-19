@@ -19,7 +19,7 @@ BUILT + tested (90 tests) + safe-by-default — the loop is now end-to-end wired
 - **Job worker** `lifecycle_orchestrator.src.worker` — claims pending jobs and runs
   them; routes materialize REAL `run_event_universe --from-stage-a <stub>` commands
   (no placeholders) when the model's cell metadata is present. **Historical M6 path**
-  only — current VectorBT prefilter uses `run_vectorbt_paid_screen.py` on Vast;
+  only — current VectorBT prefilter uses `run_paid_screen.py` on Vast;
   HftBacktest follows promoted screening artifacts.
 - **Scheduler** `scripts/orchestrator_nightly.ps1` + `register_orchestrator_task.ps1`
   (`HFT3ModelMaintenanceNightly`, 05:50, DRY-RUN default).
@@ -121,7 +121,7 @@ Authority: vault `library/14 Model Lifecycle and Governance.md`, `library/System
 
 | Step | Role | Location |
 |------|------|----------|
-| VectorBT paid screen (Vast) | Broad cheap prefilter: `events.csv × active model registry × discovery_confirmation` | `scripts/run_vectorbt_paid_screen.py`, Vast launch scripts |
+| VectorBT paid screen (Vast) | Broad cheap prefilter: `events.csv × active model registry × discovery_confirmation` | `scripts/run_paid_screen.py`, Vast launch scripts |
 | Robust gates (DSR/PBO/CSCV/WFC) | Must pass on promoted rows before LIVE eligibility | `screening_artifact.json`, `PromotionGate` |
 | `feature_recipe_hash` equality | Fail-closed handoff from VectorBT promoted row → `HftReplayScenario` | `packages/backtest_pipeline/src/recipe_hash_gate.py` |
 | HftBacktest realism | Heavier execution replay on promoted outputs only | `research_cards/hftbacktest_realism/` |

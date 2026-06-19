@@ -131,7 +131,7 @@ When full old-vs-new parity comparison runs with real NPZ data, the following mu
 
 A Vast.ai instance with real NPZ data must:
 
-1. Run the current `run_vectorbt_paid_screen.py` (v1) on the parity corpus
+1. Run archived v1 manifests on the parity corpus (v1 script **retired 2026-06**)
 2. Run `run_vectorbt_paid_screen_v2.py` (v2) on the same parity corpus
 3. Compare all 933 unit results across the fields listed in §3
 4. Report any mismatches with unit-level detail

@@ -1444,4 +1444,4 @@ def _grouping_context(
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -23,7 +23,7 @@ LAKE_HASH="$(python3 -c "import hashlib;print(hashlib.sha256(open('/data/npz/man
 tmux kill-session -t vbt_cpi_medium 2>/dev/null || true
 tmux new -d -s vbt_cpi_medium \
   "cd /root/hft3/repo && export HFT3_NPZ_ROOT=/data/npz HFT3_MANIFEST_PATH=/data/npz/manifest.json HFT3_FEATURE_BACKEND=cpp && \
-   python3 -u scripts/run_paid_screen.py --execution-mode v2 \
+   python3 -u scripts/run_paid_screen.py \
    --units-jsonl runtime/reports/vbt_cpi_medium.jsonl \
    --out ${OUT} \
    --vectorbt-scope paid-compute \

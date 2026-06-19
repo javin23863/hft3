@@ -31,9 +31,10 @@ Related documents:
 | `$GATE` | Path to `paid_screen_ready_gate.json`. |
 | `$WORKERS` | Worker count. Smoke: 4–8. Workstation: 1–16. Vast 256 vCPU: ≥230. |
 
-All v2 commands use `scripts/run_vectorbt_paid_screen_v2.py`. The v1
-orchestrator (`scripts/run_vectorbt_paid_screen.py`) remains available for
-rollback and parity comparison (see `PAID_SCREEN_MIGRATION_PLAN.md`).
+All v2 commands use `scripts/run_paid_screen.py` (canonical shim) or
+`scripts/run_vectorbt_paid_screen_v2.py` directly. The v1 subprocess-per-unit
+orchestrator (`scripts/run_vectorbt_paid_screen.py`) is **retired** (removed
+2026-06); use archived manifests for historical v1 parity only.
 
 ---
 
@@ -105,19 +106,15 @@ print('OK')
 schema as v1 on the **same** unit corpus and hashes. This is the core
 migration gate (see `PAID_SCREEN_MIGRATION_PLAN.md` §2).
 
-### 2.1 v1 baseline (if not already recorded)
+### 2.1 v1 baseline (retired — historical reference only)
+
+> **Retired 2026-06:** `scripts/run_vectorbt_paid_screen.py` was deleted. Use
+> archived v1 manifests under `runtime/reports/paid_screen_v1_baseline/` for
+> parity comparison; do not attempt to re-run v1.
 
 ```bash
-export VBT_V1_DIR="runtime/reports/paid_screen_v1_baseline"
-
-python scripts/run_vectorbt_paid_screen.py \
-  --units-jsonl runtime/reports/vbt_smoke_units.jsonl \
-  --out "$VBT_V1_DIR" \
-  --vectorbt-scope paid-compute \
-  --workers 1 \
-  --max-wall-clock-seconds 3600 \
-  --no-llm
-```
+# Historical — script no longer exists:
+# python scripts/run_vectorbt_paid_screen.py ...
 
 Record the `events_csv_hash` and `lake_manifest_hash` from the v1 manifest
 (needed to make v2 cache keys directly comparable):
@@ -212,19 +209,14 @@ python scripts/run_vectorbt_paid_screen_v2.py \
   --no-llm
 ```
 
-### 3.2 v1 benchmark (same units, same worker count)
+### 3.2 v1 benchmark (retired — historical reference only)
+
+> **Retired 2026-06:** v1 orchestrator deleted. Compare against archived v1
+> benchmark manifests only.
 
 ```bash
-export VBT_BENCH_V1_DIR="research_cards/pipeline_runs/paid_bench_v1_$(date -u +%Y%m%dT%H%M%SZ)"
-
-python scripts/run_vectorbt_paid_screen.py \
-  --units-jsonl runtime/reports/vbt_smoke_units.jsonl \
-  --out "$VBT_BENCH_V1_DIR" \
-  --vectorbt-scope paid-compute \
-  --workers 1 \
-  --max-wall-clock-seconds 3600 \
-  --no-llm
-```
+# Historical — script no longer exists:
+# python scripts/run_vectorbt_paid_screen.py ...
 
 ### 3.3 Compare throughput
 

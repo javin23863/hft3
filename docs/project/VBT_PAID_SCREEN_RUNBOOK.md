@@ -104,7 +104,7 @@ python scripts/generate_vbt_paid_units_jsonl.py \
 ```bash
 export VBT_PAID_RUN_ID="paid_smoke_$(date -u +%Y%m%dT%H%M%SZ)"
 
-python scripts/run_vectorbt_paid_screen.py \
+python scripts/run_paid_screen.py \
   --units-jsonl runtime/reports/vbt_smoke_units.jsonl \
   --out "research_cards/pipeline_runs/${VBT_PAID_RUN_ID}" \
   --vectorbt-scope paid-compute \
@@ -211,7 +211,7 @@ Or manual orchestrator after on-host unit generation:
 ```bash
 export VBT_FULL_RUN_ID="paid_full_$(date -u +%Y%m%dT%H%M%SZ)"
 
-python scripts/run_vectorbt_paid_screen.py \
+python scripts/run_paid_screen.py \
   --units-jsonl runtime/reports/vbt_full_units.jsonl \
   --out "research_cards/pipeline_runs/${VBT_FULL_RUN_ID}" \
   --vectorbt-scope paid-compute \

@@ -161,7 +161,7 @@ python scripts/generate_vbt_paid_units_jsonl.py \
   --out runtime/reports/vbt_full_units.jsonl
 
 # Sanity
-python scripts/run_vectorbt_paid_screen.py \
+python scripts/run_paid_screen.py \
   --units-jsonl runtime/reports/vbt_full_units.jsonl \
   --out /tmp/vbt_dry_run \
   --dry-run
@@ -185,7 +185,7 @@ bash scripts/run_vbt_hbt_handoff_verify.sh
 jq .ready_for_full_run runtime/reports/paid_screen_ready_gate.json
 
 # Dry-run full unit count
-python scripts/run_vectorbt_paid_screen.py \
+python scripts/run_paid_screen.py \
   --units-jsonl runtime/reports/vbt_full_units.jsonl \
   --out /tmp/preflight_out \
   --dry-run
@@ -213,8 +213,7 @@ Canary pass: `screening_artifact.json` exists, `vectorbt_engine=rust`, `no_looka
 bash scripts/run_vbt_paid_screen_vast_full.sh
 ```
 
-Uses `scripts/run_paid_screen.py --execution-mode v2` (long-lived workers) by default.
-Rollback: `export VBT_EXECUTION_MODE=v1` before the same script.
+Uses `scripts/run_paid_screen.py` (v2 long-lived workers).
 Resume: `export VBT_RESUME=1`. Cache/recycle knobs: `VBT_CACHE_MEMORY_LIMIT_MB`,
 `VBT_CACHE_MAX_ENTRIES`, `VBT_MAX_BATCHES_BEFORE_RECYCLE`. See
 [PAID_SCREEN_OPS_COMMANDS.md](PAID_SCREEN_OPS_COMMANDS.md).
@@ -242,7 +241,6 @@ export HFT3_REPO="$(pwd)"
 export VBT_FULL_RUN_ID="paid_full_$(date -u +%Y%m%dT%H%M%SZ)"
 
 python scripts/run_paid_screen.py \
-  --execution-mode v2 \
   --units-jsonl runtime/reports/vbt_full_units.jsonl \
   --out "research_cards/pipeline_runs/${VBT_FULL_RUN_ID}" \
   --vectorbt-scope paid-compute \

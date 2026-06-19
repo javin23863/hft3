@@ -181,35 +181,21 @@ def _resolve_vast_launch_hashes(
     return events_hash, lake_hash
 
 
-class TestVastLauncherV1Dispatch:
-    def test_v2_only_flags_guarded_from_v1(self):
+class TestVastLauncherV2Only:
+    def test_v2_provenance_flags_always_passed(self):
         text = _VAST_SCRIPT.read_text(encoding="utf-8")
-        paid_v2_start = text.index("  PAID_ARGS+=(\n    --max-batches-before-recycle")
-        v2_paid_block = text[paid_v2_start:]
-        assert "--max-batches-before-recycle" in v2_paid_block
-        assert "--cache-memory-limit-mb" in v2_paid_block
-        assert "--cache-max-entries" in v2_paid_block
-        assert "--resume" in v2_paid_block
-        assert '--events-csv "$EVENTS_CSV"' in v2_paid_block
-        assert '--events-csv-hash "$EVENTS_CSV_HASH"' in v2_paid_block
-        assert '--lake-manifest-hash "$LAKE_MANIFEST_HASH"' in v2_paid_block
-        pre_paid_v2 = text[:paid_v2_start]
-        assert "--max-batches-before-recycle" not in pre_paid_v2
-        assert "--cache-max-entries" not in pre_paid_v2
-        assert '--events-csv-hash "$EVENTS_CSV_HASH"' not in pre_paid_v2
-        assert '--lake-manifest-hash "$LAKE_MANIFEST_HASH"' not in pre_paid_v2
-
-    def test_v1_rollback_does_not_resolve_or_pass_hash_flags(self):
-        text = _VAST_SCRIPT.read_text(encoding="utf-8")
-        v1_guard = text.index('if [[ "$EXECUTION_MODE" == "v1" ]]; then')
-        hash_resolve = text.index("Resolving v2 provenance hashes")
-        assert v1_guard < hash_resolve
-        v1_script_line = text[v1_guard:hash_resolve]
-        assert "--events-csv-hash" not in v1_script_line
-        assert "--lake-manifest-hash" not in v1_script_line
-        assert 'if [[ "$EXECUTION_MODE" != "v1" ]]; then' in text
+        assert "run_paid_screen.py" in text
+        assert "run_vectorbt_paid_screen.py" not in text
+        assert "VBT_EXECUTION_MODE" not in text
+        assert "--max-batches-before-recycle" in text
+        assert "--cache-memory-limit-mb" in text
+        assert "--cache-max-entries" in text
+        assert "--resume" in text
+        assert '--events-csv "$EVENTS_CSV"' in text
+        assert '--events-csv-hash "$EVENTS_CSV_HASH"' in text
+        assert '--lake-manifest-hash "$LAKE_MANIFEST_HASH"' in text
+        assert "Resolving v2 provenance hashes" in text
         assert "Do not substitute units JSONL" in text
-
 
 class TestVastLauncherHashWiring:
     def test_events_hash_derived_from_events_csv(self, tmp_path):

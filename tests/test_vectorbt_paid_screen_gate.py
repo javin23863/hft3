@@ -79,13 +79,22 @@ def test_ready_gate_fails_on_missing_pilot(tmp_path: Path) -> None:
 def test_paid_screen_dry_run_lists_units(tmp_path: Path) -> None:
     units = tmp_path / "units.jsonl"
     units.write_text(
-        json.dumps({"unit_id": "u1", "event_id": "CPI_2024_09_11_TIGHT", "thesis": "t"}) + "\n",
+        json.dumps(
+            {
+                "unit_id": "u1",
+                "event_id": "CPI_2024_09_11_TIGHT",
+                "thesis": "t",
+                "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+                "symbol": "MES.v.0",
+            }
+        )
+        + "\n",
         encoding="utf-8",
     )
     proc = subprocess.run(
         [
             sys.executable,
-            str(SCRIPTS / "run_vectorbt_paid_screen.py"),
+            str(SCRIPTS / "run_paid_screen.py"),
             "--units-jsonl",
             str(units),
             "--out",
@@ -339,13 +348,22 @@ def test_generated_thesis_round_trips_hyp_ids_1_to_50(tmp_path: Path) -> None:
 def test_paid_screen_refuses_high_workers_without_gate(tmp_path: Path) -> None:
     units = tmp_path / "units.jsonl"
     units.write_text(
-        json.dumps({"unit_id": "u1", "event_id": "CPI_2024_09_11_TIGHT", "thesis": "t"}) + "\n",
+        json.dumps(
+            {
+                "unit_id": "u1",
+                "event_id": "CPI_2024_09_11_TIGHT",
+                "thesis": "t",
+                "model_id": "SPREAD_BLOWOUT_RECOMPRESSION",
+                "symbol": "MES.v.0",
+            }
+        )
+        + "\n",
         encoding="utf-8",
     )
     proc = subprocess.run(
         [
             sys.executable,
-            str(SCRIPTS / "run_vectorbt_paid_screen.py"),
+            str(SCRIPTS / "run_paid_screen.py"),
             "--units-jsonl",
             str(units),
             "--out",

@@ -15,7 +15,6 @@ python3 scripts/generate_vbt_paid_units_jsonl.py \
   --model-id HYP_5
 
 python3 scripts/run_paid_screen.py \
-  --execution-mode v2 \
   --units-jsonl "$SMOKE_UNITS" \
   --out "$OUT_DIR" \
   --vectorbt-scope paid-compute \

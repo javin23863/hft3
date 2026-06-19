@@ -291,7 +291,7 @@ python -m pytest tests/backtest_pipeline/test_feature_plane.py tests/research_pi
 |-------|-------|
 | **Purpose** | Block rented workers until pilot proves feature-family coverage |
 | **Document** | [../project/VBT_PAID_SCREEN_RUNBOOK.md](../project/VBT_PAID_SCREEN_RUNBOOK.md), [../project/VBT_PAID_SCREEN_UNIT_SCOPE.md](../project/VBT_PAID_SCREEN_UNIT_SCOPE.md) |
-| **Code** | `scripts/run_vectorbt_paid_screen.py`, `packages/backtest_pipeline/src/feature_family_status.py` |
+| **Code** | `scripts/run_paid_screen.py`, `packages/backtest_pipeline/src/feature_family_status.py` |
 | **Config** | `paid_screen_gate` in [FEATURE_FAMILY_STATUS_MANIFEST.yaml](../project/FEATURE_FAMILY_STATUS_MANIFEST.yaml) |
 | **Tests** | `tests/test_vectorbt_paid_screen_gate.py`, `tests/backtest_pipeline/test_feature_family_paid_gate.py` |
 | **Inputs** | Pilot artifact with all family statuses + PIT proof |

@@ -7,8 +7,8 @@ verified by 214 passing tests across 8 test files
 `test_paid_screen_hardening`, `test_paid_screen_parity_corpus`).
 
 This document is the authoritative migration and rollback plan for switching
-production paid-screen runs from the **v1 orchestrator**
-(`scripts/run_vectorbt_paid_screen.py`) to the **v2 orchestrator**
+production paid-screen runs from the **retired v1 orchestrator**
+(`scripts/run_vectorbt_paid_screen.py`, deleted 2026-06) to the **v2 orchestrator**
 (`scripts/run_vectorbt_paid_screen_v2.py`) and the redesigned execution path
 (typed units → `group_units_by_batch_key` → `PaidScreenWorker` →
 `screen_paid_batch` → `run_vectorbt_simulation_matrix`).
@@ -83,7 +83,7 @@ python scripts/generate_vbt_paid_units_jsonl.py \
   --event-types CPI,NFP \
   --model-id HYP_5
 
-python scripts/run_vectorbt_paid_screen.py \
+python scripts/run_vectorbt_paid_screen_v2.py \
   --units-jsonl runtime/reports/vbt_migration_units.jsonl \
   --out "$VBT_MIGRATION_BASELINE_DIR" \
   --vectorbt-scope paid-compute \
@@ -112,15 +112,11 @@ python scripts/run_vectorbt_paid_screen.py \
 - Git working tree is clean at the recorded `HEAD`; no uncommitted changes to
   `packages/backtest_pipeline/src/paid_screen_*.py` or `scripts/run_vectorbt_paid_screen_v2.py`.
 
-### 1.5 Rollback pre-arming
+### 1.5 Rollback pre-arming (historical — v1 retired 2026-06)
 
-- Confirm `scripts/run_vectorbt_paid_screen.py` (v1) is unchanged and still
-  runnable on the same unit JSONL (it is; v1 and v2 coexist as separate scripts).
-- Tag the current `HEAD` so rollback has an exact restore point:
-  ```bash
-  git tag paid-screen-v2-migration-start
-  ```
-- Record the tag name in the migration log.
+- **v1 retired.** `scripts/run_vectorbt_paid_screen.py` was deleted after v2
+  became canonical. Rollback is no longer to v1; preserve v2 run dirs for
+  post-mortem and re-run with `--resume` or a fresh v2 launch.
 
 ---
 
@@ -130,39 +126,11 @@ The migration is **gradual**: v2 is exercised first on a single worker, then
 on a small parallel batch, then on the full rent topology. Each stage has an
 explicit gate; do not advance until the gate passes.
 
-### Step 1 — Add the `--execution-mode` selector
+### Step 1 — Canonical shim (`run_paid_screen.py` → v2) — **done**
 
-The two orchestrators coexist as separate scripts. Introduce a thin dispatch
-shim so operators can select the execution mode with one flag without
-memorizing two script paths. This is a convenience layer; it does not change
-either orchestrator's internals.
-
-Create `scripts/run_paid_screen.py` (dispatch shim):
-
-```python
-#!/usr/bin/env python3
-"""Dispatch shim: select v1 or v2 paid-screen orchestrator via --execution-mode."""
-import argparse, subprocess, sys
-from pathlib import Path
-
-_REPO = Path(__file__).resolve().parents[1]
-
-def main():
-    parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--execution-mode", choices=["v1", "v2"], default="v2")
-    known, rest = parser.parse_known_args()
-    script = "run_vectorbt_paid_screen.py" if known.execution_mode == "v1" \
-             else "run_vectorbt_paid_screen_v2.py"
-    return subprocess.call([sys.executable, str(_REPO / "scripts" / script)] + rest)
-
-if __name__ == "__main__":
-    raise SystemExit(main())
-```
-
-**Why a shim and not an in-place flag on v1?** v1 spawns a `run_pipeline.py`
-subprocess per unit and parses free-text thesis strings; v2 uses typed units and
-long-lived workers. They share no execution code, so a dispatch shim keeps each
-path intact and auditable — which is what makes rollback trivial (step 3).
+`scripts/run_paid_screen.py` forwards all args to
+`scripts/run_vectorbt_paid_screen_v2.py`. The v1 `--execution-mode` selector
+and `scripts/run_vectorbt_paid_screen.py` were **retired 2026-06**.
 
 ### Step 2 — Parity run (v1 vs v2 on the same corpus)
 
@@ -224,27 +192,17 @@ At each stage record `units_per_hour` so the throughput trend is visible. v2
 should be strictly faster than v1 at the same worker count because it
 amortizes imports and VectorBT/Rust init across batches (design §1).
 
-### Step 4 — Cut over the default
+### Step 4 — Cut over the default — **done (2026-06)**
 
-Once stage D completes with a `complete` manifest and validated artifacts:
-
-1. Flip the dispatch shim default from `v2` (already the default in the shim
-   above) — confirm the default by running `--help` on the shim.
-2. Update the runbook (`VBT_PAID_SCREEN_RUNBOOK.md`) Phase B and Phase D command
-   blocks to use the shim with `--execution-mode v2` (or the v2 script
-   directly) so new operators land on v2 by default.
-3. Tag the cutover commit:
-   ```bash
-   git tag paid-screen-v2-cutover
-   ```
-4. Leave v1 in place. It is the rollback target (see §3).
+v2 is canonical. `run_paid_screen.py` forwards to `run_vectorbt_paid_screen_v2.py`.
+v1 (`run_vectorbt_paid_screen.py`) was deleted; rollback is v2 `--resume` only.
 
 ---
 
-## 3. Rollback plan
+## 3. Rollback plan (v2 resume only — v1 retired 2026-06)
 
-Rollback is **always available** because v1 and v2 are separate scripts that
-share no execution code. There is no in-place mutation to undo.
+Rollback means re-running v2 with `--resume` or a fresh v2 launch. The v1
+subprocess-per-unit path is no longer available.
 
 ### 3.1 When to roll back
 
@@ -257,52 +215,26 @@ share no execution code. There is no in-place mutation to undo.
 - A correctness regression is suspected (promoted/rejected IDs diverge from v1
   on validated artifacts).
 
-### 3.2 Rollback procedure
+### 3.2 Rollback procedure (v1 retired — v2 resume only)
 
 1. **Stop v2 workers.** Kill the v2 process pool; preserve the v2 run directory
    for post-mortem (do not delete it — the failure diagnostics in
    `failure_diagnostics.json` are the evidence).
-2. **Restore the v1 path.** No code change is needed; v1 is still
-   `scripts/run_vectorbt_paid_screen.py`. To pin to the exact pre-migration
-   state:
-   ```bash
-   git checkout paid-screen-v2-migration-start -- scripts/run_vectorbt_paid_screen.py
-   ```
-   (v1 was not modified during migration, so this is a no-op in the common
-   case; the checkout only guards against accidental edits.)
-3. **Re-run on v1** with the same unit JSONL and hashes:
-   ```bash
-   python scripts/run_vectorbt_paid_screen.py \
-     --units-jsonl runtime/reports/vbt_full_units.jsonl \
-     --out "research_cards/pipeline_runs/${VBT_FULL_RUN_ID}_rollback_v1" \
-     --vectorbt-scope paid-compute \
-     --workers 230 \
-     --ready-gate-file runtime/reports/paid_screen_ready_gate.json \
-     --max-wall-clock-seconds 86400 \
-     --no-llm
-   ```
-4. **Confirm v1 manifest is `complete`** and artifacts validate before
-   declaring the rollback successful.
-5. **File a rollback record** in
+2. **Re-run v2** with `--resume` on the same run directory, or start a fresh v2
+   launch via `scripts/run_paid_screen.py` / `run_vbt_paid_screen_vast_full.sh`.
+3. **Confirm v2 manifest is `complete`** and artifacts validate before
+   declaring recovery successful.
+4. **File a rollback record** in
    `runtime/reports/paid_screen_rollback_<date>.json` with: v2 run dir, v2
-   failure summary, v1 rollback run dir, v1 manifest status, root-cause
-   hypothesis.
+   failure summary, recovery run dir, manifest status, root-cause hypothesis.
+
+> **Historical:** v1 rollback via `scripts/run_vectorbt_paid_screen.py` is no
+> longer available (script deleted 2026-06).
 
 ### 3.3 What is preserved on rollback
 
-- **v1 path is intact.** `run_vectorbt_paid_screen.py` and its
-  `run_pipeline.py` subprocess-per-unit model are unchanged. No v2 code is
-  imported by v1.
-- **Unit JSONL is shared.** v1 and v2 consume the same JSONL format (v2 reads
-  the additional structured fields via `PaidScreenUnit.from_jsonl_row`, and
-  ignores fields it does not use; v1 reads only the v1 fields). The same
-  `vbt_full_units.jsonl` works for both.
-- **Ready gate is shared.** `paid_screen_ready_gate.json` is produced by
-  `validate_paid_screen_ready_gate.py` and is consumed by both orchestrators
-  unchanged.
-- **Artifacts are independent.** v1 and v2 write to separate run directories;
-  rolling back does not overwrite v2 artifacts, so the post-mortem evidence is
-  preserved.
+- **v2 is canonical.** `run_paid_screen.py` → `run_vectorbt_paid_screen_v2.py`
+  with long-lived workers. v1 subprocess-per-unit path retired 2026-06.
 
 ### 3.4 Partial rollback (resume-only)
 
@@ -338,7 +270,7 @@ already-validated artifacts may carry the regression.
 | R3 | Worker crash isolates a batch but the manifest is not flushed | Low | Medium (partial manifest) | Phase 6 hardening (`test_paid_screen_hardening.py`) verifies worker-crash isolation and manifest honesty (`determine_manifest_status` never returns `complete` when `failed > 0`). `--resume` recovers. |
 | R4 | Cache memory pressure on long runs | Medium | Low (eviction, not corruption) | `BoundedLRUCache` evicts LRU; `_recycle()` clears the cache after `max_batches_before_recycle` (default 100) without restarting the process. Tune `--cache-memory-limit-mb` and `--max-batches-before-recycle` for the host. |
 | R5 | v2 slower than v1 at low worker count due to spawn overhead | Medium | Low | v2 uses `spawn` context (one-time cost). At `--workers 1` the overhead is negligible; at scale the amortized init dominates favorably. Benchmark (see `PAID_SCREEN_OPS_COMMANDS.md` §Benchmark run) to confirm. |
-| R6 | Operator accidentally runs v1 on a v2-tagged run directory | Low | Low (separate dirs) | Run directories are timestamped and orchestrator-versioned (`orchestrator_version: "v2"` in the v2 manifest). The dispatch shim defaults to v2; v1 is opt-in via `--execution-mode v1`. |
+| R6 | Operator accidentally runs v1 on a v2-tagged run directory | N/A (v1 retired) | — | v1 script deleted 2026-06; only v2 launch paths remain. |
 | R7 | `events_csv_hash` / `lake_manifest_hash` drift between v1 baseline and v2 run | Medium | High (cache keys not comparable, parity invalid) | Pass `--events-csv-hash` and `--lake-manifest-hash` explicitly to v2 with the values from the v1 baseline manifest (§1.4). The ready gate also enforces hash match. |
 | R8 | Rust runtime proof fails under v2 worker init | Low | High (fail-closed rejections) | v2 fails closed (design invariant 6): missing VectorBT/Rust proof produces explicit `RejectedCandidate` rows with `rust_runtime_proof_missing_fail_closed`. Detect in the parity run; fix the Vast host setup before full rent. |
 | R9 | Artifact schema drift between v1 and v2 | Low | High (validation fails) | Both orchestrators write artifacts validated by the same `validate_screening_artifact`. The parity gate (§2) enforces schema validity on v2 artifacts before advancing. |

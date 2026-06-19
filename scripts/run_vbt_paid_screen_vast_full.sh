@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
-# Phase D full VectorBT paid screen on Vast (default v2 long-lived workers).
+# Phase D full VectorBT paid screen on Vast (v2 long-lived workers).
 # Authority: docs/project/VBT_PAID_SCREEN_UNIT_SCOPE.md, PAID_SCREEN_OPS_COMMANDS.md
 # Run ON the Vast instance (NPZ lake already present). Do not use 4-worker smoke topology.
 # Units are generated on-host from events.csv + active model registry (not local Stage A survivors).
-# Rollback: export VBT_EXECUTION_MODE=v1 before launch (legacy subprocess-per-unit).
 # v2 env knobs: VBT_CACHE_MEMORY_LIMIT_MB, VBT_CACHE_MAX_ENTRIES, VBT_MAX_BATCHES_BEFORE_RECYCLE, VBT_RESUME=1
 # v2 provenance: passes --events-csv + derived --events-csv-hash; lake hash from HFT3_MANIFEST_PATH
 # (sha256 file content) or declaration lake_manifest_hash — fail-closed before v2 launch if unavailable.
@@ -141,20 +140,10 @@ OUT_DIR="${REPO_ROOT}/research_cards/pipeline_runs/${VBT_FULL_RUN_ID}"
 LOG_FILE="${OUT_DIR}/orchestrator.log"
 mkdir -p "$OUT_DIR"
 
-# Execution mode: v2 (default) long-lived workers; v1 subprocess-per-unit rollback.
-EXECUTION_MODE="${VBT_EXECUTION_MODE:-v2}"
 PAID_SCREEN_SCRIPT="scripts/run_paid_screen.py"
-if [[ "$EXECUTION_MODE" == "v1" ]]; then
-  PAID_SCREEN_SCRIPT="scripts/run_vectorbt_paid_screen.py"
-  echo "WARN: VBT_EXECUTION_MODE=v1 — legacy subprocess-per-unit path (rollback only)" >&2
-fi
 
-# v2 fail-closes without real events/lake provenance hashes. v1 rollback skips this block.
-EVENTS_CSV_HASH=""
-LAKE_MANIFEST_HASH=""
-if [[ "$EXECUTION_MODE" != "v1" ]]; then
-  echo "Resolving v2 provenance hashes (events CSV + lake manifest)..."
-  if ! read -r EVENTS_CSV_HASH LAKE_MANIFEST_HASH < <(
+echo "Resolving v2 provenance hashes (events CSV + lake manifest)..."
+if ! read -r EVENTS_CSV_HASH LAKE_MANIFEST_HASH < <(
     python3 - "$REPO_ROOT" "$EVENTS_CSV" "$DECL_FILE" <<'PY'
 import hashlib
 import json
@@ -209,19 +198,13 @@ def resolve_lake_manifest_hash(repo_root: Path, decl_file: Path) -> str:
 
 print(resolve_events_csv_hash(events_csv, repo_root), resolve_lake_manifest_hash(repo_root, decl_file))
 PY
-  ); then
-    exit 1
-  fi
-  echo "events_csv_hash=$EVENTS_CSV_HASH lake_manifest_hash=$LAKE_MANIFEST_HASH"
+); then
+  exit 1
 fi
+echo "events_csv_hash=$EVENTS_CSV_HASH lake_manifest_hash=$LAKE_MANIFEST_HASH"
 
 PAID_ARGS=(
   python3 "$PAID_SCREEN_SCRIPT"
-)
-if [[ "$EXECUTION_MODE" != "v1" ]]; then
-  PAID_ARGS+=(--execution-mode "$EXECUTION_MODE")
-fi
-PAID_ARGS+=(
   --units-jsonl "$UNITS_JSONL"
   --out "$OUT_DIR"
   --vectorbt-scope paid-compute
@@ -229,22 +212,18 @@ PAID_ARGS+=(
   --ready-gate-file "$GATE_FILE"
   --max-wall-clock-seconds "${VBT_MAX_WALL_CLOCK_SECONDS:-86400}"
   --no-llm
+  --max-batches-before-recycle "${VBT_MAX_BATCHES_BEFORE_RECYCLE:-100}"
+  --cache-memory-limit-mb "${VBT_CACHE_MEMORY_LIMIT_MB:-4096}"
+  --cache-max-entries "${VBT_CACHE_MAX_ENTRIES:-1000}"
+  --events-csv "$EVENTS_CSV"
+  --events-csv-hash "$EVENTS_CSV_HASH"
+  --lake-manifest-hash "$LAKE_MANIFEST_HASH"
 )
-if [[ "$EXECUTION_MODE" != "v1" ]]; then
-  PAID_ARGS+=(
-    --max-batches-before-recycle "${VBT_MAX_BATCHES_BEFORE_RECYCLE:-100}"
-    --cache-memory-limit-mb "${VBT_CACHE_MEMORY_LIMIT_MB:-4096}"
-    --cache-max-entries "${VBT_CACHE_MAX_ENTRIES:-1000}"
-    --events-csv "$EVENTS_CSV"
-    --events-csv-hash "$EVENTS_CSV_HASH"
-    --lake-manifest-hash "$LAKE_MANIFEST_HASH"
-  )
-  if [[ "${VBT_RESUME:-}" == "1" || "${VBT_RESUME:-}" == "true" ]]; then
-    PAID_ARGS+=(--resume)
-  fi
+if [[ "${VBT_RESUME:-}" == "1" || "${VBT_RESUME:-}" == "true" ]]; then
+  PAID_ARGS+=(--resume)
 fi
 
-echo "Starting full run id=$VBT_FULL_RUN_ID workers=$WORKERS execution_mode=$EXECUTION_MODE out=$OUT_DIR"
+echo "Starting full run id=$VBT_FULL_RUN_ID workers=$WORKERS out=$OUT_DIR"
 "${PAID_ARGS[@]}" 2>&1 | tee "$LOG_FILE"
 
 echo "Manifest: ${OUT_DIR}/paid_screen_run_manifest.json"

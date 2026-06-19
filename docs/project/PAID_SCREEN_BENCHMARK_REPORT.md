@@ -10,11 +10,11 @@ The following configurations are defined by the redesign spec and the v2 orchest
 
 | Configuration | Description | Command flag |
 |---------------|-------------|--------------|
-| **C1 — v1 baseline** | Current subprocess-per-unit | `scripts/run_vectorbt_paid_screen.py --workers N` |
-| **C2 — v2 long-lived workers, no cache** | Long-lived workers, cache disabled (max_entries=1) | `--execution-mode v2 --cache-max-entries 1 --cache-memory-limit-mb 1` |
+| **C1 — v1 baseline** | Retired subprocess-per-unit | `scripts/run_vectorbt_paid_screen.py` (**deleted 2026-06**) |
+| **C2 — v2 long-lived workers, no cache** | Long-lived workers, cache disabled (max_entries=1) | `--cache-max-entries 1 --cache-memory-limit-mb 1` |
 | **C3 — v2 + event-data cache** | Cache NPZ→events→bars per event_id | `--cache-max-entries 1000 --cache-memory-limit-mb 4096` |
 | **C4 — v2 + feature cache** | Cache features per (event_id, feature_set_hash) | C3 + feature-cache path wired |
-| **C5 — v2 + full batching** | C3 + VectorBT chunked matrices | `--execution-mode v2 --chunk-size 64` (default) |
+| **C5 — v2 + full batching** | C3 + VectorBT chunked matrices | `--chunk-size 64` (default) |
 
 Additional variants for chunk-size tuning:
 
@@ -197,7 +197,7 @@ These numbers are conservative defaults from the design doc. They must be adjust
 profiling infrastructure: ✅ (RunProfiler, stage timings, failure diagnostics)
 cache counter hooks: ✅ (BoundedLRUCache.hit_count/miss_count, delta-reconciled)
 manifest aggregation: ✅ (v2 orchestrator collects worker summaries)
-benchmark harness: ✅ (v2 orchestrator with --execution-mode flag matrix)
+benchmark harness: ✅ (v2 orchestrator; v1 retired 2026-06)
 actual benchmarks run: ❌ pending Vast + real NPZ data
 chunk-size recommendation validated: ❌ pending benchmark
 ```
