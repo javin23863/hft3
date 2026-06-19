@@ -14,6 +14,10 @@ Compatibility flags from v1 (``--vectorbt-scope``, ``--workers``,
 ``--dry-run``, ``--no-llm``, ``--repo-root``) are preserved. New v2 flags:
 ``--max-batches-before-recycle``, ``--cache-memory-limit-mb``,
 ``--cache-max-entries``, ``--events-csv-hash``, ``--lake-manifest-hash``.
+
+Launch hygiene: run **one** orchestrator per out-dir (``flock`` the manifest
+path on Linux, or a single tmux session on Vast). Duplicate launches leave
+orphan worker pools and block clean exit even after the manifest is terminal.
 """
 from __future__ import annotations
 
@@ -22,6 +26,7 @@ import json
 import multiprocessing as mp
 import os
 import queue
+import signal
 import sys
 import time
 import traceback
@@ -296,8 +301,67 @@ _MANIFEST_FLUSH_INTERVAL_SECONDS = 15.0
 _MAX_BATCH_REDISPATCH = 3
 _STALE_BATCH_MIN_SECONDS = 30.0
 _STALE_BATCH_MAX_SECONDS = 120.0
-_WORKER_SHUTDOWN_TOTAL_TIMEOUT_SECONDS = 60.0
-_WORKER_SHUTDOWN_TERMINATE_GRACE_SECONDS = 5.0
+_WORKER_SHUTDOWN_MIN_TIMEOUT_SECONDS = 30.0
+_WORKER_SHUTDOWN_MAX_TIMEOUT_SECONDS = 120.0
+_WORKER_SHUTDOWN_PER_WORKER_SECONDS = 0.25
+_WORKER_SHUTDOWN_COOP_SECONDS = 10.0
+_POST_DRAIN_EXIT_BUDGET_SECONDS = 120.0
+
+
+def _worker_shutdown_timeout_seconds(num_workers: int) -> float:
+    """Scale pool teardown budget so large worker counts still finish promptly."""
+    scaled = _WORKER_SHUTDOWN_MIN_TIMEOUT_SECONDS + (
+        max(0, num_workers) * _WORKER_SHUTDOWN_PER_WORKER_SECONDS
+    )
+    return min(
+        _WORKER_SHUTDOWN_MAX_TIMEOUT_SECONDS,
+        _POST_DRAIN_EXIT_BUDGET_SECONDS,
+        scaled,
+    )
+
+
+def _drain_goal_reached(
+    collected_count: int,
+    expected_batches: int,
+    inflight: int,
+    outstanding: Dict[Any, Any],
+) -> bool:
+    """True when all batches are collected and no work remains in flight."""
+    return (
+        collected_count >= expected_batches
+        and inflight == 0
+        and not outstanding
+    )
+
+
+def _force_kill_process(proc: mp.Process) -> None:
+    """Hard-stop a worker process (cross-platform)."""
+    try:
+        if hasattr(proc, "kill"):
+            proc.kill()
+        elif proc.pid is not None:
+            os.kill(proc.pid, signal.SIGKILL)
+    except (ProcessLookupError, OSError, ValueError):
+        pass
+    except Exception:
+        pass
+    try:
+        proc.join(timeout=0.5)
+    except Exception:
+        pass
+
+
+def _close_mp_queues(*queues: "mp.Queue") -> None:
+    """Release queue feeder threads so the orchestrator can exit cleanly."""
+    for q in queues:
+        try:
+            q.close()
+        except Exception:
+            pass
+        try:
+            q.cancel_join_thread()
+        except Exception:
+            pass
 
 
 def _inflight_batch_limit(num_workers: int) -> int:
@@ -318,29 +382,44 @@ def _shutdown_workers(
     workers: List[mp.Process],
     batch_queue: "mp.Queue",
     *,
-    total_timeout_seconds: float = _WORKER_SHUTDOWN_TOTAL_TIMEOUT_SECONDS,
+    total_timeout_seconds: float | None = None,
 ) -> set[int]:
     """Signal workers to exit and join with a bounded total wall clock.
 
-    Returns PIDs that were ``terminate()``d so callers can exclude them from
-    post-shutdown exit-code checks.
+    Returns PIDs that were ``terminate()``/SIGKILL'd so callers can exclude them
+    from post-shutdown exit-code checks.
     """
     terminated_pids: set[int] = set()
     if not workers:
         return terminated_pids
 
+    if total_timeout_seconds is None:
+        total_timeout_seconds = _worker_shutdown_timeout_seconds(len(workers))
+
+    shutdown_started = time.monotonic()
+    shutdown_deadline = shutdown_started + total_timeout_seconds
+
     for _ in workers:
         try:
-            batch_queue.put(None)
+            batch_queue.put_nowait(None)
+        except queue.Full:
+            try:
+                batch_queue.put(None, timeout=0.5)
+            except Exception:
+                pass
         except Exception:
             pass
 
-    deadline = time.monotonic() + total_timeout_seconds
-    for proc in workers:
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
+    coop_deadline = shutdown_started + min(
+        _WORKER_SHUTDOWN_COOP_SECONDS,
+        total_timeout_seconds * 0.15,
+    )
+    while time.monotonic() < coop_deadline:
+        if not any(proc.is_alive() for proc in workers):
             break
-        proc.join(timeout=min(remaining, 2.0))
+        for proc in workers:
+            if proc.is_alive():
+                proc.join(timeout=0.05)
 
     for proc in workers:
         if not proc.is_alive():
@@ -352,14 +431,22 @@ def _shutdown_workers(
         except Exception:
             pass
 
-    terminate_deadline = time.monotonic() + _WORKER_SHUTDOWN_TERMINATE_GRACE_SECONDS
-    for proc in workers:
-        if not proc.is_alive():
-            continue
-        remaining = terminate_deadline - time.monotonic()
-        if remaining <= 0:
+    while time.monotonic() < shutdown_deadline:
+        alive = [proc for proc in workers if proc.is_alive()]
+        if not alive:
             break
-        proc.join(timeout=remaining)
+        for proc in alive:
+            proc.join(timeout=0.1)
+
+    kill_deadline = shutdown_started + total_timeout_seconds + 5.0
+    while time.monotonic() < kill_deadline:
+        alive = [proc for proc in workers if proc.is_alive()]
+        if not alive:
+            break
+        for proc in alive:
+            if proc.pid is not None:
+                terminated_pids.add(proc.pid)
+            _force_kill_process(proc)
 
     return terminated_pids
 
@@ -601,6 +688,8 @@ def _drain_workers(
     if worker_failure_reason is not None:
         stop_reason = worker_failure_reason
 
+    _close_mp_queues(batch_queue, result_queue)
+
     return collected, stop_reason
 
 
@@ -790,7 +879,7 @@ def _pipelined_dispatch_and_drain(
                 if not _try_dispatch_one():
                     break
 
-        if len(collected) >= expected_batches:
+        if _drain_goal_reached(len(collected), expected_batches, inflight, outstanding):
             break
 
         try:
@@ -798,6 +887,10 @@ def _pipelined_dispatch_and_drain(
                 timeout=min(remaining, _DRAIN_POLL_INTERVAL_SECONDS)
             )
         except queue.Empty:
+            if _drain_goal_reached(
+                len(collected), expected_batches, inflight, outstanding
+            ):
+                break
             if alive == 0 and not outstanding:
                 stop_reason = _worker_exit_stop_reason(workers)
             elif (
@@ -826,7 +919,7 @@ def _pipelined_dispatch_and_drain(
             if not _try_dispatch_one():
                 break
 
-        if len(collected) >= expected_batches:
+        if _drain_goal_reached(len(collected), expected_batches, inflight, outstanding):
             break
 
     while True:
@@ -835,7 +928,11 @@ def _pipelined_dispatch_and_drain(
         except queue.Empty:
             break
 
-    terminated_pids = _shutdown_workers(workers, batch_queue)
+    terminated_pids = _shutdown_workers(
+        workers,
+        batch_queue,
+        total_timeout_seconds=_POST_DRAIN_EXIT_BUDGET_SECONDS,
+    )
 
     if not recover_worker_deaths and worker_failure_reason is None:
         post_join_failure = _failed_worker_stop_reason(
@@ -857,6 +954,8 @@ def _pipelined_dispatch_and_drain(
         and worker_failure_reason is not None
     ):
         stop_reason = worker_failure_reason
+
+    _close_mp_queues(batch_queue, result_queue)
 
     return collected, stop_reason
 
@@ -1320,7 +1419,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         f"completed={completed} failed={failed} skipped={skipped} "
         f"units_per_hour={units_per_hour:.2f}"
     )
-    return 1 if failed or drain_stop_reason is not None else 0
+    exit_code = 1 if failed or drain_stop_reason is not None else 0
+    print(f"EXIT={exit_code}", flush=True)
+    sys.exit(exit_code)
 
 
 def _grouping_context(
@@ -1343,4 +1444,4 @@ def _grouping_context(
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

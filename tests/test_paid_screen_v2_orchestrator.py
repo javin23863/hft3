@@ -125,6 +125,16 @@ def _load_v2_module():
     return mod
 
 
+def _invoke_main(v2, argv: list[str]) -> int:
+    """Call orchestrator main(); normalize ``return`` and ``sys.exit`` to int."""
+    try:
+        rc = v2.main(argv)
+    except SystemExit as exc:
+        code = exc.code
+        return 0 if code is None else int(code)
+    return 0 if rc is None else int(rc)
+
+
 def _declaration_run_id(decl_path: Path) -> str:
     """Mirror run_vbt_paid_screen_vast_full.sh declaration run-id extraction."""
     payload = json.loads(decl_path.read_text(encoding="utf-8"))
@@ -732,7 +742,8 @@ class TestV2RunHashResolution:
             encoding="utf-8",
         )
         out_dir = repo / "out"
-        rc = v2.main(
+        rc = _invoke_main(
+            v2,
             [
                 "--units-jsonl",
                 str(units_path),
@@ -741,7 +752,7 @@ class TestV2RunHashResolution:
                 "--repo-root",
                 str(repo),
                 "--dry-run",
-            ]
+            ],
         )
         assert rc == 1
 
@@ -801,7 +812,8 @@ class TestV2RunHashResolution:
         events_csv = repo / "events.csv"
         events_csv.write_text("event_id\nE1\n", encoding="utf-8")
         out_dir = repo / "out"
-        rc = v2.main(
+        rc = _invoke_main(
+            v2,
             [
                 "--units-jsonl",
                 str(units_path),
@@ -814,7 +826,7 @@ class TestV2RunHashResolution:
                 "--lake-manifest-hash",
                 "explicit_lake_hash",
                 "--dry-run",
-            ]
+            ],
         )
         assert rc == 1
         err = capsys.readouterr().err
@@ -1190,6 +1202,208 @@ class TestPipelinedDispatchAndDrain:
                 counting_flush()
 
         assert flush_calls == [5, 10]
+
+
+class TestOrchestratorMainExit:
+    def test_orchestrator_main_exits_after_drain(self, tmp_path, monkeypatch):
+        """main() must terminate promptly after drain+shutdown (mocked 128 workers)."""
+        v2 = _load_v2_module()
+        num_workers = 128
+
+        class FakeProcess:
+            _next_pid = 10_000
+
+            def __init__(self, *args, **kwargs):
+                type(self)._next_pid += 1
+                self.pid = type(self)._next_pid
+                self.exitcode = 0
+
+            def start(self) -> None:
+                return None
+
+            def is_alive(self) -> bool:
+                return False
+
+            def join(self, timeout=None) -> None:
+                return None
+
+            def terminate(self) -> None:
+                return None
+
+            def kill(self) -> None:
+                return None
+
+        def fake_spawn(_ctx, _worker_args, _batch_queue, _result_queue):
+            return FakeProcess()
+
+        def fake_dispatch(
+            workers,
+            batch_queue,
+            result_queue,
+            batches,
+            expected_batches,
+            **kwargs,
+        ):
+            on_batch = kwargs.get("on_batch_collected")
+            collected = []
+            for batch_id, _units in batches:
+                results = [
+                    UnitScreeningResult(
+                        unit_id=f"u{batch_id}",
+                        status="ERROR",
+                        error="no_ohlcv_data",
+                    )
+                ]
+                summary = {"stage_timings": {}}
+                if on_batch is not None:
+                    on_batch(batch_id, results, summary)
+                collected.append((batch_id, results, summary))
+            v2._shutdown_workers(
+                workers,
+                batch_queue,
+                total_timeout_seconds=v2._POST_DRAIN_EXIT_BUDGET_SECONDS,
+            )
+            v2._close_mp_queues(batch_queue, result_queue)
+            return collected, None
+
+        monkeypatch.setattr(v2, "_spawn_paid_screen_worker", fake_spawn)
+        monkeypatch.setattr(v2, "_pipelined_dispatch_and_drain", fake_dispatch)
+
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        events_csv = repo / "events.csv"
+        events_csv.write_text("event_id\nE1\n", encoding="utf-8")
+        units_path = repo / "units.jsonl"
+        unit_rows = [
+            {
+                "unit_id": f"u{i}",
+                "model_id": "HYP_5",
+                "hyp_id": 5,
+                "symbol": "MES.v.0",
+                "event_id": "CPI_2024_09_11_TIGHT",
+                "event_type": "CPI",
+                "research_split": "discovery_confirmation",
+            }
+            for i in range(num_workers)
+        ]
+        units_path.write_text(
+            "\n".join(json.dumps(row) for row in unit_rows) + "\n",
+            encoding="utf-8",
+        )
+        out_dir = repo / "out"
+        gate_path = repo / "gate.json"
+        gate_path.write_text(
+            json.dumps({"ready_for_full_run": True}),
+            encoding="utf-8",
+        )
+
+        t0 = time.monotonic()
+        rc = _invoke_main(
+            v2,
+            [
+                "--units-jsonl",
+                str(units_path),
+                "--out",
+                str(out_dir),
+                "--repo-root",
+                str(repo),
+                "--events-csv",
+                str(events_csv),
+                "--lake-manifest-hash",
+                "explicit_lake_hash",
+                "--workers",
+                str(num_workers),
+                "--ready-gate-file",
+                str(gate_path),
+                "--batch-timeout-seconds",
+                "5",
+            ],
+        )
+        elapsed = time.monotonic() - t0
+
+        assert elapsed < 30.0
+        assert rc == 1
+        manifest_path = out_dir / "paid_screen_run_manifest.json"
+        assert manifest_path.is_file()
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        assert manifest["status"] in {"complete", "partial", "aborted", "failed"}
+        assert manifest["finished_at_utc"] is not None
+
+
+class TestWorkerShutdownAtScale:
+    def test_worker_shutdown_timeout_scales_with_pool_size(self):
+        v2 = _load_v2_module()
+        assert v2._worker_shutdown_timeout_seconds(1) == pytest.approx(30.25, abs=0.01)
+        assert v2._worker_shutdown_timeout_seconds(230) == pytest.approx(87.5, abs=0.01)
+        assert v2._worker_shutdown_timeout_seconds(1000) == v2._WORKER_SHUTDOWN_MAX_TIMEOUT_SECONDS
+
+    @pytest.mark.slow
+    def test_shutdown_workers_reaps_230_stuck_processes_within_budget(self):
+        v2 = _load_v2_module()
+        ctx = mp.get_context("spawn")
+        batch_queue = ctx.Queue()
+        num_workers = 230
+        workers = [
+            ctx.Process(target=_sleep_forever_worker)
+            for _ in range(num_workers)
+        ]
+        for proc in workers:
+            proc.start()
+
+        t0 = time.monotonic()
+        terminated = v2._shutdown_workers(workers, batch_queue)
+        elapsed = time.monotonic() - t0
+
+        assert elapsed < v2._POST_DRAIN_EXIT_BUDGET_SECONDS
+        assert all(not proc.is_alive() for proc in workers)
+        assert len(terminated) >= 1
+        v2._close_mp_queues(batch_queue)
+
+    @pytest.mark.slow
+    @pytest.mark.parametrize("num_workers", [64, 230])
+    def test_pipelined_high_worker_count_exits_after_drain(self, num_workers):
+        v2 = _load_v2_module()
+        ctx = mp.get_context("spawn")
+        batch_queue = ctx.Queue()
+        result_queue = ctx.Queue()
+        batch_count = min(num_workers * 2, 500)
+        batches = [(idx, []) for idx in range(batch_count)]
+        worker_args = {
+            "repo_root": str(_REPO),
+            "screening_scope": "paid-compute",
+            "events_csv_hash": "eh",
+            "lake_manifest_hash": "lh",
+            "scratch_root": str(_REPO / "runtime" / "paid_screen_scratch" / "orchestrator_scale_test"),
+        }
+        workers = [
+            ctx.Process(
+                target=_echo_fast_fail_worker,
+                args=({}, batch_queue, result_queue),
+            )
+            for _ in range(num_workers)
+        ]
+        for proc in workers:
+            proc.start()
+
+        t0 = time.monotonic()
+        collected, stop_reason = v2._pipelined_dispatch_and_drain(
+            workers,
+            batch_queue,
+            result_queue,
+            batches=batches,
+            expected_batches=batch_count,
+            timeout_per_batch=30.0,
+            inflight_limit=v2._inflight_batch_limit(num_workers),
+            spawn_ctx=ctx,
+            spawn_worker_args=worker_args,
+            target_worker_count=num_workers,
+        )
+        elapsed = time.monotonic() - t0
+
+        assert stop_reason is None
+        assert len(collected) == batch_count
+        assert elapsed < v2._POST_DRAIN_EXIT_BUDGET_SECONDS
+        assert all(not proc.is_alive() for proc in workers)
 
 
 class TestWorkerScratchPath:
