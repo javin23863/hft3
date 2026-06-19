@@ -581,6 +581,7 @@ class TestFilterCandidates:
             event_id="CPI_2024_09_11_TIGHT",
             repo_root=tmp_path,
             data_loader=lambda *_: None,
+            prefer_fs_v1_path=False,
         )
         assert result.total_candidates >= 1
         assert result.backend == "no_ohlcv_data"
