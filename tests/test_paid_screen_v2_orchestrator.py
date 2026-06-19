@@ -909,7 +909,7 @@ class TestPipelinedDispatchAndDrain:
         assert v2._effective_inflight_limit(configured, 2) == 8
         assert v2._effective_inflight_limit(configured, 0) == 0
 
-    def test_redispatch_stale_batches_requeues_orphaned_work(self):
+    def test_redispatch_outstanding_batches_requeues_orphaned_work(self):
         v2 = _load_v2_module()
         ctx = mp.get_context("spawn")
         batch_queue = ctx.Queue()
@@ -917,10 +917,9 @@ class TestPipelinedDispatchAndDrain:
             7: (0.0, 0, []),
             8: (50.0, 0, []),
         }
-        redispatched = v2._redispatch_stale_batches(
+        redispatched = v2._redispatch_outstanding_batches(
             outstanding,
             batch_queue,
-            stale_after_seconds=30.0,
             now=100.0,
         )
         assert redispatched == 2
@@ -928,6 +927,31 @@ class TestPipelinedDispatchAndDrain:
         assert batch_queue.get(timeout=1)[0] in {7, 8}
         assert outstanding[7][1] == 1
         assert outstanding[8][1] == 1
+
+    def test_expire_hung_batches_synthesizes_errors(self):
+        v2 = _load_v2_module()
+        from backtest_pipeline.src.paid_screen_types import PaidScreenUnit
+
+        unit = PaidScreenUnit(
+            unit_id="u1",
+            model_id="HYP_5",
+            hyp_id=5,
+            symbol="MES.v.0",
+            event_id="ADP_EMPLOYMENT_2018_05_02_TIGHT",
+            event_type="ADP_EMPLOYMENT",
+        )
+        outstanding = {3: (0.0, 0, [unit])}
+        expired = v2._expire_hung_batches(
+            outstanding,
+            set(),
+            now=200.0,
+            batch_timeout_seconds=30.0,
+        )
+        assert len(expired) == 1
+        batch_id, results, _summary = expired[0]
+        assert batch_id == 3
+        assert results[0].status == "ERROR"
+        assert results[0].error == "batch_worker_hung_or_lost"
 
     def test_pipelined_dispatch_collects_all_batches_under_backpressure(self):
         v2 = _load_v2_module()
@@ -1011,8 +1035,6 @@ class TestPipelinedDispatchAndDrain:
         _DIE_BEFORE_ECHO_BUDGET = ctx.Value("i", 2)
 
         monkeypatch.setattr(v2, "_spawn_paid_screen_worker", _spawn_test_echo_worker)
-        monkeypatch.setattr(v2, "_STALE_BATCH_MIN_SECONDS", 0.05)
-        monkeypatch.setattr(v2, "_STALE_BATCH_MAX_SECONDS", 0.2)
 
         workers = [
             _spawn_test_echo_worker(ctx, worker_args, batch_queue, result_queue)

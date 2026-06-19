@@ -304,7 +304,12 @@ def _inflight_batch_limit(num_workers: int) -> int:
 
 
 def _alive_worker_count(workers: List[mp.Process]) -> int:
-    return sum(1 for proc in workers if proc.is_alive())
+    alive = 0
+    for proc in workers:
+        proc.join(timeout=0)
+        if proc.is_alive():
+            alive += 1
+    return alive
 
 
 def _effective_inflight_limit(inflight_limit: int, alive_workers: int) -> int:
@@ -363,26 +368,60 @@ def _maintain_worker_pool(
     return respawned
 
 
-def _redispatch_stale_batches(
+def _redispatch_outstanding_batches(
     outstanding: Dict[Any, Tuple[float, int, List[PaidScreenUnit]]],
     batch_queue: "mp.Queue",
     *,
-    stale_after_seconds: float,
     now: float,
 ) -> int:
-    """Re-queue batches that were dequeued by dead workers and never returned."""
+    """Re-queue outstanding batches after worker respawn (lost in-flight work)."""
     redispatched = 0
-    for batch_id, (dispatched_at, redispatch_count, batch_units) in list(
+    for batch_id, (_dispatched_at, redispatch_count, batch_units) in list(
         outstanding.items()
     ):
-        if now - dispatched_at < stale_after_seconds:
-            continue
         if redispatch_count >= _MAX_BATCH_REDISPATCH:
             continue
         batch_queue.put((batch_id, batch_units))
         outstanding[batch_id] = (now, redispatch_count + 1, batch_units)
         redispatched += 1
     return redispatched
+
+
+def _expire_hung_batches(
+    outstanding: Dict[Any, Tuple[float, int, List[PaidScreenUnit]]],
+    collected_batch_ids: set[Any],
+    *,
+    now: float,
+    batch_timeout_seconds: float,
+) -> List[Tuple[Any, List[UnitScreeningResult], Dict[str, Any]]]:
+    """Synthesize ERROR results for batches that exceed the worker batch timeout."""
+    expired: List[Tuple[Any, List[UnitScreeningResult], Dict[str, Any]]] = []
+    for batch_id, (dispatched_at, _redispatch_count, batch_units) in list(
+        outstanding.items()
+    ):
+        if batch_id in collected_batch_ids:
+            continue
+        if now - dispatched_at < batch_timeout_seconds:
+            continue
+        if batch_units:
+            results = [
+                UnitScreeningResult(
+                    unit_id=unit.unit_id,
+                    status="ERROR",
+                    error="batch_worker_hung_or_lost",
+                )
+                for unit in batch_units
+            ]
+        else:
+            results = [
+                UnitScreeningResult(
+                    unit_id=f"batch_{batch_id}",
+                    status="ERROR",
+                    error="batch_worker_hung_or_lost",
+                )
+            ]
+        expired.append((batch_id, results, {"stage_timings": {}}))
+    return expired
 
 
 def _workers_all_dead(workers: List[mp.Process]) -> bool:
@@ -571,8 +610,8 @@ def _pipelined_dispatch_and_drain(
     batch_iter = iter(batches)
     inflight = 0
     outstanding: Dict[Any, Tuple[float, int, List[PaidScreenUnit]]] = {}
-    stale_after_seconds = _stale_batch_redispatch_seconds(timeout_per_batch)
     last_progress_log_mono = time.monotonic()
+    last_collect_mono = time.monotonic()
 
     per_batch_budget = timeout_per_batch * max(expected_batches, 1)
     now = time.monotonic()
@@ -603,6 +642,36 @@ def _pipelined_dispatch_and_drain(
         inflight += 1
         return True
 
+    def _record_batch_collected(
+        batch_id: Any,
+        results: List[UnitScreeningResult],
+        profiler_summary: Dict[str, Any],
+        *,
+        alive: int,
+        source: str,
+    ) -> None:
+        nonlocal inflight, last_collect_mono, last_progress_log_mono
+        if batch_id in collected_batch_ids:
+            return
+        outstanding.pop(batch_id, None)
+        collected.append((batch_id, results, profiler_summary))
+        collected_batch_ids.add(batch_id)
+        inflight = max(0, inflight - 1)
+        last_collect_mono = time.monotonic()
+        ok_units = sum(1 for r in results if r.status == "OK")
+        failed_units = sum(1 for r in results if r.status == "ERROR")
+        print(
+            f"[drain] batch={batch_id} units={len(results)} "
+            f"ok={ok_units} failed={failed_units} "
+            f"collected={len(collected)}/{expected_batches} inflight={inflight} "
+            f"alive={alive}/{target_worker_count if recover_worker_deaths else len(workers)} "
+            f"src={source}",
+            flush=True,
+        )
+        if on_batch_collected is not None:
+            on_batch_collected(batch_id, results, profiler_summary)
+        last_progress_log_mono = last_collect_mono
+
     def _maybe_recover_workers(now_mono: float) -> None:
         nonlocal last_progress_log_mono
         if not recover_worker_deaths:
@@ -615,12 +684,13 @@ def _pipelined_dispatch_and_drain(
             result_queue=result_queue,
             target_worker_count=target_worker_count,
         )
-        redispatched = _redispatch_stale_batches(
-            outstanding,
-            batch_queue,
-            stale_after_seconds=stale_after_seconds,
-            now=now_mono,
-        )
+        redispatched = 0
+        if respawned > 0:
+            redispatched = _redispatch_outstanding_batches(
+                outstanding,
+                batch_queue,
+                now=now_mono,
+            )
         if respawned or redispatched:
             alive = _alive_worker_count(workers)
             print(
@@ -663,6 +733,26 @@ def _pipelined_dispatch_and_drain(
             stop_reason = _worker_exit_stop_reason(workers)
             break
 
+        for batch_id, results, profiler_summary in _expire_hung_batches(
+            outstanding,
+            collected_batch_ids,
+            now=now_mono,
+            batch_timeout_seconds=timeout_per_batch,
+        ):
+            _record_batch_collected(
+                batch_id,
+                results,
+                profiler_summary,
+                alive=alive,
+                source="expire",
+            )
+            while inflight < _effective_limit() and stop_reason is None:
+                if not _try_dispatch_one():
+                    break
+
+        if len(collected) >= expected_batches:
+            break
+
         try:
             batch_id, results, profiler_summary = result_queue.get(
                 timeout=min(remaining, _DRAIN_POLL_INTERVAL_SECONDS)
@@ -677,30 +767,20 @@ def _pipelined_dispatch_and_drain(
                 print(
                     f"[pool] waiting alive={alive}/{target_worker_count} "
                     f"inflight={inflight} outstanding={len(outstanding)} "
-                    f"collected={len(collected)}/{expected_batches}",
+                    f"collected={len(collected)}/{expected_batches} "
+                    f"since_collect={now_mono - last_collect_mono:.1f}s",
                     flush=True,
                 )
                 last_progress_log_mono = now_mono
             continue
 
-        if batch_id in collected_batch_ids:
-            continue
-
-        outstanding.pop(batch_id, None)
-        collected.append((batch_id, results, profiler_summary))
-        collected_batch_ids.add(batch_id)
-        inflight = max(0, inflight - 1)
-        ok_units = sum(1 for r in results if r.status == "OK")
-        failed_units = sum(1 for r in results if r.status == "ERROR")
-        print(
-            f"[drain] batch={batch_id} units={len(results)} "
-            f"ok={ok_units} failed={failed_units} "
-            f"collected={len(collected)}/{expected_batches} inflight={inflight} "
-            f"alive={alive}/{target_worker_count if recover_worker_deaths else len(workers)}",
-            flush=True,
+        _record_batch_collected(
+            batch_id,
+            results,
+            profiler_summary,
+            alive=alive,
+            source="worker",
         )
-        if on_batch_collected is not None:
-            on_batch_collected(batch_id, results, profiler_summary)
 
         while inflight < _effective_limit() and stop_reason is None:
             if not _try_dispatch_one():
