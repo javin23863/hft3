@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd /root/hft3/repo
+export HFT3_NPZ_ROOT=/data/npz
+export HFT3_MANIFEST_PATH=/data/npz/manifest.json
+export HFT3_FEATURE_BACKEND=cpp
+export PYTHONPATH=/root/hft3/repo/packages/features_engine/src:/root/hft3/repo/packages:/root/hft3/repo/apps/workbench:/root/hft3/repo:/root/hft3/repo/build
+
+python3 scripts/generate_vbt_paid_units_jsonl.py \
+  --out runtime/reports/vbt_cpi_repro128.jsonl \
+  --event-types CPI \
+  --model-id SPREAD_BLOWOUT_RECOMPRESSION \
+  --symbols MES.v.0 \
+  --start-date 2019-05-01 \
+  --max-units 200 \
+  --validation-cpi-first
+
+RUN_ID="paid_cpi_repro128_$(date -u +%Y%m%dT%H%M%SZ)"
+OUT="research_cards/pipeline_runs/${RUN_ID}"
+EVENTS_HASH="$(python3 -c "import hashlib;print(hashlib.sha256(open('packages/data_system/config/events.csv','rb').read()).hexdigest()[:32])")"
+LAKE_HASH="$(python3 -c "import hashlib;print(hashlib.sha256(open('/data/npz/manifest.json','rb').read()).hexdigest()[:32])")"
+
+tmux kill-session -t vbt_cpi_repro128 2>/dev/null || true
+tmux new -d -s vbt_cpi_repro128 \
+  "cd /root/hft3/repo && export HFT3_NPZ_ROOT=/data/npz HFT3_MANIFEST_PATH=/data/npz/manifest.json HFT3_FEATURE_BACKEND=cpp PYTHONPATH=/root/hft3/repo/packages/features_engine/src:/root/hft3/repo/packages:/root/hft3/repo/apps/workbench:/root/hft3/repo:/root/hft3/repo/build && \
+   python3 -u scripts/run_paid_screen.py --execution-mode v2 \
+   --units-jsonl runtime/reports/vbt_cpi_repro128.jsonl \
+   --out ${OUT} \
+   --vectorbt-scope paid-compute \
+   --workers 128 \
+   --batch-timeout-seconds 120 \
+   --max-wall-clock-seconds 7200 \
+   --no-llm \
+   --owner-waiver 'vast D1c CPI 128w repro validation' \
+   --events-csv-hash ${EVENTS_HASH} \
+   --lake-manifest-hash ${LAKE_HASH} \
+   2>&1 | tee runtime/reports/${RUN_ID}.log; echo EXIT_CODE=\$? >> runtime/reports/${RUN_ID}.log"
+
+echo "LAUNCHED ${RUN_ID} OUT=${OUT}"
