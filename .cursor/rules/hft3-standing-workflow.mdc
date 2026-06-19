@@ -13,6 +13,10 @@ Before decisions or tooling on hft3 work, **load and apply the Fable loop**: gro
 
 Full reference: `C:\Users\MSI\.codex\skills\fable-mindset\references\Fable_Mindset_public.md` · [docs/vault/FABLE_MINDSET.md](../../docs/vault/FABLE_MINDSET.md)
 
+## Ponytail mindset (mandatory after Fable)
+
+Apply ponytail on every code/doc edit: YAGNI, stdlib-first, minimal diffs, deletion over addition. Vendored at `vendor/ponytail/`; always-on rule [.cursor/rules/ponytail.mdc](ponytail.mdc); charter [docs/ai/PONYTAIL.md](../../docs/ai/PONYTAIL.md). Never cut validation, security, or finance/math invariants. Vast ops: `vastai` + `scripts/vast_ssh_run_vbt_paid_screen.sh` — not ponytail.
+
 ## Main agent = orchestrator / brain
 
 The **main agent** owns intent, vault/repo grounding, planning, integration, and gate sequencing. It does **not** absorb large implementation inline.

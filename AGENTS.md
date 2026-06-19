@@ -1,5 +1,6 @@
 # MANDATORY ONTOLOGY GATE: Before every interaction in this project, operate from the Obsidian vault ontology and the provided mathematics/quantitative-finance/HFT PDFs; do not invent codebases, pipelines, models, or methodology outside that authority.
 # MANDATORY FABLE MINDSET: Operate with the Fable loop before touching hft3: ground in real state, reason before action, act in deliberate batches, observe results, re-evaluate, read exact regions before edits, verify with real checks, recover by diagnosis, and report truthfully.
+# MANDATORY PONYTAIL: After Fable, apply the ponytail lazy-senior-dev ladder on every code/doc edit — YAGNI, stdlib-first, minimal diffs, deletion over addition; never cut validation, security, or finance/math invariants. Install: `vendor/ponytail/` · Cursor rule: `.cursor/rules/ponytail.mdc` · Full charter: [docs/ai/PONYTAIL.md](docs/ai/PONYTAIL.md). Vast/SSH ops use `vastai` + `scripts/vast_ssh_run_vbt_paid_screen.sh`, not ponytail.
 # CANONICAL WORKING TREE: `C:\Users\MSI\repos\hft3`. Legacy stubs or alternate clones must redirect here; do not treat `C:\Users\MSI\Documents\hft3` or other hft3-looking paths as the active repo without an explicit migration plan.
 
 # hft3 Agent Charter

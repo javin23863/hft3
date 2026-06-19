@@ -19,7 +19,11 @@ Canonical repo: `C:\Users\MSI\repos\hft3`. Full Fable reference: `C:\Users\MSI\.
 
 ---
 
-## 2. When the operator says **“latency test”**
+## 2. Ponytail mindset (mandatory after Fable)
+
+Apply the ponytail lazy-senior-dev ladder on every implementation: YAGNI → stdlib → native → installed dep → one line → minimum that works. Vendored at `vendor/ponytail/`; always-on Cursor rule `.cursor/rules/ponytail.mdc`; charter `docs/ai/PONYTAIL.md`. Never cut validation, security, or finance/math invariants. Vast rent/SSH: `vastai` CLI + `scripts/vast_ssh_run_vbt_paid_screen.sh`.
+
+## 3. When the operator says **“latency test”**
 
 They mean the **CHI404 native C++ placement probe** with **offensive and defensive clocks in microseconds (`_us`)** — **not** a generic order-ack sweep in milliseconds.
 

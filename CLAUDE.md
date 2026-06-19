@@ -4,6 +4,10 @@
 
 Before touching hft3, use the Fable loop: ground in real state, reason before action, act in deliberate batches, observe, re-evaluate, read exact regions before edits, verify with real checks, recover by diagnosis, and report truthfully. Use `C:\Users\MSI\.codex\skills\fable-mindset\references\Fable_Mindset_public.md` as the full reference when the task is long-running, high-risk, finance/math-critical, or the user asks to reestablish mindset.
 
+## Ponytail mindset (mandatory after Fable)
+
+Apply the ponytail lazy-senior-dev ladder on every implementation: YAGNI → stdlib → native platform → installed dep → one line → minimum that works. Repo: https://github.com/DietrichGebert/ponytail · vendored at `vendor/ponytail/` · always-on Cursor rule `.cursor/rules/ponytail.mdc` · charter [docs/ai/PONYTAIL.md](docs/ai/PONYTAIL.md). Use `/ponytail-review` on diffs when the host supports skills. **Not lazy about:** trust-boundary validation, data-loss errors, security, accessibility, BLUEPRINT math invariants. Vast rent/SSH/sync: `vastai` CLI + `scripts/vast_ssh_run_vbt_paid_screen.sh` (set `VAST_SSH_HOST`, `VAST_SSH_PORT`).
+
 ## Knowledge graph first (structural memory)
 
 Before any repo-wide grep or file exploration, query the code graph:

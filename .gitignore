@@ -119,6 +119,7 @@ research_cards/promotion/**
 artifacts/research_cards/workbench_runs/**
 !artifacts/research_cards/workbench_runs/.gitkeep
 vendor/openfoundry_upstream_test/
+vendor/ponytail/
 models/
 *.onnx
 
