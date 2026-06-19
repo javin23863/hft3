@@ -709,6 +709,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         "cache_max_entries": int(args.cache_max_entries),
         "scratch_root": str(_worker_scratch_root(repo_root, out_dir)),
     }
+    for env_key in ("HFT3_NPZ_ROOT", "HFT3_MANIFEST_PATH"):
+        env_val = os.environ.get(env_key, "").strip()
+        if env_val:
+            worker_args[env_key] = env_val
 
     ctx = mp.get_context("spawn")
     batch_queue: "mp.Queue" = ctx.Queue()

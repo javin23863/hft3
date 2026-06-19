@@ -106,7 +106,7 @@ class TestWorkerCrashRecovery:
         """A batch-level failure (no data) is recorded in the profiler."""
         ctx = make_context(repo_root="/nonexistent")
         profiler = RunProfiler()
-        units = [make_unit()]
+        units = [make_unit(event_id="__TEST_NO_NPZ_UNIT__")]
         results = screen_paid_batch(units, ctx, profiler=profiler)
         assert len(results) == 1
         assert results[0].status == "ERROR"
@@ -120,8 +120,8 @@ class TestWorkerCrashRecovery:
         """
         ctx = make_context(repo_root="/nonexistent")
         units = [
-            make_unit(unit_id="u1"),
-            make_unit(unit_id="u2", model_id="HYP_6"),
+            make_unit(unit_id="u1", event_id="__TEST_NO_NPZ_UNIT__"),
+            make_unit(unit_id="u2", model_id="HYP_6", event_id="__TEST_NO_NPZ_UNIT__"),
         ]
         results = screen_paid_batch(units, ctx)
         assert len(results) == 2
@@ -205,6 +205,45 @@ class TestWorkerCrashRecovery:
         assert batch_id == "b0"
         assert results == []  # the exception path emits an empty result list
         assert summary["total_failures"] >= 1
+
+    def test_worker_process_main_applies_hft3_npz_root_from_worker_args(self, monkeypatch):
+        """Spawn entrypoint must set lake env vars before worker init."""
+        import multiprocessing as mp
+
+        batch_queue = mp.Queue()
+        result_queue = mp.Queue()
+        monkeypatch.delenv("HFT3_NPZ_ROOT", raising=False)
+        monkeypatch.delenv("HFT3_MANIFEST_PATH", raising=False)
+
+        worker_args = {
+            "repo_root": ".",
+            "screening_scope": "pilot",
+            "events_csv_hash": "eh",
+            "lake_manifest_hash": "lh",
+            "HFT3_NPZ_ROOT": "/data/npz",
+            "HFT3_MANIFEST_PATH": "/data/npz/manifest.json",
+        }
+
+        captured: dict[str, str] = {}
+
+        original_init = PaidScreenWorker.init
+
+        def capture_env_init(self):
+            captured["HFT3_NPZ_ROOT"] = os.environ.get("HFT3_NPZ_ROOT", "")
+            captured["HFT3_MANIFEST_PATH"] = os.environ.get("HFT3_MANIFEST_PATH", "")
+            original_init(self)
+
+        PaidScreenWorker.init = capture_env_init
+        try:
+            from backtest_pipeline.src.paid_screen_worker import worker_process_main
+
+            batch_queue.put(None)
+            worker_process_main(worker_args, batch_queue, result_queue)
+        finally:
+            PaidScreenWorker.init = original_init
+
+        assert captured["HFT3_NPZ_ROOT"] == "/data/npz"
+        assert captured["HFT3_MANIFEST_PATH"] == "/data/npz/manifest.json"
 
 
 # --------------------------------------------------------------------------- #

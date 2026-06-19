@@ -2074,6 +2074,36 @@ def _new_filter_result(
     )
 
 
+def _npz_candidates_for_event(
+    search_dirs: list[Path],
+    event_id: str,
+    symbol: str | None,
+) -> list[Path]:
+    """Return NPZ paths for *event_id*, honoring search-dir order (lake first)."""
+    from backtest_pipeline.src.fs_v1_screen_path import _store_symbol_variants
+
+    for npz_dir in search_dirs:
+        if not npz_dir.exists():
+            continue
+        if symbol:
+            for sym in _store_symbol_variants(symbol):
+                exact = npz_dir / f"{sym}_{event_id}_mbo.npz"
+                if exact.is_file():
+                    return [exact]
+            for sym in _store_symbol_variants(symbol):
+                sym_candidates = sorted(
+                    p for p in npz_dir.glob(f"*{event_id}*_mbo.npz")
+                    if p.name.startswith(f"{sym}_")
+                )
+                if sym_candidates:
+                    return sym_candidates
+        else:
+            candidates = sorted(npz_dir.glob(f"*{event_id}*_mbo.npz"))
+            if candidates:
+                return candidates
+    return []
+
+
 def _default_data_loader(
     event_id: str,
     repo_root: Path,
@@ -2083,40 +2113,13 @@ def _default_data_loader(
     Falls back to building bars from the NPZ MBO data.
     Returns None if no data is available.
     """
-    npz_dir = repo_root / "data" / "npz"
-    candidates: list[Path] = []
-    if npz_dir.exists():
-        if symbol:
-            from backtest_pipeline.src.fs_v1_screen_path import _store_symbol_variants
+    from data_system.src.event_data_resolver import npz_search_dirs
 
-            for sym in _store_symbol_variants(symbol):
-                exact = npz_dir / f"{sym}_{event_id}_mbo.npz"
-                if exact.is_file():
-                    candidates = [exact]
-                    break
-            if not candidates:
-                for sym in _store_symbol_variants(symbol):
-                    sym_candidates = sorted(
-                        p for p in npz_dir.glob(f"*{event_id}*_mbo.npz")
-                        if p.name.startswith(f"{sym}_")
-                    )
-                    if sym_candidates:
-                        candidates = sym_candidates
-                        break
-        else:
-            candidates = sorted(npz_dir.glob(f"*{event_id}*_mbo.npz"))
-    if not candidates:
-        fallback = sorted(repo_root.glob(f"data/npz/*{event_id}*_mbo.npz"))
-        if symbol:
-            from backtest_pipeline.src.fs_v1_screen_path import _store_symbol_variants
-
-            for sym in _store_symbol_variants(symbol):
-                sym_candidates = [p for p in fallback if p.name.startswith(f"{sym}_")]
-                if sym_candidates:
-                    candidates = sym_candidates
-                    break
-        else:
-            candidates = fallback
+    candidates = _npz_candidates_for_event(
+        npz_search_dirs(repo_root),
+        event_id,
+        symbol,
+    )
     if not candidates:
         return None
     npz_path = str(candidates[0])
@@ -2447,6 +2450,7 @@ def _default_signal_computer(
     parsed: ParsedHypothesis,
     repo_root: Path,
 ) -> Tuple[np.ndarray, np.ndarray]:
+    from features_engine.src.features.mbo_features import MBOEvent
     from features_engine.src.model_registry import get_hyp_id_for_slug, resolve_model_id
     from features_engine.src.hypotheses.registry import get_active_hypotheses
     from features_engine.src.pipeline.market_state_pipeline import MarketStatePipeline
@@ -2465,11 +2469,18 @@ def _default_signal_computer(
     signal_threshold = float(cand.strategy_params.get("signal_threshold", 0.0) or 0.0)
 
     for i in range(n_bars):
-        pipeline.process_event({"local_ts": _bar_timestamp_ns(ohlcv, i), "close": close[i]})
-        state = pipeline.latest_state
+        bar_close = float(close[i])
+        event = MBOEvent(
+            timestamp_ns=_bar_timestamp_ns(ohlcv, i),
+            order_id=i + 1,
+            action="TRADE",
+            side="B",
+            price=bar_close,
+            size=1,
+        )
+        state = pipeline.process_event(event)
         if state is not None:
-            sig = hypothesis_cls.evaluate(state)
-            signal[i] = sig
+            signal[i] = float(hypothesis_cls.evaluate(state))
 
     entry_signal = np.where(signal > signal_threshold, 1.0, 0.0)
     exit_signal = np.where(signal < -signal_threshold, -1.0, 0.0)

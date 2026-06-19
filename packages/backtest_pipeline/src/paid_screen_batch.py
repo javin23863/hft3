@@ -14,12 +14,12 @@ import time
 import json
 import hashlib
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from backtest_pipeline.src.paid_screen_types import (
     PaidScreenUnit, WorkerContext, UnitScreeningResult, BatchingKey,
 )
-from backtest_pipeline.src.paid_screen_profiling import RunProfiler
+from backtest_pipeline.src.paid_screen_profiling import RunProfiler, DEFAULT_RESEARCH_SPLIT
 from backtest_pipeline.src.paid_screen_cache import BoundedLRUCache
 from backtest_pipeline.src.paid_screen_matrix import run_vectorbt_simulation_matrix
 from backtest_pipeline.src.vectorbt_adapter import apply_promotion_gates
@@ -156,6 +156,20 @@ def resolve_model_from_registry(model_id: str, repo_root: str) -> dict:
         }
 
 
+def split_scheme_id_for_research_split(research_split: str | None) -> str:
+    """Map walk-forward research split labels to split_scheme_id (BLUEPRINT §8)."""
+    split = (research_split or DEFAULT_RESEARCH_SPLIT).strip()
+    mapping = {
+        "discovery_confirmation": "wf_2018_2024",
+        "discovery": "wf_discovery",
+        "confirmation": "wf_confirmation",
+        "holdout": "wf_holdout",
+        "recent_holdout": "wf_recent_holdout",
+        "all": "wf_all",
+    }
+    return mapping.get(split, "wf_2018_2024")
+
+
 def build_batching_key(unit: PaidScreenUnit, ctx: WorkerContext,
                         data_manifest_hash: str,
                         feature_set_hash: str,
@@ -173,7 +187,7 @@ def build_batching_key(unit: PaidScreenUnit, ctx: WorkerContext,
         feature_set_id=unit.feature_set_id,
         feature_set_hash=feature_set_hash,
         research_clock="scheduled_event",
-        split_scheme_id="wf_2018_2024",
+        split_scheme_id=split_scheme_id_for_research_split(unit.research_split),
         fees_model_id="cme_fees_v1",
         slippage_model_id="slip_v1",
         signal_implementation_hash=signal_implementation_hash,
@@ -266,9 +280,20 @@ def resolve_batching_hashes(
     return dm, fs_hash, sig_hash, reg_hash
 
 
-def batching_key_for_unit(unit: PaidScreenUnit, ctx: WorkerContext) -> BatchingKey:
+def batching_key_for_unit(
+    unit: PaidScreenUnit,
+    ctx: WorkerContext,
+    *,
+    signal_implementation_hash: str | None = None,
+    model_registry_hash: str | None = None,
+) -> BatchingKey:
     """Build the full batching key for *unit* under *ctx*."""
-    dm, fs_hash, sig_hash, reg_hash = resolve_batching_hashes(unit, ctx)
+    dm, fs_hash, sig_hash, reg_hash = resolve_batching_hashes(
+        unit,
+        ctx,
+        signal_implementation_hash=signal_implementation_hash,
+        model_registry_hash=model_registry_hash,
+    )
     return build_batching_key(
         unit, ctx,
         data_manifest_hash=dm,
@@ -281,9 +306,18 @@ def batching_key_for_unit(unit: PaidScreenUnit, ctx: WorkerContext) -> BatchingK
 def group_units_by_batch_key(units: list[PaidScreenUnit],
                                ctx: WorkerContext) -> dict[str, list[PaidScreenUnit]]:
     """Group units by their full ``BatchingKey`` for safe batch execution."""
+    if not units:
+        return {}
+    sig_hash = _resolve_signal_implementation_hash(ctx.repo_root)
+    reg_hash = _resolve_model_registry_hash(ctx.repo_root)
     groups: dict[str, list[PaidScreenUnit]] = {}
     for unit in units:
-        key = batching_key_for_unit(unit, ctx)
+        key = batching_key_for_unit(
+            unit,
+            ctx,
+            signal_implementation_hash=sig_hash,
+            model_registry_hash=reg_hash,
+        )
         groups.setdefault(key.group_id(), []).append(unit)
     return groups
 
@@ -305,26 +339,64 @@ def ohlcv_data_cache_key(unit: PaidScreenUnit, context: WorkerContext) -> str:
     return batching_key_for_unit(unit, context).cache_key()
 
 
+def _fs_v1_screening_available(repo_root: Path) -> bool:
+    """True when the repo layout supports fs_v1 imports and store resolution."""
+    return (repo_root / "packages").is_dir()
+
+
+def _ohlcv_aligns_with_fs_v1_store(ohlcv, fs_ctx) -> bool:
+    """Guard cache/OHLCV against pairing stub bars with fs_v1 PIT signals."""
+    store_ts = fs_ctx.store.get("ts")
+    if store_ts is None:
+        return False
+    return len(ohlcv) == len(store_ts)
+
+
+def _try_resolve_fs_v1_context(
+    unit: PaidScreenUnit,
+    context: WorkerContext,
+):
+    """Return fs_v1 screen context when feature-store rows exist for *unit*."""
+    repo_root = Path(context.repo_root)
+    if not _fs_v1_screening_available(repo_root):
+        return None
+    try:
+        from backtest_pipeline.src.fs_v1_screen_path import resolve_fs_v1_screen_context
+    except ImportError:
+        return None
+    return resolve_fs_v1_screen_context(
+        repo_root=repo_root,
+        event_id=unit.event_id,
+        symbol=unit.symbol,
+    )
+
+
 def _load_ohlcv_for_unit(unit: PaidScreenUnit, context: WorkerContext):
     """Load OHLCV for one unit via symbol-aware fs_v1 or NPZ paths."""
-    repo_root = Path(context.repo_root)
-    if (repo_root / "packages").is_dir():
-        from backtest_pipeline.src.fs_v1_screen_path import (
-            ohlcv_from_feature_store,
-            resolve_fs_v1_screen_context,
-        )
+    fs_ctx = _try_resolve_fs_v1_context(unit, context)
+    if fs_ctx is not None:
+        from backtest_pipeline.src.fs_v1_screen_path import ohlcv_from_feature_store
 
-        fs_ctx = resolve_fs_v1_screen_context(
-            repo_root=repo_root,
-            event_id=unit.event_id,
-            symbol=unit.symbol,
-        )
-        if fs_ctx is not None:
-            return ohlcv_from_feature_store(fs_ctx.store)
+        return ohlcv_from_feature_store(fs_ctx.store)
 
     from backtest_pipeline.src.vectorbt_adapter import _default_data_loader
 
-    return _default_data_loader(unit.event_id, repo_root, symbol=unit.symbol)
+    return _default_data_loader(unit.event_id, Path(context.repo_root), symbol=unit.symbol)
+
+
+def _resolve_fs_v1_signal_computer(
+    unit: PaidScreenUnit,
+    context: WorkerContext,
+    fs_ctx=None,
+) -> Callable | None:
+    """Return fs_v1 PIT signal computer when feature-store rows exist for *unit*."""
+    if fs_ctx is None:
+        fs_ctx = _try_resolve_fs_v1_context(unit, context)
+    if fs_ctx is None:
+        return None
+    from backtest_pipeline.src.fs_v1_screen_path import build_fs_v1_signal_computer
+
+    return build_fs_v1_signal_computer(fs_ctx)
 
 
 def _build_candidate_model(unit: PaidScreenUnit, model_entry: dict, repo_root: Path, parsed: "ParsedHypothesis") -> "CandidateModel":
@@ -464,22 +536,30 @@ def _write_screening_artifact(
     """
     from datetime import datetime, timezone
 
+    from backtest_pipeline.src.fs_v1_screen_path import FS_V1_BAR_CONSTRUCTION_ID
+
     _, fs_hash, sig_hash, reg_hash = resolve_batching_hashes(unit, context)
 
     # Stamp provenance fields that the matrix function may not have set.
     filter_result.code_commit = context.git_commit or resolve_git_commit(context.repo_root)
-    filter_result.feature_set_hash = fs_hash
-    if unit.feature_set_id:
+    fs_v1_active = filter_result.bar_construction_id == FS_V1_BAR_CONSTRUCTION_ID
+    if not fs_v1_active:
+        filter_result.feature_set_hash = fs_hash
+    if unit.feature_set_id and not fs_v1_active:
         filter_result.feature_set_id = unit.feature_set_id
 
     # Override provenance fields from the worker run context (BLUEPRINT §8).
-    filter_result.data_manifest_hash = ohlcv_hash
+    if not fs_v1_active:
+        filter_result.data_manifest_hash = ohlcv_hash
     filter_result.lake_manifest_hash = context.lake_manifest_hash
     filter_result.events_csv_hash_or_not_applicable = context.events_csv_hash
 
     # Build the canonical artifact dict — this calls validate_screening_artifact
     # internally and computes the correct screening_artifact_hash.
     artifact = filter_result.to_dict()
+
+    split_label = (unit.research_split or DEFAULT_RESEARCH_SPLIT).strip()
+    artifact["research_split"] = split_label
 
     # Paid-screen resume provenance (extensions beyond required artifact fields).
     artifact["model_registry_hash"] = reg_hash
@@ -615,6 +695,16 @@ def screen_paid_batch(
             ))
         return results
 
+    # v1 screening auto-selects fs_v1 signal computer; v2 matrix path must too.
+    fs_v1_ctx = _try_resolve_fs_v1_context(representative, context)
+    if fs_v1_ctx is not None and _ohlcv_aligns_with_fs_v1_store(ohlcv, fs_v1_ctx):
+        signal_computer = _resolve_fs_v1_signal_computer(
+            representative, context, fs_ctx=fs_v1_ctx
+        )
+    else:
+        fs_v1_ctx = None
+        signal_computer = None
+
     # Cache-wiring / disabled-screening path: resolve models per unit group,
     # return SKIPPED for successes and ERROR for per-unit resolution failures.
     if _should_skip_matrix_screening(run_screening, ohlcv_from_cache, data_cache):
@@ -660,6 +750,7 @@ def screen_paid_batch(
                 parsed=parsed,
                 grid=DEFAULT_PARAM_GRID,
                 repo_root=Path(context.repo_root),
+                signal_computer=signal_computer,
                 screening_scope=context.screening_scope,
                 chunk_size=64,
                 max_total_trials=max_trials,
@@ -670,6 +761,19 @@ def screen_paid_batch(
                 screening_scope=context.screening_scope,
                 repo_root=Path(context.repo_root),
             )
+            if fs_v1_ctx is not None:
+                from backtest_pipeline.src.vectorbt_adapter import (
+                    _apply_fs_v1_screen_metadata,
+                    _resolve_research_clock,
+                )
+
+                _apply_fs_v1_screen_metadata(
+                    filter_result,
+                    fs_v1_ctx,
+                    [candidate],
+                    research_clock=_resolve_research_clock([candidate]),
+                    screening_scope=context.screening_scope,
+                )
 
             # Write per-unit artifacts and collect results
             for unit in model_units:

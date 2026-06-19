@@ -20,7 +20,7 @@ CRITICAL INVARIANTS preserved by this module:
 - ``_shift_signal_to_executable_bar`` is applied identically per column.
 - ``_apply_holding_period_exit`` is applied identically per column.
 - ``sl_stop`` / ``tp_stop`` per column from the parameter grid.
-- ``pf[:, i].stats()`` extracted per column (per-trial).
+- ``pf.stats(column=i)`` extracted per column (per-trial).
 - Walk-forward simulation per column.
 - Parameter hash computed per combination (same as loop mode).
 - Candidate ID computed per combination (same as loop mode).
@@ -131,6 +131,38 @@ def _build_sl_tp_arrays(
         sl_arr.append(sl_f)
         tp_arr.append(tp_f)
     return sl_arr, tp_arr
+
+
+def _sl_tp_for_portfolio(
+    sl_arr: Sequence[Optional[float]],
+    tp_arr: Sequence[Optional[float]],
+    *,
+    engine: str,
+) -> Tuple[Optional[Any], Optional[Any]]:
+    has_sl = any(s is not None for s in sl_arr)
+    has_tp = any(t is not None for t in tp_arr)
+    if engine == "rust":
+        sl = (
+            np.array(
+                [np.nan if s is None else np.float64(s) for s in sl_arr],
+                dtype=np.float64,
+            )
+            if has_sl
+            else None
+        )
+        tp = (
+            np.array(
+                [np.nan if t is None else np.float64(t) for t in tp_arr],
+                dtype=np.float64,
+            )
+            if has_tp
+            else None
+        )
+        return sl, tp
+    return (
+        sl_arr if has_sl else None,
+        tp_arr if has_tp else None,
+    )
 
 
 def run_vectorbt_simulation_matrix(
@@ -386,6 +418,9 @@ def run_vectorbt_simulation_matrix(
                 exits_matrix[:, col] = exit_signal
 
             sl_arr, tp_arr = _build_sl_tp_arrays(surviving_chunk)
+            sl_stop, tp_stop = _sl_tp_for_portfolio(
+                sl_arr, tp_arr, engine=portfolio_engine
+            )
 
             # --- One matrix Portfolio.from_signals call ------------------------------
             try:
@@ -395,8 +430,8 @@ def run_vectorbt_simulation_matrix(
                     exits=exits_matrix < 0,
                     init_cash=10000.0,
                     freq="1min",
-                    sl_stop=(sl_arr if any(s is not None for s in sl_arr) else None),
-                    tp_stop=(tp_arr if any(t is not None for t in tp_arr) else None),
+                    sl_stop=sl_stop,
+                    tp_stop=tp_stop,
                     engine=portfolio_engine,
                 )
             except Exception as exc:
@@ -437,12 +472,13 @@ def run_vectorbt_simulation_matrix(
                 entry_signal = entries_matrix[:, col]
                 exit_signal = exits_matrix[:, col]
 
-                # Per-column stats via pf[:, col].stats() — the matrix-mode
-                # equivalent of the loop mode's pf.stats().
+                # Per-column stats via pf.stats(column=...) — bracket indexing
+                # pf[:, col] fails on rust matrix portfolios whose columns are
+                # a flat Index (tuple keys require MultiIndex).
                 vbt_stats: Dict[str, Any] = {}
                 try:
-                    col_pf = pf[:, col]
-                    vbt_stats = dict(col_pf.stats())
+                    col_label = pf.wrapper.columns[col]
+                    vbt_stats = dict(pf.stats(column=col_label))
                 except Exception as exc:
                     logger.warning(
                         "VectorBT column stats failed for %s: %s", cand_id, exc

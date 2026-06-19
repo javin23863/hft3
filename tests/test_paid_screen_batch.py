@@ -13,7 +13,7 @@ from backtest_pipeline.src.paid_screen_batch import (
     _signal_implementation_hash_paths, resolve_batching_hashes, ohlcv_data_cache_key,
     _worker_scratch_artifact_dir, _write_screening_artifact, resolve_resume_provenance,
 )
-from backtest_pipeline.src.paid_screen_profiling import RunProfiler, artifact_matches_resume_unit
+from backtest_pipeline.src.paid_screen_profiling import RunProfiler, artifact_matches_resume_unit, DEFAULT_RESEARCH_SPLIT
 from backtest_pipeline.src.vectorbt_adapter import FilterResult, validate_screening_artifact
 
 
@@ -86,7 +86,10 @@ class TestScreenPaidBatch:
     def test_no_data_fails_all_units(self):
         """When NPZ data is not found, all units get ERROR with no_ohlcv_data."""
         ctx = make_context(repo_root="/nonexistent")
-        units = [make_unit(unit_id="u1"), make_unit(unit_id="u2")]
+        units = [
+            make_unit(unit_id="u1", event_id="__TEST_NO_NPZ_UNIT__"),
+            make_unit(unit_id="u2", event_id="__TEST_NO_NPZ_UNIT__"),
+        ]
         results = screen_paid_batch(units, ctx)
         assert len(results) == 2
         for r in results:
@@ -120,7 +123,7 @@ class TestScreenPaidBatch:
         """When data is not in cache, profiler records a cache miss."""
         ctx = make_context(repo_root="/nonexistent")
         profiler = RunProfiler()
-        units = [make_unit()]
+        units = [make_unit(event_id="__TEST_NO_NPZ_UNIT__")]
         screen_paid_batch(units, ctx, profiler=profiler, data_cache={}, run_screening=False)
         assert profiler.cache_misses >= 1
 
@@ -128,7 +131,7 @@ class TestScreenPaidBatch:
         """When a unit fails, the failure is recorded in the profiler."""
         ctx = make_context(repo_root="/nonexistent")
         profiler = RunProfiler()
-        units = [make_unit()]
+        units = [make_unit(event_id="__TEST_NO_NPZ_UNIT__")]
         screen_paid_batch(units, ctx, profiler=profiler, run_screening=False)
         assert len(profiler.failures) >= 1
 
@@ -332,7 +335,7 @@ class TestArtifactProvenanceStamping:
             unit,
             events_csv_hash="ctx_events_hash_abc",
             lake_manifest_hash="ctx_lake_hash_xyz",
-            research_split="",
+            research_split=DEFAULT_RESEARCH_SPLIT,
             screening_scope="pilot",
             **provenance,
         )
@@ -381,7 +384,7 @@ class TestArtifactProvenanceStamping:
             unit,
             events_csv_hash="batch_events_hash",
             lake_manifest_hash="batch_lake_hash",
-            research_split="",
+            research_split=DEFAULT_RESEARCH_SPLIT,
             screening_scope="pilot",
             **provenance,
         )
@@ -738,3 +741,34 @@ class TestApplyPromotionGatesAfterMatrix:
         assert gated.promoted == []
         assert len(gated.rejected) == 1
         assert gated.rejected[0].reject_reason == "promotion_gate_failed"
+
+
+class TestDefaultDataLoaderNpzRoot:
+    def test_npz_candidates_prefers_hft3_npz_root_over_repo_stubs(
+        self, tmp_path, monkeypatch
+    ):
+        """Repo-relative stub NPZ must not win when HFT3_NPZ_ROOT points elsewhere."""
+        from backtest_pipeline.src.vectorbt_adapter import _npz_candidates_for_event
+        from data_system.src.event_data_resolver import npz_search_dirs
+
+        repo = tmp_path / "repo"
+        stub_dir = repo / "data" / "npz"
+        stub_dir.mkdir(parents=True)
+        external = tmp_path / "external_lake"
+        external.mkdir()
+
+        event_id = "CPI_2024_09_11_TIGHT"
+        symbol = "MES.v.0"
+        stub = stub_dir / f"{symbol}_{event_id}_mbo.npz"
+        stub.write_bytes(b"stub")
+        real = external / f"{symbol}_{event_id}_mbo.npz"
+        real.write_bytes(b"real")
+
+        monkeypatch.setenv("HFT3_NPZ_ROOT", str(external))
+
+        candidates = _npz_candidates_for_event(
+            npz_search_dirs(repo),
+            event_id,
+            symbol,
+        )
+        assert candidates == [real]

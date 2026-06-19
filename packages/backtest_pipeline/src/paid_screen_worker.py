@@ -182,6 +182,12 @@ def worker_process_main(worker_args: dict, batch_queue, result_queue):
         batch_queue: multiprocessing queue of (batch_id, list[PaidScreenUnit])
         result_queue: multiprocessing queue of (batch_id, results, profiler_summary)
     """
+    worker_args = dict(worker_args)
+    for key in ("HFT3_NPZ_ROOT", "HFT3_MANIFEST_PATH"):
+        val = worker_args.pop(key, None)
+        if val:
+            os.environ[key] = str(val)
+
     worker = PaidScreenWorker(**worker_args)
     worker.init()
 

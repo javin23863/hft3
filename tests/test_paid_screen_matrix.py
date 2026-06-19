@@ -11,7 +11,7 @@ Verifies:
     - No-lookahead shift applied per column
 
 VectorBT is mocked with a fake Portfolio that supports matrix-shaped
-entries/exits and per-column ``pf[:, i].stats()`` indexing, mirroring the
+entries/exits and per-column ``pf.stats(column=...)`` extraction, mirroring the
 real VectorBT matrix API.
 """
 from __future__ import annotations
@@ -76,7 +76,7 @@ def _install_fake_vectorbt(monkeypatch, from_signals_factory):
     an object built by ``from_signals_factory``.
 
     ``from_signals_factory(close, entries, exits, **kwargs)`` must return an
-    object supporting ``[:, i]`` indexing with a ``.stats()`` method (a
+    object supporting ``.stats(column=...)`` per column (a
     ``FakeMatrixPortfolio``).
     """
     fake_vectorbt = SimpleNamespace(
@@ -150,10 +150,16 @@ class FakeMatrixPortfolio:
             return _FakeColumnPortfolio(self, int(key))
         raise IndexError(f"unsupported index: {key!r}")
 
-    def stats(self):
+    def stats(self, column=None, **kwargs):
+        if column is not None:
+            return dict(self._stats_cache[int(column)])
         # Aggregate stats (not used by the matrix mode, which uses per-column
         # stats).  Return the first column's stats as a fallback.
         return self._stats_cache.get(0, _complete_vbt_stats())
+
+    @property
+    def wrapper(self):
+        return SimpleNamespace(columns=list(range(self._n_cols)))
 
 
 class _FakeColumnPortfolio:
@@ -488,7 +494,7 @@ class TestRunVectorbtSimulationMatrix:
             assert bool(entries[0, col]) is False, f"col {col} has unshifted entry"
 
     def test_per_column_stats_extraction(self, monkeypatch, tmp_path):
-        """pf[:, i].stats() is extracted per column."""
+        """Per-column stats via pf.stats(column=...) are extracted."""
         captured: dict = {}
         ohlcv, grid = self._setup(monkeypatch, captured)
         cand = _mock_candidate("HYP_5", 0.15)
