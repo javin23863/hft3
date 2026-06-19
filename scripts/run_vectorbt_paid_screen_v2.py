@@ -541,6 +541,34 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(f"[resume] skipping {len(skipped_unit_ids)} units with valid artifacts",
                   flush=True)
 
+    bootstrap_started = datetime.now(timezone.utc)
+    if not args.dry_run:
+        _write_run_manifest(
+            manifest_path,
+            status="bootstrapping",
+            started=bootstrap_started,
+            finished=None,
+            out_dir=out_dir,
+            units_path=units_path,
+            args=args,
+            units_raw_count=len(units_raw),
+            completed=0,
+            failed=0,
+            skipped=len(skipped_unit_ids),
+            unit_result_dicts=[],
+            resume_cached_results=[],
+            skipped_unit_ids=skipped_unit_ids,
+            events_csv_hash=events_csv_hash,
+            lake_manifest_hash=lake_manifest_hash,
+            research_split=research_split,
+            expected_batches=0,
+            collected_batches=0,
+            aborted=False,
+            stop_reason=None,
+        )
+        print(f"[bootstrap] manifest written ({len(units)} units pending grouping)",
+              flush=True)
+
     # Dry run: print plan and exit
     if args.dry_run:
         groups = group_units_by_batch_key(units, grouping_ctx)
@@ -611,7 +639,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"completed={completed} failed=0 skipped=0 units_per_hour=0.00")
         return 0
 
-    started = datetime.now(timezone.utc)
+    started = bootstrap_started
     run_started_mono = time.monotonic()
     run_deadline: float | None = None
     if int(args.max_wall_clock_seconds) > 0:
