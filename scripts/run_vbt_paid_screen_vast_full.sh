@@ -45,6 +45,30 @@ if [[ ! -f "$GATE_FILE" ]]; then
   exit 1
 fi
 
+READY_FOR_FULL="$(python3 - "$GATE_FILE" <<'PY'
+import json, sys
+print("true" if json.load(open(sys.argv[1], encoding="utf-8")).get("ready_for_full_run") else "false")
+PY
+)"
+if [[ "$READY_FOR_FULL" != "true" && "${VBT_IGNORE_LAUNCH_BLOCKED:-}" != "1" ]]; then
+  echo "ERROR: ready_for_full_run is not true in $GATE_FILE" >&2
+  exit 1
+fi
+
+if [[ -f "$DECL_FILE" && "${VBT_IGNORE_LAUNCH_BLOCKED:-}" != "1" ]]; then
+  LAUNCH_BLOCKED="$(python3 - "$DECL_FILE" <<'PY'
+import json, sys
+reason = json.load(open(sys.argv[1], encoding="utf-8")).get("launch_blocked_reason")
+print(reason or "")
+PY
+)"
+  if [[ -n "$LAUNCH_BLOCKED" ]]; then
+    echo "ERROR: Full run blocked by declaration: $LAUNCH_BLOCKED" >&2
+    echo "Clear launch_blocked_reason in $DECL_FILE or set VBT_IGNORE_LAUNCH_BLOCKED=1 after owner approval." >&2
+    exit 1
+  fi
+fi
+
 if [[ -z "${HFT3_NPZ_ROOT:-}" ]]; then
   echo "ERROR: HFT3_NPZ_ROOT unset — NPZ lake must be on this host (Vast data from prior sync)." >&2
   exit 1
@@ -119,13 +143,24 @@ PY
   fi
 fi
 
+BATCH_TIMEOUT="${VBT_BATCH_TIMEOUT_SECONDS:-}"
+if [[ -z "$BATCH_TIMEOUT" && -f "$DECL_FILE" ]]; then
+  BATCH_TIMEOUT="$(python3 - "$DECL_FILE" <<'PY'
+import json, sys
+v = json.load(open(sys.argv[1], encoding="utf-8")).get("batch_timeout_seconds")
+print(v if v is not None else "")
+PY
+)"
+fi
+BATCH_TIMEOUT="${BATCH_TIMEOUT:-1800}"
+
 if [[ -z "${VBT_FULL_RUN_ID:-}" && -f "$DECL_FILE" ]]; then
   DECL_RUN_ID="$(python3 - "$DECL_FILE" <<'PY'
 import json, sys
 d = json.load(open(sys.argv[1], encoding="utf-8"))
 for key in ("run_id", "vbt_full_run_id"):
     v = d.get(key)
-    if isinstance(v, str) and v.strip():
+    if isinstance(v, str) and v.strip() and "PENDING" not in v:
         print(v.strip())
         break
 PY
@@ -235,6 +270,7 @@ if [[ "$EXECUTION_MODE" != "v1" ]]; then
     --max-batches-before-recycle "${VBT_MAX_BATCHES_BEFORE_RECYCLE:-100}"
     --cache-memory-limit-mb "${VBT_CACHE_MEMORY_LIMIT_MB:-4096}"
     --cache-max-entries "${VBT_CACHE_MAX_ENTRIES:-1000}"
+    --batch-timeout-seconds "$BATCH_TIMEOUT"
     --events-csv "$EVENTS_CSV"
     --events-csv-hash "$EVENTS_CSV_HASH"
     --lake-manifest-hash "$LAKE_MANIFEST_HASH"
@@ -244,7 +280,7 @@ if [[ "$EXECUTION_MODE" != "v1" ]]; then
   fi
 fi
 
-echo "Starting full run id=$VBT_FULL_RUN_ID workers=$WORKERS execution_mode=$EXECUTION_MODE out=$OUT_DIR"
+echo "Starting full run id=$VBT_FULL_RUN_ID workers=$WORKERS batch_timeout_s=$BATCH_TIMEOUT execution_mode=$EXECUTION_MODE out=$OUT_DIR"
 "${PAID_ARGS[@]}" 2>&1 | tee "$LOG_FILE"
 
 echo "Manifest: ${OUT_DIR}/paid_screen_run_manifest.json"
