@@ -24,11 +24,11 @@ tmux kill-session -t vbt_cpi_repro128 2>/dev/null || true
 tmux new -d -s vbt_cpi_repro128 \
   "cd /root/hft3/repo && export HFT3_NPZ_ROOT=/data/npz HFT3_MANIFEST_PATH=/data/npz/manifest.json HFT3_FEATURE_BACKEND=cpp PYTHONPATH=/root/hft3/repo/packages/features_engine/src:/root/hft3/repo/packages:/root/hft3/repo/apps/workbench:/root/hft3/repo:/root/hft3/repo/build && \
    python3 -u scripts/run_paid_screen.py --execution-mode v2 \
-   --units-jsonl runtime/reports/vbt_cpi_repro128.jsonl \
+   --units-jsonl runtime/reports/vbt_cpi_repro128_eventcount87.jsonl \
    --out ${OUT} \
    --vectorbt-scope paid-compute \
    --workers 128 \
-   --batch-timeout-seconds 120 \
+   --batch-timeout-seconds 1200 \
    --max-wall-clock-seconds 7200 \
    --no-llm \
    --owner-waiver 'vast D1c CPI 128w repro validation' \
