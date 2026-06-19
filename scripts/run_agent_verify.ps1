@@ -4,7 +4,25 @@
 $ErrorActionPreference = 'Stop'
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $RepoRoot
-$env:PYTHONPATH = "packages"
+$env:PYTHONPATH = ".;packages;apps"
+
+function Resolve-AgentPython {
+    if ($env:HFT3_PYTHON_EXECUTABLE -and (Test-Path -LiteralPath $env:HFT3_PYTHON_EXECUTABLE)) {
+        return $env:HFT3_PYTHON_EXECUTABLE
+    }
+    $candidates = @(
+        (Join-Path $RepoRoot '.venv\Scripts\python.exe'),
+        'C:\Users\MSI\AppData\Local\Programs\Python\Python312\python.exe'
+    )
+    foreach ($candidate in $candidates) {
+        if (Test-Path -LiteralPath $candidate) {
+            return $candidate
+        }
+    }
+    return 'python'
+}
+
+$AgentPy = Resolve-AgentPython
 
 $Wrapper = Join-Path $RepoRoot 'tools/shell/run_with_timeout.ps1'
 $BudgetSec = 180
@@ -19,16 +37,16 @@ $PyArgs = @(
     '-q', '--tb=no'
 )
 
-& $Wrapper -TimeoutSec $BudgetSec -Label 'agent-verify-preamble' -- python -m economic_event_universe.cli validate
+& $Wrapper -TimeoutSec $BudgetSec -Label 'agent-verify-preamble' -- $AgentPy -m economic_event_universe.cli validate
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-& $Wrapper -TimeoutSec $BudgetSec -Label 'agent-verify' -- python @PyArgs
+& $Wrapper -TimeoutSec $BudgetSec -Label 'agent-verify' -- $AgentPy @PyArgs
 $verifyExit = $LASTEXITCODE
 if ($verifyExit -ne 0) { exit $verifyExit }
 
 $HandoffFile = $env:HANDOFF_STATUS_FILE
 if ($HandoffFile -and (Test-Path -LiteralPath $HandoffFile)) {
-  & $Wrapper -TimeoutSec 30 -Label 'handoff-status' -- python scripts/check_handoff_status.py $HandoffFile --require
+  & $Wrapper -TimeoutSec 30 -Label 'handoff-status' -- $AgentPy scripts/check_handoff_status.py $HandoffFile --require
   exit $LASTEXITCODE
 }
 exit 0
