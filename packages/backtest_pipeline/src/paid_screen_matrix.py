@@ -421,6 +421,14 @@ def run_vectorbt_simulation_matrix(
             sl_stop, tp_stop = _sl_tp_for_portfolio(
                 sl_arr, tp_arr, engine=portfolio_engine
             )
+            for name, arr in (("sl_stop", sl_stop), ("tp_stop", tp_stop)):
+                if arr is None:
+                    continue
+                arr_len = int(arr.shape[0]) if isinstance(arr, np.ndarray) else len(arr)
+                if arr_len != n_cols:
+                    raise ValueError(
+                        f"{name} length {arr_len} != matrix columns {n_cols}"
+                    )
 
             # --- One matrix Portfolio.from_signals call ------------------------------
             try:

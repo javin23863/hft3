@@ -29,6 +29,7 @@ from backtest_pipeline.src.paid_screen_matrix import (
     _build_sl_tp_arrays,
     _chunk_parameter_trials,
     _param_chunk_hash,
+    _sl_tp_for_portfolio,
     run_vectorbt_simulation_matrix,
 )
 from backtest_pipeline.src.vectorbt_adapter import (
@@ -350,6 +351,45 @@ class TestBuildSlTpArrays:
         assert tp == [None]
 
 
+class TestSlTpForPortfolio:
+    """Rust engine sl/tp arrays must match column count, not bar count."""
+
+    def test_rust_sl_tp_length_matches_trial_count_not_bars(self):
+        n_trials = 64
+        m_bars = 5
+        chunk = [
+            {"stop_loss_pct": 0.5 if i % 2 == 0 else None, "take_profit_pct": 1.0}
+            for i in range(n_trials)
+        ]
+        sl_arr, tp_arr = _build_sl_tp_arrays(chunk)
+        assert len(sl_arr) == n_trials
+        assert len(tp_arr) == n_trials
+
+        sl, tp = _sl_tp_for_portfolio(sl_arr, tp_arr, engine="rust")
+        assert sl is not None
+        assert tp is not None
+        assert sl.shape == (n_trials,)
+        assert tp.shape == (n_trials,)
+        assert sl.dtype == np.float64
+        assert tp.dtype == np.float64
+        assert sl.shape != (m_bars,)
+
+    def test_rust_partial_chunk_width(self):
+        n_trials = 7
+        chunk = [{"stop_loss_pct": 1.0, "take_profit_pct": None} for _ in range(n_trials)]
+        sl_arr, tp_arr = _build_sl_tp_arrays(chunk)
+        sl, tp = _sl_tp_for_portfolio(sl_arr, tp_arr, engine="rust")
+        assert sl.shape == (n_trials,)
+        assert tp is None
+
+    def test_numba_engine_returns_lists(self):
+        chunk = [{"stop_loss_pct": 1.0, "take_profit_pct": 2.0}]
+        sl_arr, tp_arr = _build_sl_tp_arrays(chunk)
+        sl, tp = _sl_tp_for_portfolio(sl_arr, tp_arr, engine="numba")
+        assert sl == [0.01]
+        assert tp == [0.02]
+
+
 # ---------------------------------------------------------------------------
 # run_vectorbt_simulation_matrix — integration with fake VectorBT
 # ---------------------------------------------------------------------------
@@ -618,6 +658,35 @@ class TestRunVectorbtSimulationMatrix:
         assert n_rows == 32
         skipped = [r for r in result.rejected if r.reject_reason == "RUN_BUDGET_REACHED"]
         assert len(skipped) == 32 - 10
+
+    def test_sl_tp_kwargs_match_matrix_column_count(self, monkeypatch, tmp_path):
+        """sl_stop/tp_stop passed to from_signals must match entry column count."""
+        captured: dict = {}
+        ohlcv, grid = self._setup(monkeypatch, captured)
+        cand = _mock_candidate("HYP_5", 0.15)
+
+        run_vectorbt_simulation_matrix(
+            ohlcv,
+            [cand],
+            parsed=None,
+            grid=grid,
+            repo_root=tmp_path,
+            signal_computer=_signal_computer_returns_fixed(1, -1),
+            screening_scope="pilot",
+            chunk_size=16,
+        )
+
+        entries = np.asarray(captured["entries"])
+        n_cols = int(entries.shape[1])
+        assert n_cols > 0
+        sl = captured["kwargs"].get("sl_stop")
+        tp = captured["kwargs"].get("tp_stop")
+        if sl is not None:
+            sl_len = int(sl.shape[0]) if isinstance(sl, np.ndarray) else len(sl)
+            assert sl_len == n_cols
+        if tp is not None:
+            tp_len = int(tp.shape[0]) if isinstance(tp, np.ndarray) else len(tp)
+            assert tp_len == n_cols
 
     def test_uses_build_signal_matrix_helper_path(self, monkeypatch, tmp_path):
         """When all columns share a param-independent signal, the matrix has the
