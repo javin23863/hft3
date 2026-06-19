@@ -568,6 +568,7 @@ def _write_screening_artifact(
     if recipe_hash:
         artifact["feature_recipe_hash"] = recipe_hash
     from backtest_pipeline.src.vectorbt_adapter import (
+        _json_primitive_screening_payload,
         compute_screening_artifact_hash,
         validate_screening_artifact,
     )
@@ -576,10 +577,11 @@ def _write_screening_artifact(
     validate_screening_artifact(artifact)
 
     # Write atomically
+    serializable = _json_primitive_screening_payload(artifact)
     tmp_path = artifact_path + ".tmp"
     os.makedirs(os.path.dirname(artifact_path), exist_ok=True)
     with open(tmp_path, "w") as f:
-        json.dump(artifact, f, indent=2, sort_keys=True)
+        json.dump(serializable, f, indent=2, sort_keys=True)
     os.replace(tmp_path, artifact_path)
 
     return artifact.get("screening_artifact_hash", "")

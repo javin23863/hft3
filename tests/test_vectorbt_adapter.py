@@ -1605,6 +1605,19 @@ class TestFilterCandidates:
         assert not result.promoted
         assert not (tmp_path / "research_cards" / "promotion").exists()
 
+
+def test_json_primitive_screening_payload_serializes_nat():
+    import pandas as pd
+
+    from backtest_pipeline.src.vectorbt_adapter import _json_primitive_screening_payload
+
+    payload = {"end_ts": pd.NaT, "ok": 1}
+    cleaned = _json_primitive_screening_payload(payload)
+    assert cleaned == {"end_ts": None, "ok": 1}
+    json.dumps(cleaned)
+
+
+class TestFilterCandidatesScreeningArtifactPersistence:
     def test_screening_artifact_hash_ignores_hash_and_timestamps(self, tmp_path):
         cands = [_mock_candidate("HYP_5", 0.15)]
         result = filter_candidates(

@@ -467,6 +467,15 @@ def _json_primitive_screening_payload(value: Any) -> Any:
         return _json_primitive_screening_payload(value.item())
     if isinstance(value, (str, int, bool)) or value is None:
         return value
+    try:
+        import pandas as pd
+
+        if pd.isna(value):
+            return None
+        if isinstance(value, pd.Timestamp):
+            return value.isoformat()
+    except ImportError:
+        pass
     if isinstance(value, float):
         if np.isfinite(value):
             return value
@@ -539,6 +548,15 @@ def _json_primitive_screening_payload(value: Any) -> Any:
         return _json_primitive_screening_payload(value.item())
     if isinstance(value, (str, int, bool)) or value is None:
         return value
+    try:
+        import pandas as pd
+
+        if pd.isna(value):
+            return None
+        if isinstance(value, pd.Timestamp):
+            return value.isoformat()
+    except ImportError:
+        pass
     if isinstance(value, float):
         if np.isfinite(value):
             return value
