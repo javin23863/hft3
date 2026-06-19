@@ -296,6 +296,8 @@ _MANIFEST_FLUSH_INTERVAL_SECONDS = 15.0
 _MAX_BATCH_REDISPATCH = 3
 _STALE_BATCH_MIN_SECONDS = 30.0
 _STALE_BATCH_MAX_SECONDS = 120.0
+_WORKER_SHUTDOWN_TOTAL_TIMEOUT_SECONDS = 60.0
+_WORKER_SHUTDOWN_TERMINATE_GRACE_SECONDS = 5.0
 
 
 def _inflight_batch_limit(num_workers: int) -> int:
@@ -310,6 +312,56 @@ def _alive_worker_count(workers: List[mp.Process]) -> int:
         if proc.is_alive():
             alive += 1
     return alive
+
+
+def _shutdown_workers(
+    workers: List[mp.Process],
+    batch_queue: "mp.Queue",
+    *,
+    total_timeout_seconds: float = _WORKER_SHUTDOWN_TOTAL_TIMEOUT_SECONDS,
+) -> set[int]:
+    """Signal workers to exit and join with a bounded total wall clock.
+
+    Returns PIDs that were ``terminate()``d so callers can exclude them from
+    post-shutdown exit-code checks.
+    """
+    terminated_pids: set[int] = set()
+    if not workers:
+        return terminated_pids
+
+    for _ in workers:
+        try:
+            batch_queue.put(None)
+        except Exception:
+            pass
+
+    deadline = time.monotonic() + total_timeout_seconds
+    for proc in workers:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        proc.join(timeout=min(remaining, 2.0))
+
+    for proc in workers:
+        if not proc.is_alive():
+            continue
+        if proc.pid is not None:
+            terminated_pids.add(proc.pid)
+        try:
+            proc.terminate()
+        except Exception:
+            pass
+
+    terminate_deadline = time.monotonic() + _WORKER_SHUTDOWN_TERMINATE_GRACE_SECONDS
+    for proc in workers:
+        if not proc.is_alive():
+            continue
+        remaining = terminate_deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        proc.join(timeout=remaining)
+
+    return terminated_pids
 
 
 def _effective_inflight_limit(inflight_limit: int, alive_workers: int) -> int:
@@ -376,13 +428,14 @@ def _redispatch_outstanding_batches(
 ) -> int:
     """Re-queue outstanding batches after worker respawn (lost in-flight work)."""
     redispatched = 0
-    for batch_id, (_dispatched_at, redispatch_count, batch_units) in list(
+    for batch_id, (dispatched_at, redispatch_count, batch_units) in list(
         outstanding.items()
     ):
         if redispatch_count >= _MAX_BATCH_REDISPATCH:
             continue
         batch_queue.put((batch_id, batch_units))
-        outstanding[batch_id] = (now, redispatch_count + 1, batch_units)
+        # Preserve original dispatch time so expire cannot be reset indefinitely.
+        outstanding[batch_id] = (dispatched_at, redispatch_count + 1, batch_units)
         redispatched += 1
     return redispatched
 
@@ -396,13 +449,14 @@ def _expire_hung_batches(
 ) -> List[Tuple[Any, List[UnitScreeningResult], Dict[str, Any]]]:
     """Synthesize ERROR results for batches that exceed the worker batch timeout."""
     expired: List[Tuple[Any, List[UnitScreeningResult], Dict[str, Any]]] = []
-    for batch_id, (dispatched_at, _redispatch_count, batch_units) in list(
+    for batch_id, (dispatched_at, redispatch_count, batch_units) in list(
         outstanding.items()
     ):
         if batch_id in collected_batch_ids:
             continue
-        if now - dispatched_at < batch_timeout_seconds:
-            continue
+        if redispatch_count < _MAX_BATCH_REDISPATCH:
+            if now - dispatched_at < batch_timeout_seconds:
+                continue
         if batch_units:
             results = [
                 UnitScreeningResult(
@@ -527,21 +581,7 @@ def _drain_workers(
         if on_batch_collected is not None:
             on_batch_collected(batch_id, results, profiler_summary)
 
-    # Signal workers to shut down
-    for _ in workers:
-        try:
-            batch_queue.put(None)
-        except Exception:
-            pass
-
-    terminated_pids: set[int] = set()
-    for proc in workers:
-        proc.join(timeout=30)
-        if proc.is_alive():
-            if proc.pid is not None:
-                terminated_pids.add(proc.pid)
-            proc.terminate()
-            proc.join(timeout=5)
+    terminated_pids = _shutdown_workers(workers, batch_queue)
 
     if worker_failure_reason is None:
         post_join_failure = _failed_worker_stop_reason(
@@ -786,20 +826,16 @@ def _pipelined_dispatch_and_drain(
             if not _try_dispatch_one():
                 break
 
-    for _ in workers:
-        try:
-            batch_queue.put(None)
-        except Exception:
-            pass
+        if len(collected) >= expected_batches:
+            break
 
-    terminated_pids: set[int] = set()
-    for proc in workers:
-        proc.join(timeout=30)
-        if proc.is_alive():
-            if proc.pid is not None:
-                terminated_pids.add(proc.pid)
-            proc.terminate()
-            proc.join(timeout=5)
+    while True:
+        try:
+            result_queue.get_nowait()
+        except queue.Empty:
+            break
+
+    terminated_pids = _shutdown_workers(workers, batch_queue)
 
     if not recover_worker_deaths and worker_failure_reason is None:
         post_join_failure = _failed_worker_stop_reason(

@@ -928,6 +928,20 @@ class TestPipelinedDispatchAndDrain:
         assert outstanding[7][1] == 1
         assert outstanding[8][1] == 1
 
+    def test_redispatch_preserves_original_dispatch_time_for_expire(self):
+        v2 = _load_v2_module()
+        ctx = mp.get_context("spawn")
+        batch_queue = ctx.Queue()
+        outstanding = {1: (0.0, 1, [])}
+        redispatched = v2._redispatch_outstanding_batches(
+            outstanding,
+            batch_queue,
+            now=50.0,
+        )
+        assert redispatched == 1
+        assert outstanding[1][0] == 0.0
+        assert outstanding[1][1] == 2
+
     def test_expire_hung_batches_synthesizes_errors(self):
         v2 = _load_v2_module()
         from backtest_pipeline.src.paid_screen_types import PaidScreenUnit
@@ -952,6 +966,96 @@ class TestPipelinedDispatchAndDrain:
         assert batch_id == 3
         assert results[0].status == "ERROR"
         assert results[0].error == "batch_worker_hung_or_lost"
+
+    def test_expire_after_max_redispatch_without_full_timeout(self):
+        v2 = _load_v2_module()
+        outstanding = {9: (100.0, v2._MAX_BATCH_REDISPATCH, [])}
+        expired = v2._expire_hung_batches(
+            outstanding,
+            set(),
+            now=101.0,
+            batch_timeout_seconds=1800.0,
+        )
+        assert len(expired) == 1
+        batch_id, results, _summary = expired[0]
+        assert batch_id == 9
+        assert results[0].error == "batch_worker_hung_or_lost"
+
+    def test_pipelined_all_batches_collected_via_expire_exits_promptly(self):
+        v2 = _load_v2_module()
+        ctx = mp.get_context("spawn")
+        batch_queue = ctx.Queue()
+        result_queue = ctx.Queue()
+        batch_count = 12
+        batches = [(idx, []) for idx in range(batch_count)]
+        workers = [
+            ctx.Process(target=_sleep_forever_worker)
+            for _ in range(2)
+        ]
+        for proc in workers:
+            proc.start()
+
+        t0 = time.monotonic()
+        collected, stop_reason = v2._pipelined_dispatch_and_drain(
+            workers,
+            batch_queue,
+            result_queue,
+            batches=batches,
+            expected_batches=batch_count,
+            timeout_per_batch=0.3,
+            inflight_limit=4,
+        )
+        elapsed = time.monotonic() - t0
+
+        assert stop_reason is None
+        assert len(collected) == batch_count
+        assert elapsed < 30.0
+        for _batch_id, results, _summary in collected:
+            assert results[0].error == "batch_worker_hung_or_lost"
+
+    def test_pipelined_high_worker_count_fast_fail_shuts_down_promptly(self):
+        v2 = _load_v2_module()
+        ctx = mp.get_context("spawn")
+        batch_queue = ctx.Queue()
+        result_queue = ctx.Queue()
+        num_workers = 32
+        batch_count = 128
+        batches = [(idx, []) for idx in range(batch_count)]
+        worker_args = {
+            "repo_root": str(_REPO),
+            "screening_scope": "paid-compute",
+            "events_csv_hash": "eh",
+            "lake_manifest_hash": "lh",
+            "scratch_root": str(_REPO / "runtime" / "paid_screen_scratch" / "orchestrator_test"),
+        }
+        workers = [
+            ctx.Process(
+                target=_echo_fast_fail_worker,
+                args=({}, batch_queue, result_queue),
+            )
+            for _ in range(num_workers)
+        ]
+        for proc in workers:
+            proc.start()
+
+        t0 = time.monotonic()
+        collected, stop_reason = v2._pipelined_dispatch_and_drain(
+            workers,
+            batch_queue,
+            result_queue,
+            batches=batches,
+            expected_batches=batch_count,
+            timeout_per_batch=30.0,
+            inflight_limit=v2._inflight_batch_limit(num_workers),
+            spawn_ctx=ctx,
+            spawn_worker_args=worker_args,
+            target_worker_count=num_workers,
+        )
+        elapsed = time.monotonic() - t0
+
+        assert stop_reason is None
+        assert len(collected) == batch_count
+        assert elapsed < 45.0
 
     def test_pipelined_dispatch_collects_all_batches_under_backpressure(self):
         v2 = _load_v2_module()
