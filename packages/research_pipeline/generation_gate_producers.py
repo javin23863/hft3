@@ -406,7 +406,7 @@ def build_surface_stability_gate_receipt(
         required_check_count=req_count,
         passed_check_count=passed_count,
         failed_check_count=0 if status == "PASS" else max(1, req_count),
-        missing_check_count=0 if status == "PASS" else max(0, req_count - passed_count),
+        missing_check_count=0,
         authority_refs=["docs/project/ROBUSTNESS_TESTING_SPEC.md"],
         input_artifacts=[str(screening_path)] if screening_path else [],
         output_artifacts=[f"gates/{candidate_id}/surface_stability_gate.json"],

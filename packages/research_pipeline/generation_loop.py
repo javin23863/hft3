@@ -1058,8 +1058,12 @@ def run_autoresearch_loop(
 
     start_gen = int(manifest.get("generation_index") or 0)
     if manifest.get("generation_status") == GENERATION_STATUS_COMPLETE and not resume_in_progress and not resume_recovered_complete:
-        start_gen = int(manifest.get("generation_index", 0)) + 1
-        manifest["generation_index"] = start_gen
+        # Bump only when index still points at a finished generation (1137 already
+        # advanced index after a normal loop iteration; terminal stop may not).
+        complete_at_index = generation_dir(repo_root, campaign_id, start_gen) / ".generation_complete"
+        if complete_at_index.is_file():
+            start_gen += 1
+            manifest["generation_index"] = start_gen
 
     tested = set(manifest.get("tested_parameter_hashes") or [])
     for gen in range(start_gen, cfg.max_generations):
