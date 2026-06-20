@@ -67,14 +67,17 @@ if (-not $SkipPush) {
     & git push -u origin $GitBranch
     if ($LASTEXITCODE -ne 0) { throw "git push failed exit=$LASTEXITCODE" }
 }
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
 & git fetch origin $GitBranch 2>&1 | Out-Null
+$ErrorActionPreference = $prevEap
 $localHead = (git rev-parse "origin/$GitBranch").Trim()
 
 Write-Step "Remote repo sync"
 $syncCmd = @"
 set -euo pipefail
 if [[ -d $RemoteRepo/.git ]]; then
-  git -C $RemoteRepo fetch origin
+  git -C $RemoteRepo fetch origin $GitBranch:refs/remotes/origin/$GitBranch --force --prune
   git -C $RemoteRepo checkout $GitBranch
   git -C $RemoteRepo reset --hard origin/$GitBranch
 else
