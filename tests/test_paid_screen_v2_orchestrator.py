@@ -530,6 +530,40 @@ class TestDrainWorkersEarlyWorkerExit:
         status = determine_manifest_status(0, 0, aborted, 10)
         assert status == "aborted"
 
+    def test_drain_collects_queued_batch_when_workers_already_dead(self):
+        v2 = _load_v2_module()
+        ctx = mp.get_context("spawn")
+        batch_queue = ctx.Queue()
+        result_queue = ctx.Queue()
+        workers = [
+            ctx.Process(
+                target=_immediate_worker_exit,
+                args=({}, batch_queue, result_queue),
+            )
+            for _ in range(2)
+        ]
+        for proc in workers:
+            proc.start()
+        for proc in workers:
+            proc.join(timeout=5)
+        result_queue.put((
+            1,
+            [UnitScreeningResult(unit_id="u1", status="OK")],
+            {"stage_timings": {}},
+        ))
+
+        collected, stop_reason = v2._drain_workers(
+            workers,
+            batch_queue,
+            result_queue,
+            expected_batches=5,
+            timeout_per_batch=10.0,
+        )
+
+        assert len(collected) == 1
+        assert collected[0][0] == 1
+        assert stop_reason == "worker_failed_exitcode_1"
+
 
 class TestDrainWorkersPartialWorkerFailure:
     def test_drain_fails_when_one_worker_crashes_but_batches_complete(self):

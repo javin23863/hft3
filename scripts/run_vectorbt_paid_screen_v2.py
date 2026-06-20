@@ -662,9 +662,6 @@ def _drain_workers(
         wall_clock_limited = False
         deadline = per_batch_deadline
 
-    if expected_batches > 0 and workers and _workers_all_dead(workers):
-        stop_reason = _worker_exit_stop_reason(workers)
-
     while stop_reason is None and len(collected) < expected_batches:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
@@ -677,14 +674,13 @@ def _drain_workers(
         polled_failure = _failed_worker_stop_reason(workers)
         if polled_failure is not None:
             worker_failure_reason = polled_failure
-        if _workers_all_dead(workers):
-            stop_reason = _worker_exit_stop_reason(workers)
-            break
         try:
             batch_id, results, profiler_summary = result_queue.get(
                 timeout=min(remaining, _DRAIN_POLL_INTERVAL_SECONDS)
             )
         except queue.Empty:
+            if expected_batches > 0 and workers and _workers_all_dead(workers):
+                stop_reason = _worker_exit_stop_reason(workers)
             continue
         collected.append((batch_id, results, profiler_summary))
         ok_units = sum(1 for r in results if r.status == "OK")

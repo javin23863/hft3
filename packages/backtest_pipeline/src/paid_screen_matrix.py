@@ -626,6 +626,8 @@ def run_vectorbt_simulation_matrix(
                     "vbt_stats": vbt_stats,
                     "filter_backend": result.backend,
                     **gate_metrics,
+                    "oos_expectancy": wf["oos_expectancy"],
+                    "wf_consistency": wf["wf_consistency"],
                     "auxiliary_numpy_metrics": auxiliary_metrics,
                     "auxiliary_numpy_walk_forward": wf,
                     "surface_stability_metrics": _surface_stability_formula_missing(),
