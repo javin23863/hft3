@@ -9,11 +9,35 @@ from typing import Any, Mapping
 import yaml
 
 from research_pipeline.generation_gate_chain import (
+    FINAL_BLOCKED_MISSING,
+    FINAL_HFT_REJECTED,
+    FINAL_INFRASTRUCTURE_FAILED,
     FINAL_ONTOLOGY_REJECTED,
     FINAL_PASS,
+    FINAL_REGULAR_WF_REJECTED,
+    FINAL_STATISTICAL_REJECTED,
+    FINAL_SURFACE_REJECTED,
+    FINAL_VECTORBT_REJECTED,
+    FINAL_WFC_REJECTED,
     GATE_CHAIN_ORDER,
+    validate_gate_receipt_schema,
 )
 from research_pipeline.generation_gate_producers import gate_receipt_path
+
+TERMINAL_FINAL_STATUSES: frozenset[str] = frozenset(
+    {
+        FINAL_PASS,
+        FINAL_ONTOLOGY_REJECTED,
+        FINAL_VECTORBT_REJECTED,
+        FINAL_SURFACE_REJECTED,
+        FINAL_REGULAR_WF_REJECTED,
+        FINAL_WFC_REJECTED,
+        FINAL_STATISTICAL_REJECTED,
+        FINAL_HFT_REJECTED,
+        FINAL_BLOCKED_MISSING,
+        FINAL_INFRASTRUCTURE_FAILED,
+    }
+)
 
 SCORE_WEIGHTS = {
     "oos_expectancy": 1.0,
@@ -258,20 +282,140 @@ def _row_from_candidate(
     return row
 
 
+def load_gate_receipt(path: Path) -> tuple[dict[str, Any] | None, list[str]]:
+    if not path.is_file():
+        return None, ["receipt_missing"]
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None, ["receipt_unreadable"]
+    if not isinstance(payload, dict):
+        return None, ["receipt_not_object"]
+    schema_errors = validate_gate_receipt_schema(payload)
+    if schema_errors:
+        return None, [f"receipt_schema_invalid:{';'.join(schema_errors)}"]
+    return payload, []
+
+
+def gate_receipt_is_reusable(path: Path) -> bool:
+    _, errors = load_gate_receipt(path)
+    return not errors
+
+
+def validate_generation_completion(
+    *,
+    gen_dir: Path,
+    screening_path: Path | None,
+    summary: Mapping[str, Any] | None,
+    proposed_candidate_ids: list[str] | None = None,
+) -> list[str]:
+    """Validate all required evidence before writing `.generation_complete`."""
+    reasons: list[str] = []
+    if screening_path is None or not screening_path.is_file():
+        reasons.append("screening_artifact_missing")
+    else:
+        try:
+            screening = json.loads(screening_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            reasons.append("screening_artifact_unreadable")
+            screening = None
+        if isinstance(screening, dict):
+            if not screening.get("screening_artifact_hash"):
+                reasons.append("screening_artifact_hash_missing")
+
+    summary_path = gen_dir / "generation_summary.json"
+    summary_payload = dict(summary) if summary else None
+    if summary_payload is None:
+        if not summary_path.is_file():
+            reasons.append("generation_summary_missing")
+        else:
+            try:
+                loaded = json.loads(summary_path.read_text(encoding="utf-8"))
+                summary_payload = dict(loaded) if isinstance(loaded, dict) else None
+            except (OSError, json.JSONDecodeError):
+                reasons.append("generation_summary_unreadable")
+    if summary_payload is None and "generation_summary_missing" not in reasons:
+        reasons.append("generation_summary_invalid")
+
+    candidate_ids = list(proposed_candidate_ids or [])
+    rows_by_id: dict[str, Mapping[str, Any]] = {}
+    if summary_payload:
+        for row in summary_payload.get("candidates") or []:
+            if isinstance(row, Mapping) and row.get("candidate_id"):
+                cid = str(row["candidate_id"])
+                rows_by_id[cid] = row
+                if cid not in candidate_ids:
+                    candidate_ids.append(cid)
+    if proposed_candidate_ids:
+        for cid in proposed_candidate_ids:
+            if cid not in rows_by_id:
+                reasons.append(f"candidate_missing_from_summary:{cid}")
+
+    for cid in candidate_ids:
+        row = rows_by_id.get(cid)
+        if row is None:
+            continue
+        final_status = row.get("final_status")
+        if final_status not in TERMINAL_FINAL_STATUSES:
+            reasons.append(f"candidate_non_terminal_status:{cid}:{final_status}")
+
+        if final_status == FINAL_ONTOLOGY_REJECTED:
+            _, gate_errors = load_gate_receipt(gate_receipt_path(gen_dir, cid, "ontology_gate"))
+            if gate_errors:
+                reasons.extend(f"{cid}:ontology:{e}" for e in gate_errors)
+            continue
+
+        for gate_id in GATE_CHAIN_ORDER:
+            _, gate_errors = load_gate_receipt(gate_receipt_path(gen_dir, cid, gate_id))
+            if gate_errors:
+                reasons.extend(f"{cid}:{gate_id}:{e}" for e in gate_errors)
+
+        chain_path = gate_receipt_path(gen_dir, cid, "gate_chain_result")
+        if not chain_path.is_file():
+            reasons.append(f"gate_chain_result_missing:{cid}")
+        else:
+            try:
+                chain = json.loads(chain_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                reasons.append(f"gate_chain_result_unreadable:{cid}")
+            else:
+                if isinstance(chain, dict) and chain.get("final_status") not in TERMINAL_FINAL_STATUSES:
+                    reasons.append(f"gate_chain_non_terminal:{cid}")
+
+    frozen_path = gen_dir / "candidate_manifests.jsonl"
+    if frozen_path.is_file():
+        for line in frozen_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                manifest_row = json.loads(line)
+            except json.JSONDecodeError:
+                reasons.append("frozen_manifest_unreadable")
+                break
+            if isinstance(manifest_row, dict) and manifest_row.get("candidate_id"):
+                cid = str(manifest_row["candidate_id"])
+                if cid in rows_by_id and rows_by_id[cid].get("final_status") != FINAL_ONTOLOGY_REJECTED:
+                    _, gate_errors = load_gate_receipt(gate_receipt_path(gen_dir, cid, "manifest_gate"))
+                    if gate_errors:
+                        reasons.extend(f"{cid}:manifest_gate:{e}" for e in gate_errors)
+
+    return reasons
+
+
 def validate_generation_artifacts(
     *,
     gen_dir: Path,
     screening_path: Path | None,
+    summary: Mapping[str, Any] | None = None,
+    proposed_candidate_ids: list[str] | None = None,
 ) -> list[str]:
-    reasons: list[str] = []
-    if screening_path is None or not screening_path.is_file():
-        reasons.append("screening_artifact_missing")
-        return reasons
-    try:
-        json.loads(screening_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        reasons.append("screening_artifact_unreadable")
-        return reasons
+    reasons = validate_generation_completion(
+        gen_dir=gen_dir,
+        screening_path=screening_path,
+        summary=summary,
+        proposed_candidate_ids=proposed_candidate_ids,
+    )
     marker = gen_dir / ".generation_complete"
     if not marker.is_file():
         reasons.append("generation_complete_marker_missing")

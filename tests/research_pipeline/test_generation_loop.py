@@ -410,7 +410,6 @@ def test_resume_preserves_manifest_hash(tmp_path: Path, monkeypatch) -> None:
     cfg2 = AutoresearchConfig(
         max_generations=2,
         max_candidates_per_generation=2,
-        exploration_fraction=0.5,
         run_robustness=False,
     )
     code2, report2 = run_autoresearch_loop(
@@ -475,7 +474,6 @@ def test_failure_stop_reason_exits_nonzero(tmp_path: Path) -> None:
     cfg2 = AutoresearchConfig(
         max_generations=2,
         max_candidates_per_generation=2,
-        exploration_fraction=0.5,
         run_robustness=False,
     )
     code2, report2 = run_autoresearch_loop(

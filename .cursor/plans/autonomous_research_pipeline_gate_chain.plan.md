@@ -55,10 +55,10 @@ todos:
     status: completed
   - id: phase4-completion
     content: "Phase 4 (§17): Honest .generation_complete — validate all receipts before marker; zero FINAL_PASS allowed"
-    status: pending
+    status: completed
   - id: phase4-resume
     content: "Phase 4 (§18): Deterministic resume — expanded config hash; reuse valid gates; rerun corrupt; no skip-on-marker"
-    status: pending
+    status: completed
   - id: phase5-vbt-performance
     content: "Phase 5 (§19): VectorBT performance — long-lived workers, matrix batch, shared loading; benchmark + projected campaign time"
     status: pending
@@ -229,11 +229,13 @@ Output table columns: Requirement | Existing file | Function/class | Test | Arti
 
 ---
 
-## Phase 4 — Completion + resume (§17–§18)
+## Phase 4 — Completion + resume (§17–§18) ✅ 2026-06-20
 
-- No `.generation_complete` until all receipts validate
-- Config hash covers WFC windows, thresholds, HFT stages, gate versions
-- Resume: reuse valid gates; rerun corrupt; never skip on marker alone
+- `validate_generation_completion` checks terminal status + all gate receipts before marker
+- `.generation_complete` written only after validation passes; corrupt/missing evidence → `failed`, no marker
+- `collect_semantic_config_inputs` expands config hash (WF/WFC YAML, gate versions, HFT model hashes, exploration)
+- Resume: `assert_config_hash_matches` on all resume paths; reuse valid ontology receipts; rerun corrupt; checkpoint + proposed_candidates.json
+- Tests: `tests/research_pipeline/test_generation_phase4.py` (6 cases)
 
 ---
 
