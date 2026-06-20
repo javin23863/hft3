@@ -7,7 +7,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 import yaml
 
@@ -23,16 +23,39 @@ from research_pipeline.generation_state import (
     GENERATION_STATUS_FAILED,
     GENERATION_STATUS_IN_PROGRESS,
     append_pointer,
+    assert_config_hash_matches,
     autoresearch_campaign_dir,
+    collect_semantic_config_inputs,
     compute_config_hash,
     default_manifest,
     generation_dir,
+    load_frozen_manifests,
     load_manifest,
     new_campaign_id,
     register_tested_hashes,
     save_manifest,
 )
-from research_pipeline.generation_summary import build_generation_summary, validate_generation_artifacts, write_generation_summary
+from research_pipeline.generation_gate_chain import run_generation_gate_chain, passes_gates_before_hft
+from research_pipeline.generation_gate_producers import (
+    build_hftbacktest_gate_receipt,
+    build_manifest_gate_receipt,
+    build_regular_walk_forward_gate_receipt,
+    build_statistical_robustness_gate_receipt,
+    build_surface_stability_gate_receipt,
+    build_vectorbt_gate_receipt,
+    build_walk_forward_correlation_gate_receipt,
+    emit_candidate_gate_receipts,
+    gate_receipt_path,
+    run_ontology_gate_for_candidate,
+    write_gate_receipt,
+)
+from research_pipeline.generation_summary import (
+    build_generation_summary,
+    gate_receipt_is_reusable,
+    load_gate_receipt,
+    validate_generation_completion,
+    write_generation_summary,
+)
 from research_pipeline.hypothesis_parser import parse_hypothesis
 from research_pipeline.model_generation import generate_candidates
 from research_pipeline.review_memory import append_generation_memory
@@ -100,6 +123,179 @@ def load_autoresearch_config(path: Path, *, overrides: dict[str, Any] | None = N
     )
 
 
+def _cfg_semantic_dict(cfg: AutoresearchConfig) -> dict[str, Any]:
+    return {
+        "max_candidates_per_generation": cfg.max_candidates_per_generation,
+        "robustness_max_candidates": cfg.robustness_max_candidates,
+        "exploration_fraction": cfg.exploration_fraction,
+        "family_search_enabled": cfg.family_search_enabled,
+        "family_search_fraction": cfg.family_search_fraction,
+        "screening_scope": cfg.screening_scope,
+        "vectorbt_min_trades": cfg.vectorbt_min_trades,
+        "symbol": cfg.symbol,
+        "run_robustness": cfg.run_robustness,
+        "run_hft_campaign": cfg.run_hft_campaign,
+        "hft_stages": list(cfg.hft_stages),
+        "hft_workers": cfg.hft_workers,
+        "hft_source_npz": cfg.hft_source_npz,
+        "hft_latency_model": cfg.hft_latency_model,
+        "hft_fill_queue_model": cfg.hft_fill_queue_model,
+    }
+
+
+def _campaign_config_hash(*, repo_root: Path, event_id: str, cfg: AutoresearchConfig) -> str:
+    payload = collect_semantic_config_inputs(
+        repo_root=repo_root,
+        event_id=event_id,
+        campaign_cfg=_cfg_semantic_dict(cfg),
+    )
+    return compute_config_hash(payload)
+
+
+def _serialize_candidates(candidates: list[CandidateModel]) -> list[dict[str, Any]]:
+    return [
+        {
+            "candidate_id": c.candidate_id,
+            "model_id": c.model_id,
+            "strategy_params": dict(c.strategy_params or {}),
+            "thesis": c.thesis,
+            "metadata": dict(c.metadata or {}),
+            "feature_recipe": dict(c.feature_recipe or {}) if c.feature_recipe else None,
+            "feature_recipe_hash": c.feature_recipe_hash,
+        }
+        for c in candidates
+    ]
+
+
+def _load_candidates_from_checkpoint(gen_dir: Path, proposed_ids: list[str]) -> list[CandidateModel]:
+    snapshot_path = gen_dir / "proposed_candidates.json"
+    if not snapshot_path.is_file():
+        return []
+    try:
+        rows = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    if not isinstance(rows, list):
+        return []
+    allowed = set(proposed_ids)
+    out: list[CandidateModel] = []
+    for row in rows:
+        if not isinstance(row, dict) or not row.get("candidate_id"):
+            continue
+        if allowed and str(row["candidate_id"]) not in allowed:
+            continue
+        out.append(
+            CandidateModel(
+                candidate_id=str(row["candidate_id"]),
+                model_id=str(row.get("model_id") or ""),
+                strategy_params=dict(row.get("strategy_params") or {}),
+                thesis=str(row.get("thesis") or ""),
+                metadata=dict(row.get("metadata") or {}),
+                feature_recipe=dict(row["feature_recipe"]) if row.get("feature_recipe") else None,
+                feature_recipe_hash=row.get("feature_recipe_hash"),
+            )
+        )
+    return out
+
+
+def _write_generation_checkpoint(
+    gen_dir: Path,
+    *,
+    proposed_candidate_ids: list[str],
+    pipeline_run_id: str,
+    generation_index: int,
+    candidates: list[CandidateModel] | None = None,
+) -> Path:
+    path = gen_dir / "generation_checkpoint.json"
+    path.write_text(
+        json.dumps(
+            {
+                "proposed_candidate_ids": proposed_candidate_ids,
+                "pipeline_run_id": pipeline_run_id,
+                "generation_index": generation_index,
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    if candidates:
+        (gen_dir / "proposed_candidates.json").write_text(
+            json.dumps(_serialize_candidates(candidates), indent=2) + "\n",
+            encoding="utf-8",
+        )
+    return path
+
+
+def _load_reusable_receipt(path: Path) -> dict[str, Any] | None:
+    receipt, errors = load_gate_receipt(path)
+    return receipt if not errors else None
+
+
+def _try_resume_completed_generation(
+    *,
+    repo_root: Path,
+    campaign_id: str,
+    generation_index: int,
+) -> dict[str, Any] | None:
+    gen_dir = generation_dir(repo_root, campaign_id, generation_index)
+    summary_path = gen_dir / "generation_summary.json"
+    if not summary_path.is_file():
+        return None
+    checkpoint_path = gen_dir / "generation_checkpoint.json"
+    proposed_ids: list[str] | None = None
+    screening_path: Path | None = None
+    if checkpoint_path.is_file():
+        try:
+            checkpoint = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+            proposed_ids = list(checkpoint.get("proposed_candidate_ids") or [])
+            pipeline_run_id = str(checkpoint.get("pipeline_run_id") or "")
+            if pipeline_run_id:
+                candidate_screening = gen_dir / pipeline_run_id / "screening_artifact.json"
+                if candidate_screening.is_file():
+                    screening_path = candidate_screening
+        except (OSError, json.JSONDecodeError):
+            proposed_ids = None
+    if screening_path is None:
+        for path_str in _manifest_screening_paths_for_generation(repo_root, campaign_id, generation_index):
+            candidate = Path(path_str)
+            if candidate.is_file():
+                screening_path = candidate
+                break
+    try:
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    validation = validate_generation_completion(
+        gen_dir=gen_dir,
+        screening_path=screening_path,
+        summary=summary,
+        proposed_candidate_ids=proposed_ids,
+    )
+    if validation:
+        return None
+    if not (gen_dir / ".generation_complete").is_file():
+        (gen_dir / ".generation_complete").write_text("ok\n", encoding="utf-8")
+    return summary
+
+
+def _manifest_screening_paths_for_generation(
+    repo_root: Path,
+    campaign_id: str,
+    generation_index: int,
+) -> list[str]:
+    try:
+        manifest = load_manifest(repo_root, campaign_id)
+    except (FileNotFoundError, ValueError):
+        return []
+    gen_prefix = f"generation_{generation_index:03d}"
+    return [
+        str(path)
+        for path in (manifest.get("screening_artifact_paths") or [])
+        if gen_prefix in str(path)
+    ]
+
+
 def _pipeline_run_id() -> str:
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     return f"pipeline_{ts}_{uuid.uuid4().hex[:8]}"
@@ -132,7 +328,7 @@ def make_default_robustness_fn(*, chi404_summary: Path | None = None) -> Robustn
             symbol,
             chi404_summary=chi404_summary,
             campaign_id=campaign_id,
-            allow_partial=True,
+            allow_partial=False,
             dry_run=False,
             frozen_strategy_params=params or None,
         )
@@ -140,18 +336,27 @@ def make_default_robustness_fn(*, chi404_summary: Path | None = None) -> Robustn
         metrics: dict[str, Any] = dict(screened)
         if params:
             metrics["screened_param_values"] = params
-        robustness_pass = False
+        campaign_summary: dict[str, Any] | None = None
+        regular_walk_forward_pass = False
+        wfc_pass = False
         if summary_path.is_file():
-            summary = json.loads(summary_path.read_text(encoding="utf-8"))
-            wfc_metrics = dict(summary.get("metrics") or {})
+            campaign_summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            campaign_summary["artifact_dir"] = str(result.artifact_dir)
+            wfc_metrics = dict(campaign_summary.get("metrics") or {})
             for key, value in wfc_metrics.items():
                 if key not in metrics:
                     metrics[key] = value
-            robustness_pass = summary.get("wfc_status") == "PASS" or summary.get("robustness_passed") is True
+            regular_walk_forward_pass = str(campaign_summary.get("status") or "") == "PASS"
+            wfc_pass = str(campaign_summary.get("wfc_status") or "") == "PASS"
+        strict_robustness_pass = regular_walk_forward_pass and wfc_pass
         return {
-            "robustness_pass": robustness_pass,
+            "robustness_pass": strict_robustness_pass,
+            "regular_walk_forward_pass": regular_walk_forward_pass,
+            "wfc_pass": wfc_pass,
             "metrics": metrics,
             "campaign_id": result.campaign_id,
+            "campaign_summary": campaign_summary,
+            "artifact_dir": str(result.artifact_dir),
         }
 
     return _run
@@ -224,11 +429,127 @@ def _run_robustness_top_k(
             {
                 "candidate_id": cid,
                 "robustness_pass": outcome.get("robustness_pass"),
+                "regular_walk_forward_pass": outcome.get("regular_walk_forward_pass"),
+                "wfc_pass": outcome.get("wfc_pass"),
                 "metrics": dict(outcome.get("metrics") or {}),
                 "campaign_id": outcome.get("campaign_id"),
+                "campaign_summary": outcome.get("campaign_summary"),
+                "artifact_dir": outcome.get("artifact_dir"),
             }
         )
     return results
+
+
+def _scenario_results_by_candidate(
+    scenario_results: list[Any],
+    scenarios: list[Any],
+) -> dict[str, list[dict[str, Any]]]:
+    by_scenario_id = {s.scenario_id: s for s in scenarios}
+    by_cid: dict[str, list[dict[str, Any]]] = {}
+    for result in scenario_results:
+        scenario = by_scenario_id.get(getattr(result, "scenario_id", ""))
+        cid = getattr(scenario, "candidate_id", "unknown") if scenario else "unknown"
+        by_cid.setdefault(cid, []).append(
+            {
+                "scenario_id": getattr(result, "scenario_id", ""),
+                "status": getattr(result, "status", ""),
+                "replay_result": dict(getattr(result, "replay_result", None) or {}),
+                "artifact_dir": getattr(result, "artifact_dir", None),
+            }
+        )
+    return by_cid
+
+
+def _robustness_artifact_hash(rob: Mapping[str, Any] | None) -> str:
+    if not rob:
+        return ""
+    artifact_dir = rob.get("artifact_dir")
+    if not artifact_dir:
+        return ""
+    summary_path = Path(str(artifact_dir)) / "summary.json"
+    if not summary_path.is_file():
+        return ""
+    try:
+        from backtest_pipeline.src.hft_campaign._hashing import sha256_hex
+
+        payload = json.loads(summary_path.read_text(encoding="utf-8"))
+        return sha256_hex(payload)
+    except Exception:
+        return ""
+
+
+def _run_hft_for_candidates(
+    *,
+    repo_root: Path,
+    event_id: str,
+    screening_path: Path,
+    cfg: AutoresearchConfig,
+    campaign_id: str,
+    generation_index: int,
+    candidate_ids: list[str],
+    hft_fn: HftFn | None = None,
+) -> tuple[dict[str, Any] | None, dict[str, list[dict[str, Any]]]]:
+    """Run HftBacktest only for candidates that passed gates 0–6."""
+    if not cfg.run_hft_campaign or not candidate_ids:
+        return None, {}
+    missing = [
+        name
+        for name, value in (
+            ("hft_source_npz", cfg.hft_source_npz),
+            ("hft_latency_model", cfg.hft_latency_model),
+            ("hft_fill_queue_model", cfg.hft_fill_queue_model),
+        )
+        if value is None or not Path(value).is_file()
+    ]
+    if missing:
+        return {"status": "blocked", "missing_inputs": missing}, {}
+    manifest_cfg = ManifestGenerationConfig(
+        screening_artifact_path=screening_path,
+        repo_root=repo_root,
+        event_id=event_id,
+        source_npz_path=Path(cfg.hft_source_npz),
+        latency_model_path=Path(cfg.hft_latency_model),
+        fill_queue_model_path=Path(cfg.hft_fill_queue_model),
+        candidate_ids=tuple(candidate_ids),
+        select_all_replay_eligible=False,
+    )
+    scenarios, reasons = generate_scenario_manifest(manifest_cfg)
+    if reasons:
+        return {"status": "fail", "manifest_reasons": reasons}, {}
+    hft_campaign_id = f"{campaign_id}_g{generation_index}_hft"
+    out_dir = autoresearch_campaign_dir(repo_root, campaign_id) / f"generation_{generation_index:03d}" / "hft_campaign"
+    manifest_path = out_dir / "scenario_manifest.json"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(
+        json.dumps({"scenarios": [s.to_dict() for s in scenarios]}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    hft_cfg = HftCampaignConfig(
+        campaign_id=hft_campaign_id,
+        repo_root=repo_root,
+        workers=cfg.hft_workers,
+        stages=cfg.hft_stages,
+        resume=True,
+        accelerated_mode=False,
+        select_all_replay_eligible=False,
+        candidate_ids=tuple(candidate_ids),
+        out_dir=out_dir,
+    )
+    loaded = load_scenarios_from_manifest(manifest_path)
+    if hft_fn is not None:
+        result = hft_fn(scenarios=loaded or scenarios, config=hft_cfg)
+    else:
+        result = run_hftbacktest_campaign(loaded or scenarios, hft_cfg)
+    by_cid = _scenario_results_by_candidate(result.scenario_results, loaded or scenarios)
+    return (
+        {
+            "status": result.status,
+            "campaign_id": hft_campaign_id,
+            "summary": dict(result.summary or {}),
+            "candidate_ids": list(candidate_ids),
+        },
+        by_cid,
+    )
 
 
 def _run_hft_campaign(
@@ -327,6 +648,7 @@ def run_single_generation(
     parsed: ParsedHypothesis,
     cfg: AutoresearchConfig,
     candidates: list[CandidateModel],
+    resume: bool = False,
     filter_fn: FilterFn = filter_candidates,
     persist_fn: PersistFn = persist_screening_artifact,
     robustness_fn: RobustnessFn | None = None,
@@ -337,12 +659,29 @@ def run_single_generation(
     event_id = str(manifest["event_id"])
     gen_dir = generation_dir(repo_root, campaign_id, generation_index)
     gen_dir.mkdir(parents=True, exist_ok=True)
+    proposed_candidate_ids = [c.candidate_id for c in candidates]
+
+    if resume:
+        resumed = _try_resume_completed_generation(
+            repo_root=repo_root,
+            campaign_id=campaign_id,
+            generation_index=generation_index,
+        )
+        if resumed is not None:
+            manifest["generation_status"] = GENERATION_STATUS_COMPLETE
+            save_manifest(repo_root, manifest)
+            return resumed
+
     pipeline_run_id = _pipeline_run_id()
     artifact_dir = gen_dir / pipeline_run_id
     artifact_dir.mkdir(parents=True, exist_ok=True)
 
     manifest["generation_status"] = GENERATION_STATUS_IN_PROGRESS
     save_manifest(repo_root, manifest)
+
+    frozen_manifest_path = gen_dir / "candidate_manifests.jsonl"
+    existing_frozen = load_frozen_manifests(frozen_manifest_path) if resume else []
+    frozen_by_id = {str(m["candidate_id"]): m for m in existing_frozen if m.get("candidate_id")}
 
     attached = [
         c
@@ -356,19 +695,86 @@ def run_single_generation(
         )
         for c in candidates
     ]
-    frozen_manifests = [
-        freeze_candidate_manifest(
-            candidate=c,
-            repo_root=repo_root,
-            generation_index=generation_index,
-            proposal_reason=str(c.metadata.get("proposal_reason") or "generation"),
+    _write_generation_checkpoint(
+        gen_dir,
+        proposed_candidate_ids=proposed_candidate_ids,
+        pipeline_run_id=pipeline_run_id,
+        generation_index=generation_index,
+        candidates=attached,
+    )
+    ontology_receipts: dict[str, dict[str, Any]] = {}
+    ontology_pass: list[Any] = []
+    for candidate in attached:
+        cid = candidate.candidate_id
+        ontology_path = gate_receipt_path(gen_dir, cid, "ontology_gate")
+        if resume and gate_receipt_is_reusable(ontology_path):
+            ontology_receipt = _load_reusable_receipt(ontology_path) or {}
+        else:
+            recipe_hash = (
+                candidate.feature_recipe_hash
+                or (candidate.feature_recipe or {}).get("feature_recipe_hash")
+                or candidate_identity_hash(candidate)
+            )
+            pre_manifest: dict[str, Any] = {
+                "candidate_id": candidate.candidate_id,
+                "feature_recipe_hash": recipe_hash,
+                "manifest_hash": "pending_pre_freeze",
+                "feature_recipe": dict(candidate.feature_recipe or {}),
+                "ontology_citations": candidate.metadata.get("ontology_citations"),
+            }
+            ontology_receipt = run_ontology_gate_for_candidate(
+                manifest=pre_manifest,
+                repo_root=repo_root,
+            )
+            write_gate_receipt(ontology_path, ontology_receipt)
+        ontology_receipts[cid] = ontology_receipt
+        if ontology_receipt.get("status") == "PASS":
+            ontology_pass.append(candidate)
+    frozen_manifests: list[dict[str, Any]] = []
+    if resume and frozen_by_id:
+        for candidate in ontology_pass:
+            cid = candidate.candidate_id
+            if cid in frozen_by_id:
+                frozen_manifests.append(dict(frozen_by_id[cid]))
+            else:
+                frozen_manifests.append(
+                    freeze_candidate_manifest(
+                        candidate=candidate,
+                        repo_root=repo_root,
+                        generation_index=generation_index,
+                        parent_candidate_id=str(c.metadata.get("elite_parent") or c.metadata.get("parent_candidate_id") or "") or None,
+                        proposal_reason=str(c.metadata.get("proposal_reason") or c.metadata.get("refinement") or "generation"),
+                    )
+                )
+        if len(frozen_manifests) > len(frozen_by_id):
+            write_frozen_manifests(frozen_manifest_path, frozen_manifests)
+    else:
+        frozen_manifests = [
+            freeze_candidate_manifest(
+                candidate=c,
+                repo_root=repo_root,
+                generation_index=generation_index,
+                parent_candidate_id=str(c.metadata.get("elite_parent") or c.metadata.get("parent_candidate_id") or "") or None,
+                proposal_reason=str(c.metadata.get("proposal_reason") or c.metadata.get("refinement") or "generation"),
+            )
+            for c in ontology_pass
+        ]
+        write_frozen_manifests(frozen_manifest_path, frozen_manifests)
+    manifest_receipts: dict[str, dict[str, Any]] = {}
+    for cand_manifest in frozen_manifests:
+        cid = str(cand_manifest["candidate_id"])
+        manifest_receipt = build_manifest_gate_receipt(
+            manifest=cand_manifest,
+            frozen_manifest_path=frozen_manifest_path,
         )
-        for c in attached
-    ]
-    write_frozen_manifests(gen_dir / "candidate_manifests.jsonl", frozen_manifests)
+        manifest_receipts[cid] = manifest_receipt
+        write_gate_receipt(
+            gate_receipt_path(gen_dir, cid, "manifest_gate"),
+            manifest_receipt,
+        )
     register_tested_hashes(manifest, _candidate_hashes(attached))
     screening, screening_path = _run_vectorbt_screen(
-        candidates=attached,
+        candidates=ontology_pass,
         parsed=parsed,
         event_id=event_id,
         repo_root=repo_root,
@@ -385,15 +791,136 @@ def run_single_generation(
         campaign_id=campaign_id,
         robustness_fn=robustness_fn,
     )
-    hft_summary = _run_hft_campaign(
+    screening_hash = str(screening.get("screening_artifact_hash") or "")
+    manifest_by_id = {str(m["candidate_id"]): m for m in frozen_manifests}
+    promoted_by_id = {
+        str(row.get("candidate_id")): row
+        for row in (screening.get("promoted") or [])
+        if isinstance(row, dict) and row.get("candidate_id")
+    }
+    robustness_by_id = {str(r.get("candidate_id")): r for r in robustness_results if r.get("candidate_id")}
+    pre_hft_receipts_by_id: dict[str, dict[str, Any]] = {}
+    hft_eligible_ids: list[str] = []
+    for cid, cand_manifest in manifest_by_id.items():
+        rob = robustness_by_id.get(cid)
+        promoted_row = promoted_by_id.get(cid) or {}
+        vectorbt_receipt = build_vectorbt_gate_receipt(
+            manifest=cand_manifest,
+            promoted_row=promoted_row,
+            screening_path=screening_path,
+            screening=screening,
+        )
+        surface_receipt = build_surface_stability_gate_receipt(
+            manifest=cand_manifest,
+            promoted_row=promoted_row,
+            screening_path=screening_path,
+        )
+        statistical_receipt = build_statistical_robustness_gate_receipt(
+            manifest=cand_manifest,
+            promoted_row=promoted_row,
+            allow_partial=False,
+        )
+        campaign_summary = dict(rob.get("campaign_summary") or {}) if rob else None
+        regular_wf_receipt = build_regular_walk_forward_gate_receipt(
+            manifest=cand_manifest,
+            campaign_summary=campaign_summary,
+        )
+        wfc_receipt = build_walk_forward_correlation_gate_receipt(
+            manifest=cand_manifest,
+            campaign_summary=campaign_summary,
+        )
+        pre_chain = run_generation_gate_chain(
+            candidate_manifest=cand_manifest,
+            ontology_receipt=ontology_receipts.get(cid),
+            vectorbt_receipt=vectorbt_receipt,
+            surface_receipt=surface_receipt,
+            regular_walk_forward_receipt=regular_wf_receipt,
+            walk_forward_correlation_receipt=wfc_receipt,
+            statistical_receipt=statistical_receipt,
+            hftbacktest_receipt=None,
+            certification_mode=True,
+        )
+        if passes_gates_before_hft(pre_chain):
+            hft_eligible_ids.append(cid)
+        pre_hft_receipts_by_id[cid] = {
+            "vectorbt": vectorbt_receipt,
+            "surface": surface_receipt,
+            "regular_wf": regular_wf_receipt,
+            "wfc": wfc_receipt,
+            "statistical": statistical_receipt,
+        }
+    hft_summary, hft_by_candidate = _run_hft_for_candidates(
         repo_root=repo_root,
         event_id=event_id,
         screening_path=screening_path,
         cfg=cfg,
         campaign_id=campaign_id,
         generation_index=generation_index,
+        candidate_ids=hft_eligible_ids,
         hft_fn=hft_fn,
     )
+    gate_chain_by_id: dict[str, dict[str, Any]] = {}
+    for cid, cand_manifest in manifest_by_id.items():
+        rob = robustness_by_id.get(cid)
+        receipts = pre_hft_receipts_by_id[cid]
+        if cid in hft_eligible_ids and cfg.run_hft_campaign:
+            hft_receipt = build_hftbacktest_gate_receipt(
+                manifest=cand_manifest,
+                scenario_results=hft_by_candidate.get(cid),
+                screening_path=screening_path,
+                screening_artifact_hash=screening_hash,
+                robustness_artifact_hash=_robustness_artifact_hash(rob),
+                accelerated_mode=False,
+            )
+        elif not cfg.run_hft_campaign:
+            hft_receipt = build_hftbacktest_gate_receipt(
+                manifest=cand_manifest,
+                skipped_reason="hft_campaign_disabled",
+            )
+        else:
+            hft_receipt = build_hftbacktest_gate_receipt(
+                manifest=cand_manifest,
+                skipped_reason="upstream_gates_not_passed",
+            )
+        emit_candidate_gate_receipts(
+            gen_dir=gen_dir,
+            manifest=cand_manifest,
+            ontology_receipt=ontology_receipts.get(cid),
+            manifest_receipt=manifest_receipts.get(cid),
+            vectorbt_receipt=receipts["vectorbt"],
+            surface_receipt=receipts["surface"],
+            regular_wf_receipt=receipts["regular_wf"],
+            wfc_receipt=receipts["wfc"],
+            statistical_receipt=receipts["statistical"],
+            hft_receipt=hft_receipt,
+        )
+        chain_result = run_generation_gate_chain(
+            candidate_manifest=cand_manifest,
+            ontology_receipt=ontology_receipts.get(cid),
+            vectorbt_receipt=receipts["vectorbt"],
+            surface_receipt=receipts["surface"],
+            regular_walk_forward_receipt=receipts["regular_wf"],
+            walk_forward_correlation_receipt=receipts["wfc"],
+            statistical_receipt=receipts["statistical"],
+            hftbacktest_receipt=hft_receipt,
+            certification_mode=True,
+        )
+        gate_chain_by_id[cid] = chain_result
+        chain_path = gate_receipt_path(gen_dir, cid, "gate_chain_result")
+        chain_path.parent.mkdir(parents=True, exist_ok=True)
+        chain_path.write_text(json.dumps(chain_result, indent=2) + "\n", encoding="utf-8")
+    parent_strategy_params_by_id: dict[str, dict[str, Any]] = {}
+    if generation_index > 0:
+        prior_summary_path = generation_dir(repo_root, campaign_id, generation_index - 1) / "generation_summary.json"
+        if prior_summary_path.is_file():
+            prior_summary = json.loads(prior_summary_path.read_text(encoding="utf-8"))
+            for row in prior_summary.get("candidates") or []:
+                if not isinstance(row, dict):
+                    continue
+                cid = str(row.get("candidate_id") or "")
+                params = row.get("strategy_params")
+                if cid and isinstance(params, dict):
+                    parent_strategy_params_by_id[cid] = dict(params)
     summary = build_generation_summary(
         repo_root=repo_root,
         campaign_id=campaign_id,
@@ -401,16 +928,32 @@ def run_single_generation(
         screening_artifact=screening,
         robustness_results=robustness_results,
         hft_campaign_summary=hft_summary,
+        gate_chain_by_id=gate_chain_by_id,
+        proposed_candidate_ids=[c.candidate_id for c in attached],
+        manifests_by_id=manifest_by_id,
+        candidate_metadata_by_id={c.candidate_id: dict(c.metadata or {}) for c in attached},
+        ontology_receipts_by_id=ontology_receipts,
+        gen_dir=gen_dir,
+        parent_strategy_params_by_id=parent_strategy_params_by_id,
     )
     summary_path = write_generation_summary(gen_dir / "generation_summary.json", summary)
-    (gen_dir / ".generation_complete").write_text("ok\n", encoding="utf-8")
 
-    validation = validate_generation_artifacts(gen_dir=gen_dir, screening_path=screening_path)
+    validation = validate_generation_completion(
+        gen_dir=gen_dir,
+        screening_path=screening_path,
+        summary=summary,
+        proposed_candidate_ids=proposed_candidate_ids,
+    )
+    complete_marker = gen_dir / ".generation_complete"
     if validation:
+        if complete_marker.is_file():
+            complete_marker.unlink()
         manifest["generation_status"] = GENERATION_STATUS_FAILED
-        manifest["stop_reason"] = ",".join(validation)
+        manifest["stop_reason"] = ",".join(validation[:8])
     else:
+        complete_marker.write_text("ok\n", encoding="utf-8")
         manifest["generation_status"] = GENERATION_STATUS_COMPLETE
+        manifest["stop_reason"] = None
 
     append_pointer(manifest, "pipeline_run_ids", pipeline_run_id)
     append_pointer(manifest, "screening_artifact_paths", str(screening_path))
@@ -441,21 +984,14 @@ def run_autoresearch_loop(
 ) -> tuple[int, dict[str, Any]]:
     repo_root = repo_root.resolve()
     parsed = parsed or parse_hypothesis(thesis, use_llm=not no_llm)
-    config_hash = compute_config_hash(
-        {
-            "max_generations": cfg.max_generations,
-            "max_candidates_per_generation": cfg.max_candidates_per_generation,
-            "screening_scope": cfg.screening_scope,
-            "event_id": event_id,
-            "symbol": cfg.symbol,
-        }
-    )
+    config_hash = _campaign_config_hash(repo_root=repo_root, event_id=event_id, cfg=cfg)
     summaries: list[dict[str, Any]] = []
     terminal_stop_reasons = {
         "max_generations",
         "target_score_reached",
         "no_improvement",
         "stop_file_present",
+        "no_supported_exploration_remaining",
     }
     failure_stop_reasons = {
         "prior_generation_summary_missing",
@@ -463,6 +999,8 @@ def run_autoresearch_loop(
         "screening_artifact_missing",
         "screening_artifact_unreadable",
         "generation_complete_marker_missing",
+        "config_hash_mismatch",
+        "resume_checkpoint_missing_candidates",
     }
 
     if resume and not campaign_id:
@@ -472,21 +1010,39 @@ def run_autoresearch_loop(
     elif campaign_id and not resume:
         raise ValueError("--campaign-id requires --resume for autoresearch continuation")
 
+    resume_in_progress = False
+    resume_candidates: list[CandidateModel] | None = None
+
     if resume and campaign_id:
         manifest = load_manifest(repo_root, campaign_id)
+        assert_config_hash_matches(manifest, config_hash)
         if manifest.get("generation_status") == GENERATION_STATUS_IN_PROGRESS:
             gen_idx = int(manifest["generation_index"])
-            gen_dir = generation_dir(repo_root, campaign_id, gen_idx)
-            summary_path = gen_dir / "generation_summary.json"
-            if summary_path.is_file():
-                summaries.append(json.loads(summary_path.read_text(encoding="utf-8")))
+            resumed_summary = _try_resume_completed_generation(
+                repo_root=repo_root,
+                campaign_id=campaign_id,
+                generation_index=gen_idx,
+            )
+            if resumed_summary is not None:
+                summaries.append(resumed_summary)
                 manifest["generation_index"] = gen_idx + 1
                 manifest["generation_status"] = GENERATION_STATUS_COMPLETE
                 save_manifest(repo_root, manifest)
+            else:
+                resume_in_progress = True
+                checkpoint_path = generation_dir(repo_root, campaign_id, gen_idx) / "generation_checkpoint.json"
+                if checkpoint_path.is_file():
+                    try:
+                        checkpoint = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+                        resume_candidates = _load_candidates_from_checkpoint(
+                            generation_dir(repo_root, campaign_id, gen_idx),
+                            list(checkpoint.get("proposed_candidate_ids") or []),
+                        )
+                    except (OSError, json.JSONDecodeError):
+                        resume_candidates = None
     elif campaign_id:
         manifest = load_manifest(repo_root, campaign_id)
-        if str(manifest.get("config_hash") or "") not in ("", config_hash):
-            raise ValueError("autoresearch config_hash mismatch; refuse to continue with changed config")
+        assert_config_hash_matches(manifest, config_hash)
     else:
         campaign_id = new_campaign_id(thesis=thesis, event_id=event_id)
         manifest = default_manifest(
@@ -499,14 +1055,23 @@ def run_autoresearch_loop(
         save_manifest(repo_root, manifest)
 
     start_gen = int(manifest.get("generation_index") or 0)
-    if manifest.get("generation_status") == GENERATION_STATUS_COMPLETE:
+    if manifest.get("generation_status") == GENERATION_STATUS_COMPLETE and not resume_in_progress:
         start_gen = int(manifest.get("generation_index", 0)) + 1
         manifest["generation_index"] = start_gen
 
     tested = set(manifest.get("tested_parameter_hashes") or [])
     for gen in range(start_gen, cfg.max_generations):
         manifest["generation_index"] = gen
-        if gen == 0:
+        generation_resume = resume_in_progress and gen == start_gen
+        if generation_resume:
+            if not resume_candidates:
+                manifest["generation_status"] = GENERATION_STATUS_FAILED
+                manifest["stop_reason"] = "resume_checkpoint_missing_candidates"
+                save_manifest(repo_root, manifest)
+                break
+            candidates = resume_candidates
+            resume_in_progress = False
+        elif gen == 0:
             candidates = list(
                 generate_candidates(
                     parsed,
@@ -536,7 +1101,10 @@ def run_autoresearch_loop(
                 family_search_fraction=cfg.family_search_fraction,
             )
         if not candidates:
-            manifest["stop_reason"] = "no_candidates_after_dedup"
+            if gen > 0:
+                manifest["stop_reason"] = "no_supported_exploration_remaining"
+            else:
+                manifest["stop_reason"] = "no_candidates_after_dedup"
             save_manifest(repo_root, manifest)
             break
 
@@ -546,6 +1114,7 @@ def run_autoresearch_loop(
             parsed=parsed,
             cfg=cfg,
             candidates=candidates,
+            resume=generation_resume,
             filter_fn=filter_fn,
             persist_fn=persist_fn,
             robustness_fn=robustness_fn,

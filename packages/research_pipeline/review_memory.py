@@ -147,6 +147,41 @@ def _autoresearch_memory_path(repo_root: Path) -> Path:
     return Path(repo_root) / "research_cards" / "autoresearch" / "memory.jsonl"
 
 
+def _memory_record_from_summary_row(row: Mapping[str, Any], *, generation_index: int, campaign_id: str) -> dict[str, Any]:
+    """Build one advisory candidate memory record; excludes holdout metrics."""
+    wfc = dict(row.get("wfc_metrics") or {})
+    gate_statuses = dict(row.get("gate_statuses") or {})
+    return {
+        "generation": generation_index,
+        "campaign_id": campaign_id,
+        "candidate_id": row.get("candidate_id"),
+        "parent_candidate_id": row.get("parent_candidate_id"),
+        "feature_recipe_hash": row.get("feature_recipe_hash"),
+        "proposal_reason": row.get("proposal_type"),
+        "mutation_type": row.get("feature_family_mutation") or row.get("execution_parameter_mutation"),
+        "ontology_result": gate_statuses.get("ontology_gate"),
+        "vectorbt_result": gate_statuses.get("vectorbt_gate"),
+        "surface_stability_result": gate_statuses.get("surface_stability_gate"),
+        "regular_walk_forward_result": gate_statuses.get("regular_walk_forward_gate"),
+        "walk_forward_correlation_pearson": wfc.get("wfc_pearson"),
+        "walk_forward_correlation_spearman": wfc.get("wfc_spearman"),
+        "wfc_rejection_reason": next(
+            (r for r in (row.get("rejection_reasons") or []) if "wfc" in str(r).lower()),
+            None,
+        ),
+        "bootstrap_result": gate_statuses.get("statistical_robustness_gate"),
+        "dsr_result": gate_statuses.get("statistical_robustness_gate"),
+        "cscv_pbo_result": gate_statuses.get("statistical_robustness_gate"),
+        "multiple_testing_result": gate_statuses.get("statistical_robustness_gate"),
+        "stress_results": gate_statuses.get("surface_stability_gate"),
+        "hftbacktest_result": gate_statuses.get("hftbacktest_gate"),
+        "final_status": row.get("final_status"),
+        "research_score": row.get("research_score"),
+        "rejection_reasons": list(row.get("rejection_reasons") or [])[:16],
+        "authority": "advisory",
+    }
+
+
 def append_generation_memory(
     repo_root: Path,
     summary: Dict[str, Any],
@@ -156,16 +191,34 @@ def append_generation_memory(
     """Append advisory-only generation facts; never overrides deterministic gates."""
     path = _autoresearch_memory_path(repo_root)
     path.parent.mkdir(parents=True, exist_ok=True)
+    campaign_id = str(summary.get("campaign_id") or "")
     record = {
         "generation_index": generation_index,
-        "campaign_id": summary.get("campaign_id"),
+        "campaign_id": campaign_id,
         "best_candidate_id": summary.get("best_candidate_id"),
         "best_composite_score": summary.get("best_composite_score"),
+        "best_research_score": summary.get("best_research_score"),
         "elite_count": sum(1 for row in summary.get("candidates") or [] if row.get("elite")),
+        "proposed_candidate_count": summary.get("proposed_candidate_count"),
+        "final_pass_count": summary.get("final_pass_count"),
         "authority": "advisory",
     }
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(record, sort_keys=True) + "\n")
+        for row in summary.get("candidates") or []:
+            if not isinstance(row, dict):
+                continue
+            handle.write(
+                json.dumps(
+                    _memory_record_from_summary_row(
+                        row,
+                        generation_index=generation_index,
+                        campaign_id=campaign_id,
+                    ),
+                    sort_keys=True,
+                )
+                + "\n"
+            )
     return path
 
 

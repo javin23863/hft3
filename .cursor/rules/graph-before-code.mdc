@@ -9,7 +9,9 @@ Vault protocol: [AGENTS.md](../../AGENTS.md) · [Memory Stack](file:///C:/Users/
 
 ## Non-negotiable order
 
-1. **VaultGate** — `scripts/vault_gate.ps1 -Query "<task-specific question>"`. Creates `runtime/vault-gate/.last-vault-gate.json`. Read `wiki/hot.md`, `Home.md`, `Memory Stack.md`, relevant `decisions/`.
+0. **Fable mindset** — [.cursor/rules/00-fable-mindset.mdc](00-fable-mindset.mdc) + [docs/vault/FABLE_MINDSET.md](../../docs/vault/FABLE_MINDSET.md). **First** every session.
+1. **Ponytail mindset** — [.cursor/rules/01-ponytail-mindset.mdc](01-ponytail-mindset.mdc) + [docs/ai/PONYTAIL.md](../../docs/ai/PONYTAIL.md). **Second** — before codebase.
+2. **VaultGate** — `scripts/vault_gate.ps1 -Query "<task-specific question>"`. Creates `runtime/vault-gate/.last-vault-gate.json`. Read `wiki/hot.md`, `Home.md`, `Memory Stack.md`, relevant `decisions/`.
 2. **VaultPre** — `scripts/vault_pre_edit.ps1` (fails exit 2 if vault stamp missing or stale >4h).
 3. **Graph waiver check** — If vault `wiki/hot.md` says `waived-by-owner-2026-06-16`, **skip** GraphGate/GraphPre/GraphPost; use VaultGate + targeted source reads. Do not treat Graph as substitute for Vault.
 4. **GraphGate** (when active only) — `scripts/graphify_gate.ps1 -Query "..."`.

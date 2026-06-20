@@ -1,8 +1,12 @@
 # CLAUDE.md — hft3 navigation and memory wiring
 
-## Fable mindset (standing operating discipline)
+## Fable mindset (FIRST — standing operating discipline)
 
-Before touching hft3, use the Fable loop: ground in real state, reason before action, act in deliberate batches, observe, re-evaluate, read exact regions before edits, verify with real checks, recover by diagnosis, and report truthfully. Use `C:\Users\MSI\.codex\skills\fable-mindset\references\Fable_Mindset_public.md` as the full reference when the task is long-running, high-risk, finance/math-critical, or the user asks to reestablish mindset.
+**Load before anything else:** [.cursor/rules/00-fable-mindset.mdc](.cursor/rules/00-fable-mindset.mdc) · [docs/vault/FABLE_MINDSET.md](docs/vault/FABLE_MINDSET.md). Operate the Fable loop on every turn: ground in real state, reason before action (name clock/metric/authority), act in deliberate batches, observe, re-evaluate, read exact regions before edits, verify with real checks, recover by diagnosis, report truthfully. Full reference: `C:\Users\MSI\.codex\skills\fable-mindset\references\Fable_Mindset_public.md`.
+
+## Ponytail mindset (SECOND — before touching codebase)
+
+**Load immediately after Fable:** [.cursor/rules/01-ponytail-mindset.mdc](.cursor/rules/01-ponytail-mindset.mdc) · [docs/ai/PONYTAIL.md](docs/ai/PONYTAIL.md). Lazy-senior-dev ladder: YAGNI → stdlib → native → installed dep → one line → minimum that works. Upstream: https://github.com/DietrichGebert/ponytail · Vendored: `vendor/ponytail/`. **Not lazy about:** trust-boundary validation, data-loss errors, security, accessibility, BLUEPRINT math invariants. Vast rent/SSH/sync: `vastai` CLI + `scripts/vast_ssh_run_vbt_paid_screen.sh`.
 
 ## Knowledge graph first (structural memory)
 

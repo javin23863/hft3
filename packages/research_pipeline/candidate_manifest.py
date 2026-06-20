@@ -83,3 +83,28 @@ def write_frozen_manifests(path: Path, manifests: list[Mapping[str, Any]]) -> Pa
     lines = [json.dumps(dict(m), sort_keys=True) + "\n" for m in manifests]
     path.write_text("".join(lines), encoding="utf-8")
     return path
+
+
+def compute_manifest_hash(manifest: Mapping[str, Any]) -> str:
+    """Deterministic hash of frozen manifest fields (excludes manifest_hash, frozen_at_utc)."""
+    payload = {k: v for k, v in manifest.items() if k not in {"manifest_hash", "frozen_at_utc"}}
+    return compute_feature_recipe_hash(payload)
+
+
+def verify_frozen_manifest_integrity(manifest: Mapping[str, Any]) -> list[str]:
+    """Return errors if manifest hash or feature_recipe_hash do not match payload."""
+    errors: list[str] = []
+    for field in ("manifest_schema", "candidate_id", "feature_recipe_hash", "manifest_hash"):
+        if not manifest.get(field):
+            errors.append(f"missing:{field}")
+    if errors:
+        return errors
+    expected_manifest = compute_manifest_hash(manifest)
+    if str(manifest.get("manifest_hash", "")) != expected_manifest:
+        errors.append("manifest_hash_immutability_violation")
+    recipe = dict(manifest.get("feature_recipe") or {})
+    if recipe:
+        expected_recipe = compute_feature_recipe_hash(recipe)
+        if str(manifest.get("feature_recipe_hash", "")) != expected_recipe:
+            errors.append("feature_recipe_hash_mismatch")
+    return errors

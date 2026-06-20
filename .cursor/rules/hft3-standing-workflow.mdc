@@ -9,9 +9,11 @@ Owner standing instruction. Applies to every hft3 task unless the user overrides
 
 ## Fable mindset (load first)
 
-Before decisions or tooling on hft3 work, **load and apply the Fable loop**: ground in real state, reason before action, act in batches, observe, re-evaluate, read exact regions before edits, verify with real checks, recover by diagnosis, report truthfully.
+**First context every session** — see [.cursor/rules/00-fable-mindset.mdc](00-fable-mindset.mdc) (always-on, hardened runtime rule). Vault copy: [docs/vault/FABLE_MINDSET.md](../../docs/vault/FABLE_MINDSET.md). Full reference: `C:\Users\MSI\.codex\skills\fable-mindset\references\Fable_Mindset_public.md`. No vault, graph, or code work before Fable.
 
-Full reference: `C:\Users\MSI\.codex\skills\fable-mindset\references\Fable_Mindset_public.md` · [docs/vault/FABLE_MINDSET.md](../../docs/vault/FABLE_MINDSET.md)
+## Ponytail mindset (mandatory second)
+
+**Second context every session** — see [.cursor/rules/01-ponytail-mindset.mdc](01-ponytail-mindset.mdc) (always-on, after Fable). Charter: [docs/ai/PONYTAIL.md](../../docs/ai/PONYTAIL.md). Upstream: https://github.com/DietrichGebert/ponytail · Vendored: `vendor/ponytail/`. No code edits before Ponytail.
 
 ## Main agent = orchestrator / brain
 
@@ -22,14 +24,16 @@ The **main agent** owns intent, vault/repo grounding, planning, integration, and
 
 ## Mandatory gates (every code change)
 
-Non-negotiable order — skip none **except graph while waived** (item 2):
+Non-negotiable order — skip none **except graph while waived** (item 3):
 
-1. **Vault / Ontology gate** — `scripts/vault_gate.ps1` + `scripts/vault_pre_edit.ps1`; consult Obsidian vault (`wiki/hot.md`, `Home.md`, `Memory Stack.md`, relevant `decisions/`). See [.cursor/rules/graph-before-code.mdc](graph-before-code.mdc).
-2. **Graph gates** — While vault `wiki/hot.md` contains `waived-by-owner-2026-06-16`: **skip** GraphGate, GraphPre, GraphPost; VaultGate + targeted reads replace graph. Once owner lifts the waiver: GraphGate + GraphPre before edits and GraphPost after code edits are **mandatory again**.
-3. **Plan / locate / implement** — delegate; main thread integrates.
-4. **Dual-pass review** — spawn **cavecrew-reviewer** per [docs/REVIEWER_CHARTER.md](../../docs/REVIEWER_CHARTER.md) (Pass A Karpathy + Pass B math invariants). See [.cursor/rules/reviewer-charter.mdc](reviewer-charter.mdc).
-5. **Verify** — bounded pytest/gates with **exact command, exit code, and output tail** pasted in thread.
-6. **Validation honesty handoff** — status block per [docs/VALIDATION_HONESTY.md](../../docs/VALIDATION_HONESTY.md). See [.cursor/rules/validation-honesty.mdc](validation-honesty.mdc).
+0. **Fable mindset** — [.cursor/rules/00-fable-mindset.mdc](00-fable-mindset.mdc) + [docs/vault/FABLE_MINDSET.md](../../docs/vault/FABLE_MINDSET.md). **First** every session.
+1. **Ponytail mindset** — [.cursor/rules/01-ponytail-mindset.mdc](01-ponytail-mindset.mdc) + [docs/ai/PONYTAIL.md](../../docs/ai/PONYTAIL.md). **Second** — before codebase.
+2. **Vault / Ontology gate** — `scripts/vault_gate.ps1` + `scripts/vault_pre_edit.ps1`; consult Obsidian vault (`wiki/hot.md`, `Home.md`, `Memory Stack.md`, relevant `decisions/`). See [.cursor/rules/graph-before-code.mdc](graph-before-code.mdc).
+3. **Graph gates** — While vault `wiki/hot.md` contains `waived-by-owner-2026-06-16`: **skip** GraphGate, GraphPre, GraphPost; VaultGate + targeted reads replace graph. Once owner lifts the waiver: GraphGate + GraphPre before edits and GraphPost after code edits are **mandatory again**.
+4. **Plan / locate / implement** — delegate; main thread integrates.
+5. **Dual-pass review** — spawn **cavecrew-reviewer** per [docs/REVIEWER_CHARTER.md](../../docs/REVIEWER_CHARTER.md) (Pass A Karpathy + Pass B math invariants). See [.cursor/rules/reviewer-charter.mdc](reviewer-charter.mdc).
+6. **Verify** — bounded pytest/gates with **exact command, exit code, and output tail** pasted in thread.
+7. **Validation honesty handoff** — status block per [docs/VALIDATION_HONESTY.md](../../docs/VALIDATION_HONESTY.md). See [.cursor/rules/validation-honesty.mdc](validation-honesty.mdc).
 
 ## Optional / contrast gates
 

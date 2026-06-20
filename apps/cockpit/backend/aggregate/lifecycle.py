@@ -4,6 +4,11 @@ Reads the materialized lifecycle registry (runtime/lifecycle/model_lifecycle.jso
 that packages/model_metrics/lifecycle.py writes. Read-only + defensive, like every
 other cockpit zone — the registry is the single source of truth, the cockpit never
 writes it.
+
+Research prefilter is VectorBT paid screen on Vast; lifecycle SCREENING/GAUNTLET
+states map to screening artifacts and robust gates before LIVE eligibility.
+Submit-gate enforcement (degraded states) is in trade_manager.risk_layer, separate
+from trading kill-switch and autonomy global kill.
 """
 from __future__ import annotations
 

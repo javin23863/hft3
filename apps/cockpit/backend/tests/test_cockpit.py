@@ -249,6 +249,12 @@ def _point_non_universe_pipeline_paths(monkeypatch, root: Path) -> None:
     monkeypatch.setattr(paths, "STAGE_A_RESULT", root / "missing_stage_a.json")
     monkeypatch.setattr(paths, "STAGE_A_SURVIVORS", root / "missing_survivors.json")
     monkeypatch.setattr(paths, "ALPHA_CME_SPEC", root / "missing.md")
+    reports = root / "runtime" / "reports"
+    reports.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(paths, "VBT_FULL_RUN_DECLARATION", reports / "vbt_full_run_declaration.json")
+    monkeypatch.setattr(paths, "VBT_FULL_UNITS_JSONL", reports / "vbt_full_units.jsonl")
+    monkeypatch.setattr(paths, "VBT_READY_GATE", reports / "paid_screen_ready_gate.json")
+    monkeypatch.setattr(paths, "VBT_PAID_SCREEN_DOC", root / "docs" / "project" / "VBT_PAID_SCREEN_UNIT_SCOPE.md")
     loaders._cache.clear()
 
 
@@ -272,6 +278,10 @@ def _write_active_run(root: Path, run_id: str) -> Path:
         encoding="utf-8",
     )
     return active
+
+
+def _allow_screening_validation(monkeypatch) -> None:
+    monkeypatch.setattr(pipeline_agg, "validate_screening_artifact", lambda _data: None)
 
 
 def _robustness_with_dsr_cell(dsr_cell: dict, fee_cell: dict | None = None) -> dict:
@@ -310,10 +320,16 @@ def _surface_formula_defined() -> dict:
     }
 
 
-def _screening_candidate_row(run_id: str, *, replay_eligible: bool, surface_defined: bool) -> dict:
+def _screening_candidate_row(
+    run_id: str,
+    *,
+    replay_eligible: bool,
+    surface_defined: bool,
+    include_feature_recipe_hash: bool | None = None,
+) -> dict:
     candidate_id = f"{run_id}_cand"
     parameter_values = {"signal_threshold": 0.15}
-    return {
+    row = {
         "candidate_id": candidate_id,
         "model_id": "HYP_5",
         "symbol": "MES.v.0",
@@ -375,6 +391,11 @@ def _screening_candidate_row(run_id: str, *, replay_eligible: bool, surface_defi
         ),
         "pass_reason": "vectorbt_screen_passed_replay_not_eligible",
     }
+    if include_feature_recipe_hash is None:
+        include_feature_recipe_hash = replay_eligible
+    if include_feature_recipe_hash:
+        row["feature_recipe_hash"] = _TEST_FEATURE_RECIPE_HASH
+    return row
 
 
 def _write_screening_artifact(
@@ -384,6 +405,7 @@ def _write_screening_artifact(
     *,
     replay_eligible: bool = False,
     surface_defined: bool = False,
+    include_feature_recipe_hash: bool | None = None,
     **overrides,
 ) -> Path:
     artifact = root / "research_cards" / "pipeline_runs" / run_id / "screening_artifact.json"
@@ -391,6 +413,7 @@ def _write_screening_artifact(
         run_id,
         replay_eligible=replay_eligible,
         surface_defined=surface_defined,
+        include_feature_recipe_hash=include_feature_recipe_hash,
     )
     payload = {
         "run_id": run_id,
@@ -446,11 +469,63 @@ def _write_screening_artifact(
     return artifact
 
 
+def _write_paid_screen_manifest(root: Path, run_id: str, **overrides) -> Path:
+    run_dir = root / "research_cards" / "pipeline_runs" / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    manifest = run_dir / "paid_screen_run_manifest.json"
+    payload = {
+        "status": "complete",
+        "started_at_utc": "2026-06-19T12:00:00+00:00",
+        "finished_at_utc": "2026-06-19T13:00:00+00:00",
+        "expected_work_units": 1,
+        "completed_work_units": 1,
+        "out_dir": str(run_dir),
+    }
+    payload.update(overrides)
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+    return manifest
+
+
+def _write_matched_vbt_tracking_fixtures(
+    root: Path,
+    run_id: str,
+    *,
+    expected_work_units: int = 1,
+) -> tuple[Path, Path]:
+    """Declaration + units jsonl matched to manifest run_id for anomaly-free tracking."""
+    reports = root / "runtime" / "reports"
+    reports.mkdir(parents=True, exist_ok=True)
+    units = reports / "vbt_full_units.jsonl"
+    units.write_text("\n".join(["{}"] * expected_work_units) + "\n", encoding="utf-8")
+    decl = reports / "vbt_full_run_declaration.json"
+    decl.write_text(
+        json.dumps(
+            {
+                "run_id": run_id,
+                "expected_work_units": expected_work_units,
+                "research_split": "discovery_confirmation",
+            }
+        ),
+        encoding="utf-8",
+    )
+    run_dir = root / "research_cards" / "pipeline_runs" / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "orchestrator.log").write_text("[unit] unit_a -> OK\n", encoding="utf-8")
+    return decl, units
+
+
+def _point_vbt_tracking_paths(monkeypatch, root: Path, run_id: str, *, expected_work_units: int = 1) -> None:
+    decl, units = _write_matched_vbt_tracking_fixtures(root, run_id, expected_work_units=expected_work_units)
+    monkeypatch.setattr(paths, "VBT_FULL_RUN_DECLARATION", decl)
+    monkeypatch.setattr(paths, "VBT_FULL_UNITS_JSONL", units)
+
+
 _NATIVE_CPP_LATENCY_EVIDENCE = (
     "reports/latency_baselines/order_ack_campaign_20260611T072116Z_summary.json"
     f"#sha256:{'a' * 64}"
 )
 _OFFICIAL_REPLAY_HASH = f"sha256:{'b' * 64}"
+_TEST_FEATURE_RECIPE_HASH = "2bffc531a142e2c392b0a39770d50ebd9ff9caeb89d50f4af43be22193a0d76f"
 
 
 def _hftbacktest_source_lock(created_at: str) -> dict:
@@ -487,6 +562,7 @@ def _write_replay_summary(
     *,
     screening_hash: str = "",
     candidate_id: str | None = None,
+    feature_recipe_hash: str | None = None,
     **overrides,
 ) -> Path:
     out_dir = root / "research_cards" / "hftbacktest_realism" / run_id
@@ -551,6 +627,10 @@ def _write_replay_summary(
         "replay_realism_status": "pass",
         "fail_closed_reasons": [],
     }
+    if feature_recipe_hash is not None:
+        payload["feature_recipe_hash"] = feature_recipe_hash
+    elif screening_hash:
+        payload["feature_recipe_hash"] = _TEST_FEATURE_RECIPE_HASH
     payload.update(overrides)
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "hftbacktest_source_lock.json").write_text(json.dumps(source_lock), encoding="utf-8")
@@ -566,12 +646,13 @@ def test_zone_shape(name):
     _json_roundtrip(payload)  # raises if non-serializable
 
 
-def test_pipeline_has_seven_stages():
+def test_pipeline_has_eight_stages():
     p = ZONES["pipeline"]()
     ids = [s["id"] for s in p["stages"]]
     assert ids == [
         "capture",
         "feature_build",
+        "vectorbt_screen",
         "stage_a",
         "q001_inventory",
         "gauntlet_b",
@@ -580,6 +661,10 @@ def test_pipeline_has_seven_stages():
     ]
     for s in p["stages"]:
         assert {"id", "label", "status"}.issubset(s)
+    stage_a = next(s for s in p["stages"] if s["id"] == "stage_a")
+    assert "historical" in stage_a["label"].lower()
+    vbt = next(s for s in p["stages"] if s["id"] == "vectorbt_screen")
+    assert "VectorBT" in vbt["label"]
 
 
 def test_latest_screening_artifact_missing(monkeypatch, tmp_path):
@@ -635,6 +720,7 @@ def test_latest_hbt_replay_summary_missing(monkeypatch, tmp_path):
 
 def test_latest_hbt_replay_summary_uses_semantic_time(monkeypatch, tmp_path):
     monkeypatch.setattr(paths, "REPO", tmp_path)
+    _allow_screening_validation(monkeypatch)
     screening_path = _write_screening_artifact(
         tmp_path,
         "screen_newer",
@@ -700,6 +786,7 @@ def test_latest_hbt_replay_summary_requires_matching_screening_hash_and_candidat
 
 def test_latest_hbt_replay_summary_prefers_paired_over_newer_unpaired(monkeypatch, tmp_path):
     monkeypatch.setattr(paths, "REPO", tmp_path)
+    _allow_screening_validation(monkeypatch)
     _write_screening_artifact(
         tmp_path,
         "screen_run",
@@ -749,11 +836,14 @@ def test_latest_hbt_replay_summary_blocks_surface_formula_missing(monkeypatch, t
 
 def test_pipeline_promote_stage_exposes_vbt5_visibility(monkeypatch, tmp_path):
     monkeypatch.setattr(paths, "REPO", tmp_path)
+    _allow_screening_validation(monkeypatch)
     monkeypatch.setattr(paths, "ACTIVE_RUN", tmp_path / "runtime" / "workbench" / "active_run.json")
     survivors = tmp_path / "research_cards" / "stage_a_full" / "stage_a_survivors.json"
     survivors.parent.mkdir(parents=True, exist_ok=True)
     survivors.write_text(json.dumps([{"hypothesis_id": "HYP_5"}]), encoding="utf-8")
     monkeypatch.setattr(paths, "STAGE_A_SURVIVORS", survivors)
+    _write_paid_screen_manifest(tmp_path, "screen_run")
+    _point_vbt_tracking_paths(monkeypatch, tmp_path, "screen_run")
     screening_path = _write_screening_artifact(
         tmp_path,
         "screen_run",
@@ -780,6 +870,9 @@ def test_pipeline_promote_stage_exposes_vbt5_visibility(monkeypatch, tmp_path):
     assert stage["robustness_status"] == "pass"
     assert stage["robustness_artifact"] == stage["screening_artifact"]
     assert stage["surface_formula_authority_status"] == "defined"
+    assert stage["screening_promoted_count"] == 1
+    assert stage["validated_candidates"] == 1
+    assert stage["candidates"] == 1
 
 
 def test_pipeline_promote_stage_fails_closed_without_vbt5_evidence(monkeypatch, tmp_path):
@@ -795,6 +888,28 @@ def test_pipeline_promote_stage_fails_closed_without_vbt5_evidence(monkeypatch, 
     assert stage["status"] == sc.STALE
     assert stage["vbt5_evidence_detail"] == "screening_status_not_pass"
     assert stage["screening_status"] == sc.MISSING
+
+
+def test_latest_screening_scoped_run_id_rejects_artifact_run_id_mismatch(monkeypatch, tmp_path):
+    artifact_path = _write_screening_artifact(
+        tmp_path,
+        "run_a",
+        "2026-02-01T00:00:00+00:00",
+        promoted_count=5,
+    )
+    payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    payload["run_id"] = "run_b"
+    payload["screening_artifact_hash"] = compute_screening_artifact_hash(payload)
+    artifact_path.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+
+    fields = pipeline_agg._latest_screening_fields(run_id="run_a")
+
+    assert fields["screening_status"] == sc.STALE
+    assert fields["screening_status"] != "pass"
+    assert fields.get("screening_promoted_count") is None
+    assert "run_id=run_b" in fields["screening_detail"]
+    assert "tracking run_id=run_a" in fields["screening_detail"]
 
 
 def test_latest_screening_artifact_stale_when_active_run_mismatch(monkeypatch, tmp_path):
@@ -814,6 +929,96 @@ def test_latest_screening_artifact_stale_when_active_run_mismatch(monkeypatch, t
     assert fields["screening_status"] == sc.STALE
     assert fields["robustness_status"] == sc.STALE
     assert "artifact run_id=old_run != active_run_id=fresh_run" in fields["screening_detail"]
+
+
+def test_latest_screening_scoped_run_id_ignores_active_run_mismatch(monkeypatch, tmp_path):
+    active = _write_active_run(tmp_path, "fresh_run")
+    _write_screening_artifact(
+        tmp_path,
+        "tracked_run",
+        "2026-02-01T00:00:00+00:00",
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "ACTIVE_RUN", active)
+    _allow_screening_validation(monkeypatch)
+
+    fields = pipeline_agg._latest_screening_fields(run_id="tracked_run")
+
+    assert fields["screening_status"] == "pass"
+    assert fields["screening_run_id"] == "tracked_run"
+    assert "active_run_id=fresh_run" not in (fields.get("screening_detail") or "")
+
+
+def test_screening_replay_eligibility_not_ok_without_recipe_hash(monkeypatch, tmp_path):
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    _write_screening_artifact(
+        tmp_path,
+        "screen_run",
+        "2026-02-01T00:00:00+00:00",
+        replay_eligible=True,
+        surface_defined=True,
+        include_feature_recipe_hash=False,
+    )
+
+    fields = pipeline_agg._latest_screening_fields()
+
+    assert fields["replay_eligibility_status"] == sc.STALE
+    assert fields["replay_eligibility_detail"] == "feature_recipe_hash_handoff_missing"
+
+
+def test_replay_eligibility_ok_with_matching_feature_recipe_hash(monkeypatch, tmp_path):
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    _allow_screening_validation(monkeypatch)
+    screening_path = _write_screening_artifact(
+        tmp_path,
+        "screen_run",
+        "2026-02-01T00:00:00+00:00",
+        replay_eligible=True,
+        surface_defined=True,
+    )
+    screening_fields = pipeline_agg._latest_screening_fields()
+    assert screening_fields["replay_eligibility_status"] == "eligible"
+    screening_data = json.loads(screening_path.read_text(encoding="utf-8"))
+    _write_replay_summary(
+        tmp_path,
+        "hbt_run",
+        "2026-02-02T00:00:00+00:00",
+        screening_hash=screening_data["screening_artifact_hash"],
+        candidate_id=screening_data["promoted"][0]["candidate_id"],
+        feature_recipe_hash=_TEST_FEATURE_RECIPE_HASH,
+    )
+
+    replay_fields = pipeline_agg._latest_replay_fields(screening_fields)
+
+    assert replay_fields["replay_status"] == "pass"
+    assert "feature_recipe_hash" not in (replay_fields.get("replay_detail") or "")
+
+
+def test_replay_blocks_without_feature_recipe_hash_equality(monkeypatch, tmp_path):
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    _allow_screening_validation(monkeypatch)
+    screening_path = _write_screening_artifact(
+        tmp_path,
+        "screen_run",
+        "2026-02-01T00:00:00+00:00",
+        replay_eligible=True,
+        surface_defined=True,
+    )
+    screening_fields = pipeline_agg._latest_screening_fields()
+    screening_data = json.loads(screening_path.read_text(encoding="utf-8"))
+    _write_replay_summary(
+        tmp_path,
+        "hbt_run",
+        "2026-02-02T00:00:00+00:00",
+        screening_hash=screening_data["screening_artifact_hash"],
+        candidate_id=screening_data["promoted"][0]["candidate_id"],
+        feature_recipe_hash="",
+    )
+
+    replay_fields = pipeline_agg._latest_replay_fields(screening_fields)
+
+    assert replay_fields["replay_status"] == sc.STALE
+    assert "scenario_feature_recipe_hash_missing" in replay_fields["replay_detail"]
 
 
 def test_pipeline_view_meta_includes_vbt5_keys():
@@ -840,6 +1045,8 @@ def test_models_registry_and_silent_zero():
     assert m["health"] == sc.AMBER
     assert m["registry_total"] == 50
     assert len(m["rows"]) == 50
+    assert "screened_stage_a_note" in m["funnel"]
+    assert "vectorbt_tracking_state" in m["funnel"]
     # The six structurally-dead prop hyps must be surfaced as silent-zero.
     assert m["silent_zero"]["count"] == 6
     dead_ids = {h["id"] for h in m["silent_zero"]["hypotheses"]}
@@ -2190,6 +2397,1202 @@ def test_pipeline_build_includes_universe_sweep_tracking(monkeypatch, tmp_path):
     p = pipeline_agg.build()
     assert "universe_sweep_tracking" in p
     assert p["universe_sweep_tracking"]["state"] in {"idle", "complete", "observed", "stalled", "running", "unknown"}
+    assert "vectorbt_paid_screen_tracking" in p
+    assert p["vectorbt_paid_screen_tracking"]["workflow_note"]
+
+
+def test_pipeline_health_excludes_historical_stages_when_vbt_scoped(monkeypatch, tmp_path):
+    """v2-only scoped run must not stay AMBER because historical M6 stages are missing."""
+    run_id = "paid_v2_health_green"
+    _stub_q001_ok(monkeypatch)
+    _allow_screening_validation(monkeypatch)
+    capture = tmp_path / "runtime" / "chi404" / "baseline" / "latest_capture.json"
+    feature = tmp_path / "runtime" / "workbench" / "feature_fabric_manifest.json"
+    capture.parent.mkdir(parents=True, exist_ok=True)
+    feature.parent.mkdir(parents=True, exist_ok=True)
+    capture.write_text(
+        json.dumps({"host_id": "CHI404", "captured_at": paths.now_iso(), "known_gaps": [], "drift_warnings": []}),
+        encoding="utf-8",
+    )
+    feature.write_text(
+        json.dumps({"generated_at_utc": paths.now_iso(), "row_count": 1, "rejected_count": 0}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "CAPTURE_BASELINE", capture)
+    monkeypatch.setattr(paths, "FEATURE_FABRIC", feature)
+    _point_non_universe_pipeline_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(paths, "CAPTURE_BASELINE", capture)
+    monkeypatch.setattr(paths, "FEATURE_FABRIC", feature)
+    monkeypatch.setattr(paths, "STAGE_B_RESULT", tmp_path / "missing_stage_b.json")
+    monkeypatch.setattr(paths, "M6_RESULT", tmp_path / "missing_m6.json")
+    monkeypatch.setattr(paths, "M6_FULL_RESULT", tmp_path / "missing_m6_full.json")
+    _write_paid_screen_manifest(tmp_path, run_id)
+    _point_vbt_tracking_paths(monkeypatch, tmp_path, run_id)
+    screening_path = _write_screening_artifact(
+        tmp_path,
+        run_id,
+        "2026-06-19T13:00:00+00:00",
+        replay_eligible=True,
+        surface_defined=True,
+    )
+    screening_data = json.loads(screening_path.read_text(encoding="utf-8"))
+    _write_replay_summary(
+        tmp_path,
+        "hbt_run",
+        "2026-06-19T14:00:00+00:00",
+        screening_hash=screening_data["screening_artifact_hash"],
+        candidate_id=screening_data["promoted"][0]["candidate_id"],
+    )
+    loaders._cache.clear()
+    monkeypatch.setattr(
+        pipeline_agg,
+        "_latency_evidence",
+        lambda **_: {"status": sc.OK, "live_readiness_status": sc.OK},
+    )
+
+    p = pipeline_agg.build()
+
+    historical = {s["id"]: s for s in p["stages"] if s.get("historical")}
+    assert historical["stage_a"]["status"] == sc.MISSING
+    assert historical["gauntlet_b"]["status"] == sc.MISSING
+    assert historical["m6_gate"]["status"] == sc.MISSING
+    assert p["health"] == sc.GREEN
+    assert {s["id"] for s in p["stages"] if s.get("status") != sc.OK} == {
+        "stage_a",
+        "gauntlet_b",
+        "m6_gate",
+    }
+
+
+def test_declaration_matches_manifest_on_v2_provenance_hashes(monkeypatch, tmp_path):
+    decl = {
+        "workers_requested": 50,
+        "expected_work_units": 3,
+        "events_csv_hash": "events_hash_v2",
+        "lake_manifest_hash": "lake_hash_v2",
+        "source_lock_hash": "stale_lock_should_not_match",
+    }
+    manifest = {
+        "events_csv_hash": "events_hash_v2",
+        "lake_manifest_hash": "lake_hash_v2",
+        "source_lock_hash": "stale_lock_should_not_match",
+    }
+    assert pipeline_agg._declaration_matches_manifest(
+        decl,
+        run_id="paid_hash_match",
+        manifest=manifest,
+    )
+
+
+def test_declaration_rejects_hash_wired_decl_when_manifest_hashes_differ(monkeypatch, tmp_path):
+    decl = {
+        "events_csv_hash": "events_hash_decl",
+        "lake_manifest_hash": "lake_hash_decl",
+        "source_lock_hash": "shared_lock_hash",
+    }
+    manifest = {
+        "events_csv_hash": "events_hash_manifest",
+        "lake_manifest_hash": "lake_hash_manifest",
+        "source_lock_hash": "shared_lock_hash",
+    }
+    assert not pipeline_agg._declaration_matches_manifest(
+        decl,
+        run_id="paid_hash_mismatch",
+        manifest=manifest,
+    )
+
+
+def test_declaration_matches_manifest_without_run_id_on_v2_hashes(monkeypatch, tmp_path):
+    decl = {
+        "workers_requested": 50,
+        "expected_work_units": 3,
+        "events_csv_hash": "events_hash_v2",
+        "lake_manifest_hash": "lake_hash_v2",
+    }
+    manifest = {
+        "events_csv_hash": "events_hash_v2",
+        "lake_manifest_hash": "lake_hash_v2",
+        "expected_work_units": 3,
+    }
+    assert pipeline_agg._declaration_matches_manifest(
+        decl,
+        run_id=None,
+        manifest=manifest,
+    )
+
+
+def test_declaration_rejects_hash_match_when_expected_work_units_differ(monkeypatch, tmp_path):
+    decl = {
+        "events_csv_hash": "events_hash_v2",
+        "lake_manifest_hash": "lake_hash_v2",
+        "expected_work_units": 100,
+    }
+    manifest = {
+        "events_csv_hash": "events_hash_v2",
+        "lake_manifest_hash": "lake_hash_v2",
+        "expected_work_units": 50,
+    }
+    assert not pipeline_agg._declaration_matches_manifest(
+        decl,
+        run_id=None,
+        manifest=manifest,
+    )
+
+
+def test_vectorbt_tracking_declaration_matched_on_hash_provenance_without_run_id(
+    monkeypatch, tmp_path
+):
+    reports = tmp_path / "runtime" / "reports"
+    reports.mkdir(parents=True)
+    decl = reports / "vbt_full_run_declaration.json"
+    decl.write_text(
+        json.dumps(
+            {
+                "workers_requested": 100,
+                "expected_work_units": 5,
+                "events_csv_hash": "events_hash_v2",
+                "lake_manifest_hash": "lake_hash_v2",
+            }
+        ),
+        encoding="utf-8",
+    )
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / "paid_hash_only_run"
+    run_dir.mkdir(parents=True)
+    manifest_path = run_dir / "paid_screen_run_manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "status": "complete",
+                "started_at_utc": "2026-06-19T12:00:00+00:00",
+                "finished_at_utc": "2026-06-19T13:00:00+00:00",
+                "workers": 100,
+                "expected_work_units": 5,
+                "completed_work_units": 5,
+                "failed_work_units": 0,
+                "skipped_work_units": 0,
+                "events_csv_hash": "events_hash_v2",
+                "lake_manifest_hash": "lake_hash_v2",
+                "out_dir": str(run_dir),
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "VBT_FULL_RUN_DECLARATION", decl)
+    monkeypatch.setattr(
+        paths,
+        "VBT_FULL_UNITS_JSONL",
+        reports / "missing_units.jsonl",
+    )
+
+    tracking = pipeline_agg._vectorbt_paid_screen_tracking()
+
+    assert tracking["run_id"] == "paid_hash_only_run"
+    assert tracking["declaration_matched"] is True
+    assert tracking["workers"] == 100
+    assert tracking["expected_work_units"] == 5
+    assert not any("declaration not matched" in a for a in (tracking.get("anomalies") or []))
+
+
+def test_vectorbt_paid_screen_tracking_from_artifacts(monkeypatch, tmp_path):
+    reports = tmp_path / "runtime" / "reports"
+    reports.mkdir(parents=True)
+    units = reports / "vbt_full_units.jsonl"
+    units.write_text("{}\n{}\n", encoding="utf-8")
+    decl = reports / "vbt_full_run_declaration.json"
+    decl.write_text(
+        json.dumps(
+            {
+                "workers_requested": 375,
+                "expected_work_units": 2,
+                "research_split": "discovery_confirmation",
+            }
+        ),
+        encoding="utf-8",
+    )
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / "paid_full_test"
+    run_dir.mkdir(parents=True)
+    log_path = run_dir / "orchestrator.log"
+    log_path.write_text(
+        "[unit] unit_a -> OK\n[unit] unit_b -> ERROR\n",
+        encoding="utf-8",
+    )
+    manifest_path = run_dir / "paid_screen_run_manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "status": "complete",
+                "workers": 375,
+                "expected_work_units": 2,
+                "completed_work_units": 1,
+                "failed_work_units": 1,
+                "out_dir": str(run_dir),
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "VBT_FULL_RUN_DECLARATION", decl)
+    monkeypatch.setattr(paths, "VBT_FULL_UNITS_JSONL", units)
+
+    tracking = pipeline_agg._vectorbt_paid_screen_tracking()
+
+    assert tracking["state"] == "complete"
+    assert tracking["workers"] == 375
+    assert tracking["expected_work_units"] == 2
+    assert tracking["research_split"] == "discovery_confirmation"
+    assert tracking["run_id"] == "paid_full_test"
+    assert tracking["manifest_artifact"].endswith("paid_full_test/paid_screen_run_manifest.json")
+    assert tracking["failed_work_units"] == 1
+    assert any("failed_work_units" in a for a in (tracking.get("anomalies") or []))
+
+
+def test_vectorbt_paid_screen_tracking_v2_drain_lines(monkeypatch, tmp_path):
+    reports = tmp_path / "runtime" / "reports"
+    reports.mkdir(parents=True)
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / "paid_v2_running"
+    run_dir.mkdir(parents=True)
+    log_path = run_dir / "orchestrator.log"
+    log_path.write_text(
+        "[drain] batch=0 units=2 ok=2 failed=0 collected=1/3\n"
+        "[drain] batch=1 units=1 ok=0 failed=1 collected=2/3\n",
+        encoding="utf-8",
+    )
+    manifest_path = run_dir / "paid_screen_run_manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "status": "running",
+                "workers": 50,
+                "expected_work_units": 5,
+                "completed_work_units": 2,
+                "failed_work_units": 1,
+                "orchestrator_version": "v2",
+                "expected_batches": 3,
+                "collected_batches": 2,
+                "out_dir": str(run_dir),
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(
+        paths,
+        "VBT_FULL_RUN_DECLARATION",
+        reports / "missing_declaration.json",
+    )
+    monkeypatch.setattr(
+        paths,
+        "VBT_FULL_UNITS_JSONL",
+        reports / "missing_units.jsonl",
+    )
+
+    tracking = pipeline_agg._vectorbt_paid_screen_tracking()
+
+    assert tracking["state"] == "running"
+    assert tracking["completed_work_units"] == 2
+    assert tracking["failed_work_units"] == 1
+    assert tracking["run_id"] == "paid_v2_running"
+
+
+def test_vectorbt_stale_declaration_different_run_id_not_merged(monkeypatch, tmp_path):
+    reports = tmp_path / "runtime" / "reports"
+    reports.mkdir(parents=True)
+    units = reports / "vbt_full_units.jsonl"
+    units.write_text("\n".join("{}" for _ in range(999)) + "\n", encoding="utf-8")
+    decl = reports / "vbt_full_run_declaration.json"
+    decl.write_text(
+        json.dumps(
+            {
+                "run_id": "paid_stale_other_run",
+                "workers_requested": 375,
+                "expected_work_units": 999,
+                "research_split": "holdout",
+            }
+        ),
+        encoding="utf-8",
+    )
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / "paid_current_run"
+    run_dir.mkdir(parents=True)
+    manifest_path = run_dir / "paid_screen_run_manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "status": "complete",
+                "started_at_utc": "2026-06-19T12:00:00+00:00",
+                "finished_at_utc": "2026-06-19T13:00:00+00:00",
+                "workers": 100,
+                "expected_work_units": 5,
+                "completed_work_units": 5,
+                "failed_work_units": 0,
+                "skipped_work_units": 0,
+                "out_dir": str(run_dir),
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "VBT_FULL_RUN_DECLARATION", decl)
+    monkeypatch.setattr(paths, "VBT_FULL_UNITS_JSONL", units)
+
+    tracking = pipeline_agg._vectorbt_paid_screen_tracking()
+
+    assert tracking["run_id"] == "paid_current_run"
+    assert tracking["workers"] == 100
+    assert tracking["expected_work_units"] == 5
+    assert tracking["research_split"] == "discovery_confirmation"
+    assert tracking["units_jsonl_scope"] == "global"
+    assert tracking["declaration_matched"] is False
+    assert not any(
+        "units_jsonl_lines=999" in a or "expected_work_units=999" in a
+        for a in (tracking.get("anomalies") or [])
+    )
+    assert any("declaration run_id=paid_stale_other_run" in a for a in (tracking.get("anomalies") or []))
+
+
+def test_vectorbt_research_split_defaults_discovery_confirmation(monkeypatch, tmp_path):
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / "paid_no_split"
+    run_dir.mkdir(parents=True)
+    manifest_path = run_dir / "paid_screen_run_manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "status": "complete",
+                "started_at_utc": "2026-06-19T12:00:00+00:00",
+                "finished_at_utc": "2026-06-19T13:00:00+00:00",
+                "workers": 50,
+                "expected_work_units": 1,
+                "completed_work_units": 1,
+                "failed_work_units": 0,
+                "skipped_work_units": 0,
+                "out_dir": str(run_dir),
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(
+        paths,
+        "VBT_FULL_RUN_DECLARATION",
+        tmp_path / "runtime" / "reports" / "missing_declaration.json",
+    )
+    monkeypatch.setattr(
+        paths,
+        "VBT_FULL_UNITS_JSONL",
+        tmp_path / "runtime" / "reports" / "missing_units.jsonl",
+    )
+
+    tracking = pipeline_agg._vectorbt_paid_screen_tracking()
+
+    assert tracking["research_split"] == "discovery_confirmation"
+    assert tracking["run_id"] == "paid_no_split"
+
+
+def test_vectorbt_holdout_research_split_tracking_stage_stale(monkeypatch, tmp_path):
+    """BLUEPRINT §8: explicit holdout research_split must not yield VectorBT Screen OK."""
+    reports = tmp_path / "runtime" / "reports"
+    reports.mkdir(parents=True)
+    units = reports / "vbt_full_units.jsonl"
+    units.write_text("{}\n", encoding="utf-8")
+    decl = reports / "vbt_full_run_declaration.json"
+    decl.write_text(
+        json.dumps({"workers_requested": 50, "expected_work_units": 1}),
+        encoding="utf-8",
+    )
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / "paid_holdout_run"
+    run_dir.mkdir(parents=True)
+    manifest_path = run_dir / "paid_screen_run_manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "status": "complete",
+                "started_at_utc": "2026-06-19T12:00:00+00:00",
+                "finished_at_utc": "2026-06-19T13:00:00+00:00",
+                "workers": 50,
+                "expected_work_units": 1,
+                "completed_work_units": 1,
+                "failed_work_units": 0,
+                "skipped_work_units": 0,
+                "research_split": "holdout",
+                "out_dir": str(run_dir),
+            }
+        ),
+        encoding="utf-8",
+    )
+    (run_dir / "orchestrator.log").write_text("[unit] unit_a -> OK\n", encoding="utf-8")
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "VBT_FULL_RUN_DECLARATION", decl)
+    monkeypatch.setattr(paths, "VBT_FULL_UNITS_JSONL", units)
+
+    tracking = pipeline_agg._vectorbt_paid_screen_tracking()
+    stage = pipeline_agg._vectorbt_screen_stage()
+
+    assert tracking["research_split"] == "holdout"
+    assert any("noncanonical_research_split=holdout" in a for a in (tracking.get("anomalies") or []))
+    assert stage["status"] == sc.STALE
+    assert stage["tracking_state"] == "complete"
+
+
+def test_vbt_orchestrator_log_manifest_scoped_not_cross_run(monkeypatch, tmp_path):
+    runs = tmp_path / "research_cards" / "pipeline_runs"
+    run_a = runs / "paid_run_a"
+    run_b = runs / "paid_run_b"
+    run_a.mkdir(parents=True)
+    run_b.mkdir(parents=True)
+    run_b_log = run_b / "orchestrator.log"
+    run_b_log.write_text("[unit] other_run -> OK\n", encoding="utf-8")
+    os.utime(run_b_log, (time.time(), time.time()))
+    manifest_path = run_a / "paid_screen_run_manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "status": "complete",
+                "started_at_utc": "2026-06-19T12:00:00+00:00",
+                "finished_at_utc": "2026-06-19T13:00:00+00:00",
+                "out_dir": str(run_a),
+            }
+        ),
+        encoding="utf-8",
+    )
+    manifest_entry = {
+        "path": manifest_path,
+        "data": json.loads(manifest_path.read_text(encoding="utf-8")),
+        "run_id": "paid_run_a",
+    }
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+
+    assert pipeline_agg._latest_vbt_orchestrator_log(manifest_entry) is None
+
+    reports = tmp_path / "runtime" / "reports"
+    reports.mkdir(parents=True)
+    decl = reports / "vbt_full_run_declaration.json"
+    decl.write_text(json.dumps({"expected_work_units": 1}), encoding="utf-8")
+    monkeypatch.setattr(paths, "VBT_FULL_RUN_DECLARATION", decl)
+    monkeypatch.setattr(paths, "VBT_FULL_UNITS_JSONL", reports / "vbt_full_units.jsonl")
+
+    tracking = pipeline_agg._vectorbt_paid_screen_tracking()
+
+    assert tracking["run_id"] == "paid_run_a"
+    assert tracking["log_artifact"] is None
+
+
+def test_vbt_orchestrator_log_ignores_foreign_out_dir(monkeypatch, tmp_path):
+    runs = tmp_path / "research_cards" / "pipeline_runs"
+    run_a = runs / "paid_run_a"
+    run_b = runs / "paid_run_b"
+    run_a.mkdir(parents=True)
+    run_b.mkdir(parents=True)
+    run_b_log = run_b / "orchestrator.log"
+    run_b_log.write_text("[unit] foreign -> OK\n", encoding="utf-8")
+    os.utime(run_b_log, (time.time(), time.time()))
+    manifest_path = run_a / "paid_screen_run_manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "status": "complete",
+                "started_at_utc": "2026-06-19T12:00:00+00:00",
+                "finished_at_utc": "2026-06-19T13:00:00+00:00",
+                "out_dir": str(run_b),
+            }
+        ),
+        encoding="utf-8",
+    )
+    manifest_entry = {
+        "path": manifest_path,
+        "data": json.loads(manifest_path.read_text(encoding="utf-8")),
+        "run_id": "paid_run_a",
+    }
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+
+    assert pipeline_agg._latest_vbt_orchestrator_log(manifest_entry) is None
+
+
+def test_vectorbt_complete_manifest_missing_expected_is_stalled(monkeypatch, tmp_path):
+    reports = tmp_path / "runtime" / "reports"
+    reports.mkdir(parents=True)
+    decl = reports / "vbt_full_run_declaration.json"
+    decl.write_text(json.dumps({"workers_requested": 375}), encoding="utf-8")
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / "paid_zero_expected"
+    run_dir.mkdir(parents=True)
+    manifest_path = run_dir / "paid_screen_run_manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "status": "complete",
+                "started_at_utc": "2026-06-19T12:00:00+00:00",
+                "finished_at_utc": "2026-06-19T13:00:00+00:00",
+                "workers": 375,
+                "completed_work_units": 0,
+                "failed_work_units": 0,
+                "out_dir": str(run_dir),
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "VBT_FULL_RUN_DECLARATION", decl)
+    monkeypatch.setattr(paths, "VBT_FULL_UNITS_JSONL", reports / "vbt_full_units.jsonl")
+
+    tracking = pipeline_agg._vectorbt_paid_screen_tracking()
+
+    assert tracking["state"] == "stalled"
+    assert tracking["expected_work_units"] is None
+    assert any(
+        "expected_work_units missing or zero" in a for a in (tracking.get("anomalies") or [])
+    )
+
+
+def test_vectorbt_complete_manifest_zero_expected_is_stalled(monkeypatch, tmp_path):
+    reports = tmp_path / "runtime" / "reports"
+    reports.mkdir(parents=True)
+    decl = reports / "vbt_full_run_declaration.json"
+    decl.write_text(json.dumps({"workers_requested": 375, "expected_work_units": 0}), encoding="utf-8")
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / "paid_explicit_zero_expected"
+    run_dir.mkdir(parents=True)
+    manifest_path = run_dir / "paid_screen_run_manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "status": "complete",
+                "started_at_utc": "2026-06-19T12:00:00+00:00",
+                "finished_at_utc": "2026-06-19T13:00:00+00:00",
+                "workers": 375,
+                "expected_work_units": 0,
+                "completed_work_units": 0,
+                "failed_work_units": 0,
+                "out_dir": str(run_dir),
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "VBT_FULL_RUN_DECLARATION", decl)
+    monkeypatch.setattr(paths, "VBT_FULL_UNITS_JSONL", reports / "vbt_full_units.jsonl")
+
+    tracking = pipeline_agg._vectorbt_paid_screen_tracking()
+
+    assert tracking["state"] == "stalled"
+    assert tracking["expected_work_units"] is None
+    assert any(
+        "expected_work_units missing or zero" in a for a in (tracking.get("anomalies") or [])
+    )
+
+
+def test_models_funnel_vectorbt_promoted_scoped_to_tracking_run(monkeypatch, tmp_path):
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    survivors = tmp_path / "research_cards" / "stage_a_full" / "stage_a_survivors.json"
+    survivors.parent.mkdir(parents=True, exist_ok=True)
+    survivors.write_text("[]", encoding="utf-8")
+    monkeypatch.setattr(paths, "STAGE_A_SURVIVORS", survivors)
+    monkeypatch.setattr(paths, "STAGE_A_RESULT", tmp_path / "missing_stage_a.json")
+    loaders._cache.clear()
+
+    reports = tmp_path / "runtime" / "reports"
+    reports.mkdir(parents=True)
+    monkeypatch.setattr(paths, "VBT_FULL_RUN_DECLARATION", reports / "vbt_full_run_declaration.json")
+    monkeypatch.setattr(paths, "VBT_FULL_UNITS_JSONL", reports / "vbt_full_units.jsonl")
+
+    run_tracking = "paid_tracking_run"
+    run_other = "paid_other_run"
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / run_tracking
+    run_dir.mkdir(parents=True)
+    (run_dir / "paid_screen_run_manifest.json").write_text(
+        json.dumps(
+            {
+                "status": "complete",
+                "started_at_utc": "2026-06-19T12:00:00+00:00",
+                "finished_at_utc": "2026-06-19T13:00:00+00:00",
+                "expected_work_units": 1,
+                "completed_work_units": 1,
+                "out_dir": str(run_dir),
+            }
+        ),
+        encoding="utf-8",
+    )
+    _write_screening_artifact(
+        tmp_path,
+        run_tracking,
+        "2026-06-19T13:00:00+00:00",
+        promoted_count=2,
+    )
+    _write_screening_artifact(
+        tmp_path,
+        run_other,
+        "2026-06-19T14:00:00+00:00",
+        promoted_count=99,
+    )
+
+    m = ZONES["models"]()
+
+    assert m["funnel"]["vectorbt_promoted_count"] == 2
+    assert m["funnel"]["vectorbt_tracking_state"] == "complete"
+
+
+def test_models_funnel_no_tracking_run_id_ignores_unrelated_screening_artifact(monkeypatch, tmp_path):
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    survivors = tmp_path / "research_cards" / "stage_a_full" / "stage_a_survivors.json"
+    survivors.parent.mkdir(parents=True, exist_ok=True)
+    survivors.write_text("[]", encoding="utf-8")
+    monkeypatch.setattr(paths, "STAGE_A_SURVIVORS", survivors)
+    monkeypatch.setattr(paths, "STAGE_A_RESULT", tmp_path / "missing_stage_a.json")
+    loaders._cache.clear()
+
+    reports = tmp_path / "runtime" / "reports"
+    reports.mkdir(parents=True)
+    monkeypatch.setattr(paths, "VBT_FULL_RUN_DECLARATION", reports / "vbt_full_run_declaration.json")
+    monkeypatch.setattr(paths, "VBT_FULL_UNITS_JSONL", reports / "vbt_full_units.jsonl")
+
+    _write_screening_artifact(
+        tmp_path,
+        "unrelated_run",
+        "2026-06-19T14:00:00+00:00",
+        promoted_count=99,
+    )
+
+    m = ZONES["models"]()
+
+    assert m["funnel"]["vectorbt_promoted_count"] is None
+
+
+def test_vectorbt_screen_stage_not_ok_when_tracking_has_anomalies(monkeypatch, tmp_path):
+    reports = tmp_path / "runtime" / "reports"
+    reports.mkdir(parents=True)
+    units = reports / "vbt_full_units.jsonl"
+    units.write_text("{}\n{}\n", encoding="utf-8")
+    decl = reports / "vbt_full_run_declaration.json"
+    decl.write_text(
+        json.dumps({"workers_requested": 375, "expected_work_units": 2}),
+        encoding="utf-8",
+    )
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / "paid_anomaly_run"
+    run_dir.mkdir(parents=True)
+    manifest_path = run_dir / "paid_screen_run_manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "status": "complete",
+                "started_at_utc": "2026-06-19T12:00:00+00:00",
+                "finished_at_utc": "2026-06-19T13:00:00+00:00",
+                "workers": 375,
+                "expected_work_units": 2,
+                "completed_work_units": 1,
+                "failed_work_units": 1,
+                "out_dir": str(run_dir),
+            }
+        ),
+        encoding="utf-8",
+    )
+    (run_dir / "orchestrator.log").write_text(
+        "[unit] unit_a -> OK\n[unit] unit_b -> ERROR\n",
+        encoding="utf-8",
+    )
+    _write_screening_artifact(
+        tmp_path,
+        "paid_anomaly_run",
+        "2026-06-19T13:00:00+00:00",
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "VBT_FULL_RUN_DECLARATION", decl)
+    monkeypatch.setattr(paths, "VBT_FULL_UNITS_JSONL", units)
+
+    stage = pipeline_agg._vectorbt_screen_stage()
+
+    assert stage["status"] == sc.STALE
+    assert stage["tracking_state"] == "complete"
+    assert stage["failed_work_units"] == 1
+    assert "failed_work_units=1" in (stage.get("detail") or "")
+
+
+def test_promote_stage_prefers_vectorbt_promoted_count(monkeypatch, tmp_path):
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    survivors = tmp_path / "research_cards" / "stage_a_full" / "stage_a_survivors.json"
+    survivors.parent.mkdir(parents=True, exist_ok=True)
+    survivors.write_text(json.dumps([{"hypothesis_id": "HYP_1"}, {"hypothesis_id": "HYP_2"}]), encoding="utf-8")
+    monkeypatch.setattr(paths, "STAGE_A_SURVIVORS", survivors)
+    _write_paid_screen_manifest(tmp_path, "vbt_run")
+    _write_screening_artifact(
+        tmp_path,
+        "vbt_run",
+        "2026-02-01T00:00:00+00:00",
+        replay_eligible=False,
+        surface_defined=False,
+    )
+
+    stage = pipeline_agg._promote_stage()
+
+    assert stage["candidate_source"] == "vectorbt_promoted"
+    assert stage["candidates"] == 0
+    assert stage["validated_candidates"] == 0
+    assert stage["screening_promoted_count"] == 1
+    assert stage["status"] == sc.STALE
+
+
+def test_promote_stage_no_tracking_run_id_uses_historical_not_unrelated_vbt(monkeypatch, tmp_path):
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    survivors = tmp_path / "research_cards" / "stage_a_full" / "stage_a_survivors.json"
+    survivors.parent.mkdir(parents=True, exist_ok=True)
+    survivors.write_text(json.dumps([{"hypothesis_id": "HYP_1"}, {"hypothesis_id": "HYP_2"}]), encoding="utf-8")
+    monkeypatch.setattr(paths, "STAGE_A_SURVIVORS", survivors)
+    _write_screening_artifact(
+        tmp_path,
+        "unrelated_run",
+        "2026-06-19T14:00:00+00:00",
+        promoted_count=99,
+    )
+
+    stage = pipeline_agg._promote_stage()
+
+    assert stage["candidate_source"] == "stage_a_survivors_historical"
+    assert stage["candidates"] == 2
+
+
+def test_vectorbt_tracking_short_accounting_yields_anomaly_and_stage_not_ok(monkeypatch, tmp_path):
+    reports = tmp_path / "runtime" / "reports"
+    reports.mkdir(parents=True)
+    units = reports / "vbt_full_units.jsonl"
+    units.write_text("{}\n{}\n", encoding="utf-8")
+    decl = reports / "vbt_full_run_declaration.json"
+    decl.write_text(
+        json.dumps({"workers_requested": 375, "expected_work_units": 2}),
+        encoding="utf-8",
+    )
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / "paid_short_accounting"
+    run_dir.mkdir(parents=True)
+    manifest_path = run_dir / "paid_screen_run_manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "status": "complete",
+                "started_at_utc": "2026-06-19T12:00:00+00:00",
+                "finished_at_utc": "2026-06-19T13:00:00+00:00",
+                "workers": 375,
+                "expected_work_units": 2,
+                "completed_work_units": 1,
+                "failed_work_units": 0,
+                "skipped_work_units": 0,
+                "out_dir": str(run_dir),
+            }
+        ),
+        encoding="utf-8",
+    )
+    (run_dir / "orchestrator.log").write_text("[unit] unit_a -> OK\n", encoding="utf-8")
+    _write_screening_artifact(
+        tmp_path,
+        "paid_short_accounting",
+        "2026-06-19T13:00:00+00:00",
+        replay_eligible=True,
+        surface_defined=True,
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "VBT_FULL_RUN_DECLARATION", decl)
+    monkeypatch.setattr(paths, "VBT_FULL_UNITS_JSONL", units)
+
+    tracking = pipeline_agg._vectorbt_paid_screen_tracking()
+    stage = pipeline_agg._vectorbt_screen_stage()
+
+    assert tracking["state"] == "stalled"
+    assert any("accounted_work_units=1 != expected_work_units=2" in a for a in (tracking.get("anomalies") or []))
+    assert stage["status"] == sc.STALE
+    assert stage["tracking_state"] == "stalled"
+
+
+def test_vectorbt_screen_stage_no_tracking_run_id_ignores_unrelated_screening(monkeypatch, tmp_path):
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    _write_screening_artifact(
+        tmp_path,
+        "unrelated_run",
+        "2026-06-19T14:00:00+00:00",
+        promoted_count=99,
+        replay_eligible=True,
+        surface_defined=True,
+    )
+
+    stage = pipeline_agg._vectorbt_screen_stage()
+
+    assert stage["run_id"] in (None, "")
+    assert stage["screening_status"] == sc.MISSING
+    assert stage["screening_artifact"] is None
+    assert stage.get("screening_promoted_count") is None
+
+
+def test_vectorbt_screen_stage_rejects_other_run_screening_pass(monkeypatch, tmp_path):
+    reports = tmp_path / "runtime" / "reports"
+    reports.mkdir(parents=True)
+    units = reports / "vbt_full_units.jsonl"
+    units.write_text("{}\n", encoding="utf-8")
+    decl = reports / "vbt_full_run_declaration.json"
+    decl.write_text(
+        json.dumps({"workers_requested": 375, "expected_work_units": 1}),
+        encoding="utf-8",
+    )
+    run_a = tmp_path / "research_cards" / "pipeline_runs" / "paid_run_current"
+    run_a.mkdir(parents=True)
+    manifest_path = run_a / "paid_screen_run_manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "status": "complete",
+                "started_at_utc": "2026-06-19T12:00:00+00:00",
+                "finished_at_utc": "2026-06-19T13:00:00+00:00",
+                "workers": 375,
+                "expected_work_units": 1,
+                "completed_work_units": 1,
+                "failed_work_units": 0,
+                "skipped_work_units": 0,
+                "out_dir": str(run_a),
+            }
+        ),
+        encoding="utf-8",
+    )
+    (run_a / "orchestrator.log").write_text("[unit] unit_a -> OK\n", encoding="utf-8")
+    _write_screening_artifact(
+        tmp_path,
+        "paid_run_other",
+        "2026-06-19T14:00:00+00:00",
+        replay_eligible=True,
+        surface_defined=True,
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "VBT_FULL_RUN_DECLARATION", decl)
+    monkeypatch.setattr(paths, "VBT_FULL_UNITS_JSONL", units)
+
+    stage = pipeline_agg._vectorbt_screen_stage()
+
+    assert stage["status"] in {sc.MISSING, sc.STALE}
+    assert stage["status"] != sc.UNKNOWN
+    assert stage["run_id"] == "paid_run_current"
+    assert stage["screening_status"] == sc.MISSING
+    assert "no screening_artifact.json" in (stage.get("screening_detail") or "")
+
+
+def _write_complete_vbt_tracking_fixture(
+    tmp_path: Path,
+    run_id: str,
+    *,
+    write_screening: bool = False,
+    screening_payload_patch: dict | None = None,
+) -> tuple[Path, Path]:
+    reports = tmp_path / "runtime" / "reports"
+    reports.mkdir(parents=True)
+    units = reports / "vbt_full_units.jsonl"
+    units.write_text("{}\n", encoding="utf-8")
+    decl = reports / "vbt_full_run_declaration.json"
+    decl.write_text(
+        json.dumps({"workers_requested": 375, "expected_work_units": 1, "run_id": run_id}),
+        encoding="utf-8",
+    )
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / run_id
+    run_dir.mkdir(parents=True)
+    manifest_path = run_dir / "paid_screen_run_manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "status": "complete",
+                "started_at_utc": "2026-06-19T12:00:00+00:00",
+                "finished_at_utc": "2026-06-19T13:00:00+00:00",
+                "workers": 375,
+                "expected_work_units": 1,
+                "completed_work_units": 1,
+                "failed_work_units": 0,
+                "skipped_work_units": 0,
+                "out_dir": str(run_dir),
+            }
+        ),
+        encoding="utf-8",
+    )
+    (run_dir / "orchestrator.log").write_text("[unit] unit_a -> OK\n", encoding="utf-8")
+    if write_screening:
+        artifact = _write_screening_artifact(
+            tmp_path,
+            run_id,
+            "2026-06-19T13:00:00+00:00",
+            replay_eligible=True,
+            surface_defined=True,
+        )
+        if screening_payload_patch:
+            payload = json.loads(artifact.read_text(encoding="utf-8"))
+            payload.update(screening_payload_patch)
+            artifact.write_text(json.dumps(payload), encoding="utf-8")
+    return decl, units
+
+
+def test_vectorbt_screen_stage_complete_missing_screening_maps_missing(monkeypatch, tmp_path):
+    run_id = "paid_run_missing_screen"
+    decl, units = _write_complete_vbt_tracking_fixture(tmp_path, run_id)
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "VBT_FULL_RUN_DECLARATION", decl)
+    monkeypatch.setattr(paths, "VBT_FULL_UNITS_JSONL", units)
+
+    stage = pipeline_agg._vectorbt_screen_stage()
+
+    assert stage["tracking_state"] == "complete"
+    assert stage["status"] == sc.MISSING
+    assert stage["status"] != sc.UNKNOWN
+    assert stage["screening_status"] == sc.MISSING
+    assert "no screening_artifact.json" in (stage.get("screening_detail") or "")
+
+
+def test_vectorbt_screen_stage_complete_stale_screening_maps_stale(monkeypatch, tmp_path):
+    run_id = "paid_run_stale_screen"
+    decl, units = _write_complete_vbt_tracking_fixture(
+        tmp_path,
+        run_id,
+        write_screening=True,
+        screening_payload_patch={"run_id": "other_run_id"},
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "VBT_FULL_RUN_DECLARATION", decl)
+    monkeypatch.setattr(paths, "VBT_FULL_UNITS_JSONL", units)
+
+    stage = pipeline_agg._vectorbt_screen_stage()
+
+    assert stage["tracking_state"] == "complete"
+    assert stage["status"] == sc.STALE
+    assert stage["status"] != sc.UNKNOWN
+    assert stage["screening_status"] == sc.STALE
+    assert "tracking run_id=" in (stage.get("screening_detail") or "")
+
+
+def test_point_non_universe_pipeline_paths_isolates_vbt_constants(monkeypatch, tmp_path):
+    _point_non_universe_pipeline_paths(monkeypatch, tmp_path)
+
+    assert paths.VBT_FULL_RUN_DECLARATION.is_relative_to(tmp_path)
+    assert paths.VBT_FULL_UNITS_JSONL.is_relative_to(tmp_path)
+    assert paths.VBT_READY_GATE.is_relative_to(tmp_path)
+    assert paths.VBT_PAID_SCREEN_DOC.is_relative_to(tmp_path)
+    assert not paths.VBT_FULL_RUN_DECLARATION.is_file()
+    assert not paths.VBT_FULL_UNITS_JSONL.is_file()
+
+    tracking = pipeline_agg._vectorbt_paid_screen_tracking()
+
+    assert tracking["state"] == "idle"
+    assert tracking.get("run_id") is None
+
+
+def test_promote_stage_scopes_to_tracking_run_not_newer_other_run(monkeypatch, tmp_path):
+    reports = tmp_path / "runtime" / "reports"
+    reports.mkdir(parents=True)
+    units = reports / "vbt_full_units.jsonl"
+    units.write_text("{}\n", encoding="utf-8")
+    decl = reports / "vbt_full_run_declaration.json"
+    decl.write_text(
+        json.dumps({"workers_requested": 375, "expected_work_units": 1}),
+        encoding="utf-8",
+    )
+    run_a = tmp_path / "research_cards" / "pipeline_runs" / "paid_run_current"
+    run_a.mkdir(parents=True)
+    manifest_path = run_a / "paid_screen_run_manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "status": "complete",
+                "started_at_utc": "2026-06-19T12:00:00+00:00",
+                "finished_at_utc": "2026-06-19T13:00:00+00:00",
+                "workers": 375,
+                "expected_work_units": 1,
+                "completed_work_units": 1,
+                "failed_work_units": 0,
+                "skipped_work_units": 0,
+                "out_dir": str(run_a),
+            }
+        ),
+        encoding="utf-8",
+    )
+    (run_a / "orchestrator.log").write_text("[unit] unit_a -> OK\n", encoding="utf-8")
+    _write_screening_artifact(
+        tmp_path,
+        "paid_run_other",
+        "2026-06-19T14:00:00+00:00",
+        replay_eligible=True,
+        surface_defined=True,
+    )
+    survivors = tmp_path / "research_cards" / "stage_a_full" / "stage_a_survivors.json"
+    survivors.parent.mkdir(parents=True, exist_ok=True)
+    survivors.write_text(json.dumps([{"hypothesis_id": "HYP_1"}, {"hypothesis_id": "HYP_2"}]), encoding="utf-8")
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "VBT_FULL_RUN_DECLARATION", decl)
+    monkeypatch.setattr(paths, "VBT_FULL_UNITS_JSONL", units)
+    monkeypatch.setattr(paths, "STAGE_A_SURVIVORS", survivors)
+
+    stage = pipeline_agg._promote_stage()
+
+    assert stage["candidate_source"] == "vectorbt_promoted"
+    assert stage["candidates"] == 0
+    assert stage["screening_status"] == sc.MISSING
+
+
+def test_promote_stage_zero_vectorbt_promoted_does_not_fallback_to_stage_a(monkeypatch, tmp_path):
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    survivors = tmp_path / "research_cards" / "stage_a_full" / "stage_a_survivors.json"
+    survivors.parent.mkdir(parents=True, exist_ok=True)
+    survivors.write_text(json.dumps([{"hypothesis_id": "HYP_1"}, {"hypothesis_id": "HYP_2"}]), encoding="utf-8")
+    monkeypatch.setattr(paths, "STAGE_A_SURVIVORS", survivors)
+    _write_paid_screen_manifest(tmp_path, "vbt_run")
+    _write_screening_artifact(
+        tmp_path,
+        "vbt_run",
+        "2026-02-01T00:00:00+00:00",
+        replay_eligible=False,
+        surface_defined=False,
+        promoted_ids=[],
+        promoted=[],
+        promoted_count=0,
+        candidate_ids=[],
+        candidate_reasons={},
+        promoted_reasons={},
+    )
+
+    stage = pipeline_agg._promote_stage()
+
+    assert stage["candidate_source"] == "vectorbt_promoted"
+    assert stage["candidates"] == 0
+
+
+def test_promote_stage_partial_validated_promoted_count_stale(monkeypatch, tmp_path):
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    _allow_screening_validation(monkeypatch)
+    _write_paid_screen_manifest(tmp_path, "screen_run")
+    row1 = _screening_candidate_row(
+        "screen_run",
+        replay_eligible=True,
+        surface_defined=True,
+    )
+    row2 = _screening_candidate_row(
+        "screen_run",
+        replay_eligible=True,
+        surface_defined=True,
+    )
+    row2["candidate_id"] = "screen_run_cand_2"
+    screening_path = _write_screening_artifact(
+        tmp_path,
+        "screen_run",
+        "2026-02-01T00:00:00+00:00",
+        replay_eligible=True,
+        surface_defined=True,
+        promoted=[row1, row2],
+        promoted_ids=[row1["candidate_id"], row2["candidate_id"]],
+        promoted_reasons={
+            row1["candidate_id"]: row1["pass_reason"],
+            row2["candidate_id"]: row2["pass_reason"],
+        },
+        candidate_ids=[row1["candidate_id"], row2["candidate_id"]],
+        candidate_reasons={
+            row1["candidate_id"]: row1["pass_reason"],
+            row2["candidate_id"]: row2["pass_reason"],
+        },
+    )
+    screening_data = json.loads(screening_path.read_text(encoding="utf-8"))
+    _write_replay_summary(
+        tmp_path,
+        "hbt_run",
+        "2026-02-02T00:00:00+00:00",
+        screening_hash=screening_data["screening_artifact_hash"],
+        candidate_id=row1["candidate_id"],
+    )
+
+    stage = pipeline_agg._promote_stage()
+
+    assert stage["candidate_source"] == "vectorbt_promoted"
+    assert stage["screening_promoted_count"] == 2
+    assert stage["validated_candidates"] == 1
+    assert stage["candidates"] == 1
+    assert stage["status"] == sc.STALE
+    assert "validated_candidates=1 != screening_promoted_count=2" in (stage.get("vbt5_evidence_detail") or "")
+
+
+def test_promote_stage_validated_count_ok_blocked_by_tracking_anomaly(monkeypatch, tmp_path):
+    """Validated replay count may match promoted_count while tracking is noncanonical."""
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    _allow_screening_validation(monkeypatch)
+    reports = tmp_path / "runtime" / "reports"
+    reports.mkdir(parents=True)
+    units = reports / "vbt_full_units.jsonl"
+    units.write_text("{}\n", encoding="utf-8")
+    decl = reports / "vbt_full_run_declaration.json"
+    decl.write_text(
+        json.dumps({"workers_requested": 50, "expected_work_units": 1}),
+        encoding="utf-8",
+    )
+    run_id = "paid_holdout_promote"
+    run_dir = tmp_path / "research_cards" / "pipeline_runs" / run_id
+    run_dir.mkdir(parents=True)
+    manifest_path = run_dir / "paid_screen_run_manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "status": "complete",
+                "started_at_utc": "2026-06-19T12:00:00+00:00",
+                "finished_at_utc": "2026-06-19T13:00:00+00:00",
+                "workers": 50,
+                "expected_work_units": 1,
+                "completed_work_units": 1,
+                "failed_work_units": 0,
+                "skipped_work_units": 0,
+                "research_split": "holdout",
+                "out_dir": str(run_dir),
+            }
+        ),
+        encoding="utf-8",
+    )
+    (run_dir / "orchestrator.log").write_text("[unit] unit_a -> OK\n", encoding="utf-8")
+    monkeypatch.setattr(paths, "VBT_FULL_RUN_DECLARATION", decl)
+    monkeypatch.setattr(paths, "VBT_FULL_UNITS_JSONL", units)
+    screening_path = _write_screening_artifact(
+        tmp_path,
+        run_id,
+        "2026-02-01T00:00:00+00:00",
+        replay_eligible=True,
+        surface_defined=True,
+    )
+    screening_data = json.loads(screening_path.read_text(encoding="utf-8"))
+    _write_replay_summary(
+        tmp_path,
+        "hbt_run",
+        "2026-02-02T00:00:00+00:00",
+        screening_hash=screening_data["screening_artifact_hash"],
+        candidate_id=screening_data["promoted"][0]["candidate_id"],
+    )
+
+    stage = pipeline_agg._promote_stage()
+
+    assert stage["candidate_source"] == "vectorbt_promoted"
+    assert stage["screening_promoted_count"] == 1
+    assert stage["validated_candidates"] == 1
+    assert stage["candidates"] == 1
+    assert stage["status"] == sc.STALE
+    detail = stage.get("vbt5_evidence_detail") or ""
+    assert "noncanonical_research_split=holdout" in detail
+
+
+def test_promote_stage_single_validated_promoted_count_ok(monkeypatch, tmp_path):
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    _allow_screening_validation(monkeypatch)
+    _write_paid_screen_manifest(tmp_path, "screen_run")
+    _point_vbt_tracking_paths(monkeypatch, tmp_path, "screen_run")
+    screening_path = _write_screening_artifact(
+        tmp_path,
+        "screen_run",
+        "2026-02-01T00:00:00+00:00",
+        replay_eligible=True,
+        surface_defined=True,
+    )
+    screening_data = json.loads(screening_path.read_text(encoding="utf-8"))
+    _write_replay_summary(
+        tmp_path,
+        "hbt_run",
+        "2026-02-02T00:00:00+00:00",
+        screening_hash=screening_data["screening_artifact_hash"],
+        candidate_id=screening_data["promoted"][0]["candidate_id"],
+    )
+
+    stage = pipeline_agg._promote_stage()
+
+    assert stage["candidate_source"] == "vectorbt_promoted"
+    assert stage["screening_promoted_count"] == 1
+    assert stage["validated_candidates"] == 1
+    assert stage["candidates"] == 1
+    assert stage["status"] == sc.OK
 
 
 def test_pipeline_latency_gate_is_non_green_when_defensive_ack_required(monkeypatch, tmp_path):

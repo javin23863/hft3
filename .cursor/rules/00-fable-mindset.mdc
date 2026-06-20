@@ -1,0 +1,72 @@
+---
+description: Fable mindset — FIRST context every session. Load before vault, graph, gates, or edits.
+alwaysApply: true
+---
+
+# Fable mindset — load this first (every agent session)
+
+**Permanent state of being.** This rule is the **first** context on every Cursor agent turn — before vault, graph, ontology, delegation, or code.  
+Canonical vault note: [docs/vault/FABLE_MINDSET.md](../../docs/vault/FABLE_MINDSET.md) · Full reference: `C:\Users\MSI\.codex\skills\fable-mindset\references\Fable_Mindset_public.md`
+
+**Blocking:** Do not run VaultGate, GraphGate, searches, scripts, or edits until you have internalized the Fable loop below. Then load **Ponytail second:** [.cursor/rules/01-ponytail-mindset.mdc](01-ponytail-mindset.mdc). Re-read this rule when the user says "reestablish mindset" or when a turn is long-running, high-risk, or finance/math-critical.
+
+---
+
+## 1. Fable loop (always)
+
+1. **Ground** — read real artifacts, logs, and vault notes; never assume from memory.
+2. **Reason** — name the clock, metric, and authority before acting.
+3. **Act** — deliberate batches; no mass-blast on live accounts.
+4. **Observe** — capture what changed (counts, units, paths).
+5. **Re-evaluate** — if units or authority were wrong, stop and fix before continuing.
+6. **Read exact regions** — before edits, read the file lines you will touch.
+7. **Verify** — real checks (probe output, file counts, pytest), not narrative.
+8. **Recover** — diagnose from evidence; retry with a corrected model.
+9. **Report truthfully** — separate measured vs inferred vs blocked.
+
+**Ethos:** Be cautious, then decisive. Reason before you move; decide from what you actually saw; treat your own edits as unproven until a real check passes.
+
+---
+
+## 2. Next — Ponytail (#2, before codebase)
+
+Load [.cursor/rules/01-ponytail-mindset.mdc](01-ponytail-mindset.mdc) immediately after this rule. Full charter: [docs/ai/PONYTAIL.md](../../docs/ai/PONYTAIL.md) · Repo: `vendor/ponytail/`.
+
+---
+
+## 3. When the operator says **"latency test"**
+
+They mean the **CHI404 native C++ placement probe** with **offensive and defensive clocks in microseconds (`_us`)** — **not** a generic order-ack sweep in milliseconds.
+
+| Operator phrase | Means | Does **not** mean |
+|-----------------|-------|-------------------|
+| **latency test** | `rithmic_latency_probe` → **`tick_to_send_us`** (offensive) and **`cancel_to_send_us`** / **`cancel_to_ack_us`** (defensive) | `chi404_run_*_latency_sweep.sh` p99 **ms** ack campaign alone |
+| **offensive latency** | Market event → SDK send: `tick_to_decision_us`, `tick_to_send_trigger_us`, **`tick_to_send_us`**, `rithmic_send_call_us` | Engine loop ns from `latency_truth.json` |
+| **defensive latency** | Cancel/replace path: **`cancel_to_send_us`**, `cancel_to_ack_us`, replace_* | Risk/defensive **models** in workbench |
+| **ack / wire / backtest latency** | Round trip: **`send_to_ack_us`** / **`new_send_to_ack_us`** (ms for replay) | Placement speed — never substitute for `tick_to_send_us` |
+| **HftBacktest backtest latency** | Feed + order-entry + order-response; regimes Fast/Normal/Stress/Extreme; prefer `IntpOrderLatency` | Single scalar `constant_order_latency(ms, ms)` |
+
+**Primary KPI (placement speed):** `tick_to_send_us` in **µs**.  
+**Backtest ontology:** [docs/vault/HFTBACKTEST_LATENCY_ONTOLOGY.md](../../docs/vault/HFTBACKTEST_LATENCY_ONTOLOGY.md) · **Runbook:** [docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md](../../docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md)
+
+---
+
+## 4. Gate order (session context load)
+
+| # | Context | When |
+|---|---------|------|
+| 1 | **This rule** ([00-fable-mindset.mdc](00-fable-mindset.mdc)) | **First** — every session start |
+| 2 | **Ponytail** ([01-ponytail-mindset.mdc](01-ponytail-mindset.mdc)) | **Second** — before touching codebase |
+| 3 | [docs/vault/FABLE_MINDSET.md](../../docs/vault/FABLE_MINDSET.md) | Full vault copy + latency run shape |
+| 4 | VaultGate + VaultPre | `scripts/vault_gate.ps1` · Obsidian `wiki/hot.md` |
+| 5 | GraphGate + GraphPre | When not owner-waived |
+| 6 | Task-specific vault notes | CHI404, research entrypoints, … |
+
+---
+
+## 5. Hard rejects (latency)
+
+- Do **not** report `send_to_ack_us` p99 **ms** when asked for a **latency test**.
+- Do **not** use paper ack ms as internal engine µs without explicit conversion and separate labels.
+- Do **not** invent probes, log inject, or Python ctypes for placement-speed authority.
+- Do **not** conflate `specs/LATENCY.md` replay injection (ms band) with `tick_to_send_us` (µs placement).

@@ -8,8 +8,13 @@ from typing import Any, Mapping
 
 from workbench.src.core.params import DEFAULT_STRATEGY_PARAMS, param_hash_from_dict
 
-from research_pipeline.feature_family_proposals import propose_family_variant_candidates
+from research_pipeline.feature_family_proposals import (
+    blocked_family_variants_from_summary,
+    propose_family_variant_candidates,
+    propose_failure_driven_family_candidates,
+)
 from research_pipeline.feature_recipe import attach_feature_recipe_to_candidate, candidate_identity_hash
+from research_pipeline.generation_gate_chain import FINAL_PASS
 from research_pipeline.model_generation import generate_candidates
 from research_pipeline.types import CandidateModel, ParsedHypothesis
 
@@ -32,9 +37,21 @@ def _elite_rows(summary: Mapping[str, Any]) -> list[dict[str, Any]]:
     for row in summary.get("candidates") or []:
         if not isinstance(row, Mapping):
             continue
-        if row.get("elite") is True:
+        if row.get("final_status") == FINAL_PASS or row.get("elite") is True:
             rows.append(dict(row))
     return rows
+
+
+def _parent_params_by_id(summary: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    out: dict[str, dict[str, Any]] = {}
+    for row in summary.get("candidates") or []:
+        if not isinstance(row, Mapping):
+            continue
+        cid = str(row.get("candidate_id") or "")
+        params = row.get("strategy_params")
+        if cid and isinstance(params, Mapping):
+            out[cid] = dict(params)
+    return out
 
 
 def propose_next_candidates(
@@ -88,6 +105,8 @@ def propose_next_candidates(
         seen.add(key)
         out.append(model)
 
+    parent_params = _parent_params_by_id(generation_summary)
+
     for elite in elites:
         model_id = str(elite.get("model_id") or parsed.primary_model_id)
         params = dict(elite.get("strategy_params") or DEFAULT_STRATEGY_PARAMS)
@@ -114,13 +133,15 @@ def propose_next_candidates(
                         "strategy_family": model_id,
                         "elite_parent": elite.get("candidate_id"),
                         "refinement": "neighbor",
+                        "proposal_reason": "exploitation:execution_parameter",
                     },
                 )
             )
         if len(out) >= exec_cap:
             break
 
-    if family_budget and len(out) < max_candidates:
+    if family_budget and elites and len(out) < max_candidates:
+        blocked = blocked_family_variants_from_summary(generation_summary)
         for cand in propose_family_variant_candidates(
             elites=elites,
             parsed=parsed,
@@ -129,6 +150,23 @@ def propose_next_candidates(
             target_event_id=target_event_id,
             target_symbol=target_symbol,
             research_clock=research_clock,
+            blocked_variant_ids=blocked,
+        ):
+            _add(cand)
+            if len(out) >= max_candidates:
+                break
+
+    if not elites and len(out) < max_candidates:
+        blocked = blocked_family_variants_from_summary(generation_summary)
+        for cand in propose_failure_driven_family_candidates(
+            generation_summary=generation_summary,
+            parsed=parsed,
+            tested_hashes=tested_hashes,
+            max_candidates=max(1, max_candidates - len(out)),
+            target_event_id=target_event_id,
+            target_symbol=target_symbol,
+            research_clock=research_clock,
+            blocked_variant_ids=blocked,
         ):
             _add(cand)
             if len(out) >= max_candidates:
@@ -143,6 +181,10 @@ def propose_next_candidates(
             target_symbol=target_symbol,
             research_clock=research_clock,
         ):
+            meta = dict(cand.metadata or {})
+            meta.setdefault("refinement", "exploration")
+            meta.setdefault("proposal_reason", "exploration:random_grid")
+            cand.metadata = meta
             _add(cand)
             if len(out) >= max_candidates:
                 break
