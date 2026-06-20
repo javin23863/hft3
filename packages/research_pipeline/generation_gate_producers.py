@@ -15,9 +15,9 @@ from backtest_pipeline.src.ontology_gate import (
 from backtest_pipeline.src.robustness_bridge import compute_robustness_evidence
 from backtest_pipeline.src.surface_stability import REQUIRED_CHECKS as SURFACE_REQUIRED_CHECKS
 from backtest_pipeline.src.vectorbt_adapter import (
-    _is_screening_not_run,
-    _is_surface_stability_defined,
-    _screening_status_text,
+    is_screening_not_run,
+    is_surface_stability_defined,
+    screening_status_text,
 )
 from research_pipeline.src.robustness_producers import holm_bh_correction
 from research_pipeline.candidate_manifest import verify_frozen_manifest_integrity
@@ -218,7 +218,7 @@ def _metric_present(value: Any) -> bool:
     if value is None or value == "":
         return False
     if isinstance(value, Mapping):
-        return not _is_screening_not_run(value)
+        return not is_screening_not_run(value)
     if isinstance(value, str) and value.strip().lower().startswith("not_run"):
         return False
     return True
@@ -274,7 +274,7 @@ def _robustness_input_from_promoted_row(promoted_row: Mapping[str, Any]) -> dict
 
 def _producer_status_pass(value: Any) -> bool:
     if isinstance(value, Mapping):
-        return _screening_status_text(value) == "pass"
+        return screening_status_text(value) == "pass"
     return str(value or "").strip().lower() == "pass"
 
 
@@ -382,8 +382,8 @@ def build_surface_stability_gate_receipt(
             output_artifacts=[f"gates/{candidate_id}/surface_stability_gate.json"],
             failure_reasons=["surface_stability_metrics_missing"],
         )
-    surface_status = _screening_status_text(surface)
-    defined = _is_surface_stability_defined(surface)
+    surface_status = screening_status_text(surface)
+    defined = is_surface_stability_defined(surface)
     if surface_status == "pass" and defined:
         status = "PASS"
     else:
@@ -469,7 +469,7 @@ def _evaluate_statistical_checks(
     for check_name, payload in check_map:
         if _producer_status_pass(payload):
             passed.append(check_name)
-        elif isinstance(payload, Mapping) and _screening_status_text(payload) == "not_run":
+        elif isinstance(payload, Mapping) and screening_status_text(payload) == "not_run":
             failures.append(f"{check_name}_not_run")
         else:
             failures.append(f"{check_name}_fail")

@@ -883,6 +883,12 @@ def _is_screening_not_run(value: Any) -> bool:
     return False
 
 
+# Public aliases for generation_gate_producers (avoid importing underscore helpers).
+is_screening_not_run = _is_screening_not_run
+is_surface_stability_defined = _is_surface_stability_defined
+screening_status_text = _screening_status_text
+
+
 def _external_robustness_evidence(metrics: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
     for field_name in ("robustness_evidence", "robustness_artifact"):
         value = metrics.get(field_name)
