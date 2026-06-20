@@ -95,16 +95,20 @@ if ($LASTEXITCODE -ne 0) { throw "scp manifest failed exit=$LASTEXITCODE" }
 Write-Step "Verify remote HEAD + hashes"
 $verifyCmd = @'
 set -euo pipefail
-cd __REMOTE_REPO__
+export DEPLOY_REPO="__REMOTE_REPO__"
+export DEPLOY_EVENTS="__REMOTE_REPO__/__EVENTS_CSV__"
+export DEPLOY_MANIFEST="__REMOTE_MANIFEST__"
+export DEPLOY_HEAD="__LOCAL_HEAD__"
+cd "$DEPLOY_REPO"
 python3 - <<'PY'
-import hashlib, json, subprocess, sys
+import hashlib, json, os, subprocess, sys
 from pathlib import Path
 
-repo = Path("__REMOTE_REPO__")
-events = Path("__REMOTE_REPO__/__EVENTS_CSV__")
-manifest = Path("__REMOTE_MANIFEST__")
+repo = Path(os.environ["DEPLOY_REPO"])
+events = Path(os.environ["DEPLOY_EVENTS"])
+manifest = Path(os.environ["DEPLOY_MANIFEST"])
+expected_head = os.environ["DEPLOY_HEAD"]
 gate = json.loads((repo / "runtime/reports/paid_screen_ready_gate.json").read_text(encoding="utf-8"))
-expected_head = "__LOCAL_HEAD__"
 expected_events = gate["pilot_hashes"]["events_csv_hash"]
 expected_lake = gate["pilot_hashes"]["lake_manifest_hash"]
 
