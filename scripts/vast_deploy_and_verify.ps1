@@ -77,9 +77,9 @@ Write-Step "Remote repo sync"
 $syncCmd = @"
 set -euo pipefail
 if [[ -d $RemoteRepo/.git ]]; then
-  git -C $RemoteRepo fetch origin ${GitBranch}:refs/remotes/origin/${GitBranch} --force --prune
-  git -C $RemoteRepo checkout $GitBranch
-  git -C $RemoteRepo reset --hard origin/$GitBranch
+  git -C $RemoteRepo remote prune origin || true
+  git -C $RemoteRepo fetch origin ${GitBranch}
+  git -C $RemoteRepo checkout -B ${GitBranch} FETCH_HEAD
 else
   git clone --branch $GitBranch https://github.com/javin23863/hft3.git $RemoteRepo
 fi
