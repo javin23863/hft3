@@ -77,7 +77,7 @@ Write-Step "Remote repo sync"
 $syncCmd = @"
 set -euo pipefail
 if [[ -d $RemoteRepo/.git ]]; then
-  git -C $RemoteRepo fetch origin $GitBranch:refs/remotes/origin/$GitBranch --force --prune
+  git -C $RemoteRepo fetch origin ${GitBranch}:refs/remotes/origin/${GitBranch} --force --prune
   git -C $RemoteRepo checkout $GitBranch
   git -C $RemoteRepo reset --hard origin/$GitBranch
 else
