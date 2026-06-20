@@ -3253,7 +3253,12 @@ def apply_promotion_gates(
             prom.vectorbt_results["promotion_gate_failures"] = gate_failures
         gate_pass = not gate_failures
         if gate_pass:
-            prom.pass_reason = _VBT2_PILOT_SCREEN_PASS_REASON
+            if (
+                prom.vectorbt_results.get("gate_metric_authority")
+                == "official_vectorbt_portfolio_stats"
+                and scope in ("pilot", "paid_compute")
+            ):
+                prom.pass_reason = _VBT2_PILOT_SCREEN_PASS_REASON
             prom.in_sample_results["gate_pass"] = True
             if persist_promotions:
                 logger.warning(
