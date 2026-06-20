@@ -250,6 +250,27 @@ def _active_model_ids() -> List[str]:
     return sorted({get_slug_for_hyp_id(h.hyp_id) for h in get_active_hypotheses()})
 
 
+def _filter_events_to_runnable_npz(
+    events: List[Dict[str, Any]],
+    repo_root: Path,
+) -> List[Dict[str, Any]]:
+    """Drop event×symbol rows with no runnable NPZ before model expansion."""
+    keys = _runnable_npz_keys(repo_root)
+    from backtest_pipeline.src.vectorbt_adapter import _npz_candidates_for_event
+    from data_system.src.event_data_resolver import npz_search_dirs
+
+    search_dirs = npz_search_dirs(repo_root)
+    kept: List[Dict[str, Any]] = []
+    for row in events:
+        eid = str(row.get("event_id") or "").strip()
+        sym = str(row.get("symbol") or "").strip()
+        if keys and (sym, eid) in keys:
+            kept.append(row)
+        elif eid and _npz_candidates_for_event(search_dirs, eid, row.get("symbol")):
+            kept.append(row)
+    return kept
+
+
 def _units_from_all_active_models(
     events_csv: Path,
     *,
@@ -262,6 +283,8 @@ def _units_from_all_active_models(
     start_date: Optional[str],
     end_date: Optional[str],
     research_split: Optional[str],
+    require_runnable_npz: bool = False,
+    repo_root: Path = _REPO,
 ) -> List[Dict[str, Any]]:
     ids = model_ids if model_ids is not None else _active_model_ids()
     if not ids:
@@ -282,6 +305,10 @@ def _units_from_all_active_models(
         start_date=split_start,
         end_date=split_end,
     )
+    if require_runnable_npz:
+        before = len(events)
+        events = _filter_events_to_runnable_npz(events, repo_root)
+        print(f"NPZ pre-filter: {before} event-rows -> {len(events)} runnable rows")
     units: List[Dict[str, Any]] = []
     for raw_model_id in ids:
         resolved = resolve_model_id(raw_model_id)
@@ -511,6 +538,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             start_date=args.start_date,
             end_date=args.end_date,
             research_split=research_split,
+            require_runnable_npz=args.require_runnable_npz,
+            repo_root=_REPO,
         )
     else:
         max_rows = args.smoke_count or args.max_units
