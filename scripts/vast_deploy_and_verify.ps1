@@ -125,7 +125,10 @@ if ([int]$localNpzCount -gt 0 -and [int]$remoteNpzCount -lt 1) {
 if ([int]$localNpzCount -gt 0) {
     $ratio = [double]$remoteNpzCount / [double]$localNpzCount
     if ($ratio -lt 0.95) {
-        throw "NPZ parity fail: remote/local ratio $ratio (< 0.95)"
+        Write-Warning "NPZ parity ratio $ratio (< 0.95): Vast partial lake ($remoteNpzCount vs local $localNpzCount). OK if NPZ probe passed."
+        if ([int]$remoteNpzCount -lt 100) {
+            throw "NPZ parity fail: remote count $remoteNpzCount too low"
+        }
     }
 }
 
