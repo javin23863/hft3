@@ -1011,6 +1011,7 @@ def run_autoresearch_loop(
         raise ValueError("--campaign-id requires --resume for autoresearch continuation")
 
     resume_in_progress = False
+    resume_recovered_complete = False
     resume_candidates: list[CandidateModel] | None = None
 
     if resume and campaign_id:
@@ -1025,6 +1026,7 @@ def run_autoresearch_loop(
             )
             if resumed_summary is not None:
                 summaries.append(resumed_summary)
+                resume_recovered_complete = True
                 manifest["generation_index"] = gen_idx + 1
                 manifest["generation_status"] = GENERATION_STATUS_COMPLETE
                 save_manifest(repo_root, manifest)
@@ -1055,7 +1057,7 @@ def run_autoresearch_loop(
         save_manifest(repo_root, manifest)
 
     start_gen = int(manifest.get("generation_index") or 0)
-    if manifest.get("generation_status") == GENERATION_STATUS_COMPLETE and not resume_in_progress:
+    if manifest.get("generation_status") == GENERATION_STATUS_COMPLETE and not resume_in_progress and not resume_recovered_complete:
         start_gen = int(manifest.get("generation_index", 0)) + 1
         manifest["generation_index"] = start_gen
 
