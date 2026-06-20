@@ -13,6 +13,7 @@ import os
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
+import dataclasses as dc
 from typing import Any, Optional
 
 
@@ -107,21 +108,35 @@ class BoundedLRUCache:
         return self._current_bytes
 
 
-def _estimate_size_bytes(value: Any) -> int:
-    """Estimate memory size of a cached value.
+def _estimate_size_bytes(value: Any, _seen: set[int] | None = None) -> int:
+    """Estimate memory size of a cached value (recursive for nested buffers)."""
+    if _seen is None:
+        _seen = set()
+    obj_id = id(value)
+    if obj_id in _seen:
+        return 0
+    _seen.add(obj_id)
 
-    Numpy arrays (and array-like objects with an ``.nbytes`` attribute)
-    report their true byte footprint via ``.nbytes``; this is far more
-    accurate than ``sys.getsizeof`` which only measures the Python wrapper
-    object, not the underlying buffer.  For all other values we fall back
-    to ``sys.getsizeof``.
-    """
-    # numpy arrays and similar expose .nbytes for the raw buffer size.
     nbytes = getattr(value, "nbytes", None)
-    if isinstance(nbytes, int):
-        return nbytes
+    if isinstance(nbytes, int) and not isinstance(value, (str, bytes, bytearray)):
+        return int(nbytes)
+
+    if dc.is_dataclass(value) and not isinstance(value, type):
+        return sum(_estimate_size_bytes(getattr(value, f.name), _seen) for f in dc.fields(value))
+
+    if isinstance(value, dict):
+        return sum(_estimate_size_bytes(v, _seen) for v in value.values())
+
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return sum(_estimate_size_bytes(v, _seen) for v in value)
+
+    obj_dict = getattr(value, "__dict__", None)
+    if isinstance(obj_dict, dict) and obj_dict:
+        return sum(_estimate_size_bytes(v, _seen) for v in obj_dict.values())
+
     try:
         import sys
+
         return sys.getsizeof(value)
     except Exception:
         return 1024

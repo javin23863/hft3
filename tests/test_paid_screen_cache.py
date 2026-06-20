@@ -222,3 +222,26 @@ class TestCorruptedCacheRecovery:
         cache.invalidate("a")
         cache.put("a", "new")
         assert cache.get("a") == "new"
+class TestEstimateSizeBytes:
+    def test_nested_dataclass_counts_numpy_buffers(self):
+        from pathlib import Path
+        from backtest_pipeline.src.fs_v1_screen_path import FsV1ScreenContext
+        from backtest_pipeline.src.paid_screen_cache import _estimate_size_bytes
+
+        ts = np.zeros(50_000, dtype=np.int64)
+        X = np.zeros((50_000, 8), dtype=np.float64)
+        ctx = FsV1ScreenContext(
+            symbol="MES.v.0",
+            event_id="EVT",
+            store_path=Path("dummy.npz"),
+            store={"ts": ts, "X": X},
+            feature_latency_ms=1.0,
+            content_hash="c",
+            manifest_hash="m",
+            has_vix=False,
+            vix_cols=(),
+            vix_ts=None,
+            vix_X=None,
+        )
+        est = _estimate_size_bytes(ctx)
+        assert est >= ts.nbytes + X.nbytes
