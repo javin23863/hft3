@@ -3391,6 +3391,57 @@ def test_vectorbt_screen_stage_ok_when_replay_eligible_complete(monkeypatch, tmp
     assert stage["screening_status"] == "pass"
 
 
+def test_vectorbt_screen_stage_ok_when_legacy_missing_replay_eligibility_status(monkeypatch, tmp_path):
+    run_id = "paid_run_legacy_missing_replay_eligibility_ok"
+    decl, units = _write_complete_vbt_tracking_fixture(
+        tmp_path,
+        run_id,
+        write_screening=True,
+    )
+    artifact = tmp_path / "research_cards" / "pipeline_runs" / run_id / "screening_artifact.json"
+    payload = json.loads(artifact.read_text(encoding="utf-8"))
+    payload["promoted"][0].pop("replay_eligibility_status")
+    payload["screening_artifact_hash"] = compute_screening_artifact_hash(payload)
+    artifact.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "VBT_FULL_RUN_DECLARATION", decl)
+    monkeypatch.setattr(paths, "VBT_FULL_UNITS_JSONL", units)
+
+    stage = pipeline_agg._vectorbt_screen_stage()
+
+    assert stage["tracking_state"] == "complete"
+    assert stage["status"] == sc.OK
+    assert stage["screening_status"] == "pass"
+
+
+def test_vectorbt_screen_stage_stale_when_legacy_missing_replay_eligibility_has_bad_evidence(
+    monkeypatch,
+    tmp_path,
+):
+    run_id = "paid_run_legacy_missing_replay_eligibility_bad_evidence"
+    decl, units = _write_complete_vbt_tracking_fixture(
+        tmp_path,
+        run_id,
+        write_screening=True,
+    )
+    artifact = tmp_path / "research_cards" / "pipeline_runs" / run_id / "screening_artifact.json"
+    payload = json.loads(artifact.read_text(encoding="utf-8"))
+    payload["promoted"][0].pop("replay_eligibility_status")
+    payload["promoted"][0]["dsr_or_not_run"] = {"status": "pass"}
+    payload["screening_artifact_hash"] = compute_screening_artifact_hash(payload)
+    artifact.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "VBT_FULL_RUN_DECLARATION", decl)
+    monkeypatch.setattr(paths, "VBT_FULL_UNITS_JSONL", units)
+
+    stage = pipeline_agg._vectorbt_screen_stage()
+
+    assert stage["tracking_state"] == "complete"
+    assert stage["status"] == sc.STALE
+    assert stage["screening_status"] == sc.STALE
+    assert "missing candidate field: replay_eligibility_status" in (stage.get("screening_detail") or "")
+
+
 def test_vectorbt_screen_stage_stale_when_replay_not_eligible(monkeypatch, tmp_path):
     run_id = "paid_run_not_eligible"
     decl, units = _write_complete_vbt_tracking_fixture(tmp_path, run_id)

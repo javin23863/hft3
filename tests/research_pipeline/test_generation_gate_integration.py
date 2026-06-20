@@ -721,6 +721,43 @@ def test_final_pass_requires_all_gates_including_hft() -> None:
     assert summary["candidates"][0]["elite"] is True
 
 
+def test_hft_rejects_contradictory_replay_provenance() -> None:
+    manifest = _manifest()
+    replay = _valid_hft_replay(manifest, screening_artifact_hash="screen-other")
+    replay["manifest_hash"] = "manifest-other"
+    reject = build_hftbacktest_gate_receipt(
+        manifest=manifest,
+        scenario_results=[
+            {
+                "scenario_id": "s1",
+                "status": "completed",
+                "replay_result": replay,
+            }
+        ],
+        screening_artifact_hash="screen-abc",
+        robustness_artifact_hash="rob-abc",
+        allow_declared_certification=True,
+    )
+    assert reject["status"] == "REJECT"
+    failures = set(reject.get("failure_reasons") or [])
+    assert "manifest_hash_parity_violation" in failures
+    assert "screening_artifact_hash_parity_violation" in failures
+
+    result = run_generation_gate_chain(
+        candidate_manifest=manifest,
+        ontology_receipt=_pass_receipt("ontology_gate"),
+        vectorbt_receipt=_pass_receipt(GATE_VECTORBT),
+        surface_receipt=_pass_receipt(GATE_SURFACE),
+        regular_walk_forward_receipt=_pass_receipt(GATE_REGULAR_WF),
+        walk_forward_correlation_receipt=_pass_receipt(GATE_WFC),
+        statistical_receipt=_pass_receipt(GATE_STATISTICAL),
+        hftbacktest_receipt=reject,
+        certification_mode=True,
+    )
+    assert result["final_status"] == FINAL_HFT_REJECTED
+    assert result["stopped_at_gate"] == GATE_HFT
+
+
 def test_hft_reject_maps_to_final_hft_rejected() -> None:
     manifest = _manifest()
     reject = build_hftbacktest_gate_receipt(

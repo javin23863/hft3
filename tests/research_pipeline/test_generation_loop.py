@@ -420,6 +420,38 @@ def test_generation_loop_spies_runners(tmp_path: Path, monkeypatch) -> None:
     assert manifest["tested_parameter_hashes"]
 
 
+def test_enrich_hft_scenario_results_backfills_legacy_replay_provenance(tmp_path: Path) -> None:
+    from research_pipeline import generation_loop as gl
+
+    artifact_dir = tmp_path / "hft_legacy"
+    artifact_dir.mkdir()
+    (artifact_dir / "replay_result.json").write_text(
+        json.dumps({"certification_status": "full_fidelity_declared"}),
+        encoding="utf-8",
+    )
+    manifest = {
+        "candidate_id": "candidate-legacy",
+        "manifest_hash": "manifest-hash",
+        "feature_recipe_hash": "recipe-hash",
+    }
+
+    [row] = gl._enrich_hft_scenario_results(
+        [{"status": "completed", "artifact_dir": str(artifact_dir)}],
+        manifest=manifest,
+        screening_artifact_hash="screening-hash",
+        robustness_artifact_hash="robustness-hash",
+    )
+
+    assert row["replay_result"] == {
+        "certification_status": "full_fidelity_declared",
+        "candidate_id": "candidate-legacy",
+        "feature_recipe_hash": "recipe-hash",
+        "manifest_hash": "manifest-hash",
+        "screening_artifact_hash": "screening-hash",
+        "robustness_artifact_hash": "robustness-hash",
+    }
+
+
 def test_resume_preserves_manifest_hash(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(
         "research_pipeline.generation_loop.propose_next_candidates",
@@ -540,10 +572,10 @@ def test_robustness_fn_forwards_frozen_params(tmp_path: Path, monkeypatch) -> No
                     "wfc_status": "PASS",
                     "robustness_passed": True,
                     "periods": [
-                {"name": "Discovery", "gate_pass": True},
-                {"name": "Holdout", "gate_pass": True, "evaluate_only": True},
-                {"name": "Recent holdout", "gate_pass": True, "evaluate_only": True},
-            ],
+                        {"name": "Discovery", "gate_pass": True},
+                        {"name": "Holdout", "gate_pass": True, "evaluate_only": True},
+                        {"name": "Recent holdout", "gate_pass": True, "evaluate_only": True},
+                    ],
                     "wfc": {"pearson": 0.5, "spearman": 0.4, "wfc_status": "PASS"},
                     "wfc_matrix_rows": [{"parameter_hash": "ph-fwd", "fold": 0}],
                     "metrics": {},

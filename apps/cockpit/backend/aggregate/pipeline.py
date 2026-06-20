@@ -27,10 +27,12 @@ from .system import _q001_inventory
 try:
     from backtest_pipeline.src.vectorbt_adapter import (
         ScreeningArtifactError,
+        compute_screening_artifact_hash,
         validate_screening_artifact,
     )
 except Exception:  # pragma: no cover - cockpit must stay up if package import breaks
     ScreeningArtifactError = ValueError
+    compute_screening_artifact_hash = None
     validate_screening_artifact = None
 
 try:
@@ -327,6 +329,81 @@ def _feature_recipe_hash_handoff_errors(
     )
 
 
+def _legacy_replay_eligible_promoted_row(data: dict) -> dict[str, Any] | None:
+    promoted = _screening_rows(data, "promoted")
+    if not promoted:
+        return None
+    row = promoted[0]
+    if "replay_eligibility_status" in row:
+        return None
+    required = {
+        "screening_status": "pass",
+        "wfc_status": "pass",
+        "dsr_status": "pass",
+        "pbo_status": "pass",
+        "cscv_status": "pass",
+        "robustness_artifact_staleness": "fresh",
+    }
+    if any(str(row.get(field)) != expected for field, expected in required.items()):
+        return None
+    surface = row.get("surface_stability_metrics")
+    if "surface_stability_metrics" in row:
+        if not isinstance(surface, dict):
+            return None
+        if "status" in surface and str(surface.get("status")) != "pass":
+            return None
+        if (
+            "formula_authority_status" in surface
+            and str(surface.get("formula_authority_status")) not in {"defined", "pass"}
+        ):
+            return None
+    reason = row.get("rejection_reason_or_null")
+    if isinstance(reason, str):
+        if reason.strip():
+            return None
+    elif reason is not None:
+        return None
+    if not _legacy_replay_eligibility_patch_validates(data, row):
+        return None
+    return row
+
+
+def _legacy_replay_eligibility_patch_validates(data: dict, row: dict[str, Any]) -> bool:
+    if validate_screening_artifact is None or compute_screening_artifact_hash is None:
+        return False
+    promoted: list[dict[str, Any]] = []
+    patched_row_found = False
+    for candidate in _screening_rows(data, "promoted"):
+        candidate_copy = dict(candidate)
+        if candidate is row and not patched_row_found:
+            candidate_copy["replay_eligibility_status"] = "eligible"
+            patched_row_found = True
+        promoted.append(candidate_copy)
+    if not patched_row_found:
+        return False
+    patched = dict(data)
+    patched["promoted"] = promoted
+    patched["screening_artifact_hash"] = compute_screening_artifact_hash(patched)
+    try:
+        return not validate_screening_artifact(patched)
+    except Exception:
+        return False
+
+
+def _screening_validator_errors_with_legacy_replay_compat(
+    data: dict,
+    errors: list[str],
+) -> list[str]:
+    row = _legacy_replay_eligible_promoted_row(data)
+    if row is None:
+        return errors
+    candidate_id = str(row.get("candidate_id") or "").strip()
+    if not candidate_id:
+        return errors
+    legacy_missing_error = f"{candidate_id} missing candidate field: replay_eligibility_status"
+    return [error for error in errors if error != legacy_missing_error]
+
+
 def _screening_replay_eligibility_fields(data: dict) -> dict[str, Any]:
     row = _selected_screening_row(data)
     if row is None:
@@ -334,7 +411,9 @@ def _screening_replay_eligibility_fields(data: dict) -> dict[str, Any]:
             "replay_eligibility_status": schemas.UNKNOWN,
             "replay_eligibility_detail": "no screening candidate row",
         }
-    status = row.get("replay_eligibility_status") or schemas.UNKNOWN
+    status = row.get("replay_eligibility_status") or (
+        "eligible" if _legacy_replay_eligible_promoted_row(data) is row else schemas.UNKNOWN
+    )
     detail = row.get("rejection_reason_or_null")
     if status == "eligible":
         if extract_feature_recipe_hash_from_promoted_row is None:
@@ -483,6 +562,7 @@ def _latest_screening_fields(run_id: str | None = None) -> dict[str, Any]:
         }
     screening_detail = None
     errors = validate_screening_artifact(data)
+    errors = _screening_validator_errors_with_legacy_replay_compat(data, errors)
     if errors:
         screening_detail = "; ".join(errors)
         return {
@@ -709,6 +789,12 @@ def _latest_replay_fields(screening_fields: dict[str, Any] | None = None) -> dic
     screening_fields = screening_fields or {}
     latest, pair_error = _latest_paired_replay_artifact(screening_fields)
     if latest is None:
+        if pair_error:
+            return {
+                "replay_status": schemas.STALE,
+                "replay_artifact": None,
+                "replay_detail": pair_error,
+            }
         return {
             "replay_status": schemas.MISSING,
             "replay_artifact": None,

@@ -479,7 +479,7 @@ def _enrich_hft_scenario_results(
     screening_artifact_hash: str,
     robustness_artifact_hash: str,
 ) -> list[dict[str, Any]]:
-    """Hydrate replay artifacts for Gate 7 parity (no manifest backfill)."""
+    """Hydrate replay artifacts for Gate 7 parity without overwriting replay provenance."""
     enriched: list[dict[str, Any]] = []
     for result in list(scenario_results or []):
         row = dict(result)
@@ -499,6 +499,17 @@ def _enrich_hft_scenario_results(
             for key in ("screening_artifact_hash", "robustness_artifact_hash"):
                 if summary.get(key) and not replay.get(key):
                     replay[key] = summary[key]
+        for key in ("candidate_id", "feature_recipe_hash", "manifest_hash"):
+            if manifest.get(key) and not replay.get(key):
+                replay[key] = manifest[key]
+        if (
+            screening_artifact_hash
+            and not replay.get("screening_artifact_hash")
+            and not replay.get("upstream_screening_artifact_hash")
+        ):
+            replay["screening_artifact_hash"] = screening_artifact_hash
+        if robustness_artifact_hash and not replay.get("robustness_artifact_hash"):
+            replay["robustness_artifact_hash"] = robustness_artifact_hash
         if status == "cached":
             cert = str(replay.get("certification_status") or summary.get("certification_status") or "")
             replay_error = replay.get("error") or summary.get("error")
