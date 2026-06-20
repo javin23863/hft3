@@ -19,7 +19,7 @@ Trigger **one PR at a time**: `@greptileai` on PR-A first; wait for 0 actionable
 
 | PR | URL | Branch | Base | Head SHA | Files (PR diff) | vs `main` | Greptile | merge-ready |
 |----|-----|--------|------|----------|-----------------|-----------|----------|-------------|
-| **A** | https://github.com/javin23863/hft3/pull/8 | `cursor/autoresearch-gate-chain-pr-a` | `main` | `84ca400d` | **52** | 52 | `@greptileai` posted 2026-06-20 — **pending re-review** | **no** |
+| **A** | https://github.com/javin23863/hft3/pull/8 | `cursor/autoresearch-gate-chain-pr-a` | `main` | `da62673c` | **52** | 52 | Greptile re-review pending on `da62673c` | **no** |
 | **B** | https://github.com/javin23863/hft3/pull/9 | `cursor/autoresearch-pr-b-paid-screen` | PR-A branch | `26d57b98` | **77** | 123 (cumulative) | **wait for A** — do not trigger yet | **no** |
 | **C** | https://github.com/javin23863/hft3/pull/10 | `cursor/autoresearch-pr-c-phases-5-7` | PR-B branch | `521b3502` | **8** | 131 (cumulative) | **wait for B** | **no** |
 
@@ -27,7 +27,7 @@ Trigger **one PR at a time**: `@greptileai` on PR-A first; wait for 0 actionable
 
 ---
 
-## PR-A Greptile fixes verified (`d2a6909a`)
+## PR-A Greptile fixes verified (`da62673c`, logic from `9ed376db` + `d2a6909a`)
 
 | Finding | Location | Fix |
 |---------|----------|-----|

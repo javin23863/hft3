@@ -1,49 +1,41 @@
-﻿# Greptile PR #8 status — 2026-06-20
+﻿# Greptile PR #8 status - 2026-06-20 (Phase 9 iteration)
 
 **PR:** https://github.com/javin23863/hft3/pull/8  
 **Branch:** `cursor/autoresearch-gate-chain-pr-a`  
-**Fix commit (code):** `9ed376db` — `fix(pr-a): address Greptile P1/P2`  
-**Follow-up:** public screening helper aliases (post-`9ed376db`)  
-**PR head after nudge:** `54b9070a` — empty commit `chore(pr-a): nudge Greptile re-review` (no logic change)
+**Head:** `da62673c` — `fix(pr-a): resume_recovered_complete guard (Greptile P1)`  
+**Prior head:** `efe0fda5` (Greptile review 2026-06-20T05:34:09Z flagged missing guard)
 
-## Greptile-only policy (assignment §23)
+## pr-greptile-review (PR-A only)
 
-| Reviewer | Satisfies PR GrepLoop? |
-|----------|------------------------|
-| **Greptile** (`@greptileai`, ≤100 files/PR) | **Yes — only this counts** |
-| `@codex review` / `request-codex-review` Action | **No** |
-| ChatGPT-Codex-Connector | **No** |
-| Agent / cavecrew self-review | **No** (separate gate) |
+| Field | Value |
+|-------|-------|
+| **policy** | Greptile ONLY (assignment §23); Codex ignored |
+| **head reviewed by Greptile** | `efe0fda5` (inline + review at 05:34Z) |
+| **current head** | `da62673c` — **awaiting Greptile re-review** |
+| **actionable on efe0fda5** | P1 `resume_recovered_complete` / double `generation_index` — **fixed** `da62673c` |
+| **stale threads (code OK on da62673c)** | P1 `c` vs `candidate` (748); P2 staleness (489); P2 private imports (21); P2 `parent_params`; P2 `passes_gates_before_hft` — fixed in `9ed376db`/`d2a6909a` |
+| **pr-greptile-review** | **STALE-CODE-OK** on pre-`da62673c` threads + **1 fix iteration** pushed; **not clean** until Greptile ack on `da62673c` |
 
-Canonical doc: [docs/ai/GREPLOOP.md](../../docs/ai/GREPLOOP.md)
+## verify-run (this iteration)
 
-## Greptile findings vs head
+```
+pytest tests/research_pipeline/ -q
+exit 0 — 210 passed in 23.81s (.venv, 2026-06-20)
+```
 
-| Finding | File | Status on head |
-|---------|------|----------------|
-| P1 resume NameError (`c` vs `candidate`) | `generation_loop.py:745-746` | **Fixed** `9ed376db` — uses `candidate.metadata` |
-| P1 `passes_gates_before_hft` false-negative | `generation_gate_chain.py:264-267` | **Fixed** `9ed376db` — `stopped_at_gate is None` → True |
-| P2 staleness vs `failed_check_count` | `generation_gate_producers.py:74,476-480` | **Fixed** `9ed376db` — in `_STATISTICAL_REQUIRED_CHECKS` |
-| P2 unused `parent_params` | `elite_refinement.py` | **Fixed** `9ed376db` — removed |
-| P2 private `_` imports | `generation_gate_producers.py:17-21` | **Fixed** post-`9ed376db` — public aliases in `vectorbt_adapter.py` |
+## Actions (Phase 9 step)
 
-**pytest:** `210 passed` — `pytest tests/research_pipeline/ -q` (2026-06-20)
-
-## Actions taken
-
-| Step | Action | Result |
-|------|--------|--------|
-| 1 | `gh pr comment 8` @greptileai re-review `9ed376db` | Posted (prior session) |
-| 2 | Empty commit + push | `54b9070a` |
-| 3 | Code fixes + public import aliases | pending push this session |
-| 4 | `@greptileai` re-trigger after push | pending this session |
+1. `gh pr view 8` — head `efe0fda5` → Greptile P1 on 1060 confirmed actionable  
+2. Fix `resume_recovered_complete` in `generation_loop.py` — commit `da62673c`, push  
+3. `@greptileai` re-review posted on #8  
+4. PR #9 / #10 — **not** triggered  
 
 ## merge-ready (PR-A)
 
 | Gate | Status |
 |------|--------|
-| File count vs `main` | **48** (<80 target, ≤100 Greptile limit) |
 | Scoped pytest | **pass** (210) |
-| Greptile | **pending** re-review on current head |
-| Codex Action | advisory only — does **not** satisfy GrepLoop |
-| **merge-ready** | **no** — await Greptile 0 actionable on head |
+| Greptile current head | **pending** (`da62673c`) |
+| **merge-ready** | **no** |
+
+**Next plan step:** Poll PR #8 for Greptile review on `da62673c` (0 actionable); only then `@greptileai` on PR #9 (B).

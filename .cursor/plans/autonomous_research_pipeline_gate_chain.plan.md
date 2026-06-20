@@ -61,25 +61,25 @@ todos:
     status: completed
   - id: phase5-vbt-performance
     content: "Phase 5 (§19): VectorBT performance — long-lived workers, matrix batch, shared loading; benchmark + projected campaign time"
-    status: pending
+    status: completed
   - id: phase5-hbt-performance
     content: "Phase 5 (§19): HftBacktest performance — prepared data reuse, fresh engine per scenario, bounded worker recycling"
-    status: pending
+    status: completed
   - id: phase6-gate-tests
     content: "Phase 6 (§20): Add planted PASS/FAIL tests for every gate including WFC independence, alignment, Pearson/Spearman, elite rules"
-    status: pending
+    status: completed
   - id: phase6-resume-tests
     content: "Phase 6 (§20): Tests for resume, completion marker timing, dedup recipe hashes, three-gen unattended"
-    status: pending
+    status: completed
   - id: phase7-three-gen-run
     content: "Phase 7 (§21): Run deterministic three-generation acceptance campaign; report rejects/FINAL_PASS/recipe changes"
-    status: pending
+    status: completed
   - id: phase8-rg-preflight
     content: "Phase 8 (§22): After each edit batch run bounded local rg negative/positive searches + git diff --check (max 3 iterations)"
-    status: pending
+    status: completed
   - id: phase9-greptile-loop
     content: "Phase 9 (§23) BLOCKER: Greptile PR GrepLoop ONLY — @greptileai, fix actionable findings, max 5 iterations; merge-ready requires current-head clean Greptile"
-    status: pending
+    status: in_progress
   - id: phase10-checklist
     content: "Phase 10 (§24): Complete final acceptance checklist — all 26 items must be true"
     status: pending
