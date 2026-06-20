@@ -22,7 +22,7 @@
 |------|--------|
 | Scoped pytest (research + backtest) | **yes** — 570/570 exit 0 |
 | cavecrew 0🔴 0🟡 on head diff | **yes** — remediation batch |
-| Greptile confidence + 0 actionable | **no** — ping after push |
+| Greptile confidence + 0 actionable | **no** — PENDING (12 min poll timeout on `078cecae`) |
 | **merge-ready PR-C** | **no** |
 
 ## Next step
