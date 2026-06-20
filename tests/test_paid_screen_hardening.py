@@ -203,7 +203,9 @@ class TestWorkerCrashRecovery:
             PaidScreenWorker.process_batch = original_process
 
         assert batch_id == "b0"
-        assert results == []  # the exception path emits an empty result list
+        assert len(results) == 1
+        assert results[0].status == "ERROR"
+        assert "injected_worker_crash" in results[0].error
         assert summary["total_failures"] >= 1
 
     def test_worker_process_main_applies_hft3_npz_root_from_worker_args(self, monkeypatch):
@@ -264,7 +266,7 @@ class TestInterruptAndResume:
             return False
         try:
             payload = json.loads(dest.read_text(encoding="utf-8"))
-            validate_screening_artifact_or_raise_or_raise(payload)
+            validate_screening_artifact_or_raise(payload)
             return True
         except Exception:
             return False
@@ -301,7 +303,7 @@ class TestInterruptAndResume:
             (unit_dir / "screening_artifact.json").read_text()
         )
         with pytest.raises(ScreeningArtifactError):
-            validate_screening_artifact_or_raise_or_raise(payload)
+            validate_screening_artifact_or_raise(payload)
         assert self._has_valid_artifact(tmp_path, "u1") is False
 
 
@@ -323,7 +325,7 @@ class TestCorruptedArtifactRecovery:
         # json.loads fails before the validator ever runs
         with pytest.raises(json.JSONDecodeError):
             payload = json.loads(path.read_text())
-            validate_screening_artifact_or_raise_or_raise(payload)
+            validate_screening_artifact_or_raise(payload)
 
     def test_partial_json_not_valid(self, tmp_path):
         """A partial JSON file (simulating a crash mid-write) must not validate."""
@@ -342,7 +344,7 @@ class TestCorruptedArtifactRecovery:
 
         incomplete = {"run_id": "test"}  # missing most required fields
         with pytest.raises(ScreeningArtifactError):
-            validate_screening_artifact_or_raise_or_raise(incomplete)
+            validate_screening_artifact_or_raise(incomplete)
 
     def test_empty_file_rejected(self, tmp_path):
         """An empty artifact file (zero bytes) must not validate."""
@@ -464,7 +466,7 @@ class TestPartialWrittenArtifact:
         path.write_text(partial)
         with pytest.raises(json.JSONDecodeError):
             data = json.loads(path.read_text())
-            validate_screening_artifact_or_raise_or_raise(data)
+            validate_screening_artifact_or_raise(data)
 
     def test_truncated_object_not_valid(self, tmp_path):
         path = tmp_path / "artifact.json"
@@ -551,7 +553,7 @@ class TestResumability:
             return False
         try:
             payload = json.loads(dest.read_text(encoding="utf-8"))
-            validate_screening_artifact_or_raise_or_raise(payload)
+            validate_screening_artifact_or_raise(payload)
             return True
         except Exception:
             return False

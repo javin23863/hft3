@@ -118,6 +118,9 @@ class TestFeatureStoreBatchReuse:
 
         class FakeCtx:
             store = {"ts": np.arange(10, dtype=np.int64), "X": np.zeros((10, 64))}
+            content_hash = "fake_fs_v1_content_hash"
+            store_path = str(tmp_path / "fake_store.npz")
+            missing_leader_symbols = ()
 
         def fake_resolve(unit, context):
             load_count["n"] += 1
@@ -126,6 +129,10 @@ class TestFeatureStoreBatchReuse:
         monkeypatch.setattr(
             "backtest_pipeline.src.paid_screen_batch._try_resolve_fs_v1_context",
             fake_resolve,
+        )
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch._resolve_npz_digest_for_unit",
+            lambda unit, context: "fake_npz_digest",
         )
         monkeypatch.setattr(
             "backtest_pipeline.src.paid_screen_batch._ohlcv_aligns_with_fs_v1_store",

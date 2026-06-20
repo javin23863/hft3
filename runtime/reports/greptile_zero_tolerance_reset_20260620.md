@@ -6,6 +6,12 @@
 
 ---
 
+## Session reconciliation
+
+Linear remote head `a3433804` consolidates all session fixes (no cherry-pick needed). Gate-order violation on `85eb27bd` closed by cavecrew dual-pass + fix batch before Greptile ping.
+
+---
+
 ## Finding tracker (original 13)
 
 | # | Source | Site | Status | Fix / evidence |
@@ -28,33 +34,40 @@
 
 ---
 
-## Follow-up batch (post-cb73bc87)
+## Follow-up batch (post-a3433804 cavecrew)
 
 | Item | Status |
 |------|--------|
-| `validate_screening_artifact` / `or_raise` split | **fixed** — list API wraps `or_raise`; cockpit/resume migrated |
-| 8 backtest_pipeline test failures | **fixed** — 342/342 backtest_pipeline pass in scope run |
-| Latency baseline JSON validation | **fixed** — proxy_status, percentile order, extreme band bypass |
-| Model router count 56→61 | **fixed** — dynamic `all_model_ids()` in tests |
-| `compute_latency_probe_artifact_hash` missing | **fixed** — added to `hftbacktest_realism.py` |
+| `or_raise_or_raise` typos in hardening tests (6 sites) | **fixed** |
+| Worker crash test expects ERROR rows not `[]` | **fixed** |
+| `validate_paid_screen_ready_gate.py` fail-open list API | **fixed** — `or_raise` |
+| `run_vectorbt_paid_screen.py` cached/post-write fail-open | **fixed** — `or_raise` |
+| Batch artifact test silent validation | **fixed** — assert `== []` |
+| Cockpit mock list API contract | **fixed** — mock returns `[]` |
+| HBT dual validator surface | **documented** — comment in `hftbacktest_realism.py` |
+| `test_fs_v1_context_loaded_once` npz_digest side effect | **fixed** — mock digest + FakeCtx attrs |
+
+---
+
+## cavecrew-reviewer (canonical head batch)
+
+| Pass | 🔴 | 🟡 | merge-ready |
+|------|----|----|-------------|
+| Post-fix batch (6 files) | 0 | 0 | yes (code); Greptile pending |
 
 ---
 
 ## verify-run
 
 ```text
-# scoped (796 tests — backtest_pipeline + research_pipeline + paid_screen)
-.\.venv\Scripts\python.exe -m pytest tests/backtest_pipeline/ tests/research_pipeline/ tests/test_paid_screen_*.py tests/test_vectorbt_paid_screen_gate.py -q
-exit 0 — 796 passed in ~571s
+# minimum scope (research + backtest)
+.\.venv\Scripts\python.exe -m pytest tests/research_pipeline/ tests/backtest_pipeline/ -q
+exit 0 — 568 passed in ~420s
+
+# hardening spot-check (post cavecrew fixes)
+.\.venv\Scripts\python.exe -m pytest tests/test_paid_screen_hardening.py tests/test_paid_screen_performance.py::TestFeatureStoreBatchReuse::test_fs_v1_context_loaded_once_per_batch_key -q
+exit 0 — 49 passed in ~13s
 ```
-
----
-
-## cavecrew-reviewer (latest head)
-
-| Pass | 🔴 | 🟡 | merge-ready |
-|------|----|----|-------------|
-| Post-3753e8b8 batch | 5 (validator migration — addressed in follow-up commit) | 6 | pending re-review after push |
 
 ---
 
@@ -62,17 +75,17 @@ exit 0 — 796 passed in ~571s
 
 | PR | Action |
 |----|--------|
-| #10 | `@greptileai` ping after push of validator-migration commit |
+| #10 | Single `@greptileai` ping on new head **after** push (cancel stale pings on a3433804/85eb27bd/c333cff3) |
 
 ---
 
 ## Validation honesty
 
 ```text
-merge-ready: no (Greptile #10 loop pending; cavecrew re-review after final push)
-scope-green: yes (796 scoped tests pass: backtest_pipeline + research_pipeline + paid_screen)
-scope: tests/backtest_pipeline/ + tests/research_pipeline/ + tests/test_paid_screen_*.py + test_vectorbt_paid_screen_gate.py
-verify-run: exit 0 — 796 passed in ~571s
+merge-ready: no (Greptile #10 loop pending on new head)
+scope-green: yes (568 research+backtest; 49 hardening spot-check)
+scope: tests/research_pipeline/ + tests/backtest_pipeline/
+verify-run: exit 0 — 568 passed + 49 passed (spot-check)
 data-mode: offline
-known-gaps: Greptile #10 unlimited loop not started on latest SHA; full-repo pytest not run
+known-gaps: Greptile bot pending; full 904 paid_screen suite not re-run this batch
 ```

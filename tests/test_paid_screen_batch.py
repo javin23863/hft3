@@ -327,7 +327,7 @@ class TestArtifactProvenanceStamping:
         )
 
         payload = json.loads(artifact_path.read_text(encoding="utf-8"))
-        validate_screening_artifact(payload)
+        assert validate_screening_artifact(payload) == []
         assert payload["data_manifest_hash"] == ohlcv_hash
         assert payload["lake_manifest_hash"] == "ctx_lake_hash_xyz"
         assert payload["events_csv_hash_or_not_applicable"] == "ctx_events_hash_abc"

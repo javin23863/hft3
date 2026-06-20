@@ -282,7 +282,7 @@ def _write_active_run(root: Path, run_id: str) -> Path:
 
 
 def _allow_screening_validation(monkeypatch) -> None:
-    monkeypatch.setattr(pipeline_agg, "validate_screening_artifact", lambda _data: None)
+    monkeypatch.setattr(pipeline_agg, "validate_screening_artifact", lambda _data: [])
 
 
 def _robustness_with_dsr_cell(dsr_cell: dict, fee_cell: dict | None = None) -> dict:
@@ -3370,6 +3370,72 @@ def test_vectorbt_screen_stage_complete_stale_screening_maps_stale(monkeypatch, 
     assert stage["status"] != sc.UNKNOWN
     assert stage["screening_status"] == sc.STALE
     assert "tracking run_id=" in (stage.get("screening_detail") or "")
+
+
+def test_vectorbt_screen_stage_ok_when_replay_eligible_complete(monkeypatch, tmp_path):
+    run_id = "paid_run_eligible_ok"
+    decl, units = _write_complete_vbt_tracking_fixture(
+        tmp_path,
+        run_id,
+        write_screening=True,
+    )
+    _allow_screening_validation(monkeypatch)
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "VBT_FULL_RUN_DECLARATION", decl)
+    monkeypatch.setattr(paths, "VBT_FULL_UNITS_JSONL", units)
+
+    stage = pipeline_agg._vectorbt_screen_stage()
+
+    assert stage["tracking_state"] == "complete"
+    assert stage["status"] == sc.OK
+    assert stage["screening_status"] == "pass"
+
+
+def test_vectorbt_screen_stage_stale_when_replay_not_eligible(monkeypatch, tmp_path):
+    run_id = "paid_run_not_eligible"
+    decl, units = _write_complete_vbt_tracking_fixture(tmp_path, run_id)
+    _write_screening_artifact(
+        tmp_path,
+        run_id,
+        "2026-06-19T13:00:00+00:00",
+        replay_eligible=False,
+        surface_defined=True,
+    )
+    _allow_screening_validation(monkeypatch)
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "VBT_FULL_RUN_DECLARATION", decl)
+    monkeypatch.setattr(paths, "VBT_FULL_UNITS_JSONL", units)
+
+    stage = pipeline_agg._vectorbt_screen_stage()
+
+    assert stage["tracking_state"] == "complete"
+    assert stage["status"] == sc.STALE
+    assert stage["screening_status"] == "pass"
+    assert "vbt_screen_passed_surface_formula_authority_missing" in (
+        stage.get("screening_detail") or stage.get("detail") or ""
+    )
+
+
+def test_latest_screening_fields_stale_when_validator_errors(monkeypatch, tmp_path):
+    run_id = "paid_run_validator_fail"
+    _write_screening_artifact(
+        tmp_path,
+        run_id,
+        "2026-06-19T13:00:00+00:00",
+        replay_eligible=True,
+        surface_defined=True,
+    )
+    monkeypatch.setattr(
+        pipeline_agg,
+        "validate_screening_artifact",
+        lambda _data: ["synthetic_validation_error"],
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+
+    fields = pipeline_agg._latest_screening_fields(run_id=run_id)
+
+    assert fields["screening_status"] == sc.STALE
+    assert "synthetic_validation_error" in (fields.get("screening_detail") or "")
 
 
 def test_point_non_universe_pipeline_paths_isolates_vbt_constants(monkeypatch, tmp_path):

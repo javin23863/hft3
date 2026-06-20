@@ -2654,6 +2654,9 @@ def write_hftbacktest_realism_artifacts(
     else:
         try:
             screening_artifact = _load_json(screening_artifact_path)
+            # HBT handoff uses hash-scoped validator (may require rust); cockpit/resume
+            # use validate_screening_artifact list API — pilot artifacts can pass list
+            # path yet fail here until full HBT scope is met.
             screening_reasons.extend(_validate_screening_artifact_hash(screening_artifact))
         except Exception as exc:
             screening_reasons.append(f"screening_artifact_read_failed:{type(exc).__name__}")

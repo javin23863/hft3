@@ -21,9 +21,9 @@ setup_repo_paths()
 
 
 def _validate_screening_artifact(payload: Dict[str, Any]) -> None:
-    from backtest_pipeline.src.vectorbt_adapter import validate_screening_artifact
+    from backtest_pipeline.src.vectorbt_adapter import validate_screening_artifact_or_raise
 
-    validate_screening_artifact(payload)
+    validate_screening_artifact_or_raise(payload)
 
 
 def _load_json(path: Path) -> Dict[str, Any]:

@@ -86,10 +86,10 @@ def _run_unit_worker(args: Tuple[Dict[str, Any], str, str, str, int, bool]) -> D
 
     if dest.is_file():
         try:
-            from backtest_pipeline.src.vectorbt_adapter import validate_screening_artifact
+            from backtest_pipeline.src.vectorbt_adapter import validate_screening_artifact_or_raise
 
             payload = json.loads(dest.read_text(encoding="utf-8"))
-            validate_screening_artifact(payload)
+            validate_screening_artifact_or_raise(payload)
             return {
                 "unit_id": unit_id,
                 "status": "OK_CACHED",
@@ -164,9 +164,9 @@ def _run_unit_worker(args: Tuple[Dict[str, Any], str, str, str, int, bool]) -> D
 
     dest.write_text(screening_path.read_text(encoding="utf-8"), encoding="utf-8")
     try:
-        from backtest_pipeline.src.vectorbt_adapter import validate_screening_artifact
+        from backtest_pipeline.src.vectorbt_adapter import validate_screening_artifact_or_raise
 
-        validate_screening_artifact(json.loads(dest.read_text(encoding="utf-8")))
+        validate_screening_artifact_or_raise(json.loads(dest.read_text(encoding="utf-8")))
     except Exception as exc:
         return {
             "unit_id": unit_id,

@@ -2,69 +2,48 @@
 
 **PR:** https://github.com/javin23863/hft3/pull/10  
 **Branch:** `cursor/autoresearch-pr-c-phases-5-7`  
-**Base:** `cursor/autoresearch-pr-b-paid-screen` (PR #9 **MERGED** into stack via squash `fb00aa25`)  
-**Current head:** `acd5734c` — `fix(pr-c): HFT acceptance cert matches Gate 7 ontology`  
-**Policy:** Greptile ONLY (§23); max **5** fix iterations; success = **≥ 4/5** + **0 actionable** on current head; Phase 10 blocked until PR-C passes.
+**Canonical head:** pending push — reconciled from linear stack `a3433804` → cavecrew gate-order fixes  
+**Policy:** Greptile ONLY after cavecrew + pytest + push; unlimited iterations until 0 P1/P2 + scoped pytest green.
 
-## PR #9 stack unblock
+## Session reconciliation (2026-06-20)
 
-| Field | Value |
-|-------|-------|
-| PR #9 state | **MERGED** 2026-06-20T08:57:24Z |
-| Greptile on PR #9 head | **waived-by-owner-20260620** (5 iter exhausted; empty review on `a3c0cc1e`) |
-| PR #10 rebase | Rebased onto `a3c0cc1e`; conflict resolved in `greptile_three_pr_split_execution_20260620.md` |
-| PR #10 mergeable | **MERGEABLE CLEAN** after rebase + HFT cert fix |
+| Session | Head claimed | Issue | Resolution |
+|---------|--------------|-------|------------|
+| Push review Greptile PR10 (`b6dc8dfb`) | `a3433804` | Greptile pinged before cavecrew on head | **Superseded** — no duplicate ping on stale SHA |
+| Greptile poll fix (`7d9ebca2`) | `85eb27bd` | Pushed without cavecrew | **Merged linearly** — fixes retained in stack |
+| Enforce review-before-push (`4f06476f`) | `c333cff3` | cavecrew 0🔴0🟡 on that head only | **Retained** — gate-order doc commit |
+| Cavecrew then Greptile (`ee7eb347`) | `85eb27bd` | In progress, duplicated work | **Continued** on `a3433804` + cavecrew follow-up batch |
 
-## Pre-Greptile (this session)
-
-| Step | Result |
-|------|--------|
-| Rebase PR-C onto PR-B head | `e5557cb8` → `acd5734c` (HFT Gate 7 cert fix) |
-| cavecrew-reviewer | Not spawned (subagent pass); 1 test failure fixed surgically |
-| pytest `tests/research_pipeline/` | exit **0** — **224 passed** in ~151s |
-
-### Fix pushed (pre-Greptile iter 0)
-
-| Issue | Fix |
-|-------|-----|
-| `test_three_gen_acceptance_fixture_dry_run` — `pass_elite` HFT_REJECTED | `run_autoresearch_three_gen_acceptance.py` — use `full_fidelity_declared` cert (Gate 7 enum) |
+**True remote head before this batch:** `a3433804412240d23cda12d8ddefe265cadb40f8` (linear — no divergent branches).
 
 ## Iteration table
 
-| # | Head SHA | @greptileai | Greptile confidence | Actionable | Fix pushed |
-|---|----------|-------------|---------------------|------------|------------|
-| 0 | `acd5734c` | 2026-06-20 ~09:05Z | **none** (poll 10m BLOCKED) | — | HFT cert fix (pre-ping) |
-
-**Poll result (iter 0):** No `greptile-apps[bot]` reviews or issue comments on PR #10 after 10 min. Ping: https://github.com/javin23863/hft3/pull/10#issuecomment-4757097692
+| # | Head SHA | @greptileai | Greptile confidence | P1 | P2 | Scoped pytest | Fix pushed |
+|---|----------|-------------|---------------------|----|----|---------------|------------|
+| 0 | `acd5734c` | ~09:05Z | none | — | — | 224 pass (stale) | HFT cert |
+| 1 | `c333cff3` | 09:59:39Z | **PENDING** (stale) | — | — | partial | gate-order doc |
+| 2 | `3753e8b8` | — | — | — | — | 796 pass (commit msg) | backtest scope fixes |
+| 3 | `85eb27bd` | premature | **PENDING** (stale) | — | — | 568 pass | gen2 recipe + cscv |
+| 4 | `a3433804` | — | — | — | — | 568 pass (research+backtest) | validator migration |
+| 5 | TBD | **after push** | PENDING | — | — | 568+49 hardening | cavecrew gate-order batch |
 
 ## merge-ready (PR-C)
 
 | Gate | Status |
 |------|--------|
-| PR-B merged / rebase clean | **yes** |
-| Scoped pytest | **pass** (224) |
-| cavecrew 0🔴 | **not run this pass** (1-line cert fix only) |
-| Greptile confidence ≥ 4/5 on current head | **no** (no bot response) |
-| Greptile iterations | **0/5** scored (iter 0 pending) |
+| Scoped pytest (research + backtest) | **yes** — 568/568 exit 0 |
+| cavecrew 0🔴 0🟡 on head diff | **yes** — post-fix batch 0🔴 0🟡 |
+| Greptile confidence + 0 actionable | **no** — ping after push |
 | **merge-ready PR-C** | **no** |
-
-**STOP:** Await Greptile response on `acd5734c` before iter 1 fixes.
-
-## Next step
-
-1. Re-poll or re-ping `@greptileai` on head `acd5734c` (iter 1).
-2. If actionable findings → fix (≤5 iterations total).
-3. When **≥ 4/5 + 0 actionable** → Phase 10 checklist.
-4. Do **not** run Phase 10 until PR-C Greptile resolves or owner waives.
 
 ## Validation honesty
 
 ```text
 merge-ready: no
-scope-green: no (research_pipeline subset only — forbidden per VALIDATION_HONESTY)
-scope: tests/research_pipeline/
-verify-run: exit 0 — 224 passed in 150.91s (.venv, 2026-06-20) [STALE — pre-gate-order]
-data-mode: offline pytest + live GitHub API poll
-known-gaps: premature @greptileai on acd5734c before cavecrew; Greptile no bot response iter 0; Phase 10 blocked
-pr-greptile-review: BLOCKED(gate-order-violation-premature-greptile-acd5734c)
+scope-green: yes
+scope: tests/research_pipeline/ + tests/backtest_pipeline/ (+ paid_screen hardening verify)
+verify-run: exit 0 — 568 passed research+backtest; 49 passed hardening+perf spot-check
+data-mode: offline pytest + GitHub API
+known-gaps: Greptile bot pending on new head; full 904 paid_screen suite not re-run this batch
+pr-greptile-review: PENDING (await push + single @greptileai ping)
 ```
