@@ -1,8 +1,8 @@
 # Autoresearch final checklist — PR-A scope (Phase 10 prep)
 
-**Date:** 2026-06-20  
-**PR-A:** https://github.com/javin23863/hft3/pull/8  
-**Branch:** `cursor/autoresearch-gate-chain-pr-a`  
+**Date:** 2026-06-20
+**PR-A:** https://github.com/javin23863/hft3/pull/8
+**Branch:** `cursor/autoresearch-gate-chain-pr-a`
 **Scope:** Gate chain Phases 0–4 only (48 files vs `main`)
 
 Phases 5–7 evidence lives on PR-C (`cursor/autoresearch-pr-c-phases-5-7`); paid-screen v2 on PR-B.

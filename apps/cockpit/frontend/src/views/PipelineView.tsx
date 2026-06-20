@@ -12,6 +12,16 @@ import type {
 
 function meta(s: Stage): [string, unknown][] {
   const keys = [
+    "screening_status",
+    "screening_artifact",
+    "screening_artifact_hash",
+    "replay_status",
+    "replay_detail",
+    "replay_eligibility_status",
+    "replay_artifact",
+    "robustness_artifact",
+    "surface_stability_status",
+    "surface_formula_authority_status",
     "detail",
     "skip_reason_counts",
     "q001_status",
@@ -214,7 +224,7 @@ export function PipelineView() {
           <div key={s.id} className="rounded-lg border border-line bg-bg-elev/50 p-3">
             <div className="flex items-center gap-2 text-sm font-semibold"><Dot status={s.status} /> {s.label}</div>
             <div className="mono mt-2 space-y-0.5 break-words text-[11px] text-ink-faint">
-              {meta(s).slice(0, 8).map(([k, v]) => (
+              {meta(s).slice(0, 12).map(([k, v]) => (
                 <div key={k}>{k}: {displayValue(v)}</div>
               ))}
             </div>

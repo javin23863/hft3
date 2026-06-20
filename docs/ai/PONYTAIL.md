@@ -1,8 +1,8 @@
 # Ponytail — mandatory agent coding discipline
 
-**Repo:** https://github.com/DietrichGebert/ponytail  
-**Install path:** `vendor/ponytail/` (vendored clone; update with `git -C vendor/ponytail pull`)  
-**Cursor runtime (#2 after Fable):** `.cursor/rules/01-ponytail-mindset.mdc` (hardened always-on rule)  
+**Repo:** https://github.com/DietrichGebert/ponytail
+**Install path:** `vendor/ponytail/` (vendored clone; update with `git -C vendor/ponytail pull`)
+**Cursor runtime (#2 after Fable):** `.cursor/rules/01-ponytail-mindset.mdc` (hardened always-on rule)
 **Legacy redirect:** `.cursor/rules/ponytail.mdc` → points to `01-ponytail-mindset.mdc`
 
 Ponytail is **not** a Vast/SSH tool. It is the standing **lazy-senior-dev** ruleset: YAGNI, stdlib-first, minimal diffs, deletion over addition. Safety rails (validation, security, accessibility, finance/math invariants) are never cut.

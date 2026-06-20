@@ -75,6 +75,14 @@ def _stub_q001_ok(monkeypatch) -> None:
     monkeypatch.setattr(pipeline_agg, "_q001_inventory", lambda: payload)
 
 
+def _stub_research_replay_system_ok(monkeypatch) -> None:
+    monkeypatch.setattr(system_agg, "_latency", lambda: {"status": sc.OK, "live_arm_status": sc.OK})
+    monkeypatch.setattr(system_agg, "_slow_tier", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_certification", lambda: {"status": sc.OK, "certification_status": "GREEN"})
+    monkeypatch.setattr(system_agg, "_databento", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_capture", lambda: {"status": sc.OK, "known_gaps": []})
+
+
 def _point_options_zone_ok(monkeypatch, root: Path) -> Path:
     _write_options_spec(root, "**FIXED**")
     lake = root / "options"
@@ -2220,6 +2228,11 @@ def test_pipeline_smoke_universe_placeholders_do_not_mask_q001(monkeypatch, tmp_
     feature.write_text(json.dumps({"generated_at_utc": paths.now_iso(), "row_count": 1, "rejected_count": 0}), encoding="utf-8")
     stage_a.write_text(json.dumps({"units_run": 1, "units_errored": 0, "units_skipped": 0, "cells": [], "certification_stamp": {"status": "GREEN"}}), encoding="utf-8")
     survivors.write_text(json.dumps([{"hypothesis_id": 2}]), encoding="utf-8")
+    vbt_decl, vbt_units = _write_complete_vbt_tracking_fixture(
+        tmp_path,
+        "paid_run_q001_smoke_noise_guard",
+        write_screening=True,
+    )
     monkeypatch.setattr(paths, "REPO", tmp_path)
     monkeypatch.setattr(paths, "ACTIVE_RUN", tmp_path / "runtime" / "workbench" / "active_run.json")
     monkeypatch.setattr(paths, "CAPTURE_BASELINE", capture)
@@ -2230,7 +2243,10 @@ def test_pipeline_smoke_universe_placeholders_do_not_mask_q001(monkeypatch, tmp_
     monkeypatch.setattr(paths, "M6_RESULT", smoke)
     monkeypatch.setattr(paths, "M6_FULL_RESULT", full)
     monkeypatch.setattr(paths, "ALPHA_CME_SPEC", tmp_path / "missing.md")
+    monkeypatch.setattr(paths, "VBT_FULL_RUN_DECLARATION", vbt_decl)
+    monkeypatch.setattr(paths, "VBT_FULL_UNITS_JSONL", vbt_units)
     loaders._cache.clear()
+    _allow_screening_validation(monkeypatch)
     monkeypatch.setattr(pipeline_agg, "_latency_evidence", lambda **_: {"status": sc.OK, "live_readiness_status": sc.STALE})
     monkeypatch.setattr(
         pipeline_agg,
@@ -3800,6 +3816,15 @@ def test_spa_fallback_for_client_routes():
     assert "text/html" not in chat.headers.get("content-type", "")
 
 
+def test_spa_catch_all_does_not_shadow_missing_api_routes():
+    client = TestClient(app)
+    r = client.get("/api/definitely_missing")
+    assert r.status_code == 404
+    assert "text/html" not in r.headers.get("content-type", "")
+    assert '<div id="root">' not in r.text
+    assert r.json()["detail"] == "Not Found"
+
+
 def test_spa_catch_all_blocks_path_traversal():
     # The SPA fallback must never serve a file outside dist. URL-encoded `../`
     # is NOT normalized by the client, so it reaches the handler verbatim — the
@@ -4003,6 +4028,7 @@ def test_lanes_registered_contains_cme_options():
 
 def test_lanes_options_defect_ledger_open_blocks_shadow_live_only(monkeypatch):
     _stub_q001_ok(monkeypatch)
+    _stub_research_replay_system_ok(monkeypatch)
     z = ZONES["system"]()
     defects = z.get("lanes", {}).get("cme_options_defects", {})
     assert defects.get("status") == "fail"
@@ -4017,6 +4043,7 @@ def test_lanes_missing_data_doctor_report_is_graceful(monkeypatch, tmp_path):
     """Pointing DATA_DOCTOR_REPORT at a nonexistent file -> cme_options_data.status==missing;
     system zone research/replay health remains green while the options card stays red."""
     _stub_q001_ok(monkeypatch)
+    _stub_research_replay_system_ok(monkeypatch)
     monkeypatch.setattr(paths, "DATA_DOCTOR_REPORT", tmp_path / "no_report.json")
     z = ZONES["system"]()
     lanes = z.get("lanes", {})
@@ -4029,6 +4056,7 @@ def test_lanes_missing_data_doctor_report_is_graceful(monkeypatch, tmp_path):
 
 def test_lanes_options_warn_is_not_ok(monkeypatch, tmp_path):
     _stub_q001_ok(monkeypatch)
+    _stub_research_replay_system_ok(monkeypatch)
     report_path = tmp_path / "data_doctor_report.json"
     report = {
         "run_utc": paths.now_iso(),

@@ -2,7 +2,7 @@
 
 - **Mode:** fixture_dry_run (no live VectorBT/HftBacktest compute)
 - **Exit code:** 0
-- **Campaign ID:** `autoresearch_CPI_2024_09_11_TIGHT_20260620T041409Z_3228b4d5`
+- **Campaign ID:** `autoresearch_CPI_2024_09_11_TIGHT_20260620T221114Z_3228b4d5`
 - **Generations run:** 3
 - **Stop reason:** max_generations
 - **Deduplication (tested_parameter_hashes):** 17
@@ -30,12 +30,12 @@
 
 ## Generation 1 parent-child recipe changes
 
-- `fcd8ec436e7c0618` parent=`pass_elite` reason=`exploitation:execution_parameter` recipe_changed=True variant=`None`
-- `c7c3c3bb8e12e47f` parent=`pass_elite` reason=`exploitation:execution_parameter` recipe_changed=True variant=`None`
-- `486d13ea09ec61a0` parent=`pass_elite` reason=`exploitation:execution_parameter` recipe_changed=True variant=`None`
-- `fv_5ba12bfd6668d3cb` parent=`pass_elite` reason=`family_variant:cross_asset_es_leader` recipe_changed=True variant=`None`
-- `fv_e3c91d734468e279` parent=`pass_elite` reason=`family_variant:vix_sensor_declared` recipe_changed=True variant=`None`
-- `fv_dfaa52b9da1d3576` parent=`pass_elite` reason=`family_variant:macro_context_uplift` recipe_changed=True variant=`None`
+- `fcd8ec436e7c0618` parent=`seed_elite` reason=`exploitation:execution_parameter` recipe_changed=True variant=`None`
+- `c7c3c3bb8e12e47f` parent=`seed_elite` reason=`exploitation:execution_parameter` recipe_changed=True variant=`None`
+- `486d13ea09ec61a0` parent=`seed_elite` reason=`exploitation:execution_parameter` recipe_changed=True variant=`None`
+- `fv_0ff19d5218ce7560` parent=`seed_elite` reason=`family_variant:cross_asset_es_leader` recipe_changed=True variant=`None`
+- `fv_8cdee6d72b836dd5` parent=`seed_elite` reason=`family_variant:vix_sensor_declared` recipe_changed=True variant=`None`
+- `fv_43fbbfe107dd136c` parent=`seed_elite` reason=`family_variant:macro_context_uplift` recipe_changed=True variant=`None`
 - `reject_stat_planted_g1` parent=`None` reason=`generation` recipe_changed=False variant=`None`
 
 ## Generation 2 parent-child recipe changes

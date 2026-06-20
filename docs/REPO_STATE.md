@@ -1,6 +1,6 @@
 # Repository state (canonical consolidation)
 
-**Last updated:** 2026-06-20 (Vast pipeline Plan v3 — single deploy path)  
+**Last updated:** 2026-06-20 (Vast pipeline Plan v3 — single deploy path)
 **Purpose:** One truthful map of where to work, what landed on `main`, and how to verify a clean tree. Humans and agents read this before assuming branch or path.
 
 ---
@@ -168,8 +168,8 @@ Expected after cleanup: no untracked `runtime/_*.py` flood; incident artifacts u
 
 ## Start-here doc order
 
-1. This file — path, branch, merge truth  
-2. [docs/human/GETTING_STARTED.md](human/GETTING_STARTED.md)  
-3. [docs/human/DOC_INDEX.md](human/DOC_INDEX.md) — full doc chronology  
-4. [docs/ai/ONBOARDING.md](ai/ONBOARDING.md)  
+1. This file — path, branch, merge truth
+2. [docs/human/GETTING_STARTED.md](human/GETTING_STARTED.md)
+3. [docs/human/DOC_INDEX.md](human/DOC_INDEX.md) — full doc chronology
+4. [docs/ai/ONBOARDING.md](ai/ONBOARDING.md)
 5. [AGENTS.md](../AGENTS.md)

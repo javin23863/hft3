@@ -1,8 +1,8 @@
 # Autoresearch active-path audit — Phase 0 (2026-06-20)
 
-**Branch:** `cursor/vast-vbt-workflow`  
-**Assignment:** `docs/project/AUTONOMOUS_RESEARCH_PIPELINE_DEVELOPER_ASSIGNMENT.md` §2  
-**Canonical command:** `python scripts/run_pipeline.py --autoresearch ...`  
+**Branch:** `cursor/vast-vbt-workflow`
+**Assignment:** `docs/project/AUTONOMOUS_RESEARCH_PIPELINE_DEVELOPER_ASSIGNMENT.md` §2
+**Canonical command:** `python scripts/run_pipeline.py --autoresearch ...`
 **Scope:** Audit only — no gate-chain implementation in this session.
 
 ## Executive summary

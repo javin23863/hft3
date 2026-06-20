@@ -321,7 +321,7 @@ def _seed_candidates_for_generation(
 ) -> list[CandidateModel]:
     if generation_index == 0:
         seeds = [
-            CandidateModel("pass_elite", "SPREAD_BLOWOUT_RECOMPRESSION", {"signal_threshold": 0.15, "holding_period_bars": 15}, parsed.thesis, {}),
+            CandidateModel("seed_elite", "SPREAD_BLOWOUT_RECOMPRESSION", {"signal_threshold": 0.15, "holding_period_bars": 15}, parsed.thesis, {}),
             CandidateModel("reject_vbt_1", "SPREAD_BLOWOUT_RECOMPRESSION", {"signal_threshold": 0.20, "holding_period_bars": 15}, parsed.thesis, {}),
             CandidateModel("block_ontology_1", "SPREAD_BLOWOUT_RECOMPRESSION", {"signal_threshold": 0.25, "holding_period_bars": 15}, parsed.thesis, {"ontology_citations": [{"paper_id": "fake-2099", "spec_ref": "FAKE.md"}]}),
             CandidateModel("reject_wfc_1", "SPREAD_BLOWOUT_RECOMPRESSION", {"signal_threshold": 0.30, "holding_period_bars": 15}, parsed.thesis, {}),

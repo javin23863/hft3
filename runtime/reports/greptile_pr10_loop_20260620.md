@@ -12,6 +12,7 @@
 | 3 | `85eb27bd` | premature | PENDING (stale) | — | — | 568 pass | **skipped (violation)** |
 | 5 | `078cecae` | — | — | — | — | 568 pass | 0🔴0🟡 (validator batch) |
 | 6 | `8c5c1ec0` | 2026-06-20 ~11:21Z | **PENDING** | 0 on head | 0 on head | **570 pass** | **0🔴0🟡** |
+| 7 | `1076009b` + final fix patch | pending after push | **PENDING** | 0 on head before patch | 0 on head before patch | **Vast green** | **0🔴0🟡** |
 
 ## Greptile poll (`8c5c1ec0`, 12 min)
 
@@ -26,7 +27,9 @@
 
 | Gate | Status |
 |------|--------|
-| Scoped pytest (research + backtest) | **yes** — 570/570 exit 0 |
+| Scoped pytest (research + backtest) | **yes** — Vast `569 passed, 3 skipped`, exit 0 with vault papers mounted |
+| Paid-screen gap pytest | **yes** — Vast `346 passed`, exit 0 |
+| Cockpit pytest | **yes** — Vast `258 passed, 1 skipped`, exit 0 |
 | cavecrew 0🔴 0🟡 on head diff | **yes** |
 | Greptile confidence + 0 actionable | **no** — PENDING |
 | **merge-ready PR-C** | **no** |
@@ -36,9 +39,9 @@
 ```text
 merge-ready: no
 scope-green: yes
-scope: tests/research_pipeline/ + tests/backtest_pipeline/
-verify-run: exit 0 — 570 passed in ~394s (head 8c5c1ec0)
-data-mode: offline pytest + GitHub API poll
-known-gaps: Greptile bot pending on 8c5c1ec0; Phase 10 blocked
-pr-greptile-review: PENDING(8c5c1ec0)
+scope: apps/cockpit/backend/tests/test_cockpit.py + paid-screen gap tests + tests/research_pipeline/ + tests/backtest_pipeline/
+verify-run: Vast AI `/root/hft3/pr10-gate-vast` exit 0 — cockpit 258 passed / 1 skipped; paid-screen gap 346 passed; research+backtest 569 passed / 3 skipped
+data-mode: offline pytest on Vast AI; vault paper authority synced to `/root/hft3/vault/library/papers`
+known-gaps: Greptile bot pending on final pushed head; Phase 10 blocked
+pr-greptile-review: PENDING(final pushed head)
 ```

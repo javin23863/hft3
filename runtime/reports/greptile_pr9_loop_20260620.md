@@ -1,9 +1,9 @@
 # Greptile PR #9 loop report — 2026-06-20
 
-**PR:** https://github.com/javin23863/hft3/pull/9  
-**Branch:** `cursor/autoresearch-pr-b-paid-screen`  
-**Base:** `cursor/autoresearch-gate-chain-pr-a` (PR-A #8 **merged** `8f551b31` / head `88fab454`)  
-**Current head:** `b300183b9ca6a26da4d5622f0760deb900469959`  
+**PR:** https://github.com/javin23863/hft3/pull/9
+**Branch:** `cursor/autoresearch-pr-b-paid-screen`
+**Base:** `cursor/autoresearch-gate-chain-pr-a` (PR-A #8 **merged** `8f551b31` / head `88fab454`)
+**Current head:** `b300183b9ca6a26da4d5622f0760deb900469959`
 **Policy:** [GREPLOOP.md](../../docs/ai/GREPLOOP.md) · plan Phase 9 · PR #10 **not triggered**
 
 ---

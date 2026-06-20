@@ -1,7 +1,7 @@
 # Agent Runtime Roadmap — any LLM, every session
 
-**Obsidian canonical copy:** `C:\Users\MSI\Desktop\Obsidian Vault From VPS\hft3\architecture\Agent Runtime Roadmap.md`  
-**Vault hot cache:** `wiki/hot.md` (top section, updated 2026-06-20)  
+**Obsidian canonical copy:** `C:\Users\MSI\Desktop\Obsidian Vault From VPS\hft3\architecture\Agent Runtime Roadmap.md`
+**Vault hot cache:** `wiki/hot.md` (top section, updated 2026-06-20)
 **Decision:** Obsidian `decisions/2026-06-20 Agent runtime Fable Ponytail load order.md`
 
 This repo mirror exists so agents with repo access only still see the roadmap. Keep in sync with the Obsidian note when load order changes.

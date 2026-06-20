@@ -1,6 +1,6 @@
 # Greptile PR #8 loop — 2026-06-20
 
-**PR:** https://github.com/javin23863/hft3/pull/8  
+**PR:** https://github.com/javin23863/hft3/pull/8
 **Policy:** Greptile ONLY; max 5 iterations; stop at **≥ 4/5** + 0 actionable; PR-B/C blocked until PR-A passes.
 
 ## Iteration log
