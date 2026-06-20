@@ -204,7 +204,10 @@ def load_frozen_manifests(path: Path) -> list[dict[str, Any]]:
         line = line.strip()
         if not line:
             continue
-        payload = json.loads(line)
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
         if isinstance(payload, dict):
             rows.append(payload)
     return rows

@@ -730,8 +730,6 @@ def run_single_generation(
         ontology_receipts[cid] = ontology_receipt
         if ontology_receipt.get("status") == "PASS":
             ontology_pass.append(candidate)
-    if resume and frozen_by_id and not ontology_pass:
-        ontology_pass = [c for c in attached if c.candidate_id in frozen_by_id]
     frozen_manifests: list[dict[str, Any]] = []
     if resume and frozen_by_id:
         for candidate in ontology_pass:
@@ -1002,6 +1000,7 @@ def run_autoresearch_loop(
         "screening_artifact_unreadable",
         "generation_complete_marker_missing",
         "config_hash_mismatch",
+        "resume_checkpoint_missing_candidates",
     }
 
     if resume and not campaign_id:
@@ -1064,7 +1063,12 @@ def run_autoresearch_loop(
     for gen in range(start_gen, cfg.max_generations):
         manifest["generation_index"] = gen
         generation_resume = resume_in_progress and gen == start_gen
-        if generation_resume and resume_candidates:
+        if generation_resume:
+            if not resume_candidates:
+                manifest["generation_status"] = GENERATION_STATUS_FAILED
+                manifest["stop_reason"] = "resume_checkpoint_missing_candidates"
+                save_manifest(repo_root, manifest)
+                break
             candidates = resume_candidates
             resume_in_progress = False
         elif gen == 0:
