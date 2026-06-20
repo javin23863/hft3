@@ -292,6 +292,22 @@ def _seed_candidates_for_generation(
     )
 
 
+def _manifest_recipe_hashes(gen_dir_path: Path) -> dict[str, str]:
+    """Map candidate_id → feature_recipe_hash from frozen manifests."""
+    out: dict[str, str] = {}
+    manifests_path = gen_dir_path / "candidate_manifests.jsonl"
+    if not manifests_path.is_file():
+        return out
+    for line in manifests_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        cid = str(row.get("candidate_id") or "")
+        if cid:
+            out[cid] = str(row.get("feature_recipe_hash") or "")
+    return out
+
+
 def _parent_child_recipe_changes(
     gen_dir: Path,
     prior_summaries: dict[int, dict[str, Any]],
@@ -301,29 +317,47 @@ def _parent_child_recipe_changes(
         return []
     gen_idx = int(gen_dir.name.split("_")[-1])
     prior = prior_summaries.get(gen_idx - 1) or {}
+    prior_gen_dir = gen_dir.parent / f"generation_{gen_idx - 1:03d}"
+    prior_manifest_hashes = _manifest_recipe_hashes(prior_gen_dir)
     parent_recipes = {
         str(r.get("candidate_id")): dict(r.get("feature_recipe") or {})
         for r in prior.get("candidates") or []
-        if r.get("final_status") == FINAL_PASS
     }
+    parent_hashes = {
+        str(r.get("candidate_id")): str(r.get("feature_recipe_hash") or "")
+        for r in prior.get("candidates") or []
+    }
+    parent_hashes.update(prior_manifest_hashes)
     changes: list[dict[str, Any]] = []
     for line in manifests_path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
         row = json.loads(line)
-        parent = str(row.get("elite_parent") or row.get("parent_candidate_id") or "")
-        meta_parent = str((row.get("metadata") or {}).get("elite_parent") or "")
-        parent_id = parent or meta_parent
+        meta = dict(row.get("metadata") or {})
+        parent = str(row.get("parent_candidate_id") or row.get("elite_parent") or meta.get("elite_parent") or "")
         child_recipe = dict(row.get("feature_recipe") or {})
-        parent_recipe = parent_recipes.get(parent_id) or {}
+        parent_recipe = parent_recipes.get(parent) or {}
+        child_hash = str(row.get("feature_recipe_hash") or "")
+        parent_hash = parent_hashes.get(parent, "")
+        proposal_reason = str(row.get("proposal_reason") or meta.get("proposal_reason") or "")
+        is_family_mutation = (
+            proposal_reason.startswith("family_variant:")
+            or proposal_reason.startswith("failure_driven:")
+            or bool(meta.get("family_variant_id"))
+        )
+        recipe_changed = bool(parent) and (
+            (parent_recipe and child_recipe != parent_recipe)
+            or (parent_hash and child_hash and child_hash != parent_hash)
+            or is_family_mutation
+        )
         changes.append(
             {
                 "candidate_id": row.get("candidate_id"),
-                "parent_id": parent_id or None,
-                "proposal_reason": row.get("proposal_reason"),
+                "parent_id": parent or None,
+                "proposal_reason": proposal_reason or row.get("proposal_reason"),
                 "feature_recipe_hash": row.get("feature_recipe_hash"),
-                "recipe_dimension_changed": bool(parent_recipe) and child_recipe != parent_recipe,
-                "family_variant_id": (row.get("metadata") or {}).get("family_variant_id"),
+                "recipe_dimension_changed": recipe_changed,
+                "family_variant_id": meta.get("family_variant_id"),
             }
         )
     return changes
