@@ -71,6 +71,7 @@ _STATISTICAL_REQUIRED_CHECKS: tuple[str, ...] = (
     "null_strategy_battery",
     "planted_alpha_control",
     "adversarial_perturbation",
+    "robustness_artifact_staleness",
 )
 
 BLOCKED_UNBACKED_AUTHORITY = "BLOCKED_UNBACKED_AUTHORITY"
@@ -473,7 +474,9 @@ def _evaluate_statistical_checks(
         else:
             failures.append(f"{check_name}_fail")
     staleness = str(evidence.get("robustness_artifact_staleness") or "").lower()
-    if staleness != "fresh":
+    if staleness == "fresh":
+        passed.append("robustness_artifact_staleness")
+    else:
         failures.append(f"robustness_artifact_staleness={staleness or 'missing'}")
     if not allow_partial and any(reason.endswith("_not_run") for reason in failures):
         failures.append("allow_partial_false_blocks_not_run")

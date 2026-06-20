@@ -105,7 +105,6 @@ def propose_next_candidates(
         seen.add(key)
         out.append(model)
 
-    parent_params = _parent_params_by_id(generation_summary)
 
     for elite in elites:
         model_id = str(elite.get("model_id") or parsed.primary_model_id)

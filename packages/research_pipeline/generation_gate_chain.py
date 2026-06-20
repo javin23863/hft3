@@ -261,7 +261,10 @@ def passes_gates_before_hft(chain_result: Mapping[str, Any]) -> bool:
             break
         if not outcome.get("strict_pass") or outcome.get("effective_status") != "PASS":
             return False
-    return chain_result.get("stopped_at_gate") == GATE_HFT
+    stopped_at = chain_result.get("stopped_at_gate")
+    if stopped_at is None:
+        return True
+    return stopped_at == GATE_HFT
 
 
 def _final_status_for_gate(gate_id: str, effective_status: str) -> str:
