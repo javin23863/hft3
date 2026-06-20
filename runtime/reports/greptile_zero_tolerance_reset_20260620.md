@@ -1,60 +1,54 @@
 # Greptile zero-tolerance reset — 2026-06-20 (updated)
 
 **Branch:** `cursor/autoresearch-pr-c-phases-5-7` (PR #10)  
-**Stack:** PR #8 MERGED · PR #9 MERGED · PR #10 OPEN  
-**Policy:** owner zero-tolerance — unlimited iterations until 0 P1 + 0 P2 + 0 🔴 + 0 🟡 + scoped pytest green  
+**Head:** `8c5c1ec063b405c49236f6bd6357e73eacd47fed`  
+**Policy:** 0 P1 + 0 P2 + 0 🔴 + 0 🟡 + scoped pytest green  
 
 ### Gate-order compliance
 
 | Check | Result |
 |-------|--------|
-| `85eb27bd` push | pytest green **before** push; cavecrew on 85eb27bd diff **NOT RUN** (violation) |
-| Remediation batch | cavecrew dual-pass on fix diff → **0🔴 0🟡** before push |
-| Prior `078cecae` | validator migration + cockpit eligibility tests (already on remote) |
-| Greptile | ping **after** remediation push only |
+| `85eb27bd` push | cavecrew **NOT RUN** before push (violation) |
+| Remediation `8c5c1ec0` | cavecrew **0🔴 0🟡** → pytest **570/570** → push ✓ |
+| Greptile ping | after push @ 2026-06-20 ~11:21Z |
+
+### cavecrew receipts
+
+| Pass | Initial (`85eb27bd` vs main focus) | Final (remediation diff) |
+|------|-------------------------------------|--------------------------|
+| 🔴 | 1 (Gate 4 missing holdout) | **0** |
+| 🟡 | 7 | **0** |
 
 ---
 
-## Session heads
-
-| SHA | Note |
-|-----|------|
-| `85eb27bd` | gen2 recipe + cscv structure_ran — pushed without cavecrew |
-| `a3433804` | screening validator migration |
-| `078cecae` | cavecrew batch (validator + cockpit tests) |
-| **pending** | holdout fail-closed + replay pairing + recipe delta fixes |
-
----
-
-## verify-run (this session)
+## verify-run
 
 ```text
 .\.venv\Scripts\python.exe -m pytest tests/research_pipeline/ tests/backtest_pipeline/ -q
 exit 0 — 570 passed, 41 warnings in ~394s
 ```
 
-### Fixes in remediation batch (uncommitted → push)
+---
 
-| Finding | Fix |
-|---------|-----|
-| Gate 4 missing holdout | `holdout_evaluate_only_missing:{name}` when configured band absent |
-| Synthetic robustness pass | removed `robustness_passed` → dsr/pbo/cscv pass injection |
-| Recipe dimension gen2 | require hash/recipe inequality (no label-only OR) |
-| Alien replay fallback | `_latest_paired_replay_artifact` fail-closed on pair miss |
-| vectorbt_screen OK | requires `replay_eligibility_status==eligible` |
-| structure_ran gate test | `test_statistical_gate_rejects_structure_ran_cscv_status` |
-| Phase 7 honesty | `@pytest.mark.fixture_dry_run` + mode assert |
+## Greptile (`8c5c1ec0`)
+
+| Field | Value |
+|-------|-------|
+| Confidence | **PENDING** (no N/5 bot summary after 12 min poll) |
+| P1 on head | **0** |
+| P2 on head | **0** |
+| Stale inline | 6× P1 on commit `47416a77` (pre-remediation) |
 
 ---
 
 ## Validation honesty
 
 ```text
-merge-ready: no (Greptile pending after remediation push)
-scope-green: yes (research_pipeline + backtest_pipeline 570/570 pass, exit 0)
+merge-ready: no (Greptile PENDING on 8c5c1ec0)
+scope-green: yes
 scope: tests/research_pipeline/ + tests/backtest_pipeline/
-verify-run: exit 0 — 570 passed in ~394s (.venv, 2026-06-20)
+verify-run: exit 0 — 570 passed in ~394s (.venv, 2026-06-20, head 8c5c1ec0)
 data-mode: offline pytest + GitHub API poll
-known-gaps: Greptile bot pending on new head; Phase 10 blocked
-finding-count: cavecrew 0🔴 0🟡 on remediation diff; Greptile actionable TBD
+known-gaps: Greptile bot has not responded on 8c5c1ec0; Phase 10 blocked
+finding-count: cavecrew 0🔴 0🟡; Greptile actionable on head 0 (pending bot)
 ```
