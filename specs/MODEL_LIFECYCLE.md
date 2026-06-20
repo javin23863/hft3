@@ -18,7 +18,9 @@ BUILT + tested (90 tests) + safe-by-default — the loop is now end-to-end wired
   any error fails open. State is now *enforced*, not just enforce-able.
 - **Job worker** `lifecycle_orchestrator.src.worker` — claims pending jobs and runs
   them; routes materialize REAL `run_event_universe --from-stage-a <stub>` commands
-  (no placeholders) when the model's cell metadata is present.
+  (no placeholders) when the model's cell metadata is present. **Historical M6 path**
+  only — current VectorBT prefilter uses `run_paid_screen.py` on Vast;
+  HftBacktest follows promoted screening artifacts.
 - **Scheduler** `scripts/orchestrator_nightly.ps1` + `register_orchestrator_task.ps1`
   (`HFT3ModelMaintenanceNightly`, 05:50, DRY-RUN default).
 - **Scratch-registry hook** in `get_active_hypotheses()` (env `HFT3_SCRATCH_HYP_REGISTRY`,
@@ -100,6 +102,48 @@ empty-ledger gate fails closed ⇒ autonomy cannot arm anything live today.
 gate state, job counts, audit tail). Alerts emit CRIT on QUARANTINED / RETIRED /
 AUTONOMY_FROZEN / audit-chain-break. Emergency controls: `POST /api/control/autonomy/stop`
 (always allowed — trips breaker), `/unfreeze` (gated + confirm).
+
+Pipeline zone (`/api/pipeline`) surfaces:
+- **VectorBT paid-screen tracking** — `vectorbt_paid_screen_tracking` reads
+  `runtime/reports/vbt_full_run_declaration.json`, units JSONL, and the latest
+  `research_cards/pipeline_runs/*/paid_screen_run_manifest.json` (artifact-discovered
+  run id; never hardcoded). Workers, expected/completed units, research split
+  (`discovery_confirmation` default), and anomaly flags when declaration vs JSONL
+  or orchestrator log disagree.
+- **Stage A (historical M6)** — labeled explicitly; not a VectorBT full-screen
+  prerequisite per `docs/project/VBT_PAID_SCREEN_UNIT_SCOPE.md`.
+- **Promote stage** — prefers VectorBT `screening_promoted_count`; Stage A
+  survivor count is historical fallback only.
+
+## Research prefilter → realism handoff (current workflow)
+
+Authority: vault `library/14 Model Lifecycle and Governance.md`, `library/System Implications.md`, repo [UNIFIED_RESEARCH_PIPELINE.md](../docs/vault/UNIFIED_RESEARCH_PIPELINE.md) (chronological stages 0–7).
+
+Code stage registry: `packages/backtest_pipeline/src/research_pipeline_stages.py`.
+
+| Step | Role | Location |
+|------|------|----------|
+| VectorBT paid screen (Vast) | Broad cheap prefilter: `events.csv × active model registry × discovery_confirmation` | `scripts/run_paid_screen.py`, Vast launch scripts |
+| Robust gates (DSR/PBO/CSCV/WFC) | Must pass on promoted rows before LIVE eligibility | `screening_artifact.json`, `PromotionGate` |
+| `feature_recipe_hash` equality | Fail-closed handoff from VectorBT promoted row → `HftReplayScenario` | `packages/backtest_pipeline/src/recipe_hash_gate.py` |
+| HftBacktest realism | Heavier execution replay on promoted outputs only | `research_cards/hftbacktest_realism/` |
+| M6 `run_event_universe` | Historical gauntlet path (`--from-stage-a`); parallel, not prerequisite | `research_cards/universe_M6_*` |
+
+**No local Stage A survivor file is required** for the Vast VectorBT full screen.
+
+## Inventory, lineage, and enforcement
+
+| Concern | Requirement | Location |
+|---------|-------------|----------|
+| Canonical slug + `hyp_id` lineage | Every model has registry slug; lifecycle record carries `hypothesis_id` when applicable | `features_engine` registry, `model_lifecycle.json` |
+| `feature_recipe_hash` | Must match across VectorBT promotion → HftBacktest handoff | `recipe_hash_gate.py`, screening artifacts |
+| Submit-gate (degraded lifecycle) | DEGRADED-RED / QUARANTINED / PAUSED / RETIRED → REJECT in pre-trade path | `submit_gate.py` → `trade_manager/risk_layer._static_reject` |
+| Trading kill-switch | Book-level halt; separate from autonomy global kill | `trade_manager/kill_switch.py` |
+| Autonomy kill | Stops maintenance loop only (`HFT3_AUTONOMY_KILL`); never the book | `packages/autonomy/` |
+| LIVE eligibility | Robust stats + certification + defect-ledger clean + shadow + kill drill + submit-gate | `PromotionGate`, `gates.AUTONOMY_REQUIRED_GATES` |
+
+Untracked models pass submit-gate unchanged (fail-open for registry scope).
+Tracked degraded models are rejected with `LIFECYCLE_STATE_BLOCKS_TRADE`.
 
 ## Four-subsystem hardening
 

@@ -1,0 +1,10 @@
+---
+description: Redirect — Ponytail lives in 01-ponytail-mindset.mdc (second load after Fable).
+alwaysApply: false
+---
+
+# Ponytail (moved)
+
+Always-on Ponytail discipline is **[01-ponytail-mindset.mdc](01-ponytail-mindset.mdc)** — second context every session, after [00-fable-mindset.mdc](00-fable-mindset.mdc).
+
+Charter: [docs/ai/PONYTAIL.md](../../docs/ai/PONYTAIL.md) · Upstream: https://github.com/DietrichGebert/ponytail · Vendored: `vendor/ponytail/`

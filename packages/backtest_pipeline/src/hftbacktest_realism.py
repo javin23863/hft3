@@ -19,6 +19,14 @@ from backtest_pipeline.src.feature_plane import (
     feature_plane_validation_errors,
 )
 from backtest_pipeline.src.vectorbt_adapter import compute_screening_artifact_hash
+from backtest_pipeline.src.research_pipeline_stages import (
+    STAGE_1_VECTORBT_SCREEN,
+    STAGE_2_PROMOTED_AGGREGATION,
+    STAGE_3_HFTBACKTEST_REALISM,
+    maybe_enroll_lifecycle_transition,
+    record_lifecycle_pipeline_handoff,
+    stamp_artifact,
+)
 
 UPSTREAM_REPO_URL = "https://github.com/nkaz001/hftbacktest"
 UPSTREAM_DOCS_URL = "https://hftbacktest.readthedocs.io/en/latest/index.html"
@@ -2712,6 +2720,12 @@ def write_hftbacktest_realism_artifacts(
     ):
         fail_reasons.append("official_replay_not_run")
     fail_reasons = list(dict.fromkeys(fail_reasons))
+    upstream_stage = str(screening_artifact.get("research_pipeline_stage_id") or "")
+    if screening_artifact and upstream_stage and upstream_stage not in (
+        STAGE_2_PROMOTED_AGGREGATION,
+        STAGE_1_VECTORBT_SCREEN,
+    ):
+        fail_reasons.append(f"upstream_pipeline_stage_unexpected:{upstream_stage}")
     status = (
         "pass"
         if official_replay.get("official_hftbacktest_replay_status") == "pass" and not fail_reasons
@@ -2802,8 +2816,18 @@ def write_hftbacktest_realism_artifacts(
         )
         summary["certification_allowed"] = False
         summary["replay_summary_hash"] = compute_replay_summary_hash(summary)
+    stamp_artifact(summary, STAGE_3_HFTBACKTEST_REALISM)
     summary_path = out_dir / "replay_summary.json"
     summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    model_id = str(summary.get("model_id") or "").strip()
+    if model_id:
+        record_lifecycle_pipeline_handoff(
+            model_id,
+            STAGE_3_HFTBACKTEST_REALISM,
+            artifact_path=str(summary_path),
+        )
+        if summary.get("replay_realism_status") == "pass":
+            maybe_enroll_lifecycle_transition(model_id, STAGE_3_HFTBACKTEST_REALISM)
     return {
         "source_lock": lock,
         "latency_model": latency_model,

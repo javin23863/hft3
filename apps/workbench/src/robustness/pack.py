@@ -1,4 +1,11 @@
-"""Robustness pack: walk-forward hooks, purged CV, Monte Carlo, parameter sweep."""
+"""Robustness pack: walk-forward hooks, purged CV, Monte Carlo, parameter sweep.
+
+Authority: docs/vault/UNIFIED_RESEARCH_PIPELINE.md (Stage 4)
+Vault: library/13 Robust Backtesting and Multiple Testing.md
+Literature: docs/references/Ultimate_Quantitative_Finance_Researcher.pdf;
+  docs/project/ROBUSTNESS_TESTING_SPEC.md
+Lifecycle: feeds ModelBehaviorEnvelope inputs at Stage 5 certify (trade_manager spine).
+"""
 
 from __future__ import annotations
 
@@ -86,6 +93,25 @@ class RobustnessResult:
 
     def checks_dict(self) -> List[Dict[str, Any]]:
         return [check.to_dict() for check in self.checks]
+
+    def to_artifact_dict(self) -> Dict[str, Any]:
+        """Serialize for workbench run artifacts with unified pipeline stage stamp."""
+        from backtest_pipeline.src.research_pipeline_stages import (
+            STAGE_4_WORKBENCH_ROBUSTNESS,
+            stamp_artifact,
+        )
+
+        payload: Dict[str, Any] = {
+            "walk_forward": self.walk_forward,
+            "purged_cv": self.purged_cv,
+            "monte_carlo": self.monte_carlo,
+            "parameter_sweep": self.parameter_sweep,
+            "checks": self.checks_dict(),
+            "passed": self.passed,
+            "overfit_risk": self.overfit_risk,
+            "bonferroni_penalty": self.bonferroni_penalty,
+        }
+        return dict(stamp_artifact(payload, STAGE_4_WORKBENCH_ROBUSTNESS))
 
 
 def _pending(name: str, reason_code: str = "ROBUSTNESS_INPUT_MISSING") -> RobustnessCheck:

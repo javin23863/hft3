@@ -49,6 +49,10 @@ from backtest_pipeline.src.research_clock import (
     research_clock_validation_errors,
     validate_research_clock,
 )
+from backtest_pipeline.src.research_pipeline_stages import (
+    STAGE_1_VECTORBT_SCREEN,
+    pipeline_stage_stamp,
+)
 from backtest_pipeline.src.robustness_bridge import compute_robustness_evidence
 from backtest_pipeline.src.surface_stability import compute_surface_stability
 from research_pipeline.types import CandidateModel, ParsedHypothesis
@@ -877,6 +881,12 @@ def _is_screening_not_run(value: Any) -> bool:
         status = _screening_status_text(value)
         return value.get("not_run") is True or status.startswith("not_run")
     return False
+
+
+# Public aliases for generation_gate_producers (avoid importing underscore helpers).
+is_screening_not_run = _is_screening_not_run
+is_surface_stability_defined = _is_surface_stability_defined
+screening_status_text = _screening_status_text
 
 
 def _external_robustness_evidence(metrics: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
@@ -1867,6 +1877,7 @@ class FilterResult:
             "promoted": promoted_rows,
             "rejected": rejected_rows,
         }
+        payload.update(pipeline_stage_stamp(STAGE_1_VECTORBT_SCREEN))
         payload.update(
             build_feature_plane_payload(
                 bar_construction_id=self.bar_construction_id,

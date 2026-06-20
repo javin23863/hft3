@@ -29,6 +29,27 @@ from research_pipeline.generation_state import load_manifest
 from research_pipeline.types import CandidateModel, ParsedHypothesis
 
 
+@pytest.fixture(autouse=True)
+def _pass_ontology_gate_e2e(monkeypatch):
+    from research_pipeline.generation_gate_chain import GATE_ONTOLOGY, build_gate_receipt
+    from research_pipeline import generation_loop as gl
+
+    def _pass_ontology(*, manifest, repo_root):
+        return build_gate_receipt(
+            gate_id=GATE_ONTOLOGY,
+            gate_version="1.0.0",
+            candidate_id=str(manifest["candidate_id"]),
+            feature_recipe_hash=str(manifest["feature_recipe_hash"]),
+            manifest_hash=str(manifest.get("manifest_hash") or "pending"),
+            status="PASS",
+            required_checks=["fable_entry_checklist", "citation_trace"],
+            required_check_count=2,
+            passed_check_count=2,
+        )
+
+    monkeypatch.setattr(gl, "run_ontology_gate_for_candidate", _pass_ontology)
+
+
 @dataclass
 class _E2eFilterResult:
     payload: dict[str, Any]
@@ -51,8 +72,44 @@ def _parsed_hypothesis() -> ParsedHypothesis:
     )
 
 
+def _passing_surface_metrics() -> dict[str, Any]:
+    from backtest_pipeline.src.surface_stability import compute_surface_stability
+
+    grid = {
+        (r, c): {"net_return": 0.10, "trade_count": 50}
+        for r in range(3)
+        for c in range(3)
+    }
+    return compute_surface_stability(grid)
+
+
+def _serializable_statistical_evidence() -> dict[str, Any]:
+    passed = {"status": "pass"}
+    return {
+        "robustness_artifact_staleness": "fresh",
+        "dsr_status": "pass",
+        "pbo_status": "pass",
+        "cscv_status": "pass",
+        "bootstrap_ci_or_not_run": passed,
+        "dsr_or_not_run": passed,
+        "pbo_or_not_run": passed,
+        "cscv_count_or_not_run": passed,
+        "fee_stress_or_not_run": passed,
+        "slippage_stress_or_not_run": passed,
+        "latency_stress_or_not_run": passed,
+        "holm_stepdown_or_not_run": passed,
+        "holm_bh_or_not_run": passed,
+        "null_battery_or_not_run": passed,
+        "planted_alpha_or_not_run": passed,
+        "adversarial_or_not_run": passed,
+        "parameter_perturbation_or_not_run": passed,
+    }
+
+
 def _e2e_filter(*, candidates, parsed, event_id, repo_root, gates, screening_scope, run_budget=None, **kwargs):
     promoted = []
+    surface = _passing_surface_metrics()
+    statistical = _serializable_statistical_evidence()
     for cand in candidates[:2]:
         attached = (
             cand
@@ -79,9 +136,40 @@ def _e2e_filter(*, candidates, parsed, event_id, repo_root, gates, screening_sco
                 "vectorbt_results": {
                     "oos_expectancy": 1.25,
                     "max_drawdown_pct": -4.0,
+                    "num_trades": 50,
+                    "hit_rate": 0.55,
+                    "gross_return": 0.12,
+                    "net_return": 0.10,
+                    "net_pnl": 1000.0,
+                    "total_fees": 50.0,
+                    "total_slippage": 25.0,
+                    "trade_count": 50,
+                    "expectancy_per_trade": 0.02,
+                    "profit_factor": 1.4,
+                    "sharpe": 0.8,
+                    "sortino": 1.1,
+                    "max_drawdown": -0.05,
+                    "turnover": 0.3,
                     "feature_recipe_hash": recipe_hash,
                     "feature_recipe": copy.deepcopy(recipe),
+                    "surface_stability_metrics": surface,
+                    **statistical,
                 },
+                "surface_stability_metrics": surface,
+                "gross_return": 0.12,
+                "net_return": 0.10,
+                "net_pnl": 1000.0,
+                "total_fees": 50.0,
+                "total_slippage": 25.0,
+                "trade_count": 50,
+                "hit_rate": 0.55,
+                "expectancy_per_trade": 0.02,
+                "profit_factor": 1.4,
+                "sharpe": 0.8,
+                "sortino": 1.1,
+                "max_drawdown": -0.05,
+                "turnover": 0.3,
+                **statistical,
             }
         )
     return _E2eFilterResult(
@@ -131,15 +219,134 @@ def _write_latency_queue(tmp_path: Path) -> tuple[Path, Path]:
     return latency, queue
 
 
-def test_e2e_autoresearch_two_generations_with_family_variants(tmp_path: Path) -> None:
+def _e2e_robustness_fn(tmp_path: Path):
+    calls: list[int] = []
+
+    def _run(**kwargs):
+        calls.append(1)
+        out = tmp_path / f"rob_{len(calls)}"
+        out.mkdir(parents=True, exist_ok=True)
+        campaign_summary = {
+            "status": "PASS",
+            "wfc_status": "PASS",
+            "robustness_passed": True,
+            "periods": [{"gate_pass": True}],
+            "wfc": {"pearson": 0.5, "spearman": 0.4, "wfc_status": "PASS"},
+            "metrics": {},
+        }
+        (out / "summary.json").write_text(json.dumps(campaign_summary), encoding="utf-8")
+        return {
+            "robustness_pass": True,
+            "regular_walk_forward_pass": True,
+            "wfc_pass": True,
+            "metrics": {},
+            "campaign_id": f"rob_{len(calls)}",
+            "campaign_summary": campaign_summary,
+            "artifact_dir": str(out),
+        }
+
+    return _run
+
+
+def _e2e_hft_fn(tmp_path: Path):
+    from types import SimpleNamespace
+
+    def _latest_robustness_hash() -> str:
+        from backtest_pipeline.src.hft_campaign._hashing import sha256_hex
+
+        rob_dirs = sorted(tmp_path.glob("rob_*"), key=lambda p: p.stat().st_mtime, reverse=True)
+        for rob_dir in rob_dirs:
+            summary_path = rob_dir / "summary.json"
+            if summary_path.is_file():
+                return sha256_hex(json.loads(summary_path.read_text(encoding="utf-8")))
+        return "rob-smoke-fallback"
+
+    def _manifest_for_candidate(candidate_id: str, config) -> dict[str, Any]:
+        manifests_path = Path(config.out_dir).parent / "candidate_manifests.jsonl"
+        if manifests_path.is_file():
+            for line in manifests_path.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                row = json.loads(line)
+                if str(row.get("candidate_id")) == candidate_id:
+                    return row
+        return {"candidate_id": candidate_id, "manifest_hash": "", "feature_recipe_hash": ""}
+
+    def _run(**kwargs):
+        scenarios = kwargs.get("scenarios") or []
+        config = kwargs.get("config")
+        out = tmp_path / "hft_out"
+        out.mkdir(parents=True, exist_ok=True)
+        rob_hash = _latest_robustness_hash()
+        scenario_results = []
+        for s in scenarios:
+            cid = str(getattr(s, "candidate_id", "unknown"))
+            manifest = _manifest_for_candidate(cid, config) if config else {}
+            scenario_results.append(
+                SimpleNamespace(
+                    scenario_id=str(getattr(s, "scenario_id", "s1")),
+                    status="completed",
+                    replay_result={
+                        "candidate_id": cid,
+                        "manifest_hash": str(manifest.get("manifest_hash") or ""),
+                        "feature_recipe_hash": str(manifest.get("feature_recipe_hash") or ""),
+                        "screening_artifact_hash": "phase8_smoke",
+                        "robustness_artifact_hash": rob_hash,
+                        "certification_status": "full_fidelity_declared",
+                    },
+                    artifact_dir=str(out),
+                )
+            )
+        return SimpleNamespace(
+            status="pass",
+            summary={"status": "pass"},
+            scenario_results=scenario_results,
+        )
+
+    return _run
+
+
+def test_e2e_autoresearch_two_generations_with_family_variants(tmp_path: Path, monkeypatch) -> None:
+    latency, queue = _write_latency_queue(tmp_path)
+    npz = tmp_path / "replay.npz"
+    build_minimal_mbo_npz(npz)
+    scenario_store: dict[str, list[Any]] = {"scenarios": []}
+
+    def fake_generate_scenario_manifest(cfg):
+        scenarios = [
+            type(
+                "Scenario",
+                (),
+                {
+                    "scenario_id": f"sc_{cid}",
+                    "candidate_id": cid,
+                    "to_dict": lambda self, _cid=cid: {"scenario_id": f"sc_{cid}", "candidate_id": _cid},
+                },
+            )()
+            for cid in (getattr(cfg, "candidate_ids", None) or ["unknown"])
+        ]
+        scenario_store["scenarios"] = scenarios
+        return scenarios, []
+
+    monkeypatch.setattr(
+        "research_pipeline.generation_loop.generate_scenario_manifest",
+        fake_generate_scenario_manifest,
+    )
+    monkeypatch.setattr(
+        "research_pipeline.generation_loop.load_scenarios_from_manifest",
+        lambda _path: scenario_store["scenarios"],
+    )
     cfg = AutoresearchConfig(
         max_generations=2,
         max_candidates_per_generation=6,
         exploration_fraction=0.0,
         family_search_enabled=True,
         family_search_fraction=0.5,
-        run_robustness=False,
-        run_hft_campaign=False,
+        run_robustness=True,
+        run_hft_campaign=True,
+        hft_source_npz=npz,
+        hft_latency_model=latency,
+        hft_fill_queue_model=queue,
     )
     code, report = run_autoresearch_loop(
         repo_root=tmp_path,
@@ -150,6 +357,8 @@ def test_e2e_autoresearch_two_generations_with_family_variants(tmp_path: Path) -
         no_llm=True,
         filter_fn=_e2e_filter,
         persist_fn=_e2e_persist,
+        robustness_fn=_e2e_robustness_fn(tmp_path),
+        hft_fn=_e2e_hft_fn(tmp_path),
     )
     assert code == 0
     assert report["generations_run"] == 2
@@ -165,7 +374,7 @@ def test_e2e_autoresearch_two_generations_with_family_variants(tmp_path: Path) -
             / "generation_summary.json"
         ).read_text(encoding="utf-8")
     )
-    elite_rows = [r for r in gen0_summary["candidates"] if r.get("elite")]
+    elite_rows = [r for r in gen0_summary["candidates"] if r.get("final_status") == "FINAL_PASS"]
     assert elite_rows
     assert elite_rows[0].get("feature_recipe_hash")
     assert isinstance(elite_rows[0].get("feature_recipe"), dict)

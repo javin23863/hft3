@@ -2,6 +2,8 @@
 
 Use this order. Do **not** skip to legacy paths below.
 
+**Unified chronological pipeline:** [UNIFIED_RESEARCH_PIPELINE.md](UNIFIED_RESEARCH_PIPELINE.md) — stages 0–7 (ontology → VBT → promote → HBT → workbench robustness → lifecycle/trade manager → certify → CHI404). Code registry: `packages/backtest_pipeline/src/research_pipeline_stages.py`.
+
 **Verification honesty:** Every agent handoff must use the status block in [VALIDATION_HONESTY.md](../VALIDATION_HONESTY.md). Scope-green commands for each lane are in that doc; smoke-only targeted pytest never substitutes.
 
 Baseline metrics: [CPI_2024_09_11_TIGHT_BASELINE.md](CPI_2024_09_11_TIGHT_BASELINE.md)

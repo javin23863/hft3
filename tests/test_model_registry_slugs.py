@@ -15,20 +15,20 @@ from features_engine.src.model_registry import (
 )
 
 
-def test_fifty_six_unique_slugs() -> None:
+def test_sixty_one_unique_slugs() -> None:
     slugs = all_slugs()
-    assert len(slugs) == 56
-    assert len(set(slugs)) == 56
+    assert len(slugs) == 61
+    assert len(set(slugs)) == 61
 
 
 def test_legacy_to_slug_bijection() -> None:
     l2s = legacy_to_slug()
-    assert len(l2s) == 56
-    assert len(set(l2s.values())) == 56
+    assert len(l2s) == 61
+    assert len(set(l2s.values())) == 61
 
 
 def test_hyp_id_round_trip() -> None:
-    for hyp_id in range(1, 46):
+    for hyp_id in range(1, 51):
         slug = get_slug_for_hyp_id(hyp_id)
         assert get_hyp_id_for_slug(slug) == hyp_id
 
@@ -42,5 +42,5 @@ def test_registry_entries_complete() -> None:
     models = load_model_registry()["models"]
     hyp_count = sum(1 for e in models.values() if e.get("kind") == "hypothesis")
     pdf_count = sum(1 for e in models.values() if e.get("kind") == "pdf_structural")
-    assert hyp_count == 45
+    assert hyp_count == 50
     assert pdf_count == 11

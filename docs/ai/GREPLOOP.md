@@ -9,14 +9,11 @@ Local preflight does not replace VaultGate, GraphGate, reviewer, pytest, or
 GraphPost. It is a cheap negative-search pass that catches stale terminology, old API
 fields, missing proof rows, and review-drift before the heavier gates run.
 
-External pattern: an installed PR AI review connector (for example Greptile,
-GitHub Copilot / ChatGPT Codex Connector, or a similar GitHub-integrated
-reviewer) triggers review, fetches the latest review result, fixes actionable
-comments, re-reviews, and stops at a clean review with zero unresolved comments
-or a bounded iteration limit. HFT3 adapts that loop shape to Codex while
-preserving the project ontology: VaultGate first, local grep evidence always,
-and external PR AI review whenever a PR/MR/CL review surface and an installed
-connector exist.
+External pattern: **Greptile** (`@greptileai`) is the **only** connector that
+satisfies the PR GrepLoop gate for this repo (developer assignment §23). Local
+Codex self-review, GitHub Actions `@codex review`, and the ChatGPT/Codex
+Connector do **not** count — they may run in parallel but never substitute for
+Greptile sign-off.
 
 Video-derived additions from `https://youtu.be/WIDIV8oDDC8`:
 
@@ -33,15 +30,29 @@ Video-derived additions from `https://youtu.be/WIDIV8oDDC8`:
 
 ## Position
 
+**cavecrew-reviewer runs during build** (every code-change batch in Phases
+1–8). **Greptile PR GrepLoop runs LAST** (Phase 9 only) — never interleaved
+with implementation phases.
+
+**Stacked split PRs (A→B→C):** do **not** ping `@greptileai` on PR-B or PR-C
+until the prior PR in the stack reaches **≥ 4/5 Greptile confidence** with
+**zero unresolved actionable** findings on **current head SHA**. Premature
+Greptile on downstream PRs does not count toward merge-ready and must be
+paused with an explicit PR comment.
+
 Run local preflight after each edit pass and before claiming the diff is ready
 for the dual-pass reviewer:
 
 ```text
-VaultGate -> GraphGate -> GraphPre -> Plan -> Code -> Local Preflight -> Review -> Verify -> PR GrepLoop -> GraphPost
+VaultGate -> GraphGate -> GraphPre -> Plan -> Code -> Local Preflight -> Review (cavecrew) -> Verify -> PR GrepLoop (Greptile, Phase 9) -> GraphPost
 ```
 
 If reviewer or tests find issues, fix them and run the relevant local preflight
-again before the next review.
+again before the next review. Greptile is **not** a substitute for
+cavecrew-reviewer during build; cavecrew-reviewer is **not** a substitute for
+Greptile at Phase 9.
+
+Assignment authority: [§23 Greptile PR GrepLoop](../project/AUTONOMOUS_RESEARCH_PIPELINE_DEVELOPER_ASSIGNMENT.md#23-mandatory-greptile-pr-greptile-loop).
 
 If local preflight was not run, the change is not merge-ready. The only allowed
 exception is an explicit user waiver, and that still reports `merge-ready: no`.
@@ -78,14 +89,25 @@ git diff --check
    - Scope-appropriate pytest/build commands.
    - `scripts/graphify_rebuild.ps1` after code edits when graph files are tracked.
 
-## PR GrepLoop
+## PR GrepLoop (Greptile-only)
 
 Required in addition to local preflight when there is an actual PR/MR/CL review
-surface and an external PR AI review connector is installed for the repo
-(e.g. Greptile, ChatGPT/Codex Connector, GitHub Copilot PR review). If no PR
-exists, or no connector is installed/authenticated, record
-`pr-ai-review: unavailable(...)`; do not pretend local Codex review satisfied
-this external review gate.
+surface. **Only Greptile** satisfies this gate:
+
+| Reviewer | Counts for PR GrepLoop? |
+|----------|-------------------------|
+| **Greptile** (`@greptileai` on a PR with ≤100 changed files) | **Yes** |
+| Codex connector / `@codex review` / `request-codex-review` GitHub Action | **No** |
+| ChatGPT-Codex-Connector / Copilot PR review | **No** |
+| Agent self-review or dual-pass cavecrew-reviewer | **No** (required separately) |
+
+Greptile hard limit: **100 changed files** per review. Target **<80 files** per
+PR; split stacked PRs (A→B→C) and trigger `@greptileai` on **one PR at a time**
+after fixes land — do not batch-review the monolith.
+
+If no PR exists, or Greptile is not installed/authenticated, record
+`pr-ai-review: unavailable(no-pr|no-greptile|not-authenticated)`; do not pretend
+Codex review or local agent review satisfied this gate.
 
 1. Detect the PR for the current branch:
 
@@ -93,21 +115,19 @@ this external review gate.
 gh pr view --json number,headRefName,headRefOid
 ```
 
-2. Push current work, then trigger or wait for the installed connector. Example
-   triggers:
+2. Push current work, then trigger Greptile **only** (one PR at a time):
 
 ```powershell
 git push
-gh pr comment <PR_NUMBER> --body "@greptileai"       # if Greptile is installed
-gh pr comment <PR_NUMBER> --body "@codex review"     # if Codex GitHub review is enabled
-# or use the GitHub / Copilot / Codex Connector review UI to request a review
+gh pr comment <PR_NUMBER> --body "@greptileai"
 ```
 
-When `.github/workflows/codex_pr_review.yml` is present and enabled, GitHub
-Actions requests Codex review automatically for each non-draft PR head SHA by
-posting `@codex review` with a hidden head marker. This is only a trigger. The
-PR GrepLoop gate is satisfied only after the external reviewer actually posts
-review evidence and all actionable comments are resolved.
+Do **not** post `@codex review` to satisfy PR GrepLoop. The
+`request-codex-review` GitHub Action may still run automatically; treat its
+output as advisory only.
+
+When `.github/workflows/codex_pr_review.yml` is present, it posts `@codex review`
+automatically. That workflow is **not** PR GrepLoop evidence.
 
 3. Fetch all current review surfaces, especially the latest AI reviewer general
    PR comment by `updated_at`, because bot summaries may be edited in place:
@@ -121,9 +141,25 @@ gh api "repos/{owner}/{repo}/pulls/<PR_NUMBER>/comments"
 4. Fix only actionable comments. Treat informational comments or false
    positives as review notes, not architecture changes.
 
-5. Stop when the external reviewer reports clean with zero unresolved comments,
-   or after five PR review iterations. On max-iteration stop, report remaining
-   unresolved comments and do not claim merge-ready.
+5. Stop when **Greptile** on **current head SHA** reports:
+   - confidence **≥ 4/5** (4/5 or 5/5 in Greptile summary when present), **and**
+   - zero unresolved actionable findings, **and**
+   - scope-appropriate verification green.
+
+   Run at most **five** Greptile fix iterations per PR. On max-iteration stop,
+   report remaining unresolved comments and do not claim merge-ready. Do not
+   advance to the next split PR (PR-B/C) or Phase 10 until the current PR
+   meets **≥ 4/5 confidence + zero actionable** on current head.
+
+### Stacked PR gate (A→B→C)
+
+| Prior PR | Before Greptile on next PR |
+|----------|---------------------------|
+| PR-A (#8) | PR-B (#9) blocked until PR-A **≥ 4/5** + 0 actionable |
+| PR-B (#9) | PR-C (#10) blocked until PR-B **≥ 4/5** + 0 actionable |
+
+If an agent prematurely triggers Greptile on a downstream PR, post a pause
+comment and resume PR-A (or the lowest incomplete PR) only.
 
 ## Review Surface Size
 
@@ -149,8 +185,8 @@ git diff --numstat
   blind repo spelunking.
 - Search output is evidence, not proof of correctness. Tests, external review
   where available, and reviewer verdict still decide merge-ready status.
-- Codex self-review, a prose summary, or "looks good" does not satisfy
-  the external PR AI review gate.
+- Codex self-review, `@codex review`, Codex Connector, or a prose summary does
+  **not** satisfy the PR GrepLoop gate — **Greptile only**.
 - For finance/math changes, search for stale units, timestamp fields,
   old feature names, missing source IDs, fake GREEN status, and unverified
   robustness claims.

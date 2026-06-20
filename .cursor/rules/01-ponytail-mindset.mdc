@@ -1,0 +1,73 @@
+---
+description: Ponytail mindset — SECOND context every session. Load after Fable, before vault/graph/code.
+alwaysApply: true
+---
+
+# Ponytail mindset — load this second (every agent session)
+
+**Lazy senior dev discipline.** This rule is the **second** context on every Cursor agent turn — immediately after [.cursor/rules/00-fable-mindset.mdc](00-fable-mindset.mdc), and **before** VaultGate, GraphGate, searches, scripts, or any code edit.
+
+**Upstream repo:** https://github.com/DietrichGebert/ponytail  
+**Vendored in hft3:** `vendor/ponytail/` (update: `git -C vendor/ponytail pull`)  
+**hft3 charter:** [docs/ai/PONYTAIL.md](../../docs/ai/PONYTAIL.md)
+
+**Blocking:** Do not touch the codebase until Fable (#1) and this Ponytail ladder (#2) are active. Ponytail is **not** a Vast/SSH tool — ops use `vastai` + `scripts/vast_ssh_run_vbt_paid_screen.sh`.
+
+---
+
+## 1. The ladder (before every implementation)
+
+Stop at the **first rung that holds**:
+
+1. Does this need to be built at all? (**YAGNI**)
+2. Does the **standard library** already do this? Use it.
+3. Does a **native platform** feature cover it? Use it.
+4. Does an **already-installed dependency** solve it? Use it.
+5. Can this be **one line**? Make it one line.
+6. Only then: write the **minimum code that works**.
+
+---
+
+## 2. Rules
+
+- No abstractions that weren't explicitly requested.
+- No new dependency if it can be avoided.
+- No boilerplate nobody asked for.
+- **Deletion over addition.** Boring over clever. Fewest files possible.
+- Question complex requests: "Do you actually need X, or does Y cover it?"
+- Pick the edge-case-correct stdlib option when two approaches are the same size — lazy means less code, not the flimsier algorithm.
+- Mark intentional shortcuts: `ponytail: <ceiling> — upgrade via <path>`
+
+---
+
+## 3. Not lazy about (never cut)
+
+- Input validation at trust boundaries
+- Error handling that prevents data loss
+- Security and accessibility
+- BLUEPRINT / finance / math invariants (filtration, no lookahead, walk-forward)
+- Anything the operator explicitly requested
+- Calibration real hardware needs (clocks drift, sensors read off)
+
+**Lazy code without its check is unfinished:** non-trivial logic leaves ONE runnable check — smallest thing that fails if logic breaks (assert demo or one small test; no frameworks/fixtures). Trivial one-liners need no test.
+
+---
+
+## 4. Review hooks (when host supports skills)
+
+- `/ponytail-review` — over-engineering delete-list on current diff
+- `/ponytail-audit` — repo-wide simplification pass
+
+Intensity override: `PONYTAIL_DEFAULT_MODE=lite|full|ultra|off` or `%APPDATA%\ponytail\config.json`
+
+---
+
+## 5. Gate order (context load)
+
+| # | Context | When |
+|---|---------|------|
+| 1 | [00-fable-mindset.mdc](00-fable-mindset.mdc) | **First** — every session |
+| 2 | **This rule** | **Second** — before codebase |
+| 3 | VaultGate + VaultPre | After Fable + Ponytail |
+| 4 | GraphGate + GraphPre | When not owner-waived |
+| 5 | Plan / locate / code / review / verify | After gates |
