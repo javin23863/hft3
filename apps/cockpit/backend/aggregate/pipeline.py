@@ -669,29 +669,7 @@ def _latest_paired_replay_artifact(screening_fields: dict[str, Any]) -> tuple[di
     paired, pair_error = _paired_replay_for_candidate(screening_fields, expected_candidate)
     if paired is not None:
         return paired, pair_error
-    root = paths.hftbacktest_realism_root()
-    if not root.is_dir():
-        return None, None
-    artifacts: list[dict[str, Any]] = []
-    for artifact in root.glob("*/replay_summary.json"):
-        data = paths.read_json(artifact)
-        observed = _artifact_time(artifact, data, ("generated_utc", "created_at_utc"))
-        if observed is None:
-            continue
-        sort_time, observed_at, time_source = observed
-        artifacts.append(
-            {
-                "path": artifact,
-                "data": data,
-                "observed_at": observed_at,
-                "time_source": time_source,
-                "sort_time": sort_time,
-            }
-        )
-    if not artifacts:
-        return None, None
-    artifacts.sort(key=lambda item: item["sort_time"], reverse=True)
-    return artifacts[0], pair_error or "no_paired_replay_summary_for_screening_hash_and_candidate"
+    return None, pair_error or "no_paired_replay_summary_for_screening_hash_and_candidate"
 
 
 def _validated_promoted_candidate_count(screening_fields: dict[str, Any]) -> int:
@@ -1787,8 +1765,16 @@ def _vectorbt_screen_stage() -> dict:
     anomalies = tracking.get("anomalies")
     screening_status = screening.get("screening_status")
     screening_detail = screening.get("screening_detail")
+    replay_eligibility = screening.get("replay_eligibility_status")
     if state == "complete" and screening_status == "pass" and not anomalies:
-        status = schemas.OK
+        if replay_eligibility == "eligible":
+            status = schemas.OK
+        else:
+            status = schemas.STALE
+            eligibility_detail = screening.get("replay_eligibility_detail") or "replay_eligibility_not_eligible"
+            screening_detail = (
+                (screening_detail + " " + eligibility_detail if screening_detail else eligibility_detail)
+            )
     elif state == "running":
         status = schemas.RUNNING
     elif state in {"declared", "observed"}:

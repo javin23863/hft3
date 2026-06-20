@@ -1,4 +1,8 @@
-"""Phase 7 — three-generation acceptance (assignment §21)."""
+"""Phase 7 — three-generation acceptance (assignment §21).
+
+VALIDATION_HONESTY: fixture_dry_run only — planted runners and minimal NPZ fixtures.
+Not scope-green merge evidence for live manifests or production VectorBT/HftBacktest runs.
+"""
 
 from __future__ import annotations
 
@@ -9,10 +13,12 @@ import pytest
 from scripts.run_autoresearch_three_gen_acceptance import run_three_gen_acceptance
 
 
+@pytest.mark.fixture_dry_run
 def test_three_gen_acceptance_fixture_dry_run(tmp_path: Path) -> None:
     report_path = tmp_path / "acceptance_report.md"
     payload = run_three_gen_acceptance(repo_root=tmp_path, report_path=report_path)
     assert payload["exit_code"] == 0
+    assert payload["mode"] == "fixture_dry_run"
     assert payload["generations_run"] == 3
     assert report_path.is_file()
     text = report_path.read_text(encoding="utf-8")

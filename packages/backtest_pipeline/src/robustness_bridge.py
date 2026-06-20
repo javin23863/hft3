@@ -713,10 +713,9 @@ def compute_robustness_evidence(robustness_input: dict, candidate_id: str = "") 
     adversarial_status = _PASS if (adversarial_pass is True) else (_FAIL if (adversarial_pass is False) else _NOT_RUN)
     param_perturb_pass = param_perturb_result.get("parameter_perturbation_pass")
     param_perturb_status = _PASS if (param_perturb_pass is True) else (_FAIL if (param_perturb_pass is False) else _NOT_RUN)
-    # Derive cscv_status independently from the CSCV/PBO producer result.
-    # cscv_status means "CSCV structure ran" (valid partition/config counts),
-    # not anti-overfit pass — that is pbo_status. When structure ran but PBO
-    # failed, surface structure_ran instead of aliasing pbo_status.
+    # Gate-facing cscv_status: pass when CSCV structure ran AND PBO passed;
+    # structure_ran when partition/config counts are valid but PBO failed;
+    # not_run otherwise. Anti-overfit verdict remains pbo_status.
     cscv_n_partitions = pbo_result.get("n_partitions")
     cscv_n_configs = pbo_result.get("n_configs")
     cscv_structure_ran = (

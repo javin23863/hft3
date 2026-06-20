@@ -293,6 +293,7 @@ def _holdout_evaluate_only_failures(periods: Sequence[Mapping[str, Any]]) -> lis
     for holdout_name in holdout_names:
         period = by_name.get(holdout_name)
         if period is None:
+            failures.append(f"holdout_evaluate_only_missing:{holdout_name}")
             continue
         if not bool(period.get("evaluate_only")):
             failures.append(f"holdout_evaluate_only_violation:{holdout_name}")
@@ -315,11 +316,6 @@ def _promoted_row_with_campaign_statistical(
     robustness_input = campaign_summary.get("robustness_input")
     if isinstance(robustness_input, Mapping) and robustness_input:
         merged.setdefault("robustness_input", dict(robustness_input))
-    elif campaign_summary.get("robustness_passed") is True and not _statistical_row_has_input(merged):
-        merged.setdefault("robustness_artifact_staleness", "fresh")
-        merged.setdefault("dsr_status", "pass")
-        merged.setdefault("pbo_status", "pass")
-        merged.setdefault("cscv_status", "pass")
     return merged
 
 

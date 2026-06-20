@@ -230,7 +230,11 @@ def _e2e_robustness_fn(tmp_path: Path):
             "status": "PASS",
             "wfc_status": "PASS",
             "robustness_passed": True,
-            "periods": [{"name": "Discovery", "gate_pass": True}],
+            "periods": [
+                {"name": "Discovery", "gate_pass": True},
+                {"name": "Holdout", "gate_pass": True, "evaluate_only": True},
+                {"name": "Recent holdout", "gate_pass": True, "evaluate_only": True},
+            ],
             "wfc": {"pearson": 0.5, "spearman": 0.4, "wfc_status": "PASS"},
             "wfc_matrix_rows": [{"parameter_hash": "ph-e2e", "fold": 0}],
             "metrics": {},

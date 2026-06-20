@@ -122,6 +122,35 @@ def test_statistical_gate_rejects_fail_cscv_status() -> None:
     assert any("pbo" in str(r).lower() for r in receipt.get("failure_reasons", []))
 
 
+def test_statistical_gate_rejects_structure_ran_cscv_status() -> None:
+    row = _passing_vectorbt_row()
+    row.pop("vectorbt_results", None)
+    row["bootstrap_ci_or_not_run"] = {"status": "pass"}
+    row["dsr_or_not_run"] = {"status": "pass"}
+    row["pbo_or_not_run"] = {"status": "fail", "pbo_pass": False}
+    row["cscv_count_or_not_run"] = {"status": "pass"}
+    row["dsr_status"] = "pass"
+    row["pbo_status"] = "fail"
+    row["cscv_status"] = "structure_ran"
+    row["robustness_artifact_staleness"] = "fresh"
+    row["fee_stress_or_not_run"] = {"status": "pass"}
+    row["slippage_stress_or_not_run"] = {"status": "pass"}
+    row["latency_stress_or_not_run"] = {"status": "pass"}
+    row["holm_stepdown_or_not_run"] = {"status": "pass"}
+    row["holm_bh_or_not_run"] = {"status": "pass"}
+    row["null_battery_or_not_run"] = {"status": "pass"}
+    row["planted_alpha_or_not_run"] = {"status": "pass"}
+    row["adversarial_or_not_run"] = {"status": "pass"}
+    row["parameter_perturbation_or_not_run"] = {"status": "pass"}
+    receipt = build_statistical_robustness_gate_receipt(
+        manifest=_manifest(),
+        promoted_row=row,
+        allow_partial=False,
+    )
+    assert receipt["status"] == "REJECT"
+    assert any("cscv_status=structure_ran" in str(r) for r in receipt.get("failure_reasons", []))
+
+
 def test_statistical_gate_rejects_missing_holm() -> None:
     row = _passing_promoted_row()
     inp = dict(row["vectorbt_results"]["robustness_input"])

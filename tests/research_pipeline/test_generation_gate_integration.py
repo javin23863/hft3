@@ -270,13 +270,24 @@ def test_wfc_pass_cannot_substitute_regular_wf() -> None:
 
 def test_wf_receipts_are_independent_producers() -> None:
     manifest = _manifest()
-    wf_pass_summary = {"status": "PASS", "periods": [{"name": "Discovery", "gate_pass": True}]}
+    wf_pass_summary = {
+        "status": "PASS",
+        "periods": [
+            {"name": "Discovery", "gate_pass": True},
+            {"name": "Holdout", "gate_pass": True, "evaluate_only": True},
+            {"name": "Recent holdout", "gate_pass": True, "evaluate_only": True},
+        ],
+    }
     wfc_only_summary = {
         "status": "FAIL",
         "wfc_status": "PASS",
         "wfc": {"pearson": 0.8, "spearman": 0.7, "wfc_status": "PASS"},
         "wfc_matrix_rows": [{"parameter_hash": "ph-1", "fold": 0}],
-        "periods": [{"name": "Discovery", "gate_pass": False}],
+        "periods": [
+            {"name": "Discovery", "gate_pass": False},
+            {"name": "Holdout", "gate_pass": True, "evaluate_only": True},
+            {"name": "Recent holdout", "gate_pass": True, "evaluate_only": True},
+        ],
     }
     regular = build_regular_walk_forward_gate_receipt(manifest=manifest, campaign_summary=wf_pass_summary)
     wfc = build_walk_forward_correlation_gate_receipt(manifest=manifest, campaign_summary=wfc_only_summary)
@@ -293,11 +304,27 @@ def test_gate4_rejects_holdout_without_evaluate_only() -> None:
         "periods": [
             {"name": "Discovery", "gate_pass": True},
             {"name": "Holdout", "gate_pass": True, "evaluate_only": False},
+            {"name": "Recent holdout", "gate_pass": True, "evaluate_only": True},
         ],
     }
     receipt = build_regular_walk_forward_gate_receipt(manifest=manifest, campaign_summary=holdout_violation)
     assert receipt["status"] == "REJECT"
     assert any("holdout_evaluate_only_violation" in r for r in receipt.get("failure_reasons") or [])
+
+
+def test_gate4_rejects_missing_configured_holdout_period() -> None:
+    manifest = _manifest()
+    missing_holdout = {
+        "status": "PASS",
+        "periods": [
+            {"name": "Discovery", "gate_pass": True},
+        ],
+    }
+    receipt = build_regular_walk_forward_gate_receipt(manifest=manifest, campaign_summary=missing_holdout)
+    assert receipt["status"] == "REJECT"
+    failures = receipt.get("failure_reasons") or []
+    assert any("holdout_evaluate_only_missing:Holdout" in r for r in failures)
+    assert any("holdout_evaluate_only_missing:Recent holdout" in r for r in failures)
 
 
 def test_gate5_rejects_missing_wfc_matrix_alignment() -> None:

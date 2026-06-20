@@ -210,7 +210,11 @@ def _acceptance_robustness_fn(repo_root: Path):
             "status": wf_status,
             "wfc_status": wfc_status,
             "robustness_passed": wf_status == "PASS" and wfc_status == "PASS",
-            "periods": [{"gate_pass": wf_status == "PASS"}],
+            "periods": [
+                {"name": "Discovery", "gate_pass": wf_status == "PASS"},
+                {"name": "Holdout", "gate_pass": wf_status == "PASS", "evaluate_only": True},
+                {"name": "Recent holdout", "gate_pass": wf_status == "PASS", "evaluate_only": True},
+            ],
             "wfc": {"pearson": 0.5 if wfc_status == "PASS" else -0.1, "spearman": 0.4 if wfc_status == "PASS" else -0.1, "wfc_status": wfc_status},
             "metrics": {},
         }
@@ -340,15 +344,9 @@ def _parent_child_recipe_changes(
         child_hash = str(row.get("feature_recipe_hash") or "")
         parent_hash = parent_hashes.get(parent, "")
         proposal_reason = str(row.get("proposal_reason") or meta.get("proposal_reason") or "")
-        is_family_mutation = (
-            proposal_reason.startswith("family_variant:")
-            or proposal_reason.startswith("failure_driven:")
-            or bool(meta.get("family_variant_id"))
-        )
         recipe_changed = bool(parent) and (
             (parent_recipe and child_recipe != parent_recipe)
             or (parent_hash and child_hash and child_hash != parent_hash)
-            or is_family_mutation
         )
         changes.append(
             {
