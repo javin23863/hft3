@@ -19,6 +19,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Sanitize-RemoteBash([string]$cmd) {
+    return ($cmd -replace "`r", "").Trim()
+}
+
 function Write-Step($msg) { Write-Host "`n=== $msg ===" -ForegroundColor Cyan }
 
 function Get-FileSha256Prefix([string]$Path) {
@@ -67,14 +71,14 @@ set -euo pipefail
 if [[ -d $RemoteRepo/.git ]]; then
   git -C $RemoteRepo fetch origin
   git -C $RemoteRepo checkout $GitBranch
-  git -C $RemoteRepo pull --ff-only origin $GitBranch
+  git -C $RemoteRepo reset --hard origin/$GitBranch
 else
   git clone --branch $GitBranch https://github.com/javin23863/hft3.git $RemoteRepo
 fi
 cd $RemoteRepo
 echo REMOTE_HEAD=\$(git rev-parse HEAD)
 "@
-& ssh @sshOpts $SshHost $syncCmd
+& ssh @sshOpts $SshHost (Sanitize-RemoteBash $syncCmd)
 if ($LASTEXITCODE -ne 0) { throw "Remote sync failed exit=$LASTEXITCODE" }
 
 Write-Step "SCP gate, events.csv, manifest.parquet"
@@ -89,29 +93,24 @@ if ($LASTEXITCODE -ne 0) { throw "scp events failed exit=$LASTEXITCODE" }
 if ($LASTEXITCODE -ne 0) { throw "scp manifest failed exit=$LASTEXITCODE" }
 
 Write-Step "Verify remote HEAD + hashes"
-$verifyCmd = @"
+$verifyCmd = @'
 set -euo pipefail
-cd $RemoteRepo
-REMOTE_HEAD=\$(git rev-parse HEAD)
-EVENTS=$RemoteRepo/$EventsCsv
-MANIFEST=$RemoteManifestPath
+cd __REMOTE_REPO__
 python3 - <<'PY'
-import hashlib, json, os, sys
+import hashlib, json, subprocess, sys
 from pathlib import Path
 
-repo = Path("$RemoteRepo")
-events = Path("$RemoteRepo/$EventsCsv")
-manifest = Path("$RemoteManifestPath")
+repo = Path("__REMOTE_REPO__")
+events = Path("__REMOTE_REPO__/__EVENTS_CSV__")
+manifest = Path("__REMOTE_MANIFEST__")
 gate = json.loads((repo / "runtime/reports/paid_screen_ready_gate.json").read_text(encoding="utf-8"))
-expected_head = "$localHead"
+expected_head = "__LOCAL_HEAD__"
 expected_events = gate["pilot_hashes"]["events_csv_hash"]
 expected_lake = gate["pilot_hashes"]["lake_manifest_hash"]
 
 def sha32(p: Path) -> str:
     return hashlib.sha256(p.read_bytes()).hexdigest()[:32]
 
-remote_head = (repo / ".git")
-import subprocess
 head = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
 events_h = sha32(events)
 lake_h = sha32(manifest)
@@ -129,8 +128,8 @@ if lake_h != expected_lake:
     sys.exit(1)
 print("HASH_VERIFY_OK")
 PY
-"@
-& ssh @sshOpts $SshHost $verifyCmd
+'@ -replace '__REMOTE_REPO__', $RemoteRepo -replace '__EVENTS_CSV__', ($EventsCsv -replace '\\','/') -replace '__REMOTE_MANIFEST__', $RemoteManifestPath -replace '__LOCAL_HEAD__', $localHead
+& ssh @sshOpts $SshHost (Sanitize-RemoteBash $verifyCmd)
 if ($LASTEXITCODE -ne 0) { throw "Remote hash verify failed exit=$LASTEXITCODE" }
 
 Write-Step "NPZ parity probe (file counts)"
@@ -152,16 +151,16 @@ if ([int]$localNpzCount -gt 0) {
 }
 
 Write-Step "20-unit NPZ resolution probe"
-$probeCmd = @"
+$probeCmd = @'
 set -euo pipefail
-cd $RemoteRepo
-export HFT3_NPZ_ROOT=$RemoteNpzRoot
-export HFT3_MANIFEST_PATH=$RemoteManifestPath
+cd __REMOTE_REPO__
+export HFT3_NPZ_ROOT=__REMOTE_NPZ__
+export HFT3_MANIFEST_PATH=__REMOTE_MANIFEST__
 python3 - <<'PY'
 import json, random, sys
 from pathlib import Path
 
-repo = Path("$RemoteRepo")
+repo = Path("__REMOTE_REPO__")
 sys.path.insert(0, str(repo))
 from hft3_bootstrap import setup_repo_paths
 setup_repo_paths()
@@ -174,7 +173,8 @@ if not units_path.is_file():
     print("FAIL: no probe units JSONL", file=sys.stderr)
     sys.exit(1)
 rows = [json.loads(l) for l in units_path.read_text(encoding="utf-8").splitlines() if l.strip()]
-sample = rows[:$ProbeUnitCount] if len(rows) <= $ProbeUnitCount else random.sample(rows, $ProbeUnitCount)
+probe_n = __PROBE_N__
+sample = rows[:probe_n] if len(rows) <= probe_n else random.sample(rows, probe_n)
 hits = 0
 for u in sample:
     cands = _npz_candidates_for_event(npz_search_dirs(repo), u["event_id"], u.get("symbol"))
@@ -185,8 +185,8 @@ if hits != len(sample):
     print("FAIL: NPZ resolution probe", file=sys.stderr)
     sys.exit(1)
 PY
-"@
-& ssh @sshOpts $SshHost $probeCmd
+'@ -replace '__REMOTE_REPO__', $RemoteRepo -replace '__REMOTE_NPZ__', $RemoteNpzRoot -replace '__REMOTE_MANIFEST__', $RemoteManifestPath -replace '__PROBE_N__', "$ProbeUnitCount"
+& ssh @sshOpts $SshHost (Sanitize-RemoteBash $probeCmd)
 if ($LASTEXITCODE -ne 0) { throw "NPZ resolution probe failed exit=$LASTEXITCODE" }
 
 Write-Host "`nDEPLOY_CONTRACT_PASS" -ForegroundColor Green
