@@ -1,95 +1,95 @@
----
+﻿---
 name: Autonomous Research Pipeline Gate Chain
-overview: "Complete and harden the existing autoresearch loop (run_pipeline.py --autoresearch) with strict gates 0–8, separate regular WF vs WFC, honest generation summary/resume, performance path, tests, three-gen acceptance, local rg preflight, and mandatory Greptile PR GrepLoop. Documentation-only plan — implementation follows [AUTONOMOUS_RESEARCH_PIPELINE_DEVELOPER_ASSIGNMENT.md](../../docs/project/AUTONOMOUS_RESEARCH_PIPELINE_DEVELOPER_ASSIGNMENT.md)."
+overview: "Complete and harden the existing autoresearch loop (run_pipeline.py --autoresearch) with strict gates 0â€“8, separate regular WF vs WFC, honest generation summary/resume, performance path, tests, three-gen acceptance, local rg preflight, and mandatory Greptile PR GrepLoop. Documentation-only plan â€” implementation follows [AUTONOMOUS_RESEARCH_PIPELINE_DEVELOPER_ASSIGNMENT.md](../../docs/project/AUTONOMOUS_RESEARCH_PIPELINE_DEVELOPER_ASSIGNMENT.md)."
 todos:
   - id: phase0-audit-rg
-    content: "Phase 0 (§2): Run mandatory rg audit commands; produce requirement/file/function/test/artifact/active/gap table before any code edit"
+    content: "Phase 0 (Â§2): Run mandatory rg audit commands; produce requirement/file/function/test/artifact/active/gap table before any code edit"
     status: completed
   - id: phase0-locate-wfc
-    content: "Phase 0 BLOCKER: Locate existing WFC impl (apps/workbench/src/robustness/wfc/gate.py, wfc_gate.yaml, tests, artifacts) — do NOT add second WFC until audit proves gap"
+    content: "Phase 0 BLOCKER: Locate existing WFC impl (apps/workbench/src/robustness/wfc/gate.py, wfc_gate.yaml, tests, artifacts) â€” do NOT add second WFC until audit proves gap"
     status: completed
   - id: phase0-locate-regular-wf
-    content: "Phase 0: Locate regular walk-forward impl (walk_forward.yaml, workbench, generation_summary) — prove distinct from WFC"
+    content: "Phase 0: Locate regular walk-forward impl (walk_forward.yaml, workbench, generation_summary) â€” prove distinct from WFC"
     status: completed
   - id: phase0-locate-greptile
     content: "Phase 0: Confirm Greptile PR GrepLoop entrypoints (docs/ai/GREPLOOP.md, .github, AGENTS.md); Codex is NOT acceptable substitute"
     status: completed
   - id: phase1-gate-chain-contract
-    content: "Phase 1 (§4): Add/extend run_generation_gate_chain in generation_loop ownership with strict receipt schema and exact PASS comparisons"
+    content: "Phase 1 (Â§4): Add/extend run_generation_gate_chain in generation_loop ownership with strict receipt schema and exact PASS comparisons"
     status: completed
   - id: phase2-gate0-ontology
-    content: "Phase 2 (§5): Wire Gate 0 ontology admission (ontology_gate.py + ONTOLOGY_GATE_AGENT_SPEC) before VectorBT compute"
+    content: "Phase 2 (Â§5): Wire Gate 0 ontology admission (ontology_gate.py + ONTOLOGY_GATE_AGENT_SPEC) before VectorBT compute"
     status: completed
   - id: phase2-gate1-manifest
-    content: "Phase 2 (§6): Gate 1 frozen candidate manifest (candidate_manifest.py, feature_recipe.py) with hash immutability"
+    content: "Phase 2 (Â§6): Gate 1 frozen candidate manifest (candidate_manifest.py, feature_recipe.py) with hash immutability"
     status: completed
   - id: phase2-gate2-vectorbt
-    content: "Phase 2 (§7): Gate 2 VectorBT screen via optimized paid/worker/matrix path — no subprocess-per-unit"
+    content: "Phase 2 (Â§7): Gate 2 VectorBT screen via optimized paid/worker/matrix path â€” no subprocess-per-unit"
     status: completed
   - id: phase2-gate3-surface
-    content: "Phase 2 (§8): Gate 3 surface stability (surface_stability.py) with fail-closed missing cells/thresholds"
+    content: "Phase 2 (Â§8): Gate 3 surface stability (surface_stability.py) with fail-closed missing cells/thresholds"
     status: completed
   - id: phase2-gate4-regular-wf
-    content: "Phase 2 (§9): Gate 4 regular walk-forward (FIRST WF process) — holdout evaluate-only, no learning feedback"
+    content: "Phase 2 (Â§9): Gate 4 regular walk-forward (FIRST WF process) â€” holdout evaluate-only, no learning feedback"
     status: completed
   - id: phase2-gate5-wfc
-    content: "Phase 2 (§10) BLOCKER: Gate 5 WFC (SECOND distinct process) — reuse existing evaluate_wfc_gate; full aligned parameter surface; Pearson+Spearman; no equity-curve/best-param substitute"
+    content: "Phase 2 (Â§10) BLOCKER: Gate 5 WFC (SECOND distinct process) â€” reuse existing evaluate_wfc_gate; full aligned parameter surface; Pearson+Spearman; no equity-curve/best-param substitute"
     status: completed
   - id: phase2-gate6-statistical
-    content: "Phase 2 (§11): Gate 6 statistical/Monte Carlo gauntlet (allow_partial=False, robustness_producers + ROBUSTNESS_TESTING_SPEC)"
+    content: "Phase 2 (Â§11): Gate 6 statistical/Monte Carlo gauntlet (allow_partial=False, robustness_producers + ROBUSTNESS_TESTING_SPEC)"
     status: completed
   - id: phase2-gate7-hft
-    content: "Phase 2 (§12): Gate 7 HftBacktest realism (hft_campaign/, run_hft_campaign:true, per-candidate status)"
+    content: "Phase 2 (Â§12): Gate 7 HftBacktest realism (hft_campaign/, run_hft_campaign:true, per-candidate status)"
     status: completed
   - id: phase2-gate8-certification
-    content: "Phase 2 (§13): Gate 8 final certification — FINAL_PASS only when all prior gates PASS; score cannot override"
+    content: "Phase 2 (Â§13): Gate 8 final certification â€” FINAL_PASS only when all prior gates PASS; score cannot override"
     status: completed
   - id: phase3-generation-summary
-    content: "Phase 3 (§14): Fix generation_summary — all candidates, elite=FINAL_PASS only, best_candidate from FINAL_PASS only"
+    content: "Phase 3 (Â§14): Fix generation_summary â€” all candidates, elite=FINAL_PASS only, best_candidate from FINAL_PASS only"
     status: completed
   - id: phase3-learning-behavior
-    content: "Phase 3 (§15): Karpathy autonomous learning — exploitation from FINAL_PASS only; no threshold lowering or WFC/HFT bypass"
+    content: "Phase 3 (Â§15): Karpathy autonomous learning â€” exploitation from FINAL_PASS only; no threshold lowering or WFC/HFT bypass"
     status: completed
   - id: phase3-review-memory
-    content: "Phase 3 (§16): Extend review_memory with full gate outcomes including WFC Pearson/Spearman; advisory only"
+    content: "Phase 3 (Â§16): Extend review_memory with full gate outcomes including WFC Pearson/Spearman; advisory only"
     status: completed
   - id: phase4-completion
-    content: "Phase 4 (§17): Honest .generation_complete — validate all receipts before marker; zero FINAL_PASS allowed"
+    content: "Phase 4 (Â§17): Honest .generation_complete â€” validate all receipts before marker; zero FINAL_PASS allowed"
     status: completed
   - id: phase4-resume
-    content: "Phase 4 (§18): Deterministic resume — expanded config hash; reuse valid gates; rerun corrupt; no skip-on-marker"
+    content: "Phase 4 (Â§18): Deterministic resume â€” expanded config hash; reuse valid gates; rerun corrupt; no skip-on-marker"
     status: completed
   - id: phase5-vbt-performance
-    content: "Phase 5 (§19): VectorBT performance — long-lived workers, matrix batch, shared loading; benchmark + projected campaign time"
+    content: "Phase 5 (Â§19): VectorBT performance â€” long-lived workers, matrix batch, shared loading; benchmark + projected campaign time"
     status: completed
   - id: phase5-hbt-performance
-    content: "Phase 5 (§19): HftBacktest performance — prepared data reuse, fresh engine per scenario, bounded worker recycling"
+    content: "Phase 5 (Â§19): HftBacktest performance â€” prepared data reuse, fresh engine per scenario, bounded worker recycling"
     status: completed
   - id: phase6-gate-tests
-    content: "Phase 6 (§20): Add planted PASS/FAIL tests for every gate including WFC independence, alignment, Pearson/Spearman, elite rules"
+    content: "Phase 6 (Â§20): Add planted PASS/FAIL tests for every gate including WFC independence, alignment, Pearson/Spearman, elite rules"
     status: completed
   - id: phase6-resume-tests
-    content: "Phase 6 (§20): Tests for resume, completion marker timing, dedup recipe hashes, three-gen unattended"
+    content: "Phase 6 (Â§20): Tests for resume, completion marker timing, dedup recipe hashes, three-gen unattended"
     status: completed
   - id: phase7-three-gen-run
-    content: "Phase 7 (§21): Run deterministic three-generation acceptance campaign; report rejects/FINAL_PASS/recipe changes"
+    content: "Phase 7 (Â§21): Run deterministic three-generation acceptance campaign; report rejects/FINAL_PASS/recipe changes"
     status: completed
   - id: phase8-rg-preflight
-    content: "Phase 8 (§22): After each edit batch run bounded local rg negative/positive searches + git diff --check (max 3 iterations)"
+    content: "Phase 8 (Â§22): After each edit batch run bounded local rg negative/positive searches + git diff --check (max 3 iterations)"
     status: completed
   - id: phase9-greptile-loop
-    content: "Phase 9 (§23) BLOCKER: Greptile PR GrepLoop LAST — PR-A (#8) merged 2026-06-20; PR-B (#9) loop in progress; max 5 iterations; stop at confidence ≥4/5 + 0 actionable on current head"
+    content: "Phase 9 (§23) BLOCKER: Greptile PR GrepLoop LAST - PR-A (#8) merged; PR-B (#9) poll-only 2026-06-20: head a3c0cc1e, no Greptile score on current head (best stale 4/5 a8aa74b9); 5 iter exhausted; P1 clear; 4 P2 open; OWNER_UNBLOCK in runtime/reports/greptile_pr9_loop_20260620.md; Phase 10 blocked"
     status: in_progress
   - id: phase10-checklist
-    content: "Phase 10 (§24): Complete final acceptance checklist — all 26 items must be true"
+    content: "Phase 10 (Â§24): Complete final acceptance checklist â€” all 26 items must be true"
     status: pending
   - id: phase10-developer-table
-    content: "Phase 10 (§25): Return required developer response table with evidence artifacts (not fixture-only claims)"
+    content: "Phase 10 (Â§25): Return required developer response table with evidence artifacts (not fixture-only claims)"
     status: pending
 isProject: true
 ---
 
-# Autonomous research pipeline — gate chain implementation plan
+# Autonomous research pipeline â€” gate chain implementation plan
 
 **Assignment authority:** [AUTONOMOUS_RESEARCH_PIPELINE_DEVELOPER_ASSIGNMENT.md](../../docs/project/AUTONOMOUS_RESEARCH_PIPELINE_DEVELOPER_ASSIGNMENT.md)
 
@@ -105,9 +105,9 @@ isProject: true
 |---------|-------------|
 | **WFC is second process** | Regular walk-forward (Gate 4) and Walk Forward Correlation (Gate 5) are **independent** gates. Neither PASS substitutes for the other. |
 | **Reuse existing WFC** | Audit must locate `evaluate_wfc_gate` in [`apps/workbench/src/robustness/wfc/gate.py`](../../apps/workbench/src/robustness/wfc/gate.py), config [`apps/workbench/config/wfc_gate.yaml`](../../apps/workbench/config/wfc_gate.yaml), tests, and artifact schema **before** any new WFC code. |
-| **Full parameter surface** | WFC correlates aligned cells across two surfaces by **parameter hash** — not equity curves, best params, or summary scores. |
+| **Full parameter surface** | WFC correlates aligned cells across two surfaces by **parameter hash** â€” not equity curves, best params, or summary scores. |
 | **Greptile required** | [Greptile PR GrepLoop](../../docs/ai/GREPLOOP.md) only. Codex/Copilot/Bugbot/local review **do not** satisfy merge-ready. |
-| **Phase 0 before code** | Active-path audit table (§2) is mandatory first deliverable. |
+| **Phase 0 before code** | Active-path audit table (Â§2) is mandatory first deliverable. |
 
 ---
 
@@ -146,36 +146,36 @@ isProject: true
 | [`vendor/vectorbt/VENDOR.lock`](../../vendor/vectorbt/VENDOR.lock) | VectorBT lock |
 | [`vendor/hftbacktest/VENDOR.lock`](../../vendor/hftbacktest/VENDOR.lock) | HftBacktest lock |
 
-### Audit must still confirm (existence ≠ wired to `--autoresearch`)
+### Audit must still confirm (existence â‰  wired to `--autoresearch`)
 
 - WFC call site active in `run_pipeline.py --autoresearch` path
-- Regular WF receipt schema → `regular_walk_forward_gate.json`
-- WFC receipt schema → `walk_forward_correlation_gate.json`
-- Martyn Tinsley / transcript reference location (rg per §2)
-- Greptile GitHub integration trigger in `.github/` (rg per §2)
-- `run_generation_gate_chain` — **not yet present** (expected new work in Phase 1)
+- Regular WF receipt schema â†’ `regular_walk_forward_gate.json`
+- WFC receipt schema â†’ `walk_forward_correlation_gate.json`
+- Martyn Tinsley / transcript reference location (rg per Â§2)
+- Greptile GitHub integration trigger in `.github/` (rg per Â§2)
+- `run_generation_gate_chain` â€” **not yet present** (expected new work in Phase 1)
 
 ---
 
 ## Phase map
 
-| Phase | Assignment § | Deliverable |
+| Phase | Assignment Â§ | Deliverable |
 |-------|----------------|-------------|
-| **0** | §2 | Active-path audit table; WFC vs regular WF disambiguation |
-| **1** | §4 | `run_generation_gate_chain` contract + receipt schema |
-| **2** | §5–§13 | Gates 0–8 wired to autoresearch with artifact paths |
-| **3** | §14–§16 | generation_summary, learning behavior, review_memory |
-| **4** | §17–§18 | Honest completion + deterministic resume |
-| **5** | §19 | VectorBT + HftBacktest performance benchmark |
-| **6** | §20 | Full automated test matrix (planted PASS/FAIL) |
-| **7** | §21 | Three-generation unattended acceptance run |
-| **8** | §22 | Local rg preflight loop after edit batches |
-| **9** | §23 | Greptile PR GrepLoop to clean current-head review |
-| **10** | §24–§25 | Final checklist + developer response table |
+| **0** | Â§2 | Active-path audit table; WFC vs regular WF disambiguation |
+| **1** | Â§4 | `run_generation_gate_chain` contract + receipt schema |
+| **2** | Â§5â€“Â§13 | Gates 0â€“8 wired to autoresearch with artifact paths |
+| **3** | Â§14â€“Â§16 | generation_summary, learning behavior, review_memory |
+| **4** | Â§17â€“Â§18 | Honest completion + deterministic resume |
+| **5** | Â§19 | VectorBT + HftBacktest performance benchmark |
+| **6** | Â§20 | Full automated test matrix (planted PASS/FAIL) |
+| **7** | Â§21 | Three-generation unattended acceptance run |
+| **8** | Â§22 | Local rg preflight loop after edit batches |
+| **9** | Â§23 | Greptile PR GrepLoop to clean current-head review |
+| **10** | Â§24â€“Â§25 | Final checklist + developer response table |
 
 ---
 
-## Phase 0 — Active-path audit (§2) — MUST complete before code
+## Phase 0 â€” Active-path audit (Â§2) â€” MUST complete before code
 
 ```bash
 rg -n "run_autoresearch_loop|run_single_generation|propose_next_candidates" \
@@ -196,16 +196,16 @@ Output table columns: Requirement | Existing file | Function/class | Test | Arti
 
 ---
 
-## Phase 1 — Gate chain contract (§4)
+## Phase 1 â€” Gate chain contract (Â§4)
 
 - Owner: `packages/research_pipeline/generation_loop.py` (or justified helper)
-- Function: `run_generation_gate_chain(...)` — **not** named `GrepLoop`
+- Function: `run_generation_gate_chain(...)` â€” **not** named `GrepLoop`
 - Strict PASS: `passed == required`, `failed == 0`, `missing == 0`
 - Remove permissive patterns (`robustness_pass is not False`, etc.)
 
 ---
 
-## Phase 2 — Gates 0–8 (§5–§13)
+## Phase 2 â€” Gates 0â€“8 (Â§5â€“Â§13)
 
 | Gate | Receipt path | Key invariant |
 |------|--------------|---------------|
@@ -221,7 +221,7 @@ Output table columns: Requirement | Existing file | Function/class | Test | Arti
 
 ---
 
-## Phase 3 — Summary + learning (§14–§16)
+## Phase 3 â€” Summary + learning (Â§14â€“Â§16)
 
 - [`generation_summary.py`](../../packages/research_pipeline/generation_summary.py): `elite = final_status == "FINAL_PASS"`
 - [`feature_family_proposals.py`](../../packages/research_pipeline/feature_family_proposals.py) / [`elite_refinement.py`](../../packages/research_pipeline/elite_refinement.py): exploitation from FINAL_PASS only
@@ -229,17 +229,17 @@ Output table columns: Requirement | Existing file | Function/class | Test | Arti
 
 ---
 
-## Phase 4 — Completion + resume (§17–§18) ✅ 2026-06-20
+## Phase 4 â€” Completion + resume (Â§17â€“Â§18) âœ… 2026-06-20
 
 - `validate_generation_completion` checks terminal status + all gate receipts before marker
-- `.generation_complete` written only after validation passes; corrupt/missing evidence → `failed`, no marker
+- `.generation_complete` written only after validation passes; corrupt/missing evidence â†’ `failed`, no marker
 - `collect_semantic_config_inputs` expands config hash (WF/WFC YAML, gate versions, HFT model hashes, exploration)
 - Resume: `assert_config_hash_matches` on all resume paths; reuse valid ontology receipts; rerun corrupt; checkpoint + proposed_candidates.json
 - Tests: `tests/research_pipeline/test_generation_phase4.py` (6 cases)
 
 ---
 
-## Phase 5 — Performance (§19)
+## Phase 5 â€” Performance (Â§19)
 
 VectorBT: no `run_pipeline.py` subprocess per unit; matrix batch; shared feature load.
 
@@ -249,7 +249,7 @@ Deliverable: identical-scope benchmark + projected full-campaign time.
 
 ---
 
-## Phase 6 — Tests (§20)
+## Phase 6 â€” Tests (Â§20)
 
 Minimum new/extended test files under `tests/` covering:
 
@@ -264,15 +264,15 @@ Each gate: planted PASS + planted FAIL.
 
 ---
 
-## Phase 7 — Three-gen acceptance (§21)
+## Phase 7 â€” Three-gen acceptance (Â§21)
 
-Deterministic config; unattended run through gen 0→1→2.
+Deterministic config; unattended run through gen 0â†’1â†’2.
 
 Report: rejects by gate, FINAL_PASS count, parent-child recipe diffs (real feature dimension change required), dedup counts, stop reason.
 
 ---
 
-## Phase 8 — Local rg preflight (§22)
+## Phase 8 â€” Local rg preflight (Â§22)
 
 After every edit batch (max 3 loops):
 
@@ -296,18 +296,18 @@ git diff --check
 
 ---
 
-## Phase 9 — Greptile PR GrepLoop (§23) — LAST gate
+## Phase 9 â€” Greptile PR GrepLoop (Â§23) â€” LAST gate
 
-**Run only after Phases 1–8 complete.** Do **not** interleave Greptile with implementation phases. Do **not** trigger `@greptileai` on PR-B or PR-C until PR-A reaches **≥ 4/5 Greptile confidence + zero actionable** on current head (same gate for B→C). If Greptile was prematurely pinged on a downstream PR, post a pause comment and continue only on the lowest incomplete PR.
+**Run only after Phases 1â€“8 complete.** Do **not** interleave Greptile with implementation phases. Do **not** trigger `@greptileai` on PR-B or PR-C until PR-A reaches **â‰¥ 4/5 Greptile confidence + zero actionable** on current head (same gate for Bâ†’C). If Greptile was prematurely pinged on a downstream PR, post a pause comment and continue only on the lowest incomplete PR.
 
 **Review split:**
 
 | When | Reviewer | Purpose |
 |------|----------|---------|
-| Phases 1–8 (every code batch) | **cavecrew-reviewer** (dual-pass) | 0 🔴 before claiming slice done |
+| Phases 1â€“8 (every code batch) | **cavecrew-reviewer** (dual-pass) | 0 ðŸ”´ before claiming slice done |
 | Phase 9 only | **Greptile** (`@greptileai`) | External PR sign-off; Codex/@codex does **not** count |
 
-Authority: [GREPLOOP.md](../../docs/ai/GREPLOOP.md) · assignment [§23](../../docs/project/AUTONOMOUS_RESEARCH_PIPELINE_DEVELOPER_ASSIGNMENT.md#23-mandatory-greptile-pr-greptile-loop).
+Authority: [GREPLOOP.md](../../docs/ai/GREPLOOP.md) Â· assignment [Â§23](../../docs/project/AUTONOMOUS_RESEARCH_PIPELINE_DEVELOPER_ASSIGNMENT.md#23-mandatory-greptile-pr-greptile-loop).
 
 **Per iteration (max 5):**
 
@@ -315,14 +315,14 @@ Authority: [GREPLOOP.md](../../docs/ai/GREPLOOP.md) · assignment [§23](../../d
 2. `git push`
 3. `gh pr comment <PR> --body "@greptileai"`
 4. Poll up to 10 min for `greptile-apps[bot]` review on **current head SHA**
-5. Parse Greptile summary confidence (target **≥ 4/5**)
+5. Parse Greptile summary confidence (target **â‰¥ 4/5**)
 6. Classify findings; fix all actionable; re-run cavecrew-reviewer on fix diff; pytest; push
 7. Repeat until stop condition or iteration 5 exhausted
 
 **Stop condition (gate passes):**
 
 - Greptile reviewed **current head SHA**
-- Greptile confidence **≥ 4/5** (4/5 or 5/5 in summary when present)
+- Greptile confidence **â‰¥ 4/5** (4/5 or 5/5 in summary when present)
 - **Zero** unresolved actionable Greptile findings
 - Scope-appropriate verification green
 
@@ -332,14 +332,14 @@ Authority: [GREPLOOP.md](../../docs/ai/GREPLOOP.md) · assignment [§23](../../d
 
 ---
 
-## Phase 10 — Final checklist + developer table (§24–§25)
+## Phase 10 â€” Final checklist + developer table (Â§24â€“Â§25)
 
-- Complete all 26 checklist items in assignment §24
-- Return §25 table only — evidence from canonical `--autoresearch` run, not fixture existence
+- Complete all 26 checklist items in assignment Â§24
+- Return Â§25 table only â€” evidence from canonical `--autoresearch` run, not fixture existence
 
 ---
 
-## Three loops (§3) — naming discipline
+## Three loops (Â§3) â€” naming discipline
 
 | Loop | Name | Runtime function |
 |------|------|------------------|
@@ -357,4 +357,4 @@ Authority: [GREPLOOP.md](../../docs/ai/GREPLOOP.md) · assignment [§23](../../d
 - [Autoresearch gap matrix](../../docs/project/AUTORESEARCH_GAP_MATRIX.md)
 - [Phase contracts](../../docs/project/PHASE_CONTRACTS.md)
 - [Validation matrix](../../docs/project/VALIDATION_MATRIX.md)
-- [AGENTS.md](../../AGENTS.md) — delegation + merge-ready criteria
+- [AGENTS.md](../../AGENTS.md) â€” delegation + merge-ready criteria

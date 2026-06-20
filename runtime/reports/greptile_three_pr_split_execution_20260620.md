@@ -20,7 +20,7 @@ Trigger **one PR at a time**: `@greptileai` on PR-A first; wait for ≥4/5 + 0 a
 | PR | URL | Branch | Base | Status | Greptile |
 |----|-----|--------|------|--------|----------|
 | **A** | https://github.com/javin23863/hft3/pull/8 | `cursor/autoresearch-gate-chain-pr-a` | `main` | **MERGED** (`8f551b31`, head `88fab454`) | **5/5** Greptile SUCCESS |
-| **B** | https://github.com/javin23863/hft3/pull/9 | `cursor/autoresearch-pr-b-paid-screen` | PR-A branch | OPEN — Phase 9 in progress | pending rebase + loop |
+| **B** | https://github.com/javin23863/hft3/pull/9 | `cursor/autoresearch-pr-b-paid-screen` | PR-A branch | OPEN — Phase 9 **STOP** (5 iter, no ≥4/5) | head `a3c0cc1e`; 4 P2 inline; **no merge** |
 | **C** | https://github.com/javin23863/hft3/pull/10 | `cursor/autoresearch-pr-c-phases-5-7` | PR-B branch | OPEN — **blocked** until B ≥4/5 | not triggered |
 | **#7** | https://github.com/javin23863/hft3/pull/7 | `cursor/vast-vbt-workflow` | `main` | **CLOSED** superseded | n/a |
 
