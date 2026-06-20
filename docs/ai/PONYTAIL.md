@@ -2,13 +2,14 @@
 
 **Repo:** https://github.com/DietrichGebert/ponytail  
 **Install path:** `vendor/ponytail/` (vendored clone; update with `git -C vendor/ponytail pull`)  
-**Cursor rule:** `.cursor/rules/ponytail.mdc` (copied from `vendor/ponytail/.cursor/rules/ponytail.mdc`)
+**Cursor runtime (#2 after Fable):** `.cursor/rules/01-ponytail-mindset.mdc` (hardened always-on rule)  
+**Legacy redirect:** `.cursor/rules/ponytail.mdc` → points to `01-ponytail-mindset.mdc`
 
 Ponytail is **not** a Vast/SSH tool. It is the standing **lazy-senior-dev** ruleset: YAGNI, stdlib-first, minimal diffs, deletion over addition. Safety rails (validation, security, accessibility, finance/math invariants) are never cut.
 
 ## When agents MUST apply ponytail
 
-- Any code or doc edit in hft3 (always-on via `.cursor/rules/ponytail.mdc`)
+- Any code or doc edit in hft3 (always-on via `.cursor/rules/01-ponytail-mindset.mdc`, second after Fable)
 - Refactors, new scripts, pipeline wiring — prefer extending existing scripts over new abstractions
 - Vast/CHI404 ops wrappers — one shell script, env vars, no orchestration frameworks
 - Review pass before merge: ask "can this be one line / already-installed / deleted?"
@@ -22,7 +23,7 @@ Default: **full**. Override per session:
 
 ## Minimal usage (from ponytail docs)
 
-**Cursor / Windsurf / Cline:** copy `.cursor/rules/ponytail.mdc` into the project (done here).
+**Cursor / Windsurf / Cline:** hft3 uses `.cursor/rules/01-ponytail-mindset.mdc` (load order #2). Sync from upstream: copy `vendor/ponytail/.cursor/rules/ponytail.mdc` into `01-ponytail-mindset.mdc` when updating vendor.
 
 **Review current diff (skill hosts):** `/ponytail-review` — over-engineering delete-list.
 

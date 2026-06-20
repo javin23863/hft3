@@ -1,6 +1,8 @@
 # Fable mindset — load this first (every agent session)
 
 **Permanent state of being.** Read this note before any task, search, script, or edit.  
+**Cursor runtime (first load):** `.cursor/rules/00-fable-mindset.mdc` — always-on, hardened copy of this note.  
+**Obsidian vault roadmap (ANY LLM):** `C:\Users\MSI\Desktop\Obsidian Vault From VPS\hft3\architecture\Agent Runtime Roadmap.md` · `wiki/hot.md` (top section).  
 Canonical repo: `C:\Users\MSI\repos\hft3`. Full Fable reference: `C:\Users\MSI\.codex\skills\fable-mindset\references\Fable_Mindset_public.md`.
 
 ---
@@ -19,9 +21,9 @@ Canonical repo: `C:\Users\MSI\repos\hft3`. Full Fable reference: `C:\Users\MSI\.
 
 ---
 
-## 2. Ponytail mindset (mandatory after Fable)
+## 2. Ponytail mindset (mandatory second — before codebase)
 
-Apply the ponytail lazy-senior-dev ladder on every implementation: YAGNI → stdlib → native → installed dep → one line → minimum that works. Vendored at `vendor/ponytail/`; always-on Cursor rule `.cursor/rules/ponytail.mdc`; charter `docs/ai/PONYTAIL.md`. Never cut validation, security, or finance/math invariants. Vast rent/SSH: `vastai` CLI + `scripts/vast_ssh_run_vbt_paid_screen.sh`.
+Apply the ponytail lazy-senior-dev ladder on every implementation: YAGNI → stdlib → native → installed dep → one line → minimum that works. **Cursor runtime (#2):** `.cursor/rules/01-ponytail-mindset.mdc`. Upstream: https://github.com/DietrichGebert/ponytail · Vendored: `vendor/ponytail/` · Charter: `docs/ai/PONYTAIL.md`. Never cut validation, security, or finance/math invariants. Vast rent/SSH: `vastai` CLI + `scripts/vast_ssh_run_vbt_paid_screen.sh`.
 
 ## 3. When the operator says **“latency test”**
 
@@ -76,12 +78,13 @@ Live safety: [RITHMIC_LIVE_CONNECTION.md](RITHMIC_LIVE_CONNECTION.md).
 
 | # | Note | When |
 |---|------|------|
-| 1 | **This file** | Every session start |
-| 2 | [HFTBACKTEST_LATENCY_ONTOLOGY.md](HFTBACKTEST_LATENCY_ONTOLOGY.md) | Backtest / realism / component latency |
-| 3 | [RITHMIC_LIVE_CONNECTION.md](RITHMIC_LIVE_CONNECTION.md) | CHI404 / Rithmic / live |
-| 4 | [CHI404_CANONICAL_ENTRYPOINTS.md](CHI404_CANONICAL_ENTRYPOINTS.md) | Probes, capture, forbidden paths |
-| 5 | [RESEARCH_ENTRYPOINTS.md](RESEARCH_ENTRYPOINTS.md) | Pipeline script order |
-| 6 | Task-specific note | CPI, data lake, certification, … |
+| 1 | **Fable** — [FABLE_MINDSET.md](FABLE_MINDSET.md) + `.cursor/rules/00-fable-mindset.mdc` | Every session start |
+| 2 | **Ponytail** — [docs/ai/PONYTAIL.md](../ai/PONYTAIL.md) + `.cursor/rules/01-ponytail-mindset.mdc` | Second — before codebase |
+| 3 | [HFTBACKTEST_LATENCY_ONTOLOGY.md](HFTBACKTEST_LATENCY_ONTOLOGY.md) | Backtest / realism / component latency |
+| 4 | [RITHMIC_LIVE_CONNECTION.md](RITHMIC_LIVE_CONNECTION.md) | CHI404 / Rithmic / live |
+| 5 | [CHI404_CANONICAL_ENTRYPOINTS.md](CHI404_CANONICAL_ENTRYPOINTS.md) | Probes, capture, forbidden paths |
+| 6 | [RESEARCH_ENTRYPOINTS.md](RESEARCH_ENTRYPOINTS.md) | Pipeline script order |
+| 7 | Task-specific note | CPI, data lake, certification, … |
 
 Obsidian vault (declarative memory): `C:\Users\MSI\Desktop\Obsidian Vault From VPS\hft3\` — read `wiki/hot.md` after this repo vault gate.
 

@@ -1,6 +1,6 @@
-# MANDATORY ONTOLOGY GATE: Before every interaction in this project, operate from the Obsidian vault ontology and the provided mathematics/quantitative-finance/HFT PDFs; do not invent codebases, pipelines, models, or methodology outside that authority.
-# MANDATORY FABLE MINDSET: Operate with the Fable loop before touching hft3: ground in real state, reason before action, act in deliberate batches, observe results, re-evaluate, read exact regions before edits, verify with real checks, recover by diagnosis, and report truthfully.
-# MANDATORY PONYTAIL: After Fable, apply the ponytail lazy-senior-dev ladder on every code/doc edit — YAGNI, stdlib-first, minimal diffs, deletion over addition; never cut validation, security, or finance/math invariants. Install: `vendor/ponytail/` · Cursor rule: `.cursor/rules/ponytail.mdc` · Full charter: [docs/ai/PONYTAIL.md](docs/ai/PONYTAIL.md). Vast/SSH ops use `vastai` + `scripts/vast_ssh_run_vbt_paid_screen.sh`, not ponytail.
+# MANDATORY FABLE MINDSET (FIRST — before every other gate): Load [docs/vault/FABLE_MINDSET.md](docs/vault/FABLE_MINDSET.md) and operate from the Fable loop before vault, graph, search, scripts, or edits. Cursor always-on rule: `.cursor/rules/00-fable-mindset.mdc`. Obsidian vault roadmap (ANY LLM): `architecture/Agent Runtime Roadmap` in `C:\Users\MSI\Desktop\Obsidian Vault From VPS\hft3\`. Full reference: `C:\Users\MSI\.codex\skills\fable-mindset\references\Fable_Mindset_public.md`. Ground → reason (name clock/metric/authority) → act in batches → observe → re-evaluate → read exact regions → verify with real checks → recover → report truthfully.
+# MANDATORY PONYTAIL (SECOND — before touching codebase): Load `.cursor/rules/01-ponytail-mindset.mdc` immediately after Fable. Apply the lazy-senior-dev ladder on every code/doc edit — YAGNI, stdlib-first, minimal diffs, deletion over addition; never cut validation, security, or finance/math invariants. Upstream: https://github.com/DietrichGebert/ponytail · Vendored: `vendor/ponytail/` · Charter: [docs/ai/PONYTAIL.md](docs/ai/PONYTAIL.md). Vast/SSH ops use `vastai` + `scripts/vast_ssh_run_vbt_paid_screen.sh`, not ponytail.
+# MANDATORY ONTOLOGY GATE (third, after Fable + Ponytail): Operate from the Obsidian vault ontology and the provided mathematics/quantitative-finance/HFT PDFs; do not invent codebases, pipelines, models, or methodology outside that authority.
 # CANONICAL WORKING TREE: `C:\Users\MSI\repos\hft3`. Legacy stubs or alternate clones must redirect here; do not treat `C:\Users\MSI\Documents\hft3` or other hft3-looking paths as the active repo without an explicit migration plan.
 
 # hft3 Agent Charter
@@ -13,9 +13,11 @@ Full workflow reference: [docs/AGENTIC_ENGINEERING.md](docs/AGENTIC_ENGINEERING.
 
 ## VaultGate: check project memory first
 
-Before starting work, locating code, designing a change, or asking the user for missing context, consult the hft3 Obsidian vault:
+Before starting work, locating code, designing a change, or asking the user for missing context, consult the hft3 Obsidian vault (after Fable + Ponytail):
 
 `C:\Users\MSI\Desktop\Obsidian Vault From VPS\hft3\`
+
+**ANY LLM session start:** read vault `architecture/Agent Runtime Roadmap` or `wiki/hot.md` (Agent runtime roadmap section) for the full gate order.
 
 Minimum read path:
 
@@ -141,23 +143,25 @@ Touch only what the task requires. Match existing naming, types, and style. Ever
 
 Convert imperative instructions into verifiable success criteria. Prefer "write a failing test, then make it pass" over "fix the bug." Strong criteria let the agent loop independently; weak criteria ("make it work") require constant clarification.
 
-## VaultGate → Spec → GraphPre → Plan → Code → Local Preflight → Review → Verify → PR GrepLoop → GraphPost
+## Fable → Ponytail → VaultGate → Spec → GraphPre → Plan → Code → Local Preflight → Review → Verify → PR GrepLoop → GraphPost
 
 Every task runs this loop:
 
-1. **VaultGate** — **Blocking:** `scripts/vault_gate.ps1 -Query "..."` then `scripts/vault_pre_edit.ps1` (exits 2 if stamp missing/stale). Read/search Obsidian vault: `wiki/hot.md`, `Home.md`, `Memory Stack.md`, task-relevant `decisions/`/`sessions/`. Stamp: `runtime/vault-gate/.last-vault-gate.json`.
-2. **Spec** — Restate goal, constraints, and success criteria. Ask only after VaultGate if ambiguity remains.
-3. **GraphGate** — When **not** owner-waived (`wiki/hot.md` → `waived-by-owner-2026-06-16`): `scripts/graphify_gate.ps1 -Query "..."`. When waived: skip GraphGate/GraphPre/GraphPost; use VaultGate + targeted source reads.
-4. **GraphPre** — Only when graph gates active: `scripts/graphify_pre_edit.ps1`.
-5. **Plan** — Brief plan with verification steps before editing. Delegate locate work when needed (with graph context).
-6. **Code** — Minimal change via builder or approved multi-file path. No drive-by edits. No parallel CHI404 orchestrators.
-7. **Local preflight** — Before reviewer, run a bounded, task-specific `rg` loop for forbidden legacy terms, old fields, missing required terms/citation rows, and whitespace errors. Patch actionable hits; max three local iterations; report blockers instead of widening blindly.
-8. **Review** — **cavecrew-reviewer** must complete Pass A (Karpathy) and Pass B (math invariants) on the diff before test commands can be used as merge evidence.
-9. **Verify** — **shell** runs bounded pytest (see [docs/ai/SHELL_EXECUTION.md](docs/ai/SHELL_EXECUTION.md)) and CHI404 validate gates when infra applies. Loop until met or blocked.
-10. **PR GrepLoop** — If a PR/MR/CL exists and an external PR AI review connector is installed, run the PR loop or document unavailability.
-11. **GraphPost** — After code edits: `graphify update .` or `scripts/graphify_rebuild.ps1`. Commit updated `graphify-out/` with the change when the team tracks graph in git.
+0. **Fable mindset** — **Blocking first:** `.cursor/rules/00-fable-mindset.mdc` + [docs/vault/FABLE_MINDSET.md](docs/vault/FABLE_MINDSET.md). Ground → reason → act → observe → re-evaluate before any gate or tool use.
+1. **Ponytail mindset** — **Blocking second:** `.cursor/rules/01-ponytail-mindset.mdc` + [docs/ai/PONYTAIL.md](docs/ai/PONYTAIL.md). YAGNI ladder before any codebase touch.
+2. **VaultGate** — **Blocking:** `scripts/vault_gate.ps1 -Query "..."` then `scripts/vault_pre_edit.ps1` (exits 2 if stamp missing/stale). Read/search Obsidian vault: `wiki/hot.md`, `Home.md`, `Memory Stack.md`, task-relevant `decisions/`/`sessions/`. Stamp: `runtime/vault-gate/.last-vault-gate.json`.
+3. **Spec** — Restate goal, constraints, and success criteria. Ask only after VaultGate if ambiguity remains.
+4. **GraphGate** — When **not** owner-waived (`wiki/hot.md` → `waived-by-owner-2026-06-16`): `scripts/graphify_gate.ps1 -Query "..."`. When waived: skip GraphGate/GraphPre/GraphPost; use VaultGate + targeted source reads.
+5. **GraphPre** — Only when graph gates active: `scripts/graphify_pre_edit.ps1`.
+6. **Plan** — Brief plan with verification steps before editing. Delegate locate work when needed (with graph context).
+7. **Code** — Minimal change via builder or approved multi-file path. No drive-by edits. No parallel CHI404 orchestrators.
+8. **Local preflight** — Before reviewer, run a bounded, task-specific `rg` loop for forbidden legacy terms, old fields, missing required terms/citation rows, and whitespace errors. Patch actionable hits; max three local iterations; report blockers instead of widening blindly.
+9. **Review** — **cavecrew-reviewer** must complete Pass A (Karpathy) and Pass B (math invariants) on the diff before test commands can be used as merge evidence.
+10. **Verify** — **shell** runs bounded pytest (see [docs/ai/SHELL_EXECUTION.md](docs/ai/SHELL_EXECUTION.md)) and CHI404 validate gates when infra applies. Loop until met or blocked.
+11. **PR GrepLoop** — If a PR/MR/CL exists and an external PR AI review connector is installed, run the PR loop or document unavailability.
+12. **GraphPost** — After code edits: `graphify update .` or `scripts/graphify_rebuild.ps1`. Commit updated `graphify-out/` with the change when the team tracks graph in git.
 
-Do not skip VaultGate, VaultPre, GraphGate (when active), GraphPre, Plan, Local Preflight, Review, Verify, PR GrepLoop when available, or GraphPost (when active) for "small" changes.
+Do not skip Fable, Ponytail, VaultGate, VaultPre, GraphGate (when active), GraphPre, Plan, Local Preflight, Review, Verify, PR GrepLoop when available, or GraphPost (when active) for "small" changes.
 
 ## hft3-specific constraints
 

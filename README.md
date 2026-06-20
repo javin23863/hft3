@@ -7,7 +7,7 @@ Chicago CME microstructure research and execution stack.
 | You are | Start here |
 |---------|------------|
 | **Human developer** | [docs/START_HERE.md](docs/START_HERE.md) -> [docs/human/GETTING_STARTED.md](docs/human/GETTING_STARTED.md) -> [docs/human/DOC_INDEX.md](docs/human/DOC_INDEX.md) |
-| **AI / Cursor agent** | [AGENTS.md](AGENTS.md) -> [graphify-out/wiki/index.md](graphify-out/wiki/index.md) -> [docs/ai/ONBOARDING.md](docs/ai/ONBOARDING.md) |
+| **ANY LLM agent session start** | [docs/vault/AGENT_RUNTIME_ROADMAP.md](docs/vault/AGENT_RUNTIME_ROADMAP.md) → [00-fable-mindset.mdc](.cursor/rules/00-fable-mindset.mdc) → [01-ponytail-mindset.mdc](.cursor/rules/01-ponytail-mindset.mdc) → [AGENTS.md](AGENTS.md) |
 
 Coding style: [docs/ai/ENGINEERING.md](docs/ai/ENGINEERING.md). Contributing:
 [CONTRIBUTING.md](CONTRIBUTING.md).

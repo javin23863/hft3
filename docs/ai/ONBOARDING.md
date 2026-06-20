@@ -1,10 +1,27 @@
 # AI developer onboarding (graph-first)
 
-**Read the graph before prose.** Humans start at [docs/human/GETTING_STARTED.md](../human/GETTING_STARTED.md).
+**Fable first, Ponytail second, then graph, then prose.** Humans start at [docs/human/GETTING_STARTED.md](../human/GETTING_STARTED.md).
 
 **Canonical repo:** [docs/REPO_STATE.md](../REPO_STATE.md) — path, `main` HEAD, branch cleanup, `git status` verification (read before assuming workspace path or branch).
 
-## Step 0 — Vault ontology gate (mandatory, always first)
+## Step 0 — Fable mindset (mandatory, always first)
+
+1. Read vault **Agent Runtime Roadmap** (`architecture/Agent Runtime Roadmap` in Obsidian) or repo [docs/vault/AGENT_RUNTIME_ROADMAP.md](../vault/AGENT_RUNTIME_ROADMAP.md) for the full ANY-LLM gate order.
+2. Load [.cursor/rules/00-fable-mindset.mdc](../../.cursor/rules/00-fable-mindset.mdc) — hardened always-on Cursor runtime rule.
+3. Read [docs/vault/FABLE_MINDSET.md](../vault/FABLE_MINDSET.md) — repo vault copy (latency vocabulary, hard rejects, read order).
+4. Full reference when needed: `C:\Users\MSI\.codex\skills\fable-mindset\references\Fable_Mindset_public.md`.
+
+**Blocking:** No VaultGate, graph query, search, script, or edit until Fable is loaded.
+
+## Step 1 — Ponytail mindset (mandatory, second — before codebase)
+
+1. Load [.cursor/rules/01-ponytail-mindset.mdc](../../.cursor/rules/01-ponytail-mindset.mdc) — second always-on Cursor runtime rule.
+2. Read [docs/ai/PONYTAIL.md](PONYTAIL.md) — hft3 charter (ladder, not-lazy-about, Vast ops boundary).
+3. Upstream repo: https://github.com/DietrichGebert/ponytail · Vendored: `vendor/ponytail/`
+
+**Blocking:** No code or doc edits until Ponytail ladder is active.
+
+## Step 2 — Vault ontology gate (after Fable + Ponytail)
 
 1. Read vault `wiki/hot.md`, `Home.md`, `Memory Stack.md` (path: `C:\Users\MSI\Desktop\Obsidian Vault From VPS\hft3` or `$env:HFT3_VAULT_ROOT`).
 2. Run task-specific consult:
@@ -16,7 +33,7 @@
 
 3. Check `graph_gates` in `runtime/vault-gate/.last-vault-gate.json`. If `waived-by-owner-2026-06-16`, skip Step 1 graph below.
 
-## Step 1 — Code graph (when not owner-waived)
+## Step 3 — Code graph (when not owner-waived)
 
 1. Open [graphify-out/wiki/index.md](../../graphify-out/wiki/index.md) — check **Freshness** banner (timestamp + git SHA).
 2. Run scoped queries (do not read raw `GRAPH_REPORT.md` or full `graph.json`):
@@ -36,7 +53,7 @@ Regenerate wiki index:
 python tools/graphify/build_wiki_index.py
 ```
 
-## Step 1 — Agent charter
+## Step 4 — Agent charter
 
 - [AGENTS.md](../../AGENTS.md) — delegation, topology (CHI404 only for live), verify loop
 - [ENGINEERING.md](ENGINEERING.md) — Karpathy principles (canonical coding style)
@@ -46,18 +63,18 @@ python tools/graphify/build_wiki_index.py
 - [docs/project/PROJECT_PLANNING_STANDARD.md](../project/PROJECT_PLANNING_STANDARD.md) — literature-traceable feature control before roadmap changes
 - [docs/project/FEATURE_LITERATURE_TRACEABILITY_MATRIX.md](../project/FEATURE_LITERATURE_TRACEABILITY_MATRIX.md) — feature classification and acceptance basis
 
-## Step 2 — Math invariants
+## Step 5 — Math invariants
 
 - [BLUEPRINT.md](../../BLUEPRINT.md)
 - [docs/REVIEWER_CHARTER.md](../REVIEWER_CHARTER.md) — Pass A + Pass B with PDF citations
 
-## Step 3 — Operating the system (when needed)
+## Step 6 — Operating the system (when needed)
 
 Only after graph + charter: [docs/human/DOC_INDEX.md](../human/DOC_INDEX.md).
 
 **CHI404 hardware/runtime (before infra edits):** [docs/ai/chi404_system_spec.json](chi404_system_spec.json) · human: [docs/chi404/HARDWARE_BASELINE.md](../chi404/HARDWARE_BASELINE.md)
 
-## Step 4 — Verification
+## Step 7 — Verification
 
 **Honest status:** Every handoff uses the block in [docs/VALIDATION_HONESTY.md](../VALIDATION_HONESTY.md). Subset pytest is not scope-green.
 

@@ -4,7 +4,9 @@ Full protocol: [AGENTS.md](../../AGENTS.md) VaultGate section · vault [Memory S
 
 ## Non-negotiable order (before any code edit)
 
-1. **VaultGate** — `scripts/vault_gate.ps1 -Query "<task-specific question>"` (Windows) or `bash scripts/vault_gate.sh '<query>'`. Writes `runtime/vault-gate/.last-vault-gate.json`.
+0. **Fable mindset** — [.cursor/rules/00-fable-mindset.mdc](00-fable-mindset.mdc) + [docs/vault/FABLE_MINDSET.md](../../docs/vault/FABLE_MINDSET.md). **First** every session.
+1. **Ponytail mindset** — [.cursor/rules/01-ponytail-mindset.mdc](01-ponytail-mindset.mdc) + [docs/ai/PONYTAIL.md](../../docs/ai/PONYTAIL.md). **Second** — before codebase.
+2. **VaultGate** — `scripts/vault_gate.ps1 -Query "<task-specific question>"` (Windows) or `bash scripts/vault_gate.sh '<query>'`. Writes `runtime/vault-gate/.last-vault-gate.json`.
 2. **VaultPre** — `scripts/vault_pre_edit.ps1` (fails exit 2 if gate stamp missing or stale >4h).
 3. **GraphGate** — only when **not** owner-waived. Check vault `wiki/hot.md` for `waived-by-owner-2026-06-16`. When waived: report `graph-gates: waived-by-owner-2026-06-16` and use VaultGate + targeted source reads instead.
 4. Plan / locate / code / review / verify.
