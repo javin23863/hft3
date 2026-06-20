@@ -25,10 +25,10 @@ todos:
     status: pending
   - id: phase2-gate2-vectorbt
     content: "Phase 2 (§7): Gate 2 VectorBT screen via optimized paid/worker/matrix path — no subprocess-per-unit"
-    status: pending
+    status: completed
   - id: phase2-gate3-surface
     content: "Phase 2 (§8): Gate 3 surface stability (surface_stability.py) with fail-closed missing cells/thresholds"
-    status: pending
+    status: completed
   - id: phase2-gate4-regular-wf
     content: "Phase 2 (§9): Gate 4 regular walk-forward (FIRST WF process) — holdout evaluate-only, no learning feedback"
     status: completed
@@ -37,7 +37,7 @@ todos:
     status: completed
   - id: phase2-gate6-statistical
     content: "Phase 2 (§11): Gate 6 statistical/Monte Carlo gauntlet (allow_partial=False, robustness_producers + ROBUSTNESS_TESTING_SPEC)"
-    status: pending
+    status: completed
   - id: phase2-gate7-hft
     content: "Phase 2 (§12): Gate 7 HftBacktest realism (hft_campaign/, run_hft_campaign:true, per-candidate status)"
     status: pending

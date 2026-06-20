@@ -35,6 +35,8 @@ from research_pipeline.generation_state import (
 from research_pipeline.generation_gate_chain import run_generation_gate_chain
 from research_pipeline.generation_gate_producers import (
     build_regular_walk_forward_gate_receipt,
+    build_statistical_robustness_gate_receipt,
+    build_surface_stability_gate_receipt,
     build_vectorbt_gate_receipt,
     build_walk_forward_correlation_gate_receipt,
     emit_candidate_gate_receipts,
@@ -454,6 +456,17 @@ def run_single_generation(
             manifest=cand_manifest,
             promoted_row=promoted_row,
             screening_path=screening_path,
+            screening=screening,
+        )
+        surface_receipt = build_surface_stability_gate_receipt(
+            manifest=cand_manifest,
+            promoted_row=promoted_row,
+            screening_path=screening_path,
+        )
+        statistical_receipt = build_statistical_robustness_gate_receipt(
+            manifest=cand_manifest,
+            promoted_row=promoted_row,
+            allow_partial=False,
         )
         campaign_summary = dict(rob.get("campaign_summary") or {}) if rob else None
         regular_wf_receipt = build_regular_walk_forward_gate_receipt(
@@ -468,17 +481,19 @@ def run_single_generation(
             gen_dir=gen_dir,
             manifest=cand_manifest,
             vectorbt_receipt=vectorbt_receipt,
+            surface_receipt=surface_receipt,
             regular_wf_receipt=regular_wf_receipt,
             wfc_receipt=wfc_receipt,
+            statistical_receipt=statistical_receipt,
         )
         chain_result = run_generation_gate_chain(
             candidate_manifest=cand_manifest,
             ontology_receipt=ontology_receipts.get(cid),
             vectorbt_receipt=vectorbt_receipt,
-            surface_receipt=None,
+            surface_receipt=surface_receipt,
             regular_walk_forward_receipt=regular_wf_receipt,
             walk_forward_correlation_receipt=wfc_receipt,
-            statistical_receipt=None,
+            statistical_receipt=statistical_receipt,
             hftbacktest_receipt=None,
             certification_mode=True,
         )

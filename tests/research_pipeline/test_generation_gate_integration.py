@@ -12,14 +12,23 @@ import pytest
 from research_pipeline.feature_recipe import attach_feature_recipe_to_candidate
 from research_pipeline.generation_gate_chain import (
     FINAL_REGULAR_WF_REJECTED,
+    FINAL_STATISTICAL_REJECTED,
+    FINAL_SURFACE_REJECTED,
+    FINAL_VECTORBT_REJECTED,
     FINAL_WFC_REJECTED,
     GATE_REGULAR_WF,
+    GATE_STATISTICAL,
+    GATE_SURFACE,
+    GATE_VECTORBT,
     GATE_WFC,
     build_gate_receipt,
     run_generation_gate_chain,
 )
 from research_pipeline.generation_gate_producers import (
     BLOCKED_UNBACKED_AUTHORITY,
+    build_statistical_robustness_gate_receipt,
+    build_surface_stability_gate_receipt,
+    build_vectorbt_gate_receipt,
     build_regular_walk_forward_gate_receipt,
     build_walk_forward_correlation_gate_receipt,
     run_ontology_gate_for_candidate,
@@ -283,3 +292,202 @@ def test_regular_wf_reject_maps_to_final_regular_wf_rejected() -> None:
         certification_mode=True,
     )
     assert result["final_status"] == FINAL_REGULAR_WF_REJECTED
+
+
+def _passing_surface_metrics() -> dict[str, Any]:
+    from backtest_pipeline.src.surface_stability import compute_surface_stability
+
+    grid = {
+        (r, c): {"net_return": 0.10, "trade_count": 50}
+        for r in range(3)
+        for c in range(3)
+    }
+    return compute_surface_stability(grid)
+
+
+def _passing_vectorbt_row(*, candidate_id: str = "cand-001") -> dict[str, Any]:
+    return {
+        "candidate_id": candidate_id,
+        "screening_status": "pass",
+        "vectorbt_results": {
+            "oos_expectancy": 1.0,
+            "num_trades": 50,
+            "hit_rate": 0.55,
+        },
+        "gross_return": 0.12,
+        "net_return": 0.10,
+        "net_pnl": 1000.0,
+        "total_fees": 50.0,
+        "total_slippage": 25.0,
+        "trade_count": 50,
+        "hit_rate": 0.55,
+        "expectancy_per_trade": 0.02,
+        "profit_factor": 1.4,
+        "sharpe": 0.8,
+        "sortino": 1.1,
+        "max_drawdown": -0.05,
+        "turnover": 0.3,
+        "surface_stability_metrics": _passing_surface_metrics(),
+    }
+
+
+def _passing_robustness_input() -> dict[str, Any]:
+    from tests.backtest_pipeline.test_robustness_bridge import _full_passing_input
+
+    return _full_passing_input()
+
+
+def _passing_promoted_row(*, candidate_id: str = "cand-001") -> dict[str, Any]:
+    row = _passing_vectorbt_row(candidate_id=candidate_id)
+    row["vectorbt_results"]["robustness_input"] = _passing_robustness_input()
+    return row
+
+
+def test_vectorbt_gate_pass_with_official_stats() -> None:
+    manifest = _manifest()
+    screening = {"screening_artifact_hash": "screen-hash-abc"}
+    receipt = build_vectorbt_gate_receipt(
+        manifest=manifest,
+        promoted_row=_passing_vectorbt_row(),
+        screening=screening,
+    )
+    assert receipt["status"] == "PASS"
+    assert receipt["screening_artifact_hash"] == "screen-hash-abc"
+    assert receipt["official_stats"]["net_return"] == 0.10
+
+
+def test_vectorbt_gate_fail_missing_stats() -> None:
+    manifest = _manifest()
+    row = {"candidate_id": "cand-001", "vectorbt_results": {"oos_expectancy": 1.0}}
+    receipt = build_vectorbt_gate_receipt(
+        manifest=manifest,
+        promoted_row=row,
+        screening={"screening_artifact_hash": "hash"},
+    )
+    assert receipt["status"] == "REJECT"
+    assert any("official_stats_missing" in r for r in receipt["failure_reasons"])
+
+
+def test_surface_gate_pass_with_complete_evidence() -> None:
+    manifest = _manifest()
+    receipt = build_surface_stability_gate_receipt(
+        manifest=manifest,
+        promoted_row=_passing_vectorbt_row(),
+    )
+    assert receipt["status"] == "PASS"
+    assert receipt["passed_check_count"] == receipt["required_check_count"]
+
+
+def test_surface_gate_fail_formula_missing() -> None:
+    manifest = _manifest()
+    receipt = build_surface_stability_gate_receipt(
+        manifest=manifest,
+        promoted_row={
+            "surface_stability_metrics": {
+                "status": "not_run",
+                "reason": "surface_stability_formula_authority_missing",
+                "formula_authority_status": "missing",
+            }
+        },
+    )
+    assert receipt["status"] == "REJECT"
+
+
+def test_statistical_gate_pass_full_gauntlet() -> None:
+    manifest = _manifest()
+    receipt = build_statistical_robustness_gate_receipt(
+        manifest=manifest,
+        promoted_row=_passing_promoted_row(),
+        allow_partial=False,
+    )
+    assert receipt["status"] == "PASS"
+    assert receipt["robustness_artifact_staleness"] == "fresh"
+
+
+def test_partial_statistical_robustness_cannot_pass() -> None:
+    manifest = _manifest()
+    receipt = build_statistical_robustness_gate_receipt(
+        manifest=manifest,
+        promoted_row=_passing_vectorbt_row(),
+        allow_partial=False,
+    )
+    assert receipt["status"] in ("REJECT", "NOT_RUN")
+    assert receipt["status"] != "PASS"
+
+
+def test_statistical_gate_fail_dsr() -> None:
+    from tests.backtest_pipeline.test_robustness_bridge import _failing_dsr_expectancies
+
+    manifest = _manifest()
+    row = _passing_promoted_row()
+    row["vectorbt_results"]["robustness_input"]["per_event_expectancies"] = _failing_dsr_expectancies()
+    receipt = build_statistical_robustness_gate_receipt(
+        manifest=manifest,
+        promoted_row=row,
+        allow_partial=False,
+    )
+    assert receipt["status"] == "REJECT"
+
+
+def test_vectorbt_reject_maps_to_final_vectorbt_rejected() -> None:
+    reject = build_vectorbt_gate_receipt(
+        manifest=_manifest(),
+        promoted_row={"candidate_id": "cand-001", "rejected": True, "vectorbt_results": {}},
+        screening={"screening_artifact_hash": "h"},
+    )
+    result = run_generation_gate_chain(
+        candidate_manifest=_manifest(),
+        ontology_receipt=_pass_receipt("ontology_gate"),
+        vectorbt_receipt=reject,
+        surface_receipt=_pass_receipt(GATE_SURFACE),
+        regular_walk_forward_receipt=_pass_receipt(GATE_REGULAR_WF),
+        walk_forward_correlation_receipt=_pass_receipt(GATE_WFC),
+        statistical_receipt=_pass_receipt(GATE_STATISTICAL),
+        hftbacktest_receipt=None,
+        certification_mode=True,
+    )
+    assert result["final_status"] == FINAL_VECTORBT_REJECTED
+
+
+def test_surface_reject_maps_to_final_surface_rejected() -> None:
+    reject = build_surface_stability_gate_receipt(
+        manifest=_manifest(),
+        promoted_row={"surface_stability_metrics": {"status": "fail"}},
+    )
+    result = run_generation_gate_chain(
+        candidate_manifest=_manifest(),
+        ontology_receipt=_pass_receipt("ontology_gate"),
+        vectorbt_receipt=_pass_receipt(GATE_VECTORBT),
+        surface_receipt=reject,
+        regular_walk_forward_receipt=_pass_receipt(GATE_REGULAR_WF),
+        walk_forward_correlation_receipt=_pass_receipt(GATE_WFC),
+        statistical_receipt=_pass_receipt(GATE_STATISTICAL),
+        hftbacktest_receipt=None,
+        certification_mode=True,
+    )
+    assert result["final_status"] == FINAL_SURFACE_REJECTED
+
+
+def test_statistical_reject_maps_to_final_statistical_rejected() -> None:
+    from tests.backtest_pipeline.test_robustness_bridge import _failing_dsr_expectancies
+
+    row = _passing_promoted_row()
+    row["vectorbt_results"]["robustness_input"]["per_event_expectancies"] = _failing_dsr_expectancies()
+    reject = build_statistical_robustness_gate_receipt(
+        manifest=_manifest(),
+        promoted_row=row,
+        allow_partial=False,
+    )
+    assert reject["status"] == "REJECT"
+    result = run_generation_gate_chain(
+        candidate_manifest=_manifest(),
+        ontology_receipt=_pass_receipt("ontology_gate"),
+        vectorbt_receipt=_pass_receipt(GATE_VECTORBT),
+        surface_receipt=_pass_receipt(GATE_SURFACE),
+        regular_walk_forward_receipt=_pass_receipt(GATE_REGULAR_WF),
+        walk_forward_correlation_receipt=_pass_receipt(GATE_WFC),
+        statistical_receipt=reject,
+        hftbacktest_receipt=None,
+        certification_mode=True,
+    )
+    assert result["final_status"] == FINAL_STATISTICAL_REJECTED
