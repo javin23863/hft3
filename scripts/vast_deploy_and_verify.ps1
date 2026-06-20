@@ -19,8 +19,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-function Sanitize-RemoteBash([string]$cmd) {
-    return ($cmd -replace "`r", "").Trim()
+function Send-RemoteBash([string]$script) {
+    ($script -replace "`r", "") | & ssh @sshOpts $SshHost bash
 }
 
 function Write-Step($msg) { Write-Host "`n=== $msg ===" -ForegroundColor Cyan }
@@ -78,7 +78,7 @@ fi
 cd $RemoteRepo
 echo REMOTE_HEAD=\$(git rev-parse HEAD)
 "@
-& ssh @sshOpts $SshHost (Sanitize-RemoteBash $syncCmd)
+Send-RemoteBash $syncCmd
 if ($LASTEXITCODE -ne 0) { throw "Remote sync failed exit=$LASTEXITCODE" }
 
 Write-Step "SCP gate, events.csv, manifest.parquet"
@@ -104,36 +104,36 @@ python3 - <<'PY'
 import hashlib, json, os, subprocess, sys
 from pathlib import Path
 
-repo = Path(os.environ["DEPLOY_REPO"])
-events = Path(os.environ["DEPLOY_EVENTS"])
-manifest = Path(os.environ["DEPLOY_MANIFEST"])
-expected_head = os.environ["DEPLOY_HEAD"]
-gate = json.loads((repo / "runtime/reports/paid_screen_ready_gate.json").read_text(encoding="utf-8"))
-expected_events = gate["pilot_hashes"]["events_csv_hash"]
-expected_lake = gate["pilot_hashes"]["lake_manifest_hash"]
+repo = Path(os.environ['DEPLOY_REPO'])
+events = Path(os.environ['DEPLOY_EVENTS'])
+manifest = Path(os.environ['DEPLOY_MANIFEST'])
+expected_head = os.environ['DEPLOY_HEAD']
+gate = json.loads((repo / 'runtime/reports/paid_screen_ready_gate.json').read_text(encoding='utf-8'))
+expected_events = gate['pilot_hashes']['events_csv_hash']
+expected_lake = gate['pilot_hashes']['lake_manifest_hash']
 
 def sha32(p: Path) -> str:
     return hashlib.sha256(p.read_bytes()).hexdigest()[:32]
 
-head = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+head = subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD'], text=True).strip()
 events_h = sha32(events)
 lake_h = sha32(manifest)
-print(f"REMOTE_HEAD={head}")
-print(f"EVENTS_HASH={events_h}")
-print(f"LAKE_HASH={lake_h}")
+print(f'REMOTE_HEAD={head}')
+print(f'EVENTS_HASH={events_h}')
+print(f'LAKE_HASH={lake_h}')
 if head != expected_head:
-    print(f"FAIL: HEAD {head} != expected {expected_head}", file=sys.stderr)
+    print(f'FAIL: HEAD {head} != expected {expected_head}', file=sys.stderr)
     sys.exit(1)
 if events_h != expected_events:
-    print(f"FAIL: events hash {events_h} != gate {expected_events}", file=sys.stderr)
+    print(f'FAIL: events hash {events_h} != gate {expected_events}', file=sys.stderr)
     sys.exit(1)
 if lake_h != expected_lake:
-    print(f"FAIL: lake hash {lake_h} != gate {expected_lake}", file=sys.stderr)
+    print(f'FAIL: lake hash {lake_h} != gate {expected_lake}', file=sys.stderr)
     sys.exit(1)
-print("HASH_VERIFY_OK")
+print('HASH_VERIFY_OK')
 PY
 '@ -replace '__REMOTE_REPO__', $RemoteRepo -replace '__EVENTS_CSV__', ($EventsCsv -replace '\\','/') -replace '__REMOTE_MANIFEST__', $RemoteManifestPath -replace '__LOCAL_HEAD__', $localHead
-& ssh @sshOpts $SshHost (Sanitize-RemoteBash $verifyCmd)
+Send-RemoteBash $verifyCmd
 if ($LASTEXITCODE -ne 0) { throw "Remote hash verify failed exit=$LASTEXITCODE" }
 
 Write-Step "NPZ parity probe (file counts)"
@@ -157,40 +157,41 @@ if ([int]$localNpzCount -gt 0) {
 Write-Step "20-unit NPZ resolution probe"
 $probeCmd = @'
 set -euo pipefail
-cd __REMOTE_REPO__
+export DEPLOY_REPO=__REMOTE_REPO__
 export HFT3_NPZ_ROOT=__REMOTE_NPZ__
 export HFT3_MANIFEST_PATH=__REMOTE_MANIFEST__
+cd "$DEPLOY_REPO"
 python3 - <<'PY'
-import json, random, sys
+import json, os, random, sys
 from pathlib import Path
 
-repo = Path("__REMOTE_REPO__")
+repo = Path(os.environ['DEPLOY_REPO'])
 sys.path.insert(0, str(repo))
 from hft3_bootstrap import setup_repo_paths
 setup_repo_paths()
 from backtest_pipeline.src.vectorbt_adapter import _npz_candidates_for_event
 from data_system.src.event_data_resolver import npz_search_dirs
 
-smoke = repo / "runtime/reports/vbt_smoke_units.jsonl"
-units_path = smoke if smoke.is_file() else repo / "runtime/reports/vbt_full_units.jsonl"
+smoke = repo / 'runtime/reports/vbt_smoke_units.jsonl'
+units_path = smoke if smoke.is_file() else repo / 'runtime/reports/vbt_full_units.jsonl'
 if not units_path.is_file():
-    print("FAIL: no probe units JSONL", file=sys.stderr)
+    print('FAIL: no probe units JSONL', file=sys.stderr)
     sys.exit(1)
-rows = [json.loads(l) for l in units_path.read_text(encoding="utf-8").splitlines() if l.strip()]
+rows = [json.loads(l) for l in units_path.read_text(encoding='utf-8').splitlines() if l.strip()]
 probe_n = __PROBE_N__
 sample = rows[:probe_n] if len(rows) <= probe_n else random.sample(rows, probe_n)
 hits = 0
 for u in sample:
-    cands = _npz_candidates_for_event(npz_search_dirs(repo), u["event_id"], u.get("symbol"))
+    cands = _npz_candidates_for_event(npz_search_dirs(repo), u.get('event_id'), u.get('symbol'))
     if cands:
         hits += 1
-print(f"PROBE_HITS={hits}/{len(sample)}")
+print(f'PROBE_HITS={hits}/{len(sample)}')
 if hits != len(sample):
-    print("FAIL: NPZ resolution probe", file=sys.stderr)
+    print('FAIL: NPZ resolution probe', file=sys.stderr)
     sys.exit(1)
 PY
 '@ -replace '__REMOTE_REPO__', $RemoteRepo -replace '__REMOTE_NPZ__', $RemoteNpzRoot -replace '__REMOTE_MANIFEST__', $RemoteManifestPath -replace '__PROBE_N__', "$ProbeUnitCount"
-& ssh @sshOpts $SshHost (Sanitize-RemoteBash $probeCmd)
+Send-RemoteBash $probeCmd
 if ($LASTEXITCODE -ne 0) { throw "NPZ resolution probe failed exit=$LASTEXITCODE" }
 
 Write-Host "`nDEPLOY_CONTRACT_PASS" -ForegroundColor Green
