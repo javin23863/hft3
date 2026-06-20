@@ -481,11 +481,10 @@ def _latest_screening_fields(run_id: str | None = None) -> dict[str, Any]:
             **_screening_surface_fields(data),
             **_screening_replay_eligibility_fields(data),
         }
-    try:
-        validate_screening_artifact(data)
-        screening_detail = None
-    except ScreeningArtifactError as exc:
-        screening_detail = str(exc)
+    screening_detail = None
+    errors = validate_screening_artifact(data)
+    if errors:
+        screening_detail = "; ".join(errors)
         return {
             **common,
             "screening_status": schemas.STALE,

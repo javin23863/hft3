@@ -158,10 +158,10 @@ def _has_valid_artifact(
     if not dest.is_file():
         return False
     try:
-        from backtest_pipeline.src.vectorbt_adapter import validate_screening_artifact
+        from backtest_pipeline.src.vectorbt_adapter import validate_screening_artifact_or_raise
 
         payload = json.loads(dest.read_text(encoding="utf-8"))
-        validate_screening_artifact(payload)
+        validate_screening_artifact_or_raise(payload)
         provenance = resolve_resume_provenance(
             str(repo_root), unit, git_commit=git_commit
         )

@@ -17,7 +17,7 @@
   "order_response_latency_ms": 10.790344999999999,
   "latency_p50_ms": 3.537,
   "latency_p90_ms": 7.0,
-  "latency_p99_ms": 10.0,
+  "latency_p99_ms": 14.509656,
   "order_response_latency_modeled": true,
   "native_latency_probe_host": "CHI404",
   "note": "CC-3 decomposed entry/response from cc3_new_decomp_20260618T022002Z; symmetric split fallback no longer used for this regime.",

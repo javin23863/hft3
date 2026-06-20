@@ -524,9 +524,11 @@ class ScreeningArtifactError(ValueError):
 
 def validate_screening_artifact(artifact: Mapping[str, Any]) -> list[str]:
     """Public screening artifact validator for cockpit and HftBacktest handoff."""
-    from backtest_pipeline.src.hftbacktest_realism import _validate_screening_artifact_hash
-
-    return _validate_screening_artifact_hash(artifact)
+    try:
+        validate_screening_artifact_or_raise(artifact)
+        return []
+    except ScreeningArtifactError as exc:
+        return [part.strip() for part in str(exc).split(";") if part.strip()]
 
 
 def _parameter_values_hash(values: Mapping[str, Any]) -> str:
