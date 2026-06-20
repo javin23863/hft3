@@ -11,13 +11,15 @@
 | 2 | `54b9070` | re-review | — | P1 double generation_index | nudge |
 | 3 | `efe0fda` | push | — | P1 resume_recovered_complete missing | → `da62673c` |
 | 4 | `d6b5fd41` | re-review | **3/5** | 2 inline (resume guard stale vs `da62673c`; statistical failed+missing double-count); 1 outside-diff (stop_no_improvement `>= 2`) | PASS-CODE posted; premature PR #9 ping (corrected) |
-| 5 | *(pending)* | @greptileai after iteration-5 fixes | — | Fix statistical count invariant; fix stop_no_improvement guard; re-trigger on new head | *in progress* |
+| 5 | `d2af3072` → `88fab454` | @greptileai | **5/5** | 0 actionable (dead helper noted informational) | statistical counts + stop guard (`d2af3072`); surface counts + resume index (`d30ce248`); HFT parity + docs (`6b4c4b0e`); staleness in check_map (`88fab454`) |
 
 ## Confidence scores observed
 
 | When (UTC) | commit reviewed | Confidence |
 |------------|-----------------|------------|
 | 2026-06-20 ~05:37 | `d6b5fd41` | **3/5** |
+| 2026-06-20 ~05:45 | `d2af3072` chain | **4/5** |
+| 2026-06-20 ~05:51+ | `88fab454` | **5/5** |
 
 ## Code fixes (cumulative)
 
@@ -30,7 +32,11 @@
 | P2 private `_` imports | `d2a6909a` |
 | P1 `resume_recovered_complete` double increment | `da62673c` |
 | P2 statistical failed+missing double-count | iteration 5 (this session) |
-| P2 stop_no_improvement hardcoded `>= 2` | iteration 5 (this session) |
+| P2 stop_no_improvement hardcoded `>= 2` | `d2af3072` |
+| Surface REJECT receipt counts | `d30ce248` |
+| COMPLETE resume index | `d30ce248` |
+| HFT parity checks | `6b4c4b0e` |
+| Staleness inside statistical check_map | `88fab454` |
 
 ## PR #9 correction
 
@@ -40,9 +46,9 @@ Premature `@greptileai` on PR #9 (agent 8a222097) — **paused** with comment: G
 
 | Gate | Status |
 |------|--------|
-| Scoped pytest | pending re-run iteration 5 |
-| Greptile ≥ 4/5 | **no** (last 3/5) |
-| 0 actionable | pending iteration 5 re-review |
-| **merge-ready** | **no** |
+| Scoped pytest | **pass** (210, prior `d2af3072`; re-run on `88fab454` recommended) |
+| Greptile ≥ 4/5 | **yes** (**5/5** on head `88fab454`) |
+| 0 actionable | **yes** (Greptile summary; resolve stale inline threads manually) |
+| **merge-ready** | **conditional yes** — owner resolve stale threads; then PR-B Greptile unblocked |
 
-**Next:** push iteration-5 fixes → `@greptileai` on #8 only → poll 10 min → resolve stale threads if confidence ≥ 4/5.
+**Next (plan):** Owner resolves stale inline threads on #8 → merge PR-A → `@greptileai` on PR-B (#9) only after merge.
