@@ -101,10 +101,21 @@ if ($LASTEXITCODE -ne 0) { throw "scp events failed exit=$LASTEXITCODE" }
 & scp @scpOpts $ManifestParquet "${SshHost}:${RemoteManifestPath}"
 if ($LASTEXITCODE -ne 0) { throw "scp manifest failed exit=$LASTEXITCODE" }
 $smokeUnits = Join-Path $RepoRoot "runtime/reports/vbt_smoke_units.jsonl"
-if (Test-Path $smokeUnits) {
-    & scp @scpOpts $smokeUnits "${SshHost}:${RemoteRepo}/runtime/reports/vbt_smoke_units.jsonl"
-    if ($LASTEXITCODE -ne 0) { throw "scp smoke units failed exit=$LASTEXITCODE" }
+if (-not (Test-Path $smokeUnits)) {
+    Write-Step "Generate vbt_smoke_units.jsonl (missing locally)"
+    & python (Join-Path $RepoRoot "scripts/generate_vbt_paid_units_jsonl.py") `
+        --out $smokeUnits `
+        --smoke-count 12 `
+        --symbols "MES.v.0,ES.v.0" `
+        --event-types "CPI,NFP" `
+        --model-id "HYP_5"
+    if ($LASTEXITCODE -ne 0) { throw "generate vbt_smoke_units failed exit=$LASTEXITCODE" }
 }
+if (-not (Test-Path $smokeUnits)) {
+    throw "vbt_smoke_units.jsonl still missing after generation attempt"
+}
+& scp @scpOpts $smokeUnits "${SshHost}:${RemoteRepo}/runtime/reports/vbt_smoke_units.jsonl"
+if ($LASTEXITCODE -ne 0) { throw "scp smoke units failed exit=$LASTEXITCODE" }
 
 Write-Step "Verify remote HEAD + hashes + NPZ probe"
 $remoteVerify = "export DEPLOY_REPO='$RemoteRepo'; export DEPLOY_EVENTS='$RemoteRepo/$($EventsCsv -replace '\\','/')'; export DEPLOY_MANIFEST='$RemoteManifestPath'; export DEPLOY_HEAD='$localHead'; export DEPLOY_NPZ_ROOT='$RemoteNpzRoot'; export DEPLOY_PROBE_N='$ProbeUnitCount'; bash '$RemoteRepo/scripts/vast_remote_verify.sh'"

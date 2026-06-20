@@ -147,6 +147,7 @@ Canonical path for production verify and new `main`-based work per [AGENTS.md](.
 | **NPZ filter** | `VBT_REQUIRE_RUNNABLE_NPZ=1` (default) + `--require-runnable-npz` on unit generator |
 | **Abort policy** | `abort_on_failed_units: true` in declaration + `--abort-on-failed-units` on v2 orchestrator |
 | **Gate hashes** | `events_csv_hash` / `lake_manifest_hash` in `runtime/reports/paid_screen_ready_gate.json` — sync `manifest.parquet` to Vast `/data/npz/manifest.parquet` |
+| **Vast manifest env** | On Vast host set `HFT3_MANIFEST_PATH=/data/npz/manifest.parquet` (parquet hash matches gate `pilot_hashes.lake_manifest_hash`; not `manifest.json`) |
 
 ---
 

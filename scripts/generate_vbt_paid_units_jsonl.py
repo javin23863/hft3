@@ -372,6 +372,8 @@ def _runnable_npz_keys(repo_root: Path) -> Set[tuple[str, str]]:
             sym = str(rec.get("symbol") or "").strip()
             eid = str(rec.get("event_id") or "").strip()
             npz_path = Path(str(rec.get("npz_path") or ""))
+            if not npz_path.is_absolute():
+                npz_path = root / npz_path
             if sym and eid and not rec.get("error") and npz_path.is_file():
                 keys.add((sym, eid))
     return keys
@@ -383,22 +385,18 @@ def _filter_runnable_npz_units(
 ) -> List[Dict[str, Any]]:
     """Keep only units whose event_id+symbol resolve to an NPZ under HFT3_NPZ_ROOT."""
     keys = _runnable_npz_keys(repo_root)
-    if keys:
-        return [
-            u
-            for u in units
-            if (str(u.get("symbol") or "").strip(), str(u.get("event_id") or "").strip()) in keys
-        ]
-
     from backtest_pipeline.src.vectorbt_adapter import _npz_candidates_for_event
     from data_system.src.event_data_resolver import npz_search_dirs
 
     search_dirs = npz_search_dirs(repo_root)
     kept: List[Dict[str, Any]] = []
     for unit in units:
+        sym = str(unit.get("symbol") or "").strip()
         event_id = str(unit.get("event_id") or "").strip()
         symbol = unit.get("symbol")
-        if event_id and _npz_candidates_for_event(search_dirs, event_id, symbol):
+        if keys and (sym, event_id) in keys:
+            kept.append(unit)
+        elif event_id and _npz_candidates_for_event(search_dirs, event_id, symbol):
             kept.append(unit)
     return kept
 

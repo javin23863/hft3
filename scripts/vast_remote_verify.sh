@@ -68,7 +68,7 @@ echo "REMOTE_NPZ_COUNT=$remote_npz"
 export HFT3_NPZ_ROOT="$NPZ_ROOT"
 export HFT3_MANIFEST_PATH="$MANIFEST"
 python3 - <<PY
-import json, os, random, sys
+import json, os, sys
 from pathlib import Path
 
 repo = Path(os.environ["DEPLOY_REPO"])
@@ -85,7 +85,7 @@ if not units_path.is_file():
     sys.stderr.write("FAIL: no probe units JSONL\\n")
     sys.exit(1)
 rows = [json.loads(l) for l in units_path.read_text(encoding="utf-8").splitlines() if l.strip()]
-sample = rows[:probe_n] if len(rows) <= probe_n else random.sample(rows, probe_n)
+sample = rows[:probe_n]
 hits = sum(
     1 for u in sample
     if _npz_candidates_for_event(npz_search_dirs(repo), u.get("event_id"), u.get("symbol"))
