@@ -465,19 +465,25 @@ def _evaluate_statistical_checks(
         ("null_strategy_battery", evidence.get("null_battery_or_not_run")),
         ("planted_alpha_control", evidence.get("planted_alpha_or_not_run")),
         ("adversarial_perturbation", evidence.get("adversarial_or_not_run")),
+        (
+            "robustness_artifact_staleness",
+            {"status": "pass" if str(evidence.get("robustness_artifact_staleness") or "").lower() == "fresh" else "fail"},
+        ),
     ]
     for check_name, payload in check_map:
+        if check_name == "robustness_artifact_staleness":
+            staleness = str(evidence.get("robustness_artifact_staleness") or "").lower()
+            if staleness == "fresh":
+                passed.append(check_name)
+            else:
+                failures.append(f"robustness_artifact_staleness={staleness or 'missing'}")
+            continue
         if _producer_status_pass(payload):
             passed.append(check_name)
         elif isinstance(payload, Mapping) and screening_status_text(payload) == "not_run":
             failures.append(f"{check_name}_not_run")
         else:
             failures.append(f"{check_name}_fail")
-    staleness = str(evidence.get("robustness_artifact_staleness") or "").lower()
-    if staleness == "fresh":
-        passed.append("robustness_artifact_staleness")
-    else:
-        failures.append(f"robustness_artifact_staleness={staleness or 'missing'}")
     if not allow_partial and any(reason.endswith("_not_run") for reason in failures):
         failures.append("allow_partial_false_blocks_not_run")
     dsr_status = str(evidence.get("dsr_status") or "").lower()
