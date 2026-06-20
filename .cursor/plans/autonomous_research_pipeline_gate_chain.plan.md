@@ -78,7 +78,7 @@ todos:
     content: "Phase 8 (§22): After each edit batch run bounded local rg negative/positive searches + git diff --check (max 3 iterations)"
     status: completed
   - id: phase9-greptile-loop
-    content: "Phase 9 (§23) BLOCKER: Greptile PR GrepLoop LAST — @greptileai after phases 1–8 done; cavecrew during build; max 5 iterations; stop at confidence ≥4/5 + 0 actionable on current head; PR-A merged 2026-06-20"
+    content: "Phase 9 (§23) BLOCKER: Greptile PR GrepLoop LAST — PR-A (#8) merged 2026-06-20; PR-B (#9) loop in progress; max 5 iterations; stop at confidence ≥4/5 + 0 actionable on current head"
     status: in_progress
   - id: phase10-checklist
     content: "Phase 10 (§24): Complete final acceptance checklist — all 26 items must be true"
