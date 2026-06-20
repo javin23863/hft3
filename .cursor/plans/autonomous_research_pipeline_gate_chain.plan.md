@@ -4,16 +4,16 @@ overview: "Complete and harden the existing autoresearch loop (run_pipeline.py -
 todos:
   - id: phase0-audit-rg
     content: "Phase 0 (§2): Run mandatory rg audit commands; produce requirement/file/function/test/artifact/active/gap table before any code edit"
-    status: pending
+    status: completed
   - id: phase0-locate-wfc
     content: "Phase 0 BLOCKER: Locate existing WFC impl (apps/workbench/src/robustness/wfc/gate.py, wfc_gate.yaml, tests, artifacts) — do NOT add second WFC until audit proves gap"
-    status: pending
+    status: completed
   - id: phase0-locate-regular-wf
     content: "Phase 0: Locate regular walk-forward impl (walk_forward.yaml, workbench, generation_summary) — prove distinct from WFC"
-    status: pending
+    status: completed
   - id: phase0-locate-greptile
     content: "Phase 0: Confirm Greptile PR GrepLoop entrypoints (docs/ai/GREPLOOP.md, .github, AGENTS.md); Codex is NOT acceptable substitute"
-    status: pending
+    status: completed
   - id: phase1-gate-chain-contract
     content: "Phase 1 (§4): Add/extend run_generation_gate_chain in generation_loop ownership with strict receipt schema and exact PASS comparisons"
     status: pending
