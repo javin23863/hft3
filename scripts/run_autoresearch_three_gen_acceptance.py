@@ -239,10 +239,10 @@ def _acceptance_hft_fn(repo_root: Path):
         out = repo_root / "runtime" / "reports" / "three_gen_hft" / (cid or "unknown")
         out.mkdir(parents=True, exist_ok=True)
         status = "completed"
-        cert = "PASS"
+        cert = "full_fidelity_declared"
         if str(cid).startswith("reject_hft"):
             status = "failed"
-            cert = "FAIL"
+            cert = "fail"
         return SimpleNamespace(
             status="pass" if status == "completed" else "fail",
             summary={"status": "pass" if status == "completed" else "fail"},
