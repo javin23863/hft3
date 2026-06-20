@@ -19,8 +19,13 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-function Send-RemoteBash([string]$script) {
-    ($script -replace "`r", "").Trim() | & ssh @sshOpts $SshHost bash
+function Invoke-RemoteSh([string]$command) {
+    $clean = ($command -replace "`r", "").Trim()
+    & ssh @sshOpts $SshHost $clean
+}
+
+function Invoke-RemoteBash([string]$script) {
+    ($script -replace "`r", "") | & ssh @sshOpts $SshHost "bash -s"
 }
 
 function Write-Step($msg) { Write-Host "`n=== $msg ===" -ForegroundColor Cyan }
@@ -82,7 +87,7 @@ fi
 cd $RemoteRepo
 echo REMOTE_HEAD=\$(git rev-parse HEAD)
 "@
-Invoke-RemoteSh $syncCmd
+Invoke-RemoteBash $syncCmd
 if ($LASTEXITCODE -ne 0) { throw "Remote sync failed exit=$LASTEXITCODE" }
 
 Write-Step "SCP gate, events.csv, manifest.parquet"
@@ -103,7 +108,7 @@ if (Test-Path $smokeUnits) {
 
 Write-Step "Verify remote HEAD + hashes + NPZ probe"
 $remoteVerify = "export DEPLOY_REPO='$RemoteRepo'; export DEPLOY_EVENTS='$RemoteRepo/$($EventsCsv -replace '\\','/')'; export DEPLOY_MANIFEST='$RemoteManifestPath'; export DEPLOY_HEAD='$localHead'; export DEPLOY_NPZ_ROOT='$RemoteNpzRoot'; export DEPLOY_PROBE_N='$ProbeUnitCount'; bash '$RemoteRepo/scripts/vast_remote_verify.sh'"
-Send-RemoteBash $remoteVerify
+Invoke-RemoteSh $remoteVerify
 if ($LASTEXITCODE -ne 0) { throw "Remote verify failed exit=$LASTEXITCODE" }
 
 Write-Step "NPZ parity probe (file counts)"
