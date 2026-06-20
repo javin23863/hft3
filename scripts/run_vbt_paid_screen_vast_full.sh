@@ -19,6 +19,9 @@ if [[ -f "${HFT3_ENV_FILE:-/root/hft3/.env}" ]]; then
   set +a
 fi
 
+# Gate-aligned lake manifest (parquet hash); override only when owner sets explicitly.
+export HFT3_MANIFEST_PATH="${HFT3_MANIFEST_PATH:-/data/npz/manifest.parquet}"
+
 EVENTS_CSV="${VBT_EVENTS_CSV:-packages/data_system/config/events.csv}"
 UNITS_JSONL="${VBT_FULL_UNITS_JSONL:-runtime/reports/vbt_full_units.jsonl}"
 GATE_FILE="${VBT_READY_GATE_FILE:-runtime/reports/paid_screen_ready_gate.json}"
@@ -148,7 +151,7 @@ PAID_SCREEN_SCRIPT="scripts/run_paid_screen.py"
 
 echo "Resolving v2 provenance hashes (events CSV + lake manifest)..."
 if ! read -r EVENTS_CSV_HASH LAKE_MANIFEST_HASH < <(
-    python3 - "$REPO_ROOT" "$EVENTS_CSV" "$DECL_FILE" <<'PY'
+    python3 - "$REPO_ROOT" "$EVENTS_CSV" "$DECL_FILE" "$GATE_FILE" <<'PY'
 import hashlib
 import json
 import os
@@ -158,6 +161,7 @@ from pathlib import Path
 repo_root = Path(sys.argv[1])
 events_csv = Path(sys.argv[2])
 decl_file = Path(sys.argv[3])
+gate_file = Path(sys.argv[4])
 
 
 def file_sha256(path: Path) -> str:
@@ -176,31 +180,55 @@ def resolve_events_csv_hash(events_csv: Path, repo_root: Path) -> str:
     return file_sha256(path)
 
 
-def resolve_lake_manifest_hash(repo_root: Path, decl_file: Path) -> str:
-    manifest_env = os.environ.get("HFT3_MANIFEST_PATH", "").strip()
-    if manifest_env:
-        manifest_path = Path(manifest_env)
-        if not manifest_path.is_absolute():
-            manifest_path = repo_root / manifest_path
-        if manifest_path.is_file():
-            return file_sha256(manifest_path)
+def resolve_lake_manifest_hash(repo_root: Path, decl_file: Path, gate_file: Path) -> str:
+    gate_hash = ""
+    if gate_file.is_file():
+        gate_hash = str(
+            (json.loads(gate_file.read_text(encoding="utf-8")).get("pilot_hashes") or {}).get(
+                "lake_manifest_hash"
+            )
+            or ""
+        ).strip()
+    decl_hash = ""
     if decl_file.is_file():
         decl_hash = str(
             json.loads(decl_file.read_text(encoding="utf-8")).get("lake_manifest_hash") or ""
         ).strip()
-        if decl_hash:
-            return decl_hash
+    expected = gate_hash or decl_hash
+    manifest_env = os.environ.get("HFT3_MANIFEST_PATH", "/data/npz/manifest.parquet").strip()
+    manifest_path = Path(manifest_env)
+    if not manifest_path.is_absolute():
+        manifest_path = repo_root / manifest_path
+    if not manifest_path.is_file():
+        print(
+            f"ERROR: lake manifest file missing: {manifest_path} "
+            "(set HFT3_MANIFEST_PATH=/data/npz/manifest.parquet on Vast)",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    actual = file_sha256(manifest_path)
+    if expected:
+        if actual != expected:
+            print(
+                f"ERROR: lake manifest hash mismatch: manifest={actual} "
+                f"gate/decl={expected} path={manifest_path}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        return expected
     print(
         "ERROR: lake manifest hash unavailable for v2 launch: "
-        "set HFT3_MANIFEST_PATH to an on-host manifest file, or record "
-        "lake_manifest_hash in the full-run declaration. "
-        "Do not substitute units JSONL or other artifacts.",
+        "record lake_manifest_hash in gate pilot_hashes or full-run declaration. "
+        "Do not substitute manifest.json or units JSONL.",
         file=sys.stderr,
     )
     sys.exit(1)
 
 
-print(resolve_events_csv_hash(events_csv, repo_root), resolve_lake_manifest_hash(repo_root, decl_file))
+print(
+    resolve_events_csv_hash(events_csv, repo_root),
+    resolve_lake_manifest_hash(repo_root, decl_file, gate_file),
+)
 PY
 ); then
   exit 1

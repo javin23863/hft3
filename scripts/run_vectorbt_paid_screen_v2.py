@@ -91,6 +91,26 @@ def _load_ready_gate(path: Path) -> bool:
     return bool(tail)
 
 
+def _assert_hashes_match_ready_gate(
+    gate_path: Path,
+    *,
+    events_csv_hash: str,
+    lake_manifest_hash: str,
+) -> None:
+    payload = json.loads(gate_path.read_text(encoding="utf-8"))
+    pilot = payload.get("pilot_hashes") or {}
+    expected_events = str(pilot.get("events_csv_hash") or "").strip()
+    expected_lake = str(pilot.get("lake_manifest_hash") or "").strip()
+    if expected_events and events_csv_hash != expected_events:
+        raise ValueError(
+            f"events_csv_hash {events_csv_hash} != ready gate {expected_events}"
+        )
+    if expected_lake and lake_manifest_hash != expected_lake:
+        raise ValueError(
+            f"lake_manifest_hash {lake_manifest_hash} != ready gate {expected_lake}"
+        )
+
+
 def _result_to_dict(result: UnitScreeningResult) -> Dict[str, Any]:
     row: Dict[str, Any] = {
         "unit_id": result.unit_id,
@@ -1061,6 +1081,17 @@ def main(argv: Optional[List[str]] = None) -> int:
     # Hashes and research split must be resolved before resume (BLUEPRINT §8).
     try:
         events_csv_hash, lake_manifest_hash = _resolve_run_hashes(args, repo_root)
+        if args.ready_gate_file:
+            gate_path = (
+                args.ready_gate_file
+                if args.ready_gate_file.is_absolute()
+                else repo_root / args.ready_gate_file
+            )
+            _assert_hashes_match_ready_gate(
+                gate_path,
+                events_csv_hash=events_csv_hash,
+                lake_manifest_hash=lake_manifest_hash,
+            )
     except (FileNotFoundError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1

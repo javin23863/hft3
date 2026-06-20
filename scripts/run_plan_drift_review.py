@@ -191,7 +191,10 @@ def run_review(
             if prior in plan_todos and plan_todos.index(prior) > plan_todos.index(completed_phase):
                 errors.append(f"wrong phase order in plan: {completed_phase} before {prior}")
 
-    allowed = _allowed_for_phase(completed_phase)
+    try:
+        allowed = _allowed_for_phase(completed_phase)
+    except ValueError:
+        allowed = set()
     changed = _git_diff_files(base_ref)
     out_of_scope: List[str] = []
     deprecated_hits: List[str] = []
@@ -230,31 +233,41 @@ def main(argv: List[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, default=_DEFAULT_OUT)
     args = parser.parse_args(argv)
 
+    report = run_review(
+        plan_path=args.plan if args.plan.is_absolute() else args.plan,
+        completed_phase=args.completed_phase,
+        base_ref=args.base_ref,
+    )
+    try:
+        allowed = _allowed_for_phase(args.completed_phase)
+    except ValueError:
+        allowed = set()
+
     changed = _git_changed_files()
-    allowed = _allowed_for_phase(args.completed_phase)
     out_of_scope = [
         p for p, st in changed if not _path_allowed(p, allowed, git_status=st)
     ]
     deprecated_hits = [
         d for p, st in changed if (d := _deprecated_violation(p, status=st.strip()))
     ]
-
-    report = run_review(
-        plan_path=args.plan if args.plan.is_absolute() else args.plan,
-        completed_phase=args.completed_phase,
-        base_ref=args.base_ref,
-    )
     report["changed_files"] = [p for p, _ in changed]
     report["out_of_scope"] = out_of_scope
     report["deprecated_violations"] = deprecated_hits
-    report["errors"] = []
+    porcelain_errors: List[str] = []
     if out_of_scope:
-        report["errors"].append(
+        porcelain_errors.append(
             f"files outside plan scope for phase {args.completed_phase}: {out_of_scope}"
         )
     if deprecated_hits:
-        report["errors"].extend(deprecated_hits)
-    report["pass"] = len(report["errors"]) == 0
+        porcelain_errors.extend(deprecated_hits)
+    seen: Set[str] = set()
+    merged_errors: List[str] = []
+    for err in list(report.get("errors") or []) + porcelain_errors:
+        if err not in seen:
+            seen.add(err)
+            merged_errors.append(err)
+    report["errors"] = merged_errors
+    report["pass"] = len(merged_errors) == 0
 
     out = args.out if args.out.is_absolute() else _REPO / args.out
     out.parent.mkdir(parents=True, exist_ok=True)
