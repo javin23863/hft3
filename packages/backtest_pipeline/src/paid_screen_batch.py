@@ -230,7 +230,7 @@ def _signal_implementation_hash_paths(repo_root: str) -> list[Path]:
         "packages/backtest_pipeline/src/vectorbt_adapter.py",
         "packages/backtest_pipeline/src/fs_v1_screen_path.py",
         "packages/backtest_pipeline/src/paid_screen_matrix.py",
-        "packages/backtest_pipeline/src/cross_asset_assembly.py",
+        "packages/replay/cross_asset_assembly.py",
     ):
         candidate = root / rel
         if candidate.is_file():
