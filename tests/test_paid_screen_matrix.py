@@ -419,7 +419,7 @@ class TestSlTpForPortfolio:
         except ImportError:
             pytest.skip("vectorbt not installed")
 
-        close = np.ones(m_bars)
+        close = np.ones((m_bars, n_trials))
         entries = np.zeros((m_bars, n_trials), dtype=bool)
         entries[0, :] = True
         exits = np.zeros((m_bars, n_trials), dtype=bool)

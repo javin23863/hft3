@@ -438,6 +438,8 @@ class TestSignalImplementationHash:
         assert "packages/features_engine/src/hypotheses/modules.py" in rel_paths
         assert "packages/features_engine/src/pipeline/market_state_pipeline.py" in rel_paths
         assert "packages/research_pipeline/feature_recipe.py" in rel_paths
+        assert "packages/backtest_pipeline/src/fs_v1_screen_path.py" in rel_paths
+        assert "packages/backtest_pipeline/src/paid_screen_matrix.py" in rel_paths
 
     def test_resolve_signal_implementation_hash_uses_packages_path(self):
         digest = _resolve_signal_implementation_hash(str(_REPO))

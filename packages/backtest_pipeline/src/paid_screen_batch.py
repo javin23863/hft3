@@ -228,8 +228,13 @@ def _signal_implementation_hash_paths(repo_root: str) -> list[Path]:
         "packages/features_engine/config/model_registry.yaml",
         "packages/research_pipeline/feature_recipe.py",
         "packages/backtest_pipeline/src/vectorbt_adapter.py",
+        "packages/backtest_pipeline/src/fs_v1_screen_path.py",
+        "packages/backtest_pipeline/src/paid_screen_matrix.py",
+        "packages/backtest_pipeline/src/cross_asset_assembly.py",
     ):
-        paths.append(root / rel)
+        candidate = root / rel
+        if candidate.is_file():
+            paths.append(candidate)
 
     structural_dir = root / "packages" / "features_engine" / "src" / "structural_models"
     if structural_dir.is_dir():

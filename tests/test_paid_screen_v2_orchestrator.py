@@ -195,7 +195,7 @@ class TestVastLauncherV2Only:
         assert '--events-csv-hash "$EVENTS_CSV_HASH"' in text
         assert '--lake-manifest-hash "$LAKE_MANIFEST_HASH"' in text
         assert "Resolving v2 provenance hashes" in text
-        assert "Do not substitute units JSONL" in text
+        assert "Do not substitute manifest.json or units JSONL." in text
 
 class TestVastLauncherHashWiring:
     def test_events_hash_derived_from_events_csv(self, tmp_path):
@@ -1279,7 +1279,10 @@ class TestOrchestratorMainExit:
         out_dir = repo / "out"
         gate_path = repo / "gate.json"
         gate_path.write_text(
-            json.dumps({"ready_for_full_run": True}),
+            json.dumps({
+                "ready_for_full_run": True,
+                "lookahead_pytest_tail": "1 passed in 0.01s",
+            }),
             encoding="utf-8",
         )
 
