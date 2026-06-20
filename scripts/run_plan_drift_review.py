@@ -35,6 +35,7 @@ PHASE_ALLOWED: Dict[str, List[str]] = {
     "stop-vast": [],
     "single-deploy": [
         "scripts/vast_deploy_and_verify.ps1",
+        "scripts/vast_remote_verify.sh",
         "scripts/vbt_paid_screen_next_steps.py",
         "docs/REPO_STATE.md",
         "runtime/_deprecated_vast_incident_20260619/",
