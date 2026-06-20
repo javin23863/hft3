@@ -1,8 +1,10 @@
 """Tests for the paid-screen batch entry point."""
-import pytest
-import os
 import json
+import os
 from pathlib import Path
+
+import numpy as np
+import pytest
 from backtest_pipeline.src.paid_screen_types import (
     PaidScreenUnit, WorkerContext, UnitScreeningResult,
 )
@@ -741,6 +743,132 @@ class TestApplyPromotionGatesAfterMatrix:
         assert gated.promoted == []
         assert len(gated.rejected) == 1
         assert gated.rejected[0].reject_reason == "promotion_gate_failed"
+
+
+class TestPromotionGateWiringPlantedPass:
+    """Step 1: candidate -> VectorBT metrics -> gate -> promoted_ids."""
+
+    @staticmethod
+    def _official_stats_promoted(**metric_overrides) -> "PromotedCandidate":
+        from backtest_pipeline.src.promotion_gate import PromotedCandidate
+
+        metrics = {
+            "gate_metric_authority": "official_vectorbt_portfolio_stats",
+            "oos_expectancy": 1.5,
+            "max_drawdown_pct": -5.0,
+            "num_trades": 50,
+        }
+        metrics.update(metric_overrides)
+        return PromotedCandidate(
+            candidate_id="planted_pass",
+            hypothesis_id="HYP_5",
+            strategy_family="HYP_5",
+            asset_class="futures",
+            symbol="MES.v.0",
+            timeframe="1m",
+            param_values={"signal_threshold": 0.15},
+            vectorbt_run_id="run_planted",
+            vectorbt_results=metrics,
+            pass_reason="vectorbt_simulated",
+        )
+
+    def test_paid_compute_scope_promotes_official_stats_candidate(self):
+        from backtest_pipeline.src.vectorbt_adapter import FilterResult, apply_promotion_gates
+
+        prom = self._official_stats_promoted()
+        result = FilterResult(backend="vectorbt", run_id="run_planted", promoted=[prom], rejected=[])
+        gated = apply_promotion_gates(result, screening_scope="paid-compute")
+        assert len(gated.promoted) == 1
+        assert gated.promoted[0].candidate_id == "planted_pass"
+        assert gated.promoted[0].pass_reason == "vectorbt_screen_passed_replay_not_eligible"
+        assert gated.promoted[0].vectorbt_results["pilot_gate_evaluation"]["failures"] == []
+
+    def test_paid_compute_rejects_low_expectancy_with_explicit_reason(self):
+        from backtest_pipeline.src.vectorbt_adapter import FilterResult, apply_promotion_gates
+
+        prom = self._official_stats_promoted(oos_expectancy=-1.0)
+        result = FilterResult(backend="vectorbt", run_id="run_planted", promoted=[prom], rejected=[])
+        gated = apply_promotion_gates(result, screening_scope="paid_compute")
+        assert gated.promoted == []
+        assert len(gated.rejected) == 1
+        failures = gated.rejected[0].metric_values["pilot_gate_evaluation"]["failures"]
+        assert "oos_expectancy_below_threshold" in failures
+
+    def test_paid_compute_rejects_missing_expectancy_with_explicit_reason(self):
+        from backtest_pipeline.src.vectorbt_adapter import FilterResult, apply_promotion_gates
+
+        prom = self._official_stats_promoted()
+        del prom.vectorbt_results["oos_expectancy"]
+        result = FilterResult(backend="vectorbt", run_id="run_planted", promoted=[prom], rejected=[])
+        gated = apply_promotion_gates(result, screening_scope="paid-compute")
+        assert gated.promoted == []
+        failures = gated.rejected[0].metric_values["pilot_gate_evaluation"]["failures"]
+        assert "missing_oos_expectancy_from_official_expectancy" in failures
+
+    def test_full_gate_rejects_missing_walk_forward_and_stability(self):
+        from backtest_pipeline.src.promotion_gate import PromotionGate
+        from backtest_pipeline.src.vectorbt_adapter import FilterResult, apply_promotion_gates
+
+        prom = self._official_stats_promoted()
+        prom.vectorbt_results.pop("gate_metric_authority", None)
+        result = FilterResult(backend="vectorbt", run_id="run_planted", promoted=[prom], rejected=[])
+        gated = apply_promotion_gates(
+            result,
+            screening_scope="refine",
+            gates=PromotionGate(),
+        )
+        assert gated.promoted == []
+        failures = gated.rejected[0].metric_values["promotion_gate_failures"]
+        assert "missing_wf_consistency" in failures
+        assert "missing_param_stability_score" in failures
+
+    def test_screen_paid_batch_writes_promoted_ids_from_planted_pass(self, monkeypatch, tmp_path):
+        from backtest_pipeline.src.paid_screen_cache import BoundedLRUCache
+        from backtest_pipeline.src.vectorbt_adapter import FilterResult, apply_promotion_gates
+
+        prom = self._official_stats_promoted()
+        filter_result = FilterResult(
+            backend="vectorbt",
+            run_id="run_planted",
+            promoted=[prom],
+            rejected=[],
+            screening_scope="paid-compute",
+            code_commit="abc123",
+            parameter_space_id="ps_test",
+            parameter_space_hash="ps_hash_test",
+            max_trials=1,
+            trials_run=1,
+            max_total_trials=1,
+            max_models=1,
+            max_symbols=1,
+            max_feature_sets=1,
+            rust_engine_required_for_scope=True,
+            rust_engine_available=True,
+            vectorbt_engine_runtime_proof=True,
+            vectorbt_engine="rust",
+            engine_parity_status="rust_runtime_proven",
+            vectorbt_version="1.0.0",
+            vectorbt_available=True,
+        )
+        gated = apply_promotion_gates(filter_result, screening_scope="paid-compute")
+        assert gated.promoted
+
+        unit = make_unit()
+        ctx = make_context(screening_scope="paid-compute", repo_root=str(tmp_path))
+        cache = BoundedLRUCache(max_entries=4, max_memory_mb=64)
+        ohlcv = np.array([[100.0, 101.0, 102.0, 103.0, 1.0, 1_700_000_000_000.0]] * 40)
+        cache.put(_batch_cache_key(ctx, unit), ohlcv)
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch.run_vectorbt_simulation_matrix",
+            lambda **_kwargs: gated,
+        )
+
+        results = screen_paid_batch([unit], ctx, data_cache=cache, run_screening=True)
+        assert len(results) == 1
+        assert results[0].status == "OK", results[0].error
+        assert results[0].promoted_ids == ["planted_pass"]
+        artifact = json.loads(Path(results[0].screening_artifact_path).read_text(encoding="utf-8"))
+        assert artifact["promoted_ids"] == ["planted_pass"]
 
 
 class TestDefaultDataLoaderNpzRoot:

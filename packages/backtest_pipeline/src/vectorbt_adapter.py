@@ -3174,14 +3174,16 @@ def apply_promotion_gates(
         prom.timestamp_utc = datetime.now(timezone.utc).isoformat()
 
         if (
-            _normalise_screening_scope(screening_scope) == "pilot"
-            and prom.vectorbt_results.get("gate_metric_authority")
+            prom.vectorbt_results.get("gate_metric_authority")
             == "official_vectorbt_portfolio_stats"
         ):
             gate_pass, gate_evaluation = _evaluate_vbt2_pilot_stats_gate(prom, gates)
             prom.vectorbt_results["pilot_gate_evaluation"] = gate_evaluation
         else:
-            gate_pass = gates.evaluate(prom)
+            gate_failures = gates.evaluate_failures(prom)
+            gate_pass = not gate_failures
+            if gate_failures:
+                prom.vectorbt_results["promotion_gate_failures"] = gate_failures
         if gate_pass:
             prom.pass_reason = _VBT2_PILOT_SCREEN_PASS_REASON
             prom.in_sample_results["gate_pass"] = True

@@ -104,22 +104,58 @@ class PromotionGate:
     param_stability_rtol: float = 0.3
     max_slippage_sensitivity: float = 0.5
 
+    def evaluate_failures(self, candidate: PromotedCandidate) -> List[str]:
+        """Return explicit gate failure codes; empty list means pass."""
+        metrics = candidate.vectorbt_results or {}
+        failures: List[str] = []
+
+        oos_expectancy = metrics.get("oos_expectancy")
+        if oos_expectancy is None:
+            failures.append("missing_oos_expectancy")
+        elif float(oos_expectancy) < self.min_oos_expectancy:
+            failures.append("oos_expectancy_below_threshold")
+
+        wf_consistency = metrics.get("wf_consistency")
+        if wf_consistency is None:
+            failures.append("missing_wf_consistency")
+        elif float(wf_consistency) < self.min_walk_forward_consistency:
+            failures.append("wf_consistency_below_threshold")
+
+        max_drawdown_pct = metrics.get("max_drawdown_pct")
+        if max_drawdown_pct is None:
+            failures.append("missing_max_drawdown_pct")
+        elif abs(float(max_drawdown_pct)) > abs(self.max_drawdown_pct):
+            failures.append("max_drawdown_above_threshold")
+
+        turnover_mean_pct = metrics.get("turnover_mean_pct")
+        if turnover_mean_pct is None:
+            failures.append("missing_turnover_mean_pct")
+        elif float(turnover_mean_pct) > self.max_turnover_pct:
+            failures.append("turnover_above_threshold")
+
+        num_trades = metrics.get("num_trades")
+        if num_trades is None:
+            failures.append("missing_num_trades")
+        elif int(num_trades) < self.min_trades:
+            failures.append("num_trades_below_threshold")
+
+        param_stability_score = metrics.get("param_stability_score")
+        min_param_stability = 1.0 - self.param_stability_rtol
+        if param_stability_score is None:
+            failures.append("missing_param_stability_score")
+        elif float(param_stability_score) < min_param_stability:
+            failures.append("param_stability_below_threshold")
+
+        slippage_sensitivity = metrics.get("slippage_sensitivity")
+        if slippage_sensitivity is None:
+            failures.append("missing_slippage_sensitivity")
+        elif float(slippage_sensitivity) > self.max_slippage_sensitivity:
+            failures.append("slippage_sensitivity_above_threshold")
+
+        return failures
+
     def evaluate(self, candidate: PromotedCandidate) -> bool:
-        if candidate.vectorbt_results.get("oos_expectancy", 0.0) < self.min_oos_expectancy:
-            return False
-        if candidate.vectorbt_results.get("wf_consistency", 0.0) < self.min_walk_forward_consistency:
-            return False
-        if abs(candidate.vectorbt_results.get("max_drawdown_pct", 0.0)) > abs(self.max_drawdown_pct):
-            return False
-        if candidate.vectorbt_results.get("turnover_mean_pct", 0.0) > self.max_turnover_pct:
-            return False
-        if candidate.vectorbt_results.get("num_trades", 0) < self.min_trades:
-            return False
-        if candidate.vectorbt_results.get("param_stability_score", 0.0) < (1.0 - self.param_stability_rtol):
-            return False
-        if candidate.vectorbt_results.get("slippage_sensitivity", 0.0) > self.max_slippage_sensitivity:
-            return False
-        return True
+        return not self.evaluate_failures(candidate)
 
 
 def serialize_promoted(
