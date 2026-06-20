@@ -2022,27 +2022,27 @@ class TestFilterCandidatesScreeningArtifactPersistence:
         promoted = artifact["promoted"][0]
         vectorbt_results = promoted["vectorbt_results"]
         for field_name in (
-            "wf_consistency",
             "turnover_mean_pct",
             "param_stability_score",
             "slippage_sensitivity",
         ):
             assert field_name not in vectorbt_results
+        assert "wf_consistency" in vectorbt_results
+        assert "oos_expectancy" in vectorbt_results
         assert vectorbt_results["gate_metric_non_stats_status"] == {
-            "wf_consistency": "not_measured_not_used_by_vbt2_pilot_gate",
             "turnover_mean_pct": "not_measured_not_used_by_vbt2_pilot_gate",
             "param_stability_score": "not_measured_not_used_by_vbt2_pilot_gate",
             "slippage_sensitivity": "not_measured_not_used_by_vbt2_pilot_gate",
         }
         assert vectorbt_results["pilot_gate_evaluation"] == {
-            "scope": "vbt2_pilot_official_vectorbt_stats_only",
+            "scope": "official_vectorbt_stats_with_walk_forward_oos",
             "used_fields": {
-                "oos_expectancy": "Expectancy",
+                "oos_expectancy": "auxiliary_numpy_walk_forward",
+                "wf_consistency": "auxiliary_numpy_walk_forward",
                 "max_drawdown_pct": "Max Drawdown [%]",
                 "num_trades": "Total Trades",
             },
             "skipped_unmeasured_fields": [
-                "wf_consistency",
                 "turnover_mean_pct",
                 "param_stability_score",
                 "slippage_sensitivity",
@@ -2050,7 +2050,7 @@ class TestFilterCandidatesScreeningArtifactPersistence:
             "failure_semantics": "screening_only_not_replay_or_robustness_eligible",
             "failures": [],
         }
-        assert promoted["walk_forward_metrics"]["wf_consistency"] is None
+        assert promoted["walk_forward_metrics"]["wf_consistency"] is not None
         assert promoted["turnover"]["status"] == "not_run"
 
     def test_total_return_is_optional_for_vbt2_pilot_gate(self, monkeypatch, tmp_path):

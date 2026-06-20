@@ -728,6 +728,7 @@ class TestApplyPromotionGatesAfterMatrix:
             vectorbt_results={
                 "gate_metric_authority": "official_vectorbt_portfolio_stats",
                 "oos_expectancy": -999.0,
+                "wf_consistency": 0.75,
                 "max_drawdown_pct": 0.0,
                 "num_trades": 100,
             },
@@ -755,6 +756,7 @@ class TestPromotionGateWiringPlantedPass:
         metrics = {
             "gate_metric_authority": "official_vectorbt_portfolio_stats",
             "oos_expectancy": 1.5,
+            "wf_consistency": 0.75,
             "max_drawdown_pct": -5.0,
             "num_trades": 50,
         }
@@ -803,7 +805,7 @@ class TestPromotionGateWiringPlantedPass:
         gated = apply_promotion_gates(result, screening_scope="paid-compute")
         assert gated.promoted == []
         failures = gated.rejected[0].metric_values["pilot_gate_evaluation"]["failures"]
-        assert "missing_oos_expectancy_from_official_expectancy" in failures
+        assert "missing_oos_expectancy" in failures
 
     def test_full_gate_rejects_missing_walk_forward_and_stability(self):
         from backtest_pipeline.src.promotion_gate import PromotionGate
@@ -811,6 +813,8 @@ class TestPromotionGateWiringPlantedPass:
 
         prom = self._official_stats_promoted()
         prom.vectorbt_results.pop("gate_metric_authority", None)
+        prom.vectorbt_results.pop("wf_consistency", None)
+        prom.vectorbt_results.pop("oos_expectancy", None)
         result = FilterResult(backend="vectorbt", run_id="run_planted", promoted=[prom], rejected=[])
         gated = apply_promotion_gates(
             result,

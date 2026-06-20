@@ -2382,7 +2382,6 @@ _VBT_GATE_REQUIRED_STATS = (
     "Max Drawdown [%]",
 )
 _VBT2_PILOT_SKIPPED_UNMEASURED_GATE_FIELDS = (
-    "wf_consistency",
     "turnover_mean_pct",
     "param_stability_score",
     "slippage_sensitivity",
@@ -2440,7 +2439,6 @@ def _normalise_vectorbt_stats_for_gate(vbt_stats: Mapping[str, Any]) -> Tuple[Di
         "gross_return": round(total_return_pct / 100.0, 8),
         "net_return": round(total_return_pct / 100.0, 8),
         "expectancy": round(expectancy_f, 8),
-        "oos_expectancy": round(expectancy_f, 8),
         "num_trades": total_trades_i,
         "trade_count": total_trades_i,
         "max_drawdown_pct": round(max_drawdown_pct, 8),
@@ -2455,43 +2453,33 @@ def _normalise_vectorbt_stats_for_gate(vbt_stats: Mapping[str, Any]) -> Tuple[Di
     }, []
 
 
-def _evaluate_vbt2_pilot_stats_gate(
-    candidate: PromotedCandidate,
-    gates: PromotionGate,
-) -> Tuple[bool, Dict[str, Any]]:
-    """Evaluate the VBT-2 pilot gate using only official VectorBT stats fields."""
-    metrics = candidate.vectorbt_results
-    failures: List[str] = []
-    oos_expectancy = _finite_float(metrics.get("oos_expectancy"))
-    max_drawdown_pct = _finite_float(metrics.get("max_drawdown_pct"))
-    num_trades = _finite_float(metrics.get("num_trades"))
+def _hydrate_walk_forward_gate_metrics(metrics: Dict[str, Any]) -> None:
+    """Copy walk-forward OOS metrics onto the gate surface when present."""
+    aux_wf = metrics.get("auxiliary_numpy_walk_forward")
+    if not isinstance(aux_wf, Mapping):
+        return
+    for key in ("oos_expectancy", "wf_consistency"):
+        if key in aux_wf:
+            metrics[key] = aux_wf[key]
 
-    if oos_expectancy is None:
-        failures.append("missing_oos_expectancy_from_official_expectancy")
-    elif oos_expectancy < gates.min_oos_expectancy:
-        failures.append("oos_expectancy_below_threshold")
 
-    if max_drawdown_pct is None:
-        failures.append("missing_max_drawdown_pct_from_official_stats")
-    elif abs(max_drawdown_pct) > abs(gates.max_drawdown_pct):
-        failures.append("max_drawdown_above_threshold")
-
-    if num_trades is None:
-        failures.append("missing_num_trades_from_official_total_trades")
-    elif int(round(num_trades)) < gates.min_trades:
-        failures.append("num_trades_below_threshold")
-
-    return not failures, {
-        "scope": "vbt2_pilot_official_vectorbt_stats_only",
-        "used_fields": {
-            "oos_expectancy": "Expectancy",
-            "max_drawdown_pct": "Max Drawdown [%]",
-            "num_trades": "Total Trades",
-        },
-        "skipped_unmeasured_fields": list(_VBT2_PILOT_SKIPPED_UNMEASURED_GATE_FIELDS),
-        "failure_semantics": "screening_only_not_replay_or_robustness_eligible",
-        "failures": failures,
+def _is_vbt2_pilot_exempt_gate_failure(failure_code: str) -> bool:
+    """Official VectorBT stats do not measure turnover/stability/slippage yet."""
+    exempt_by_field = {
+        "turnover_mean_pct": ("missing_turnover_mean_pct", "turnover_above_threshold"),
+        "param_stability_score": (
+            "missing_param_stability_score",
+            "param_stability_below_threshold",
+        ),
+        "slippage_sensitivity": (
+            "missing_slippage_sensitivity",
+            "slippage_sensitivity_above_threshold",
+        ),
     }
+    for codes in exempt_by_field.values():
+        if failure_code in codes:
+            return True
+    return False
 
 
 def compute_raw_hypothesis_signal_series(
@@ -2793,6 +2781,8 @@ def _run_vectorbt_simulation(
                 "vbt_stats": vbt_stats,
                 "filter_backend": result.backend,
                 **gate_metrics,
+                "oos_expectancy": wf["oos_expectancy"],
+                "wf_consistency": wf["wf_consistency"],
                 "auxiliary_numpy_metrics": auxiliary_metrics,
                 "auxiliary_numpy_walk_forward": wf,
                 "surface_stability_metrics": _surface_stability_formula_missing(),
@@ -3222,17 +3212,32 @@ def apply_promotion_gates(
         prom.seed = 42
         prom.timestamp_utc = datetime.now(timezone.utc).isoformat()
 
+        _hydrate_walk_forward_gate_metrics(prom.vectorbt_results)
+        gate_failures = gates.evaluate_failures(prom)
         if (
             prom.vectorbt_results.get("gate_metric_authority")
             == "official_vectorbt_portfolio_stats"
         ):
-            gate_pass, gate_evaluation = _evaluate_vbt2_pilot_stats_gate(prom, gates)
-            prom.vectorbt_results["pilot_gate_evaluation"] = gate_evaluation
-        else:
-            gate_failures = gates.evaluate_failures(prom)
-            gate_pass = not gate_failures
-            if gate_failures:
-                prom.vectorbt_results["promotion_gate_failures"] = gate_failures
+            gate_failures = [
+                code
+                for code in gate_failures
+                if not _is_vbt2_pilot_exempt_gate_failure(code)
+            ]
+            prom.vectorbt_results["pilot_gate_evaluation"] = {
+                "scope": "official_vectorbt_stats_with_walk_forward_oos",
+                "used_fields": {
+                    "oos_expectancy": "auxiliary_numpy_walk_forward",
+                    "wf_consistency": "auxiliary_numpy_walk_forward",
+                    "max_drawdown_pct": "Max Drawdown [%]",
+                    "num_trades": "Total Trades",
+                },
+                "skipped_unmeasured_fields": list(_VBT2_PILOT_SKIPPED_UNMEASURED_GATE_FIELDS),
+                "failure_semantics": "screening_only_not_replay_or_robustness_eligible",
+                "failures": gate_failures,
+            }
+        elif gate_failures:
+            prom.vectorbt_results["promotion_gate_failures"] = gate_failures
+        gate_pass = not gate_failures
         if gate_pass:
             prom.pass_reason = _VBT2_PILOT_SCREEN_PASS_REASON
             prom.in_sample_results["gate_pass"] = True
