@@ -65,6 +65,23 @@ def _manifest(**overrides: object) -> dict:
     return base
 
 
+def _valid_hft_replay(
+    manifest: dict[str, Any] | None = None,
+    *,
+    screening_artifact_hash: str = "screen-abc",
+    robustness_artifact_hash: str = "rob-abc",
+) -> dict[str, Any]:
+    m = manifest or _manifest()
+    return {
+        "candidate_id": m["candidate_id"],
+        "manifest_hash": m["manifest_hash"],
+        "feature_recipe_hash": m["feature_recipe_hash"],
+        "screening_artifact_hash": screening_artifact_hash,
+        "robustness_artifact_hash": robustness_artifact_hash,
+        "certification_status": "full_fidelity_declared",
+    }
+
+
 def _pass_receipt(gate_id: str) -> dict:
     m = _manifest()
     return build_gate_receipt(
@@ -603,9 +620,16 @@ def test_hft_not_run_cannot_elite() -> None:
 
 
 def test_final_pass_requires_all_gates_including_hft() -> None:
+    manifest = _manifest()
     hft_pass = build_hftbacktest_gate_receipt(
-        manifest=_manifest(),
-        scenario_results=[{"scenario_id": "s1", "status": "completed", "replay_result": {}}],
+        manifest=manifest,
+        scenario_results=[
+            {
+                "scenario_id": "s1",
+                "status": "completed",
+                "replay_result": _valid_hft_replay(manifest),
+            }
+        ],
         screening_artifact_hash="screen-abc",
         robustness_artifact_hash="rob-abc",
     )
@@ -641,9 +665,16 @@ def test_final_pass_requires_all_gates_including_hft() -> None:
 
 
 def test_hft_reject_maps_to_final_hft_rejected() -> None:
+    manifest = _manifest()
     reject = build_hftbacktest_gate_receipt(
-        manifest=_manifest(),
-        scenario_results=[{"scenario_id": "s1", "status": "failed", "replay_result": {"error": "boom"}}],
+        manifest=manifest,
+        scenario_results=[
+            {
+                "scenario_id": "s1",
+                "status": "failed",
+                "replay_result": {"error": "boom", **_valid_hft_replay(manifest)},
+            }
+        ],
         screening_artifact_hash="screen-abc",
         robustness_artifact_hash="rob-abc",
     )

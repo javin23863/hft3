@@ -251,22 +251,56 @@ def _e2e_robustness_fn(tmp_path: Path):
 def _e2e_hft_fn(tmp_path: Path):
     from types import SimpleNamespace
 
+    def _latest_robustness_hash() -> str:
+        from backtest_pipeline.src.hft_campaign._hashing import sha256_hex
+
+        rob_dirs = sorted(tmp_path.glob("rob_*"), key=lambda p: p.stat().st_mtime, reverse=True)
+        for rob_dir in rob_dirs:
+            summary_path = rob_dir / "summary.json"
+            if summary_path.is_file():
+                return sha256_hex(json.loads(summary_path.read_text(encoding="utf-8")))
+        return "rob-smoke-fallback"
+
+    def _manifest_for_candidate(candidate_id: str, config) -> dict[str, Any]:
+        manifests_path = Path(config.out_dir).parent / "candidate_manifests.jsonl"
+        if manifests_path.is_file():
+            for line in manifests_path.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                row = json.loads(line)
+                if str(row.get("candidate_id")) == candidate_id:
+                    return row
+        return {"candidate_id": candidate_id, "manifest_hash": "", "feature_recipe_hash": ""}
+
     def _run(**kwargs):
         scenarios = kwargs.get("scenarios") or []
+        config = kwargs.get("config")
         out = tmp_path / "hft_out"
         out.mkdir(parents=True, exist_ok=True)
-        return SimpleNamespace(
-            status="pass",
-            summary={"status": "pass"},
-            scenario_results=[
+        rob_hash = _latest_robustness_hash()
+        scenario_results = []
+        for s in scenarios:
+            cid = str(getattr(s, "candidate_id", "unknown"))
+            manifest = _manifest_for_candidate(cid, config) if config else {}
+            scenario_results.append(
                 SimpleNamespace(
                     scenario_id=str(getattr(s, "scenario_id", "s1")),
                     status="completed",
-                    replay_result={"certification_status": "PASS"},
+                    replay_result={
+                        "candidate_id": cid,
+                        "manifest_hash": str(manifest.get("manifest_hash") or ""),
+                        "feature_recipe_hash": str(manifest.get("feature_recipe_hash") or ""),
+                        "screening_artifact_hash": "phase8_smoke",
+                        "robustness_artifact_hash": rob_hash,
+                        "certification_status": "full_fidelity_declared",
+                    },
                     artifact_dir=str(out),
                 )
-                for s in scenarios
-            ],
+            )
+        return SimpleNamespace(
+            status="pass",
+            summary={"status": "pass"},
+            scenario_results=scenario_results,
         )
 
     return _run

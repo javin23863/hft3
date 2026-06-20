@@ -302,20 +302,48 @@ def test_generation_loop_spies_runners(tmp_path: Path, monkeypatch) -> None:
 
     def hft_fn(**kwargs):
         from types import SimpleNamespace
+        from backtest_pipeline.src.hft_campaign._hashing import sha256_hex
 
         hft_calls.append(1)
         scenarios = kwargs.get("scenarios") or []
+        config = kwargs.get("config")
         hft_out = tmp_path / f"hft_{len(hft_calls)}"
         hft_out.mkdir(parents=True, exist_ok=True)
-        scenario_results = [
-            SimpleNamespace(
-                scenario_id=str(getattr(s, "scenario_id", f"s{i}")),
-                status="completed",
-                replay_result={"certification_status": "PASS"},
-                artifact_dir=str(hft_out),
+        rob_dirs = sorted(tmp_path.glob("rob*"), key=lambda p: p.stat().st_mtime, reverse=True)
+        rob_hash = "rob-smoke-fallback"
+        for rob_dir in rob_dirs:
+            summary_path = rob_dir / "summary.json"
+            if summary_path.is_file():
+                rob_hash = sha256_hex(json.loads(summary_path.read_text(encoding="utf-8")))
+                break
+        manifests_path = (
+            Path(config.out_dir).parent / "candidate_manifests.jsonl" if config else None
+        )
+        manifest_by_cid: dict[str, dict[str, Any]] = {}
+        if manifests_path and manifests_path.is_file():
+            for line in manifests_path.read_text(encoding="utf-8").splitlines():
+                if line.strip():
+                    row = json.loads(line)
+                    manifest_by_cid[str(row.get("candidate_id"))] = row
+        scenario_results = []
+        for i, s in enumerate(scenarios):
+            cid = str(getattr(s, "candidate_id", f"c{i}"))
+            manifest = manifest_by_cid.get(cid, {})
+            scenario_results.append(
+                SimpleNamespace(
+                    scenario_id=str(getattr(s, "scenario_id", f"s{i}")),
+                    status="completed",
+                    replay_result={
+                        "candidate_id": cid,
+                        "manifest_hash": str(manifest.get("manifest_hash") or ""),
+                        "feature_recipe_hash": str(manifest.get("feature_recipe_hash") or ""),
+                        "screening_artifact_hash": "abc123",
+                        "robustness_artifact_hash": rob_hash,
+                        "certification_status": "full_fidelity_declared",
+                    },
+                    artifact_dir=str(hft_out),
+                )
             )
-            for i, s in enumerate(scenarios)
-        ]
         mock = MagicMock()
         mock.status = "pass"
         mock.summary = {"status": "pass"}

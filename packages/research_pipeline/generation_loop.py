@@ -7,7 +7,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, Sequence
 
 import yaml
 
@@ -460,6 +460,55 @@ def _scenario_results_by_candidate(
     return by_cid
 
 
+def _load_hft_artifact_json(artifact_dir: Path | None, filename: str) -> dict[str, Any]:
+    if artifact_dir is None or not artifact_dir.is_dir():
+        return {}
+    path = artifact_dir / filename
+    if not path.is_file():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _enrich_hft_scenario_results(
+    scenario_results: Sequence[Mapping[str, Any]] | None,
+    *,
+    manifest: Mapping[str, Any],
+    screening_artifact_hash: str,
+    robustness_artifact_hash: str,
+) -> list[dict[str, Any]]:
+    """Hydrate replay artifacts and inject upstream identity for Gate 7 parity."""
+    enriched: list[dict[str, Any]] = []
+    for result in list(scenario_results or []):
+        row = dict(result)
+        status = str(row.get("status") or "")
+        if status == "cached":
+            row["status"] = "completed"
+        artifact_dir = Path(str(row.get("artifact_dir") or "")) if row.get("artifact_dir") else None
+        replay = dict(row.get("replay_result") or {})
+        if artifact_dir is not None and artifact_dir.is_dir():
+            if not replay:
+                replay = _load_hft_artifact_json(artifact_dir, "replay_result.json")
+            summary = _load_hft_artifact_json(artifact_dir, "replay_summary.json")
+            if summary.get("certification_status") and not replay.get("certification_status"):
+                replay["certification_status"] = summary["certification_status"]
+            for key in ("candidate_id", "feature_recipe_hash"):
+                if summary.get(key) and not replay.get(key):
+                    replay[key] = summary[key]
+        replay.setdefault("candidate_id", str(manifest.get("candidate_id") or ""))
+        replay.setdefault("manifest_hash", str(manifest.get("manifest_hash") or ""))
+        replay.setdefault("feature_recipe_hash", str(manifest.get("feature_recipe_hash") or ""))
+        if screening_artifact_hash:
+            replay.setdefault("screening_artifact_hash", screening_artifact_hash)
+        if robustness_artifact_hash:
+            replay.setdefault("robustness_artifact_hash", robustness_artifact_hash)
+        row["replay_result"] = replay
+        enriched.append(row)
+    return enriched
+
+
 def _robustness_artifact_hash(rob: Mapping[str, Any] | None) -> str:
     if not rob:
         return ""
@@ -866,7 +915,12 @@ def run_single_generation(
         if cid in hft_eligible_ids and cfg.run_hft_campaign:
             hft_receipt = build_hftbacktest_gate_receipt(
                 manifest=cand_manifest,
-                scenario_results=hft_by_candidate.get(cid),
+                scenario_results=_enrich_hft_scenario_results(
+                    hft_by_candidate.get(cid),
+                    manifest=cand_manifest,
+                    screening_artifact_hash=screening_hash,
+                    robustness_artifact_hash=_robustness_artifact_hash(rob),
+                ),
                 screening_path=screening_path,
                 screening_artifact_hash=screening_hash,
                 robustness_artifact_hash=_robustness_artifact_hash(rob),

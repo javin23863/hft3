@@ -1424,11 +1424,14 @@ The Greptile gate passes only when:
 
 ```text
 Greptile reviewed the current PR head SHA
+Greptile confidence ≥ 4/5 (4/5 or 5/5 in summary when present)
 zero unresolved actionable Greptile findings remain
 all required local verification is green
 ```
 
-Run at most five Greptile iterations.
+Run at most five Greptile iterations. Do **not** advance to split PR-B/C or
+Phase 10 until the current PR meets confidence ≥ 4/5 **and** zero actionable
+findings on current head. Codex/@codex review does **not** satisfy this gate.
 After five unsuccessful iterations:
 
 ```text
