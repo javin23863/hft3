@@ -116,11 +116,13 @@ def build_generation_summary(
     screening_artifact: Mapping[str, Any],
     robustness_results: list[Mapping[str, Any]] | None = None,
     hft_campaign_summary: Mapping[str, Any] | None = None,
+    gate_chain_by_id: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     holdout_names = _holdout_period_names(repo_root)
     robustness_by_id = {
         str(r.get("candidate_id")): r for r in (robustness_results or []) if r.get("candidate_id")
     }
+    gate_chains = dict(gate_chain_by_id or {})
     hft_status = str((hft_campaign_summary or {}).get("status") or "not_run")
 
     rows: list[dict[str, Any]] = []
@@ -130,21 +132,26 @@ def build_generation_summary(
         row = _row_from_promoted(promoted)
         cid = row["candidate_id"]
         rob = robustness_by_id.get(cid)
+        chain = gate_chains.get(cid) or {}
         if rob:
-            row["robustness_pass"] = rob.get("robustness_pass")
+            regular_wf_pass = rob.get("regular_walk_forward_pass") is True
+            wfc_pass = rob.get("wfc_pass") is True
+            row["robustness_pass"] = regular_wf_pass and wfc_pass
+            row["regular_walk_forward_pass"] = regular_wf_pass
+            row["wfc_pass"] = wfc_pass
             row["metrics"].update(_metrics_exclude_holdout(dict(rob.get("metrics") or {}), holdout_names))
         row["metrics"] = _metrics_exclude_holdout(row["metrics"], holdout_names)
         row["hft_replay_status"] = hft_status if cid else "not_run"
         row["composite_score"] = _composite_score(row, holdout_names=holdout_names)
-        row["elite"] = bool(
-            row.get("vectorbt_pass")
-            and row.get("robustness_pass") is not False
-            and row.get("hft_replay_status") not in ("fail", "blocked")
-        )
+        row["final_status"] = chain.get("final_status")
+        row["gate_chain_final_pass"] = bool(chain.get("final_pass"))
+        row["elite"] = bool(row.get("gate_chain_final_pass"))
         rows.append(row)
 
-    gate_passers = [r for r in rows if r.get("vectorbt_pass")]
+    gate_passers = [r for r in rows if r.get("gate_chain_final_pass")]
     best = max(gate_passers, key=lambda r: r.get("composite_score", float("-inf")), default=None)
+    if best is None:
+        best = max(rows, key=lambda r: r.get("composite_score", float("-inf")), default=None) if rows else None
     return {
         "campaign_id": campaign_id,
         "generation_index": generation_index,

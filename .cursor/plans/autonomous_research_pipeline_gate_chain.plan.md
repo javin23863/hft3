@@ -19,7 +19,7 @@ todos:
     status: completed
   - id: phase2-gate0-ontology
     content: "Phase 2 (§5): Wire Gate 0 ontology admission (ontology_gate.py + ONTOLOGY_GATE_AGENT_SPEC) before VectorBT compute"
-    status: pending
+    status: completed
   - id: phase2-gate1-manifest
     content: "Phase 2 (§6): Gate 1 frozen candidate manifest (candidate_manifest.py, feature_recipe.py) with hash immutability"
     status: pending
@@ -31,10 +31,10 @@ todos:
     status: pending
   - id: phase2-gate4-regular-wf
     content: "Phase 2 (§9): Gate 4 regular walk-forward (FIRST WF process) — holdout evaluate-only, no learning feedback"
-    status: pending
+    status: completed
   - id: phase2-gate5-wfc
     content: "Phase 2 (§10) BLOCKER: Gate 5 WFC (SECOND distinct process) — reuse existing evaluate_wfc_gate; full aligned parameter surface; Pearson+Spearman; no equity-curve/best-param substitute"
-    status: pending
+    status: completed
   - id: phase2-gate6-statistical
     content: "Phase 2 (§11): Gate 6 statistical/Monte Carlo gauntlet (allow_partial=False, robustness_producers + ROBUSTNESS_TESTING_SPEC)"
     status: pending

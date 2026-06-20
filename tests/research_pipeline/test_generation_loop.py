@@ -16,7 +16,28 @@ from research_pipeline.generation_state import load_manifest
 from research_pipeline.generation_summary import build_generation_summary
 from research_pipeline.idea_generation import parsed_from_idea
 from research_pipeline.review_memory import append_generation_memory, load_tested_hashes
-from research_pipeline.types import ParsedHypothesis
+from research_pipeline.types import CandidateModel, ParsedHypothesis
+
+
+@pytest.fixture(autouse=True)
+def _pass_ontology_gate(monkeypatch):
+    from research_pipeline.generation_gate_chain import GATE_ONTOLOGY, build_gate_receipt
+    from research_pipeline import generation_loop as gl
+
+    def _pass_ontology(*, manifest, repo_root):
+        return build_gate_receipt(
+            gate_id=GATE_ONTOLOGY,
+            gate_version="1.0.0",
+            candidate_id=str(manifest["candidate_id"]),
+            feature_recipe_hash=str(manifest["feature_recipe_hash"]),
+            manifest_hash=str(manifest.get("manifest_hash") or "pending"),
+            status="PASS",
+            required_checks=["fable_entry_checklist", "citation_trace"],
+            required_check_count=2,
+            passed_check_count=2,
+        )
+
+    monkeypatch.setattr(gl, "run_ontology_gate_for_candidate", _pass_ontology)
 
 
 @dataclass
@@ -25,6 +46,35 @@ class _FakeFilterResult:
 
     def to_dict(self) -> dict[str, Any]:
         return dict(self.payload)
+
+
+def _fresh_proposal_candidates(**kwargs):
+    """Return dedup-safe candidates for multi-generation loop tests."""
+    from research_pipeline.model_generation import generate_candidates
+
+    parsed = kwargs["parsed"]
+    gen_idx = len(kwargs.get("tested_hashes") or [])
+    out = generate_candidates(
+        parsed,
+        max_candidates=int(kwargs.get("max_candidates") or 3),
+        expand_for_vectorbt=True,
+        target_event_id=kwargs.get("target_event_id"),
+        target_symbol=kwargs.get("target_symbol"),
+    )
+    fresh: list = []
+    for i, cand in enumerate(out):
+        params = dict(cand.strategy_params)
+        params["_test_gen_probe"] = gen_idx + i
+        fresh.append(
+            CandidateModel(
+                candidate_id=f"{cand.candidate_id}_g{gen_idx}_{i}",
+                model_id=cand.model_id,
+                strategy_params=params,
+                thesis=cand.thesis,
+                metadata=dict(cand.metadata),
+            )
+        )
+    return fresh[: int(kwargs.get("max_candidates") or 3)]
 
 
 def _fake_filter(*, candidates, parsed, event_id, repo_root, gates, screening_scope, run_budget=None, **kwargs):
@@ -133,9 +183,12 @@ def test_generation_summary_excludes_holdout_periods(tmp_path: Path) -> None:
             {
                 "candidate_id": "c1",
                 "robustness_pass": True,
+                "regular_walk_forward_pass": True,
+                "wfc_pass": True,
                 "metrics": {"holdout_eval": {"net_return": 999}, "discovery": {"net_return": 1.0}},
             }
         ],
+        gate_chain_by_id={"c1": {"final_pass": True, "final_status": "FINAL_PASS"}},
     )
     row = summary["candidates"][0]
     assert "holdout_eval" not in row["metrics"]
@@ -167,7 +220,7 @@ def test_generation_loop_spies_runners(tmp_path: Path, monkeypatch) -> None:
     cfg = AutoresearchConfig(
         max_generations=2,
         max_candidates_per_generation=3,
-        exploration_fraction=0.0,
+        exploration_fraction=0.5,
         family_search_enabled=False,
         run_robustness=True,
         run_hft_campaign=True,
@@ -182,6 +235,10 @@ def test_generation_loop_spies_runners(tmp_path: Path, monkeypatch) -> None:
         "research_pipeline.generation_loop.generate_scenario_manifest",
         lambda cfg: ([], []),
     )
+    monkeypatch.setattr(
+        "research_pipeline.generation_loop.propose_next_candidates",
+        _fresh_proposal_candidates,
+    )
 
     code, report = run_autoresearch_loop(
         repo_root=tmp_path,
@@ -194,7 +251,7 @@ def test_generation_loop_spies_runners(tmp_path: Path, monkeypatch) -> None:
         robustness_fn=robustness_fn,
         hft_fn=hft_fn,
     )
-    assert code == 0
+    assert code == 0, report
     assert len(filter_calls) == 2
     assert len(robustness_calls) == 4
     assert len(hft_calls) == 2
@@ -203,7 +260,11 @@ def test_generation_loop_spies_runners(tmp_path: Path, monkeypatch) -> None:
     assert manifest["tested_parameter_hashes"]
 
 
-def test_resume_preserves_manifest_hash(tmp_path: Path) -> None:
+def test_resume_preserves_manifest_hash(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        "research_pipeline.generation_loop.propose_next_candidates",
+        _fresh_proposal_candidates,
+    )
     cfg = AutoresearchConfig(max_generations=1, max_candidates_per_generation=2, run_robustness=False)
     code1, report1 = run_autoresearch_loop(
         repo_root=tmp_path,
@@ -219,7 +280,12 @@ def test_resume_preserves_manifest_hash(tmp_path: Path) -> None:
     manifest_before = load_manifest(tmp_path, campaign_id)
     hashes_before = list(manifest_before["tested_parameter_hashes"])
 
-    cfg2 = AutoresearchConfig(max_generations=2, max_candidates_per_generation=2, run_robustness=False)
+    cfg2 = AutoresearchConfig(
+        max_generations=2,
+        max_candidates_per_generation=2,
+        exploration_fraction=0.5,
+        run_robustness=False,
+    )
     code2, report2 = run_autoresearch_loop(
         repo_root=tmp_path,
         thesis="fade",
@@ -266,7 +332,12 @@ def test_failure_stop_reason_exits_nonzero(tmp_path: Path) -> None:
         / "generation_summary.json"
     )
     prior.unlink()
-    cfg2 = AutoresearchConfig(max_generations=2, max_candidates_per_generation=2, run_robustness=False)
+    cfg2 = AutoresearchConfig(
+        max_generations=2,
+        max_candidates_per_generation=2,
+        exploration_fraction=0.5,
+        run_robustness=False,
+    )
     code2, report2 = run_autoresearch_loop(
         repo_root=tmp_path,
         thesis="fade",
@@ -292,7 +363,16 @@ def test_robustness_fn_forwards_frozen_params(tmp_path: Path, monkeypatch) -> No
         out = tmp_path / "rob_campaign"
         out.mkdir(parents=True, exist_ok=True)
         (out / "summary.json").write_text(
-            json.dumps({"wfc_status": "PASS", "robustness_passed": True, "metrics": {}}),
+            json.dumps(
+                {
+                    "status": "PASS",
+                    "wfc_status": "PASS",
+                    "robustness_passed": True,
+                    "periods": [{"gate_pass": True}],
+                    "wfc": {"pearson": 0.5, "spearman": 0.4, "wfc_status": "PASS"},
+                    "metrics": {},
+                }
+            ),
             encoding="utf-8",
         )
         return CampaignResult(

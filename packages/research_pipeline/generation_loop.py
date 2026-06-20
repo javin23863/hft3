@@ -32,6 +32,16 @@ from research_pipeline.generation_state import (
     register_tested_hashes,
     save_manifest,
 )
+from research_pipeline.generation_gate_chain import run_generation_gate_chain
+from research_pipeline.generation_gate_producers import (
+    build_regular_walk_forward_gate_receipt,
+    build_vectorbt_gate_receipt,
+    build_walk_forward_correlation_gate_receipt,
+    emit_candidate_gate_receipts,
+    gate_receipt_path,
+    run_ontology_gate_for_candidate,
+    write_gate_receipt,
+)
 from research_pipeline.generation_summary import build_generation_summary, validate_generation_artifacts, write_generation_summary
 from research_pipeline.hypothesis_parser import parse_hypothesis
 from research_pipeline.model_generation import generate_candidates
@@ -132,7 +142,7 @@ def make_default_robustness_fn(*, chi404_summary: Path | None = None) -> Robustn
             symbol,
             chi404_summary=chi404_summary,
             campaign_id=campaign_id,
-            allow_partial=True,
+            allow_partial=False,
             dry_run=False,
             frozen_strategy_params=params or None,
         )
@@ -140,18 +150,27 @@ def make_default_robustness_fn(*, chi404_summary: Path | None = None) -> Robustn
         metrics: dict[str, Any] = dict(screened)
         if params:
             metrics["screened_param_values"] = params
-        robustness_pass = False
+        campaign_summary: dict[str, Any] | None = None
+        regular_walk_forward_pass = False
+        wfc_pass = False
         if summary_path.is_file():
-            summary = json.loads(summary_path.read_text(encoding="utf-8"))
-            wfc_metrics = dict(summary.get("metrics") or {})
+            campaign_summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            campaign_summary["artifact_dir"] = str(result.artifact_dir)
+            wfc_metrics = dict(campaign_summary.get("metrics") or {})
             for key, value in wfc_metrics.items():
                 if key not in metrics:
                     metrics[key] = value
-            robustness_pass = summary.get("wfc_status") == "PASS" or summary.get("robustness_passed") is True
+            regular_walk_forward_pass = str(campaign_summary.get("status") or "") == "PASS"
+            wfc_pass = str(campaign_summary.get("wfc_status") or "") == "PASS"
+        strict_robustness_pass = regular_walk_forward_pass and wfc_pass
         return {
-            "robustness_pass": robustness_pass,
+            "robustness_pass": strict_robustness_pass,
+            "regular_walk_forward_pass": regular_walk_forward_pass,
+            "wfc_pass": wfc_pass,
             "metrics": metrics,
             "campaign_id": result.campaign_id,
+            "campaign_summary": campaign_summary,
+            "artifact_dir": str(result.artifact_dir),
         }
 
     return _run
@@ -356,6 +375,32 @@ def run_single_generation(
         )
         for c in candidates
     ]
+    ontology_receipts: dict[str, dict[str, Any]] = {}
+    ontology_pass: list[Any] = []
+    for candidate in attached:
+        recipe_hash = (
+            candidate.feature_recipe_hash
+            or (candidate.feature_recipe or {}).get("feature_recipe_hash")
+            or candidate_identity_hash(candidate)
+        )
+        pre_manifest: dict[str, Any] = {
+            "candidate_id": candidate.candidate_id,
+            "feature_recipe_hash": recipe_hash,
+            "manifest_hash": "pending_pre_freeze",
+            "feature_recipe": dict(candidate.feature_recipe or {}),
+            "ontology_citations": candidate.metadata.get("ontology_citations"),
+        }
+        ontology_receipt = run_ontology_gate_for_candidate(
+            manifest=pre_manifest,
+            repo_root=repo_root,
+        )
+        ontology_receipts[candidate.candidate_id] = ontology_receipt
+        write_gate_receipt(
+            gate_receipt_path(gen_dir, candidate.candidate_id, "ontology_gate"),
+            ontology_receipt,
+        )
+        if ontology_receipt.get("status") == "PASS":
+            ontology_pass.append(candidate)
     frozen_manifests = [
         freeze_candidate_manifest(
             candidate=c,
@@ -363,12 +408,12 @@ def run_single_generation(
             generation_index=generation_index,
             proposal_reason=str(c.metadata.get("proposal_reason") or "generation"),
         )
-        for c in attached
+        for c in ontology_pass
     ]
     write_frozen_manifests(gen_dir / "candidate_manifests.jsonl", frozen_manifests)
     register_tested_hashes(manifest, _candidate_hashes(attached))
     screening, screening_path = _run_vectorbt_screen(
-        candidates=attached,
+        candidates=ontology_pass,
         parsed=parsed,
         event_id=event_id,
         repo_root=repo_root,
@@ -394,6 +439,53 @@ def run_single_generation(
         generation_index=generation_index,
         hft_fn=hft_fn,
     )
+    manifest_by_id = {str(m["candidate_id"]): m for m in frozen_manifests}
+    promoted_by_id = {
+        str(row.get("candidate_id")): row
+        for row in (screening.get("promoted") or [])
+        if isinstance(row, dict) and row.get("candidate_id")
+    }
+    robustness_by_id = {str(r.get("candidate_id")): r for r in robustness_results if r.get("candidate_id")}
+    gate_chain_by_id: dict[str, dict[str, Any]] = {}
+    for cid, cand_manifest in manifest_by_id.items():
+        rob = robustness_by_id.get(cid)
+        promoted_row = promoted_by_id.get(cid) or {}
+        vectorbt_receipt = build_vectorbt_gate_receipt(
+            manifest=cand_manifest,
+            promoted_row=promoted_row,
+            screening_path=screening_path,
+        )
+        campaign_summary = dict(rob.get("campaign_summary") or {}) if rob else None
+        regular_wf_receipt = build_regular_walk_forward_gate_receipt(
+            manifest=cand_manifest,
+            campaign_summary=campaign_summary,
+        )
+        wfc_receipt = build_walk_forward_correlation_gate_receipt(
+            manifest=cand_manifest,
+            campaign_summary=campaign_summary,
+        )
+        emit_candidate_gate_receipts(
+            gen_dir=gen_dir,
+            manifest=cand_manifest,
+            vectorbt_receipt=vectorbt_receipt,
+            regular_wf_receipt=regular_wf_receipt,
+            wfc_receipt=wfc_receipt,
+        )
+        chain_result = run_generation_gate_chain(
+            candidate_manifest=cand_manifest,
+            ontology_receipt=ontology_receipts.get(cid),
+            vectorbt_receipt=vectorbt_receipt,
+            surface_receipt=None,
+            regular_walk_forward_receipt=regular_wf_receipt,
+            walk_forward_correlation_receipt=wfc_receipt,
+            statistical_receipt=None,
+            hftbacktest_receipt=None,
+            certification_mode=True,
+        )
+        gate_chain_by_id[cid] = chain_result
+        chain_path = gate_receipt_path(gen_dir, cid, "gate_chain_result")
+        chain_path.parent.mkdir(parents=True, exist_ok=True)
+        chain_path.write_text(json.dumps(chain_result, indent=2) + "\n", encoding="utf-8")
     summary = build_generation_summary(
         repo_root=repo_root,
         campaign_id=campaign_id,
@@ -401,6 +493,7 @@ def run_single_generation(
         screening_artifact=screening,
         robustness_results=robustness_results,
         hft_campaign_summary=hft_summary,
+        gate_chain_by_id=gate_chain_by_id,
     )
     summary_path = write_generation_summary(gen_dir / "generation_summary.json", summary)
     (gen_dir / ".generation_complete").write_text("ok\n", encoding="utf-8")
