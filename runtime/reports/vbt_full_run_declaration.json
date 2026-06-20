@@ -1,18 +1,13 @@
 {
-  "host_vcpu": 384,
+  "host_vcpu": 256,
   "reserved_vcpu": 26,
   "workers_requested": 230,
-  "expected_work_units": 1629250,
-  "run_id": "paid_full_v2_20260619T042614Z",
-  "vbt_full_run_id": "paid_full_v2_20260619T042614Z",
-  "units_source": "runtime/reports/vbt_full_units.jsonl (50 models x TIGHT events x 7 symbols)",
-  "stall_minutes": 45,
-  "abort_on_failed_units": false,
-  "git_head": "148cc917",
-  "events_csv_hash": "4e65539f80470590732ef46116014174",
-  "lake_manifest_hash": "4a0c5a3f9abc1ad6731d851e5a5430c2",
-  "ready_gate_file": "runtime/reports/paid_screen_ready_gate.json",
-  "data_mode": "vast_npz_lake_cpp_features",
-  "smoke_units_per_hour": 128.36,
-  "medium_units_per_hour": 319.89
+  "expected_work_units": 1092800,
+  "units_source": "events.csv TIGHT x CME M6 x active models, NPZ-filtered (--require-runnable-npz)",
+  "stall_minutes": 30,
+  "abort_on_failed_units": true,
+  "git_head": "4e62e556a6f2072d2f3637607b65dacf927838b9",
+  "events_csv_hash": "bfa4911d8de2d07821563c16160f9388",
+  "lake_manifest_hash": "cc910af8129266cb37ff078fd527fa15",
+  "smoke_units_per_hour": 89.7823
 }

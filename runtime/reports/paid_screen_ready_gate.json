@@ -1,8 +1,8 @@
 {
-  "ready_for_full_run": false,
-  "evaluated_at_utc": "2026-06-19T22:50:23.152581+00:00",
-  "pilot_artifact": "C:\\Users\\MSI\\Documents\\New project\\research_cards\\pipeline_runs\\paid_cpi_pilot_gate_20260619T162305Z\\screening_artifact.json",
-  "smoke_manifest": "C:\\Users\\MSI\\Documents\\New project\\research_cards\\pipeline_runs\\paid_smoke_v2_20260619T155758Z\\paid_screen_run_manifest.json",
+  "ready_for_full_run": true,
+  "evaluated_at_utc": "2026-06-20T00:26:59.529144+00:00",
+  "pilot_artifact": "C:\\Users\\MSI\\Documents\\New project\\research_cards\\pipeline_runs\\pipeline_20260619T225717Z_1ab4db61\\screening_artifact.json",
+  "smoke_manifest": "C:\\Users\\MSI\\Documents\\New project\\research_cards\\pipeline_runs\\paid_smoke_v2_20260619T232402Z\\paid_screen_run_manifest.json",
   "feature_family_gate": {
     "manifest_path": "C:\\Users\\MSI\\Documents\\New project\\docs\\project\\FEATURE_FAMILY_STATUS_MANIFEST.yaml",
     "paid_screen_gate_allowed": true,
@@ -21,36 +21,32 @@
       "hftbacktest_handoff_status"
     ],
     "resolved_fields": {
-      "feature_recipe_hash": "7453e6b80108289f56e5f299c765826cde3b0300afbe6e8c418dd4bd8479e9f9",
+      "feature_recipe_hash": "2bffc531a142e2c392b0a39770d50ebd9ff9caeb89d50f4af43be22193a0d76f",
       "feature_usage_manifest": "present",
-      "cross_asset_alignment_status": "not_used",
+      "cross_asset_alignment_status": "not_measured",
       "vix_sensor_status": "not_used",
       "vix_options_status": "not_used",
-      "cme_options_context_status": "not_used",
+      "cme_options_context_status": "sidelined_scope",
       "macro_context_ablation_status": "not_measured",
       "continuous_clock_status": "out_of_scope",
       "latency_feature_status": "not_used",
-      "vectorbt_result": null,
-      "robustness_result": null,
-      "hftbacktest_handoff_status": null
+      "vectorbt_result": "trials_completed",
+      "robustness_result": "not_run_pilot_scope",
+      "hftbacktest_handoff_status": "recipe_hash_handoff_ready"
     }
   },
   "pilot_hashes": {
     "events_csv_hash": "bfa4911d8de2d07821563c16160f9388",
-    "lake_manifest_hash": "2e116ef5d889149a2a666817a9561f7c",
-    "screening_scope": "paid_compute",
-    "vectorbt_engine": "rust"
+    "lake_manifest_hash": "cc910af8129266cb37ff078fd527fa15",
+    "screening_scope": "pilot",
+    "vectorbt_engine": "numba"
   },
   "smoke_manifest_summary": {
     "expected_work_units": 12,
     "completed_work_units": 12,
     "failed_work_units": 0,
-    "units_per_hour": 83.3619
+    "units_per_hour": 89.7823
   },
-  "errors": [
-    "pilot_missing:vectorbt_result",
-    "pilot_missing:robustness_result",
-    "pilot_missing:hftbacktest_handoff_status"
-  ],
-  "lookahead_pytest_tail": ".                                                                        [100%]\n1 passed in 1.12s"
+  "errors": [],
+  "lookahead_pytest_tail": ".                                                                        [100%]\n1 passed in 2.17s"
 }

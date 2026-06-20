@@ -83,7 +83,12 @@ def _load_units(path: Path) -> List[Dict[str, Any]]:
 
 def _load_ready_gate(path: Path) -> bool:
     payload = json.loads(path.read_text(encoding="utf-8"))
-    return bool(payload.get("ready_for_full_run"))
+    if payload.get("errors"):
+        return False
+    if not payload.get("ready_for_full_run"):
+        return False
+    tail = str(payload.get("lookahead_pytest_tail") or "").strip()
+    return bool(tail)
 
 
 def _result_to_dict(result: UnitScreeningResult) -> Dict[str, Any]:
@@ -709,6 +714,7 @@ def _pipelined_dispatch_and_drain(
     spawn_ctx: mp.context.BaseContext | None = None,
     spawn_worker_args: Dict[str, Any] | None = None,
     target_worker_count: int | None = None,
+    external_stop: Callable[[], str | None] | None = None,
 ) -> Tuple[List[Tuple[Any, List[UnitScreeningResult], Dict[str, Any]]], str | None]:
     """Dispatch batches with backpressure while draining worker results.
 
@@ -829,7 +835,18 @@ def _pipelined_dispatch_and_drain(
             )
             last_progress_log_mono = now_mono
 
-    while inflight < _effective_limit() and stop_reason is None:
+    def _should_stop() -> bool:
+        nonlocal stop_reason
+        if stop_reason is not None:
+            return True
+        if external_stop is not None:
+            ext = external_stop()
+            if ext:
+                stop_reason = ext
+                return True
+        return False
+
+    while inflight < _effective_limit() and not _should_stop():
         if not _try_dispatch_one():
             break
 
@@ -841,6 +858,11 @@ def _pipelined_dispatch_and_drain(
 
     while stop_reason is None and len(collected) < expected_batches:
         now_mono = time.monotonic()
+        if external_stop is not None:
+            ext = external_stop()
+            if ext:
+                stop_reason = ext
+                break
         remaining = deadline - now_mono
         if remaining <= 0:
             stop_reason = (
@@ -875,7 +897,7 @@ def _pipelined_dispatch_and_drain(
                 alive=alive,
                 source="expire",
             )
-            while inflight < _effective_limit() and stop_reason is None:
+            while inflight < _effective_limit() and not _should_stop():
                 if not _try_dispatch_one():
                     break
 
@@ -915,7 +937,7 @@ def _pipelined_dispatch_and_drain(
             source="worker",
         )
 
-        while inflight < _effective_limit() and stop_reason is None:
+        while inflight < _effective_limit() and not _should_stop():
             if not _try_dispatch_one():
                 break
 
@@ -989,6 +1011,11 @@ def main(argv: Optional[List[str]] = None) -> int:
                         help="Explicit lake manifest hash (required if HFT3_MANIFEST_PATH unset/missing)")
     parser.add_argument("--batch-timeout-seconds", type=float, default=1800.0,
                         help="Per-batch wall-clock timeout when draining results")
+    parser.add_argument(
+        "--abort-on-failed-units",
+        action="store_true",
+        help="Stop dispatch after first batch with ERROR units (declaration abort_on_failed_units)",
+    )
 
     args = parser.parse_args(argv)
 
@@ -1247,7 +1274,19 @@ def main(argv: Optional[List[str]] = None) -> int:
             partial_results.append(result)
             partial_result_dicts.append(_result_to_dict(result))
         run_state["collected_batches"] = int(run_state["collected_batches"]) + 1
+        if args.abort_on_failed_units and any(r.status == "ERROR" for r in batch_results):
+            run_state["stop_reason"] = "abort_on_failed_units"
+            failed = [r for r in batch_results if r.status == "ERROR"]
+            print(
+                f"[abort] abort_on_failed_units: batch={_batch_id} "
+                f"failed={len(failed)} sample={failed[0].error if failed else ''}",
+                flush=True,
+            )
         _flush_running_manifest()
+
+    def _external_stop() -> str | None:
+        reason = run_state.get("stop_reason")
+        return str(reason) if reason else None
 
     _write_run_manifest(
         manifest_path,
@@ -1312,8 +1351,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         spawn_ctx=ctx,
         spawn_worker_args=worker_args,
         target_worker_count=num_workers,
+        external_stop=_external_stop,
     )
-    run_state["stop_reason"] = drain_stop_reason
+    run_state["stop_reason"] = drain_stop_reason or run_state.get("stop_reason")
     _flush_running_manifest(force=True)
 
     results_by_batch: Dict[int, List[UnitScreeningResult]] = {}

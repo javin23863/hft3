@@ -360,6 +360,49 @@ def _units_from_stage_a_survivors(
     return units
 
 
+def _runnable_npz_keys(repo_root: Path) -> Set[tuple[str, str]]:
+    """Build (symbol, event_id) keys from lake catalog manifest.json when present."""
+    from data_system.src.npz_resolver import npz_root
+
+    root = npz_root(repo_root)
+    catalog = root / "manifest.json"
+    keys: Set[tuple[str, str]] = set()
+    if catalog.is_file():
+        for rec in json.loads(catalog.read_text(encoding="utf-8")):
+            sym = str(rec.get("symbol") or "").strip()
+            eid = str(rec.get("event_id") or "").strip()
+            npz_path = Path(str(rec.get("npz_path") or ""))
+            if sym and eid and not rec.get("error") and npz_path.is_file():
+                keys.add((sym, eid))
+    return keys
+
+
+def _filter_runnable_npz_units(
+    units: List[Dict[str, Any]],
+    repo_root: Path,
+) -> List[Dict[str, Any]]:
+    """Keep only units whose event_id+symbol resolve to an NPZ under HFT3_NPZ_ROOT."""
+    keys = _runnable_npz_keys(repo_root)
+    if keys:
+        return [
+            u
+            for u in units
+            if (str(u.get("symbol") or "").strip(), str(u.get("event_id") or "").strip()) in keys
+        ]
+
+    from backtest_pipeline.src.vectorbt_adapter import _npz_candidates_for_event
+    from data_system.src.event_data_resolver import npz_search_dirs
+
+    search_dirs = npz_search_dirs(repo_root)
+    kept: List[Dict[str, Any]] = []
+    for unit in units:
+        event_id = str(unit.get("event_id") or "").strip()
+        symbol = unit.get("symbol")
+        if event_id and _npz_candidates_for_event(search_dirs, event_id, symbol):
+            kept.append(unit)
+    return kept
+
+
 def write_units_jsonl(path: Path, units: List[Dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
@@ -422,6 +465,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         "--validation-cpi-first",
         action="store_true",
         help="Sort JSONL with CPI event_type rows first (validation runs only; not Phase D scope)",
+    )
+    parser.add_argument(
+        "--require-runnable-npz",
+        action="store_true",
+        help="Drop units with no NPZ at HFT3_NPZ_ROOT (Vast full default via VBT_REQUIRE_RUNNABLE_NPZ=1)",
     )
     args = parser.parse_args(argv)
 
@@ -495,6 +543,13 @@ def main(argv: Optional[List[str]] = None) -> int:
         units = enriched
         if args.max_units is not None:
             units = units[: args.max_units]
+
+    if args.require_runnable_npz:
+        before = len(units)
+        units = _filter_runnable_npz_units(units, _REPO)
+        dropped = before - len(units)
+        if dropped:
+            print(f"Filtered {dropped} units without runnable NPZ ({len(units)} remain)")
 
     if not units:
         print("ERROR: zero units generated", file=sys.stderr)

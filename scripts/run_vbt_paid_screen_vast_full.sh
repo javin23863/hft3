@@ -77,6 +77,10 @@ fi
 
 GEN_ARGS+=(--research-split "$RESEARCH_SPLIT")
 
+if [[ "${VBT_REQUIRE_RUNNABLE_NPZ:-1}" == "1" || "${VBT_REQUIRE_RUNNABLE_NPZ:-1}" == "true" ]]; then
+  GEN_ARGS+=(--require-runnable-npz)
+fi
+
 "${GEN_ARGS[@]}"
 
 UNIT_COUNT="$(grep -c . "$UNITS_JSONL" || true)"
@@ -221,6 +225,18 @@ PAID_ARGS=(
 )
 if [[ "${VBT_RESUME:-}" == "1" || "${VBT_RESUME:-}" == "true" ]]; then
   PAID_ARGS+=(--resume)
+fi
+
+ABORT_ON_FAIL="${VBT_ABORT_ON_FAILED_UNITS:-}"
+if [[ -z "$ABORT_ON_FAIL" && -f "$DECL_FILE" ]]; then
+  ABORT_ON_FAIL="$(python3 - "$DECL_FILE" <<'PY'
+import json, sys
+print("1" if json.load(open(sys.argv[1], encoding="utf-8")).get("abort_on_failed_units") else "0")
+PY
+)"
+fi
+if [[ "$ABORT_ON_FAIL" == "1" || "$ABORT_ON_FAIL" == "true" ]]; then
+  PAID_ARGS+=(--abort-on-failed-units)
 fi
 
 echo "Starting full run id=$VBT_FULL_RUN_ID workers=$WORKERS out=$OUT_DIR"

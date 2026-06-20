@@ -1,6 +1,6 @@
 # Repository state (canonical consolidation)
 
-**Last updated:** 2026-06-19 (repo cleanup — branches + chronological trunk)  
+**Last updated:** 2026-06-20 (Vast pipeline Plan v3 — single deploy path)  
 **Purpose:** One truthful map of where to work, what landed on `main`, and how to verify a clean tree. Humans and agents read this before assuming branch or path.
 
 ---
@@ -134,6 +134,19 @@ origin/stocks-lane-restored
 ### `C:\Users\MSI\repos\hft3`
 
 Canonical path for production verify and new `main`-based work per [AGENTS.md](../AGENTS.md).
+
+---
+
+## Vast VectorBT deploy (Plan v3)
+
+| Item | Value |
+|------|--------|
+| **Only deploy path** | `scripts/vast_deploy_and_verify.ps1` → must print `DEPLOY_CONTRACT_PASS` |
+| **Review stack before commit** | `cavecrew-reviewer` → `python scripts/run_ontology_gate.py` → `python scripts/run_plan_drift_review.py --completed-phase <id>` → pytest |
+| **Retired launch scripts** | `runtime/vast_*.sh` → `runtime/_deprecated_vast_incident_20260619/` |
+| **NPZ filter** | `VBT_REQUIRE_RUNNABLE_NPZ=1` (default) + `--require-runnable-npz` on unit generator |
+| **Abort policy** | `abort_on_failed_units: true` in declaration + `--abort-on-failed-units` on v2 orchestrator |
+| **Gate hashes** | `events_csv_hash` / `lake_manifest_hash` in `runtime/reports/paid_screen_ready_gate.json` — sync `manifest.parquet` to Vast `/data/npz/manifest.parquet` |
 
 ---
 
