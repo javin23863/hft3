@@ -82,7 +82,7 @@ fi
 cd $RemoteRepo
 echo REMOTE_HEAD=\$(git rev-parse HEAD)
 "@
-Send-RemoteBash $syncCmd
+Invoke-RemoteSh $syncCmd
 if ($LASTEXITCODE -ne 0) { throw "Remote sync failed exit=$LASTEXITCODE" }
 
 Write-Step "SCP gate, events.csv, manifest.parquet"
