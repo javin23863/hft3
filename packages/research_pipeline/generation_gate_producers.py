@@ -542,6 +542,12 @@ def build_statistical_robustness_gate_receipt(
         status = "REJECT"
         failure_reasons.append("partial_robustness_not_run")
     passed_count = req_count if status == "PASS" else len(unique_passed)
+    if status == "PASS":
+        failed_check_count = 0
+        missing_check_count = 0
+    else:
+        failed_check_count = max(1, req_count - passed_count)
+        missing_check_count = max(0, req_count - passed_count - failed_check_count)
     receipt = build_gate_receipt(
         gate_id=GATE_STATISTICAL,
         gate_version=STATISTICAL_GATE_VERSION,
@@ -552,8 +558,8 @@ def build_statistical_robustness_gate_receipt(
         required_checks=required_checks,
         required_check_count=req_count,
         passed_check_count=passed_count,
-        failed_check_count=0 if status == "PASS" else max(1, req_count - passed_count),
-        missing_check_count=0 if status == "PASS" else max(0, req_count - passed_count),
+        failed_check_count=failed_check_count,
+        missing_check_count=missing_check_count,
         authority_refs=["docs/project/ROBUSTNESS_TESTING_SPEC.md"],
         output_artifacts=[f"gates/{candidate_id}/statistical_robustness_gate.json"],
         failure_reasons=sorted(set(failure_reasons)),
@@ -758,6 +764,71 @@ def build_manifest_gate_receipt(
     return receipt
 
 
+_PASSING_HFT_CERTIFICATION = frozenset(
+    {"full_fidelity_declared", "scheduled_event_replay_not_full_feature_plane"}
+)
+_FAILING_HFT_CERTIFICATION = frozenset(
+    {
+        "accelerated_not_certifying",
+        "fail",
+        "integration_smoke_not_production",
+        "missing_native_hot_path_evidence",
+    }
+)
+
+
+def _hft_replay_parity_failures(
+    *,
+    manifest: Mapping[str, Any],
+    replay: Mapping[str, Any],
+    screening_artifact_hash: str,
+    robustness_artifact_hash: str,
+) -> list[str]:
+    """Compare replay artifact identity fields to frozen manifest and upstream hashes."""
+    failures: list[str] = []
+    candidate_id = str(manifest.get("candidate_id") or "")
+    feature_recipe_hash = str(manifest.get("feature_recipe_hash") or "")
+    manifest_hash = str(manifest.get("manifest_hash") or "")
+
+    replay_cid = str(replay.get("candidate_id") or "")
+    if not replay_cid:
+        failures.append("candidate_id_hash_parity_missing")
+    elif replay_cid != candidate_id:
+        failures.append("candidate_id_hash_parity_violation")
+
+    replay_manifest = str(replay.get("manifest_hash") or "")
+    if not replay_manifest:
+        failures.append("manifest_hash_parity_missing")
+    elif replay_manifest != manifest_hash:
+        failures.append("manifest_hash_parity_violation")
+
+    replay_recipe = str(replay.get("feature_recipe_hash") or "")
+    if not replay_recipe:
+        failures.append("feature_recipe_hash_parity_missing")
+    elif replay_recipe != feature_recipe_hash:
+        failures.append("feature_recipe_hash_parity_violation")
+
+    if screening_artifact_hash:
+        replay_screen = str(
+            replay.get("screening_artifact_hash")
+            or replay.get("upstream_screening_artifact_hash")
+            or ""
+        )
+        if not replay_screen:
+            failures.append("screening_artifact_hash_parity_missing")
+        elif replay_screen != screening_artifact_hash:
+            failures.append("screening_artifact_hash_parity_violation")
+
+    if robustness_artifact_hash:
+        replay_rob = str(replay.get("robustness_artifact_hash") or "")
+        if not replay_rob:
+            failures.append("robustness_artifact_hash_parity_missing")
+        elif replay_rob != robustness_artifact_hash:
+            failures.append("robustness_artifact_hash_parity_violation")
+
+    return failures
+
+
 def build_hftbacktest_gate_receipt(
     *,
     manifest: Mapping[str, Any],
@@ -809,35 +880,37 @@ def build_hftbacktest_gate_receipt(
 
     for result in results:
         replay = dict(result.get("replay_result") or {})
-        summary_path = result.get("artifact_dir")
         if str(result.get("status") or "") != "completed":
             failure_reasons.append(f"scenario_{result.get('scenario_id')}_status={result.get('status')}")
-        elif replay.get("error"):
+            continue
+        if not replay:
+            failure_reasons.append(f"scenario_{result.get('scenario_id')}_replay_result_empty")
+            continue
+        if replay.get("error"):
             failure_reasons.append(f"scenario_{result.get('scenario_id')}_replay_error")
+            continue
         cert = str(replay.get("certification_status") or "")
-        if cert and cert not in ("full_fidelity_declared", "scheduled_event_replay_not_full_feature_plane"):
-            if cert in ("accelerated_not_certifying", "fail", "integration_smoke_not_production"):
-                failure_reasons.append(f"certification_status={cert}")
-
-    if feature_recipe_hash and results:
-        for result in results:
-            replay = dict(result.get("replay_result") or {})
-            if replay.get("feature_recipe_hash") and str(replay["feature_recipe_hash"]) != feature_recipe_hash:
-                failure_reasons.append("feature_recipe_hash_parity_violation")
+        if not cert:
+            failure_reasons.append(f"scenario_{result.get('scenario_id')}_certification_status_missing")
+        elif cert in _FAILING_HFT_CERTIFICATION:
+            failure_reasons.append(f"certification_status={cert}")
+        elif cert not in _PASSING_HFT_CERTIFICATION:
+            failure_reasons.append(f"certification_status_not_passing={cert}")
+        failure_reasons.extend(
+            _hft_replay_parity_failures(
+                manifest=manifest,
+                replay=replay,
+                screening_artifact_hash=screening_artifact_hash,
+                robustness_artifact_hash=robustness_artifact_hash,
+            )
+        )
 
     if not screening_artifact_hash:
         failure_reasons.append("screening_artifact_hash_missing")
+    if not robustness_artifact_hash:
+        failure_reasons.append("robustness_artifact_hash_missing")
     if not results:
         failure_reasons.append("hft_scenarios_not_run")
-
-    hash_parity_ok = (
-        bool(candidate_id)
-        and bool(feature_recipe_hash)
-        and bool(manifest_hash)
-        and bool(screening_artifact_hash)
-    )
-    if not hash_parity_ok:
-        failure_reasons.append("hash_parity_incomplete")
 
     status = "PASS" if not failure_reasons and results else "REJECT"
     if not results and not failure_reasons:

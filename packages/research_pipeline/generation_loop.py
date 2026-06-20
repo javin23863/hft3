@@ -632,7 +632,7 @@ def _should_stop(
         best = last.get("best_composite_score")
         if best is not None and float(best) >= float(cfg.target_score):
             return True, "target_score_reached"
-    if cfg.stop_no_improvement_generations and len(summaries) >= 2:
+    if cfg.stop_no_improvement_generations and len(summaries) >= cfg.stop_no_improvement_generations:
         window = summaries[-cfg.stop_no_improvement_generations :]
         scores = [s.get("best_composite_score") for s in window]
         if len(scores) == len(window) and all(s is not None for s in scores):

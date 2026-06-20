@@ -30,15 +30,29 @@ Video-derived additions from `https://youtu.be/WIDIV8oDDC8`:
 
 ## Position
 
+**cavecrew-reviewer runs during build** (every code-change batch in Phases
+1–8). **Greptile PR GrepLoop runs LAST** (Phase 9 only) — never interleaved
+with implementation phases.
+
+**Stacked split PRs (A→B→C):** do **not** ping `@greptileai` on PR-B or PR-C
+until the prior PR in the stack reaches **≥ 4/5 Greptile confidence** with
+**zero unresolved actionable** findings on **current head SHA**. Premature
+Greptile on downstream PRs does not count toward merge-ready and must be
+paused with an explicit PR comment.
+
 Run local preflight after each edit pass and before claiming the diff is ready
 for the dual-pass reviewer:
 
 ```text
-VaultGate -> GraphGate -> GraphPre -> Plan -> Code -> Local Preflight -> Review -> Verify -> PR GrepLoop -> GraphPost
+VaultGate -> GraphGate -> GraphPre -> Plan -> Code -> Local Preflight -> Review (cavecrew) -> Verify -> PR GrepLoop (Greptile, Phase 9) -> GraphPost
 ```
 
 If reviewer or tests find issues, fix them and run the relevant local preflight
-again before the next review.
+again before the next review. Greptile is **not** a substitute for
+cavecrew-reviewer during build; cavecrew-reviewer is **not** a substitute for
+Greptile at Phase 9.
+
+Assignment authority: [§23 Greptile PR GrepLoop](../project/AUTONOMOUS_RESEARCH_PIPELINE_DEVELOPER_ASSIGNMENT.md#23-mandatory-greptile-pr-greptile-loop).
 
 If local preflight was not run, the change is not merge-ready. The only allowed
 exception is an explicit user waiver, and that still reports `merge-ready: no`.
@@ -127,9 +141,25 @@ gh api "repos/{owner}/{repo}/pulls/<PR_NUMBER>/comments"
 4. Fix only actionable comments. Treat informational comments or false
    positives as review notes, not architecture changes.
 
-5. Stop when **Greptile** reports clean with zero unresolved actionable
-   comments, or after five Greptile review iterations. On max-iteration stop,
-   report remaining unresolved comments and do not claim merge-ready.
+5. Stop when **Greptile** on **current head SHA** reports:
+   - confidence **≥ 4/5** (4/5 or 5/5 in Greptile summary when present), **and**
+   - zero unresolved actionable findings, **and**
+   - scope-appropriate verification green.
+
+   Run at most **five** Greptile fix iterations per PR. On max-iteration stop,
+   report remaining unresolved comments and do not claim merge-ready. Do not
+   advance to the next split PR (PR-B/C) or Phase 10 until the current PR
+   meets **≥ 4/5 confidence + zero actionable** on current head.
+
+### Stacked PR gate (A→B→C)
+
+| Prior PR | Before Greptile on next PR |
+|----------|---------------------------|
+| PR-A (#8) | PR-B (#9) blocked until PR-A **≥ 4/5** + 0 actionable |
+| PR-B (#9) | PR-C (#10) blocked until PR-B **≥ 4/5** + 0 actionable |
+
+If an agent prematurely triggers Greptile on a downstream PR, post a pause
+comment and resume PR-A (or the lowest incomplete PR) only.
 
 ## Review Surface Size
 

@@ -78,7 +78,7 @@ todos:
     content: "Phase 8 (§22): After each edit batch run bounded local rg negative/positive searches + git diff --check (max 3 iterations)"
     status: completed
   - id: phase9-greptile-loop
-    content: "Phase 9 (§23) BLOCKER: Greptile PR GrepLoop ONLY — @greptileai, fix actionable findings, max 5 iterations; merge-ready requires current-head clean Greptile"
+    content: "Phase 9 (§23) BLOCKER: Greptile PR GrepLoop LAST — @greptileai after phases 1–8 done; cavecrew during build; max 5 iterations; stop at confidence ≥4/5 + 0 actionable on current head"
     status: in_progress
   - id: phase10-checklist
     content: "Phase 10 (§24): Complete final acceptance checklist — all 26 items must be true"
@@ -296,18 +296,37 @@ git diff --check
 
 ---
 
-## Phase 9 — Greptile PR GrepLoop (§23)
+## Phase 9 — Greptile PR GrepLoop (§23) — LAST gate
 
-**Greptile ONLY.** See [GREPLOOP.md](../../docs/ai/GREPLOOP.md).
+**Run only after Phases 1–8 complete.** Do **not** interleave Greptile with implementation phases. Do **not** trigger `@greptileai` on PR-B or PR-C until PR-A reaches **≥ 4/5 Greptile confidence + zero actionable** on current head (same gate for B→C). If Greptile was prematurely pinged on a downstream PR, post a pause comment and continue only on the lowest incomplete PR.
+
+**Review split:**
+
+| When | Reviewer | Purpose |
+|------|----------|---------|
+| Phases 1–8 (every code batch) | **cavecrew-reviewer** (dual-pass) | 0 🔴 before claiming slice done |
+| Phase 9 only | **Greptile** (`@greptileai`) | External PR sign-off; Codex/@codex does **not** count |
+
+Authority: [GREPLOOP.md](../../docs/ai/GREPLOOP.md) · assignment [§23](../../docs/project/AUTONOMOUS_RESEARCH_PIPELINE_DEVELOPER_ASSIGNMENT.md#23-mandatory-greptile-pr-greptile-loop).
+
+**Per iteration (max 5):**
 
 1. `gh pr view --json number,headRefName,headRefOid,url`
 2. `git push`
 3. `gh pr comment <PR> --body "@greptileai"`
-4. Fetch reviews/comments via `gh pr view` + `gh api`
-5. Fix all actionable findings
-6. Re-run: local rg, dual-pass reviewer, tests, `git diff --check`
-7. Push + `@greptileai` again
-8. Stop when: Greptile reviewed **current head SHA** + zero actionable findings + verification green (max 5 iterations)
+4. Poll up to 10 min for `greptile-apps[bot]` review on **current head SHA**
+5. Parse Greptile summary confidence (target **≥ 4/5**)
+6. Classify findings; fix all actionable; re-run cavecrew-reviewer on fix diff; pytest; push
+7. Repeat until stop condition or iteration 5 exhausted
+
+**Stop condition (gate passes):**
+
+- Greptile reviewed **current head SHA**
+- Greptile confidence **≥ 4/5** (4/5 or 5/5 in summary when present)
+- **Zero** unresolved actionable Greptile findings
+- Scope-appropriate verification green
+
+**Do not advance** to Phase 10 or split PR-B/C until PR-A meets the stop condition above.
 
 **merge-ready: no** until Greptile gate passes or owner waives.
 
