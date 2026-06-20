@@ -22,6 +22,66 @@ from backtest_pipeline.src.paid_screen_types import PaidScreenUnit
 
 DEFAULT_RESEARCH_SPLIT = "discovery_confirmation"
 
+NATIVE_THREAD_LIMIT_ENV_VARS = (
+    "OMP_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+)
+
+
+@dataclass
+class PaidScreenPerformanceCounters:
+    """Stage 1 paid-screen throughput counters (manifest + benchmark proof)."""
+
+    feature_store_load_count: int = 0
+    feature_store_cache_hits: int = 0
+    feature_store_cache_misses: int = 0
+    models_evaluated_per_load: list[int] = field(default_factory=list)
+    raw_signal_computations: int = 0
+    trials_evaluated: int = 0
+    signal_reuse_ratio: float = 0.0
+    portfolio_call_count: int = 0
+    trials_per_portfolio_call: list[int] = field(default_factory=list)
+    matrix_chunk_size: int = 0
+    native_thread_limits: dict[str, str] = field(default_factory=dict)
+
+    def record_models_for_last_load(self, model_count: int) -> None:
+        if model_count > 0:
+            self.models_evaluated_per_load.append(int(model_count))
+
+    def finalize_signal_reuse(self) -> None:
+        if self.trials_evaluated > 0 and self.raw_signal_computations > 0:
+            self.signal_reuse_ratio = float(self.trials_evaluated) / float(
+                self.raw_signal_computations
+            )
+
+    def to_dict(self) -> dict[str, Any]:
+        self.finalize_signal_reuse()
+        return {
+            "feature_store_load_count": self.feature_store_load_count,
+            "feature_store_cache_hits": self.feature_store_cache_hits,
+            "feature_store_cache_misses": self.feature_store_cache_misses,
+            "models_evaluated_per_load": list(self.models_evaluated_per_load),
+            "raw_signal_computations": self.raw_signal_computations,
+            "trials_evaluated": self.trials_evaluated,
+            "signal_reuse_ratio": round(self.signal_reuse_ratio, 4),
+            "portfolio_call_count": self.portfolio_call_count,
+            "trials_per_portfolio_call": list(self.trials_per_portfolio_call),
+            "matrix_chunk_size": self.matrix_chunk_size,
+            "native_thread_limits": dict(self.native_thread_limits),
+        }
+
+
+def apply_native_thread_limits(threads: int = 1) -> dict[str, str]:
+    """Pin BLAS/OpenMP thread pools for paid-screen worker processes."""
+    applied: dict[str, str] = {}
+    val = str(max(1, int(threads)))
+    for var in NATIVE_THREAD_LIMIT_ENV_VARS:
+        os.environ[var] = val
+        applied[var] = val
+    return applied
+
 
 @dataclass(frozen=True)
 class StageTimer:
@@ -61,6 +121,9 @@ class RunProfiler:
     failures: list[FailureDiagnostic] = field(default_factory=list)
     cache_hits: int = 0
     cache_misses: int = 0
+    performance: PaidScreenPerformanceCounters = field(
+        default_factory=PaidScreenPerformanceCounters
+    )
     _stage_starts: dict[str, float] = field(default_factory=dict)
 
     def start_stage(self, stage_name: str) -> None:
@@ -118,12 +181,14 @@ class RunProfiler:
                 "p50_seconds": p50,
                 "p95_seconds": p95,
             }
+        perf = self.performance.to_dict()
         return {
             "time_by_stage": stage_summary,
             "total_failures": len(self.failures),
             "cache_hits": self.cache_hits,
             "cache_misses": self.cache_misses,
             "cache_hit_rate": self.cache_hits / max(self.cache_hits + self.cache_misses, 1),
+            **perf,
         }
 
 

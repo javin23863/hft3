@@ -498,6 +498,7 @@ def _strip_screening_hash_exclusions(value: Any) -> Any:
         "created_at_utc",
         "timestamp_utc",
         "updated_at_utc",
+        "screen_performance",
     }
     pipeline_prefix = "research_pipeline_"
     if isinstance(value, Mapping):
@@ -585,6 +586,7 @@ def _strip_screening_hash_exclusions(value: Any) -> Any:
         "created_at_utc",
         "timestamp_utc",
         "updated_at_utc",
+        "screen_performance",
     }
     pipeline_prefix = "research_pipeline_"
     if isinstance(value, Mapping):
@@ -1837,6 +1839,7 @@ class FilterResult:
     declared_context_sets: List[Any] = field(default_factory=list)
     feature_recipe_hash: str = ""
     hftbacktest_handoff_status: str = ""
+    screen_performance: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         promoted_rows = [_normalise_promoted_screening_row(p, self) for p in self.promoted]
@@ -1921,6 +1924,8 @@ class FilterResult:
             payload["feature_recipe_hash"] = self.feature_recipe_hash
         if self.hftbacktest_handoff_status:
             payload["hftbacktest_handoff_status"] = self.hftbacktest_handoff_status
+        if self.screen_performance:
+            payload["screen_performance"] = dict(self.screen_performance)
         payload["screening_artifact_hash"] = compute_screening_artifact_hash(payload)
         validate_screening_artifact(payload)
         if payload.get("promoted_count", 0) > 0:
@@ -2489,12 +2494,13 @@ def _evaluate_vbt2_pilot_stats_gate(
     }
 
 
-def _default_signal_computer(
+def compute_raw_hypothesis_signal_series(
     cand: CandidateModel,
     ohlcv: np.ndarray,
     parsed: ParsedHypothesis,
     repo_root: Path,
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> np.ndarray:
+    """Compute the continuous hypothesis signal once (threshold applied later)."""
     from features_engine.src.features.mbo_features import MBOEvent
     from features_engine.src.model_registry import get_hyp_id_for_slug, resolve_model_id
     from features_engine.src.hypotheses.registry import get_active_hypotheses
@@ -2511,7 +2517,6 @@ def _default_signal_computer(
     n_bars = len(ohlcv)
     close = _ohlcv_column(ohlcv, "close")
     signal = np.zeros(n_bars)
-    signal_threshold = float(cand.strategy_params.get("signal_threshold", 0.0) or 0.0)
 
     for i in range(n_bars):
         bar_close = float(close[i])
@@ -2527,6 +2532,17 @@ def _default_signal_computer(
         if state is not None:
             signal[i] = float(hypothesis_cls.evaluate(state))
 
+    return signal
+
+
+def _default_signal_computer(
+    cand: CandidateModel,
+    ohlcv: np.ndarray,
+    parsed: ParsedHypothesis,
+    repo_root: Path,
+) -> Tuple[np.ndarray, np.ndarray]:
+    signal = compute_raw_hypothesis_signal_series(cand, ohlcv, parsed, repo_root)
+    signal_threshold = float(cand.strategy_params.get("signal_threshold", 0.0) or 0.0)
     entry_signal = np.where(signal > signal_threshold, 1.0, 0.0)
     exit_signal = np.where(signal < -signal_threshold, -1.0, 0.0)
     return entry_signal, exit_signal
@@ -2892,22 +2908,30 @@ def _apply_fs_v1_screen_metadata(
         fs_v1_feature_set_hash,
         fs_v1_feature_set_id,
         sample_cross_asset_features_for_manifest,
+        _import_cross_asset_assembly_module,
     )
 
     cross_asset_aligned = False
     if ctx.leader_legs:
-        from replay.cross_asset_assembly import validate_cross_asset_alignment
+        try:
+            cross_asset_mod = _import_cross_asset_assembly_module()
+            validate_cross_asset_alignment = cross_asset_mod.validate_cross_asset_alignment
+        except ImportError:
+            validate_cross_asset_alignment = None
 
         cross_feats = sample_cross_asset_features_for_manifest(ctx)
         ts = np.asarray(ctx.store.get("ts"), dtype=np.int64)
         feat_latency_ns = int(ctx.feature_latency_ms * 1_000_000)
         pit_decision_ns = int(ts[-1]) - feat_latency_ns if len(ts) else None
-        alignment = validate_cross_asset_alignment(
-            cross_feats,
-            target_symbol=ctx.symbol,
-            decision_timestamp_ns=pit_decision_ns,
-        )
-        cross_asset_aligned = alignment.ok
+        if validate_cross_asset_alignment is not None:
+            alignment = validate_cross_asset_alignment(
+                cross_feats,
+                target_symbol=ctx.symbol,
+                decision_timestamp_ns=pit_decision_ns,
+            )
+            cross_asset_aligned = alignment.ok
+        else:
+            cross_asset_aligned = bool(cross_feats)
 
     base_manifest = build_feature_usage_manifest(
         bar_construction_id=FS_V1_BAR_CONSTRUCTION_ID,
@@ -3120,7 +3144,24 @@ def filter_candidates(
             ))
         return result
 
-    result = _run_vectorbt_simulation(
+    from backtest_pipeline.src.paid_screen_matrix import (
+        DEFAULT_MATRIX_CHUNK_SIZE,
+        run_vectorbt_simulation_matrix,
+    )
+    from backtest_pipeline.src.paid_screen_profiling import (
+        PaidScreenPerformanceCounters,
+        apply_native_thread_limits,
+    )
+
+    performance = PaidScreenPerformanceCounters()
+    performance.native_thread_limits = apply_native_thread_limits(1)
+    performance.matrix_chunk_size = DEFAULT_MATRIX_CHUNK_SIZE
+    if fs_v1_ctx is not None:
+        performance.feature_store_load_count = 1
+        performance.feature_store_cache_misses = 1
+        performance.record_models_for_last_load(len(candidates))
+
+    result = run_vectorbt_simulation_matrix(
         ohlcv,
         candidates,
         parsed,
@@ -3130,7 +3171,15 @@ def filter_candidates(
         screening_scope=screening_scope,
         max_total_trials=max_total_trials,
         run_budget=budget,
+        chunk_size=DEFAULT_MATRIX_CHUNK_SIZE,
+        performance_counters=performance,
+        fs_v1_ctx=fs_v1_ctx,
     )
+    result.screen_performance = {
+        **performance.to_dict(),
+        "screening_path": "matrix_v2",
+        "subprocess_per_unit": 0,
+    }
     if fs_v1_ctx is not None:
         _apply_fs_v1_screen_metadata(
             result,

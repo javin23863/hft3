@@ -311,6 +311,11 @@ def _write_run_manifest(
     }
     if profiler_summaries is not None:
         manifest["worker_profiler_summaries"] = profiler_summaries
+        if profiler_summaries:
+            manifest["performance_counters"] = profiler_summaries[-1]
+            thread_limits = profiler_summaries[-1].get("native_thread_limits")
+            if thread_limits:
+                manifest["native_thread_limits"] = thread_limits
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
 
@@ -1353,6 +1358,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "cache_memory_limit_mb": int(args.cache_memory_limit_mb),
         "cache_max_entries": int(args.cache_max_entries),
         "scratch_root": str(_worker_scratch_root(repo_root, out_dir)),
+        "native_threads": 1,
     }
     for env_key in ("HFT3_NPZ_ROOT", "HFT3_MANIFEST_PATH"):
         env_val = os.environ.get(env_key, "").strip()

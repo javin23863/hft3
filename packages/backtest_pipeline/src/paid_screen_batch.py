@@ -352,6 +352,31 @@ def _ohlcv_aligns_with_fs_v1_store(ohlcv, fs_ctx) -> bool:
     return len(ohlcv) == len(store_ts)
 
 
+def _fs_v1_context_cache_key(unit: PaidScreenUnit, context: WorkerContext) -> str:
+    """Cache key for fs_v1 feature-store context (one load per batching key)."""
+    return "fs_v1_ctx:" + batching_key_for_unit(unit, context).feature_cache_key()
+
+
+def _get_or_load_fs_v1_context(
+    unit: PaidScreenUnit,
+    context: WorkerContext,
+    data_cache: dict | BoundedLRUCache,
+    profiler: RunProfiler,
+):
+    """Load fs_v1 screen context once per batching key; record cache counters."""
+    cache_key = _fs_v1_context_cache_key(unit, context)
+    cached = _cache_get(data_cache, cache_key)
+    if cached is not None:
+        profiler.performance.feature_store_cache_hits += 1
+        return cached
+    profiler.performance.feature_store_cache_misses += 1
+    profiler.performance.feature_store_load_count += 1
+    fs_ctx = _try_resolve_fs_v1_context(unit, context)
+    if fs_ctx is not None:
+        _cache_put(data_cache, cache_key, fs_ctx)
+    return fs_ctx
+
+
 def _try_resolve_fs_v1_context(
     unit: PaidScreenUnit,
     context: WorkerContext,
@@ -364,11 +389,14 @@ def _try_resolve_fs_v1_context(
         from backtest_pipeline.src.fs_v1_screen_path import resolve_fs_v1_screen_context
     except ImportError:
         return None
-    return resolve_fs_v1_screen_context(
-        repo_root=repo_root,
-        event_id=unit.event_id,
-        symbol=unit.symbol,
-    )
+    try:
+        return resolve_fs_v1_screen_context(
+            repo_root=repo_root,
+            event_id=unit.event_id,
+            symbol=unit.symbol,
+        )
+    except (ImportError, ModuleNotFoundError, OSError, ValueError):
+        return None
 
 
 def _load_ohlcv_for_unit(unit: PaidScreenUnit, context: WorkerContext):
@@ -463,21 +491,30 @@ def build_structured_parsed_hypothesis(
 
 
 def resolve_git_commit(repo_root: str) -> str:
-    """Resolve current git HEAD for provenance stamping."""
+    """Resolve current git HEAD without spawning a subprocess per batch."""
     try:
-        import subprocess
-
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=repo_root,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        commit = result.stdout.strip()
-        return commit or "unknown"
+        git_dir = Path(repo_root) / ".git"
+        head_text = (git_dir / "HEAD").read_text(encoding="utf-8").strip()
+        if head_text.startswith("ref: "):
+            ref_rel = head_text[5:].strip()
+            ref_file = git_dir / ref_rel
+            if ref_file.is_file():
+                commit = ref_file.read_text(encoding="utf-8").strip()
+                return commit or "unknown"
+            packed = git_dir / "packed-refs"
+            if packed.is_file():
+                for line in packed.read_text(encoding="utf-8").splitlines():
+                    if line.startswith("#") or not line.strip():
+                        continue
+                    parts = line.split(" ", 1)
+                    if len(parts) == 2 and parts[1].strip() == ref_rel:
+                        return parts[0].strip() or "unknown"
+            return "unknown"
+        if len(head_text) >= 7:
+            return head_text
     except Exception:
-        return "unknown"
+        pass
+    return "unknown"
 
 
 def resolve_resume_provenance(
@@ -701,20 +738,25 @@ def screen_paid_batch(
             ))
         return results
 
-    # v1 screening auto-selects fs_v1 signal computer; v2 matrix path must too.
-    fs_v1_ctx = _try_resolve_fs_v1_context(representative, context)
-    if fs_v1_ctx is not None and _ohlcv_aligns_with_fs_v1_store(ohlcv, fs_v1_ctx):
-        signal_computer = _resolve_fs_v1_signal_computer(
-            representative, context, fs_ctx=fs_v1_ctx
-        )
-    else:
-        fs_v1_ctx = None
-        signal_computer = None
-
     # Cache-wiring / disabled-screening path: resolve models per unit group,
     # return SKIPPED for successes and ERROR for per-unit resolution failures.
     if _should_skip_matrix_screening(run_screening, ohlcv_from_cache, data_cache):
         return _resolve_models_without_screening(units, context, profiler)
+
+    # v1 screening auto-selects fs_v1 signal computer; v2 matrix path must too.
+    fs_v1_ctx = _get_or_load_fs_v1_context(
+        representative, context, data_cache, profiler
+    )
+    signal_computer = None
+    if fs_v1_ctx is not None and _ohlcv_aligns_with_fs_v1_store(ohlcv, fs_v1_ctx):
+        signal_computer = _resolve_fs_v1_signal_computer(
+            representative, context, fs_ctx=fs_v1_ctx
+        )
+        profiler.performance.record_models_for_last_load(
+            len({u.model_id for u in units})
+        )
+    else:
+        fs_v1_ctx = None
 
     # Compute OHLCV hash for artifact provenance
     ohlcv_hash = hashlib.sha256(ohlcv.tobytes()).hexdigest()[:32]
@@ -750,6 +792,9 @@ def screen_paid_batch(
                 max_total_trials=max_trials,
                 run_budget=context.run_budget or None,
             )
+            from backtest_pipeline.src.paid_screen_matrix import DEFAULT_MATRIX_CHUNK_SIZE
+            chunk_size = DEFAULT_MATRIX_CHUNK_SIZE
+            profiler.performance.matrix_chunk_size = chunk_size
             filter_result = run_vectorbt_simulation_matrix(
                 ohlcv=ohlcv,
                 candidates=[candidate],
@@ -758,9 +803,11 @@ def screen_paid_batch(
                 repo_root=Path(context.repo_root),
                 signal_computer=signal_computer,
                 screening_scope=context.screening_scope,
-                chunk_size=64,
+                chunk_size=chunk_size,
                 max_total_trials=max_trials,
                 run_budget=budget,
+                performance_counters=profiler.performance,
+                fs_v1_ctx=fs_v1_ctx,
             )
             filter_result = apply_promotion_gates(
                 filter_result,

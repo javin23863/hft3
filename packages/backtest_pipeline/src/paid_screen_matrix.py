@@ -66,14 +66,14 @@ from backtest_pipeline.src.vectorbt_adapter import (
 )
 from backtest_pipeline.src.promotion_gate import PromotedCandidate, RejectedCandidate
 from backtest_pipeline.src.vectorbt_adapter import FilterResult, RunBudget
+from backtest_pipeline.src.paid_screen_profiling import PaidScreenPerformanceCounters
 from research_pipeline.types import CandidateModel
 
 logger = logging.getLogger(__name__)
 
-# Default chunk size for matrix Portfolio.from_signals calls.  Chosen to keep
-# peak memory bounded (bars * chunk_size * 8 bytes per signal matrix) while
-# amortizing Python overhead.  64 is a safe default for ~1-day of 1m bars.
-DEFAULT_MATRIX_CHUNK_SIZE = 64
+# Default chunk size for matrix Portfolio.from_signals calls.
+DEFAULT_MATRIX_CHUNK_SIZE = 256
+ALLOWED_MATRIX_CHUNK_SIZES = (128, 256, 512, 1024)
 
 
 def _chunk_parameter_trials(
@@ -167,6 +167,25 @@ def _sl_tp_for_portfolio(
     return sl, tp
 
 
+def _apply_signal_threshold(
+    raw_signal: np.ndarray, threshold: float
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Convert a continuous hypothesis signal into entry/exit arrays."""
+    entry_signal = np.where(raw_signal > threshold, 1.0, 0.0)
+    exit_signal = np.where(raw_signal < -threshold, -1.0, 0.0)
+    return entry_signal, exit_signal
+
+
+def _normalize_chunk_size(chunk_size: int, *, production: bool = False) -> int:
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be positive")
+    if production and chunk_size not in ALLOWED_MATRIX_CHUNK_SIZES:
+        raise ValueError(
+            f"chunk_size must be one of {ALLOWED_MATRIX_CHUNK_SIZES}, got {chunk_size}"
+        )
+    return chunk_size
+
+
 def run_vectorbt_simulation_matrix(
     ohlcv: np.ndarray,
     candidates: List[CandidateModel],
@@ -178,6 +197,8 @@ def run_vectorbt_simulation_matrix(
     max_total_trials: Optional[int] = None,
     run_budget: Optional[RunBudget] = None,
     chunk_size: int = DEFAULT_MATRIX_CHUNK_SIZE,
+    performance_counters: PaidScreenPerformanceCounters | None = None,
+    fs_v1_ctx: Any | None = None,
 ) -> FilterResult:
     """Run the VectorBT screen in chunked-matrix mode.
 
@@ -193,7 +214,17 @@ def run_vectorbt_simulation_matrix(
     from backtest_pipeline.src.asset_class_routing import resolve_validation_path
     from backtest_pipeline.src import vectorbt_adapter
 
+    chunk_size = _normalize_chunk_size(
+        chunk_size, production=performance_counters is not None
+    )
+    counters = performance_counters or PaidScreenPerformanceCounters()
+    counters.matrix_chunk_size = chunk_size
+
     signal_computer = signal_computer or vectorbt_adapter._default_signal_computer
+    use_raw_signal_reuse = (
+        fs_v1_ctx is not None
+        or signal_computer is vectorbt_adapter._default_signal_computer
+    )
     budget = run_budget or _build_run_budget(
         candidates=candidates,
         grid=grid,
@@ -276,6 +307,28 @@ def run_vectorbt_simulation_matrix(
     grid_trials = list(_grid_iter(grid))[: budget.max_trials]
     trial_budget = budget.max_total_trials
     started_at = time.monotonic()
+    raw_signal_cache: dict[str, np.ndarray] = {}
+
+    def _raw_signal_for_candidate(
+        cand: CandidateModel,
+        trial_candidate: CandidateModel,
+    ) -> np.ndarray:
+        recipe_hash = str(getattr(cand, "feature_recipe_hash", "") or cand.candidate_id)
+        cache_key = f"{cand.model_id}|{recipe_hash}"
+        cached = raw_signal_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        if fs_v1_ctx is not None:
+            from backtest_pipeline.src.fs_v1_screen_path import compute_fs_v1_raw_signal_series
+
+            raw = compute_fs_v1_raw_signal_series(fs_v1_ctx, trial_candidate)
+        else:
+            raw = vectorbt_adapter.compute_raw_hypothesis_signal_series(
+                trial_candidate, ohlcv, parsed, repo_root
+            )
+        raw_signal_cache[cache_key] = raw
+        counters.raw_signal_computations += 1
+        return raw
 
     # ---- Per-candidate matrix execution ------------------------------------
     for candidate_index, cand in enumerate(candidates):
@@ -335,15 +388,7 @@ def run_vectorbt_simulation_matrix(
                 # appended as skipped above.
                 continue
 
-            # --- Signal computation (one call per trial, identical to loop mode) ---
-            # The loop mode computes a fresh signal per (candidate, params)
-            # because the signal computer may depend on signal_threshold
-            # (which varies across params).  The matrix mode preserves this
-            # invariant: we compute the raw signal for *each* trial's merged
-            # params exactly once, then assemble per-column matrices.  If the
-            # signal computer is independent of params (common case), the
-            # caller can supply a memoizing computer; correctness does not
-            # depend on it.
+            # --- Raw signal once per model×symbol×event×recipe; threshold per trial ---
             per_col_raw_entry: List[np.ndarray] = []
             per_col_raw_exit: List[np.ndarray] = []
             signal_failures: List[
@@ -351,20 +396,49 @@ def run_vectorbt_simulation_matrix(
             ] = []
             surviving_trials: List[Tuple[Dict[str, Any], str, CandidateModel]] = []
             surviving_chunk: List[Dict[str, Any]] = []
-            for merged, cand_id, trial_candidate in chunk_trials:
+
+            if use_raw_signal_reuse:
+                raw_series: np.ndarray | None = None
                 try:
-                    raw_entry_signal, raw_exit_signal = signal_computer(
-                        trial_candidate, ohlcv, parsed, repo_root
-                    )
-                    per_col_raw_entry.append(np.asarray(raw_entry_signal, dtype=float))
-                    per_col_raw_exit.append(np.asarray(raw_exit_signal, dtype=float))
-                    surviving_trials.append((merged, cand_id, trial_candidate))
-                    surviving_chunk.append(merged)
+                    raw_series = _raw_signal_for_candidate(cand, chunk_trials[0][2])
                 except Exception as exc:
-                    logger.warning(
-                        "signal computer failed for %s: %s", cand_id, exc
-                    )
-                    signal_failures.append((exc, merged, cand_id, trial_candidate))
+                    for _merged, cand_id, trial_candidate in chunk_trials:
+                        signal_failures.append((exc, _merged, cand_id, trial_candidate))
+                if raw_series is not None:
+                    for merged, cand_id, trial_candidate in chunk_trials:
+                        counters.trials_evaluated += 1
+                        try:
+                            threshold = float(merged.get("signal_threshold", 0.15))
+                            raw_entry, raw_exit = _apply_signal_threshold(
+                                raw_series, threshold
+                            )
+                            per_col_raw_entry.append(np.asarray(raw_entry, dtype=float))
+                            per_col_raw_exit.append(np.asarray(raw_exit, dtype=float))
+                            surviving_trials.append((merged, cand_id, trial_candidate))
+                            surviving_chunk.append(merged)
+                        except Exception as exc:
+                            signal_failures.append(
+                                (exc, merged, cand_id, trial_candidate)
+                            )
+            else:
+                for merged, cand_id, trial_candidate in chunk_trials:
+                    counters.trials_evaluated += 1
+                    try:
+                        raw_entry_signal, raw_exit_signal = signal_computer(
+                            trial_candidate, ohlcv, parsed, repo_root
+                        )
+                        per_col_raw_entry.append(np.asarray(raw_entry_signal, dtype=float))
+                        per_col_raw_exit.append(np.asarray(raw_exit_signal, dtype=float))
+                        surviving_trials.append((merged, cand_id, trial_candidate))
+                        surviving_chunk.append(merged)
+                        counters.raw_signal_computations += 1
+                    except Exception as exc:
+                        logger.warning(
+                            "signal computer failed for %s: %s", cand_id, exc
+                        )
+                        signal_failures.append(
+                            (exc, merged, cand_id, trial_candidate)
+                        )
 
             # Reject every trial whose signal computation failed (same reason
             # and metric_values as the loop mode).
@@ -438,6 +512,8 @@ def run_vectorbt_simulation_matrix(
             ).copy()
 
             # --- One matrix Portfolio.from_signals call ------------------------------
+            counters.portfolio_call_count += 1
+            counters.trials_per_portfolio_call.append(len(surviving_trials))
             try:
                 pf = vbt.Portfolio.from_signals(
                     close_matrix,
@@ -594,4 +670,5 @@ def run_vectorbt_simulation_matrix(
                 )
                 return result
 
+    counters.finalize_signal_reuse()
     return result

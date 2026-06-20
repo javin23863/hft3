@@ -125,16 +125,49 @@ def _load_leader_leg_store(
     return None
 
 
+def _import_cross_asset_assembly_module():
+    """Load cross_asset_assembly without importing replay package __init__."""
+    import importlib.util
+    import sys
+
+    mod_path = Path(__file__).resolve().parents[2] / "replay" / "cross_asset_assembly.py"
+    spec = importlib.util.spec_from_file_location(
+        "replay_cross_asset_assembly_isolated", mod_path
+    )
+    if spec is None or spec.loader is None:
+        raise ImportError("cross_asset_assembly module unavailable")
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _default_leaders_for_target(target_symbol: str) -> tuple[str, ...]:
+    """Leader list without importing replay package __init__ (hftbacktest chain)."""
+    try:
+        return _import_cross_asset_assembly_module().default_leaders_for_target(
+            target_symbol
+        )
+    except Exception:
+        pass
+    base = str(target_symbol or "MES").split(".")[0].upper()
+    fallback = {
+        "MES": ("ES",),
+        "MNQ": ("NQ",),
+        "ES": ("NQ", "ZN"),
+        "NQ": ("ES", "ZN"),
+    }
+    return fallback.get(base, ("ES",))
+
+
 def _load_leader_legs(
     root: Path,
     event_id: str,
     target_symbol: str,
 ) -> tuple[tuple[str, LeaderLegStore], ...]:
-    from replay.cross_asset_assembly import default_leaders_for_target
-
     target = str(target_symbol).split(".")[0].upper()
     legs: list[tuple[str, LeaderLegStore]] = []
-    for leader in default_leaders_for_target(target):
+    for leader in _default_leaders_for_target(target):
         leg = _load_leader_leg_store(root, event_id, leader)
         if leg is not None:
             legs.append((leader, leg))
@@ -146,18 +179,29 @@ def cross_asset_features_at_vis_ts(
     vis_ts: int,
 ) -> dict[str, dict[str, Any]]:
     """Build provenance-tagged leader (+ optional VIX) legs at one PIT visibility time."""
-    from replay.cross_asset_assembly import enrich_cross_leg
+    try:
+        enrich_cross_leg = _import_cross_asset_assembly_module().enrich_cross_leg
+    except ImportError:
+        enrich_cross_leg = None
 
     cross_feats: dict[str, dict[str, Any]] = {}
     for leader, leg in ctx.leader_legs:
         j = int(np.searchsorted(leg.ts, vis_ts, side="right")) - 1
         if j < 0:
             continue
-        cross_feats[leader] = enrich_cross_leg(
-            _leader_leg_features_from_row(leg.X[j]),
-            symbol=leader,
-            source_timestamp_ns=int(leg.ts[j]),
-        )
+        leg_feats = _leader_leg_features_from_row(leg.X[j])
+        if enrich_cross_leg is not None:
+            cross_feats[leader] = enrich_cross_leg(
+                leg_feats,
+                symbol=leader,
+                source_timestamp_ns=int(leg.ts[j]),
+            )
+        else:
+            cross_feats[leader] = {
+                **leg_feats,
+                "_symbol": leader,
+                "_source_timestamp_ns": int(leg.ts[j]),
+            }
     if ctx.has_vix and ctx.vix_ts is not None and ctx.vix_X is not None:
         vix_j = int(np.searchsorted(ctx.vix_ts, vis_ts, side="right")) - 1
         if vix_j >= 0 and ctx.vix_cols:
@@ -166,11 +210,18 @@ def cross_asset_features_at_vis_ts(
                 for ci, col in enumerate(ctx.vix_cols)
                 if ci < ctx.vix_X.shape[1]
             }
-            cross_feats["VIX"] = enrich_cross_leg(
-                vix_feats,
-                symbol="VIX",
-                source_timestamp_ns=int(ctx.vix_ts[vix_j]),
-            )
+            if enrich_cross_leg is not None:
+                cross_feats["VIX"] = enrich_cross_leg(
+                    vix_feats,
+                    symbol="VIX",
+                    source_timestamp_ns=int(ctx.vix_ts[vix_j]),
+                )
+            else:
+                cross_feats["VIX"] = {
+                    **vix_feats,
+                    "_symbol": "VIX",
+                    "_source_timestamp_ns": int(ctx.vix_ts[vix_j]),
+                }
     return cross_feats
 
 
@@ -293,79 +344,87 @@ def ohlcv_from_feature_store(store: Mapping[str, Any]) -> np.ndarray:
     return np.column_stack([ts, close, close, close, close, vol])
 
 
+def compute_fs_v1_raw_signal_series(
+    ctx: FsV1ScreenContext,
+    cand: Any,
+) -> np.ndarray:
+    """Compute continuous fs_v1 hypothesis signal once (threshold applied later)."""
+    from features_engine.src.hypotheses.modules import MarketState
+    from features_engine.src.hypotheses.registry import get_active_hypotheses
+    from features_engine.src.model_registry import get_hyp_id_for_slug, resolve_model_id
+
+    resolved = resolve_model_id(cand.model_id)
+    hyp_id = get_hyp_id_for_slug(resolved)
+    by_hyp_id = {h.hyp_id: h for h in get_active_hypotheses()}
+    hypothesis = by_hyp_id.get(hyp_id)
+    if hypothesis is None:
+        raise ValueError(f"model_id {cand.model_id} (hyp_id={hyp_id}) not in active hypotheses")
+
+    store = ctx.store
+    ts = np.asarray(store["ts"], dtype=np.int64)
+    X = np.asarray(store["X"], dtype=np.float64)
+    event_ctx_id = np.asarray(store["event_ctx_id"])
+    event_ctx_vocab = _store_vocab_list(store.get("event_ctx_vocab"))
+    regime_state_id = np.asarray(store["regime_state_id"])
+    regime_state_vocab = _store_vocab_list(store.get("regime_state_vocab"))
+    vol_state_id = np.asarray(store["vol_state_id"])
+    vol_state_vocab = _store_vocab_list(store.get("vol_state_vocab"))
+    liq_state_id = np.asarray(store["liq_state_id"])
+    liq_state_vocab = _store_vocab_list(store.get("liq_state_vocab"))
+
+    n = len(ts)
+    signal = np.zeros(n, dtype=np.float64)
+    feat_latency_ns = int(ctx.feature_latency_ms * 1_000_000)
+
+    state = MarketState(
+        primary_features={},
+        cross_asset_features={},
+        regime_state="normal",
+        event_context="NORMAL",
+        volatility_state="NORMAL",
+        liquidity_state="NORMAL",
+        latency_ms=ctx.feature_latency_ms,
+        current_inventory=0,
+        feature_vector=None,
+        regime_posterior={},
+    )
+
+    for i in range(n):
+        vis_ts = int(ts[i]) - feat_latency_ns
+        j = int(np.searchsorted(ts, vis_ts, side="right")) - 1
+        if j < 0:
+            continue
+        vec_j = X[j]
+        state.feature_vector = vec_j
+        state.primary_features = _primary_features_from_row(vec_j)
+        state.event_context = (
+            str(event_ctx_vocab[int(event_ctx_id[j])]) if event_ctx_vocab else "NORMAL"
+        )
+        state.regime_state = (
+            str(regime_state_vocab[int(regime_state_id[j])]) if regime_state_vocab else "normal"
+        )
+        state.volatility_state = (
+            str(vol_state_vocab[int(vol_state_id[j])]) if vol_state_vocab else "NORMAL"
+        )
+        state.liquidity_state = (
+            str(liq_state_vocab[int(liq_state_id[j])]) if liq_state_vocab else "NORMAL"
+        )
+        state.regime_posterior = {
+            lbl: float(vec_j[_REGIME_SLOT_START + k])
+            for k, lbl in enumerate(REGIME_LABELS_ORDERED)
+        }
+        state.cross_asset_features = cross_asset_features_at_vis_ts(ctx, vis_ts)
+        signal[i] = float(hypothesis.evaluate(state))
+
+    return signal
+
+
 def build_fs_v1_signal_computer(ctx: FsV1ScreenContext) -> Callable[..., Tuple[np.ndarray, np.ndarray]]:
     """Return a VectorBT signal_computer using PIT fs_v1 visible rows."""
 
     def compute(cand, ohlcv, parsed, repo_root) -> Tuple[np.ndarray, np.ndarray]:
-        from features_engine.src.hypotheses.modules import MarketState
-        from features_engine.src.hypotheses.registry import get_active_hypotheses
-        from features_engine.src.model_registry import get_hyp_id_for_slug, resolve_model_id
-
-        resolved = resolve_model_id(cand.model_id)
-        hyp_id = get_hyp_id_for_slug(resolved)
-        by_hyp_id = {h.hyp_id: h for h in get_active_hypotheses()}
-        hypothesis = by_hyp_id.get(hyp_id)
-        if hypothesis is None:
-            raise ValueError(f"model_id {cand.model_id} (hyp_id={hyp_id}) not in active hypotheses")
-
-        store = ctx.store
-        ts = np.asarray(store["ts"], dtype=np.int64)
-        X = np.asarray(store["X"], dtype=np.float64)
-        event_ctx_id = np.asarray(store["event_ctx_id"])
-        event_ctx_vocab = _store_vocab_list(store.get("event_ctx_vocab"))
-        regime_state_id = np.asarray(store["regime_state_id"])
-        regime_state_vocab = _store_vocab_list(store.get("regime_state_vocab"))
-        vol_state_id = np.asarray(store["vol_state_id"])
-        vol_state_vocab = _store_vocab_list(store.get("vol_state_vocab"))
-        liq_state_id = np.asarray(store["liq_state_id"])
-        liq_state_vocab = _store_vocab_list(store.get("liq_state_vocab"))
-
-        n = len(ts)
-        signal = np.zeros(n, dtype=np.float64)
-        feat_latency_ns = int(ctx.feature_latency_ms * 1_000_000)
+        signal = compute_fs_v1_raw_signal_series(ctx, cand)
         signal_threshold = float(cand.strategy_params.get("signal_threshold", 0.0) or 0.0)
-
-        state = MarketState(
-            primary_features={},
-            cross_asset_features={},
-            regime_state="normal",
-            event_context="NORMAL",
-            volatility_state="NORMAL",
-            liquidity_state="NORMAL",
-            latency_ms=ctx.feature_latency_ms,
-            current_inventory=0,
-            feature_vector=None,
-            regime_posterior={},
-        )
-
-        for i in range(n):
-            vis_ts = int(ts[i]) - feat_latency_ns
-            j = int(np.searchsorted(ts, vis_ts, side="right")) - 1
-            if j < 0:
-                continue
-            vec_j = X[j]
-            state.feature_vector = vec_j
-            state.primary_features = _primary_features_from_row(vec_j)
-            state.event_context = (
-                str(event_ctx_vocab[int(event_ctx_id[j])]) if event_ctx_vocab else "NORMAL"
-            )
-            state.regime_state = (
-                str(regime_state_vocab[int(regime_state_id[j])]) if regime_state_vocab else "normal"
-            )
-            state.volatility_state = (
-                str(vol_state_vocab[int(vol_state_id[j])]) if vol_state_vocab else "NORMAL"
-            )
-            state.liquidity_state = (
-                str(liq_state_vocab[int(liq_state_id[j])]) if liq_state_vocab else "NORMAL"
-            )
-            state.regime_posterior = {
-                lbl: float(vec_j[_REGIME_SLOT_START + k])
-                for k, lbl in enumerate(REGIME_LABELS_ORDERED)
-            }
-            state.cross_asset_features = cross_asset_features_at_vis_ts(ctx, vis_ts)
-
-            signal[i] = float(hypothesis.evaluate(state))
-
         entry_signal = np.where(signal > signal_threshold, 1.0, 0.0)
         exit_signal = np.where(signal < -signal_threshold, -1.0, 0.0)
         return entry_signal, exit_signal

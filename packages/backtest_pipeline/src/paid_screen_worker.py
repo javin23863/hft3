@@ -18,8 +18,9 @@ from backtest_pipeline.src.paid_screen_types import (
     PaidScreenUnit, WorkerContext, UnitScreeningResult,
 )
 from backtest_pipeline.src.paid_screen_batch import screen_paid_batch
-from backtest_pipeline.src.paid_screen_profiling import RunProfiler
+from backtest_pipeline.src.paid_screen_profiling import RunProfiler, apply_native_thread_limits
 from backtest_pipeline.src.paid_screen_cache import BoundedLRUCache
+from backtest_pipeline.src.paid_screen_batch import resolve_git_commit
 
 
 class PaidScreenWorker:
@@ -38,7 +39,8 @@ class PaidScreenWorker:
                  max_batches_before_recycle: int = 100,
                  cache_memory_limit_mb: int = 4096,
                  cache_max_entries: int = 1000,
-                 scratch_root: str | None = None):
+                 scratch_root: str | None = None,
+                 native_threads: int = 1):
         self.repo_root = repo_root
         self.screening_scope = screening_scope
         self.events_csv_hash = events_csv_hash
@@ -48,6 +50,8 @@ class PaidScreenWorker:
         self.cache_memory_limit_mb = cache_memory_limit_mb
         self.cache_max_entries = cache_max_entries
         self.scratch_root = scratch_root
+        self.native_threads = max(1, int(native_threads))
+        self.native_thread_limits = apply_native_thread_limits(self.native_threads)
         self._batches_processed = 0
         self._data_cache = BoundedLRUCache(
             max_entries=cache_max_entries,
@@ -64,15 +68,8 @@ class PaidScreenWorker:
             return
         self._profiler.start_stage("worker_init")
 
-        # Resolve git commit once
-        import subprocess
-        try:
-            result = subprocess.run(
-                ["git", "rev-parse", "HEAD"],
-                cwd=self.repo_root, capture_output=True, text=True, timeout=10)
-            self._git_commit = result.stdout.strip()
-        except Exception:
-            self._git_commit = "unknown"
+        # Resolve git commit once (filesystem read — no subprocess per batch)
+        self._git_commit = resolve_git_commit(self.repo_root)
 
         # Initialize VectorBT (import triggers Rust init)
         vbt_version = "unknown"
@@ -129,6 +126,7 @@ class PaidScreenWorker:
             data_cache=self._data_cache,
             scratch_root=self.scratch_root,
         )
+        self._profiler.performance.native_thread_limits = dict(self.native_thread_limits)
 
         # The BoundedLRUCache's authoritative hit/miss counters are folded
         # into the profiler inside screen_paid_batch (delta-based, so safe
@@ -190,6 +188,7 @@ def worker_process_main(worker_args: dict, batch_queue, result_queue):
 
     worker = PaidScreenWorker(**worker_args)
     worker.init()
+    worker.get_profiler().performance.native_thread_limits = dict(worker.native_thread_limits)
 
     while True:
         batch = batch_queue.get()
