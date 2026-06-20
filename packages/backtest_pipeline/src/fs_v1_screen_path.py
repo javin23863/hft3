@@ -114,10 +114,16 @@ def _load_leader_leg_store(
             store = load_store(candidate_path)
         except (OSError, ValueError):
             continue
-        ts = np.asarray(store.get("ts"), dtype=np.int64)
+        store_ts = store.get("ts")
+        if store_ts is None:
+            continue
+        ts = np.asarray(store_ts, dtype=np.int64)
         if len(ts) < 2:
             continue
-        X = np.asarray(store.get("X"), dtype=np.float64)
+        store_x = store.get("X")
+        if store_x is None:
+            continue
+        X = np.asarray(store_x, dtype=np.float64)
         if X.shape[0] != len(ts):
             continue
         base = str(leader_symbol).split(".")[0].upper()

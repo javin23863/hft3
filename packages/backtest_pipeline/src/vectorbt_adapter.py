@@ -2916,18 +2916,22 @@ def _apply_fs_v1_screen_metadata(
             validate_cross_asset_alignment = None
 
         cross_feats = sample_cross_asset_features_for_manifest(ctx)
-        ts = np.asarray(ctx.store.get("ts"), dtype=np.int64)
-        feat_latency_ns = int(ctx.feature_latency_ms * 1_000_000)
-        pit_decision_ns = int(ts[-1]) - feat_latency_ns if len(ts) else None
-        if validate_cross_asset_alignment is not None:
-            alignment = validate_cross_asset_alignment(
-                cross_feats,
-                target_symbol=ctx.symbol,
-                decision_timestamp_ns=pit_decision_ns,
-            )
-            cross_asset_aligned = alignment.ok
+        store_ts = ctx.store.get("ts")
+        if store_ts is None:
+            cross_asset_aligned = False
         else:
-            cross_asset_aligned = bool(cross_feats)
+            ts = np.asarray(store_ts, dtype=np.int64)
+            feat_latency_ns = int(ctx.feature_latency_ms * 1_000_000)
+            pit_decision_ns = int(ts[-1]) - feat_latency_ns if len(ts) else None
+            if validate_cross_asset_alignment is not None:
+                alignment = validate_cross_asset_alignment(
+                    cross_feats,
+                    target_symbol=ctx.symbol,
+                    decision_timestamp_ns=pit_decision_ns,
+                )
+                cross_asset_aligned = alignment.ok
+            else:
+                cross_asset_aligned = bool(cross_feats)
 
     base_manifest = build_feature_usage_manifest(
         bar_construction_id=FS_V1_BAR_CONSTRUCTION_ID,
@@ -3205,6 +3209,7 @@ def apply_promotion_gates(
     """Apply robust promotion gates after VectorBT simulation (BLUEPRINT §8)."""
     gates = gates or PromotionGate()
     repo_root = repo_root or _REPO
+    scope = _normalise_screening_scope(screening_scope)
     promoted_out: List[PromotedCandidate] = []
     rejected_out: List[RejectedCandidate] = list(result.rejected)
 
@@ -3223,6 +3228,7 @@ def apply_promotion_gates(
         if (
             prom.vectorbt_results.get("gate_metric_authority")
             == "official_vectorbt_portfolio_stats"
+            and scope in ("pilot", "paid_compute")
         ):
             gate_failures = [
                 code
@@ -3230,7 +3236,9 @@ def apply_promotion_gates(
                 if not _is_vbt2_pilot_exempt_gate_failure(code)
             ]
             prom.vectorbt_results["pilot_gate_evaluation"] = {
-                "scope": "official_vectorbt_stats_with_walk_forward_oos",
+                "scope": scope,
+                "screening_scope": scope,
+                "metric_authority": "official_vectorbt_stats_with_walk_forward_oos",
                 "used_fields": {
                     "oos_expectancy": "auxiliary_numpy_walk_forward",
                     "wf_consistency": "auxiliary_numpy_walk_forward",
