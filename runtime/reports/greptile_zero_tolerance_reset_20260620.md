@@ -1,8 +1,8 @@
 # Greptile zero-tolerance reset — 2026-06-20 (updated)
 
-**Branch:** `cursor/autoresearch-pr-c-phases-5-7` (PR #10)  
-**Head:** `8c5c1ec063b405c49236f6bd6357e73eacd47fed`  
-**Policy:** 0 P1 + 0 P2 + 0 🔴 + 0 🟡 + scoped pytest green  
+**Branch:** `cursor/autoresearch-pr-c-phases-5-7` (PR #10)
+**Head:** `8c5c1ec063b405c49236f6bd6357e73eacd47fed`
+**Policy:** 0 P1 + 0 P2 + 0 🔴 + 0 🟡 + scoped pytest green
 
 ### Gate-order compliance
 

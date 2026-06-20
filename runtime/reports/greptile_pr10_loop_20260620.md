@@ -1,8 +1,8 @@
 # Greptile PR #10 loop — 2026-06-20 (Phase 9 PR-C)
 
-**PR:** https://github.com/javin23863/hft3/pull/10  
-**Branch:** `cursor/autoresearch-pr-c-phases-5-7`  
-**Head:** `8c5c1ec063b405c49236f6bd6357e73eacd47fed` — `fix(pr-c): cavecrew remediation for 85eb27bd gate gaps`  
+**PR:** https://github.com/javin23863/hft3/pull/10
+**Branch:** `cursor/autoresearch-pr-c-phases-5-7`
+**Head:** `8c5c1ec063b405c49236f6bd6357e73eacd47fed` — `fix(pr-c): cavecrew remediation for 85eb27bd gate gaps`
 **Policy:** Greptile ONLY after cavecrew + pytest + push.
 
 ## Iteration table

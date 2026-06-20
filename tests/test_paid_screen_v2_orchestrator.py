@@ -259,7 +259,7 @@ class TestVastLauncherHashWiring:
         repo.mkdir()
         events = repo / "events.csv"
         events.write_text("event_id\nE1\n", encoding="utf-8")
-        manifest = repo / "data" / "manifest.json"
+        manifest = repo / "data" / "manifest.parquet"
         manifest.parent.mkdir(parents=True)
         manifest.write_bytes(b"lake-manifest-bytes")
         decl = repo / "decl.json"
@@ -298,6 +298,17 @@ class TestVastLauncherHashWiring:
                 decl,
                 manifest_path="",
             )
+
+    def test_declaration_head_and_hash_guards_before_launch(self):
+        text = _VAST_SCRIPT.read_text(encoding="utf-8")
+        assert "DECL_GIT_HEAD" in text
+        assert "git rev-parse HEAD" in text
+        assert "Declaration git_head=" in text
+        assert "DECL_EVENTS_HASH" in text
+        assert "DECL_LAKE_HASH" in text
+        assert "Declaration hashes OK" in text
+        assert text.index("Declaration HEAD OK") < text.index("Workers from declaration")
+        assert text.index("Declaration hashes OK") < text.index("PAID_ARGS=(")
 
 
 class TestVastLauncherRunIdDerivation:

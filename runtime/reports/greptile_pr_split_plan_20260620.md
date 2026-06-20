@@ -1,7 +1,7 @@
 # Greptile PR split plan — PR #7 (`cursor/vast-vbt-workflow`)
 
-**Date:** 2026-06-20  
-**Problem:** Greptile hard limit 100 changed files; PR #7 has **147** files (+26k / −821 LOC).  
+**Date:** 2026-06-20
+**Problem:** Greptile hard limit 100 changed files; PR #7 has **147** files (+26k / −821 LOC).
 **Goal:** Three stacked PRs, each **<80 files**, preserving merge order and test gates.
 
 ---

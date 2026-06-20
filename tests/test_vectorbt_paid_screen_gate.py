@@ -1,7 +1,10 @@
 """Tests for VectorBT paid screen gate and unit generation."""
 from __future__ import annotations
 
+import hashlib
 import json
+import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -106,6 +109,23 @@ def test_paid_screen_dry_run_lists_units(tmp_path: Path) -> None:
         text=True,
     )
     assert proc.returncode == 0, proc.stderr
+
+
+def test_run_paid_screen_dispatches_to_v2_orchestrator() -> None:
+    script = (SCRIPTS / "run_paid_screen.py").read_text(encoding="utf-8")
+    assert 'run_vectorbt_paid_screen_v2.py"' in script
+    assert '_ORCHESTRATOR = _REPO / "scripts" / "run_vectorbt_paid_screen.py"' not in script
+
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPTS / "run_paid_screen.py"), "--help"],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "run_vectorbt_paid_screen_v2.py" in proc.stdout
+    assert "--max-batches-before-recycle" in proc.stdout
+    assert "--lake-manifest-hash" in proc.stdout
 
 
 def test_next_steps_defaults_to_phase_a(tmp_path: Path) -> None:
@@ -515,9 +535,148 @@ def test_vast_full_script_requires_declaration_before_workers() -> None:
     assert "vbt_full_run_declaration.json" in script
     assert "expected_work_units" in script
     assert "DECL_EXPECTED" in script
+    assert "DECL_GIT_HEAD" in script
+    assert "git rev-parse HEAD" in script
+    assert "Declaration git_head=" in script
+    assert "DECL_EVENTS_HASH" in script
+    assert "DECL_LAKE_HASH" in script
     assert "ERROR: Full-run declaration missing" in script
     assert "ERROR: Declaration expected_work_units=" in script
     assert "--research-split" in script
+
+
+def test_vast_remote_verify_contract_is_no_launch() -> None:
+    script_path = REPO / "scripts" / "vast_remote_verify.sh"
+    script = script_path.read_text(encoding="utf-8")
+    deploy = (REPO / "scripts" / "vast_deploy_and_verify.ps1").read_text(encoding="utf-8")
+    assert "vast_remote_verify.sh" in deploy
+    assert "DEPLOY_CONTRACT_PASS" in deploy
+    assert "REMOTE_VERIFY_PASS" in script
+    assert "DEPLOY_HEAD" in script
+    assert "ready_for_full_run" in script
+    assert "events_csv_hash" in script
+    assert "lake_manifest_hash" in script
+    assert "manifest.parquet" in script
+    assert "run_paid_screen" not in script
+    assert "run_vbt_paid_screen_vast_full.sh" not in script
+    assert "tmux" not in script
+
+
+def test_vast_deploy_contract_checks_declaration_head_and_hashes() -> None:
+    deploy = (REPO / "scripts" / "vast_deploy_and_verify.ps1").read_text(encoding="utf-8")
+    assert "vbt_full_run_declaration.json" in deploy
+    assert "$declHead" in deploy
+    assert "Local HEAD $repoHead != declaration git_head $declHead" in deploy
+    assert "Origin/$GitBranch head $localHead != declaration git_head $declHead" in deploy
+    assert "Declaration events_csv_hash $declEventsHash != gate $expectedEventsHash" in deploy
+    assert "Declaration lake_manifest_hash $declLakeHash != gate $expectedLakeHash" in deploy
+
+
+def test_vast_deploy_contract_copies_declaration_and_derives_branch() -> None:
+    deploy = (REPO / "scripts" / "vast_deploy_and_verify.ps1").read_text(encoding="utf-8")
+    assert 'else { "cursor/vast-vbt-workflow" }' not in deploy
+    assert "git branch --show-current" in deploy
+    assert "set HFT3_VAST_GIT_BRANCH" in deploy
+    assert "$remoteDecl" in deploy
+    assert "scp declaration failed" in deploy
+    assert "SCP gate, declaration, events.csv, manifest.parquet" in deploy
+
+
+def test_vast_remote_verify_passes_temp_contract(tmp_path: Path) -> None:
+    if shutil.which("bash") is None or shutil.which("git") is None:
+        pytest.skip("requires bash and git")
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo, check=True)
+    (repo / "README.md").write_text("test\n", encoding="utf-8")
+    subprocess.run(["git", "add", "README.md"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=repo, check=True, capture_output=True, text=True)
+    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, text=True).strip()
+
+    events = repo / "events.csv"
+    manifest = repo / "manifest.parquet"
+    npz_root = repo / "npz"
+    reports = repo / "runtime" / "reports"
+    npz_root.mkdir()
+    reports.mkdir(parents=True)
+    events.write_text("event_id\nE1\n", encoding="utf-8")
+    manifest.write_bytes(b"manifest-bytes")
+    (npz_root / "one.npz").write_bytes(b"npz-bytes")
+    events_hash = hashlib.sha256(events.read_bytes()).hexdigest()[:32]
+    lake_hash = hashlib.sha256(manifest.read_bytes()).hexdigest()[:32]
+    (reports / "paid_screen_ready_gate.json").write_text(
+        json.dumps(
+            {
+                "ready_for_full_run": True,
+                "pilot_hashes": {
+                    "events_csv_hash": events_hash,
+                    "lake_manifest_hash": lake_hash,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (reports / "vbt_full_run_declaration.json").write_text(
+        json.dumps(
+            {
+                "git_head": head,
+                "events_csv_hash": events_hash,
+                "lake_manifest_hash": lake_hash,
+            }
+        ),
+        encoding="utf-8",
+    )
+    shutil.copy2(SCRIPTS / "vast_remote_verify.sh", repo / "vast_remote_verify.sh")
+    env = os.environ.copy()
+    env.update(
+        {
+            "DEPLOY_REPO": ".",
+            "DEPLOY_EVENTS": "events.csv",
+            "DEPLOY_MANIFEST": "manifest.parquet",
+            "DEPLOY_HEAD": head,
+            "DEPLOY_NPZ_ROOT": "npz",
+            "DEPLOY_PROBE_N": "1",
+        }
+    )
+    proc = subprocess.run(
+        ["bash", "vast_remote_verify.sh"],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "REMOTE_VERIFY_PASS" in proc.stdout
+
+
+def test_vast_remote_verify_rejects_manifest_json(tmp_path: Path) -> None:
+    if shutil.which("bash") is None:
+        pytest.skip("requires bash")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    shutil.copy2(SCRIPTS / "vast_remote_verify.sh", repo / "vast_remote_verify.sh")
+    env = os.environ.copy()
+    env.update(
+        {
+            "DEPLOY_REPO": ".",
+            "DEPLOY_EVENTS": "events.csv",
+            "DEPLOY_MANIFEST": "manifest.json",
+            "DEPLOY_HEAD": "deadbeef",
+            "DEPLOY_NPZ_ROOT": "npz",
+        }
+    )
+    proc = subprocess.run(
+        ["bash", "vast_remote_verify.sh"],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode != 0
+    assert "manifest.parquet" in proc.stderr
 
 
 def test_vast_ssh_script_uses_current_branch_not_hardcoded_main() -> None:

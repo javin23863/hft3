@@ -23,7 +23,7 @@ Canonical repo: `C:\Users\MSI\repos\hft3`. Full Fable reference: `C:\Users\MSI\.
 
 ## 2. Ponytail mindset (mandatory second — before codebase)
 
-Apply the ponytail lazy-senior-dev ladder on every implementation: YAGNI → stdlib → native → installed dep → one line → minimum that works. **Cursor runtime (#2):** `.cursor/rules/01-ponytail-mindset.mdc`. Upstream: https://github.com/DietrichGebert/ponytail · Vendored: `vendor/ponytail/` · Charter: `docs/ai/PONYTAIL.md`. Never cut validation, security, or finance/math invariants. Vast rent/SSH: `vastai` CLI + `scripts/vast_ssh_run_vbt_paid_screen.sh`.
+Apply the ponytail lazy-senior-dev ladder on every implementation: YAGNI → stdlib → native → installed dep → one line → minimum that works. **Cursor runtime (#2):** `.cursor/rules/01-ponytail-mindset.mdc`. Upstream: https://github.com/DietrichGebert/ponytail · Vendored: `vendor/ponytail/` · Charter: `docs/ai/PONYTAIL.md`. Never cut validation, security, or finance/math invariants. Vast rent/inspect uses `vastai` CLI; paid-screen deploy uses `scripts/vast_deploy_and_verify.ps1` and must print `DEPLOY_CONTRACT_PASS`.
 
 ## 3. When the operator says **“latency test”**
 

@@ -1,7 +1,7 @@
 # Autoresearch Performance Audit — Phase 5 (2026-06-20)
 
-Assignment: `docs/project/AUTONOMOUS_RESEARCH_PIPELINE_DEVELOPER_ASSIGNMENT.md` §19  
-Branch: `cursor/vast-vbt-workflow`  
+Assignment: `docs/project/AUTONOMOUS_RESEARCH_PIPELINE_DEVELOPER_ASSIGNMENT.md` §19
+Branch: `cursor/vast-vbt-workflow`
 Prior commits: `c90bd870` (Phase 4 completion/resume), `f5c08439` (fail-closed resume)
 
 ## Executive summary

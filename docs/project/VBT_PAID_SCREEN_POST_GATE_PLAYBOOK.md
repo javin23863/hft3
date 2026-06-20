@@ -137,7 +137,7 @@ pip install 'vectorbt[rust]==1.0.0'
 
 ```bash
 export HFT3_NPZ_ROOT=/data/npz
-export HFT3_MANIFEST_PATH=/data/npz/manifest.json
+export HFT3_MANIFEST_PATH=/data/npz/manifest.parquet
 # hash must match declaration lake_manifest_hash
 ```
 
@@ -218,20 +218,17 @@ Resume: `export VBT_RESUME=1`. Cache/recycle knobs: `VBT_CACHE_MEMORY_LIMIT_MB`,
 `VBT_CACHE_MAX_ENTRIES`, `VBT_MAX_BATCHES_BEFORE_RECYCLE`. See
 [PAID_SCREEN_OPS_COMMANDS.md](PAID_SCREEN_OPS_COMMANDS.md).
 
-From workstation via SSH:
+From workstation deploy contract:
 
-```bash
-# Preferred: separate host and port (non-22 ports require this)
-export VAST_SSH_HOST='root@<vast-host>'
-export VAST_SSH_PORT='<port>'
-bash scripts/vast_ssh_run_vbt_paid_screen.sh
-
-# Or ssh-config alias / host-only (port from ~/.ssh/config when applicable)
-export VAST_SSH_TARGET='<vast-ssh-alias-or-user@host>'
-bash scripts/vast_ssh_run_vbt_paid_screen.sh
+```powershell
+$env:VAST_SSH_HOST = 'root@<vast-host>'
+$env:VAST_SSH_PORT = '<port>'
+# Optional; defaults to the current checked-out branch.
+$env:HFT3_VAST_GIT_BRANCH = 'cursor/autoresearch-pr-c-phases-5-7'
+.\scripts\vast_deploy_and_verify.ps1
 ```
 
-Do **not** embed `-p <port>` inside `VAST_SSH_TARGET`; the wrapper passes host and port as separate `ssh`/`scp` arguments.
+Do not start the full run unless the deploy contract prints `DEPLOY_CONTRACT_PASS`.
 
 Manual equivalent (after D2 unit generation):
 

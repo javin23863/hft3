@@ -5,7 +5,7 @@ param(
     [string]$SshHost = $(if ($env:VAST_SSH_HOST) { $env:VAST_SSH_HOST } else { "root@ssh7.vast.ai" }),
     [int]$SshPort = $(if ($env:VAST_SSH_PORT) { [int]$env:VAST_SSH_PORT } else { 15808 }),
     [string]$RemoteRepo = $(if ($env:VAST_REMOTE_REPO) { $env:VAST_REMOTE_REPO } else { "/root/hft3/repo" }),
-    [string]$GitBranch = $(if ($env:HFT3_VAST_GIT_BRANCH) { $env:HFT3_VAST_GIT_BRANCH } else { "cursor/vast-vbt-workflow" }),
+    [string]$GitBranch = $(if ($env:HFT3_VAST_GIT_BRANCH) { $env:HFT3_VAST_GIT_BRANCH } else { "" }),
     [string]$RepoRoot = $(if ($env:HFT3_REPO) { $env:HFT3_REPO } else { (Resolve-Path (Join-Path $PSScriptRoot "..")).Path }),
     [string]$GateFile = "runtime/reports/paid_screen_ready_gate.json",
     [string]$EventsCsv = "packages/data_system/config/events.csv",
@@ -36,28 +36,53 @@ function Get-FileSha256Prefix([string]$Path) {
 }
 
 Set-Location $RepoRoot
+if (-not $GitBranch) {
+    $GitBranch = (git branch --show-current).Trim()
+    if (-not $GitBranch) {
+        throw "GitBranch not provided and current checkout is detached; set HFT3_VAST_GIT_BRANCH"
+    }
+}
 $gatePath = Join-Path $RepoRoot $GateFile
 $eventsPath = Join-Path $RepoRoot $EventsCsv
+$declPath = Join-Path $RepoRoot "runtime/reports/vbt_full_run_declaration.json"
 
 if (-not (Test-Path $gatePath)) { throw "Gate file missing: $gatePath" }
 if (-not (Test-Path $eventsPath)) { throw "events.csv missing: $eventsPath" }
+if (-not (Test-Path $declPath)) { throw "Full-run declaration missing: $declPath" }
 if (-not $ManifestParquet -or -not (Test-Path $ManifestParquet)) {
     throw "manifest.parquet missing (set HFT3_MANIFEST_PATH or place at C:\hft3-lake\manifest.parquet)"
 }
 
 $gate = Get-Content $gatePath -Raw | ConvertFrom-Json
+$decl = Get-Content $declPath -Raw | ConvertFrom-Json
 if (-not $gate.ready_for_full_run) { throw "Gate ready_for_full_run is not true" }
 
 $expectedEventsHash = $gate.pilot_hashes.events_csv_hash
 $expectedLakeHash = $gate.pilot_hashes.lake_manifest_hash
 $localEventsHash = Get-FileSha256Prefix $eventsPath
 $localLakeHash = Get-FileSha256Prefix $ManifestParquet
+$declHead = [string]$decl.git_head
+$declEventsHash = [string]$decl.events_csv_hash
+$declLakeHash = [string]$decl.lake_manifest_hash
+$repoHead = (git rev-parse HEAD).Trim()
 
 if ($localEventsHash -ne $expectedEventsHash) {
     throw "Local events.csv hash $localEventsHash != gate $expectedEventsHash"
 }
 if ($localLakeHash -ne $expectedLakeHash) {
     throw "Local manifest.parquet hash $localLakeHash != gate $expectedLakeHash"
+}
+if (-not $declHead) {
+    throw "Declaration git_head missing in $declPath"
+}
+if ($repoHead -ne $declHead) {
+    throw "Local HEAD $repoHead != declaration git_head $declHead"
+}
+if ($declEventsHash -ne $expectedEventsHash) {
+    throw "Declaration events_csv_hash $declEventsHash != gate $expectedEventsHash"
+}
+if ($declLakeHash -ne $expectedLakeHash) {
+    throw "Declaration lake_manifest_hash $declLakeHash != gate $expectedLakeHash"
 }
 
 $knownHostsDir = Join-Path $RepoRoot "runtime" "vast_known_hosts"
@@ -92,6 +117,9 @@ $ErrorActionPreference = 'Continue'
 & git fetch origin $GitBranch 2>&1 | Out-Null
 $ErrorActionPreference = $prevEap
 $localHead = (git rev-parse "origin/$GitBranch").Trim()
+if ($localHead -ne $declHead) {
+    throw "Origin/$GitBranch head $localHead != declaration git_head $declHead"
+}
 
 Write-Step "Remote repo sync"
 $syncCmd = @"
@@ -109,12 +137,15 @@ echo REMOTE_HEAD=\$(git rev-parse HEAD)
 Invoke-RemoteBash $syncCmd
 if ($LASTEXITCODE -ne 0) { throw "Remote sync failed exit=$LASTEXITCODE" }
 
-Write-Step "SCP gate, events.csv, manifest.parquet"
+Write-Step "SCP gate, declaration, events.csv, manifest.parquet"
 $remoteGate = "$RemoteRepo/runtime/reports/paid_screen_ready_gate.json"
+$remoteDecl = "$RemoteRepo/runtime/reports/vbt_full_run_declaration.json"
 $remoteEvents = "$RemoteRepo/$EventsCsv"
 & ssh @sshOpts $SshHost "mkdir -p $(Split-Path $remoteEvents -Parent) $RemoteRepo/runtime/reports $(Split-Path $RemoteManifestPath -Parent)"
 & scp @scpOpts $gatePath "${SshHost}:${remoteGate}"
 if ($LASTEXITCODE -ne 0) { throw "scp gate failed exit=$LASTEXITCODE" }
+& scp @scpOpts $declPath "${SshHost}:${remoteDecl}"
+if ($LASTEXITCODE -ne 0) { throw "scp declaration failed exit=$LASTEXITCODE" }
 & scp @scpOpts $eventsPath "${SshHost}:${remoteEvents}"
 if ($LASTEXITCODE -ne 0) { throw "scp events failed exit=$LASTEXITCODE" }
 & scp @scpOpts $ManifestParquet "${SshHost}:${RemoteManifestPath}"
