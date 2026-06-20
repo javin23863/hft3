@@ -539,7 +539,6 @@ def build_statistical_robustness_gate_receipt(
         evidence,
         allow_partial=allow_partial,
     )
-    unique_passed = sorted(set(passed_checks))
     status = "PASS" if len(passed_checks) == req_count and not failure_reasons else "REJECT"
     if not allow_partial and any(
         str(evidence.get(key) or "").lower() == "not_run"
@@ -547,13 +546,37 @@ def build_statistical_robustness_gate_receipt(
     ):
         status = "REJECT"
         failure_reasons.append("partial_robustness_not_run")
-    passed_count = req_count if status == "PASS" else len(unique_passed)
+    unique_passed = sorted(set(passed_checks))
+    passed_count = len(unique_passed)
     if status == "PASS":
         failed_check_count = 0
         missing_check_count = 0
     else:
-        failed_check_count = max(1, req_count - passed_count)
-        missing_check_count = max(0, req_count - passed_count - failed_check_count)
+        failed_names: set[str] = set()
+        missing_names: set[str] = set()
+        for reason in failure_reasons:
+            matched = False
+            for check_name in required_checks:
+                if reason.startswith(check_name):
+                    matched = True
+                    if check_name in unique_passed:
+                        break
+                    if reason.endswith("_not_run") or "_not_run" in reason:
+                        missing_names.add(check_name)
+                    else:
+                        failed_names.add(check_name)
+                    break
+            if not matched and reason not in unique_passed:
+                failed_names.add("_unmapped")
+        failed_check_count = len(failed_names)
+        missing_check_count = len(missing_names)
+        # Enforce strict invariant: passed + failed + missing == required
+        accounted = passed_count + failed_check_count + missing_check_count
+        if accounted < req_count:
+            missing_check_count += req_count - accounted
+        elif accounted > req_count:
+            overflow = accounted - req_count
+            missing_check_count = max(0, missing_check_count - overflow)
     receipt = build_gate_receipt(
         gate_id=GATE_STATISTICAL,
         gate_version=STATISTICAL_GATE_VERSION,

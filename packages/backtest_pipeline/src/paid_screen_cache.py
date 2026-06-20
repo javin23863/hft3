@@ -56,12 +56,13 @@ class BoundedLRUCache:
         return None
 
     def put(self, key: str, value: Any,
-            source_hashes: dict[str, str] | None = None) -> None:
+            source_hashes: dict[str, str] | None = None) -> bool:
+        """Store *value* under *key*. Returns False when oversized (fail-closed)."""
         size = _estimate_size_bytes(value)
 
         if size > self.max_memory_bytes:
             self.oversized_reject_count += 1
-            return
+            return False
 
         if key in self._store:
             evicted = self._store.pop(key)
@@ -82,6 +83,7 @@ class BoundedLRUCache:
             source_hashes=source_hashes or {},
         )
         self._current_bytes += size
+        return True
 
     def clear(self) -> None:
         self._store.clear()

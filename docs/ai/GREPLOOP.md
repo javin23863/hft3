@@ -35,10 +35,16 @@ Video-derived additions from `https://youtu.be/WIDIV8oDDC8`:
 with implementation phases.
 
 **Stacked split PRs (A→B→C):** do **not** ping `@greptileai` on PR-B or PR-C
-until the prior PR in the stack reaches **≥ 4/5 Greptile confidence** with
-**zero unresolved actionable** findings on **current head SHA**. Premature
-Greptile on downstream PRs does not count toward merge-ready and must be
-paused with an explicit PR comment.
+until the prior PR in the stack has **zero open actionable findings** on
+**current head SHA** (0 P1, 0 P2, 0 cavecrew 🔴, 0 cavecrew 🟡). Greptile
+confidence score is **advisory** — the **code perfection gate is primary**.
+Premature Greptile on downstream PRs does not count toward merge-ready and must
+be paused with an explicit PR comment.
+
+> **Owner override (2026-06-20, zero tolerance):** Supersedes the prior
+> **≥4/5 + 5-iteration STOP FAIL** policy. Iterations continue **without cap**
+> until **0 actionable P1 AND 0 actionable P2 AND 0 cavecrew 🔴 AND 0 cavecrew 🟡**
+> on current head. Do **not** waive by merge or confidence score alone.
 
 Run local preflight after each edit pass and before claiming the diff is ready
 for the dual-pass reviewer:
@@ -142,21 +148,27 @@ gh api "repos/{owner}/{repo}/pulls/<PR_NUMBER>/comments"
    positives as review notes, not architecture changes.
 
 5. Stop when **Greptile** on **current head SHA** reports:
-   - confidence **≥ 4/5** (4/5 or 5/5 in Greptile summary when present), **and**
-   - zero unresolved actionable findings, **and**
+   - **zero unresolved actionable P1 findings**, **and**
+   - **zero unresolved actionable P2 findings**, **and**
+   - **zero cavecrew-reviewer 🔴 and 🟡** on the fix diff, **and**
    - scope-appropriate verification green.
 
-   Run at most **five** Greptile fix iterations per PR. On max-iteration stop,
-   report remaining unresolved comments and do not claim merge-ready. Do not
-   advance to the next split PR (PR-B/C) or Phase 10 until the current PR
-   meets **≥ 4/5 confidence + zero actionable** on current head.
+   Greptile confidence (≥4/5) is **advisory only** — it does **not** override
+   the perfection gate above.
+
+   > **Owner override (2026-06-20):** The former **five-iteration cap** and
+   > **STOP FAIL at iteration 5** are **superseded**. Continue fix → review →
+   > verify → `@greptileai` loops **without limit** until all actionable
+   > findings are closed or proven false-positive with test evidence. Do **not**
+   > advance to the next split PR (PR-B/C) or Phase 10 until the current PR
+   > meets the perfection gate on current head.
 
 ### Stacked PR gate (A→B→C)
 
 | Prior PR | Before Greptile on next PR |
 |----------|---------------------------|
-| PR-A (#8) | PR-B (#9) blocked until PR-A **≥ 4/5** + 0 actionable |
-| PR-B (#9) | PR-C (#10) blocked until PR-B **≥ 4/5** + 0 actionable |
+| PR-A (#8) | PR-B (#9) blocked until PR-A **0 actionable + 0 🔴 + 0 🟡** on head |
+| PR-B (#9) | PR-C (#10) blocked until PR-B **0 actionable + 0 🔴 + 0 🟡** on head |
 
 If an agent prematurely triggers Greptile on a downstream PR, post a pause
 comment and resume PR-A (or the lowest incomplete PR) only.

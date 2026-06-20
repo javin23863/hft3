@@ -67,6 +67,8 @@ class FsV1ScreenContext:
     vix_ts: np.ndarray | None
     vix_X: np.ndarray | None
     leader_legs: tuple[tuple[str, LeaderLegStore], ...] = ()
+    leader_resolution_source: str = "unknown"
+    missing_leader_symbols: tuple[str, ...] = ()
 
 
 def _manifest_record_hash(record: Mapping[str, Any]) -> str:
@@ -148,12 +150,17 @@ def _import_cross_asset_assembly_module():
     return mod
 
 
-def _default_leaders_for_target(target_symbol: str) -> tuple[str, ...]:
-    """Leader list without importing replay package __init__ (hftbacktest chain)."""
+def _default_leaders_for_target(target_symbol: str) -> tuple[tuple[str, ...], str]:
+    """Leader list without importing replay package __init__ (hftbacktest chain).
+
+    Returns ``(leaders, resolution_source)`` where *resolution_source* is
+    ``cross_asset_module`` when the replay helper loaded, else ``static_fallback``.
+    """
     try:
-        return _import_cross_asset_assembly_module().default_leaders_for_target(
+        leaders = _import_cross_asset_assembly_module().default_leaders_for_target(
             target_symbol
         )
+        return tuple(str(x) for x in leaders), "cross_asset_module"
     except Exception:
         pass
     base = str(target_symbol or "MES").split(".")[0].upper()
@@ -163,21 +170,26 @@ def _default_leaders_for_target(target_symbol: str) -> tuple[str, ...]:
         "ES": ("NQ", "ZN"),
         "NQ": ("ES", "ZN"),
     }
-    return fallback.get(base, ("ES",))
+    return fallback.get(base, ("ES",)), "static_fallback"
 
 
 def _load_leader_legs(
     root: Path,
     event_id: str,
     target_symbol: str,
-) -> tuple[tuple[str, LeaderLegStore], ...]:
+) -> tuple[tuple[tuple[str, LeaderLegStore], ...], tuple[str, ...], str]:
+    """Load PIT leader legs; return (loaded, missing_symbols, resolution_source)."""
     target = str(target_symbol).split(".")[0].upper()
+    expected_leaders, resolution_source = _default_leaders_for_target(target)
     legs: list[tuple[str, LeaderLegStore]] = []
-    for leader in _default_leaders_for_target(target):
+    missing: list[str] = []
+    for leader in expected_leaders:
         leg = _load_leader_leg_store(root, event_id, leader)
         if leg is not None:
             legs.append((leader, leg))
-    return tuple(legs)
+        else:
+            missing.append(leader)
+    return tuple(legs), tuple(missing), resolution_source
 
 
 def cross_asset_features_at_vis_ts(
@@ -313,7 +325,9 @@ def resolve_fs_v1_screen_context(
             vix_cols = []
 
     has_vix = vix_ts is not None and vix_X is not None and len(vix_ts) > 0
-    leader_legs = _load_leader_legs(root, event_id, resolved_symbol)
+    leader_legs, missing_leaders, leader_source = _load_leader_legs(
+        root, event_id, resolved_symbol
+    )
     return FsV1ScreenContext(
         symbol=resolved_symbol,
         event_id=event_id,
@@ -327,6 +341,8 @@ def resolve_fs_v1_screen_context(
         vix_ts=vix_ts,
         vix_X=vix_X,
         leader_legs=leader_legs,
+        leader_resolution_source=leader_source,
+        missing_leader_symbols=missing_leaders,
     )
 
 

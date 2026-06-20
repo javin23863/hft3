@@ -680,6 +680,22 @@ def _drain_workers(
             )
         except queue.Empty:
             if expected_batches > 0 and workers and _workers_all_dead(workers):
+                while True:
+                    try:
+                        batch_id, results, profiler_summary = result_queue.get_nowait()
+                    except queue.Empty:
+                        break
+                    collected.append((batch_id, results, profiler_summary))
+                    ok_units = sum(1 for r in results if r.status == "OK")
+                    failed_units = sum(1 for r in results if r.status == "ERROR")
+                    print(
+                        f"[drain] batch={batch_id} units={len(results)} "
+                        f"ok={ok_units} failed={failed_units} "
+                        f"collected={len(collected)}/{expected_batches} (post-exit drain)",
+                        flush=True,
+                    )
+                    if on_batch_collected is not None:
+                        on_batch_collected(batch_id, results, profiler_summary)
                 stop_reason = _worker_exit_stop_reason(workers)
             continue
         collected.append((batch_id, results, profiler_summary))

@@ -60,8 +60,27 @@ if ($localLakeHash -ne $expectedLakeHash) {
     throw "Local manifest.parquet hash $localLakeHash != gate $expectedLakeHash"
 }
 
-$sshOpts = @("-o", "ConnectTimeout=15", "-o", "StrictHostKeyChecking=accept-new", "-p", "$SshPort")
-$scpOpts = @("-o", "ConnectTimeout=15", "-o", "StrictHostKeyChecking=accept-new", "-P", "$SshPort")
+$knownHostsDir = Join-Path $RepoRoot "runtime" "vast_known_hosts"
+New-Item -ItemType Directory -Force -Path $knownHostsDir | Out-Null
+$knownHostsFile = Join-Path $knownHostsDir "known_hosts"
+$hostOnly = ($SshHost -split "@")[-1]
+$keyscan = & ssh-keyscan -p $SshPort -H $hostOnly 2>$null
+if (-not $keyscan) {
+    throw "ssh-keyscan failed for ${hostOnly}:${SshPort} — fail-closed (no accept-new)"
+}
+$keyscan | Set-Content -Path $knownHostsFile -Encoding ascii
+$sshOpts = @(
+    "-o", "ConnectTimeout=15",
+    "-o", "StrictHostKeyChecking=yes",
+    "-o", "UserKnownHostsFile=$knownHostsFile",
+    "-p", "$SshPort"
+)
+$scpOpts = @(
+    "-o", "ConnectTimeout=15",
+    "-o", "StrictHostKeyChecking=yes",
+    "-o", "UserKnownHostsFile=$knownHostsFile",
+    "-P", "$SshPort"
+)
 
 Write-Step "Push branch $GitBranch to origin"
 if (-not $SkipPush) {

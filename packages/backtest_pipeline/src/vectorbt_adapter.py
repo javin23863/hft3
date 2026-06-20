@@ -2510,7 +2510,7 @@ def compute_raw_hypothesis_signal_series(
     pipeline = MarketStatePipeline()
     n_bars = len(ohlcv)
     close = _ohlcv_column(ohlcv, "close")
-    signal = np.zeros(n_bars)
+    raw_signal = np.zeros(n_bars)
 
     for i in range(n_bars):
         bar_close = float(close[i])
@@ -2524,8 +2524,13 @@ def compute_raw_hypothesis_signal_series(
         )
         state = pipeline.process_event(event)
         if state is not None:
-            signal[i] = float(hypothesis_cls.evaluate(state))
+            raw_signal[i] = float(hypothesis_cls.evaluate(state))
 
+    # Bar-synthetic MBO uses same-bar close — defer one bar for PIT / executable lag
+    # parity with ``_shift_signal_to_executable_bar`` (filtration F_t).
+    signal = np.zeros(n_bars, dtype=np.float64)
+    if n_bars > 1:
+        signal[1:] = raw_signal[:-1]
     return signal
 
 

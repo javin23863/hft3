@@ -1424,22 +1424,22 @@ The Greptile gate passes only when:
 
 ```text
 Greptile reviewed the current PR head SHA
-Greptile confidence ≥ 4/5 (4/5 or 5/5 in summary when present)
-zero unresolved actionable Greptile findings remain
+zero unresolved actionable Greptile P1 findings
+zero unresolved actionable Greptile P2 findings
+zero cavecrew-reviewer 🔴 and 🟡 on current fix diff
 all required local verification is green
 ```
 
-Run at most five Greptile iterations. Do **not** advance to split PR-B/C or
-Phase 10 until the current PR meets confidence ≥ 4/5 **and** zero actionable
-findings on current head. Codex/@codex review does **not** satisfy this gate.
-After five unsuccessful iterations:
+Greptile confidence ≥ 4/5 is **advisory only** — it does **not** substitute
+for the perfection gate above.
 
-```text
-pr-greptile-review: BLOCKED
-merge-ready: no
-```
+> **Owner zero-tolerance override (2026-06-20):** Perfection required — **no
+> waive-by-merge**, **no five-iteration cap**. Continue fix → dual-pass review →
+> verify → `@greptileai` until **0 P1 + 0 P2 actionable + 0 🔴 + 0 🟡** on
+> current head. Codex/@codex review does **not** satisfy this gate.
 
-Report all remaining findings.
+After any unsuccessful iteration, report all remaining findings — do **not**
+claim merge-ready until the perfection gate is met.
 
 If Greptile is genuinely unavailable or unauthenticated:
 

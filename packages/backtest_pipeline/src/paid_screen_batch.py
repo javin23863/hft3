@@ -33,8 +33,6 @@ def _cache_get(cache, key):
     the NPZ cache only stores non-None OHLCV arrays, so None always
     means a miss here.
     """
-    if isinstance(cache, BoundedLRUCache):
-        return cache.get(key)
     return cache.get(key)
 
 
@@ -258,6 +256,33 @@ def _resolve_signal_implementation_hash(repo_root: str) -> str:
     return digest.hexdigest()[:32] if found else "unknown"
 
 
+def _resolve_npz_digest_for_unit(unit: PaidScreenUnit, ctx: WorkerContext) -> str:
+    """Content digest for the NPZ or fs_v1 store backing *unit* (batching provenance)."""
+    fs_ctx = _try_resolve_fs_v1_context(unit, ctx)
+    if fs_ctx is not None:
+        if fs_ctx.content_hash:
+            return fs_ctx.content_hash
+        try:
+            return hash_file_content(fs_ctx.store_path)
+        except FileNotFoundError:
+            return "fs_v1_store_missing"
+    from data_system.src.event_data_resolver import npz_search_dirs
+    from backtest_pipeline.src.vectorbt_adapter import _npz_candidates_for_event
+
+    repo_root = Path(ctx.repo_root)
+    candidates = _npz_candidates_for_event(
+        npz_search_dirs(repo_root),
+        unit.event_id,
+        unit.symbol,
+    )
+    if not candidates:
+        return "no_npz"
+    try:
+        return hash_file_content(candidates[0])
+    except FileNotFoundError:
+        return "npz_missing"
+
+
 def resolve_batching_hashes(
     unit: PaidScreenUnit,
     ctx: WorkerContext,
@@ -268,10 +293,12 @@ def resolve_batching_hashes(
     model_registry_hash: str | None = None,
 ) -> tuple[str, str, str, str]:
     """Resolve content hashes used to build a full ``BatchingKey``."""
+    npz_digest = _resolve_npz_digest_for_unit(unit, ctx)
     dm = data_manifest_hash or hashlib.sha256(json.dumps({
         "event_id": unit.event_id,
         "lake_manifest_hash": ctx.lake_manifest_hash,
         "events_csv_hash": ctx.events_csv_hash,
+        "npz_digest": npz_digest,
     }, sort_keys=True).encode()).hexdigest()[:32]
     fs_id = unit.feature_set_id or "default"
     fs_hash = feature_set_hash or hashlib.sha256(json.dumps({
@@ -687,6 +714,11 @@ def screen_paid_batch(
 
     results: list[UnitScreeningResult] = []
 
+    def _fold_lru_profiler_delta() -> None:
+        if use_lru:
+            profiler.cache_hits += data_cache.hit_count - pre_hits
+            profiler.cache_misses += data_cache.miss_count - pre_misses
+
     if not units:
         return results
 
@@ -719,14 +751,6 @@ def screen_paid_batch(
             profiler.cache_hits += 1
     profiler.end_stage("npz_discovery")
 
-    # When using a BoundedLRUCache, its get()/put() already maintain the
-    # authoritative hit_count/miss_count. Fold the *delta* (this batch's
-    # contribution) into the profiler so the profiler reflects the cache's
-    # view without double-counting across multiple batches.
-    if use_lru:
-        profiler.cache_hits += data_cache.hit_count - pre_hits
-        profiler.cache_misses += data_cache.miss_count - pre_misses
-
     if ohlcv is None:
         # All units fail — no data
         for unit in units:
@@ -738,12 +762,15 @@ def screen_paid_batch(
                 status="ERROR",
                 error="no_ohlcv_data",
             ))
+        _fold_lru_profiler_delta()
         return results
 
     # Cache-wiring / disabled-screening path: resolve models per unit group,
     # return SKIPPED for successes and ERROR for per-unit resolution failures.
     if _should_skip_matrix_screening(run_screening, ohlcv_from_cache, data_cache):
-        return _resolve_models_without_screening(units, context, profiler)
+        skipped = _resolve_models_without_screening(units, context, profiler)
+        _fold_lru_profiler_delta()
+        return skipped
 
     # v1 screening auto-selects fs_v1 signal computer; v2 matrix path must too.
     fs_v1_ctx = _get_or_load_fs_v1_context(
@@ -833,17 +860,21 @@ def screen_paid_batch(
 
             # Write per-unit artifacts and collect results
             for unit in model_units:
+                unit_parsed = build_structured_parsed_hypothesis(unit, model_entry)
+                unit_candidate = _build_candidate_model(
+                    unit, model_entry, Path(context.repo_root), unit_parsed
+                )
                 artifact_dir = _worker_scratch_artifact_dir(
                     context.repo_root, unit.unit_id, scratch_root=scratch_root
                 )
                 os.makedirs(artifact_dir, exist_ok=True)
                 artifact_path = os.path.join(artifact_dir, "screening_artifact.json")
 
-                # Write the artifact
+                # Write the artifact with per-unit candidate attribution
                 artifact_hash = _write_screening_artifact(
                     artifact_path, filter_result,
                     unit, model_entry, context, ohlcv_hash, profiler,
-                    candidate=candidate,
+                    candidate=unit_candidate,
                 )
 
                 result = UnitScreeningResult(
@@ -873,4 +904,5 @@ def screen_paid_batch(
                     elapsed_seconds=elapsed,
                 ))
 
+    _fold_lru_profiler_delta()
     return results
