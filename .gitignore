@@ -119,6 +119,7 @@ research_cards/promotion/**
 artifacts/research_cards/workbench_runs/**
 !artifacts/research_cards/workbench_runs/.gitkeep
 vendor/openfoundry_upstream_test/
+vendor/ponytail/
 models/
 *.onnx
 
@@ -155,9 +156,29 @@ runtime/data_audits/model_coverage_after_paid_sync.json
 runtime/data_audits/model_coverage_after_paid_sync.md
 runtime/data_downloads/
 runtime/*.log
+runtime/reports/*.log
 runtime/*.png
 runtime/*.txt
 runtime/_*.json
+runtime/_*.py
+runtime/_*.sh
+runtime/_*.ps1
+runtime/_*.bat
+runtime/paid_screen_scratch/
+runtime/vault-gate/
+runtime/reports/npz_parts*/
+runtime/reports/_*
+runtime/reports/vbt_full_units.jsonl
+runtime/reports/*.tar
+runtime/reports/*.bin
+runtime/vbt_full_v2_cost_monitor*.jsonl
+runtime/launch_vbt_*.sh
+runtime/poll_vbt_*.sh
+runtime/relaunch_vbt_*.sh
+runtime/npz_sync_*.bat
+research_cards/autoresearch/**
+!research_cards/autoresearch/.gitkeep
+_rebase_stash/
 runtime/_m6_*/
 runtime/cockpit/
 runtime/corrupt_npz_redownload.json

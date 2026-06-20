@@ -22,7 +22,7 @@ Output: `runtime/reports/ontology_gate_vast_m6_validation.json` (expect `actual_
 
 ## Required pipeline order (canonical)
 
-1. **VectorBT paid screen** — `scripts/run_vectorbt_paid_screen.py` / Vast launch scripts per `docs/project/VBT_PAID_SCREEN_RUNBOOK.md`
+1. **VectorBT paid screen** — `scripts/run_paid_screen.py` / Vast launch scripts per `docs/project/VBT_PAID_SCREEN_RUNBOOK.md`
 2. **Screening artifact** — `screening_artifact.json` passing `validate_screening_artifact` + `feature_plane_validation_errors`
 3. **Stage A survivors** (when applicable) — `stage_a_survivors.json`
 4. **HftBacktest realism** — `run_event_universe.py --from-stage-a` with latency band `6.255764` ms (M5 authority), not bare `--rescan` full matrix

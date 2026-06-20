@@ -74,7 +74,7 @@ HftBacktest is the heavier downstream realism pass on **VectorBT promoted output
 
 ## Vast workers
 
-On 256 vCPU hosts: **≥230 workers** (`run_vectorbt_paid_screen.py --workers 230`). Do not run full rent at 4 workers — that is smoke-only topology.
+On 256 vCPU hosts: **≥230 workers** (`run_paid_screen.py --workers 230` or `run_vectorbt_paid_screen_v2.py --workers 230`). Do not run full rent at 4 workers — that is smoke-only topology.
 
 ```bash
 bash scripts/run_vbt_paid_screen_vast_full.sh

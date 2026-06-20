@@ -49,11 +49,12 @@ from backtest_pipeline.src.research_clock import (
     research_clock_validation_errors,
     validate_research_clock,
 )
+from backtest_pipeline.src.robustness_bridge import compute_robustness_evidence
 from backtest_pipeline.src.research_pipeline_stages import (
     STAGE_1_VECTORBT_SCREEN,
-    pipeline_stage_stamp,
+    STAGE_2_PROMOTED_AGGREGATION,
+    stamp_artifact,
 )
-from backtest_pipeline.src.robustness_bridge import compute_robustness_evidence
 from backtest_pipeline.src.surface_stability import compute_surface_stability
 from research_pipeline.types import CandidateModel, ParsedHypothesis
 
@@ -471,6 +472,15 @@ def _json_primitive_screening_payload(value: Any) -> Any:
         return _json_primitive_screening_payload(value.item())
     if isinstance(value, (str, int, bool)) or value is None:
         return value
+    try:
+        import pandas as pd
+
+        if pd.isna(value):
+            return None
+        if isinstance(value, pd.Timestamp):
+            return value.isoformat()
+    except ImportError:
+        pass
     if isinstance(value, float):
         if np.isfinite(value):
             return value
@@ -483,12 +493,19 @@ def _hash_payload(value: Any) -> str:
 
 
 def _strip_screening_hash_exclusions(value: Any) -> Any:
-    excluded = {"screening_artifact_hash", "created_at_utc", "timestamp_utc", "updated_at_utc"}
+    excluded = {
+        "screening_artifact_hash",
+        "created_at_utc",
+        "timestamp_utc",
+        "updated_at_utc",
+        "screen_performance",
+    }
+    pipeline_prefix = "research_pipeline_"
     if isinstance(value, Mapping):
         return {
             key: _strip_screening_hash_exclusions(item)
             for key, item in value.items()
-            if key not in excluded
+            if key not in excluded and not str(key).startswith(pipeline_prefix)
         }
     if isinstance(value, list):
         return [_strip_screening_hash_exclusions(item) for item in value]
@@ -543,6 +560,15 @@ def _json_primitive_screening_payload(value: Any) -> Any:
         return _json_primitive_screening_payload(value.item())
     if isinstance(value, (str, int, bool)) or value is None:
         return value
+    try:
+        import pandas as pd
+
+        if pd.isna(value):
+            return None
+        if isinstance(value, pd.Timestamp):
+            return value.isoformat()
+    except ImportError:
+        pass
     if isinstance(value, float):
         if np.isfinite(value):
             return value
@@ -555,12 +581,19 @@ def _hash_payload(value: Any) -> str:
 
 
 def _strip_screening_hash_exclusions(value: Any) -> Any:
-    excluded = {"screening_artifact_hash", "created_at_utc", "timestamp_utc", "updated_at_utc"}
+    excluded = {
+        "screening_artifact_hash",
+        "created_at_utc",
+        "timestamp_utc",
+        "updated_at_utc",
+        "screen_performance",
+    }
+    pipeline_prefix = "research_pipeline_"
     if isinstance(value, Mapping):
         return {
             key: _strip_screening_hash_exclusions(item)
             for key, item in value.items()
-            if key not in excluded
+            if key not in excluded and not str(key).startswith(pipeline_prefix)
         }
     if isinstance(value, list):
         return [_strip_screening_hash_exclusions(item) for item in value]
@@ -1810,6 +1843,9 @@ class FilterResult:
     target_event_type_or_null: Optional[str] = None
     allowed_context_set_id_or_null: Optional[str] = None
     declared_context_sets: List[Any] = field(default_factory=list)
+    feature_recipe_hash: str = ""
+    hftbacktest_handoff_status: str = ""
+    screen_performance: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         promoted_rows = [_normalise_promoted_screening_row(p, self) for p in self.promoted]
@@ -1877,7 +1913,6 @@ class FilterResult:
             "promoted": promoted_rows,
             "rejected": rejected_rows,
         }
-        payload.update(pipeline_stage_stamp(STAGE_1_VECTORBT_SCREEN))
         payload.update(
             build_feature_plane_payload(
                 bar_construction_id=self.bar_construction_id,
@@ -1891,8 +1926,18 @@ class FilterResult:
                 overrides=self.feature_plane_overrides,
             )
         )
+        if self.feature_recipe_hash:
+            payload["feature_recipe_hash"] = self.feature_recipe_hash
+        if self.hftbacktest_handoff_status:
+            payload["hftbacktest_handoff_status"] = self.hftbacktest_handoff_status
+        if self.screen_performance:
+            payload["screen_performance"] = dict(self.screen_performance)
         payload["screening_artifact_hash"] = compute_screening_artifact_hash(payload)
         validate_screening_artifact(payload)
+        if payload.get("promoted_count", 0) > 0:
+            stamp_artifact(payload, STAGE_2_PROMOTED_AGGREGATION)
+        else:
+            stamp_artifact(payload, STAGE_1_VECTORBT_SCREEN)
         return payload
 
 
@@ -2085,17 +2130,52 @@ def _new_filter_result(
     )
 
 
+def _npz_candidates_for_event(
+    search_dirs: list[Path],
+    event_id: str,
+    symbol: str | None,
+) -> list[Path]:
+    """Return NPZ paths for *event_id*, honoring search-dir order (lake first)."""
+    from backtest_pipeline.src.fs_v1_screen_path import _store_symbol_variants
+
+    for npz_dir in search_dirs:
+        if not npz_dir.exists():
+            continue
+        if symbol:
+            for sym in _store_symbol_variants(symbol):
+                exact = npz_dir / f"{sym}_{event_id}_mbo.npz"
+                if exact.is_file():
+                    return [exact]
+            for sym in _store_symbol_variants(symbol):
+                sym_candidates = sorted(
+                    p for p in npz_dir.glob(f"*{event_id}*_mbo.npz")
+                    if p.name.startswith(f"{sym}_")
+                )
+                if sym_candidates:
+                    return sym_candidates
+        else:
+            candidates = sorted(npz_dir.glob(f"*{event_id}*_mbo.npz"))
+            if candidates:
+                return candidates
+    return []
+
+
 def _default_data_loader(
     event_id: str,
     repo_root: Path,
+    symbol: str | None = None,
 ) -> Optional[np.ndarray]:
     """Load OHLCV bars from existing HFT3 data pipeline.
     Falls back to building bars from the NPZ MBO data.
     Returns None if no data is available.
     """
-    npz_dir = repo_root / "data" / "npz"
-    candidates = list(npz_dir.glob(f"*{event_id}*_mbo.npz")) if npz_dir.exists() else []
-    candidates.extend(list(repo_root.glob(f"data/npz/*{event_id}*_mbo.npz")))
+    from data_system.src.event_data_resolver import npz_search_dirs
+
+    candidates = _npz_candidates_for_event(
+        npz_search_dirs(repo_root),
+        event_id,
+        symbol,
+    )
     if not candidates:
         return None
     npz_path = str(candidates[0])
@@ -2308,7 +2388,6 @@ _VBT_GATE_REQUIRED_STATS = (
     "Max Drawdown [%]",
 )
 _VBT2_PILOT_SKIPPED_UNMEASURED_GATE_FIELDS = (
-    "wf_consistency",
     "turnover_mean_pct",
     "param_stability_score",
     "slippage_sensitivity",
@@ -2366,7 +2445,6 @@ def _normalise_vectorbt_stats_for_gate(vbt_stats: Mapping[str, Any]) -> Tuple[Di
         "gross_return": round(total_return_pct / 100.0, 8),
         "net_return": round(total_return_pct / 100.0, 8),
         "expectancy": round(expectancy_f, 8),
-        "oos_expectancy": round(expectancy_f, 8),
         "num_trades": total_trades_i,
         "trade_count": total_trades_i,
         "max_drawdown_pct": round(max_drawdown_pct, 8),
@@ -2381,51 +2459,43 @@ def _normalise_vectorbt_stats_for_gate(vbt_stats: Mapping[str, Any]) -> Tuple[Di
     }, []
 
 
-def _evaluate_vbt2_pilot_stats_gate(
-    candidate: PromotedCandidate,
-    gates: PromotionGate,
-) -> Tuple[bool, Dict[str, Any]]:
-    """Evaluate the VBT-2 pilot gate using only official VectorBT stats fields."""
-    metrics = candidate.vectorbt_results
-    failures: List[str] = []
-    oos_expectancy = _finite_float(metrics.get("oos_expectancy"))
-    max_drawdown_pct = _finite_float(metrics.get("max_drawdown_pct"))
-    num_trades = _finite_float(metrics.get("num_trades"))
+def _hydrate_walk_forward_gate_metrics(metrics: Dict[str, Any]) -> None:
+    """Copy walk-forward OOS metrics onto the gate surface when present."""
+    aux_wf = metrics.get("auxiliary_numpy_walk_forward")
+    if not isinstance(aux_wf, Mapping):
+        return
+    for key in ("oos_expectancy", "wf_consistency"):
+        if key in aux_wf:
+            metrics[key] = aux_wf[key]
 
-    if oos_expectancy is None:
-        failures.append("missing_oos_expectancy_from_official_expectancy")
-    elif oos_expectancy < gates.min_oos_expectancy:
-        failures.append("oos_expectancy_below_threshold")
 
-    if max_drawdown_pct is None:
-        failures.append("missing_max_drawdown_pct_from_official_stats")
-    elif abs(max_drawdown_pct) > abs(gates.max_drawdown_pct):
-        failures.append("max_drawdown_above_threshold")
-
-    if num_trades is None:
-        failures.append("missing_num_trades_from_official_total_trades")
-    elif int(round(num_trades)) < gates.min_trades:
-        failures.append("num_trades_below_threshold")
-
-    return not failures, {
-        "scope": "vbt2_pilot_official_vectorbt_stats_only",
-        "used_fields": {
-            "oos_expectancy": "Expectancy",
-            "max_drawdown_pct": "Max Drawdown [%]",
-            "num_trades": "Total Trades",
-        },
-        "skipped_unmeasured_fields": list(_VBT2_PILOT_SKIPPED_UNMEASURED_GATE_FIELDS),
-        "failure_semantics": "screening_only_not_replay_or_robustness_eligible",
-        "failures": failures,
+def _is_vbt2_pilot_exempt_gate_failure(failure_code: str) -> bool:
+    """Official VectorBT stats do not measure turnover/stability/slippage yet."""
+    exempt_by_field = {
+        "turnover_mean_pct": ("missing_turnover_mean_pct", "turnover_above_threshold"),
+        "param_stability_score": (
+            "missing_param_stability_score",
+            "param_stability_below_threshold",
+        ),
+        "slippage_sensitivity": (
+            "missing_slippage_sensitivity",
+            "slippage_sensitivity_above_threshold",
+        ),
     }
+    for codes in exempt_by_field.values():
+        if failure_code in codes:
+            return True
+    return False
 
 
-def _default_signal_computer(
+def compute_raw_hypothesis_signal_series(
     cand: CandidateModel,
     ohlcv: np.ndarray,
     parsed: ParsedHypothesis,
     repo_root: Path,
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> np.ndarray:
+    """Compute the continuous hypothesis signal once (threshold applied later)."""
+    from features_engine.src.features.mbo_features import MBOEvent
     from features_engine.src.model_registry import get_hyp_id_for_slug, resolve_model_id
     from features_engine.src.hypotheses.registry import get_active_hypotheses
     from features_engine.src.pipeline.market_state_pipeline import MarketStatePipeline
@@ -2441,15 +2511,32 @@ def _default_signal_computer(
     n_bars = len(ohlcv)
     close = _ohlcv_column(ohlcv, "close")
     signal = np.zeros(n_bars)
-    signal_threshold = float(cand.strategy_params.get("signal_threshold", 0.0) or 0.0)
 
     for i in range(n_bars):
-        pipeline.process_event({"local_ts": _bar_timestamp_ns(ohlcv, i), "close": close[i]})
-        state = pipeline.latest_state
+        bar_close = float(close[i])
+        event = MBOEvent(
+            timestamp_ns=_bar_timestamp_ns(ohlcv, i),
+            order_id=i + 1,
+            action="TRADE",
+            side="B",
+            price=bar_close,
+            size=1,
+        )
+        state = pipeline.process_event(event)
         if state is not None:
-            sig = hypothesis_cls.evaluate(state)
-            signal[i] = sig
+            signal[i] = float(hypothesis_cls.evaluate(state))
 
+    return signal
+
+
+def _default_signal_computer(
+    cand: CandidateModel,
+    ohlcv: np.ndarray,
+    parsed: ParsedHypothesis,
+    repo_root: Path,
+) -> Tuple[np.ndarray, np.ndarray]:
+    signal = compute_raw_hypothesis_signal_series(cand, ohlcv, parsed, repo_root)
+    signal_threshold = float(cand.strategy_params.get("signal_threshold", 0.0) or 0.0)
     entry_signal = np.where(signal > signal_threshold, 1.0, 0.0)
     exit_signal = np.where(signal < -signal_threshold, -1.0, 0.0)
     return entry_signal, exit_signal
@@ -2700,6 +2787,8 @@ def _run_vectorbt_simulation(
                 "vbt_stats": vbt_stats,
                 "filter_backend": result.backend,
                 **gate_metrics,
+                "oos_expectancy": wf["oos_expectancy"],
+                "wf_consistency": wf["wf_consistency"],
                 "auxiliary_numpy_metrics": auxiliary_metrics,
                 "auxiliary_numpy_walk_forward": wf,
                 "surface_stability_metrics": _surface_stability_formula_missing(),
@@ -2808,12 +2897,41 @@ def _apply_fs_v1_screen_metadata(
     *,
     research_clock: str,
     screening_scope: str,
+    repo_root: Path,
 ) -> None:
     from backtest_pipeline.src.fs_v1_screen_path import (
         FS_V1_BAR_CONSTRUCTION_ID,
         fs_v1_feature_set_hash,
         fs_v1_feature_set_id,
+        sample_cross_asset_features_for_manifest,
+        _import_cross_asset_assembly_module,
     )
+
+    cross_asset_aligned = False
+    if ctx.leader_legs:
+        try:
+            cross_asset_mod = _import_cross_asset_assembly_module()
+            validate_cross_asset_alignment = cross_asset_mod.validate_cross_asset_alignment
+        except ImportError:
+            validate_cross_asset_alignment = None
+
+        cross_feats = sample_cross_asset_features_for_manifest(ctx)
+        store_ts = ctx.store.get("ts")
+        if store_ts is None:
+            cross_asset_aligned = False
+        else:
+            ts = np.asarray(store_ts, dtype=np.int64)
+            feat_latency_ns = int(ctx.feature_latency_ms * 1_000_000)
+            pit_decision_ns = int(ts[-1]) - feat_latency_ns if len(ts) else None
+            if validate_cross_asset_alignment is not None:
+                alignment = validate_cross_asset_alignment(
+                    cross_feats,
+                    target_symbol=ctx.symbol,
+                    decision_timestamp_ns=pit_decision_ns,
+                )
+                cross_asset_aligned = alignment.ok
+            else:
+                cross_asset_aligned = bool(cross_feats)
 
     base_manifest = build_feature_usage_manifest(
         bar_construction_id=FS_V1_BAR_CONSTRUCTION_ID,
@@ -2826,6 +2944,7 @@ def _apply_fs_v1_screen_metadata(
         candidates,
         fs_v1_row_loop_active=True,
         vix_injected=ctx.has_vix,
+        cross_asset_aligned=cross_asset_aligned,
     )
     result.bar_construction_id = FS_V1_BAR_CONSTRUCTION_ID
     result.feature_set_id = fs_v1_feature_set_id()
@@ -2840,6 +2959,38 @@ def _apply_fs_v1_screen_metadata(
         "fs_v1_row_loop_visible_index_j_with_ts[j]<=ts[i]-feature_latency_ns;"
         " signals shifted one executable bar before VectorBT portfolio simulation"
     )
+    from backtest_pipeline.src.paid_screen_profiling import (
+        resolve_events_csv_hash,
+        resolve_lake_manifest_hash,
+    )
+
+    try:
+        result.lake_manifest_hash = resolve_lake_manifest_hash(
+            explicit_hash=None,
+            repo_root=repo_root,
+        )
+    except (OSError, ValueError):
+        pass
+    try:
+        result.events_csv_hash_or_not_applicable = resolve_events_csv_hash(
+            explicit_hash=None,
+            events_csv=None,
+            repo_root=repo_root,
+        )
+    except (OSError, ValueError):
+        pass
+    for cand in candidates:
+        recipe_hash = str(
+            getattr(cand, "feature_recipe_hash", None)
+            or cand.metadata.get("feature_recipe_hash")
+            or ""
+        ).strip()
+        if recipe_hash:
+            result.feature_recipe_hash = recipe_hash
+            break
+    scope = str(screening_scope or "").lower()
+    if scope in {"pilot", "pilot-scope", "pilot_scope"} and result.feature_recipe_hash:
+        result.hftbacktest_handoff_status = "recipe_hash_handoff_ready"
 
 
 def filter_candidates(
@@ -2961,7 +3112,10 @@ def filter_candidates(
         ohlcv = ohlcv_from_feature_store(fs_v1_ctx.store)
         signal_computer = build_fs_v1_signal_computer(fs_v1_ctx)
     else:
-        ohlcv = data_loader(event_id, repo_root)
+        if data_loader is _default_data_loader:
+            ohlcv = data_loader(event_id, repo_root, symbol=screen_symbol)
+        else:
+            ohlcv = data_loader(event_id, repo_root)
 
     if ohlcv is None:
         logger.warning("No OHLCV data for %s — rejecting all candidates", event_id)
@@ -2990,7 +3144,24 @@ def filter_candidates(
             ))
         return result
 
-    result = _run_vectorbt_simulation(
+    from backtest_pipeline.src.paid_screen_matrix import (
+        DEFAULT_MATRIX_CHUNK_SIZE,
+        run_vectorbt_simulation_matrix,
+    )
+    from backtest_pipeline.src.paid_screen_profiling import (
+        PaidScreenPerformanceCounters,
+        apply_native_thread_limits,
+    )
+
+    performance = PaidScreenPerformanceCounters()
+    performance.native_thread_limits = apply_native_thread_limits(1)
+    performance.matrix_chunk_size = DEFAULT_MATRIX_CHUNK_SIZE
+    if fs_v1_ctx is not None:
+        performance.feature_store_load_count = 1
+        performance.feature_store_cache_misses = 1
+        performance.record_models_for_last_load(len(candidates))
+
+    result = run_vectorbt_simulation_matrix(
         ohlcv,
         candidates,
         parsed,
@@ -3000,7 +3171,15 @@ def filter_candidates(
         screening_scope=screening_scope,
         max_total_trials=max_total_trials,
         run_budget=budget,
+        chunk_size=DEFAULT_MATRIX_CHUNK_SIZE,
+        performance_counters=performance,
+        fs_v1_ctx=fs_v1_ctx,
     )
+    result.screen_performance = {
+        **performance.to_dict(),
+        "screening_path": "matrix_v2",
+        "subprocess_per_unit": 0,
+    }
     if fs_v1_ctx is not None:
         _apply_fs_v1_screen_metadata(
             result,
@@ -3008,7 +3187,29 @@ def filter_candidates(
             candidates,
             research_clock=research_clock,
             screening_scope=screening_scope,
+            repo_root=repo_root,
         )
+    return apply_promotion_gates(
+        result,
+        screening_scope=screening_scope,
+        gates=gates,
+        repo_root=repo_root,
+        persist_promotions=persist_promotions,
+    )
+
+
+def apply_promotion_gates(
+    result: FilterResult,
+    *,
+    screening_scope: str,
+    gates: Optional[PromotionGate] = None,
+    repo_root: Optional[Path] = None,
+    persist_promotions: bool = False,
+) -> FilterResult:
+    """Apply robust promotion gates after VectorBT simulation (BLUEPRINT §8)."""
+    gates = gates or PromotionGate()
+    repo_root = repo_root or _REPO
+    scope = _normalise_screening_scope(screening_scope)
     promoted_out: List[PromotedCandidate] = []
     rejected_out: List[RejectedCandidate] = list(result.rejected)
 
@@ -3022,17 +3223,42 @@ def filter_candidates(
         prom.seed = 42
         prom.timestamp_utc = datetime.now(timezone.utc).isoformat()
 
+        _hydrate_walk_forward_gate_metrics(prom.vectorbt_results)
+        gate_failures = gates.evaluate_failures(prom)
         if (
-            _normalise_screening_scope(screening_scope) == "pilot"
-            and prom.vectorbt_results.get("gate_metric_authority")
+            prom.vectorbt_results.get("gate_metric_authority")
             == "official_vectorbt_portfolio_stats"
+            and scope in ("pilot", "paid_compute")
         ):
-            gate_pass, gate_evaluation = _evaluate_vbt2_pilot_stats_gate(prom, gates)
-            prom.vectorbt_results["pilot_gate_evaluation"] = gate_evaluation
-        else:
-            gate_pass = gates.evaluate(prom)
+            gate_failures = [
+                code
+                for code in gate_failures
+                if not _is_vbt2_pilot_exempt_gate_failure(code)
+            ]
+            prom.vectorbt_results["pilot_gate_evaluation"] = {
+                "scope": scope,
+                "screening_scope": scope,
+                "metric_authority": "official_vectorbt_stats_with_walk_forward_oos",
+                "used_fields": {
+                    "oos_expectancy": "auxiliary_numpy_walk_forward",
+                    "wf_consistency": "auxiliary_numpy_walk_forward",
+                    "max_drawdown_pct": "Max Drawdown [%]",
+                    "num_trades": "Total Trades",
+                },
+                "skipped_unmeasured_fields": list(_VBT2_PILOT_SKIPPED_UNMEASURED_GATE_FIELDS),
+                "failure_semantics": "screening_only_not_replay_or_robustness_eligible",
+                "failures": gate_failures,
+            }
+        elif gate_failures:
+            prom.vectorbt_results["promotion_gate_failures"] = gate_failures
+        gate_pass = not gate_failures
         if gate_pass:
-            prom.pass_reason = _VBT2_PILOT_SCREEN_PASS_REASON
+            if (
+                prom.vectorbt_results.get("gate_metric_authority")
+                == "official_vectorbt_portfolio_stats"
+                and scope in ("pilot", "paid_compute")
+            ):
+                prom.pass_reason = _VBT2_PILOT_SCREEN_PASS_REASON
             prom.in_sample_results["gate_pass"] = True
             if persist_promotions:
                 logger.warning(
