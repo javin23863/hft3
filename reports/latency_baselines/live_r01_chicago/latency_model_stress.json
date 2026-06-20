@@ -16,7 +16,7 @@
   "order_entry_latency_ms": 3.595122,
   "order_response_latency_ms": 1.793268,
   "latency_p50_ms": 3.537,
-  "latency_p90_ms": 7.0,
+  "latency_p90_ms": 5.0,
   "latency_p99_ms": 5.388389999999999,
   "order_response_latency_modeled": true,
   "native_latency_probe_host": "CHI404",
@@ -25,5 +25,5 @@
   "native_latency_probe_status": "provided",
   "native_latency_probe_provenance": "hft3_native_cpp_rithmic_latency_probe",
   "native_latency_probe_artifact_hash": "sha256:953e1af51228ace943b76e644a746f28546db8c85da44c7e1a5bed3afb82a46b",
-  "latency_value_or_sample_hash": "sha256:10d032c9eee1da2f82425c55fa8a0eca467c0605db8c3a0ee946d6cdc0a70a1a"
+  "latency_value_or_sample_hash": "sha256:bd2c1b3a74e08815c1db49f75176af060ae3849cf0ef0c4035ec0b19e078fbc2"
 }

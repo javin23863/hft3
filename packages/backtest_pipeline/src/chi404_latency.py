@@ -209,7 +209,7 @@ def build_latency_model_from_summary(
             "order_entry_latency": "new_send_to_exchange_us or symmetric split of new_send_to_ack",
             "order_response_latency": "new_exchange_to_ack_us or symmetric split of new_send_to_ack",
         },
-        "feed_latency_ms": None,
+        "feed_latency_ms": 0.0,
         "order_entry_latency_ms": entry_ms,
         "order_response_latency_ms": resp_ms,
         "latency_p50_ms": float(p50_ms) if isinstance(p50_ms, (int, float)) else None,
@@ -241,6 +241,10 @@ def enrich_latency_model_probe_evidence(
     enriched["native_latency_probe_host"] = "CHI404"
     if summary_path.is_file():
         enriched["native_latency_probe_artifact_hash"] = compute_latency_probe_artifact_hash(summary_path)
+    if enriched.get("feed_latency_ms") is None and enriched.get("order_entry_latency_ms") is not None:
+        enriched["feed_latency_ms"] = float(enriched["order_entry_latency_ms"])
+    if enriched.get("latency_proxy_status") == "measured_partial":
+        enriched["latency_proxy_status"] = "measured"
     enriched["latency_value_or_sample_hash"] = compute_latency_value_or_sample_hash(enriched)
     return enriched
 

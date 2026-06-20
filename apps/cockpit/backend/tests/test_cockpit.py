@@ -25,6 +25,7 @@ from backtest_pipeline.src.vectorbt_adapter import (
     compute_screening_artifact_hash,
     _parameter_values_hash,
 )
+from backtest_pipeline.src.feature_plane import build_feature_plane_payload
 from backtest_pipeline.src.hftbacktest_realism import (
     DEFAULT_ADAPTER_FILES,
     DEFAULT_API_SURFACE_USED,
@@ -384,6 +385,14 @@ def _screening_candidate_row(
         "dsr_or_not_run": {"status": "pass", "dsr_pass": True, "dsr_cdf": 0.96},
         "pbo_or_not_run": {"status": "pass", "pbo_pass": True, "pbo": 0.1, "maximum_pbo": 0.2},
         "cscv_count_or_not_run": {"status": "pass", "n_partitions": 8, "n_configs": 3},
+        "fee_stress_or_not_run": {"status": "pass"},
+        "slippage_stress_or_not_run": {"status": "pass"},
+        "latency_stress_or_not_run": {"status": "pass"},
+        "holm_bh_or_not_run": {"status": "pass"},
+        "null_battery_or_not_run": {"status": "pass"},
+        "planted_alpha_or_not_run": {"status": "pass"},
+        "adversarial_or_not_run": {"status": "pass"},
+        "parameter_perturbation_or_not_run": {"status": "pass"},
         "screening_status": "pass",
         "replay_eligibility_status": "eligible" if replay_eligible else "not_eligible",
         "rejection_reason_or_null": None if replay_eligible else (
@@ -462,6 +471,15 @@ def _write_screening_artifact(
         "rejected": [],
         "screening_artifact_hash": "",
     }
+    payload.update(
+        build_feature_plane_payload(
+            bar_construction_id=str(payload.get("bar_construction_id", "bars_test")),
+            feature_set_id=str(payload.get("feature_set_id", "features_test")),
+            feature_set_hash=str(payload.get("feature_set_hash", "features_hash")),
+            research_clock=str(payload.get("research_clock", "continuous_intraday")),
+            screening_scope=str(payload.get("screening_scope", "screen")),
+        )
+    )
     payload.update(overrides)
     payload["screening_artifact_hash"] = compute_screening_artifact_hash(payload)
     artifact.parent.mkdir(parents=True, exist_ok=True)

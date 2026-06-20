@@ -40,6 +40,7 @@ from backtest_pipeline.src.vectorbt_adapter import (
     filter_candidates,
     persist_screening_artifact,
     validate_screening_artifact,
+    validate_screening_artifact_or_raise,
     validate_parameter_space_artifact,
     SCREENING_ARTIFACT_REQUIRED_FIELDS,
     SCREENING_CANDIDATE_REQUIRED_FIELDS,
@@ -827,7 +828,7 @@ class TestFilterCandidates:
         assert artifact["rejected"][0]["rejection_reason_or_null"] == "RUN_BUDGET_REACHED"
         assert artifact["rejected"][0]["parameter_values"]["signal_threshold"] == 0.2
         assert artifact["rejected"][1]["parameter_values"]["signal_threshold"] == 0.3
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
 
     def test_negative_max_total_trials_is_rejected(self, tmp_path):
         with pytest.raises(ValueError, match="max_total_trials"):
@@ -897,7 +898,7 @@ class TestFilterCandidates:
         assert artifact["rejected"][0]["rejection_reason_or_null"] == "RUN_BUDGET_REACHED"
         assert artifact["rejected"][0]["parameter_values"]["signal_threshold"] == 0.1
         assert artifact["stop_reasons"] == ["RUN_BUDGET_REACHED"]
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
 
     def test_validator_rejects_trials_run_exceeding_max_total_trials(self, tmp_path):
         artifact = filter_candidates(
@@ -912,7 +913,7 @@ class TestFilterCandidates:
         artifact["screening_artifact_hash"] = compute_screening_artifact_hash(artifact)
 
         with pytest.raises(ScreeningArtifactError, match="trials_run_exceeds_max_total_trials"):
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
 
     @pytest.mark.parametrize("bad_budget", [-0.5, 1.5, "1.5"])
     def test_validator_rejects_fractional_max_total_trials(self, tmp_path, bad_budget):
@@ -928,7 +929,7 @@ class TestFilterCandidates:
         artifact["screening_artifact_hash"] = compute_screening_artifact_hash(artifact)
 
         with pytest.raises(ScreeningArtifactError, match="trial_budget_fields_malformed"):
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
 
     def test_zero_max_trials_is_rejected(self, tmp_path):
         with pytest.raises(ValueError, match="max_trials"):
@@ -954,7 +955,7 @@ class TestFilterCandidates:
         artifact["screening_artifact_hash"] = compute_screening_artifact_hash(artifact)
 
         with pytest.raises(ScreeningArtifactError, match="trial_budget_fields_malformed"):
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
 
     def test_run_budget_rejects_excess_model_count_before_data_lookup(self, tmp_path):
         cands = [_mock_candidate("HYP_5", 0.15), _mock_candidate("HYP_6", 0.15)]
@@ -976,7 +977,7 @@ class TestFilterCandidates:
         assert set(artifact["candidate_ids"]) == {cand.candidate_id for cand in result.rejected}
         assert all(row["rejection_reason_or_null"] == "RUN_BUDGET_REACHED" for row in artifact["rejected"])
         assert artifact["rejected"][0]["budget_field"] == "max_models"
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
 
     def test_run_budget_reject_ids_include_symbol_idea_context(self, tmp_path):
         result = filter_candidates(
@@ -995,7 +996,7 @@ class TestFilterCandidates:
         assert set(artifact["candidate_reasons"]) == set(artifact["candidate_ids"])
         assert {row["base_candidate_id"] for row in artifact["rejected"]} == {"same_base_candidate"}
         assert {row["base_candidate_metadata"]["symbol"] for row in artifact["rejected"]} == {"MES", "MNQ"}
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
 
     def test_run_budget_rejects_excess_symbol_count_before_data_lookup(self, tmp_path):
         mes = _mock_candidate("HYP_5", 0.15)
@@ -1015,7 +1016,7 @@ class TestFilterCandidates:
         assert result.backend == "run_budget_fail_closed"
         assert artifact["max_symbols"] == 1
         assert artifact["rejected"][0]["budget_field"] == "max_symbols"
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
 
     def test_run_budget_symbol_cap_requires_explicit_symbol_metadata(self, tmp_path):
         cand = _mock_candidate("HYP_5", 0.15)
@@ -1034,7 +1035,7 @@ class TestFilterCandidates:
         assert result.backend == "run_budget_fail_closed"
         assert artifact["rejected"][0]["budget_field"] == "max_symbols"
         assert artifact["rejected"][0]["missing_budget_dimension"] == "symbol"
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
 
     def test_run_budget_symbol_cap_rejects_strategy_param_only_symbol(self, tmp_path):
         cand = _mock_candidate("HYP_5", 0.15)
@@ -1053,7 +1054,7 @@ class TestFilterCandidates:
 
         assert artifact["rejected"][0]["budget_field"] == "max_symbols"
         assert artifact["rejected"][0]["missing_budget_dimension"] == "symbol"
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
 
     def test_run_budget_rejects_excess_feature_set_count_before_data_lookup(self, tmp_path):
         a = _mock_candidate("HYP_5", 0.15)
@@ -1074,7 +1075,7 @@ class TestFilterCandidates:
         assert result.backend == "run_budget_fail_closed"
         assert artifact["max_feature_sets"] == 1
         assert artifact["rejected"][0]["budget_field"] == "max_feature_sets"
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
 
     def test_run_budget_feature_set_cap_requires_explicit_feature_set_metadata(self, tmp_path):
         result = filter_candidates(
@@ -1090,7 +1091,7 @@ class TestFilterCandidates:
         assert result.backend == "run_budget_fail_closed"
         assert artifact["rejected"][0]["budget_field"] == "max_feature_sets"
         assert artifact["rejected"][0]["missing_budget_dimension"] == "feature_set_id"
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
 
     def test_run_budget_feature_set_cap_rejects_strategy_param_only_feature_set(self, tmp_path):
         cand = _mock_candidate("HYP_5", 0.15)
@@ -1108,7 +1109,7 @@ class TestFilterCandidates:
 
         assert artifact["rejected"][0]["budget_field"] == "max_feature_sets"
         assert artifact["rejected"][0]["missing_budget_dimension"] == "feature_set_id"
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
 
     def test_wall_clock_budget_stops_before_first_trial(self, monkeypatch, tmp_path):
         import sys
@@ -1146,7 +1147,7 @@ class TestFilterCandidates:
         assert artifact["max_wall_clock_seconds"] == 0
         assert artifact["stop_reasons"] == ["WALL_CLOCK_BUDGET_REACHED"]
         assert artifact["rejected"][0]["rejection_reason_or_null"] == "WALL_CLOCK_BUDGET_REACHED"
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
 
     def test_memory_budget_request_fails_closed_until_monitor_exists(self, tmp_path):
         result = filter_candidates(
@@ -1163,7 +1164,7 @@ class TestFilterCandidates:
         assert artifact["max_peak_memory_mb_or_null"] == 1
         assert artifact["stop_reasons"] == ["MEMORY_BUDGET_REACHED"]
         assert artifact["rejected"][0]["memory_monitor_status"] == "unsupported_fail_closed"
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
 
     def test_validator_rejects_missing_abort_on_budget_exhaustion(self, tmp_path):
         artifact = filter_candidates(
@@ -1177,7 +1178,7 @@ class TestFilterCandidates:
         artifact["screening_artifact_hash"] = compute_screening_artifact_hash(artifact)
 
         with pytest.raises(ScreeningArtifactError, match="trial_budget_fields_malformed"):
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
 
     def test_screen_scope_requires_rust_engine(self, monkeypatch, tmp_path):
         from backtest_pipeline.src import vectorbt_adapter
@@ -1231,7 +1232,7 @@ class TestFilterCandidates:
         )
 
         artifact = result.to_dict()
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
         assert result.trials_run == 0
         assert not result.promoted
         assert artifact["vectorbt_engine"] == "numba"
@@ -1261,7 +1262,7 @@ class TestFilterCandidates:
         )
 
         artifact = result.to_dict()
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
         assert len(artifact["rejected_ids"]) == 2
         assert len(set(artifact["rejected_ids"])) == 2
         assert set(artifact["candidate_reasons"]) == set(artifact["candidate_ids"])
@@ -1285,7 +1286,7 @@ class TestFilterCandidates:
         )
 
         artifact = result.to_dict()
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
         assert len(artifact["rejected_ids"]) == 2
         assert len(set(artifact["rejected_ids"])) == 2
         assert set(artifact["candidate_reasons"]) == set(artifact["candidate_ids"])
@@ -1311,7 +1312,7 @@ class TestFilterCandidates:
         )
 
         artifact = result.to_dict()
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
 
         assert result.backend == "vectorbt_rust_unavailable"
         assert artifact["stop_reasons"] == ["rust_engine_required_unavailable_fail_closed"]
@@ -1333,7 +1334,7 @@ class TestFilterCandidates:
             screening_scope="refine",
         )
         artifact = result.to_dict()
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
 
         assert result.backend == "vectorbt_rust_unavailable"
         assert artifact["screening_scope"] == "refine"
@@ -1357,7 +1358,7 @@ class TestFilterCandidates:
             screening_scope="screen",
         )
         artifact = result.to_dict()
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
 
         assert artifact["vectorbt_engine"] == "unavailable"
         assert artifact["engine_parity_status"] == "rust_engine_required_unavailable_fail_closed"
@@ -1564,7 +1565,7 @@ class TestFilterCandidates:
         )
 
         artifact = result.to_dict()
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
         rejected = artifact["rejected"][0]
 
         assert captured["entries"].tolist() == [False, True, False, False]
@@ -1671,7 +1672,7 @@ class TestFilterCandidatesScreeningArtifactPersistence:
         assert loaded["rejected"][0]["out_of_sample_metrics"]["np_scalar"] == 1.25
         assert loaded["rejected"][0]["walk_forward_metrics"]["np_array"] == [1, 2]
         assert loaded["screening_artifact_hash"] == compute_screening_artifact_hash(loaded)
-        validate_screening_artifact(loaded)
+        validate_screening_artifact_or_raise(loaded)
 
     def test_validator_rejects_missing_and_stale_promoted_reasons(self, monkeypatch, tmp_path):
         artifact = _promoted_screening_artifact(monkeypatch, tmp_path)
@@ -1680,20 +1681,20 @@ class TestFilterCandidatesScreeningArtifactPersistence:
         missing["promoted_reasons"] = {}
         missing["screening_artifact_hash"] = compute_screening_artifact_hash(missing)
         with pytest.raises(ScreeningArtifactError, match="promoted_reasons"):
-            validate_screening_artifact(missing)
+            validate_screening_artifact_or_raise(missing)
 
         stale = copy.deepcopy(artifact)
         stale["promoted_reasons"]["stale_candidate"] = "old_reason"
         stale["screening_artifact_hash"] = compute_screening_artifact_hash(stale)
         with pytest.raises(ScreeningArtifactError, match="promoted_reasons"):
-            validate_screening_artifact(stale)
+            validate_screening_artifact_or_raise(stale)
 
         mismatched = copy.deepcopy(artifact)
         promoted_id = mismatched["promoted_ids"][0]
         mismatched["promoted_reasons"][promoted_id] = "wrong_reason"
         mismatched["screening_artifact_hash"] = compute_screening_artifact_hash(mismatched)
         with pytest.raises(ScreeningArtifactError, match="promoted_reasons"):
-            validate_screening_artifact(mismatched)
+            validate_screening_artifact_or_raise(mismatched)
 
     def test_validator_rejects_invalid_research_clock(self, monkeypatch, tmp_path):
         artifact = _promoted_screening_artifact(monkeypatch, tmp_path)
@@ -1702,7 +1703,7 @@ class TestFilterCandidatesScreeningArtifactPersistence:
         bad["promoted"][0]["research_clock"] = "bogus_lane"
         bad["screening_artifact_hash"] = compute_screening_artifact_hash(bad)
         with pytest.raises(ScreeningArtifactError, match="research_clock_invalid"):
-            validate_screening_artifact(bad)
+            validate_screening_artifact_or_raise(bad)
 
     def test_validator_rejects_missing_and_stale_rejected_reasons(self, tmp_path):
         artifact = filter_candidates(
@@ -1723,20 +1724,20 @@ class TestFilterCandidatesScreeningArtifactPersistence:
         missing["rejected_reasons"] = {}
         missing["screening_artifact_hash"] = compute_screening_artifact_hash(missing)
         with pytest.raises(ScreeningArtifactError, match="rejected_reasons"):
-            validate_screening_artifact(missing)
+            validate_screening_artifact_or_raise(missing)
 
         stale = copy.deepcopy(artifact)
         stale["rejected_reasons"]["stale_candidate"] = "old_reason"
         stale["screening_artifact_hash"] = compute_screening_artifact_hash(stale)
         with pytest.raises(ScreeningArtifactError, match="rejected_reasons"):
-            validate_screening_artifact(stale)
+            validate_screening_artifact_or_raise(stale)
 
         mismatched = copy.deepcopy(artifact)
         rejected_id = mismatched["rejected_ids"][0]
         mismatched["rejected_reasons"][rejected_id] = "wrong_reason"
         mismatched["screening_artifact_hash"] = compute_screening_artifact_hash(mismatched)
         with pytest.raises(ScreeningArtifactError, match="rejected_reasons"):
-            validate_screening_artifact(mismatched)
+            validate_screening_artifact_or_raise(mismatched)
 
     def test_validator_rejects_duplicate_emitted_candidate_ids(self, tmp_path):
         artifact = filter_candidates(
@@ -1760,7 +1761,7 @@ class TestFilterCandidatesScreeningArtifactPersistence:
         artifact["screening_artifact_hash"] = compute_screening_artifact_hash(artifact)
 
         with pytest.raises(ScreeningArtifactError, match="rejected_ids_not_unique"):
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
 
     def test_rust_unavailable_pilot_label_when_vectorbt_available(self, monkeypatch, tmp_path):
         from backtest_pipeline.src import vectorbt_adapter
@@ -1818,7 +1819,7 @@ class TestFilterCandidatesScreeningArtifactPersistence:
         artifact["screening_artifact_hash"] = compute_screening_artifact_hash(artifact)
 
         with pytest.raises(ScreeningArtifactError, match="rust_required_scope"):
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
 
     def test_validator_requires_screening_scope(self, tmp_path):
         artifact = filter_candidates(
@@ -1838,7 +1839,7 @@ class TestFilterCandidatesScreeningArtifactPersistence:
         artifact["screening_artifact_hash"] = compute_screening_artifact_hash(artifact)
 
         with pytest.raises(ScreeningArtifactError, match="screening_scope"):
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
 
     @pytest.mark.parametrize("field_name", SCREENING_ARTIFACT_REQUIRED_FIELDS)
     def test_validator_rejects_each_missing_required_top_level_field(self, tmp_path, field_name):
@@ -1848,7 +1849,7 @@ class TestFilterCandidatesScreeningArtifactPersistence:
             artifact["screening_artifact_hash"] = compute_screening_artifact_hash(artifact)
 
         with pytest.raises(ScreeningArtifactError, match=f"missing required field: {field_name}"):
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
 
     @pytest.mark.parametrize("field_name", SCREENING_CANDIDATE_REQUIRED_FIELDS)
     def test_validator_rejects_each_missing_required_candidate_field(self, tmp_path, field_name):
@@ -1857,7 +1858,7 @@ class TestFilterCandidatesScreeningArtifactPersistence:
         artifact["screening_artifact_hash"] = compute_screening_artifact_hash(artifact)
 
         with pytest.raises(ScreeningArtifactError, match=f"missing candidate field: {field_name}"):
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
 
     def test_rejected_rows_emit_complete_fail_closed_handoff_schema(self, tmp_path):
         result = filter_candidates(
@@ -1875,7 +1876,7 @@ class TestFilterCandidatesScreeningArtifactPersistence:
         )
 
         artifact = result.to_dict()
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
         rejected = artifact["rejected"][0]
 
         for field_name in SCREENING_CANDIDATE_REQUIRED_FIELDS:
@@ -1942,7 +1943,7 @@ class TestFilterCandidatesScreeningArtifactPersistence:
         )
 
         artifact = result.to_dict()
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
         promoted = artifact["promoted"][0]
 
         for field_name in SCREENING_CANDIDATE_REQUIRED_FIELDS:
@@ -2017,7 +2018,7 @@ class TestFilterCandidatesScreeningArtifactPersistence:
         )
 
         artifact = result.to_dict()
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
         assert artifact["promoted_ids"]
         promoted = artifact["promoted"][0]
         vectorbt_results = promoted["vectorbt_results"]
@@ -2096,7 +2097,7 @@ class TestFilterCandidatesScreeningArtifactPersistence:
         )
 
         artifact = result.to_dict()
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
         assert artifact["promoted_ids"]
         promoted = artifact["promoted"][0]
         assert promoted["vectorbt_results"]["pilot_gate_evaluation"]["failures"] == []
@@ -2150,7 +2151,7 @@ class TestFilterCandidatesScreeningArtifactPersistence:
         )
 
         artifact = result.to_dict()
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
         assert artifact["promoted"] == []
         rejected = artifact["rejected"][0]
         assert rejected["rejection_reason_or_null"] == "vectorbt_stats_missing_gate_fields"
@@ -2220,7 +2221,7 @@ class TestFilterCandidatesScreeningArtifactPersistence:
         )
 
         artifact = result.to_dict()
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
         assert len(artifact["promoted_ids"]) == 2
         assert len(set(artifact["promoted_ids"])) == 2
         assert set(artifact["candidate_reasons"]) == set(artifact["candidate_ids"])
@@ -2280,7 +2281,7 @@ class TestFilterCandidatesScreeningArtifactPersistence:
         )
 
         artifact = result.to_dict()
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
         promoted = artifact["promoted"][0]
         assert promoted["replay_eligibility_status"] == "not_eligible"
         assert promoted["rejection_reason_or_null"].startswith(
@@ -2310,7 +2311,7 @@ class TestFilterCandidatesScreeningArtifactPersistence:
             ScreeningArtifactError,
             match="surface_stability_plateau_score_formula_missing",
         ):
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
 
     def test_validator_rejects_defined_surface_missing_required_evidence(self, monkeypatch, tmp_path):
         artifact = _promoted_screening_artifact(monkeypatch, tmp_path)
@@ -2323,7 +2324,7 @@ class TestFilterCandidatesScreeningArtifactPersistence:
             ScreeningArtifactError,
             match="surface_stability_formula_authority_missing",
         ):
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
 
     def test_validator_rejects_replay_eligible_surface_formula_missing(self, monkeypatch, tmp_path):
         artifact = _promoted_screening_artifact(monkeypatch, tmp_path)
@@ -2346,7 +2347,7 @@ class TestFilterCandidatesScreeningArtifactPersistence:
             ScreeningArtifactError,
             match="surface_stability_formula_authority_missing",
         ):
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
 
     def test_validator_rejects_replay_eligible_failed_robustness_map(self, monkeypatch, tmp_path):
         artifact = _promoted_screening_artifact(monkeypatch, tmp_path)
@@ -2361,7 +2362,7 @@ class TestFilterCandidatesScreeningArtifactPersistence:
             ScreeningArtifactError,
             match="dsr_or_not_run_not_pass",
         ):
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
 
     def test_validator_rejects_replay_eligible_empty_pass_robustness_map(self, monkeypatch, tmp_path):
         artifact = _promoted_screening_artifact(monkeypatch, tmp_path)
@@ -2376,7 +2377,7 @@ class TestFilterCandidatesScreeningArtifactPersistence:
             ScreeningArtifactError,
             match="dsr_or_not_run_missing:dsr_pass",
         ):
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
 
     def test_validator_rejects_replay_eligible_non_positive_bootstrap_lower(self, monkeypatch, tmp_path):
         artifact = _promoted_screening_artifact(monkeypatch, tmp_path)
@@ -2391,7 +2392,7 @@ class TestFilterCandidatesScreeningArtifactPersistence:
             ScreeningArtifactError,
             match="bootstrap_ci_or_not_run_lower_bound_not_positive",
         ):
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
 
     def test_persist_promotions_does_not_write_replay_ineligible_vectorbt_pilot(self, monkeypatch, tmp_path):
         import sys
@@ -2442,7 +2443,7 @@ class TestFilterCandidatesScreeningArtifactPersistence:
         )
 
         artifact = result.to_dict()
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
         promoted = artifact["promoted"][0]
 
         assert promoted["replay_eligibility_status"] == "not_eligible"
@@ -2501,7 +2502,7 @@ class TestFilterCandidatesScreeningArtifactPersistence:
         artifact["screening_artifact_hash"] = compute_screening_artifact_hash(artifact)
 
         with pytest.raises(ScreeningArtifactError, match="wfc_status_not_pass"):
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
 
     def test_validator_rejects_candidate_parameter_hash_mismatch(self, tmp_path):
         artifact = filter_candidates(
@@ -2521,7 +2522,7 @@ class TestFilterCandidatesScreeningArtifactPersistence:
         artifact["screening_artifact_hash"] = compute_screening_artifact_hash(artifact)
 
         with pytest.raises(ScreeningArtifactError, match="parameter_values_hash_mismatch"):
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
 
     def test_promotion_gate_failed_row_preserves_tested_parameters(self, monkeypatch, tmp_path):
         import sys
@@ -2565,7 +2566,7 @@ class TestFilterCandidatesScreeningArtifactPersistence:
         )
 
         artifact = result.to_dict()
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
         rejected = artifact["rejected"][0]
 
         assert rejected["rejection_reason_or_null"] == "promotion_gate_failed"

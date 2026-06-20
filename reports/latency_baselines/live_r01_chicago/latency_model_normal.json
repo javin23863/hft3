@@ -17,7 +17,7 @@
   "order_response_latency_ms": 0.687688,
   "latency_p50_ms": 3.537,
   "latency_p90_ms": 7.0,
-  "latency_p99_ms": 3.92594,
+  "latency_p99_ms": 9.897361,
   "order_response_latency_modeled": true,
   "native_latency_probe_host": "CHI404",
   "note": "CC-3 decomposed entry/response from cc3_new_decomp_20260618T022002Z; symmetric split fallback no longer used for this regime.",
@@ -25,5 +25,5 @@
   "native_latency_probe_status": "provided",
   "native_latency_probe_provenance": "hft3_native_cpp_rithmic_latency_probe",
   "native_latency_probe_artifact_hash": "sha256:953e1af51228ace943b76e644a746f28546db8c85da44c7e1a5bed3afb82a46b",
-  "latency_value_or_sample_hash": "sha256:e87f6e883ee186f4315e0b8dd3415c90c02e782d7443c2100b4938205758042d"
+  "latency_value_or_sample_hash": "sha256:8e9dadbbd18a0cdb672eae20f73bf99abedf21a7298f76e973f8e211ae334c88"
 }

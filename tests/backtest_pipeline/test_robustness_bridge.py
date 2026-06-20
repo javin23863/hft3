@@ -260,11 +260,7 @@ class TestPBOFails:
         inp["cscv_matrix"] = _failing_pbo_matrix()
         result = compute_robustness_evidence(inp, candidate_id="c3")
         assert result["pbo_status"] == "fail"
-        # cscv_status is now derived independently from whether the CSCV
-        # partition/config analysis ran (n_partitions/n_configs > 0), not
-        # aliased to pbo_status.  The failing-PBO matrix still produces valid
-        # CSCV structure, so cscv_status is "pass" even though pbo_status fails.
-        assert result["cscv_status"] == "pass"
+        assert result["cscv_status"] == "structure_ran"
         assert result["robustness_artifact_staleness"] == "stale"
 
     def test_pbo_fail_does_not_affect_dsr(self):

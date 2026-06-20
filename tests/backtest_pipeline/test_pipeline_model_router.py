@@ -21,8 +21,8 @@ from backtest_pipeline.src.pipeline_model_router import (
 
 def test_all_model_ids_count_56() -> None:
     ids = all_model_ids()
-    assert len(ids) == 56
-    assert len(set(ids)) == 56
+    assert len(ids) == 61
+    assert len(set(ids)) == 61
 
 
 def test_route_engine_kinds_unique_coverage() -> None:

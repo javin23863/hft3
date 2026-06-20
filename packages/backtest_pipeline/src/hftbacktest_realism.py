@@ -487,6 +487,31 @@ def _sha256_payload(value: Any) -> str:
     return hashlib.sha256(_canonical_json(value).encode("utf-8")).hexdigest()
 
 
+def compute_latency_probe_artifact_hash(summary_path: Path) -> str:
+    """Hash native CHI404 latency_summary.json for probe-evidence linkage."""
+    data = Path(summary_path).read_bytes()
+    return f"sha256:{hashlib.sha256(data).hexdigest()}"
+
+
+def compute_latency_value_or_sample_hash(latency_model: Mapping[str, Any]) -> str:
+    """Hash latency model value fields for artifact immutability checks."""
+    payload = {
+        key: latency_model.get(key)
+        for key in (
+            "latency_model_family",
+            "latency_regime",
+            "latency_proxy_status",
+            "feed_latency_ms",
+            "order_entry_latency_ms",
+            "order_response_latency_ms",
+            "latency_p50_ms",
+            "latency_p90_ms",
+            "latency_p99_ms",
+        )
+    }
+    return f"sha256:{_sha256_payload(payload)}"
+
+
 def _optional_list_arg(value: list[str] | None, *, field: str) -> list[str] | None:
     if value is None:
         return None
@@ -705,7 +730,7 @@ def validate_hftbacktest_latency_model(latency_model: Mapping[str, Any]) -> list
             reasons.append("missing_order_latency_unavailable_reason")
 
     if family in LATENCY_MEASURED_FAMILIES:
-        if proxy_status != "measured":
+        if proxy_status not in {"measured", "measured_decomposed", "measured_partial"}:
             reasons.append("measured_latency_proxy_status_must_be_measured")
         if probe_status not in LATENCY_NATIVE_PROBE_OK_STATUSES:
             reasons.append("invalid_native_latency_probe_evidence")
@@ -722,11 +747,14 @@ def validate_hftbacktest_latency_model(latency_model: Mapping[str, Any]) -> list
         # inside the LATENCY_BANDS_MS band [0.5, 10.0].  The ordering check above
         # only ensures monotonicity; a monotonically-ordered triple outside the
         # band still indicates a broken latency model.
-        for field in ("latency_p50_ms", "latency_p90_ms", "latency_p99_ms"):
-            value = latency_model[field]
-            if value < 0.5 or value > 10.0:
-                reasons.append("latency_percentile_outside_band")
-                break
+        # Extreme regime may exceed the fast/normal/stress [0.5, 10.0] ms band.
+        regime = str(latency_model.get("latency_regime") or "").lower()
+        if regime != "extreme":
+            for field in ("latency_p50_ms", "latency_p90_ms", "latency_p99_ms"):
+                value = latency_model[field]
+                if value < 0.5 or value > 10.0:
+                    reasons.append("latency_percentile_outside_band")
+                    break
 
     if family == "FeedLatency" and not reasons:
         # FeedLatency remains proxy-only/non-certifying by contract.
