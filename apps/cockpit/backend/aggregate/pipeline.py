@@ -26,12 +26,10 @@ from .system import _q001_inventory
 
 try:
     from backtest_pipeline.src.vectorbt_adapter import (
-        ScreeningArtifactError,
         compute_screening_artifact_hash,
         validate_screening_artifact,
     )
 except Exception:  # pragma: no cover - cockpit must stay up if package import breaks
-    ScreeningArtifactError = ValueError
     compute_screening_artifact_hash = None
     validate_screening_artifact = None
 

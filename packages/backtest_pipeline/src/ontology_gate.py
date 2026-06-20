@@ -39,7 +39,6 @@ from backtest_pipeline.src.feature_plane import (
 )
 from backtest_pipeline.src.vectorbt_adapter import (
     SCREENING_ARTIFACT_REQUIRED_FIELDS,
-    validate_screening_artifact,
     validate_screening_artifact_or_raise,
 )
 
@@ -639,7 +638,7 @@ def validate_artifact_schema(
 ) -> ArtifactResult:
     """Validate a screening/feature-plane artifact schema.
 
-    Delegates to :func:`validate_screening_artifact` and
+    Delegates to :func:`validate_screening_artifact_or_raise` and
     :func:`feature_plane_validation_errors` from the existing modules — this
     gate does not duplicate schema logic.
     """
