@@ -77,15 +77,86 @@ def _fresh_proposal_candidates(**kwargs):
     return fresh[: int(kwargs.get("max_candidates") or 3)]
 
 
+def _passing_surface_metrics() -> dict[str, Any]:
+    from backtest_pipeline.src.surface_stability import compute_surface_stability
+
+    grid = {
+        (r, c): {"net_return": 0.10, "trade_count": 50}
+        for r in range(3)
+        for c in range(3)
+    }
+    return compute_surface_stability(grid)
+
+
+def _serializable_statistical_evidence() -> dict[str, Any]:
+    passed = {"status": "pass"}
+    return {
+        "robustness_artifact_staleness": "fresh",
+        "dsr_status": "pass",
+        "pbo_status": "pass",
+        "cscv_status": "pass",
+        "bootstrap_ci_or_not_run": passed,
+        "dsr_or_not_run": passed,
+        "pbo_or_not_run": passed,
+        "cscv_count_or_not_run": passed,
+        "fee_stress_or_not_run": passed,
+        "slippage_stress_or_not_run": passed,
+        "latency_stress_or_not_run": passed,
+        "holm_stepdown_or_not_run": passed,
+        "holm_bh_or_not_run": passed,
+        "null_battery_or_not_run": passed,
+        "planted_alpha_or_not_run": passed,
+        "adversarial_or_not_run": passed,
+        "parameter_perturbation_or_not_run": passed,
+    }
+
+
 def _fake_filter(*, candidates, parsed, event_id, repo_root, gates, screening_scope, run_budget=None, **kwargs):
     promoted = []
+    surface = _passing_surface_metrics()
+    statistical = _serializable_statistical_evidence()
     for cand in candidates[:2]:
+        vectorbt_results = {
+            "oos_expectancy": 1.0,
+            "max_drawdown_pct": -5.0,
+            "num_trades": 50,
+            "hit_rate": 0.55,
+            "gross_return": 0.12,
+            "net_return": 0.10,
+            "net_pnl": 1000.0,
+            "total_fees": 50.0,
+            "total_slippage": 25.0,
+            "trade_count": 50,
+            "expectancy_per_trade": 0.02,
+            "profit_factor": 1.4,
+            "sharpe": 0.8,
+            "sortino": 1.1,
+            "max_drawdown": -0.05,
+            "turnover": 0.3,
+            "surface_stability_metrics": surface,
+            **statistical,
+        }
         promoted.append(
             {
                 "candidate_id": cand.candidate_id,
                 "hypothesis_id": cand.model_id,
                 "param_values": dict(cand.strategy_params),
-                "vectorbt_results": {"oos_expectancy": 1.0, "max_drawdown_pct": -5.0},
+                "vectorbt_results": vectorbt_results,
+                "surface_stability_metrics": surface,
+                "gross_return": 0.12,
+                "net_return": 0.10,
+                "net_pnl": 1000.0,
+                "total_fees": 50.0,
+                "total_slippage": 25.0,
+                "trade_count": 50,
+                "hit_rate": 0.55,
+                "expectancy_per_trade": 0.02,
+                "profit_factor": 1.4,
+                "sharpe": 0.8,
+                "sortino": 1.1,
+                "max_drawdown": -0.05,
+                "turnover": 0.3,
+                **statistical,
             }
         )
     return _FakeFilterResult(
@@ -208,13 +279,47 @@ def test_generation_loop_spies_runners(tmp_path: Path, monkeypatch) -> None:
 
     def robustness_fn(**kwargs):
         robustness_calls.append(1)
-        return {"robustness_pass": True, "metrics": {"oos_expectancy": 1.0}, "campaign_id": "rob1"}
+        out = tmp_path / f"rob_{len(robustness_calls)}"
+        out.mkdir(parents=True, exist_ok=True)
+        campaign_summary = {
+            "status": "PASS",
+            "wfc_status": "PASS",
+            "robustness_passed": True,
+            "periods": [{"gate_pass": True}],
+            "wfc": {"pearson": 0.5, "spearman": 0.4, "wfc_status": "PASS"},
+            "metrics": {},
+        }
+        (out / "summary.json").write_text(json.dumps(campaign_summary), encoding="utf-8")
+        return {
+            "robustness_pass": True,
+            "regular_walk_forward_pass": True,
+            "wfc_pass": True,
+            "metrics": {"oos_expectancy": 1.0},
+            "campaign_id": f"rob{len(robustness_calls)}",
+            "campaign_summary": campaign_summary,
+            "artifact_dir": str(out),
+        }
 
     def hft_fn(**kwargs):
+        from types import SimpleNamespace
+
         hft_calls.append(1)
+        scenarios = kwargs.get("scenarios") or []
+        hft_out = tmp_path / f"hft_{len(hft_calls)}"
+        hft_out.mkdir(parents=True, exist_ok=True)
+        scenario_results = [
+            SimpleNamespace(
+                scenario_id=str(getattr(s, "scenario_id", f"s{i}")),
+                status="completed",
+                replay_result={"certification_status": "PASS"},
+                artifact_dir=str(hft_out),
+            )
+            for i, s in enumerate(scenarios)
+        ]
         mock = MagicMock()
         mock.status = "pass"
         mock.summary = {"status": "pass"}
+        mock.scenario_results = scenario_results
         return mock
 
     cfg = AutoresearchConfig(
@@ -231,9 +336,31 @@ def test_generation_loop_spies_runners(tmp_path: Path, monkeypatch) -> None:
     for name in ("x.npz", "lat.json", "fill.json"):
         (tmp_path / name).write_text("{}", encoding="utf-8")
 
+    scenario_store: dict[str, list[Any]] = {"scenarios": []}
+
+    def fake_generate_scenario_manifest(cfg):
+        scenarios = [
+            type(
+                "Scenario",
+                (),
+                {
+                    "scenario_id": f"sc_{cid}",
+                    "candidate_id": cid,
+                    "to_dict": lambda self, _cid=cid: {"scenario_id": f"sc_{cid}", "candidate_id": _cid},
+                },
+            )()
+            for cid in (getattr(cfg, "candidate_ids", None) or ["unknown"])
+        ]
+        scenario_store["scenarios"] = scenarios
+        return scenarios, []
+
     monkeypatch.setattr(
         "research_pipeline.generation_loop.generate_scenario_manifest",
-        lambda cfg: ([], []),
+        fake_generate_scenario_manifest,
+    )
+    monkeypatch.setattr(
+        "research_pipeline.generation_loop.load_scenarios_from_manifest",
+        lambda _path: scenario_store["scenarios"],
     )
     monkeypatch.setattr(
         "research_pipeline.generation_loop.propose_next_candidates",
@@ -303,10 +430,23 @@ def test_resume_preserves_manifest_hash(tmp_path: Path, monkeypatch) -> None:
 
 
 def test_append_generation_memory_advisory_only(tmp_path: Path) -> None:
-    summary = {"campaign_id": "c1", "best_candidate_id": "x", "best_composite_score": 1.0, "candidates": []}
+    summary = {
+        "campaign_id": "c1",
+        "best_candidate_id": "x",
+        "best_composite_score": 1.0,
+        "candidates": [
+            {
+                "candidate_id": "x",
+                "final_status": "FINAL_PASS",
+                "gate_statuses": {"ontology_gate": "PASS"},
+                "research_score": 1.0,
+            }
+        ],
+    }
     path = append_generation_memory(tmp_path, summary, generation_index=0)
-    row = json.loads(path.read_text(encoding="utf-8").strip())
-    assert row["authority"] == "advisory"
+    lines = [json.loads(line) for line in path.read_text(encoding="utf-8").strip().splitlines()]
+    assert lines[0]["authority"] == "advisory"
+    assert any(row.get("candidate_id") == "x" and row.get("authority") == "advisory" for row in lines)
     assert load_tested_hashes(tmp_path, "missing") == set()
 
 

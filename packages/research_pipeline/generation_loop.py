@@ -526,7 +526,8 @@ def run_single_generation(
             candidate=c,
             repo_root=repo_root,
             generation_index=generation_index,
-            proposal_reason=str(c.metadata.get("proposal_reason") or "generation"),
+            parent_candidate_id=str(c.metadata.get("elite_parent") or c.metadata.get("parent_candidate_id") or "") or None,
+            proposal_reason=str(c.metadata.get("proposal_reason") or c.metadata.get("refinement") or "generation"),
         )
         for c in ontology_pass
     ]
@@ -681,6 +682,18 @@ def run_single_generation(
         chain_path = gate_receipt_path(gen_dir, cid, "gate_chain_result")
         chain_path.parent.mkdir(parents=True, exist_ok=True)
         chain_path.write_text(json.dumps(chain_result, indent=2) + "\n", encoding="utf-8")
+    parent_strategy_params_by_id: dict[str, dict[str, Any]] = {}
+    if generation_index > 0:
+        prior_summary_path = generation_dir(repo_root, campaign_id, generation_index - 1) / "generation_summary.json"
+        if prior_summary_path.is_file():
+            prior_summary = json.loads(prior_summary_path.read_text(encoding="utf-8"))
+            for row in prior_summary.get("candidates") or []:
+                if not isinstance(row, dict):
+                    continue
+                cid = str(row.get("candidate_id") or "")
+                params = row.get("strategy_params")
+                if cid and isinstance(params, dict):
+                    parent_strategy_params_by_id[cid] = dict(params)
     summary = build_generation_summary(
         repo_root=repo_root,
         campaign_id=campaign_id,
@@ -689,6 +702,12 @@ def run_single_generation(
         robustness_results=robustness_results,
         hft_campaign_summary=hft_summary,
         gate_chain_by_id=gate_chain_by_id,
+        proposed_candidate_ids=[c.candidate_id for c in attached],
+        manifests_by_id=manifest_by_id,
+        candidate_metadata_by_id={c.candidate_id: dict(c.metadata or {}) for c in attached},
+        ontology_receipts_by_id=ontology_receipts,
+        gen_dir=gen_dir,
+        parent_strategy_params_by_id=parent_strategy_params_by_id,
     )
     summary_path = write_generation_summary(gen_dir / "generation_summary.json", summary)
     (gen_dir / ".generation_complete").write_text("ok\n", encoding="utf-8")
@@ -744,6 +763,7 @@ def run_autoresearch_loop(
         "target_score_reached",
         "no_improvement",
         "stop_file_present",
+        "no_supported_exploration_remaining",
     }
     failure_stop_reasons = {
         "prior_generation_summary_missing",
@@ -824,7 +844,10 @@ def run_autoresearch_loop(
                 family_search_fraction=cfg.family_search_fraction,
             )
         if not candidates:
-            manifest["stop_reason"] = "no_candidates_after_dedup"
+            if gen > 0:
+                manifest["stop_reason"] = "no_supported_exploration_remaining"
+            else:
+                manifest["stop_reason"] = "no_candidates_after_dedup"
             save_manifest(repo_root, manifest)
             break
 

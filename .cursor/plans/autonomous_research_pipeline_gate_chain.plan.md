@@ -22,7 +22,7 @@ todos:
     status: completed
   - id: phase2-gate1-manifest
     content: "Phase 2 (§6): Gate 1 frozen candidate manifest (candidate_manifest.py, feature_recipe.py) with hash immutability"
-    status: pending
+    status: completed
   - id: phase2-gate2-vectorbt
     content: "Phase 2 (§7): Gate 2 VectorBT screen via optimized paid/worker/matrix path — no subprocess-per-unit"
     status: completed
@@ -40,19 +40,19 @@ todos:
     status: completed
   - id: phase2-gate7-hft
     content: "Phase 2 (§12): Gate 7 HftBacktest realism (hft_campaign/, run_hft_campaign:true, per-candidate status)"
-    status: pending
+    status: completed
   - id: phase2-gate8-certification
     content: "Phase 2 (§13): Gate 8 final certification — FINAL_PASS only when all prior gates PASS; score cannot override"
-    status: pending
+    status: completed
   - id: phase3-generation-summary
     content: "Phase 3 (§14): Fix generation_summary — all candidates, elite=FINAL_PASS only, best_candidate from FINAL_PASS only"
-    status: pending
+    status: completed
   - id: phase3-learning-behavior
     content: "Phase 3 (§15): Karpathy autonomous learning — exploitation from FINAL_PASS only; no threshold lowering or WFC/HFT bypass"
-    status: pending
+    status: completed
   - id: phase3-review-memory
     content: "Phase 3 (§16): Extend review_memory with full gate outcomes including WFC Pearson/Spearman; advisory only"
-    status: pending
+    status: completed
   - id: phase4-completion
     content: "Phase 4 (§17): Honest .generation_complete — validate all receipts before marker; zero FINAL_PASS allowed"
     status: pending
