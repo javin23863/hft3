@@ -158,7 +158,7 @@ class TestVectorbtAdapterIntegration:
         assert artifact["feature_usage_manifest_hash"] == compute_feature_usage_manifest_hash(
             artifact["feature_usage_manifest"]
         )
-        validate_screening_artifact(artifact)
+        assert validate_screening_artifact(artifact) == []
 
     def test_validate_rejects_removed_feature_plane_field(self, tmp_path):
         artifact = filter_candidates(

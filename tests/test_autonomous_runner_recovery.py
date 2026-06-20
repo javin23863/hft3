@@ -17,6 +17,16 @@ CONFIG_PATH = Path("configs/research/autonomous_hft3.yaml")
 def _config(tmp_path: Path) -> CampaignConfig:
     cfg = CampaignConfig.from_yaml(CONFIG_PATH)
     cfg.output["artifacts_dir"] = str(tmp_path / "artifacts")
+    cfg.data["event_windows"] = [
+        {
+            "event_id": "pytest",
+            "start_ns": 1,
+            "end_ns": 2,
+            "symbols": ["MES.v.0"],
+        }
+    ]
+    cfg.models["alpha"] = ["HYP_1"]
+    cfg.models["select"] = {"roles": ["alpha"]}
     return cfg
 
 

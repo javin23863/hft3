@@ -276,7 +276,13 @@ def _resolve_npz_digest_for_unit(unit: PaidScreenUnit, ctx: WorkerContext) -> st
             return hash_file_content(fs_ctx.store_path)
         except FileNotFoundError:
             return "fs_v1_store_missing"
-    from data_system.src.event_data_resolver import npz_search_dirs
+    try:
+        from data_system.src.event_data_resolver import npz_search_dirs
+    except ModuleNotFoundError as exc:
+        missing = exc.name or ""
+        if missing != "data_system" and not missing.startswith("data_system."):
+            raise
+        raise RuntimeError("npz resolver unavailable; cannot derive content-backed data manifest") from exc
     from backtest_pipeline.src.vectorbt_adapter import _npz_candidates_for_event
 
     repo_root = Path(ctx.repo_root)

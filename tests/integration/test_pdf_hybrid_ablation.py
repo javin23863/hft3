@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from backtest.adapters.rithmic_replay_loader import resolve_event_npz
 from backtest_pipeline.src.event_meta import load_event_row
 from backtest_pipeline.src.pdf_defensive_config import all_defensive_configs
 from backtest_pipeline.src.pdf_hybrid_ablation import run_defensive_ablation_matrix
+from backtest_pipeline.src.runner import ReplayRunner
 
 
 def _cpi_npz_or_skip():
@@ -48,6 +50,29 @@ def test_pdf_defensive_ablation_smoke_two_modes() -> None:
     )
     assert len(matrix["modes"]) == 2
     _assert_matrix_health(matrix)
+
+
+@pytest.mark.integration
+def test_replay_runner_callback_mode_is_uncertified() -> None:
+    npz_path, _event_meta = _cpi_npz_or_skip()
+    result = ReplayRunner(str(npz_path)).run_replay(
+        model_logic_callback=lambda _hbt: [],
+        use_combined_strategy=False,
+        max_steps=1,
+        run_id="pytest_callback_uncertified",
+    )
+
+    summary = json.loads(Path(result["summary_path"]).read_text(encoding="utf-8"))
+    for metadata in (result, summary):
+        stamp = metadata["certification_stamp"]
+        assert metadata["certification_allowed"] is False
+        assert metadata["certification_status"] == "callback_mode_uncertified_no_lifecycle"
+        assert (
+            metadata["certification_block_reason"]
+            == "legacy_model_logic_callback_bypasses_replay_adapter_lifecycle"
+        )
+        assert stamp["promotion_eligible"] is False
+        assert stamp["promotion_label"] == "UNCERTIFIED_CALLBACK_MODE"
 
 
 @pytest.mark.integration

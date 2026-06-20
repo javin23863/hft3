@@ -43,6 +43,21 @@ def _config() -> CampaignConfig:
     return CampaignConfig.from_yaml(CONFIG_PATH)
 
 
+def _runner_config() -> CampaignConfig:
+    cfg = _config()
+    cfg.data["event_windows"] = [
+        {
+            "event_id": "pytest",
+            "start_ns": 1,
+            "end_ns": 2,
+            "symbols": ["MES.v.0"],
+        }
+    ]
+    cfg.models["alpha"] = ["HYP_1"]
+    cfg.models["select"] = {"roles": ["alpha"]}
+    return cfg
+
+
 def _write_passing_robustness_gates(
     path: Path,
     run_id: str,
@@ -147,7 +162,7 @@ def test_config_validates_required_fields() -> None:
 
 def test_autonomous_runner_headless(tmp_path: Path) -> None:
     """The runner must not require Streamlit, notebooks, or input()."""
-    runner = AutonomousRunner(config=_config(), root=tmp_path)
+    runner = AutonomousRunner(config=_runner_config(), root=tmp_path)
     rc = runner.run()
     # Default scaffolded decision is QUARANTINE → rc 2
     assert rc == 2
@@ -173,7 +188,7 @@ def test_autonomous_runner_no_input_or_gui_imports() -> None:
 
 
 def test_resumable_rerun(tmp_path: Path) -> None:
-    cfg = _config()
+    cfg = _runner_config()
     cfg.output["artifacts_dir"] = str(tmp_path / "artifacts")
     runner = AutonomousRunner(config=cfg, root=tmp_path, run_id="R1")
     assert runner.run() == 2
@@ -195,7 +210,7 @@ def test_resumable_rerun(tmp_path: Path) -> None:
 
 
 def test_quarantine_path_does_not_write_registry(tmp_path: Path) -> None:
-    cfg = _config()
+    cfg = _runner_config()
     cfg.output["artifacts_dir"] = str(tmp_path / "artifacts")
     runner = AutonomousRunner(config=cfg, root=tmp_path, run_id="Q1")
     rc = runner.run()
@@ -214,7 +229,7 @@ def test_quarantine_path_does_not_write_registry(tmp_path: Path) -> None:
 
 
 def test_promote_writes_registry_atomically(tmp_path: Path) -> None:
-    cfg = _config()
+    cfg = _runner_config()
     cfg.output["artifacts_dir"] = str(tmp_path / "artifacts")
 
     def force_promote(runner: AutonomousRunner, run_id: str, *, gates: str) -> Path:
@@ -352,7 +367,7 @@ def test_promote_writes_registry_atomically(tmp_path: Path) -> None:
 
 
 def test_artifact_bundle_manifest_lists_all_stages(tmp_path: Path) -> None:
-    cfg = _config()
+    cfg = _runner_config()
     cfg.output["artifacts_dir"] = str(tmp_path / "artifacts")
     runner = AutonomousRunner(config=cfg, root=tmp_path, run_id="M1")
     runner.run()
@@ -371,7 +386,7 @@ def test_artifact_bundle_manifest_lists_all_stages(tmp_path: Path) -> None:
 
 
 def test_report_md_has_required_sections(tmp_path: Path) -> None:
-    cfg = _config()
+    cfg = _runner_config()
     cfg.output["artifacts_dir"] = str(tmp_path / "artifacts")
     runner = AutonomousRunner(config=cfg, root=tmp_path, run_id="R1")
     runner.run()
@@ -386,7 +401,7 @@ def test_report_md_has_required_sections(tmp_path: Path) -> None:
 def test_cli_dry_run(tmp_path: Path) -> None:
     """The CLI works end-to-end via the repo-root launcher
     `python hft3-research.py --config ...`."""
-    cfg = _config()
+    cfg = _runner_config()
     cfg.output["artifacts_dir"] = str(tmp_path / "artifacts")
     cfg_path = tmp_path / "campaign.yaml"
     cfg_path.write_text(yaml.safe_dump({
@@ -418,7 +433,7 @@ def test_cli_dry_run(tmp_path: Path) -> None:
 
 
 def test_config_hash_is_deterministic(tmp_path: Path) -> None:
-    cfg = _config()
+    cfg = _runner_config()
     cfg.output["artifacts_dir"] = str(tmp_path / "artifacts")
     r1 = AutonomousRunner(config=cfg, root=tmp_path, run_id="H1")
     r1.stage_load_config()

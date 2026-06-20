@@ -58,6 +58,7 @@ def _make_client(tmp_path: Path, cost_return: float = 0.10):
             # Override manifest path to tmp_path so tests are isolated
             client.manifest_path = str(tmp_path / "manifest.parquet")
             client.budget.manifest_path = str(tmp_path / "manifest.parquet")
+            client.budget.total_used = 0.0
             # Keep a reference to the mock for assertions
             client._mock_hist = mock_hist
         return client

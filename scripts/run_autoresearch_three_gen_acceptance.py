@@ -216,6 +216,7 @@ def _acceptance_robustness_fn(repo_root: Path):
                 {"name": "Recent holdout", "gate_pass": wf_status == "PASS", "evaluate_only": True},
             ],
             "wfc": {"pearson": 0.5 if wfc_status == "PASS" else -0.1, "spearman": 0.4 if wfc_status == "PASS" else -0.1, "wfc_status": wfc_status},
+            "wfc_matrix_rows": [{"parameter_hash": f"acceptance_{cid}", "fold": 0}] if wfc_status == "PASS" else [],
             "metrics": {},
         }
         (out / "summary.json").write_text(json.dumps(campaign_summary), encoding="utf-8")
@@ -235,18 +236,50 @@ def _acceptance_robustness_fn(repo_root: Path):
 def _acceptance_hft_fn(repo_root: Path):
     from types import SimpleNamespace
 
+    def _manifest_for_candidate(candidate_id: str, config) -> dict[str, Any]:
+        if not config:
+            return {}
+        manifests_path = Path(config.out_dir).parent / "candidate_manifests.jsonl"
+        if manifests_path.is_file():
+            for line in manifests_path.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                row = json.loads(line)
+                if str(row.get("candidate_id")) == candidate_id:
+                    return row
+        return {}
+
+    def _screening_artifact_hash(config) -> str:
+        if not config:
+            return ""
+        for path in sorted(Path(config.out_dir).parent.glob("*/screening_artifact.json")):
+            artifact = json.loads(path.read_text(encoding="utf-8"))
+            if artifact.get("screening_artifact_hash"):
+                return str(artifact["screening_artifact_hash"])
+        return ""
+
+    def _robustness_artifact_hash(candidate_id: str) -> str:
+        from backtest_pipeline.src.hft_campaign._hashing import sha256_hex
+
+        summary_path = repo_root / "runtime" / "reports" / "three_gen_rob" / candidate_id / "summary.json"
+        if not summary_path.is_file():
+            return ""
+        return sha256_hex(json.loads(summary_path.read_text(encoding="utf-8")))
+
     def _run(**kwargs):
         cid = str((kwargs.get("scenarios") or [{}])[0].candidate_id if kwargs.get("scenarios") else kwargs.get("candidate_id") or "")
         if not cid and kwargs.get("scenarios"):
             cid = str(getattr(kwargs["scenarios"][0], "candidate_id", ""))
         scenarios = kwargs.get("scenarios") or []
+        config = kwargs.get("config")
         out = repo_root / "runtime" / "reports" / "three_gen_hft" / (cid or "unknown")
         out.mkdir(parents=True, exist_ok=True)
         status = "completed"
-        cert = "full_fidelity_declared"
+        cert = "scheduled_event_replay_not_full_feature_plane"
         if str(cid).startswith("reject_hft"):
             status = "failed"
             cert = "fail"
+        screening_hash = _screening_artifact_hash(config)
         return SimpleNamespace(
             status="pass" if status == "completed" else "fail",
             summary={"status": "pass" if status == "completed" else "fail"},
@@ -254,7 +287,22 @@ def _acceptance_hft_fn(repo_root: Path):
                 SimpleNamespace(
                     scenario_id=str(getattr(s, "scenario_id", "s1")),
                     status=status,
-                    replay_result={"certification_status": cert},
+                    replay_result={
+                        "candidate_id": str(getattr(s, "candidate_id", cid)),
+                        "manifest_hash": str(
+                            getattr(s, "manifest_hash", "")
+                            or _manifest_for_candidate(str(getattr(s, "candidate_id", cid)), config).get("manifest_hash")
+                            or ""
+                        ),
+                        "feature_recipe_hash": str(
+                            getattr(s, "feature_recipe_hash", "")
+                            or _manifest_for_candidate(str(getattr(s, "candidate_id", cid)), config).get("feature_recipe_hash")
+                            or ""
+                        ),
+                        "screening_artifact_hash": str(getattr(s, "upstream_screening_artifact_hash", "") or screening_hash),
+                        "robustness_artifact_hash": _robustness_artifact_hash(str(getattr(s, "candidate_id", cid))),
+                        "certification_status": cert,
+                    },
                     artifact_dir=str(out),
                 )
                 for s in scenarios
@@ -441,6 +489,8 @@ def run_three_gen_acceptance(
 
     original_propose = gl.propose_next_candidates
     original_generate = gl.generate_candidates
+    original_generate_scenario_manifest = gl.generate_scenario_manifest
+    original_load_scenarios_from_manifest = gl.load_scenarios_from_manifest
 
     def propose_wrapper(**kwargs):
         cands = list(original_propose(**kwargs))
@@ -499,6 +549,8 @@ def run_three_gen_acceptance(
     finally:
         gl.propose_next_candidates = original_propose
         gl.generate_candidates = original_generate
+        gl.generate_scenario_manifest = original_generate_scenario_manifest
+        gl.load_scenarios_from_manifest = original_load_scenarios_from_manifest
 
     campaign_id = loop_report["campaign_id"]
     manifest = load_manifest(repo_root, campaign_id)

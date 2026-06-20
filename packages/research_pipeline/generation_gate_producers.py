@@ -311,7 +311,7 @@ def _promoted_row_with_campaign_statistical(
     inst = dict(campaign_summary.get("institutional_metrics") or {})
     scorecard = dict(inst.get("scorecard") or {})
     for key, value in scorecard.items():
-        if value is not None and not merged.get(key):
+        if value is not None and merged.get(key) is None:
             merged[key] = value
     robustness_input = campaign_summary.get("robustness_input")
     if isinstance(robustness_input, Mapping) and robustness_input:
@@ -596,7 +596,7 @@ def build_statistical_robustness_gate_receipt(
         status = "REJECT"
         failure_reasons.append("partial_robustness_not_run")
     unique_passed = sorted(set(passed_checks))
-    passed_count = len(unique_passed)
+    passed_count = req_count if status == "PASS" else len(unique_passed)
     if status == "PASS":
         failed_check_count = 0
         missing_check_count = 0

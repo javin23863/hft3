@@ -991,7 +991,7 @@ class TestV2FeatureFamilyConsumption:
         payload = json.loads(
             Path(results[0].screening_artifact_path).read_text(encoding="utf-8")
         )
-        validate_screening_artifact(payload)
+        assert validate_screening_artifact(payload) == []
         assert payload["bar_construction_id"] == FS_V1_BAR_CONSTRUCTION_ID
         manifest = payload["feature_usage_manifest"]
         primary = manifest["primary_fs_v1"]
