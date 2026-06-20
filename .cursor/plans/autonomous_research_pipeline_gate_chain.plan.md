@@ -16,7 +16,7 @@ todos:
     status: completed
   - id: phase1-gate-chain-contract
     content: "Phase 1 (§4): Add/extend run_generation_gate_chain in generation_loop ownership with strict receipt schema and exact PASS comparisons"
-    status: pending
+    status: completed
   - id: phase2-gate0-ontology
     content: "Phase 2 (§5): Wire Gate 0 ontology admission (ontology_gate.py + ONTOLOGY_GATE_AGENT_SPEC) before VectorBT compute"
     status: pending
