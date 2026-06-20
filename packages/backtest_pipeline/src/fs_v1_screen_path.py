@@ -233,7 +233,10 @@ def cross_asset_features_at_vis_ts(
 
 def sample_cross_asset_features_for_manifest(ctx: FsV1ScreenContext) -> dict[str, dict[str, Any]]:
     """Representative cross-asset legs at the final primary-store decision timestamp."""
-    ts = np.asarray(ctx.store.get("ts"), dtype=np.int64)
+    store_ts = ctx.store.get("ts")
+    if store_ts is None:
+        return {}
+    ts = np.asarray(store_ts, dtype=np.int64)
     if len(ts) == 0:
         return {}
     feat_latency_ns = int(ctx.feature_latency_ms * 1_000_000)
