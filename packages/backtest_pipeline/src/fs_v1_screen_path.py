@@ -133,6 +133,22 @@ def _load_leader_leg_store(
     return None
 
 
+def recipe_requires_cross_asset_leaders(
+    *,
+    metadata: Mapping[str, Any] | None = None,
+    model_id: str = "",
+) -> bool:
+    """Shared detector for cross-asset leader-leg requirements."""
+    meta = dict(metadata or {})
+    recipe = meta.get("feature_recipe") or {}
+    if recipe.get("cross_asset_legs") or recipe.get("leader_symbols"):
+        return True
+    family = str(meta.get("feature_family") or meta.get("proposal_reason") or "").lower()
+    if "cross_asset" in family:
+        return True
+    return "CROSS_ASSET" in str(model_id or "").upper()
+
+
 def _import_cross_asset_assembly_module():
     """Load cross_asset_assembly without importing replay package __init__."""
     import importlib.util

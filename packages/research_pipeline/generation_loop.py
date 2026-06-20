@@ -479,31 +479,35 @@ def _enrich_hft_scenario_results(
     screening_artifact_hash: str,
     robustness_artifact_hash: str,
 ) -> list[dict[str, Any]]:
-    """Hydrate replay artifacts and inject upstream identity for Gate 7 parity."""
+    """Hydrate replay artifacts for Gate 7 parity (no manifest backfill)."""
     enriched: list[dict[str, Any]] = []
     for result in list(scenario_results or []):
         row = dict(result)
         status = str(row.get("status") or "")
-        if status == "cached":
-            row["status"] = "completed"
         artifact_dir = Path(str(row.get("artifact_dir") or "")) if row.get("artifact_dir") else None
         replay = dict(row.get("replay_result") or {})
+        summary: dict[str, Any] = {}
         if artifact_dir is not None and artifact_dir.is_dir():
             if not replay:
                 replay = _load_hft_artifact_json(artifact_dir, "replay_result.json")
             summary = _load_hft_artifact_json(artifact_dir, "replay_summary.json")
             if summary.get("certification_status") and not replay.get("certification_status"):
                 replay["certification_status"] = summary["certification_status"]
-            for key in ("candidate_id", "feature_recipe_hash"):
+            for key in ("candidate_id", "feature_recipe_hash", "manifest_hash"):
                 if summary.get(key) and not replay.get(key):
                     replay[key] = summary[key]
-        replay.setdefault("candidate_id", str(manifest.get("candidate_id") or ""))
-        replay.setdefault("manifest_hash", str(manifest.get("manifest_hash") or ""))
-        replay.setdefault("feature_recipe_hash", str(manifest.get("feature_recipe_hash") or ""))
-        if screening_artifact_hash:
-            replay.setdefault("screening_artifact_hash", screening_artifact_hash)
-        if robustness_artifact_hash:
-            replay.setdefault("robustness_artifact_hash", robustness_artifact_hash)
+            for key in ("screening_artifact_hash", "robustness_artifact_hash"):
+                if summary.get(key) and not replay.get(key):
+                    replay[key] = summary[key]
+        if status == "cached":
+            cert = str(replay.get("certification_status") or summary.get("certification_status") or "")
+            replay_error = replay.get("error") or summary.get("error")
+            if replay_error:
+                row["status"] = "error"
+            elif cert and cert not in ("fail", "accelerated_not_certifying"):
+                row["status"] = "completed"
+            else:
+                row["status"] = "cached"
         row["replay_result"] = replay
         enriched.append(row)
     return enriched
@@ -864,12 +868,13 @@ def run_single_generation(
             promoted_row=promoted_row,
             screening_path=screening_path,
         )
+        campaign_summary = dict(rob.get("campaign_summary") or {}) if rob else None
         statistical_receipt = build_statistical_robustness_gate_receipt(
             manifest=cand_manifest,
             promoted_row=promoted_row,
             allow_partial=False,
+            campaign_summary=campaign_summary,
         )
-        campaign_summary = dict(rob.get("campaign_summary") or {}) if rob else None
         regular_wf_receipt = build_regular_walk_forward_gate_receipt(
             manifest=cand_manifest,
             campaign_summary=campaign_summary,
@@ -913,6 +918,11 @@ def run_single_generation(
         rob = robustness_by_id.get(cid)
         receipts = pre_hft_receipts_by_id[cid]
         if cid in hft_eligible_ids and cfg.run_hft_campaign:
+            pilot_scope = str(cfg.screening_scope or "").lower() in {
+                "pilot",
+                "pilot-scope",
+                "pilot_scope",
+            }
             hft_receipt = build_hftbacktest_gate_receipt(
                 manifest=cand_manifest,
                 scenario_results=_enrich_hft_scenario_results(
@@ -925,6 +935,7 @@ def run_single_generation(
                 screening_artifact_hash=screening_hash,
                 robustness_artifact_hash=_robustness_artifact_hash(rob),
                 accelerated_mode=False,
+                allow_declared_certification=pilot_scope,
             )
         elif not cfg.run_hft_campaign:
             hft_receipt = build_hftbacktest_gate_receipt(

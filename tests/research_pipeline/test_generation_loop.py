@@ -285,8 +285,9 @@ def test_generation_loop_spies_runners(tmp_path: Path, monkeypatch) -> None:
             "status": "PASS",
             "wfc_status": "PASS",
             "robustness_passed": True,
-            "periods": [{"gate_pass": True}],
+            "periods": [{"name": "Discovery", "gate_pass": True}],
             "wfc": {"pearson": 0.5, "spearman": 0.4, "wfc_status": "PASS"},
+            "wfc_matrix_rows": [{"parameter_hash": "ph-smoke", "fold": 0}],
             "metrics": {},
         }
         (out / "summary.json").write_text(json.dumps(campaign_summary), encoding="utf-8")
@@ -534,8 +535,9 @@ def test_robustness_fn_forwards_frozen_params(tmp_path: Path, monkeypatch) -> No
                     "status": "PASS",
                     "wfc_status": "PASS",
                     "robustness_passed": True,
-                    "periods": [{"gate_pass": True}],
+                    "periods": [{"name": "Discovery", "gate_pass": True}],
                     "wfc": {"pearson": 0.5, "spearman": 0.4, "wfc_status": "PASS"},
+                    "wfc_matrix_rows": [{"parameter_hash": "ph-fwd", "fold": 0}],
                     "metrics": {},
                 }
             ),

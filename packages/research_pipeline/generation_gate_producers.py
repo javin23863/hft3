@@ -42,6 +42,8 @@ STATISTICAL_GATE_VERSION = "1.0.0"
 MANIFEST_GATE_VERSION = "1.0.0"
 HFT_GATE_VERSION = "1.0.0"
 
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
 _VECTORBT_OFFICIAL_STATS: tuple[str, ...] = (
     "gross_return",
     "net_return",
@@ -272,6 +274,55 @@ def _robustness_input_from_promoted_row(promoted_row: Mapping[str, Any]) -> dict
     return None
 
 
+def _holdout_period_names_for_gate() -> frozenset[str]:
+    """Load holdout band names from walk_forward.yaml (lazy — avoids import cycle)."""
+    from research_pipeline.generation_summary import _holdout_period_names
+
+    return frozenset(_holdout_period_names(_REPO_ROOT))
+
+
+def _holdout_evaluate_only_failures(periods: Sequence[Mapping[str, Any]]) -> list[str]:
+    """Fail when configured holdout periods ran without evaluate_only=True."""
+    failures: list[str] = []
+    by_name = {
+        str(period.get("name") or ""): period
+        for period in periods
+        if isinstance(period, Mapping) and period.get("name")
+    }
+    holdout_names = _holdout_period_names_for_gate() or frozenset({"Holdout", "Recent holdout"})
+    for holdout_name in holdout_names:
+        period = by_name.get(holdout_name)
+        if period is None:
+            continue
+        if not bool(period.get("evaluate_only")):
+            failures.append(f"holdout_evaluate_only_violation:{holdout_name}")
+    return failures
+
+
+def _promoted_row_with_campaign_statistical(
+    promoted_row: Mapping[str, Any],
+    campaign_summary: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Merge campaign robustness/scorecard fields into Gate 6 screening row."""
+    merged = dict(promoted_row)
+    if not campaign_summary:
+        return merged
+    inst = dict(campaign_summary.get("institutional_metrics") or {})
+    scorecard = dict(inst.get("scorecard") or {})
+    for key, value in scorecard.items():
+        if value is not None and not merged.get(key):
+            merged[key] = value
+    robustness_input = campaign_summary.get("robustness_input")
+    if isinstance(robustness_input, Mapping) and robustness_input:
+        merged.setdefault("robustness_input", dict(robustness_input))
+    elif campaign_summary.get("robustness_passed") is True and not _statistical_row_has_input(merged):
+        merged.setdefault("robustness_artifact_staleness", "fresh")
+        merged.setdefault("dsr_status", "pass")
+        merged.setdefault("pbo_status", "pass")
+        merged.setdefault("cscv_status", "pass")
+    return merged
+
+
 def _producer_status_pass(value: Any) -> bool:
     if isinstance(value, Mapping):
         return screening_status_text(value) == "pass"
@@ -500,12 +551,14 @@ def build_statistical_robustness_gate_receipt(
     manifest: Mapping[str, Any],
     promoted_row: Mapping[str, Any],
     allow_partial: bool = False,
+    campaign_summary: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Gate 6 — statistical/Monte Carlo gauntlet via robustness_bridge producers."""
     candidate_id = str(manifest["candidate_id"])
     required_checks = list(_STATISTICAL_REQUIRED_CHECKS)
     req_count = len(required_checks)
-    robustness_input = _robustness_input_from_promoted_row(promoted_row)
+    row = _promoted_row_with_campaign_statistical(promoted_row, campaign_summary)
+    robustness_input = _robustness_input_from_promoted_row(row)
     if robustness_input:
         evidence = compute_robustness_evidence(robustness_input, candidate_id=candidate_id)
         p_values = robustness_input.get("p_values")
@@ -513,11 +566,11 @@ def build_statistical_robustness_gate_receipt(
         if not evidence.get("holm_bh_or_not_run"):
             evidence["holm_bh_or_not_run"] = _holm_bh_evidence(p_values, method="bh")
     else:
-        evidence = _statistical_evidence_from_row(promoted_row)
-        p_values = promoted_row.get("p_values")
+        evidence = _statistical_evidence_from_row(row)
+        p_values = row.get("p_values")
         if p_values and not evidence.get("holm_stepdown_or_not_run"):
             evidence["holm_stepdown_or_not_run"] = _holm_bh_evidence(p_values, method="holm")
-    has_any_input = _statistical_row_has_input(promoted_row)
+    has_any_input = _statistical_row_has_input(row)
     if not has_any_input:
         return build_gate_receipt(
             gate_id=GATE_STATISTICAL,
@@ -576,7 +629,11 @@ def build_statistical_robustness_gate_receipt(
             missing_check_count += req_count - accounted
         elif accounted > req_count:
             overflow = accounted - req_count
-            missing_check_count = max(0, missing_check_count - overflow)
+            trim_missing = min(overflow, missing_check_count)
+            missing_check_count -= trim_missing
+            overflow -= trim_missing
+            if overflow > 0:
+                failed_check_count = max(0, failed_check_count - overflow)
     receipt = build_gate_receipt(
         gate_id=GATE_STATISTICAL,
         gate_version=STATISTICAL_GATE_VERSION,
@@ -642,12 +699,17 @@ def build_regular_walk_forward_gate_receipt(
     wf_status = str(campaign_summary.get("status") or "")
     periods = list(campaign_summary.get("periods") or [])
     period_pass = all(bool(p.get("gate_pass")) for p in periods if periods) if periods else False
-    status = "PASS" if wf_status == "PASS" and period_pass else "REJECT"
+    holdout_failures = _holdout_evaluate_only_failures(
+        [p for p in periods if isinstance(p, Mapping)]
+    )
+    holdout_ok = not holdout_failures
+    status = "PASS" if wf_status == "PASS" and period_pass and holdout_ok else "REJECT"
     failure_reasons: list[str] = []
     if status != "PASS":
         failure_reasons.append(f"regular_walk_forward_status={wf_status}")
         if periods and not period_pass:
             failure_reasons.append("one_or_more_period_gate_fail")
+        failure_reasons.extend(holdout_failures)
     receipt = build_gate_receipt(
         gate_id=GATE_REGULAR_WF,
         gate_version=REGULAR_WF_GATE_VERSION,
@@ -667,6 +729,7 @@ def build_regular_walk_forward_gate_receipt(
     )
     receipt["regular_walk_forward_status"] = wf_status
     receipt["period_count"] = len(periods)
+    receipt["holdout_evaluate_only"] = holdout_ok
     return receipt
 
 
@@ -706,7 +769,16 @@ def build_walk_forward_correlation_gate_receipt(
     spearman = wfc.get("spearman")
     pearson_present = pearson is not None
     spearman_present = spearman is not None
-    status = "PASS" if wfc_status == "PASS" and pearson_present and spearman_present else "REJECT"
+    matrix_rows = list(campaign_summary.get("wfc_matrix_rows") or [])
+    aligned_hashes = sorted(
+        {str(r.get("parameter_hash", "")) for r in matrix_rows if r.get("parameter_hash")}
+    )
+    alignment_ok = bool(aligned_hashes)
+    status = (
+        "PASS"
+        if wfc_status == "PASS" and pearson_present and spearman_present and alignment_ok
+        else "REJECT"
+    )
     if wfc_status in ("SKIPPED", "NOT_RUN"):
         status = "NOT_RUN"
     failure_reasons: list[str] = []
@@ -716,6 +788,8 @@ def build_walk_forward_correlation_gate_receipt(
             failure_reasons.append("pearson_missing")
         if not spearman_present:
             failure_reasons.append("spearman_missing")
+        if not alignment_ok:
+            failure_reasons.append("parameter_surface_alignment_missing")
     passed_count = req_count if status == "PASS" else 0
     receipt = build_gate_receipt(
         gate_id=GATE_WFC,
@@ -738,11 +812,9 @@ def build_walk_forward_correlation_gate_receipt(
     receipt["spearman"] = spearman
     receipt["n_parameter_combinations"] = wfc.get("n_parameter_combinations")
     receipt["n_folds"] = wfc.get("n_folds")
-    aligned_hashes = sorted(
-        {str(r.get("parameter_hash", "")) for r in (campaign_summary.get("wfc_matrix_rows") or []) if r.get("parameter_hash")}
-    )
     if aligned_hashes:
         receipt["aligned_parameter_hashes"] = aligned_hashes
+    receipt["parameter_surface_alignment"] = alignment_ok
     return receipt
 
 
@@ -793,9 +865,9 @@ def build_manifest_gate_receipt(
     return receipt
 
 
-_PASSING_HFT_CERTIFICATION = frozenset(
-    {"full_fidelity_declared", "scheduled_event_replay_not_full_feature_plane"}
-)
+_PRODUCTION_HFT_CERTIFICATION = frozenset({"scheduled_event_replay_not_full_feature_plane"})
+_DECLARED_HFT_CERTIFICATION = frozenset({"full_fidelity_declared"})
+_PASSING_HFT_CERTIFICATION = _PRODUCTION_HFT_CERTIFICATION | _DECLARED_HFT_CERTIFICATION
 _FAILING_HFT_CERTIFICATION = frozenset(
     {
         "accelerated_not_certifying",
@@ -867,6 +939,7 @@ def build_hftbacktest_gate_receipt(
     robustness_artifact_hash: str = "",
     skipped_reason: str | None = None,
     accelerated_mode: bool = False,
+    allow_declared_certification: bool = False,
 ) -> dict[str, Any]:
     """Gate 7 — per-candidate HftBacktest realism with hash parity."""
     candidate_id = str(manifest["candidate_id"])
@@ -923,6 +996,8 @@ def build_hftbacktest_gate_receipt(
             failure_reasons.append(f"scenario_{result.get('scenario_id')}_certification_status_missing")
         elif cert in _FAILING_HFT_CERTIFICATION:
             failure_reasons.append(f"certification_status={cert}")
+        elif cert in _DECLARED_HFT_CERTIFICATION and not allow_declared_certification:
+            failure_reasons.append("declared_certification_requires_dry_run_mode")
         elif cert not in _PASSING_HFT_CERTIFICATION:
             failure_reasons.append(f"certification_status_not_passing={cert}")
         failure_reasons.extend(

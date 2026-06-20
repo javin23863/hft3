@@ -1335,6 +1335,11 @@ Full procedure: [Greptile PR GrepLoop](../ai/GREPLOOP.md)
 
 ### Greptile loop procedure
 
+> **Owner gate-order correction (2026-06-20):** **Build: cavecrew dual-pass → fix
+> (0🔴 0🟡) → verify → push → Greptile last.** Push before dual-pass review or
+> Greptile before cavecrew clears is a workflow violation — dual-pass still
+> required on pushed commits; re-ping Greptile only after fixes land on new head.
+
 #### Step 1 — Open or identify the PR
 
 ```bash
@@ -1349,13 +1354,19 @@ branch
 current head SHA
 ```
 
-#### Step 2 — Push the current verified commit
+#### Step 2 — Dual-pass review and verify (before push)
+
+Run **cavecrew-reviewer** dual-pass (Pass A Karpathy + Pass B math) on the
+local diff vs base. Fix all 🔴 and 🟡; re-review until **0🔴 0🟡**. Then run
+scope-appropriate pytest. Do **not** push until this step passes.
+
+#### Step 3 — Push the current verified commit
 
 ```bash
 git push
 ```
 
-#### Step 3 — Request Greptile review
+#### Step 4 — Request Greptile review (LAST ONLY)
 
 Use the repository's installed Greptile trigger:
 
@@ -1365,7 +1376,7 @@ gh pr comment <PR_NUMBER> --body "@greptileai"
 
 If the installed integration uses an automatic trigger, confirm that Greptile reviewed the current head SHA. Do not assume the old review applies to the new commit.
 
-#### Step 4 — Fetch all Greptile review surfaces
+#### Step 5 — Fetch all Greptile review surfaces
 
 ```bash
 gh pr view <PR_NUMBER> --json body,reviews,comments,statusCheckRollup
@@ -1385,7 +1396,7 @@ updated-in-place Greptile comments
 review head SHA
 ```
 
-#### Step 5 — Fix all actionable Greptile findings
+#### Step 6 — Fix all actionable Greptile findings
 
 For each finding, classify:
 
@@ -1399,7 +1410,7 @@ informational
 Fix every actionable issue.
 Do not make unrelated architectural changes in response to informational comments.
 
-#### Step 6 — Re-run required gates
+#### Step 7 — Re-run required gates
 
 After fixes:
 
@@ -1411,14 +1422,14 @@ scope-appropriate tests
 git diff --check
 ```
 
-#### Step 7 — Push and request Greptile again
+#### Step 8 — Push and request Greptile again
 
 ```bash
 git push
 gh pr comment <PR_NUMBER> --body "@greptileai"
 ```
 
-#### Step 8 — Stop condition
+#### Step 9 — Stop condition
 
 The Greptile gate passes only when:
 

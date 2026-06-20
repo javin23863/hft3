@@ -61,10 +61,10 @@
 
 ```text
 merge-ready: no
-scope-green: yes (tests/research_pipeline/ 224 passed on acd5734c)
+scope-green: no (research_pipeline subset only — forbidden per VALIDATION_HONESTY)
 scope: tests/research_pipeline/
-verify-run: exit 0 — 224 passed in 150.91s (.venv, 2026-06-20)
+verify-run: exit 0 — 224 passed in 150.91s (.venv, 2026-06-20) [STALE — pre-gate-order]
 data-mode: offline pytest + live GitHub API poll
-known-gaps: Greptile no response on PR #10 iter 0; Phase 10 blocked
-pr-greptile-review: BLOCKED(no-bot-response-pr10-iter0)
+known-gaps: premature @greptileai on acd5734c before cavecrew; Greptile no bot response iter 0; Phase 10 blocked
+pr-greptile-review: BLOCKED(gate-order-violation-premature-greptile-acd5734c)
 ```

@@ -30,6 +30,15 @@ Video-derived additions from `https://youtu.be/WIDIV8oDDC8`:
 
 ## Position
 
+**Mandatory build order (owner 2026-06-20, NON-NEGOTIABLE):**
+
+```text
+Build: cavecrew dual-pass → fix (0🔴 0🟡) → verify → push → Greptile last
+```
+
+Forbidden: push before dual-pass review clears with 0🔴; Greptile in parallel with
+cavecrew or before push; Greptile before cavecrew gate clears.
+
 **cavecrew-reviewer runs during build** (every code-change batch in Phases
 1–8). **Greptile PR GrepLoop runs LAST** (Phase 9 only) — never interleaved
 with implementation phases.
@@ -50,7 +59,7 @@ Run local preflight after each edit pass and before claiming the diff is ready
 for the dual-pass reviewer:
 
 ```text
-VaultGate -> GraphGate -> GraphPre -> Plan -> Code -> Local Preflight -> Review (cavecrew) -> Verify -> PR GrepLoop (Greptile, Phase 9) -> GraphPost
+VaultGate -> GraphGate -> GraphPre -> Plan -> Code -> Local Preflight -> Review (cavecrew dual-pass) -> Verify -> Push -> PR GrepLoop (Greptile, Phase 9 LAST) -> GraphPost
 ```
 
 If reviewer or tests find issues, fix them and run the relevant local preflight
@@ -121,12 +130,15 @@ Codex review or local agent review satisfied this gate.
 gh pr view --json number,headRefName,headRefOid
 ```
 
-2. Push current work, then trigger Greptile **only** (one PR at a time):
+2. Push current work, then trigger Greptile **only after cavecrew 0🔴 0🟡 + verify** (one PR at a time):
 
 ```powershell
+# After dual-pass review + pytest pass:
 git push
 gh pr comment <PR_NUMBER> --body "@greptileai"
 ```
+
+Do **not** post `@greptileai` before push or before cavecrew dual-pass clears.
 
 Do **not** post `@codex review` to satisfy PR GrepLoop. The
 `request-codex-review` GitHub Action may still run automatically; treat its

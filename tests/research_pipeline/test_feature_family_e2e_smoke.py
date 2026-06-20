@@ -230,8 +230,9 @@ def _e2e_robustness_fn(tmp_path: Path):
             "status": "PASS",
             "wfc_status": "PASS",
             "robustness_passed": True,
-            "periods": [{"gate_pass": True}],
+            "periods": [{"name": "Discovery", "gate_pass": True}],
             "wfc": {"pearson": 0.5, "spearman": 0.4, "wfc_status": "PASS"},
+            "wfc_matrix_rows": [{"parameter_hash": "ph-e2e", "fold": 0}],
             "metrics": {},
         }
         (out / "summary.json").write_text(json.dumps(campaign_summary), encoding="utf-8")

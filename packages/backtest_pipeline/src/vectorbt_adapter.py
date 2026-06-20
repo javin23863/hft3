@@ -610,7 +610,7 @@ def persist_screening_artifact(artifact: Mapping[str, Any], path: Path) -> Path:
     """Validate and persist the terminal VectorBT handoff artifact."""
     payload = _json_primitive_screening_payload(artifact)
     payload["screening_artifact_hash"] = compute_screening_artifact_hash(payload)
-    validate_screening_artifact(payload)
+    validate_screening_artifact_or_raise(payload)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return path
@@ -1537,7 +1537,7 @@ def _validate_screening_reason_map(
         errors.append(f"{mapping_field}_reason_mismatch")
 
 
-def validate_screening_artifact(artifact: Mapping[str, Any]) -> None:
+def validate_screening_artifact_or_raise(artifact: Mapping[str, Any]) -> None:
     """Validate the terminal VectorBT screening artifact and fail closed."""
     errors: List[str] = []
     for field_name in SCREENING_ARTIFACT_REQUIRED_FIELDS:
@@ -1933,7 +1933,7 @@ class FilterResult:
         if self.screen_performance:
             payload["screen_performance"] = dict(self.screen_performance)
         payload["screening_artifact_hash"] = compute_screening_artifact_hash(payload)
-        validate_screening_artifact(payload)
+        validate_screening_artifact_or_raise(payload)
         if payload.get("promoted_count", 0) > 0:
             stamp_artifact(payload, STAGE_2_PROMOTED_AGGREGATION)
         else:
@@ -2526,12 +2526,9 @@ def compute_raw_hypothesis_signal_series(
         if state is not None:
             raw_signal[i] = float(hypothesis_cls.evaluate(state))
 
-    # Bar-synthetic MBO uses same-bar close — defer one bar for PIT / executable lag
-    # parity with ``_shift_signal_to_executable_bar`` (filtration F_t).
-    signal = np.zeros(n_bars, dtype=np.float64)
-    if n_bars > 1:
-        signal[1:] = raw_signal[:-1]
-    return signal
+    # Matrix screening applies ``_shift_signal_to_executable_bar`` once — do not
+    # defer here or NPZ/bar paths get double executable lag (filtration F_t).
+    return raw_signal
 
 
 def _default_signal_computer(
@@ -2895,6 +2892,15 @@ def _resolve_research_clock(candidates: List[CandidateModel]) -> str:
     return RESEARCH_CLOCK_SCHEDULED_EVENT
 
 
+def _candidate_requires_cross_asset_leaders(candidate: CandidateModel) -> bool:
+    from backtest_pipeline.src.fs_v1_screen_path import recipe_requires_cross_asset_leaders
+
+    return recipe_requires_cross_asset_leaders(
+        metadata=getattr(candidate, "metadata", None),
+        model_id=str(getattr(candidate, "model_id", "") or ""),
+    )
+
+
 def _apply_fs_v1_screen_metadata(
     result: FilterResult,
     ctx: Any,
@@ -2913,7 +2919,9 @@ def _apply_fs_v1_screen_metadata(
     )
 
     cross_asset_aligned = False
-    if ctx.leader_legs:
+    if ctx.missing_leader_symbols:
+        cross_asset_aligned = False
+    elif ctx.leader_legs:
         try:
             cross_asset_mod = _import_cross_asset_assembly_module()
             validate_cross_asset_alignment = cross_asset_mod.validate_cross_asset_alignment
@@ -2960,6 +2968,9 @@ def _apply_fs_v1_screen_metadata(
         "feature_usage_manifest": {**base_manifest, **recipe_manifest},
         "model_feature_usage_status": "partial_observed",
     }
+    if ctx.missing_leader_symbols:
+        result.feature_plane_overrides["missing_leader_symbols"] = list(ctx.missing_leader_symbols)
+        result.feature_plane_overrides["cross_asset_leader_fail_closed"] = True
     result.no_lookahead_signal_shift_proof = (
         "fs_v1_row_loop_visible_index_j_with_ts[j]<=ts[i]-feature_latency_ns;"
         " signals shifted one executable bar before VectorBT portfolio simulation"
@@ -3227,6 +3238,23 @@ def apply_promotion_gates(
         )
         prom.seed = 42
         prom.timestamp_utc = datetime.now(timezone.utc).isoformat()
+
+        overrides = dict(result.feature_plane_overrides or {})
+        missing_leaders = list(overrides.get("missing_leader_symbols") or [])
+        if overrides.get("cross_asset_leader_fail_closed") and missing_leaders:
+            if _candidate_requires_cross_asset_leaders(prom):
+                rejected_out.append(
+                    RejectedCandidate(
+                        candidate_id=prom.candidate_id,
+                        hypothesis_id=prom.hypothesis_id,
+                        reject_reason=(
+                            "cross_asset_leader_missing_fail_closed:"
+                            + ",".join(str(s) for s in missing_leaders)
+                        ),
+                        vectorbt_results=dict(prom.vectorbt_results or {}),
+                    )
+                )
+                continue
 
         _hydrate_walk_forward_gate_metrics(prom.vectorbt_results)
         gate_failures = gates.evaluate_failures(prom)

@@ -270,12 +270,13 @@ def test_wfc_pass_cannot_substitute_regular_wf() -> None:
 
 def test_wf_receipts_are_independent_producers() -> None:
     manifest = _manifest()
-    wf_pass_summary = {"status": "PASS", "periods": [{"gate_pass": True}]}
+    wf_pass_summary = {"status": "PASS", "periods": [{"name": "Discovery", "gate_pass": True}]}
     wfc_only_summary = {
         "status": "FAIL",
         "wfc_status": "PASS",
         "wfc": {"pearson": 0.8, "spearman": 0.7, "wfc_status": "PASS"},
-        "periods": [{"gate_pass": False}],
+        "wfc_matrix_rows": [{"parameter_hash": "ph-1", "fold": 0}],
+        "periods": [{"name": "Discovery", "gate_pass": False}],
     }
     regular = build_regular_walk_forward_gate_receipt(manifest=manifest, campaign_summary=wf_pass_summary)
     wfc = build_walk_forward_correlation_gate_receipt(manifest=manifest, campaign_summary=wfc_only_summary)
@@ -283,6 +284,34 @@ def test_wf_receipts_are_independent_producers() -> None:
     assert wfc["status"] == "PASS"
     regular_fail = build_regular_walk_forward_gate_receipt(manifest=manifest, campaign_summary=wfc_only_summary)
     assert regular_fail["status"] == "REJECT"
+
+
+def test_gate4_rejects_holdout_without_evaluate_only() -> None:
+    manifest = _manifest()
+    holdout_violation = {
+        "status": "PASS",
+        "periods": [
+            {"name": "Discovery", "gate_pass": True},
+            {"name": "Holdout", "gate_pass": True, "evaluate_only": False},
+        ],
+    }
+    receipt = build_regular_walk_forward_gate_receipt(manifest=manifest, campaign_summary=holdout_violation)
+    assert receipt["status"] == "REJECT"
+    assert any("holdout_evaluate_only_violation" in r for r in receipt.get("failure_reasons") or [])
+
+
+def test_gate5_rejects_missing_wfc_matrix_alignment() -> None:
+    manifest = _manifest()
+    no_matrix = {
+        "status": "PASS",
+        "wfc_status": "PASS",
+        "wfc": {"pearson": 0.8, "spearman": 0.7, "wfc_status": "PASS"},
+        "wfc_matrix_rows": [],
+        "periods": [{"name": "Discovery", "gate_pass": True}],
+    }
+    receipt = build_walk_forward_correlation_gate_receipt(manifest=manifest, campaign_summary=no_matrix)
+    assert receipt["status"] == "REJECT"
+    assert "parameter_surface_alignment_missing" in (receipt.get("failure_reasons") or [])
 
 
 def test_wfc_reject_maps_to_final_wfc_rejected() -> None:
@@ -632,6 +661,7 @@ def test_final_pass_requires_all_gates_including_hft() -> None:
         ],
         screening_artifact_hash="screen-abc",
         robustness_artifact_hash="rob-abc",
+        allow_declared_certification=True,
     )
     result = run_generation_gate_chain(
         candidate_manifest=_manifest(),

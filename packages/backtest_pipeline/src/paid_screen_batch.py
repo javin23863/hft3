@@ -36,17 +36,27 @@ def _cache_get(cache, key):
     return cache.get(key)
 
 
-def _cache_put(cache, key, value):
-    """Store a value in either a BoundedLRUCache or a plain dict."""
+def _cache_put(cache, key, value) -> bool:
+    """Store a value in either a BoundedLRUCache or a plain dict.
+
+    Returns False when a BoundedLRUCache rejects an oversized entry.
+    """
     if isinstance(cache, BoundedLRUCache):
-        cache.put(key, value)
-    else:
-        cache[key] = value
+        return cache.put(key, value)
+    cache[key] = value
+    return True
 
 
 def _is_bounded_lru_cache(cache) -> bool:
     """True when *cache* is a BoundedLRUCache (has observable hit/miss counters)."""
     return isinstance(cache, BoundedLRUCache)
+
+
+def _unit_requires_cross_asset_leaders(unit: PaidScreenUnit) -> bool:
+    """True when *unit* model family requires PIT leader legs."""
+    from backtest_pipeline.src.fs_v1_screen_path import recipe_requires_cross_asset_leaders
+
+    return recipe_requires_cross_asset_leaders(model_id=str(unit.model_id or ""))
 
 
 def _worker_scratch_artifact_dir(
@@ -636,11 +646,11 @@ def _write_screening_artifact(
     from backtest_pipeline.src.vectorbt_adapter import (
         _json_primitive_screening_payload,
         compute_screening_artifact_hash,
-        validate_screening_artifact,
+        validate_screening_artifact_or_raise,
     )
 
     artifact["screening_artifact_hash"] = compute_screening_artifact_hash(artifact)
-    validate_screening_artifact(artifact)
+    validate_screening_artifact_or_raise(artifact)
 
     # Write atomically
     serializable = _json_primitive_screening_payload(artifact)
@@ -794,6 +804,23 @@ def screen_paid_batch(
     units_by_model: dict[str, list[PaidScreenUnit]] = {}
     for unit in units:
         units_by_model.setdefault(unit.model_id, []).append(unit)
+
+    if fs_v1_ctx is not None and fs_v1_ctx.missing_leader_symbols:
+        missing = ",".join(str(s) for s in fs_v1_ctx.missing_leader_symbols)
+        for model_id in list(units_by_model):
+            model_units = units_by_model[model_id]
+            if not any(_unit_requires_cross_asset_leaders(u) for u in model_units):
+                continue
+            for unit in model_units:
+                results.append(UnitScreeningResult(
+                    unit_id=unit.unit_id,
+                    status="ERROR",
+                    error=f"cross_asset_leader_missing_fail_closed:{missing}",
+                ))
+            del units_by_model[model_id]
+        if not units_by_model:
+            _fold_lru_profiler_delta()
+            return results
 
     # Process each model group
     for model_id, model_units in units_by_model.items():

@@ -40,6 +40,7 @@ from backtest_pipeline.src.feature_plane import (
 from backtest_pipeline.src.vectorbt_adapter import (
     SCREENING_ARTIFACT_REQUIRED_FIELDS,
     validate_screening_artifact,
+    validate_screening_artifact_or_raise,
 )
 
 
@@ -659,7 +660,7 @@ def validate_artifact_schema(
     screening_ok = True
     if run_screening_validator and artifact_type == "screening" and not missing:
         try:
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
         except Exception as exc:  # the existing validator raises ValueError subclasses
             screening_ok = False
             issues.append(f"screening_artifact_validator_rejected:{exc}")
