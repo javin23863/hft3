@@ -20,7 +20,10 @@ from backtest_pipeline.src.vectorbt_adapter import (
     _screening_status_text,
 )
 from research_pipeline.src.robustness_producers import holm_bh_correction
+from research_pipeline.candidate_manifest import verify_frozen_manifest_integrity
 from research_pipeline.generation_gate_chain import (
+    GATE_HFT,
+    GATE_MANIFEST,
     GATE_ONTOLOGY,
     GATE_REGULAR_WF,
     GATE_STATISTICAL,
@@ -36,6 +39,8 @@ WFC_GATE_VERSION = "1.0.0"
 VECTORBT_GATE_VERSION = "1.0.0"
 SURFACE_GATE_VERSION = "1.0.0"
 STATISTICAL_GATE_VERSION = "1.0.0"
+MANIFEST_GATE_VERSION = "1.0.0"
+HFT_GATE_VERSION = "1.0.0"
 
 _VECTORBT_OFFICIAL_STATS: tuple[str, ...] = (
     "gross_return",
@@ -703,27 +708,198 @@ def build_walk_forward_correlation_gate_receipt(
     return receipt
 
 
+def build_manifest_gate_receipt(
+    *,
+    manifest: Mapping[str, Any],
+    frozen_manifest_path: Path | None = None,
+) -> dict[str, Any]:
+    """Gate 1 — frozen candidate manifest with immutability hash enforcement."""
+    candidate_id = str(manifest.get("candidate_id") or "")
+    feature_recipe_hash = str(manifest.get("feature_recipe_hash") or "")
+    manifest_hash = str(manifest.get("manifest_hash") or "")
+    required_checks = [
+        "manifest_schema",
+        "manifest_hash",
+        "feature_recipe_hash",
+        "manifest_immutability",
+    ]
+    req_count = len(required_checks)
+    integrity_errors = verify_frozen_manifest_integrity(manifest)
+    failure_reasons = list(integrity_errors)
+    status = "PASS" if not failure_reasons else "REJECT"
+    if not manifest.get("manifest_schema"):
+        status = "BLOCKED"
+    passed_count = req_count if status == "PASS" else 0
+    receipt = build_gate_receipt(
+        gate_id=GATE_MANIFEST,
+        gate_version=MANIFEST_GATE_VERSION,
+        candidate_id=candidate_id,
+        feature_recipe_hash=feature_recipe_hash,
+        manifest_hash=manifest_hash,
+        status=status,
+        required_checks=required_checks,
+        required_check_count=req_count,
+        passed_check_count=passed_count,
+        failed_check_count=0 if status == "PASS" else max(1, req_count),
+        missing_check_count=0,
+        authority_refs=[
+            "packages/research_pipeline/candidate_manifest.py",
+            "packages/research_pipeline/feature_recipe.py",
+        ],
+        input_artifacts=[str(frozen_manifest_path)] if frozen_manifest_path else [],
+        output_artifacts=[f"gates/{candidate_id}/manifest_gate.json"],
+        failure_reasons=failure_reasons,
+    )
+    receipt["manifest_schema"] = manifest.get("manifest_schema")
+    receipt["frozen_at_utc"] = manifest.get("frozen_at_utc")
+    return receipt
+
+
+def build_hftbacktest_gate_receipt(
+    *,
+    manifest: Mapping[str, Any],
+    scenario_results: Sequence[Mapping[str, Any]] | None = None,
+    screening_path: Path | None = None,
+    screening_artifact_hash: str = "",
+    robustness_artifact_hash: str = "",
+    skipped_reason: str | None = None,
+    accelerated_mode: bool = False,
+) -> dict[str, Any]:
+    """Gate 7 — per-candidate HftBacktest realism with hash parity."""
+    candidate_id = str(manifest["candidate_id"])
+    feature_recipe_hash = str(manifest["feature_recipe_hash"])
+    manifest_hash = str(manifest["manifest_hash"])
+    required_checks = [
+        "candidate_id_hash_parity",
+        "feature_recipe_hash_parity",
+        "manifest_hash_parity",
+        "screening_artifact_hash_parity",
+        "robustness_artifact_hash_parity",
+        "hft_replay_completed",
+        "certifying_mode_not_accelerated",
+    ]
+    req_count = len(required_checks)
+    failure_reasons: list[str] = []
+
+    if skipped_reason:
+        return build_gate_receipt(
+            gate_id=GATE_HFT,
+            gate_version=HFT_GATE_VERSION,
+            candidate_id=candidate_id,
+            feature_recipe_hash=feature_recipe_hash,
+            manifest_hash=manifest_hash,
+            status="NOT_RUN",
+            required_checks=required_checks,
+            required_check_count=req_count,
+            passed_check_count=0,
+            failed_check_count=0,
+            missing_check_count=req_count,
+            authority_refs=["docs/project/HFTBACKTEST_REALISM_ENGINE_SPEC.md"],
+            input_artifacts=[str(screening_path)] if screening_path else [],
+            output_artifacts=[f"gates/{candidate_id}/hftbacktest_gate.json"],
+            failure_reasons=[skipped_reason],
+        )
+
+    results = list(scenario_results or [])
+    if accelerated_mode:
+        failure_reasons.append("accelerated_mode_not_certifying")
+
+    for result in results:
+        replay = dict(result.get("replay_result") or {})
+        summary_path = result.get("artifact_dir")
+        if str(result.get("status") or "") != "completed":
+            failure_reasons.append(f"scenario_{result.get('scenario_id')}_status={result.get('status')}")
+        elif replay.get("error"):
+            failure_reasons.append(f"scenario_{result.get('scenario_id')}_replay_error")
+        cert = str(replay.get("certification_status") or "")
+        if cert and cert not in ("full_fidelity_declared", "scheduled_event_replay_not_full_feature_plane"):
+            if cert in ("accelerated_not_certifying", "fail", "integration_smoke_not_production"):
+                failure_reasons.append(f"certification_status={cert}")
+
+    if feature_recipe_hash and results:
+        for result in results:
+            replay = dict(result.get("replay_result") or {})
+            if replay.get("feature_recipe_hash") and str(replay["feature_recipe_hash"]) != feature_recipe_hash:
+                failure_reasons.append("feature_recipe_hash_parity_violation")
+
+    if not screening_artifact_hash:
+        failure_reasons.append("screening_artifact_hash_missing")
+    if not results:
+        failure_reasons.append("hft_scenarios_not_run")
+
+    hash_parity_ok = (
+        bool(candidate_id)
+        and bool(feature_recipe_hash)
+        and bool(manifest_hash)
+        and bool(screening_artifact_hash)
+    )
+    if not hash_parity_ok:
+        failure_reasons.append("hash_parity_incomplete")
+
+    status = "PASS" if not failure_reasons and results else "REJECT"
+    if not results and not failure_reasons:
+        status = "NOT_RUN"
+        failure_reasons.append("hft_not_run")
+
+    passed_count = req_count if status == "PASS" else 0
+    receipt = build_gate_receipt(
+        gate_id=GATE_HFT,
+        gate_version=HFT_GATE_VERSION,
+        candidate_id=candidate_id,
+        feature_recipe_hash=feature_recipe_hash,
+        manifest_hash=manifest_hash,
+        status=status,
+        required_checks=required_checks,
+        required_check_count=req_count,
+        passed_check_count=passed_count,
+        failed_check_count=0 if status == "PASS" else max(1, req_count),
+        missing_check_count=req_count if status == "NOT_RUN" else 0,
+        authority_refs=[
+            "docs/project/HFTBACKTEST_REALISM_ENGINE_SPEC.md",
+            "vendor/hftbacktest/VENDOR.lock",
+        ],
+        input_artifacts=[str(screening_path)] if screening_path else [],
+        input_hashes={
+            "screening_artifact_hash": screening_artifact_hash,
+            "robustness_artifact_hash": robustness_artifact_hash,
+            "manifest_hash": manifest_hash,
+            "feature_recipe_hash": feature_recipe_hash,
+        },
+        output_artifacts=[f"gates/{candidate_id}/hftbacktest_gate.json"],
+        failure_reasons=sorted(set(failure_reasons)),
+    )
+    receipt["scenario_count"] = len(results)
+    receipt["accelerated_mode"] = accelerated_mode
+    receipt["screening_artifact_hash"] = screening_artifact_hash
+    receipt["robustness_artifact_hash"] = robustness_artifact_hash
+    return receipt
+
+
 def emit_candidate_gate_receipts(
     *,
     gen_dir: Path,
     manifest: Mapping[str, Any],
     ontology_receipt: dict[str, Any] | None = None,
+    manifest_receipt: dict[str, Any] | None = None,
     vectorbt_receipt: dict[str, Any] | None = None,
     surface_receipt: dict[str, Any] | None = None,
     regular_wf_receipt: dict[str, Any] | None = None,
     wfc_receipt: dict[str, Any] | None = None,
     statistical_receipt: dict[str, Any] | None = None,
+    hft_receipt: dict[str, Any] | None = None,
 ) -> dict[str, Path]:
     """Write gate receipt JSON files under generation_<N>/gates/<candidate_id>/."""
     candidate_id = str(manifest["candidate_id"])
     paths: dict[str, Path] = {}
     for gate_id, receipt in (
         (GATE_ONTOLOGY, ontology_receipt),
+        (GATE_MANIFEST, manifest_receipt),
         (GATE_VECTORBT, vectorbt_receipt),
         (GATE_SURFACE, surface_receipt),
         (GATE_REGULAR_WF, regular_wf_receipt),
         (GATE_WFC, wfc_receipt),
         (GATE_STATISTICAL, statistical_receipt),
+        (GATE_HFT, hft_receipt),
     ):
         if receipt is None:
             continue

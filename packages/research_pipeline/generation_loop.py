@@ -7,7 +7,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 import yaml
 
@@ -32,8 +32,10 @@ from research_pipeline.generation_state import (
     register_tested_hashes,
     save_manifest,
 )
-from research_pipeline.generation_gate_chain import run_generation_gate_chain
+from research_pipeline.generation_gate_chain import run_generation_gate_chain, passes_gates_before_hft
 from research_pipeline.generation_gate_producers import (
+    build_hftbacktest_gate_receipt,
+    build_manifest_gate_receipt,
     build_regular_walk_forward_gate_receipt,
     build_statistical_robustness_gate_receipt,
     build_surface_stability_gate_receipt,
@@ -245,11 +247,127 @@ def _run_robustness_top_k(
             {
                 "candidate_id": cid,
                 "robustness_pass": outcome.get("robustness_pass"),
+                "regular_walk_forward_pass": outcome.get("regular_walk_forward_pass"),
+                "wfc_pass": outcome.get("wfc_pass"),
                 "metrics": dict(outcome.get("metrics") or {}),
                 "campaign_id": outcome.get("campaign_id"),
+                "campaign_summary": outcome.get("campaign_summary"),
+                "artifact_dir": outcome.get("artifact_dir"),
             }
         )
     return results
+
+
+def _scenario_results_by_candidate(
+    scenario_results: list[Any],
+    scenarios: list[Any],
+) -> dict[str, list[dict[str, Any]]]:
+    by_scenario_id = {s.scenario_id: s for s in scenarios}
+    by_cid: dict[str, list[dict[str, Any]]] = {}
+    for result in scenario_results:
+        scenario = by_scenario_id.get(getattr(result, "scenario_id", ""))
+        cid = getattr(scenario, "candidate_id", "unknown") if scenario else "unknown"
+        by_cid.setdefault(cid, []).append(
+            {
+                "scenario_id": getattr(result, "scenario_id", ""),
+                "status": getattr(result, "status", ""),
+                "replay_result": dict(getattr(result, "replay_result", None) or {}),
+                "artifact_dir": getattr(result, "artifact_dir", None),
+            }
+        )
+    return by_cid
+
+
+def _robustness_artifact_hash(rob: Mapping[str, Any] | None) -> str:
+    if not rob:
+        return ""
+    artifact_dir = rob.get("artifact_dir")
+    if not artifact_dir:
+        return ""
+    summary_path = Path(str(artifact_dir)) / "summary.json"
+    if not summary_path.is_file():
+        return ""
+    try:
+        from backtest_pipeline.src.hft_campaign._hashing import sha256_hex
+
+        payload = json.loads(summary_path.read_text(encoding="utf-8"))
+        return sha256_hex(payload)
+    except Exception:
+        return ""
+
+
+def _run_hft_for_candidates(
+    *,
+    repo_root: Path,
+    event_id: str,
+    screening_path: Path,
+    cfg: AutoresearchConfig,
+    campaign_id: str,
+    generation_index: int,
+    candidate_ids: list[str],
+    hft_fn: HftFn | None = None,
+) -> tuple[dict[str, Any] | None, dict[str, list[dict[str, Any]]]]:
+    """Run HftBacktest only for candidates that passed gates 0–6."""
+    if not cfg.run_hft_campaign or not candidate_ids:
+        return None, {}
+    missing = [
+        name
+        for name, value in (
+            ("hft_source_npz", cfg.hft_source_npz),
+            ("hft_latency_model", cfg.hft_latency_model),
+            ("hft_fill_queue_model", cfg.hft_fill_queue_model),
+        )
+        if value is None or not Path(value).is_file()
+    ]
+    if missing:
+        return {"status": "blocked", "missing_inputs": missing}, {}
+    manifest_cfg = ManifestGenerationConfig(
+        screening_artifact_path=screening_path,
+        repo_root=repo_root,
+        event_id=event_id,
+        source_npz_path=Path(cfg.hft_source_npz),
+        latency_model_path=Path(cfg.hft_latency_model),
+        fill_queue_model_path=Path(cfg.hft_fill_queue_model),
+        candidate_ids=tuple(candidate_ids),
+        select_all_replay_eligible=False,
+    )
+    scenarios, reasons = generate_scenario_manifest(manifest_cfg)
+    if reasons:
+        return {"status": "fail", "manifest_reasons": reasons}, {}
+    hft_campaign_id = f"{campaign_id}_g{generation_index}_hft"
+    out_dir = autoresearch_campaign_dir(repo_root, campaign_id) / f"generation_{generation_index:03d}" / "hft_campaign"
+    manifest_path = out_dir / "scenario_manifest.json"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(
+        json.dumps({"scenarios": [s.to_dict() for s in scenarios]}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    hft_cfg = HftCampaignConfig(
+        campaign_id=hft_campaign_id,
+        repo_root=repo_root,
+        workers=cfg.hft_workers,
+        stages=cfg.hft_stages,
+        resume=True,
+        accelerated_mode=False,
+        select_all_replay_eligible=False,
+        candidate_ids=tuple(candidate_ids),
+        out_dir=out_dir,
+    )
+    loaded = load_scenarios_from_manifest(manifest_path)
+    if hft_fn is not None:
+        result = hft_fn(scenarios=loaded or scenarios, config=hft_cfg)
+    else:
+        result = run_hftbacktest_campaign(loaded or scenarios, hft_cfg)
+    by_cid = _scenario_results_by_candidate(result.scenario_results, loaded or scenarios)
+    return (
+        {
+            "status": result.status,
+            "campaign_id": hft_campaign_id,
+            "summary": dict(result.summary or {}),
+            "candidate_ids": list(candidate_ids),
+        },
+        by_cid,
+    )
 
 
 def _run_hft_campaign(
@@ -413,6 +531,19 @@ def run_single_generation(
         for c in ontology_pass
     ]
     write_frozen_manifests(gen_dir / "candidate_manifests.jsonl", frozen_manifests)
+    frozen_manifest_path = gen_dir / "candidate_manifests.jsonl"
+    manifest_receipts: dict[str, dict[str, Any]] = {}
+    for cand_manifest in frozen_manifests:
+        cid = str(cand_manifest["candidate_id"])
+        manifest_receipt = build_manifest_gate_receipt(
+            manifest=cand_manifest,
+            frozen_manifest_path=frozen_manifest_path,
+        )
+        manifest_receipts[cid] = manifest_receipt
+        write_gate_receipt(
+            gate_receipt_path(gen_dir, cid, "manifest_gate"),
+            manifest_receipt,
+        )
     register_tested_hashes(manifest, _candidate_hashes(attached))
     screening, screening_path = _run_vectorbt_screen(
         candidates=ontology_pass,
@@ -432,15 +563,7 @@ def run_single_generation(
         campaign_id=campaign_id,
         robustness_fn=robustness_fn,
     )
-    hft_summary = _run_hft_campaign(
-        repo_root=repo_root,
-        event_id=event_id,
-        screening_path=screening_path,
-        cfg=cfg,
-        campaign_id=campaign_id,
-        generation_index=generation_index,
-        hft_fn=hft_fn,
-    )
+    screening_hash = str(screening.get("screening_artifact_hash") or "")
     manifest_by_id = {str(m["candidate_id"]): m for m in frozen_manifests}
     promoted_by_id = {
         str(row.get("candidate_id")): row
@@ -448,7 +571,8 @@ def run_single_generation(
         if isinstance(row, dict) and row.get("candidate_id")
     }
     robustness_by_id = {str(r.get("candidate_id")): r for r in robustness_results if r.get("candidate_id")}
-    gate_chain_by_id: dict[str, dict[str, Any]] = {}
+    pre_hft_receipts_by_id: dict[str, dict[str, Any]] = {}
+    hft_eligible_ids: list[str] = []
     for cid, cand_manifest in manifest_by_id.items():
         rob = robustness_by_id.get(cid)
         promoted_row = promoted_by_id.get(cid) or {}
@@ -477,16 +601,7 @@ def run_single_generation(
             manifest=cand_manifest,
             campaign_summary=campaign_summary,
         )
-        emit_candidate_gate_receipts(
-            gen_dir=gen_dir,
-            manifest=cand_manifest,
-            vectorbt_receipt=vectorbt_receipt,
-            surface_receipt=surface_receipt,
-            regular_wf_receipt=regular_wf_receipt,
-            wfc_receipt=wfc_receipt,
-            statistical_receipt=statistical_receipt,
-        )
-        chain_result = run_generation_gate_chain(
+        pre_chain = run_generation_gate_chain(
             candidate_manifest=cand_manifest,
             ontology_receipt=ontology_receipts.get(cid),
             vectorbt_receipt=vectorbt_receipt,
@@ -495,6 +610,71 @@ def run_single_generation(
             walk_forward_correlation_receipt=wfc_receipt,
             statistical_receipt=statistical_receipt,
             hftbacktest_receipt=None,
+            certification_mode=True,
+        )
+        if passes_gates_before_hft(pre_chain):
+            hft_eligible_ids.append(cid)
+        pre_hft_receipts_by_id[cid] = {
+            "vectorbt": vectorbt_receipt,
+            "surface": surface_receipt,
+            "regular_wf": regular_wf_receipt,
+            "wfc": wfc_receipt,
+            "statistical": statistical_receipt,
+        }
+    hft_summary, hft_by_candidate = _run_hft_for_candidates(
+        repo_root=repo_root,
+        event_id=event_id,
+        screening_path=screening_path,
+        cfg=cfg,
+        campaign_id=campaign_id,
+        generation_index=generation_index,
+        candidate_ids=hft_eligible_ids,
+        hft_fn=hft_fn,
+    )
+    gate_chain_by_id: dict[str, dict[str, Any]] = {}
+    for cid, cand_manifest in manifest_by_id.items():
+        rob = robustness_by_id.get(cid)
+        receipts = pre_hft_receipts_by_id[cid]
+        if cid in hft_eligible_ids and cfg.run_hft_campaign:
+            hft_receipt = build_hftbacktest_gate_receipt(
+                manifest=cand_manifest,
+                scenario_results=hft_by_candidate.get(cid),
+                screening_path=screening_path,
+                screening_artifact_hash=screening_hash,
+                robustness_artifact_hash=_robustness_artifact_hash(rob),
+                accelerated_mode=False,
+            )
+        elif not cfg.run_hft_campaign:
+            hft_receipt = build_hftbacktest_gate_receipt(
+                manifest=cand_manifest,
+                skipped_reason="hft_campaign_disabled",
+            )
+        else:
+            hft_receipt = build_hftbacktest_gate_receipt(
+                manifest=cand_manifest,
+                skipped_reason="upstream_gates_not_passed",
+            )
+        emit_candidate_gate_receipts(
+            gen_dir=gen_dir,
+            manifest=cand_manifest,
+            ontology_receipt=ontology_receipts.get(cid),
+            manifest_receipt=manifest_receipts.get(cid),
+            vectorbt_receipt=receipts["vectorbt"],
+            surface_receipt=receipts["surface"],
+            regular_wf_receipt=receipts["regular_wf"],
+            wfc_receipt=receipts["wfc"],
+            statistical_receipt=receipts["statistical"],
+            hft_receipt=hft_receipt,
+        )
+        chain_result = run_generation_gate_chain(
+            candidate_manifest=cand_manifest,
+            ontology_receipt=ontology_receipts.get(cid),
+            vectorbt_receipt=receipts["vectorbt"],
+            surface_receipt=receipts["surface"],
+            regular_walk_forward_receipt=receipts["regular_wf"],
+            walk_forward_correlation_receipt=receipts["wfc"],
+            statistical_receipt=receipts["statistical"],
+            hftbacktest_receipt=hft_receipt,
             certification_mode=True,
         )
         gate_chain_by_id[cid] = chain_result

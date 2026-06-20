@@ -27,24 +27,28 @@ from research_pipeline.generation_gate_chain import (
 
 
 def _manifest(**overrides: object) -> dict:
+    from research_pipeline.candidate_manifest import compute_manifest_hash
+
     base = {
         "manifest_schema": "candidate_manifest.v1",
         "candidate_id": "cand-001",
         "feature_recipe_hash": "recipe-abc",
-        "manifest_hash": "manifest-xyz",
         "model_id": "HYP_5",
     }
     base.update(overrides)
+    if "manifest_hash" not in overrides:
+        base["manifest_hash"] = compute_manifest_hash(base)
     return base
 
 
 def _pass_receipt(gate_id: str, *, candidate_id: str = "cand-001") -> dict:
+    m = _manifest()
     return build_gate_receipt(
         gate_id=gate_id,
         gate_version="1.0.0",
         candidate_id=candidate_id,
         feature_recipe_hash="recipe-abc",
-        manifest_hash="manifest-xyz",
+        manifest_hash=str(m["manifest_hash"]),
         status="PASS",
         required_checks=["check_a", "check_b"],
         required_check_count=2,

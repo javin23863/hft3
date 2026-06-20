@@ -10,12 +10,17 @@ from unittest.mock import MagicMock
 import pytest
 
 from research_pipeline.feature_recipe import attach_feature_recipe_to_candidate
+from research_pipeline.candidate_manifest import verify_frozen_manifest_integrity
 from research_pipeline.generation_gate_chain import (
+    FINAL_PASS,
+    FINAL_HFT_REJECTED,
     FINAL_REGULAR_WF_REJECTED,
     FINAL_STATISTICAL_REJECTED,
     FINAL_SURFACE_REJECTED,
     FINAL_VECTORBT_REJECTED,
     FINAL_WFC_REJECTED,
+    GATE_HFT,
+    GATE_MANIFEST,
     GATE_REGULAR_WF,
     GATE_STATISTICAL,
     GATE_SURFACE,
@@ -26,6 +31,8 @@ from research_pipeline.generation_gate_chain import (
 )
 from research_pipeline.generation_gate_producers import (
     BLOCKED_UNBACKED_AUTHORITY,
+    build_hftbacktest_gate_receipt,
+    build_manifest_gate_receipt,
     build_statistical_robustness_gate_receipt,
     build_surface_stability_gate_receipt,
     build_vectorbt_gate_receipt,
@@ -38,29 +45,34 @@ from research_pipeline.generation_loop import (
     run_single_generation,
 )
 from research_pipeline.generation_state import default_manifest, generation_dir, save_manifest
+from research_pipeline.generation_summary import build_generation_summary
 from research_pipeline.hypothesis_parser import parse_hypothesis
 from research_pipeline.types import CandidateModel
 
 
 def _manifest(**overrides: object) -> dict:
+    from research_pipeline.candidate_manifest import compute_manifest_hash
+
     base = {
         "manifest_schema": "candidate_manifest.v1",
         "candidate_id": "cand-001",
         "feature_recipe_hash": "recipe-abc",
-        "manifest_hash": "manifest-xyz",
         "model_id": "HYP_5",
     }
     base.update(overrides)
+    if "manifest_hash" not in overrides:
+        base["manifest_hash"] = compute_manifest_hash(base)
     return base
 
 
 def _pass_receipt(gate_id: str) -> dict:
+    m = _manifest()
     return build_gate_receipt(
         gate_id=gate_id,
         gate_version="1.0.0",
         candidate_id="cand-001",
         feature_recipe_hash="recipe-abc",
-        manifest_hash="manifest-xyz",
+        manifest_hash=str(m["manifest_hash"]),
         status="PASS",
         required_checks=["check_a", "check_b"],
         required_check_count=2,
@@ -491,3 +503,161 @@ def test_statistical_reject_maps_to_final_statistical_rejected() -> None:
         certification_mode=True,
     )
     assert result["final_status"] == FINAL_STATISTICAL_REJECTED
+
+
+def test_manifest_immutability_tamper_rejects() -> None:
+    manifest = _manifest()
+    errors = verify_frozen_manifest_integrity(manifest)
+    assert errors == []
+    tampered = dict(manifest)
+    tampered["manifest_hash"] = "tampered-hash"
+    assert "manifest_hash_immutability_violation" in verify_frozen_manifest_integrity(tampered)
+    receipt = build_manifest_gate_receipt(manifest=tampered)
+    assert receipt["status"] == "REJECT"
+
+
+def test_manifest_gate_receipt_emitted_on_generation(tmp_path: Path, monkeypatch) -> None:
+    from research_pipeline import generation_loop as gl
+
+    monkeypatch.setattr(
+        gl,
+        "run_ontology_gate_for_candidate",
+        lambda *, manifest, repo_root: build_gate_receipt(
+            gate_id="ontology_gate",
+            gate_version="1.0.0",
+            candidate_id=str(manifest["candidate_id"]),
+            feature_recipe_hash=str(manifest["feature_recipe_hash"]),
+            manifest_hash=str(manifest.get("manifest_hash") or "pending"),
+            status="PASS",
+            required_checks=["fable_entry_checklist"],
+            required_check_count=1,
+            passed_check_count=1,
+        ),
+    )
+    cfg = AutoresearchConfig(max_candidates_per_generation=1, run_robustness=False)
+    manifest = default_manifest(
+        campaign_id="camp_manifest",
+        event_id="E1",
+        symbol="MES",
+        thesis="fade",
+        config_hash="abc",
+    )
+    manifest["generation_index"] = 0
+    save_manifest(tmp_path, manifest)
+    cand = _candidate(candidate_id="manifest_cand")
+    run_single_generation(
+        repo_root=tmp_path,
+        manifest=manifest,
+        parsed=parse_hypothesis("fade", use_llm=False),
+        cfg=cfg,
+        candidates=[cand],
+        filter_fn=_fake_filter,
+        persist_fn=_fake_persist,
+    )
+    receipt_path = (
+        generation_dir(tmp_path, "camp_manifest", 0)
+        / "gates"
+        / "manifest_cand"
+        / "manifest_gate.json"
+    )
+    assert receipt_path.is_file()
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert receipt["status"] == "PASS"
+    assert receipt["gate_id"] == GATE_MANIFEST
+
+
+def test_hft_not_run_cannot_elite() -> None:
+    chain = run_generation_gate_chain(
+        candidate_manifest=_manifest(),
+        ontology_receipt=_pass_receipt("ontology_gate"),
+        vectorbt_receipt=_pass_receipt(GATE_VECTORBT),
+        surface_receipt=_pass_receipt(GATE_SURFACE),
+        regular_walk_forward_receipt=_pass_receipt(GATE_REGULAR_WF),
+        walk_forward_correlation_receipt=_pass_receipt(GATE_WFC),
+        statistical_receipt=_pass_receipt(GATE_STATISTICAL),
+        hftbacktest_receipt=build_hftbacktest_gate_receipt(
+            manifest=_manifest(),
+            skipped_reason="hft_campaign_disabled",
+        ),
+        certification_mode=True,
+    )
+    summary = build_generation_summary(
+        repo_root=Path("."),
+        campaign_id="c1",
+        generation_index=0,
+        screening_artifact={
+            "promoted": [
+                {
+                    "candidate_id": "cand-001",
+                    "hypothesis_id": "HYP_5",
+                    "vectorbt_results": {"oos_expectancy": 2.0},
+                }
+            ]
+        },
+        gate_chain_by_id={"cand-001": chain},
+    )
+    row = summary["candidates"][0]
+    assert row["elite"] is False
+    assert summary["best_candidate_id"] is None
+    assert row["hft_replay_status"] == "not_run"
+
+
+def test_final_pass_requires_all_gates_including_hft() -> None:
+    hft_pass = build_hftbacktest_gate_receipt(
+        manifest=_manifest(),
+        scenario_results=[{"scenario_id": "s1", "status": "completed", "replay_result": {}}],
+        screening_artifact_hash="screen-abc",
+        robustness_artifact_hash="rob-abc",
+    )
+    result = run_generation_gate_chain(
+        candidate_manifest=_manifest(),
+        ontology_receipt=_pass_receipt("ontology_gate"),
+        vectorbt_receipt=_pass_receipt(GATE_VECTORBT),
+        surface_receipt=_pass_receipt(GATE_SURFACE),
+        regular_walk_forward_receipt=_pass_receipt(GATE_REGULAR_WF),
+        walk_forward_correlation_receipt=_pass_receipt(GATE_WFC),
+        statistical_receipt=_pass_receipt(GATE_STATISTICAL),
+        hftbacktest_receipt=hft_pass,
+        certification_mode=True,
+    )
+    assert result["final_status"] == FINAL_PASS
+    summary = build_generation_summary(
+        repo_root=Path("."),
+        campaign_id="c1",
+        generation_index=0,
+        screening_artifact={
+            "promoted": [
+                {
+                    "candidate_id": "cand-001",
+                    "hypothesis_id": "HYP_5",
+                    "vectorbt_results": {"oos_expectancy": 2.0},
+                }
+            ]
+        },
+        gate_chain_by_id={"cand-001": result},
+    )
+    assert summary["best_candidate_id"] == "cand-001"
+    assert summary["candidates"][0]["elite"] is True
+
+
+def test_hft_reject_maps_to_final_hft_rejected() -> None:
+    reject = build_hftbacktest_gate_receipt(
+        manifest=_manifest(),
+        scenario_results=[{"scenario_id": "s1", "status": "failed", "replay_result": {"error": "boom"}}],
+        screening_artifact_hash="screen-abc",
+        robustness_artifact_hash="rob-abc",
+    )
+    assert reject["status"] == "REJECT"
+    result = run_generation_gate_chain(
+        candidate_manifest=_manifest(),
+        ontology_receipt=_pass_receipt("ontology_gate"),
+        vectorbt_receipt=_pass_receipt(GATE_VECTORBT),
+        surface_receipt=_pass_receipt(GATE_SURFACE),
+        regular_walk_forward_receipt=_pass_receipt(GATE_REGULAR_WF),
+        walk_forward_correlation_receipt=_pass_receipt(GATE_WFC),
+        statistical_receipt=_pass_receipt(GATE_STATISTICAL),
+        hftbacktest_receipt=reject,
+        certification_mode=True,
+    )
+    assert result["final_status"] == FINAL_HFT_REJECTED
+    assert result["stopped_at_gate"] == GATE_HFT

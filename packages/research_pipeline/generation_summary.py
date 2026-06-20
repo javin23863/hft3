@@ -8,6 +8,8 @@ from typing import Any, Mapping
 
 import yaml
 
+from research_pipeline.generation_gate_chain import FINAL_PASS
+
 SCORE_WEIGHTS = {
     "oos_expectancy": 1.0,
     "drawdown_penalty": 0.5,
@@ -141,17 +143,25 @@ def build_generation_summary(
             row["wfc_pass"] = wfc_pass
             row["metrics"].update(_metrics_exclude_holdout(dict(rob.get("metrics") or {}), holdout_names))
         row["metrics"] = _metrics_exclude_holdout(row["metrics"], holdout_names)
-        row["hft_replay_status"] = hft_status if cid else "not_run"
+        hft_outcome = next(
+            (
+                o
+                for o in (chain.get("gate_outcomes") or [])
+                if str(o.get("gate_id") or "") == "hftbacktest_gate"
+            ),
+            None,
+        )
+        row["hft_replay_status"] = str(
+            (hft_outcome or {}).get("effective_status") or "not_run"
+        ).lower()
         row["composite_score"] = _composite_score(row, holdout_names=holdout_names)
         row["final_status"] = chain.get("final_status")
-        row["gate_chain_final_pass"] = bool(chain.get("final_pass"))
-        row["elite"] = bool(row.get("gate_chain_final_pass"))
+        row["gate_chain_final_pass"] = chain.get("final_status") == FINAL_PASS
+        row["elite"] = chain.get("final_status") == FINAL_PASS
         rows.append(row)
 
-    gate_passers = [r for r in rows if r.get("gate_chain_final_pass")]
+    gate_passers = [r for r in rows if r.get("final_status") == FINAL_PASS]
     best = max(gate_passers, key=lambda r: r.get("composite_score", float("-inf")), default=None)
-    if best is None:
-        best = max(rows, key=lambda r: r.get("composite_score", float("-inf")), default=None) if rows else None
     return {
         "campaign_id": campaign_id,
         "generation_index": generation_index,

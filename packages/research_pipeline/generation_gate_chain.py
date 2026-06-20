@@ -9,6 +9,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Mapping, Sequence
 
+from research_pipeline.candidate_manifest import verify_frozen_manifest_integrity
+
 GATE_ONTOLOGY = "ontology_gate"
 GATE_MANIFEST = "manifest_gate"
 GATE_VECTORBT = "vectorbt_gate"
@@ -225,13 +227,15 @@ def evaluate_manifest_gate(candidate_manifest: Mapping[str, Any] | None) -> dict
     """Gate 1 — frozen candidate manifest (no separate receipt parameter in chain API)."""
     if candidate_manifest is None:
         return normalize_gate_receipt(None)
-    missing = [f for f in MANIFEST_REQUIRED_FIELDS if not candidate_manifest.get(f)]
-    if missing:
+    integrity_errors = verify_frozen_manifest_integrity(candidate_manifest)
+    if integrity_errors:
+        missing = [e for e in integrity_errors if e.startswith("missing:")]
+        status = "BLOCKED" if missing else "REJECT"
         return {
-            "effective_status": "BLOCKED",
+            "effective_status": status,
             "strict_pass": False,
-            "schema_valid": False,
-            "failure_reasons": [f"manifest missing fields: {', '.join(missing)}"],
+            "schema_valid": not missing,
+            "failure_reasons": integrity_errors,
             "receipt": None,
         }
     receipt = build_gate_receipt(
@@ -241,12 +245,23 @@ def evaluate_manifest_gate(candidate_manifest: Mapping[str, Any] | None) -> dict
         feature_recipe_hash=str(candidate_manifest["feature_recipe_hash"]),
         manifest_hash=str(candidate_manifest["manifest_hash"]),
         status="PASS",
-        required_checks=["manifest_schema", "manifest_hash", "feature_recipe_hash"],
-        required_check_count=3,
-        passed_check_count=3,
+        required_checks=["manifest_schema", "manifest_hash", "feature_recipe_hash", "manifest_immutability"],
+        required_check_count=4,
+        passed_check_count=4,
         authority_refs=["packages/research_pipeline/candidate_manifest.py"],
     )
     return normalize_gate_receipt(receipt)
+
+
+def passes_gates_before_hft(chain_result: Mapping[str, Any]) -> bool:
+    """True when gates 0–6 (ontology through statistical) all strict-PASS."""
+    for outcome in chain_result.get("gate_outcomes") or []:
+        gate_id = str(outcome.get("gate_id") or "")
+        if gate_id == GATE_HFT:
+            break
+        if not outcome.get("strict_pass") or outcome.get("effective_status") != "PASS":
+            return False
+    return chain_result.get("stopped_at_gate") == GATE_HFT
 
 
 def _final_status_for_gate(gate_id: str, effective_status: str) -> str:
