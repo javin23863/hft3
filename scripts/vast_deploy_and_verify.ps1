@@ -20,7 +20,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 function Send-RemoteBash([string]$script) {
-    ($script -replace "`r", "") | & ssh @sshOpts $SshHost bash
+    ($script -replace "`r", "").Trim() | & ssh @sshOpts $SshHost bash
 }
 
 function Write-Step($msg) { Write-Host "`n=== $msg ===" -ForegroundColor Cyan }
@@ -51,10 +51,6 @@ $localLakeHash = Get-FileSha256Prefix $ManifestParquet
 if ($localEventsHash -ne $expectedEventsHash) {
     throw "Local events.csv hash $localEventsHash != gate $expectedEventsHash"
 }
-if ($localLakeHash -ne $expectedLakeHash) {
-    throw "Local manifest.parquet hash $localLakeHash != gate $expectedLakeHash"
-}
-
 if ($localLakeHash -ne $expectedLakeHash) {
     throw "Local manifest.parquet hash $localLakeHash != gate $expectedLakeHash"
 }
@@ -106,15 +102,7 @@ if (Test-Path $smokeUnits) {
 }
 
 Write-Step "Verify remote HEAD + hashes + NPZ probe"
-$remoteVerify = @"
-export DEPLOY_REPO='$RemoteRepo'
-export DEPLOY_EVENTS='$RemoteRepo/$($EventsCsv -replace '\\','/')'
-export DEPLOY_MANIFEST='$RemoteManifestPath'
-export DEPLOY_HEAD='$localHead'
-export DEPLOY_NPZ_ROOT='$RemoteNpzRoot'
-export DEPLOY_PROBE_N='$ProbeUnitCount'
-bash $RemoteRepo/scripts/vast_remote_verify.sh
-"@
+$remoteVerify = "export DEPLOY_REPO='$RemoteRepo'; export DEPLOY_EVENTS='$RemoteRepo/$($EventsCsv -replace '\\','/')'; export DEPLOY_MANIFEST='$RemoteManifestPath'; export DEPLOY_HEAD='$localHead'; export DEPLOY_NPZ_ROOT='$RemoteNpzRoot'; export DEPLOY_PROBE_N='$ProbeUnitCount'; bash '$RemoteRepo/scripts/vast_remote_verify.sh'"
 Send-RemoteBash $remoteVerify
 if ($LASTEXITCODE -ne 0) { throw "Remote verify failed exit=$LASTEXITCODE" }
 
