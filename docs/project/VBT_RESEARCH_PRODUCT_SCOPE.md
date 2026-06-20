@@ -113,7 +113,7 @@ Vault paths cited in specs (read on workstation): `wiki/hot.md`, `Home.md`, `lib
 | Engine | Decision-time data | Context uplift | Continuous |
 |--------|-------------------|----------------|------------|
 | **Stage A** (`stage_a_screen.py`) | Full `fs_v1` row matrix `X` at latency-adjusted visible time; VIX injected into `cross_asset_features`; regime slots 41–49 | **Not measured** — cell is `(hyp_id, event_type)` only | **No** |
-| **VectorBT paid JSONL** (`run_vectorbt_paid_screen.py`) | Bar OHLCV from NPZ → `close` fed into pipeline stub; **not** full MBO row loop | **No** ablation units | **No** |
+| **VectorBT paid JSONL** (`run_paid_screen.py` / v2) | Bar OHLCV from NPZ → `close` fed into pipeline stub; **not** full MBO row loop | **No** ablation units | **No** |
 | **Event replay** (`ReplaySession`, `sensor_feature_npz`) | Full MBO + optional sensor NPZ map into `cross_asset_features` | Historical path; not VectorBT discovery | Partial (event-driven steps) |
 | **Workbench campaign** | Per-event diagnostics; options fixture contract marks context `not_measured` unless artifact proves uplift | Schema stubs in `campaign_runner.py`; producer contract fail-closed | Campaign mode exists; not same as paid JSONL |
 

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_utc": "2026-06-15T00:00:00+00:00",
+  "updated_utc": "2026-06-19T12:22:00+00:00",
   "status": "PLANNED_NON_BLOCKING_INTAKE",
   "non_blocking": true,
   "scope": "missing-data upload/backfill staging only; not model readiness, pipeline gating, live routing, or cockpit GREEN evidence",
@@ -161,6 +161,41 @@
         "Land accepted VIX raw and sensor files.",
         "Build feature files for covered events.",
         "Record missing source data as unavailable, not as zero-valued features."
+      ]
+    },
+    {
+      "id": "cpi_2020_04_10_tight_mes_mbo",
+      "status": "BACKLOG_NON_BLOCKING",
+      "lane": "CME_FUTURES",
+      "symbol": "MES.v.0",
+      "event_id": "CPI_2020_04_10_TIGHT",
+      "missing_evidence": "MES.v.0_CPI_2020_04_10_TIGHT_mbo.npz is a 97-byte raw.dbn.zst stub (~97B); manifest event_count=0; not derivable from lake.",
+      "source_layouts": [
+        "mbo_release/CPI_2020_04_10_TIGHT/MES.v.0/raw.dbn.zst",
+        "npz/MES.v.0_CPI_2020_04_10_TIGHT_mbo.npz"
+      ],
+      "landing_zones": [
+        "HFT3_NPZ_ROOT",
+        "data/raw/databento_mbo",
+        "data/npz"
+      ],
+      "tracking_surfaces": [
+        "runtime/reports/repro128_readiness_eventcount.json",
+        "docs/project/MISSING_DATA_BACKFILL_SIDECAR.md",
+        "scripts/build_lake_catalog.py"
+      ],
+      "preflight_commands": [
+        "python apps\\\\workbench\\\\scripts\\\\backfill_catalog.py --model SPREAD_BLOWOUT_RECOMPRESSION --symbol MES.v.0 --scope full_universe --dry-run",
+        "python scripts\\\\paid_data_inventory.py --dry-run --verify-q001-hashes"
+      ],
+      "staging_commands": [
+        "CME MBO re-pull per backfill_catalog dry-run; no purchase without dry-run cost estimate"
+      ],
+      "model_treatment": "Single CPI repro128 unit sidelined; 87/88 event_count>0 units proceed when repro32 PASS.",
+      "manual_steps_remaining": [
+        "Replace 97B stub with accepted CME MBO window",
+        "Refresh manifest/catalog",
+        "Re-run repro128_readiness_eventcount gate"
       ]
     }
   ]

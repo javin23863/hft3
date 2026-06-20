@@ -133,12 +133,13 @@ def _phase(paths: Dict[str, Optional[Path]]) -> Tuple[str, List[str]]:
     full_m = _load_json(full) if full and full.is_file() else None
     if full_m is None:
         commands = [
-            "Phase D1–D4 — Vast full VectorBT screen (units generated on host)",
-            "See docs/project/VBT_PAID_SCREEN_POST_GATE_PLAYBOOK.md",
-            "Gate ready. Sync repo + NPZ + paid_screen_ready_gate.json to Vast; then on Vast host:",
-            "bash scripts/run_vbt_paid_screen_vast_full.sh",
-            "Units: events.csv TIGHT rows × CME M6 symbols × active model registry (not local Stage A survivors).",
-            "Env knobs: VBT_MODEL_SCOPE=active | VBT_MODEL_IDS=... | VBT_EVENT_TYPES=... | VBT_SYMBOLS=...",
+            "Phase D1–D4 — Vast full VectorBT screen (v2; deploy contract required first)",
+            "See docs/project/VBT_PAID_SCREEN_POST_GATE_PLAYBOOK.md and docs/project/PAID_SCREEN_OPS_COMMANDS.md",
+            "ONLY deploy path: .\\scripts\\vast_deploy_and_verify.ps1  # must print DEPLOY_CONTRACT_PASS",
+            "Then on Vast: bash scripts/run_vbt_paid_screen_vast_full.sh  # VBT_REQUIRE_RUNNABLE_NPZ=1 default",
+            "v2 resume: export VBT_RESUME=1; abort: declaration abort_on_failed_units or --abort-on-failed-units",
+            "Units: NPZ-filtered events.csv TIGHT × CME M6 × active models (not unfiltered 1.63M)",
+            "Env knobs: VBT_WORKERS | VBT_MODEL_SCOPE=active | VBT_REQUIRE_RUNNABLE_NPZ=1 | VBT_SYMBOLS=...",
             "export VBT_FULL_RUN_ID=\"paid_full_$(date -u +%Y%m%dT%H%M%SZ)\"  # optional override",
         ]
         if decl_missing:

@@ -42,7 +42,7 @@ Contract owner: `packages/backtest_pipeline/src/feature_plane.py` (`FEATURE_FAMI
 | Robustness gates | `ROBUSTNESS_TESTING_SPEC.md` | `robustness_bridge.py`, `workbench/.../campaign_runner.py` | `wfc_gate.yaml`, `walk_forward.yaml` | `tests/backtest_pipeline/test_robustness_bridge.py` | WFC summary under campaign dir | **implemented** | Caller must supply screened params (`frozen_strategy_params`) | `research_pipeline/robustness_producers.py` | Autoresearch already wires top-K |
 | HftBacktest realism | `HFTBACKTEST_REALISM_ENGINE_SPEC.md`, `HFTBACKTEST_CAMPAIGN_ARCHITECTURE.md` | `hft_campaign/runner.py`, `hftbacktest_realism.py` | `HftCampaignConfig` | `tests/backtest_pipeline/hft_campaign/` | Campaign manifests, HBT-0..4 | **implemented** | Default `scheduled_event_only`; no recipe-hash equality gate | Legacy `run_event_replay.py` | Add VBT↔HBT `feature_recipe_hash` gate |
 | Autonomous research memory | `AUTORESEARCH_GAP_MATRIX.md` (superseded rows below) | `generation_loop.py`, `review_memory.py`, `run_pipeline.py --autoresearch` | `config/autoresearch/default.yaml` | `tests/research_pipeline/test_generation_loop.py` | `research_cards/autoresearch/` | **partial** | Refines 4 execution params, not feature recipes | Idea packet memory vs autoresearch JSONL | Phase 7: family-aware candidate generation |
-| Paid VectorBT runner | `VBT_PAID_SCREEN_RUNBOOK.md` | `scripts/run_vectorbt_paid_screen.py`, `run_pipeline.py --vectorbt-scope paid-compute` | Worker count, rust engine | `tests/test_vectorbt_paid_screen_gate.py` | Paid unit JSONL → screening artifacts | **partial** | Same bar-stub data plane | Stage A vs paid JSONL | Block paid until pilot proves families |
+| Paid VectorBT runner | `VBT_PAID_SCREEN_RUNBOOK.md` | `scripts/run_paid_screen.py`, `run_pipeline.py --vectorbt-scope paid-compute` | Worker count, rust engine | `tests/test_vectorbt_paid_screen_gate.py` | Paid unit JSONL → screening artifacts | **partial** | Same bar-stub data plane | Stage A vs paid JSONL | Block paid until pilot proves families |
 
 ---
 
@@ -55,7 +55,7 @@ Contract owner: `packages/backtest_pipeline/src/feature_plane.py` (`FEATURE_FAMI
 | `scripts/run_pipeline.py --hftbacktest-realism` | **canonical** | `HFTBACKTEST_REALISM_ENGINE_SPEC.md` | Single-shot HBT handoff |
 | `scripts/hft_run_campaign.py` / `hft_campaign/runner.py` | **canonical** | `HFTBACKTEST_CAMPAIGN_ARCHITECTURE.md` | Batch HBT scenarios |
 | `workbench/src/run/campaign_runner.run_campaign` | **canonical** | Workbench README | WFC robustness |
-| `scripts/run_vectorbt_paid_screen.py` | **canonical** (gated) | `VBT_PAID_SCREEN_RUNBOOK.md` | Paid compute blocked until pilot |
+| `scripts/run_paid_screen.py` | **canonical** (v2 shim) | `VBT_PAID_SCREEN_RUNBOOK.md` | Paid compute blocked until pilot |
 | `vectorbt_adapter` default OHLCV bar path | **diagnostic-only** | `feature_plane.py` | Emits `bar_stub_research_only` |
 | `packages/backtest_pipeline/src/stage_a_screen.py` | **supported but limited** | Stage A docs | Full fs_v1 row loop; not default VBT path |
 | `scripts/run_event_replay.py` | **retired** | `RESEARCH_ENTRYPOINTS.md` §1a | Historical; fail-closed for new research |

@@ -151,7 +151,7 @@ feature_families:
       - tests/test_context_assembly.py
 
 paid_screen_gate:
-  allowed: false
+  allowed: true
   reason: feature_plane_drift_blocks_expensive_run_until_pilot_proves_pit_consumption
   evaluator: packages/backtest_pipeline/src/feature_family_status.py
   pilot_scope_allows_not_run:

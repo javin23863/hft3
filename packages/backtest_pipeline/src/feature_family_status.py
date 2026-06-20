@@ -61,6 +61,8 @@ def _resolve_vectorbt_result(artifact: Mapping[str, Any]) -> str | None:
         return None
     promoted = _promoted_rows(artifact)
     if not promoted:
+        if int(artifact.get("trials_run") or 0) > 0:
+            return "trials_completed"
         return None
     for row in promoted:
         status = str(row.get("screening_status") or "").lower()
