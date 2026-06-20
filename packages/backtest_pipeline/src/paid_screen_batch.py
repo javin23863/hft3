@@ -147,13 +147,10 @@ def resolve_model_from_registry(model_id: str, repo_root: str) -> dict:
             }
         except KeyError:
             raise ValueError(f"Model {model_id} not found in registry")
-    except ImportError:
-        # Fallback: return a minimal model dict for testing
-        return {
-            "model_id": model_id,
-            "slug": model_id,
-            "display_name": model_id,
-        }
+    except ImportError as exc:
+        raise RuntimeError(
+            f"model registry unavailable; cannot resolve {model_id!r} for paid screening"
+        ) from exc
 
 
 def split_scheme_id_for_research_split(research_split: str | None) -> str:
