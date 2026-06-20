@@ -124,3 +124,17 @@ data-mode: offline
 known-gaps: Greptile ≥4/5 pending on PR #9 head; PR #10 blocked; full-repo pytest not run
 pr-ai-review: @greptileai triggered iter 1–2 on #9; Codex Action advisory only
 ```
+
+---
+
+## Owner waive + merge (option B) — 2026-06-20T08:57Z
+
+| Step | Result |
+|------|--------|
+| Waive comment | https://github.com/javin23863/hft3/pull/9#issuecomment-4757067398 — tag **`PR-B Greptile waived-by-owner-20260620`** |
+| Final head | `a3c0cc1e` — P1=0; cavecrew 0🔴; pytest **213 passed** |
+| Greptile on head | empty review body (06:55:51Z); 5 fix iterations exhausted |
+| **Merge** | **MERGED** squash @ 2026-06-20T08:57:24Z — merge commit `fb00aa25` |
+| **merge-ready PR-B** | **waived** (owner §23 waiver; not full Greptile PASS) |
+
+**Next:** Greptile loop PR #10 only → Phase 10 blocked until PR-C gate met/waived.
