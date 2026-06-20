@@ -581,6 +581,7 @@ class TestFilterCandidates:
             event_id="CPI_2024_09_11_TIGHT",
             repo_root=tmp_path,
             data_loader=lambda *_: None,
+            prefer_fs_v1_path=False,
         )
         assert result.total_candidates >= 1
         assert result.backend == "no_ohlcv_data"
@@ -1605,6 +1606,19 @@ class TestFilterCandidates:
         assert not result.promoted
         assert not (tmp_path / "research_cards" / "promotion").exists()
 
+
+def test_json_primitive_screening_payload_serializes_nat():
+    import pandas as pd
+
+    from backtest_pipeline.src.vectorbt_adapter import _json_primitive_screening_payload
+
+    payload = {"end_ts": pd.NaT, "ok": 1}
+    cleaned = _json_primitive_screening_payload(payload)
+    assert cleaned == {"end_ts": None, "ok": 1}
+    json.dumps(cleaned)
+
+
+class TestFilterCandidatesScreeningArtifactPersistence:
     def test_screening_artifact_hash_ignores_hash_and_timestamps(self, tmp_path):
         cands = [_mock_candidate("HYP_5", 0.15)]
         result = filter_candidates(
@@ -2008,27 +2022,27 @@ class TestFilterCandidates:
         promoted = artifact["promoted"][0]
         vectorbt_results = promoted["vectorbt_results"]
         for field_name in (
-            "wf_consistency",
             "turnover_mean_pct",
             "param_stability_score",
             "slippage_sensitivity",
         ):
             assert field_name not in vectorbt_results
+        assert "wf_consistency" in vectorbt_results
+        assert "oos_expectancy" in vectorbt_results
         assert vectorbt_results["gate_metric_non_stats_status"] == {
-            "wf_consistency": "not_measured_not_used_by_vbt2_pilot_gate",
             "turnover_mean_pct": "not_measured_not_used_by_vbt2_pilot_gate",
             "param_stability_score": "not_measured_not_used_by_vbt2_pilot_gate",
             "slippage_sensitivity": "not_measured_not_used_by_vbt2_pilot_gate",
         }
         assert vectorbt_results["pilot_gate_evaluation"] == {
-            "scope": "vbt2_pilot_official_vectorbt_stats_only",
+            "scope": "official_vectorbt_stats_with_walk_forward_oos",
             "used_fields": {
-                "oos_expectancy": "Expectancy",
+                "oos_expectancy": "auxiliary_numpy_walk_forward",
+                "wf_consistency": "auxiliary_numpy_walk_forward",
                 "max_drawdown_pct": "Max Drawdown [%]",
                 "num_trades": "Total Trades",
             },
             "skipped_unmeasured_fields": [
-                "wf_consistency",
                 "turnover_mean_pct",
                 "param_stability_score",
                 "slippage_sensitivity",
@@ -2036,7 +2050,7 @@ class TestFilterCandidates:
             "failure_semantics": "screening_only_not_replay_or_robustness_eligible",
             "failures": [],
         }
-        assert promoted["walk_forward_metrics"]["wf_consistency"] is None
+        assert promoted["walk_forward_metrics"]["wf_consistency"] is not None
         assert promoted["turnover"]["status"] == "not_run"
 
     def test_total_return_is_optional_for_vbt2_pilot_gate(self, monkeypatch, tmp_path):
@@ -2579,3 +2593,77 @@ class TestFilterCandidates:
         assert result.rejected[0].reject_reason == "no_ohlcv_data"
         assert result.rejected[0].metric_values["operator_escape_ignored"] is True
         assert not (tmp_path / "research_cards" / "promotion").exists()
+
+
+class TestFilterCandidatesDefaultDataLoaderSymbol:
+    def test_default_loader_receives_screen_symbol_when_fs_v1_unavailable(
+        self, monkeypatch, tmp_path,
+    ):
+        from backtest_pipeline.src import vectorbt_adapter
+        from backtest_pipeline.src.vectorbt_adapter import FilterResult
+
+        captured: dict[str, object] = {}
+        close = 100.0 + np.arange(40, dtype=float) * 0.1
+        ohlcv = np.column_stack([close, close, close, close, np.ones_like(close)])
+
+        def spy_default(event_id, repo_root, symbol=None):
+            captured["symbol"] = symbol
+            captured["event_id"] = event_id
+            return ohlcv
+
+        monkeypatch.setattr(vectorbt_adapter, "_default_data_loader", spy_default)
+        monkeypatch.setattr(
+            vectorbt_adapter,
+            "_run_vectorbt_simulation",
+            lambda ohlcv_arg, *args, **kwargs: FilterResult(
+                backend="vectorbt",
+                run_id="symbol_scope_test",
+                screening_scope="pilot",
+            ),
+        )
+
+        filter_candidates(
+            candidates=[_mock_candidate()],
+            parsed=None,
+            event_id="EVT_SYMBOL_SCOPE",
+            repo_root=tmp_path,
+            screening_scope="pilot",
+            prefer_fs_v1_path=False,
+        )
+
+        assert captured.get("symbol") == "MES"
+        assert captured.get("event_id") == "EVT_SYMBOL_SCOPE"
+
+    def test_custom_two_arg_loader_not_passed_symbol(self, monkeypatch, tmp_path):
+        from backtest_pipeline.src import vectorbt_adapter
+        from backtest_pipeline.src.vectorbt_adapter import FilterResult
+
+        calls: list[tuple[str, Path]] = []
+        close = 100.0 + np.arange(40, dtype=float) * 0.1
+        ohlcv = np.column_stack([close, close, close, close, np.ones_like(close)])
+
+        def custom_loader(event_id, repo_root):
+            calls.append((event_id, repo_root))
+            return ohlcv
+
+        monkeypatch.setattr(
+            vectorbt_adapter,
+            "_run_vectorbt_simulation",
+            lambda ohlcv_arg, *args, **kwargs: FilterResult(
+                backend="vectorbt",
+                run_id="custom_loader_test",
+                screening_scope="pilot",
+            ),
+        )
+
+        filter_candidates(
+            candidates=[_mock_candidate()],
+            parsed=None,
+            event_id="EVT_CUSTOM_LOADER",
+            repo_root=tmp_path,
+            screening_scope="pilot",
+            data_loader=custom_loader,
+            prefer_fs_v1_path=False,
+        )
+
+        assert calls == [("EVT_CUSTOM_LOADER", tmp_path)]
