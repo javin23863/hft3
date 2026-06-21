@@ -132,7 +132,11 @@ def main(argv: list[str] | None = None) -> int:
             print(f"NPZ data: {result['npz']['npz_count']} files ({result['npz']['npz_total_size_mb']} MB)")
             print(f"Graphify: {'OK' if result['graphify']['graph_present'] else 'MISSING — run with --rebuild-graph'}")
             if result.get("graph_rebuild"):
-                print(f"Graph rebuild: {'OK' if result['graph_rebuild']['rebuilt'] else 'FAILED'}")
+                if result["graph_rebuild"].get("skipped"):
+                    graph_status = "SKIPPED"
+                else:
+                    graph_status = "OK" if result["graph_rebuild"]["rebuilt"] else "FAILED"
+                print(f"Graph rebuild: {graph_status}")
             core = "PASS" if result["all_ok"] else "FAIL"
             data = "OK" if result["npz"]["npz_count"] > 0 else "MISSING"
             graph = "OK" if result["graphify"]["graph_present"] else "MISSING"
@@ -154,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if result["all_ok"] else 1
 
     if args.command == "download":
-        from apps.workbench.scripts.backfill_catalog import main as backfill_main
+        from workbench.scripts.backfill_catalog import main as backfill_main
 
         argv = [
             "--model",

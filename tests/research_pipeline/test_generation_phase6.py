@@ -98,10 +98,10 @@ def test_statistical_gate_rejects_fail_cscv_status() -> None:
     row.pop("vectorbt_results", None)
     row["bootstrap_ci_or_not_run"] = {"status": "pass"}
     row["dsr_or_not_run"] = {"status": "pass"}
-    row["pbo_or_not_run"] = {"status": "fail", "pbo_pass": False}
+    row["pbo_or_not_run"] = {"status": "pass", "pbo_pass": True}
     row["cscv_count_or_not_run"] = {"status": "pass"}
     row["dsr_status"] = "pass"
-    row["pbo_status"] = "fail"
+    row["pbo_status"] = "pass"
     row["cscv_status"] = "fail"
     row["robustness_artifact_staleness"] = "fresh"
     row["fee_stress_or_not_run"] = {"status": "pass"}
@@ -119,7 +119,7 @@ def test_statistical_gate_rejects_fail_cscv_status() -> None:
         allow_partial=False,
     )
     assert receipt["status"] == "REJECT"
-    assert any("pbo" in str(r).lower() for r in receipt.get("failure_reasons", []))
+    assert any("cscv" in str(r).lower() for r in receipt.get("failure_reasons", []))
 
 
 def test_statistical_gate_rejects_structure_ran_cscv_status() -> None:

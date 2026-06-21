@@ -1049,8 +1049,15 @@ def test_replay_blocks_without_feature_recipe_hash_equality(monkeypatch, tmp_pat
 
 def test_pipeline_view_meta_includes_vbt5_keys():
     source = (Path(__file__).resolve().parents[2] / "frontend" / "src" / "views" / "PipelineView.tsx").read_text(encoding="utf-8")
+    priority_keys = (
+        "vbt5_evidence_detail",
+        "screening_detail",
+        "validated_candidates",
+        "screening_promoted_count",
+    )
     for key in (
         "screening_status",
+        *priority_keys,
         "screening_artifact",
         "screening_artifact_hash",
         "replay_status",
@@ -1062,6 +1069,15 @@ def test_pipeline_view_meta_includes_vbt5_keys():
         "surface_formula_authority_status",
     ):
         assert f'"{key}"' in source
+    keys_block = source.split("const keys = [", 1)[1].split("];", 1)[0]
+    first_twelve = [
+        line.strip().strip('",')
+        for line in keys_block.splitlines()
+        if line.strip().startswith('"')
+    ][:12]
+    for key in priority_keys:
+        assert key in first_twelve
+        assert source.index(f'"{key}"') < source.index('"screening_artifact"')
     assert source.index('"replay_detail"') < source.index("slice(0, 12)")
     assert source.index('"replay_eligibility_status"') < source.index("slice(0, 12)")
 
@@ -3800,7 +3816,12 @@ def test_health_open():
     assert r.json()["status"] == "ok"
 
 
-def test_spa_fallback_for_client_routes():
+def test_spa_inline_fallback_for_client_routes_when_enabled(monkeypatch, tmp_path):
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    monkeypatch.setattr(cockpit_main, "_DIST_ROOT", dist.resolve())
+    monkeypatch.setattr(cockpit_main, "_INDEX", dist / "index.html")
+    monkeypatch.setattr(cockpit_main, "_ALLOW_INLINE_FALLBACK", True)
     client = TestClient(app)
     for route in ("/chat", "/models", "/lifecycle"):
         r = client.get(route)
@@ -3814,6 +3835,21 @@ def test_spa_fallback_for_client_routes():
     # (no view token configured here → require_view 401, never an HTML body).
     chat = client.post("/api/chat", json={"query": "x"})
     assert "text/html" not in chat.headers.get("content-type", "")
+
+
+def test_spa_missing_bundle_returns_503_by_default(monkeypatch, tmp_path):
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    monkeypatch.setattr(cockpit_main, "_DIST_ROOT", dist.resolve())
+    monkeypatch.setattr(cockpit_main, "_INDEX", dist / "index.html")
+    monkeypatch.setattr(cockpit_main, "_ALLOW_INLINE_FALLBACK", False)
+    client = TestClient(app)
+
+    r = client.get("/chat")
+
+    assert r.status_code == 503
+    assert '<div id="root">' not in r.text
+    assert "frontend bundle missing" in r.text
 
 
 def test_spa_catch_all_does_not_shadow_missing_api_routes():
@@ -3838,12 +3874,14 @@ def test_spa_catch_all_blocks_path_traversal():
     ]
     for path in evil:
         r = client.get(path)
-        # Either a clean 404 (no dist) or the index.html SPA fallback — never
-        # the contents of a backend source / secrets file.
+        # Either a clean non-200 (no dist) or the index.html SPA fallback when
+        # explicitly enabled — never the contents of backend source / secrets.
         assert "Keyword retrieval over the Obsidian vault" not in r.text, path
         assert "FastAPI aggregation service" not in r.text, path
         if r.status_code == 200:
             assert "text/html" in r.headers.get("content-type", ""), path
+        else:
+            assert r.status_code in {404, 503}
 
 
 def test_rate_limit_ignores_xff_without_trusted_proxy(monkeypatch):
@@ -3919,17 +3957,46 @@ def test_control_rescreen_stage_a_command_refreshes_full_artifact():
     args = spec["command"]["args"]
 
     assert spec["host"] == "laptop"
+    assert spec["singleton"] is True
     assert spec["command"]["entry"].endswith("run_stage_a_screen.py")
     assert args == [
-        "--band", "6.255764",
         "--symbols", "MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0",
         "--out", "research_cards/stage_a_full",
         "--workers", "12",
     ]
+    assert "--band" not in args
     assert "--event-type" not in args
     assert "--max-units" not in args
     assert "--cells" not in args
     assert "--shard" not in args
+
+
+def test_control_rescreen_stage_a_uses_singleton_enqueue(monkeypatch):
+    from apps.cockpit.backend import auth
+    from lifecycle_orchestrator.src import job_runner
+
+    calls = {}
+
+    def fake_enqueue_singleton(model_id, route, command, *, host="laptop", depends_on=None):
+        calls.update({"model_id": model_id, "route": route, "command": command, "host": host})
+        return "rescreen_stage_a_cockpit_1"
+
+    def fake_enqueue(*args, **kwargs):
+        raise AssertionError("rescreen_stage_a must use enqueue_singleton")
+
+    monkeypatch.setattr(auth, "_LOOPBACK", {"testclient"})
+    monkeypatch.setattr(control, "_exec_enabled", lambda: False)
+    monkeypatch.setattr(control, "_audit", lambda *args, **kwargs: None)
+    monkeypatch.setattr(job_runner, "enqueue_singleton", fake_enqueue_singleton)
+    monkeypatch.setattr(job_runner, "enqueue", fake_enqueue)
+    client = TestClient(app)
+
+    r = client.post("/api/control/job", json={"name": "rescreen_stage_a", "confirm": True})
+
+    assert r.status_code == 200
+    assert calls["model_id"] == "rescreen_stage_a"
+    assert calls["host"] == "laptop"
+    assert "--band" not in calls["command"]["args"]
 
 
 def test_control_job_commands_omit_retired_cme_m6_sweep():

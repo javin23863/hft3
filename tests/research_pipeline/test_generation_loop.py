@@ -268,6 +268,7 @@ def test_generation_summary_excludes_holdout_periods(tmp_path: Path) -> None:
 def test_generation_loop_spies_runners(tmp_path: Path, monkeypatch) -> None:
     filter_calls: list[int] = []
     robustness_calls: list[int] = []
+    robustness_candidate_ids: list[str] = []
     hft_calls: list[int] = []
 
     def filter_fn(**kwargs):
@@ -279,6 +280,7 @@ def test_generation_loop_spies_runners(tmp_path: Path, monkeypatch) -> None:
 
     def robustness_fn(**kwargs):
         robustness_calls.append(1)
+        robustness_candidate_ids.append(str(kwargs.get("candidate_id") or ""))
         out = tmp_path / f"rob_{len(robustness_calls)}"
         out.mkdir(parents=True, exist_ok=True)
         campaign_summary = {
@@ -414,6 +416,7 @@ def test_generation_loop_spies_runners(tmp_path: Path, monkeypatch) -> None:
     assert code == 0, report
     assert len(filter_calls) == 2
     assert len(robustness_calls) == 4
+    assert all(robustness_candidate_ids)
     assert len(hft_calls) == 2
     assert report["generations_run"] == 2
     manifest = load_manifest(tmp_path, report["campaign_id"])
@@ -445,11 +448,140 @@ def test_enrich_hft_scenario_results_backfills_legacy_replay_provenance(tmp_path
     assert row["replay_result"] == {
         "certification_status": "full_fidelity_declared",
         "candidate_id": "candidate-legacy",
-        "feature_recipe_hash": "recipe-hash",
         "manifest_hash": "manifest-hash",
+        "feature_recipe_hash": "recipe-hash",
         "screening_artifact_hash": "screening-hash",
         "robustness_artifact_hash": "robustness-hash",
     }
+
+
+def test_legacy_replay_provenance_backfill_allows_hft_gate(tmp_path: Path) -> None:
+    from research_pipeline import generation_loop as gl
+    from research_pipeline.generation_gate_producers import build_hftbacktest_gate_receipt
+
+    artifact_dir = tmp_path / "hft_missing_provenance"
+    artifact_dir.mkdir()
+    (artifact_dir / "replay_result.json").write_text(
+        json.dumps({"certification_status": "full_fidelity_declared"}),
+        encoding="utf-8",
+    )
+    manifest = {
+        "candidate_id": "candidate-missing-provenance",
+        "manifest_hash": "manifest-hash",
+        "feature_recipe_hash": "recipe-hash",
+    }
+
+    [row] = gl._enrich_hft_scenario_results(
+        [{"scenario_id": "s1", "status": "completed", "artifact_dir": str(artifact_dir)}],
+        manifest=manifest,
+        screening_artifact_hash="screening-hash",
+        robustness_artifact_hash="robustness-hash",
+    )
+    replay = row["replay_result"]
+    assert replay["candidate_id"] == "candidate-missing-provenance"
+    assert replay["feature_recipe_hash"] == "recipe-hash"
+    assert replay["manifest_hash"] == "manifest-hash"
+    assert replay["screening_artifact_hash"] == "screening-hash"
+    assert replay["robustness_artifact_hash"] == "robustness-hash"
+
+    receipt = build_hftbacktest_gate_receipt(
+        manifest=manifest,
+        scenario_results=[row],
+        screening_artifact_hash="screening-hash",
+        robustness_artifact_hash="robustness-hash",
+        allow_declared_certification=True,
+    )
+    assert receipt["status"] == "PASS"
+
+
+def test_enrich_hft_scenario_results_preserves_upstream_screening_hash(tmp_path: Path) -> None:
+    from research_pipeline import generation_loop as gl
+
+    manifest = {
+        "candidate_id": "candidate-screening-upstream",
+        "manifest_hash": "manifest-hash",
+        "feature_recipe_hash": "recipe-hash",
+    }
+
+    [row] = gl._enrich_hft_scenario_results(
+        [
+            {
+                "status": "completed",
+                "replay_result": {
+                    "certification_status": "full_fidelity_declared",
+                    "upstream_screening_artifact_hash": "replay-screening-hash",
+                },
+            }
+        ],
+        manifest=manifest,
+        screening_artifact_hash="screening-hash",
+        robustness_artifact_hash="robustness-hash",
+    )
+
+    replay = row["replay_result"]
+    assert replay["upstream_screening_artifact_hash"] == "replay-screening-hash"
+    assert "screening_artifact_hash" not in replay
+
+
+def test_cached_hft_scenario_with_failing_cert_stays_cached(tmp_path: Path) -> None:
+    from research_pipeline import generation_loop as gl
+
+    manifest = {
+        "candidate_id": "candidate-cached-fail",
+        "manifest_hash": "manifest-hash",
+        "feature_recipe_hash": "recipe-hash",
+    }
+
+    [row] = gl._enrich_hft_scenario_results(
+        [
+            {
+                "scenario_id": "s1",
+                "status": "cached",
+                "replay_result": {
+                    "certification_status": "missing_native_hot_path_evidence",
+                },
+            }
+        ],
+        manifest=manifest,
+        screening_artifact_hash="screening-hash",
+        robustness_artifact_hash="robustness-hash",
+    )
+
+    assert row["status"] == "cached"
+
+
+def test_cached_hft_scenario_without_cert_stays_completed_for_gate_diagnostic(tmp_path: Path) -> None:
+    from research_pipeline import generation_loop as gl
+    from research_pipeline.generation_gate_producers import build_hftbacktest_gate_receipt
+
+    manifest = {
+        "candidate_id": "candidate-cached-missing-cert",
+        "manifest_hash": "manifest-hash",
+        "feature_recipe_hash": "recipe-hash",
+    }
+
+    [row] = gl._enrich_hft_scenario_results(
+        [
+            {
+                "scenario_id": "s1",
+                "status": "cached",
+                "replay_result": {},
+            }
+        ],
+        manifest=manifest,
+        screening_artifact_hash="screening-hash",
+        robustness_artifact_hash="robustness-hash",
+    )
+
+    assert row["status"] == "completed"
+    receipt = build_hftbacktest_gate_receipt(
+        manifest=manifest,
+        scenario_results=[row],
+        screening_artifact_hash="screening-hash",
+        robustness_artifact_hash="robustness-hash",
+    )
+    assert "scenario_s1_certification_status_missing" in receipt["failure_reasons"]
+    assert "scenario_s1_status=cached" not in receipt["failure_reasons"]
 
 
 def test_resume_preserves_manifest_hash(tmp_path: Path, monkeypatch) -> None:

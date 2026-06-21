@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from backtest_pipeline.src.fee_model import FeeModel
+from backtest_pipeline.src.latency_components import latency_component_band_meets_minimum
 from backtest_pipeline.src.research_clock import research_clock_validation_errors
 from backtest_pipeline.src.feature_plane import (
     FEATURE_PLANE_ARTIFACT_FIELDS,
@@ -270,6 +271,13 @@ LATENCY_SAMPLE_SCHEMA_FIELDS = ("req_ts", "exch_ts", "resp_ts", "_padding")
 LATENCY_NATIVE_PROBE_OK_STATUSES = {"provided", "pass", "valid"}
 LATENCY_COMPONENT_MAPPING_FIELDS = ("feed_latency", "order_entry_latency", "order_response_latency")
 LATENCY_MEASURED_FAMILIES = {"ConstantLatency", "IntpOrderLatency", "Custom"}
+LATENCY_DECOMPOSED_REQUIRED_BANDS = {
+    "feed_latency_us": ("feed", "cc2_feed_"),
+    "new_send_to_exchange_us": ("order_entry", "cc3_new_decomp_"),
+    "new_exchange_to_ack_us": ("order_response", "cc3_new_decomp_"),
+    "cancel_send_to_exchange_us": ("order_entry", "cc4_cancel_"),
+    "cancel_exchange_to_ack_us": ("order_response", "cc4_cancel_"),
+}
 LATENCY_NATIVE_PROBE_REQUIRED_FIELDS = (
     "native_latency_probe_artifact_hash",
     "native_latency_probe_provenance",
@@ -605,6 +613,100 @@ def _validate_latency_component_mapping(latency_model: Mapping[str, Any]) -> lis
     return reasons
 
 
+def _latency_component_band_evidence(latency_model: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    for field in ("latency_component_bands", "component_bands"):
+        bands = latency_model.get(field)
+        if isinstance(bands, Mapping):
+            return bands
+    return None
+
+
+def _resolve_latency_source_artifact(source_artifact: str, repo_root: Path) -> Path:
+    path = Path(source_artifact)
+    return path if path.is_absolute() else repo_root / path
+
+
+def _latency_band_source_label(band: Mapping[str, Any]) -> str:
+    for field in ("source_run_id", "source_campaign", "source"):
+        value = band.get(field)
+        if isinstance(value, str) and value.strip():
+            return value.strip().lower()
+    return ""
+
+
+def _validate_measured_decomposed_latency_evidence(
+    latency_model: Mapping[str, Any],
+    *,
+    repo_root: Path | None = None,
+) -> list[str]:
+    bands = _latency_component_band_evidence(latency_model)
+    if bands is None:
+        return ["measured_decomposed_requires_component_band_evidence"]
+
+    root = repo_root or _repo_root_default()
+    reasons: list[str] = []
+    for band_name, (expected_component, expected_prefix) in LATENCY_DECOMPOSED_REQUIRED_BANDS.items():
+        band = bands.get(band_name)
+        if not isinstance(band, Mapping):
+            reasons.append(f"measured_decomposed_missing_component_band:{band_name}")
+            continue
+        if band.get("measurement_status") != "MEASURED":
+            reasons.append(f"measured_decomposed_component_band_not_measured:{band_name}")
+        if band.get("hftbacktest_component") != expected_component:
+            reasons.append(f"measured_decomposed_component_band_component_mismatch:{band_name}")
+        if not latency_component_band_meets_minimum(band_name, band):
+            reasons.append(f"measured_decomposed_component_band_sample_count_below_min:{band_name}")
+        source_artifact = band.get("source_artifact")
+        if not isinstance(source_artifact, str) or not source_artifact.strip():
+            reasons.append(f"measured_decomposed_component_band_source_artifact_missing:{band_name}")
+            continue
+        artifact_path = _resolve_latency_source_artifact(source_artifact.strip(), root)
+        expected_hash = band.get("source_artifact_hash")
+        if not _is_sha256_digest(expected_hash):
+            reasons.append(f"measured_decomposed_component_band_source_artifact_hash_invalid:{band_name}")
+            continue
+        try:
+            artifact_bytes = artifact_path.read_bytes()
+        except OSError:
+            reasons.append(f"measured_decomposed_component_band_source_artifact_unreadable:{band_name}")
+            continue
+        if not artifact_path.name.lower().startswith(expected_prefix):
+            reasons.append(f"measured_decomposed_component_band_source_artifact_mismatch:{band_name}")
+            continue
+        source_label = _latency_band_source_label(band)
+        if not source_label.startswith(expected_prefix):
+            reasons.append(f"measured_decomposed_component_band_source_mismatch:{band_name}")
+        actual_hash = f"sha256:{hashlib.sha256(artifact_bytes).hexdigest()}"
+        if actual_hash.lower() != str(expected_hash).lower():
+            reasons.append(f"measured_decomposed_component_band_source_artifact_hash_mismatch:{band_name}")
+    return reasons
+
+
+def _latency_evidence_mentions_partial_components(latency_model: Mapping[str, Any]) -> bool:
+    fields = (
+        "feed_latency_source",
+        "order_entry_latency_source",
+        "order_response_latency_source",
+        "latency_source_authority",
+        "note",
+    )
+    chunks = [str(latency_model.get(field) or "") for field in fields]
+    mapping = latency_model.get("latency_component_mapping")
+    if isinstance(mapping, Mapping):
+        chunks.extend(str(value or "") for value in mapping.values())
+    evidence_text = " ".join(chunks).lower()
+    return any(
+        token in evidence_text
+        for token in (
+            "measured_partial",
+            "open_pending",
+            "proxy_only",
+            "generated_from_feed_latency_proxy",
+            "symmetric split",
+        )
+    )
+
+
 def _validate_native_latency_probe_evidence(latency_model: Mapping[str, Any]) -> list[str]:
     reasons: list[str] = []
     for field in LATENCY_NATIVE_PROBE_REQUIRED_FIELDS:
@@ -649,7 +751,11 @@ def _upstream_ref_verification_status(upstream_ref: str | None, package_version:
     return "package_version_match" if upstream_ref in allowed_refs else "unverified_ref_package_version_mismatch"
 
 
-def validate_hftbacktest_latency_model(latency_model: Mapping[str, Any]) -> list[str]:
+def validate_hftbacktest_latency_model(
+    latency_model: Mapping[str, Any],
+    *,
+    repo_root: Path | None = None,
+) -> list[str]:
     """Return fail-closed reasons for a HftBacktest latency artifact."""
     reasons: list[str] = []
     for field in LATENCY_MODEL_REQUIRED_FIELDS:
@@ -730,8 +836,14 @@ def validate_hftbacktest_latency_model(latency_model: Mapping[str, Any]) -> list
             reasons.append("missing_order_latency_unavailable_reason")
 
     if family in LATENCY_MEASURED_FAMILIES:
-        if proxy_status not in {"measured", "measured_decomposed", "measured_partial"}:
+        if proxy_status == "measured_partial":
+            reasons.append("measured_partial_latency_cannot_certify")
+        elif proxy_status not in {"measured", "measured_decomposed"}:
             reasons.append("measured_latency_proxy_status_must_be_measured")
+        elif proxy_status == "measured_decomposed":
+            reasons.extend(_validate_measured_decomposed_latency_evidence(latency_model, repo_root=repo_root))
+        elif _latency_evidence_mentions_partial_components(latency_model):
+            reasons.append("measured_latency_contains_partial_component_evidence")
         if probe_status not in LATENCY_NATIVE_PROBE_OK_STATUSES:
             reasons.append("invalid_native_latency_probe_evidence")
         reasons.extend(_validate_native_latency_probe_evidence(latency_model))
@@ -763,7 +875,11 @@ def validate_hftbacktest_latency_model(latency_model: Mapping[str, Any]) -> list
     return list(dict.fromkeys(reasons))
 
 
-def _load_latency_model_artifact(latency_model_path: Path | None) -> tuple[dict[str, Any], list[str]]:
+def _load_latency_model_artifact(
+    latency_model_path: Path | None,
+    *,
+    repo_root: Path | None = None,
+) -> tuple[dict[str, Any], list[str]]:
     if latency_model_path is None:
         artifact = {
             "latency_model_status": "not_run",
@@ -805,7 +921,7 @@ def _load_latency_model_artifact(latency_model_path: Path | None) -> tuple[dict[
         }
         return artifact, [f"latency_model_read_failed:{type(exc).__name__}"]
 
-    reasons = validate_hftbacktest_latency_model(latency_model)
+    reasons = validate_hftbacktest_latency_model(latency_model, repo_root=repo_root)
     artifact = dict(latency_model)
     artifact["latency_model_path"] = str(latency_model_path)
     artifact["latency_model_status"] = (
@@ -2630,7 +2746,7 @@ def write_hftbacktest_realism_artifacts(
 ) -> dict[str, Any]:
     """Write source lock, data validation, input manifest, and fail-closed summary."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    latency_model, latency_reasons = _load_latency_model_artifact(latency_model_path)
+    latency_model, latency_reasons = _load_latency_model_artifact(latency_model_path, repo_root=repo_root)
     latency_model_path_out = out_dir / "latency_model.json"
     latency_model_path_out.write_text(json.dumps(latency_model, indent=2) + "\n", encoding="utf-8")
     fill_queue_model, fill_queue_reasons = _load_fill_queue_model_artifact(fill_queue_model_path)

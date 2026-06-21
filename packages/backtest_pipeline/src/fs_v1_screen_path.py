@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Mapping, Optional, Tuple
+from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -133,6 +133,26 @@ def _load_leader_leg_store(
     return None
 
 
+_CROSS_ASSET_REQUIRED_LEADERS_BY_MODEL = {
+    "HYP_16": ("ES",),
+    "ES_MES_LEAD_LAG": ("ES",),
+    "HYP_17": ("NQ",),
+    "NQ_MNQ_LEAD_LAG": ("NQ",),
+    "HYP_18": ("ES", "NQ"),
+    "ES_NQ_DIVERGENCE_SNAPBACK": ("ES", "NQ"),
+    "HYP_19": ("ZN",),
+    "ZN_ZB_ES_NQ_MACRO_IMPULSE": ("ZN",),
+}
+
+
+def cross_asset_required_leaders_for_model(model_id: str) -> tuple[str, ...]:
+    """Ontology-backed static leaders for real cross-asset hypothesis slugs."""
+    key = str(model_id or "").strip().upper()
+    if key.isdigit():
+        key = f"HYP_{key}"
+    return _CROSS_ASSET_REQUIRED_LEADERS_BY_MODEL.get(key, ())
+
+
 def recipe_requires_cross_asset_leaders(
     *,
     metadata: Mapping[str, Any] | None = None,
@@ -140,6 +160,15 @@ def recipe_requires_cross_asset_leaders(
 ) -> bool:
     """Shared detector for cross-asset leader-leg requirements."""
     meta = dict(metadata or {})
+    for candidate_model_id in (
+        model_id,
+        meta.get("model_id"),
+        meta.get("hypothesis_id"),
+        meta.get("strategy_family"),
+        meta.get("source_model"),
+    ):
+        if cross_asset_required_leaders_for_model(str(candidate_model_id or "")):
+            return True
     recipe = meta.get("feature_recipe") or {}
     if recipe.get("cross_asset_legs") or recipe.get("leader_symbols"):
         return True
@@ -189,14 +218,29 @@ def _default_leaders_for_target(target_symbol: str) -> tuple[tuple[str, ...], st
     return fallback.get(base, ("ES",)), "static_fallback"
 
 
+def _normalize_leader_symbols(symbols: Sequence[str] | None) -> tuple[str, ...]:
+    leaders: list[str] = []
+    for symbol in symbols or ():
+        base = str(symbol or "").split(".")[0].upper()
+        if base and base not in leaders:
+            leaders.append(base)
+    return tuple(leaders)
+
+
 def _load_leader_legs(
     root: Path,
     event_id: str,
     target_symbol: str,
+    required_leaders: Sequence[str] | None = None,
 ) -> tuple[tuple[tuple[str, LeaderLegStore], ...], tuple[str, ...], str]:
     """Load PIT leader legs; return (loaded, missing_symbols, resolution_source)."""
     target = str(target_symbol).split(".")[0].upper()
-    expected_leaders, resolution_source = _default_leaders_for_target(target)
+    explicit_leaders = _normalize_leader_symbols(required_leaders)
+    if explicit_leaders:
+        expected_leaders = explicit_leaders
+        resolution_source = "candidate_required_leaders"
+    else:
+        expected_leaders, resolution_source = _default_leaders_for_target(target)
     legs: list[tuple[str, LeaderLegStore]] = []
     missing: list[str] = []
     for leader in expected_leaders:
@@ -279,6 +323,7 @@ def resolve_fs_v1_screen_context(
     symbol: str,
     feature_store_root_override: Path | None = None,
     feature_latency_ms: float = 1.0,
+    required_leaders: Sequence[str] | None = None,
 ) -> FsV1ScreenContext | None:
     root = feature_store_root_override or feature_store_root(repo_root)
     sp: Path | None = None
@@ -342,7 +387,7 @@ def resolve_fs_v1_screen_context(
 
     has_vix = vix_ts is not None and vix_X is not None and len(vix_ts) > 0
     leader_legs, missing_leaders, leader_source = _load_leader_legs(
-        root, event_id, resolved_symbol
+        root, event_id, resolved_symbol, required_leaders=required_leaders
     )
     return FsV1ScreenContext(
         symbol=resolved_symbol,

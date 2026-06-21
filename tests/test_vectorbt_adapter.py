@@ -61,6 +61,111 @@ def _mock_candidate(model_id: str = "HYP_5", threshold: float = 0.15) -> Candida
     )
 
 
+@pytest.mark.parametrize(
+    ("model_id", "leaders"),
+    [
+        ("HYP_16", ("ES",)),
+        ("ES_MES_LEAD_LAG", ("ES",)),
+        ("HYP_17", ("NQ",)),
+        ("NQ_MNQ_LEAD_LAG", ("NQ",)),
+        ("HYP_18", ("ES", "NQ")),
+        ("ES_NQ_DIVERGENCE_SNAPBACK", ("ES", "NQ")),
+        ("HYP_19", ("ZN",)),
+        ("ZN_ZB_ES_NQ_MACRO_IMPULSE", ("ZN",)),
+    ],
+)
+def test_real_cross_asset_slug_only_candidates_require_leaders(model_id, leaders):
+    from backtest_pipeline.src.fs_v1_screen_path import (
+        cross_asset_required_leaders_for_model,
+        recipe_requires_cross_asset_leaders,
+    )
+    from backtest_pipeline.src.vectorbt_adapter import (
+        _candidate_cross_asset_required_leaders,
+        _candidate_requires_cross_asset_leaders,
+    )
+
+    candidate = _mock_candidate(model_id)
+
+    assert cross_asset_required_leaders_for_model(model_id) == leaders
+    assert recipe_requires_cross_asset_leaders(model_id=model_id)
+    assert _candidate_cross_asset_required_leaders(candidate) == leaders
+    assert _candidate_requires_cross_asset_leaders(candidate)
+
+
+def test_cross_asset_batch_override_does_not_reject_candidate_with_own_leader_context():
+    from types import SimpleNamespace
+
+    from backtest_pipeline.src.fs_v1_screen_path import (
+        FS_V1_BAR_CONSTRUCTION_ID,
+        fs_v1_feature_set_hash,
+        fs_v1_feature_set_id,
+    )
+    from backtest_pipeline.src.vectorbt_adapter import FilterResult, apply_promotion_gates
+
+    ts = np.arange(40, dtype=np.int64) * 1_000_000
+    leader_x = np.ones((len(ts), 41), dtype=np.float64)
+    fs_v1_ctx = SimpleNamespace(
+        symbol="MES.v.0",
+        missing_leader_symbols=(),
+        leader_legs=(("ES", SimpleNamespace(symbol="ES", ts=ts, X=leader_x)),),
+        has_vix=False,
+        vix_ts=None,
+        vix_X=None,
+        vix_cols=(),
+        store={"ts": ts},
+        feature_latency_ms=1.0,
+        manifest_hash="manifest_hash",
+        content_hash="content_hash",
+    )
+    promoted = PromotedCandidate(
+        candidate_id="hyp16_es_only_survivor",
+        hypothesis_id="HYP_16",
+        strategy_family="HYP_16",
+        asset_class="CME_FUTURES",
+        symbol="MES",
+        timeframe="1m",
+        param_values={"signal_threshold": 0.15},
+        vectorbt_run_id="run_mixed_batch",
+        vectorbt_results={
+            "oos_expectancy": 1.25,
+            "wf_consistency": 0.75,
+            "max_drawdown_pct": -10.0,
+            "turnover_mean_pct": 50.0,
+            "num_trades": 25,
+            "param_stability_score": 0.9,
+            "slippage_sensitivity": 0.1,
+        },
+        pass_reason="candidate_stats_passed",
+    )
+    result = FilterResult(
+        backend="vectorbt",
+        run_id="run_mixed_batch",
+        code_commit="abc123",
+        promoted=[promoted],
+        rejected=[],
+        bar_construction_id=FS_V1_BAR_CONSTRUCTION_ID,
+        feature_set_id=fs_v1_feature_set_id(),
+        feature_set_hash=fs_v1_feature_set_hash(),
+        data_manifest_hash="manifest_hash",
+        feature_plane_overrides={
+            "cross_asset_leader_fail_closed": True,
+            "missing_leader_symbols": ["NQ"],
+            "cross_asset_leader_fail_closed_reason": (
+                "cross_asset_leader_missing_fail_closed:NQ"
+            ),
+        },
+    )
+
+    gated = apply_promotion_gates(
+        result,
+        screening_scope="paid-compute",
+        fs_v1_ctx=fs_v1_ctx,
+    )
+
+    assert [p.candidate_id for p in gated.promoted] == ["hyp16_es_only_survivor"]
+    assert gated.rejected == []
+
+
 def _duplicate_base_candidates() -> list[CandidateModel]:
     return [
         CandidateModel(
@@ -2031,6 +2136,7 @@ class TestFilterCandidatesScreeningArtifactPersistence:
         assert "wf_consistency" in vectorbt_results
         assert "oos_expectancy" in vectorbt_results
         assert vectorbt_results["gate_metric_non_stats_status"] == {
+            "wf_consistency": "not_measured_not_used_by_vbt2_pilot_gate",
             "turnover_mean_pct": "not_measured_not_used_by_vbt2_pilot_gate",
             "param_stability_score": "not_measured_not_used_by_vbt2_pilot_gate",
             "slippage_sensitivity": "not_measured_not_used_by_vbt2_pilot_gate",
@@ -2039,11 +2145,11 @@ class TestFilterCandidatesScreeningArtifactPersistence:
             "scope": "official_vectorbt_stats_with_walk_forward_oos",
             "used_fields": {
                 "oos_expectancy": "auxiliary_numpy_walk_forward",
-                "wf_consistency": "auxiliary_numpy_walk_forward",
                 "max_drawdown_pct": "Max Drawdown [%]",
                 "num_trades": "Total Trades",
             },
             "skipped_unmeasured_fields": [
+                "wf_consistency",
                 "turnover_mean_pct",
                 "param_stability_score",
                 "slippage_sensitivity",

@@ -46,6 +46,12 @@ REJECT_STATUS_MAP = {
     FINAL_HFT_REJECTED: "hft",
 }
 
+PLANTED_EXPECTED_OUTCOMES = {
+    "reject_wfc_1": FINAL_WFC_REJECTED,
+    "reject_stat_planted_g1": FINAL_STATISTICAL_REJECTED,
+    "reject_stat_planted_g2": FINAL_STATISTICAL_REJECTED,
+}
+
 
 @dataclass
 class _FilterResult:
@@ -204,7 +210,7 @@ def _acceptance_robustness_fn(repo_root: Path):
         wfc_status = "PASS"
         if cid.startswith("reject_wfc"):
             wfc_status = "FAIL"
-        if cid.startswith("reject_wf"):
+        if cid.startswith("reject_wf_"):
             wf_status = "FAIL"
         campaign_summary = {
             "status": wf_status,
@@ -268,8 +274,6 @@ def _acceptance_hft_fn(repo_root: Path):
 
     def _run(**kwargs):
         cid = str((kwargs.get("scenarios") or [{}])[0].candidate_id if kwargs.get("scenarios") else kwargs.get("candidate_id") or "")
-        if not cid and kwargs.get("scenarios"):
-            cid = str(getattr(kwargs["scenarios"][0], "candidate_id", ""))
         scenarios = kwargs.get("scenarios") or []
         config = kwargs.get("config")
         out = repo_root / "runtime" / "reports" / "three_gen_hft" / (cid or "unknown")
@@ -437,6 +441,16 @@ def _summarize_generation(gen_dir: Path, gen_idx: int) -> dict[str, Any]:
     }
 
 
+def _planted_final_statuses(generation_summaries: list[dict[str, Any]]) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for gen in generation_summaries:
+        for row in gen.get("summary", {}).get("candidates") or []:
+            cid = str(row.get("candidate_id") or "")
+            if cid.startswith("reject_wfc") or cid.startswith("reject_stat"):
+                out[cid] = str(row.get("final_status") or "")
+    return out
+
+
 def run_three_gen_acceptance(
     *,
     repo_root: Path | None = None,
@@ -470,6 +484,7 @@ def run_three_gen_acceptance(
         family_search_enabled=True,
         family_search_fraction=0.6,
         run_robustness=True,
+        robustness_max_candidates=8,
         run_hft_campaign=True,
         stop_no_improvement_generations=0,
         hft_source_npz=npz,
@@ -572,6 +587,21 @@ def run_three_gen_acceptance(
     if recipe_changes.get(2):
         recipe_dimension_change_gen2 = any(r.get("recipe_dimension_changed") for r in recipe_changes[2])
 
+    planted_outcomes = _planted_final_statuses(generation_summaries)
+    planted_mismatches = {
+        cid: {"expected": expected, "actual": planted_outcomes.get(cid)}
+        for cid, expected in PLANTED_EXPECTED_OUTCOMES.items()
+        if planted_outcomes.get(cid) != expected
+    }
+    planted_final_pass = sorted(
+        cid for cid, status in planted_outcomes.items() if status == FINAL_PASS
+    )
+    if planted_mismatches or planted_final_pass:
+        raise AssertionError(
+            "planted acceptance outcome mismatch: "
+            f"mismatches={planted_mismatches}, final_pass={planted_final_pass}"
+        )
+
     payload = {
         "mode": "fixture_dry_run",
         "live_data_required": False,
@@ -583,6 +613,8 @@ def run_three_gen_acceptance(
         "generations": generation_summaries,
         "recipe_changes": recipe_changes,
         "recipe_dimension_change_gen2": recipe_dimension_change_gen2,
+        "planted_expected_outcomes": dict(PLANTED_EXPECTED_OUTCOMES),
+        "planted_outcomes": planted_outcomes,
     }
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(_format_report(payload), encoding="utf-8")
@@ -617,6 +649,12 @@ def _format_report(payload: dict[str, Any]) -> str:
         else:
             lines.append("- Gate rejects by type: none")
         lines.append("")
+
+    lines.extend(["## Planted outcome assertions", ""])
+    for cid, expected in sorted(payload["planted_expected_outcomes"].items()):
+        actual = payload["planted_outcomes"].get(cid)
+        lines.append(f"- `{cid}`: expected `{expected}`, actual `{actual}`")
+    lines.append("")
 
     for gen_idx, changes in sorted(payload.get("recipe_changes", {}).items()):
         lines.append(f"## Generation {gen_idx} parent-child recipe changes")

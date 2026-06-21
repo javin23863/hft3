@@ -582,6 +582,35 @@ def test_vast_deploy_contract_copies_declaration_and_derives_branch() -> None:
     assert "SCP gate, declaration, events.csv, manifest.parquet" in deploy
 
 
+def test_vast_deploy_contract_rejects_shell_unsafe_branch_and_paths() -> None:
+    deploy = (REPO / "scripts" / "vast_deploy_and_verify.ps1").read_text(encoding="utf-8")
+    assert "git check-ref-format --branch $Branch" in deploy
+    assert "Invalid GitBranch" in deploy
+    assert "Normalize-RemoteAbsolutePath \"RemoteRepo\" $RemoteRepo" in deploy
+    assert "Normalize-RemoteAbsolutePath \"RemoteNpzRoot\" $RemoteNpzRoot" in deploy
+    assert "Normalize-RemoteAbsolutePath \"RemoteManifestPath\" $RemoteManifestPath" in deploy
+    assert "Normalize-RepoRelativePath \"EventsCsv\" $EventsCsv" in deploy
+    assert "Get-RemotePosixParent" in deploy
+    assert "Split-Path $remoteEvents" not in deploy
+    assert "Split-Path $RemoteManifestPath" not in deploy
+    assert "contains unsafe path characters" in deploy
+
+
+def test_vast_deploy_contract_passes_remote_shell_values_as_quoted_bash_args() -> None:
+    deploy = (REPO / "scripts" / "vast_deploy_and_verify.ps1").read_text(encoding="utf-8")
+    assert "ConvertTo-BashSingleQuotedArg" in deploy
+    assert "bash -s -- $quotedArgs" in deploy
+    assert 'remote_repo="$1"' in deploy
+    assert 'git -C "$remote_repo" fetch origin "$git_branch"' in deploy
+    assert "Invoke-RemoteBash $syncCmd @($RemoteRepo, $GitBranch)" in deploy
+    assert 'export DEPLOY_REPO="$1"' in deploy
+    assert "Invoke-RemoteBash $remoteVerify @(" in deploy
+    assert 'find "$1" -maxdepth 1 -type f -name' in deploy
+    assert "Invoke-RemoteSh" not in deploy
+    assert "export DEPLOY_REPO='$RemoteRepo'" not in deploy
+    assert "find $RemoteNpzRoot -maxdepth" not in deploy
+
+
 def test_vast_remote_verify_passes_temp_contract(tmp_path: Path) -> None:
     if shutil.which("bash") is None or shutil.which("git") is None:
         pytest.skip("requires bash and git")

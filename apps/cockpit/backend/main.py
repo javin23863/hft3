@@ -236,9 +236,9 @@ async def ws(websocket: WebSocket) -> None:
 
 
 # Serve the SPA shell (single origin). Hashed assets are served from /assets
-# when the bundle exists; every other non-API path falls back to index.html so
-# client-side routes (/models, /chat, ...) work on deep-link + refresh (the
-# catch-all is added LAST, so the explicit /api and /ws routes always win).
+# when the bundle exists; every other non-API path uses index.html so client-side
+# routes (/models, /chat, ...) work on deep-link + refresh. Missing bundles fail
+# closed by default; the inline shell is only for explicit dev/test opt-in.
 _DIST = _REPO / "apps" / "cockpit" / "frontend" / "dist"
 _INDEX = _DIST / "index.html"
 from fastapi.responses import FileResponse, HTMLResponse  # noqa: E402
@@ -258,6 +258,7 @@ _FALLBACK_INDEX_HTML = """<!doctype html>
   </body>
 </html>
 """
+_ALLOW_INLINE_FALLBACK = os.environ.get("COCKPIT_INLINE_SPA_FALLBACK", "") == "1"
 
 if (_DIST / "assets").is_dir():
     app.mount("/assets", StaticFiles(directory=str(_DIST / "assets")), name="assets")
@@ -269,9 +270,7 @@ async def spa(full_path: str):
     # + parents containment check rejects `../` traversal (incl. URL-encoded
     # %2e%2e%2f) and absolute/drive-letter inputs, so this unauthenticated
     # route cannot leak backend source or any other process-readable file
-    # (e.g. a .env with credentials). Otherwise fall back to the SPA entrypoint
-    # so client-side routes work on deep-link/refresh, even in test/dev before
-    # the frontend bundle has been built.
+    # (e.g. a .env with credentials). Otherwise serve the built SPA entrypoint.
     if full_path == "api" or full_path.startswith("api/"):
         raise HTTPException(status_code=404)
     if full_path:
@@ -283,4 +282,12 @@ async def spa(full_path: str):
             return FileResponse(candidate)
     if _INDEX.is_file():
         return FileResponse(_INDEX)
-    return HTMLResponse(_FALLBACK_INDEX_HTML)
+    if _ALLOW_INLINE_FALLBACK:
+        return HTMLResponse(_FALLBACK_INDEX_HTML)
+    raise HTTPException(
+        status_code=503,
+        detail=(
+            "frontend bundle missing: build apps/cockpit/frontend/dist/index.html "
+            "or set COCKPIT_INLINE_SPA_FALLBACK=1 for dev/test"
+        ),
+    )

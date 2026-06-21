@@ -55,7 +55,11 @@ class ReplayRunner:
         if model_logic_callback is not None:
             class _CallbackStrategy:
                 def on_step(self, ctx):
-                    actions = model_logic_callback(ctx.execution._hbt)
+                    if ctx.hbt_handle is None:
+                        raise RuntimeError(
+                            "legacy_model_logic_callback requires uncertified hbt handle access"
+                        )
+                    actions = model_logic_callback(ctx.hbt_handle)
                     return [] if actions is None else actions
 
             strategy = _CallbackStrategy()
@@ -91,6 +95,7 @@ class ReplayRunner:
             step_ns=step_ns,
             max_steps=max_steps,
             certification_override=certification_override,
+            allow_uncertified_hbt_handle=model_logic_callback is not None,
         )
         return ReplaySession(cfg, strategy).run()
 

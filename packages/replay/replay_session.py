@@ -103,6 +103,9 @@ class ReplayStepContext:
     # strategy is still stepped so it can cancel/flatten; it should suppress
     # new passive quotes itself while this is set.
     book_one_sided: bool = False
+    # Public escape hatch for uncertified legacy callbacks that need the raw
+    # HftBacktest handle without reaching through execution adapter internals.
+    hbt_handle: Any | None = None
 
 
 @runtime_checkable
@@ -171,6 +174,7 @@ class ReplaySessionConfig:
     latency_model_path: str = ""
     fill_queue_model_path: str = ""
     certification_override: Dict[str, Any] = field(default_factory=dict)
+    allow_uncertified_hbt_handle: bool = False
 
 
 class ReplaySession:
@@ -179,6 +183,13 @@ class ReplaySession:
         config: ReplaySessionConfig,
         strategy: ReplayStrategy,
     ) -> None:
+        if (
+            config.allow_uncertified_hbt_handle
+            and config.certification_override.get("certification_allowed") is not False
+        ):
+            raise ValueError(
+                "allow_uncertified_hbt_handle requires certification_allowed=False"
+            )
         self.config = config
         self.strategy = strategy
         self.run_id = config.run_id or deterministic_run_id(
@@ -398,6 +409,7 @@ class ReplaySession:
                     execution=adapter,
                     symbol=cfg.symbol,
                     book_one_sided=book_one_sided,
+                    hbt_handle=hbt if cfg.allow_uncertified_hbt_handle else None,
                 )
                 actions = self.strategy.on_step(ctx)
                 for action in actions:

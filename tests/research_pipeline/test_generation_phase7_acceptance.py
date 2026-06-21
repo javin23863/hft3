@@ -10,7 +10,10 @@ from pathlib import Path
 
 import pytest
 
-from scripts.run_autoresearch_three_gen_acceptance import run_three_gen_acceptance
+from scripts.run_autoresearch_three_gen_acceptance import (
+    PLANTED_EXPECTED_OUTCOMES,
+    run_three_gen_acceptance,
+)
 
 
 @pytest.mark.fixture_dry_run
@@ -33,6 +36,10 @@ def test_three_gen_acceptance_fixture_dry_run(tmp_path: Path) -> None:
     assert gens[0]["proposed_count"] >= 1
     total_rejects = sum(sum(g["reject_counts"].values()) for g in gens)
     assert total_rejects >= 1 or gens[0]["final_pass_count"] >= 1
+    assert payload["planted_outcomes"] == PLANTED_EXPECTED_OUTCOMES
+    assert all(status != "FINAL_PASS" for status in payload["planted_outcomes"].values())
+    for cid, expected in PLANTED_EXPECTED_OUTCOMES.items():
+        assert f"`{cid}`: expected `{expected}`, actual `{expected}`" in text
 
     gen2_changes = payload["recipe_changes"].get(2) or []
     assert any(c.get("recipe_dimension_changed") for c in gen2_changes)

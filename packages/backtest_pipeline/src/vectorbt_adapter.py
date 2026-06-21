@@ -2390,6 +2390,7 @@ _VBT_GATE_REQUIRED_STATS = (
     "Max Drawdown [%]",
 )
 _VBT2_PILOT_SKIPPED_UNMEASURED_GATE_FIELDS = (
+    "wf_consistency",
     "turnover_mean_pct",
     "param_stability_score",
     "slippage_sensitivity",
@@ -2472,8 +2473,9 @@ def _hydrate_walk_forward_gate_metrics(metrics: Dict[str, Any]) -> None:
 
 
 def _is_vbt2_pilot_exempt_gate_failure(failure_code: str) -> bool:
-    """Official VectorBT stats do not measure turnover/stability/slippage yet."""
+    """Official VectorBT stats do not measure all full promotion-gate fields yet."""
     exempt_by_field = {
+        "wf_consistency": ("missing_wf_consistency", "wf_consistency_below_threshold"),
         "turnover_mean_pct": ("missing_turnover_mean_pct", "turnover_above_threshold"),
         "param_stability_score": (
             "missing_param_stability_score",
@@ -2894,13 +2896,234 @@ def _resolve_research_clock(candidates: List[CandidateModel]) -> str:
     return RESEARCH_CLOCK_SCHEDULED_EVENT
 
 
-def _candidate_requires_cross_asset_leaders(candidate: CandidateModel) -> bool:
+def _mapping_or_empty(value: Any) -> Mapping[str, Any]:
+    return value if isinstance(value, Mapping) else {}
+
+
+def _declares_cross_asset_leader(value: Any) -> bool:
+    text = str(value or "").lower()
+    return any(
+        marker in text
+        for marker in (
+            "cross_asset_es_leader",
+            "cross_asset_leader",
+            "es_leader",
+            "nq_co_move",
+        )
+    )
+
+
+_CROSS_ASSET_ES_LEADER_REQUIRED = ("ES", "NQ", "ZN")
+
+
+def _declares_cross_asset_es_leader(value: Any) -> bool:
+    text = str(value or "").lower()
+    return any(
+        marker in text
+        for marker in ("cross_asset_es_leader", "es_leader", "nq_co_move")
+    )
+
+
+def _recipe_requires_cross_asset_leaders(recipe: Any) -> bool:
+    recipe_map = _mapping_or_empty(recipe)
+    if not recipe_map:
+        return False
+    if recipe_map.get("cross_asset_legs") or recipe_map.get("leader_symbols"):
+        return True
+    families = _mapping_or_empty(recipe_map.get("feature_families"))
+    cross_asset = _mapping_or_empty(families.get("cross_asset_futures"))
+    return any(
+        _declares_cross_asset_leader(cross_asset.get(field_name))
+        for field_name in (
+            "selected_features",
+            "why_not_used_or_sidelined",
+            "proposal_reason",
+        )
+    ) or _declares_cross_asset_leader(recipe_map.get("proposal_reason"))
+
+
+def _normalize_leader_symbols(symbols: Any) -> tuple[str, ...]:
+    if isinstance(symbols, str):
+        raw_symbols = (symbols,)
+    else:
+        try:
+            raw_symbols = tuple(symbols or ())
+        except TypeError:
+            raw_symbols = ()
+    leaders: list[str] = []
+    for symbol in raw_symbols:
+        base = str(symbol or "").split(".")[0].upper()
+        if base and base not in leaders:
+            leaders.append(base)
+    return tuple(leaders)
+
+
+def _recipe_cross_asset_required_leaders(recipe: Any) -> tuple[str, ...]:
+    recipe_map = _mapping_or_empty(recipe)
+    if not recipe_map or not _recipe_requires_cross_asset_leaders(recipe_map):
+        return ()
+    families = _mapping_or_empty(recipe_map.get("feature_families"))
+    cross_asset = _mapping_or_empty(families.get("cross_asset_futures"))
+    declares_es_leader = any(
+        _declares_cross_asset_es_leader(value)
+        for value in (
+            recipe_map.get("proposal_reason"),
+            cross_asset.get("selected_features"),
+            cross_asset.get("proposal_reason"),
+            cross_asset.get("why_not_used_or_sidelined"),
+        )
+    )
+    for key in ("source_symbols", "leader_symbols"):
+        leaders = _normalize_leader_symbols(cross_asset.get(key) or recipe_map.get(key))
+        if declares_es_leader:
+            if set(_CROSS_ASSET_ES_LEADER_REQUIRED).issubset(set(leaders)):
+                return _CROSS_ASSET_ES_LEADER_REQUIRED
+            return ()
+        if leaders:
+            return leaders
+    return ()
+
+
+def _candidate_cross_asset_required_leaders(candidate: Any) -> tuple[str, ...]:
+    from backtest_pipeline.src.fs_v1_screen_path import cross_asset_required_leaders_for_model
+
+    vectorbt_results = _mapping_or_empty(getattr(candidate, "vectorbt_results", None))
+    metadata_sources = (
+        _mapping_or_empty(getattr(candidate, "metadata", None)),
+        _mapping_or_empty(vectorbt_results.get("base_candidate_metadata")),
+        vectorbt_results,
+    )
+    model_ids = [
+        getattr(candidate, "model_id", ""),
+        getattr(candidate, "hypothesis_id", ""),
+        getattr(candidate, "strategy_family", ""),
+        vectorbt_results.get("model_id", ""),
+        vectorbt_results.get("hypothesis_id", ""),
+        vectorbt_results.get("strategy_family", ""),
+    ]
+    for metadata in metadata_sources:
+        model_ids.extend(
+            [
+                metadata.get("model_id", ""),
+                metadata.get("hypothesis_id", ""),
+                metadata.get("strategy_family", ""),
+                metadata.get("source_model", ""),
+            ]
+        )
+    for model_id in model_ids:
+        leaders = cross_asset_required_leaders_for_model(str(model_id or ""))
+        if leaders:
+            return leaders
+    for recipe in (
+        getattr(candidate, "feature_recipe", None),
+        vectorbt_results.get("feature_recipe"),
+        *(metadata.get("feature_recipe") for metadata in metadata_sources),
+    ):
+        leaders = _recipe_cross_asset_required_leaders(recipe)
+        if leaders:
+            return leaders
+    return ()
+
+
+def _candidate_requires_cross_asset_leaders(candidate: Any) -> bool:
     from backtest_pipeline.src.fs_v1_screen_path import recipe_requires_cross_asset_leaders
 
-    return recipe_requires_cross_asset_leaders(
-        metadata=getattr(candidate, "metadata", None),
-        model_id=str(getattr(candidate, "model_id", "") or ""),
+    if _candidate_cross_asset_required_leaders(candidate):
+        return True
+
+    vectorbt_results = _mapping_or_empty(getattr(candidate, "vectorbt_results", None))
+    metadata_sources = [
+        _mapping_or_empty(getattr(candidate, "metadata", None)),
+        _mapping_or_empty(vectorbt_results.get("base_candidate_metadata")),
+        vectorbt_results,
+    ]
+    model_ids = [
+        getattr(candidate, "model_id", ""),
+        getattr(candidate, "hypothesis_id", ""),
+        getattr(candidate, "strategy_family", ""),
+        vectorbt_results.get("model_id", ""),
+        vectorbt_results.get("hypothesis_id", ""),
+        vectorbt_results.get("strategy_family", ""),
+    ]
+    for metadata in metadata_sources:
+        model_ids.extend(
+            [
+                metadata.get("model_id", ""),
+                metadata.get("hypothesis_id", ""),
+                metadata.get("strategy_family", ""),
+                metadata.get("source_model", ""),
+            ]
+        )
+        if _recipe_requires_cross_asset_leaders(metadata.get("feature_recipe")):
+            return True
+        if any(
+            recipe_requires_cross_asset_leaders(metadata=metadata, model_id=str(model_id or ""))
+            for model_id in model_ids
+        ):
+            return True
+    return _recipe_requires_cross_asset_leaders(
+        getattr(candidate, "feature_recipe", None)
+        or vectorbt_results.get("feature_recipe")
     )
+
+
+def _ctx_cross_asset_leader_alignment_failure(
+    result: FilterResult,
+    ctx: Any,
+    required_leaders: tuple[str, ...],
+) -> str | None:
+    from backtest_pipeline.src.fs_v1_screen_path import (
+        FS_V1_BAR_CONSTRUCTION_ID,
+        fs_v1_feature_set_hash,
+        fs_v1_feature_set_id,
+        sample_cross_asset_features_for_manifest,
+        _import_cross_asset_assembly_module,
+    )
+
+    if not required_leaders:
+        return "cross_asset_leader_missing_fail_closed:required_leaders_missing"
+    if ctx is None:
+        return "cross_asset_leader_missing_fail_closed:aligned_fs_v1_evidence_missing"
+    if result.bar_construction_id != FS_V1_BAR_CONSTRUCTION_ID:
+        return "cross_asset_leader_missing_fail_closed:aligned_fs_v1_evidence_missing"
+    if result.feature_set_id != fs_v1_feature_set_id():
+        return "cross_asset_leader_missing_fail_closed:aligned_fs_v1_evidence_missing"
+    if result.feature_set_hash != fs_v1_feature_set_hash():
+        return "cross_asset_leader_missing_fail_closed:aligned_fs_v1_evidence_missing"
+    fs_data_manifest_hash = (
+        getattr(ctx, "manifest_hash", None)
+        or getattr(ctx, "content_hash", None)
+        or "fs_v1_store"
+    )
+    if result.data_manifest_hash != fs_data_manifest_hash:
+        return "cross_asset_leader_missing_fail_closed:aligned_fs_v1_evidence_missing"
+
+    try:
+        validate_cross_asset_alignment = (
+            _import_cross_asset_assembly_module().validate_cross_asset_alignment
+        )
+    except ImportError:
+        return "cross_asset_leader_missing_fail_closed:alignment_validator_import_unavailable"
+
+    store_ts = _mapping_or_empty(getattr(ctx, "store", None)).get("ts")
+    if store_ts is None:
+        return "cross_asset_leader_missing_fail_closed:aligned_fs_v1_evidence_missing"
+    ts = np.asarray(store_ts, dtype=np.int64)
+    if len(ts) == 0:
+        return "cross_asset_leader_missing_fail_closed:aligned_fs_v1_evidence_missing"
+    feat_latency_ns = int(getattr(ctx, "feature_latency_ms", 1.0) * 1_000_000)
+    pit_decision_ns = int(ts[-1]) - feat_latency_ns
+    cross_feats = sample_cross_asset_features_for_manifest(ctx)
+    alignment = validate_cross_asset_alignment(
+        cross_feats,
+        target_symbol=getattr(ctx, "symbol", ""),
+        required_leaders=required_leaders,
+        decision_timestamp_ns=pit_decision_ns,
+    )
+    if alignment.ok:
+        return None
+    suffix = ",".join(alignment.missing_leaders or required_leaders)
+    return "cross_asset_leader_missing_fail_closed:" + suffix
 
 
 def _apply_fs_v1_screen_metadata(
@@ -2921,6 +3144,15 @@ def _apply_fs_v1_screen_metadata(
     )
 
     cross_asset_aligned = False
+    cross_asset_fail_closed_reason = "cross_asset_leader_alignment_fail_closed"
+    cross_asset_alignment_proof: dict[str, Any] | None = None
+    required_leaders = tuple(
+        dict.fromkeys(
+            leader
+            for candidate in candidates
+            for leader in _candidate_cross_asset_required_leaders(candidate)
+        )
+    )
     if ctx.missing_leader_symbols:
         cross_asset_aligned = False
     elif ctx.leader_legs:
@@ -2929,6 +3161,10 @@ def _apply_fs_v1_screen_metadata(
             validate_cross_asset_alignment = cross_asset_mod.validate_cross_asset_alignment
         except ImportError:
             validate_cross_asset_alignment = None
+            cross_asset_fail_closed_reason = (
+                "cross_asset_leader_missing_fail_closed:"
+                "alignment_validator_import_unavailable"
+            )
 
         cross_feats = sample_cross_asset_features_for_manifest(ctx)
         store_ts = ctx.store.get("ts")
@@ -2942,16 +3178,20 @@ def _apply_fs_v1_screen_metadata(
                 alignment = validate_cross_asset_alignment(
                     cross_feats,
                     target_symbol=ctx.symbol,
+                    required_leaders=required_leaders or None,
                     decision_timestamp_ns=pit_decision_ns,
                 )
                 cross_asset_aligned = alignment.ok
-            else:
-                cross_asset_aligned = bool(cross_feats)
+                if alignment.ok:
+                    cross_asset_alignment_proof = alignment.to_proof()
 
+    fs_feature_set_id = fs_v1_feature_set_id()
+    fs_feature_set_hash = fs_v1_feature_set_hash()
+    fs_data_manifest_hash = ctx.manifest_hash or ctx.content_hash or "fs_v1_store"
     base_manifest = build_feature_usage_manifest(
         bar_construction_id=FS_V1_BAR_CONSTRUCTION_ID,
-        feature_set_id=fs_v1_feature_set_id(),
-        feature_set_hash=fs_v1_feature_set_hash(),
+        feature_set_id=fs_feature_set_id,
+        feature_set_hash=fs_feature_set_hash,
         research_clock=research_clock,
         screening_scope=screening_scope,
     )
@@ -2962,14 +3202,35 @@ def _apply_fs_v1_screen_metadata(
         cross_asset_aligned=cross_asset_aligned,
     )
     result.bar_construction_id = FS_V1_BAR_CONSTRUCTION_ID
-    result.feature_set_id = fs_v1_feature_set_id()
-    result.feature_set_hash = fs_v1_feature_set_hash()
-    result.data_manifest_hash = ctx.manifest_hash or ctx.content_hash or "fs_v1_store"
+    result.feature_set_id = fs_feature_set_id
+    result.feature_set_hash = fs_feature_set_hash
+    result.data_manifest_hash = fs_data_manifest_hash
     result.research_clock = research_clock
     result.feature_plane_overrides = {
         "feature_usage_manifest": {**base_manifest, **recipe_manifest},
         "model_feature_usage_status": "partial_observed",
     }
+    if cross_asset_alignment_proof is not None:
+        result.feature_plane_overrides["cross_asset_alignment_validation"] = {
+            "stamped_by": "_apply_fs_v1_screen_metadata",
+            "validator": "validate_cross_asset_alignment",
+            "evidence_scope": "vectorbt_fs_v1_row_loop",
+            "ok": True,
+            "target_symbol": cross_asset_alignment_proof["target_symbol"],
+            "required_leaders": cross_asset_alignment_proof["required_leaders"],
+            "present_leaders": cross_asset_alignment_proof["present_leaders"],
+            "feature_set_id": fs_feature_set_id,
+            "feature_set_hash": fs_feature_set_hash,
+            "data_manifest_hash": fs_data_manifest_hash,
+        }
+    if not cross_asset_aligned:
+        result.feature_plane_overrides["cross_asset_leader_fail_closed"] = True
+        if ctx.missing_leader_symbols:
+            result.feature_plane_overrides["missing_leader_symbols"] = list(ctx.missing_leader_symbols)
+        else:
+            result.feature_plane_overrides[
+                "cross_asset_leader_fail_closed_reason"
+            ] = cross_asset_fail_closed_reason
     if ctx.missing_leader_symbols:
         result.feature_plane_overrides["missing_leader_symbols"] = list(ctx.missing_leader_symbols)
         result.feature_plane_overrides["cross_asset_leader_fail_closed"] = True
@@ -3124,6 +3385,14 @@ def filter_candidates(
             symbol=screen_symbol,
             feature_store_root_override=feature_store_root,
             feature_latency_ms=feature_latency_ms,
+            required_leaders=tuple(
+                dict.fromkeys(
+                    leader
+                    for candidate in candidates
+                    for leader in _candidate_cross_asset_required_leaders(candidate)
+                )
+            )
+            or None,
         )
 
     if fs_v1_ctx is not None:
@@ -3161,6 +3430,31 @@ def filter_candidates(
                 },
             ))
         return result
+
+    if fs_v1_ctx is None and len(candidates) * budget.max_trials <= 1:
+        result = _run_vectorbt_simulation(
+            ohlcv,
+            candidates,
+            parsed,
+            grid,
+            repo_root,
+            signal_computer,
+            screening_scope=screening_scope,
+            max_total_trials=max_total_trials,
+            run_budget=budget,
+        )
+        result.screen_performance = {
+            "screening_path": "loop_scalar_fallback",
+            "subprocess_per_unit": 0,
+        }
+        return apply_promotion_gates(
+            result,
+            screening_scope=screening_scope,
+            gates=gates,
+            repo_root=repo_root,
+            persist_promotions=persist_promotions,
+            fs_v1_ctx=fs_v1_ctx,
+        )
 
     from backtest_pipeline.src.paid_screen_matrix import (
         DEFAULT_MATRIX_CHUNK_SIZE,
@@ -3213,6 +3507,7 @@ def filter_candidates(
         gates=gates,
         repo_root=repo_root,
         persist_promotions=persist_promotions,
+        fs_v1_ctx=fs_v1_ctx,
     )
 
 
@@ -3223,6 +3518,7 @@ def apply_promotion_gates(
     gates: Optional[PromotionGate] = None,
     repo_root: Optional[Path] = None,
     persist_promotions: bool = False,
+    fs_v1_ctx: Any = None,
 ) -> FilterResult:
     """Apply robust promotion gates after VectorBT simulation (BLUEPRINT §8)."""
     gates = gates or PromotionGate()
@@ -3243,16 +3539,34 @@ def apply_promotion_gates(
 
         overrides = dict(result.feature_plane_overrides or {})
         missing_leaders = list(overrides.get("missing_leader_symbols") or [])
-        if overrides.get("cross_asset_leader_fail_closed") and missing_leaders:
-            if _candidate_requires_cross_asset_leaders(prom):
+        if _candidate_requires_cross_asset_leaders(prom):
+            required_leaders = _candidate_cross_asset_required_leaders(prom)
+            ctx_fail_reason = _ctx_cross_asset_leader_alignment_failure(
+                result,
+                fs_v1_ctx,
+                required_leaders,
+            )
+            if ctx_fail_reason is not None:
+                override_reason = str(
+                    overrides.get("cross_asset_leader_fail_closed_reason") or ""
+                )
+                reject_reason = ctx_fail_reason or override_reason
+                if (
+                    ctx_fail_reason
+                    == "cross_asset_leader_missing_fail_closed:aligned_fs_v1_evidence_missing"
+                    and override_reason
+                ):
+                    reject_reason = override_reason
+                if not reject_reason:
+                    suffix = ",".join(str(s) for s in missing_leaders)
+                    if not suffix:
+                        suffix = "aligned_fs_v1_evidence_missing"
+                    reject_reason = "cross_asset_leader_missing_fail_closed:" + suffix
                 rejected_out.append(
                     RejectedCandidate(
                         candidate_id=prom.candidate_id,
                         hypothesis_id=prom.hypothesis_id,
-                        reject_reason=(
-                            "cross_asset_leader_missing_fail_closed:"
-                            + ",".join(str(s) for s in missing_leaders)
-                        ),
+                        reject_reason=reject_reason,
                         vectorbt_results=dict(prom.vectorbt_results or {}),
                     )
                 )
@@ -3271,12 +3585,9 @@ def apply_promotion_gates(
                 if not _is_vbt2_pilot_exempt_gate_failure(code)
             ]
             prom.vectorbt_results["pilot_gate_evaluation"] = {
-                "scope": scope,
-                "screening_scope": scope,
-                "metric_authority": "official_vectorbt_stats_with_walk_forward_oos",
+                "scope": "official_vectorbt_stats_with_walk_forward_oos",
                 "used_fields": {
                     "oos_expectancy": "auxiliary_numpy_walk_forward",
-                    "wf_consistency": "auxiliary_numpy_walk_forward",
                     "max_drawdown_pct": "Max Drawdown [%]",
                     "num_trades": "Total Trades",
                 },

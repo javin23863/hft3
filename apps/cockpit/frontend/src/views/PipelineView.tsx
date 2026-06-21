@@ -13,6 +13,10 @@ import type {
 function meta(s: Stage): [string, unknown][] {
   const keys = [
     "screening_status",
+    "vbt5_evidence_detail",
+    "screening_detail",
+    "validated_candidates",
+    "screening_promoted_count",
     "screening_artifact",
     "screening_artifact_hash",
     "replay_status",

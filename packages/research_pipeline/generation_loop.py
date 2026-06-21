@@ -67,6 +67,10 @@ PersistFn = Callable[..., Path]
 RobustnessFn = Callable[..., Any]
 HftFn = Callable[..., Any]
 
+_PASSING_HFT_CERTIFICATION_STATUS_STRINGS = frozenset(
+    {"scheduled_event_replay_not_full_feature_plane", "full_fidelity_declared"}
+)
+
 
 @dataclass
 class AutoresearchConfig:
@@ -419,6 +423,7 @@ def _run_robustness_top_k(
             continue
         outcome = robustness_fn(
             repo_root=repo_root,
+            candidate_id=cid,
             model_id=model_id,
             symbol=cfg.symbol,
             campaign_id=f"{campaign_id}_g{generation_index}_rob_{cid[:8]}",
@@ -515,7 +520,9 @@ def _enrich_hft_scenario_results(
             replay_error = replay.get("error") or summary.get("error")
             if replay_error:
                 row["status"] = "error"
-            elif cert and cert not in ("fail", "accelerated_not_certifying"):
+            elif cert in _PASSING_HFT_CERTIFICATION_STATUS_STRINGS:
+                row["status"] = "completed"
+            elif not cert:
                 row["status"] = "completed"
             else:
                 row["status"] = "cached"

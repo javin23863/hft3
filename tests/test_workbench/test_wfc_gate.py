@@ -305,7 +305,7 @@ def test_wfc_rejects_missing_cells():
                     "oos_metrics": _metric_dict(float(i) * 0.8 + 1),
                 }
             )
-    result = evaluate_wfc_gate(rows, _cfg(min_parameter_combinations=20), model_id="HYP_5")
+    result = evaluate_wfc_gate(rows, _cfg(min_parameter_combinations=21), model_id="HYP_5")
     assert result.wfc_status != "PASS"
 
 
@@ -389,3 +389,47 @@ def test_wfc_does_not_correlate_equity_curves():
     result = evaluate_wfc_gate(rows, _cfg(min_parameter_combinations=20), model_id="HYP_5")
     assert result.wfc_status == "FAIL"
     assert result.pearson < 0.35
+
+
+def test_rebuild_graph_respects_owner_waiver(tmp_path, monkeypatch) -> None:
+    from workbench.src.setup import rebuild_graph
+
+    repo = tmp_path
+    (repo / "AGENTS.md").write_text("graph gates waived-by-owner-2026-06-16", encoding="utf-8")
+    scripts = repo / "scripts"
+    scripts.mkdir()
+    (scripts / "graphify_rebuild.ps1").write_text("throw 'should not run'", encoding="utf-8")
+    monkeypatch.delenv("HFT3_ALLOW_GRAPH_REBUILD_WHILE_WAIVED", raising=False)
+    monkeypatch.delenv("HFT3_VAULT_ROOT", raising=False)
+
+    result = rebuild_graph(repo)
+
+    assert result["skipped"] is True
+    assert result["waiver"] == "waived-by-owner-2026-06-16"
+    assert result["rebuilt"] is False
+
+
+def test_graph_rebuild_waiver_allows_explicit_override(tmp_path, monkeypatch) -> None:
+    from workbench.src.setup import graph_rebuild_waiver
+
+    repo = tmp_path
+    (repo / "AGENTS.md").write_text("graph gates waived-by-owner-2026-06-16", encoding="utf-8")
+    monkeypatch.setenv("HFT3_ALLOW_GRAPH_REBUILD_WHILE_WAIVED", "1")
+
+    assert graph_rebuild_waiver(repo) is None
+
+
+def test_graph_rebuild_waiver_ignores_developer_home_vault(tmp_path, monkeypatch) -> None:
+    from workbench.src import setup
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    home = tmp_path / "home"
+    vault_hot = home / "Desktop" / "Obsidian Vault From VPS" / "hft3" / "wiki" / "hot.md"
+    vault_hot.parent.mkdir(parents=True)
+    vault_hot.write_text("graph gates waived-by-owner-2026-06-16", encoding="utf-8")
+    monkeypatch.delenv("HFT3_ALLOW_GRAPH_REBUILD_WHILE_WAIVED", raising=False)
+    monkeypatch.delenv("HFT3_VAULT_ROOT", raising=False)
+    monkeypatch.setattr(setup.Path, "home", lambda: home)
+
+    assert setup.graph_rebuild_waiver(repo) is None

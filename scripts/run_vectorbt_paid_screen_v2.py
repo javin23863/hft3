@@ -244,10 +244,15 @@ def _resolve_run_hashes(
         events_csv=events_csv,
         repo_root=repo_root,
     )
-    lake_manifest_hash = resolve_lake_manifest_hash(
-        explicit_hash=args.lake_manifest_hash,
-        repo_root=repo_root,
-    )
+    try:
+        lake_manifest_hash = resolve_lake_manifest_hash(
+            explicit_hash=args.lake_manifest_hash,
+            repo_root=repo_root,
+        )
+    except (FileNotFoundError, ValueError):
+        if not getattr(args, "dry_run", False):
+            raise
+        lake_manifest_hash = "dry_run_lake_manifest_not_required"
     return events_csv_hash, lake_manifest_hash
 
 

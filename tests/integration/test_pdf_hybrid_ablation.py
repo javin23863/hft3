@@ -16,6 +16,7 @@ from backtest_pipeline.src.event_meta import load_event_row
 from backtest_pipeline.src.pdf_defensive_config import all_defensive_configs
 from backtest_pipeline.src.pdf_hybrid_ablation import run_defensive_ablation_matrix
 from backtest_pipeline.src.runner import ReplayRunner
+from replay.replay_session import ReplaySession, ReplaySessionConfig
 
 
 def _cpi_npz_or_skip():
@@ -31,6 +32,14 @@ def _cpi_npz_or_skip():
         pytest.skip(f"NPZ not on disk: {npz_path}")
     event_meta = load_event_row(event_id, _REPO / "packages" / "data_system" / "config" / "events.csv")
     return npz_path, event_meta
+
+
+def _minimal_replay_npz(tmp_path: Path) -> Path:
+    from backtest_pipeline.src.replay_npz_fixture import build_minimal_mbo_npz
+
+    path = tmp_path / "minimal_replay.npz"
+    build_minimal_mbo_npz(path)
+    return path
 
 
 @pytest.mark.integration
@@ -53,15 +62,22 @@ def test_pdf_defensive_ablation_smoke_two_modes() -> None:
 
 
 @pytest.mark.integration
-def test_replay_runner_callback_mode_is_uncertified() -> None:
-    npz_path, _event_meta = _cpi_npz_or_skip()
+def test_replay_runner_callback_mode_is_uncertified(tmp_path: Path) -> None:
+    npz_path = _minimal_replay_npz(tmp_path)
+    handles = []
+
+    def _callback(hbt):
+        handles.append(hbt)
+        return []
+
     result = ReplayRunner(str(npz_path)).run_replay(
-        model_logic_callback=lambda _hbt: [],
+        model_logic_callback=_callback,
         use_combined_strategy=False,
         max_steps=1,
         run_id="pytest_callback_uncertified",
     )
 
+    assert handles and handles[0] is not None
     summary = json.loads(Path(result["summary_path"]).read_text(encoding="utf-8"))
     for metadata in (result, summary):
         stamp = metadata["certification_stamp"]
@@ -73,6 +89,48 @@ def test_replay_runner_callback_mode_is_uncertified() -> None:
         )
         assert stamp["promotion_eligible"] is False
         assert stamp["promotion_label"] == "UNCERTIFIED_CALLBACK_MODE"
+
+
+@pytest.mark.integration
+def test_direct_replay_strategy_does_not_receive_hbt_handle(tmp_path: Path) -> None:
+    npz_path = _minimal_replay_npz(tmp_path)
+
+    class _CaptureHandleStrategy:
+        def __init__(self) -> None:
+            self.handles = []
+
+        def on_step(self, ctx):
+            self.handles.append(ctx.hbt_handle)
+            return []
+
+    strategy = _CaptureHandleStrategy()
+    cfg = ReplaySessionConfig(
+        npz_path=str(npz_path),
+        max_steps=1,
+        run_id="pytest_direct_strategy_no_hbt_handle",
+        audit_dir=tmp_path / "audits",
+    )
+    result = ReplaySession(cfg, strategy).run()
+
+    assert result["certification_stamp"]["promotion_eligible"] is True
+    assert strategy.handles == [None]
+
+
+@pytest.mark.integration
+def test_hbt_handle_access_requires_uncertified_override(tmp_path: Path) -> None:
+    npz_path = _minimal_replay_npz(tmp_path)
+
+    class _NoopStrategy:
+        def on_step(self, ctx):
+            return []
+
+    cfg = ReplaySessionConfig(
+        npz_path=str(npz_path),
+        max_steps=1,
+        allow_uncertified_hbt_handle=True,
+    )
+    with pytest.raises(ValueError, match="allow_uncertified_hbt_handle"):
+        ReplaySession(cfg, _NoopStrategy())
 
 
 @pytest.mark.integration
