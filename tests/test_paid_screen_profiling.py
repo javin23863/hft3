@@ -14,13 +14,64 @@ from backtest_pipeline.src.paid_screen_profiling import (
 from backtest_pipeline.src.paid_screen_types import PaidScreenUnit
 from backtest_pipeline.src.paid_screen_batch import resolve_resume_provenance
 
-_VALID_UNIT_ARTIFACT = (
-    Path(__file__).resolve().parents[1]
-    / "research_cards"
-    / "pipeline_runs"
-    / "paid_batch_ok"
-    / "screening_artifact.json"
-)
+_REPO = Path(__file__).resolve().parents[1]
+
+
+def _valid_unit_artifact_payload(tmp_path: Path) -> dict:
+    from backtest_pipeline.src.vectorbt_adapter import (
+        compute_screening_artifact_hash,
+        filter_candidates,
+        validate_screening_artifact,
+    )
+    from research_pipeline.types import CandidateModel
+
+    unit = PaidScreenUnit(
+        unit_id="u_ok",
+        model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+        hyp_id=5,
+        symbol="MES.v.0",
+        event_id="CPI_2024_09_11_TIGHT",
+        event_type="CPI",
+        research_split="discovery_confirmation",
+        thesis="test paid-screen resume artifact",
+    )
+    candidate_id = f"{unit.model_id}|{unit.symbol}|{unit.event_id}|{unit.hyp_id}"
+    payload = filter_candidates(
+        candidates=[
+            CandidateModel(
+                candidate_id=candidate_id,
+                model_id=unit.model_id,
+                strategy_params={"signal_threshold": 0.15},
+                thesis=unit.thesis,
+                metadata={
+                    "unit_id": unit.unit_id,
+                    "symbol": unit.symbol,
+                    "event_id": unit.event_id,
+                    "event_type": unit.event_type,
+                    "hyp_id": unit.hyp_id,
+                },
+                target_symbol=unit.symbol.split(".")[0],
+                target_event_id=unit.event_id,
+                research_clock="scheduled_event",
+            )
+        ],
+        parsed=None,
+        event_id=unit.event_id,
+        repo_root=_REPO,
+        data_loader=lambda *_: None,
+        screening_scope="pilot",
+    ).to_dict()
+    payload.update(resolve_resume_provenance(str(_REPO), unit))
+    payload["events_csv_hash_or_not_applicable"] = "not_applicable_for_vectorbt_pilot"
+    payload["lake_manifest_hash"] = "pilot_requires_lake_manifest_before_screen"
+    payload["research_split"] = unit.research_split
+    payload["screening_artifact_hash"] = compute_screening_artifact_hash(payload)
+    validate_screening_artifact(payload)
+    return payload
+
+
+def _valid_unit_artifact_text(tmp_path: Path) -> str:
+    return json.dumps(_valid_unit_artifact_payload(tmp_path))
 
 
 class TestRunProfiler:
@@ -210,7 +261,7 @@ class TestAggregateScreeningArtifact:
         run_id = "paid_merge_test"
         run_dir = tmp_path / run_id
         run_dir.mkdir()
-        artifact_text = _VALID_UNIT_ARTIFACT.read_text(encoding="utf-8")
+        artifact_text = _valid_unit_artifact_text(tmp_path)
         (run_dir / "units" / "u1").mkdir(parents=True)
         (run_dir / "units" / "u2").mkdir(parents=True)
         (run_dir / "units" / "u1" / "screening_artifact.json").write_text(
@@ -237,8 +288,8 @@ class TestAggregateScreeningArtifact:
         assert payload["run_id"] == run_id
         assert isinstance(payload["promoted_ids"], list)
 
-    def test_merge_unit_artifacts_unions_promoted_ids(self):
-        artifact = json.loads(_VALID_UNIT_ARTIFACT.read_text(encoding="utf-8"))
+    def test_merge_unit_artifacts_unions_promoted_ids(self, tmp_path):
+        artifact = _valid_unit_artifact_payload(tmp_path)
         merged = merge_unit_screening_artifacts(
             [artifact, dict(artifact)],
             run_id="merge_only",
@@ -247,8 +298,8 @@ class TestAggregateScreeningArtifact:
         assert merged["run_id"] == "merge_only"
         assert merged["trials_run"] >= int(artifact.get("trials_run") or 0)
 
-    def test_merge_aggregate_provenance_records_child_hashes_honestly(self):
-        artifact_a = json.loads(_VALID_UNIT_ARTIFACT.read_text(encoding="utf-8"))
+    def test_merge_aggregate_provenance_records_child_hashes_honestly(self, tmp_path):
+        artifact_a = _valid_unit_artifact_payload(tmp_path)
         artifact_b = dict(artifact_a)
         artifact_a["screening_artifact_hash"] = "child_hash_a"
         artifact_a["data_manifest_hash"] = "manifest_a"
@@ -284,8 +335,8 @@ class TestResumeArtifactMatching:
         with pytest.raises(ValueError, match="mixed research_split"):
             derive_run_research_split(rows)
 
-    def test_artifact_matches_resume_unit_with_fixture(self):
-        payload = json.loads(_VALID_UNIT_ARTIFACT.read_text(encoding="utf-8"))
+    def test_artifact_matches_resume_unit_with_fixture(self, tmp_path):
+        payload = _valid_unit_artifact_payload(tmp_path)
         unit = PaidScreenUnit(
             unit_id="u_ok",
             model_id="SPREAD_BLOWOUT_RECOMPRESSION",
@@ -400,8 +451,8 @@ class TestResumeArtifactMatching:
             screening_scope="paid-compute",
         )
 
-    def test_artifact_rejects_mismatched_model(self):
-        payload = json.loads(_VALID_UNIT_ARTIFACT.read_text(encoding="utf-8"))
+    def test_artifact_rejects_mismatched_model(self, tmp_path):
+        payload = _valid_unit_artifact_payload(tmp_path)
         unit = PaidScreenUnit(
             unit_id="u_ok",
             model_id="HYP_99",
@@ -418,8 +469,8 @@ class TestResumeArtifactMatching:
             research_split="discovery_confirmation",
         )
 
-    def test_artifact_rejects_mismatched_code_commit(self):
-        payload = json.loads(_VALID_UNIT_ARTIFACT.read_text(encoding="utf-8"))
+    def test_artifact_rejects_mismatched_code_commit(self, tmp_path):
+        payload = _valid_unit_artifact_payload(tmp_path)
         unit = PaidScreenUnit(
             unit_id="u_ok",
             model_id="SPREAD_BLOWOUT_RECOMPRESSION",
@@ -446,8 +497,8 @@ class TestResumeArtifactMatching:
             feature_recipe_hash=payload["feature_recipe_hash"],
         )
 
-    def test_artifact_rejects_mismatched_registry_hash(self):
-        payload = json.loads(_VALID_UNIT_ARTIFACT.read_text(encoding="utf-8"))
+    def test_artifact_rejects_mismatched_registry_hash(self, tmp_path):
+        payload = _valid_unit_artifact_payload(tmp_path)
         unit = PaidScreenUnit(
             unit_id="u_ok",
             model_id="SPREAD_BLOWOUT_RECOMPRESSION",
