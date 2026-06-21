@@ -1295,6 +1295,18 @@ class TestPromotionGateWiringPlantedPass:
         failures = gated.rejected[0].metric_values["pilot_gate_evaluation"]["failures"]
         assert "oos_expectancy_below_threshold" in failures
 
+    def test_paid_compute_rejects_measured_low_walk_forward_consistency(self):
+        from backtest_pipeline.src.vectorbt_adapter import FilterResult, apply_promotion_gates
+
+        prom = self._official_stats_promoted(wf_consistency=0.1)
+        result = FilterResult(backend="vectorbt", run_id="run_planted", promoted=[prom], rejected=[])
+
+        gated = apply_promotion_gates(result, screening_scope="paid-compute")
+
+        assert gated.promoted == []
+        failures = gated.rejected[0].metric_values["pilot_gate_evaluation"]["failures"]
+        assert "wf_consistency_below_threshold" in failures
+
     def test_paid_compute_rejects_missing_expectancy_with_explicit_reason(self):
         from backtest_pipeline.src.vectorbt_adapter import FilterResult, apply_promotion_gates
 
@@ -1471,6 +1483,121 @@ class TestPromotionGateWiringPlantedPass:
         assert artifact["promoted_ids"] == []
         assert artifact["rejected"][0]["rejection_reason_or_null"] == (
             "cross_asset_leader_missing_fail_closed:ES,NQ,ZN"
+        )
+
+    def test_screen_paid_batch_gates_after_fs_v1_metadata_stamp(self, monkeypatch, tmp_path):
+        from types import SimpleNamespace
+
+        from backtest_pipeline.src.fs_v1_screen_path import FS_V1_BAR_CONSTRUCTION_ID
+        from backtest_pipeline.src.paid_screen_cache import BoundedLRUCache
+        from backtest_pipeline.src.vectorbt_adapter import FilterResult
+        from research_pipeline.feature_family_proposals import apply_family_variant_to_recipe
+        from research_pipeline.feature_recipe import build_feature_recipe
+
+        unit = make_unit(unit_id="u_cross_asset_aligned", model_id="HYP_5")
+        base_recipe = build_feature_recipe(
+            model_id="HYP_5",
+            strategy_params={"signal_threshold": 0.15},
+            feature_list=["HYP_5"],
+            target_symbol="MES",
+            target_event_id=unit.event_id,
+        ).to_dict()
+        recipe = apply_family_variant_to_recipe(
+            base_recipe,
+            variant_id="cross_asset_es_leader",
+            target_event_id=unit.event_id,
+        )
+        prom = self._official_stats_promoted(
+            feature_recipe=recipe,
+            feature_recipe_hash=recipe["feature_recipe_hash"],
+            base_candidate_metadata={
+                "proposal_reason": "family_variant:cross_asset_es_leader",
+                "strategy_family": "HYP_5",
+            },
+        )
+        filter_result = FilterResult(
+            backend="vectorbt",
+            run_id="run_cross_asset_aligned",
+            promoted=[prom],
+            rejected=[],
+            screening_scope="paid-compute",
+            code_commit="abc123",
+            parameter_space_id="ps_test",
+            parameter_space_hash="ps_hash_test",
+            max_trials=1,
+            trials_run=1,
+            max_total_trials=1,
+            max_models=1,
+            max_symbols=1,
+            max_feature_sets=1,
+            rust_engine_required_for_scope=True,
+            rust_engine_available=True,
+            vectorbt_engine_runtime_proof=True,
+            vectorbt_engine="rust",
+            engine_parity_status="rust_runtime_proven",
+            vectorbt_version="1.0.0",
+            vectorbt_available=True,
+        )
+
+        ctx = make_context(screening_scope="paid-compute", repo_root=str(tmp_path))
+        cache = BoundedLRUCache(max_entries=4, max_memory_mb=64)
+        ohlcv = np.array([[100.0, 101.0, 102.0, 103.0, 1.0, 1_700_000_000_000.0]] * 40)
+        cache.put(_batch_cache_key(ctx, unit), ohlcv)
+        fs_ts = np.arange(len(ohlcv), dtype=np.int64) * 1_000_000
+        leader_legs = tuple(
+            (
+                leader,
+                SimpleNamespace(
+                    symbol=leader,
+                    ts=fs_ts,
+                    X=np.ones((len(ohlcv), 41), dtype=np.float64),
+                ),
+            )
+            for leader in ("ES", "NQ", "ZN")
+        )
+        fs_v1_ctx = SimpleNamespace(
+            symbol="MES",
+            missing_leader_symbols=(),
+            leader_legs=leader_legs,
+            has_vix=False,
+            vix_ts=None,
+            vix_X=None,
+            vix_cols=(),
+            store={"ts": fs_ts},
+            feature_latency_ms=1.0,
+            manifest_hash="manifest_hash",
+            content_hash="content_hash",
+        )
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch._get_or_load_fs_v1_context",
+            lambda *_args, **_kwargs: fs_v1_ctx,
+        )
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch._resolve_fs_v1_signal_computer",
+            lambda *_args, **_kwargs: None,
+        )
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch.run_vectorbt_simulation_matrix",
+            lambda **_kwargs: filter_result,
+        )
+
+        results = screen_paid_batch(
+            [unit],
+            ctx,
+            data_cache=cache,
+            run_screening=True,
+            scratch_root=str(tmp_path / "scratch"),
+        )
+
+        assert len(results) == 1
+        assert results[0].status == "OK", results[0].error
+        assert results[0].promoted_ids == ["planted_pass"]
+        artifact = json.loads(Path(results[0].screening_artifact_path).read_text(encoding="utf-8"))
+        assert artifact["promoted_ids"] == ["planted_pass"]
+        assert artifact["bar_construction_id"] == FS_V1_BAR_CONSTRUCTION_ID
+        assert artifact["data_manifest_hash"] == "manifest_hash"
+        assert artifact["feature_usage_manifest"]["cross_asset_futures"]["evidence_scope"] == (
+            "vectorbt_fs_v1_row_loop"
         )
 
     def test_screen_paid_batch_fails_closed_when_alignment_validator_import_fails(

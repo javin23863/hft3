@@ -975,6 +975,8 @@ def screen_paid_batch(
                 performance_counters=profiler.performance,
                 fs_v1_ctx=model_fs_v1_ctx,
             )
+            # Promotion gates validate fs_v1 provenance, so stamp the metadata
+            # before applying them.
             if model_fs_v1_ctx is not None:
                 from backtest_pipeline.src.vectorbt_adapter import (
                     _apply_fs_v1_screen_metadata,

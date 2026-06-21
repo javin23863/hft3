@@ -15,11 +15,6 @@ from research_pipeline.generation_loop import AutoresearchConfig, run_autoresear
 from research_pipeline.generation_state import generation_dir
 from research_pipeline.generation_summary import validate_generation_completion
 from research_pipeline.types import CandidateModel, ParsedHypothesis
-from tests.research_pipeline.test_generation_gate_integration import (
-    _manifest,
-    _passing_promoted_row,
-    _passing_vectorbt_row,
-)
 
 
 def _parsed() -> ParsedHypothesis:
@@ -34,6 +29,79 @@ def _parsed() -> ParsedHypothesis:
         primary_model_id="HYP_5",
         source="heuristic",
     )
+
+
+def _manifest(**overrides: object) -> dict:
+    from research_pipeline.candidate_manifest import compute_manifest_hash
+
+    base = {
+        "manifest_schema": "candidate_manifest.v1",
+        "candidate_id": "cand-001",
+        "feature_recipe_hash": "recipe-abc",
+        "model_id": "HYP_5",
+    }
+    base.update(overrides)
+    if "manifest_hash" not in overrides:
+        base["manifest_hash"] = compute_manifest_hash(base)
+    return base
+
+
+def _pass_evidence(**overrides: object) -> dict:
+    evidence = {"status": "pass"}
+    evidence.update(overrides)
+    return evidence
+
+
+def _passing_vectorbt_row(*, candidate_id: str = "cand-001") -> dict:
+    return {
+        "candidate_id": candidate_id,
+        "screening_status": "pass",
+        "vectorbt_results": {
+            "oos_expectancy": 1.0,
+            "num_trades": 50,
+            "hit_rate": 0.55,
+        },
+        "gross_return": 0.12,
+        "net_return": 0.10,
+        "net_pnl": 1000.0,
+        "total_fees": 50.0,
+        "total_slippage": 25.0,
+        "trade_count": 50,
+        "hit_rate": 0.55,
+        "expectancy_per_trade": 0.02,
+        "profit_factor": 1.4,
+        "sharpe": 0.8,
+        "sortino": 1.1,
+        "max_drawdown": -0.05,
+        "turnover": 0.3,
+        "surface_stability_metrics": {"status": "pass"},
+    }
+
+
+def _passing_promoted_row(*, candidate_id: str = "cand-001") -> dict:
+    row = _passing_vectorbt_row(candidate_id=candidate_id)
+    row.update(
+        {
+            "bootstrap_ci_or_not_run": _pass_evidence(),
+            "dsr_or_not_run": _pass_evidence(),
+            "pbo_or_not_run": _pass_evidence(pbo_pass=True),
+            "cscv_count_or_not_run": _pass_evidence(),
+            "dsr_status": "pass",
+            "pbo_status": "pass",
+            "cscv_status": "pass",
+            "robustness_artifact_staleness": "fresh",
+            "fee_stress_or_not_run": _pass_evidence(),
+            "slippage_stress_or_not_run": _pass_evidence(),
+            "latency_stress_or_not_run": _pass_evidence(),
+            "holm_stepdown_or_not_run": _pass_evidence(),
+            "holm_bh_or_not_run": _pass_evidence(),
+            "null_battery_or_not_run": _pass_evidence(),
+            "planted_alpha_or_not_run": _pass_evidence(),
+            "adversarial_or_not_run": _pass_evidence(),
+            "parameter_perturbation_or_not_run": _pass_evidence(),
+        }
+    )
+    return row
 
 
 def test_statistical_gate_rejects_missing_bootstrap() -> None:
@@ -66,10 +134,9 @@ def test_statistical_gate_rejects_missing_bootstrap() -> None:
 
 
 def test_statistical_gate_rejects_fail_dsr() -> None:
-    from tests.backtest_pipeline.test_robustness_bridge import _failing_dsr_expectancies
-
     row = _passing_promoted_row()
-    row["vectorbt_results"]["robustness_input"]["per_event_expectancies"] = _failing_dsr_expectancies()
+    row["dsr_status"] = "fail"
+    row["dsr_or_not_run"] = {"status": "fail", "reason": "planted_dsr_fail"}
     receipt = build_statistical_robustness_gate_receipt(
         manifest=_manifest(),
         promoted_row=row,
@@ -80,10 +147,9 @@ def test_statistical_gate_rejects_fail_dsr() -> None:
 
 
 def test_statistical_gate_rejects_fail_pbo() -> None:
-    from tests.backtest_pipeline.test_robustness_bridge import _failing_pbo_matrix
-
     row = _passing_promoted_row()
-    row["vectorbt_results"]["robustness_input"]["cscv_matrix"] = _failing_pbo_matrix()
+    row["pbo_status"] = "fail"
+    row["pbo_or_not_run"] = {"status": "fail", "pbo_pass": False}
     receipt = build_statistical_robustness_gate_receipt(
         manifest=_manifest(),
         promoted_row=row,
@@ -153,11 +219,8 @@ def test_statistical_gate_rejects_structure_ran_cscv_status() -> None:
 
 def test_statistical_gate_rejects_missing_holm() -> None:
     row = _passing_promoted_row()
-    inp = dict(row["vectorbt_results"]["robustness_input"])
-    inp.pop("p_values", None)
-    row["vectorbt_results"]["robustness_input"] = inp
-    row["vectorbt_results"]["holm_stepdown_or_not_run"] = {"status": "not_run"}
-    row["vectorbt_results"]["holm_bh_or_not_run"] = {"status": "not_run"}
+    row["holm_stepdown_or_not_run"] = {"status": "not_run"}
+    row["holm_bh_or_not_run"] = {"status": "not_run"}
     receipt = build_statistical_robustness_gate_receipt(
         manifest=_manifest(),
         promoted_row=row,

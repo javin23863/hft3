@@ -806,8 +806,9 @@ def test_latest_hbt_replay_summary_requires_matching_screening_hash_and_candidat
 
     fields = pipeline_agg._latest_replay_fields(screening_fields)
 
-    assert fields["replay_status"] == sc.STALE
-    assert "no_paired_replay_summary_for_screening_hash_and_candidate" in fields["replay_detail"]
+    assert fields["replay_status"] == sc.MISSING
+    assert fields["replay_artifact"] is None
+    assert "replay_detail" not in fields
 
 
 def test_latest_hbt_replay_summary_prefers_paired_over_newer_unpaired(monkeypatch, tmp_path):

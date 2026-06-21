@@ -747,6 +747,11 @@ def _latest_paired_replay_artifact(screening_fields: dict[str, Any]) -> tuple[di
     paired, pair_error = _paired_replay_for_candidate(screening_fields, expected_candidate)
     if paired is not None:
         return paired, pair_error
+    if pair_error in {
+        "hftbacktest_realism_root_missing",
+        "no_paired_replay_summary_for_screening_hash_and_candidate",
+    }:
+        return None, None
     return None, pair_error or "no_paired_replay_summary_for_screening_hash_and_candidate"
 
 

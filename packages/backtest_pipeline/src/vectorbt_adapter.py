@@ -2475,7 +2475,7 @@ def _hydrate_walk_forward_gate_metrics(metrics: Dict[str, Any]) -> None:
 def _is_vbt2_pilot_exempt_gate_failure(failure_code: str) -> bool:
     """Official VectorBT stats do not measure all full promotion-gate fields yet."""
     exempt_by_field = {
-        "wf_consistency": ("missing_wf_consistency", "wf_consistency_below_threshold"),
+        "wf_consistency": ("missing_wf_consistency",),
         "turnover_mean_pct": ("missing_turnover_mean_pct", "turnover_above_threshold"),
         "param_stability_score": (
             "missing_param_stability_score",
