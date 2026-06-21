@@ -310,6 +310,17 @@ def _candidate_hashes(candidates: list[CandidateModel]) -> list[str]:
     return [candidate_identity_hash(c) for c in candidates]
 
 
+def _load_wfc_matrix_rows(artifact_dir: Path) -> list[dict[str, Any]]:
+    from workbench.src.optimization.matrix_runner import load_matrix_rows
+
+    wfc_dir = artifact_dir / "wfc"
+    for name in ("param_matrix.parquet", "param_matrix.csv"):
+        rows = load_matrix_rows(wfc_dir / name)
+        if rows:
+            return rows
+    return []
+
+
 def make_default_robustness_fn(*, chi404_summary: Path | None = None) -> RobustnessFn:
     """Return a callable that runs workbench robustness via existing run_campaign."""
 
@@ -347,6 +358,10 @@ def make_default_robustness_fn(*, chi404_summary: Path | None = None) -> Robustn
         if summary_path.is_file():
             campaign_summary = json.loads(summary_path.read_text(encoding="utf-8"))
             campaign_summary["artifact_dir"] = str(result.artifact_dir)
+            if not campaign_summary.get("wfc_matrix_rows"):
+                matrix_rows = _load_wfc_matrix_rows(Path(result.artifact_dir))
+                if matrix_rows:
+                    campaign_summary["wfc_matrix_rows"] = matrix_rows
             wfc_metrics = dict(campaign_summary.get("metrics") or {})
             for key, value in wfc_metrics.items():
                 if key not in metrics:

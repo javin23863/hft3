@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -528,6 +529,7 @@ def test_enrich_hft_scenario_results_preserves_upstream_screening_hash(tmp_path:
 
 def test_cached_hft_scenario_with_failing_cert_stays_cached(tmp_path: Path) -> None:
     from research_pipeline import generation_loop as gl
+    from research_pipeline.generation_gate_producers import build_hftbacktest_gate_receipt
 
     manifest = {
         "candidate_id": "candidate-cached-fail",
@@ -551,6 +553,15 @@ def test_cached_hft_scenario_with_failing_cert_stays_cached(tmp_path: Path) -> N
     )
 
     assert row["status"] == "cached"
+    receipt = build_hftbacktest_gate_receipt(
+        manifest=manifest,
+        scenario_results=[row],
+        screening_artifact_hash="screening-hash",
+        robustness_artifact_hash="robustness-hash",
+    )
+    failures = receipt["failure_reasons"]
+    assert "scenario_s1_status=cached" in failures
+    assert "certification_status=missing_native_hot_path_evidence" in failures
 
 
 def test_cached_hft_scenario_with_declared_cert_stays_cached_without_pilot_scope(
@@ -734,6 +745,23 @@ def test_robustness_fn_forwards_frozen_params(tmp_path: Path, monkeypatch) -> No
 
         out = tmp_path / "rob_campaign"
         out.mkdir(parents=True, exist_ok=True)
+        wfc_dir = out / "wfc"
+        wfc_dir.mkdir()
+        with (wfc_dir / "param_matrix.csv").open("w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(
+                f,
+                fieldnames=["fold_id", "parameter_hash", "params", "is_metrics", "oos_metrics"],
+            )
+            writer.writeheader()
+            writer.writerow(
+                {
+                    "fold_id": 0,
+                    "parameter_hash": "ph-fwd",
+                    "params": json.dumps(params),
+                    "is_metrics": json.dumps({"sharpe": 1.1}),
+                    "oos_metrics": json.dumps({"sharpe": 1.0}),
+                }
+            )
         (out / "summary.json").write_text(
             json.dumps(
                 {
@@ -746,7 +774,6 @@ def test_robustness_fn_forwards_frozen_params(tmp_path: Path, monkeypatch) -> No
                         {"name": "Recent holdout", "gate_pass": True, "evaluate_only": True},
                     ],
                     "wfc": {"pearson": 0.5, "spearman": 0.4, "wfc_status": "PASS"},
-                    "wfc_matrix_rows": [{"parameter_hash": "ph-fwd", "fold": 0}],
                     "metrics": {},
                 }
             ),
@@ -777,6 +804,8 @@ def test_robustness_fn_forwards_frozen_params(tmp_path: Path, monkeypatch) -> No
     assert captured
     assert captured[0]["frozen_strategy_params"] == params
     assert outcome["robustness_pass"] is True
+    matrix_rows = outcome["campaign_summary"]["wfc_matrix_rows"]
+    assert matrix_rows[0]["parameter_hash"] == "ph-fwd"
 
 
 def test_load_autoresearch_config(tmp_path: Path) -> None:

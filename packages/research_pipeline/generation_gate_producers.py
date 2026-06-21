@@ -874,6 +874,20 @@ _FAILING_HFT_CERTIFICATION = frozenset(
 )
 
 
+def _hft_certification_failure_reason(
+    cert: str,
+    *,
+    allow_declared_certification: bool,
+) -> str | None:
+    if cert in _FAILING_HFT_CERTIFICATION:
+        return f"certification_status={cert}"
+    if cert in _DECLARED_HFT_CERTIFICATION and not allow_declared_certification:
+        return "declared_certification_requires_dry_run_mode"
+    if cert not in _PASSING_HFT_CERTIFICATION:
+        return f"certification_status_not_passing={cert}"
+    return None
+
+
 def _hft_replay_parity_failures(
     *,
     manifest: Mapping[str, Any],
@@ -980,6 +994,15 @@ def build_hftbacktest_gate_receipt(
         replay = dict(result.get("replay_result") or {})
         if str(result.get("status") or "") != "completed":
             failure_reasons.append(f"scenario_{result.get('scenario_id')}_status={result.get('status')}")
+            cert = str(replay.get("certification_status") or "")
+            cert_reason = None
+            if cert:
+                cert_reason = _hft_certification_failure_reason(
+                    cert,
+                    allow_declared_certification=allow_declared_certification,
+                )
+            if cert_reason:
+                failure_reasons.append(cert_reason)
             continue
         if not replay:
             failure_reasons.append(f"scenario_{result.get('scenario_id')}_replay_result_empty")
@@ -990,12 +1013,13 @@ def build_hftbacktest_gate_receipt(
         cert = str(replay.get("certification_status") or "")
         if not cert:
             failure_reasons.append(f"scenario_{result.get('scenario_id')}_certification_status_missing")
-        elif cert in _FAILING_HFT_CERTIFICATION:
-            failure_reasons.append(f"certification_status={cert}")
-        elif cert in _DECLARED_HFT_CERTIFICATION and not allow_declared_certification:
-            failure_reasons.append("declared_certification_requires_dry_run_mode")
-        elif cert not in _PASSING_HFT_CERTIFICATION:
-            failure_reasons.append(f"certification_status_not_passing={cert}")
+        else:
+            cert_reason = _hft_certification_failure_reason(
+                cert,
+                allow_declared_certification=allow_declared_certification,
+            )
+            if cert_reason:
+                failure_reasons.append(cert_reason)
         failure_reasons.extend(
             _hft_replay_parity_failures(
                 manifest=manifest,
