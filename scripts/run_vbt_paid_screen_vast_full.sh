@@ -20,6 +20,9 @@ if [[ -f "${HFT3_ENV_FILE:-/root/hft3/.env}" ]]; then
   source "${HFT3_ENV_FILE:-/root/hft3/.env}"
   set +a
 fi
+if [[ -z "${HFT3_VAULT_ROOT:-}" && -d /root/hft3/vault/library/papers ]]; then
+  export HFT3_VAULT_ROOT="/root/hft3/vault"
+fi
 
 # Gate-aligned lake manifest (parquet hash); override only when owner sets explicitly.
 export HFT3_MANIFEST_PATH="${HFT3_MANIFEST_PATH:-/data/npz/manifest.parquet}"

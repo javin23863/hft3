@@ -4,10 +4,14 @@
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
+if [[ -z "${HFT3_VAULT_ROOT:-}" && -d /root/hft3/vault/library/papers ]]; then
+  export HFT3_VAULT_ROOT="/root/hft3/vault"
+fi
 PYTHON="${PYTHON:-python3}"
+VERIFY_TIMEOUT_SECONDS="${VBT_HBT_VERIFY_TIMEOUT_SECONDS:-300}"
 PYTHON="$PYTHON" bash scripts/install_vbt_hbt_handoff_verify_deps.sh
 export PYTHONPATH="${REPO_ROOT}:${REPO_ROOT}/packages${PYTHONPATH:+:$PYTHONPATH}"
-exec bash tools/shell/run_with_timeout.sh 180 vbt-hbt-handoff-verify -- \
+exec bash tools/shell/run_with_timeout.sh "$VERIFY_TIMEOUT_SECONDS" vbt-hbt-handoff-verify -- \
   "$PYTHON" -B -m pytest -q \
     tests/backtest_pipeline/test_ontology_gate.py \
     tests/backtest_pipeline/test_feature_plane.py \
