@@ -356,6 +356,26 @@ def _pipe_identity(value: Any) -> tuple[str, str, str] | None:
     return None
 
 
+def _symbol_matches_pipe(row_symbol: str, pipe_symbol: str) -> bool:
+    if not row_symbol:
+        return True
+    return row_symbol == pipe_symbol or row_symbol == pipe_symbol.split(".", 1)[0]
+
+
+def _row_fields_match_pipe(
+    parsed: tuple[str, str, str],
+    model_id: str,
+    symbol: str,
+    event_id: str,
+) -> bool:
+    pipe_model_id, pipe_symbol, pipe_event_id = parsed
+    if model_id and model_id != pipe_model_id:
+        return False
+    if not _symbol_matches_pipe(symbol, pipe_symbol):
+        return False
+    return not event_id or event_id == pipe_event_id
+
+
 def _row_unit_identity(row: Mapping[str, Any]) -> tuple[str, str, str] | None:
     meta = row.get("base_candidate_metadata")
     if not isinstance(meta, Mapping):
@@ -365,12 +385,11 @@ def _row_unit_identity(row: Mapping[str, Any]) -> tuple[str, str, str] | None:
     ).strip()
     symbol = str(row.get("symbol") or meta.get("symbol") or "").strip()
     event_id = str(meta.get("event_id") or "").strip()
-    if not event_id:
-        parsed = _pipe_identity(row.get("base_candidate_id"))
-        if parsed is not None:
-            model_id = model_id or parsed[0]
-            symbol = symbol or parsed[1]
-            event_id = parsed[2]
+    parsed_base = _pipe_identity(row.get("base_candidate_id"))
+    if parsed_base is not None:
+        if _row_fields_match_pipe(parsed_base, model_id, symbol, event_id):
+            return parsed_base
+        return None
     if not model_id or not symbol or not event_id:
         parsed = _pipe_identity(row.get("candidate_id"))
         if parsed is not None:
@@ -403,6 +422,16 @@ def artifact_unit_identity_matches(payload: Mapping[str, Any], unit: PaidScreenU
     return any(identity == target for identity in identities)
 
 
+def _is_paid_compute_scope(value: str) -> bool:
+    return value.replace("-", "_") == "paid_compute"
+
+
+def _resume_scope_matches(artifact_scope: str, screening_scope: str) -> bool:
+    if artifact_scope == screening_scope:
+        return True
+    return _is_paid_compute_scope(artifact_scope) and _is_paid_compute_scope(screening_scope)
+
+
 def artifact_matches_resume_unit(
     payload: Mapping[str, Any],
     unit: PaidScreenUnit,
@@ -433,7 +462,8 @@ def artifact_matches_resume_unit(
             return False
     if screening_scope:
         artifact_scope = str(payload.get("screening_scope") or "").strip()
-        if artifact_scope and artifact_scope != screening_scope:
+        expected_scope = screening_scope.strip()
+        if artifact_scope and not _resume_scope_matches(artifact_scope, expected_scope):
             return False
 
     provenance_checks = {

@@ -304,6 +304,102 @@ class TestResumeArtifactMatching:
             screening_scope="pilot",
         )
 
+    def test_artifact_accepts_base_candidate_pipe_symbol_when_row_symbol_shortened(self):
+        payload = {
+            "screening_scope": "paid-compute",
+            "events_csv_hash": "events_hash",
+            "lake_manifest_hash": "lake_hash",
+            "candidate_ids": ["trial_hash"],
+            "promoted_ids": ["trial_hash"],
+            "promoted": [
+                {
+                    "candidate_id": "trial_hash",
+                    "model_id": "ABSORPTION_FADE",
+                    "symbol": "ES",
+                    "base_candidate_id": "ABSORPTION_FADE|ES.v.0|EVENT|12",
+                    "base_candidate_metadata": {"event_id": "EVENT"},
+                }
+            ],
+            "rejected": [],
+        }
+        unit = PaidScreenUnit(
+            unit_id="u_es",
+            model_id="ABSORPTION_FADE",
+            hyp_id=12,
+            symbol="ES.v.0",
+            event_id="EVENT",
+            event_type="EVENT",
+        )
+
+        assert artifact_matches_resume_unit(
+            payload,
+            unit,
+            events_csv_hash="events_hash",
+            lake_manifest_hash="lake_hash",
+            research_split="discovery_confirmation",
+            screening_scope="paid-compute",
+        )
+
+    def test_artifact_accepts_paid_compute_scope_separator_variant(self):
+        payload = {
+            "screening_scope": "paid_compute",
+            "events_csv_hash": "events_hash",
+            "lake_manifest_hash": "lake_hash",
+            "candidate_ids": [
+                "SPREAD_BLOWOUT_RECOMPRESSION|MES.v.0|CPI_2024_09_11_TIGHT|5"
+            ],
+            "promoted": [],
+            "rejected": [],
+        }
+        unit = PaidScreenUnit(
+            unit_id="u_ok",
+            model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+            hyp_id=5,
+            symbol="MES.v.0",
+            event_id="CPI_2024_09_11_TIGHT",
+            event_type="CPI",
+            research_split="discovery_confirmation",
+        )
+
+        assert artifact_matches_resume_unit(
+            payload,
+            unit,
+            events_csv_hash="events_hash",
+            lake_manifest_hash="lake_hash",
+            research_split="discovery_confirmation",
+            screening_scope="paid-compute",
+        )
+
+    def test_artifact_rejects_different_scope_after_separator_normalization(self):
+        payload = {
+            "screening_scope": "refine",
+            "events_csv_hash": "events_hash",
+            "lake_manifest_hash": "lake_hash",
+            "candidate_ids": [
+                "SPREAD_BLOWOUT_RECOMPRESSION|MES.v.0|CPI_2024_09_11_TIGHT|5"
+            ],
+            "promoted": [],
+            "rejected": [],
+        }
+        unit = PaidScreenUnit(
+            unit_id="u_ok",
+            model_id="SPREAD_BLOWOUT_RECOMPRESSION",
+            hyp_id=5,
+            symbol="MES.v.0",
+            event_id="CPI_2024_09_11_TIGHT",
+            event_type="CPI",
+            research_split="discovery_confirmation",
+        )
+
+        assert not artifact_matches_resume_unit(
+            payload,
+            unit,
+            events_csv_hash="events_hash",
+            lake_manifest_hash="lake_hash",
+            research_split="discovery_confirmation",
+            screening_scope="paid-compute",
+        )
+
     def test_artifact_rejects_mismatched_model(self):
         payload = json.loads(_VALID_UNIT_ARTIFACT.read_text(encoding="utf-8"))
         unit = PaidScreenUnit(
