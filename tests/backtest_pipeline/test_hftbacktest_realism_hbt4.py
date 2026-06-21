@@ -383,6 +383,42 @@ def test_hbt4_valid_order_intent_writes_official_replay_and_can_pass(
         assert expected_call in hbt4_contract
 
 
+def test_hbt4_measured_partial_latency_cannot_certify(
+    tmp_path: Path,
+    hbt4_contract: list[str],
+) -> None:
+    screening_path, data_path, _latency_path, fill_queue_path = _write_valid_inputs(
+        tmp_path,
+        include_intent=True,
+    )
+    latency_model = _constant_latency_model()
+    latency_model["latency_proxy_status"] = "measured_partial"
+    latency_path = _write_json(tmp_path / "latency_model_partial.json", latency_model)
+    out_dir = tmp_path / "research_cards" / "hftbacktest_realism" / "hbt4_partial_latency"
+
+    payload = hbt4.write_hftbacktest_realism_artifacts(
+        repo_root=tmp_path,
+        out_dir=out_dir,
+        screening_artifact_path=screening_path,
+        data_npz_path=data_path,
+        latency_model_path=latency_path,
+        fill_queue_model_path=fill_queue_path,
+        upstream_ref="v2.4.2",
+        native_hot_path_evidence=[NATIVE_CPP_LATENCY_EVIDENCE],
+        run_id="hbt4_partial_latency",
+    )
+
+    latency_artifact = json.loads((out_dir / "latency_model.json").read_text(encoding="utf-8"))
+    summary = payload["replay_summary"]
+
+    assert latency_artifact["latency_model_status"] == "fail"
+    assert summary["official_hftbacktest_replay_status"] == "pass"
+    assert "measured_partial_latency_cannot_certify" in summary["fail_closed_reasons"]
+    assert summary["replay_realism_status"] == "fail"
+    assert summary["certification_allowed"] is False
+    assert "submit_buy_or_sell_order" in hbt4_contract
+
+
 def test_hbt4_non_hash_native_evidence_cannot_leave_certification_allowed(
     tmp_path: Path,
     hbt4_contract: list[str],

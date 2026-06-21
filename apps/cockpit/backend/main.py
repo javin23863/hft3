@@ -17,7 +17,7 @@ for _p in (str(_REPO), str(_REPO / "packages")):
 
 from contextlib import asynccontextmanager  # noqa: E402
 
-from fastapi import Depends, FastAPI, WebSocket, WebSocketDisconnect  # noqa: E402
+from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
 from apps.cockpit.backend import paths  # noqa: E402
@@ -235,37 +235,59 @@ async def ws(websocket: WebSocket) -> None:
         await hub.disconnect(websocket)
 
 
-# Serve the built SPA (single origin) if built. Hashed assets are served from
-# /assets; every other non-API path falls back to index.html so client-side
-# routes (/models, /chat, ...) work on deep-link + refresh (the catch-all is
-# added LAST, so the explicit /api and /ws routes always win).
+# Serve the SPA shell (single origin). Hashed assets are served from /assets
+# when the bundle exists; every other non-API path uses index.html so client-side
+# routes (/models, /chat, ...) work on deep-link + refresh. Missing bundles fail
+# closed by default; the inline shell is only for explicit dev/test opt-in.
 _DIST = _REPO / "apps" / "cockpit" / "frontend" / "dist"
 _INDEX = _DIST / "index.html"
-if _DIST.is_dir() and _INDEX.is_file():
-    from fastapi import HTTPException  # noqa: E402
-    from fastapi.staticfiles import StaticFiles  # noqa: E402
-    from fastapi.responses import FileResponse  # noqa: E402
+from fastapi.responses import FileResponse, HTMLResponse  # noqa: E402
+from fastapi.staticfiles import StaticFiles  # noqa: E402
 
-    _DIST_ROOT = _DIST.resolve()
+_DIST_ROOT = _DIST.resolve()
+_FALLBACK_INDEX_HTML = """<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <title>HFT3 Cockpit</title>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
+"""
+_ALLOW_INLINE_FALLBACK = os.environ.get("COCKPIT_INLINE_SPA_FALLBACK", "") == "1"
 
-    if (_DIST / "assets").is_dir():
-        app.mount("/assets", StaticFiles(directory=str(_DIST / "assets")), name="assets")
+if (_DIST / "assets").is_dir():
+    app.mount("/assets", StaticFiles(directory=str(_DIST / "assets")), name="assets")
 
-    @app.get("/{full_path:path}", include_in_schema=False)
-    async def spa(full_path: str):
-        # Serve a real static file ONLY if it resolves INSIDE dist. The resolve()
-        # + parents containment check rejects `../` traversal (incl. URL-encoded
-        # %2e%2e%2f) and absolute/drive-letter inputs, so this unauthenticated
-        # route cannot leak backend source or any other process-readable file
-        # (e.g. a .env with credentials). Otherwise fall back to the SPA
-        # entrypoint so client-side routes work on deep-link/refresh.
-        if full_path:
-            try:
-                candidate = (_DIST_ROOT / full_path).resolve()
-            except (OSError, ValueError):
-                candidate = None
-            if candidate is not None and candidate.is_file() and _DIST_ROOT in candidate.parents:
-                return FileResponse(candidate)
-        if _INDEX.is_file():
-            return FileResponse(_INDEX)
+
+@app.get("/{full_path:path}", include_in_schema=False)
+async def spa(full_path: str):
+    # Serve a real static file ONLY if it resolves INSIDE dist. The resolve()
+    # + parents containment check rejects `../` traversal (incl. URL-encoded
+    # %2e%2e%2f) and absolute/drive-letter inputs, so this unauthenticated
+    # route cannot leak backend source or any other process-readable file
+    # (e.g. a .env with credentials). Otherwise serve the built SPA entrypoint.
+    if full_path == "api" or full_path.startswith("api/"):
         raise HTTPException(status_code=404)
+    if full_path:
+        try:
+            candidate = (_DIST_ROOT / full_path).resolve()
+        except (OSError, ValueError):
+            candidate = None
+        if candidate is not None and candidate.is_file() and _DIST_ROOT in candidate.parents:
+            return FileResponse(candidate)
+    if _INDEX.is_file():
+        return FileResponse(_INDEX)
+    if _ALLOW_INLINE_FALLBACK:
+        return HTMLResponse(_FALLBACK_INDEX_HTML)
+    raise HTTPException(
+        status_code=503,
+        detail=(
+            "frontend bundle missing: build apps/cockpit/frontend/dist/index.html "
+            "or set COCKPIT_INLINE_SPA_FALLBACK=1 for dev/test"
+        ),
+    )

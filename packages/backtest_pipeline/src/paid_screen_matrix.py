@@ -167,6 +167,31 @@ def _sl_tp_for_portfolio(
     return sl, tp
 
 
+def _portfolio_stats_for_column(pf: Any, col: int, *, n_cols: int) -> Dict[str, Any]:
+    """Return per-column stats, with a fallback for fake/single-column portfolios."""
+    last_exc: Exception | None = None
+    try:
+        columns = getattr(getattr(pf, "wrapper", None), "columns", None)
+        if columns is not None:
+            return dict(pf.stats(column=columns[col]))
+    except Exception as exc:
+        last_exc = exc
+
+    try:
+        return dict(pf.stats(column=col))
+    except Exception as exc:
+        last_exc = exc
+
+    if n_cols == 1:
+        try:
+            return dict(pf.stats())
+        except Exception as exc:
+            raise last_exc or exc
+    if last_exc is not None:
+        raise last_exc
+    raise AttributeError("per-column portfolio stats unavailable for multi-column matrix")
+
+
 def _apply_signal_threshold(
     raw_signal: np.ndarray, threshold: float
 ) -> Tuple[np.ndarray, np.ndarray]:
@@ -568,8 +593,7 @@ def run_vectorbt_simulation_matrix(
                 # a flat Index (tuple keys require MultiIndex).
                 vbt_stats: Dict[str, Any] = {}
                 try:
-                    col_label = pf.wrapper.columns[col]
-                    vbt_stats = dict(pf.stats(column=col_label))
+                    vbt_stats = _portfolio_stats_for_column(pf, col, n_cols=n_cols)
                 except Exception as exc:
                     logger.warning(
                         "VectorBT column stats failed for %s: %s", cand_id, exc

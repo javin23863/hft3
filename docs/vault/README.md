@@ -2,7 +2,7 @@
 
 Durable research and ops baselines. Not runtime logs or secrets.
 
-**ANY LLM agent session start (full roadmap):** Obsidian vault `architecture/Agent Runtime Roadmap` at  
+**ANY LLM agent session start (full roadmap):** Obsidian vault `architecture/Agent Runtime Roadmap` at
 `C:\Users\MSI\Desktop\Obsidian Vault From VPS\hft3\` — also mirrored in `wiki/hot.md` top section.
 
 ## Mandatory load order (repo + vault)

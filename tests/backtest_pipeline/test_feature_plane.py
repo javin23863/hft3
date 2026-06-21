@@ -19,6 +19,7 @@ from backtest_pipeline.src.vectorbt_adapter import (
     compute_screening_artifact_hash,
     filter_candidates,
     validate_screening_artifact,
+    validate_screening_artifact_or_raise,
 )
 
 
@@ -157,7 +158,7 @@ class TestVectorbtAdapterIntegration:
         assert artifact["feature_usage_manifest_hash"] == compute_feature_usage_manifest_hash(
             artifact["feature_usage_manifest"]
         )
-        validate_screening_artifact(artifact)
+        assert validate_screening_artifact(artifact) == []
 
     def test_validate_rejects_removed_feature_plane_field(self, tmp_path):
         artifact = filter_candidates(
@@ -177,7 +178,7 @@ class TestVectorbtAdapterIntegration:
         broken.pop("feature_plane_status")
         broken["screening_artifact_hash"] = compute_screening_artifact_hash(broken)
         with pytest.raises(ScreeningArtifactError, match="feature_plane_status"):
-            validate_screening_artifact(broken)
+            validate_screening_artifact_or_raise(broken)
 
     def test_validate_rejects_forged_full_product_claim_on_bar_stub(self, tmp_path):
         artifact = filter_candidates(
@@ -197,4 +198,4 @@ class TestVectorbtAdapterIntegration:
         forged["full_product_evidence_status"] = "allowed"
         forged["screening_artifact_hash"] = compute_screening_artifact_hash(forged)
         with pytest.raises(ScreeningArtifactError, match="full_product"):
-            validate_screening_artifact(forged)
+            validate_screening_artifact_or_raise(forged)

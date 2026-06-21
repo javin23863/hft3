@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Mapping, Optional, Tuple
+from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -67,6 +67,8 @@ class FsV1ScreenContext:
     vix_ts: np.ndarray | None
     vix_X: np.ndarray | None
     leader_legs: tuple[tuple[str, LeaderLegStore], ...] = ()
+    leader_resolution_source: str = "unknown"
+    missing_leader_symbols: tuple[str, ...] = ()
 
 
 def _manifest_record_hash(record: Mapping[str, Any]) -> str:
@@ -131,6 +133,51 @@ def _load_leader_leg_store(
     return None
 
 
+_CROSS_ASSET_REQUIRED_LEADERS_BY_MODEL = {
+    "HYP_16": ("ES",),
+    "ES_MES_LEAD_LAG": ("ES",),
+    "HYP_17": ("NQ",),
+    "NQ_MNQ_LEAD_LAG": ("NQ",),
+    "HYP_18": ("ES", "NQ"),
+    "ES_NQ_DIVERGENCE_SNAPBACK": ("ES", "NQ"),
+    "HYP_19": ("ZN",),
+    "ZN_ZB_ES_NQ_MACRO_IMPULSE": ("ZN",),
+}
+
+
+def cross_asset_required_leaders_for_model(model_id: str) -> tuple[str, ...]:
+    """Ontology-backed static leaders for real cross-asset hypothesis slugs."""
+    key = str(model_id or "").strip().upper()
+    if key.isdigit():
+        key = f"HYP_{key}"
+    return _CROSS_ASSET_REQUIRED_LEADERS_BY_MODEL.get(key, ())
+
+
+def recipe_requires_cross_asset_leaders(
+    *,
+    metadata: Mapping[str, Any] | None = None,
+    model_id: str = "",
+) -> bool:
+    """Shared detector for cross-asset leader-leg requirements."""
+    meta = dict(metadata or {})
+    for candidate_model_id in (
+        model_id,
+        meta.get("model_id"),
+        meta.get("hypothesis_id"),
+        meta.get("strategy_family"),
+        meta.get("source_model"),
+    ):
+        if cross_asset_required_leaders_for_model(str(candidate_model_id or "")):
+            return True
+    recipe = meta.get("feature_recipe") or {}
+    if recipe.get("cross_asset_legs") or recipe.get("leader_symbols"):
+        return True
+    family = str(meta.get("feature_family") or meta.get("proposal_reason") or "").lower()
+    if "cross_asset" in family:
+        return True
+    return "CROSS_ASSET" in str(model_id or "").upper()
+
+
 def _import_cross_asset_assembly_module():
     """Load cross_asset_assembly without importing replay package __init__."""
     import importlib.util
@@ -148,12 +195,17 @@ def _import_cross_asset_assembly_module():
     return mod
 
 
-def _default_leaders_for_target(target_symbol: str) -> tuple[str, ...]:
-    """Leader list without importing replay package __init__ (hftbacktest chain)."""
+def _default_leaders_for_target(target_symbol: str) -> tuple[tuple[str, ...], str]:
+    """Leader list without importing replay package __init__ (hftbacktest chain).
+
+    Returns ``(leaders, resolution_source)`` where *resolution_source* is
+    ``cross_asset_module`` when the replay helper loaded, else ``static_fallback``.
+    """
     try:
-        return _import_cross_asset_assembly_module().default_leaders_for_target(
+        leaders = _import_cross_asset_assembly_module().default_leaders_for_target(
             target_symbol
         )
+        return tuple(str(x) for x in leaders), "cross_asset_module"
     except Exception:
         pass
     base = str(target_symbol or "MES").split(".")[0].upper()
@@ -163,21 +215,41 @@ def _default_leaders_for_target(target_symbol: str) -> tuple[str, ...]:
         "ES": ("NQ", "ZN"),
         "NQ": ("ES", "ZN"),
     }
-    return fallback.get(base, ("ES",))
+    return fallback.get(base, ("ES",)), "static_fallback"
+
+
+def _normalize_leader_symbols(symbols: Sequence[str] | None) -> tuple[str, ...]:
+    leaders: list[str] = []
+    for symbol in symbols or ():
+        base = str(symbol or "").split(".")[0].upper()
+        if base and base not in leaders:
+            leaders.append(base)
+    return tuple(leaders)
 
 
 def _load_leader_legs(
     root: Path,
     event_id: str,
     target_symbol: str,
-) -> tuple[tuple[str, LeaderLegStore], ...]:
+    required_leaders: Sequence[str] | None = None,
+) -> tuple[tuple[tuple[str, LeaderLegStore], ...], tuple[str, ...], str]:
+    """Load PIT leader legs; return (loaded, missing_symbols, resolution_source)."""
     target = str(target_symbol).split(".")[0].upper()
+    explicit_leaders = _normalize_leader_symbols(required_leaders)
+    if explicit_leaders:
+        expected_leaders = explicit_leaders
+        resolution_source = "candidate_required_leaders"
+    else:
+        expected_leaders, resolution_source = _default_leaders_for_target(target)
     legs: list[tuple[str, LeaderLegStore]] = []
-    for leader in _default_leaders_for_target(target):
+    missing: list[str] = []
+    for leader in expected_leaders:
         leg = _load_leader_leg_store(root, event_id, leader)
         if leg is not None:
             legs.append((leader, leg))
-    return tuple(legs)
+        else:
+            missing.append(leader)
+    return tuple(legs), tuple(missing), resolution_source
 
 
 def cross_asset_features_at_vis_ts(
@@ -251,6 +323,7 @@ def resolve_fs_v1_screen_context(
     symbol: str,
     feature_store_root_override: Path | None = None,
     feature_latency_ms: float = 1.0,
+    required_leaders: Sequence[str] | None = None,
 ) -> FsV1ScreenContext | None:
     root = feature_store_root_override or feature_store_root(repo_root)
     sp: Path | None = None
@@ -313,7 +386,9 @@ def resolve_fs_v1_screen_context(
             vix_cols = []
 
     has_vix = vix_ts is not None and vix_X is not None and len(vix_ts) > 0
-    leader_legs = _load_leader_legs(root, event_id, resolved_symbol)
+    leader_legs, missing_leaders, leader_source = _load_leader_legs(
+        root, event_id, resolved_symbol, required_leaders=required_leaders
+    )
     return FsV1ScreenContext(
         symbol=resolved_symbol,
         event_id=event_id,
@@ -327,6 +402,8 @@ def resolve_fs_v1_screen_context(
         vix_ts=vix_ts,
         vix_X=vix_X,
         leader_legs=leader_legs,
+        leader_resolution_source=leader_source,
+        missing_leader_symbols=missing_leaders,
     )
 
 

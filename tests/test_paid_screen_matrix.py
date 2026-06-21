@@ -608,6 +608,73 @@ class TestRunVectorbtSimulationMatrix:
             assert "Expectancy" in stats
             assert prom.vectorbt_results["gate_metric_authority"] == "official_vectorbt_portfolio_stats"
 
+    def test_single_column_fake_portfolio_stats_fallback(self, monkeypatch, tmp_path):
+        """Single-column fake portfolios without wrapper metadata still produce stats."""
+
+        class FakeScalarPortfolio:
+            def stats(self, *args, **kwargs):
+                if args or kwargs:
+                    raise TypeError("column stats unsupported")
+                return _complete_vbt_stats(total_return_pct=2.0, total_trades=1, expectancy=0.02)
+
+        def from_signals(close, entries, exits, **kwargs):
+            return FakeScalarPortfolio()
+
+        _install_fake_vectorbt(monkeypatch, from_signals)
+        ohlcv = _synthetic_ohlcv(80)
+        cand = _mock_candidate("HYP_5", 0.15)
+        result = run_vectorbt_simulation_matrix(
+            ohlcv,
+            [cand],
+            parsed=None,
+            grid={
+                "signal_threshold": [0.15],
+                "holding_period_bars": [15],
+                "stop_loss_pct": [None],
+                "take_profit_pct": [None],
+            },
+            repo_root=tmp_path,
+            signal_computer=_signal_computer_returns_fixed(1, -1),
+            chunk_size=16,
+        )
+
+        assert not [r for r in result.rejected if r.reject_reason == "vectorbt_simulation_failed"]
+        assert len(result.promoted) == 1
+        assert result.promoted[0].vectorbt_results["vbt_stats"]["Total Trades"] == 1
+
+    def test_multi_column_fake_portfolio_does_not_use_aggregate_stats_fallback(self, monkeypatch, tmp_path):
+        """Multi-column matrix trials must not be gated on aggregate portfolio stats."""
+
+        class FakeAggregateOnlyPortfolio:
+            def stats(self, *args, **kwargs):
+                if args or kwargs:
+                    raise TypeError("column stats unsupported")
+                return _complete_vbt_stats(total_return_pct=2.0, total_trades=1, expectancy=0.02)
+
+        def from_signals(close, entries, exits, **kwargs):
+            return FakeAggregateOnlyPortfolio()
+
+        _install_fake_vectorbt(monkeypatch, from_signals)
+        ohlcv = _synthetic_ohlcv(80)
+        cand = _mock_candidate("HYP_5", 0.15)
+        result = run_vectorbt_simulation_matrix(
+            ohlcv,
+            [cand],
+            parsed=None,
+            grid={
+                "signal_threshold": [0.1, 0.2],
+                "holding_period_bars": [15],
+                "stop_loss_pct": [None],
+                "take_profit_pct": [None],
+            },
+            repo_root=tmp_path,
+            signal_computer=_signal_computer_returns_fixed(1, -1),
+            chunk_size=16,
+        )
+
+        assert not result.promoted
+        assert {r.reject_reason for r in result.rejected} == {"vectorbt_simulation_failed"}
+
     def test_candidate_id_matches_loop_mode(self, monkeypatch, tmp_path):
         """Per-trial candidate IDs are identical to loop mode."""
         ohlcv, grid = self._setup(monkeypatch)

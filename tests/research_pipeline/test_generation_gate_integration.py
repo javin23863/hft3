@@ -270,12 +270,24 @@ def test_wfc_pass_cannot_substitute_regular_wf() -> None:
 
 def test_wf_receipts_are_independent_producers() -> None:
     manifest = _manifest()
-    wf_pass_summary = {"status": "PASS", "periods": [{"gate_pass": True}]}
+    wf_pass_summary = {
+        "status": "PASS",
+        "periods": [
+            {"name": "Discovery", "gate_pass": True},
+            {"name": "Holdout", "gate_pass": True, "evaluate_only": True},
+            {"name": "Recent holdout", "gate_pass": True, "evaluate_only": True},
+        ],
+    }
     wfc_only_summary = {
         "status": "FAIL",
         "wfc_status": "PASS",
         "wfc": {"pearson": 0.8, "spearman": 0.7, "wfc_status": "PASS"},
-        "periods": [{"gate_pass": False}],
+        "wfc_matrix_rows": [{"parameter_hash": "ph-1", "fold": 0}],
+        "periods": [
+            {"name": "Discovery", "gate_pass": False},
+            {"name": "Holdout", "gate_pass": True, "evaluate_only": True},
+            {"name": "Recent holdout", "gate_pass": True, "evaluate_only": True},
+        ],
     }
     regular = build_regular_walk_forward_gate_receipt(manifest=manifest, campaign_summary=wf_pass_summary)
     wfc = build_walk_forward_correlation_gate_receipt(manifest=manifest, campaign_summary=wfc_only_summary)
@@ -283,6 +295,50 @@ def test_wf_receipts_are_independent_producers() -> None:
     assert wfc["status"] == "PASS"
     regular_fail = build_regular_walk_forward_gate_receipt(manifest=manifest, campaign_summary=wfc_only_summary)
     assert regular_fail["status"] == "REJECT"
+
+
+def test_gate4_rejects_holdout_without_evaluate_only() -> None:
+    manifest = _manifest()
+    holdout_violation = {
+        "status": "PASS",
+        "periods": [
+            {"name": "Discovery", "gate_pass": True},
+            {"name": "Holdout", "gate_pass": True, "evaluate_only": False},
+            {"name": "Recent holdout", "gate_pass": True, "evaluate_only": True},
+        ],
+    }
+    receipt = build_regular_walk_forward_gate_receipt(manifest=manifest, campaign_summary=holdout_violation)
+    assert receipt["status"] == "REJECT"
+    assert any("holdout_evaluate_only_violation" in r for r in receipt.get("failure_reasons") or [])
+
+
+def test_gate4_rejects_missing_configured_holdout_period() -> None:
+    manifest = _manifest()
+    missing_holdout = {
+        "status": "PASS",
+        "periods": [
+            {"name": "Discovery", "gate_pass": True},
+        ],
+    }
+    receipt = build_regular_walk_forward_gate_receipt(manifest=manifest, campaign_summary=missing_holdout)
+    assert receipt["status"] == "REJECT"
+    failures = receipt.get("failure_reasons") or []
+    assert any("holdout_evaluate_only_missing:Holdout" in r for r in failures)
+    assert any("holdout_evaluate_only_missing:Recent holdout" in r for r in failures)
+
+
+def test_gate5_rejects_missing_wfc_matrix_alignment() -> None:
+    manifest = _manifest()
+    no_matrix = {
+        "status": "PASS",
+        "wfc_status": "PASS",
+        "wfc": {"pearson": 0.8, "spearman": 0.7, "wfc_status": "PASS"},
+        "wfc_matrix_rows": [],
+        "periods": [{"name": "Discovery", "gate_pass": True}],
+    }
+    receipt = build_walk_forward_correlation_gate_receipt(manifest=manifest, campaign_summary=no_matrix)
+    assert receipt["status"] == "REJECT"
+    assert "parameter_surface_alignment_missing" in (receipt.get("failure_reasons") or [])
 
 
 def test_wfc_reject_maps_to_final_wfc_rejected() -> None:
@@ -632,6 +688,7 @@ def test_final_pass_requires_all_gates_including_hft() -> None:
         ],
         screening_artifact_hash="screen-abc",
         robustness_artifact_hash="rob-abc",
+        allow_declared_certification=True,
     )
     result = run_generation_gate_chain(
         candidate_manifest=_manifest(),
@@ -662,6 +719,43 @@ def test_final_pass_requires_all_gates_including_hft() -> None:
     )
     assert summary["best_candidate_id"] == "cand-001"
     assert summary["candidates"][0]["elite"] is True
+
+
+def test_hft_rejects_contradictory_replay_provenance() -> None:
+    manifest = _manifest()
+    replay = _valid_hft_replay(manifest, screening_artifact_hash="screen-other")
+    replay["manifest_hash"] = "manifest-other"
+    reject = build_hftbacktest_gate_receipt(
+        manifest=manifest,
+        scenario_results=[
+            {
+                "scenario_id": "s1",
+                "status": "completed",
+                "replay_result": replay,
+            }
+        ],
+        screening_artifact_hash="screen-abc",
+        robustness_artifact_hash="rob-abc",
+        allow_declared_certification=True,
+    )
+    assert reject["status"] == "REJECT"
+    failures = set(reject.get("failure_reasons") or [])
+    assert "manifest_hash_parity_violation" in failures
+    assert "screening_artifact_hash_parity_violation" in failures
+
+    result = run_generation_gate_chain(
+        candidate_manifest=manifest,
+        ontology_receipt=_pass_receipt("ontology_gate"),
+        vectorbt_receipt=_pass_receipt(GATE_VECTORBT),
+        surface_receipt=_pass_receipt(GATE_SURFACE),
+        regular_walk_forward_receipt=_pass_receipt(GATE_REGULAR_WF),
+        walk_forward_correlation_receipt=_pass_receipt(GATE_WFC),
+        statistical_receipt=_pass_receipt(GATE_STATISTICAL),
+        hftbacktest_receipt=reject,
+        certification_mode=True,
+    )
+    assert result["final_status"] == FINAL_HFT_REJECTED
+    assert result["stopped_at_gate"] == GATE_HFT
 
 
 def test_hft_reject_maps_to_final_hft_rejected() -> None:

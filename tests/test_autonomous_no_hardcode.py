@@ -18,6 +18,21 @@ RUNNER = Path("packages/hft3/research/run_autonomous.py")
 DEFAULT_CONFIG = Path("configs/research/autonomous_hft3.yaml")
 
 
+def _config_without_catalog_discovery() -> CampaignConfig:
+    cfg = CampaignConfig.from_yaml(DEFAULT_CONFIG)
+    cfg.data["event_windows"] = [
+        {
+            "event_id": "pytest",
+            "start_ns": 1,
+            "end_ns": 2,
+            "symbols": ["MES.v.0"],
+        }
+    ]
+    cfg.models["alpha"] = ["HYP_1"]
+    cfg.models["select"] = {"roles": ["alpha"]}
+    return cfg
+
+
 def test_autonomous_runner_has_no_fixed_candidate_or_agent_branding() -> None:
     src = RUNNER.read_text(encoding="utf-8")
     forbidden = (
@@ -45,7 +60,7 @@ def test_default_autonomous_config_uses_catalogs_not_fixed_samples() -> None:
 
 
 def test_autonomous_runner_does_not_generate_external_access_packet(tmp_path: Path) -> None:
-    cfg = CampaignConfig.from_yaml(DEFAULT_CONFIG)
+    cfg = _config_without_catalog_discovery()
     cfg.output["artifacts_dir"] = str(tmp_path / "artifacts")
     runner = AutonomousRunner(config=cfg, root=tmp_path, run_id="NOEXTPACKET")
     assert runner.run() == 2

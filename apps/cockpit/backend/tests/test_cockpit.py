@@ -25,6 +25,7 @@ from backtest_pipeline.src.vectorbt_adapter import (
     compute_screening_artifact_hash,
     _parameter_values_hash,
 )
+from backtest_pipeline.src.feature_plane import build_feature_plane_payload
 from backtest_pipeline.src.hftbacktest_realism import (
     DEFAULT_ADAPTER_FILES,
     DEFAULT_API_SURFACE_USED,
@@ -72,6 +73,14 @@ def _stub_q001_ok(monkeypatch) -> None:
     )
     monkeypatch.setattr(alerts_agg, "_q001_inventory", lambda: payload)
     monkeypatch.setattr(pipeline_agg, "_q001_inventory", lambda: payload)
+
+
+def _stub_research_replay_system_ok(monkeypatch) -> None:
+    monkeypatch.setattr(system_agg, "_latency", lambda: {"status": sc.OK, "live_arm_status": sc.OK})
+    monkeypatch.setattr(system_agg, "_slow_tier", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_certification", lambda: {"status": sc.OK, "certification_status": "GREEN"})
+    monkeypatch.setattr(system_agg, "_databento", lambda: {"status": sc.OK})
+    monkeypatch.setattr(system_agg, "_capture", lambda: {"status": sc.OK, "known_gaps": []})
 
 
 def _point_options_zone_ok(monkeypatch, root: Path) -> Path:
@@ -281,7 +290,7 @@ def _write_active_run(root: Path, run_id: str) -> Path:
 
 
 def _allow_screening_validation(monkeypatch) -> None:
-    monkeypatch.setattr(pipeline_agg, "validate_screening_artifact", lambda _data: None)
+    monkeypatch.setattr(pipeline_agg, "validate_screening_artifact", lambda _data: [])
 
 
 def _robustness_with_dsr_cell(dsr_cell: dict, fee_cell: dict | None = None) -> dict:
@@ -384,6 +393,14 @@ def _screening_candidate_row(
         "dsr_or_not_run": {"status": "pass", "dsr_pass": True, "dsr_cdf": 0.96},
         "pbo_or_not_run": {"status": "pass", "pbo_pass": True, "pbo": 0.1, "maximum_pbo": 0.2},
         "cscv_count_or_not_run": {"status": "pass", "n_partitions": 8, "n_configs": 3},
+        "fee_stress_or_not_run": {"status": "pass"},
+        "slippage_stress_or_not_run": {"status": "pass"},
+        "latency_stress_or_not_run": {"status": "pass"},
+        "holm_bh_or_not_run": {"status": "pass"},
+        "null_battery_or_not_run": {"status": "pass"},
+        "planted_alpha_or_not_run": {"status": "pass"},
+        "adversarial_or_not_run": {"status": "pass"},
+        "parameter_perturbation_or_not_run": {"status": "pass"},
         "screening_status": "pass",
         "replay_eligibility_status": "eligible" if replay_eligible else "not_eligible",
         "rejection_reason_or_null": None if replay_eligible else (
@@ -462,6 +479,15 @@ def _write_screening_artifact(
         "rejected": [],
         "screening_artifact_hash": "",
     }
+    payload.update(
+        build_feature_plane_payload(
+            bar_construction_id=str(payload.get("bar_construction_id", "bars_test")),
+            feature_set_id=str(payload.get("feature_set_id", "features_test")),
+            feature_set_hash=str(payload.get("feature_set_hash", "features_hash")),
+            research_clock=str(payload.get("research_clock", "continuous_intraday")),
+            screening_scope=str(payload.get("screening_scope", "screen")),
+        )
+    )
     payload.update(overrides)
     payload["screening_artifact_hash"] = compute_screening_artifact_hash(payload)
     artifact.parent.mkdir(parents=True, exist_ok=True)
@@ -780,8 +806,9 @@ def test_latest_hbt_replay_summary_requires_matching_screening_hash_and_candidat
 
     fields = pipeline_agg._latest_replay_fields(screening_fields)
 
-    assert fields["replay_status"] == sc.STALE
-    assert "no_paired_replay_summary_for_screening_hash_and_candidate" in fields["replay_detail"]
+    assert fields["replay_status"] == sc.MISSING
+    assert fields["replay_artifact"] is None
+    assert "replay_detail" not in fields
 
 
 def test_latest_hbt_replay_summary_prefers_paired_over_newer_unpaired(monkeypatch, tmp_path):
@@ -1023,8 +1050,15 @@ def test_replay_blocks_without_feature_recipe_hash_equality(monkeypatch, tmp_pat
 
 def test_pipeline_view_meta_includes_vbt5_keys():
     source = (Path(__file__).resolve().parents[2] / "frontend" / "src" / "views" / "PipelineView.tsx").read_text(encoding="utf-8")
+    priority_keys = (
+        "vbt5_evidence_detail",
+        "screening_detail",
+        "validated_candidates",
+        "screening_promoted_count",
+    )
     for key in (
         "screening_status",
+        *priority_keys,
         "screening_artifact",
         "screening_artifact_hash",
         "replay_status",
@@ -1036,6 +1070,15 @@ def test_pipeline_view_meta_includes_vbt5_keys():
         "surface_formula_authority_status",
     ):
         assert f'"{key}"' in source
+    keys_block = source.split("const keys = [", 1)[1].split("];", 1)[0]
+    first_twelve = [
+        line.strip().strip('",')
+        for line in keys_block.splitlines()
+        if line.strip().startswith('"')
+    ][:12]
+    for key in priority_keys:
+        assert key in first_twelve
+        assert source.index(f'"{key}"') < source.index('"screening_artifact"')
     assert source.index('"replay_detail"') < source.index("slice(0, 12)")
     assert source.index('"replay_eligibility_status"') < source.index("slice(0, 12)")
 
@@ -2202,6 +2245,11 @@ def test_pipeline_smoke_universe_placeholders_do_not_mask_q001(monkeypatch, tmp_
     feature.write_text(json.dumps({"generated_at_utc": paths.now_iso(), "row_count": 1, "rejected_count": 0}), encoding="utf-8")
     stage_a.write_text(json.dumps({"units_run": 1, "units_errored": 0, "units_skipped": 0, "cells": [], "certification_stamp": {"status": "GREEN"}}), encoding="utf-8")
     survivors.write_text(json.dumps([{"hypothesis_id": 2}]), encoding="utf-8")
+    vbt_decl, vbt_units = _write_complete_vbt_tracking_fixture(
+        tmp_path,
+        "paid_run_q001_smoke_noise_guard",
+        write_screening=True,
+    )
     monkeypatch.setattr(paths, "REPO", tmp_path)
     monkeypatch.setattr(paths, "ACTIVE_RUN", tmp_path / "runtime" / "workbench" / "active_run.json")
     monkeypatch.setattr(paths, "CAPTURE_BASELINE", capture)
@@ -2212,7 +2260,10 @@ def test_pipeline_smoke_universe_placeholders_do_not_mask_q001(monkeypatch, tmp_
     monkeypatch.setattr(paths, "M6_RESULT", smoke)
     monkeypatch.setattr(paths, "M6_FULL_RESULT", full)
     monkeypatch.setattr(paths, "ALPHA_CME_SPEC", tmp_path / "missing.md")
+    monkeypatch.setattr(paths, "VBT_FULL_RUN_DECLARATION", vbt_decl)
+    monkeypatch.setattr(paths, "VBT_FULL_UNITS_JSONL", vbt_units)
     loaders._cache.clear()
+    _allow_screening_validation(monkeypatch)
     monkeypatch.setattr(pipeline_agg, "_latency_evidence", lambda **_: {"status": sc.OK, "live_readiness_status": sc.STALE})
     monkeypatch.setattr(
         pipeline_agg,
@@ -3354,6 +3405,123 @@ def test_vectorbt_screen_stage_complete_stale_screening_maps_stale(monkeypatch, 
     assert "tracking run_id=" in (stage.get("screening_detail") or "")
 
 
+def test_vectorbt_screen_stage_ok_when_replay_eligible_complete(monkeypatch, tmp_path):
+    run_id = "paid_run_eligible_ok"
+    decl, units = _write_complete_vbt_tracking_fixture(
+        tmp_path,
+        run_id,
+        write_screening=True,
+    )
+    _allow_screening_validation(monkeypatch)
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "VBT_FULL_RUN_DECLARATION", decl)
+    monkeypatch.setattr(paths, "VBT_FULL_UNITS_JSONL", units)
+
+    stage = pipeline_agg._vectorbt_screen_stage()
+
+    assert stage["tracking_state"] == "complete"
+    assert stage["status"] == sc.OK
+    assert stage["screening_status"] == "pass"
+
+
+def test_vectorbt_screen_stage_ok_when_legacy_missing_replay_eligibility_status(monkeypatch, tmp_path):
+    run_id = "paid_run_legacy_missing_replay_eligibility_ok"
+    decl, units = _write_complete_vbt_tracking_fixture(
+        tmp_path,
+        run_id,
+        write_screening=True,
+    )
+    artifact = tmp_path / "research_cards" / "pipeline_runs" / run_id / "screening_artifact.json"
+    payload = json.loads(artifact.read_text(encoding="utf-8"))
+    payload["promoted"][0].pop("replay_eligibility_status")
+    payload["screening_artifact_hash"] = compute_screening_artifact_hash(payload)
+    artifact.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "VBT_FULL_RUN_DECLARATION", decl)
+    monkeypatch.setattr(paths, "VBT_FULL_UNITS_JSONL", units)
+
+    stage = pipeline_agg._vectorbt_screen_stage()
+
+    assert stage["tracking_state"] == "complete"
+    assert stage["status"] == sc.OK
+    assert stage["screening_status"] == "pass"
+
+
+def test_vectorbt_screen_stage_stale_when_legacy_missing_replay_eligibility_has_bad_evidence(
+    monkeypatch,
+    tmp_path,
+):
+    run_id = "paid_run_legacy_missing_replay_eligibility_bad_evidence"
+    decl, units = _write_complete_vbt_tracking_fixture(
+        tmp_path,
+        run_id,
+        write_screening=True,
+    )
+    artifact = tmp_path / "research_cards" / "pipeline_runs" / run_id / "screening_artifact.json"
+    payload = json.loads(artifact.read_text(encoding="utf-8"))
+    payload["promoted"][0].pop("replay_eligibility_status")
+    payload["promoted"][0]["dsr_or_not_run"] = {"status": "pass"}
+    payload["screening_artifact_hash"] = compute_screening_artifact_hash(payload)
+    artifact.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "VBT_FULL_RUN_DECLARATION", decl)
+    monkeypatch.setattr(paths, "VBT_FULL_UNITS_JSONL", units)
+
+    stage = pipeline_agg._vectorbt_screen_stage()
+
+    assert stage["tracking_state"] == "complete"
+    assert stage["status"] == sc.STALE
+    assert stage["screening_status"] == sc.STALE
+    assert "missing candidate field: replay_eligibility_status" in (stage.get("screening_detail") or "")
+
+
+def test_vectorbt_screen_stage_stale_when_replay_not_eligible(monkeypatch, tmp_path):
+    run_id = "paid_run_not_eligible"
+    decl, units = _write_complete_vbt_tracking_fixture(tmp_path, run_id)
+    _write_screening_artifact(
+        tmp_path,
+        run_id,
+        "2026-06-19T13:00:00+00:00",
+        replay_eligible=False,
+        surface_defined=True,
+    )
+    _allow_screening_validation(monkeypatch)
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+    monkeypatch.setattr(paths, "VBT_FULL_RUN_DECLARATION", decl)
+    monkeypatch.setattr(paths, "VBT_FULL_UNITS_JSONL", units)
+
+    stage = pipeline_agg._vectorbt_screen_stage()
+
+    assert stage["tracking_state"] == "complete"
+    assert stage["status"] == sc.STALE
+    assert stage["screening_status"] == "pass"
+    assert "vbt_screen_passed_surface_formula_authority_missing" in (
+        stage.get("screening_detail") or stage.get("detail") or ""
+    )
+
+
+def test_latest_screening_fields_stale_when_validator_errors(monkeypatch, tmp_path):
+    run_id = "paid_run_validator_fail"
+    _write_screening_artifact(
+        tmp_path,
+        run_id,
+        "2026-06-19T13:00:00+00:00",
+        replay_eligible=True,
+        surface_defined=True,
+    )
+    monkeypatch.setattr(
+        pipeline_agg,
+        "validate_screening_artifact",
+        lambda _data: ["synthetic_validation_error"],
+    )
+    monkeypatch.setattr(paths, "REPO", tmp_path)
+
+    fields = pipeline_agg._latest_screening_fields(run_id=run_id)
+
+    assert fields["screening_status"] == sc.STALE
+    assert "synthetic_validation_error" in (fields.get("screening_detail") or "")
+
+
 def test_point_non_universe_pipeline_paths_isolates_vbt_constants(monkeypatch, tmp_path):
     _point_non_universe_pipeline_paths(monkeypatch, tmp_path)
 
@@ -3649,7 +3817,12 @@ def test_health_open():
     assert r.json()["status"] == "ok"
 
 
-def test_spa_fallback_for_client_routes():
+def test_spa_inline_fallback_for_client_routes_when_enabled(monkeypatch, tmp_path):
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    monkeypatch.setattr(cockpit_main, "_DIST_ROOT", dist.resolve())
+    monkeypatch.setattr(cockpit_main, "_INDEX", dist / "index.html")
+    monkeypatch.setattr(cockpit_main, "_ALLOW_INLINE_FALLBACK", True)
     client = TestClient(app)
     for route in ("/chat", "/models", "/lifecycle"):
         r = client.get(route)
@@ -3665,6 +3838,30 @@ def test_spa_fallback_for_client_routes():
     assert "text/html" not in chat.headers.get("content-type", "")
 
 
+def test_spa_missing_bundle_returns_503_by_default(monkeypatch, tmp_path):
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    monkeypatch.setattr(cockpit_main, "_DIST_ROOT", dist.resolve())
+    monkeypatch.setattr(cockpit_main, "_INDEX", dist / "index.html")
+    monkeypatch.setattr(cockpit_main, "_ALLOW_INLINE_FALLBACK", False)
+    client = TestClient(app)
+
+    r = client.get("/chat")
+
+    assert r.status_code == 503
+    assert '<div id="root">' not in r.text
+    assert "frontend bundle missing" in r.text
+
+
+def test_spa_catch_all_does_not_shadow_missing_api_routes():
+    client = TestClient(app)
+    r = client.get("/api/definitely_missing")
+    assert r.status_code == 404
+    assert "text/html" not in r.headers.get("content-type", "")
+    assert '<div id="root">' not in r.text
+    assert r.json()["detail"] == "Not Found"
+
+
 def test_spa_catch_all_blocks_path_traversal():
     # The SPA fallback must never serve a file outside dist. URL-encoded `../`
     # is NOT normalized by the client, so it reaches the handler verbatim — the
@@ -3678,12 +3875,14 @@ def test_spa_catch_all_blocks_path_traversal():
     ]
     for path in evil:
         r = client.get(path)
-        # Either a clean 404 (no dist) or the index.html SPA fallback — never
-        # the contents of a backend source / secrets file.
+        # Either a clean non-200 (no dist) or the index.html SPA fallback when
+        # explicitly enabled — never the contents of backend source / secrets.
         assert "Keyword retrieval over the Obsidian vault" not in r.text, path
         assert "FastAPI aggregation service" not in r.text, path
         if r.status_code == 200:
             assert "text/html" in r.headers.get("content-type", ""), path
+        else:
+            assert r.status_code in {404, 503}
 
 
 def test_rate_limit_ignores_xff_without_trusted_proxy(monkeypatch):
@@ -3759,17 +3958,46 @@ def test_control_rescreen_stage_a_command_refreshes_full_artifact():
     args = spec["command"]["args"]
 
     assert spec["host"] == "laptop"
+    assert spec["singleton"] is True
     assert spec["command"]["entry"].endswith("run_stage_a_screen.py")
     assert args == [
-        "--band", "6.255764",
         "--symbols", "MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0",
         "--out", "research_cards/stage_a_full",
         "--workers", "12",
     ]
+    assert "--band" not in args
     assert "--event-type" not in args
     assert "--max-units" not in args
     assert "--cells" not in args
     assert "--shard" not in args
+
+
+def test_control_rescreen_stage_a_uses_singleton_enqueue(monkeypatch):
+    from apps.cockpit.backend import auth
+    from lifecycle_orchestrator.src import job_runner
+
+    calls = {}
+
+    def fake_enqueue_singleton(model_id, route, command, *, host="laptop", depends_on=None):
+        calls.update({"model_id": model_id, "route": route, "command": command, "host": host})
+        return "rescreen_stage_a_cockpit_1"
+
+    def fake_enqueue(*args, **kwargs):
+        raise AssertionError("rescreen_stage_a must use enqueue_singleton")
+
+    monkeypatch.setattr(auth, "_LOOPBACK", {"testclient"})
+    monkeypatch.setattr(control, "_exec_enabled", lambda: False)
+    monkeypatch.setattr(control, "_audit", lambda *args, **kwargs: None)
+    monkeypatch.setattr(job_runner, "enqueue_singleton", fake_enqueue_singleton)
+    monkeypatch.setattr(job_runner, "enqueue", fake_enqueue)
+    client = TestClient(app)
+
+    r = client.post("/api/control/job", json={"name": "rescreen_stage_a", "confirm": True})
+
+    assert r.status_code == 200
+    assert calls["model_id"] == "rescreen_stage_a"
+    assert calls["host"] == "laptop"
+    assert "--band" not in calls["command"]["args"]
 
 
 def test_control_job_commands_omit_retired_cme_m6_sweep():
@@ -3868,6 +4096,7 @@ def test_lanes_registered_contains_cme_options():
 
 def test_lanes_options_defect_ledger_open_blocks_shadow_live_only(monkeypatch):
     _stub_q001_ok(monkeypatch)
+    _stub_research_replay_system_ok(monkeypatch)
     z = ZONES["system"]()
     defects = z.get("lanes", {}).get("cme_options_defects", {})
     assert defects.get("status") == "fail"
@@ -3882,6 +4111,7 @@ def test_lanes_missing_data_doctor_report_is_graceful(monkeypatch, tmp_path):
     """Pointing DATA_DOCTOR_REPORT at a nonexistent file -> cme_options_data.status==missing;
     system zone research/replay health remains green while the options card stays red."""
     _stub_q001_ok(monkeypatch)
+    _stub_research_replay_system_ok(monkeypatch)
     monkeypatch.setattr(paths, "DATA_DOCTOR_REPORT", tmp_path / "no_report.json")
     z = ZONES["system"]()
     lanes = z.get("lanes", {})
@@ -3894,6 +4124,7 @@ def test_lanes_missing_data_doctor_report_is_graceful(monkeypatch, tmp_path):
 
 def test_lanes_options_warn_is_not_ok(monkeypatch, tmp_path):
     _stub_q001_ok(monkeypatch)
+    _stub_research_replay_system_ok(monkeypatch)
     report_path = tmp_path / "data_doctor_report.json"
     report = {
         "run_utc": paths.now_iso(),

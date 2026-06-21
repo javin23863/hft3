@@ -5,7 +5,7 @@ Delegates to ReplaySession + HftBacktestSimulatedExchangeAdapter for execution p
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 from backtest_pipeline.src.hft_backtest_builder import LATENCY_BANDS_MS, QUEUE_MODELS, build_hftbacktest
 from backtest_pipeline.src.hypothesis_replay_strategy import CombinedHypothesisReplayStrategy
@@ -48,9 +48,29 @@ class ReplayRunner:
         use_combined_strategy: bool = True,
         max_steps: Optional[int] = None,
         run_id: str | None = None,
+        model_logic_callback: Optional[Callable] = None,
     ) -> Dict:
         raw_events = load_npz_events(self.data_path)
-        if use_combined_strategy:
+        certification_override = {}
+        if model_logic_callback is not None:
+            class _CallbackStrategy:
+                def on_step(self, ctx):
+                    if ctx.hbt_handle is None:
+                        raise RuntimeError(
+                            "legacy_model_logic_callback requires uncertified hbt handle access"
+                        )
+                    actions = model_logic_callback(ctx.hbt_handle)
+                    return [] if actions is None else actions
+
+            strategy = _CallbackStrategy()
+            certification_override = {
+                "certification_allowed": False,
+                "certification_status": "callback_mode_uncertified_no_lifecycle",
+                "certification_block_reason": (
+                    "legacy_model_logic_callback_bypasses_replay_adapter_lifecycle"
+                ),
+            }
+        elif use_combined_strategy:
             hyps = get_active_hypotheses()
             strategy = CombinedHypothesisReplayStrategy(
                 hyps,
@@ -74,6 +94,8 @@ class ReplayRunner:
             product=self.product,
             step_ns=step_ns,
             max_steps=max_steps,
+            certification_override=certification_override,
+            allow_uncertified_hbt_handle=model_logic_callback is not None,
         )
         return ReplaySession(cfg, strategy).run()
 

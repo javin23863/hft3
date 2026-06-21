@@ -195,7 +195,7 @@ git submodule update --init vendor/openfoundry vendor/alphageometry
 bash scripts/install_vbt_hbt_handoff_verify_deps.sh
 pip install 'vectorbt[rust]==1.0.0'
 export HFT3_NPZ_ROOT=/path/to/npz   # must match manifest
-export HFT3_MANIFEST_PATH=/path/to/manifest.json
+export HFT3_MANIFEST_PATH=/path/to/manifest.parquet
 ```
 
 ### D3 Execute (tmux)

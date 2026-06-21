@@ -40,6 +40,7 @@ from backtest_pipeline.src.vectorbt_adapter import (
     filter_candidates,
     persist_screening_artifact,
     validate_screening_artifact,
+    validate_screening_artifact_or_raise,
     validate_parameter_space_artifact,
     SCREENING_ARTIFACT_REQUIRED_FIELDS,
     SCREENING_CANDIDATE_REQUIRED_FIELDS,
@@ -58,6 +59,111 @@ def _mock_candidate(model_id: str = "HYP_5", threshold: float = 0.15) -> Candida
         thesis="Fade spread blowout after CPI",
         metadata={"source_model": model_id, "strategy_family": model_id, "symbol": "MES"},
     )
+
+
+@pytest.mark.parametrize(
+    ("model_id", "leaders"),
+    [
+        ("HYP_16", ("ES",)),
+        ("ES_MES_LEAD_LAG", ("ES",)),
+        ("HYP_17", ("NQ",)),
+        ("NQ_MNQ_LEAD_LAG", ("NQ",)),
+        ("HYP_18", ("ES", "NQ")),
+        ("ES_NQ_DIVERGENCE_SNAPBACK", ("ES", "NQ")),
+        ("HYP_19", ("ZN",)),
+        ("ZN_ZB_ES_NQ_MACRO_IMPULSE", ("ZN",)),
+    ],
+)
+def test_real_cross_asset_slug_only_candidates_require_leaders(model_id, leaders):
+    from backtest_pipeline.src.fs_v1_screen_path import (
+        cross_asset_required_leaders_for_model,
+        recipe_requires_cross_asset_leaders,
+    )
+    from backtest_pipeline.src.vectorbt_adapter import (
+        _candidate_cross_asset_required_leaders,
+        _candidate_requires_cross_asset_leaders,
+    )
+
+    candidate = _mock_candidate(model_id)
+
+    assert cross_asset_required_leaders_for_model(model_id) == leaders
+    assert recipe_requires_cross_asset_leaders(model_id=model_id)
+    assert _candidate_cross_asset_required_leaders(candidate) == leaders
+    assert _candidate_requires_cross_asset_leaders(candidate)
+
+
+def test_cross_asset_batch_override_does_not_reject_candidate_with_own_leader_context():
+    from types import SimpleNamespace
+
+    from backtest_pipeline.src.fs_v1_screen_path import (
+        FS_V1_BAR_CONSTRUCTION_ID,
+        fs_v1_feature_set_hash,
+        fs_v1_feature_set_id,
+    )
+    from backtest_pipeline.src.vectorbt_adapter import FilterResult, apply_promotion_gates
+
+    ts = np.arange(40, dtype=np.int64) * 1_000_000
+    leader_x = np.ones((len(ts), 41), dtype=np.float64)
+    fs_v1_ctx = SimpleNamespace(
+        symbol="MES.v.0",
+        missing_leader_symbols=(),
+        leader_legs=(("ES", SimpleNamespace(symbol="ES", ts=ts, X=leader_x)),),
+        has_vix=False,
+        vix_ts=None,
+        vix_X=None,
+        vix_cols=(),
+        store={"ts": ts},
+        feature_latency_ms=1.0,
+        manifest_hash="manifest_hash",
+        content_hash="content_hash",
+    )
+    promoted = PromotedCandidate(
+        candidate_id="hyp16_es_only_survivor",
+        hypothesis_id="HYP_16",
+        strategy_family="HYP_16",
+        asset_class="CME_FUTURES",
+        symbol="MES",
+        timeframe="1m",
+        param_values={"signal_threshold": 0.15},
+        vectorbt_run_id="run_mixed_batch",
+        vectorbt_results={
+            "oos_expectancy": 1.25,
+            "wf_consistency": 0.75,
+            "max_drawdown_pct": -10.0,
+            "turnover_mean_pct": 50.0,
+            "num_trades": 25,
+            "param_stability_score": 0.9,
+            "slippage_sensitivity": 0.1,
+        },
+        pass_reason="candidate_stats_passed",
+    )
+    result = FilterResult(
+        backend="vectorbt",
+        run_id="run_mixed_batch",
+        code_commit="abc123",
+        promoted=[promoted],
+        rejected=[],
+        bar_construction_id=FS_V1_BAR_CONSTRUCTION_ID,
+        feature_set_id=fs_v1_feature_set_id(),
+        feature_set_hash=fs_v1_feature_set_hash(),
+        data_manifest_hash="manifest_hash",
+        feature_plane_overrides={
+            "cross_asset_leader_fail_closed": True,
+            "missing_leader_symbols": ["NQ"],
+            "cross_asset_leader_fail_closed_reason": (
+                "cross_asset_leader_missing_fail_closed:NQ"
+            ),
+        },
+    )
+
+    gated = apply_promotion_gates(
+        result,
+        screening_scope="paid-compute",
+        fs_v1_ctx=fs_v1_ctx,
+    )
+
+    assert [p.candidate_id for p in gated.promoted] == ["hyp16_es_only_survivor"]
+    assert gated.rejected == []
 
 
 def _duplicate_base_candidates() -> list[CandidateModel]:
@@ -581,6 +687,7 @@ class TestFilterCandidates:
             event_id="CPI_2024_09_11_TIGHT",
             repo_root=tmp_path,
             data_loader=lambda *_: None,
+            prefer_fs_v1_path=False,
         )
         assert result.total_candidates >= 1
         assert result.backend == "no_ohlcv_data"
@@ -826,7 +933,7 @@ class TestFilterCandidates:
         assert artifact["rejected"][0]["rejection_reason_or_null"] == "RUN_BUDGET_REACHED"
         assert artifact["rejected"][0]["parameter_values"]["signal_threshold"] == 0.2
         assert artifact["rejected"][1]["parameter_values"]["signal_threshold"] == 0.3
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
 
     def test_negative_max_total_trials_is_rejected(self, tmp_path):
         with pytest.raises(ValueError, match="max_total_trials"):
@@ -896,7 +1003,7 @@ class TestFilterCandidates:
         assert artifact["rejected"][0]["rejection_reason_or_null"] == "RUN_BUDGET_REACHED"
         assert artifact["rejected"][0]["parameter_values"]["signal_threshold"] == 0.1
         assert artifact["stop_reasons"] == ["RUN_BUDGET_REACHED"]
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
 
     def test_validator_rejects_trials_run_exceeding_max_total_trials(self, tmp_path):
         artifact = filter_candidates(
@@ -911,7 +1018,7 @@ class TestFilterCandidates:
         artifact["screening_artifact_hash"] = compute_screening_artifact_hash(artifact)
 
         with pytest.raises(ScreeningArtifactError, match="trials_run_exceeds_max_total_trials"):
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
 
     @pytest.mark.parametrize("bad_budget", [-0.5, 1.5, "1.5"])
     def test_validator_rejects_fractional_max_total_trials(self, tmp_path, bad_budget):
@@ -927,7 +1034,7 @@ class TestFilterCandidates:
         artifact["screening_artifact_hash"] = compute_screening_artifact_hash(artifact)
 
         with pytest.raises(ScreeningArtifactError, match="trial_budget_fields_malformed"):
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
 
     def test_zero_max_trials_is_rejected(self, tmp_path):
         with pytest.raises(ValueError, match="max_trials"):
@@ -953,7 +1060,7 @@ class TestFilterCandidates:
         artifact["screening_artifact_hash"] = compute_screening_artifact_hash(artifact)
 
         with pytest.raises(ScreeningArtifactError, match="trial_budget_fields_malformed"):
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
 
     def test_run_budget_rejects_excess_model_count_before_data_lookup(self, tmp_path):
         cands = [_mock_candidate("HYP_5", 0.15), _mock_candidate("HYP_6", 0.15)]
@@ -975,7 +1082,7 @@ class TestFilterCandidates:
         assert set(artifact["candidate_ids"]) == {cand.candidate_id for cand in result.rejected}
         assert all(row["rejection_reason_or_null"] == "RUN_BUDGET_REACHED" for row in artifact["rejected"])
         assert artifact["rejected"][0]["budget_field"] == "max_models"
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
 
     def test_run_budget_reject_ids_include_symbol_idea_context(self, tmp_path):
         result = filter_candidates(
@@ -994,7 +1101,7 @@ class TestFilterCandidates:
         assert set(artifact["candidate_reasons"]) == set(artifact["candidate_ids"])
         assert {row["base_candidate_id"] for row in artifact["rejected"]} == {"same_base_candidate"}
         assert {row["base_candidate_metadata"]["symbol"] for row in artifact["rejected"]} == {"MES", "MNQ"}
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
 
     def test_run_budget_rejects_excess_symbol_count_before_data_lookup(self, tmp_path):
         mes = _mock_candidate("HYP_5", 0.15)
@@ -1014,7 +1121,7 @@ class TestFilterCandidates:
         assert result.backend == "run_budget_fail_closed"
         assert artifact["max_symbols"] == 1
         assert artifact["rejected"][0]["budget_field"] == "max_symbols"
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
 
     def test_run_budget_symbol_cap_requires_explicit_symbol_metadata(self, tmp_path):
         cand = _mock_candidate("HYP_5", 0.15)
@@ -1033,7 +1140,7 @@ class TestFilterCandidates:
         assert result.backend == "run_budget_fail_closed"
         assert artifact["rejected"][0]["budget_field"] == "max_symbols"
         assert artifact["rejected"][0]["missing_budget_dimension"] == "symbol"
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
 
     def test_run_budget_symbol_cap_rejects_strategy_param_only_symbol(self, tmp_path):
         cand = _mock_candidate("HYP_5", 0.15)
@@ -1052,7 +1159,7 @@ class TestFilterCandidates:
 
         assert artifact["rejected"][0]["budget_field"] == "max_symbols"
         assert artifact["rejected"][0]["missing_budget_dimension"] == "symbol"
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
 
     def test_run_budget_rejects_excess_feature_set_count_before_data_lookup(self, tmp_path):
         a = _mock_candidate("HYP_5", 0.15)
@@ -1073,7 +1180,7 @@ class TestFilterCandidates:
         assert result.backend == "run_budget_fail_closed"
         assert artifact["max_feature_sets"] == 1
         assert artifact["rejected"][0]["budget_field"] == "max_feature_sets"
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
 
     def test_run_budget_feature_set_cap_requires_explicit_feature_set_metadata(self, tmp_path):
         result = filter_candidates(
@@ -1089,7 +1196,7 @@ class TestFilterCandidates:
         assert result.backend == "run_budget_fail_closed"
         assert artifact["rejected"][0]["budget_field"] == "max_feature_sets"
         assert artifact["rejected"][0]["missing_budget_dimension"] == "feature_set_id"
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
 
     def test_run_budget_feature_set_cap_rejects_strategy_param_only_feature_set(self, tmp_path):
         cand = _mock_candidate("HYP_5", 0.15)
@@ -1107,7 +1214,7 @@ class TestFilterCandidates:
 
         assert artifact["rejected"][0]["budget_field"] == "max_feature_sets"
         assert artifact["rejected"][0]["missing_budget_dimension"] == "feature_set_id"
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
 
     def test_wall_clock_budget_stops_before_first_trial(self, monkeypatch, tmp_path):
         import sys
@@ -1145,7 +1252,7 @@ class TestFilterCandidates:
         assert artifact["max_wall_clock_seconds"] == 0
         assert artifact["stop_reasons"] == ["WALL_CLOCK_BUDGET_REACHED"]
         assert artifact["rejected"][0]["rejection_reason_or_null"] == "WALL_CLOCK_BUDGET_REACHED"
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
 
     def test_memory_budget_request_fails_closed_until_monitor_exists(self, tmp_path):
         result = filter_candidates(
@@ -1162,7 +1269,7 @@ class TestFilterCandidates:
         assert artifact["max_peak_memory_mb_or_null"] == 1
         assert artifact["stop_reasons"] == ["MEMORY_BUDGET_REACHED"]
         assert artifact["rejected"][0]["memory_monitor_status"] == "unsupported_fail_closed"
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
 
     def test_validator_rejects_missing_abort_on_budget_exhaustion(self, tmp_path):
         artifact = filter_candidates(
@@ -1176,7 +1283,7 @@ class TestFilterCandidates:
         artifact["screening_artifact_hash"] = compute_screening_artifact_hash(artifact)
 
         with pytest.raises(ScreeningArtifactError, match="trial_budget_fields_malformed"):
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
 
     def test_screen_scope_requires_rust_engine(self, monkeypatch, tmp_path):
         from backtest_pipeline.src import vectorbt_adapter
@@ -1230,7 +1337,7 @@ class TestFilterCandidates:
         )
 
         artifact = result.to_dict()
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
         assert result.trials_run == 0
         assert not result.promoted
         assert artifact["vectorbt_engine"] == "numba"
@@ -1260,7 +1367,7 @@ class TestFilterCandidates:
         )
 
         artifact = result.to_dict()
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
         assert len(artifact["rejected_ids"]) == 2
         assert len(set(artifact["rejected_ids"])) == 2
         assert set(artifact["candidate_reasons"]) == set(artifact["candidate_ids"])
@@ -1284,7 +1391,7 @@ class TestFilterCandidates:
         )
 
         artifact = result.to_dict()
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
         assert len(artifact["rejected_ids"]) == 2
         assert len(set(artifact["rejected_ids"])) == 2
         assert set(artifact["candidate_reasons"]) == set(artifact["candidate_ids"])
@@ -1310,7 +1417,7 @@ class TestFilterCandidates:
         )
 
         artifact = result.to_dict()
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
 
         assert result.backend == "vectorbt_rust_unavailable"
         assert artifact["stop_reasons"] == ["rust_engine_required_unavailable_fail_closed"]
@@ -1332,7 +1439,7 @@ class TestFilterCandidates:
             screening_scope="refine",
         )
         artifact = result.to_dict()
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
 
         assert result.backend == "vectorbt_rust_unavailable"
         assert artifact["screening_scope"] == "refine"
@@ -1356,7 +1463,7 @@ class TestFilterCandidates:
             screening_scope="screen",
         )
         artifact = result.to_dict()
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
 
         assert artifact["vectorbt_engine"] == "unavailable"
         assert artifact["engine_parity_status"] == "rust_engine_required_unavailable_fail_closed"
@@ -1563,7 +1670,7 @@ class TestFilterCandidates:
         )
 
         artifact = result.to_dict()
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
         rejected = artifact["rejected"][0]
 
         assert captured["entries"].tolist() == [False, True, False, False]
@@ -1605,6 +1712,19 @@ class TestFilterCandidates:
         assert not result.promoted
         assert not (tmp_path / "research_cards" / "promotion").exists()
 
+
+def test_json_primitive_screening_payload_serializes_nat():
+    import pandas as pd
+
+    from backtest_pipeline.src.vectorbt_adapter import _json_primitive_screening_payload
+
+    payload = {"end_ts": pd.NaT, "ok": 1}
+    cleaned = _json_primitive_screening_payload(payload)
+    assert cleaned == {"end_ts": None, "ok": 1}
+    json.dumps(cleaned)
+
+
+class TestFilterCandidatesScreeningArtifactPersistence:
     def test_screening_artifact_hash_ignores_hash_and_timestamps(self, tmp_path):
         cands = [_mock_candidate("HYP_5", 0.15)]
         result = filter_candidates(
@@ -1657,7 +1777,7 @@ class TestFilterCandidates:
         assert loaded["rejected"][0]["out_of_sample_metrics"]["np_scalar"] == 1.25
         assert loaded["rejected"][0]["walk_forward_metrics"]["np_array"] == [1, 2]
         assert loaded["screening_artifact_hash"] == compute_screening_artifact_hash(loaded)
-        validate_screening_artifact(loaded)
+        validate_screening_artifact_or_raise(loaded)
 
     def test_validator_rejects_missing_and_stale_promoted_reasons(self, monkeypatch, tmp_path):
         artifact = _promoted_screening_artifact(monkeypatch, tmp_path)
@@ -1666,20 +1786,20 @@ class TestFilterCandidates:
         missing["promoted_reasons"] = {}
         missing["screening_artifact_hash"] = compute_screening_artifact_hash(missing)
         with pytest.raises(ScreeningArtifactError, match="promoted_reasons"):
-            validate_screening_artifact(missing)
+            validate_screening_artifact_or_raise(missing)
 
         stale = copy.deepcopy(artifact)
         stale["promoted_reasons"]["stale_candidate"] = "old_reason"
         stale["screening_artifact_hash"] = compute_screening_artifact_hash(stale)
         with pytest.raises(ScreeningArtifactError, match="promoted_reasons"):
-            validate_screening_artifact(stale)
+            validate_screening_artifact_or_raise(stale)
 
         mismatched = copy.deepcopy(artifact)
         promoted_id = mismatched["promoted_ids"][0]
         mismatched["promoted_reasons"][promoted_id] = "wrong_reason"
         mismatched["screening_artifact_hash"] = compute_screening_artifact_hash(mismatched)
         with pytest.raises(ScreeningArtifactError, match="promoted_reasons"):
-            validate_screening_artifact(mismatched)
+            validate_screening_artifact_or_raise(mismatched)
 
     def test_validator_rejects_invalid_research_clock(self, monkeypatch, tmp_path):
         artifact = _promoted_screening_artifact(monkeypatch, tmp_path)
@@ -1688,7 +1808,7 @@ class TestFilterCandidates:
         bad["promoted"][0]["research_clock"] = "bogus_lane"
         bad["screening_artifact_hash"] = compute_screening_artifact_hash(bad)
         with pytest.raises(ScreeningArtifactError, match="research_clock_invalid"):
-            validate_screening_artifact(bad)
+            validate_screening_artifact_or_raise(bad)
 
     def test_validator_rejects_missing_and_stale_rejected_reasons(self, tmp_path):
         artifact = filter_candidates(
@@ -1709,20 +1829,20 @@ class TestFilterCandidates:
         missing["rejected_reasons"] = {}
         missing["screening_artifact_hash"] = compute_screening_artifact_hash(missing)
         with pytest.raises(ScreeningArtifactError, match="rejected_reasons"):
-            validate_screening_artifact(missing)
+            validate_screening_artifact_or_raise(missing)
 
         stale = copy.deepcopy(artifact)
         stale["rejected_reasons"]["stale_candidate"] = "old_reason"
         stale["screening_artifact_hash"] = compute_screening_artifact_hash(stale)
         with pytest.raises(ScreeningArtifactError, match="rejected_reasons"):
-            validate_screening_artifact(stale)
+            validate_screening_artifact_or_raise(stale)
 
         mismatched = copy.deepcopy(artifact)
         rejected_id = mismatched["rejected_ids"][0]
         mismatched["rejected_reasons"][rejected_id] = "wrong_reason"
         mismatched["screening_artifact_hash"] = compute_screening_artifact_hash(mismatched)
         with pytest.raises(ScreeningArtifactError, match="rejected_reasons"):
-            validate_screening_artifact(mismatched)
+            validate_screening_artifact_or_raise(mismatched)
 
     def test_validator_rejects_duplicate_emitted_candidate_ids(self, tmp_path):
         artifact = filter_candidates(
@@ -1746,7 +1866,7 @@ class TestFilterCandidates:
         artifact["screening_artifact_hash"] = compute_screening_artifact_hash(artifact)
 
         with pytest.raises(ScreeningArtifactError, match="rejected_ids_not_unique"):
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
 
     def test_rust_unavailable_pilot_label_when_vectorbt_available(self, monkeypatch, tmp_path):
         from backtest_pipeline.src import vectorbt_adapter
@@ -1804,7 +1924,7 @@ class TestFilterCandidates:
         artifact["screening_artifact_hash"] = compute_screening_artifact_hash(artifact)
 
         with pytest.raises(ScreeningArtifactError, match="rust_required_scope"):
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
 
     def test_validator_requires_screening_scope(self, tmp_path):
         artifact = filter_candidates(
@@ -1824,7 +1944,7 @@ class TestFilterCandidates:
         artifact["screening_artifact_hash"] = compute_screening_artifact_hash(artifact)
 
         with pytest.raises(ScreeningArtifactError, match="screening_scope"):
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
 
     @pytest.mark.parametrize("field_name", SCREENING_ARTIFACT_REQUIRED_FIELDS)
     def test_validator_rejects_each_missing_required_top_level_field(self, tmp_path, field_name):
@@ -1834,7 +1954,7 @@ class TestFilterCandidates:
             artifact["screening_artifact_hash"] = compute_screening_artifact_hash(artifact)
 
         with pytest.raises(ScreeningArtifactError, match=f"missing required field: {field_name}"):
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
 
     @pytest.mark.parametrize("field_name", SCREENING_CANDIDATE_REQUIRED_FIELDS)
     def test_validator_rejects_each_missing_required_candidate_field(self, tmp_path, field_name):
@@ -1843,7 +1963,7 @@ class TestFilterCandidates:
         artifact["screening_artifact_hash"] = compute_screening_artifact_hash(artifact)
 
         with pytest.raises(ScreeningArtifactError, match=f"missing candidate field: {field_name}"):
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
 
     def test_rejected_rows_emit_complete_fail_closed_handoff_schema(self, tmp_path):
         result = filter_candidates(
@@ -1861,7 +1981,7 @@ class TestFilterCandidates:
         )
 
         artifact = result.to_dict()
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
         rejected = artifact["rejected"][0]
 
         for field_name in SCREENING_CANDIDATE_REQUIRED_FIELDS:
@@ -1928,7 +2048,7 @@ class TestFilterCandidates:
         )
 
         artifact = result.to_dict()
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
         promoted = artifact["promoted"][0]
 
         for field_name in SCREENING_CANDIDATE_REQUIRED_FIELDS:
@@ -2003,17 +2123,18 @@ class TestFilterCandidates:
         )
 
         artifact = result.to_dict()
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
         assert artifact["promoted_ids"]
         promoted = artifact["promoted"][0]
         vectorbt_results = promoted["vectorbt_results"]
         for field_name in (
-            "wf_consistency",
             "turnover_mean_pct",
             "param_stability_score",
             "slippage_sensitivity",
         ):
             assert field_name not in vectorbt_results
+        assert "wf_consistency" in vectorbt_results
+        assert "oos_expectancy" in vectorbt_results
         assert vectorbt_results["gate_metric_non_stats_status"] == {
             "wf_consistency": "not_measured_not_used_by_vbt2_pilot_gate",
             "turnover_mean_pct": "not_measured_not_used_by_vbt2_pilot_gate",
@@ -2021,9 +2142,9 @@ class TestFilterCandidates:
             "slippage_sensitivity": "not_measured_not_used_by_vbt2_pilot_gate",
         }
         assert vectorbt_results["pilot_gate_evaluation"] == {
-            "scope": "vbt2_pilot_official_vectorbt_stats_only",
+            "scope": "official_vectorbt_stats_with_walk_forward_oos",
             "used_fields": {
-                "oos_expectancy": "Expectancy",
+                "oos_expectancy": "auxiliary_numpy_walk_forward",
                 "max_drawdown_pct": "Max Drawdown [%]",
                 "num_trades": "Total Trades",
             },
@@ -2036,7 +2157,7 @@ class TestFilterCandidates:
             "failure_semantics": "screening_only_not_replay_or_robustness_eligible",
             "failures": [],
         }
-        assert promoted["walk_forward_metrics"]["wf_consistency"] is None
+        assert promoted["walk_forward_metrics"]["wf_consistency"] is not None
         assert promoted["turnover"]["status"] == "not_run"
 
     def test_total_return_is_optional_for_vbt2_pilot_gate(self, monkeypatch, tmp_path):
@@ -2082,7 +2203,7 @@ class TestFilterCandidates:
         )
 
         artifact = result.to_dict()
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
         assert artifact["promoted_ids"]
         promoted = artifact["promoted"][0]
         assert promoted["vectorbt_results"]["pilot_gate_evaluation"]["failures"] == []
@@ -2136,7 +2257,7 @@ class TestFilterCandidates:
         )
 
         artifact = result.to_dict()
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
         assert artifact["promoted"] == []
         rejected = artifact["rejected"][0]
         assert rejected["rejection_reason_or_null"] == "vectorbt_stats_missing_gate_fields"
@@ -2206,7 +2327,7 @@ class TestFilterCandidates:
         )
 
         artifact = result.to_dict()
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
         assert len(artifact["promoted_ids"]) == 2
         assert len(set(artifact["promoted_ids"])) == 2
         assert set(artifact["candidate_reasons"]) == set(artifact["candidate_ids"])
@@ -2266,7 +2387,7 @@ class TestFilterCandidates:
         )
 
         artifact = result.to_dict()
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
         promoted = artifact["promoted"][0]
         assert promoted["replay_eligibility_status"] == "not_eligible"
         assert promoted["rejection_reason_or_null"].startswith(
@@ -2296,7 +2417,7 @@ class TestFilterCandidates:
             ScreeningArtifactError,
             match="surface_stability_plateau_score_formula_missing",
         ):
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
 
     def test_validator_rejects_defined_surface_missing_required_evidence(self, monkeypatch, tmp_path):
         artifact = _promoted_screening_artifact(monkeypatch, tmp_path)
@@ -2309,7 +2430,7 @@ class TestFilterCandidates:
             ScreeningArtifactError,
             match="surface_stability_formula_authority_missing",
         ):
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
 
     def test_validator_rejects_replay_eligible_surface_formula_missing(self, monkeypatch, tmp_path):
         artifact = _promoted_screening_artifact(monkeypatch, tmp_path)
@@ -2332,7 +2453,7 @@ class TestFilterCandidates:
             ScreeningArtifactError,
             match="surface_stability_formula_authority_missing",
         ):
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
 
     def test_validator_rejects_replay_eligible_failed_robustness_map(self, monkeypatch, tmp_path):
         artifact = _promoted_screening_artifact(monkeypatch, tmp_path)
@@ -2347,7 +2468,7 @@ class TestFilterCandidates:
             ScreeningArtifactError,
             match="dsr_or_not_run_not_pass",
         ):
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
 
     def test_validator_rejects_replay_eligible_empty_pass_robustness_map(self, monkeypatch, tmp_path):
         artifact = _promoted_screening_artifact(monkeypatch, tmp_path)
@@ -2362,7 +2483,7 @@ class TestFilterCandidates:
             ScreeningArtifactError,
             match="dsr_or_not_run_missing:dsr_pass",
         ):
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
 
     def test_validator_rejects_replay_eligible_non_positive_bootstrap_lower(self, monkeypatch, tmp_path):
         artifact = _promoted_screening_artifact(monkeypatch, tmp_path)
@@ -2377,7 +2498,7 @@ class TestFilterCandidates:
             ScreeningArtifactError,
             match="bootstrap_ci_or_not_run_lower_bound_not_positive",
         ):
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
 
     def test_persist_promotions_does_not_write_replay_ineligible_vectorbt_pilot(self, monkeypatch, tmp_path):
         import sys
@@ -2428,7 +2549,7 @@ class TestFilterCandidates:
         )
 
         artifact = result.to_dict()
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
         promoted = artifact["promoted"][0]
 
         assert promoted["replay_eligibility_status"] == "not_eligible"
@@ -2487,7 +2608,7 @@ class TestFilterCandidates:
         artifact["screening_artifact_hash"] = compute_screening_artifact_hash(artifact)
 
         with pytest.raises(ScreeningArtifactError, match="wfc_status_not_pass"):
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
 
     def test_validator_rejects_candidate_parameter_hash_mismatch(self, tmp_path):
         artifact = filter_candidates(
@@ -2507,7 +2628,7 @@ class TestFilterCandidates:
         artifact["screening_artifact_hash"] = compute_screening_artifact_hash(artifact)
 
         with pytest.raises(ScreeningArtifactError, match="parameter_values_hash_mismatch"):
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
 
     def test_promotion_gate_failed_row_preserves_tested_parameters(self, monkeypatch, tmp_path):
         import sys
@@ -2551,7 +2672,7 @@ class TestFilterCandidates:
         )
 
         artifact = result.to_dict()
-        validate_screening_artifact(artifact)
+        validate_screening_artifact_or_raise(artifact)
         rejected = artifact["rejected"][0]
 
         assert rejected["rejection_reason_or_null"] == "promotion_gate_failed"
@@ -2579,3 +2700,77 @@ class TestFilterCandidates:
         assert result.rejected[0].reject_reason == "no_ohlcv_data"
         assert result.rejected[0].metric_values["operator_escape_ignored"] is True
         assert not (tmp_path / "research_cards" / "promotion").exists()
+
+
+class TestFilterCandidatesDefaultDataLoaderSymbol:
+    def test_default_loader_receives_screen_symbol_when_fs_v1_unavailable(
+        self, monkeypatch, tmp_path,
+    ):
+        from backtest_pipeline.src import vectorbt_adapter
+        from backtest_pipeline.src.vectorbt_adapter import FilterResult
+
+        captured: dict[str, object] = {}
+        close = 100.0 + np.arange(40, dtype=float) * 0.1
+        ohlcv = np.column_stack([close, close, close, close, np.ones_like(close)])
+
+        def spy_default(event_id, repo_root, symbol=None):
+            captured["symbol"] = symbol
+            captured["event_id"] = event_id
+            return ohlcv
+
+        monkeypatch.setattr(vectorbt_adapter, "_default_data_loader", spy_default)
+        monkeypatch.setattr(
+            vectorbt_adapter,
+            "_run_vectorbt_simulation",
+            lambda ohlcv_arg, *args, **kwargs: FilterResult(
+                backend="vectorbt",
+                run_id="symbol_scope_test",
+                screening_scope="pilot",
+            ),
+        )
+
+        filter_candidates(
+            candidates=[_mock_candidate()],
+            parsed=None,
+            event_id="EVT_SYMBOL_SCOPE",
+            repo_root=tmp_path,
+            screening_scope="pilot",
+            prefer_fs_v1_path=False,
+        )
+
+        assert captured.get("symbol") == "MES"
+        assert captured.get("event_id") == "EVT_SYMBOL_SCOPE"
+
+    def test_custom_two_arg_loader_not_passed_symbol(self, monkeypatch, tmp_path):
+        from backtest_pipeline.src import vectorbt_adapter
+        from backtest_pipeline.src.vectorbt_adapter import FilterResult
+
+        calls: list[tuple[str, Path]] = []
+        close = 100.0 + np.arange(40, dtype=float) * 0.1
+        ohlcv = np.column_stack([close, close, close, close, np.ones_like(close)])
+
+        def custom_loader(event_id, repo_root):
+            calls.append((event_id, repo_root))
+            return ohlcv
+
+        monkeypatch.setattr(
+            vectorbt_adapter,
+            "_run_vectorbt_simulation",
+            lambda ohlcv_arg, *args, **kwargs: FilterResult(
+                backend="vectorbt",
+                run_id="custom_loader_test",
+                screening_scope="pilot",
+            ),
+        )
+
+        filter_candidates(
+            candidates=[_mock_candidate()],
+            parsed=None,
+            event_id="EVT_CUSTOM_LOADER",
+            repo_root=tmp_path,
+            screening_scope="pilot",
+            data_loader=custom_loader,
+            prefer_fs_v1_path=False,
+        )
+
+        assert calls == [("EVT_CUSTOM_LOADER", tmp_path)]

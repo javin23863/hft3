@@ -16,13 +16,53 @@ from backtest_pipeline.src.paid_screen_profiling import (
     write_aggregate_screening_artifact,
 )
 from backtest_pipeline.src.paid_screen_types import UnitScreeningResult
-from backtest_pipeline.src.vectorbt_adapter import validate_screening_artifact
+from backtest_pipeline.src.promotion_gate import RejectedCandidate
+from backtest_pipeline.src.vectorbt_adapter import (
+    FilterResult,
+    compute_screening_artifact_hash,
+    validate_screening_artifact,
+)
 
 
 _REPO = Path(__file__).resolve().parents[1]
 _VAST_SCRIPT = _REPO / "scripts" / "run_vbt_paid_screen_vast_full.sh"
 _SCRIPTS = _REPO / "scripts"
-_VALID_UNIT_ARTIFACT = _REPO / "research_cards" / "pipeline_runs" / "paid_batch_ok" / "screening_artifact.json"
+
+
+def _valid_unit_artifact_payload(*, unit: "PaidScreenUnit") -> dict:
+    candidate_id = f"{unit.model_id}|{unit.symbol}|{unit.event_id}"
+    rejected = RejectedCandidate(
+        candidate_id="test_reject_row",
+        hypothesis_id=unit.model_id,
+        reject_reason="vectorbt_unavailable_fail_closed",
+        metric_values={
+            "symbol": unit.symbol,
+            "base_candidate_metadata": {"event_id": unit.event_id},
+            "base_candidate_id": f"{candidate_id}|{unit.hyp_id}",
+        },
+    )
+    payload = FilterResult(
+        backend="vectorbt_unavailable",
+        run_id="paid_batch_ok",
+        screening_scope="pilot",
+        code_commit="abc123",
+        parameter_space_id="ps_test",
+        parameter_space_hash="ps_hash_test",
+        max_trials=1,
+        trials_run=0,
+        max_total_trials=1,
+        max_models=1,
+        max_symbols=1,
+        max_feature_sets=1,
+        rejected=[rejected],
+    ).to_dict()
+    payload.update(
+        events_csv_hash="not_applicable_for_vectorbt_pilot",
+        lake_manifest_hash="pilot_requires_lake_manifest_before_screen",
+        research_split=unit.research_split,
+    )
+    payload["screening_artifact_hash"] = compute_screening_artifact_hash(payload)
+    return payload
 
 
 def _copy_valid_unit_artifact(dest: Path, *, repo_root: Path, unit: "PaidScreenUnit") -> None:
@@ -30,7 +70,7 @@ def _copy_valid_unit_artifact(dest: Path, *, repo_root: Path, unit: "PaidScreenU
     from backtest_pipeline.src.vectorbt_adapter import compute_screening_artifact_hash
 
     dest.parent.mkdir(parents=True, exist_ok=True)
-    payload = json.loads(_VALID_UNIT_ARTIFACT.read_text(encoding="utf-8"))
+    payload = _valid_unit_artifact_payload(unit=unit)
     payload.update(resolve_resume_provenance(str(repo_root), unit))
     payload["screening_artifact_hash"] = compute_screening_artifact_hash(payload)
     dest.write_text(json.dumps(payload), encoding="utf-8")
@@ -219,7 +259,7 @@ class TestVastLauncherHashWiring:
         repo.mkdir()
         events = repo / "events.csv"
         events.write_text("event_id\nE1\n", encoding="utf-8")
-        manifest = repo / "data" / "manifest.json"
+        manifest = repo / "data" / "manifest.parquet"
         manifest.parent.mkdir(parents=True)
         manifest.write_bytes(b"lake-manifest-bytes")
         decl = repo / "decl.json"
@@ -258,6 +298,17 @@ class TestVastLauncherHashWiring:
                 decl,
                 manifest_path="",
             )
+
+    def test_declaration_head_and_hash_guards_before_launch(self):
+        text = _VAST_SCRIPT.read_text(encoding="utf-8")
+        assert "DECL_GIT_HEAD" in text
+        assert "git rev-parse HEAD" in text
+        assert "Declaration git_head=" in text
+        assert "DECL_EVENTS_HASH" in text
+        assert "DECL_LAKE_HASH" in text
+        assert "Declaration hashes OK" in text
+        assert text.index("Declaration HEAD OK") < text.index("Workers from declaration")
+        assert text.index("Declaration hashes OK") < text.index("PAID_ARGS=(")
 
 
 class TestVastLauncherRunIdDerivation:
@@ -351,7 +402,7 @@ class TestV2ManifestRelpaths:
         )
         assert aggregate_path is not None
         payload = json.loads(Path(aggregate_path).read_text(encoding="utf-8"))
-        validate_screening_artifact(payload)
+        assert validate_screening_artifact(payload) == []
         assert payload["run_id"] == run_id
 
         manifest = {

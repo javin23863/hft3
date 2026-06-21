@@ -158,10 +158,10 @@ def _has_valid_artifact(
     if not dest.is_file():
         return False
     try:
-        from backtest_pipeline.src.vectorbt_adapter import validate_screening_artifact
+        from backtest_pipeline.src.vectorbt_adapter import validate_screening_artifact_or_raise
 
         payload = json.loads(dest.read_text(encoding="utf-8"))
-        validate_screening_artifact(payload)
+        validate_screening_artifact_or_raise(payload)
         provenance = resolve_resume_provenance(
             str(repo_root), unit, git_commit=git_commit
         )
@@ -244,10 +244,15 @@ def _resolve_run_hashes(
         events_csv=events_csv,
         repo_root=repo_root,
     )
-    lake_manifest_hash = resolve_lake_manifest_hash(
-        explicit_hash=args.lake_manifest_hash,
-        repo_root=repo_root,
-    )
+    try:
+        lake_manifest_hash = resolve_lake_manifest_hash(
+            explicit_hash=args.lake_manifest_hash,
+            repo_root=repo_root,
+        )
+    except (FileNotFoundError, ValueError):
+        if not getattr(args, "dry_run", False):
+            raise
+        lake_manifest_hash = "dry_run_lake_manifest_not_required"
     return events_csv_hash, lake_manifest_hash
 
 
@@ -680,6 +685,22 @@ def _drain_workers(
             )
         except queue.Empty:
             if expected_batches > 0 and workers and _workers_all_dead(workers):
+                while True:
+                    try:
+                        batch_id, results, profiler_summary = result_queue.get_nowait()
+                    except queue.Empty:
+                        break
+                    collected.append((batch_id, results, profiler_summary))
+                    ok_units = sum(1 for r in results if r.status == "OK")
+                    failed_units = sum(1 for r in results if r.status == "ERROR")
+                    print(
+                        f"[drain] batch={batch_id} units={len(results)} "
+                        f"ok={ok_units} failed={failed_units} "
+                        f"collected={len(collected)}/{expected_batches} (post-exit drain)",
+                        flush=True,
+                    )
+                    if on_batch_collected is not None:
+                        on_batch_collected(batch_id, results, profiler_summary)
                 stop_reason = _worker_exit_stop_reason(workers)
             continue
         collected.append((batch_id, results, profiler_summary))

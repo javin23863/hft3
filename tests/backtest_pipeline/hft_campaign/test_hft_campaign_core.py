@@ -11,6 +11,7 @@ from apps.cockpit.backend.tests.test_cockpit import (
     _screening_candidate_row,
     _write_screening_artifact,
 )
+from backtest_pipeline.src.hft_campaign import validation as campaign_validation
 from backtest_pipeline.src.hft_campaign.accelerated import annotate_accelerated_replay
 from backtest_pipeline.src.hft_campaign.artifacts import (
     commit_scenario_success,
@@ -205,6 +206,75 @@ def test_manifest_requires_explicit_candidate_selection(tmp_path: Path, monkeypa
     scenarios, reasons = generate_scenario_manifest(cfg)
     assert scenarios == []
     assert any("candidate_selection_not_explicit" in r for r in reasons)
+
+
+def test_stage0_passes_explicit_repo_root_to_latency_validation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "explicit_repo_root"
+    latency_path, queue_path = _write_latency_queue(tmp_path)
+    prepared_data_path = tmp_path / "prepared" / "events.npz"
+    prepared_data_path.parent.mkdir()
+    prepared_data_path.write_bytes(b"placeholder")
+    captured: dict[str, Path | None] = {}
+
+    monkeypatch.setattr(
+        campaign_validation,
+        "load_screening_artifact",
+        lambda _path: (
+            {"promoted": [{"candidate_id": "c1", "replay_eligibility_status": "eligible"}], "promoted_ids": ["c1"]},
+            [],
+            False,
+        ),
+    )
+    monkeypatch.setattr(campaign_validation, "validate_screening_artifact", lambda _screening: [])
+    monkeypatch.setattr(campaign_validation, "validate_screening_feature_plane", lambda _screening: [])
+    monkeypatch.setattr(campaign_validation, "validate_candidate_replay_eligibility", lambda _row: [])
+    monkeypatch.setattr(campaign_validation, "validate_feature_recipe_hash_handoff", lambda **_kwargs: [])
+    monkeypatch.setattr(campaign_validation, "validate_feature_plane_status", lambda _status: [])
+    monkeypatch.setattr(campaign_validation, "load_vault_gate_receipt", lambda _root: ({}, []))
+    monkeypatch.setattr(campaign_validation, "validate_prepared_data_dir", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(campaign_validation, "validate_hftbacktest_data_path", lambda _path: {"status": "pass"})
+    monkeypatch.setattr(campaign_validation, "validate_hftbacktest_fill_queue_model", lambda _model: [])
+    monkeypatch.setattr(campaign_validation, "build_campaign_source_lock", lambda _root: ({}, []))
+
+    def capture_latency_repo_root(_model: dict, *, repo_root: Path | None = None) -> list[str]:
+        captured["repo_root"] = repo_root
+        return []
+
+    monkeypatch.setattr(campaign_validation, "validate_hftbacktest_latency_model", capture_latency_repo_root)
+
+    result = campaign_validation.validate_stage0_scenario(
+        HftReplayScenario(
+            scenario_id="s1",
+            upstream_screening_artifact=tmp_path / "screening.json",
+            upstream_screening_artifact_hash="",
+            candidate_id="c1",
+            model_id="HYP_5",
+            symbol="MES.v.0",
+            event_id="E1",
+            event_type="screen",
+            prepared_data_path=prepared_data_path,
+            prepared_data_hash="",
+            source_data_hash="sd1",
+            feature_set_id="f1",
+            feature_set_hash="fh1",
+            research_clock="continuous_intraday",
+            latency_model_path=latency_path,
+            latency_model_hash="",
+            fill_queue_model_path=queue_path,
+            fill_queue_model_hash="",
+            fee_model_id="fee1",
+            split_scheme_id="split1",
+            replay_mode="baseline",
+            seed=0,
+        ),
+        repo_root=repo_root,
+    )
+
+    assert result.ok, result.reasons
+    assert captured["repo_root"] == repo_root
 
 
 def _write_latency_queue(tmp_path: Path) -> tuple[Path, Path]:

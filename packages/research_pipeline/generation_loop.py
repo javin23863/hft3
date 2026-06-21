@@ -67,6 +67,11 @@ PersistFn = Callable[..., Path]
 RobustnessFn = Callable[..., Any]
 HftFn = Callable[..., Any]
 
+_PRODUCTION_HFT_CERTIFICATION_STATUS_STRINGS = frozenset(
+    {"scheduled_event_replay_not_full_feature_plane"}
+)
+_DECLARED_HFT_CERTIFICATION_STATUS_STRINGS = frozenset({"full_fidelity_declared"})
+
 
 @dataclass
 class AutoresearchConfig:
@@ -305,6 +310,17 @@ def _candidate_hashes(candidates: list[CandidateModel]) -> list[str]:
     return [candidate_identity_hash(c) for c in candidates]
 
 
+def _load_wfc_matrix_rows(artifact_dir: Path) -> list[dict[str, Any]]:
+    from workbench.src.optimization.matrix_runner import load_matrix_rows
+
+    wfc_dir = artifact_dir / "wfc"
+    for name in ("param_matrix.parquet", "param_matrix.csv"):
+        rows = load_matrix_rows(wfc_dir / name)
+        if rows:
+            return rows
+    return []
+
+
 def make_default_robustness_fn(*, chi404_summary: Path | None = None) -> RobustnessFn:
     """Return a callable that runs workbench robustness via existing run_campaign."""
 
@@ -342,6 +358,10 @@ def make_default_robustness_fn(*, chi404_summary: Path | None = None) -> Robustn
         if summary_path.is_file():
             campaign_summary = json.loads(summary_path.read_text(encoding="utf-8"))
             campaign_summary["artifact_dir"] = str(result.artifact_dir)
+            if not campaign_summary.get("wfc_matrix_rows"):
+                matrix_rows = _load_wfc_matrix_rows(Path(result.artifact_dir))
+                if matrix_rows:
+                    campaign_summary["wfc_matrix_rows"] = matrix_rows
             wfc_metrics = dict(campaign_summary.get("metrics") or {})
             for key, value in wfc_metrics.items():
                 if key not in metrics:
@@ -419,6 +439,7 @@ def _run_robustness_top_k(
             continue
         outcome = robustness_fn(
             repo_root=repo_root,
+            candidate_id=cid,
             model_id=model_id,
             symbol=cfg.symbol,
             campaign_id=f"{campaign_id}_g{generation_index}_rob_{cid[:8]}",
@@ -478,32 +499,53 @@ def _enrich_hft_scenario_results(
     manifest: Mapping[str, Any],
     screening_artifact_hash: str,
     robustness_artifact_hash: str,
+    allow_declared_certification: bool = False,
 ) -> list[dict[str, Any]]:
-    """Hydrate replay artifacts and inject upstream identity for Gate 7 parity."""
+    """Hydrate replay artifacts for Gate 7 parity without overwriting replay provenance."""
     enriched: list[dict[str, Any]] = []
     for result in list(scenario_results or []):
         row = dict(result)
         status = str(row.get("status") or "")
-        if status == "cached":
-            row["status"] = "completed"
         artifact_dir = Path(str(row.get("artifact_dir") or "")) if row.get("artifact_dir") else None
         replay = dict(row.get("replay_result") or {})
+        summary: dict[str, Any] = {}
         if artifact_dir is not None and artifact_dir.is_dir():
             if not replay:
                 replay = _load_hft_artifact_json(artifact_dir, "replay_result.json")
             summary = _load_hft_artifact_json(artifact_dir, "replay_summary.json")
             if summary.get("certification_status") and not replay.get("certification_status"):
                 replay["certification_status"] = summary["certification_status"]
-            for key in ("candidate_id", "feature_recipe_hash"):
+            for key in ("candidate_id", "feature_recipe_hash", "manifest_hash"):
                 if summary.get(key) and not replay.get(key):
                     replay[key] = summary[key]
-        replay.setdefault("candidate_id", str(manifest.get("candidate_id") or ""))
-        replay.setdefault("manifest_hash", str(manifest.get("manifest_hash") or ""))
-        replay.setdefault("feature_recipe_hash", str(manifest.get("feature_recipe_hash") or ""))
-        if screening_artifact_hash:
-            replay.setdefault("screening_artifact_hash", screening_artifact_hash)
-        if robustness_artifact_hash:
-            replay.setdefault("robustness_artifact_hash", robustness_artifact_hash)
+            for key in ("screening_artifact_hash", "robustness_artifact_hash"):
+                if summary.get(key) and not replay.get(key):
+                    replay[key] = summary[key]
+        for key in ("candidate_id", "feature_recipe_hash", "manifest_hash"):
+            if manifest.get(key) and not replay.get(key):
+                replay[key] = manifest[key]
+        if (
+            screening_artifact_hash
+            and not replay.get("screening_artifact_hash")
+            and not replay.get("upstream_screening_artifact_hash")
+        ):
+            replay["screening_artifact_hash"] = screening_artifact_hash
+        if robustness_artifact_hash and not replay.get("robustness_artifact_hash"):
+            replay["robustness_artifact_hash"] = robustness_artifact_hash
+        if status == "cached":
+            cert = str(replay.get("certification_status") or summary.get("certification_status") or "")
+            replay_error = replay.get("error") or summary.get("error")
+            if replay_error:
+                row["status"] = "error"
+            elif cert in _PRODUCTION_HFT_CERTIFICATION_STATUS_STRINGS or (
+                allow_declared_certification
+                and cert in _DECLARED_HFT_CERTIFICATION_STATUS_STRINGS
+            ):
+                row["status"] = "completed"
+            elif not cert:
+                row["status"] = "completed"
+            else:
+                row["status"] = "cached"
         row["replay_result"] = replay
         enriched.append(row)
     return enriched
@@ -864,12 +906,13 @@ def run_single_generation(
             promoted_row=promoted_row,
             screening_path=screening_path,
         )
+        campaign_summary = dict(rob.get("campaign_summary") or {}) if rob else None
         statistical_receipt = build_statistical_robustness_gate_receipt(
             manifest=cand_manifest,
             promoted_row=promoted_row,
             allow_partial=False,
+            campaign_summary=campaign_summary,
         )
-        campaign_summary = dict(rob.get("campaign_summary") or {}) if rob else None
         regular_wf_receipt = build_regular_walk_forward_gate_receipt(
             manifest=cand_manifest,
             campaign_summary=campaign_summary,
@@ -913,6 +956,11 @@ def run_single_generation(
         rob = robustness_by_id.get(cid)
         receipts = pre_hft_receipts_by_id[cid]
         if cid in hft_eligible_ids and cfg.run_hft_campaign:
+            pilot_scope = str(cfg.screening_scope or "").lower() in {
+                "pilot",
+                "pilot-scope",
+                "pilot_scope",
+            }
             hft_receipt = build_hftbacktest_gate_receipt(
                 manifest=cand_manifest,
                 scenario_results=_enrich_hft_scenario_results(
@@ -920,11 +968,13 @@ def run_single_generation(
                     manifest=cand_manifest,
                     screening_artifact_hash=screening_hash,
                     robustness_artifact_hash=_robustness_artifact_hash(rob),
+                    allow_declared_certification=pilot_scope,
                 ),
                 screening_path=screening_path,
                 screening_artifact_hash=screening_hash,
                 robustness_artifact_hash=_robustness_artifact_hash(rob),
                 accelerated_mode=False,
+                allow_declared_certification=pilot_scope,
             )
         elif not cfg.run_hft_campaign:
             hft_receipt = build_hftbacktest_gate_receipt(

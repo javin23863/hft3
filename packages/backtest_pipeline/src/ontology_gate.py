@@ -39,7 +39,7 @@ from backtest_pipeline.src.feature_plane import (
 )
 from backtest_pipeline.src.vectorbt_adapter import (
     SCREENING_ARTIFACT_REQUIRED_FIELDS,
-    validate_screening_artifact,
+    validate_screening_artifact_or_raise,
 )
 
 
@@ -54,18 +54,30 @@ _SPECS_ROOT = _REPO_ROOT / "specs"
 _VENDOR_VBT_LOCK = _REPO_ROOT / "vendor" / "vectorbt" / "VENDOR.lock"
 _VENDOR_HBT_LOCK = _REPO_ROOT / "vendor" / "hftbacktest" / "VENDOR.lock"
 
-_env_vault = os.environ.get("HFT3_VAULT_ROOT", "").strip()
-if _env_vault:
-    _DEFAULT_VAULT_ROOT = Path(_env_vault)
-elif os.environ.get("USERPROFILE"):
-    _DEFAULT_VAULT_ROOT = Path(os.environ["USERPROFILE"]) / "Desktop" / "Obsidian Vault From VPS" / "hft3"
-else:
-    # Fallback: check common vault locations relative to repo root and home dir.
-    _candidate = _REPO_ROOT.parent / "Desktop" / "Obsidian Vault From VPS" / "hft3"
-    if _candidate.is_dir():
-        _DEFAULT_VAULT_ROOT = _candidate
-    else:
-        _DEFAULT_VAULT_ROOT = Path.home() / "Desktop" / "Obsidian Vault From VPS" / "hft3"
+def _discover_default_vault_root() -> Path:
+    env_vault = os.environ.get("HFT3_VAULT_ROOT", "").strip()
+    if env_vault:
+        return Path(env_vault)
+
+    candidates: list[Path] = []
+    if os.environ.get("USERPROFILE"):
+        candidates.append(
+            Path(os.environ["USERPROFILE"]) / "Desktop" / "Obsidian Vault From VPS" / "hft3"
+        )
+    candidates.extend(
+        (
+            _REPO_ROOT.parent / "vault",
+            _REPO_ROOT.parent / "Desktop" / "Obsidian Vault From VPS" / "hft3",
+            Path.home() / "Desktop" / "Obsidian Vault From VPS" / "hft3",
+        )
+    )
+    for candidate in candidates:
+        if candidate.is_dir():
+            return candidate
+    return candidates[0]
+
+
+_DEFAULT_VAULT_ROOT = _discover_default_vault_root()
 _VAULT_LIBRARY_PAPERS = _DEFAULT_VAULT_ROOT / "library" / "papers"
 
 
@@ -638,7 +650,7 @@ def validate_artifact_schema(
 ) -> ArtifactResult:
     """Validate a screening/feature-plane artifact schema.
 
-    Delegates to :func:`validate_screening_artifact` and
+    Delegates to :func:`validate_screening_artifact_or_raise` and
     :func:`feature_plane_validation_errors` from the existing modules — this
     gate does not duplicate schema logic.
     """
@@ -659,7 +671,7 @@ def validate_artifact_schema(
     screening_ok = True
     if run_screening_validator and artifact_type == "screening" and not missing:
         try:
-            validate_screening_artifact(artifact)
+            validate_screening_artifact_or_raise(artifact)
         except Exception as exc:  # the existing validator raises ValueError subclasses
             screening_ok = False
             issues.append(f"screening_artifact_validator_rejected:{exc}")

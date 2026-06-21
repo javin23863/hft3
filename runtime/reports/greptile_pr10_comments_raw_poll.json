@@ -1,0 +1,39 @@
+{
+  "polled_at": "2026-06-20T11:34:45.296028Z",
+  "head": "8c5c1ec0",
+  "greptile_reviews": [
+    {
+      "login": "greptile-apps[bot]",
+      "state": "COMMENTED",
+      "body": "",
+      "submitted_at": "2026-06-20T09:31:50Z"
+    },
+    {
+      "login": "greptile-apps[bot]",
+      "state": "COMMENTED",
+      "body": "",
+      "submitted_at": "2026-06-20T10:04:58Z"
+    },
+    {
+      "login": "greptile-apps[bot]",
+      "state": "COMMENTED",
+      "body": "",
+      "submitted_at": "2026-06-20T10:07:47Z"
+    },
+    {
+      "login": "greptile-apps[bot]",
+      "state": "COMMENTED",
+      "body": "",
+      "submitted_at": "2026-06-20T10:50:28Z"
+    },
+    {
+      "login": "greptile-apps[bot]",
+      "state": "COMMENTED",
+      "body": "",
+      "submitted_at": "2026-06-20T10:51:51Z"
+    }
+  ],
+  "greptile_issue_comments": [],
+  "greptile_inline_count": 6,
+  "greptile_inline_on_head": []
+}

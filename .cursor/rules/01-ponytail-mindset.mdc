@@ -7,8 +7,8 @@ alwaysApply: true
 
 **Lazy senior dev discipline.** This rule is the **second** context on every Cursor agent turn — immediately after [.cursor/rules/00-fable-mindset.mdc](00-fable-mindset.mdc), and **before** VaultGate, GraphGate, searches, scripts, or any code edit.
 
-**Upstream repo:** https://github.com/DietrichGebert/ponytail  
-**Vendored in hft3:** `vendor/ponytail/` (update: `git -C vendor/ponytail pull`)  
+**Upstream repo:** https://github.com/DietrichGebert/ponytail
+**Vendored in hft3:** `vendor/ponytail/` (update: `git -C vendor/ponytail pull`)
 **hft3 charter:** [docs/ai/PONYTAIL.md](../../docs/ai/PONYTAIL.md)
 
 **Blocking:** Do not touch the codebase until Fable (#1) and this Ponytail ladder (#2) are active. Ponytail is **not** a Vast/SSH tool — ops use `vastai` + `scripts/vast_ssh_run_vbt_paid_screen.sh`.

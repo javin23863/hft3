@@ -50,8 +50,11 @@ def _job_cmd() -> dict:
     return {
         "feature_rebuild":  {"host": "laptop",
                              "command": {"entry": str(s / "build_feature_store.py"), "args": ["--rebuild"]}},
-        "rescreen_stage_a": {"host": "laptop",
-                              "command": {"entry": str(s / "run_stage_a_screen.py"), "args": []}},
+        "rescreen_stage_a": {"host": "laptop", "singleton": True,
+                              "command": {"entry": str(s / "run_stage_a_screen.py"),
+                                          "args": ["--symbols", "MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0",
+                                                   "--out", "research_cards/stage_a_full",
+                                                   "--workers", "12"]}},
         "slowtier_run":     {"host": "laptop",
                               "command": {"entry": "powershell",
                                           "args": ["-NoProfile", "-ExecutionPolicy", "Bypass",

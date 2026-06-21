@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 _REPO = Path(__file__).resolve().parents[3]
+_GRAPH_WAIVER = "waived-by-owner-2026-06-16"
 
 
 def _reqs_path(repo: Path) -> Path:
@@ -88,7 +89,44 @@ def check_graphify(repo: Path) -> Dict[str, Any]:
     }
 
 
+def graph_rebuild_waiver(repo: Path) -> Optional[str]:
+    if os.environ.get("HFT3_ALLOW_GRAPH_REBUILD_WHILE_WAIVED") == "1":
+        return None
+
+    candidates = [
+        repo / "runtime" / "vault-gate" / ".last-vault-gate.json",
+        repo / "AGENTS.md",
+        repo / "docs" / "ai" / "ENGINEERING.md",
+        repo / "docs" / "vault" / "AGENT_RUNTIME_ROADMAP.md",
+    ]
+    vault_root = os.environ.get("HFT3_VAULT_ROOT")
+    if vault_root:
+        candidates.append(Path(vault_root) / "wiki" / "hot.md")
+
+    for path in candidates:
+        if not path.is_file():
+            continue
+        try:
+            if _GRAPH_WAIVER in path.read_text(encoding="utf-8", errors="ignore"):
+                return _GRAPH_WAIVER
+        except OSError:
+            continue
+    return None
+
+
 def rebuild_graph(repo: Path) -> Dict[str, Any]:
+    waiver = graph_rebuild_waiver(repo)
+    if waiver:
+        return {
+            "rebuilt": False,
+            "skipped": True,
+            "waiver": waiver,
+            "error": (
+                f"graph rebuild owner-waived ({waiver}); "
+                "set HFT3_ALLOW_GRAPH_REBUILD_WHILE_WAIVED=1 to override"
+            ),
+        }
+
     ps1 = repo / "scripts" / "graphify_rebuild.ps1"
     if ps1.is_file():
         try:

@@ -25,5 +25,5 @@
   "native_latency_probe_status": "provided",
   "native_latency_probe_provenance": "hft3_native_cpp_rithmic_latency_probe",
   "native_latency_probe_artifact_hash": "sha256:953e1af51228ace943b76e644a746f28546db8c85da44c7e1a5bed3afb82a46b",
-  "latency_value_or_sample_hash": "sha256:31d97990125202ed1bab0497b146153c002b01b3b2c20b51cd7797e524ae7e3e"
+  "latency_value_or_sample_hash": "sha256:b510a0b0067e62fc3b7345750261ba111ccdb7d8b1a8af37cc19448fca913f78"
 }

@@ -112,6 +112,24 @@ fi
 
 echo "Declaration OK: expected_work_units=$DECL_EXPECTED"
 
+DECL_GIT_HEAD="$(python3 - "$DECL_FILE" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+print(str(d.get("git_head") or "").strip())
+PY
+)"
+if [[ -z "$DECL_GIT_HEAD" ]]; then
+  echo "ERROR: Declaration git_head missing in $DECL_FILE" >&2
+  exit 1
+fi
+CURRENT_HEAD="$(git rev-parse HEAD)"
+if [[ "$CURRENT_HEAD" != "$DECL_GIT_HEAD" ]]; then
+  echo "ERROR: Declaration git_head=$DECL_GIT_HEAD != current HEAD=$CURRENT_HEAD" >&2
+  echo "Regenerate $DECL_FILE on the current head before starting workers." >&2
+  exit 1
+fi
+echo "Declaration HEAD OK: git_head=$DECL_GIT_HEAD"
+
 if [[ -z "${VBT_WORKERS:-}" && -f "$DECL_FILE" ]]; then
   DECL_WORKERS="$(python3 - "$DECL_FILE" <<'PY'
 import json, sys
@@ -234,6 +252,29 @@ PY
   exit 1
 fi
 echo "events_csv_hash=$EVENTS_CSV_HASH lake_manifest_hash=$LAKE_MANIFEST_HASH"
+
+DECL_HASHES="$(python3 - "$DECL_FILE" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+events = str(d.get("events_csv_hash") or "").strip()
+lake = str(d.get("lake_manifest_hash") or "").strip()
+print(events + "\t" + lake)
+PY
+)"
+IFS=$'\t' read -r DECL_EVENTS_HASH DECL_LAKE_HASH <<< "$DECL_HASHES"
+if [[ -z "$DECL_EVENTS_HASH" || -z "$DECL_LAKE_HASH" ]]; then
+  echo "ERROR: Declaration events_csv_hash/lake_manifest_hash missing in $DECL_FILE" >&2
+  exit 1
+fi
+if [[ "$DECL_EVENTS_HASH" != "$EVENTS_CSV_HASH" ]]; then
+  echo "ERROR: Declaration events_csv_hash=$DECL_EVENTS_HASH != resolved=$EVENTS_CSV_HASH" >&2
+  exit 1
+fi
+if [[ "$DECL_LAKE_HASH" != "$LAKE_MANIFEST_HASH" ]]; then
+  echo "ERROR: Declaration lake_manifest_hash=$DECL_LAKE_HASH != resolved=$LAKE_MANIFEST_HASH" >&2
+  exit 1
+fi
+echo "Declaration hashes OK"
 
 PAID_ARGS=(
   python3 "$PAID_SCREEN_SCRIPT"

@@ -2,12 +2,21 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
-MIN_CC_SAMPLE_COUNT = 50
+DEFAULT_COMPONENT_MIN_SAMPLE_COUNT = 50
+
+LATENCY_COMPONENT_MIN_SAMPLE_COUNTS: dict[str, int] = {
+    "feed_latency_us": 1000,
+    "new_send_to_exchange_us": 200,
+    "new_exchange_to_ack_us": 200,
+    "cancel_send_to_exchange_us": 200,
+    "cancel_exchange_to_ack_us": 200,
+}
 
 _CC_SUMMARY_PREFIXES: dict[str, str] = {
     "cc2": "cc2_feed_",
@@ -16,7 +25,7 @@ _CC_SUMMARY_PREFIXES: dict[str, str] = {
 }
 
 _METRIC_CC_SOURCES: dict[str, tuple[str, ...]] = {
-    "feed_latency_us": ("cc3", "cc2"),
+    "feed_latency_us": ("cc2",),
     "new_send_to_exchange_us": ("cc3",),
     "new_exchange_to_ack_us": ("cc3",),
     "cancel_send_to_exchange_us": ("cc4",),
@@ -24,6 +33,7 @@ _METRIC_CC_SOURCES: dict[str, tuple[str, ...]] = {
 }
 
 _RUN_SUFFIX_RE = re.compile(r"_(\d{8}T\d{6}Z)_summary\.json$")
+_SHA256_RE = re.compile(r"^sha256:[0-9a-fA-F]{64}$")
 
 CRITICAL_BANDS = (
     "feed_latency_us",
@@ -221,6 +231,13 @@ def find_latest_cc_summary(repo_root: Path, prefix: str) -> Path | None:
     return candidates[0] if candidates else None
 
 
+def _artifact_ref(repo_root: Path, path: Path) -> str:
+    try:
+        return path.relative_to(repo_root).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
 def load_cc_summaries(repo_root: Path) -> dict[str, dict[str, Any]]:
     """Load latest cc2/cc3/cc4 summary JSON objects keyed by campaign id."""
     loaded: dict[str, dict[str, Any]] = {}
@@ -230,10 +247,14 @@ def load_cc_summaries(repo_root: Path) -> dict[str, dict[str, Any]]:
         if path is None:
             continue
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+            raw = path.read_bytes()
+            data = json.loads(raw.decode("utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
             continue
         if isinstance(data, dict):
+            data = dict(data)
+            data["source_artifact"] = _artifact_ref(repo_root, path)
+            data["source_artifact_hash"] = f"sha256:{hashlib.sha256(raw).hexdigest()}"
             loaded[cc_key] = data
     return loaded
 
@@ -269,11 +290,54 @@ def _regime_us_value(dist: dict[str, Any], regime: str) -> float | None:
     return float(val) if isinstance(val, (int, float)) else None
 
 
+def latency_component_min_sample_count(metric: str) -> int:
+    return LATENCY_COMPONENT_MIN_SAMPLE_COUNTS.get(metric, DEFAULT_COMPONENT_MIN_SAMPLE_COUNT)
+
+
+def latency_component_sample_count(band: Mapping[str, Any]) -> int:
+    count = band.get("sample_count")
+    if isinstance(count, int) and not isinstance(count, bool):
+        return count
+    dist = band.get("distribution_us")
+    if (
+        isinstance(dist, Mapping)
+        and isinstance(dist.get("count"), int)
+        and not isinstance(dist.get("count"), bool)
+    ):
+        return dist["count"]
+    return 0
+
+
+def latency_component_band_meets_minimum(metric: str, band: Mapping[str, Any]) -> bool:
+    return latency_component_sample_count(band) >= latency_component_min_sample_count(metric)
+
+
+def latency_component_stats_meets_minimum(metric: str, stats: Mapping[str, Any]) -> bool:
+    count = stats.get("count")
+    return (
+        isinstance(count, int)
+        and not isinstance(count, bool)
+        and count >= latency_component_min_sample_count(metric)
+    )
+
+
+def _band_has_measured_provenance(metric: str, band: dict[str, Any]) -> bool:
+    return (
+        band.get("measurement_status") == "MEASURED"
+        and latency_component_band_meets_minimum(metric, band)
+        and isinstance(band.get("source_artifact"), str)
+        and bool(band["source_artifact"].strip())
+        and isinstance(band.get("source_artifact_hash"), str)
+        and _SHA256_RE.match(band["source_artifact_hash"]) is not None
+    )
+
+
 def enrich_latency_model_from_component_bands(
     model: dict[str, Any],
     bands: dict[str, Any],
     *,
     regime: str,
+    repo_root: Path | None = None,
 ) -> dict[str, Any]:
     """Apply measured component_bands to a latency_model dict (feed/entry/response)."""
     out = dict(model)
@@ -286,7 +350,7 @@ def enrich_latency_model_from_component_bands(
         feed_us = _regime_us_value(dist, regime)
         if feed_us is not None:
             out["feed_latency_ms"] = feed_us / 1000.0
-            out["feed_latency_source"] = feed.get("source_run_id") or "cc3_feed_latency_us"
+            out["feed_latency_source"] = feed.get("source_run_id") or "cc2_feed_latency_us"
             mapping = dict(out.get("latency_component_mapping") or {})
             mapping["feed_latency"] = f"feed_latency_us from {feed.get('source_run_id', 'CC campaign')}"
             out["latency_component_mapping"] = mapping
@@ -303,12 +367,38 @@ def enrich_latency_model_from_component_bands(
             src = entry.get("source_run_id") or "cc3_new_decomp"
             out["order_entry_latency_source"] = src
             out["order_response_latency_source"] = src
-            out["latency_proxy_status"] = "measured_decomposed"
-            out["note"] = (
-                f"CC-3 decomposed entry/response from {src}; "
-                "symmetric split fallback no longer used for this regime."
-            )
+            required_bands = {name: dict(bands.get(name) or {}) for name in CRITICAL_BANDS}
+            if all(_band_has_measured_provenance(name, band) for name, band in required_bands.items()):
+                out["latency_component_bands"] = required_bands
+                if _strict_measured_decomposed_evidence_passes(out, repo_root=repo_root):
+                    out["latency_proxy_status"] = "measured_decomposed"
+                    out["note"] = (
+                        f"CC-3/CC-4 decomposed entry/response from {src}; "
+                        "symmetric split fallback no longer used for this regime."
+                    )
+                else:
+                    out["latency_proxy_status"] = "measured_partial"
+                    out["note"] = (
+                        "CC decomposed component bands attached, but source-artifact "
+                        "hash validation has not certified measured_decomposed status."
+                    )
     return out
+
+
+def _strict_measured_decomposed_evidence_passes(
+    latency_model: Mapping[str, Any],
+    *,
+    repo_root: Path | None,
+) -> bool:
+    if repo_root is None:
+        return False
+    try:
+        from backtest_pipeline.src.hftbacktest_realism import (
+            _validate_measured_decomposed_latency_evidence,
+        )
+    except ImportError:
+        return False
+    return not _validate_measured_decomposed_latency_evidence(latency_model, repo_root=repo_root)
 
 
 def merge_component_bands_from_cc_summaries(repo_root: Path, bands: dict[str, Any]) -> dict[str, Any]:
@@ -334,14 +424,22 @@ def merge_component_bands_from_cc_summaries(repo_root: Path, bands: dict[str, An
             if count > 0:
                 stats = candidate
                 source_run_id = str(summary.get("run_id") or cc_key)
-                break
+                if latency_component_stats_meets_minimum(metric, candidate):
+                    break
 
-        if stats is not None and int(stats.get("count") or 0) >= MIN_CC_SAMPLE_COUNT:
+        if stats is not None and latency_component_stats_meets_minimum(metric, stats):
             dist = distribution_from_stats(stats)
             base["measurement_status"] = "MEASURED"
             base["distribution_us"] = dist
             base["source_run_id"] = source_run_id
             base["sample_count"] = int(stats["count"])
+            source = loaded.get(_METRIC_CC_SOURCES.get(metric, ("",))[0], {})
+            if source.get("run_id") != source_run_id:
+                source = next((item for item in loaded.values() if item.get("run_id") == source_run_id), {})
+            if isinstance(source.get("source_artifact"), str):
+                base["source_artifact"] = source["source_artifact"]
+            if isinstance(source.get("source_artifact_hash"), str):
+                base["source_artifact_hash"] = source["source_artifact_hash"]
             base["note"] = f"Measured by CC campaign {source_run_id} (n={int(stats['count'])})"
             merged[metric] = base
             continue
@@ -357,6 +455,10 @@ def merge_component_bands_from_cc_summaries(repo_root: Path, bands: dict[str, An
             if cc4_count > 0:
                 base["sample_count"] = cc4_count
             base["source_run_id"] = cc4_run_id
+            if isinstance(cc4.get("source_artifact"), str):
+                base["source_artifact"] = cc4["source_artifact"]
+            if isinstance(cc4.get("source_artifact_hash"), str):
+                base["source_artifact_hash"] = cc4["source_artifact_hash"]
             merged[metric] = base
             continue
 
@@ -369,6 +471,10 @@ def merge_component_bands_from_cc_summaries(repo_root: Path, bands: dict[str, An
                 f"CC-4 {cc4_run_id}: cancel_send_to_exchange_us count={cc4_count} "
                 "(cancel_ack_timeout; local cancel_to_send_us measured in placement test)"
             )
+            if isinstance(cc4.get("source_artifact"), str):
+                base["source_artifact"] = cc4["source_artifact"]
+            if isinstance(cc4.get("source_artifact_hash"), str):
+                base["source_artifact_hash"] = cc4["source_artifact_hash"]
             merged[metric] = base
             continue
 

@@ -203,7 +203,9 @@ class TestWorkerCrashRecovery:
             PaidScreenWorker.process_batch = original_process
 
         assert batch_id == "b0"
-        assert results == []  # the exception path emits an empty result list
+        assert len(results) == 1
+        assert results[0].status == "ERROR"
+        assert "injected_worker_crash" in results[0].error
         assert summary["total_failures"] >= 1
 
     def test_worker_process_main_applies_hft3_npz_root_from_worker_args(self, monkeypatch):
@@ -221,7 +223,7 @@ class TestWorkerCrashRecovery:
             "events_csv_hash": "eh",
             "lake_manifest_hash": "lh",
             "HFT3_NPZ_ROOT": "/data/npz",
-            "HFT3_MANIFEST_PATH": "/data/npz/manifest.json",
+            "HFT3_MANIFEST_PATH": "/data/npz/manifest.parquet",
         }
 
         captured: dict[str, str] = {}
@@ -243,7 +245,7 @@ class TestWorkerCrashRecovery:
             PaidScreenWorker.init = original_init
 
         assert captured["HFT3_NPZ_ROOT"] == "/data/npz"
-        assert captured["HFT3_MANIFEST_PATH"] == "/data/npz/manifest.json"
+        assert captured["HFT3_MANIFEST_PATH"] == "/data/npz/manifest.parquet"
 
 
 # --------------------------------------------------------------------------- #
@@ -257,14 +259,14 @@ class TestInterruptAndResume:
 
     def _has_valid_artifact(self, out_dir: Path, unit_id: str) -> bool:
         """Faithful copy of the orchestrator's resume predicate."""
-        from backtest_pipeline.src.vectorbt_adapter import validate_screening_artifact
+        from backtest_pipeline.src.vectorbt_adapter import validate_screening_artifact_or_raise
 
         dest = out_dir / "units" / unit_id / "screening_artifact.json"
         if not dest.is_file():
             return False
         try:
             payload = json.loads(dest.read_text(encoding="utf-8"))
-            validate_screening_artifact(payload)
+            validate_screening_artifact_or_raise(payload)
             return True
         except Exception:
             return False
@@ -289,7 +291,7 @@ class TestInterruptAndResume:
         """A JSON object missing required fields must fail validation."""
         from backtest_pipeline.src.vectorbt_adapter import (
             ScreeningArtifactError,
-            validate_screening_artifact,
+            validate_screening_artifact_or_raise,
         )
 
         unit_dir = tmp_path / "units" / "u1"
@@ -301,7 +303,7 @@ class TestInterruptAndResume:
             (unit_dir / "screening_artifact.json").read_text()
         )
         with pytest.raises(ScreeningArtifactError):
-            validate_screening_artifact(payload)
+            validate_screening_artifact_or_raise(payload)
         assert self._has_valid_artifact(tmp_path, "u1") is False
 
 
@@ -314,7 +316,7 @@ class TestCorruptedArtifactRecovery:
         """A corrupted screening_artifact.json must not be treated as valid."""
         from backtest_pipeline.src.vectorbt_adapter import (
             ScreeningArtifactError,
-            validate_screening_artifact,
+            validate_screening_artifact_or_raise,
         )
 
         bad = '{"broken": "json"'
@@ -323,7 +325,7 @@ class TestCorruptedArtifactRecovery:
         # json.loads fails before the validator ever runs
         with pytest.raises(json.JSONDecodeError):
             payload = json.loads(path.read_text())
-            validate_screening_artifact(payload)
+            validate_screening_artifact_or_raise(payload)
 
     def test_partial_json_not_valid(self, tmp_path):
         """A partial JSON file (simulating a crash mid-write) must not validate."""
@@ -337,12 +339,12 @@ class TestCorruptedArtifactRecovery:
         """An artifact missing required fields must fail validation."""
         from backtest_pipeline.src.vectorbt_adapter import (
             ScreeningArtifactError,
-            validate_screening_artifact,
+            validate_screening_artifact_or_raise,
         )
 
         incomplete = {"run_id": "test"}  # missing most required fields
         with pytest.raises(ScreeningArtifactError):
-            validate_screening_artifact(incomplete)
+            validate_screening_artifact_or_raise(incomplete)
 
     def test_empty_file_rejected(self, tmp_path):
         """An empty artifact file (zero bytes) must not validate."""
@@ -457,14 +459,14 @@ class TestMemoryLimitRecycling:
 class TestPartialWrittenArtifact:
     def test_partial_json_not_complete(self, tmp_path):
         """A partial JSON write (crash mid-write) must not be marked complete."""
-        from backtest_pipeline.src.vectorbt_adapter import validate_screening_artifact
+        from backtest_pipeline.src.vectorbt_adapter import validate_screening_artifact_or_raise
 
         partial = '{"run_id": "r1", "created_at_utc": "2026"'
         path = tmp_path / "screening_artifact.json"
         path.write_text(partial)
         with pytest.raises(json.JSONDecodeError):
             data = json.loads(path.read_text())
-            validate_screening_artifact(data)
+            validate_screening_artifact_or_raise(data)
 
     def test_truncated_object_not_valid(self, tmp_path):
         path = tmp_path / "artifact.json"
@@ -544,14 +546,14 @@ class TestManifestStatusCorrectness:
 
 class TestResumability:
     def _has_valid_artifact(self, out_dir: Path, unit_id: str) -> bool:
-        from backtest_pipeline.src.vectorbt_adapter import validate_screening_artifact
+        from backtest_pipeline.src.vectorbt_adapter import validate_screening_artifact_or_raise
 
         dest = out_dir / "units" / unit_id / "screening_artifact.json"
         if not dest.is_file():
             return False
         try:
             payload = json.loads(dest.read_text(encoding="utf-8"))
-            validate_screening_artifact(payload)
+            validate_screening_artifact_or_raise(payload)
             return True
         except Exception:
             return False

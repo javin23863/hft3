@@ -8,6 +8,7 @@ from typing import Any
 
 _REPO = Path(__file__).resolve().parents[3]
 DEFAULT_CHI404_SUMMARY = _REPO / "runtime" / "latency_reports" / "latency_summary.json"
+DEFAULT_LATENCY_TRUTH = _REPO / "runtime" / "latency_reports" / "latency_truth.json"
 
 PAPER_ORDER_MIN_PAIRED = 1000
 
@@ -209,7 +210,7 @@ def build_latency_model_from_summary(
             "order_entry_latency": "new_send_to_exchange_us or symmetric split of new_send_to_ack",
             "order_response_latency": "new_exchange_to_ack_us or symmetric split of new_send_to_ack",
         },
-        "feed_latency_ms": None,
+        "feed_latency_ms": 0.0,
         "order_entry_latency_ms": entry_ms,
         "order_response_latency_ms": resp_ms,
         "latency_p50_ms": float(p50_ms) if isinstance(p50_ms, (int, float)) else None,
@@ -241,7 +242,65 @@ def enrich_latency_model_probe_evidence(
     enriched["native_latency_probe_host"] = "CHI404"
     if summary_path.is_file():
         enriched["native_latency_probe_artifact_hash"] = compute_latency_probe_artifact_hash(summary_path)
+    # Component-band summaries are necessary realism evidence, but they are not
+    # sufficient to certify a latency model as fully measured. Keep partial
+    # status until the strict decomposed-evidence validator proves source
+    # artifacts, hashes, and sample counts.
     enriched["latency_value_or_sample_hash"] = compute_latency_value_or_sample_hash(enriched)
+    return enriched
+
+
+def enrich_latency_model_component_bands(
+    model: dict[str, Any],
+    *,
+    regime: str,
+    latency_truth: Path = DEFAULT_LATENCY_TRUTH,
+) -> dict[str, Any]:
+    """Attach measured component-band evidence from the latency-truth artifact."""
+    if not latency_truth.is_file():
+        return dict(model)
+
+    try:
+        truth = json.loads(latency_truth.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return dict(model)
+
+    bands = truth.get("component_bands")
+    if not isinstance(bands, dict):
+        return dict(model)
+
+    from backtest_pipeline.src.latency_components import (
+        CRITICAL_BANDS,
+        _band_has_measured_provenance,
+        enrich_latency_model_from_component_bands,
+        merge_component_bands_from_cc_summaries,
+    )
+
+    merged = merge_component_bands_from_cc_summaries(_REPO, bands)
+    original_percentiles = {
+        field: model.get(field) for field in ("latency_p50_ms", "latency_p90_ms", "latency_p99_ms")
+    }
+    enriched = enrich_latency_model_from_component_bands(
+        dict(model),
+        merged,
+        regime=regime,
+        repo_root=_REPO,
+    )
+    for field, value in original_percentiles.items():
+        if isinstance(value, (int, float)):
+            enriched[field] = float(value)
+    enriched["latency_component_bands"] = {
+        name: dict(merged.get(name) or {}) for name in CRITICAL_BANDS
+    }
+    if not all(
+        _band_has_measured_provenance(name, band)
+        for name, band in enriched["latency_component_bands"].items()
+    ):
+        enriched["latency_proxy_status"] = "measured_partial"
+        enriched["note"] = (
+            str(enriched.get("note") or "").strip()
+            + "; incomplete critical latency component evidence remains research-only."
+        ).strip("; ")
     return enriched
 
 
@@ -261,9 +320,9 @@ def resolve_latency_model(
     if regime_path.is_file():
         model = json.loads(regime_path.read_text(encoding="utf-8"))
         if isinstance(model, dict) and model.get("latency_model_family"):
-            if not model.get("latency_value_or_sample_hash"):
-                model = enrich_latency_model_probe_evidence(model, chi404_summary=summary_path)
-            return model
+            model = enrich_latency_model_component_bands(model, regime=regime)
+            return enrich_latency_model_probe_evidence(model, chi404_summary=summary_path)
 
     model = build_latency_model_from_summary(regime=regime, summary=summary)
+    model = enrich_latency_model_component_bands(model, regime=regime)
     return enrich_latency_model_probe_evidence(model, chi404_summary=summary_path)

@@ -241,3 +241,195 @@ def test_wfc_cost_adjusted_correlation_required():
     )
     assert result.wfc_status == "FAIL"
     assert not result.cost_adjusted_pass
+
+
+def test_wfc_aligns_rows_by_parameter_hash():
+    """IS/OOS pairs must align on parameter_hash across folds, not row order."""
+    rows = []
+    for fi, fold in enumerate(("D1", "D2", "D3")):
+        for i in range(25):
+            # Deliberately scramble row append order per fold; hash alignment must recover pairs.
+            idx = (i * 7 + 3) % 25
+            is_v = float(idx) + fi * 0.05
+            oos_v = is_v * 0.85 + 1.0
+            rows.append(
+                {
+                    "parameter_hash": f"h{idx}",
+                    "fold_id": fold,
+                    "asset": "MES.v.0",
+                    "regime_label": "macro",
+                    "is_metrics": _metric_dict(is_v),
+                    "oos_metrics": _metric_dict(oos_v),
+                }
+            )
+    result = evaluate_wfc_gate(rows, _cfg(min_parameter_combinations=20), model_id="HYP_5")
+    assert result.wfc_status == "PASS"
+    assert result.pearson > 0.9
+
+
+def test_wfc_rejects_mismatched_grids():
+    """Different parameter universes per fold → insufficient aligned vectors."""
+    rows = []
+    for fi, fold in enumerate(("D1", "D2", "D3")):
+        for i in range(25):
+            ph = f"h{i + fi * 100}"
+            rows.append(
+                {
+                    "parameter_hash": ph,
+                    "fold_id": fold,
+                    "asset": "MES.v.0",
+                    "regime_label": "macro",
+                    "is_metrics": _metric_dict(float(i)),
+                    "oos_metrics": _metric_dict(float(i) * 0.8 + 1),
+                }
+            )
+    result = evaluate_wfc_gate(rows, _cfg(min_parameter_combinations=20), model_id="HYP_5")
+    assert result.wfc_status in ("FAIL", "ERROR", "CONDITIONAL")
+    assert result.pearson < 0.5 or result.wfc_status == "ERROR"
+
+
+def test_wfc_rejects_missing_cells():
+    """Parameter hash present in fold D1 but absent in D2/D3 → dropped from correlation."""
+    rows = []
+    for fold in ("D1", "D2", "D3"):
+        for i in range(25):
+            if fold != "D1" and i >= 20:
+                continue
+            rows.append(
+                {
+                    "parameter_hash": f"h{i}",
+                    "fold_id": fold,
+                    "asset": "MES.v.0",
+                    "regime_label": "macro",
+                    "is_metrics": _metric_dict(float(i)),
+                    "oos_metrics": _metric_dict(float(i) * 0.8 + 1),
+                }
+            )
+    result = evaluate_wfc_gate(rows, _cfg(min_parameter_combinations=21), model_id="HYP_5")
+    assert result.wfc_status != "PASS"
+
+
+def test_wfc_rejects_constant_vectors():
+    """Flat IS/OOS per parameter across folds → zero variance → excluded from median."""
+    rows = []
+    for fi, fold in enumerate(("D1", "D2", "D3")):
+        for i in range(25):
+            rows.append(
+                {
+                    "parameter_hash": f"h{i}",
+                    "fold_id": fold,
+                    "asset": "MES.v.0",
+                    "regime_label": "macro",
+                    "is_metrics": _metric_dict(1.0),
+                    "oos_metrics": _metric_dict(1.0),
+                }
+            )
+    result = evaluate_wfc_gate(
+        rows,
+        _cfg(min_parameter_combinations=20),
+        model_id="HYP_5",
+    )
+    assert result.wfc_status in ("FAIL", "ERROR")
+    assert result.pearson == 0.0
+
+
+def test_wfc_best_params_only_cannot_fake_pass():
+    """Single outlier parameter with correlation; rest random → gate must fail."""
+    rng = random.Random(99)
+    n = 30
+    rows = []
+    for fi, fold in enumerate(("D1", "D2", "D3")):
+        for i in range(n):
+            if i == 0:
+                is_v = float(fi + 1)
+                oos_v = is_v * 0.9 + 0.5
+            else:
+                is_v = rng.random()
+                oos_v = rng.random()
+            rows.append(
+                {
+                    "parameter_hash": f"h{i}",
+                    "fold_id": fold,
+                    "asset": "MES.v.0",
+                    "regime_label": "macro",
+                    "is_metrics": _metric_dict(is_v + float(i) * 0.01),
+                    "oos_metrics": _metric_dict(oos_v + float(i) * 0.008),
+                }
+            )
+    result = evaluate_wfc_gate(
+        rows,
+        _cfg(min_parameter_combinations=20, pearson_min=0.35, spearman_min=0.35),
+        model_id="HYP_5",
+    )
+    assert result.wfc_status == "FAIL"
+
+
+def test_wfc_does_not_correlate_equity_curves():
+    """High pooled fold correlation must not substitute for per-parameter fold vectors."""
+    rng = random.Random(7)
+    rows = []
+    for fi, fold in enumerate(("D1", "D2", "D3")):
+        for i in range(25):
+            # Within-fold monotonic series → high pooled fold correlation.
+            is_v = float(i)
+            oos_v = float(i)
+            # Across folds for the same parameter_hash, OOS shuffles while IS stays flat.
+            if fi > 0:
+                oos_v = float(rng.randint(0, 24))
+            rows.append(
+                {
+                    "parameter_hash": f"h{i}",
+                    "fold_id": fold,
+                    "asset": "MES.v.0",
+                    "regime_label": "macro",
+                    "is_metrics": _metric_dict(is_v),
+                    "oos_metrics": _metric_dict(oos_v),
+                }
+            )
+    result = evaluate_wfc_gate(rows, _cfg(min_parameter_combinations=20), model_id="HYP_5")
+    assert result.wfc_status == "FAIL"
+    assert result.pearson < 0.35
+
+
+def test_rebuild_graph_respects_owner_waiver(tmp_path, monkeypatch) -> None:
+    from workbench.src.setup import rebuild_graph
+
+    repo = tmp_path
+    (repo / "AGENTS.md").write_text("graph gates waived-by-owner-2026-06-16", encoding="utf-8")
+    scripts = repo / "scripts"
+    scripts.mkdir()
+    (scripts / "graphify_rebuild.ps1").write_text("throw 'should not run'", encoding="utf-8")
+    monkeypatch.delenv("HFT3_ALLOW_GRAPH_REBUILD_WHILE_WAIVED", raising=False)
+    monkeypatch.delenv("HFT3_VAULT_ROOT", raising=False)
+
+    result = rebuild_graph(repo)
+
+    assert result["skipped"] is True
+    assert result["waiver"] == "waived-by-owner-2026-06-16"
+    assert result["rebuilt"] is False
+
+
+def test_graph_rebuild_waiver_allows_explicit_override(tmp_path, monkeypatch) -> None:
+    from workbench.src.setup import graph_rebuild_waiver
+
+    repo = tmp_path
+    (repo / "AGENTS.md").write_text("graph gates waived-by-owner-2026-06-16", encoding="utf-8")
+    monkeypatch.setenv("HFT3_ALLOW_GRAPH_REBUILD_WHILE_WAIVED", "1")
+
+    assert graph_rebuild_waiver(repo) is None
+
+
+def test_graph_rebuild_waiver_ignores_developer_home_vault(tmp_path, monkeypatch) -> None:
+    from workbench.src import setup
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    home = tmp_path / "home"
+    vault_hot = home / "Desktop" / "Obsidian Vault From VPS" / "hft3" / "wiki" / "hot.md"
+    vault_hot.parent.mkdir(parents=True)
+    vault_hot.write_text("graph gates waived-by-owner-2026-06-16", encoding="utf-8")
+    monkeypatch.delenv("HFT3_ALLOW_GRAPH_REBUILD_WHILE_WAIVED", raising=False)
+    monkeypatch.delenv("HFT3_VAULT_ROOT", raising=False)
+    monkeypatch.setattr(setup.Path, "home", lambda: home)
+
+    assert setup.graph_rebuild_waiver(repo) is None

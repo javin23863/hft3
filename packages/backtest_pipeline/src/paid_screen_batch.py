@@ -13,6 +13,7 @@ import os
 import time
 import json
 import hashlib
+import logging
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -24,6 +25,8 @@ from backtest_pipeline.src.paid_screen_cache import BoundedLRUCache
 from backtest_pipeline.src.paid_screen_matrix import run_vectorbt_simulation_matrix
 from backtest_pipeline.src.vectorbt_adapter import apply_promotion_gates
 
+_LOG = logging.getLogger(__name__)
+
 
 def _cache_get(cache, key):
     """Retrieve a value from either a BoundedLRUCache or a plain dict.
@@ -33,22 +36,47 @@ def _cache_get(cache, key):
     the NPZ cache only stores non-None OHLCV arrays, so None always
     means a miss here.
     """
-    if isinstance(cache, BoundedLRUCache):
-        return cache.get(key)
     return cache.get(key)
 
 
-def _cache_put(cache, key, value):
-    """Store a value in either a BoundedLRUCache or a plain dict."""
+def _cache_put(cache, key, value) -> bool:
+    """Store a value in either a BoundedLRUCache or a plain dict.
+
+    Returns False when a BoundedLRUCache rejects an oversized entry.
+    """
     if isinstance(cache, BoundedLRUCache):
-        cache.put(key, value)
-    else:
-        cache[key] = value
+        return cache.put(key, value)
+    cache[key] = value
+    return True
 
 
 def _is_bounded_lru_cache(cache) -> bool:
     """True when *cache* is a BoundedLRUCache (has observable hit/miss counters)."""
     return isinstance(cache, BoundedLRUCache)
+
+
+def _unit_requires_cross_asset_leaders(unit: PaidScreenUnit) -> bool:
+    """True when *unit* model family requires PIT leader legs."""
+    from backtest_pipeline.src.fs_v1_screen_path import recipe_requires_cross_asset_leaders
+
+    return bool(_unit_cross_asset_required_leaders(unit)) or recipe_requires_cross_asset_leaders(
+        model_id=str(unit.model_id or "")
+    )
+
+
+def _unit_cross_asset_required_leaders(unit: PaidScreenUnit) -> tuple[str, ...]:
+    from backtest_pipeline.src.fs_v1_screen_path import cross_asset_required_leaders_for_model
+
+    return cross_asset_required_leaders_for_model(str(unit.model_id or ""))
+
+
+def _normalize_leader_symbols(symbols) -> tuple[str, ...]:
+    leaders: list[str] = []
+    for symbol in symbols or ():
+        base = str(symbol or "").split(".")[0].upper()
+        if base and base not in leaders:
+            leaders.append(base)
+    return tuple(leaders)
 
 
 def _worker_scratch_artifact_dir(
@@ -258,6 +286,39 @@ def _resolve_signal_implementation_hash(repo_root: str) -> str:
     return digest.hexdigest()[:32] if found else "unknown"
 
 
+def _resolve_npz_digest_for_unit(unit: PaidScreenUnit, ctx: WorkerContext) -> str:
+    """Content digest for the NPZ or fs_v1 store backing *unit* (batching provenance)."""
+    fs_ctx = _try_resolve_fs_v1_context(unit, ctx)
+    if fs_ctx is not None:
+        if fs_ctx.content_hash:
+            return fs_ctx.content_hash
+        try:
+            return hash_file_content(fs_ctx.store_path)
+        except FileNotFoundError:
+            return "fs_v1_store_missing"
+    try:
+        from data_system.src.event_data_resolver import npz_search_dirs
+    except ModuleNotFoundError as exc:
+        missing = exc.name or ""
+        if missing != "data_system" and not missing.startswith("data_system."):
+            raise
+        return "npz_digest_unavailable"
+    from backtest_pipeline.src.vectorbt_adapter import _npz_candidates_for_event
+
+    repo_root = Path(ctx.repo_root)
+    candidates = _npz_candidates_for_event(
+        npz_search_dirs(repo_root),
+        unit.event_id,
+        unit.symbol,
+    )
+    if not candidates:
+        return "no_npz"
+    try:
+        return hash_file_content(candidates[0])
+    except FileNotFoundError:
+        return "npz_missing"
+
+
 def resolve_batching_hashes(
     unit: PaidScreenUnit,
     ctx: WorkerContext,
@@ -268,10 +329,12 @@ def resolve_batching_hashes(
     model_registry_hash: str | None = None,
 ) -> tuple[str, str, str, str]:
     """Resolve content hashes used to build a full ``BatchingKey``."""
+    npz_digest = _resolve_npz_digest_for_unit(unit, ctx)
     dm = data_manifest_hash or hashlib.sha256(json.dumps({
         "event_id": unit.event_id,
         "lake_manifest_hash": ctx.lake_manifest_hash,
         "events_csv_hash": ctx.events_csv_hash,
+        "npz_digest": npz_digest,
     }, sort_keys=True).encode()).hexdigest()[:32]
     fs_id = unit.feature_set_id or "default"
     fs_hash = feature_set_hash or hashlib.sha256(json.dumps({
@@ -354,9 +417,19 @@ def _ohlcv_aligns_with_fs_v1_store(ohlcv, fs_ctx) -> bool:
     return len(ohlcv) == len(store_ts)
 
 
-def _fs_v1_context_cache_key(unit: PaidScreenUnit, context: WorkerContext) -> str:
+def _fs_v1_context_cache_key(
+    unit: PaidScreenUnit,
+    context: WorkerContext,
+    required_leaders=(),
+) -> str:
     """Cache key for fs_v1 feature-store context (one load per batching key)."""
-    return "fs_v1_ctx:" + batching_key_for_unit(unit, context).feature_cache_key()
+    leader_key = ",".join(_normalize_leader_symbols(required_leaders))
+    return (
+        "fs_v1_ctx:"
+        + batching_key_for_unit(unit, context).feature_cache_key()
+        + ":leaders="
+        + leader_key
+    )
 
 
 def _get_or_load_fs_v1_context(
@@ -364,24 +437,31 @@ def _get_or_load_fs_v1_context(
     context: WorkerContext,
     data_cache: dict | BoundedLRUCache,
     profiler: RunProfiler,
+    required_leaders=(),
 ):
     """Load fs_v1 screen context once per batching key; record cache counters."""
-    cache_key = _fs_v1_context_cache_key(unit, context)
+    cache_key = _fs_v1_context_cache_key(unit, context, required_leaders)
     cached = _cache_get(data_cache, cache_key)
     if cached is not None:
         profiler.performance.feature_store_cache_hits += 1
         return cached
     profiler.performance.feature_store_cache_misses += 1
     profiler.performance.feature_store_load_count += 1
-    fs_ctx = _try_resolve_fs_v1_context(unit, context)
+    fs_ctx = _try_resolve_fs_v1_context(
+        unit,
+        context,
+        required_leaders=required_leaders,
+    )
     if fs_ctx is not None:
-        _cache_put(data_cache, cache_key, fs_ctx)
+        if not _cache_put(data_cache, cache_key, fs_ctx):
+            _LOG.warning("fs_v1_context_cache_rejected key=%s", cache_key)
     return fs_ctx
 
 
 def _try_resolve_fs_v1_context(
     unit: PaidScreenUnit,
     context: WorkerContext,
+    required_leaders=(),
 ):
     """Return fs_v1 screen context when feature-store rows exist for *unit*."""
     repo_root = Path(context.repo_root)
@@ -396,6 +476,7 @@ def _try_resolve_fs_v1_context(
             repo_root=repo_root,
             event_id=unit.event_id,
             symbol=unit.symbol,
+            required_leaders=_normalize_leader_symbols(required_leaders) or None,
         )
     except (ImportError, ModuleNotFoundError, OSError, ValueError):
         return None
@@ -609,11 +690,11 @@ def _write_screening_artifact(
     from backtest_pipeline.src.vectorbt_adapter import (
         _json_primitive_screening_payload,
         compute_screening_artifact_hash,
-        validate_screening_artifact,
+        validate_screening_artifact_or_raise,
     )
 
     artifact["screening_artifact_hash"] = compute_screening_artifact_hash(artifact)
-    validate_screening_artifact(artifact)
+    validate_screening_artifact_or_raise(artifact)
 
     # Write atomically
     serializable = _json_primitive_screening_payload(artifact)
@@ -687,6 +768,11 @@ def screen_paid_batch(
 
     results: list[UnitScreeningResult] = []
 
+    def _fold_lru_profiler_delta() -> None:
+        if use_lru:
+            profiler.cache_hits += data_cache.hit_count - pre_hits
+            profiler.cache_misses += data_cache.miss_count - pre_misses
+
     if not units:
         return results
 
@@ -702,7 +788,8 @@ def screen_paid_batch(
         try:
             ohlcv = _load_ohlcv_for_unit(representative, context)
             if ohlcv is not None:
-                _cache_put(data_cache, cache_key, ohlcv)
+                if not _cache_put(data_cache, cache_key, ohlcv):
+                    _LOG.warning("ohlcv_cache_rejected key=%s", cache_key)
                 if not use_lru:
                     profiler.cache_misses += 1
             else:
@@ -719,14 +806,6 @@ def screen_paid_batch(
             profiler.cache_hits += 1
     profiler.end_stage("npz_discovery")
 
-    # When using a BoundedLRUCache, its get()/put() already maintain the
-    # authoritative hit_count/miss_count. Fold the *delta* (this batch's
-    # contribution) into the profiler so the profiler reflects the cache's
-    # view without double-counting across multiple batches.
-    if use_lru:
-        profiler.cache_hits += data_cache.hit_count - pre_hits
-        profiler.cache_misses += data_cache.miss_count - pre_misses
-
     if ohlcv is None:
         # All units fail — no data
         for unit in units:
@@ -738,17 +817,28 @@ def screen_paid_batch(
                 status="ERROR",
                 error="no_ohlcv_data",
             ))
+        _fold_lru_profiler_delta()
         return results
 
     # Cache-wiring / disabled-screening path: resolve models per unit group,
     # return SKIPPED for successes and ERROR for per-unit resolution failures.
     if _should_skip_matrix_screening(run_screening, ohlcv_from_cache, data_cache):
-        return _resolve_models_without_screening(units, context, profiler)
+        skipped = _resolve_models_without_screening(units, context, profiler)
+        _fold_lru_profiler_delta()
+        return skipped
 
     # v1 screening auto-selects fs_v1 signal computer; v2 matrix path must too.
-    fs_v1_ctx = _get_or_load_fs_v1_context(
-        representative, context, data_cache, profiler
+    initial_required_leaders = _normalize_leader_symbols(
+        leader for unit in units for leader in _unit_cross_asset_required_leaders(unit)
     )
+    fs_v1_ctx = _get_or_load_fs_v1_context(
+        representative,
+        context,
+        data_cache,
+        profiler,
+        required_leaders=initial_required_leaders,
+    )
+    fs_v1_unavailable_reason = "fs_v1_context_absent" if fs_v1_ctx is None else None
     signal_computer = None
     if fs_v1_ctx is not None and _ohlcv_aligns_with_fs_v1_store(ohlcv, fs_v1_ctx):
         signal_computer = _resolve_fs_v1_signal_computer(
@@ -758,6 +848,8 @@ def screen_paid_batch(
             len({u.model_id for u in units})
         )
     else:
+        if fs_v1_ctx is not None:
+            fs_v1_unavailable_reason = "fs_v1_context_misaligned"
         fs_v1_ctx = None
 
     # Compute OHLCV hash for artifact provenance
@@ -767,6 +859,37 @@ def screen_paid_batch(
     units_by_model: dict[str, list[PaidScreenUnit]] = {}
     for unit in units:
         units_by_model.setdefault(unit.model_id, []).append(unit)
+
+    if fs_v1_ctx is not None and fs_v1_ctx.missing_leader_symbols:
+        missing_leader_symbols = _normalize_leader_symbols(
+            fs_v1_ctx.missing_leader_symbols
+        )
+        missing_leader_set = set(missing_leader_symbols)
+        for model_id in list(units_by_model):
+            model_units = units_by_model[model_id]
+            static_required_leaders = _normalize_leader_symbols(
+                leader
+                for unit in model_units
+                for leader in _unit_cross_asset_required_leaders(unit)
+            )
+            relevant_missing = tuple(
+                leader
+                for leader in static_required_leaders
+                if leader in missing_leader_set
+            )
+            if not relevant_missing:
+                continue
+            missing = ",".join(relevant_missing)
+            for unit in model_units:
+                results.append(UnitScreeningResult(
+                    unit_id=unit.unit_id,
+                    status="ERROR",
+                    error=f"cross_asset_leader_missing_fail_closed:{missing}",
+                ))
+            del units_by_model[model_id]
+        if not units_by_model:
+            _fold_lru_profiler_delta()
+            return results
 
     # Process each model group
     for model_id, model_units in units_by_model.items():
@@ -784,6 +907,47 @@ def screen_paid_batch(
             candidate = _build_candidate_model(
                 representative_unit, model_entry, Path(context.repo_root), parsed
             )
+            from backtest_pipeline.src.vectorbt_adapter import _candidate_cross_asset_required_leaders
+
+            required_leaders = _candidate_cross_asset_required_leaders(candidate)
+            model_fs_v1_ctx = fs_v1_ctx
+            model_signal_computer = signal_computer
+            model_fs_v1_unavailable_reason = fs_v1_unavailable_reason
+            if required_leaders and fs_v1_ctx is not None:
+                present_leaders = _normalize_leader_symbols(
+                    leader for leader, _leg in getattr(fs_v1_ctx, "leader_legs", ())
+                )
+                missing_leaders = _normalize_leader_symbols(
+                    getattr(fs_v1_ctx, "missing_leader_symbols", ())
+                )
+                if (
+                    not set(required_leaders).issubset(set(present_leaders))
+                    or missing_leaders
+                ):
+                    model_fs_v1_ctx = _get_or_load_fs_v1_context(
+                        representative_unit,
+                        context,
+                        data_cache,
+                        profiler,
+                        required_leaders=required_leaders,
+                    )
+                    if (
+                        model_fs_v1_ctx is not None
+                        and _ohlcv_aligns_with_fs_v1_store(ohlcv, model_fs_v1_ctx)
+                    ):
+                        model_signal_computer = _resolve_fs_v1_signal_computer(
+                            representative_unit,
+                            context,
+                            fs_ctx=model_fs_v1_ctx,
+                        )
+                        model_fs_v1_unavailable_reason = None
+                    else:
+                        model_fs_v1_unavailable_reason = (
+                            "fs_v1_context_absent"
+                            if model_fs_v1_ctx is None
+                            else "fs_v1_context_misaligned"
+                        )
+                        model_fs_v1_ctx = None
 
             # Run the matrix screening with worker run budget forwarded.
             from backtest_pipeline.src.vectorbt_adapter import DEFAULT_PARAM_GRID, _build_run_budget
@@ -803,20 +967,17 @@ def screen_paid_batch(
                 parsed=parsed,
                 grid=DEFAULT_PARAM_GRID,
                 repo_root=Path(context.repo_root),
-                signal_computer=signal_computer,
+                signal_computer=model_signal_computer,
                 screening_scope=context.screening_scope,
                 chunk_size=chunk_size,
                 max_total_trials=max_trials,
                 run_budget=budget,
                 performance_counters=profiler.performance,
-                fs_v1_ctx=fs_v1_ctx,
+                fs_v1_ctx=model_fs_v1_ctx,
             )
-            filter_result = apply_promotion_gates(
-                filter_result,
-                screening_scope=context.screening_scope,
-                repo_root=Path(context.repo_root),
-            )
-            if fs_v1_ctx is not None:
+            # Promotion gates validate fs_v1 provenance, so stamp the metadata
+            # before applying them.
+            if model_fs_v1_ctx is not None:
                 from backtest_pipeline.src.vectorbt_adapter import (
                     _apply_fs_v1_screen_metadata,
                     _resolve_research_clock,
@@ -824,26 +985,45 @@ def screen_paid_batch(
 
                 _apply_fs_v1_screen_metadata(
                     filter_result,
-                    fs_v1_ctx,
+                    model_fs_v1_ctx,
                     [candidate],
                     research_clock=_resolve_research_clock([candidate]),
                     screening_scope=context.screening_scope,
                     repo_root=Path(context.repo_root),
                 )
+            else:
+                filter_result.feature_plane_overrides = {
+                    **dict(filter_result.feature_plane_overrides or {}),
+                    "cross_asset_leader_fail_closed": True,
+                    "cross_asset_leader_fail_closed_reason": (
+                        "cross_asset_leader_missing_fail_closed:"
+                        f"{model_fs_v1_unavailable_reason or 'fs_v1_context_absent'}"
+                    ),
+                }
+            filter_result = apply_promotion_gates(
+                filter_result,
+                screening_scope=context.screening_scope,
+                repo_root=Path(context.repo_root),
+                fs_v1_ctx=model_fs_v1_ctx,
+            )
 
             # Write per-unit artifacts and collect results
             for unit in model_units:
+                unit_parsed = build_structured_parsed_hypothesis(unit, model_entry)
+                unit_candidate = _build_candidate_model(
+                    unit, model_entry, Path(context.repo_root), unit_parsed
+                )
                 artifact_dir = _worker_scratch_artifact_dir(
                     context.repo_root, unit.unit_id, scratch_root=scratch_root
                 )
                 os.makedirs(artifact_dir, exist_ok=True)
                 artifact_path = os.path.join(artifact_dir, "screening_artifact.json")
 
-                # Write the artifact
+                # Write the artifact with per-unit candidate attribution
                 artifact_hash = _write_screening_artifact(
                     artifact_path, filter_result,
                     unit, model_entry, context, ohlcv_hash, profiler,
-                    candidate=candidate,
+                    candidate=unit_candidate,
                 )
 
                 result = UnitScreeningResult(
@@ -873,4 +1053,5 @@ def screen_paid_batch(
                     elapsed_seconds=elapsed,
                 ))
 
+    _fold_lru_profiler_delta()
     return results

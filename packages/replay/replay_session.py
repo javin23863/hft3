@@ -29,6 +29,23 @@ from features_engine.src.hypotheses.modules import MarketState
 
 _REPO = Path(__file__).resolve().parents[1]
 AUDIT_DIR = _REPO / "runtime" / "replay_audits"
+_CERTIFICATION_OVERRIDE_KEYS = {
+    "certification_allowed",
+    "certification_status",
+    "certification_block_reason",
+}
+
+
+def _certification_override_metadata(value: Dict[str, Any]) -> Dict[str, Any]:
+    if value.get("certification_allowed") is not False:
+        return {}
+    metadata = {
+        key: value[key]
+        for key in _CERTIFICATION_OVERRIDE_KEYS - {"certification_allowed"}
+        if key in value
+    }
+    metadata["certification_allowed"] = False
+    return metadata
 
 
 def _realized_closed_trade_pnl(fill_records: List[Dict[str, Any]]) -> float:
@@ -86,6 +103,9 @@ class ReplayStepContext:
     # strategy is still stepped so it can cancel/flatten; it should suppress
     # new passive quotes itself while this is set.
     book_one_sided: bool = False
+    # Public escape hatch for uncertified legacy callbacks that need the raw
+    # HftBacktest handle without reaching through execution adapter internals.
+    hbt_handle: Any | None = None
 
 
 @runtime_checkable
@@ -153,6 +173,8 @@ class ReplaySessionConfig:
     prepared_data: bool = False
     latency_model_path: str = ""
     fill_queue_model_path: str = ""
+    certification_override: Dict[str, Any] = field(default_factory=dict)
+    allow_uncertified_hbt_handle: bool = False
 
 
 class ReplaySession:
@@ -161,6 +183,13 @@ class ReplaySession:
         config: ReplaySessionConfig,
         strategy: ReplayStrategy,
     ) -> None:
+        if (
+            config.allow_uncertified_hbt_handle
+            and config.certification_override.get("certification_allowed") is not False
+        ):
+            raise ValueError(
+                "allow_uncertified_hbt_handle requires certification_allowed=False"
+            )
         self.config = config
         self.strategy = strategy
         self.run_id = config.run_id or deterministic_run_id(
@@ -380,6 +409,7 @@ class ReplaySession:
                     execution=adapter,
                     symbol=cfg.symbol,
                     book_one_sided=book_one_sided,
+                    hbt_handle=hbt if cfg.allow_uncertified_hbt_handle else None,
                 )
                 actions = self.strategy.on_step(ctx)
                 for action in actions:
@@ -400,6 +430,7 @@ class ReplaySession:
 
             account = adapter.get_account_state()
             summary = self._build_summary(adapter, account, steps)
+            certification_override = _certification_override_metadata(cfg.certification_override)
             stamp = build_certification_stamp(
                 execution_mode="REPLAY",
                 execution_adapter_mode="hftbacktest_simulated_exchange",
@@ -408,10 +439,20 @@ class ReplaySession:
                 fee_model="FeeModel",
                 fill_model_version="hftbacktest",
             )
+            if certification_override.get("certification_allowed") is False:
+                stamp = dict(stamp)
+                stamp["promotion_eligible"] = False
+                stamp["promotion_label"] = "UNCERTIFIED_CALLBACK_MODE"
+                stamp["reason_if_not_promotion_eligible"] = str(
+                    certification_override.get("certification_block_reason")
+                    or "certification_disabled_by_replay_session"
+                )
             summary["certification_stamp"] = stamp
             summary["certification_footer"] = format_stamp_footer(stamp)
+            if certification_override:
+                summary.update(certification_override)
             self._write_audits(summary)
-            return {
+            result = {
                 "run_id": self.run_id,
                 "steps": steps,
                 "balance": account.balance,
@@ -428,6 +469,9 @@ class ReplaySession:
                 "certification_footer": format_stamp_footer(stamp),
                 "stepping_mode": effective_step_mode,
             }
+            if certification_override:
+                result.update(certification_override)
+            return result
         finally:
             if self._temp_npz is not None:
                 try:

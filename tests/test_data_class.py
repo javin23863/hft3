@@ -195,6 +195,17 @@ def test_data_resolution_from_dict_rejects_inconsistent_degraded_tag() -> None:
 def _config_with_data(**data_overrides) -> CampaignConfig:
     base = CampaignConfig.from_yaml(Path("configs/research/autonomous_hft3.yaml"))
     base.data.update(data_overrides)
+    if "event_windows" not in data_overrides:
+        base.data["event_windows"] = [
+            {
+                "event_id": "pytest",
+                "start_ns": 1,
+                "end_ns": 2,
+                "symbols": ["MES.v.0"],
+            }
+        ]
+    base.models["alpha"] = ["HYP_1"]
+    base.models["select"] = {"roles": ["alpha"]}
     return base
 
 

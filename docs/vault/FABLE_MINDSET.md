@@ -1,8 +1,8 @@
 # Fable mindset — load this first (every agent session)
 
-**Permanent state of being.** Read this note before any task, search, script, or edit.  
-**Cursor runtime (first load):** `.cursor/rules/00-fable-mindset.mdc` — always-on, hardened copy of this note.  
-**Obsidian vault roadmap (ANY LLM):** `C:\Users\MSI\Desktop\Obsidian Vault From VPS\hft3\architecture\Agent Runtime Roadmap.md` · `wiki/hot.md` (top section).  
+**Permanent state of being.** Read this note before any task, search, script, or edit.
+**Cursor runtime (first load):** `.cursor/rules/00-fable-mindset.mdc` — always-on, hardened copy of this note.
+**Obsidian vault roadmap (ANY LLM):** `C:\Users\MSI\Desktop\Obsidian Vault From VPS\hft3\architecture\Agent Runtime Roadmap.md` · `wiki/hot.md` (top section).
 Canonical repo: `C:\Users\MSI\repos\hft3`. Full Fable reference: `C:\Users\MSI\.codex\skills\fable-mindset\references\Fable_Mindset_public.md`.
 
 ---
@@ -23,7 +23,7 @@ Canonical repo: `C:\Users\MSI\repos\hft3`. Full Fable reference: `C:\Users\MSI\.
 
 ## 2. Ponytail mindset (mandatory second — before codebase)
 
-Apply the ponytail lazy-senior-dev ladder on every implementation: YAGNI → stdlib → native → installed dep → one line → minimum that works. **Cursor runtime (#2):** `.cursor/rules/01-ponytail-mindset.mdc`. Upstream: https://github.com/DietrichGebert/ponytail · Vendored: `vendor/ponytail/` · Charter: `docs/ai/PONYTAIL.md`. Never cut validation, security, or finance/math invariants. Vast rent/SSH: `vastai` CLI + `scripts/vast_ssh_run_vbt_paid_screen.sh`.
+Apply the ponytail lazy-senior-dev ladder on every implementation: YAGNI → stdlib → native → installed dep → one line → minimum that works. **Cursor runtime (#2):** `.cursor/rules/01-ponytail-mindset.mdc`. Upstream: https://github.com/DietrichGebert/ponytail · Vendored: `vendor/ponytail/` · Charter: `docs/ai/PONYTAIL.md`. Never cut validation, security, or finance/math invariants. Vast rent/inspect uses `vastai` CLI; paid-screen deploy uses `scripts/vast_deploy_and_verify.ps1` and must print `DEPLOY_CONTRACT_PASS`.
 
 ## 3. When the operator says **“latency test”**
 
@@ -37,8 +37,8 @@ They mean the **CHI404 native C++ placement probe** with **offensive and defensi
 | **ack / wire / backtest latency** | Round trip: **`send_to_ack_us`** / **`new_send_to_ack_us`** (ms distribution for replay) | Placement speed — never substitute for `tick_to_send_us` |
 | **HftBacktest backtest latency** | Three components: **feed**, **order-entry**, **order-response**; regimes Fast/Normal/Stress/Extreme; prefer `IntpOrderLatency` samples | Single scalar `constant_order_latency(ms, ms)` or collapsed `live_order_ack_p99_ms` |
 
-**Primary KPI (placement speed):** `tick_to_send_us` in **µs**.  
-**Backtest ontology:** [HFTBACKTEST_LATENCY_ONTOLOGY.md](HFTBACKTEST_LATENCY_ONTOLOGY.md) — load before any realism or HftBacktest replay work.  
+**Primary KPI (placement speed):** `tick_to_send_us` in **µs**.
+**Backtest ontology:** [HFTBACKTEST_LATENCY_ONTOLOGY.md](HFTBACKTEST_LATENCY_ONTOLOGY.md) — load before any realism or HftBacktest replay work.
 **Spec:** [docs/LATENCY_BASELINE.md](../LATENCY_BASELINE.md) · **Runbook:** [CHI404_CANONICAL_ENTRYPOINTS.md](CHI404_CANONICAL_ENTRYPOINTS.md) · **Paper baseline:** `reports/latency_baselines/current_baseline.json` · **Live baseline (R01 Chicago, 2026-06-18):** `reports/latency_baselines/live_r01_chicago_baseline.json` · **Live capability:** `runtime/latency_reports/live_placement_capability.json`.
 
 **Authority path:** R|API+ C++ adapter (in-process) → `rithmic_latency_probe` → `data/latency_baselines/…/*.jsonl` + `reports/latency_baselines/<run_id>_summary.json` (`hot_path_language=c++`, `wrapper=none`).

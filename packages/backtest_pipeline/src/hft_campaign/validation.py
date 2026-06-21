@@ -93,7 +93,7 @@ def validate_stage0_scenario(scenario: HftReplayScenario, *, repo_root: Path) ->
         reasons.append("prepared_data_validation_failed")
 
     latency_model = _load_json(scenario.latency_model_path)
-    reasons.extend(validate_hftbacktest_latency_model(latency_model))
+    reasons.extend(validate_hftbacktest_latency_model(latency_model, repo_root=repo_root))
     if scenario.latency_model_hash:
         from backtest_pipeline.src.hft_campaign._hashing import sha256_hex
 

@@ -18,8 +18,12 @@ workbench = "workbench.__main__:main"
 economic-event-universe = "economic_event_universe.cli:main"
 llm-slow-tier = "llm_slow_tier.cli:main"
 
+[tool.setuptools]
+py-modules = ["hft3_bootstrap"]
+
 [tool.setuptools.packages.find]
 where = ["apps", "packages", "."]
+namespaces = false
 exclude = ["connectors*"]
 
 [tool.setuptools.package-data]
@@ -31,4 +35,5 @@ pythonpath = [".", "packages", "apps"]
 markers = [
     "integration: requires built C++ binaries (hft_research_sim, hft_feature_golden)",
     "slow: long-running tests (external LLM endpoint, live services, etc.)",
+    "fixture_dry_run: acceptance tests using planted fake runners; not scope-green live evidence",
 ]

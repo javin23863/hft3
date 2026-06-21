@@ -118,14 +118,21 @@ class TestFeatureStoreBatchReuse:
 
         class FakeCtx:
             store = {"ts": np.arange(10, dtype=np.int64), "X": np.zeros((10, 64))}
+            content_hash = "fake_fs_v1_content_hash"
+            store_path = str(tmp_path / "fake_store.npz")
+            missing_leader_symbols = ()
 
-        def fake_resolve(unit, context):
+        def fake_resolve(unit, context, required_leaders=()):
             load_count["n"] += 1
             return FakeCtx()
 
         monkeypatch.setattr(
             "backtest_pipeline.src.paid_screen_batch._try_resolve_fs_v1_context",
             fake_resolve,
+        )
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch._resolve_npz_digest_for_unit",
+            lambda unit, context: "fake_npz_digest",
         )
         monkeypatch.setattr(
             "backtest_pipeline.src.paid_screen_batch._ohlcv_aligns_with_fs_v1_store",
@@ -182,6 +189,32 @@ class TestFeatureStoreBatchReuse:
         assert profiler.performance.feature_store_load_count == 1
         assert profiler.performance.feature_store_cache_misses == 1
         assert profiler.performance.models_evaluated_per_load == [2]
+
+    def test_fs_v1_context_cache_rejection_is_logged(self, monkeypatch, tmp_path, caplog):
+        class FakeCtx:
+            store = {"ts": np.arange(10, dtype=np.int64), "X": np.zeros((10, 64))}
+            content_hash = "fake_fs_v1_content_hash"
+            store_path = str(tmp_path / "fake_store.npz")
+            missing_leader_symbols = ()
+
+        monkeypatch.setattr(
+            "backtest_pipeline.src.paid_screen_batch._try_resolve_fs_v1_context",
+            lambda unit, context, required_leaders=(): FakeCtx(),
+        )
+
+        from backtest_pipeline.src.paid_screen_batch import _get_or_load_fs_v1_context
+        from backtest_pipeline.src.paid_screen_profiling import RunProfiler
+
+        ctx = make_context(repo_root=str(tmp_path))
+        cache = BoundedLRUCache(max_entries=4, max_memory_mb=0)
+        profiler = RunProfiler()
+
+        with caplog.at_level("WARNING", logger="backtest_pipeline.src.paid_screen_batch"):
+            result = _get_or_load_fs_v1_context(make_unit(), ctx, cache, profiler)
+
+        assert result is not None
+        assert cache.oversized_reject_count == 1
+        assert "fs_v1_context_cache_rejected" in caplog.text
 
 
 class TestRawSignalReuse:

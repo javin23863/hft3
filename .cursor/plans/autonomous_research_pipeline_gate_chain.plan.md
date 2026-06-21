@@ -78,7 +78,7 @@ todos:
     content: "Phase 8 (§22): After each edit batch run bounded local rg negative/positive searches + git diff --check (max 3 iterations)"
     status: completed
   - id: phase9-greptile-loop
-    content: "Phase 9 (§23) BLOCKER: Greptile PR GrepLoop LAST — PR-A (#8) merged 2026-06-20; PR-B (#9) loop in progress; max 5 iterations; stop at confidence ≥4/5 + 0 actionable on current head"
+    content: "Phase 9 (§23) BLOCKER: PR-C (#10) — gate order: cavecrew 0🔴0🟡 → verify → push → Greptile last; premature @greptileai on acd5734c noted"
     status: in_progress
   - id: phase10-checklist
     content: "Phase 10 (§24): Complete final acceptance checklist — all 26 items must be true"
@@ -298,7 +298,17 @@ git diff --check
 
 ## Phase 9 — Greptile PR GrepLoop (§23) — LAST gate
 
-**Run only after Phases 1–8 complete.** Do **not** interleave Greptile with implementation phases. Do **not** trigger `@greptileai` on PR-B or PR-C until PR-A reaches **≥ 4/5 Greptile confidence + zero actionable** on current head (same gate for B→C). If Greptile was prematurely pinged on a downstream PR, post a pause comment and continue only on the lowest incomplete PR.
+**Run only after Phases 1–8 complete.** Do **not** interleave Greptile with implementation phases.
+
+> **Owner gate-order correction (2026-06-20, NON-NEGOTIABLE):**
+> **Build: cavecrew dual-pass → fix (0🔴 0🟡) → verify → push → Greptile last.**
+> Forbidden: push before dual-pass review clears; Greptile in parallel with cavecrew or before push.
+
+Do **not** trigger `@greptileai` on PR-B or PR-C until the prior PR has **zero open actionable findings** (0 P1, 0 P2, 0 cavecrew 🔴, 0 cavecrew 🟡) on current head — **not** merely ≥4/5 confidence. If Greptile was prematurely pinged on a downstream PR, post a pause comment and continue only on the lowest incomplete PR.
+
+> **Owner zero-tolerance override (2026-06-20):** Iterations are **unlimited**
+> until perfection gate met. No waive-by-merge. Greptile confidence is advisory;
+> code perfection gate is primary.
 
 **Review split:**
 
@@ -309,26 +319,31 @@ git diff --check
 
 Authority: [GREPLOOP.md](../../docs/ai/GREPLOOP.md) · assignment [§23](../../docs/project/AUTONOMOUS_RESEARCH_PIPELINE_DEVELOPER_ASSIGNMENT.md#23-mandatory-greptile-pr-greptile-loop).
 
-**Per iteration (max 5):**
+**Per iteration (unlimited until perfection gate):**
 
 1. `gh pr view --json number,headRefName,headRefOid,url`
-2. `git push`
-3. `gh pr comment <PR> --body "@greptileai"`
-4. Poll up to 10 min for `greptile-apps[bot]` review on **current head SHA**
-5. Parse Greptile summary confidence (target **≥ 4/5**)
-6. Classify findings; fix all actionable; re-run cavecrew-reviewer on fix diff; pytest; push
-7. Repeat until stop condition or iteration 5 exhausted
+2. **cavecrew-reviewer dual-pass** on local diff vs base (Pass A Karpathy + Pass B math) — **before any push**
+3. Fix all 🔴 and 🟡; re-review until **0🔴 0🟡**
+4. Scope-appropriate pytest (research_pipeline + paid_screen + backtest_pipeline attempt)
+5. `git push`
+6. `gh pr comment <PR> --body "@greptileai"` — **Greptile LAST ONLY** (never parallel with cavecrew or before push)
+7. Poll up to 10 min for `greptile-apps[bot]` review on **current head SHA**
+8. Parse Greptile summary confidence (**advisory** — does not override perfection gate)
+9. Classify findings; fix all actionable P1/P2; return to step 2
+10. Repeat until perfection gate met (no iteration cap)
 
-**Stop condition (gate passes):**
+**Stop condition (gate passes — owner zero-tolerance):**
 
 - Greptile reviewed **current head SHA**
-- Greptile confidence **≥ 4/5** (4/5 or 5/5 in summary when present)
-- **Zero** unresolved actionable Greptile findings
+- **Zero** unresolved actionable Greptile P1 findings
+- **Zero** unresolved actionable Greptile P2 findings
+- **Zero** cavecrew-reviewer 🔴 and 🟡 on current fix diff
 - Scope-appropriate verification green
+- Greptile confidence ≥4/5 is **nice-to-have advisory only**
 
-**Do not advance** to Phase 10 or split PR-B/C until PR-A meets the stop condition above.
+**Do not advance** to Phase 10 or claim merge-ready until all above are true.
 
-**merge-ready: no** until Greptile gate passes or owner waives.
+**merge-ready: no** until perfection gate passes — **no owner waive-by-merge**.
 
 ---
 

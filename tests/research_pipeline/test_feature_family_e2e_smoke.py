@@ -230,8 +230,13 @@ def _e2e_robustness_fn(tmp_path: Path):
             "status": "PASS",
             "wfc_status": "PASS",
             "robustness_passed": True,
-            "periods": [{"gate_pass": True}],
+            "periods": [
+                {"name": "Discovery", "gate_pass": True},
+                {"name": "Holdout", "gate_pass": True, "evaluate_only": True},
+                {"name": "Recent holdout", "gate_pass": True, "evaluate_only": True},
+            ],
             "wfc": {"pearson": 0.5, "spearman": 0.4, "wfc_status": "PASS"},
+            "wfc_matrix_rows": [{"parameter_hash": "ph-e2e", "fold": 0}],
             "metrics": {},
         }
         (out / "summary.json").write_text(json.dumps(campaign_summary), encoding="utf-8")
@@ -320,7 +325,10 @@ def test_e2e_autoresearch_two_generations_with_family_variants(tmp_path: Path, m
                 {
                     "scenario_id": f"sc_{cid}",
                     "candidate_id": cid,
-                    "to_dict": lambda self, _cid=cid: {"scenario_id": f"sc_{cid}", "candidate_id": _cid},
+                    "to_dict": lambda self, _cid=cid, _sid=f"sc_{cid}": {
+                        "scenario_id": _sid,
+                        "candidate_id": _cid,
+                    },
                 },
             )()
             for cid in (getattr(cfg, "candidate_ids", None) or ["unknown"])

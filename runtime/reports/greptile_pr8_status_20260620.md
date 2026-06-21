@@ -1,7 +1,7 @@
 ﻿# Greptile PR #8 status - 2026-06-20 (Phase 9 poll)
 
-**PR:** https://github.com/javin23863/hft3/pull/8  
-**Branch:** `cursor/autoresearch-gate-chain-pr-a`  
+**PR:** https://github.com/javin23863/hft3/pull/8
+**Branch:** `cursor/autoresearch-gate-chain-pr-a`
 **Head:** `d6b5fd41` (docs) / **`da62673c`** (resume_recovered_complete fix)
 
 ## Greptile activity (poll 2026-06-20)
@@ -46,10 +46,10 @@ local re-poll shell: BLOCKED (venv missing pytest)
 
 ## Phase 9 step (this poll)
 
-1. Polled `gh pr view 8` + inline/issue comments — Greptile on `d6b5fd41`/`da62673c`.  
-2. Classified: **0 actionable**; 05:37Z P1 **stale** after `da62673c`.  
-3. Posted PASS-CODE resolve map on #8.  
-4. **`@greptileai` on PR #9 only** (first PR-B review).  
+1. Polled `gh pr view 8` + inline/issue comments — Greptile on `d6b5fd41`/`da62673c`.
+2. Classified: **0 actionable**; 05:37Z P1 **stale** after `da62673c`.
+3. Posted PASS-CODE resolve map on #8.
+4. **`@greptileai` on PR #9 only** (first PR-B review).
 5. PR #10 — not touched.
 
 ## merge-ready (PR-A)

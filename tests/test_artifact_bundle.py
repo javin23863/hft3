@@ -115,7 +115,18 @@ def test_to_gate_result_incomplete(tmp_path: Path) -> None:
 
 
 def _config() -> CampaignConfig:
-    return CampaignConfig.from_yaml(Path("configs/research/autonomous_hft3.yaml"))
+    cfg = CampaignConfig.from_yaml(Path("configs/research/autonomous_hft3.yaml"))
+    cfg.data["event_windows"] = [
+        {
+            "event_id": "pytest",
+            "start_ns": 1,
+            "end_ns": 2,
+            "symbols": ["MES.v.0"],
+        }
+    ]
+    cfg.models["alpha"] = ["HYP_1"]
+    cfg.models["select"] = {"roles": ["alpha"]}
+    return cfg
 
 
 def test_runner_writes_all_17_artifacts(tmp_path: Path) -> None:

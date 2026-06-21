@@ -204,8 +204,16 @@ def worker_process_main(worker_args: dict, batch_queue, result_queue):
         except Exception as e:
             worker.get_profiler().record_failure(
                 "batch_processing", e, f"batch_{batch_id}")
+            error_results = [
+                UnitScreeningResult(
+                    unit_id=u.unit_id,
+                    status="ERROR",
+                    error=str(e),
+                )
+                for u in units
+            ]
             result_queue.put((
                 batch_id,
-                [],
+                error_results,
                 worker.get_profiler().manifest_summary(),
             ))

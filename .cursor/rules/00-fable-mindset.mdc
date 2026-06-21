@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Fable mindset — load this first (every agent session)
 
-**Permanent state of being.** This rule is the **first** context on every Cursor agent turn — before vault, graph, ontology, delegation, or code.  
+**Permanent state of being.** This rule is the **first** context on every Cursor agent turn — before vault, graph, ontology, delegation, or code.
 Canonical vault note: [docs/vault/FABLE_MINDSET.md](../../docs/vault/FABLE_MINDSET.md) · Full reference: `C:\Users\MSI\.codex\skills\fable-mindset\references\Fable_Mindset_public.md`
 
 **Blocking:** Do not run VaultGate, GraphGate, searches, scripts, or edits until you have internalized the Fable loop below. Then load **Ponytail second:** [.cursor/rules/01-ponytail-mindset.mdc](01-ponytail-mindset.mdc). Re-read this rule when the user says "reestablish mindset" or when a turn is long-running, high-risk, or finance/math-critical.
@@ -46,7 +46,7 @@ They mean the **CHI404 native C++ placement probe** with **offensive and defensi
 | **ack / wire / backtest latency** | Round trip: **`send_to_ack_us`** / **`new_send_to_ack_us`** (ms for replay) | Placement speed — never substitute for `tick_to_send_us` |
 | **HftBacktest backtest latency** | Feed + order-entry + order-response; regimes Fast/Normal/Stress/Extreme; prefer `IntpOrderLatency` | Single scalar `constant_order_latency(ms, ms)` |
 
-**Primary KPI (placement speed):** `tick_to_send_us` in **µs**.  
+**Primary KPI (placement speed):** `tick_to_send_us` in **µs**.
 **Backtest ontology:** [docs/vault/HFTBACKTEST_LATENCY_ONTOLOGY.md](../../docs/vault/HFTBACKTEST_LATENCY_ONTOLOGY.md) · **Runbook:** [docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md](../../docs/vault/CHI404_CANONICAL_ENTRYPOINTS.md)
 
 ---
