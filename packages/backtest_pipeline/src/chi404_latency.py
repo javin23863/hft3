@@ -242,8 +242,6 @@ def enrich_latency_model_probe_evidence(
     enriched["native_latency_probe_host"] = "CHI404"
     if summary_path.is_file():
         enriched["native_latency_probe_artifact_hash"] = compute_latency_probe_artifact_hash(summary_path)
-    if enriched.get("feed_latency_ms") is None and enriched.get("order_entry_latency_ms") is not None:
-        enriched["feed_latency_ms"] = float(enriched["order_entry_latency_ms"])
     # Component-band summaries are necessary realism evidence, but they are not
     # sufficient to certify a latency model as fully measured. Keep partial
     # status until the strict decomposed-evidence validator proves source
