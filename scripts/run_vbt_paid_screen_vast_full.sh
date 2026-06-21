@@ -3,7 +3,9 @@
 # Authority: docs/project/VBT_PAID_SCREEN_UNIT_SCOPE.md, PAID_SCREEN_OPS_COMMANDS.md
 # Run ON the Vast instance (NPZ lake already present). Do not use 4-worker smoke topology.
 # Units are generated on-host from events.csv + active model registry (not local Stage A survivors).
-# v2 env knobs: VBT_CACHE_MEMORY_LIMIT_MB, VBT_CACHE_MAX_ENTRIES, VBT_MAX_BATCHES_BEFORE_RECYCLE, VBT_RESUME=1
+# v2 env knobs: PYTHON, VBT_CACHE_MEMORY_LIMIT_MB, VBT_CACHE_MAX_ENTRIES,
+# VBT_MAX_BATCHES_BEFORE_RECYCLE, VBT_MAX_UNITS_PER_BATCH, VBT_BATCH_TIMEOUT_SECONDS,
+# VBT_MAX_UNITS, VBT_SAMPLE_MODE=1, VBT_RESUME=1
 # v2 provenance: passes --events-csv + derived --events-csv-hash; lake hash from HFT3_MANIFEST_PATH
 # (sha256 file content) or declaration lake_manifest_hash — fail-closed before v2 launch if unavailable.
 set -euo pipefail
@@ -30,7 +32,19 @@ MODEL_SCOPE="${VBT_MODEL_SCOPE:-active}"
 MODEL_IDS="${VBT_MODEL_IDS:-}"
 EVENT_TYPES="${VBT_EVENT_TYPES:-}"
 RESEARCH_SPLIT="${VBT_RESEARCH_SPLIT:-discovery_confirmation}"
-DECL_FILE="${VBT_FULL_RUN_DECLARATION:-runtime/reports/vbt_full_run_declaration.json}"
+MAX_UNITS="${VBT_MAX_UNITS:-}"
+START_DATE="${VBT_START_DATE:-}"
+END_DATE="${VBT_END_DATE:-}"
+PYTHON="${PYTHON:-python3}"
+SAMPLE_ENABLED=0
+case "${VBT_SAMPLE_MODE:-0}" in
+  1|true|TRUE|yes|YES) SAMPLE_ENABLED=1 ;;
+esac
+if [[ "$SAMPLE_ENABLED" == "1" && -z "${VBT_FULL_RUN_DECLARATION:-}" ]]; then
+  DECL_FILE="runtime/reports/vbt_sample_run_declaration.json"
+else
+  DECL_FILE="${VBT_FULL_RUN_DECLARATION:-runtime/reports/vbt_full_run_declaration.json}"
+fi
 
 NPROC="$(nproc)"
 if [[ -n "${VBT_WORKERS:-}" ]]; then
@@ -54,13 +68,17 @@ fi
 
 echo "=== Vast VectorBT paid screen ==="
 echo "repo=$REPO_ROOT nproc=$NPROC workers=$WORKERS npz_root=$HFT3_NPZ_ROOT"
-echo "events_csv=$EVENTS_CSV symbols=$SYMBOLS model_scope=$MODEL_SCOPE units_out=$UNITS_JSONL"
+echo "events_csv=$EVENTS_CSV symbols=$SYMBOLS model_scope=$MODEL_SCOPE max_units=${MAX_UNITS:-all} units_out=$UNITS_JSONL"
 
-bash scripts/install_vbt_hbt_handoff_verify_deps.sh
-pip3 install 'vectorbt[rust]==1.0.0' -q
+if [[ "$SAMPLE_ENABLED" == "1" && -z "$MAX_UNITS" ]]; then
+  echo "ERROR: VBT_SAMPLE_MODE=1 requires VBT_MAX_UNITS to cap paid compute." >&2
+  exit 1
+fi
+
+PYTHON="$PYTHON" bash scripts/install_vbt_hbt_handoff_verify_deps.sh
 
 GEN_ARGS=(
-  python3 scripts/generate_vbt_paid_units_jsonl.py
+  "$PYTHON" scripts/generate_vbt_paid_units_jsonl.py
   --events-csv "$EVENTS_CSV"
   --symbols "$SYMBOLS"
   --out "$UNITS_JSONL"
@@ -79,6 +97,15 @@ if [[ -n "$EVENT_TYPES" ]]; then
 fi
 
 GEN_ARGS+=(--research-split "$RESEARCH_SPLIT")
+if [[ -n "$MAX_UNITS" ]]; then
+  GEN_ARGS+=(--max-units "$MAX_UNITS")
+fi
+if [[ -n "$START_DATE" ]]; then
+  GEN_ARGS+=(--start-date "$START_DATE")
+fi
+if [[ -n "$END_DATE" ]]; then
+  GEN_ARGS+=(--end-date "$END_DATE")
+fi
 
 if [[ "${VBT_REQUIRE_RUNNABLE_NPZ:-1}" == "1" || "${VBT_REQUIRE_RUNNABLE_NPZ:-1}" == "true" ]]; then
   GEN_ARGS+=(--require-runnable-npz)
@@ -87,17 +114,45 @@ fi
 "${GEN_ARGS[@]}"
 
 UNIT_COUNT="$(grep -c . "$UNITS_JSONL" || true)"
-echo "Full unit count: $UNIT_COUNT (must match declaration expected_work_units)"
+echo "Unit count: $UNIT_COUNT (must match declaration expected_work_units)"
+
+if [[ "$SAMPLE_ENABLED" == "1" && -z "${VBT_FULL_RUN_DECLARATION:-}" ]]; then
+  mkdir -p "$(dirname "$DECL_FILE")"
+  "$PYTHON" - "$DECL_FILE" "$UNIT_COUNT" "$WORKERS" "$UNITS_JSONL" <<'PY'
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+decl_file = Path(sys.argv[1])
+unit_count = int(sys.argv[2])
+workers = int(sys.argv[3])
+units_path = sys.argv[4]
+decl = {
+    "sample_mode": True,
+    "workers_requested": workers,
+    "expected_work_units": unit_count,
+    "units_source": "sample env: events.csv × selected model/symbol/event filters",
+    "units_path": units_path,
+    "stall_minutes": int(os.environ.get("VBT_STALL_MINUTES", "30")),
+    "abort_on_failed_units": True,
+    "git_head": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
+}
+decl_file.write_text(json.dumps(decl, indent=2) + "\n", encoding="utf-8")
+print(f"Sample declaration written: {decl_file}")
+PY
+fi
 
 if [[ ! -f "$DECL_FILE" ]]; then
   echo "ERROR: Full-run declaration missing: $DECL_FILE" >&2
   echo "Generate units on-host, record expected_work_units, then rerun. See docs/project/VBT_PAID_SCREEN_POST_GATE_PLAYBOOK.md (Phase D0)." >&2
-  echo "  python3 scripts/generate_vbt_paid_units_jsonl.py ... --out $UNITS_JSONL" >&2
+  echo "  $PYTHON scripts/generate_vbt_paid_units_jsonl.py ... --out $UNITS_JSONL" >&2
   echo "  wc -l $UNITS_JSONL  # write count to $DECL_FILE as expected_work_units" >&2
   exit 1
 fi
 
-DECL_EXPECTED="$(python3 - "$DECL_FILE" <<'PY'
+DECL_EXPECTED="$("$PYTHON" - "$DECL_FILE" <<'PY'
 import json, sys
 print(json.load(open(sys.argv[1], encoding="utf-8"))["expected_work_units"])
 PY
@@ -113,7 +168,7 @@ fi
 echo "Declaration OK: expected_work_units=$DECL_EXPECTED"
 
 if [[ -z "${VBT_WORKERS:-}" && -f "$DECL_FILE" ]]; then
-  DECL_WORKERS="$(python3 - "$DECL_FILE" <<'PY'
+  DECL_WORKERS="$("$PYTHON" - "$DECL_FILE" <<'PY'
 import json, sys
 w = json.load(open(sys.argv[1], encoding="utf-8")).get("workers_requested")
 print(w if w is not None else "")
@@ -126,7 +181,7 @@ PY
 fi
 
 if [[ -z "${VBT_FULL_RUN_ID:-}" && -f "$DECL_FILE" ]]; then
-  DECL_RUN_ID="$(python3 - "$DECL_FILE" <<'PY'
+  DECL_RUN_ID="$("$PYTHON" - "$DECL_FILE" <<'PY'
 import json, sys
 d = json.load(open(sys.argv[1], encoding="utf-8"))
 for key in ("run_id", "vbt_full_run_id"):
@@ -142,7 +197,11 @@ PY
   fi
 fi
 
-export VBT_FULL_RUN_ID="${VBT_FULL_RUN_ID:-paid_full_$(date -u +%Y%m%dT%H%M%SZ)}"
+RUN_PREFIX="${VBT_RUN_PREFIX:-paid_full}"
+if [[ "$SAMPLE_ENABLED" == "1" && -z "${VBT_RUN_PREFIX:-}" ]]; then
+  RUN_PREFIX="paid_sample"
+fi
+export VBT_FULL_RUN_ID="${VBT_FULL_RUN_ID:-${RUN_PREFIX}_$(date -u +%Y%m%dT%H%M%SZ)}"
 OUT_DIR="${REPO_ROOT}/research_cards/pipeline_runs/${VBT_FULL_RUN_ID}"
 LOG_FILE="${OUT_DIR}/orchestrator.log"
 mkdir -p "$OUT_DIR"
@@ -151,7 +210,7 @@ PAID_SCREEN_SCRIPT="scripts/run_paid_screen.py"
 
 echo "Resolving v2 provenance hashes (events CSV + lake manifest)..."
 if ! read -r EVENTS_CSV_HASH LAKE_MANIFEST_HASH < <(
-    python3 - "$REPO_ROOT" "$EVENTS_CSV" "$DECL_FILE" "$GATE_FILE" <<'PY'
+    "$PYTHON" - "$REPO_ROOT" "$EVENTS_CSV" "$DECL_FILE" "$GATE_FILE" <<'PY'
 import hashlib
 import json
 import os
@@ -219,7 +278,7 @@ def resolve_lake_manifest_hash(repo_root: Path, decl_file: Path, gate_file: Path
     print(
         "ERROR: lake manifest hash unavailable for v2 launch: "
         "record lake_manifest_hash in gate pilot_hashes or full-run declaration. "
-        "Do not substitute manifest.json or units JSONL.",
+        "Do not substitute units JSONL or manifest.json.",
         file=sys.stderr,
     )
     sys.exit(1)
@@ -236,7 +295,7 @@ fi
 echo "events_csv_hash=$EVENTS_CSV_HASH lake_manifest_hash=$LAKE_MANIFEST_HASH"
 
 PAID_ARGS=(
-  python3 "$PAID_SCREEN_SCRIPT"
+  "$PYTHON" "$PAID_SCREEN_SCRIPT"
   --units-jsonl "$UNITS_JSONL"
   --out "$OUT_DIR"
   --vectorbt-scope paid-compute
@@ -245,6 +304,8 @@ PAID_ARGS=(
   --max-wall-clock-seconds "${VBT_MAX_WALL_CLOCK_SECONDS:-86400}"
   --no-llm
   --max-batches-before-recycle "${VBT_MAX_BATCHES_BEFORE_RECYCLE:-100}"
+  --max-units-per-batch "${VBT_MAX_UNITS_PER_BATCH:-2}"
+  --batch-timeout-seconds "${VBT_BATCH_TIMEOUT_SECONDS:-1800}"
   --cache-memory-limit-mb "${VBT_CACHE_MEMORY_LIMIT_MB:-4096}"
   --cache-max-entries "${VBT_CACHE_MAX_ENTRIES:-1000}"
   --events-csv "$EVENTS_CSV"
@@ -257,7 +318,7 @@ fi
 
 ABORT_ON_FAIL="${VBT_ABORT_ON_FAILED_UNITS:-}"
 if [[ -z "$ABORT_ON_FAIL" && -f "$DECL_FILE" ]]; then
-  ABORT_ON_FAIL="$(python3 - "$DECL_FILE" <<'PY'
+  ABORT_ON_FAIL="$("$PYTHON" - "$DECL_FILE" <<'PY'
 import json, sys
 print("1" if json.load(open(sys.argv[1], encoding="utf-8")).get("abort_on_failed_units") else "0")
 PY
@@ -271,6 +332,6 @@ echo "Starting full run id=$VBT_FULL_RUN_ID workers=$WORKERS out=$OUT_DIR"
 "${PAID_ARGS[@]}" 2>&1 | tee "$LOG_FILE"
 
 echo "Manifest: ${OUT_DIR}/paid_screen_run_manifest.json"
-python3 scripts/aggregate_vbt_promoted_ids.py \
+"$PYTHON" scripts/aggregate_vbt_promoted_ids.py \
   --manifest "${OUT_DIR}/paid_screen_run_manifest.json" \
   --out runtime/reports/vbt_full_promoted_ids.json

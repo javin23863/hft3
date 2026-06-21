@@ -129,15 +129,15 @@ PY
 git clone <repo-url> hft3 && cd hft3
 git checkout <git_head from declaration>
 git submodule update --init vendor/openfoundry vendor/alphageometry
+export PYTHON=python3
 bash scripts/install_vbt_hbt_handoff_verify_deps.sh
-pip install 'vectorbt[rust]==1.0.0'
 ```
 
 3. **Sync NPZ lake** — same manifest as pilot/smoke (`HFT3_MANIFEST_PATH`). Verify hash:
 
 ```bash
 export HFT3_NPZ_ROOT=/data/npz
-export HFT3_MANIFEST_PATH=/data/npz/manifest.json
+export HFT3_MANIFEST_PATH=/data/npz/manifest.parquet
 # hash must match declaration lake_manifest_hash
 ```
 
@@ -190,16 +190,65 @@ python scripts/run_paid_screen.py \
   --out /tmp/preflight_out \
   --dry-run
 
-# Single-unit canary on Vast (same scope as full run)
-python scripts/run_pipeline.py \
-  --thesis "Canary paid-compute on CPI_2024_09_11_TIGHT HYP_5" \
-  --event-id CPI_2024_09_11_TIGHT \
-  --vectorbt --vectorbt-scope paid-compute --no-llm
+# Dry-run full unit count after units are generated
+python scripts/run_paid_screen.py \
+  --units-jsonl runtime/reports/vbt_full_units.jsonl \
+  --out /tmp/vbt_full_dryrun \
+  --vectorbt-scope paid-compute \
+  --workers 230 \
+  --max-units-per-batch 2 \
+  --dry-run
 ```
 
-Canary pass: `screening_artifact.json` exists, `vectorbt_engine=rust`, `no_lookahead_signal_shift_proof` non-empty.
+Record `N_FULL` from `wc -l runtime/reports/vbt_full_units.jsonl` and dry-run `DRY_RUN units=N`.
 
-**Only after canary:** start tmux full run (D4).
+### Phase D3.5 — Paid-compute sample before scale
+
+Run one real paid-compute unit through the same v2 wrapper before any 230-worker full launch:
+
+```bash
+cd "$HFT3_REPO"
+set -a; source /root/hft3/.env; set +a
+export PYTHON=python3
+export HFT3_NPZ_ROOT=/data/npz
+export HFT3_MANIFEST_PATH=/data/npz/manifest.parquet
+
+export VBT_SAMPLE_MODE=1
+export VBT_FULL_RUN_ID="paid_sample_1u_$(date -u +%Y%m%dT%H%M%SZ)"
+export VBT_FULL_UNITS_JSONL=runtime/reports/vbt_sample_1u.jsonl
+export VBT_WORKERS=1
+export VBT_MAX_UNITS=1
+export VBT_MAX_UNITS_PER_BATCH=1
+export VBT_BATCH_TIMEOUT_SECONDS=1200
+export VBT_MAX_WALL_CLOCK_SECONDS=1800
+export VBT_MODEL_SCOPE=single
+export VBT_MODEL_ID=SPREAD_BLOWOUT_RECOMPRESSION
+export VBT_SYMBOLS=MES.v.0
+export VBT_EVENT_TYPES=CPI
+export VBT_START_DATE=2024-09-11
+export VBT_END_DATE=2024-09-11
+
+SECONDS=0
+bash scripts/run_vbt_paid_screen_vast_full.sh
+echo "elapsed_seconds=$SECONDS"
+jq '{status, expected_work_units, completed_work_units, failed_work_units, units_per_hour}' \
+  research_cards/pipeline_runs/${VBT_FULL_RUN_ID}/paid_screen_run_manifest.json
+```
+
+Sample pass: manifest `status=complete`, `completed_work_units=1`, `failed_work_units=0`, screening artifact exists, `vectorbt_engine=rust`, and lookahead proof fields are present.
+
+Cost estimate before scale:
+
+```text
+sample_uph_per_worker = sample_completed / sample_elapsed_hours
+full_wall_hours = N_FULL / (sample_uph_per_worker * workers * efficiency)
+full_cost_usd = full_wall_hours * vast_price_usd_per_hour
+batch_safe = floor((batch_timeout_seconds * 0.8) / sample_unit_p95_seconds)
+```
+
+Use efficiency `0.5` to `0.8` until a 16-worker or 32-worker mini-run proves better. If one unit takes about 480 seconds, a 50-unit batch takes about 24,000 seconds and cannot fit a 1,800-second timeout. Start with `VBT_MAX_UNITS_PER_BATCH=1` for the sample and `2` for scale unless the sample p95 supports a higher cap.
+
+**Only after sample pass and owner acceptance of estimated wall-clock/cost:** start tmux full run (D4).
 
 ---
 
@@ -248,6 +297,8 @@ python scripts/run_paid_screen.py \
   --ready-gate-file runtime/reports/paid_screen_ready_gate.json \
   --max-wall-clock-seconds 86400 \
   --max-batches-before-recycle 100 \
+  --max-units-per-batch 2 \
+  --batch-timeout-seconds 1800 \
   --cache-memory-limit-mb 4096 \
   --cache-max-entries 1000 \
   --no-llm \

@@ -4,10 +4,11 @@
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
-bash scripts/install_vbt_hbt_handoff_verify_deps.sh
+PYTHON="${PYTHON:-python3}"
+PYTHON="$PYTHON" bash scripts/install_vbt_hbt_handoff_verify_deps.sh
 export PYTHONPATH="${REPO_ROOT}:${REPO_ROOT}/packages${PYTHONPATH:+:$PYTHONPATH}"
 exec bash tools/shell/run_with_timeout.sh 180 vbt-hbt-handoff-verify -- \
-  python3 -B -m pytest -q \
+  "$PYTHON" -B -m pytest -q \
     tests/backtest_pipeline/test_ontology_gate.py \
     tests/backtest_pipeline/test_feature_plane.py \
     tests/test_vectorbt_adapter.py \

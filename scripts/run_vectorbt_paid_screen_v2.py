@@ -111,6 +111,30 @@ def _assert_hashes_match_ready_gate(
         )
 
 
+def _chunk_grouped_batches(
+    groups: Dict[str, List[PaidScreenUnit]],
+    *,
+    max_units_per_batch: int,
+) -> List[Tuple[int, List[PaidScreenUnit]]]:
+    """Split compatible groups into smaller dispatch batches without mixing keys."""
+    batches: List[Tuple[int, List[PaidScreenUnit]]] = []
+    batch_id = 0
+    for batch_units in groups.values():
+        if max_units_per_batch > 0:
+            chunks = (
+                batch_units[start:start + max_units_per_batch]
+                for start in range(0, len(batch_units), max_units_per_batch)
+            )
+        else:
+            chunks = (batch_units,)
+        for chunk in chunks:
+            if not chunk:
+                continue
+            batches.append((batch_id, list(chunk)))
+            batch_id += 1
+    return batches
+
+
 def _result_to_dict(result: UnitScreeningResult) -> Dict[str, Any]:
     row: Dict[str, Any] = {
         "unit_id": result.unit_id,
@@ -1036,6 +1060,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                         help="Explicit lake manifest hash (required if HFT3_MANIFEST_PATH unset/missing)")
     parser.add_argument("--batch-timeout-seconds", type=float, default=1800.0,
                         help="Per-batch wall-clock timeout when draining results")
+    parser.add_argument("--max-units-per-batch", type=int, default=0,
+                        help="Split compatible groups into chunks capped at N units; 0 keeps full groups")
     parser.add_argument(
         "--abort-on-failed-units",
         action="store_true",
@@ -1043,6 +1069,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
 
     args = parser.parse_args(argv)
+    if args.max_units_per_batch < 0:
+        print("ERROR: --max-units-per-batch must be >= 0", file=sys.stderr)
+        return 2
 
     repo_root = args.repo_root if args.repo_root.is_absolute() else _REPO / args.repo_root
     units_path = args.units_jsonl if args.units_jsonl.is_absolute() else repo_root / args.units_jsonl
@@ -1164,9 +1193,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     # Dry run: print plan and exit
     if args.dry_run:
         groups = group_units_by_batch_key(units, grouping_ctx)
+        batches = _chunk_grouped_batches(
+            groups,
+            max_units_per_batch=args.max_units_per_batch,
+        )
         print(f"DRY_RUN units={len(units_raw)} "
               f"after_resume={len(units)} "
-              f"batches={len(groups)} "
+              f"batches={len(batches)} "
+              f"max_units_per_batch={args.max_units_per_batch} "
               f"workers={args.workers} "
               f"scope={args.vectorbt_scope} "
               f"out={out_dir}")
@@ -1184,9 +1218,10 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     # Group units into compatible batches (full BatchingKey)
     groups = group_units_by_batch_key(units, grouping_ctx)
-    batches: List[Tuple[int, List[PaidScreenUnit]]] = [
-        (idx, batch_units) for idx, batch_units in enumerate(groups.values())
-    ]
+    batches = _chunk_grouped_batches(
+        groups,
+        max_units_per_batch=args.max_units_per_batch,
+    )
 
     resume_cached_results = [
         _resume_cached_unit_result(out_dir, uid) for uid in skipped_unit_ids

@@ -192,10 +192,10 @@ Historical only: `--from-stage-a-survivors research_cards/stage_a_full/stage_a_s
 ```bash
 git clone / sync hft3
 git submodule update --init vendor/openfoundry vendor/alphageometry
+export PYTHON=python3
 bash scripts/install_vbt_hbt_handoff_verify_deps.sh
-pip install 'vectorbt[rust]==1.0.0'
 export HFT3_NPZ_ROOT=/path/to/npz   # must match manifest
-export HFT3_MANIFEST_PATH=/path/to/manifest.json
+export HFT3_MANIFEST_PATH=/path/to/manifest.parquet
 ```
 
 ### D3 Execute (tmux)
@@ -218,7 +218,8 @@ python scripts/run_paid_screen.py \
   --workers 230 \
   --ready-gate-file runtime/reports/paid_screen_ready_gate.json \
   --max-wall-clock-seconds 86400 \
-  --stall-minutes 30 \
+  --max-units-per-batch 2 \
+  --batch-timeout-seconds 1800 \
   --no-llm
 ```
 

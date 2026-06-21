@@ -22,17 +22,50 @@ from backtest_pipeline.src.vectorbt_adapter import validate_screening_artifact
 _REPO = Path(__file__).resolve().parents[1]
 _VAST_SCRIPT = _REPO / "scripts" / "run_vbt_paid_screen_vast_full.sh"
 _SCRIPTS = _REPO / "scripts"
-_VALID_UNIT_ARTIFACT = _REPO / "research_cards" / "pipeline_runs" / "paid_batch_ok" / "screening_artifact.json"
 
 
 def _copy_valid_unit_artifact(dest: Path, *, repo_root: Path, unit: "PaidScreenUnit") -> None:
     from backtest_pipeline.src.paid_screen_batch import resolve_resume_provenance
-    from backtest_pipeline.src.vectorbt_adapter import compute_screening_artifact_hash
+    from backtest_pipeline.src.vectorbt_adapter import (
+        compute_screening_artifact_hash,
+        filter_candidates,
+        validate_screening_artifact,
+    )
+    from research_pipeline.types import CandidateModel
 
     dest.parent.mkdir(parents=True, exist_ok=True)
-    payload = json.loads(_VALID_UNIT_ARTIFACT.read_text(encoding="utf-8"))
+    candidate_id = f"{unit.model_id}|{unit.symbol}|{unit.event_id}|{unit.hyp_id or 0}"
+    payload = filter_candidates(
+        candidates=[
+            CandidateModel(
+                candidate_id=candidate_id,
+                model_id=unit.model_id,
+                strategy_params={"signal_threshold": 0.15},
+                thesis=unit.thesis or "test paid-screen resume artifact",
+                metadata={
+                    "unit_id": unit.unit_id,
+                    "symbol": unit.symbol,
+                    "event_id": unit.event_id,
+                    "event_type": unit.event_type,
+                    "hyp_id": unit.hyp_id,
+                },
+                target_symbol=unit.symbol.split(".")[0],
+                target_event_id=unit.event_id,
+                research_clock="scheduled_event",
+            )
+        ],
+        parsed=None,
+        event_id=unit.event_id,
+        repo_root=repo_root,
+        data_loader=lambda *_: None,
+        screening_scope="pilot",
+    ).to_dict()
     payload.update(resolve_resume_provenance(str(repo_root), unit))
+    payload["events_csv_hash_or_not_applicable"] = "not_applicable_for_vectorbt_pilot"
+    payload["lake_manifest_hash"] = "pilot_requires_lake_manifest_before_screen"
+    payload["research_split"] = unit.research_split or "discovery_confirmation"
     payload["screening_artifact_hash"] = compute_screening_artifact_hash(payload)
+    validate_screening_artifact(payload)
     dest.write_text(json.dumps(payload), encoding="utf-8")
 
 
@@ -188,14 +221,49 @@ class TestVastLauncherV2Only:
         assert "run_vectorbt_paid_screen.py" not in text
         assert "VBT_EXECUTION_MODE" not in text
         assert "--max-batches-before-recycle" in text
+        assert "--max-units-per-batch" in text
+        assert "--batch-timeout-seconds" in text
         assert "--cache-memory-limit-mb" in text
         assert "--cache-max-entries" in text
         assert "--resume" in text
+        assert "VBT_SAMPLE_MODE=1" in text
+        assert "VBT_MAX_UNITS" in text
+        assert 'PYTHON="$PYTHON" bash scripts/install_vbt_hbt_handoff_verify_deps.sh' in text
+        assert "pip3 install 'vectorbt[rust]==1.0.0'" not in text
         assert '--events-csv "$EVENTS_CSV"' in text
         assert '--events-csv-hash "$EVENTS_CSV_HASH"' in text
         assert '--lake-manifest-hash "$LAKE_MANIFEST_HASH"' in text
         assert "Resolving v2 provenance hashes" in text
         assert "Do not substitute units JSONL" in text
+
+
+class TestBatchChunking:
+    def test_chunk_grouped_batches_preserves_group_order_and_caps_size(self):
+        v2 = _load_v2_module()
+        groups = {
+            "event-a": ["a0", "a1", "a2", "a3", "a4"],
+            "event-b": ["b0"],
+        }
+
+        assert v2._chunk_grouped_batches(groups, max_units_per_batch=2) == [
+            (0, ["a0", "a1"]),
+            (1, ["a2", "a3"]),
+            (2, ["a4"]),
+            (3, ["b0"]),
+        ]
+
+    def test_chunk_grouped_batches_zero_keeps_compatible_group_together(self):
+        v2 = _load_v2_module()
+        groups = {
+            "event-a": ["a0", "a1", "a2"],
+            "event-b": ["b0", "b1"],
+        }
+
+        assert v2._chunk_grouped_batches(groups, max_units_per_batch=0) == [
+            (0, ["a0", "a1", "a2"]),
+            (1, ["b0", "b1"]),
+        ]
+
 
 class TestVastLauncherHashWiring:
     def test_events_hash_derived_from_events_csv(self, tmp_path):
@@ -267,7 +335,7 @@ class TestVastLauncherRunIdDerivation:
         assert '"vbt_full_run_id"' in text
         decl_ok = text.index("Declaration OK:")
         run_id_guard = text.index('if [[ -z "${VBT_FULL_RUN_ID:-}" && -f "$DECL_FILE" ]]; then')
-        timestamp_fallback = text.index('export VBT_FULL_RUN_ID="${VBT_FULL_RUN_ID:-paid_full_$(date -u')
+        timestamp_fallback = text.index('export VBT_FULL_RUN_ID="${VBT_FULL_RUN_ID:-${RUN_PREFIX}_$(date -u')
         assert decl_ok < run_id_guard < timestamp_fallback
 
     def test_run_id_from_declaration_run_id_key(self, tmp_path):
@@ -1279,7 +1347,12 @@ class TestOrchestratorMainExit:
         out_dir = repo / "out"
         gate_path = repo / "gate.json"
         gate_path.write_text(
-            json.dumps({"ready_for_full_run": True}),
+            json.dumps(
+                {
+                    "ready_for_full_run": True,
+                    "lookahead_pytest_tail": "1 passed",
+                }
+            ),
             encoding="utf-8",
         )
 

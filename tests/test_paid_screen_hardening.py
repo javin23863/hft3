@@ -221,7 +221,7 @@ class TestWorkerCrashRecovery:
             "events_csv_hash": "eh",
             "lake_manifest_hash": "lh",
             "HFT3_NPZ_ROOT": "/data/npz",
-            "HFT3_MANIFEST_PATH": "/data/npz/manifest.json",
+            "HFT3_MANIFEST_PATH": "/data/npz/manifest.parquet",
         }
 
         captured: dict[str, str] = {}
@@ -243,7 +243,7 @@ class TestWorkerCrashRecovery:
             PaidScreenWorker.init = original_init
 
         assert captured["HFT3_NPZ_ROOT"] == "/data/npz"
-        assert captured["HFT3_MANIFEST_PATH"] == "/data/npz/manifest.json"
+        assert captured["HFT3_MANIFEST_PATH"] == "/data/npz/manifest.parquet"
 
 
 # --------------------------------------------------------------------------- #

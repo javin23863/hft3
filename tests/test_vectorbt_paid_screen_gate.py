@@ -513,11 +513,32 @@ def test_all_active_holdout_split_includes_holdout_when_explicit(tmp_path: Path)
 def test_vast_full_script_requires_declaration_before_workers() -> None:
     script = (REPO / "scripts" / "run_vbt_paid_screen_vast_full.sh").read_text(encoding="utf-8")
     assert "vbt_full_run_declaration.json" in script
+    assert "vbt_sample_run_declaration.json" in script
+    assert "VBT_SAMPLE_MODE=1 requires VBT_MAX_UNITS" in script
     assert "expected_work_units" in script
     assert "DECL_EXPECTED" in script
     assert "ERROR: Full-run declaration missing" in script
     assert "ERROR: Declaration expected_work_units=" in script
     assert "--research-split" in script
+    assert "--max-units" in script
+    assert "--batch-timeout-seconds" in script
+    assert 'PYTHON="$PYTHON" bash scripts/install_vbt_hbt_handoff_verify_deps.sh' in script
+
+
+def test_paid_screen_shell_entrypoints_use_single_python_runtime() -> None:
+    install = (REPO / "scripts" / "install_vbt_hbt_handoff_verify_deps.sh").read_text(encoding="utf-8")
+    verify = (REPO / "scripts" / "run_vbt_hbt_handoff_verify.sh").read_text(encoding="utf-8")
+    smoke = (REPO / "scripts" / "run_vbt_paid_screen_smoke.sh").read_text(encoding="utf-8")
+    assert '"vectorbt[rust]==1.0.0"' in install
+    assert 'PYTHON="$PYTHON" bash scripts/install_hftbacktest_realism_deps.sh' in install
+    assert "pip3 install 'vectorbt[rust]==1.0.0'" not in (
+        REPO / "scripts" / "run_vbt_paid_screen_vast_full.sh"
+    ).read_text(encoding="utf-8")
+    assert 'PYTHON="${PYTHON:-python3}"' in verify
+    assert '"$PYTHON" -B -m pytest' in verify
+    assert 'PYTHON="${PYTHON:-python3}"' in smoke
+    assert '"$PYTHON" scripts/generate_vbt_paid_units_jsonl.py' in smoke
+    assert '"$PYTHON" scripts/run_paid_screen.py' in smoke
 
 
 def test_vast_ssh_script_uses_current_branch_not_hardcoded_main() -> None:

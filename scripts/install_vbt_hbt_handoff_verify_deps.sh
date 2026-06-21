@@ -16,5 +16,6 @@ PYTHON="${PYTHON:-python3}"
   "python-docx>=1.1.0" \
   "beautifulsoup4>=4.12.0" \
   "requests>=2.31.0" \
+  "vectorbt[rust]==1.0.0" \
   pydantic scipy pytest
-bash scripts/install_hftbacktest_realism_deps.sh
+PYTHON="$PYTHON" bash scripts/install_hftbacktest_realism_deps.sh
