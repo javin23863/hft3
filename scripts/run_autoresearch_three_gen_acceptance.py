@@ -536,7 +536,10 @@ def run_three_gen_acceptance(
                 {
                     "scenario_id": f"sc_{cid}",
                     "candidate_id": cid,
-                    "to_dict": lambda self, _cid=cid: {"scenario_id": f"sc_{cid}", "candidate_id": _cid},
+                    "to_dict": lambda self, _cid=cid, _sid=f"sc_{cid}": {
+                        "scenario_id": _sid,
+                        "candidate_id": _cid,
+                    },
                 },
             )()
             for cid in (getattr(mcfg, "candidate_ids", None) or ["unknown"])
@@ -544,11 +547,11 @@ def run_three_gen_acceptance(
         scenario_store["scenarios"] = scenarios
         return scenarios, []
 
-    gl.generate_candidates = gen0_wrapper
-    gl.propose_next_candidates = propose_wrapper
-    gl.generate_scenario_manifest = fake_generate_scenario_manifest
-    gl.load_scenarios_from_manifest = lambda _path: scenario_store["scenarios"]
     try:
+        gl.generate_candidates = gen0_wrapper
+        gl.propose_next_candidates = propose_wrapper
+        gl.generate_scenario_manifest = fake_generate_scenario_manifest
+        gl.load_scenarios_from_manifest = lambda _path: scenario_store["scenarios"]
         code, loop_report = run_autoresearch_loop(
             repo_root=repo_root,
             thesis=parsed.thesis,

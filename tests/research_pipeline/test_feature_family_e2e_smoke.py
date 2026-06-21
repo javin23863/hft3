@@ -325,7 +325,10 @@ def test_e2e_autoresearch_two_generations_with_family_variants(tmp_path: Path, m
                 {
                     "scenario_id": f"sc_{cid}",
                     "candidate_id": cid,
-                    "to_dict": lambda self, _cid=cid: {"scenario_id": f"sc_{cid}", "candidate_id": _cid},
+                    "to_dict": lambda self, _cid=cid, _sid=f"sc_{cid}": {
+                        "scenario_id": _sid,
+                        "candidate_id": _cid,
+                    },
                 },
             )()
             for cid in (getattr(cfg, "candidate_ids", None) or ["unknown"])

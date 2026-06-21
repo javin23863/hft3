@@ -67,9 +67,10 @@ PersistFn = Callable[..., Path]
 RobustnessFn = Callable[..., Any]
 HftFn = Callable[..., Any]
 
-_PASSING_HFT_CERTIFICATION_STATUS_STRINGS = frozenset(
-    {"scheduled_event_replay_not_full_feature_plane", "full_fidelity_declared"}
+_PRODUCTION_HFT_CERTIFICATION_STATUS_STRINGS = frozenset(
+    {"scheduled_event_replay_not_full_feature_plane"}
 )
+_DECLARED_HFT_CERTIFICATION_STATUS_STRINGS = frozenset({"full_fidelity_declared"})
 
 
 @dataclass
@@ -483,6 +484,7 @@ def _enrich_hft_scenario_results(
     manifest: Mapping[str, Any],
     screening_artifact_hash: str,
     robustness_artifact_hash: str,
+    allow_declared_certification: bool = False,
 ) -> list[dict[str, Any]]:
     """Hydrate replay artifacts for Gate 7 parity without overwriting replay provenance."""
     enriched: list[dict[str, Any]] = []
@@ -520,7 +522,10 @@ def _enrich_hft_scenario_results(
             replay_error = replay.get("error") or summary.get("error")
             if replay_error:
                 row["status"] = "error"
-            elif cert in _PASSING_HFT_CERTIFICATION_STATUS_STRINGS:
+            elif cert in _PRODUCTION_HFT_CERTIFICATION_STATUS_STRINGS or (
+                allow_declared_certification
+                and cert in _DECLARED_HFT_CERTIFICATION_STATUS_STRINGS
+            ):
                 row["status"] = "completed"
             elif not cert:
                 row["status"] = "completed"
@@ -948,6 +953,7 @@ def run_single_generation(
                     manifest=cand_manifest,
                     screening_artifact_hash=screening_hash,
                     robustness_artifact_hash=_robustness_artifact_hash(rob),
+                    allow_declared_certification=pilot_scope,
                 ),
                 screening_path=screening_path,
                 screening_artifact_hash=screening_hash,

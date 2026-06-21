@@ -78,8 +78,22 @@ def _passing_vectorbt_row(*, candidate_id: str = "cand-001") -> dict:
     }
 
 
+def _passing_surface_metrics() -> dict:
+    from backtest_pipeline.src.surface_stability import compute_surface_stability
+
+    grid = {
+        (r, c): {"net_return": 0.10, "trade_count": 50}
+        for r in range(3)
+        for c in range(3)
+    }
+    return compute_surface_stability(grid)
+
+
 def _passing_promoted_row(*, candidate_id: str = "cand-001") -> dict:
     row = _passing_vectorbt_row(candidate_id=candidate_id)
+    surface = _passing_surface_metrics()
+    row["surface_stability_metrics"] = surface
+    row["vectorbt_results"]["surface_stability_metrics"] = surface
     row.update(
         {
             "bootstrap_ci_or_not_run": _pass_evidence(),
@@ -102,6 +116,57 @@ def _passing_promoted_row(*, candidate_id: str = "cand-001") -> dict:
         }
     )
     return row
+
+
+class _FakeFilterResult:
+    def __init__(self, payload: dict) -> None:
+        self.payload = payload
+
+    def to_dict(self) -> dict:
+        return dict(self.payload)
+
+
+def _fake_filter(
+    *,
+    candidates,
+    parsed,
+    event_id,
+    repo_root,
+    gates,
+    screening_scope,
+    run_budget=None,
+    **kwargs,
+):
+    promoted = []
+    for cand in candidates[:2]:
+        row = _passing_promoted_row(candidate_id=cand.candidate_id)
+        row["hypothesis_id"] = cand.model_id
+        row["param_values"] = dict(cand.strategy_params)
+        promoted.append(row)
+    return _FakeFilterResult(
+        {
+            "screening_backend": "vectorbt",
+            "vectorbt_engine": "rust",
+            "rust_engine_available": True,
+            "rust_engine_required_for_scope": False,
+            "screening_scope": screening_scope,
+            "research_clock": "discovery",
+            "event_id": event_id,
+            "promoted": promoted,
+            "promoted_ids": [p["candidate_id"] for p in promoted],
+            "rejected": [],
+            "feature_plane_status": "scheduled_event_only",
+        }
+    )
+
+
+def _fake_persist(artifact, path: Path) -> Path:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    artifact = dict(artifact)
+    artifact.setdefault("screening_artifact_hash", "abc123")
+    path.write_text(json.dumps(artifact, indent=2) + "\n", encoding="utf-8")
+    return path
 
 
 def test_statistical_gate_rejects_missing_bootstrap() -> None:
@@ -357,8 +422,6 @@ def _pass_ontology_gate(monkeypatch):
 
 
 def test_generation_marker_written_after_full_validation(tmp_path: Path) -> None:
-    from tests.research_pipeline.test_generation_loop import _fake_filter, _fake_persist
-
     cfg = AutoresearchConfig(max_generations=1, max_candidates_per_generation=1, run_robustness=False)
     code, report = run_autoresearch_loop(
         repo_root=tmp_path,

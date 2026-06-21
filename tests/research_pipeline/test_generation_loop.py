@@ -381,7 +381,10 @@ def test_generation_loop_spies_runners(tmp_path: Path, monkeypatch) -> None:
                 {
                     "scenario_id": f"sc_{cid}",
                     "candidate_id": cid,
-                    "to_dict": lambda self, _cid=cid: {"scenario_id": f"sc_{cid}", "candidate_id": _cid},
+                    "to_dict": lambda self, _cid=cid, _sid=f"sc_{cid}": {
+                        "scenario_id": _sid,
+                        "candidate_id": _cid,
+                    },
                 },
             )()
             for cid in (getattr(cfg, "candidate_ids", None) or ["unknown"])
@@ -548,6 +551,40 @@ def test_cached_hft_scenario_with_failing_cert_stays_cached(tmp_path: Path) -> N
     )
 
     assert row["status"] == "cached"
+
+
+def test_cached_hft_scenario_with_declared_cert_stays_cached_without_pilot_scope(
+    tmp_path: Path,
+) -> None:
+    from research_pipeline import generation_loop as gl
+
+    manifest = {
+        "candidate_id": "candidate-cached-declared",
+        "manifest_hash": "manifest-hash",
+        "feature_recipe_hash": "recipe-hash",
+    }
+    result = {
+        "scenario_id": "s1",
+        "status": "cached",
+        "replay_result": {"certification_status": "full_fidelity_declared"},
+    }
+
+    [row] = gl._enrich_hft_scenario_results(
+        [result],
+        manifest=manifest,
+        screening_artifact_hash="screening-hash",
+        robustness_artifact_hash="robustness-hash",
+    )
+    assert row["status"] == "cached"
+
+    [pilot_row] = gl._enrich_hft_scenario_results(
+        [result],
+        manifest=manifest,
+        screening_artifact_hash="screening-hash",
+        robustness_artifact_hash="robustness-hash",
+        allow_declared_certification=True,
+    )
+    assert pilot_row["status"] == "completed"
 
 
 def test_cached_hft_scenario_without_cert_stays_completed_for_gate_diagnostic(tmp_path: Path) -> None:
