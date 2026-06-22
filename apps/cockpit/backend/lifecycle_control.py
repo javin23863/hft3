@@ -56,9 +56,9 @@ class LifecycleActionRequest(BaseModel):
 
 
 @router.post("/action")
-def lifecycle_action(req: LifecycleActionRequest, _: str = Depends(require_control)) -> dict:
+def lifecycle_action(req: LifecycleActionRequest, scope: str = Depends(require_control)) -> dict:
     """Write an operator request receipt. Does not mutate model_lifecycle.json."""
-    actor = "cockpit-control"
+    actor = scope or "cockpit-control"
     if req.action not in _ALLOWED_ACTIONS:
         raise HTTPException(400, f"unknown action '{req.action}'")
     if not _MODEL_ID_RE.match(req.model_id):

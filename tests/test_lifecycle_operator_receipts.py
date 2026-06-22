@@ -50,7 +50,7 @@ def test_lifecycle_action_receipt_written(client):
     assert len(lines) == 1
     rec = json.loads(lines[0])
     assert rec["action"] == "request_rearm"
-    assert rec["actor"] == "cockpit-control"
+    assert rec["actor"] == "control"
     assert rec["source_state"] == "DEGRADED"
 
 

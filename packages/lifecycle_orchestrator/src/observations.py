@@ -7,6 +7,7 @@ carry scaffolded GREEN pass labels.
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -196,7 +197,7 @@ def _metrics_from_hbt(raw: dict) -> dict[str, Any]:
             pass
     if (v := metrics.get("latency_p99_ms")) is not None:
         try:
-            out["latency_order_to_ack"] = float(v)
+            out["send_to_ack_us"] = float(v) * 1000.0
         except (TypeError, ValueError):
             pass
     if (v := order_state.get("orders_intended")) is not None:
@@ -350,5 +351,6 @@ def write_observations_file(path: Path, observations: dict[str, dict]) -> Path:
     with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(observations, fh, indent=2, sort_keys=True)
         fh.flush()
+        os.fsync(fh.fileno())
     tmp.replace(path)
     return path

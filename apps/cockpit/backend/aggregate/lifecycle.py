@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
@@ -74,6 +75,15 @@ def _load_registry() -> tuple[dict[str, dict], bool, bool, Optional[str]]:
     return models, True, False, None
 
 
+def _ts_key(raw: Any) -> str:
+    if not raw or not isinstance(raw, str):
+        return ""
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00")).isoformat()
+    except ValueError:
+        return raw
+
+
 def _parse_transitions() -> tuple[dict[str, dict[str, Any]], bool]:
     """Per-model last transition + count; True if any jsonl line was bad."""
     counts: dict[str, int] = {}
@@ -106,8 +116,8 @@ def _parse_transitions() -> tuple[dict[str, dict[str, Any]], bool]:
         if prev is None:
             last[mid] = rec
             continue
-        prev_ts = prev.get("ts") or ""
-        cur_ts = rec.get("ts") or ""
+        prev_ts = _ts_key(prev.get("ts"))
+        cur_ts = _ts_key(rec.get("ts"))
         if cur_ts >= prev_ts:
             last[mid] = rec
     out: dict[str, dict[str, Any]] = {}
