@@ -111,6 +111,8 @@ def validate_route_manifest(manifest: dict) -> list[str]:
     mid = manifest.get("model_id")
     if not mid or not isinstance(mid, str):
         errors.append("model_id must be a non-empty string")
+    elif not _MANIFEST_ID_RE.fullmatch(mid):
+        errors.append("model_id contains invalid characters (must match [A-Za-z0-9_.-]+)")
     evidence = manifest.get("source_evidence")
     if not isinstance(evidence, dict) or not evidence:
         errors.append("source_evidence must be a non-empty object")
