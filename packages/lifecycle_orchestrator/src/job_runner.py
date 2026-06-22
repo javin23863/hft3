@@ -119,6 +119,27 @@ def validate_route_manifest(manifest: dict) -> list[str]:
     return errors
 
 
+def find_route_manifest(model_id: str, route: str, source_transition_hash: str) -> dict | None:
+    """Return an existing manifest with the same model/route/transition key, if any."""
+    d = manifests_dir()
+    if not d.is_dir():
+        return None
+    for path in d.glob("*.json"):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        if (
+            data.get("model_id") == model_id
+            and data.get("route") == route
+            and data.get("source_transition_hash") == source_transition_hash
+        ):
+            return data
+    return None
+
+
 def write_route_manifest(manifest: dict) -> tuple[Path, dict]:
     """Persist a validated route manifest under runtime/lifecycle/jobs/manifests/."""
     errors = validate_route_manifest(manifest)

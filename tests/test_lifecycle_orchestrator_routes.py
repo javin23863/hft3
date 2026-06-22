@@ -106,6 +106,16 @@ def test_regime_shift_with_artifact_evidence_returns_regime_watch(env):
     assert (lc_dir / "jobs" / "manifests").is_dir()
 
 
+def test_regime_shift_reuses_manifest_for_same_transition(env):
+    routes, _, lc_dir, _ = env
+    rec = _degraded("REGIME_OK", lifecycle.ROUTE_REGIME_SHIFT)
+    first = routes.handle_route(rec, actor="pytest", reason="regime drift")
+    second = routes.handle_route(rec, actor="pytest", reason="regime drift")
+    assert first["manifest"]["manifest_id"] == second["manifest"]["manifest_id"]
+    manifest_files = list((lc_dir / "jobs" / "manifests").glob("REGIME_OK_*.json"))
+    assert len(manifest_files) == 1
+
+
 def test_handle_route_rejects_invalid_model_id_in_manifest(env):
     routes, _, _, _ = env
     rec = _degraded("../escape", lifecycle.ROUTE_PARAM_TWEAK)

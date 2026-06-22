@@ -129,6 +129,15 @@ def create_route_manifest(
     created_at: Optional[str] = None,
 ) -> dict:
     manifest = build_route_manifest(record, reason=reason, created_by=created_by, created_at=created_at)
+    existing = job_runner.find_route_manifest(
+        str(manifest["model_id"]),
+        str(manifest["route"]),
+        str(manifest["source_transition_hash"]),
+    )
+    if existing is not None:
+        manifest_id = str(existing["manifest_id"])
+        path = job_runner.manifests_dir() / f"{manifest_id}.json"
+        return {"manifest": existing, "manifest_path": str(path)}
     path, stored = job_runner.write_route_manifest(manifest)
     return {"manifest": stored, "manifest_path": str(path)}
 

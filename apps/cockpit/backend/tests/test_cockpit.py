@@ -4667,6 +4667,24 @@ def test_lifecycle_degraded_routed_has_route_fields(monkeypatch, tmp_path):
     assert row["next_required_gate"] == "rearm G0-G8"
 
 
+def test_lifecycle_evidence_links_skip_non_string_research_cards(monkeypatch, tmp_path):
+    _lifecycle_fixture(monkeypatch, tmp_path, {
+        "MES_CELL": {
+            "current_state": "DEGRADED",
+            "hypothesis_id": 7,
+            "symbol": "MES",
+            "research_card_links": {
+                "vectorbt": "research_cards/vbt.json",
+                "cell": {"hyp_id": 5, "event_type": "CPI_TIGHT", "band_ms": 100},
+            },
+            "last_revalidation": {"model_state": "YELLOW"},
+        },
+    })
+    z = ZONES["lifecycle"]()
+    links = z["rows"][0]["evidence_links"]["research_card_links"]
+    assert links == {"vectorbt": "research_cards/vbt.json"}
+
+
 def test_lifecycle_malformed_transition_line_no_crash(monkeypatch, tmp_path):
     _lifecycle_fixture(
         monkeypatch,

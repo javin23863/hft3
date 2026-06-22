@@ -83,3 +83,10 @@ def test_lifecycle_action_path_traversal_rejected(client):
         "reason": "bad id",
     })
     assert resp.status_code == 400
+
+
+def test_lifecycle_receipts_tail_zero_rejected(client):
+    c, receipts, _ = client
+    receipts.write_text('{"action":"request_rearm"}\n', encoding="utf-8")
+    resp = c.get("/api/lifecycle/receipts?tail=0")
+    assert resp.status_code == 422

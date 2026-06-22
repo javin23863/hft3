@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from . import paths
@@ -88,7 +88,7 @@ def lifecycle_action(req: LifecycleActionRequest, scope: str = Depends(require_c
 
 
 @router.get("/receipts")
-def lifecycle_receipts(tail: int = 50, _: str = Depends(require_control)) -> dict:
+def lifecycle_receipts(tail: int = Query(50, ge=1, le=500), _: str = Depends(require_control)) -> dict:
     p = _receipts_path()
     if not p.is_file():
         return {"receipts": []}
@@ -97,7 +97,7 @@ def lifecycle_receipts(tail: int = 50, _: str = Depends(require_control)) -> dic
     except OSError:
         return {"receipts": []}
     out = []
-    for line in lines[-max(1, min(tail, 500)):]:
+    for line in lines[-min(tail, 500):]:
         if not line.strip():
             continue
         try:

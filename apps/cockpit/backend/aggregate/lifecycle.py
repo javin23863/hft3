@@ -181,7 +181,9 @@ def _evidence_links(rec: dict) -> dict:
     out: dict[str, Any] = {}
     rc = rec.get("research_card_links") or {}
     if rc:
-        out["research_card_links"] = rc
+        string_links = {str(k): v for k, v in rc.items() if isinstance(v, str)}
+        if string_links:
+            out["research_card_links"] = string_links
     gov = rec.get("governance_links") or {}
     if gov:
         out["governance_links"] = gov

@@ -73,7 +73,7 @@ function RowDetail({ row }: { row: LifecycleRow }) {
         <div className="flex flex-wrap gap-1">
           <span className="text-ink-faint">research</span>
           {Object.entries(links.research_card_links).map(([k, v]) => (
-            <Badge key={k} tone="accent">{k}: {v}</Badge>
+            <Badge key={k} tone="accent">{k}: {typeof v === "string" ? v : JSON.stringify(v)}</Badge>
           ))}
         </div>
       )}
