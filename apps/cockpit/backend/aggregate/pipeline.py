@@ -1438,9 +1438,23 @@ def _status_path_value(value: Any) -> Any:
         if path.is_absolute():
             if value.startswith("/"):
                 stripped = value.replace("\\", "/")
-                for prefix in ("/root/hft3/repo/", "/root/hft3/"):
+                known_prefixes = (
+                    "/root/hft3/repo/",
+                    "/root/hft3/",
+                    "/home/ubuntu/hft3/repo/",
+                    "/home/ubuntu/hft3/",
+                    "/workspace/hft3/repo/",
+                    "/workspace/hft3/",
+                )
+                for prefix in known_prefixes:
                     if stripped.startswith(prefix):
                         return stripped[len(prefix):]
+                idx = stripped.find("/hft3/repo/")
+                if idx >= 0:
+                    return stripped[idx + len("/hft3/repo/"):]
+                idx = stripped.find("/hft3/")
+                if idx >= 0:
+                    return stripped[idx + len("/hft3/"):]
                 return value
             return _rel(path)
         return path.as_posix()

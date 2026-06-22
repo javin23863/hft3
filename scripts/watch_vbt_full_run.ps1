@@ -200,6 +200,8 @@ function Invoke-BoundedProcess {
     $proc = New-Object System.Diagnostics.Process
     $proc.StartInfo = $psi
     [void]$proc.Start()
+    $stdoutTask = $proc.StandardOutput.ReadToEndAsync()
+    $stderrTask = $proc.StandardError.ReadToEndAsync()
     $finished = $proc.WaitForExit($TimeoutSeconds * 1000)
     if (-not $finished) {
         try {
@@ -216,8 +218,8 @@ function Invoke-BoundedProcess {
     return [pscustomobject]@{
         exit_code = $proc.ExitCode
         timed_out = $false
-        stdout = $proc.StandardOutput.ReadToEnd()
-        stderr = $proc.StandardError.ReadToEnd()
+        stdout = $stdoutTask.Result
+        stderr = $stderrTask.Result
     }
 }
 
