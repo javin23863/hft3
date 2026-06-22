@@ -9,7 +9,7 @@ from pathlib import Path
 _REPO = Path(__file__).resolve().parents[1]
 
 _RETIRED_V1_FLAG = "--execution-mode"
-_ORCHESTRATOR = _REPO / "scripts" / "run_vectorbt_paid_screen.py"
+_ORCHESTRATOR = _REPO / "scripts" / "run_vectorbt_paid_screen_v2.py"
 
 
 def _strip_retired_flags(argv: list[str]) -> list[str]:

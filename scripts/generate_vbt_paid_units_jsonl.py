@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -360,6 +361,82 @@ def _units_from_stage_a_survivors(
     return units
 
 
+def _parse_npz_event_symbol(filename: str, symbols: tuple[str, ...]) -> tuple[str, str] | None:
+    """Parse `{symbol}_{event_id}_mbo.npz` basename into (symbol, event_id)."""
+    if not filename.endswith("_mbo.npz"):
+        return None
+    core = filename[: -len("_mbo.npz")]
+    for sym in sorted(symbols, key=len, reverse=True):
+        prefix = f"{sym}_"
+        if core.startswith(prefix):
+            return sym, core[len(prefix) :]
+    return None
+
+
+def _runnable_npz_paths(
+    repo_root: Path,
+    parsed_symbols: tuple[str, ...],
+) -> set[Path]:
+    """Paths under npz_root whose NPZ contains at least two loadable MBO events."""
+    import numpy as np
+
+    from data_system.src.npz_resolver import npz_root
+
+    paths: set[Path] = set()
+    root = npz_root(repo_root)
+    if not root.is_dir():
+        return paths
+    for path in root.glob("*_mbo.npz"):
+        if not path.is_file():
+            continue
+        if _parse_npz_event_symbol(path.name, parsed_symbols) is None:
+            continue
+        try:
+            with np.load(path, allow_pickle=False) as npz:
+                data = npz.get("data")
+                if data is None or len(data) < 2:
+                    continue
+        except Exception:  # noqa: BLE001
+            continue
+        try:
+            paths.add(path.resolve())
+        except OSError:
+            paths.add(path)
+    return paths
+
+
+def _filter_runnable_npz_units(
+    units: List[Dict[str, Any]],
+    *,
+    repo_root: Path,
+    parsed_symbols: tuple[str, ...],
+) -> List[Dict[str, Any]]:
+    """Keep units whose resolved NPZ path is loadable (HFT3_NPZ_ROOT + symbol fallback aware)."""
+    from data_system.src.npz_resolver import resolve_npz_for_event
+
+    runnable = _runnable_npz_paths(repo_root, parsed_symbols)
+    if not runnable:
+        return []
+
+    kept: List[Dict[str, Any]] = []
+    for unit in units:
+        path, present, _ = resolve_npz_for_event(
+            repo_root,
+            str(unit["event_id"]),
+            str(unit["symbol"]),
+            parsed_symbols,
+        )
+        if not present:
+            continue
+        try:
+            key = path.resolve()
+        except OSError:
+            key = path
+        if key in runnable:
+            kept.append(unit)
+    return kept
+
+
 def write_units_jsonl(path: Path, units: List[Dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
@@ -418,9 +495,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         default=None,
         help="Inclusive release_date upper bound (YYYY-MM-DD); overrides period names when set",
     )
+    parser.add_argument(
+        "--require-runnable-npz",
+        action="store_true",
+        help="Drop units with no resolvable MBO NPZ on disk (uses HFT3_NPZ_ROOT when set)",
+    )
     args = parser.parse_args(argv)
 
     symbols = [s.strip() for s in args.symbols.split(",") if s.strip()]
+    parsed_symbols = tuple(symbols)
     event_types: Optional[Set[str]] = None
     if args.event_types:
         event_types = {t.strip() for t in args.event_types.split(",") if t.strip()}
@@ -494,6 +577,21 @@ def main(argv: Optional[List[str]] = None) -> int:
     if not units:
         print("ERROR: zero units generated", file=sys.stderr)
         return 1
+
+    if args.require_runnable_npz:
+        before = len(units)
+        units = _filter_runnable_npz_units(
+            units,
+            repo_root=_REPO,
+            parsed_symbols=parsed_symbols,
+        )
+        print(
+            f"require-runnable-npz: kept {len(units)} / {before} units "
+            f"(npz_root={os.environ.get('HFT3_NPZ_ROOT') or _REPO / 'data' / 'npz'})"
+        )
+        if not units:
+            print("ERROR: zero units after require-runnable-npz filter", file=sys.stderr)
+            return 1
 
     out = args.out if args.out.is_absolute() else _REPO / args.out
     write_units_jsonl(out, units)

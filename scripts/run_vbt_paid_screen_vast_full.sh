@@ -2,7 +2,7 @@
 # Phase D full VectorBT paid screen on Vast (v2 long-lived workers).
 # Authority: docs/project/VBT_PAID_SCREEN_UNIT_SCOPE.md, PAID_SCREEN_OPS_COMMANDS.md
 # Run ON the Vast instance (NPZ lake already present). Do not use 4-worker smoke topology.
-# Units are generated on-host from events.csv + active model registry (not local Stage A survivors).
+# Units are generated from stage_a_survivors.json (423 cells -> ~73k-78k VBT units), not all-active-models.
 # v2 env knobs: VBT_CACHE_MEMORY_LIMIT_MB, VBT_CACHE_MAX_ENTRIES, VBT_MAX_BATCHES_BEFORE_RECYCLE, VBT_RESUME=1
 # v2 provenance: passes --events-csv + derived --events-csv-hash; lake hash from HFT3_MANIFEST_PATH
 # (sha256 file content) or declaration lake_manifest_hash — fail-closed before v2 launch if unavailable.
@@ -22,14 +22,11 @@ fi
 # Gate-aligned lake manifest (parquet hash); override only when owner sets explicitly.
 export HFT3_MANIFEST_PATH="${HFT3_MANIFEST_PATH:-/data/npz/manifest.parquet}"
 
+SURVIVORS="${VBT_STAGE_A_SURVIVORS:-research_cards/stage_a_full/stage_a_survivors.json}"
 EVENTS_CSV="${VBT_EVENTS_CSV:-packages/data_system/config/events.csv}"
 UNITS_JSONL="${VBT_FULL_UNITS_JSONL:-runtime/reports/vbt_full_units.jsonl}"
 GATE_FILE="${VBT_READY_GATE_FILE:-runtime/reports/paid_screen_ready_gate.json}"
 SYMBOLS="${VBT_SYMBOLS:-MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0}"
-MODEL_SCOPE="${VBT_MODEL_SCOPE:-active}"
-MODEL_IDS="${VBT_MODEL_IDS:-}"
-EVENT_TYPES="${VBT_EVENT_TYPES:-}"
-RESEARCH_SPLIT="${VBT_RESEARCH_SPLIT:-discovery_confirmation}"
 DECL_FILE="${VBT_FULL_RUN_DECLARATION:-runtime/reports/vbt_full_run_declaration.json}"
 
 NPROC="$(nproc)"
@@ -40,6 +37,12 @@ elif [[ "$NPROC" -ge 256 ]]; then
 else
   WORKERS=$((NPROC - 26))
   if [[ "$WORKERS" -lt 1 ]]; then WORKERS=1; fi
+fi
+
+if [[ ! -f "$SURVIVORS" ]]; then
+  echo "ERROR: Stage A survivors missing: $SURVIVORS" >&2
+  echo "Full scope requires research_cards/stage_a_full/stage_a_survivors.json (not CPI+NFP smoke)." >&2
+  exit 1
 fi
 
 if [[ ! -f "$GATE_FILE" ]]; then
@@ -54,31 +57,18 @@ fi
 
 echo "=== Vast VectorBT paid screen ==="
 echo "repo=$REPO_ROOT nproc=$NPROC workers=$WORKERS npz_root=$HFT3_NPZ_ROOT"
-echo "events_csv=$EVENTS_CSV symbols=$SYMBOLS model_scope=$MODEL_SCOPE units_out=$UNITS_JSONL"
+echo "survivors=$SURVIVORS events_csv=$EVENTS_CSV symbols=$SYMBOLS units_out=$UNITS_JSONL"
 
 bash scripts/install_vbt_hbt_handoff_verify_deps.sh
 pip3 install 'vectorbt[rust]==1.0.0' -q
 
 GEN_ARGS=(
   python3 scripts/generate_vbt_paid_units_jsonl.py
+  --from-stage-a-survivors "$SURVIVORS"
   --events-csv "$EVENTS_CSV"
   --symbols "$SYMBOLS"
   --out "$UNITS_JSONL"
 )
-
-if [[ -n "$MODEL_IDS" ]]; then
-  GEN_ARGS+=(--model-ids "$MODEL_IDS")
-elif [[ "$MODEL_SCOPE" == "active" ]]; then
-  GEN_ARGS+=(--all-active-models)
-else
-  GEN_ARGS+=(--model-id "${VBT_MODEL_ID:-SPREAD_BLOWOUT_RECOMPRESSION}")
-fi
-
-if [[ -n "$EVENT_TYPES" ]]; then
-  GEN_ARGS+=(--event-types "$EVENT_TYPES")
-fi
-
-GEN_ARGS+=(--research-split "$RESEARCH_SPLIT")
 
 if [[ "${VBT_REQUIRE_RUNNABLE_NPZ:-1}" == "1" || "${VBT_REQUIRE_RUNNABLE_NPZ:-1}" == "true" ]]; then
   GEN_ARGS+=(--require-runnable-npz)

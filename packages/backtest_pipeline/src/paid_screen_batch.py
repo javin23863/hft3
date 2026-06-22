@@ -407,7 +407,9 @@ def _load_ohlcv_for_unit(unit: PaidScreenUnit, context: WorkerContext):
     if fs_ctx is not None:
         from backtest_pipeline.src.fs_v1_screen_path import ohlcv_from_feature_store
 
-        return ohlcv_from_feature_store(fs_ctx.store)
+        ohlcv = ohlcv_from_feature_store(fs_ctx.store)
+        if ohlcv is not None:
+            return ohlcv
 
     from backtest_pipeline.src.vectorbt_adapter import _default_data_loader
 
