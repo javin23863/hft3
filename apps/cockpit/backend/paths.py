@@ -34,6 +34,7 @@ M6_FULL_RESULT = _p("research_cards", "universe_M6_full", "universe_result.json"
 M6_FULL_CHECKPOINT = _p("research_cards", "universe_M6_full", "unit_results.context.json")
 VBT_FULL_RUN_DECLARATION = _p("runtime", "reports", "vbt_full_run_declaration.json")
 VBT_FULL_UNITS_JSONL = _p("runtime", "reports", "vbt_full_units.jsonl")
+VBT_FULL_STATUS = _p("runtime", "reports", "vbt_full_status.json")
 VBT_READY_GATE = _p("runtime", "reports", "paid_screen_ready_gate.json")
 VBT_PAID_SCREEN_DOC = _p("docs", "project", "VBT_PAID_SCREEN_UNIT_SCOPE.md")
 REPO_STATE_DOC = _p("docs", "REPO_STATE.md")

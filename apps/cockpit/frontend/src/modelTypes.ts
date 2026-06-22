@@ -21,6 +21,22 @@ export interface StageACell {
   p5_expectancy_tail_usd: number | null;
 }
 
+export interface ModelResultSurface {
+  label?: string;
+  title?: string;
+  name?: string;
+  kind?: string;
+  path?: string;
+  artifact?: string;
+  artifact_path?: string;
+  viewer_url?: string;
+  viewerUrl?: string;
+  external_viewer_url?: string;
+  external_url?: string;
+  externalUrl?: string;
+  url?: string;
+}
+
 export interface ModelDetail {
   id: number;
   name: string;
@@ -34,5 +50,6 @@ export interface ModelDetail {
     n_event_types: number;
     total_trades: number;
     card: Record<string, unknown> | null;
+    surfaces?: ModelResultSurface[];
   };
 }

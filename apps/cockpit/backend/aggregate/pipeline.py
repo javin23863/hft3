@@ -1423,6 +1423,195 @@ def _vbt_host_label(workers: Any) -> tuple[str, str, str | None]:
     return "unknown", "unknown", None
 
 
+def _first_present(data: dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in data and data.get(key) not in (None, ""):
+            return data.get(key)
+    return None
+
+
+def _status_path_value(value: Any) -> Any:
+    if not isinstance(value, str) or not value:
+        return value
+    path = Path(value)
+    try:
+        if path.is_absolute():
+            if value.startswith("/"):
+                stripped = value.replace("\\", "/")
+                for prefix in ("/root/hft3/repo/", "/root/hft3/"):
+                    if stripped.startswith(prefix):
+                        return stripped[len(prefix):]
+                return value
+            return _rel(path)
+        return path.as_posix()
+    except (OSError, ValueError):
+        return value
+
+
+def _status_anomalies(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item) for item in value if item not in (None, "")]
+    if isinstance(value, str) and value:
+        return [value]
+    return []
+
+
+def _status_count(source: dict[str, Any], *aliases: str) -> tuple[bool, int | None, bool]:
+    value = _first_present(source, *aliases)
+    if value is None:
+        return False, None, False
+    parsed = _as_int(value, -1)
+    return parsed >= 0, parsed if parsed >= 0 else None, True
+
+
+def _overlay_vbt_status_json(tracking: dict[str, Any]) -> dict[str, Any]:
+    try:
+        paths.VBT_FULL_STATUS.resolve().relative_to(paths.REPO.resolve())
+    except (OSError, ValueError):
+        return tracking
+    status = paths.read_json(paths.VBT_FULL_STATUS)
+    if not isinstance(status, dict):
+        return tracking
+
+    out = dict(tracking)
+    progress = status.get("progress") if isinstance(status.get("progress"), dict) else {}
+    source = {**progress, **status}
+    int_fields = {
+        "workers": ("workers", "worker_count", "workers_requested"),
+        "expected_work_units": ("expected_work_units", "expected", "total_work_units", "total_units"),
+        "completed_work_units": ("completed_work_units", "completed", "units_completed", "completed_units"),
+        "collected_batches": ("collected_batches", "batches_collected"),
+        "expected_batches": ("expected_batches", "total_batches"),
+    }
+    for field, aliases in int_fields.items():
+        value = _first_present(source, *aliases)
+        if value is not None:
+            parsed = _as_int(value, -1)
+            if parsed >= 0:
+                out[field] = parsed
+
+    for field, aliases in {
+        "state": ("state", "status"),
+        "run_id": ("run_id", "run"),
+        "last_sync_utc": ("last_sync_utc", "last_sync", "synced_at_utc", "updated_at_utc"),
+        "tmux_session": ("tmux_session", "tmux"),
+        "ssh_host": ("ssh_host", "host"),
+        "host_label": ("host_label", "host_name", "ssh_host"),
+        "eta_utc": ("eta_utc", "estimated_completion_utc"),
+    }.items():
+        value = _first_present(source, *aliases)
+        if value is not None:
+            out[field] = value
+
+    units_per_hour = _finite_float(_first_present(source, "units_per_hour", "rate_units_per_hour"))
+    if units_per_hour is not None:
+        out["units_per_hour"] = units_per_hour
+    eta_seconds = _finite_float(_first_present(source, "eta_seconds", "remaining_seconds"))
+    if eta_seconds is not None:
+        out["eta_seconds"] = eta_seconds
+
+    artifact_fields = {
+        "log_artifact": ("log_artifact", "log_path"),
+        "manifest_artifact": ("manifest_artifact", "manifest_path"),
+        "artifact": ("artifact", "output_artifact", "output_path"),
+    }
+    for field, aliases in artifact_fields.items():
+        value = _first_present(source, *aliases)
+        if value is not None:
+            out[field] = _status_path_value(value)
+
+    anomalies: list[str] = []
+    for anomaly in _status_anomalies(tracking.get("anomalies")) + _status_anomalies(source.get("anomalies")):
+        if anomaly not in anomalies:
+            anomalies.append(anomaly)
+    failed_known, failed_value, failed_present = _status_count(
+        source,
+        "failed_work_units",
+        "failed",
+        "units_failed",
+        "failed_units",
+    )
+    completed_known, completed_value, completed_present = _status_count(
+        source,
+        "completed_work_units",
+        "completed",
+        "units_completed",
+        "completed_units",
+    )
+    skipped_known, skipped_value, skipped_present = _status_count(
+        source,
+        "skipped_work_units",
+        "skipped",
+        "units_skipped",
+        "skipped_units",
+    )
+    for field, status_known, status_value in (
+        ("failed_work_units", failed_known, failed_value),
+        ("skipped_work_units", skipped_known, skipped_value),
+        ("completed_work_units", completed_known, completed_value),
+    ):
+        tracking_value = tracking.get(field)
+        tracking_known = tracking_value is not None
+        counts: list[int] = []
+        if tracking_known:
+            tracking_count = _as_int(tracking_value, -1)
+            if tracking_count >= 0:
+                counts.append(tracking_count)
+        if status_known and status_value is not None:
+            counts.append(status_value)
+        if counts:
+            out[field] = max(counts)
+        else:
+            out.pop(field, None)
+
+    failed = _as_int(out.get("failed_work_units"), 0)
+    if failed > 0 and f"failed_work_units={failed}" not in anomalies:
+        anomalies.append(f"failed_work_units={failed}")
+    skipped = _as_int(out.get("skipped_work_units"), 0)
+    if skipped > 0 and f"skipped_work_units={skipped}" not in anomalies:
+        anomalies.append(f"skipped_work_units={skipped}")
+    status_state = str(out.get("state") or "").lower()
+    if status_state == "complete":
+        expected = _as_int(out.get("expected_work_units"), -1)
+        completed = _as_int(out.get("completed_work_units"), 0)
+        for field, known, present in (
+            ("failed_work_units", failed_known, failed_present),
+            ("skipped_work_units", skipped_known, skipped_present),
+        ):
+            if known:
+                continue
+            reason = "unknown" if present else "missing"
+            anomaly = f"status json state=complete but {field} {reason}"
+            if anomaly not in anomalies:
+                anomalies.append(anomaly)
+        if expected <= 0:
+            anomaly = "status json state=complete but expected_work_units missing or zero"
+            if anomaly not in anomalies:
+                anomalies.append(anomaly)
+        elif failed_known and skipped_known:
+            accounted = completed + failed + skipped
+            anomaly = f"accounted_work_units={accounted} != expected_work_units={expected}"
+            if accounted != expected and anomaly not in anomalies:
+                anomalies.append(anomaly)
+        clean_complete = (
+            expected > 0
+            and completed_known
+            and failed_known
+            and skipped_known
+            and failed == 0
+            and skipped == 0
+            and completed + failed + skipped == expected
+        )
+        if not clean_complete or anomalies:
+            out["state"] = "partial_failed" if failed > 0 or skipped > 0 else "stalled"
+    out["anomalies"] = anomalies or None
+    out["status_artifact"] = _rel(paths.VBT_FULL_STATUS)
+    out["tracking_mode"] = "read_only_external_status_json"
+    if out.get("ssh_host") and out.get("host_kind") in (None, "unknown"):
+        out["host_kind"] = "external"
+    return out
+
+
 def _vectorbt_paid_screen_tracking() -> dict[str, Any]:
     declaration = paths.read_json(paths.VBT_FULL_RUN_DECLARATION)
     decl: dict[str, Any] = declaration if isinstance(declaration, dict) else {}
@@ -1455,6 +1644,12 @@ def _vectorbt_paid_screen_tracking() -> dict[str, Any]:
     units_line_count = _count_jsonl_lines(units_path) if units_path.is_file() else None
     units_jsonl_scope = "declaration" if declaration_matched else "global"
 
+    def _manifest_count_known(key: str) -> bool:
+        return isinstance(manifest, dict) and key in manifest and _as_int(manifest.get(key), -1) >= 0
+
+    completed_known = _manifest_count_known("completed_work_units")
+    failed_known = _manifest_count_known("failed_work_units")
+    skipped_known = _manifest_count_known("skipped_work_units")
     completed = _as_int(manifest.get("completed_work_units"), 0) if isinstance(manifest, dict) else 0
     failed = _as_int(manifest.get("failed_work_units"), 0) if isinstance(manifest, dict) else 0
     skipped = _as_int(manifest.get("skipped_work_units"), 0) if isinstance(manifest, dict) else 0
@@ -1465,6 +1660,7 @@ def _vectorbt_paid_screen_tracking() -> dict[str, Any]:
     log_failed = 0
     log_drain_ok = 0
     log_drain_failed = 0
+    log_accounting_known = False
     age_s: float | None = None
     if log_path is not None:
         log_text = _tail_log_text(log_path)
@@ -1473,12 +1669,14 @@ def _vectorbt_paid_screen_tracking() -> dict[str, Any]:
         for line in lines:
             drain_match = _RE_VBT_DRAIN_PROGRESS.search(line)
             if drain_match:
+                log_accounting_known = True
                 log_drain_ok += _as_int(drain_match.group(2), 0)
                 log_drain_failed += _as_int(drain_match.group(3), 0)
                 continue
             match = _RE_VBT_UNIT_PROGRESS.search(line)
             if not match:
                 continue
+            log_accounting_known = True
             status = match.group(2).upper()
             if status in {"OK", "OK_CACHED"}:
                 log_completed += 1
@@ -1505,6 +1703,8 @@ def _vectorbt_paid_screen_tracking() -> dict[str, Any]:
                 failed = log_drain_failed
             elif log_failed > 0:
                 failed = log_failed
+        completed_known = completed_known or log_accounting_known
+        failed_known = failed_known or log_accounting_known
 
     accounted = completed + failed + skipped
 
@@ -1512,13 +1712,15 @@ def _vectorbt_paid_screen_tracking() -> dict[str, Any]:
     state = "idle"
     log_stale = False
     manifest_status = str(manifest.get("status") or "").lower() if isinstance(manifest, dict) else ""
-    accounting_complete = expected > 0 and accounted == expected
+    reject_counts_known = failed_known and skipped_known
+    accounting_complete = expected > 0 and reject_counts_known and accounted == expected
+    log_complete_by_progress = log_path is not None and expected > 0 and completed >= expected
     if isinstance(manifest, dict) and manifest_status == "complete":
         state = "complete" if accounting_complete else "stalled"
     elif isinstance(manifest, dict) and manifest_status == "running":
         state = "running"
     elif log_path is not None:
-        if expected > 0 and completed >= expected:
+        if accounting_complete and log_complete_by_progress:
             state = "complete"
         elif age_s is not None and age_s < 300:
             state = "running"
@@ -1552,9 +1754,17 @@ def _vectorbt_paid_screen_tracking() -> dict[str, Any]:
         )
     if failed > 0:
         anomalies.append(f"failed_work_units={failed}")
+    if skipped > 0:
+        anomalies.append(f"skipped_work_units={skipped}")
     if manifest_status == "complete" and expected <= 0:
         anomalies.append("manifest status=complete but expected_work_units missing or zero")
-    elif expected > 0 and accounted != expected:
+    if manifest_status == "complete" or log_complete_by_progress:
+        count_source = "manifest status=complete" if manifest_status == "complete" else "orchestrator log complete"
+        if not failed_known:
+            anomalies.append(f"{count_source} but failed_work_units missing")
+        if not skipped_known:
+            anomalies.append(f"{count_source} but skipped_work_units missing")
+    if expected > 0 and accounted != expected:
         anomalies.append(
             f"accounted_work_units={accounted} != expected_work_units={expected}"
         )
@@ -1582,15 +1792,15 @@ def _vectorbt_paid_screen_tracking() -> dict[str, Any]:
     if research_split != _VBT_DEFAULT_RESEARCH_SPLIT:
         anomalies.append(f"noncanonical_research_split={research_split}")
 
-    return {
+    tracking = {
         "state": state,
         "host_kind": host_kind,
         "host_label": host_label,
         "workers": workers if workers >= 0 else None,
         "expected_work_units": expected if expected > 0 else None,
-        "completed_work_units": completed if completed > 0 else None,
-        "failed_work_units": failed if failed > 0 else None,
-        "skipped_work_units": skipped if skipped > 0 else None,
+        "completed_work_units": completed if completed_known else None,
+        "failed_work_units": failed if failed_known else None,
+        "skipped_work_units": skipped if skipped_known else None,
         "units_jsonl_lines": units_line_count,
         "units_jsonl_scope": units_jsonl_scope,
         "research_split": research_split,
@@ -1619,6 +1829,7 @@ def _vectorbt_paid_screen_tracking() -> dict[str, Any]:
             "HftBacktest realism is downstream on promoted outputs only."
         ),
     }
+    return _overlay_vbt_status_json(tracking)
 
 
 def _latency_evidence(*, defensive_ack_required: bool = False) -> dict:
@@ -1818,6 +2029,7 @@ def _vectorbt_screen_stage() -> dict:
         expected_work_units=tracking.get("expected_work_units"),
         completed_work_units=tracking.get("completed_work_units"),
         failed_work_units=tracking.get("failed_work_units"),
+        skipped_work_units=tracking.get("skipped_work_units"),
         research_split=tracking.get("research_split"),
         run_id=tracking.get("run_id"),
         screening_status=screening_status,
