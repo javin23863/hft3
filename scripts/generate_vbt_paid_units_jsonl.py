@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """Generate JSONL work units for VectorBT paid-compute screening."""
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ CME_M6_SYMBOLS = "MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0"
 _DEFAULT_THESIS_TEMPLATE = (
     "{display_name} event-window strategy ({model_id}) on {event_type} release for {symbol} event {event_id}"
 )
-# BLUEPRINT §8 / walk_forward.yaml — holdout excluded from discovery prefilter by default
+# BLUEPRINT ┬º8 / walk_forward.yaml ΓÇö holdout excluded from discovery prefilter by default
 RESEARCH_SPLIT_CHOICES: Dict[str, Optional[List[str]]] = {
     "discovery": ["Discovery"],
     "confirmation": ["Confirmation"],
@@ -250,6 +250,27 @@ def _active_model_ids() -> List[str]:
     return sorted({get_slug_for_hyp_id(h.hyp_id) for h in get_active_hypotheses()})
 
 
+def _filter_events_to_runnable_npz(
+    events: List[Dict[str, Any]],
+    repo_root: Path,
+) -> List[Dict[str, Any]]:
+    """Drop event├ùsymbol rows with no runnable NPZ before model expansion."""
+    keys = _runnable_npz_keys(repo_root)
+    from backtest_pipeline.src.vectorbt_adapter import _npz_candidates_for_event
+    from data_system.src.event_data_resolver import npz_search_dirs
+
+    search_dirs = npz_search_dirs(repo_root)
+    kept: List[Dict[str, Any]] = []
+    for row in events:
+        eid = str(row.get("event_id") or "").strip()
+        sym = str(row.get("symbol") or "").strip()
+        if keys and (sym, eid) in keys:
+            kept.append(row)
+        elif eid and _npz_candidates_for_event(search_dirs, eid, row.get("symbol")):
+            kept.append(row)
+    return kept
+
+
 def _units_from_all_active_models(
     events_csv: Path,
     *,
@@ -262,6 +283,8 @@ def _units_from_all_active_models(
     start_date: Optional[str],
     end_date: Optional[str],
     research_split: Optional[str],
+    require_runnable_npz: bool = False,
+    repo_root: Path = _REPO,
 ) -> List[Dict[str, Any]]:
     ids = model_ids if model_ids is not None else _active_model_ids()
     if not ids:
@@ -282,6 +305,10 @@ def _units_from_all_active_models(
         start_date=split_start,
         end_date=split_end,
     )
+    if require_runnable_npz:
+        before = len(events)
+        events = _filter_events_to_runnable_npz(events, repo_root)
+        print(f"NPZ pre-filter: {before} event-rows -> {len(events)} runnable rows")
     units: List[Dict[str, Any]] = []
     for raw_model_id in ids:
         resolved = resolve_model_id(raw_model_id)
@@ -310,20 +337,11 @@ def _units_from_stage_a_survivors(
     thesis_template: str,
     max_units: Optional[int],
     window_name: str,
-    research_split: Optional[str] = None,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     payload = json.loads(survivors_path.read_text(encoding="utf-8"))
     allowed_cells = _parse_stage_a_allowed_cells(payload)
     if not allowed_cells:
         raise ValueError("stage_a_survivors.json: no allowed (hyp_id, event_type) cells")
-
-    split_start, split_end, split_label = _resolve_split_date_bounds(
-        research_split,
-        start_date=start_date,
-        end_date=end_date,
-    )
 
     allowed_etypes = {etype for _, etype in allowed_cells}
     by_type: Dict[str, List[Dict[str, Any]]] = {}
@@ -333,8 +351,6 @@ def _units_from_stage_a_survivors(
         symbols=symbols,
         window_name=window_name,
         max_rows=None,
-        start_date=split_start,
-        end_date=split_end,
     ):
         by_type.setdefault(row["event_type"], []).append(row)
 
@@ -349,27 +365,67 @@ def _units_from_stage_a_survivors(
             if unit_id in seen:
                 continue
             seen.add(unit_id)
-            unit: Dict[str, Any] = {
-                "unit_id": unit_id,
-                "event_id": event_id,
-                "symbol": symbol,
-                "event_type": event_type,
-                "model_id": model_id,
-                "hyp_id": hyp_id,
-                "thesis": _format_thesis(
-                    model_id=model_id,
-                    event_type=event_type,
-                    symbol=symbol,
-                    event_id=event_id,
-                    thesis_template=thesis_template,
-                ),
-            }
-            if split_label:
-                unit["research_split"] = split_label
-            units.append(unit)
+            units.append(
+                {
+                    "unit_id": unit_id,
+                    "event_id": event_id,
+                    "symbol": symbol,
+                    "event_type": event_type,
+                    "model_id": model_id,
+                    "hyp_id": hyp_id,
+                    "thesis": _format_thesis(
+                        model_id=model_id,
+                        event_type=event_type,
+                        symbol=symbol,
+                        event_id=event_id,
+                        thesis_template=thesis_template,
+                    ),
+                }
+            )
             if max_units is not None and len(units) >= max_units:
                 return units
     return units
+
+
+def _runnable_npz_keys(repo_root: Path) -> Set[tuple[str, str]]:
+    """Build (symbol, event_id) keys from lake catalog manifest.json when present."""
+    from data_system.src.npz_resolver import npz_root
+
+    root = npz_root(repo_root)
+    catalog = root / "manifest.json"
+    keys: Set[tuple[str, str]] = set()
+    if catalog.is_file():
+        for rec in json.loads(catalog.read_text(encoding="utf-8")):
+            sym = str(rec.get("symbol") or "").strip()
+            eid = str(rec.get("event_id") or "").strip()
+            npz_path = Path(str(rec.get("npz_path") or ""))
+            if not npz_path.is_absolute():
+                npz_path = root / npz_path
+            if sym and eid and not rec.get("error") and npz_path.is_file():
+                keys.add((sym, eid))
+    return keys
+
+
+def _filter_runnable_npz_units(
+    units: List[Dict[str, Any]],
+    repo_root: Path,
+) -> List[Dict[str, Any]]:
+    """Keep only units whose event_id+symbol resolve to an NPZ under HFT3_NPZ_ROOT."""
+    keys = _runnable_npz_keys(repo_root)
+    from backtest_pipeline.src.vectorbt_adapter import _npz_candidates_for_event
+    from data_system.src.event_data_resolver import npz_search_dirs
+
+    search_dirs = npz_search_dirs(repo_root)
+    kept: List[Dict[str, Any]] = []
+    for unit in units:
+        sym = str(unit.get("symbol") or "").strip()
+        event_id = str(unit.get("event_id") or "").strip()
+        symbol = unit.get("symbol")
+        if keys and (sym, event_id) in keys:
+            kept.append(unit)
+        elif event_id and _npz_candidates_for_event(search_dirs, event_id, symbol):
+            kept.append(unit)
+    return kept
 
 
 def write_units_jsonl(path: Path, units: List[Dict[str, Any]]) -> None:
@@ -430,6 +486,16 @@ def main(argv: Optional[List[str]] = None) -> int:
         default=None,
         help="Inclusive release_date upper bound (YYYY-MM-DD); overrides period names when set",
     )
+    parser.add_argument(
+        "--validation-cpi-first",
+        action="store_true",
+        help="Sort JSONL with CPI event_type rows first (validation runs only; not Phase D scope)",
+    )
+    parser.add_argument(
+        "--require-runnable-npz",
+        action="store_true",
+        help="Drop units with no NPZ at HFT3_NPZ_ROOT (Vast full default via VBT_REQUIRE_RUNNABLE_NPZ=1)",
+    )
     args = parser.parse_args(argv)
 
     symbols = [s.strip() for s in args.symbols.split(",") if s.strip()]
@@ -456,9 +522,6 @@ def main(argv: Optional[List[str]] = None) -> int:
             thesis_template=args.thesis_template,
             max_units=args.max_units,
             window_name=args.window_name,
-            research_split=research_split,
-            start_date=args.start_date,
-            end_date=args.end_date,
         )
     elif args.all_active_models or args.model_ids:
         model_id_list: Optional[List[str]] = None
@@ -475,6 +538,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             start_date=args.start_date,
             end_date=args.end_date,
             research_split=research_split,
+            require_runnable_npz=args.require_runnable_npz,
+            repo_root=_REPO,
         )
     else:
         max_rows = args.smoke_count or args.max_units
@@ -506,9 +571,24 @@ def main(argv: Optional[List[str]] = None) -> int:
         if args.max_units is not None:
             units = units[: args.max_units]
 
+    if args.require_runnable_npz:
+        before = len(units)
+        units = _filter_runnable_npz_units(units, _REPO)
+        dropped = before - len(units)
+        if dropped:
+            print(f"Filtered {dropped} units without runnable NPZ ({len(units)} remain)")
+
     if not units:
         print("ERROR: zero units generated", file=sys.stderr)
         return 1
+
+    if args.validation_cpi_first:
+        units.sort(
+            key=lambda u: (
+                0 if str(u.get("event_type") or "").upper() == "CPI" else 1,
+                str(u.get("event_id") or ""),
+            )
+        )
 
     out = args.out if args.out.is_absolute() else _REPO / args.out
     write_units_jsonl(out, units)

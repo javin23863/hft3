@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Phase D full VectorBT paid screen on Vast (long-lived workers in tmux).
-# Authority: docs/project/VBT_PAID_SCREEN_UNIT_SCOPE.md
+# Phase D full VectorBT paid screen on Vast (v2 long-lived workers in tmux).
+# Authority: docs/project/VBT_PAID_SCREEN_UNIT_SCOPE.md, PAID_SCREEN_OPS_COMMANDS.md
 # Run ON the Vast instance (NPZ lake already present). Do not use 4-worker smoke topology.
-# Units are generated on-host from stage_a_survivors.json + events.csv (Stage A filtered).
-# v2 runner: long-lived multiprocessing.spawn workers with --resume support.
+# Units are generated on-host from events.csv + active model registry (not local Stage A survivors).
+# v2 env knobs: VBT_CACHE_MEMORY_LIMIT_MB, VBT_CACHE_MAX_ENTRIES, VBT_MAX_BATCHES_BEFORE_RECYCLE, VBT_RESUME=1
+# v2 provenance: passes --events-csv + derived --events-csv-hash; lake hash from HFT3_MANIFEST_PATH
+# (sha256 file content) or declaration lake_manifest_hash — fail-closed before v2 launch if unavailable.
 # tmux wrapper: survives SSH disconnect — the run keeps going after you log out.
 set -euo pipefail
 
@@ -14,18 +16,20 @@ cd "$REPO_ROOT"
 if [[ -f "${HFT3_ENV_FILE:-/root/hft3/.env}" ]]; then
   set -a
   # shellcheck disable=SC1090
-  source "${HBT3_ENV_FILE:-/root/hft3/.env}"
+  source "${HFT3_ENV_FILE:-/root/hft3/.env}"
   set +a
 fi
 
+# Gate-aligned lake manifest (parquet hash); override only when owner sets explicitly.
 export HFT3_MANIFEST_PATH="${HFT3_MANIFEST_PATH:-/data/npz/manifest.parquet}"
-export HFT3_NPZ_ROOT="${HFT3_NPZ_ROOT:-/data/npz}"
 
-SURVIVORS="${VBT_STAGE_A_SURVIVORS:-research_cards/stage_a_full/stage_a_survivors.json}"
 EVENTS_CSV="${VBT_EVENTS_CSV:-packages/data_system/config/events.csv}"
 UNITS_JSONL="${VBT_FULL_UNITS_JSONL:-runtime/reports/vbt_full_units.jsonl}"
 GATE_FILE="${VBT_READY_GATE_FILE:-runtime/reports/paid_screen_ready_gate.json}"
 SYMBOLS="${VBT_SYMBOLS:-MES.v.0,MNQ.v.0,ES.v.0,NQ.v.0,ZN.v.0,ZB.v.0,RTY.v.0}"
+MODEL_SCOPE="${VBT_MODEL_SCOPE:-active}"
+MODEL_IDS="${VBT_MODEL_IDS:-}"
+EVENT_TYPES="${VBT_EVENT_TYPES:-}"
 RESEARCH_SPLIT="${VBT_RESEARCH_SPLIT:-discovery_confirmation}"
 DECL_FILE="${VBT_FULL_RUN_DECLARATION:-runtime/reports/vbt_full_run_declaration.json}"
 TMUX_SESSION="${VBT_TMUX_SESSION:-vbt_full}"
@@ -40,41 +44,73 @@ else
   if [[ "$WORKERS" -lt 1 ]]; then WORKERS=1; fi
 fi
 
-if [[ ! -f "$SURVIVORS" ]]; then
-  echo "ERROR: Stage A survivors missing: $SURVIVORS" >&2
-  echo "Full scope requires research_cards/stage_a_full/stage_a_survivors.json (not CPI+NFP smoke)." >&2
-  exit 1
-fi
-
 if [[ ! -f "$GATE_FILE" ]]; then
   echo "ERROR: Ready gate missing: $GATE_FILE (run validate_paid_screen_ready_gate.py first)" >&2
   exit 1
 fi
 
-if [[ -z "${HFT3_NPZ_ROOT:-}" ]] || [[ ! -d "${HFT3_NPZ_ROOT}" ]]; then
-  echo "ERROR: HFT3_NPZ_ROOT unset or missing — NPZ lake must be on this host." >&2
+if [[ -z "${HFT3_NPZ_ROOT:-}" ]]; then
+  echo "ERROR: HFT3_NPZ_ROOT unset — NPZ lake must be on this host (Vast data from prior sync)." >&2
   exit 1
 fi
 
 echo "=== Vast VectorBT paid screen ==="
 echo "repo=$REPO_ROOT nproc=$NPROC workers=$WORKERS npz_root=$HFT3_NPZ_ROOT"
-echo "survivors=$SURVIVORS symbols=$SYMBOLS research_split=$RESEARCH_SPLIT"
+echo "events_csv=$EVENTS_CSV symbols=$SYMBOLS model_scope=$MODEL_SCOPE units_out=$UNITS_JSONL"
 
 bash scripts/install_vbt_hbt_handoff_verify_deps.sh
 pip3 install 'vectorbt[rust]==1.0.0' -q
 
-# --- Unit generation (Stage A survivors + discovery_confirmation date filter) ---
-python3 scripts/generate_vbt_paid_units_jsonl.py \
-  --from-stage-a-survivors "$SURVIVORS" \
-  --events-csv "$EVENTS_CSV" \
-  --symbols "$SYMBOLS" \
-  --research-split "$RESEARCH_SPLIT" \
+# --- Unit generation (all-active-models + research_split + require-runnable-npz) ---
+GEN_ARGS=(
+  python3 scripts/generate_vbt_paid_units_jsonl.py
+  --events-csv "$EVENTS_CSV"
+  --symbols "$SYMBOLS"
   --out "$UNITS_JSONL"
+)
+
+if [[ -n "$MODEL_IDS" ]]; then
+  GEN_ARGS+=(--model-ids "$MODEL_IDS")
+elif [[ "$MODEL_SCOPE" == "active" ]]; then
+  GEN_ARGS+=(--all-active-models)
+else
+  GEN_ARGS+=(--model-id "${VBT_MODEL_ID:-SPREAD_BLOWOUT_RECOMPRESSION}")
+fi
+
+if [[ -n "$EVENT_TYPES" ]]; then
+  GEN_ARGS+=(--event-types "$EVENT_TYPES")
+fi
+
+GEN_ARGS+=(--research-split "$RESEARCH_SPLIT")
+
+if [[ "${VBT_REQUIRE_RUNNABLE_NPZ:-1}" == "1" || "${VBT_REQUIRE_RUNNABLE_NPZ:-1}" == "true" ]]; then
+  GEN_ARGS+=(--require-runnable-npz)
+fi
+
+"${GEN_ARGS[@]}"
 
 UNIT_COUNT="$(grep -c . "$UNITS_JSONL" || true)"
-echo "Full unit count: $UNIT_COUNT (research_split=$RESEARCH_SPLIT)"
+echo "Full unit count: $UNIT_COUNT (must match declaration expected_work_units)"
 
-# --- Declaration (must match unit count) ---
+# --- Declaration check ---
+if [[ ! -f "$DECL_FILE" ]]; then
+  echo "ERROR: Full-run declaration missing: $DECL_FILE" >&2
+  echo "Generate units on-host, record expected_work_units, then rerun." >&2
+  exit 1
+fi
+
+DECL_EXPECTED="$(python3 - "$DECL_FILE" <<'PY'
+import json, sys
+print(json.load(open(sys.argv[1], encoding="utf-8"))["expected_work_units"])
+PY
+)"
+
+if [[ "$DECL_EXPECTED" != "$UNIT_COUNT" ]]; then
+  echo "WARNING: Declaration expected_work_units=$DECL_EXPECTED != generated unit count=$UNIT_COUNT" >&2
+  echo "Updating declaration to match generated count." >&2
+fi
+
+# --- Write/update declaration ---
 EVENTS_HASH="$(python3 -c "import hashlib; print(hashlib.sha256(open('$EVENTS_CSV','rb').read()).hexdigest()[:32])")"
 LAKE_HASH="$(python3 -c "
 import hashlib, os
@@ -91,7 +127,7 @@ cat > "$DECL_FILE" << EOF
   "reserved_vcpu": 26,
   "workers_requested": $WORKERS,
   "expected_work_units": $UNIT_COUNT,
-  "units_source": "stage_a_survivors: $SURVIVORS expanded via generate_vbt_paid_units_jsonl.py --from-stage-a-survivors --research-split $RESEARCH_SPLIT",
+  "units_source": "Vast on-host: events TIGHT x CME M6 x active models, --require-runnable-npz (NPZ pre-filter)",
   "stall_minutes": 30,
   "abort_on_failed_units": false,
   "git_head": "$(git rev-parse HEAD 2>/dev/null || echo unknown)",
