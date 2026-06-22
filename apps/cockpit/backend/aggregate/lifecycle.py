@@ -290,7 +290,8 @@ def build() -> dict:
         r["state"] in _TRADE_STATES
         and (
             r.get("latest_model_state") not in (None, "GREEN")
-            or (r.get("submit_size_factor") or 1.0) < 1.0
+            or not r.get("submit_allowed")
+            or r.get("submit_size_factor", 1.0) < 1.0
         )
         for r in rows
     ):

@@ -4577,6 +4577,24 @@ def test_lifecycle_live_without_revalidation_blocked(monkeypatch, tmp_path):
     assert z["blocked_count"] == 1
 
 
+def test_lifecycle_stale_blocked_live_zone_health_amber(monkeypatch, tmp_path):
+    _lifecycle_fixture(monkeypatch, tmp_path, {
+        "MES_STALE": {
+            "current_state": "LIVE",
+            "hypothesis_id": 1,
+            "symbol": "MES",
+            "current_state_since": "2026-06-12T00:00:00+00:00",
+        },
+    })
+    z = ZONES["lifecycle"]()
+    row = z["rows"][0]
+    assert z["blocked_count"] == 1
+    assert z["health"] == sc.AMBER
+    assert row["submit_allowed"] is False
+    assert row["submit_size_factor"] == 0.0
+    assert row["submit_reason"] == "stale_no_revalidation"
+
+
 def test_lifecycle_degraded_red_blocked(monkeypatch, tmp_path):
     _lifecycle_fixture(monkeypatch, tmp_path, {
         "MCL_Z": {
