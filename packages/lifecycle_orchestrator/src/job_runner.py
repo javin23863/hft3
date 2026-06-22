@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from pathlib import Path
 from typing import Optional
@@ -20,6 +21,8 @@ _STATES = ("pending", "running", "done", "failed")
 _MANIFEST_REQUIRED = frozenset({
     "model_id", "route", "reason", "created_by", "created_at", "source_evidence",
 })
+_MANIFEST_ID_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
+
 _VALID_ROUTES = frozenset({
     lifecycle.ROUTE_REGIME_SHIFT,
     lifecycle.ROUTE_PARAM_TWEAK,
@@ -125,6 +128,8 @@ def write_route_manifest(manifest: dict) -> Path:
         manifest_id = f"{mid}_{route}_{time.time_ns()}"
     else:
         manifest_id = str(manifest["manifest_id"])
+        if not _MANIFEST_ID_RE.fullmatch(manifest_id):
+            raise ValueError("invalid manifest_id")
     manifest = {**manifest, "manifest_id": manifest_id}
     p = manifests_dir() / f"{manifest_id}.json"
     if p.is_file():
@@ -139,7 +144,7 @@ def write_route_manifest(manifest: dict) -> Path:
 
 
 def load_route_manifest(manifest_id: str) -> dict:
-    if not manifest_id or ".." in manifest_id or "/" in manifest_id or "\\" in manifest_id:
+    if not manifest_id or not _MANIFEST_ID_RE.fullmatch(manifest_id):
         raise ValueError("invalid manifest_id")
     p = manifests_dir() / f"{manifest_id}.json"
     if not p.is_file():

@@ -118,6 +118,15 @@ def test_restart_recovery_replay_mode_safe_signals(tmp_path) -> None:
     assert report.safe_to_resume_signals is True
 
 
+def test_restart_recovery_missing_kill_switch_file_incident(tmp_path) -> None:
+    _closed_session(tmp_path, "SESSION-NOKILL")
+    (tmp_path / "SESSION-NOKILL" / "kill_switch_events.jsonl").unlink()
+    report = recover_trade_manager_session(tmp_path, "SESSION-NOKILL")
+    assert report.status == STATUS_INCIDENT
+    assert "review_kill_switch" in report.required_operator_actions
+    assert "kill_switch_events_missing" in report.notes
+
+
 def test_restart_recovery_unparseable_kill_switch_incident(tmp_path) -> None:
     _closed_session(tmp_path, "SESSION-KILL")
     session_path = tmp_path / "SESSION-KILL"

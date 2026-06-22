@@ -191,12 +191,16 @@ def _evidence_links(rec: dict) -> dict:
 def _submit_fields(rec: dict) -> tuple[bool, float, str]:
     """Submit decision from the already-loaded registry row (same policy as submit_gate)."""
     state = rec.get("current_state", "")
-    model_state = (rec.get("last_revalidation") or {}).get("model_state", "GREEN")
+    reval = rec.get("last_revalidation") or {}
+    model_state = reval.get("model_state")
+    if state in ("LIVE", "DEGRADED") and not model_state:
+        return False, 0.0, "stale_no_revalidation"
+    gate_state = model_state if model_state is not None else "GREEN"
     try:
         from model_metrics.decay_detector import submit_allowed
 
-        allowed, size = submit_allowed(state, model_state)
-        return allowed, size, f"lifecycle={state} model_state={model_state}"
+        allowed, size = submit_allowed(state, gate_state)
+        return allowed, size, f"lifecycle={state} model_state={gate_state}"
     except Exception as exc:
         logging.warning("submit_gate lookup failed for lifecycle row: %s", exc)
         return False, 0.0, "submit_gate_error"

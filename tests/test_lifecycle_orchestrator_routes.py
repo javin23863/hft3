@@ -68,6 +68,14 @@ def test_missing_artifact_evidence_rejected(env):
         routes.build_route_manifest(rec, reason="x", created_by="t")
 
 
+def test_load_route_manifest_rejects_traversal_id():
+    job_runner = importlib.import_module("lifecycle_orchestrator.src.job_runner")
+    with pytest.raises(ValueError, match="invalid manifest_id"):
+        job_runner.load_route_manifest("../evil")
+    with pytest.raises(ValueError, match="invalid manifest_id"):
+        job_runner.load_route_manifest("ok%2e%2e")
+
+
 def test_duplicate_manifest_id_rejected(env):
     routes, job_runner, _, _ = env
     rec = _degraded("DUP", lifecycle.ROUTE_PARAM_TWEAK)

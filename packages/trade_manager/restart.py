@@ -116,20 +116,28 @@ def recover_trade_manager_session(
         if "reconcile_positions" not in actions:
             actions.append("reconcile_positions")
 
-    kill_rows = _read_jsonl(session_path / "kill_switch_events.jsonl")
-    if kill_rows is None:
+    kill_path = session_path / "kill_switch_events.jsonl"
+    if not kill_path.is_file():
         if status == STATUS_OK:
             status = STATUS_INCIDENT
         if "review_kill_switch" not in actions:
             actions.append("review_kill_switch")
-        notes.append("kill_switch_events_unparseable")
-    elif kill_rows:
-        latest_kill = kill_rows[-1]
-        if latest_kill.get("active") is True or latest_kill.get("status") not in (None, "CLEAR", "clear"):
-            if "review_kill_switch" not in actions:
-                actions.append("review_kill_switch")
+        notes.append("kill_switch_events_missing")
+    else:
+        kill_rows = _read_jsonl(kill_path)
+        if kill_rows is None:
             if status == STATUS_OK:
                 status = STATUS_INCIDENT
+            if "review_kill_switch" not in actions:
+                actions.append("review_kill_switch")
+            notes.append("kill_switch_events_unparseable")
+        elif kill_rows:
+            latest_kill = kill_rows[-1]
+            if latest_kill.get("active") is True or latest_kill.get("status") not in (None, "CLEAR", "clear"):
+                if "review_kill_switch" not in actions:
+                    actions.append("review_kill_switch")
+                if status == STATUS_OK:
+                    status = STATUS_INCIDENT
 
     if lifecycle_dir is not None:
         lifecycle_ok = _lifecycle_registry_ok(lifecycle_dir)
