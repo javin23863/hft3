@@ -65,6 +65,9 @@ def lifecycle_action(req: LifecycleActionRequest, scope: str = Depends(require_c
         raise HTTPException(400, "invalid model_id")
     if ".." in req.model_id or "/" in req.model_id or "\\" in req.model_id:
         raise HTTPException(400, "invalid model_id")
+    reason = req.reason.strip()
+    if not reason:
+        raise HTTPException(422, "reason must be non-empty")
 
     models = _load_registry_models()
     rec = models.get(req.model_id)
@@ -75,7 +78,7 @@ def lifecycle_action(req: LifecycleActionRequest, scope: str = Depends(require_c
         "ts": paths.now_iso(),
         "model_id": req.model_id,
         "action": req.action,
-        "reason": req.reason.strip(),
+        "reason": reason,
         "actor": actor,
         "source_state": rec.get("current_state"),
         "source_route": (rec.get("reentry_routing") or {}).get("route"),
