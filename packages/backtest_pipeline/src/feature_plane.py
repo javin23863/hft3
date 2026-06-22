@@ -137,6 +137,7 @@ def build_manifest_from_feature_recipes(
     *,
     fs_v1_row_loop_active: bool = False,
     vix_injected: bool = False,
+    cross_asset_aligned: bool = False,
 ) -> dict[str, dict[str, Any]]:
     """Merge frozen recipe family rows into VectorBT manifest vocabulary."""
     merged: dict[str, dict[str, Any]] = {}
@@ -191,6 +192,21 @@ def build_manifest_from_feature_recipes(
             row["why_not_used_or_sidelined"] = "vix_sensor_row_injected_in_fs_v1_vectorbt_path"
             merged[family_id] = row
 
+    if cross_asset_aligned:
+        cross = dict(
+            merged.get("cross_asset_futures")
+            or _family_row(
+                catalog_eligibility="not_measured",
+                model_consumption="not_measured",
+                why_not_used_or_sidelined="leader_legs_aligned_observed_in_vectorbt_fs_v1_screen",
+                evidence_scope="vectorbt_fs_v1_row_loop",
+            )
+        )
+        cross["model_consumption"] = "not_measured"
+        cross["why_not_used_or_sidelined"] = "leader_legs_aligned_observed_in_vectorbt_fs_v1_screen"
+        cross["evidence_scope"] = "vectorbt_fs_v1_row_loop"
+        merged["cross_asset_futures"] = cross
+
     return merged
 
 
@@ -225,16 +241,24 @@ def build_feature_usage_manifest(
         primary_consumption = "not_measured"
         primary_why = "model_feature_consumption_not_observed_in_screening_path"
 
+    cross_why = (
+        "fs_v1_row_loop_without_cross_asset_legs_observed"
+        if fs_v1_active
+        else "cross_asset_alignment_not_implemented_in_vectorbt_screen"
+    )
+
     manifest: dict[str, Any] = {
         "primary_fs_v1": _family_row(
             catalog_eligibility=fs_catalog,
             model_consumption=primary_consumption,
             why_not_used_or_sidelined=primary_why,
+            evidence_scope="vectorbt_fs_v1_row_loop" if fs_v1_active else "catalog_eligibility_not_model_usage",
         ),
         "cross_asset_futures": _family_row(
             catalog_eligibility="not_measured",
             model_consumption="not_used",
-            why_not_used_or_sidelined="cross_asset_alignment_not_implemented_in_vectorbt_screen",
+            why_not_used_or_sidelined=cross_why,
+            evidence_scope="vectorbt_fs_v1_row_loop" if fs_v1_active else "catalog_eligibility_not_model_usage",
         ),
         "vix_vvix_sensor": _family_row(
             catalog_eligibility="not_measured",

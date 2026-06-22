@@ -791,8 +791,8 @@ def run_single_generation(
                         candidate=candidate,
                         repo_root=repo_root,
                         generation_index=generation_index,
-                        parent_candidate_id=str(candidate.metadata.get("elite_parent") or candidate.metadata.get("parent_candidate_id") or "") or None,
-                        proposal_reason=str(candidate.metadata.get("proposal_reason") or candidate.metadata.get("refinement") or "generation"),
+                        parent_candidate_id=str(c.metadata.get("elite_parent") or c.metadata.get("parent_candidate_id") or "") or None,
+                        proposal_reason=str(c.metadata.get("proposal_reason") or c.metadata.get("refinement") or "generation"),
                     )
                 )
         if len(frozen_manifests) > len(frozen_by_id):

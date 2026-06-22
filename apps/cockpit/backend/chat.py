@@ -47,6 +47,21 @@ def _state_summary() -> str:
         p = ZONES["pipeline"]()
         lines.append("Pipeline health=%s stages=%s" % (
             p.get("health"), ", ".join(f"{s['id']}:{s['status']}" for s in p.get("stages", []))))
+        vbt = p.get("vectorbt_paid_screen_tracking") or {}
+        if isinstance(vbt, dict):
+            lines.append(
+                "VectorBT paid screen: state=%s run_id=%s progress=%s/%s failed=%s skipped=%s units_per_hour=%s last_sync=%s host=%s" % (
+                    vbt.get("state"),
+                    vbt.get("run_id"),
+                    vbt.get("completed_work_units"),
+                    vbt.get("expected_work_units"),
+                    vbt.get("failed_work_units"),
+                    vbt.get("skipped_work_units"),
+                    vbt.get("units_per_hour"),
+                    vbt.get("last_sync_utc"),
+                    vbt.get("host_label") or vbt.get("ssh_host"),
+                )
+            )
     except Exception:
         pass
     try:

@@ -19,6 +19,7 @@ export interface PipelineZone {
   health: Health;
   latency_evidence?: PipelineLatencyEvidence;
   universe_sweep_tracking?: UniverseSweepTracking;
+  vectorbt_paid_screen_tracking?: VectorbtPaidScreenTracking;
   stages: Stage[];
 }
 
@@ -61,6 +62,41 @@ export interface UniverseSweepTracking {
   repo_state_doc?: string;
   monitor_doc?: string | null;
   tracking_mode?: string;
+}
+
+export interface VectorbtPaidScreenTracking {
+  state?: string;
+  host_kind?: string;
+  host_label?: string;
+  ssh_host?: string | null;
+  tmux_session?: string | null;
+  run_id?: string | null;
+  workers?: number | null;
+  expected_work_units?: number | null;
+  completed_work_units?: number | null;
+  failed_work_units?: number | null;
+  skipped_work_units?: number | null;
+  collected_batches?: number | null;
+  expected_batches?: number | null;
+  units_per_hour?: number | null;
+  eta_seconds?: number | null;
+  eta_utc?: string | null;
+  last_sync_utc?: string | null;
+  log_artifact?: string | null;
+  manifest_artifact?: string | null;
+  artifact?: string | null;
+  status_artifact?: string | null;
+  declaration_artifact?: string | null;
+  units_jsonl_artifact?: string | null;
+  ready_gate_artifact?: string | null;
+  ready_gate?: string | null;
+  scope_doc?: string | null;
+  anomalies?: string[] | null;
+  detail?: string | null;
+  tracking_mode?: string;
+  workflow_note?: string;
+  research_split?: string | null;
+  declaration_matched?: boolean | null;
 }
 
 export interface RepoContext {

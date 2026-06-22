@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
@@ -41,14 +42,102 @@ from workbench.ui.evidence_panels import (  # noqa: E402
     render_system,
 )
 
+
+def _query_param_value(name: str) -> str:
+    value = st.query_params.get(name, "")
+    if isinstance(value, list):
+        value = value[0] if value else ""
+    return str(value).strip()
+
+
+def _resolve_model_query(value: str) -> str:
+    if not value:
+        return ""
+    try:
+        from features_engine.src.model_registry import resolve_model_id
+
+        return resolve_model_id(value)
+    except KeyError:
+        return ""
+    except Exception:
+        return value
+
+
+def _vbt_paid_has_anomalies(status: dict) -> bool:
+    anomalies = status.get("anomalies")
+    if isinstance(anomalies, str):
+        if anomalies.strip():
+            return True
+    elif anomalies:
+        return True
+    validation_errors = status.get("validation_errors")
+    if isinstance(validation_errors, str):
+        if validation_errors.strip():
+            return True
+    elif validation_errors:
+        return True
+    validation_error_count = status.get("validation_error_count")
+    return (
+        isinstance(validation_error_count, (int, float))
+        and not isinstance(validation_error_count, bool)
+        and validation_error_count > 0
+    )
+
+
+def _normalize_vbt_paid_state(
+    state: object,
+    *,
+    expected: float | int | None,
+    completed: float | int | None,
+    failed: float | int | None,
+    skipped: float | int | None,
+    accounted: float | int | None,
+    has_anomalies: bool,
+) -> str:
+    display_state = str(state or "unknown").strip().lower() or "unknown"
+    has_rejected_units = (failed is not None and failed > 0) or (
+        skipped is not None and skipped > 0
+    )
+    if has_rejected_units:
+        return "partial_failed"
+    if display_state != "complete":
+        return display_state
+    clean_complete = (
+        expected is not None
+        and expected > 0
+        and completed is not None
+        and failed is not None
+        and skipped is not None
+        and failed == 0
+        and skipped == 0
+        and accounted == expected
+        and not has_anomalies
+    )
+    return "complete" if clean_complete else "stalled"
+
+
 init_session(REPO)
 
 with st.sidebar:
     personal_lock_sidebar(REPO)
     run_sources = workbench_run_sources()
-    query_source = str(st.query_params.get("source", ""))
+    raw_query_source = st.query_params.get("source", "")
+    if isinstance(raw_query_source, list):
+        raw_query_source = raw_query_source[0] if raw_query_source else ""
+    query_source = str(raw_query_source).strip()
     if query_source in run_sources:
         st.session_state.wb_run_source = query_source
+    raw_query_model = _query_param_value("model")
+    query_model = (
+        _resolve_model_query(raw_query_model)
+        if raw_query_model and raw_query_model != st.session_state.get("wb_consumed_query_model", "")
+        else ""
+    )
+    if query_model:
+        st.session_state.wb_selected_model = query_model
+        st.session_state.wb_selection_explicit = True
+        st.session_state.wb__primary_model = query_model
+        st.session_state.wb_consumed_query_model = raw_query_model
     if "wb_run_source" not in st.session_state:
         st.session_state.wb_run_source = default_source(REPO)
     st.selectbox(
@@ -61,6 +150,82 @@ with st.sidebar:
     st.caption("Verify: `powershell -File scripts/verify_workbench.ps1`")
 
 st.title("Microstructure Backtesting Workbench")
+
+
+def _render_vbt_paid_status(repo: Path) -> None:
+    def _first_present(*names: str, default=None):
+        for name in names:
+            value = status.get(name)
+            if value is not None:
+                return value
+        return default
+
+    def _number(value):
+        return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+    def _display(value):
+        return "--" if value is None else value
+
+    status_path = repo / "runtime" / "reports" / "vbt_full_status.json"
+    try:
+        status = json.loads(status_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        st.caption("VBT paid-screen status unavailable — no vbt_full_status.json synced yet.")
+        return
+    except (json.JSONDecodeError, OSError, ValueError):
+        st.caption("VBT paid-screen status unreadable — vbt_full_status.json is malformed or partially written.")
+        return
+    if not isinstance(status, dict):
+        st.caption("VBT paid-screen status malformed — expected a JSON object.")
+        return
+    state = _first_present("state", "status", default="unknown")
+    workers = _first_present("workers")
+    rate = _first_present("units_per_hour")
+    expected = _number(_first_present("expected_work_units", "expected"))
+    completed = _number(_first_present("completed_work_units", "completed"))
+    failed = _number(_first_present("failed_work_units", "failed"))
+    skipped = _number(_first_present("skipped_work_units", "skipped"))
+    counts = (completed, failed, skipped)
+    accounted = None if any(value is None for value in counts) else sum(counts)
+    display_state = _normalize_vbt_paid_state(
+        state,
+        expected=expected,
+        completed=completed,
+        failed=failed,
+        skipped=skipped,
+        accounted=accounted,
+        has_anomalies=_vbt_paid_has_anomalies(status),
+    )
+    expected_display = _display(expected)
+    progress = None
+    if expected is not None and expected > 0 and accounted is not None:
+        progress = min(1.0, max(0.0, accounted / expected))
+    with st.expander("VectorBT paid screen (Vast)", expanded=state == "running"):
+        cols = st.columns(7)
+        cols[0].metric("state", display_state)
+        cols[1].metric("workers", _display(workers))
+        cols[2].metric("completed", f"{_display(completed)}/{expected_display}")
+        cols[3].metric("failed", _display(failed))
+        cols[4].metric("skipped", _display(skipped))
+        cols[5].metric("accounted", f"{_display(accounted)}/{expected_display}")
+        cols[6].metric("rate", f"{_display(rate)}/h")
+        if progress is not None:
+            st.progress(progress)
+        st.caption(
+            " · ".join(
+                str(v)
+                for v in (
+                    status.get("run_id"),
+                    status.get("eta_utc"),
+                    status.get("last_sync_utc"),
+                    status.get("tmux_session"),
+                )
+                if v
+            )
+        )
+
+
+_render_vbt_paid_status(REPO)
 
 run_source = st.session_state.get("wb_run_source", "")
 _active = st.session_state.get("wb_active_campaign", "") if run_source == "workbench_campaign" else ""

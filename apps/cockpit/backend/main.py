@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 # --- self-contained import path (no dependency on hft3_bootstrap shim) ------
@@ -17,7 +18,7 @@ for _p in (str(_REPO), str(_REPO / "packages")):
 
 from contextlib import asynccontextmanager  # noqa: E402
 
-from fastapi import Depends, FastAPI, WebSocket, WebSocketDisconnect  # noqa: E402
+from fastapi import Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
 from apps.cockpit.backend import paths  # noqa: E402
@@ -59,7 +60,7 @@ app.add_middleware(
 import time as _time  # noqa: E402
 from collections import defaultdict, deque  # noqa: E402
 
-from fastapi.responses import JSONResponse  # noqa: E402
+from fastapi.responses import FileResponse, JSONResponse  # noqa: E402
 
 _RL_WINDOW_S = 60.0
 _RL_MAX = int(os.environ.get("COCKPIT_RATE_LIMIT_PER_MIN", "120"))
@@ -124,6 +125,75 @@ def _zone(name: str) -> dict:
         return {"zone": name, "error": str(exc), "generated_utc": paths.now_iso()}
 
 
+_DIR_LIST_LIMIT = 200
+
+
+def _artifact_roots() -> tuple[Path, ...]:
+    roots = (
+        paths.REPO / "artifacts",
+        paths.REPO / "research_cards",
+        paths.REPO / "reports",
+        paths.REPO / "runtime" / "reports",
+        paths.REPO / "runtime" / "latency_reports",
+        paths.REPO / "runtime" / "validation",
+        paths.REPO / "runtime" / "monitor",
+        paths.REPO / "runtime" / "workbench",
+    )
+    return tuple(root.resolve() for root in roots)
+
+
+def _safe_artifact_path(requested: str) -> Path:
+    raw = (requested or "").strip().replace("\\", "/")
+    rel = Path(raw)
+    if not raw or rel.is_absolute() or ".." in rel.parts:
+        raise HTTPException(status_code=400, detail="repo-relative artifact path required")
+    try:
+        candidate = (paths.REPO / rel).resolve()
+    except (OSError, ValueError):
+        raise HTTPException(status_code=400, detail="invalid artifact path") from None
+    if not any(candidate == root or root in candidate.parents for root in _artifact_roots()):
+        raise HTTPException(status_code=403, detail="artifact path outside allowed roots")
+    if not candidate.exists():
+        raise HTTPException(status_code=404, detail="artifact path not found")
+    return candidate
+
+
+def _artifact_listing(directory: Path) -> dict:
+    entries = []
+    children = sorted(directory.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower()))
+    for child in children[:_DIR_LIST_LIMIT]:
+        try:
+            stat = child.stat()
+        except OSError:
+            continue
+        entries.append(
+            {
+                "name": child.name,
+                "path": child.relative_to(paths.REPO).as_posix(),
+                "type": "dir" if child.is_dir() else "file",
+                "size_bytes": stat.st_size if child.is_file() else None,
+                "modified_utc": datetime.fromtimestamp(
+                    stat.st_mtime,
+                    tz=timezone.utc,
+                ).isoformat(),
+            }
+        )
+    return {
+        "path": directory.relative_to(paths.REPO).as_posix(),
+        "type": "dir",
+        "entries": entries,
+        "truncated": len(children) > _DIR_LIST_LIMIT,
+    }
+
+
+def _artifact_file_response(path: Path) -> FileResponse:
+    suffix = path.suffix.lower()
+    media_type = "text/plain" if suffix in {".html", ".htm", ".svg"} else None
+    response = FileResponse(path, media_type=media_type)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
 @app.get("/api/health")
 def health() -> dict:
     return {"status": "ok", "ws_clients": hub.count, "execution_mode": paths.execution_mode()}
@@ -167,6 +237,16 @@ def system(_: str = Depends(require_view)) -> dict:
 @app.get("/api/alerts")
 def alerts(_: str = Depends(require_view)) -> dict:
     return _zone("alerts")
+
+
+@app.get("/api/artifact")
+def artifact(path: str = Query(..., min_length=1), _: str = Depends(require_view)):
+    target = _safe_artifact_path(path)
+    if target.is_dir():
+        return _artifact_listing(target)
+    if target.is_file():
+        return _artifact_file_response(target)
+    raise HTTPException(status_code=404, detail="artifact path is not a file or directory")
 
 
 @app.get("/api/all")
@@ -242,9 +322,7 @@ async def ws(websocket: WebSocket) -> None:
 _DIST = _REPO / "apps" / "cockpit" / "frontend" / "dist"
 _INDEX = _DIST / "index.html"
 if _DIST.is_dir() and _INDEX.is_file():
-    from fastapi import HTTPException  # noqa: E402
     from fastapi.staticfiles import StaticFiles  # noqa: E402
-    from fastapi.responses import FileResponse  # noqa: E402
 
     _DIST_ROOT = _DIST.resolve()
 

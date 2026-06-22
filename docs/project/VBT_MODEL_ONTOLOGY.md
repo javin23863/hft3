@@ -24,7 +24,7 @@ Authority chain (do not invent parallel processes):
 
 ## Critical scope warning
 
-The current paid JSONL generator and `run_vectorbt_paid_screen.py` implement
+The current paid JSONL generator and `run_paid_screen.py` / `run_vectorbt_paid_screen_v2.py` implement
 **scheduled-event target units only**. In the derivative
 [VBT_RESEARCH_PRODUCT_SCOPE.md](VBT_RESEARCH_PRODUCT_SCOPE.md) map this is
 called "family A," but the canonical classification is
@@ -158,7 +158,7 @@ Stage A is a **separate historical job** (M6 cell filtering). It is **not** the 
 
 | | Stage A (historical / M6) | VectorBT paid screen (current) |
 |---|---------|---------------------|
-| Script | `run_stage_a_screen.py` | `run_pipeline.py` / `run_vectorbt_paid_screen.py` |
+| Script | `run_stage_a_screen.py` | `run_pipeline.py` / `run_paid_screen.py` (v2) |
 | Unit | `(hyp_id, event_type)` cell on feature store | `(slug, symbol, event_id)` |
 | Output | `stage_a_survivors.json` (423 cells) | `screening_artifact.json` per unit |
 | Engine | Cell expectancy on `fs_v1` features | Rust VectorBT bar simulation |

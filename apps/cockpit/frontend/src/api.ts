@@ -40,6 +40,27 @@ export async function apiPost<T = unknown>(path: string, body: unknown): Promise
   return r.json();
 }
 
+export function artifactUrl(path: string): string {
+  return `${API_BASE}/api/artifact?path=${encodeURIComponent(path)}`;
+}
+
+export async function openArtifact(path: string): Promise<void> {
+  const tab = window.open("about:blank", "_blank");
+  if (tab) tab.opener = null;
+  try {
+    const r = await fetch(artifactUrl(path), { headers: authHeaders() });
+    if (!r.ok) throw new Error(`${r.status} ${r.statusText || "artifact fetch failed"}`);
+    const url = URL.createObjectURL(await r.blob());
+    if (tab) tab.location.href = url;
+    else window.open(url, "_blank", "noopener,noreferrer");
+    const revokeMs = 300000;
+    window.setTimeout(() => URL.revokeObjectURL(url), revokeMs);
+  } catch (err) {
+    if (tab) tab.close();
+    window.alert(`Failed to open artifact: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 export interface ChatEvent {
   type: "context" | "token" | "done" | "error";
   text?: string;
@@ -92,12 +113,14 @@ export interface CockpitState {
   zones: Zones;
   connected: boolean;
   lastUpdate: number | null;
+  pollError: string | null;
 }
 
 export function useCockpit(): CockpitState {
   const [zones, setZones] = useState<Zones>({});
   const [connected, setConnected] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<number | null>(null);
+  const [pollError, setPollError] = useState<string | null>(null);
   const pollRef = useRef<number | null>(null);
   const backoff = useRef(1000);
 
@@ -109,8 +132,9 @@ export function useCockpit(): CockpitState {
         const all = await apiGet<Zones>("/api/all");
         setZones(all);
         setLastUpdate(Date.now());
-      } catch {
-        /* WS retry recovers */
+        setPollError(null);
+      } catch (err) {
+        setPollError(err instanceof Error ? err.message : String(err));
       }
     }
     function startPolling() {
@@ -145,5 +169,5 @@ export function useCockpit(): CockpitState {
     return () => { closed = true; stopPolling(); };
   }, []);
 
-  return { zones, connected, lastUpdate };
+  return { zones, connected, lastUpdate, pollError };
 }

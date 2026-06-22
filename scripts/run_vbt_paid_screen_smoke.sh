@@ -14,7 +14,7 @@ python3 scripts/generate_vbt_paid_units_jsonl.py \
   --event-types CPI,NFP \
   --model-id HYP_5
 
-python3 scripts/run_vectorbt_paid_screen.py \
+python3 scripts/run_paid_screen.py \
   --units-jsonl "$SMOKE_UNITS" \
   --out "$OUT_DIR" \
   --vectorbt-scope paid-compute \

@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Tabs from "@radix-ui/react-tabs";
-import { X, BookOpen } from "lucide-react";
+import { X, BookOpen, ExternalLink, FileText } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
-import { apiGet } from "../api";
+import { apiGet, openArtifact } from "../api";
 import { Badge } from "../ui";
-import type { ModelDetail as MD } from "../modelTypes";
+import type { ModelDetail as MD, ModelResultSurface } from "../modelTypes";
 
 const AX = { stroke: "#6b7689", fontSize: 11 };
 
@@ -15,6 +15,60 @@ function Chips({ label, items, tone = "dim" }: { label: string; items: string[];
     <div className="flex flex-wrap items-center gap-1.5">
       <span className="text-[11px] uppercase tracking-wide text-ink-faint">{label}</span>
       {items.map((x) => <Badge key={x} tone={tone}>{x}</Badge>)}
+    </div>
+  );
+}
+
+function surfacePath(s: ModelResultSurface): string | null {
+  return s.artifact_path || s.artifact || s.path || null;
+}
+
+function surfaceViewerUrl(s: ModelResultSurface): string | null {
+  return (
+    s.viewer_url ||
+    s.viewerUrl ||
+    s.external_viewer_url ||
+    s.external_url ||
+    s.externalUrl ||
+    (s.url?.startsWith("http") ? s.url : null)
+  );
+}
+
+function surfaceLabel(s: ModelResultSurface): string {
+  return s.label || s.title || s.name || s.kind || surfacePath(s) || "artifact";
+}
+
+function SurfaceActions({ surfaces }: { surfaces: ModelResultSurface[] }) {
+  const actions = surfaces
+    .map((s, i) => {
+      const viewer = surfaceViewerUrl(s);
+      const path = surfacePath(s);
+      return viewer || path ? { viewer, path, label: surfaceLabel(s), key: `${viewer || path}:${i}` } : null;
+    })
+    .filter((x): x is { viewer: string | null; path: string | null; label: string; key: string } => Boolean(x));
+
+  if (!actions.length) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-[11px] uppercase tracking-wide text-ink-faint">surfaces</span>
+      {actions.map((a) => {
+        if (a.viewer) {
+          return (
+            <a key={a.key} href={a.viewer} target="_blank" rel="noreferrer"
+              className="chip hover:border-accent/60 hover:text-accent" title={a.viewer}>
+              <ExternalLink size={12} />
+              <span>{a.label}</span>
+            </a>
+          );
+        }
+        return (
+          <button key={a.key} type="button" onClick={() => a.path && void openArtifact(a.path)}
+            className="chip hover:border-accent/60 hover:text-accent" title={a.path ?? undefined}>
+            <FileText size={12} />
+            <span>{a.label}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -33,6 +87,7 @@ export function ModelDetail({ hypId, open, onClose }: { hypId: number | null; op
 
   const c = d?.construction;
   const cells = d?.results?.stage_a_cells ?? [];
+  const surfaces = d?.results?.surfaces ?? [];
   const chart = cells.map((x) => ({ e: x.event_type, v: x.mean_expectancy_usd ?? 0 }))
     .sort((a, b) => b.v - a.v).slice(0, 24);
 
@@ -96,6 +151,7 @@ export function ModelDetail({ hypId, open, onClose }: { hypId: number | null; op
 
                 <Tabs.Content value="results" className="space-y-4">
                   <div className="text-sm text-ink-dim">{d.results?.n_event_types ?? 0} event types · {d.results?.total_trades ?? 0} total trades</div>
+                  <SurfaceActions surfaces={surfaces} />
                   {chart.length > 0 && (
                     <div className="panel p-3">
                       <div className="mb-2 text-[11px] uppercase tracking-wide text-ink-faint">mean expectancy by event type (USD)</div>

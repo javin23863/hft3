@@ -11,9 +11,11 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any, Optional
+from urllib.parse import urlencode
 
 from .. import loaders, paths, schemas
 from . import models as _models  # reuse vendored family/defect sets
@@ -156,6 +158,287 @@ def _card_for(hyp_id: int) -> Optional[dict]:
     return cards.get(f"HYP_{hyp_id}")
 
 
+def _rel(path: Path) -> str:
+    try:
+        return path.relative_to(paths.REPO).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def _artifact_url(path: Path) -> str:
+    return "/api/artifact?" + urlencode({"path": _rel(path)})
+
+
+def _mtime(path: Path) -> float:
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return 0.0
+
+
+def _slug_from_name(name: str) -> str:
+    slug = re.sub(r"[^A-Za-z0-9]+", "_", name).strip("_").upper()
+    return re.sub(r"_+", "_", slug)
+
+
+def _slug_for_hyp_id(hyp_id: int, name: str) -> str:
+    try:
+        from features_engine.src.model_registry import get_slug_for_hyp_id
+
+        return get_slug_for_hyp_id(hyp_id)
+    except Exception:
+        return _slug_from_name(name)
+
+
+def _file_surface(kind: str, label: str, path: Path, **extra: Any) -> dict[str, Any]:
+    return {
+        "kind": kind,
+        "label": label,
+        "path": _rel(path),
+        "url": _artifact_url(path),
+        "modified_utc": paths.mtime_iso(path),
+        **extra,
+    }
+
+
+def _latest_file(files: list[Path]) -> Path | None:
+    existing = [path for path in files if path.is_file()]
+    if not existing:
+        return None
+    return max(existing, key=_mtime)
+
+
+def _workbench_dir_matches(name: str, slug: str, legacy_id: str) -> bool:
+    return (
+        name == slug
+        or name.startswith(f"{slug}_")
+        or name == legacy_id
+        or name.startswith(f"{legacy_id}_")
+    )
+
+
+def _matching_workbench_dirs(slug: str, hyp_id: int) -> list[Path]:
+    slug_upper = slug.upper()
+    legacy_id = f"HYP_{hyp_id}"
+    roots = [
+        paths.REPO / "artifacts" / "workbench_runs",
+        paths.REPO / "artifacts" / "research_cards" / "workbench_runs",
+        paths.REPO / "research_cards" / "workbench_runs",
+    ]
+    matches: list[Path] = []
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for child in root.iterdir():
+            if not child.is_dir():
+                continue
+            upper = child.name.upper()
+            if _workbench_dir_matches(upper, slug_upper, legacy_id):
+                matches.append(child)
+    return matches
+
+
+def _latest_workbench_artifact(slug: str, hyp_id: int, filename: str) -> Path | None:
+    files: list[Path] = []
+    for run_dir in _matching_workbench_dirs(slug, hyp_id):
+        files.extend(path for path in run_dir.rglob(filename) if path.is_file())
+    return _latest_file(files)
+
+
+def _artifact_roots() -> tuple[Path, ...]:
+    roots = (
+        paths.REPO / "artifacts",
+        paths.REPO / "research_cards",
+        paths.REPO / "reports",
+        paths.REPO / "runtime" / "reports",
+        paths.REPO / "runtime" / "latency_reports",
+        paths.REPO / "runtime" / "validation",
+        paths.REPO / "runtime" / "monitor",
+        paths.REPO / "runtime" / "workbench",
+    )
+    return tuple(root.resolve() for root in roots)
+
+
+def _safe_status_manifest_path(requested: str) -> Path | None:
+    raw = requested.strip().replace("\\", "/")
+    rel = Path(raw)
+    if not raw or rel.is_absolute() or ".." in rel.parts:
+        return None
+    try:
+        candidate = (paths.REPO / rel).resolve()
+    except (OSError, ValueError):
+        return None
+    if not any(candidate == root or root in candidate.parents for root in _artifact_roots()):
+        return None
+    return candidate if candidate.is_file() else None
+
+
+def _latest_paid_manifest(status: dict[str, Any] | None = None) -> Path | None:
+    if isinstance(status, dict):
+        rel = status.get("manifest_artifact")
+        if isinstance(rel, str) and rel:
+            candidate = _safe_status_manifest_path(rel)
+            if candidate is not None:
+                return candidate
+    root = paths.pipeline_runs_root()
+    if not root.is_dir():
+        return None
+    return _latest_file([path for path in root.glob("*/paid_screen_run_manifest.json")])
+
+
+def _first_present(data: dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in data and data.get(key) not in (None, ""):
+            return data.get(key)
+    return None
+
+
+_MODEL_ID_KEYS = {
+    "model_id",
+    "legacy_id",
+    "hypothesis_id",
+    "hyp_id",
+    "primary_model_id",
+    "resolved_model_id",
+    "slug",
+}
+_MODEL_METADATA_KEYS = {
+    "candidate",
+    "candidate_metadata",
+    "metadata",
+    "model",
+    "promoted",
+    "rejected",
+    "scenario",
+    "scenarios",
+    "screening_artifact",
+    "selected_candidate",
+    "unit_results",
+}
+
+
+def _matches_model(data: Any, slug: str, hyp_id: int, *, depth: int = 0) -> bool:
+    if depth > 5:
+        return False
+    targets = {slug.upper(), f"HYP_{hyp_id}", str(hyp_id)}
+    if isinstance(data, dict):
+        for key, value in data.items():
+            key_l = str(key).lower()
+            if key_l in _MODEL_ID_KEYS and isinstance(value, (str, int)):
+                if str(value).upper() in targets:
+                    return True
+            if key_l in _MODEL_METADATA_KEYS and _matches_model(value, slug, hyp_id, depth=depth + 1):
+                return True
+    elif isinstance(data, list):
+        return any(_matches_model(item, slug, hyp_id, depth=depth + 1) for item in data[:200])
+    return False
+
+
+def _latest_hftbacktest_summary(slug: str, hyp_id: int) -> Path | None:
+    root = paths.hftbacktest_realism_root()
+    if not root.is_dir():
+        return None
+    matched: list[Path] = []
+    for summary in root.glob("*/replay_summary.json"):
+        if not summary.is_file():
+            continue
+        data = paths.read_json(summary)
+        manifest = paths.read_json(summary.parent / "input_manifest.json")
+        if _matches_model(data, slug, hyp_id) or _matches_model(manifest, slug, hyp_id):
+            matched.append(summary)
+    return _latest_file(matched)
+
+
+def _result_surfaces(hyp_id: int, name: str) -> list[dict[str, Any]]:
+    slug = _slug_for_hyp_id(hyp_id, name)
+    workbench_base = os.environ.get("COCKPIT_WORKBENCH_URL", "http://localhost:8501").rstrip("/")
+    surfaces: list[dict[str, Any]] = [
+        {
+            "kind": "url",
+            "label": "Workbench viewer",
+            "url": f"{workbench_base}/?{urlencode({'source': 'workbench_campaign', 'model': slug})}",
+            "model_slug": slug,
+            "legacy_id": f"HYP_{hyp_id}",
+        }
+    ]
+
+    report = _latest_workbench_artifact(slug, hyp_id, "report.md")
+    if report is not None:
+        surfaces.append(
+            _file_surface("workbench_report", "Latest Workbench report", report, model_slug=slug)
+        )
+    research_card = _latest_workbench_artifact(slug, hyp_id, "research_card.json")
+    if research_card is not None:
+        surfaces.append(
+            _file_surface(
+                "workbench_research_card",
+                "Latest Workbench research card",
+                research_card,
+                model_slug=slug,
+            )
+        )
+
+    if paths.STAGE_A_RESULT.is_file():
+        surfaces.append(
+            _file_surface(
+                "stage_a_result",
+                "Global Stage A result",
+                paths.STAGE_A_RESULT,
+                scope="global",
+            )
+        )
+    if paths.STAGE_A_SURVIVORS.is_file():
+        surfaces.append(
+            _file_surface(
+                "stage_a_survivors",
+                "Global Stage A survivors",
+                paths.STAGE_A_SURVIVORS,
+                scope="global",
+            )
+        )
+
+    vbt_status = paths.read_json(paths.VBT_FULL_STATUS)
+    if paths.VBT_FULL_STATUS.is_file():
+        status_extra = {}
+        if isinstance(vbt_status, dict):
+            status_extra = {
+                "state": vbt_status.get("state") or vbt_status.get("status"),
+                "run_id": vbt_status.get("run_id"),
+                "expected_work_units": _first_present(vbt_status, "expected_work_units", "expected"),
+                "completed_work_units": _first_present(vbt_status, "completed_work_units", "completed"),
+            }
+            for surface_key, status_keys in (
+                ("failed_work_units", ("failed_work_units", "failed")),
+                ("skipped_work_units", ("skipped_work_units", "skipped")),
+            ):
+                if any(key in vbt_status for key in status_keys):
+                    status_extra[surface_key] = _first_present(vbt_status, *status_keys)
+        surfaces.append(
+            _file_surface(
+                "vectorbt_paid_status",
+                "Global VectorBT paid status",
+                paths.VBT_FULL_STATUS,
+                scope="global",
+                **status_extra,
+            )
+        )
+    vbt_manifest = _latest_paid_manifest(vbt_status if isinstance(vbt_status, dict) else None)
+    if vbt_manifest is not None:
+        surfaces.append(
+            _file_surface(
+                "vectorbt_paid_manifest",
+                "Global VectorBT paid manifest",
+                vbt_manifest,
+                scope="global",
+            )
+        )
+
+    hbt_summary = _latest_hftbacktest_summary(slug, hyp_id)
+    if hbt_summary is not None:
+        surfaces.append(_file_surface("hftbacktest_replay_summary", "Latest HftBacktest replay summary", hbt_summary))
+    return surfaces
+
+
 def build(hyp_id: int) -> dict:
     fam, prop_dead, cross, vix = _models._registry()
     construction = _parse_all().get(hyp_id)
@@ -179,6 +462,7 @@ def build(hyp_id: int) -> dict:
             "n_event_types": len(cells),
             "total_trades": sum(c.get("total_trades", 0) or 0 for c in cells),
             "card": card,
+            "surfaces": _result_surfaces(hyp_id, name),
         },
     }
     if construction:
