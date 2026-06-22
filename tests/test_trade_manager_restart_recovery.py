@@ -118,6 +118,17 @@ def test_restart_recovery_replay_mode_safe_signals(tmp_path) -> None:
     assert report.safe_to_resume_signals is True
 
 
+def test_restart_recovery_missing_transitions_incident(tmp_path) -> None:
+    _closed_session(tmp_path, "SESSION-NOTRANS")
+    (tmp_path / "SESSION-NOTRANS" / "order_state_transitions.jsonl").unlink()
+    report = recover_trade_manager_session(tmp_path, "SESSION-NOTRANS")
+    assert report.status == STATUS_INCIDENT
+    assert report.status != STATUS_OK
+    assert report.open_orders_unknown is True
+    assert "reconcile_open_orders" in report.required_operator_actions
+    assert "order_state_transitions_missing" in report.notes
+
+
 def test_restart_recovery_missing_kill_switch_file_incident(tmp_path) -> None:
     _closed_session(tmp_path, "SESSION-NOKILL")
     (tmp_path / "SESSION-NOKILL" / "kill_switch_events.jsonl").unlink()

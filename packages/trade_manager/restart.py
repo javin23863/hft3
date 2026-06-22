@@ -76,22 +76,29 @@ def recover_trade_manager_session(
     if manifest is None:
         return _unknown(session_id, ("session_manifest_unparseable",))
 
-    transitions = _read_jsonl(session_path / "order_state_transitions.jsonl")
-    if transitions is None:
-        return _unknown(session_id, ("order_state_transitions_unparseable",))
-
-    latest_by_intent = _latest_order_states(transitions)
-    terminal_values = {state.value for state in TERMINAL_ORDER_STATES}
-    open_intents = [
-        intent_id
-        for intent_id, state in latest_by_intent.items()
-        if str(state) not in terminal_values
-    ]
-    if open_intents:
+    transitions_path = session_path / "order_state_transitions.jsonl"
+    if not transitions_path.is_file():
         open_unknown = True
         status = STATUS_INCIDENT
         actions.append("reconcile_open_orders")
-        notes.append(f"non_terminal_orders={len(open_intents)}")
+        notes.append("order_state_transitions_missing")
+    else:
+        transitions = _read_jsonl(transitions_path)
+        if transitions is None:
+            return _unknown(session_id, ("order_state_transitions_unparseable",))
+
+        latest_by_intent = _latest_order_states(transitions)
+        terminal_values = {state.value for state in TERMINAL_ORDER_STATES}
+        open_intents = [
+            intent_id
+            for intent_id, state in latest_by_intent.items()
+            if str(state) not in terminal_values
+        ]
+        if open_intents:
+            open_unknown = True
+            status = STATUS_INCIDENT
+            actions.append("reconcile_open_orders")
+            notes.append(f"non_terminal_orders={len(open_intents)}")
 
     positions_rows = _read_jsonl(session_path / "positions.jsonl")
     if positions_rows is None:
