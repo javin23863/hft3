@@ -159,6 +159,26 @@ def test_restart_recovery_position_mismatch_incident(tmp_path) -> None:
     assert "reconcile_positions" in report.required_operator_actions
 
 
+def test_restart_recovery_corrupt_position_quantity_incident(tmp_path) -> None:
+    write_session_report(
+        tmp_path,
+        SessionReportInput(
+            session_id="SESSION-BADQTY",
+            session_manifest={"session_id": "SESSION-BADQTY"},
+            order_state_transitions=[
+                {"order_intent_id": "intent-1", "state": "FILLED", "timestamp_ns": 100},
+            ],
+            fills=[{"order_intent_id": "intent-1", "symbol": "ES", "quantity": 0.0, "side": "BUY"}],
+            positions=[{"timestamp_ns": 100, "symbol": "ES", "quantity": "N/A"}],
+            kill_switch_events=[{"timestamp_ns": 200, "active": False, "status": "CLEAR"}],
+        ),
+    )
+    report = recover_trade_manager_session(tmp_path, "SESSION-BADQTY")
+    assert report.status == STATUS_INCIDENT
+    assert report.position_reconciliation_status == "UNKNOWN"
+    assert "reconcile_positions" in report.required_operator_actions
+
+
 def test_restart_recovery_unparseable_kill_switch_incident(tmp_path) -> None:
     _closed_session(tmp_path, "SESSION-KILL")
     session_path = tmp_path / "SESSION-KILL"

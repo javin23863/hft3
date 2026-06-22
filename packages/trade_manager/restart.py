@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
@@ -251,9 +252,16 @@ def _reconcile_latest_positions(
         return POSITION_STATUS_UNKNOWN
     positions: dict[str, float] = {}
     if "symbol" in last and "quantity" in last:
-        positions[str(last["symbol"])] = float(last["quantity"])
+        qty = _safe_float(last["quantity"])
+        if qty is None:
+            return POSITION_STATUS_UNKNOWN
+        positions[str(last["symbol"])] = qty
     elif "positions" in last and isinstance(last["positions"], dict):
-        positions = {str(k): float(v) for k, v in last["positions"].items()}
+        for key, value in last["positions"].items():
+            qty = _safe_float(value)
+            if qty is None:
+                return POSITION_STATUS_UNKNOWN
+            positions[str(key)] = qty
     else:
         return POSITION_STATUS_UNKNOWN
 
@@ -292,7 +300,7 @@ def _expected_positions_from_session(
     return _expected_positions_from_intents(intents, latest_by_intent)
 
 
-def _expected_positions_from_fills(fills: list[dict[str, Any]]) -> list[ExpectedPosition]:
+def _expected_positions_from_fills(fills: list[dict[str, Any]]) -> list[ExpectedPosition] | None:
     net: dict[str, float] = {}
     intent_ids: dict[str, list[str]] = {}
     for rec in fills:
@@ -300,8 +308,10 @@ def _expected_positions_from_fills(fills: list[dict[str, Any]]) -> list[Expected
         qty = rec.get("quantity")
         if not symbol or qty is None:
             continue
+        signed = _safe_float(qty)
+        if signed is None:
+            return None
         key = str(symbol)
-        signed = float(qty)
         side = str(rec.get("side", "")).upper()
         if side == "SELL":
             signed = -abs(signed)
@@ -343,7 +353,9 @@ def _expected_positions_from_intents(
         if not symbol or qty is None:
             return None
         key = str(symbol)
-        signed = float(qty)
+        signed = _safe_float(qty)
+        if signed is None:
+            return None
         side = str(intent.get("side", "BUY")).upper()
         if side == "SELL":
             signed = -abs(signed)
@@ -357,6 +369,16 @@ def _expected_positions_from_intents(
         )
         for symbol, qty in net.items()
     ]
+
+
+def _safe_float(value: Any) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(number):
+        return None
+    return number
 
 
 def _lifecycle_registry_ok(lifecycle_dir: Path | str) -> bool:
