@@ -122,8 +122,7 @@ def write_route_manifest(manifest: dict) -> Path:
     mid = str(manifest["model_id"])
     route = str(manifest["route"])
     if not manifest.get("manifest_id"):
-        seq = len(list(manifests_dir().glob("*.json"))) + 1
-        manifest_id = f"{mid}_{route}_{seq}"
+        manifest_id = f"{mid}_{route}_{time.time_ns()}"
     else:
         manifest_id = str(manifest["manifest_id"])
     manifest = {**manifest, "manifest_id": manifest_id}

@@ -57,6 +57,7 @@ def recover_trade_manager_session(
     *,
     lifecycle_dir: Path | str | None = None,
     now_ns: int = 0,
+    workstation_mode: bool = True,
 ) -> RestartRecoveryReport:
     """Load session artifacts and return an inert recovery verdict."""
     try:
@@ -70,7 +71,6 @@ def recover_trade_manager_session(
     open_unknown = False
     pos_status = POSITION_STATUS_OK
     lifecycle_ok: bool | None = None
-    safe_signals = False
 
     manifest = _read_json(session_path / "session_manifest.json")
     if manifest is None:
@@ -116,11 +116,16 @@ def recover_trade_manager_session(
         if "reconcile_positions" not in actions:
             actions.append("reconcile_positions")
 
-    kill_rows = _read_jsonl(session_path / "kill_switch_events.jsonl") or []
-    if kill_rows:
+    kill_rows = _read_jsonl(session_path / "kill_switch_events.jsonl")
+    if kill_rows is None:
+        if status == STATUS_OK:
+            status = STATUS_INCIDENT
+        if "review_kill_switch" not in actions:
+            actions.append("review_kill_switch")
+        notes.append("kill_switch_events_unparseable")
+    elif kill_rows:
         latest_kill = kill_rows[-1]
         if latest_kill.get("active") is True or latest_kill.get("status") not in (None, "CLEAR", "clear"):
-            safe_signals = False
             if "review_kill_switch" not in actions:
                 actions.append("review_kill_switch")
             if status == STATUS_OK:
@@ -135,6 +140,14 @@ def recover_trade_manager_session(
         status = STATUS_OK
     elif status == STATUS_OK:
         status = STATUS_INCIDENT
+
+    signals_eligible = (
+        status == STATUS_OK
+        and not open_unknown
+        and pos_status == POSITION_STATUS_OK
+        and lifecycle_ok is not False
+    )
+    safe_signals = signals_eligible and not workstation_mode
 
     return RestartRecoveryReport(
         status=status,

@@ -109,3 +109,20 @@ def test_restart_recovery_lifecycle_registry_check(tmp_path) -> None:
     (lc / "model_lifecycle.json").write_text(json.dumps({"models": {}}), encoding="utf-8")
     report = recover_trade_manager_session(tmp_path, "SESSION-LC", lifecycle_dir=lc)
     assert report.lifecycle_registry_ok is True
+
+
+def test_restart_recovery_replay_mode_safe_signals(tmp_path) -> None:
+    _closed_session(tmp_path)
+    report = recover_trade_manager_session(tmp_path, "SESSION-OK", workstation_mode=False)
+    assert report.status == STATUS_OK
+    assert report.safe_to_resume_signals is True
+
+
+def test_restart_recovery_unparseable_kill_switch_incident(tmp_path) -> None:
+    _closed_session(tmp_path, "SESSION-KILL")
+    session_path = tmp_path / "SESSION-KILL"
+    (session_path / "kill_switch_events.jsonl").write_text("not-json\n", encoding="utf-8")
+    report = recover_trade_manager_session(tmp_path, "SESSION-KILL")
+    assert report.status == STATUS_INCIDENT
+    assert "review_kill_switch" in report.required_operator_actions
+    assert report.safe_to_resume_signals is False
