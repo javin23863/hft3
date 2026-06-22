@@ -84,3 +84,31 @@ def test_duplicate_manifest_id_rejected(env):
     job_runner.write_route_manifest(manifest)
     with pytest.raises(FileExistsError):
         job_runner.write_route_manifest(manifest)
+
+
+def test_regime_shift_without_artifact_evidence_rejected(env):
+    routes, _, _, _ = env
+    rec = _degraded("REGIME_NOEV", lifecycle.ROUTE_REGIME_SHIFT)
+    rec.research_card_links = {"cell": {"hyp_id": 5, "event_type": "CPI_TIGHT"}}
+    result = routes.handle_route(rec, actor="pytest", reason="regime drift")
+    assert result["action"] == "manifest_rejected"
+    assert result["job"] is None
+    assert "missing source evidence" in result["error"]
+
+
+def test_regime_shift_with_artifact_evidence_returns_regime_watch(env):
+    routes, job_runner, lc_dir, _ = env
+    rec = _degraded("REGIME_OK", lifecycle.ROUTE_REGIME_SHIFT)
+    result = routes.handle_route(rec, actor="pytest", reason="regime drift")
+    assert result["action"] == "regime_watch"
+    assert result["job"] is None
+    assert result["manifest"]["route"] == lifecycle.ROUTE_REGIME_SHIFT
+    assert (lc_dir / "jobs" / "manifests").is_dir()
+
+
+def test_handle_route_rejects_invalid_model_id_in_manifest(env):
+    routes, _, _, _ = env
+    rec = _degraded("../escape", lifecycle.ROUTE_PARAM_TWEAK)
+    result = routes.handle_route(rec, actor="pytest", reason="bad id")
+    assert result["action"] == "manifest_rejected"
+    assert result["job"] is None

@@ -76,12 +76,18 @@ def _source_evidence(record) -> dict[str, Any]:
     return links
 
 
+def _artifact_evidence_path(value: Any) -> bool:
+    if isinstance(value, str):
+        return bool(value.strip())
+    return bool(value)
+
+
 def _has_artifact_evidence(links: dict[str, Any]) -> bool:
     artifact_keys = (
         "vectorbt", "vectorbt_results", "vectorbt_artifact", "paid_screen",
         "hftbacktest", "hbt", "hbt_observation", "replay_observation", "session_report", "session",
     )
-    return any(links.get(k) for k in artifact_keys)
+    return any(_artifact_evidence_path(links.get(k)) for k in artifact_keys)
 
 
 def build_route_manifest(
@@ -123,8 +129,7 @@ def create_route_manifest(
     created_at: Optional[str] = None,
 ) -> dict:
     manifest = build_route_manifest(record, reason=reason, created_by=created_by, created_at=created_at)
-    path = job_runner.write_route_manifest(manifest)
-    stored = job_runner.load_route_manifest(path.stem)
+    path, stored = job_runner.write_route_manifest(manifest)
     return {"manifest": stored, "manifest_path": str(path)}
 
 

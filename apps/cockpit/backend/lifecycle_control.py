@@ -61,9 +61,7 @@ def lifecycle_action(req: LifecycleActionRequest, scope: str = Depends(require_c
     actor = scope or "cockpit-control"
     if req.action not in _ALLOWED_ACTIONS:
         raise HTTPException(400, f"unknown action '{req.action}'")
-    if not _MODEL_ID_RE.match(req.model_id):
-        raise HTTPException(400, "invalid model_id")
-    if ".." in req.model_id or "/" in req.model_id or "\\" in req.model_id:
+    if not _MODEL_ID_RE.fullmatch(req.model_id):
         raise HTTPException(400, "invalid model_id")
     reason = req.reason.strip()
     if not reason:

@@ -119,7 +119,7 @@ def validate_route_manifest(manifest: dict) -> list[str]:
     return errors
 
 
-def write_route_manifest(manifest: dict) -> Path:
+def write_route_manifest(manifest: dict) -> tuple[Path, dict]:
     """Persist a validated route manifest under runtime/lifecycle/jobs/manifests/."""
     errors = validate_route_manifest(manifest)
     if errors:
@@ -128,21 +128,25 @@ def write_route_manifest(manifest: dict) -> Path:
     route = str(manifest["route"])
     if not manifest.get("manifest_id"):
         manifest_id = f"{mid}_{route}_{time.time_ns()}"
+        if not _MANIFEST_ID_RE.fullmatch(manifest_id):
+            raise ValueError(
+                f"auto-generated manifest_id is invalid (model_id or route contains forbidden chars): {manifest_id!r}"
+            )
     else:
         manifest_id = str(manifest["manifest_id"])
         if not _MANIFEST_ID_RE.fullmatch(manifest_id):
             raise ValueError("invalid manifest_id")
-    manifest = {**manifest, "manifest_id": manifest_id}
+    stored = {**manifest, "manifest_id": manifest_id}
     p = manifests_dir() / f"{manifest_id}.json"
     if p.is_file():
         raise FileExistsError(f"manifest already exists: {manifest_id}")
     tmp = p.with_suffix(".json.tmp")
     with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(manifest, fh, indent=2, sort_keys=True)
+        json.dump(stored, fh, indent=2, sort_keys=True)
         fh.flush()
         os.fsync(fh.fileno())
     tmp.replace(p)
-    return p
+    return p, stored
 
 
 def load_route_manifest(manifest_id: str) -> dict:
