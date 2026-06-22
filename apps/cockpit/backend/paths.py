@@ -111,6 +111,7 @@ def vault_dir() -> Path:
 # --- Lifecycle zone (ML1/ML4) ----------------------------------------------
 MODEL_LIFECYCLE = _p("runtime", "lifecycle", "model_lifecycle.json")
 LIFECYCLE_TRANSITIONS = _p("runtime", "lifecycle", "transitions.jsonl")
+LIFECYCLE_OPERATOR_RECEIPTS = _p("runtime", "lifecycle", "operator_receipts.jsonl")
 
 # --- Control zone (write side, W4) -----------------------------------------
 CONTROL_AUDIT_LOG = _p("runtime", "cockpit", "control_audit.jsonl")

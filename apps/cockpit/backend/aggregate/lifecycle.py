@@ -13,6 +13,7 @@ from trading kill-switch and autonomy global kill.
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any, Optional
 
@@ -101,7 +102,14 @@ def _parse_transitions() -> tuple[dict[str, dict[str, Any]], bool]:
             bad = True
             continue
         counts[mid] = counts.get(mid, 0) + 1
-        last[mid] = rec
+        prev = last.get(mid)
+        if prev is None:
+            last[mid] = rec
+            continue
+        prev_ts = prev.get("ts") or ""
+        cur_ts = rec.get("ts") or ""
+        if cur_ts >= prev_ts:
+            last[mid] = rec
     out: dict[str, dict[str, Any]] = {}
     for mid, cnt in counts.items():
         rec = last[mid]
@@ -179,7 +187,8 @@ def _submit_fields(rec: dict) -> tuple[bool, float, str]:
 
         allowed, size = submit_allowed(state, model_state)
         return allowed, size, f"lifecycle={state} model_state={model_state}"
-    except Exception:
+    except Exception as exc:
+        logging.warning("submit_gate lookup failed for lifecycle row: %s", exc)
         return False, 0.0, "submit_gate_error"
 
 
@@ -201,6 +210,7 @@ def _build_row(mid: str, rec: dict, tx: dict[str, dict[str, Any]]) -> dict:
         "since": rec.get("current_state_since"),
         "route": routing.get("route"),
         "demotion_reason": demotion.get("reason"),
+        # last_revalidation: legacy alias (model_state string only); prefer latest_model_state in new UI.
         "last_revalidation": reval.get("model_state"),
         "envelope_id": rec.get("current_envelope_id"),
         "submit_allowed": allowed,

@@ -1,5 +1,6 @@
 import { Fragment, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
+import { apiPost } from "../api";
 import { useZones } from "../zonesContext";
 import { Badge, Dot, Kpi, Panel } from "../ui";
 import type { LifecycleRow, LifecycleZone } from "../types";
@@ -77,6 +78,56 @@ function RowDetail({ row }: { row: LifecycleRow }) {
         </div>
       )}
       <div className="text-[10px] text-ink-faint">read-only registry · no live order routing from workstation</div>
+      <OperatorActions modelId={row.id} state={row.state} />
+    </div>
+  );
+}
+
+function OperatorActions({ modelId, state }: { modelId: string; state: string }) {
+  const [action, setAction] = useState("request_retest");
+  const [reason, setReason] = useState("");
+  const [status, setStatus] = useState<string | null>(null);
+
+  async function submit() {
+    if (!reason.trim()) {
+      setStatus("reason required");
+      return;
+    }
+    setStatus("sending…");
+    try {
+      const data = await apiPost<{ receipt?: { action?: string } }>("/api/lifecycle/action", {
+        model_id: modelId,
+        action,
+        reason: reason.trim(),
+      });
+      setStatus(`receipt: ${data?.receipt?.action ?? action}`);
+    } catch {
+      setStatus("request failed (control scope / local origin required)");
+    }
+  }
+
+  return (
+    <div className="mt-2 space-y-2 rounded border border-line/60 p-2">
+      <div className="text-[10px] uppercase tracking-wide text-ink-faint">operator request (receipt only)</div>
+      <div className="flex flex-wrap items-center gap-2">
+        <select className="rounded border border-line bg-bg-panel px-2 py-1 text-xs" value={action} onChange={(e) => setAction(e.target.value)}>
+          <option value="acknowledge_observation">acknowledge observation</option>
+          <option value="request_retest">request retest</option>
+          <option value="request_quarantine">request quarantine</option>
+          <option value="request_rearm">request rearm</option>
+          <option value="request_retire">request retire</option>
+        </select>
+        <input
+          className="min-w-[12rem] flex-1 rounded border border-line bg-bg-panel px-2 py-1 text-xs"
+          placeholder={`reason (required) · state ${state}`}
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+        />
+        <button type="button" className="rounded border border-line px-2 py-1 text-xs hover:bg-bg-elev" onClick={() => void submit()}>
+          write receipt
+        </button>
+      </div>
+      {status && <div className="text-[10px] text-ink-dim">{status}</div>}
     </div>
   );
 }

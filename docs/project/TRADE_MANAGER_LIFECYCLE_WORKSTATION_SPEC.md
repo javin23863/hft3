@@ -395,11 +395,51 @@ This slice is complete when:
 
 | Gap | Target slice |
 |---|---|
-| Lifecycle panel UI / evidence drawer | Slices 3–4 |
-| Executable restart recovery module + tests | Slices 5–6 |
+| ~~Lifecycle panel UI / evidence drawer~~ | Slices 3–4 **done** |
+| ~~Executable restart recovery module + tests~~ | Slices 5–6 **done** |
+| ~~Observation producer + route manifests + operator receipts + e2e~~ | Slices 7–10 **done** |
 | `risk_layer` fail-open on submit_gate exception | Slice 6+ (CHI404 live hardening) |
 | `size_factor` from submit gate not applied to order quantity | Slice 6+ (wire `_size` in risk_layer) |
 | Live routing on CHI404 | Future authorized phase; boundary inert today |
+
+## Operator commands (Slices 7–11)
+
+### Build observations for decay driver
+
+```powershell
+py -3.12 -c "from lifecycle_orchestrator.src.observations import build_observations, write_observations_file; from pathlib import Path; obs=build_observations(); write_observations_file(Path('runtime/lifecycle/observations.json'), obs)"
+py -3.12 -m lifecycle_orchestrator.src.run_lifecycle_eval --observations runtime/lifecycle/observations.json
+```
+
+Evidence is read from `research_card_links` on each LIVE/DEGRADED model (VectorBT, HftBacktest replay, session report). Missing or stale evidence produces a **blocking** observation (fail-closed).
+
+### Route job manifests
+
+After demotion routing, `lifecycle_orchestrator.src.routes.handle_route` writes manifests under `runtime/lifecycle/jobs/manifests/` and enqueues durable jobs under `runtime/lifecycle/jobs/{pending,running,done,failed}/`.
+
+```powershell
+py -3.12 -m lifecycle_orchestrator.src.orchestrator scan
+```
+
+### Cockpit operator receipts (no registry mutation)
+
+`POST /api/lifecycle/action` (local-origin + control scope) writes `runtime/lifecycle/operator_receipts.jsonl`:
+
+- `acknowledge_observation`
+- `request_retest`
+- `request_quarantine`
+- `request_rearm`
+- `request_retire`
+
+State transitions still require `model_metrics.lifecycle.apply_transition` from an authorized job path.
+
+### Verification
+
+```powershell
+py -3.12 -m pytest tests\test_lifecycle_orchestrator_observations.py tests\test_lifecycle_orchestrator_routes.py tests\test_lifecycle_operator_receipts.py tests\test_lifecycle_workstation_e2e.py -q
+py -3.12 -m pytest apps\cockpit\backend\tests\test_cockpit.py -k lifecycle -q
+```
+
 
 ## Related documents
 

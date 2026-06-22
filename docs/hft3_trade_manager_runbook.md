@@ -289,8 +289,45 @@ The Trade Manager will be built in 4 milestones:
 - `packages/trade_manager/kill_switch.py` — Phase 21 complete: 12 triggers x 7 actions as decisions only
 - Tests: `tests/test_trade_manager_phase20.py`, `tests/test_trade_manager_phase21.py`
 
-### Milestone 4: Observer + session reporting + future restart recovery (Phases 22, 23, future)
+### Milestone 4: Observer + session reporting + restart recovery (Phases 22, 23, restart)
 - `apps/observer/` — read-only CLI
 - `packages/trade_manager/session.py` — 16 session files
-- `packages/trade_manager/restart.py` — crash recovery
+- `packages/trade_manager/restart.py` — inert crash recovery report (no adapter calls)
 - Tests: `test_observer_view_read_only.py`, `test_session_report_generation.py`, `test_trade_manager_restart_recovery.py`
+
+## Lifecycle workstation (Cockpit + orchestrator)
+
+Read-only Cockpit zones aggregate `runtime/lifecycle/model_lifecycle.json` and `transitions.jsonl`. Operator requests via `POST /api/lifecycle/action` append receipts only (`runtime/lifecycle/operator_receipts.jsonl`); they do **not** mutate lifecycle state.
+
+Decay evaluation:
+
+```powershell
+py -3.12 -c "from lifecycle_orchestrator.src.observations import build_observations, write_observations_file; from pathlib import Path; write_observations_file(Path('runtime/lifecycle/observations.json'), build_observations())"
+py -3.12 -m lifecycle_orchestrator.src.run_lifecycle_eval --observations runtime/lifecycle/observations.json
+```
+
+Route dispatch (autonomy `retest` must be enabled):
+
+```powershell
+py -3.12 -m lifecycle_orchestrator.src.orchestrator scan
+```
+
+Artifacts:
+
+| Path | Role |
+|---|---|
+| `runtime/lifecycle/observations.json` | Optional hand-built observation bundle for eval |
+| `runtime/lifecycle/jobs/manifests/*.json` | Route manifests (model, route, evidence, transition hash) |
+| `runtime/lifecycle/jobs/pending/*.json` | Durable job queue |
+| `runtime/lifecycle/operator_receipts.jsonl` | Cockpit operator action receipts |
+
+Failure modes:
+
+- Missing revalidation artifact → blocking observation; submit gate stays fail-closed.
+- Stale artifact (>90d default) → blocking observation.
+- Operator receipt without reason → HTTP 422; registry unchanged.
+- Route manifest without artifact evidence → rejected before enqueue.
+
+Intentionally inert on dev workstation: live order routing, adapter creation, registry mutation from Cockpit UI.
+
+Full contract: `docs/project/TRADE_MANAGER_LIFECYCLE_WORKSTATION_SPEC.md`.
