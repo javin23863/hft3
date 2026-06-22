@@ -34,6 +34,7 @@ def _closed_session(tmp_path, session_id: str = "SESSION-OK") -> None:
                 {"order_intent_id": "intent-1", "state": "CREATED", "timestamp_ns": 100},
                 {"order_intent_id": "intent-1", "state": "FILLED", "timestamp_ns": 200},
             ],
+            fills=[{"order_intent_id": "intent-1", "symbol": "ES", "quantity": 0.0, "side": "BUY"}],
             positions=[{"timestamp_ns": 200, "symbol": "ES", "quantity": 0.0}],
             kill_switch_events=[{"timestamp_ns": 300, "active": False, "status": "CLEAR"}],
             session_metrics={"status": "COMPLETE"},
@@ -136,6 +137,26 @@ def test_restart_recovery_missing_kill_switch_file_incident(tmp_path) -> None:
     assert report.status == STATUS_INCIDENT
     assert "review_kill_switch" in report.required_operator_actions
     assert "kill_switch_events_missing" in report.notes
+
+
+def test_restart_recovery_position_mismatch_incident(tmp_path) -> None:
+    write_session_report(
+        tmp_path,
+        SessionReportInput(
+            session_id="SESSION-MISMATCH",
+            session_manifest={"session_id": "SESSION-MISMATCH"},
+            order_state_transitions=[
+                {"order_intent_id": "intent-1", "state": "FILLED", "timestamp_ns": 100},
+            ],
+            fills=[{"order_intent_id": "intent-1", "symbol": "ES", "quantity": 2.0, "side": "BUY"}],
+            positions=[{"timestamp_ns": 100, "symbol": "ES", "quantity": 0.0}],
+            kill_switch_events=[{"timestamp_ns": 200, "active": False, "status": "CLEAR"}],
+        ),
+    )
+    report = recover_trade_manager_session(tmp_path, "SESSION-MISMATCH")
+    assert report.status == STATUS_INCIDENT
+    assert report.position_reconciliation_status == "MISMATCH"
+    assert "reconcile_positions" in report.required_operator_actions
 
 
 def test_restart_recovery_unparseable_kill_switch_incident(tmp_path) -> None:

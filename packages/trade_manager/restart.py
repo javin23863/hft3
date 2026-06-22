@@ -77,6 +77,7 @@ def recover_trade_manager_session(
         return _unknown(session_id, ("session_manifest_unparseable",))
 
     transitions_path = session_path / "order_state_transitions.jsonl"
+    latest_by_intent: dict[str, str] = {}
     if not transitions_path.is_file():
         open_unknown = True
         status = STATUS_INCIDENT
@@ -112,7 +113,12 @@ def recover_trade_manager_session(
         actions.append("reconcile_positions")
         notes.append("positions_missing")
     else:
-        pos_status = _reconcile_latest_positions(positions_rows, now_ns=now_ns)
+        pos_status = _reconcile_latest_positions(
+            session_path,
+            positions_rows,
+            latest_by_intent=latest_by_intent,
+            now_ns=now_ns,
+        )
 
     if pos_status == POSITION_STATUS_UNKNOWN:
         status = STATUS_INCIDENT if status == STATUS_OK else status
@@ -218,16 +224,27 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]] | None:
 
 def _latest_order_states(transitions: list[dict[str, Any]]) -> dict[str, str]:
     latest: dict[str, str] = {}
+    latest_ts: dict[str, str] = {}
     for rec in transitions:
         intent_id = rec.get("order_intent_id")
         state = rec.get("state")
         if not intent_id or not state:
             continue
-        latest[str(intent_id)] = str(state)
+        key = str(intent_id)
+        cur_ts = str(rec.get("timestamp_ns") or rec.get("ts") or "")
+        if key not in latest or cur_ts >= latest_ts.get(key, ""):
+            latest[key] = str(state)
+            latest_ts[key] = cur_ts
     return latest
 
 
-def _reconcile_latest_positions(rows: list[dict[str, Any]], *, now_ns: int) -> str:
+def _reconcile_latest_positions(
+    session_path: Path,
+    rows: list[dict[str, Any]],
+    *,
+    latest_by_intent: dict[str, str],
+    now_ns: int,
+) -> str:
     last = rows[-1]
     ts = last.get("timestamp_ns", now_ns)
     if not isinstance(ts, int) or ts < 0:
@@ -246,10 +263,9 @@ def _reconcile_latest_positions(rows: list[dict[str, Any]], *, now_ns: int) -> s
         positions=positions,
         account_state=None,
     )
-    expected = [
-        ExpectedPosition(symbol=symbol, quantity=qty, source_order_intent_ids=())
-        for symbol, qty in positions.items()
-    ]
+    expected = _expected_positions_from_session(session_path, latest_by_intent)
+    if expected is None:
+        return POSITION_STATUS_UNKNOWN
     result = reconcile_positions(
         timestamp_ns=int(ts),
         snapshot=snapshot,
@@ -257,6 +273,90 @@ def _reconcile_latest_positions(rows: list[dict[str, Any]], *, now_ns: int) -> s
         config=PositionMonitorConfig(max_position_mismatch_contracts=0.0, stale_position_max_ns=10**18),
     )
     return result.status
+
+
+def _expected_positions_from_session(
+    session_path: Path,
+    latest_by_intent: dict[str, str],
+) -> list[ExpectedPosition] | None:
+    fills = _read_jsonl(session_path / "fills.jsonl")
+    if fills is None:
+        return None
+    if fills:
+        return _expected_positions_from_fills(fills)
+    intents = _read_jsonl(session_path / "order_intents.jsonl")
+    if intents is None:
+        return None
+    if not intents:
+        return []
+    return _expected_positions_from_intents(intents, latest_by_intent)
+
+
+def _expected_positions_from_fills(fills: list[dict[str, Any]]) -> list[ExpectedPosition]:
+    net: dict[str, float] = {}
+    intent_ids: dict[str, list[str]] = {}
+    for rec in fills:
+        symbol = rec.get("symbol")
+        qty = rec.get("quantity")
+        if not symbol or qty is None:
+            continue
+        key = str(symbol)
+        signed = float(qty)
+        side = str(rec.get("side", "")).upper()
+        if side == "SELL":
+            signed = -abs(signed)
+        elif side == "BUY":
+            signed = abs(signed)
+        net[key] = net.get(key, 0.0) + signed
+        oid = rec.get("order_intent_id") or rec.get("order_id")
+        if oid:
+            intent_ids.setdefault(key, []).append(str(oid))
+    return [
+        ExpectedPosition(
+            symbol=symbol,
+            quantity=qty,
+            source_order_intent_ids=tuple(intent_ids.get(symbol, ())),
+        )
+        for symbol, qty in net.items()
+    ]
+
+
+def _expected_positions_from_intents(
+    intents: list[dict[str, Any]],
+    latest_by_intent: dict[str, str],
+) -> list[ExpectedPosition] | None:
+    by_id = {
+        str(rec["order_intent_id"]): rec
+        for rec in intents
+        if rec.get("order_intent_id")
+    }
+    net: dict[str, float] = {}
+    intent_ids: dict[str, list[str]] = {}
+    for intent_id, state in latest_by_intent.items():
+        if str(state) != "FILLED":
+            continue
+        intent = by_id.get(intent_id)
+        if intent is None:
+            continue
+        symbol = intent.get("symbol")
+        qty = intent.get("quantity")
+        if not symbol or qty is None:
+            return None
+        key = str(symbol)
+        signed = float(qty)
+        side = str(intent.get("side", "BUY")).upper()
+        if side == "SELL":
+            signed = -abs(signed)
+        net[key] = net.get(key, 0.0) + signed
+        intent_ids.setdefault(key, []).append(intent_id)
+    return [
+        ExpectedPosition(
+            symbol=symbol,
+            quantity=qty,
+            source_order_intent_ids=tuple(intent_ids.get(symbol, ())),
+        )
+        for symbol, qty in net.items()
+    ]
 
 
 def _lifecycle_registry_ok(lifecycle_dir: Path | str) -> bool:
