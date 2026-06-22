@@ -37,6 +37,29 @@ export interface ModelResultSurface {
   url?: string;
 }
 
+export interface ModelLifecycleBlock {
+  tracked: boolean;
+  status: "tracked" | "untracked" | "malformed";
+  note?: string | null;
+  id?: string;
+  state?: string;
+  dot?: string;
+  submit_allowed?: boolean;
+  submit_size_factor?: number;
+  submit_reason?: string | null;
+  envelope_id?: string | null;
+  latest_model_state?: string | null;
+  latest_revalidation_ts?: string | null;
+  latest_revalidation_triggers?: string[];
+  route?: string | null;
+  route_decided_at?: string | null;
+  next_required_gate?: string | null;
+  demotion_reason?: string | null;
+  evidence_links?: Record<string, unknown>;
+  last_transition?: Record<string, unknown> | null;
+  transition_count?: number;
+}
+
 export interface ModelDetail {
   id: number;
   name: string;
@@ -45,6 +68,7 @@ export interface ModelDetail {
   generated_utc: string;
   error?: string;
   construction: ModelConstruction | null;
+  lifecycle?: ModelLifecycleBlock;
   results: {
     stage_a_cells: StageACell[];
     n_event_types: number;

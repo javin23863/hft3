@@ -89,6 +89,17 @@ def test_submit_gate_blocks_red_tracked_model(env):
     assert allowed2 is True and size2 == 1.0 and reason2 == "untracked"
 
 
+def test_submit_gate_blocks_live_without_revalidation(env):
+    cert, lc, tmp, mp = env
+    _certify_live(cert, lc)
+    sg = importlib.import_module("model_metrics.submit_gate")
+    sg._cache["mtime"] = None
+    rec = lc.get_record("MGC_X")
+    assert not (rec.last_revalidation or {}).get("model_state")
+    allowed, size, reason = sg.model_submit_decision("MGC_X")
+    assert allowed is False and size == 0.0 and reason == "stale_no_revalidation"
+
+
 # --- job worker -------------------------------------------------------------
 def test_worker_records_only_when_exec_disabled(env):
     cert, lc, tmp, mp = env

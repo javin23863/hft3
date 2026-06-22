@@ -25,6 +25,7 @@ from apps.cockpit.backend import paths  # noqa: E402
 from apps.cockpit.backend.aggregate import ZONES  # noqa: E402
 from apps.cockpit.backend.auth import require_view  # noqa: E402
 from apps.cockpit.backend.control import router as control_router  # noqa: E402
+from apps.cockpit.backend.lifecycle_control import router as lifecycle_control_router  # noqa: E402
 from apps.cockpit.backend.hub import Hub  # noqa: E402
 from apps.cockpit.backend.watch import Watcher  # noqa: E402
 
@@ -116,6 +117,7 @@ async def _rate_limit(request, call_next):
 
 
 app.include_router(control_router)
+app.include_router(lifecycle_control_router)
 
 
 def _zone(name: str) -> dict:

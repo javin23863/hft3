@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from pathlib import Path
 from typing import Optional
@@ -17,6 +18,17 @@ from typing import Optional
 from model_metrics import lifecycle
 
 _STATES = ("pending", "running", "done", "failed")
+_MANIFEST_REQUIRED = frozenset({
+    "model_id", "route", "reason", "created_by", "created_at", "source_evidence",
+})
+_MANIFEST_ID_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
+
+_VALID_ROUTES = frozenset({
+    lifecycle.ROUTE_REGIME_SHIFT,
+    lifecycle.ROUTE_PARAM_TWEAK,
+    lifecycle.ROUTE_HYPOTHESIS_TWEAK,
+    lifecycle.ROUTE_EDGE_GONE,
+})
 
 
 class DuplicateActiveJob(RuntimeError):
@@ -77,6 +89,100 @@ def _bump_counter() -> int:
 
 def jobs_dir() -> Path:
     return lifecycle.lifecycle_dir() / "jobs"
+
+
+def manifests_dir() -> Path:
+    d = jobs_dir() / "manifests"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def validate_route_manifest(manifest: dict) -> list[str]:
+    """Return validation errors; empty list means OK."""
+    errors: list[str] = []
+    if not isinstance(manifest, dict):
+        return ["manifest must be an object"]
+    missing = sorted(_MANIFEST_REQUIRED - set(manifest))
+    if missing:
+        errors.append(f"missing fields: {', '.join(missing)}")
+    route = manifest.get("route")
+    if route not in _VALID_ROUTES:
+        errors.append(f"unknown route {route!r}")
+    mid = manifest.get("model_id")
+    if not mid or not isinstance(mid, str):
+        errors.append("model_id must be a non-empty string")
+    elif not _MANIFEST_ID_RE.fullmatch(mid):
+        errors.append("model_id contains invalid characters (must match [A-Za-z0-9_.-]+)")
+    evidence = manifest.get("source_evidence")
+    if not isinstance(evidence, dict) or not evidence:
+        errors.append("source_evidence must be a non-empty object")
+    return errors
+
+
+def find_route_manifest(model_id: str, route: str, source_transition_hash: str | None) -> dict | None:
+    """Return an existing manifest with the same model/route/transition key, if any."""
+    d = manifests_dir()
+    if not d.is_dir():
+        return None
+    for path in d.glob("*.json"):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        if (
+            data.get("model_id") == model_id
+            and data.get("route") == route
+            and data.get("source_transition_hash") == source_transition_hash
+        ):
+            return data
+    return None
+
+
+def write_route_manifest(manifest: dict) -> tuple[Path, dict]:
+    """Persist a validated route manifest under runtime/lifecycle/jobs/manifests/."""
+    errors = validate_route_manifest(manifest)
+    if errors:
+        raise ValueError("; ".join(errors))
+    mid = str(manifest["model_id"])
+    route = str(manifest["route"])
+    if not manifest.get("manifest_id"):
+        manifest_id = f"{mid}_{route}_{time.time_ns()}"
+        if not _MANIFEST_ID_RE.fullmatch(manifest_id):
+            raise ValueError(
+                f"auto-generated manifest_id is invalid (model_id or route contains forbidden chars): {manifest_id!r}"
+            )
+    else:
+        manifest_id = str(manifest["manifest_id"])
+        if not _MANIFEST_ID_RE.fullmatch(manifest_id):
+            raise ValueError("invalid manifest_id")
+    stored = {**manifest, "manifest_id": manifest_id}
+    p = manifests_dir() / f"{manifest_id}.json"
+    if p.is_file():
+        raise FileExistsError(f"manifest already exists: {manifest_id}")
+    tmp = p.with_suffix(".json.tmp")
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(stored, fh, indent=2, sort_keys=True)
+        fh.flush()
+        os.fsync(fh.fileno())
+    tmp.replace(p)
+    return p, stored
+
+
+def load_route_manifest(manifest_id: str) -> dict:
+    if not manifest_id or not _MANIFEST_ID_RE.fullmatch(manifest_id):
+        raise ValueError("invalid manifest_id")
+    p = manifests_dir() / f"{manifest_id}.json"
+    if not p.is_file():
+        raise FileNotFoundError(manifest_id)
+    data = json.loads(p.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError("manifest malformed")
+    errors = validate_route_manifest(data)
+    if errors:
+        raise ValueError("; ".join(errors))
+    return data
 
 
 def _state_dir(state: str) -> Path:

@@ -29,7 +29,7 @@ def scan(*, actor: str = "orchestrator", ts: Optional[str] = None) -> dict:
     for rec in degraded:
         if not acfg.action_enabled("retest", model_id=rec.model_lifecycle_id):
             continue
-        plan = routes.handle_route(rec)
+        plan = routes.handle_route(rec, actor=actor, reason=f"orchestrator scan for {rec.model_lifecycle_id}")
         audit.append(audit.RETEST_START, plan, model_id=rec.model_lifecycle_id, ts=ts)
         dispatched.append(plan)
     return {"disabled": False, "scanned": len(degraded), "dispatched": dispatched}

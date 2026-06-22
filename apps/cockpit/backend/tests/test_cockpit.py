@@ -4498,11 +4498,296 @@ def test_lifecycle_zone_populated_and_alerts(monkeypatch, tmp_path):
     assert z["total_models"] == 3 and z["live"] == 1
     assert z["funnel"]["QUARANTINED"] == 1 and z["funnel"]["DEGRADED"] == 1
     assert z["health"] == "red"  # a QUARANTINED model
+    assert z["blocked_count"] >= 1
     # alerts feed surfaces the quarantine (crit) + degraded (warn)
     a = ZONES["alerts"]()
     ids = {al["id"] for al in a["alerts"]}
     assert "lifecycle-quar-MGC_Y" in ids
     assert any(al["severity"] == "crit" and al["source"] == "lifecycle" for al in a["alerts"])
+
+
+def _lifecycle_fixture(monkeypatch, tmp_path, models: dict, *, transitions=None):
+    """Write registry + optional transitions; align submit_gate lifecycle dir."""
+    import importlib
+
+    lc_dir = tmp_path / "lifecycle"
+    lc_dir.mkdir(parents=True, exist_ok=True)
+    reg = lc_dir / "model_lifecycle.json"
+    reg.write_text(json.dumps({"models": models}), encoding="utf-8")
+    tx = lc_dir / "transitions.jsonl"
+    if transitions:
+        tx.write_text("\n".join(json.dumps(r) for r in transitions) + "\n", encoding="utf-8")
+    monkeypatch.setattr(paths, "MODEL_LIFECYCLE", reg)
+    monkeypatch.setattr(paths, "LIFECYCLE_TRANSITIONS", tx)
+    monkeypatch.setenv("HFT3_LIFECYCLE_DIR", str(lc_dir))
+    sg = importlib.import_module("model_metrics.submit_gate")
+    sg._cache = {"mtime": None, "reg": {}}
+    return reg, tx
+
+
+def test_lifecycle_live_yellow_size_down(monkeypatch, tmp_path):
+    _lifecycle_fixture(monkeypatch, tmp_path, {
+        "MES_X": {
+            "current_state": "LIVE",
+            "hypothesis_id": 1,
+            "symbol": "MES",
+            "current_state_since": "2026-06-12T00:00:00+00:00",
+            "last_revalidation": {"model_state": "YELLOW", "ts": "2026-06-12T00:00:00+00:00"},
+        },
+    })
+    z = ZONES["lifecycle"]()
+    row = z["rows"][0]
+    assert row["submit_allowed"] is True
+    assert row["submit_size_factor"] == 0.5
+    assert z["blocked_count"] == 0
+
+
+def test_lifecycle_live_green_submit_allowed(monkeypatch, tmp_path):
+    _lifecycle_fixture(monkeypatch, tmp_path, {
+        "MES_X": {
+            "current_state": "LIVE",
+            "hypothesis_id": 1,
+            "symbol": "MES",
+            "current_state_since": "2026-06-12T00:00:00+00:00",
+            "last_revalidation": {"model_state": "GREEN", "ts": "2026-06-12T00:00:00+00:00"},
+        },
+    })
+    z = ZONES["lifecycle"]()
+    row = z["rows"][0]
+    assert row["submit_allowed"] is True
+    assert row["submit_size_factor"] == 1.0
+    assert row["latest_model_state"] == "GREEN"
+    assert z["blocked_count"] == 0
+
+
+def test_lifecycle_live_without_revalidation_blocked(monkeypatch, tmp_path):
+    _lifecycle_fixture(monkeypatch, tmp_path, {
+        "MES_STALE": {
+            "current_state": "LIVE",
+            "hypothesis_id": 1,
+            "symbol": "MES",
+            "current_state_since": "2026-06-12T00:00:00+00:00",
+        },
+    })
+    z = ZONES["lifecycle"]()
+    row = z["rows"][0]
+    assert row["submit_allowed"] is False
+    assert row["submit_reason"] == "stale_no_revalidation"
+    assert row["dot"] == sc.STALE
+    assert z["blocked_count"] == 1
+
+
+def test_lifecycle_stale_blocked_live_zone_health_amber(monkeypatch, tmp_path):
+    _lifecycle_fixture(monkeypatch, tmp_path, {
+        "MES_STALE": {
+            "current_state": "LIVE",
+            "hypothesis_id": 1,
+            "symbol": "MES",
+            "current_state_since": "2026-06-12T00:00:00+00:00",
+        },
+    })
+    z = ZONES["lifecycle"]()
+    row = z["rows"][0]
+    assert z["blocked_count"] == 1
+    assert z["health"] == sc.AMBER
+    assert row["submit_allowed"] is False
+    assert row["submit_size_factor"] == 0.0
+    assert row["submit_reason"] == "stale_no_revalidation"
+
+
+def test_lifecycle_degraded_red_blocked(monkeypatch, tmp_path):
+    _lifecycle_fixture(monkeypatch, tmp_path, {
+        "MCL_Z": {
+            "current_state": "DEGRADED",
+            "hypothesis_id": 7,
+            "symbol": "MCL",
+            "current_state_since": "2026-06-12T02:00:00+00:00",
+            "last_revalidation": {"model_state": "RED", "ts": "2026-06-12T02:00:00+00:00"},
+        },
+    })
+    z = ZONES["lifecycle"]()
+    row = z["rows"][0]
+    assert row["submit_allowed"] is False
+    assert row["submit_size_factor"] == 0.0
+    assert z["blocked_count"] == 1
+    assert z["degraded_count"] == 1
+
+
+def test_lifecycle_quarantined_retired_blocked(monkeypatch, tmp_path):
+    _lifecycle_fixture(monkeypatch, tmp_path, {
+        "MGC_Y": {
+            "current_state": "QUARANTINED",
+            "hypothesis_id": 35,
+            "symbol": "MGC",
+            "current_state_since": "2026-06-12T01:00:00+00:00",
+        },
+        "OLD_A": {
+            "current_state": "RETIRED",
+            "hypothesis_id": 2,
+            "symbol": "MES",
+            "current_state_since": "2026-06-01T00:00:00+00:00",
+        },
+    })
+    z = ZONES["lifecycle"]()
+    by_id = {r["id"]: r for r in z["rows"]}
+    assert by_id["MGC_Y"]["submit_allowed"] is False
+    assert by_id["OLD_A"]["submit_allowed"] is False
+    assert z["blocked_count"] == 0
+    assert z["retired_count"] == 1
+    assert by_id["MGC_Y"]["next_required_gate"] == "operator review"
+
+
+def test_lifecycle_malformed_registry_fail_closed(monkeypatch, tmp_path):
+    reg = tmp_path / "model_lifecycle.json"
+    reg.write_text("{not valid json", encoding="utf-8")
+    monkeypatch.setattr(paths, "MODEL_LIFECYCLE", reg)
+    z = ZONES["lifecycle"]()
+    assert z["registered"] is False
+    assert z["health"] == "red"
+    assert z["rows"] == []
+    assert z["note"] is not None
+    assert "malformed" in z["note"]
+
+
+def test_lifecycle_degraded_routed_has_route_fields(monkeypatch, tmp_path):
+    _lifecycle_fixture(monkeypatch, tmp_path, {
+        "MCL_Z": {
+            "current_state": "DEGRADED",
+            "hypothesis_id": 7,
+            "symbol": "MCL",
+            "current_state_since": "2026-06-12T02:00:00+00:00",
+            "reentry_routing": {"route": "param_tweak", "decided_at": "2026-06-12T02:05:00+00:00"},
+            "last_revalidation": {"model_state": "GREEN"},
+        },
+    })
+    z = ZONES["lifecycle"]()
+    row = z["rows"][0]
+    assert row["route"] == "param_tweak"
+    assert row["route_decided_at"] == "2026-06-12T02:05:00+00:00"
+    assert row["next_required_gate"] == "rearm G0-G8"
+
+
+def test_lifecycle_evidence_links_skip_non_string_research_cards(monkeypatch, tmp_path):
+    _lifecycle_fixture(monkeypatch, tmp_path, {
+        "MES_CELL": {
+            "current_state": "DEGRADED",
+            "hypothesis_id": 7,
+            "symbol": "MES",
+            "research_card_links": {
+                "vectorbt": "research_cards/vbt.json",
+                "cell": {"hyp_id": 5, "event_type": "CPI_TIGHT", "band_ms": 100},
+            },
+            "last_revalidation": {"model_state": "YELLOW"},
+        },
+    })
+    z = ZONES["lifecycle"]()
+    links = z["rows"][0]["evidence_links"]["research_card_links"]
+    assert links == {"vectorbt": "research_cards/vbt.json"}
+
+
+def test_lifecycle_malformed_transition_line_no_crash(monkeypatch, tmp_path):
+    _lifecycle_fixture(
+        monkeypatch,
+        tmp_path,
+        {
+            "MES_X": {
+                "current_state": "LIVE",
+                "hypothesis_id": 1,
+                "symbol": "MES",
+                "current_state_since": "2026-06-12T00:00:00+00:00",
+                "last_revalidation": {"model_state": "GREEN"},
+            },
+        },
+        transitions=[
+            {
+                "model_lifecycle_id": "MES_X",
+                "ts": "2026-06-11T00:00:00+00:00",
+                "from_state": "SHADOW",
+                "to_state": "LIVE",
+                "trigger": "rearm",
+                "reason": "gates pass",
+                "actor": "operator",
+            },
+        ],
+    )
+    tx = paths.LIFECYCLE_TRANSITIONS
+    tx.write_text(tx.read_text(encoding="utf-8") + "not-json\n", encoding="utf-8")
+    z = ZONES["lifecycle"]()
+    row = z["rows"][0]
+    assert row["transition_count"] == 1
+    assert row["last_transition"]["to_state"] == "LIVE"
+    assert z.get("transition_log_warning")
+
+
+def test_model_detail_lifecycle_tracked(monkeypatch, tmp_path):
+    from apps.cockpit.backend.aggregate import model_detail as model_detail_agg
+
+    _lifecycle_fixture(monkeypatch, tmp_path, {
+        "MES_X": {
+            "current_state": "DEGRADED",
+            "hypothesis_id": 7,
+            "symbol": "MES",
+            "current_state_since": "2026-06-12T02:00:00+00:00",
+            "current_envelope_id": "env_7",
+            "reentry_routing": {"route": "param_tweak", "decided_at": "2026-06-12T02:05:00+00:00"},
+            "last_revalidation": {"model_state": "YELLOW", "ts": "2026-06-12T02:00:00+00:00", "triggers": ["slippage"]},
+        },
+    })
+    out = model_detail_agg.build(7)
+    lc = out["lifecycle"]
+    assert lc["tracked"] is True
+    assert lc["state"] == "DEGRADED"
+    assert lc["submit_allowed"] is True
+    assert lc["submit_size_factor"] == 0.5
+    assert lc["route"] == "param_tweak"
+    assert lc["next_required_gate"] == "rearm G0-G8"
+    assert lc["envelope_id"] == "env_7"
+
+
+def test_model_detail_lifecycle_untracked(monkeypatch, tmp_path):
+    from apps.cockpit.backend.aggregate import model_detail as model_detail_agg
+
+    monkeypatch.setattr(paths, "MODEL_LIFECYCLE", tmp_path / "absent.json")
+    out = model_detail_agg.build(99)
+    lc = out["lifecycle"]
+    assert lc["tracked"] is False
+    assert lc["status"] == "untracked"
+
+
+def test_model_detail_lifecycle_malicious_envelope_rejected(monkeypatch, tmp_path):
+    from apps.cockpit.backend.aggregate import lifecycle as lifecycle_agg
+    from apps.cockpit.backend.aggregate import model_detail as model_detail_agg
+
+    lc_dir = tmp_path / "lifecycle"
+    lc_dir.mkdir(parents=True)
+    env_dir = lc_dir / "envelopes"
+    env_dir.mkdir()
+    (env_dir / "safe_env.json").write_text("{}", encoding="utf-8")
+    reg = lc_dir / "model_lifecycle.json"
+    reg.write_text(json.dumps({
+        "models": {
+            "MES_X": {
+                "current_state": "LIVE",
+                "hypothesis_id": 1,
+                "symbol": "MES",
+                "current_envelope_id": "../../../etc/passwd",
+                "last_revalidation": {"model_state": "GREEN"},
+            },
+        }
+    }), encoding="utf-8")
+    monkeypatch.setattr(paths, "MODEL_LIFECYCLE", reg)
+    monkeypatch.setattr(paths, "LIFECYCLE_TRANSITIONS", lc_dir / "transitions.jsonl")
+    z = ZONES["lifecycle"]()
+    zone_links = z["rows"][0].get("evidence_links") or {}
+    assert "envelope" not in zone_links
+    out = model_detail_agg.build(1)
+    links = out["lifecycle"].get("evidence_links") or {}
+    assert "envelope" not in links
+    assert lifecycle_agg._safe_envelope_rel("../../../etc/passwd") is None
+    safe = lifecycle_agg._safe_envelope_rel("safe_env")
+    assert safe is not None
+    assert safe.replace("\\", "/").endswith("lifecycle/envelopes/safe_env.json")
+    assert ".." not in safe
 
 
 def test_autonomy_zone_disabled_by_default(monkeypatch):
