@@ -276,7 +276,9 @@ def build() -> dict:
             funnel[state] = funnel.get(state, 0) + 1
             rows.append(_build_row(mid, rec, tx))
 
-    blocked_count = sum(1 for r in rows if not r["submit_allowed"])
+    blocked_count = sum(
+        1 for r in rows if r["state"] in _TRADE_STATES and not r["submit_allowed"]
+    )
     degraded_count = funnel.get("DEGRADED", 0)
     needs_rearm_count = (
         funnel.get("SHADOW", 0) + funnel.get("DEGRADED", 0) + funnel.get("ARCHIVED_PAUSED", 0)

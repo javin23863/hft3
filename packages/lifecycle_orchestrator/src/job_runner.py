@@ -119,7 +119,7 @@ def validate_route_manifest(manifest: dict) -> list[str]:
     return errors
 
 
-def find_route_manifest(model_id: str, route: str, source_transition_hash: str) -> dict | None:
+def find_route_manifest(model_id: str, route: str, source_transition_hash: str | None) -> dict | None:
     """Return an existing manifest with the same model/route/transition key, if any."""
     d = manifests_dir()
     if not d.is_dir():

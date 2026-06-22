@@ -4632,7 +4632,7 @@ def test_lifecycle_quarantined_retired_blocked(monkeypatch, tmp_path):
     by_id = {r["id"]: r for r in z["rows"]}
     assert by_id["MGC_Y"]["submit_allowed"] is False
     assert by_id["OLD_A"]["submit_allowed"] is False
-    assert z["blocked_count"] == 2
+    assert z["blocked_count"] == 0
     assert z["retired_count"] == 1
     assert by_id["MGC_Y"]["next_required_gate"] == "operator review"
 

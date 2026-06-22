@@ -132,7 +132,7 @@ def create_route_manifest(
     existing = job_runner.find_route_manifest(
         str(manifest["model_id"]),
         str(manifest["route"]),
-        str(manifest["source_transition_hash"]),
+        manifest.get("source_transition_hash"),
     )
     if existing is not None:
         manifest_id = str(existing["manifest_id"])
