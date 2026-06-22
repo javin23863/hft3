@@ -263,6 +263,22 @@ export interface AlertsZone {
   alerts: Alert[];
 }
 
+export interface LifecycleTransition {
+  ts?: string | null;
+  from_state?: string | null;
+  to_state?: string | null;
+  trigger?: string | null;
+  reason?: string | null;
+  route?: string | null;
+  actor?: string | null;
+}
+
+export interface LifecycleEvidenceLinks {
+  research_card_links?: Record<string, string>;
+  governance_links?: Record<string, string>;
+  envelope?: string;
+}
+
 export interface LifecycleRow {
   id: string;
   hypothesis_id: number | null;
@@ -274,6 +290,17 @@ export interface LifecycleRow {
   demotion_reason: string | null;
   last_revalidation: string | null;
   envelope_id: string | null;
+  submit_allowed?: boolean;
+  submit_size_factor?: number;
+  submit_reason?: string | null;
+  latest_model_state?: string | null;
+  latest_revalidation_ts?: string | null;
+  latest_revalidation_triggers?: string[];
+  route_decided_at?: string | null;
+  next_required_gate?: string | null;
+  evidence_links?: LifecycleEvidenceLinks;
+  last_transition?: LifecycleTransition | null;
+  transition_count?: number;
 }
 
 export interface LifecycleZone {
@@ -286,6 +313,12 @@ export interface LifecycleZone {
   rows: LifecycleRow[];
   registered: boolean;
   note: string | null;
+  blocked_count?: number;
+  degraded_count?: number;
+  needs_rearm_count?: number;
+  needs_retest_count?: number;
+  retired_count?: number;
+  transition_log_warning?: string | null;
 }
 
 export interface AutonomyZone {

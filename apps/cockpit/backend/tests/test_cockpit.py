@@ -4666,6 +4666,77 @@ def test_lifecycle_malformed_transition_line_no_crash(monkeypatch, tmp_path):
     assert z.get("transition_log_warning")
 
 
+def test_model_detail_lifecycle_tracked(monkeypatch, tmp_path):
+    from apps.cockpit.backend.aggregate import model_detail as model_detail_agg
+
+    _lifecycle_fixture(monkeypatch, tmp_path, {
+        "MES_X": {
+            "current_state": "DEGRADED",
+            "hypothesis_id": 7,
+            "symbol": "MES",
+            "current_state_since": "2026-06-12T02:00:00+00:00",
+            "current_envelope_id": "env_7",
+            "reentry_routing": {"route": "param_tweak", "decided_at": "2026-06-12T02:05:00+00:00"},
+            "last_revalidation": {"model_state": "YELLOW", "ts": "2026-06-12T02:00:00+00:00", "triggers": ["slippage"]},
+        },
+    })
+    out = model_detail_agg.build(7)
+    lc = out["lifecycle"]
+    assert lc["tracked"] is True
+    assert lc["state"] == "DEGRADED"
+    assert lc["submit_allowed"] is True
+    assert lc["submit_size_factor"] == 0.5
+    assert lc["route"] == "param_tweak"
+    assert lc["next_required_gate"] == "rearm G0-G8"
+    assert lc["envelope_id"] == "env_7"
+
+
+def test_model_detail_lifecycle_untracked(monkeypatch, tmp_path):
+    from apps.cockpit.backend.aggregate import model_detail as model_detail_agg
+
+    monkeypatch.setattr(paths, "MODEL_LIFECYCLE", tmp_path / "absent.json")
+    out = model_detail_agg.build(99)
+    lc = out["lifecycle"]
+    assert lc["tracked"] is False
+    assert lc["status"] == "untracked"
+
+
+def test_model_detail_lifecycle_malicious_envelope_rejected(monkeypatch, tmp_path):
+    from apps.cockpit.backend.aggregate import lifecycle as lifecycle_agg
+    from apps.cockpit.backend.aggregate import model_detail as model_detail_agg
+
+    lc_dir = tmp_path / "lifecycle"
+    lc_dir.mkdir(parents=True)
+    env_dir = lc_dir / "envelopes"
+    env_dir.mkdir()
+    (env_dir / "safe_env.json").write_text("{}", encoding="utf-8")
+    reg = lc_dir / "model_lifecycle.json"
+    reg.write_text(json.dumps({
+        "models": {
+            "MES_X": {
+                "current_state": "LIVE",
+                "hypothesis_id": 1,
+                "symbol": "MES",
+                "current_envelope_id": "../../../etc/passwd",
+                "last_revalidation": {"model_state": "GREEN"},
+            },
+        }
+    }), encoding="utf-8")
+    monkeypatch.setattr(paths, "MODEL_LIFECYCLE", reg)
+    monkeypatch.setattr(paths, "LIFECYCLE_TRANSITIONS", lc_dir / "transitions.jsonl")
+    z = ZONES["lifecycle"]()
+    zone_links = z["rows"][0].get("evidence_links") or {}
+    assert "envelope" not in zone_links
+    out = model_detail_agg.build(1)
+    links = out["lifecycle"].get("evidence_links") or {}
+    assert "envelope" not in links
+    assert lifecycle_agg._safe_envelope_rel("../../../etc/passwd") is None
+    safe = lifecycle_agg._safe_envelope_rel("safe_env")
+    assert safe is not None
+    assert safe.replace("\\", "/").endswith("lifecycle/envelopes/safe_env.json")
+    assert ".." not in safe
+
+
 def test_autonomy_zone_disabled_by_default(monkeypatch):
     monkeypatch.delenv("HFT3_AUTONOMY_ENABLED", raising=False)
     monkeypatch.delenv("HFT3_AUTONOMY_KILL", raising=False)

@@ -4,8 +4,9 @@ import * as Tabs from "@radix-ui/react-tabs";
 import { X, BookOpen, ExternalLink, FileText } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { apiGet, openArtifact } from "../api";
-import { Badge } from "../ui";
-import type { ModelDetail as MD, ModelResultSurface } from "../modelTypes";
+import { Badge, Dot } from "../ui";
+import type { ModelDetail as MD, ModelLifecycleBlock, ModelResultSurface } from "../modelTypes";
+import { lifecycleSubmitLabel, lifecycleSubmitTone } from "../lifecycleUi";
 
 const AX = { stroke: "#6b7689", fontSize: 11 };
 
@@ -73,6 +74,64 @@ function SurfaceActions({ surfaces }: { surfaces: ModelResultSurface[] }) {
   );
 }
 
+function LifecyclePanel({ lc }: { lc: ModelLifecycleBlock }) {
+  if (lc.status === "malformed") {
+    return (
+      <div className="rounded-lg border border-bad/40 p-3 text-sm text-bad">
+        Lifecycle registry malformed: {lc.note ?? "cannot load registry"}
+      </div>
+    );
+  }
+  if (!lc.tracked) {
+    return <div className="text-sm text-ink-dim">Not tracked in lifecycle registry.</div>;
+  }
+  const tone = lifecycleSubmitTone(lc);
+  const submitLabel = lifecycleSubmitLabel(lc);
+  const dotStatus = lc.latest_model_state === "RED"
+    ? "fail"
+    : lc.latest_model_state === "YELLOW" || lc.state === "DEGRADED"
+      ? "stale"
+      : lc.dot;
+  return (
+    <div className="space-y-4 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        {lc.state && (
+          <span className="inline-flex items-center gap-1.5">
+            <Dot status={dotStatus} />
+            <span className="font-medium">{lc.state}</span>
+          </span>
+        )}
+        <Badge tone={tone}>{submitLabel}</Badge>
+        {lc.latest_model_state && <Badge tone="dim">model_state {lc.latest_model_state}</Badge>}
+        {lc.route && <Badge tone="warn">route {lc.route}</Badge>}
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <div><span className="text-ink-faint">lifecycle id </span><span className="mono text-xs">{lc.id}</span></div>
+        <div><span className="text-ink-faint">next gate </span>{lc.next_required_gate ?? "—"}</div>
+        <div><span className="text-ink-faint">envelope </span><span className="mono text-xs">{lc.envelope_id ?? "—"}</span></div>
+        <div><span className="text-ink-faint">revalidation </span>{lc.latest_revalidation_ts?.slice(0, 19) ?? "—"}</div>
+        <div className="sm:col-span-2"><span className="text-ink-faint">submit reason </span><span className="mono text-xs">{lc.submit_reason ?? "—"}</span></div>
+        {lc.demotion_reason && (
+          <div className="sm:col-span-2"><span className="text-ink-faint">demotion </span>{lc.demotion_reason}</div>
+        )}
+      </div>
+      {!!lc.latest_revalidation_triggers?.length && (
+        <div className="flex flex-wrap gap-1">
+          <span className="text-[11px] uppercase tracking-wide text-ink-faint">triggers</span>
+          {lc.latest_revalidation_triggers.map((t) => <Badge key={t} tone="warn">{t}</Badge>)}
+        </div>
+      )}
+      {lc.last_transition && (
+        <div className="panel p-3 text-xs text-ink-dim">
+          last transition: {String(lc.last_transition.from_state ?? "?")} → {String(lc.last_transition.to_state ?? "?")}
+          {lc.last_transition.ts ? ` · ${String(lc.last_transition.ts).slice(0, 19)}` : ""}
+        </div>
+      )}
+      <div className="text-[10px] text-ink-faint">read-only registry · workstation does not route live orders</div>
+    </div>
+  );
+}
+
 export function ModelDetail({ hypId, open, onClose }: { hypId: number | null; open: boolean; onClose: () => void }) {
   const [d, setD] = useState<MD | null>(null);
   const [loading, setLoading] = useState(false);
@@ -112,7 +171,7 @@ export function ModelDetail({ hypId, open, onClose }: { hypId: number | null; op
           {d && !d.error && (
             <Tabs.Root defaultValue="construction" className="flex max-h-[78vh] flex-col">
               <Tabs.List className="flex gap-1 border-b border-line px-4">
-                {["construction", "results"].map((t) => (
+                {["construction", "lifecycle", "results"].map((t) => (
                   <Tabs.Trigger key={t} value={t}
                     className="px-3 py-2 text-sm capitalize text-ink-dim data-[state=active]:border-b-2 data-[state=active]:border-accent data-[state=active]:text-ink">
                     {t}
@@ -147,6 +206,12 @@ export function ModelDetail({ hypId, open, onClose }: { hypId: number | null; op
                     </details>
                   )}
                   {!c && <div className="text-ink-faint">No source construction found for this id.</div>}
+                </Tabs.Content>
+
+                <Tabs.Content value="lifecycle" className="space-y-4">
+                  {d.lifecycle ? <LifecyclePanel lc={d.lifecycle} /> : (
+                    <div className="text-ink-faint">No lifecycle data returned.</div>
+                  )}
                 </Tabs.Content>
 
                 <Tabs.Content value="results" className="space-y-4">

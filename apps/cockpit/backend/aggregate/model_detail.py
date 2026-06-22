@@ -18,6 +18,7 @@ from typing import Any, Optional
 from urllib.parse import urlencode
 
 from .. import loaders, paths, schemas
+from . import lifecycle as lifecycle_agg
 from . import models as _models  # reuse vendored family/defect sets
 
 _CITE = re.compile(r"\[\[(.+?)\]\]")
@@ -439,6 +440,15 @@ def _result_surfaces(hyp_id: int, name: str) -> list[dict[str, Any]]:
     return surfaces
 
 
+def _lifecycle_block(hyp_id: int) -> dict:
+    block = lifecycle_agg.row_for_hypothesis(hyp_id)
+    if not block.get("tracked"):
+        return block
+    links = dict(block.get("evidence_links") or {})
+    block["evidence_links"] = links
+    return block
+
+
 def build(hyp_id: int) -> dict:
     fam, prop_dead, cross, vix = _models._registry()
     construction = _parse_all().get(hyp_id)
@@ -482,4 +492,5 @@ def build(hyp_id: int) -> dict:
                 "STRUCTURALLY_DEAD — no feature producer / no context / hardcoded 0 "
                 "(see specs/CORRECTNESS.md). Never alive ≠ tested-and-rejected."
             )
+    out["lifecycle"] = _lifecycle_block(hyp_id)
     return out

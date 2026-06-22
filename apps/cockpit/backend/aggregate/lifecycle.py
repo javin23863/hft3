@@ -13,6 +13,7 @@ from trading kill-switch and autonomy global kill.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any, Optional
 
 from .. import paths, schemas
@@ -117,6 +118,43 @@ def _next_required_gate(state: str) -> Optional[str]:
     return "unknown"
 
 
+def _rel(path: Path) -> str:
+    try:
+        return path.relative_to(paths.REPO).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def _safe_envelope_rel(envelope_id: str | None) -> str | None:
+    if not envelope_id or not isinstance(envelope_id, str):
+        return None
+    eid = envelope_id.strip()
+    if not eid or ".." in eid or "/" in eid or "\\" in eid:
+        return None
+    root = paths.MODEL_LIFECYCLE.parent.resolve()
+    candidate = (root / "envelopes" / f"{eid}.json").resolve()
+    if root not in candidate.parents and candidate != root:
+        return None
+    if not candidate.is_file():
+        return None
+    return _rel(candidate)
+
+
+def _row_dot(state: str, model_state: str | None, *, has_revalidation: bool) -> str:
+    if state in ("QUARANTINED", "RETIRED"):
+        return _STATE_DOT[state]
+    if state in ("LIVE", "DEGRADED"):
+        if not has_revalidation:
+            return schemas.STALE
+        if model_state == "RED":
+            return schemas.FAIL
+        if model_state == "YELLOW":
+            return schemas.STALE
+        if model_state == "GREEN":
+            return schemas.OK if state == "LIVE" else schemas.STALE
+    return _STATE_DOT.get(state, schemas.UNKNOWN)
+
+
 def _evidence_links(rec: dict) -> dict:
     out: dict[str, Any] = {}
     rc = rec.get("research_card_links") or {}
@@ -126,8 +164,9 @@ def _evidence_links(rec: dict) -> dict:
     if gov:
         out["governance_links"] = gov
     eid = rec.get("current_envelope_id")
-    if eid:
-        out["envelope"] = str(paths.MODEL_LIFECYCLE.parent / "envelopes" / f"{eid}.json")
+    safe = _safe_envelope_rel(eid if isinstance(eid, str) else None)
+    if safe:
+        out["envelope"] = safe
     return out
 
 
@@ -149,6 +188,8 @@ def _build_row(mid: str, rec: dict, tx: dict[str, dict[str, Any]]) -> dict:
     routing = rec.get("reentry_routing") or {}
     demotion = rec.get("demotion") or {}
     reval = rec.get("last_revalidation") or {}
+    model_state = reval.get("model_state")
+    has_reval = bool(reval.get("model_state"))
     allowed, size, reason = _submit_fields(rec)
     tx_info = tx.get(mid, {})
     return {
@@ -156,7 +197,7 @@ def _build_row(mid: str, rec: dict, tx: dict[str, dict[str, Any]]) -> dict:
         "hypothesis_id": rec.get("hypothesis_id"),
         "symbol": rec.get("symbol"),
         "state": state,
-        "dot": _STATE_DOT.get(state, schemas.UNKNOWN),
+        "dot": _row_dot(state, model_state, has_revalidation=has_reval),
         "since": rec.get("current_state_since"),
         "route": routing.get("route"),
         "demotion_reason": demotion.get("reason"),
@@ -174,6 +215,23 @@ def _build_row(mid: str, rec: dict, tx: dict[str, dict[str, Any]]) -> dict:
         "last_transition": tx_info.get("last_transition"),
         "transition_count": tx_info.get("transition_count", 0),
     }
+
+
+def row_for_hypothesis(hyp_id: int) -> dict:
+    """Lifecycle snapshot for one hypothesis id (read-only)."""
+    models, registered, malformed, note = _load_registry()
+    if malformed:
+        return {"tracked": False, "status": "malformed", "note": note}
+    if not registered:
+        return {"tracked": False, "status": "untracked"}
+    tx, _tx_bad = _parse_transitions()
+    for mid, rec in models.items():
+        if rec.get("hypothesis_id") == hyp_id:
+            row = _build_row(mid, rec, tx)
+            row["tracked"] = True
+            row["status"] = "tracked"
+            return row
+    return {"tracked": False, "status": "untracked"}
 
 
 def build() -> dict:
@@ -200,6 +258,15 @@ def build() -> dict:
         health = schemas.RED
     elif funnel.get("QUARANTINED", 0):
         health = schemas.RED
+    elif any(
+        r["state"] in ("LIVE", "DEGRADED")
+        and (
+            r.get("latest_model_state") not in (None, "GREEN")
+            or (r.get("submit_size_factor") or 1.0) < 1.0
+        )
+        for r in rows
+    ):
+        health = schemas.AMBER
     elif funnel.get("DEGRADED", 0) + funnel.get("ARCHIVED_PAUSED", 0):
         health = schemas.AMBER
     else:
