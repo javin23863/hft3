@@ -39,6 +39,10 @@ def model_submit_decision(model_id: str) -> Tuple[bool, float, str]:
     if rec is None:
         return (True, 1.0, "untracked")
     state = rec.get("current_state", "")
-    model_state = (rec.get("last_revalidation") or {}).get("model_state", "GREEN")
-    allowed, size = decay_detector.submit_allowed(state, model_state)
-    return (allowed, size, f"lifecycle={state} model_state={model_state}")
+    reval = rec.get("last_revalidation") or {}
+    model_state = reval.get("model_state")
+    if state in (lifecycle.LIVE, lifecycle.DEGRADED) and not model_state:
+        return (False, 0.0, "stale_no_revalidation")
+    gate_state = model_state if model_state is not None else "GREEN"
+    allowed, size = decay_detector.submit_allowed(state, gate_state)
+    return (allowed, size, f"lifecycle={state} model_state={gate_state}")
