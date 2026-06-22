@@ -310,11 +310,20 @@ def _units_from_stage_a_survivors(
     thesis_template: str,
     max_units: Optional[int],
     window_name: str,
+    research_split: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     payload = json.loads(survivors_path.read_text(encoding="utf-8"))
     allowed_cells = _parse_stage_a_allowed_cells(payload)
     if not allowed_cells:
         raise ValueError("stage_a_survivors.json: no allowed (hyp_id, event_type) cells")
+
+    split_start, split_end, split_label = _resolve_split_date_bounds(
+        research_split,
+        start_date=start_date,
+        end_date=end_date,
+    )
 
     allowed_etypes = {etype for _, etype in allowed_cells}
     by_type: Dict[str, List[Dict[str, Any]]] = {}
@@ -324,6 +333,8 @@ def _units_from_stage_a_survivors(
         symbols=symbols,
         window_name=window_name,
         max_rows=None,
+        start_date=split_start,
+        end_date=split_end,
     ):
         by_type.setdefault(row["event_type"], []).append(row)
 
@@ -338,23 +349,24 @@ def _units_from_stage_a_survivors(
             if unit_id in seen:
                 continue
             seen.add(unit_id)
-            units.append(
-                {
-                    "unit_id": unit_id,
-                    "event_id": event_id,
-                    "symbol": symbol,
-                    "event_type": event_type,
-                    "model_id": model_id,
-                    "hyp_id": hyp_id,
-                    "thesis": _format_thesis(
-                        model_id=model_id,
-                        event_type=event_type,
-                        symbol=symbol,
-                        event_id=event_id,
-                        thesis_template=thesis_template,
-                    ),
-                }
-            )
+            unit: Dict[str, Any] = {
+                "unit_id": unit_id,
+                "event_id": event_id,
+                "symbol": symbol,
+                "event_type": event_type,
+                "model_id": model_id,
+                "hyp_id": hyp_id,
+                "thesis": _format_thesis(
+                    model_id=model_id,
+                    event_type=event_type,
+                    symbol=symbol,
+                    event_id=event_id,
+                    thesis_template=thesis_template,
+                ),
+            }
+            if split_label:
+                unit["research_split"] = split_label
+            units.append(unit)
             if max_units is not None and len(units) >= max_units:
                 return units
     return units
@@ -444,6 +456,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             thesis_template=args.thesis_template,
             max_units=args.max_units,
             window_name=args.window_name,
+            research_split=research_split,
+            start_date=args.start_date,
+            end_date=args.end_date,
         )
     elif args.all_active_models or args.model_ids:
         model_id_list: Optional[List[str]] = None
