@@ -18,7 +18,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
+from model_metrics import lifecycle as lc
+
 from .. import paths, schemas
+
+_TRADE_STATES = (lc.LIVE, lc.DEGRADED)
 
 # State -> dot status for the UI.
 _STATE_DOT = {
@@ -161,7 +165,7 @@ def _safe_envelope_rel(envelope_id: str | None) -> str | None:
 def _row_dot(state: str, model_state: str | None, *, has_revalidation: bool) -> str:
     if state in ("QUARANTINED", "RETIRED"):
         return _STATE_DOT[state]
-    if state in ("LIVE", "DEGRADED"):
+    if state in _TRADE_STATES:
         if not has_revalidation:
             return schemas.STALE
         if model_state == "RED":
@@ -169,7 +173,7 @@ def _row_dot(state: str, model_state: str | None, *, has_revalidation: bool) -> 
         if model_state == "YELLOW":
             return schemas.STALE
         if model_state == "GREEN":
-            return schemas.OK if state == "LIVE" else schemas.STALE
+            return schemas.OK if state == lc.LIVE else schemas.STALE
     return _STATE_DOT.get(state, schemas.UNKNOWN)
 
 
@@ -193,7 +197,7 @@ def _submit_fields(rec: dict) -> tuple[bool, float, str]:
     state = rec.get("current_state", "")
     reval = rec.get("last_revalidation") or {}
     model_state = reval.get("model_state")
-    if state in ("LIVE", "DEGRADED") and not model_state:
+    if state in _TRADE_STATES and not model_state:
         return False, 0.0, "stale_no_revalidation"
     gate_state = model_state if model_state is not None else "GREEN"
     try:
@@ -283,7 +287,7 @@ def build() -> dict:
     elif funnel.get("QUARANTINED", 0):
         health = schemas.RED
     elif any(
-        r["state"] in ("LIVE", "DEGRADED")
+        r["state"] in _TRADE_STATES
         and (
             r.get("latest_model_state") not in (None, "GREEN")
             or (r.get("submit_size_factor") or 1.0) < 1.0
