@@ -216,6 +216,7 @@ def _acceptance_robustness_fn(repo_root: Path):
                 {"name": "Recent holdout", "gate_pass": wf_status == "PASS", "evaluate_only": True},
             ],
             "wfc": {"pearson": 0.5 if wfc_status == "PASS" else -0.1, "spearman": 0.4 if wfc_status == "PASS" else -0.1, "wfc_status": wfc_status},
+            "wfc_matrix_rows": [{"parameter_hash": cid or "acceptance", "fold": 0}],
             "metrics": {},
         }
         (out / "summary.json").write_text(json.dumps(campaign_summary), encoding="utf-8")
@@ -243,7 +244,7 @@ def _acceptance_hft_fn(repo_root: Path):
         out = repo_root / "runtime" / "reports" / "three_gen_hft" / (cid or "unknown")
         out.mkdir(parents=True, exist_ok=True)
         status = "completed"
-        cert = "full_fidelity_declared"
+        cert = "scheduled_event_replay_not_full_feature_plane"
         if str(cid).startswith("reject_hft"):
             status = "failed"
             cert = "fail"

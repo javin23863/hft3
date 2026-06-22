@@ -596,7 +596,7 @@ def build_statistical_robustness_gate_receipt(
         status = "REJECT"
         failure_reasons.append("partial_robustness_not_run")
     unique_passed = sorted(set(passed_checks))
-    passed_count = len(unique_passed)
+    passed_count = req_count if status == "PASS" else len(unique_passed)
     if status == "PASS":
         failed_check_count = 0
         missing_check_count = 0

@@ -276,8 +276,11 @@ def _resolve_npz_digest_for_unit(unit: PaidScreenUnit, ctx: WorkerContext) -> st
             return hash_file_content(fs_ctx.store_path)
         except FileNotFoundError:
             return "fs_v1_store_missing"
-    from data_system.src.event_data_resolver import npz_search_dirs
-    from backtest_pipeline.src.vectorbt_adapter import _npz_candidates_for_event
+    try:
+        from data_system.src.event_data_resolver import npz_search_dirs
+        from backtest_pipeline.src.vectorbt_adapter import _npz_candidates_for_event
+    except ImportError:
+        return "data_system_unavailable"
 
     repo_root = Path(ctx.repo_root)
     candidates = _npz_candidates_for_event(
