@@ -522,13 +522,6 @@ class ScreeningArtifactError(ValueError):
     """Raised when a VectorBT screening artifact fails validation."""
 
 
-def validate_screening_artifact(artifact: Mapping[str, Any]) -> list[str]:
-    """Public screening artifact validator for cockpit and HftBacktest handoff."""
-    from backtest_pipeline.src.hftbacktest_realism import _validate_screening_artifact_hash
-
-    return _validate_screening_artifact_hash(artifact)
-
-
 def _parameter_values_hash(values: Mapping[str, Any]) -> str:
     return _hash_payload(dict(values))
 
@@ -1537,7 +1530,7 @@ def _validate_screening_reason_map(
         errors.append(f"{mapping_field}_reason_mismatch")
 
 
-def validate_screening_artifact(artifact: Mapping[str, Any]) -> list[str]:
+def validate_screening_artifact(artifact: Mapping[str, Any]) -> None:
     """Validate the terminal VectorBT screening artifact and fail closed."""
     errors: List[str] = []
     for field_name in SCREENING_ARTIFACT_REQUIRED_FIELDS:
@@ -1775,7 +1768,6 @@ def validate_screening_artifact(artifact: Mapping[str, Any]) -> list[str]:
 
     if errors:
         raise ScreeningArtifactError("; ".join(errors))
-    return []
 
 
 @dataclass(frozen=True)
@@ -2963,7 +2955,7 @@ def _is_pilot_handoff_scope(screening_scope: str) -> bool:
     return _normalise_screening_scope(screening_scope) in {"pilot", "pilot_scope"}
 
 
-def _apply_filter_result_provenance_metadata(
+def apply_filter_result_provenance_metadata(
     result: FilterResult,
     candidates: List[CandidateModel],
     *,
@@ -3009,7 +3001,6 @@ def _apply_filter_result_provenance_metadata(
         result.hftbacktest_handoff_status = (
             "recipe_hash_handoff_ready" if promoted_recipe_hash else ""
         )
-
 
 def _apply_fs_v1_screen_metadata(
     result: FilterResult,
@@ -3285,7 +3276,7 @@ def filter_candidates(
         repo_root=repo_root,
         persist_promotions=persist_promotions,
     )
-    _apply_filter_result_provenance_metadata(
+    apply_filter_result_provenance_metadata(
         result,
         candidates,
         screening_scope=screening_scope,

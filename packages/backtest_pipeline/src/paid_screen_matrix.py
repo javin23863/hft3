@@ -79,9 +79,6 @@ ALLOWED_MATRIX_CHUNK_SIZES = (128, 256, 512, 1024)
 def _finalize_matrix_result(
     result: FilterResult,
     candidates: List[CandidateModel],
-    *,
-    screening_scope: str,
-    repo_root: Path,
 ) -> FilterResult:
     if not result.feature_recipe_hash:
         promoted_recipe_hash = next(
@@ -316,8 +313,6 @@ def run_vectorbt_simulation_matrix(
         return _finalize_matrix_result(
             result,
             candidates,
-            screening_scope=screening_scope,
-            repo_root=repo_root,
         )
 
     import vectorbt as vbt  # type: ignore[no-redef]
@@ -389,8 +384,6 @@ def run_vectorbt_simulation_matrix(
                 return _finalize_matrix_result(
                     result,
                     candidates,
-                    screening_scope=screening_scope,
-                    repo_root=repo_root,
                 )
             # Trial-count budget check.
             remaining_budget = trial_budget - result.trials_run
@@ -406,8 +399,6 @@ def run_vectorbt_simulation_matrix(
                 return _finalize_matrix_result(
                     result,
                     candidates,
-                    screening_scope=screening_scope,
-                    repo_root=repo_root,
                 )
 
             # Build the merged param dicts + candidate IDs for this chunk
@@ -517,8 +508,6 @@ def run_vectorbt_simulation_matrix(
                     return _finalize_matrix_result(
                         result,
                         candidates,
-                        screening_scope=screening_scope,
-                        repo_root=repo_root,
                     )
                 continue
 
@@ -736,14 +725,10 @@ def run_vectorbt_simulation_matrix(
                 return _finalize_matrix_result(
                     result,
                     candidates,
-                    screening_scope=screening_scope,
-                    repo_root=repo_root,
                 )
 
     counters.finalize_signal_reuse()
     return _finalize_matrix_result(
         result,
         candidates,
-        screening_scope=screening_scope,
-        repo_root=repo_root,
     )

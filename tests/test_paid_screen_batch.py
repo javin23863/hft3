@@ -228,7 +228,7 @@ class TestScreenPaidBatch:
             lambda result, **kwargs: result,
         )
         monkeypatch.setattr(
-            "backtest_pipeline.src.paid_screen_batch._apply_filter_result_provenance_metadata",
+            "backtest_pipeline.src.paid_screen_batch.apply_filter_result_provenance_metadata",
             _fake_stamp,
         )
 

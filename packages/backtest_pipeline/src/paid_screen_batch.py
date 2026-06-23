@@ -23,7 +23,7 @@ from backtest_pipeline.src.paid_screen_profiling import RunProfiler, DEFAULT_RES
 from backtest_pipeline.src.paid_screen_cache import BoundedLRUCache
 from backtest_pipeline.src.paid_screen_matrix import run_vectorbt_simulation_matrix
 from backtest_pipeline.src.vectorbt_adapter import (
-    _apply_filter_result_provenance_metadata,
+    apply_filter_result_provenance_metadata,
     apply_promotion_gates,
 )
 
@@ -830,7 +830,7 @@ def screen_paid_batch(
                 screening_scope=context.screening_scope,
                 repo_root=Path(context.repo_root),
             )
-            _apply_filter_result_provenance_metadata(
+            apply_filter_result_provenance_metadata(
                 filter_result,
                 [candidate],
                 screening_scope=context.screening_scope,
