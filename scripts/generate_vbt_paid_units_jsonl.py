@@ -540,7 +540,7 @@ def _parse_npz_name(path: Path) -> Optional[tuple[str, str]]:
     stem = path.name[: -len(suffix)]
     if "_" not in stem:
         return None
-    return stem.split("_", 1)
+    return tuple(stem.split("_", 1))
 
 
 def _first_symbol(value: Any) -> str:
@@ -576,14 +576,14 @@ def _manifest_paths(root: Path) -> List[Path]:
 
 
 def _read_manifest_parquet_records(path: Path) -> List[Dict[str, Any]]:
+    if not path.is_file():
+        raise RuntimeError(f"runnable NPZ parquet manifest file is missing: {path}")
     try:
         import pandas as pd  # type: ignore[import-not-found]
     except ImportError as exc:
         raise RuntimeError(
             f"pandas is required to read runnable NPZ parquet manifest: {path}"
         ) from exc
-    if not path.is_file():
-        return []
     df = pd.read_parquet(path)
     return [dict(row) for row in df.to_dict("records")]
 

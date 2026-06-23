@@ -661,6 +661,26 @@ def test_require_runnable_npz_event_filter_empty_parquet_authority_fail_closed(
         )
 
 
+def test_require_runnable_npz_missing_parquet_manifest_fails_distinctly(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Missing parquet authority must report the missing file, not empty records."""
+    import scripts.generate_vbt_paid_units_jsonl as generator
+
+    npz_root = tmp_path / "npz"
+    npz_root.mkdir()
+    manifest = npz_root / "manifest.parquet"
+    monkeypatch.setenv("HFT3_NPZ_ROOT", str(npz_root))
+    monkeypatch.setenv("HFT3_MANIFEST_PATH", str(manifest))
+
+    with pytest.raises(RuntimeError, match="parquet manifest file is missing"):
+        generator._filter_runnable_npz_units(
+            [{"unit_id": "drop", "symbol": "MES.v.0", "event_id": "CPI_2020_01_15_TIGHT"}],
+            REPO,
+        )
+
+
 def test_require_runnable_npz_parquet_missing_pandas_fails_closed(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
