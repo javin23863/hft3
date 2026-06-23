@@ -634,9 +634,6 @@ def merge_unit_screening_artifacts(
     base["run_id"] = run_id
     base["created_at_utc"] = finished_at_utc or base.get("created_at_utc") or datetime.now(timezone.utc).isoformat()
 
-    candidate_ids: list[str] = []
-    promoted_ids: list[str] = []
-    rejected_ids: list[str] = []
     stop_reasons: list[str] = []
     promoted_rows: list[dict[str, Any]] = []
     rejected_rows: list[dict[str, Any]] = []
@@ -646,9 +643,6 @@ def merge_unit_screening_artifacts(
     trials_run = 0
 
     for artifact in unit_artifacts:
-        candidate_ids.extend(str(x) for x in artifact.get("candidate_ids") or [])
-        promoted_ids.extend(str(x) for x in artifact.get("promoted_ids") or [])
-        rejected_ids.extend(str(x) for x in artifact.get("rejected_ids") or [])
         stop_reasons.extend(str(x) for x in artifact.get("stop_reasons") or [])
         promoted_rows.extend(_merge_candidate_rows(list(artifact.get("promoted") or [])))
         rejected_rows.extend(_merge_candidate_rows(list(artifact.get("rejected") or [])))
@@ -660,12 +654,20 @@ def merge_unit_screening_artifacts(
             rejected_reasons.append(artifact["rejected_reasons"])
         trials_run += int(artifact.get("trials_run") or 0)
 
-    base["candidate_ids"] = _merge_unique_strings(candidate_ids)
-    base["promoted_ids"] = _merge_unique_strings(promoted_ids)
-    base["rejected_ids"] = _merge_unique_strings(rejected_ids)
     base["stop_reasons"] = _merge_unique_strings(stop_reasons)
     base["promoted"] = _merge_candidate_rows(promoted_rows)
     base["rejected"] = _merge_candidate_rows(rejected_rows)
+    base["promoted_ids"] = [
+        str(row["candidate_id"])
+        for row in base["promoted"]
+        if isinstance(row, dict) and row.get("candidate_id")
+    ]
+    base["rejected_ids"] = [
+        str(row["candidate_id"])
+        for row in base["rejected"]
+        if isinstance(row, dict) and row.get("candidate_id")
+    ]
+    base["candidate_ids"] = [*base["promoted_ids"], *base["rejected_ids"]]
     base["candidate_reasons"] = _merge_reason_maps(candidate_reasons)
     base["promoted_reasons"] = _merge_reason_maps(promoted_reasons)
     base["rejected_reasons"] = _merge_reason_maps(rejected_reasons)

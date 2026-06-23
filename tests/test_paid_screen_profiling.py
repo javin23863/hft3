@@ -13,14 +13,116 @@ from backtest_pipeline.src.paid_screen_profiling import (
 )
 from backtest_pipeline.src.paid_screen_types import PaidScreenUnit
 from backtest_pipeline.src.paid_screen_batch import resolve_resume_provenance
-
-_VALID_UNIT_ARTIFACT = (
-    Path(__file__).resolve().parents[1]
-    / "research_cards"
-    / "pipeline_runs"
-    / "paid_batch_ok"
-    / "screening_artifact.json"
+from backtest_pipeline.src.promotion_gate import PromotedCandidate, RejectedCandidate
+from backtest_pipeline.src.vectorbt_adapter import (
+    FilterResult,
+    compute_screening_artifact_hash,
+    validate_screening_artifact,
 )
+
+
+def _tiny_screening_artifact(
+    *,
+    run_id: str,
+    promoted_ids: list[str] | None = None,
+    rejected_ids: list[str] | None = None,
+    model_id: str = "SPREAD_BLOWOUT_RECOMPRESSION",
+    symbol: str = "ES.v.0",
+    event_id: str = "CPI_2024_09_11_TIGHT",
+    event_type: str = "CPI",
+    events_csv_hash: str = "not_applicable_for_vectorbt_pilot",
+    lake_manifest_hash: str = "pilot_requires_lake_manifest_before_screen",
+) -> dict:
+    """Build a small valid artifact through production screening serialization."""
+    promoted_ids = promoted_ids or []
+    rejected_ids = rejected_ids or []
+    base_metadata = {
+        "model_id": model_id,
+        "symbol": symbol,
+        "event_id": event_id,
+        "event_type": event_type,
+    }
+    result = FilterResult(
+        promoted=[
+            PromotedCandidate(
+                candidate_id=candidate_id,
+                hypothesis_id=model_id,
+                strategy_family=model_id,
+                asset_class="CME_FUTURES",
+                symbol=symbol,
+                timeframe="event_window",
+                param_values={"signal_threshold": 0.15, "holding_period_bars": 15},
+                vectorbt_run_id=run_id,
+                vectorbt_results={
+                    "base_candidate_metadata": base_metadata,
+                    "opportunity_type_or_event_type": event_type,
+                    "oos_expectancy": 1.0,
+                    "wf_consistency": 1.0,
+                    "max_drawdown_pct": -1.0,
+                    "turnover_mean_pct": 1.0,
+                    "num_trades": 12,
+                    "param_stability_score": 1.0,
+                    "slippage_sensitivity": 0.0,
+                    "net_return": 0.01,
+                    "net_pnl": 10.0,
+                    "profit_factor": 1.5,
+                    "sharpe": 1.0,
+                    "sortino": 1.0,
+                },
+                pass_reason="vectorbt_screen_passed_replay_not_eligible",
+            )
+            for candidate_id in promoted_ids
+        ],
+        rejected=[
+            RejectedCandidate(
+                candidate_id=candidate_id,
+                hypothesis_id=model_id,
+                reject_reason="promotion_gate_failed",
+                metric_values={
+                    "symbol": symbol,
+                    "base_candidate_metadata": base_metadata,
+                    "opportunity_type_or_event_type": event_type,
+                    "parameter_values": {"signal_threshold": 0.15, "holding_period_bars": 15},
+                },
+            )
+            for candidate_id in rejected_ids
+        ],
+        run_id=run_id,
+        total_candidates=len(promoted_ids) + len(rejected_ids),
+        code_commit="test_commit",
+        vectorbt_available=True,
+        backend="python",
+        vectorbt_version="test",
+        vectorbt_engine="numba",
+        engine_parity_status="pilot_python_engine_allowed",
+        rust_engine_required_for_scope=False,
+        rust_engine_available=False,
+        vectorbt_engine_runtime_proof=False,
+        license_review="unit_test",
+        parameter_space_id="unit_test_parameter_space",
+        parameter_space_hash="unit_test_parameter_space_hash",
+        max_trials=max(1, len(promoted_ids) + len(rejected_ids)),
+        trials_run=len(promoted_ids) + len(rejected_ids),
+        run_budget_id="unit_test_budget",
+        max_models=1,
+        max_symbols=1,
+        max_feature_sets=1,
+        max_total_trials=max(1, len(promoted_ids) + len(rejected_ids)),
+        abort_on_budget_exhaustion=True,
+        screening_scope="pilot",
+        feature_set_id="fs_v1",
+        feature_set_hash="unit_test_feature_set_hash",
+        data_manifest_hash="unit_test_data_manifest_hash",
+        lake_manifest_hash=lake_manifest_hash,
+        events_csv_hash_or_not_applicable=events_csv_hash,
+        fees_model_id="unit_test_fees",
+        slippage_model_id="unit_test_slippage",
+        bar_construction_id="fs_v1_row_loop_from_feature_store",
+        target_event_type_or_null=event_type,
+    )
+    artifact = result.to_dict()
+    validate_screening_artifact(artifact)
+    return artifact
 
 
 class TestRunProfiler:
@@ -210,14 +312,15 @@ class TestAggregateScreeningArtifact:
         run_id = "paid_merge_test"
         run_dir = tmp_path / run_id
         run_dir.mkdir()
-        artifact_text = _VALID_UNIT_ARTIFACT.read_text(encoding="utf-8")
+        artifact_u1 = _tiny_screening_artifact(run_id="u1", rejected_ids=["u1_rejected"])
+        artifact_u2 = _tiny_screening_artifact(run_id="u2", promoted_ids=["u2_promoted"])
         (run_dir / "units" / "u1").mkdir(parents=True)
         (run_dir / "units" / "u2").mkdir(parents=True)
         (run_dir / "units" / "u1" / "screening_artifact.json").write_text(
-            artifact_text, encoding="utf-8"
+            json.dumps(artifact_u1), encoding="utf-8"
         )
         (run_dir / "units" / "u2" / "screening_artifact.json").write_text(
-            artifact_text, encoding="utf-8"
+            json.dumps(artifact_u2), encoding="utf-8"
         )
 
         rows = [
@@ -231,14 +334,17 @@ class TestAggregateScreeningArtifact:
         )
         assert aggregate_path == str(run_dir / "screening_artifact.json")
         payload = json.loads((run_dir / "screening_artifact.json").read_text(encoding="utf-8"))
-        from backtest_pipeline.src.vectorbt_adapter import validate_screening_artifact
 
         validate_screening_artifact(payload)
         assert payload["run_id"] == run_id
         assert isinstance(payload["promoted_ids"], list)
 
     def test_merge_unit_artifacts_unions_promoted_ids(self):
-        artifact = json.loads(_VALID_UNIT_ARTIFACT.read_text(encoding="utf-8"))
+        artifact = _tiny_screening_artifact(
+            run_id="unit_fixture",
+            promoted_ids=["shared_promoted"],
+            rejected_ids=["shared_rejected"],
+        )
         merged = merge_unit_screening_artifacts(
             [artifact, dict(artifact)],
             run_id="merge_only",
@@ -246,9 +352,37 @@ class TestAggregateScreeningArtifact:
         )
         assert merged["run_id"] == "merge_only"
         assert merged["trials_run"] >= int(artifact.get("trials_run") or 0)
+        assert merged["promoted_ids"] == ["shared_promoted"]
+
+    def test_merge_derives_candidate_ids_from_emitted_rows(self):
+        rejected_only = _tiny_screening_artifact(
+            run_id="u_rejected",
+            rejected_ids=["first_unit_rejected"],
+        )
+        promoted_later = _tiny_screening_artifact(
+            run_id="u_promoted",
+            promoted_ids=["later_unit_promoted"],
+            rejected_ids=["later_unit_rejected"],
+        )
+
+        merged = merge_unit_screening_artifacts(
+            [rejected_only, promoted_later],
+            run_id="merge_order_regression",
+            finished_at_utc="2026-06-19T13:00:00+00:00",
+        )
+        emitted_row_ids = [
+            str(row["candidate_id"])
+            for row in merged["promoted"] + merged["rejected"]
+        ]
+
+        assert merged["promoted_ids"] == ["later_unit_promoted"]
+        assert merged["rejected_ids"] == ["first_unit_rejected", "later_unit_rejected"]
+        assert merged["candidate_ids"] == emitted_row_ids
+        merged["screening_artifact_hash"] = compute_screening_artifact_hash(merged)
+        validate_screening_artifact(merged)
 
     def test_merge_aggregate_provenance_records_child_hashes_honestly(self):
-        artifact_a = json.loads(_VALID_UNIT_ARTIFACT.read_text(encoding="utf-8"))
+        artifact_a = _tiny_screening_artifact(run_id="a", rejected_ids=["a_rejected"])
         artifact_b = dict(artifact_a)
         artifact_a["screening_artifact_hash"] = "child_hash_a"
         artifact_a["data_manifest_hash"] = "manifest_a"
@@ -285,7 +419,11 @@ class TestResumeArtifactMatching:
             derive_run_research_split(rows)
 
     def test_artifact_matches_resume_unit_with_fixture(self):
-        payload = json.loads(_VALID_UNIT_ARTIFACT.read_text(encoding="utf-8"))
+        payload = _tiny_screening_artifact(
+            run_id="u_ok",
+            rejected_ids=["u_ok_rejected"],
+            symbol="MES.v.0",
+        )
         unit = PaidScreenUnit(
             unit_id="u_ok",
             model_id="SPREAD_BLOWOUT_RECOMPRESSION",
@@ -305,7 +443,11 @@ class TestResumeArtifactMatching:
         )
 
     def test_artifact_rejects_mismatched_model(self):
-        payload = json.loads(_VALID_UNIT_ARTIFACT.read_text(encoding="utf-8"))
+        payload = _tiny_screening_artifact(
+            run_id="u_ok",
+            rejected_ids=["u_ok_rejected"],
+            symbol="MES.v.0",
+        )
         unit = PaidScreenUnit(
             unit_id="u_ok",
             model_id="HYP_99",
@@ -323,7 +465,11 @@ class TestResumeArtifactMatching:
         )
 
     def test_artifact_rejects_mismatched_code_commit(self):
-        payload = json.loads(_VALID_UNIT_ARTIFACT.read_text(encoding="utf-8"))
+        payload = _tiny_screening_artifact(
+            run_id="u_ok",
+            rejected_ids=["u_ok_rejected"],
+            symbol="MES.v.0",
+        )
         unit = PaidScreenUnit(
             unit_id="u_ok",
             model_id="SPREAD_BLOWOUT_RECOMPRESSION",
@@ -351,7 +497,11 @@ class TestResumeArtifactMatching:
         )
 
     def test_artifact_rejects_mismatched_registry_hash(self):
-        payload = json.loads(_VALID_UNIT_ARTIFACT.read_text(encoding="utf-8"))
+        payload = _tiny_screening_artifact(
+            run_id="u_ok",
+            rejected_ids=["u_ok_rejected"],
+            symbol="MES.v.0",
+        )
         unit = PaidScreenUnit(
             unit_id="u_ok",
             model_id="SPREAD_BLOWOUT_RECOMPRESSION",

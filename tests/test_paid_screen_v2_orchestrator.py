@@ -1608,6 +1608,21 @@ class TestWorkerScratchPath:
         assert v2._build_worker_run_budget(0) == {}
         assert v2._build_worker_run_budget(-1) == {}
         assert v2._build_worker_run_budget(42) == {"max_wall_clock_seconds": 42}
+        assert v2._build_worker_run_budget(
+            42,
+            max_trials=256,
+            max_total_trials=256,
+            max_models=1,
+            max_symbols=1,
+            max_feature_sets=1,
+        ) == {
+            "max_trials": 256,
+            "max_total_trials": 256,
+            "max_models": 1,
+            "max_symbols": 1,
+            "max_feature_sets": 1,
+            "max_wall_clock_seconds": 42,
+        }
 
     def test_worker_scratch_root_under_runtime_not_out_dir(self, tmp_path):
         v2 = _load_v2_module()

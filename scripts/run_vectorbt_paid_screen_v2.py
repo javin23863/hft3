@@ -165,11 +165,30 @@ def _worker_scratch_root(repo_root: Path, out_dir: Path) -> Path:
     return repo_root / "runtime" / "paid_screen_scratch" / out_dir.name
 
 
-def _build_worker_run_budget(max_wall_clock_seconds: int) -> dict[str, int]:
-    """Build worker run_budget; omit wall-clock cap when unset (<= 0)."""
-    if int(max_wall_clock_seconds) <= 0:
-        return {}
-    return {"max_wall_clock_seconds": int(max_wall_clock_seconds)}
+def _build_worker_run_budget(
+    max_wall_clock_seconds: int,
+    *,
+    max_trials: int | None = None,
+    max_total_trials: int | None = None,
+    max_models: int | None = None,
+    max_symbols: int | None = None,
+    max_feature_sets: int | None = None,
+) -> dict[str, int]:
+    """Build worker run_budget; omit unset optional caps."""
+    budget: dict[str, int] = {}
+    if max_trials is not None:
+        budget["max_trials"] = int(max_trials)
+    if max_total_trials is not None:
+        budget["max_total_trials"] = int(max_total_trials)
+    if max_models is not None:
+        budget["max_models"] = int(max_models)
+    if max_symbols is not None:
+        budget["max_symbols"] = int(max_symbols)
+    if max_feature_sets is not None:
+        budget["max_feature_sets"] = int(max_feature_sets)
+    if int(max_wall_clock_seconds) > 0:
+        budget["max_wall_clock_seconds"] = int(max_wall_clock_seconds)
+    return budget
 
 
 def _has_valid_artifact(
@@ -1074,6 +1093,41 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--vectorbt-scope", default="paid-compute")
     parser.add_argument("--workers", type=int, default=1)
     parser.add_argument("--max-wall-clock-seconds", type=int, default=0)
+    parser.add_argument(
+        "--max-trials",
+        "--vectorbt-max-trials",
+        dest="max_trials",
+        type=int,
+        default=None,
+    )
+    parser.add_argument(
+        "--max-total-trials",
+        "--vectorbt-max-total-trials",
+        dest="max_total_trials",
+        type=int,
+        default=None,
+    )
+    parser.add_argument(
+        "--max-models",
+        "--vectorbt-max-models",
+        dest="max_models",
+        type=int,
+        default=None,
+    )
+    parser.add_argument(
+        "--max-symbols",
+        "--vectorbt-max-symbols",
+        dest="max_symbols",
+        type=int,
+        default=None,
+    )
+    parser.add_argument(
+        "--max-feature-sets",
+        "--vectorbt-max-feature-sets",
+        dest="max_feature_sets",
+        type=int,
+        default=None,
+    )
     parser.add_argument("--ready-gate-file", type=Path, default=None)
     parser.add_argument("--owner-waiver", default=None, help="Reason to skip ready gate")
     parser.add_argument("--dry-run", action="store_true")
@@ -1414,7 +1468,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         "screening_scope": args.vectorbt_scope,
         "events_csv_hash": events_csv_hash,
         "lake_manifest_hash": lake_manifest_hash,
-        "run_budget": _build_worker_run_budget(args.max_wall_clock_seconds),
+        "run_budget": _build_worker_run_budget(
+            args.max_wall_clock_seconds,
+            max_trials=args.max_trials,
+            max_total_trials=args.max_total_trials,
+            max_models=args.max_models,
+            max_symbols=args.max_symbols,
+            max_feature_sets=args.max_feature_sets,
+        ),
         "max_batches_before_recycle": args.max_batches_before_recycle,
         "cache_memory_limit_mb": int(args.cache_memory_limit_mb),
         "cache_max_entries": int(args.cache_max_entries),
