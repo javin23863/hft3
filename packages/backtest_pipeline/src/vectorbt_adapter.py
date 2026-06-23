@@ -2388,10 +2388,24 @@ _VBT_GATE_REQUIRED_STATS = (
     "Max Drawdown [%]",
 )
 _VBT2_PILOT_SKIPPED_UNMEASURED_GATE_FIELDS = (
+    "wf_consistency",
     "turnover_mean_pct",
     "param_stability_score",
     "slippage_sensitivity",
 )
+_VBT_PAID_COMPUTE_SKIPPED_UNMEASURED_GATE_FIELDS = tuple(
+    field
+    for field in _VBT2_PILOT_SKIPPED_UNMEASURED_GATE_FIELDS
+    if field != "wf_consistency"
+)
+_VBT_PAID_COMPUTE_EXEMPT_GATE_FAILURES = {
+    "missing_turnover_mean_pct",
+    "turnover_above_threshold",
+    "missing_param_stability_score",
+    "param_stability_below_threshold",
+    "missing_slippage_sensitivity",
+    "slippage_sensitivity_above_threshold",
+}
 
 
 def _finite_float(value: Any) -> Optional[float]:
@@ -2469,9 +2483,25 @@ def _hydrate_walk_forward_gate_metrics(metrics: Dict[str, Any]) -> None:
             metrics[key] = aux_wf[key]
 
 
+def _apply_vbt2_pilot_official_stats_gate_surface(metrics: Dict[str, Any]) -> None:
+    """Keep the VBT2 pilot gate on official Portfolio.stats() fields only."""
+    expectancy = metrics.get("expectancy")
+    if expectancy is not None:
+        metrics["oos_expectancy"] = expectancy
+    metrics.pop("wf_consistency", None)
+    non_stats_status = metrics.setdefault("gate_metric_non_stats_status", {})
+    if isinstance(non_stats_status, dict):
+        for field_name in _VBT2_PILOT_SKIPPED_UNMEASURED_GATE_FIELDS:
+            non_stats_status[field_name] = "not_measured_not_used_by_vbt2_pilot_gate"
+
+
 def _is_vbt2_pilot_exempt_gate_failure(failure_code: str) -> bool:
     """Official VectorBT stats do not measure turnover/stability/slippage yet."""
     exempt_by_field = {
+        "wf_consistency": (
+            "missing_wf_consistency",
+            "wf_consistency_below_threshold",
+        ),
         "turnover_mean_pct": ("missing_turnover_mean_pct", "turnover_above_threshold"),
         "param_stability_score": (
             "missing_param_stability_score",
@@ -3223,17 +3253,37 @@ def apply_promotion_gates(
         prom.seed = 42
         prom.timestamp_utc = datetime.now(timezone.utc).isoformat()
 
-        _hydrate_walk_forward_gate_metrics(prom.vectorbt_results)
-        gate_failures = gates.evaluate_failures(prom)
-        if (
+        official_stats_gate = (
             prom.vectorbt_results.get("gate_metric_authority")
             == "official_vectorbt_portfolio_stats"
-            and scope in ("pilot", "paid_compute")
-        ):
+        )
+        if official_stats_gate and scope == "pilot":
+            _apply_vbt2_pilot_official_stats_gate_surface(prom.vectorbt_results)
+        else:
+            _hydrate_walk_forward_gate_metrics(prom.vectorbt_results)
+        gate_failures = gates.evaluate_failures(prom)
+        if official_stats_gate and scope == "pilot":
             gate_failures = [
                 code
                 for code in gate_failures
                 if not _is_vbt2_pilot_exempt_gate_failure(code)
+            ]
+            prom.vectorbt_results["pilot_gate_evaluation"] = {
+                "scope": "vbt2_pilot_official_vectorbt_stats_only",
+                "used_fields": {
+                    "oos_expectancy": "Expectancy",
+                    "max_drawdown_pct": "Max Drawdown [%]",
+                    "num_trades": "Total Trades",
+                },
+                "skipped_unmeasured_fields": list(_VBT2_PILOT_SKIPPED_UNMEASURED_GATE_FIELDS),
+                "failure_semantics": "screening_only_not_replay_or_robustness_eligible",
+                "failures": gate_failures,
+            }
+        elif official_stats_gate and scope == "paid_compute":
+            gate_failures = [
+                code
+                for code in gate_failures
+                if code not in _VBT_PAID_COMPUTE_EXEMPT_GATE_FAILURES
             ]
             prom.vectorbt_results["pilot_gate_evaluation"] = {
                 "scope": scope,
@@ -3245,7 +3295,7 @@ def apply_promotion_gates(
                     "max_drawdown_pct": "Max Drawdown [%]",
                     "num_trades": "Total Trades",
                 },
-                "skipped_unmeasured_fields": list(_VBT2_PILOT_SKIPPED_UNMEASURED_GATE_FIELDS),
+                "skipped_unmeasured_fields": list(_VBT_PAID_COMPUTE_SKIPPED_UNMEASURED_GATE_FIELDS),
                 "failure_semantics": "screening_only_not_replay_or_robustness_eligible",
                 "failures": gate_failures,
             }

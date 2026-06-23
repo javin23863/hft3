@@ -95,7 +95,7 @@ isProject: true
 
 **Canonical command:** `python scripts/run_pipeline.py --autoresearch ...`
 
-**Branch context:** `cursor/vast-vbt-workflow`
+**Branch context:** `codex/feature-plane-mvc-gates` / PR #13
 
 ---
 

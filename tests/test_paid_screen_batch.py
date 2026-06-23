@@ -919,6 +919,50 @@ class TestPromotionGateWiringPlantedPass:
         failures = gated.rejected[0].metric_values["pilot_gate_evaluation"]["failures"]
         assert "missing_oos_expectancy" in failures
 
+    def test_paid_compute_hydrates_auxiliary_walk_forward_metrics(self):
+        from backtest_pipeline.src.vectorbt_adapter import FilterResult, apply_promotion_gates
+
+        prom = self._official_stats_promoted()
+        prom.vectorbt_results.pop("oos_expectancy", None)
+        prom.vectorbt_results.pop("wf_consistency", None)
+        prom.vectorbt_results["auxiliary_numpy_walk_forward"] = {
+            "oos_expectancy": 1.25,
+            "wf_consistency": 0.9,
+        }
+        result = FilterResult(backend="vectorbt", run_id="run_planted", promoted=[prom], rejected=[])
+        gated = apply_promotion_gates(result, screening_scope="paid_compute")
+
+        assert len(gated.promoted) == 1
+        metrics = gated.promoted[0].vectorbt_results
+        assert metrics["oos_expectancy"] == 1.25
+        assert metrics["wf_consistency"] == 0.9
+        assert metrics["pilot_gate_evaluation"]["used_fields"] == {
+            "oos_expectancy": "auxiliary_numpy_walk_forward",
+            "wf_consistency": "auxiliary_numpy_walk_forward",
+            "max_drawdown_pct": "Max Drawdown [%]",
+            "num_trades": "Total Trades",
+        }
+        assert "wf_consistency" not in metrics["pilot_gate_evaluation"]["skipped_unmeasured_fields"]
+
+    def test_pilot_gate_ignores_auxiliary_walk_forward_metrics(self):
+        from backtest_pipeline.src.vectorbt_adapter import FilterResult, apply_promotion_gates
+
+        prom = self._official_stats_promoted(
+            expectancy=-1.0,
+            auxiliary_numpy_walk_forward={
+                "oos_expectancy": 2.0,
+                "wf_consistency": 1.0,
+            },
+        )
+        result = FilterResult(backend="vectorbt", run_id="run_planted", promoted=[prom], rejected=[])
+        gated = apply_promotion_gates(result, screening_scope="pilot")
+
+        assert gated.promoted == []
+        failures = gated.rejected[0].metric_values["pilot_gate_evaluation"]["failures"]
+        assert "oos_expectancy_below_threshold" in failures
+        assert gated.rejected[0].metric_values["oos_expectancy"] == -1.0
+        assert "wf_consistency" not in gated.rejected[0].metric_values
+
     def test_full_gate_rejects_missing_walk_forward_and_stability(self):
         from backtest_pipeline.src.promotion_gate import PromotionGate
         from backtest_pipeline.src.vectorbt_adapter import FilterResult, apply_promotion_gates

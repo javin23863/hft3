@@ -1,11 +1,12 @@
-# Sole supported Vast deploy path for VectorBT paid screen (Plan v3 Phase B).
+# Supported Vast deploy path for VectorBT paid screen.
 # Authority: docs/project/VBT_PAID_SCREEN_RUNBOOK.md, docs/ai/PONYTAIL.md (manifest.parquet hash)
-# Outputs DEPLOY_CONTRACT_PASS on success; exit 1 otherwise.
+# Outputs DEPLOY_CONTRACT_PASS on success; exit 1 otherwise. Vast host/port must be supplied
+# by environment or parameters; this script intentionally has no stale host default.
 param(
-    [string]$SshHost = $(if ($env:VAST_SSH_HOST) { $env:VAST_SSH_HOST } else { "root@ssh7.vast.ai" }),
-    [int]$SshPort = $(if ($env:VAST_SSH_PORT) { [int]$env:VAST_SSH_PORT } else { 15808 }),
+    [string]$SshHost = $(if ($env:VAST_SSH_HOST) { $env:VAST_SSH_HOST } else { "" }),
+    [int]$SshPort = $(if ($env:VAST_SSH_PORT) { [int]$env:VAST_SSH_PORT } else { 22 }),
     [string]$RemoteRepo = $(if ($env:VAST_REMOTE_REPO) { $env:VAST_REMOTE_REPO } else { "/root/hft3/repo" }),
-    [string]$GitBranch = $(if ($env:HFT3_VAST_GIT_BRANCH) { $env:HFT3_VAST_GIT_BRANCH } else { "cursor/vast-vbt-workflow" }),
+    [string]$GitBranch = $(if ($env:HFT3_VAST_GIT_BRANCH) { $env:HFT3_VAST_GIT_BRANCH } elseif ($env:VBT_GIT_BRANCH) { $env:VBT_GIT_BRANCH } else { "" }),
     [string]$RepoRoot = $(if ($env:HFT3_REPO) { $env:HFT3_REPO } else { (Resolve-Path (Join-Path $PSScriptRoot "..")).Path }),
     [string]$GateFile = "runtime/reports/paid_screen_ready_gate.json",
     [string]$EventsCsv = "packages/data_system/config/events.csv",
@@ -36,6 +37,15 @@ function Get-FileSha256Prefix([string]$Path) {
 }
 
 Set-Location $RepoRoot
+if (-not $SshHost) {
+    throw "Vast SSH host missing: pass -SshHost or set VAST_SSH_HOST for the current instance"
+}
+if (-not $GitBranch) {
+    $GitBranch = (& git branch --show-current).Trim()
+    if (-not $GitBranch) {
+        throw "Git branch missing: pass -GitBranch or set HFT3_VAST_GIT_BRANCH/VBT_GIT_BRANCH"
+    }
+}
 $gatePath = Join-Path $RepoRoot $GateFile
 $eventsPath = Join-Path $RepoRoot $EventsCsv
 

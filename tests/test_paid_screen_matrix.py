@@ -734,6 +734,40 @@ class TestRunVectorbtSimulationMatrix:
             tp_len = int(tp.shape[0]) if isinstance(tp, np.ndarray) else len(tp)
             assert tp_len == n_cols
 
+    def test_singleton_chunk_uses_loop_shaped_inputs_and_scalar_stops(self, monkeypatch, tmp_path):
+        """One-column matrix chunks preserve the loop-mode VectorBT call shape."""
+        captured: dict = {}
+        _install_fake_vectorbt(monkeypatch, _make_fake_from_signals(captured))
+        ohlcv = _synthetic_ohlcv(40)
+        grid = {
+            "signal_threshold": [0.15],
+            "holding_period_bars": [5],
+            "stop_loss_pct": [0.5],
+            "take_profit_pct": [1.0],
+        }
+
+        run_vectorbt_simulation_matrix(
+            ohlcv,
+            [_mock_candidate()],
+            parsed=None,
+            grid=grid,
+            repo_root=tmp_path,
+            signal_computer=_signal_computer_returns_fixed(1, -1),
+            screening_scope="pilot",
+            chunk_size=16,
+        )
+
+        close = np.asarray(captured["close"])
+        entries = np.asarray(captured["entries"])
+        exits = np.asarray(captured["exits"])
+        assert close.ndim == 1
+        assert entries.ndim == 1
+        assert exits.ndim == 1
+        assert entries.shape == (40,)
+        assert exits.shape == (40,)
+        assert np.isscalar(captured["kwargs"].get("sl_stop"))
+        assert np.isscalar(captured["kwargs"].get("tp_stop"))
+
     def test_uses_build_signal_matrix_helper_path(self, monkeypatch, tmp_path):
         """When all columns share a param-independent signal, the matrix has the
         expected [bars, n_cols] shape passed to from_signals."""
