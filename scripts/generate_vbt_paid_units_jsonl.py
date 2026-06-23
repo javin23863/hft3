@@ -148,6 +148,7 @@ def _parse_stage_a_allowed_cells(
             pt_id = parse_hyp_id(pt["hyp_id"], context="pass_through")
         else:
             raise ValueError("stage_a_survivors.json: invalid pass_through entry")
+        _hypothesis_model_id(pt_id)
         for etype in tested_etypes:
             allowed.add((pt_id, etype))
 
@@ -613,10 +614,7 @@ def _manifest_paths(root: Path) -> List[Path]:
                 "HFT3_MANIFEST_PATH rejected: manifest must live under "
                 f"HFT3_NPZ_ROOT or its parent; path={path} root={root}"
             )
-    catalog = root / "manifest.json"
-    if not any(p.resolve() == catalog.resolve() for p in paths if p.exists()):
-        paths.append(catalog)
-    return paths
+    return [root / "manifest.json"]
 
 
 def _read_manifest_parquet_records(path: Path) -> List[Dict[str, Any]]:

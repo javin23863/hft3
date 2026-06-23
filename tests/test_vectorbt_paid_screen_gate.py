@@ -1311,6 +1311,47 @@ def test_stage_a_survivors_cli_rejects_bad_pass_through_entries(tmp_path: Path) 
     assert not out.exists()
 
 
+def test_stage_a_survivors_cli_reports_unknown_pass_through_hyp_id(tmp_path: Path) -> None:
+    """Pass-through hyp IDs should validate against the same registry as survivors."""
+    survivors = tmp_path / "stage_a_survivors.json"
+    survivors.write_text(
+        json.dumps(
+            {
+                "survivors": [{"hyp_id": 5, "event_type": "CPI"}],
+                "pass_through": [999999],
+                "tested_cells": [{"hyp_id": 5, "event_type": "CPI"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    out = tmp_path / "units.jsonl"
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "generate_vbt_paid_units_jsonl.py"),
+            "--out",
+            str(out),
+            "--from-stage-a-survivors",
+            str(survivors),
+            "--event-types",
+            "CPI",
+            "--symbols",
+            "MES.v.0",
+            "--max-units",
+            "1",
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    )
+
+    assert proc.returncode == 1
+    assert "ERROR: stage_a_survivors.json: unknown hyp_id 999999" in proc.stderr
+    assert "Traceback" not in proc.stderr
+    assert not out.exists()
+
+
 def test_all_active_require_runnable_npz_cli_reports_no_valid_manifest_keys(tmp_path: Path) -> None:
     """All-active generation should report manifest authority failures cleanly."""
     out = tmp_path / "units.jsonl"

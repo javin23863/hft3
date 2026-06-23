@@ -94,7 +94,7 @@ def _load_ready_gate_payload(path: Path) -> Dict[str, Any]:
 def _load_ready_gate(path: Path) -> bool:
     payload = _load_ready_gate_payload(path)
     errors = payload.get("errors")
-    if errors != []:
+    if errors not in (None, []):
         return False
     if payload.get("ready_for_full_run") is not True:
         return False

@@ -1232,6 +1232,20 @@ class TestV2RunHashResolution:
 
         assert v2._load_ready_gate(gate_path) is False
 
+    @pytest.mark.parametrize("payload_errors", [None, "missing"])
+    def test_ready_gate_allows_legacy_absent_or_null_errors(self, tmp_path, payload_errors):
+        v2 = _load_v2_module()
+        gate_path = tmp_path / "gate.json"
+        payload = {
+            "ready_for_full_run": True,
+            "lookahead_pytest_tail": "1 passed",
+        }
+        if payload_errors != "missing":
+            payload["errors"] = payload_errors
+        gate_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        assert v2._load_ready_gate(gate_path) is True
+
     def test_ready_gate_requires_string_pytest_tail(self, tmp_path):
         v2 = _load_v2_module()
         gate_path = tmp_path / "gate.json"
