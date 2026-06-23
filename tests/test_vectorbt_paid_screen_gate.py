@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import builtins
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -696,6 +697,42 @@ def test_require_runnable_npz_missing_parquet_manifest_fails_distinctly(
             [{"unit_id": "drop", "symbol": "MES.v.0", "event_id": "CPI_2020_01_15_TIGHT"}],
             REPO,
         )
+
+
+def test_require_runnable_npz_cli_reports_manifest_error(tmp_path: Path) -> None:
+    """CLI should print ERROR and exit 1 instead of a raw traceback."""
+    out = tmp_path / "units.jsonl"
+    npz_root = tmp_path / "npz"
+    npz_root.mkdir()
+    env = os.environ.copy()
+    env["HFT3_NPZ_ROOT"] = str(npz_root)
+    env["HFT3_MANIFEST_PATH"] = str(npz_root / "manifest.parquet")
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(REPO), str(REPO / "packages"), str(REPO / "apps"), env.get("PYTHONPATH", "")]
+    )
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "generate_vbt_paid_units_jsonl.py"),
+            "--out",
+            str(out),
+            "--all-active-models",
+            "--require-runnable-npz",
+            "--event-types",
+            "CPI",
+            "--symbols",
+            "MES.v.0",
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    assert proc.returncode == 1
+    assert "ERROR: runnable NPZ parquet manifest file is missing" in proc.stderr
+    assert "Traceback" not in proc.stderr
 
 
 def test_require_runnable_npz_parquet_missing_pandas_fails_closed(

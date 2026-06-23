@@ -894,25 +894,29 @@ def main(argv: Optional[List[str]] = None) -> int:
         model_id_list: Optional[List[str]] = None
         if args.model_ids:
             model_id_list = [m.strip() for m in args.model_ids.split(",") if m.strip()]
-        units = _units_from_all_active_models(
-            args.events_csv,
-            symbols=symbols,
-            event_types=event_types,
-            thesis_template=args.thesis_template,
-            window_name=args.window_name,
-            max_units=args.max_units,
-            model_ids=model_id_list,
-            start_date=args.start_date,
-            end_date=args.end_date,
-            research_split=research_split,
-            require_runnable_npz=args.require_runnable_npz,
-            repo_root=_REPO,
-            research_clock=research_clock,
-            context_set_id=context_set_id,
-            declared_context_sets=declared_context_sets,
-            ablation_group_id=args.ablation_group_id,
-            negative_control_policy=negative_control_policy,
-        )
+        try:
+            units = _units_from_all_active_models(
+                args.events_csv,
+                symbols=symbols,
+                event_types=event_types,
+                thesis_template=args.thesis_template,
+                window_name=args.window_name,
+                max_units=args.max_units,
+                model_ids=model_id_list,
+                start_date=args.start_date,
+                end_date=args.end_date,
+                research_split=research_split,
+                require_runnable_npz=args.require_runnable_npz,
+                repo_root=_REPO,
+                research_clock=research_clock,
+                context_set_id=context_set_id,
+                declared_context_sets=declared_context_sets,
+                ablation_group_id=args.ablation_group_id,
+                negative_control_policy=negative_control_policy,
+            )
+        except RuntimeError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
     else:
         max_rows = args.smoke_count or args.max_units
         events = _load_events(
@@ -950,7 +954,11 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if args.require_runnable_npz:
         before = len(units)
-        units = _filter_runnable_npz_units(units, _REPO)
+        try:
+            units = _filter_runnable_npz_units(units, _REPO)
+        except RuntimeError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
         dropped = before - len(units)
         if dropped:
             print(f"Filtered {dropped} units without runnable NPZ ({len(units)} remain)")
