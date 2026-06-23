@@ -578,8 +578,10 @@ def _manifest_paths(root: Path) -> List[Path]:
 def _read_manifest_parquet_records(path: Path) -> List[Dict[str, Any]]:
     try:
         import pandas as pd  # type: ignore[import-not-found]
-    except ImportError:
-        return []
+    except ImportError as exc:
+        raise RuntimeError(
+            f"pandas is required to read runnable NPZ parquet manifest: {path}"
+        ) from exc
     if not path.is_file():
         return []
     df = pd.read_parquet(path)
@@ -672,7 +674,11 @@ def _runnable_npz_key_state(repo_root: Path) -> tuple[Set[tuple[str, str]], bool
     for manifest in _manifest_paths(root):
         if manifest.suffix == ".parquet":
             records = _read_manifest_parquet_records(manifest)
-            manifest_authority_seen = True
+            if not records:
+                raise RuntimeError(
+                    f"runnable NPZ parquet manifest yielded no records: {manifest}"
+                )
+            manifest_authority_seen = bool(records) or manifest_authority_seen
         else:
             records, recognized = _read_manifest_json_records(manifest)
             manifest_authority_seen = recognized or manifest_authority_seen
@@ -694,8 +700,13 @@ def _runnable_npz_key_state(repo_root: Path) -> tuple[Set[tuple[str, str]], bool
                     continue
                 parsed_sym, parsed_eid = parsed
                 add_key(sym or parsed_sym, eid or parsed_eid)
-    if keys or manifest_authority_seen:
+    if keys:
         return keys, manifest_authority_seen
+    if manifest_authority_seen:
+        raise RuntimeError(
+            "runnable NPZ manifest authority yielded no valid keys; "
+            "check HFT3_MANIFEST_PATH, pandas/parquet dependencies, event_count, and NPZ paths"
+        )
 
     for npz_path in root.glob("*_mbo.npz"):
         parsed = _parse_npz_name(npz_path)

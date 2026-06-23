@@ -146,6 +146,25 @@ known-gaps:      PR AI status inconsistent with review surface
     assert any("review surface id or URL plus head" in e for e in errs)
 
 
+def test_merge_ready_yes_invalid_review_surface_reports_once():
+    text = """
+merge-ready:     yes
+scope-green:     yes
+scope:           workbench/
+verify-run:      python -m pytest tests/test_workbench/ -q -> exit 0
+plan-drift:      pass
+data-mode:       fixture
+pr-ai-review:    run
+review-surface:  none(blocked: no PR yet)
+known-gaps:      none
+"""
+    errs = validate_status_block(text)
+    review_surface_errs = [e for e in errs if "review surface" in e]
+    assert review_surface_errs == [
+        "merge-ready: yes requires a current-head PR/MR/CL review surface"
+    ]
+
+
 def test_pr_ai_run_rejects_branch_only_surface():
     text = """
 merge-ready:     no

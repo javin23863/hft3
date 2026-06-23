@@ -602,19 +602,18 @@ def test_require_runnable_npz_manifest_authority_blocks_glob_fallback(
         ],
     )
 
-    kept = generator._filter_runnable_npz_units(
-        [{"unit_id": "drop", "symbol": "MES.v.0", "event_id": "CPI_2020_01_15_TIGHT"}],
-        REPO,
-    )
+    with pytest.raises(RuntimeError, match="manifest authority yielded no valid keys"):
+        generator._filter_runnable_npz_units(
+            [{"unit_id": "drop", "symbol": "MES.v.0", "event_id": "CPI_2020_01_15_TIGHT"}],
+            REPO,
+        )
 
-    assert kept == []
 
-
-def test_require_runnable_npz_parquet_authority_ignores_json_strays(
+def test_require_runnable_npz_parquet_authority_empty_records_fail_closed(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """When HFT3_MANIFEST_PATH points at parquet, manifest.json cannot add stray runnable keys."""
+    """Empty parquet authority must fail closed instead of silently zeroing units."""
     import scripts.generate_vbt_paid_units_jsonl as generator
 
     npz_root = tmp_path / "npz"
@@ -631,12 +630,57 @@ def test_require_runnable_npz_parquet_authority_ignores_json_strays(
     monkeypatch.setenv("HFT3_MANIFEST_PATH", str(manifest))
     monkeypatch.setattr(generator, "_read_manifest_parquet_records", lambda _path: [])
 
-    kept = generator._filter_runnable_npz_units(
-        [{"unit_id": "drop", "symbol": "MES.v.0", "event_id": "CPI_2020_01_15_TIGHT"}],
-        REPO,
-    )
+    with pytest.raises(RuntimeError, match="parquet manifest yielded no records"):
+        generator._filter_runnable_npz_units(
+            [{"unit_id": "drop", "symbol": "MES.v.0", "event_id": "CPI_2020_01_15_TIGHT"}],
+            REPO,
+        )
 
-    assert kept == []
+
+def test_require_runnable_npz_event_filter_empty_parquet_authority_fail_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Event filtering must not convert empty parquet authority into a zero-unit run."""
+    import scripts.generate_vbt_paid_units_jsonl as generator
+
+    npz_root = tmp_path / "npz"
+    npz_root.mkdir()
+    manifest = npz_root / "manifest.parquet"
+    manifest.write_bytes(b"placeholder")
+    stray = npz_root / "MES_CPI_2020_01_15_TIGHT_mbo.npz"
+    np.savez(stray, data=np.arange(3, dtype=np.int64))
+    monkeypatch.setenv("HFT3_NPZ_ROOT", str(npz_root))
+    monkeypatch.setenv("HFT3_MANIFEST_PATH", str(manifest))
+    monkeypatch.setattr(generator, "_read_manifest_parquet_records", lambda _path: [])
+
+    with pytest.raises(RuntimeError, match="parquet manifest yielded no records"):
+        generator._filter_events_to_runnable_npz(
+            [{"symbol": "MES.v.0", "event_id": "CPI_2020_01_15_TIGHT"}],
+            REPO,
+        )
+
+
+def test_require_runnable_npz_parquet_missing_pandas_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Missing pandas must not make parquet manifest authority silently empty."""
+    import scripts.generate_vbt_paid_units_jsonl as generator
+
+    manifest = tmp_path / "manifest.parquet"
+    manifest.write_bytes(b"placeholder")
+    original_import = builtins.__import__
+
+    def guarded_import(name: str, *args: object, **kwargs: object) -> object:
+        if name == "pandas":
+            raise ImportError("no pandas")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", guarded_import)
+
+    with pytest.raises(RuntimeError, match="pandas is required"):
+        generator._read_manifest_parquet_records(manifest)
 
 
 def test_require_runnable_npz_accepts_fixture_manifest_shape(

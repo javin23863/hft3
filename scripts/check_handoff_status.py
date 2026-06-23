@@ -96,7 +96,11 @@ def validate_status_block(text: str, *, strict_merge: bool = True) -> list[str]:
             "pr-ai-review must be pending, run, "
             "unavailable(no-pr|no-connector|not-authenticated), or waived-by-user"
         )
-    if pr_ai == "run" and not _has_current_review_surface(review_surface):
+    if (
+        pr_ai == "run"
+        and not _has_current_review_surface(review_surface)
+        and not (merge == "yes" and strict_merge)
+    ):
         errors.append(
             "pr-ai-review: run requires a PR/MR/CL review surface id or URL plus head=<sha>"
         )
