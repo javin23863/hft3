@@ -1537,7 +1537,7 @@ def _validate_screening_reason_map(
         errors.append(f"{mapping_field}_reason_mismatch")
 
 
-def validate_screening_artifact(artifact: Mapping[str, Any]) -> None:
+def validate_screening_artifact(artifact: Mapping[str, Any]) -> list[str]:
     """Validate the terminal VectorBT screening artifact and fail closed."""
     errors: List[str] = []
     for field_name in SCREENING_ARTIFACT_REQUIRED_FIELDS:
@@ -1775,6 +1775,7 @@ def validate_screening_artifact(artifact: Mapping[str, Any]) -> None:
 
     if errors:
         raise ScreeningArtifactError("; ".join(errors))
+    return []
 
 
 @dataclass(frozen=True)
